@@ -21,6 +21,12 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
         success: jest.fn((msg, opts) => { if (opts && opts.onClose) opts.onClose(); }),
         error: jest.fn()
     };
+    const mockValueHelpService = {
+        openValueHelp: jest.fn(),
+        applySuggestionFilter: jest.fn()
+    };
+    const MockFilter = function (path, op, val) { this.path = path; this.op = op; this.val = val; };
+    const MockFilterOperator = { EQ: 'EQ', Contains: 'Contains' };
 
     function FakeJSONModel(initialData) {
         this._data = Object.assign({}, initialData);
@@ -59,7 +65,7 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
                 define: (deps, factory) => {
                     // Check which module is being required
                     if (deps.some(d => d.includes('BaseController'))) {
-                        factory(BaseController, FakeJSONModel, MessageBox, MessageToast, function () {});
+                        factory(BaseController, FakeJSONModel, MessageBox, MessageToast, function () {}, mockValueHelpService, MockFilter, MockFilterOperator);
                     } else {
                         factory(ListBaseController, FakeJSONModel, MessageToast, function () {});
                     }
@@ -480,6 +486,123 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(serviceMock.retryStep).toHaveBeenCalledWith('0000001001', '0001', 'AUTO');
             await Promise.resolve();
             expect(detailSubject._loadDetail).toHaveBeenCalledWith('0000001001', '0001');
+        });
+    });
+
+    describe('ValueHelp & Selection Options for Material, Plant, and Storage Location', () => {
+        let subject;
+        beforeEach(() => {
+            subject = createDetailSubject();
+        });
+
+        it('delegates onSuggest for Material with plant contextual filter to ValueHelpService', () => {
+            subject._oCreateModel.setProperty('/Plant', '1120');
+            const mockInput = { getId: () => 'inputMaterial' };
+            subject.onSuggest({
+                getSource: () => mockInput,
+                getParameter: (p) => p === 'suggestValue' ? '8000' : null
+            });
+
+            expect(mockValueHelpService.applySuggestionFilter).toHaveBeenCalledWith(
+                mockInput,
+                '8000',
+                expect.arrayContaining([expect.objectContaining({ path: 'Plant', op: 'EQ', val: '1120' })])
+            );
+        });
+
+        it('delegates onSuggest for StorageLocation with plant contextual filter to ValueHelpService', () => {
+            subject._oCreateModel.setProperty('/Plant', '1120');
+            const mockInput = { getId: () => 'inputStorageLocation' };
+            subject.onSuggest({
+                getSource: () => mockInput,
+                getParameter: (p) => p === 'suggestValue' ? 'HS' : null
+            });
+
+            expect(mockValueHelpService.applySuggestionFilter).toHaveBeenCalledWith(
+                mockInput,
+                'HS',
+                expect.arrayContaining([expect.objectContaining({ path: 'Plant', op: 'EQ', val: '1120' })])
+            );
+        });
+
+        it('delegates onValueHelpRequest for Material to ValueHelpService.openValueHelp', () => {
+            subject._oCreateModel.setProperty('/Plant', '1120');
+            const mockInput = { getId: () => 'inputMaterial' };
+            subject.onValueHelpRequest({ getSource: () => mockInput });
+
+            expect(mockValueHelpService.openValueHelp).toHaveBeenCalledWith(
+                expect.any(Object),
+                mockInput,
+                expect.any(Function),
+                expect.arrayContaining([expect.objectContaining({ path: 'Plant', op: 'EQ', val: '1120' })])
+            );
+        });
+
+        it('delegates onValueHelpRequest for StorageLocation with plant filter to ValueHelpService.openValueHelp', () => {
+            subject._oCreateModel.setProperty('/Plant', '1120');
+            const mockInput = { getId: () => 'inputStorageLocation' };
+            subject.onValueHelpRequest({ getSource: () => mockInput });
+
+            expect(mockValueHelpService.openValueHelp).toHaveBeenCalledWith(
+                expect.any(Object),
+                mockInput,
+                expect.any(Function),
+                expect.arrayContaining([expect.objectContaining({ path: 'Plant', op: 'EQ', val: '1120' })])
+            );
+        });
+
+        it('_handleValueHelpSelected populates Material, MaterialName, and Unit', () => {
+            const mockInput = { getId: () => 'inputMaterial', setValueState: jest.fn() };
+            subject._handleValueHelpSelected(
+                mockInput,
+                '000000008000000023',
+                null,
+                { Material: '000000008000000023', MaterialName: 'Finished Cable Assy', MaterialBaseUnit: 'NOS' }
+            );
+
+            expect(subject._oCreateModel.getProperty('/Material')).toBe('000000008000000023');
+            expect(subject._oCreateModel.getProperty('/MaterialName')).toBe('Finished Cable Assy');
+            expect(subject._oCreateModel.getProperty('/Unit')).toBe('NOS');
+            expect(mockInput.setValueState).toHaveBeenCalledWith('None');
+        });
+
+        it('_handleValueHelpSelected populates Plant', () => {
+            const mockInput = { getId: () => 'inputPlant', setValueState: jest.fn() };
+            subject._handleValueHelpSelected(mockInput, '1130', null, { Plant: '1130' });
+
+            expect(subject._oCreateModel.getProperty('/Plant')).toBe('1130');
+            expect(mockInput.setValueState).toHaveBeenCalledWith('None');
+        });
+
+        it('_handleValueHelpSelected populates StorageLocation and auto-sets Plant if empty', () => {
+            subject._oCreateModel.setProperty('/Plant', '');
+            const mockInput = { getId: () => 'inputStorageLocation', setValueState: jest.fn() };
+            subject._handleValueHelpSelected(mockInput, 'HS01', null, { StorageLocation: 'HS01', Plant: '1120' });
+
+            expect(subject._oCreateModel.getProperty('/StorageLocation')).toBe('HS01');
+            expect(subject._oCreateModel.getProperty('/Plant')).toBe('1120');
+            expect(mockInput.setValueState).toHaveBeenCalledWith('None');
+        });
+
+        it('item selection event handlers trigger _handleValueHelpSelected', () => {
+            const mockInput = { getId: () => 'inputMaterial', setValueState: jest.fn() };
+            const mockItem = {
+                getKey: () => '1000000045',
+                getText: () => '1000000045',
+                getDescription: () => 'Raw Material 45',
+                getBindingContext: () => ({
+                    getObject: () => ({ Material: '1000000045', MaterialName: 'Raw Material 45', MaterialBaseUnit: 'KG' })
+                })
+            };
+
+            subject.onMaterialSelect({
+                getSource: () => mockInput,
+                getParameter: (p) => p === 'selectedItem' ? mockItem : null
+            });
+
+            expect(subject._oCreateModel.getProperty('/Material')).toBe('1000000045');
+            expect(subject._oCreateModel.getProperty('/MaterialName')).toBe('Raw Material 45');
+            expect(subject._oCreateModel.getProperty('/Unit')).toBe('KG');
         });
     });
 });

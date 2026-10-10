@@ -163,17 +163,39 @@
                                         <Input
                                             id="inputPlant"
                                             value="{create>/Plant}"
-                                            placeholder="1120"
+                                            placeholder="{i18n>resPlaceholderSelectPlant}"
                                             maxLength="4"
-                                            liveChange=".onFieldLiveChange" />
+                                            showValueHelp="true"
+                                            showSuggestion="true"
+                                            filterSuggests="false"
+                                            suggest=".onSuggest"
+                                            valueHelpRequest=".onValueHelpRequest"
+                                            suggestionItemSelected=".onPlantSelect"
+                                            suggestionItems="{path: '/PlantVH', templateShareable: false}"
+                                            liveChange=".onFieldLiveChange">
+                                            <suggestionItems>
+                                                <core:ListItem key="{Plant}" text="{Plant}" additionalText="{= ${PlantName} + (${PurchasingOrganization} ? ' (' + ${PurchasingOrganization} + ')' : '') }" />
+                                            </suggestionItems>
+                                        </Input>
 
                                         <Label text="{i18n>resEntryFieldSLoc}" required="true" />
                                         <Input
                                             id="inputStorageLocation"
                                             value="{create>/StorageLocation}"
-                                            placeholder="HS01"
+                                            placeholder="{i18n>resPlaceholderSelectSLoc}"
                                             maxLength="4"
-                                            liveChange=".onFieldLiveChange" />
+                                            showValueHelp="true"
+                                            showSuggestion="true"
+                                            filterSuggests="false"
+                                            suggest=".onSuggest"
+                                            valueHelpRequest=".onValueHelpRequest"
+                                            suggestionItemSelected=".onStorageLocationSelect"
+                                            suggestionItems="{path: '/StorageLocationVH', templateShareable: false}"
+                                            liveChange=".onFieldLiveChange">
+                                            <suggestionItems>
+                                                <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{= ${StorageLocationName} + (${Plant} ? ' (' + ${Plant} + ')' : '') }" />
+                                            </suggestionItems>
+                                        </Input>
 
                                         <Label text="{i18n>resEntryFieldWarehouse}" />
                                         <Input
@@ -188,15 +210,26 @@
                                         <Input
                                             id="inputMaterial"
                                             value="{create>/Material}"
-                                            placeholder="1000000045"
+                                            placeholder="{i18n>resPlaceholderSelectMaterial}"
                                             maxLength="40"
-                                            liveChange=".onFieldLiveChange" />
+                                            showValueHelp="true"
+                                            showSuggestion="true"
+                                            filterSuggests="false"
+                                            suggest=".onSuggest"
+                                            valueHelpRequest=".onValueHelpRequest"
+                                            suggestionItemSelected=".onMaterialSelect"
+                                            suggestionItems="{path: '/MaterialVH', templateShareable: false}"
+                                            liveChange=".onFieldLiveChange">
+                                            <suggestionItems>
+                                                <core:ListItem key="{Material}" text="{Material}" additionalText="{= (${MaterialName} || ${Material_Text} || '') + (${MaterialBaseUnit} ? ' (' + ${MaterialBaseUnit} + ')' : '') }" />
+                                            </suggestionItems>
+                                        </Input>
 
                                         <Label text="{i18n>resEntryFieldMaterialName}" />
                                         <Input
                                             id="inputMaterialName"
                                             value="{create>/MaterialName}"
-                                            placeholder="Raw Material 45"
+                                            placeholder="{i18n>resEntryFieldMaterialName}"
                                             maxLength="40" />
 
                                         <Label text="{i18n>resEntryColQuantity}" required="true" />
@@ -331,10 +364,21 @@
                                     <Input
                                         id="inputRecSLoc"
                                         value="{create>/ReceivingStorageLocation}"
-                                        placeholder="CS01"
+                                        placeholder="{i18n>resPlaceholderRecSLoc}"
                                         maxLength="4"
+                                        showValueHelp="true"
+                                        showSuggestion="true"
+                                        filterSuggests="false"
+                                        suggest=".onSuggest"
+                                        valueHelpRequest=".onValueHelpRequest"
+                                        suggestionItemSelected=".onRecSLocSelect"
+                                        suggestionItems="{path: '/StorageLocationVH', templateShareable: false}"
                                         visible="{= ${create>/MovementType} === '311' }"
-                                        liveChange=".onFieldLiveChange" />
+                                        liveChange=".onFieldLiveChange">
+                                        <suggestionItems>
+                                            <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{= ${StorageLocationName} + (${Plant} ? ' (' + ${Plant} + ')' : '') }" />
+                                        </suggestionItems>
+                                    </Input>
 
                                     <!-- Movement 301: Receiving Plant -->
                                     <Label
@@ -344,10 +388,21 @@
                                     <Input
                                         id="inputRecPlant"
                                         value="{create>/ReceivingPlant}"
-                                        placeholder="1130"
+                                        placeholder="{i18n>resPlaceholderRecPlant}"
                                         maxLength="4"
+                                        showValueHelp="true"
+                                        showSuggestion="true"
+                                        filterSuggests="false"
+                                        suggest=".onSuggest"
+                                        valueHelpRequest=".onValueHelpRequest"
+                                        suggestionItemSelected=".onRecPlantSelect"
+                                        suggestionItems="{path: '/PlantVH', templateShareable: false}"
                                         visible="{= ${create>/MovementType} === '301' }"
-                                        liveChange=".onFieldLiveChange" />
+                                        liveChange=".onFieldLiveChange">
+                                        <suggestionItems>
+                                            <core:ListItem key="{Plant}" text="{Plant}" additionalText="{= ${PlantName} + (${PurchasingOrganization} ? ' (' + ${PurchasingOrganization} + ')' : '') }" />
+                                        </suggestionItems>
+                                    </Input>
                                 </f:content>
                             </f:SimpleForm>
 

@@ -144,10 +144,21 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       let trNumber = '';
       let currentStatus = '01';
       let trError = null;
+      let determinedWh = WarehouseNumber;
+      if (!determinedWh || determinedWh === 'W01') {
+        try {
+          const t320 = await adapter.rfc.readTable('T320', ['LGNUM'], [`( WERKS = '${Plant}' AND LGORT = '${StorageLocation}' )`], 1);
+          if (t320 && t320[0] && t320[0].LGNUM) {
+            determinedWh = t320[0].LGNUM;
+          }
+        } catch (_t320Err) {
+          determinedWh = WarehouseNumber || 'W01';
+        }
+      }
 
       try {
         const trResult = await adapter.createTransferRequirement({
-          warehouseNumber: WarehouseNumber,
+          warehouseNumber: determinedWh || WarehouseNumber || 'W01',
           wmMovementType: MovementType,
           material: Material,
           plant: Plant,
@@ -209,7 +220,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         ReservationNo: resNo,
         ReservationItem: resItem,
         MovementType,
-        WarehouseNumber,
+        WarehouseNumber: determinedWh || WarehouseNumber || 'W01',
         Plant,
         StorageLocation,
         Material,

@@ -5,6 +5,30 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Feature: Material, Plant & Storage Location Value Help and Dynamic Selection Options for Reservation Creation (/wm/reservation-entry/create) — Resolved & Validated (2026-10-10):**
+  - **Issue Reported:** On route `/wm/reservation-entry/create`, inputs for Material, Plant, and Storage Location lacked Value Help dialogs, F4 search help, and auto-complete suggestions, making it impossible for operators to browse and select materials, plants, and storage locations across the system.
+  - **Root Cause & Requirements:**
+    1. UI inputs were plain `<Input>` controls without `showValueHelp`, `showSuggestion`, or bindings to OData Value Help collections (`/MaterialVH`, `/PlantVH`, `/StorageLocationVH`).
+    2. The controller lacked suggestion filtering (`onSuggest`), F4 dialog invocation (`onValueHelpRequest`), and selection handlers (`_handleValueHelpSelected`) to populate material description, base unit of measure, and contextual plant filters.
+    3. The backend `executeReservationAndAutoTR` defaulted warehouse number to `W01`, which could cause warehouse mismatch when selecting plants/locations mapped to other warehouses (e.g. W10, W12, W13, W14).
+  - **Resolution:**
+    1. In `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`:
+       - Enabled `showValueHelp="true"`, `showSuggestion="true"`, `filterSuggests="false"`, `suggest=".onSuggest"`, and `valueHelpRequest=".onValueHelpRequest"` on `inputPlant`, `inputStorageLocation`, `inputMaterial`, `inputRecSLoc`, and `inputRecPlant`.
+       - Bound suggestion items to `/PlantVH`, `/StorageLocationVH`, and `/MaterialVH` with descriptive item templates (`key`, `text`, `additionalText`).
+    2. In `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`:
+       - Integrated `ValueHelpService` and implemented `onSuggest`, `onValueHelpRequest`, `_handleValueHelpSelected`, and event listeners `onMaterialSelect`, `onPlantSelect`, `onStorageLocationSelect`, `onRecSLocSelect`, `onRecPlantSelect`.
+       - Implemented contextual filtering so Storage Location dialogs and suggestions filter by the selected Plant.
+       - Selecting a material via Value Help or suggestions automatically populates Material Number, Material Description/Name, and Base Unit of Measure (`NOS`, `KG`, `EA`, etc.).
+    3. In `srv/wm/reservation-entry/service.js`:
+       - Added automatic warehouse determination from SAP table `T320` (`( WERKS = '${Plant}' AND LGORT = '${StorageLocation}' )`) so any selected plant and storage location accurately resolves its configured warehouse.
+    4. In `app/fiori-app/webapp/i18n/i18n.properties`: Added localized placeholder strings for F4 selections.
+    5. In `test/unit/wm/reservationEntryUi.test.js`: Added 8 new unit tests covering Value Help delegation, suggestion filtering, and selection data mapping.
+  - **Validation:**
+    - `ui5lint` in `app/fiori-app`: 0 findings (clean).
+    - `git diff --check`: 0 errors (clean).
+    - Targeted unit tests (`npx jest test/unit/wm/reservationEntryUi.test.js`): **32/32 tests passed**.
+    - Full repository WM test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,277/1,277 unit tests passed (100% green)**.
+
 - **Fix: Reservation Process Step LB01 Retry & TR Creation Restricted by SAP Note 2295840 — Resolved via Deployed RFC Wrappers Z_WM_TR_CREATE / ZWM_TR_CREATE & Proven Live (2026-10-10):**
   - **Issue Reported:** On route `/wm/reservation-entry/0000524979/0001`, retrying step `LB01` threw:
     `Error : Retry LB01 deferred: L_TR_CREATE restricted by SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)`.
@@ -450,6 +474,30 @@ The previous log was removed in commit `b741337`; this file restarts it.
 11. **Create Sales Order fixes (Unresolved Issue 10):** ~~(1) Incoterms removed (no SAP API on this system writes them on create; user chose "Fix All"), (2) RFC value helps honour `$filter`, no 50-row cap, (3) validation on `change` only, (4) fallback lists deleted (503 when RFC is unavailable), (5) no defaulted ShipToParty / CustomerPurchaseOrderDate, (6) read-back mismatch shown as created, form reset~~ — all done 2026-10-06. **Open: (7) with the user's go, prove one live ZDOM create end to end through the changed path (sold-to 10135, one ZFRT material, payment terms + contact person from the value helps), read it back via `HeaderSet('<id>')?$expand=HeaderPartnerSet` and RFC VBKD/VBPA, and record the document number here.** **Incoterms (2026-10-08): resolved via customer-master defaulting (no code) — maintain INCO1/INCO2 on the sold-to for the order's sales area; LORD cannot carry Incoterms on create. Explicit per-order entry would need `API_SALES_ORDER_SRV`, currently **Blocked (no System Alias, Issue 11)**. See Changes Log 2026-10-08.**
 
 ## Changes Log
+
+### 2026-10-10 14:45 IST — Feature: Value Help & Dynamic Selection Options for Material, Plant, and Storage Location on Create Reservation (/wm/reservation-entry/create)
+- **Issue / Request.** On route `/wm/reservation-entry/create`, inputs for Material, Plant, and Storage Location lacked Value Help (F4) dialogs, search help, and auto-complete suggestions, restricting operators or requiring manual input without guidance.
+- **Root Cause & Requirements.**
+  1. UI inputs were plain `<Input>` controls without `showValueHelp`, `showSuggestion`, or bindings to OData Value Help collections (`/MaterialVH`, `/PlantVH`, `/StorageLocationVH`).
+  2. The detail controller lacked suggestion filtering (`onSuggest`), F4 dialog invocation (`onValueHelpRequest`), and selection handlers (`_handleValueHelpSelected`, `onMaterialSelect`, etc.) to auto-populate material description, base unit of measure, and contextual plant filters.
+  3. The backend `executeReservationAndAutoTR` defaulted warehouse number to `W01`, which could cause warehouse mismatch when selecting plants/locations configured under other warehouses (e.g., W10, W12, W13, W14).
+- **Change.**
+  1. `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`:
+     - Added `showValueHelp="true"`, `showSuggestion="true"`, `filterSuggests="false"`, `suggest=".onSuggest"`, and `valueHelpRequest=".onValueHelpRequest"` on `inputPlant`, `inputStorageLocation`, `inputMaterial`, `inputRecSLoc`, and `inputRecPlant`.
+     - Bound suggestion items to `/PlantVH`, `/StorageLocationVH`, and `/MaterialVH` with descriptive item templates (`key`, `text`, `additionalText`).
+  2. `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`:
+     - Integrated `ValueHelpService` and implemented `onSuggest`, `onValueHelpRequest`, `_handleValueHelpSelected`, and event listeners `onMaterialSelect`, `onPlantSelect`, `onStorageLocationSelect`, `onRecSLocSelect`, `onRecPlantSelect`.
+     - Implemented contextual filtering so Storage Location dialogs and suggestions filter by the selected Plant.
+     - Auto-populates Material Number, Material Description/Name, and Base Unit of Measure upon material selection.
+  3. `srv/wm/reservation-entry/service.js`:
+     - Added dynamic warehouse determination from SAP table `T320` (`( WERKS = '${Plant}' AND LGORT = '${StorageLocation}' )`) so any selected plant and storage location accurately resolves its configured warehouse.
+  4. `app/fiori-app/webapp/i18n/i18n.properties`: Added localized placeholder strings for F4 selections (`resPlaceholderSelectPlant`, `resPlaceholderSelectSLoc`, `resPlaceholderSelectMaterial`, `resPlaceholderRecPlant`, `resPlaceholderRecSLoc`).
+  5. `test/unit/wm/reservationEntryUi.test.js`: Added 8 new unit tests covering Value Help delegation, suggestion filtering, and selection data mapping.
+- **Validation:**
+  - `git diff --check`: clean (0 errors).
+  - `ui5lint` in `app/fiori-app`: 0 findings (clean).
+  - Targeted unit tests (`npx jest test/unit/wm/reservationEntryUi.test.js`): **32/32 tests passed**.
+  - Complete repository WM test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,277/1,277 unit tests passed (100% green)**.
 
 ### 2026-10-10 14:35 IST — Fix: Deploy Z_WM_TR_CREATE & ZWM_TR_CREATE RFC Wrappers for SAP Note 2295840 & Resolve LB01 Retry
 - **Issue.** While navigating to `/wm/reservation-entry/0000524979/0001` and triggering `retryStep` for step `LB01` (Create Transfer Requirement), the call was deferred with error:

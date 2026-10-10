@@ -3,8 +3,11 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "sap/m/MessageBox",
     "sap/m/MessageToast",
-    "../service/ReservationEntryService"
-], function (BaseController, JSONModel, MessageBox, MessageToast, ReservationEntryService) {
+    "../service/ReservationEntryService",
+    "saps4hana/fiori/service/ValueHelpService",
+    "sap/ui/model/Filter",
+    "sap/ui/model/FilterOperator"
+], function (BaseController, JSONModel, MessageBox, MessageToast, ReservationEntryService, ValueHelpService, Filter, FilterOperator) {
     "use strict";
 
     return BaseController.extend("saps4hana.fiori.modules.wm.reservation-entry.controller.ReservationEntryDetail", {
@@ -175,6 +178,146 @@ sap.ui.define([
             if (this._oViewModel.getProperty("/errorMessage")) {
                 this._oViewModel.setProperty("/errorMessage", "");
             }
+        },
+
+        onSuggest: function (oEvent) {
+            var oInput = oEvent.getSource();
+            var sValue = oEvent.getParameter("suggestValue") || "";
+            var aContextFilters = [];
+            var sId = oInput.getId();
+
+            if (sId.indexOf("inputStorageLocation") !== -1) {
+                var sPlant = this._oCreateModel.getProperty("/Plant");
+                if (sPlant) {
+                    aContextFilters.push(new Filter("Plant", FilterOperator.EQ, sPlant));
+                }
+            } else if (sId.indexOf("inputRecSLoc") !== -1) {
+                var sRecPlant = this._oCreateModel.getProperty("/ReceivingPlant") || this._oCreateModel.getProperty("/Plant");
+                if (sRecPlant) {
+                    aContextFilters.push(new Filter("Plant", FilterOperator.EQ, sRecPlant));
+                }
+            } else if (sId.indexOf("inputMaterial") !== -1) {
+                var sMatPlant = this._oCreateModel.getProperty("/Plant");
+                if (sMatPlant) {
+                    aContextFilters.push(new Filter("Plant", FilterOperator.EQ, sMatPlant));
+                }
+            }
+
+            if (ValueHelpService && typeof ValueHelpService.applySuggestionFilter === "function") {
+                ValueHelpService.applySuggestionFilter(oInput, sValue, aContextFilters);
+            }
+        },
+
+        onValueHelpRequest: function (oEvent) {
+            var oInput = oEvent.getSource();
+            var oView = this.getView();
+            var that = this;
+            var aInitialFilters = [];
+            var sId = oInput.getId();
+
+            if (sId.indexOf("inputStorageLocation") !== -1) {
+                var sPlant = this._oCreateModel.getProperty("/Plant");
+                if (sPlant) {
+                    aInitialFilters.push(new Filter("Plant", FilterOperator.EQ, sPlant));
+                }
+            } else if (sId.indexOf("inputRecSLoc") !== -1) {
+                var sRecPlant = this._oCreateModel.getProperty("/ReceivingPlant") || this._oCreateModel.getProperty("/Plant");
+                if (sRecPlant) {
+                    aInitialFilters.push(new Filter("Plant", FilterOperator.EQ, sRecPlant));
+                }
+            } else if (sId.indexOf("inputMaterial") !== -1) {
+                var sMatPlant = this._oCreateModel.getProperty("/Plant");
+                if (sMatPlant) {
+                    aInitialFilters.push(new Filter("Plant", FilterOperator.EQ, sMatPlant));
+                }
+            }
+
+            if (ValueHelpService && typeof ValueHelpService.openValueHelp === "function") {
+                ValueHelpService.openValueHelp(oView, oInput, function (sKey, oSelectedItem, oData) {
+                    that._handleValueHelpSelected(oInput, sKey, oSelectedItem, oData);
+                }, aInitialFilters);
+            }
+        },
+
+        _handleValueHelpSelected: function (oInput, sKey, oSelectedItem, oData) {
+            if (!oInput || !sKey) return;
+            var sId = oInput.getId();
+
+            if (sId.indexOf("inputMaterial") !== -1) {
+                this._oCreateModel.setProperty("/Material", sKey);
+                var sMatName = (oData && (oData.MaterialName || oData.Material_Text)) || (oSelectedItem && oSelectedItem.getDescription && oSelectedItem.getDescription()) || "";
+                if (!sMatName && oSelectedItem && oSelectedItem.getCells) {
+                    var aCells = oSelectedItem.getCells();
+                    sMatName = (aCells[1] && aCells[1].getText && aCells[1].getText()) || "";
+                }
+                if (sMatName) {
+                    this._oCreateModel.setProperty("/MaterialName", sMatName);
+                }
+                var sUnit = (oData && oData.MaterialBaseUnit) || "";
+                if (!sUnit && oSelectedItem && oSelectedItem.getCells) {
+                    var aCells2 = oSelectedItem.getCells();
+                    sUnit = (aCells2[4] && aCells2[4].getText && aCells2[4].getText()) || "";
+                }
+                if (sUnit) {
+                    this._oCreateModel.setProperty("/Unit", sUnit);
+                }
+                oInput.setValueState("None");
+            } else if (sId.indexOf("inputPlant") !== -1) {
+                this._oCreateModel.setProperty("/Plant", sKey);
+                oInput.setValueState("None");
+            } else if (sId.indexOf("inputStorageLocation") !== -1) {
+                this._oCreateModel.setProperty("/StorageLocation", sKey);
+                if (oData && oData.Plant && !this._oCreateModel.getProperty("/Plant")) {
+                    this._oCreateModel.setProperty("/Plant", oData.Plant);
+                }
+                oInput.setValueState("None");
+            } else if (sId.indexOf("inputRecSLoc") !== -1) {
+                this._oCreateModel.setProperty("/ReceivingStorageLocation", sKey);
+                oInput.setValueState("None");
+            } else if (sId.indexOf("inputRecPlant") !== -1) {
+                this._oCreateModel.setProperty("/ReceivingPlant", sKey);
+                oInput.setValueState("None");
+            }
+            this.onFieldLiveChange();
+        },
+
+        onMaterialSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            var oContext = oItem.getBindingContext();
+            var oData = oContext ? oContext.getObject() : null;
+            this._handleValueHelpSelected(oEvent.getSource(), sKey, oItem, oData);
+        },
+
+        onPlantSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            this._handleValueHelpSelected(oEvent.getSource(), sKey, oItem, null);
+        },
+
+        onStorageLocationSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            var oContext = oItem.getBindingContext();
+            var oData = oContext ? oContext.getObject() : null;
+            this._handleValueHelpSelected(oEvent.getSource(), sKey, oItem, oData);
+        },
+
+        onRecSLocSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            this._handleValueHelpSelected(oEvent.getSource(), sKey, oItem, null);
+        },
+
+        onRecPlantSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            this._handleValueHelpSelected(oEvent.getSource(), sKey, oItem, null);
         },
 
         onCloseErrorMessage: function () {
