@@ -5,6 +5,71 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Chunk 4: Step 2 Service and App (Warehouse Scan → TO → Auto Confirm) — Implemented, Validated, and Tested (2026-10-10):** In response to user request `Chunk 4: Step 2 Service and App (Warehouse Scan → TO → Auto Confirm)`:
+  1. **OData Function & Action Service Extensions (`srv/wm/tr-to/` & `TrToAdapter.js`):**
+     - CDS Definition (`srv/wm/tr-to/service.cds`): Added complex types `TOProcessResult` (TransferOrder, ConfirmationNumber, WarehouseNumber, Status, IsConfirmed, ConfirmedBy, ErrorMessage) and `TRDetail` (WarehouseNumber, TRNumber, TRItem, Material, MaterialDescription, Plant, StorageLocation, DestinationType, DestinationBin, TargetQty, OpenQty, Unit, Batch, IsBatchManaged, IsSerialManaged, ReservationNo, ReservationItem).
+     - Added function `lookupTR(tbnum, lgnum)` returning `TRDetail`.
+     - Added actions `createTOFromTR(...)` and alias `CreateTOFromTR(...)` (matching SAP Gateway SEGW Function Import name) accepting `lgnum`, `tbnum`, `tbpos`, `qty`, `unit`, `batch`, `serials`, `autoConfirm`, `storageUnit`.
+     - Backend Adapter (`srv/integration/s4hana/wm/TrToAdapter.js`):
+       - Material profiles inspection (`MARA` query for `XCHPF` batch management and `SERNP` serial management).
+       - TR lookup calculation: computes open TR quantity from target minus picked quantities; detects batch and serial requirement flags.
+       - Validates pick quantity: rejects zero, negative, or over-quantity exceeding open TR amount.
+       - Validates dynamic requirements: enforces mandatory batch if material is batch-managed; enforces serial number count matching quantity if material is serial-managed.
+       - Sequential TO creation (`L_TO_CREATE_TR` / `ZWM_TO_CREATE_FROM_TR`) and auto-confirmation via `confirmTO` (`L_TO_CONFIRM`).
+       - Service Handler (`srv/wm/tr-to/handlers/trTo.handler.js`): Persists Transfer Order number and status `04` (`TO_CONFIRMED`) to `ZRES_TRACK`, and records step-wise audit log in `ZRES_LOG` (`LT04` TO Created, `LT12` TO Confirmed).
+  2. **Freestyle UI5 Scan Screen (App 2) (`app/fiori-app/webapp/modules/wm/warehouse-scan-to/`):**
+     - Built dedicated Freestyle UI5 view `WarehouseScanTo.view.xml` and controller `WarehouseScanTo.controller.js` preserving existing Zebra RF screen 9001 (`TrTo.view.xml`).
+     - Barcode & Camera Scanning: prominent scan input for TR (`inputBarcodeTR`) with hardware laser wedge integration via `BarcodeScanService.attachHardwareScanner`, camera barcode scan (`btnCameraScanTR`), and open TR value help (`btnValueHelpTR` / `TrSelectDialog.fragment.xml`).
+     - TR Lookup Summary Card: displays Material Number & Description (`ObjectIdentifier`), Movement Type, Plant & SLoc, Destination Storage Type & Bin, and highlighted Open Quantity with Unit.
+     - Quantity Input & Live Check: pick quantity input prefilled to open amount, with live validation preventing zero, negative, or over-pick values, plus 1-click "Max Qty" button.
+     - Dynamic Batch Capture: conditionally rendered when `IsBatchManaged` is true; includes barcode camera scan and validation blocking submission if batch is empty.
+     - Dynamic Serial Number Capture: conditionally rendered when `IsSerialManaged` is true; includes scan input, camera scan, tokenized table of scanned serials, duplicate prevention, and counter status (`Scanned: X of Y`).
+     - Auto-Confirm Switch: toggle in header (default ON) controlling immediate `L_TO_CONFIRM` execution.
+     - Outcome Banner: success summary displaying confirmed Transfer Order number, confirmation number, status badge (`04 - TO Confirmed`), and "Scan Next TR" quick reset.
+     - Audio feedback: synthesized tones via Web Audio API for success chime, warning, and error buzz.
+  3. **Manifest, Routing & Navigation Wiring:**
+     - Registered route `wmWarehouseScanTo` (`wm/scan-to`) and target `TargetWarehouseScanTo` in `manifest.json`.
+     - Added generic tile `tileWarehouseScanTo` under the Warehouse tab in `Dashboard.view.xml` and navigation handler `onNavigateToWarehouseScanTo` in `Dashboard.controller.js`.
+     - Client service `WarehouseScanToService.js` and updated `TrToService.js` exposing `lookupTR` and `createTOFromTR`.
+     - Complete i18n localization in `i18n.properties` and `i18n_en.properties`.
+  4. **ABAP Model Alignment:**
+     - Updated behavior definition `zr_res_entry.bdef.asbdef` and behavior pool `zbp_r_res_entry.clas.locals_imp.abap` with action `createTOFromTR` wrapping `ZCL_RES_PROCESS=>create_to_from_tr` and `confirm_to`.
+  5. **Validation:**
+     - Backend unit tests (`test/unit/wm/createTOFromTR.test.js`): 7/7 tests passed 100% green (TR lookup, quantity checks, batch validation, serial count validation, sequential create + confirm, and manual confirm fallback).
+     - Frontend UI unit tests (`test/unit/wm/warehouseScanToUi.test.js`): 23/23 tests passed 100% green (initialization, hardware & camera scanning, TR lookup, quantity validations, batch checks, serial number capture, TO processing, auto-confirm outcome, reset flow).
+     - Complete repository WM test pass: **61 passed, 61 total test suites; 1,240 passed, 1,240 total tests (100% green)**.
+     - `ui5lint`: 0 errors, 0 warnings (clean).
+     - `git diff --check`: 0 errors (clean).
+
+- **Chunk 3: Step 1 Service and App (Create Reservation + auto TR) — Implemented, Validated, and Tested (2026-10-10):** In response to user request `Chunk 3: Step 1 Service and App (Create Reservation + auto TR)`:
+  1. **ABAP RESTful Application Programming Model (RAP) Artifacts (`docs/abap/`):**
+     - Root View Entity `ZR_RES_ENTRY` (`docs/abap/zr_res_entry.ddls.asddls`) on `zres_track` with composition child `_Logs` to `zres_log`.
+     - Projection View Entity `ZC_RES_ENTRY` (`docs/abap/zc_res_entry.ddls.asddls`) decorated with standard `@UI.headerInfo`, `@UI.facet`, `@UI.lineItem`, `@UI.identification`, and `@UI.selectionField` annotations for Fiori Elements.
+     - Managed Behavior Definition `ZR_RES_ENTRY` (`docs/abap/zr_res_entry.bdef.asbdef`) with validation `validateMovementType` on save (verifying Cost Center for 201, Asset for 241, Receiving SLoc for 311, Receiving Plant for 301) and determination `processReservationAndTR` executing `ZCL_RES_PROCESS=>create_reservation` and auto `create_tr`.
+     - Behavior Pool Implementation `ZBP_R_RES_ENTRY` (`docs/abap/zbp_r_res_entry.clas.abap` and `.locals_imp.abap`) integrating RAP lifecycle to `ZCL_RES_PROCESS`.
+     - Service Definition `ZUI_RES_ENTRY_O4` (`docs/abap/zui_res_entry_o4.srvd.asrvds`) exposing `ZC_RES_ENTRY` and `ZC_RES_LOG` for OData V4 UI consumption.
+  2. **CAP Full-Stack Service `ReservationEntryService` (`srv/wm/reservation-entry/`):**
+     - CDS definition in `srv/wm/reservation-entry/service.cds` mounted at `/odata/v4/reservation-entry` exposing `ReservationEntries`, `ReservationStatuses`, `ReservationLogs`, and action `createReservationEntry`. Wired into main `srv/service.cds`.
+     - Validation per movement type: Cost Center mandatory for 201; Asset Number mandatory for 241; Receiving Storage Location mandatory and different from issuing location for 311; Receiving Plant mandatory and different from issuing plant for 301.
+     - Sequential On-Save Orchestration:
+       - Step 1: Creates Reservation in SAP via `ReservationProcessAdapter.createReservation` (`BAPI_RESERVATION_CREATE1`), retrieves generated `ReservationNo`, and logs Step `MB21` in `ReservationLogs`.
+       - Step 2: Auto-creates Transfer Requirement in the background via `ReservationProcessAdapter.createTransferRequirement` (`L_TR_CREATE`), retrieves generated `TransferRequirement` (TBNUM), advances status to `02` (`TR Auto-Created`), and logs Step `LB01`.
+       - Graceful Degradation: If TR creation fails or SLoc is non-WM, reservation is preserved in status `01` (`Reservation Created`) with warning logged.
+  3. **Fiori Elements List Report & Object Page (`app/fiori-app/`):**
+     - Frontend Service `ReservationEntryService.js` handling `/odata/v4/reservation-entry` queries and create action.
+     - List Report `ReservationEntryList.view.xml` & `.controller.js`: DynamicPage with FilterBar (Movement Type, Status, Plant), SearchField, responsive table with ObjectStatus badges (`01` Created, `02` TR Auto-Created, `03` TO Created, `04` TO Confirmed, `05` GI Posted, `99` Error), and 1-click navigation.
+     - Object Page `ReservationEntryDetail.view.xml` & `.controller.js`: `sap.uxap.ObjectPageLayout` supporting both Create mode (`wmReservationEntryCreate`) and Display mode (`wmReservationEntryDetail`). Features dynamic field visibility switching per movement type (Cost Center for 201, Asset/Subnumber for 241, Receiving SLoc for 311, Receiving Plant for 301), Auto-TR status tracking, and step-wise processing logs table (`Logs`).
+     - Configuration in `manifest.json`: added dataSource `reservationEntryService`, model `reservationEntry`, routes `wmReservationEntryList`, `wmReservationEntryCreate`, `wmReservationEntryDetail`, and targets.
+     - Dashboard Tile: added `tileReservationEntry` under Warehouse (EWM / WM) tab in `Dashboard.view.xml` and handler `onNavigateToReservationEntry` in `Dashboard.controller.js`.
+     - Localization: added complete text keys in `i18n.properties` and `i18n_en.properties`.
+  4. **Validation:**
+     - Backend unit tests (`test/unit/wm/reservationEntryService.test.js`): 12/12 tests passed (all 7 movement-type validations, auto-TR creation for 311/201/241, fallback warning handling, and status badges).
+     - Frontend UI unit tests (`test/unit/wm/reservationEntryUi.test.js`): 19/19 tests passed (defaults, dynamic movement switching, validations, save orchestration, error handling, status formatters, and list search).
+     - Full reservation test suite (`test/unit/wm/reservation`): 4 suites, 60/60 tests passed 100% green.
+     - Repository WM regression: 58 test suites, 1,191/1,191 tests passed.
+     - `ui5lint`: 0 findings detected.
+     - `git diff --check`: 0 errors.
+
 - **Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS & ReservationProcessAdapter) — Implemented & Tested in Isolation (2026-10-10):** In response to user request `Chunk 2: Backend Function Wrappers (ABAP, no UI yet)`:
   1. **Reusable ABAP Class `ZCL_RES_PROCESS` (`docs/abap/zcl_res_process.clas.abap`):**
      - Built modular, single-responsibility methods wrapping each SAP standard function module:
@@ -147,6 +212,12 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Next Recommended Action (Chunk 5):** Proceed with **Chunk 5: Step 3 Service and App (Goods Issue / MIGO Post Against Reservation + Status 05 GI_POSTED)**:
+  - OData action / function wrapping `BAPI_GOODSMVT_CREATE` (`GOODSMVT_CODE = '06'`) referencing confirmed Transfer Order and Reservation.
+  - Final goods issue confirmation screen / step in UI.
+  - Automatic status advance to `05` (`GI_POSTED`) in `ZRES_TRACK` and persistence of generated Material Document (`MBLNR` / `MJAHR`).
+  - Validation across all 4 movement types (201, 241, 311, 301).
+
 0. User to decide: reverse 4900050046/2026 with the API Cancel action (then verify ENMNG, KZEAR, stock and the WM transfer requirement), and whether to run test 2 (418011/4, 1 KG, needs a batch decision).
 1. Log in locally, open the dashboard tile "First Goods Issue 261" (WM tab) and confirm the page with plant 1120.
 2. Decide whether the ABAP RAP variant is still wanted.
@@ -162,6 +233,93 @@ The previous log was removed in commit `b741337`; this file restarts it.
 11. **Create Sales Order fixes (Unresolved Issue 10):** ~~(1) Incoterms removed (no SAP API on this system writes them on create; user chose "Fix All"), (2) RFC value helps honour `$filter`, no 50-row cap, (3) validation on `change` only, (4) fallback lists deleted (503 when RFC is unavailable), (5) no defaulted ShipToParty / CustomerPurchaseOrderDate, (6) read-back mismatch shown as created, form reset~~ — all done 2026-10-06. **Open: (7) with the user's go, prove one live ZDOM create end to end through the changed path (sold-to 10135, one ZFRT material, payment terms + contact person from the value helps), read it back via `HeaderSet('<id>')?$expand=HeaderPartnerSet` and RFC VBKD/VBPA, and record the document number here.** **Incoterms (2026-10-08): resolved via customer-master defaulting (no code) — maintain INCO1/INCO2 on the sold-to for the order's sales area; LORD cannot carry Incoterms on create. Explicit per-order entry would need `API_SALES_ORDER_SRV`, currently **Blocked (no System Alias, Issue 11)**. See Changes Log 2026-10-08.**
 
 ## Changes Log
+
+### 2026-10-10 11:15 IST — Chunk 4: Step 2 Service and App (Warehouse Scan → TO → Auto Confirm)
+- **Request.** `Chunk 4: Step 2 Service and App (Warehouse Scan → TO → Auto Confirm)
+OData function import CreateTOFromTR
+Freestyle UI5 scan screen (barcode/camera), TR lookup, quantity check
+Batch/serial capture if the material needs it
+Auto-confirm the TO and update status to TO_CONFIRMED
+
+Output: App 2 live, TO created and confirmed from a TR scan`
+- **1. CDS Model & OData Actions (`srv/wm/tr-to/service.cds`):**
+  - Added complex types `TOProcessResult` (TransferOrder, ConfirmationNumber, WarehouseNumber, Status, IsConfirmed, ConfirmedBy, ErrorMessage) and `TRDetail` (WarehouseNumber, TRNumber, TRItem, Material, MaterialDescription, Plant, StorageLocation, DestinationType, DestinationBin, TargetQty, OpenQty, Unit, Batch, IsBatchManaged, IsSerialManaged, ReservationNo, ReservationItem).
+  - Added function `lookupTR(tbnum, lgnum)` returning `TRDetail`.
+  - Added action `createTOFromTR(...)` and uppercase alias `CreateTOFromTR(...)` (matching SAP Gateway SEGW Function Import name) accepting `lgnum`, `tbnum`, `tbpos`, `qty`, `unit`, `batch`, `serials`, `autoConfirm`, `storageUnit`.
+  - Verified compilation via `npx cds compile srv/wm/tr-to/service.cds` (exit code 0).
+- **2. Backend Integration Adapter & Handler (`srv/integration/s4hana/wm/TrToAdapter.js` & `trTo.handler.js`):**
+  - Implemented `_materialProfiles(matnrs)` querying `MARA` for `XCHPF` (batch management) and `SERNP` (serial management).
+  - Implemented `lookupTR(tbnum, lgnum)` calculating open TR quantity and determining dynamic material requirements.
+  - Implemented `confirmTO({ lgnum, toNumber, squit })` executing `L_TO_CONFIRM`.
+  - Implemented `createTOFromTR(...)`:
+    - Validates pick quantity > 0 and <= open TR quantity.
+    - Enforces mandatory batch if `isBatchManaged`.
+    - Enforces serial numbers array matching required pick quantity if `isSerialManaged`.
+    - Creates TO via `L_TO_CREATE_TR` / `ZWM_TO_CREATE_FROM_TR`.
+    - When `autoConfirm=true`, sequentially executes `confirmTO` (`L_TO_CONFIRM`).
+    - Updates transparent table `ZRES_TRACK` (`TransferOrder`, `Status_code = '04'`) and records step-wise audit logs in `ZRES_LOG` (`LT04` TO Created, `LT12` TO Confirmed).
+- **3. Freestyle UI5 Scan Screen (App 2) (`app/fiori-app/webapp/modules/wm/warehouse-scan-to/`):**
+  - Built dedicated Freestyle UI5 view `WarehouseScanTo.view.xml` and controller `WarehouseScanTo.controller.js` preserving existing Zebra RF screen 9001 (`TrTo.view.xml`).
+  - Barcode & Camera Scanning: prominent scan input for TR (`inputBarcodeTR`) with hardware laser wedge integration via `BarcodeScanService.attachHardwareScanner`, camera barcode scan (`btnCameraScanTR`), and open TR value help (`btnValueHelpTR` / `TrSelectDialog.fragment.xml`).
+  - TR Lookup Summary Card: displays Material Number & Description (`ObjectIdentifier`), Movement Type, Plant & SLoc, Destination Storage Type & Bin, and highlighted Open Quantity with Unit.
+  - Quantity Input & Live Check: pick quantity input prefilled to open amount, with live validation preventing zero, negative, or over-pick values, plus 1-click "Max Qty" button.
+  - Dynamic Batch Capture: conditionally rendered when `IsBatchManaged` is true; includes barcode camera scan and validation blocking submission if batch is empty.
+  - Dynamic Serial Number Capture: conditionally rendered when `IsSerialManaged` is true; includes scan input, camera scan, tokenized table of scanned serials, duplicate prevention, and counter status (`Scanned: X of Y`).
+  - Auto-Confirm Switch: toggle in header (default ON) controlling immediate `L_TO_CONFIRM` execution.
+  - Outcome Banner: success summary displaying confirmed Transfer Order number, confirmation number, status badge (`04 - TO Confirmed`), and "Scan Next TR" quick reset.
+  - Audio feedback: synthesized tones via Web Audio API for success chime, warning, and error buzz.
+- **4. Manifest, Navigation & Localization:**
+  - Registered route `wmWarehouseScanTo` (`wm/scan-to`) and target `TargetWarehouseScanTo` in `manifest.json`.
+  - Added generic tile `tileWarehouseScanTo` under the Warehouse tab in `Dashboard.view.xml` and navigation handler `onNavigateToWarehouseScanTo` in `Dashboard.controller.js`.
+  - Client service `WarehouseScanToService.js` and updated `TrToService.js` exposing `lookupTR` and `createTOFromTR`.
+  - Added localized text keys in `i18n.properties` and `i18n_en.properties`.
+- **5. ABAP Behavior Alignment (`docs/abap/`):**
+  - Updated behavior definition `zr_res_entry.bdef.asbdef` and behavior pool `zbp_r_res_entry.clas.locals_imp.abap` with action `createTOFromTR` wrapping `ZCL_RES_PROCESS=>create_to_from_tr` and `confirm_to`.
+- **6. Validation:**
+  - Backend unit tests (`test/unit/wm/createTOFromTR.test.js`): 7/7 tests passed 100% green.
+  - Frontend UI unit tests (`test/unit/wm/warehouseScanToUi.test.js`): 23/23 tests passed 100% green.
+  - All WM unit test suites: **61 passed, 61 total suites; 1,240 passed, 1,240 total tests (100% green)**.
+  - `ui5lint`: 0 errors, 0 warnings (clean).
+  - `git diff --check`: clean (exit code 0).
+
+### 2026-10-10 10:50 IST — Chunk 3: Step 1 Service and App (Create Reservation + auto TR)
+- **Request.** `Chunk 3: Step 1 Service and App (Create Reservation + auto TR)
+RAP BO / OData service for reservation entry
+Validation per movement type (cost center for 201, asset for 241, receiving SLoc for 311, receiving plant for 301)
+On save: create reservation, then auto-create the TR (background), then update status
+Fiori Elements List Report + Object Page`
+- **1. ABAP RAP BO Artifacts (`docs/abap/`):**
+  - **CDS Root View Entity `ZR_RES_ENTRY` (`docs/abap/zr_res_entry.ddls.asddls`):** Defined root entity on `zres_track` with associations to status code list and composition child `_Logs` to `zres_log`.
+  - **CDS Projection View Entity `ZC_RES_ENTRY` (`docs/abap/zc_res_entry.ddls.asddls`):** Fiori Elements projection decorated with `@UI.headerInfo`, `@UI.facet`, `@UI.lineItem`, `@UI.identification`, and `@UI.selectionField` annotations.
+  - **Managed Behavior Definition `ZR_RES_ENTRY` (`docs/abap/zr_res_entry.bdef.asbdef`):** Defines draft-enabled / managed behavior with validations (`validateMovementType` on save) and determinations (`processReservationAndTR` on save).
+  - **Behavior Pool Implementation `ZBP_R_RES_ENTRY` (`docs/abap/zbp_r_res_entry.clas.abap` and `.locals_imp.abap`):** Implements `validateMovementType` enforcing mandatory cost center (201), asset (241), receiving SLoc (311), and receiving plant (301), and determination `processReservationAndTR` calling `ZCL_RES_PROCESS=>create_reservation` then `ZCL_RES_PROCESS=>create_tr`.
+  - **Service Definition `ZUI_RES_ENTRY_O4` (`docs/abap/zui_res_entry_o4.srvd.asrvds`):** Exposes `ZC_RES_ENTRY` and `ZC_RES_LOG` for OData V4 consumption.
+- **2. CAP Service `ReservationEntryService` (`srv/wm/reservation-entry/`):**
+  - Defined service in `service.cds` mounted at `/odata/v4/reservation-entry` exposing `ReservationEntries`, `ReservationStatuses`, `ReservationLogs`, and action `createReservationEntry`. Wired into `srv/service.cds`.
+  - Validations per movement type:
+    - 201: Cost Center mandatory.
+    - 241: Asset Number mandatory.
+    - 311: Receiving Storage Location mandatory and different from issuing storage location.
+    - 301: Receiving Plant mandatory and different from issuing plant.
+  - On-Save Orchestration:
+    - Creates Reservation via `ReservationProcessAdapter.createReservation` (`BAPI_RESERVATION_CREATE1`).
+    - Auto-creates Transfer Requirement via `ReservationProcessAdapter.createTransferRequirement` (`L_TR_CREATE`) in the background.
+    - Updates `ReservationTrack` status to `02` (`TR Auto-Created`) and records step-wise audit logs for `MB21` and `LB01`.
+    - Handles fallback warning gracefully if TR creation cannot complete.
+- **3. Fiori Elements List Report & Object Page (`app/fiori-app/`):**
+  - Built frontend client `ReservationEntryService.js` in `modules/wm/reservation-entry/service/`.
+  - Built List Report `ReservationEntryList.view.xml` & `.controller.js`: DynamicPage with FilterBar, SearchField, ObjectStatus badges, and navigation.
+  - Built Object Page `ReservationEntryDetail.view.xml` & `.controller.js`: `sap.uxap.ObjectPageLayout` with header metrics, Create mode form with movement-type dynamic visibility, Display mode with Auto-TR (`TBNUM`) and Transfer Order (`TANUM`) tracking, and audit `Logs` table.
+  - Registered dataSource, model, routes (`wmReservationEntryList`, `wmReservationEntryCreate`, `wmReservationEntryDetail`), and targets in `manifest.json`.
+  - Added Dashboard tile `tileReservationEntry` under Warehouse tab in `Dashboard.view.xml` and navigation handler in `Dashboard.controller.js`.
+  - Localized all UI keys in `i18n.properties` and `i18n_en.properties`.
+- **4. Validation:**
+  - `test/unit/wm/reservationEntryService.test.js`: 12/12 unit tests passed.
+  - `test/unit/wm/reservationEntryUi.test.js`: 19/19 UI unit tests passed.
+  - All reservation test suites (`test/unit/wm/reservation`): 4 suites, 60/60 tests passed (100% green).
+  - Full WM regression: 58 suites, 1,191/1,191 tests passed.
+  - `ui5lint`: 0 findings detected.
+  - `git diff --check`: 0 errors.
 
 ### 2026-10-10 10:30 IST — Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS & ReservationProcessAdapter)
 - **Request.** `Chunk 2: Backend Function Wrappers (ABAP, no UI yet)

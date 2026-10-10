@@ -13,3 +13,4 @@ using from './wm/mvt261/service';
 using from './wm/handling-unit/service';
 using from './wm/packing-instruction/service';
 using from './wm/reservation-track/service';
+using from './wm/reservation-entry/service';

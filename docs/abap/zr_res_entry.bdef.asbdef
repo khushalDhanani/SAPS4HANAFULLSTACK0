@@ -1,0 +1,61 @@
+managed implementation in class zbp_r_res_entry unique;
+strict ( 2 );
+
+define behavior for ZR_RES_ENTRY alias ReservationEntry
+persistent table zres_track
+lock master
+authorization master ( instance )
+//etag master ChangedAt
+{
+  create;
+  update;
+  delete;
+
+  field ( readonly )
+    ReservationNo,
+    ReservationItem,
+    TransferRequirement,
+    TransferOrder,
+    MaterialDocument,
+    MaterialDocYear,
+    Status,
+    ErrorMessage,
+    CreatedBy,
+    CreatedOn,
+    CreatedAt,
+    ChangedBy,
+    ChangedOn,
+    ChangedAt;
+
+  field ( mandatory )
+    MovementType;
+
+  // Validation per movement type
+  validation validateMovementType on save { create; field MovementType; }
+
+  // On Save: Create Reservation via BAPI and auto-create TR in background
+  determination processReservationAndTR on save { create; }
+
+  // Step 2 (Chunk 4): Create Transfer Order from TR and Auto-Confirm
+  action createTOFromTR parameter ZD_TO_FROM_TR_PARAM result [1] $self;
+
+  mapping for zres_track
+  {
+    ReservationNo = rsnum;
+    ReservationItem = rspos;
+    MovementType = move_type;
+    WarehouseNumber = lgnum;
+    TransferRequirement = tbnum;
+    TransferOrder = tanum;
+    MaterialDocument = mblnr;
+    MaterialDocYear = mjahr;
+    Status = status;
+    ErrorMessage = err_msg;
+    CreatedBy = created_by;
+    CreatedOn = created_on;
+    CreatedAt = created_at;
+    ChangedBy = changed_by;
+    ChangedOn = changed_on;
+    ChangedAt = changed_at;
+  }
+}

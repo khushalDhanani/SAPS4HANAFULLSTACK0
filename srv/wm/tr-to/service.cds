@@ -75,6 +75,54 @@ service TrToService @(path: '/odata/v4/tr-to') {
         Confirmed     : Boolean;
     };
 
+    type TOProcessResult {
+        TransferOrder       : String(10);
+        TransferRequirement : String(10);
+        TRItem              : String(4);
+        ReservationNo       : String(10);
+        ReservationItem     : String(4);
+        Status              : String(2);
+        StatusText          : String(40);
+        Confirmed           : Boolean;
+        Material            : String(40);
+        MaterialName        : String(80);
+        Quantity            : Decimal(13, 3);
+        Unit                : String(3);
+        Batch               : String(10);
+        Serials             : array of String(18);
+        Success             : Boolean;
+        Message             : String(255);
+    };
+
+    type TRDetail {
+        TransferRequirement     : String(10);
+        TRItem                  : String(4);
+        WarehouseNumber         : String(3);
+        MovementType            : String(3);
+        RequirementType         : String(1);
+        RequirementNumber       : String(10);
+        ReservationNo           : String(10);
+        ReservationItem         : String(4);
+        Material                : String(40);
+        MaterialName            : String(80);
+        Plant                   : String(4);
+        StorageLocation         : String(4);
+        DestinationStorageType  : String(3);
+        DestinationStorageBin   : String(10);
+        SourceStorageType       : String(3);
+        SourceStorageBin        : String(10);
+        RequiredQuantity        : Decimal(13, 3);
+        ProcessedQuantity       : Decimal(13, 3);
+        OpenQuantity            : Decimal(13, 3);
+        Unit                    : String(3);
+        Batch                   : String(10);
+        IsBatchManaged          : Boolean;
+        IsSerialManaged         : Boolean;
+        DeliveryCompleted       : Boolean;
+        Status                  : String(2);
+        StatusText              : String(40);
+    };
+
     type TRListItem {
         Lgnum        : String(3);
         Tbnum        : String(10);
@@ -95,6 +143,9 @@ service TrToService @(path: '/odata/v4/tr-to') {
     function getTR(tbnum: String(10), lgnum: String(3)) returns TRHeader;
 
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function lookupTR(tbnum: String(10), lgnum: String(3)) returns TRDetail;
+
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getAvailableSUs(tbnum: String(10), lgnum: String(3), tbpos: String(4)) returns array of SUQuant;
 
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -108,4 +159,30 @@ service TrToService @(path: '/odata/v4/tr-to') {
         lenum : String(20),
         qty   : Decimal(13, 3)
     ) returns TOConfirmation;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action createTOFromTR(
+        lgnum       : String(3),
+        tbnum       : String(10),
+        tbpos       : String(4),
+        qty         : Decimal(13, 3),
+        unit        : String(3),
+        batch       : String(10),
+        serials     : array of String(18),
+        storageUnit : String(20),
+        autoConfirm : Boolean
+    ) returns TOProcessResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action CreateTOFromTR(
+        lgnum       : String(3),
+        tbnum       : String(10),
+        tbpos       : String(4),
+        qty         : Decimal(13, 3),
+        unit        : String(3),
+        batch       : String(10),
+        serials     : array of String(18),
+        storageUnit : String(20),
+        autoConfirm : Boolean
+    ) returns TOProcessResult;
 }

@@ -89,6 +89,14 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
+      },
+      "reservationEntryService": {
+        "uri": "/odata/v4/reservation-entry/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       }
     }
   },
@@ -188,6 +196,13 @@
       },
       "trTo": {
         "dataSource": "trToService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "reservationEntry": {
+        "dataSource": "reservationEntryService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -375,6 +390,26 @@
           "name": "wmPackingInstructions",
           "pattern": "wm/packing-instruction",
           "target": "TargetPackingInstructions"
+        },
+        {
+          "name": "wmReservationEntryList",
+          "pattern": "wm/reservation-entry",
+          "target": "TargetReservationEntryList"
+        },
+        {
+          "name": "wmReservationEntryCreate",
+          "pattern": "wm/reservation-entry/create",
+          "target": "TargetReservationEntryDetail"
+        },
+        {
+          "name": "wmReservationEntryDetail",
+          "pattern": "wm/reservation-entry/{ReservationNo}/{ReservationItem}",
+          "target": "TargetReservationEntryDetail"
+        },
+        {
+          "name": "wmWarehouseScanTo",
+          "pattern": "wm/scan-to",
+          "target": "TargetWarehouseScanTo"
         }
       ],
       "targets": {
@@ -530,6 +565,21 @@
           "id": "packingInstructionDetail",
           "name": "PackingInstructionDetail",
           "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
+        },
+        "TargetReservationEntryList": {
+          "id": "reservationEntryList",
+          "name": "ReservationEntryList",
+          "path": "saps4hana.fiori.modules.wm.reservation-entry.view"
+        },
+        "TargetReservationEntryDetail": {
+          "id": "reservationEntryDetail",
+          "name": "ReservationEntryDetail",
+          "path": "saps4hana.fiori.modules.wm.reservation-entry.view"
+        },
+        "TargetWarehouseScanTo": {
+          "id": "warehouseScanTo",
+          "name": "WarehouseScanTo",
+          "path": "saps4hana.fiori.modules.wm.warehouse-scan-to.view"
         }
       }
     }

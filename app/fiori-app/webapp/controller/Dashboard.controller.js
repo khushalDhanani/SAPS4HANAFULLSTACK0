@@ -328,6 +328,14 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("wmPackingInstructions");
         },
 
+        onNavigateToReservationEntry: function () {
+            this.getOwnerComponent().getRouter().navTo("wmReservationEntryList");
+        },
+
+        onNavigateToWarehouseScanTo: function () {
+            this.getOwnerComponent().getRouter().navTo("wmWarehouseScanTo");
+        },
+
         onNavigateToOrdersDueForDelivery: function () {
             this.getOwnerComponent().getRouter().navTo("ordersDueForDelivery");
         },

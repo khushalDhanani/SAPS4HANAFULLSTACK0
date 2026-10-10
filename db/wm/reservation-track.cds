@@ -23,6 +23,17 @@ entity ReservationTrack : managed {
     key ReservationItem     : String(4);     // RSPOS
     MovementType            : String(3);     // MOVE_TYPE / BWART (201, 241, 311, 301)
     WarehouseNumber         : String(3);     // LGNUM
+    Plant                   : String(4);     // WERKS
+    StorageLocation         : String(4);     // LGORT
+    Material                : String(40);    // MATNR
+    MaterialName            : String(40);    // MAKTX
+    Quantity                : Decimal(13,3); // MENGE
+    Unit                    : String(3);     // MEINS
+    ReceivingPlant          : String(4);     // UMWRK (301)
+    ReceivingStorageLocation: String(4);     // UMLGO (311)
+    CostCenter              : String(10);    // KOSTL (201)
+    AssetNo                 : String(12);    // ANLN1 (241)
+    SubNumber               : String(4);     // ANLN2 (241)
     TransferRequirement     : String(10);    // TBNUM (LB01)
     TransferOrder           : String(10);    // TANUM (LT04)
     MaterialDocument        : String(10);    // MBLNR (MIGO)

@@ -1,0 +1,165 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.reservation-entry.controller.ReservationEntryList"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.f"
+    xmlns:fb="sap.ui.comp.filterbar"
+    xmlns:core="sap.ui.core">
+
+    <f:DynamicPage id="pageResEntryList" headerExpanded="true" showFooter="false">
+        <f:title>
+            <f:DynamicPageTitle>
+                <f:heading>
+                    <Title id="titleResList" text="{i18n>resEntryListTitle}" level="H2" />
+                </f:heading>
+                <f:expandedContent>
+                    <Label text="{i18n>resEntryListSubhead}" />
+                </f:expandedContent>
+                <f:snappedContent>
+                    <Label text="{i18n>resEntryListSubhead}" />
+                </f:snappedContent>
+                <f:actions>
+                    <Button
+                        id="btnCreateReservation"
+                        text="{i18n>resEntryBtnCreate}"
+                        icon="sap-icon://add"
+                        type="Emphasized"
+                        press=".onCreatePress" />
+                    <Button
+                        id="btnRefreshList"
+                        icon="sap-icon://refresh"
+                        tooltip="{i18n>commonRefresh}"
+                        press=".onRefreshPress" />
+                </f:actions>
+            </f:DynamicPageTitle>
+        </f:title>
+
+        <f:header>
+            <f:DynamicPageHeader pinnable="true">
+                <fb:FilterBar id="filterBarRes" search=".onSearch" showClearOnFB="true" clear=".onClearFilters" useToolbar="false">
+                    <fb:filterGroupItems>
+                        <fb:FilterGroupItem
+                            name="MovementType"
+                            label="{i18n>resEntryFieldMovementType}"
+                            groupName="Group1"
+                            visibleInFilterBar="true">
+                            <fb:control>
+                                <Select id="filterMvtType" change=".onFilterChange" selectedKey="{view>/filterMvtType}">
+                                    <core:Item key="" text="{i18n>commonAll}" />
+                                    <core:Item key="311" text="{i18n>resMvt311Text}" />
+                                    <core:Item key="201" text="{i18n>resMvt201Text}" />
+                                    <core:Item key="241" text="{i18n>resMvt241Text}" />
+                                    <core:Item key="301" text="{i18n>resMvt301Text}" />
+                                </Select>
+                            </fb:control>
+                        </fb:FilterGroupItem>
+
+                        <fb:FilterGroupItem
+                            name="Status"
+                            label="{i18n>resEntryFieldStatus}"
+                            groupName="Group1"
+                            visibleInFilterBar="true">
+                            <fb:control>
+                                <Select id="filterStatus" change=".onFilterChange" selectedKey="{view>/filterStatus}">
+                                    <core:Item key="" text="{i18n>commonAll}" />
+                                    <core:Item key="01" text="{i18n>resStatus01}" />
+                                    <core:Item key="02" text="{i18n>resStatus02}" />
+                                    <core:Item key="03" text="{i18n>resStatus03}" />
+                                    <core:Item key="04" text="{i18n>resStatus04}" />
+                                    <core:Item key="05" text="{i18n>resStatus05}" />
+                                    <core:Item key="99" text="{i18n>resStatus99}" />
+                                </Select>
+                            </fb:control>
+                        </fb:FilterGroupItem>
+
+                        <fb:FilterGroupItem
+                            name="Plant"
+                            label="{i18n>resEntryFieldPlant}"
+                            groupName="Group1"
+                            visibleInFilterBar="true">
+                            <fb:control>
+                                <Input id="filterPlant" value="{view>/filterPlant}" change=".onFilterChange" placeholder="1120" />
+                            </fb:control>
+                        </fb:FilterGroupItem>
+                    </fb:filterGroupItems>
+                </fb:FilterBar>
+            </f:DynamicPageHeader>
+        </f:header>
+
+        <f:content>
+            <Table
+                id="tblReservationEntries"
+                items="{view>/entries}"
+                growing="true"
+                growingThreshold="25"
+                noDataText="{i18n>resEntryNoData}"
+                itemPress=".onRowPress"
+                mode="None">
+                <headerToolbar>
+                    <OverflowToolbar id="toolbarResTable">
+                        <Title id="lblResTableTitle" text="{i18n>resEntryTableHeading}" level="H3" />
+                        <Badge id="badgeCount" text="{= ${view>/entries}.length }" class="sapUiTinyMarginBegin" />
+                        <ToolbarSpacer />
+                        <SearchField
+                            id="searchFieldList"
+                            width="250px"
+                            placeholder="{i18n>commonSearchPlaceholder}"
+                            search=".onSearchFieldSearch" />
+                    </OverflowToolbar>
+                </headerToolbar>
+
+                <columns>
+                    <Column width="140px"><Text text="{i18n>resEntryColResNo}" /></Column>
+                    <Column width="90px"><Text text="{i18n>resEntryColMvt}" /></Column>
+                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColMaterial}" /></Column>
+                    <Column width="100px" hAlign="End"><Text text="{i18n>resEntryColQuantity}" /></Column>
+                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColLocation}" /></Column>
+                    <Column width="110px" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resEntryColAutoTR}" /></Column>
+                    <Column width="110px" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resEntryColTO}" /></Column>
+                    <Column width="140px"><Text text="{i18n>resEntryColStatus}" /></Column>
+                </columns>
+
+                <items>
+                    <ColumnListItem type="Navigation" press=".onRowPress">
+                        <cells>
+                            <ObjectIdentifier
+                                title="{view>ReservationNo}"
+                                text="{= 'Item: ' + ${view>ReservationItem} }" />
+
+                            <ObjectStatus
+                                text="{view>MovementType}"
+                                state="None" />
+
+                            <ObjectIdentifier
+                                title="{view>Material}"
+                                text="{view>MaterialName}" />
+
+                            <ObjectNumber
+                                number="{view>Quantity}"
+                                unit="{view>Unit}" />
+
+                            <VBox>
+                                <Text text="{= ${view>Plant} + ' / ' + ${view>StorageLocation} }" />
+                                <Text
+                                    text="{= ${view>MovementType} === '311' ? ('-> Dest: ' + ${view>ReceivingStorageLocation}) : (${view>MovementType} === '301' ? ('-> Plant: ' + ${view>ReceivingPlant}) : (${view>MovementType} === '201' ? ('CostCtr: ' + ${view>CostCenter}) : (${view>MovementType} === '241' ? ('Asset: ' + ${view>AssetNo}) : ''))) }"
+                                    class="textMuted"
+                                    visible="{= !!${view>ReceivingStorageLocation} || !!${view>ReceivingPlant} || !!${view>CostCenter} || !!${view>AssetNo} }" />
+                            </VBox>
+
+                            <ObjectIdentifier
+                                title="{= ${view>TransferRequirement} ? ${view>TransferRequirement} : '-' }"
+                                text="{= ${view>TransferRequirement} ? 'Auto-Created' : 'Pending' }" />
+
+                            <Text text="{= ${view>TransferOrder} ? ${view>TransferOrder} : '-' }" />
+
+                            <ObjectStatus
+                                text="{path: 'view>Status_code', formatter: '.formatStatusText'}"
+                                state="{path: 'view>Status_code', formatter: '.formatStatusState'}"
+                                icon="{path: 'view>Status_code', formatter: '.formatStatusIcon'}" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+            </Table>
+        </f:content>
+    </f:DynamicPage>
+</mvc:View>

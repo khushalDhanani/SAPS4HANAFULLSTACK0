@@ -1,0 +1,21 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <SelectDialog
+        id="dlgScanTrSelect"
+        title="{i18n>scanToSelectDialogTitle}"
+        noDataText="{i18n>scanToSelectDialogNoData}"
+        search=".onSearchTRValueHelp"
+        confirm=".onConfirmTRValueHelp"
+        cancel=".onCancelTRValueHelp"
+        items="{scanView>/openTRs}"
+        contentWidth="34rem">
+        <StandardListItem
+            title="{scanView>DisplayText}"
+            description="{scanView>Description}"
+            info="{= ${scanView>Statu} === 'T' ? 'Partial' : 'Open' }"
+            infoState="{= ${scanView>Statu} === 'T' ? 'Warning' : 'Success' }"
+            icon="sap-icon://document-text"
+            type="Active" />
+    </SelectDialog>
+</core:FragmentDefinition>

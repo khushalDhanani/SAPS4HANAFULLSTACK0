@@ -1,0 +1,383 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.warehouse-scan-to.controller.WarehouseScanTo"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:layout="sap.ui.layout"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page
+        id="warehouseScanToPage"
+        title="{i18n>scanToPageTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack"
+        class="sapUiSizeCompact">
+
+        <headerContent>
+            <HBox alignItems="Center" class="sapUiTinyMarginEnd">
+                <Label text="{i18n>scanToAutoConfirmLabel}" class="sapUiTinyMarginEnd" design="Bold" />
+                <Switch
+                    id="switchAutoConfirm"
+                    state="{scanView>/autoConfirm}"
+                    customTextOn="{i18n>commonYes}"
+                    customTextOff="{i18n>commonNo}"
+                    change=".onAutoConfirmChange"
+                    class="sapUiSmallMarginEnd" />
+                <Button
+                    id="btnToggleAudio"
+                    icon="{= ${scanView>/audioEnabled} ? 'sap-icon://sound' : 'sap-icon://sound-off' }"
+                    tooltip="{i18n>scanToTooltipToggleAudio}"
+                    type="Transparent"
+                    press=".onToggleAudio" />
+            </HBox>
+        </headerContent>
+
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto">
+
+                <!-- STATUS MESSAGE BANNER -->
+                <MessageStrip
+                    id="scanMessageStrip"
+                    visible="{scanView>/hasMessage}"
+                    text="{scanView>/messageText}"
+                    type="{scanView>/messageType}"
+                    showIcon="true"
+                    showCloseButton="true"
+                    close=".onCloseMessage"
+                    class="sapUiSmallMarginBottom" />
+
+                <!-- SECTION 1: TR BARCODE / CAMERA SCAN -->
+                <Panel
+                    id="panelScanTR"
+                    headerText="{i18n>scanToPanelScanTitle}"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+                    <VBox class="sapUiSmallMargin">
+                        <Label
+                            text="{i18n>scanToLabelScanTR}"
+                            design="Bold"
+                            required="true"
+                            class="sapUiTinyMarginBottom" />
+                        <HBox width="100%" alignItems="Center">
+                            <Input
+                                id="inputBarcodeTR"
+                                value="{scanView>/scannedTR}"
+                                placeholder="{i18n>scanToPlaceholderTR}"
+                                submit=".onLookupTR"
+                                liveChange=".onTRLiveChange"
+                                width="100%"
+                                class="sapUiTinyMarginEnd">
+                                <layoutData>
+                                    <FlexItemData growFactor="1" />
+                                </layoutData>
+                            </Input>
+                            <Button
+                                id="btnCameraScanTR"
+                                icon="sap-icon://bar-code"
+                                tooltip="{i18n>scanToBtnCameraTR}"
+                                press=".onCameraScanTR"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnValueHelpTR"
+                                icon="sap-icon://value-help"
+                                tooltip="{i18n>scanToBtnValueHelp}"
+                                press=".onValueHelpTR"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnLookupTR"
+                                text="{i18n>scanToBtnLookup}"
+                                icon="sap-icon://search"
+                                type="Emphasized"
+                                press=".onLookupTR" />
+                        </HBox>
+                    </VBox>
+                </Panel>
+
+                <!-- SECTION 2: SUCCESS OUTCOME BANNER (IF TO POSTED) -->
+                <Panel
+                    id="panelResult"
+                    headerText="{i18n>scanToPanelResultTitle}"
+                    visible="{scanView>/hasResult}"
+                    expandable="false"
+                    class="sapUiSmallMarginBottom">
+                    <VBox class="sapUiSmallMargin">
+                        <MessageStrip
+                            type="Success"
+                            text="{scanView>/resultMessage}"
+                            showIcon="true"
+                            class="sapUiSmallMarginBottom" />
+
+                        <form:SimpleForm
+                            editable="false"
+                            layout="ResponsiveGridLayout"
+                            labelSpanXL="4"
+                            labelSpanL="4"
+                            labelSpanM="4"
+                            labelSpanS="12"
+                            adjustLabelSpan="false"
+                            emptySpanXL="0"
+                            emptySpanL="0"
+                            emptySpanM="0"
+                            emptySpanS="0"
+                            columnsXL="2"
+                            columnsL="2"
+                            columnsM="2">
+                            <form:content>
+                                <Label text="{i18n>scanToLabelTO}" design="Bold" />
+                                <Text text="{scanView>/result/TransferOrder}" />
+
+                                <Label text="{i18n>scanToLabelStatus}" design="Bold" />
+                                <ObjectStatus
+                                    text="{scanView>/result/Status}"
+                                    state="{= ${scanView>/result/IsConfirmed} ? 'Success' : 'Warning' }" />
+
+                                <Label text="{i18n>scanToLabelConfNumber}" design="Bold" visible="{scanView>/result/IsConfirmed}" />
+                                <Text text="{scanView>/result/ConfirmationNumber}" visible="{scanView>/result/IsConfirmed}" />
+
+                                <Label text="{i18n>scanToLabelConfirmedBy}" design="Bold" visible="{scanView>/result/IsConfirmed}" />
+                                <Text text="{scanView>/result/ConfirmedBy}" visible="{scanView>/result/IsConfirmed}" />
+                            </form:content>
+                        </form:SimpleForm>
+
+                        <HBox justifyContent="End" class="sapUiSmallMarginTop">
+                            <Button
+                                id="btnScanNextTR"
+                                text="{i18n>scanToBtnNextTR}"
+                                icon="sap-icon://next"
+                                type="Emphasized"
+                                press=".onScanNextTR" />
+                        </HBox>
+                    </VBox>
+                </Panel>
+
+                <!-- SECTION 3: TR DETAILS SUMMARY CARD -->
+                <Panel
+                    id="panelTRDetails"
+                    headerText="{i18n>scanToPanelTRDetails}"
+                    visible="{scanView>/hasTR}"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+                    <form:SimpleForm
+                        editable="false"
+                        layout="ResponsiveGridLayout"
+                        labelSpanXL="4"
+                        labelSpanL="4"
+                        labelSpanM="4"
+                        labelSpanS="12"
+                        adjustLabelSpan="false"
+                        emptySpanXL="0"
+                        emptySpanL="0"
+                        emptySpanM="0"
+                        emptySpanS="0"
+                        columnsXL="2"
+                        columnsL="2"
+                        columnsM="2">
+                        <form:content>
+                            <core:Title text="{i18n>scanToGroupMaterialInfo}" />
+                            <Label text="{i18n>scanToLabelMaterial}" design="Bold" />
+                            <ObjectIdentifier
+                                title="{scanView>/tr/Material}"
+                                text="{scanView>/tr/MaterialDescription}" />
+
+                            <Label text="{i18n>scanToLabelMovementType}" design="Bold" />
+                            <ObjectStatus
+                                text="{scanView>/tr/MovementType}"
+                                state="Information" />
+
+                            <Label text="{i18n>scanToLabelReservation}" design="Bold" />
+                            <Text text="{scanView>/tr/ReservationNo} / {scanView>/tr/ReservationItem}" />
+
+                            <core:Title text="{i18n>scanToGroupQuantitiesAndLocations}" />
+                            <Label text="{i18n>scanToLabelOpenQty}" design="Bold" />
+                            <ObjectStatus
+                                text="{scanView>/tr/OpenQty} {scanView>/tr/Unit}"
+                                state="Success"
+                                inverted="true" />
+
+                            <Label text="{i18n>scanToLabelTargetQty}" design="Bold" />
+                            <Text text="{scanView>/tr/TargetQty} {scanView>/tr/Unit}" />
+
+                            <Label text="{i18n>scanToLabelLocation}" design="Bold" />
+                            <Text text="{scanView>/tr/Plant} / {scanView>/tr/StorageLocation} (WH: {scanView>/tr/WarehouseNumber})" />
+
+                            <Label text="{i18n>scanToLabelDestinationBin}" design="Bold" />
+                            <Text text="{scanView>/tr/DestinationType} / {scanView>/tr/DestinationBin}" />
+                        </form:content>
+                    </form:SimpleForm>
+                </Panel>
+
+                <!-- SECTION 4: QUANTITY INPUT & VALIDATION -->
+                <Panel
+                    id="panelQuantityCheck"
+                    headerText="{i18n>scanToPanelQuantityTitle}"
+                    visible="{scanView>/hasTR}"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+                    <VBox class="sapUiSmallMargin">
+                        <Label
+                            text="{i18n>scanToLabelPickQty}"
+                            design="Bold"
+                            required="true"
+                            class="sapUiTinyMarginBottom" />
+                        <HBox alignItems="Center">
+                            <Input
+                                id="inputPickQty"
+                                value="{scanView>/pickQty}"
+                                type="Number"
+                                width="12rem"
+                                liveChange=".onPickQtyChange"
+                                valueState="{scanView>/qtyValueState}"
+                                valueStateText="{scanView>/qtyValueStateText}"
+                                class="sapUiSmallMarginEnd" />
+                            <Text text="{scanView>/tr/Unit}" class="sapUiSmallMarginEnd" />
+                            <Button
+                                id="btnSetMaxQty"
+                                text="{i18n>scanToBtnMaxQty}"
+                                tooltip="{i18n>scanToTooltipMaxQty}"
+                                type="Transparent"
+                                press=".onSetMaxQty" />
+                        </HBox>
+                    </VBox>
+                </Panel>
+
+                <!-- SECTION 5: DYNAMIC BATCH CAPTURE (IF MATERIAL IS BATCH-MANAGED) -->
+                <Panel
+                    id="panelBatch"
+                    headerText="{i18n>scanToPanelBatchTitle}"
+                    visible="{= ${scanView>/hasTR} &amp;&amp; ${scanView>/tr/IsBatchManaged} }"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+                    <VBox class="sapUiSmallMargin">
+                        <Label
+                            text="{i18n>scanToLabelBatch}"
+                            design="Bold"
+                            required="true"
+                            class="sapUiTinyMarginBottom" />
+                        <HBox width="100%" alignItems="Center">
+                            <Input
+                                id="inputBatch"
+                                value="{scanView>/batch}"
+                                placeholder="{i18n>scanToPlaceholderBatch}"
+                                liveChange=".onBatchLiveChange"
+                                valueState="{scanView>/batchValueState}"
+                                valueStateText="{scanView>/batchValueStateText}"
+                                width="100%"
+                                class="sapUiTinyMarginEnd">
+                                <layoutData>
+                                    <FlexItemData growFactor="1" />
+                                </layoutData>
+                            </Input>
+                            <Button
+                                id="btnCameraScanBatch"
+                                icon="sap-icon://bar-code"
+                                tooltip="{i18n>scanToBtnCameraBatch}"
+                                press=".onCameraScanBatch" />
+                        </HBox>
+                    </VBox>
+                </Panel>
+
+                <!-- SECTION 6: DYNAMIC SERIAL NUMBER CAPTURE (IF MATERIAL IS SERIAL-MANAGED) -->
+                <Panel
+                    id="panelSerials"
+                    headerText="{i18n>scanToPanelSerialsTitle}"
+                    visible="{= ${scanView>/hasTR} &amp;&amp; ${scanView>/tr/IsSerialManaged} }"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+                    <VBox class="sapUiSmallMargin">
+                        <HBox alignItems="Center" justifyContent="SpaceBetween" class="sapUiTinyMarginBottom">
+                            <Label text="{i18n>scanToLabelSerialInput}" design="Bold" required="true" />
+                            <ObjectStatus
+                                id="statusSerialsCount"
+                                text="{scanView>/serialsStatusText}"
+                                state="{scanView>/serialsStatusState}" />
+                        </HBox>
+
+                        <HBox width="100%" alignItems="Center" class="sapUiSmallMarginBottom">
+                            <Input
+                                id="inputSerialScan"
+                                value="{scanView>/serialInput}"
+                                placeholder="{i18n>scanToPlaceholderSerial}"
+                                submit=".onAddSerial"
+                                width="100%"
+                                class="sapUiTinyMarginEnd">
+                                <layoutData>
+                                    <FlexItemData growFactor="1" />
+                                </layoutData>
+                            </Input>
+                            <Button
+                                id="btnCameraScanSerial"
+                                icon="sap-icon://bar-code"
+                                tooltip="{i18n>scanToBtnCameraSerial}"
+                                press=".onCameraScanSerial"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnAddSerial"
+                                text="{i18n>scanToAddSerial}"
+                                icon="sap-icon://add"
+                                press=".onAddSerial" />
+                        </HBox>
+
+                        <!-- LIST OF SCANNED SERIALS -->
+                        <Table
+                            id="tableSerials"
+                            items="{scanView>/serials}"
+                            noDataText="{i18n>scanToNoSerialsScanned}"
+                            class="sapUiSizeCompact">
+                            <columns>
+                                <Column>
+                                    <Text text="{i18n>scanToColIndex}" />
+                                </Column>
+                                <Column>
+                                    <Text text="{i18n>scanToColSerialNo}" />
+                                </Column>
+                                <Column hAlign="End" width="4rem">
+                                    <Text text="{i18n>scanToColAction}" />
+                                </Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <Text text="{scanView>index}" />
+                                        <Text text="{scanView>serial}" />
+                                        <Button
+                                            icon="sap-icon://delete"
+                                            type="Transparent"
+                                            tooltip="{i18n>scanToTooltipRemoveSerial}"
+                                            press=".onRemoveSerial" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </VBox>
+                </Panel>
+
+            </VBox>
+        </content>
+
+        <!-- FOOTER ACTIONS -->
+        <footer>
+            <OverflowToolbar id="scanFooterToolbar">
+                <Button
+                    id="btnReset"
+                    text="{i18n>commonCancel}"
+                    icon="sap-icon://reset"
+                    press=".onReset" />
+                <ToolbarSpacer />
+                <Button
+                    id="btnProcessTO"
+                    text="{= ${scanView>/autoConfirm} ? ${i18n>scanToBtnCreateAndConfirm} : ${i18n>scanToBtnCreateTO} }"
+                    type="Emphasized"
+                    icon="sap-icon://accept"
+                    press=".onProcessTO"
+                    enabled="{scanView>/canSubmit}" />
+            </OverflowToolbar>
+        </footer>
+
+    </Page>
+</mvc:View>

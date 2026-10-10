@@ -386,6 +386,25 @@ sap.ui.define([
                     MessageToast.show("Camera access unavailable. Please use manual entry.");
                 });
             });
+        },
+
+        /**
+         * Convenience callback wrapper for camera scanning
+         * @param {string} sTitle
+         * @param {Function} fnCallback
+         * @returns {Promise<string>}
+         */
+        openCameraScanner: function (sTitle, fnCallback) {
+            return this.scanWithCamera({ title: sTitle })
+                .then(function (sResult) {
+                    if (typeof fnCallback === "function") {
+                        fnCallback(sResult);
+                    }
+                    return sResult;
+                })
+                .catch(function () {
+                    // Cancelled or unavailable
+                });
         }
     };
 
