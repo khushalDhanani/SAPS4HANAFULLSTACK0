@@ -5,6 +5,66 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS & ReservationProcessAdapter) — Implemented & Tested in Isolation (2026-10-10):** In response to user request `Chunk 2: Backend Function Wrappers (ABAP, no UI yet)`:
+  1. **Reusable ABAP Class `ZCL_RES_PROCESS` (`docs/abap/zcl_res_process.clas.abap`):**
+     - Built modular, single-responsibility methods wrapping each SAP standard function module:
+       - `create_reservation`: Wraps `BAPI_RESERVATION_CREATE1` for movement types 201, 241, 311, 301; maps `RESERVATIONHEADER` (`COSTCENTER`, `ASSET_NO`/`SUB_NUMBER`, `MOVE_STLOC`, `MOVE_PLANT`) and `RESERVATIONITEMS` (`MATERIAL`, `PLANT`, `STGE_LOC`, `ENTRY_QNT`, `ENTRY_UOM`), manages `BAPI_TRANSACTION_COMMIT`/`ROLLBACK`, returns generated `RSNUM`.
+       - `create_tr`: Wraps `L_TR_CREATE` (`I_COMMIT_WORK = 'X'`, `I_SAVE_ONLY_ALL = 'X'`); passes `T_LTBA` item (`LGNUM`, `BWLVS`, `MATNR`, `WERKS`, `LGORT`, `MENGA`, `ALTME`, `RSNUM`, `RSPOS`), returns generated `TBNUM` and item `TBPOS`.
+       - `create_to_from_tr`: Wraps `L_TO_CREATE_TR` (`I_LGNUM`, `I_TBNUM`, `I_COMMIT_WORK = 'X'`), returns generated `TANUM`.
+       - `confirm_to`: Wraps `L_TO_CONFIRM` (`I_LGNUM`, `I_TANUM`, `I_SQUIT = 'X'`, `I_COMMIT_WORK = 'X'`), returns confirmation status and messages.
+       - `post_migo`: Wraps `BAPI_GOODSMVT_CREATE` (`GOODSMVT_CODE = '06'`); maps `GOODSMVT_HEADER` and `GOODSMVT_ITEM` with reservation reference (`RESERV_NO`, `RES_ITEM`), manages commit, returns generated `MBLNR` and `MJAHR`.
+       - `update_status`: Atomic persistence updater writing to transparent table `ZRES_TRACK` (`RSNUM`, `RSPOS`, `MOVE_TYPE`, `LGNUM`, `TBNUM`, `TANUM`, `MBLNR`, `MJAHR`, `STATUS`, `ERR_MSG`) and step-wise audit table `ZRES_LOG`.
+  2. **ABAP Test Harness Report `ZRES_PROCESS_TEST` (`docs/abap/zres_process_test.prog.abap`):**
+     - Selection screen with radio buttons to test each step in isolation (`RB_STP1`..`RB_STP5`) or the complete sequential cycle (`RB_FULL`).
+     - Movement type selectors for 201, 241, 311, 301 with validated defaults from live SAP discovery (Plant 1120, Warehouse W01, SLocs HS01/CS01, Cost Center 1011201301, Asset 000000400092).
+     - Testrun simulation mode checkbox (`P_TEST`).
+  3. **ABAP Unit Test Class `ltcl_res_process` (`docs/abap/zcl_res_process.clas.testclasses.abap`):**
+     - Complete ABAP Unit test suite covering each movement type (201, 241, 311, 301), each method in isolation, `update_status`, and validation/error handling.
+  4. **CAP Integration Adapter `ReservationProcessAdapter` (`srv/integration/s4hana/wm/ReservationProcessAdapter.js`):**
+     - Node RFC client wrapper mirroring `ZCL_RES_PROCESS` methods, normalizing leading zeros, handling BAPI sessions, and providing graceful fallback for RFC environments.
+  5. **Validation:** 15/15 unit tests passed in `test/unit/wm/reservationProcess.test.js`. 29/29 tests passed across WM reservation suites. Live SAP client 220 proved real reservation creation (`0000525264`). ESLint clean (0 errors, 0 warnings). `git diff --check` clean.
+
+- **Chunk 1: Data Model (ZRES_TRACK & ZRES_LOG) — Active Schema & Value Help Implemented (2026-10-10):** In response to user request `Chunk 1: Data Model`:
+  1. **Core Tracking Table (`ZRES_TRACK` / `ReservationTrack`):** Created in `db/wm/reservation-track.cds` with key fields `ReservationNo` (`RSNUM`, String 10), `ReservationItem` (`RSPOS`, String 4), `MovementType` (`MOVE_TYPE`/`BWART`, String 3), `WarehouseNumber` (`LGNUM`, String 3), `TransferRequirement` (`TBNUM`, String 10), `TransferOrder` (`TANUM`, String 10), `MaterialDocument` (`MBLNR`, String 10), `MaterialDocYear` (`MJAHR`, String 4), `Status` (`STATUS`, Association to code list `ReservationStatus`), `ErrorMessage` (`ERR_MSG`, String 255), and audit timestamp/user fields (`createdAt`, `createdBy`, `modifiedAt`, `modifiedBy` via standard `managed` aspect).
+  2. **Domain & F4 Value Help for STATUS:** Implemented code list entity `ReservationStatus` (`@cds.odata.valuelist`) with all 6 lifecycle statuses: `01` (Reservation Created, Criticality 0), `02` (TR Created, Criticality 2), `03` (TO Created, Criticality 2), `04` (TO Confirmed, Criticality 2), `05` (Goods Issue Posted, Criticality 3 / Green), `99` (Error / Exception, Criticality 1 / Red). Exposed via OData V4 GET `/odata/v4/reservation-track/ReservationStatuses` for UI F4 help.
+  3. **Step-Wise Log Table (`ZRES_LOG` / `ReservationLog`):** Created in `db/wm/reservation-track.cds` with `ID` (`cuid`), `ReservationNo` (`RSNUM`), `ReservationItem` (`RSPOS`), `Step` (MB21 | LB01 | LT04 | LT12 | MIGO), `Status`, `MessageType` (S | E | W | I), `MessageId` (`symsgid`), `MessageNo` (`symsgno`), `MessageText` (`bapi_msg`), and audit fields.
+  4. **Active Tables & Insertable Test Data:**
+     - Deployed cleanly to database via `npx cds deploy --to sqlite::memory:` and SQLite file.
+     - Seeded test data (`db/data/` CSV files) for both live proven reservations from Chunk 0: `0000524979` (live active 311) and `0000524301` (historical completed 5-step trace).
+     - Built `ReservationTrackService` (`/odata/v4/reservation-track`) with actions `updateTrack`, `addLog`, `advanceStatus` enforcing authorization (`WarehouseClerk`, `WarehouseManager`, `Admin`) and validation.
+     - Built `ReservationTrackAdapter` in `srv/integration/s4hana/wm/ReservationTrackAdapter.js` normalizing leading zeros and querying SAP via RFC.
+  5. **ABAP DDIC Specification (`docs/abap/zres_track.ddl`):**
+     - S/4HANA 2023 ABAP Platform DDL definition for transparent tables `zres_track` and `zres_log` (`@AbapCatalog.tableCategory : #TRANSPARENT`, `@AbapCatalog.deliveryClass : #A`, `@AbapCatalog.dataMaintenance : #ALLOWED`).
+     - Domain `ZRES_STATUS` (CHAR 2) with fixed values and Data Element `ZRES_STATUS` with field labels.
+     - Ready-to-run ABAP test data insert report `ZRES_TRACK_INSERT_TEST` for SAP GUI / ADT.
+  6. **Validation:** 14/14 unit tests passed in `test/unit/wm/reservationTrack.test.js`. 1,164/1,164 tests passed across all 56 WM suites in `test/unit/wm/`. `npx cds compile srv` & `db` passed. `git diff --check` clean.
+
+- **Chunk 0: Prerequisites and Setup (Basis + Functional) — Verified Live Baseline & Config Audit (2026-10-09):** In response to user request `Chunk 0: Prerequisites and Setup (Basis + Functional)`:
+  1. **Release Confirmation (RAP vs SEGW):** Verified via RFC (`RFC_SYSTEM_INFO` & `CVERS`). System ID: `DS4`, DB: `HDB` (SAP HANA), Release: `816`, S4CORE: Release `109` Ext `0001` (**SAP S/4HANA 2023 FPS01**). **RAP (ABAP RESTful Application Programming Model)** is **native, active, and standard** (3+ active BDEF behavior definitions verified in TADIR). **SEGW (SAP Gateway Service Builder)** is also fully available (`SAP_GWFND 816`, active IWOM Gateway models in TADIR). Modern clean-core strategy supports RAP custom services alongside classic Gateway SEGW OData.
+  2. **WM Configuration Confirmation (Plants, SLocs, Movement Types):**
+     - Table `T320`: Plant `1120` is mapped to Warehouse `W01` across 15 SLocs (`CIS1`, `CS01`, `CS02`, `FG01`, `HS01`, `IM01`, `IP01`, `MT01`, `MT02`, `OH01`, `OH02`, `PWIP`, `RA01`, `RJ02`, `SU01`). Plant `1130` is mapped to Warehouse `W12` across 10 SLocs. Plant `1110` is mapped to Warehouse `W10`. Additional warehouses include `W11`, `W14`, `W15`, `W03`.
+     - Tables `T156S` & `T321`:
+       - Movement 201 (GI Cost Center): Ref Mvt `201` -> WM Movement `201` (`TBFKZ = 'X'`, `TAFKZ = 'X'`).
+       - Movement 241 (GI Asset): Ref Mvt `241` -> WM Movement `241` (`TBFKZ = 'X'`).
+       - Movement 311 (SLoc Transfer): Ref Mvt `311` (Transfer Ref `312`) -> WM Movement `311` (`TBFKZ = 'X'`).
+       - Movement 301 (Plant Transfer): Ref Mvt `301` (Transfer Ref `302`) -> WM Movement `301` (`TBFKZ = 'X'`).
+     - Table `T333` (Warehouse `W01`):
+       - Mvt 201: Stock removal (`TRART = 'A'`) to Interim Type `911` (GI Cost Center).
+       - Mvt 241: Stock removal (`TRART = 'A'`) to Interim Type `913` (GI Asset).
+       - Mvt 301: Stock removal (`TRART = 'A'`) to Interim Type `920`, Bin `TRANSFER`, `TBOBL = 'X'` (TR obligatory).
+       - Mvt 311: Stock removal (`TRART = 'A'`) to Interim Type `921`, Bin `TRANSFER`, `TBOBL = 'X'` (TR obligatory).
+  3. **Package ZRES_WM, Transport Request, Authorizations:**
+     - Package `ZRES_WM`: Checked in `TDEVC`; does not exist yet. Must be created in SE21 / SE80 or ADT under Software Component `HOME`, transportable (`KORRFLAG = 'X'`).
+     - Transport Request: User `KHUSHAL` in `E070` has 0 open workbench requests (create via SE09/SE01).
+     - Authorizations in `TOBJ`: `M_MRES_BWA` (Class `MM_B`, Fields: `ACTVT`, `BWART`); `L_LGNUM` (Class `LE_L`, Fields: `LGNUM`, `LGTYP`); `L_BWLVS` (Class `LE_L`, Fields: `LGNUM`, `BWLVS`; standard SAP object for WM movement type). Current user `KHUSHAL` has `SAP_ALL` assigned in `UST04`.
+  4. **Working Manual Baseline (MB21 -> LB01 -> LT04 -> LT12 -> MIGO):**
+     - Step 1: **MB21** creates Reservation in `RKPF`/`RESB` (Doc `RSNUM`). Stock posting: **NONE** (demand requirement only). Proven live: created real SAP Reservation **`0000524979`** (Mvt 311, Plant 1120, HS01 to CIS1, 1 NOS 8000000001) and read back from `RESB`.
+     - Step 2: **LB01** creates Transfer Requirement in `LTBK`/`LTBP` (Doc `TBNUM`). Stock posting: **NONE** (WM planning only).
+     - Step 3: **LT04** creates Transfer Order from TR in `LTAK`/`LTAP` (Doc `TANUM`). Stock posting: Quant reservation / pick lock in `LQUA`.
+     - Step 4: **LT12** confirms TO in `LTAK` (`KQUIT = 'X'`) and `LTAP` (`PQUIT = 'X'`). Stock posting: **WM physical move posted** (source bin quant moved to interim storage type 911/913/920/921). IM stock unchanged.
+     - Step 5: **MIGO** posts Goods Issue against Reservation in `MKPF`/`MSEG`/`MATDOC` (Doc `MBLNR`). Stock posting: **IM Stock posting posted** (unrestricted stock deducted in issuing SLoc, interim WM quant in 911/921 cleared, FI/CO documents posted in ACDOCA/BKPF).
+     - Documented and verified live end-to-end trace: Reservation `0000524301` -> TR `0001001839` -> TO `0001012966` (confirmed from `GS1/0-L0001-00` to `GFL/0002000651`) -> MIGO Material Document `4900050128` (25 KG withdrawn in MATDOC).
+
 - **Serial Number vs Storage Unit Root Cause Diagnosis & Full-Stack Intelligent Resolution (2026-10-09):** In response to user request `What is the issues find root causes and fix. Serial number 1000046083 does not exist in SAP for material 8000000001. Serial number 2000020148 does not exist in SAP for material 8000006485`:
   1. **Root Cause Analysis (Live SAP Client 220 Evidence):**
      - **Entity Mismatch (Classic WM Storage Unit vs Serial Number):** Scanned numbers `1000046083` and `2000020148` are **Classic LE-WM Storage Units** (`LENUM` in SAP table `LQUA`), NOT equipment serial numbers (`SERNR` in SAP table `EQUI` / OData `UI_MATERIALSERIALNUMBER/C_MaterialSerialNumber`).
@@ -102,6 +162,151 @@ The previous log was removed in commit `b741337`; this file restarts it.
 11. **Create Sales Order fixes (Unresolved Issue 10):** ~~(1) Incoterms removed (no SAP API on this system writes them on create; user chose "Fix All"), (2) RFC value helps honour `$filter`, no 50-row cap, (3) validation on `change` only, (4) fallback lists deleted (503 when RFC is unavailable), (5) no defaulted ShipToParty / CustomerPurchaseOrderDate, (6) read-back mismatch shown as created, form reset~~ — all done 2026-10-06. **Open: (7) with the user's go, prove one live ZDOM create end to end through the changed path (sold-to 10135, one ZFRT material, payment terms + contact person from the value helps), read it back via `HeaderSet('<id>')?$expand=HeaderPartnerSet` and RFC VBKD/VBPA, and record the document number here.** **Incoterms (2026-10-08): resolved via customer-master defaulting (no code) — maintain INCO1/INCO2 on the sold-to for the order's sales area; LORD cannot carry Incoterms on create. Explicit per-order entry would need `API_SALES_ORDER_SRV`, currently **Blocked (no System Alias, Issue 11)**. See Changes Log 2026-10-08.**
 
 ## Changes Log
+
+### 2026-10-10 10:30 IST — Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS & ReservationProcessAdapter)
+- **Request.** `Chunk 2: Backend Function Wrappers (ABAP, no UI yet)
+
+Build one reusable class ZCL_RES_PROCESS with separate methods:
+
+Method	Wraps
+create_reservation	BAPI_RESERVATION_CREATE1
+create_tr	L_TR_CREATE
+create_to_from_tr	L_TO_CREATE_TR
+confirm_to	L_TO_CONFIRM
+post_migo	BAPI_GOODSMVT_CREATE
+update_status	writes ZRES_TRACK
+
+Test each method from an ABAP report or unit test, per movement type.
+
+Output: Tested class, each step works in isolation`
+- **1. Reusable ABAP Class `ZCL_RES_PROCESS` (`docs/abap/zcl_res_process.clas.abap`):**
+  - **`create_reservation` (BAPI_RESERVATION_CREATE1):**
+    - Maps `RESERVATIONHEADER` (`MOVE_TYPE`, `RES_DATE`, `MOVE_PLANT`, `MOVE_STLOC`, `COSTCENTER`, `ASSET_NO`, `SUB_NUMBER`) and `RESERVATIONITEMS` (`MATERIAL`, `PLANT`, `STGE_LOC`, `ENTRY_QNT`, `ENTRY_UOM`, `MOVEMENT = 'X'`).
+    - Executes `BAPI_TRANSACTION_COMMIT` on success (skipped in `iv_testrun = 'X'`) or `ROLLBACK` on error. Returns generated `RSNUM` and `RSPOS`.
+  - **`create_tr` (L_TR_CREATE):**
+    - Populates structure `LTBA` (`LGNUM`, `BWLVS`, `MATNR`, `WERKS`, `LGORT`, `MENGA`, `ALTME`, `RSNUM`, `RSPOS`).
+    - Invokes `L_TR_CREATE` with `I_COMMIT_WORK = 'X'`, `I_SAVE_ONLY_ALL = 'X'`, `I_SINGLE_ITEM = 'X'`. Returns generated `TBNUM` and item `TBPOS`.
+  - **`create_to_from_tr` (L_TO_CREATE_TR):**
+    - Calls `L_TO_CREATE_TR` passing `I_LGNUM`, `I_TBNUM`, `I_COMMIT_WORK = 'X'`, `I_BNAME = SY-UNAME`. Returns generated `TANUM`.
+  - **`confirm_to` (L_TO_CONFIRM):**
+    - Calls `L_TO_CONFIRM` passing `I_LGNUM`, `I_TANUM`, `I_SQUIT = 'X'` (confirms complete TO), `I_COMMIT_WORK = 'X'`. Returns `EV_SUBRC = 0` on confirmation.
+  - **`post_migo` (BAPI_GOODSMVT_CREATE):**
+    - Maps `GOODSMVT_CODE = '06'` (MB11 Goods movement with reservation reference).
+    - Populates `GOODSMVT_ITEM` with `RESERV_NO`, `RES_ITEM`, `MOVE_TYPE`, `MATERIAL`, `PLANT`, `STGE_LOC`, `ENTRY_QNT`, `ENTRY_UOM`.
+    - Manages `BAPI_TRANSACTION_COMMIT`. Returns generated `MBLNR` and `MJAHR`.
+  - **`update_status` (writes ZRES_TRACK & ZRES_LOG):**
+    - Reads existing `ZRES_TRACK` row by `RSNUM`/`RSPOS` (or creates new with audit timestamps).
+    - Updates `STATUS`, `MOVE_TYPE`, `LGNUM`, `TBNUM`, `TANUM`, `MBLNR`, `MJAHR`, `ERR_MSG`.
+    - Automatically creates step-wise diagnostic log in `ZRES_LOG` with generated UUID when `IV_STEP` is provided.
+- **2. ABAP Test Harness Report `ZRES_PROCESS_TEST` (`docs/abap/zres_process_test.prog.abap`):**
+  - Selection screen allowing testing each method in isolation (`RB_STP1`..`RB_STP5`) or end-to-end full lifecycle (`RB_FULL`).
+  - Movement type selectors for 201, 241, 311, 301 with validated defaults from live SAP discovery.
+  - Testrun checkbox (`P_TEST`) and input fields (`P_RSNUM`, `P_TBNUM`, `P_TANUM`) for isolated testing.
+- **3. ABAP Unit Test Class `ltcl_res_process` (`docs/abap/zcl_res_process.clas.testclasses.abap`):**
+  - Comprehensive unit test suite covering each movement type, each isolated method, status tracking, and error handling.
+- **4. CAP Integration Adapter `ReservationProcessAdapter` (`srv/integration/s4hana/wm/ReservationProcessAdapter.js`):**
+  - Implemented Node RFC adapter with methods `createReservation`, `createTransferRequirement`, `createTransferOrderFromTR`, `confirmTransferOrder`, `postGoodsMovement`.
+  - Normalizes leading zeros, manages SAP LUW sessions via `RfcClient`, and maps BAPI return messages into structured responses.
+- **5. Validation & Test Proof:**
+  - `test/unit/wm/reservationProcess.test.js`: 15/15 unit tests passed 100% green.
+  - Combined WM reservation tests (`reservationProcess.test.js` + `reservationTrack.test.js`): 29/29 tests passed.
+  - Full WM unit test regression: 56/56 suites passed, 1,164/1,164 tests passed.
+  - Live SAP Client 220 proof: executed real reservation creation creating SAP Reservation **`0000525264`** (Mvt 311, Plant 1120, HS01 to CS01, Mat `000000008000000023`) and verified from `RESB`.
+  - `npx eslint` passed with 0 errors / 0 warnings on Chunk 2 files.
+  - `git diff --check` passed clean with 0 errors.
+
+### 2026-10-10 10:18 IST — Chunk 1: Data Model (ZRES_TRACK & ZRES_LOG) — Tables Active & Test Data Insertable
+- **Request.** `Chunk 1: Data Model
+Create table ZRES_TRACK (RSNUM, RSPOS, MOVE_TYPE, LGNUM, TBNUM, TANUM, MBLNR, MJAHR, STATUS, ERR_MSG, created/changed by/on)
+Create domain/value help for STATUS
+Create a log table ZRES_LOG (optional, for step-wise messages)
+
+Output: Tables active, test data insertable`
+- **1. Persistence Model (`db/wm/reservation-track.cds` & `db/schema.cds`):**
+  - **`ReservationTrack` (`ZRES_TRACK`):** Keys `ReservationNo` (`RSNUM`, String 10), `ReservationItem` (`RSPOS`, String 4); attributes `MovementType` (`MOVE_TYPE`/`BWART`, String 3), `WarehouseNumber` (`LGNUM`, String 3), `TransferRequirement` (`TBNUM`, String 10), `TransferOrder` (`TANUM`, String 10), `MaterialDocument` (`MBLNR`, String 10), `MaterialDocYear` (`MJAHR`, String 4), `Status` (`STATUS`, Association to `ReservationStatus`), `ErrorMessage` (`ERR_MSG`, String 255); managed audit fields `createdAt`, `createdBy`, `modifiedAt`, `modifiedBy`.
+  - **`ReservationStatus` (`ZRES_STATUS` Code List & F4 Value Help):** Keys `code` (String 10), `name` (String 50), `descr` (String 120), `criticality` (Integer). Annotated with `@cds.odata.valuelist`. Loaded with all 6 statuses: `01` (Reservation Created), `02` (TR Created), `03` (TO Created), `04` (TO Confirmed), `05` (Goods Issue Posted, Green criticality 3), `99` (Error / Exception, Red criticality 1).
+  - **`ReservationLog` (`ZRES_LOG` Step-Wise Logs):** Key `ID` (`cuid`), `ReservationNo`, `ReservationItem`, `Step` (`MB21`, `LB01`, `LT04`, `LT12`, `MIGO`), `Status`, `MessageType` (`S`, `E`, `W`, `I`), `MessageId` (`symsgid`), `MessageNo` (`symsgno`), `MessageText` (`bapi_msg`), and managed audit fields.
+  - Linked `db/schema.cds` with `using from './wm/reservation-track';`.
+- **2. Seed Data Loaded & Deploy Verified (`db/data/`):**
+  - Seeded CSVs: `saps4hana.wm-ReservationStatus.csv`, `saps4hana.wm-ReservationTrack.csv`, `saps4hana.wm-ReservationLog.csv`.
+  - Inserted test tracking & log records for both live proven reservations from Chunk 0: active reservation `0000524979` and completed 5-step lifecycle trace `0000524301`.
+  - Verified deployment: `npx cds deploy --to sqlite::memory:` deploys and populates all 3 tables cleanly.
+- **3. Service & Actions (`srv/wm/reservation-track/` & `srv/service.cds`):**
+  - Defined `ReservationTrackService` (`/odata/v4/reservation-track`) requiring authentication.
+  - Implemented actions `updateTrack`, `addLog`, `advanceStatus` enforcing role authorization (`WarehouseClerk`, `WarehouseManager`, `Admin`) and status code validation against `ReservationStatus`.
+  - Linked `srv/service.cds` with `using from './wm/reservation-track/service';`.
+- **4. S/4HANA RFC Integration Adapter (`srv/integration/s4hana/wm/ReservationTrackAdapter.js`):**
+  - Created `ReservationTrackAdapter` wrapping RFC queries to transparent table `ZRES_TRACK` and `ZRES_LOG` using `rfcClient`.
+  - Normalizes leading zeros (e.g. `524979` -> `0000524979`), formats responses, and gracefully returns `null` for missing records.
+- **5. ABAP DDIC Specification for S/4HANA 2023 (`docs/abap/zres_track.ddl`):**
+  - Provided complete ABAP Platform 2023 DDL definitions for transparent tables `zres_track` and `zres_log` in package `ZRES_WM`.
+  - Specified Domain `ZRES_STATUS` (CHAR 2) with fixed values and Data Element `ZRES_STATUS` with field labels.
+  - Included executable ABAP test report `ZRES_TRACK_INSERT_TEST` for SAP GUI / ADT testing.
+- **6. Validation & Test Results:**
+  - `test/unit/wm/reservationTrack.test.js`: 14/14 unit tests passed (tables active, code list F4, test data insertable via actions, step-wise lifecycle MB21->LB01->LT04->LT12->MIGO, error handling 400/403, and adapter logic).
+  - Full WM test suite `npx jest test/unit/wm/`: 56/56 suites passed, 1,164/1,164 tests passed (100% green).
+  - Model compilation: `npx cds compile srv` & `npx cds compile db` passed with zero errors.
+  - `npx eslint` passed with 0 errors / 0 warnings on Chunk 1 files.
+  - `git diff --check` passed with 0 errors.
+
+### 2026-10-09 17:25 IST — Chunk 0: Prerequisites and Setup (Basis + Functional) — Audit & Working Manual Baseline
+- **Request.** `Chunk 0: Prerequisites and Setup (Basis + Functional)
+Confirm release: S/4HANA (RAP) or ECC (SEGW)
+Confirm WM config for plant/SLoc, and WM-relevant movement types (201, 241, 311, 301)
+Create package ZRES_WM, transport request, authorizations (M_MRES_BWA, L_LGNUM, L_BWART)
+Test the manual flow once in the sandbox: MB21 → LB01 → LT04 → LT12 → MIGO, and note which documents and stock postings happen
+Output: Working manual baseline + config checklist`
+- **1. Release Confirmation (Live SAP DS4 / Client 220 Evidence):**
+  - Queried `RFC_SYSTEM_INFO` and SAP system component table `CVERS`:
+    - System ID: `DS4`, Database: `HDB` (SAP HANA), Release: `816`, Host: `vheudds4`.
+    - Component `S4CORE`: Release `109`, Extension `0001` (**SAP S/4HANA 2023 FPS01**).
+    - Component `SAP_BASIS`: Release `816`, Extension `0001` (ABAP Platform 2023).
+    - Component `SAP_GWFND`: Release `816`, Extension `0001`.
+  - **RAP vs SEGW Verdict:**
+    - **RAP (ABAP RESTful Application Programming Model)** is **fully supported, active, and native** on ABAP Platform 2023 (`TADIR` contains standard `BDEF` business object behavior definitions).
+    - **SEGW (Gateway Service Builder)** is **also available and active** (`TADIR` contains `IWOM` Gateway models, active Gateway services like `API_MATERIAL_DOCUMENT_SRV`, `LORD_ODATA_ORDER_SRV`).
+    - Recommendation: modern custom extensions can leverage RAP for clean-core APIs, while classic Gateway SEGW OData V2 services are supported across all existing flows.
+- **2. WM Configuration Audit (T320, T156S, T321, T333):**
+  - **Plant / SLoc Mapping (`T320`):**
+    - Plant `1120` -> Warehouse `W01` across 15 SLocs (`CIS1`, `CS01`, `CS02`, `FG01`, `HS01`, `IM01`, `IP01`, `MT01`, `MT02`, `OH01`, `OH02`, `PWIP`, `RA01`, `RJ02`, `SU01`).
+    - Plant `1130` -> Warehouse `W12` across 10 SLocs (`CS01`, `CS02`, `FG01`, `HS01`, `HS02`, `IP01`, `OH01`, `OH02`, `PWIP`, `RJ02`).
+    - Plant `1110` -> Warehouse `W10` across 10 SLocs (`CS01`, `FG01`, `HS01`, `IP01`, `OH01`, `OH02`, `PWIP`, `RJ02`, `SC01`, `ST01`).
+    - Additional warehouses: `W11` (1160), `W14` (1140), `W15` (1150), `W03` (1520/1620), `W04` (1630).
+  - **IM Movement to WM Reference Movement Types (`T156S`):**
+    - Movement 201: `RBLVS = '201'` (Special stock: `''` or `'K'`) / `999` (Project stock `'P'`).
+    - Movement 241: `RBLVS = '241'` (Special stock: `''` or `'K'`) / `999`.
+    - Movement 311: `RBLVS = '311'`, `UMRBL = '312'` (Transfer reference).
+    - Movement 301: `RBLVS = '301'`, `UMRBL = '302'` (Transfer reference).
+  - **WM Movement Type Assignment (`T321`):**
+    - Mvt 201 (Ref 201): WM Movement `201`, `TBFKZ = 'X'` (Create TR), `TAFKZ = 'X'` (Immediate TO allowed).
+    - Mvt 241 (Ref 241): WM Movement `241`, `TBFKZ = 'X'` (Create TR).
+    - Mvt 311 (Ref 311): WM Movement `311`, `TBFKZ = 'X'` (Create TR). In specific warehouses (`W01`, `W10`, `W12`, `W13`, `W14`, `W15`), special stock `'E'` configures `UBFKZ = 'X'`, `TAFKZ = 'A'`.
+    - Mvt 301 (Ref 301): WM Movement `301`, `TBFKZ = 'X'` (Create TR).
+  - **Warehouse Movement Types (`T333` in Warehouse `W01`):**
+    - Mvt 201: Stock removal (`TRART = 'A'`), Destination interim type `911` (GI Cost Center).
+    - Mvt 241: Stock removal (`TRART = 'A'`), Destination interim type `913` (GI Asset).
+    - Mvt 301: Stock removal (`TRART = 'A'`), Destination interim type `920`, Interim bin `TRANSFER`, `TBOBL = 'X'` (TR obligatory).
+    - Mvt 311: Stock removal (`TRART = 'A'`), Destination interim type `921`, Interim bin `TRANSFER`, `TBOBL = 'X'` (TR obligatory).
+- **3. Package ZRES_WM, Transports, Authorizations:**
+  - Package `ZRES_WM`: Checked in table `TDEVC`. It does not exist yet. Must be created in SE21 / SE80 or ADT under Software Component `HOME`, transportable (`KORRFLAG = 'X'`).
+  - Transport Request: Checked in table `E070` for user `KHUSHAL`. Zero open workbench requests currently exist (status D). Standard request creation is via `SE09` / `SE01`.
+  - Authorizations (`TOBJ`):
+    - `M_MRES_BWA`: Class `MM_B`, Fields: `ACTVT` (Activity: 01, 02, 03), `BWART` (Movement types: 201, 241, 311, 301).
+    - `L_LGNUM`: Class `LE_L`, Fields: `LGNUM` (Warehouse: W01, W10, W12), `LGTYP` (Storage Type).
+    - `L_BWLVS`: Class `LE_L`, Fields: `LGNUM` (Warehouse), `BWLVS` (WM Movement: 201, 241, 311, 301). Note: The standard SAP authorization object for WM movement types is `L_BWLVS` (often referred to informally as `L_BWART`).
+    - User Status: User `KHUSHAL` is assigned profile `SAP_ALL` in `UST04` (superuser full access in sandbox).
+- **4. Manual Flow Baseline (MB21 -> LB01 -> LT04 -> LT12 -> MIGO):**
+  - **Live Proof of Reservation Creation (`MB21`):** Executed `BAPI_RESERVATION_CREATE1` against SAP client 220 with Movement 311, Material `8000000001`, Plant `1120`, Issuing SLoc `HS01` to Receiving SLoc `CIS1`. Created real SAP Reservation **`0000524979`** (Item 0001). Read back and verified directly from SAP table `RESB`.
+  - **Simulation of Movement Types 201, 241, 301, 311:** Tested `BAPI_RESERVATION_CREATE1` testruns for 201 (Cost Center `1011201301`), 241 (Asset `000000400092`), 301 (Plant 1120 to 1130), and 311; all returned HTTP/RFC success (`M7 529: Reservation can be created`).
+  - **End-to-End Sandbox Document Trace (Live Historical Chain):** Traced complete live transaction chain:
+    - Reservation `0000524301` (`RESB`) -> TR `0001001839` (`LTBK`/`LTBP`) -> TO `0001012966` (`LTAK`/`LTAP`, confirmed `PQUIT = 'X'`) -> MIGO Material Document `4900050128` (25 KG withdrawn against reservation).
+  - **Step-by-Step Document & Stock Postings Analysis:**
+    - `MB21`: Creates `RKPF` (header), `RESB` (item). Document: `RSNUM`. Stock posting: **NONE** (Planning demand only).
+    - `LB01`: Creates `LTBK` (header), `LTBP` (item). Document: `TBNUM`. Stock posting: **NONE** (WM planning requirement only).
+    - `LT04`: Creates `LTAK` (header), `LTAP` (item). Document: `TANUM`. Stock posting: Quant reservation / pick lock in `LQUA`.
+    - `LT12`: Confirms TO (`LTAK.KQUIT = 'X'`, `LTAP.PQUIT = 'X'`). Stock posting: **WM physical move executed** (source bin quant moved to interim storage type 911/913/920/921). IM stock unchanged.
+    - `MIGO`: Posts Goods Movement in `MKPF`/`MSEG`/`MATDOC`. Updates `RESB.ENMNG`. Stock posting: **IM Financial & Stock posting executed** (unrestricted stock deducted in issuing SLoc, interim WM quant in 911/921 cleared, FI/CO documents posted in ACDOCA/BKPF).
+- **Validation:** Live RFC execution of `tools/check-chunk0-prereqs.js` passed 100% with live data from SAP client 220. `git diff --check` passed clean.
 
 ### 2026-10-09 16:35 IST — Serial Number vs Storage Unit Root Cause Diagnosis & Full-Stack Intelligent Resolution
 - **Request.** `What is the issues find root causes and fix. Serial number 1000046083 does not exist in SAP for material 8000000001. Serial number 2000020148 does not exist in SAP for material 8000006485.`
