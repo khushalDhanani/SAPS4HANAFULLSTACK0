@@ -280,10 +280,39 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
 
       // Read current record to fill in any omitted fields
-      const existing = await SELECT.one.from(ReservationEntries).where({
+      let existing = await SELECT.one.from(ReservationEntries).where({
         ReservationNo: sResNo,
         ReservationItem: sResItem
       });
+
+      if (!existing && adapter.rfc) {
+        try {
+          const s4Rsnum = String(sResNo).padStart(10, '0');
+          const s4Rspos = String(sResItem).padStart(4, '0');
+          const [rkpfRows, resbRows] = await Promise.all([
+            adapter.rfc.readTable('RKPF', ['RSNUM', 'BWART', 'KOSTL', 'USNAM'], [`RSNUM = '${s4Rsnum}'`], 1),
+            adapter.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
+          ]);
+          if (resbRows && resbRows[0]) {
+            existing = {
+              ReservationNo: sResNo,
+              ReservationItem: sResItem,
+              MovementType: rkpfRows?.[0]?.BWART || data.MovementType || '201',
+              CostCenter: rkpfRows?.[0]?.KOSTL || data.CostCenter || '',
+              Material: resbRows[0].MATNR,
+              Plant: resbRows[0].WERKS,
+              StorageLocation: resbRows[0].LGORT,
+              Quantity: parseFloat(resbRows[0].BDMNG) || 1,
+              Unit: resbRows[0].MEINS || 'NOS',
+              WarehouseNumber: 'W01',
+              Status_code: '04'
+            };
+            await INSERT.into(ReservationEntries).entries(existing);
+          }
+        } catch (_fetchErr) {
+          // ignore DDIC read error
+        }
+      }
 
       const sMvt = data.MovementType || existing?.MovementType;
       const sMat = data.Material || existing?.Material;
@@ -298,6 +327,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const sSubNumber = data.SubNumber || existing?.SubNumber;
       const extId = `${sResNo}/${sResItem}`;
       const sLogHandle = existing?.LogHandle || `LOG_${Date.now().toString(36).toUpperCase()}`;
+
+      const sSerials = data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : (existing?.SerialNo ? [existing.SerialNo] : []));
 
       try {
         const migoRes = await adapter.postGoodsMovement({
@@ -314,7 +345,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           costCenter: sCostCenter,
           assetNo: sAssetNo,
           subNumber: sSubNumber,
-          deriveGmCode: true
+          deriveGmCode: true,
+          serials: sSerials
         });
 
         // Update status to 05 (Goods Issue Posted)
@@ -348,10 +380,17 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           MessageText: `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect})`
         });
 
-        return await SELECT.one.from(ReservationEntries).where({
+        const updated = await SELECT.one.from(ReservationEntries).where({
           ReservationNo: sResNo,
           ReservationItem: sResItem
         });
+        return updated || {
+          ReservationNo: sResNo,
+          ReservationItem: sResItem,
+          MaterialDocument: migoRes.materialDocument,
+          MaterialDocYear: migoRes.materialDocYear,
+          Status_code: '05'
+        };
       } catch (err) {
         // Rollback already executed by adapter; update status to 99 (Error) and record log
         await UPDATE(ReservationEntries)
@@ -665,7 +704,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             costCenter: track.CostCenter,
             assetNo: track.AssetNo,
             subNumber: track.SubNumber,
-            deriveGmCode: true
+            deriveGmCode: true,
+            serials: data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : (track.SerialNo ? [track.SerialNo] : []))
           });
 
           await UPDATE(ReservationEntries).set({

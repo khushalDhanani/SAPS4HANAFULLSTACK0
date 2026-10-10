@@ -338,6 +338,7 @@ class ReservationProcessAdapter {
       costCenter,
       assetNo,
       subNumber,
+      serials = [],
       testrun = false
     } = params;
 
@@ -385,11 +386,17 @@ class ReservationProcessAdapter {
       ...(subNumber ? { SUB_NUMBER: String(subNumber).trim() } : {})
     };
 
+    const serialItems = (Array.isArray(serials) ? serials : [serials]).filter(Boolean).map((s) => ({
+      MATDOC_ITM: '0001',
+      SERIALNO: String(s).trim()
+    }));
+
     return await this.rfc.session(async (call) => {
       const res = await call('BAPI_GOODSMVT_CREATE', {
         GOODSMVT_HEADER: header,
         GOODSMVT_CODE: { GM_CODE: sGmCode },
         GOODSMVT_ITEM: [item],
+        ...(serialItems.length ? { GOODSMVT_SERIALNUMBER: serialItems } : {}),
         ...(testrun ? { TESTRUN: 'X' } : {})
       });
 

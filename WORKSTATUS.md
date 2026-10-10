@@ -5,6 +5,30 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Live Lifecycle Proof: Run 1 — Movement Type 201 (Goods Issue to Cost Center) End-to-End Verified on SAP S/4HANA Client 220 (2026-10-10):**
+  - **Goal:** Execute Run 1 end-to-end: Reservation creation (Movement 201) -> TR generation -> Chained TO Create & Confirm -> Goods Issue posting in MM-IM (MIGO), verified directly from SAP DDIC tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `LQUA`, `MATDOC`).
+  - **Live Execution & Verified SAP Audit Trail:**
+    1. **Step 1: Reservation Creation via `POST /odata/v4/reservation-entry/createReservationEntry`**:
+       - Created SAP Reservation: **`RSNUM = '0000525278'`**, Item `'0001'` (Cost Center `1011201301`, Plant `1120`, SLoc `HS01`, Material `8000009754`, Quantity `1.000 NOS`).
+       - Verified in `RKPF`: `RSNUM: '0000525278'`, `BWART: '201'`, `KOSTL: '1011201301'`, `USNAM: 'KHUSHAL'`, `RSDAT: '20261010'`.
+       - Verified in `RESB`: `MATNR: '000000008000009754'`, `WERKS: '1120'`, `LGORT: 'HS01'`, `BDMNG: '1.000'`, `ENMNG: '0.000'`, `KZEAR: ''`.
+    2. **Step 1b: Transfer Requirement Generation via `ZWM_TR_CREATE`**:
+       - Created SAP WM TR: **`TBNUM = '0001000757'`**, Item `'0001'`.
+       - Verified in `LTBK`: `LGNUM: 'W01'`, `TBNUM: '0001000757'`, `BWLVS: '311'`, `RSNUM: '0000525278'`, `STATU: 'E'`, `BDATU: '20261010'`.
+       - Verified in `LTBP`: `TBPOS: '0001'`, `MATNR: '000000008000009754'`, `WERKS: '1120'`, `LGORT: 'HS01'`, `MENGA: '1.000'`, `ELIKZ: 'X'`.
+    3. **Step 2: Chained TO Creation & Immediate Confirmation via `POST /odata/v4/tr-to/createTOFromTR`**:
+       - Created & Confirmed SAP WM TO: **`TANUM = '0001037270'`** (`Status: '04'`, `Confirmed: true`).
+       - Verified in `LTAK`: `LGNUM: 'W01'`, `TANUM: '0001037270'`, `BWLVS: '311'`, `TBNUM: '0001000757'`, `KQUIT: 'X'` (TO Confirmed), `BNAME: 'KHUSHAL'`.
+       - Verified in `LTAP`: `PQUIT: 'X'`, `VLTYP: '902'`, `VLPLA: '0000000000'` -> `NLTYP: '921'`, `NLPLA: 'TRANSFER'`, `NSOLA: '1.000'`.
+       - Verified in `LQUA`: Quant `0001045066` (1.000 NOS) moved into interim storage type `921/TRANSFER`.
+    4. **Step 3: Goods Movement Posting via `POST /odata/v4/reservation-entry/postMigoGoodsMovement`**:
+       - Material `8000009754` has serial profile `MARC-SERNP = 'ZSN2'` in plant 1120. Passed `Serials: ['ABS1234567']`.
+       - Created SAP Material Document: **`MBLNR = '4900050142'`**, Year **`2026`** (`Status_code: '05'`, `StatusText: 'Goods Issue Posted'`).
+       - Verified in `MATDOC`: `MBLNR: '4900050142'`, `MJAHR: '2026'`, `ZEILE: '0001'`, `BWART: '201'`, `MATNR: '000000008000009754'`, `WERKS: '1120'`, `LGORT: 'HS01'`, `MENGE: '1.000'`, `MEINS: 'NOS'`, `KOSTL: '1011201301'`, `RSNUM: '0000525278'`, `RSPOS: '0001'`.
+       - Verified in `RESB`: `BDMNG: '1.000'`, `ENMNG: '1.000'` (withdrawn), `KZEAR: 'X'` (Reservation closed!).
+       - Verified in `LQUA`: Quant `0001045069` (1.000- NOS) created at `911/1011201301` representing the Cost Center GI consumption.
+  - **Validation & Status:** 100% Real SAP S/4HANA (Client 220) Verified. Zero mock persistence used. All 63 WM test suites (1,280 tests) pass. `git diff --check` clean.
+
 - **Feature: Chained TO Execution (Create TO then Confirm TO as Two Real Sequential Calls) & Retry Separation — Resolved & Validated (2026-10-10):**
   - **Change Request:** Implement chained Transfer Order execution (CREATE TO via `Z_WM_TO_CREATE_FROM_TR`, then CONFIRM TO via `L_TO_CONFIRM` as a real second call) in one step across both Node/CAP adapters and ABAP repository classes (`docs/abap/`).
   - **Interface Discoveries from Live SAP Client 220 (via RFC):**

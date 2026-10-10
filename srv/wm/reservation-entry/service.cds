@@ -32,7 +32,9 @@ service ReservationEntryService {
         CostCenter              : String(10),
         AssetNo                 : String(12),
         SubNumber               : String(4),
-        WarehouseNumber         : String(3)
+        WarehouseNumber         : String(3),
+        SerialNo                : String(18),
+        Serials                 : array of String(18)
     ) returns ReservationEntries;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -49,14 +51,18 @@ service ReservationEntryService {
         ReceivingStorageLocation : String(4),
         CostCenter               : String(10),
         AssetNo                  : String(12),
-        SubNumber                : String(4)
+        SubNumber                : String(4),
+        SerialNo                 : String(18),
+        Serials                  : array of String(18)
     ) returns ReservationEntries;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action retryStep(
         ReservationNo   : String(10),
         ReservationItem : String(4),
-        Step            : String(10)
+        Step            : String(10),
+        SerialNo        : String(18),
+        Serials         : array of String(18)
     ) returns ReservationEntries;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
