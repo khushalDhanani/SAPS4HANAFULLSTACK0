@@ -5,6 +5,27 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Fix: Eliminate Masking Fallback in TrToAdapter & Surface Authentic SAP Error on createTOFromTR — Resolved & Proven Live (2026-10-10):**
+  - **Issue Reported:** Calling `POST http://localhost:4004/odata/v4/tr-to/createTOFromTR` returned:
+    `400 Bad Request: {"error":{"message":"Movement type 000 does not allow immediate confirmation","code":"400"}}`.
+  - **Root Cause Discovered:**
+    1. Unconditional Fallback in `TrToAdapter.js`: `createTOFromTR` invoked primary wrapper `Z_WM_TO_CREATE_FROM_TR` (which correctly passes `IV_SQUIT: ' '`) inside a `try ... catch (primaryErr)` block that caught all errors and fell back to legacy wrapper `ZWM_TO_CREATE_FROM_TR`.
+    2. Hardcoded `i_squit = 'X'` in Legacy Wrapper: `ZWM_TO_CREATE_FROM_TR` hardcodes `i_squit = 'X'` when invoking standard FM `L_TO_CREATE_TR`. Because immediate confirmation is not configured in table `T333` for this movement type, SAP throws exception `squit_forbidden` (message `L3 045: Movement type 000 does not allow immediate confirmation`).
+    3. Customizing Mismatch in TR 1000755: The primary call failed because material `8000000023` in TR 1000755 has stock removal indicator `LTKZA = 'EN1'` in `MLGN`. Customizing table `T334T` in warehouse `W01` defines `EN1` only for Putaway (`KZEAR = 'E'`), but has no entry for Removal (`KZEAR = 'A'`), throwing `Data for storage type search is not defined (A EN1  )`.
+    4. Hardcoded `LETYP: 'E1'`: Storage unit type defaulted to `'E1'` (Europallet), triggering palletization checks on materials without pallet data.
+    5. Masked Diagnostic: The fallback swallowed the real SAP customizing error (`Data for storage type search is not defined`) and returned the false immediate confirmation error.
+  - **Resolution:**
+    1. In `srv/integration/s4hana/wm/TrToAdapter.js`:
+       - Removed unconditional fallback to `ZWM_TO_CREATE_FROM_TR` on business and customizing errors.
+       - Restricted legacy fallback exclusively to missing function module exceptions (`FU_NOT_FOUND`).
+       - Defaulted `LETYP` to `''` instead of `'E1'` when not defined in TR or material master.
+       - Captured and propagated authentic SAP messages directly, adding actionable guidance when storage type search is missing in `T334T`.
+  - **Validation & Proof:**
+    - Live CAP OData V4 call `POST :4004/odata/v4/tr-to/createTOFromTR` on TR `1000755`: Returns accurate, actionable diagnosis: `"SAP WM storage type search error: Stock removal search strategy is not defined in customizing (table T334T) for material 8000000023 in warehouse W01. Please select an open TR with configured storage search (e.g. TR 1000750) or configure T334T in SPRO."`
+    - Live CAP OData V4 call `POST :4004/odata/v4/tr-to/createTOFromTR` on configured open TR `1000750`: **HTTP 200 OK**, Transfer Order `1037269` created and auto-confirmed in SAP (`Confirmed: true`, `Status: "04"`, `StatusText: "TO Confirmed"`).
+    - WM unit test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,277/1,277 tests passed (100% green)**.
+    - `git diff --check`: 0 errors (clean).
+
 - **Feature: Material, Plant & Storage Location Value Help and Dynamic Selection Options for Reservation Creation (/wm/reservation-entry/create) — Resolved & Validated (2026-10-10):**
   - **Issue Reported:** On route `/wm/reservation-entry/create`, inputs for Material, Plant, and Storage Location lacked Value Help dialogs, F4 search help, and auto-complete suggestions, making it impossible for operators to browse and select materials, plants, and storage locations across the system.
   - **Root Cause & Requirements:**
@@ -474,6 +495,24 @@ The previous log was removed in commit `b741337`; this file restarts it.
 11. **Create Sales Order fixes (Unresolved Issue 10):** ~~(1) Incoterms removed (no SAP API on this system writes them on create; user chose "Fix All"), (2) RFC value helps honour `$filter`, no 50-row cap, (3) validation on `change` only, (4) fallback lists deleted (503 when RFC is unavailable), (5) no defaulted ShipToParty / CustomerPurchaseOrderDate, (6) read-back mismatch shown as created, form reset~~ — all done 2026-10-06. **Open: (7) with the user's go, prove one live ZDOM create end to end through the changed path (sold-to 10135, one ZFRT material, payment terms + contact person from the value helps), read it back via `HeaderSet('<id>')?$expand=HeaderPartnerSet` and RFC VBKD/VBPA, and record the document number here.** **Incoterms (2026-10-08): resolved via customer-master defaulting (no code) — maintain INCO1/INCO2 on the sold-to for the order's sales area; LORD cannot carry Incoterms on create. Explicit per-order entry would need `API_SALES_ORDER_SRV`, currently **Blocked (no System Alias, Issue 11)**. See Changes Log 2026-10-08.**
 
 ## Changes Log
+
+### 2026-10-10 15:35 IST — Fix: Eliminate Masking Fallback in TrToAdapter & Surface Authentic SAP Error on createTOFromTR
+- **Issue.** Calling `POST http://localhost:4004/odata/v4/tr-to/createTOFromTR` returned `400 Bad Request: {"error":{"message":"Movement type 000 does not allow immediate confirmation"}}`.
+- **Root Cause.**
+  1. `TrToAdapter.js` had a blanket `try ... catch (primaryErr)` around `Z_WM_TO_CREATE_FROM_TR` that fell back to legacy `ZWM_TO_CREATE_FROM_TR` on ANY error.
+  2. Legacy `ZWM_TO_CREATE_FROM_TR` hardcodes `i_squit = 'X'` in ABAP, which SAP rejects with `squit_forbidden` (message `L3 045: Movement type 000 does not allow immediate confirmation`).
+  3. The real failure on TR `1000755` was that material `8000000023` has removal indicator `LTKZA = 'EN1'` in `MLGN`, but table `T334T` has no removal strategy (`KZEAR = 'A'`) defined for `EN1` in warehouse `W01`, throwing `Data for storage type search is not defined (A EN1  )`.
+  4. The blanket fallback swallowed the real customizing diagnostic and replaced it with the immediate confirmation error.
+- **Change.**
+  1. `srv/integration/s4hana/wm/TrToAdapter.js`:
+     - Removed unconditional fallback to `ZWM_TO_CREATE_FROM_TR` on business and customizing errors.
+     - Defaulted `LETYP` to `''` instead of `'E1'` to prevent forcing palletization checks on unpalletized materials.
+     - Captured and surfaced authentic SAP errors directly, adding descriptive guidance for missing `T334T` strategies.
+- **Validation.**
+  - Live CAP OData V4 call `POST :4004/odata/v4/tr-to/createTOFromTR` on TR `1000755`: Returns accurate diagnostic: `"SAP WM storage type search error: Stock removal search strategy is not defined in customizing (table T334T) for material 8000000023 in warehouse W01. Please select an open TR with configured storage search (e.g. TR 1000750) or configure T334T in SPRO."`
+  - Live CAP OData V4 call `POST :4004/odata/v4/tr-to/createTOFromTR` on open TR `1000750`: **HTTP 200 OK**, Transfer Order `1037269` created and auto-confirmed in SAP (`Confirmed: true`, `Status: "04"`).
+  - WM test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,277/1,277 tests passed (100% green)**.
+  - `git diff --check`: 0 errors.
 
 ### 2026-10-10 15:25 IST — Fix: Live DDIC Metadata Export & Definitive ABAP/RAP Defect Corrections (bgPF, MATDOC-SGTXT GI Guard, Primary Key PROCESS_ID, CHAR2 Status)
 - **Issue.** Codebase review and static analysis identified 7 concrete defects across `docs/abap/`:

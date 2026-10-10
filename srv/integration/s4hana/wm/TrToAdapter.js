@@ -499,14 +499,14 @@ class TrToAdapter {
 
     const selectedBatch = batch || item.Batch || '';
 
-    // Create TO via Z_WM_TO_CREATE_FROM_TR / ZWM_TO_CREATE_FROM_TR
+    // Create TO via Z_WM_TO_CREATE_FROM_TR (creation without immediate confirmation)
     LOG.info(`Creating TO from TR ${tr.Tbnum} item ${item.Tbpos}, qty ${quantity} ${unit || item.Unit}`);
     const itItems = [{
       TBPOS: item.Tbpos,
       ANFME: quantity.toFixed(3),
       ALTME: unit || item.Unit,
       CHARG: selectedBatch,
-      LETYP: item.StorageUnitType || profile.storageUnitType || 'E1',
+      LETYP: item.StorageUnitType || profile.storageUnitType || '',
       NLTYP: item.DestStorageType || tr.Nltyp || '',
       NLPLA: item.DestStorageBin || tr.Nlpla || '',
       VLTYP: item.SourceStorageType || tr.Vltyp || '',
@@ -527,20 +527,39 @@ class TrToAdapter {
         `Create Transfer Order for TR ${alphaOut(tr.Tbnum)}`
       );
     } catch (primaryErr) {
-      LOG.warn(`Z_WM_TO_CREATE_FROM_TR call failed (${primaryErr.message}), falling back to ZWM_TO_CREATE_FROM_TR`);
-      res = await this._rfc(
-        () => this.rfc.call('ZWM_TO_CREATE_FROM_TR', {
-          IV_LGNUM: wh,
-          IV_TBNUM: tr.Tbnum,
-          IV_COMMIT: 'X',
-          IT_ITEMS: itItems
-        }),
-        `Create Transfer Order for TR ${alphaOut(tr.Tbnum)} (fallback)`
+      // Only fall back to ZWM_TO_CREATE_FROM_TR if Z_WM_TO_CREATE_FROM_TR is completely missing from the system
+      const isMissingFm = primaryErr.message && (
+        primaryErr.message.includes('FU_NOT_FOUND') ||
+        primaryErr.message.includes('NOT_FOUND') ||
+        primaryErr.message.includes('does not exist')
       );
+      if (isMissingFm) {
+        LOG.warn(`Z_WM_TO_CREATE_FROM_TR not found on system (${primaryErr.message}), trying ZWM_TO_CREATE_FROM_TR`);
+        res = await this._rfc(
+          () => this.rfc.call('ZWM_TO_CREATE_FROM_TR', {
+            IV_LGNUM: wh,
+            IV_TBNUM: tr.Tbnum,
+            IV_COMMIT: 'X',
+            IT_ITEMS: itItems
+          }),
+          `Create Transfer Order for TR ${alphaOut(tr.Tbnum)} (fallback)`
+        );
+      } else {
+        // Business / customizing / authorization error from SAP: preserve and surface the real error
+        let msg = primaryErr.message || 'Error creating Transfer Order in SAP';
+        if (msg.includes('Data for storage type search is not defined')) {
+          msg = `SAP WM storage type search error: Stock removal search strategy is not defined in customizing (table T334T) for material ${item.Material} in warehouse ${wh}. Please select an open TR with configured storage search (e.g. TR 1000750) or configure T334T in SPRO.`;
+        }
+        throw httpError(400, msg);
+      }
     }
 
     if (res?.EV_SUCCESS !== 'S' || !res.EV_TANUM) {
-      throw httpError(400, res?.EV_MESSAGE || `SAP did not create a Transfer Order for TR ${alphaOut(tr.Tbnum)}`);
+      let errMsg = res?.EV_MESSAGE;
+      if (!errMsg && Array.isArray(res?.ET_MESSAGES) && res.ET_MESSAGES.length > 0) {
+        errMsg = res.ET_MESSAGES.map((m) => m.MESSAGE).filter(Boolean).join('; ');
+      }
+      throw httpError(400, errMsg || `SAP did not create a Transfer Order for TR ${alphaOut(tr.Tbnum)}`);
     }
 
     const tanum = alphaOut(res.EV_TANUM);
