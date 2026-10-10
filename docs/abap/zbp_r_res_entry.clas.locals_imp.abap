@@ -28,12 +28,11 @@ CLASS lhc_ReservationEntry DEFINITION INHERITING FROM cl_abap_behavior_handler.
     METHODS refreshStatus FOR MODIFY
       IMPORTING keys FOR ACTION ReservationEntry~refreshStatus RESULT result.
 
-    " Helper to trigger background execution (Issue 1: No COMMIT inside RAP)
+    " Helper to trigger real bgPF execution (CL_BGMC_PROCESS_FACTORY)
     METHODS start_background_job
       IMPORTING
-        !iv_rsnum  TYPE rsnum
-        !iv_rspos  TYPE rspos
-        !iv_step   TYPE char10
+        !iv_process_id TYPE sysuuid_x16
+        !iv_step       TYPE char10
       RETURNING
         VALUE(rv_started) TYPE abap_bool.
 
@@ -45,7 +44,6 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD get_instance_features.
-    " Control enable/disable of action buttons based on Status
     READ ENTITIES OF zr_res_entry IN LOCAL MODE
       ENTITY ReservationEntry
       FIELDS ( Status ErrorStep )
@@ -54,12 +52,12 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
 
     result = VALUE #( FOR ls_entry IN lt_entries
       ( %tky = ls_entry-%tky
-        %action-createTR     = COND #( WHEN ls_entry-Status = '01' OR ls_entry-Status = '11' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+        %action-createTR       = COND #( WHEN ls_entry-Status = '01' OR ls_entry-Status = '11' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
         %action-createTOFromTR = COND #( WHEN ls_entry-Status = '02' OR ls_entry-Status = '12' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
-        %action-confirmTO    = COND #( WHEN ls_entry-Status = '03' OR ls_entry-Status = '13' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
-        %action-postMigo     = COND #( WHEN ls_entry-Status = '04' OR ls_entry-Status = '90' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
-        %action-retryStep    = COND #( WHEN ls_entry-Status IN VALUE #( ( '11' ) ( '12' ) ( '13' ) ( '90' ) ) THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
-        %action-refreshStatus = if_abap_behv=>fc-o-enabled
+        %action-confirmTO      = COND #( WHEN ls_entry-Status = '03' OR ls_entry-Status = '13' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+        %action-postMigo       = COND #( WHEN ls_entry-Status = '04' OR ls_entry-Status = '90' THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+        %action-retryStep      = COND #( WHEN ls_entry-Status IN VALUE #( ( '11' ) ( '12' ) ( '13' ) ( '90' ) ) THEN if_abap_behv=>fc-o-enabled ELSE if_abap_behv=>fc-o-disabled )
+        %action-refreshStatus  = if_abap_behv=>fc-o-enabled
       ) ).
   ENDMETHOD.
 
@@ -71,7 +69,6 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
       RESULT DATA(lt_entries).
 
     LOOP AT lt_entries INTO DATA(ls_entry).
-      " Check Movement Type relevance
       CASE ls_entry-MovementType.
         WHEN '201'.
           IF ls_entry-CostCenter IS INITIAL.
@@ -100,14 +97,13 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
                                    severity = if_abap_behv_message=>severity-error
                                    text     = |Movement type { ls_entry-MovementType } not supported. Allowed: 201, 241, 311, 301| )
                         ) TO reported-reservationentry.
-      ENDCASE.
+      ENDCASE>
     ENDLOOP.
   ENDMETHOD.
 
   METHOD createTR.
-    " Issue 1: Do not execute BAPI/COMMIT inside RAP action. Delegate to bgPF.
     LOOP AT keys INTO DATA(ls_key).
-      start_background_job( iv_rsnum = ls_key-ReservationNo iv_rspos = ls_key-ReservationItem iv_step = 'LB01' ).
+      start_background_job( iv_process_id = ls_key-ProcessId iv_step = 'LB01' ).
     ENDLOOP.
 
     READ ENTITIES OF zr_res_entry IN LOCAL MODE
@@ -120,7 +116,7 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
 
   METHOD createTOFromTR.
     LOOP AT keys INTO DATA(ls_key).
-      start_background_job( iv_rsnum = ls_key-ReservationNo iv_rspos = ls_key-ReservationItem iv_step = 'LT04' ).
+      start_background_job( iv_process_id = ls_key-ProcessId iv_step = 'LT04' ).
     ENDLOOP.
 
     READ ENTITIES OF zr_res_entry IN LOCAL MODE
@@ -133,7 +129,7 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
 
   METHOD confirmTO.
     LOOP AT keys INTO DATA(ls_key).
-      start_background_job( iv_rsnum = ls_key-ReservationNo iv_rspos = ls_key-ReservationItem iv_step = 'LT12' ).
+      start_background_job( iv_process_id = ls_key-ProcessId iv_step = 'LT12' ).
     ENDLOOP.
 
     READ ENTITIES OF zr_res_entry IN LOCAL MODE
@@ -146,7 +142,7 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
 
   METHOD postMigo.
     LOOP AT keys INTO DATA(ls_key).
-      start_background_job( iv_rsnum = ls_key-ReservationNo iv_rspos = ls_key-ReservationItem iv_step = 'MIGO' ).
+      start_background_job( iv_process_id = ls_key-ProcessId iv_step = 'MIGO' ).
     ENDLOOP.
 
     READ ENTITIES OF zr_res_entry IN LOCAL MODE
@@ -172,7 +168,7 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
         WHEN ls_entry-Status = '90' OR ls_entry-ErrorStep = 'MIGO' THEN 'MIGO'
         ELSE 'RETRY_AUTO' ).
 
-      start_background_job( iv_rsnum = ls_entry-ReservationNo iv_rspos = ls_entry-ReservationItem iv_step = lv_target_step ).
+      start_background_job( iv_process_id = ls_entry-ProcessId iv_step = lv_target_step ).
     ENDLOOP.
 
     READ ENTITIES OF zr_res_entry IN LOCAL MODE
@@ -184,7 +180,6 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD refreshStatus.
-    " Issue 8: Explicit refresh action on demand from UI
     READ ENTITIES OF zr_res_entry IN LOCAL MODE
       ENTITY ReservationEntry
       ALL FIELDS WITH CORRESPONDING #( keys )
@@ -194,25 +189,21 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD start_background_job.
-    " Pattern 1: Modern S/4HANA Background Processing Framework (bgPF) [REVIEW IN ADT]
-    " In modern releases:
-    " TRY.
-    "   DATA(lo_operation) = cl_bgpf_operation_factory=>create_operation( ... ).
-    "   lo_operation->execute( ).
-    " CATCH cx_bgpf_error.
-    " ENDTRY.
+    " Real SAP S/4HANA Background Processing Framework (bgPF) in Package S_BGMC_PUBLIC
+    TRY.
+        DATA(lo_op) = NEW zcl_res_process_bgpf(
+          iv_process_id = iv_process_id
+          iv_step       = iv_step ).
 
-    " Pattern 2: Universally available asynchronous background execution without blocking RAP
-    CALL FUNCTION 'Z_RUN_RES_PROCESS_STEP' IN BACKGROUND TASK
-      ASYNCHRONOUS - LOCAL
-      EXPORTING
-        iv_rsnum = iv_rsnum
-        iv_rspos = iv_rspos
-        iv_step  = iv_step
-      EXCEPTIONS
-        OTHERS   = 1.
-
-    rv_started = COND #( WHEN sy-subrc = 0 THEN abap_true ELSE abap_false ).
+        DATA(lo_factory) = cl_bgmc_process_factory=>get_default( ).
+        DATA(lo_process) = lo_factory->create( ).
+        lo_process->set_name( |RES_{ iv_step }_{ iv_process_id }| ).
+        lo_process->set_operation_tx_uncontrolled( lo_op ).
+        lo_process->save_for_execution( ).
+        rv_started = abap_true.
+      CATCH cx_bgmc.
+        rv_started = abap_false.
+    ENDTRY.
   ENDMETHOD.
 
 ENDCLASS.

@@ -44,17 +44,17 @@ define root view entity ZC_RES_ENTRY
     }
   ]
 
+  @UI.fieldGroup: [{ qualifier: 'AuditGroup', position: 10, label: 'Process UUID' }]
+  key ProcessId,
+
   @UI.lineItem: [{ position: 10, importance: #HIGH, label: 'Reservation No' }]
   @UI.identification: [{ position: 10, label: 'Reservation No' }]
   @UI.selectionField: [{ position: 10 }]
-  key ReservationNo,
+  ReservationNo,
 
   @UI.lineItem: [{ position: 20, label: 'Item' }]
   @UI.identification: [{ position: 20, label: 'Item' }]
-  key ReservationItem,
-
-  @UI.fieldGroup: [{ qualifier: 'AuditGroup', position: 10, label: 'Process UUID' }]
-  ProcessId,
+  ReservationItem,
 
   @UI.fieldGroup: [{ qualifier: 'AuditGroup', position: 20, label: 'Reference Text' }]
   RefText,
@@ -158,12 +158,20 @@ define root view entity ZC_RES_ENTRY
   @UI.identification: [{ position: 50, label: 'Error Message' }]
   ErrorMessage,
 
+  @UI.fieldGroup: [{ qualifier: 'AuditGroup', position: 30, label: 'Log Handle' }]
+  LogHandle,
+
+  @UI.fieldGroup: [{ qualifier: 'AuditGroup', position: 40, label: 'External ID' }]
+  ExternalId,
+
   @UI.identification: [{ position: 60, label: 'Created By' }]
   CreatedBy,
 
   @UI.lineItem: [{ position: 100, label: 'Created On' }]
   @UI.identification: [{ position: 70, label: 'Created On' }]
   CreatedOn,
+
+  ChangedAt,
 
   _Logs
 }

@@ -62,9 +62,9 @@
 define table zres_track {
 
   key mandt     : mandt not null;
-  key rsnum     : rsnum not null;
-  key rspos     : rspos not null;
-  process_id    : sysuuid_x16;
+  key process_id: sysuuid_x16 not null;
+  rsnum         : rsnum;
+  rspos         : rspos;
   ref_text      : bktxt;
   move_type     : bwart;
   werks         : werks_d;
@@ -87,7 +87,7 @@ define table zres_track {
   tanum         : tanum;
   mblnr         : mblnr;
   mjahr         : mjahr;
-  status        : zres_status;
+  status        : char2;
   retry_count   : int4;
   error_step    : char10;
   err_msg       : bapi_msg;

@@ -475,7 +475,36 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
-### 2026-10-10 15:10 IST — Fix: ABAP/RAP Architecture Corrections for Classic WM Reservation Flow (bgPF, ZRES_TRACK, Warehouse Derivation, GI Retry Guard, Status Domain)
+### 2026-10-10 15:25 IST — Fix: Live DDIC Metadata Export & Definitive ABAP/RAP Defect Corrections (bgPF, MATDOC-SGTXT GI Guard, Primary Key PROCESS_ID, CHAR2 Status)
+- **Issue.** Codebase review and static analysis identified 7 concrete defects across `docs/abap/`:
+  1. `ChangedAt` was omitted from projection `ZC_RES_ENTRY` despite `etag master ChangedAt` in BDEF.
+  2. `balloghndl` and `balextn` in table `ZRES_TRACK` were omitted from `ZR_RES_ENTRY`, `ZC_RES_ENTRY`, and BDEF mapping.
+  3. Action handler called a non-existent function module `Z_RUN_RES_PROCESS_STEP` with invalid background task syntax.
+  4. Primary key was `(rsnum, rspos)`, which blocks draft creation before the reservation is generated.
+  5. GI retry guard matched on `(rsnum, rspos)` (blocking valid partial goods issues) and truncated 32-char UUIDs into 25-char `bktxt`.
+  6. `ZRES_STATUS` domain and data element were not in the repo, blocking table activation.
+  7. Code had obsolete `MKPF`/`MSEG` fallback logic instead of targeting S/4HANA `MATDOC`.
+- **Change.**
+  1. **Step 0 System Metadata (`docs/abap/system-metadata.md`):** Read DDIC live via RFC:
+     - Confirmed `T320` fields (`WERKS`, `LGORT`, `LGNUM`) and sample row (`1120`/`HS01` -> `W01`).
+     - Confirmed `T321` links via `RBLVS` (not `BWART`) and `T333` immediate confirmation via `SQUIT`.
+     - Confirmed real bgPF classes in `S_BGMC_PUBLIC`: `CL_BGMC_PROCESS_FACTORY`, `IF_BGMC_PROCESS_SINGLE_OP`, and `IF_BGMC_OP_SINGLE_TX_UNCONTR`.
+     - Confirmed text lengths: `MKPF-BKTXT` is 25 chars; `BAPI2017_GM_ITEM_CREATE-ITEM_TEXT` and `MATDOC-SGTXT` are 50 chars.
+     - Confirmed reservation lock object `EMRESB` (`ENQUEUE_EMRESB` / `DEQUEUE_EMRESB`).
+  2. `docs/abap/zc_res_entry.ddls.asddls`: Added `ChangedAt`, `LogHandle`, `ExternalId`, and switched key to `ProcessId`.
+  3. `docs/abap/zr_res_entry.ddls.asddls`: Added `LogHandle`, `ExternalId`, and switched key to `ProcessId`.
+  4. `docs/abap/zres_track.ddl`: Switched primary key to `process_id` (`sysuuid_x16`) with `rsnum`/`rspos` as standard fields, and switched `status` to `char2` for zero-prerequisite activation.
+  5. `docs/abap/zr_res_entry.bdef.asbdef`: Updated to `key ProcessId` with early numbering, mapped `LogHandle` and `ExternalId`, and used standard `draft action Activate`.
+  6. `docs/abap/zcl_res_process_bgpf.clas.abap`: Created real bgPF class implementing `IF_BGMC_OP_SINGLE_TX_UNCONTR~EXECUTE`.
+  7. `docs/abap/zbp_r_res_entry.clas.locals_imp.abap`: Integrated `CL_BGMC_PROCESS_FACTORY` and `ZCL_RES_PROCESS_BGPF` for uncontrolled transactions.
+  8. `docs/abap/zcl_res_process.clas.abap`:
+     - Updated `post_migo` to match strictly on `MATDOC-SGTXT = iv_ref_text` (never on `rsnum, rspos` alone), and populated full UUID into `ITEM_TEXT` (50 chars).
+     - Removed `MKPF`/`MSEG` fallback.
+     - Updated `derive_warehouse` to query `T320` directly.
+- **Validation:**
+  - `git diff --check`: clean (0 errors).
+  - DDIC metadata read directly from live S/4HANA Client 220 via RFC.
+  - Note: ABAP syntax, ATC, and unit tests require Eclipse ADT activation.
 - **Issue.** Codebase review identified 8 architectural and transactional defects in the ABAP/RAP layer (`docs/abap/`):
   1. `BAPI_TRANSACTION_COMMIT` and explicit commits were called inside RAP actions (prohibited in RAP interaction phase, triggering `BEHV_COMMIT_FORBIDDEN`).
   2. Table `ZRES_TRACK` and CDS views lacked essential business and audit fields (`KOSTL`, `ANLN1`, `ANLN2`, `CHARG`, `SERNR`, `SAKNR`, `COMPLETE_RES`, `RETRY_COUNT`, `REF_TEXT`, `PROCESS_ID`, `CONF_MENGE`).

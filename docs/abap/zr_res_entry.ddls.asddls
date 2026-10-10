@@ -4,9 +4,9 @@ define root view entity ZR_RES_ENTRY
   as select from zres_track
   composition [0..*] of zres_log as _Logs
 {
-  key rsnum             as ReservationNo,
-  key rspos             as ReservationItem,
-      process_id        as ProcessId,
+  key process_id        as ProcessId,
+      rsnum             as ReservationNo,
+      rspos             as ReservationItem,
       ref_text          as RefText,
       move_type         as MovementType,
       werks             as Plant,
@@ -33,6 +33,8 @@ define root view entity ZR_RES_ENTRY
       retry_count       as RetryCount,
       error_step        as ErrorStep,
       err_msg           as ErrorMessage,
+      balloghndl        as LogHandle,
+      balextn           as ExternalId,
       created_by        as CreatedBy,
       created_on        as CreatedOn,
       created_at        as CreatedAt,

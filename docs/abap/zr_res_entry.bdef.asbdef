@@ -5,6 +5,7 @@ with draft;
 /* REVIEW IN ADT: Verify draft table ZRES_TRACK_D creation in SE11 / ADT */
 define behavior for ZR_RES_ENTRY alias ReservationEntry
 draft table zres_track_d
+early numbering
 lock master
 authorization master ( instance )
 etag master ChangedAt
@@ -14,6 +15,7 @@ etag master ChangedAt
   delete;
 
   field ( readonly )
+    ProcessId,
     ReservationNo,
     ReservationItem,
     TransferRequirement,
@@ -52,7 +54,7 @@ etag master ChangedAt
 
   // Draft actions
   draft action Edit;
-  draft action Activate optimized;
+  draft action Activate;
   draft action Discard;
   draft determine action Prepare {
     validation validateMovementData;
@@ -60,9 +62,9 @@ etag master ChangedAt
 
   mapping for zres_track
   {
+    ProcessId = process_id;
     ReservationNo = rsnum;
     ReservationItem = rspos;
-    ProcessId = process_id;
     RefText = ref_text;
     MovementType = move_type;
     Plant = werks;
@@ -89,6 +91,8 @@ etag master ChangedAt
     RetryCount = retry_count;
     ErrorStep = error_step;
     ErrorMessage = err_msg;
+    LogHandle = balloghndl;
+    ExternalId = balextn;
     CreatedBy = created_by;
     CreatedOn = created_on;
     CreatedAt = created_at;

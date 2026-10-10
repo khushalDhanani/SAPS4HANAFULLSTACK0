@@ -208,11 +208,9 @@ ENDCLASS.
 CLASS zcl_res_process IMPLEMENTATION.
 
   METHOD derive_warehouse.
-    CONSTANTS lc_tab_t320 TYPE tabname VALUE 'T320'. " Verify table T320 in SE11
-
     CLEAR: ev_lgnum, ev_subrc.
 
-    SELECT SINGLE lgnum FROM (lc_tab_t320)
+    SELECT SINGLE lgnum FROM t320
       WHERE werks = @iv_werks AND lgort = @iv_lgort
       INTO @ev_lgnum.
 
@@ -223,7 +221,7 @@ CLASS zcl_res_process IMPLEMENTATION.
           textid   = zcx_res_process_error=>not_wm_managed
           mv_werks = iv_werks
           mv_lgort = iv_lgort
-          mv_msg   = |Plant { iv_werks } SLoc { iv_lgort } is not WM-managed in table { lc_tab_t320 }|.
+          mv_msg   = |Plant { iv_werks } SLoc { iv_lgort } is not WM-managed in table T320|.
     ENDIF.
 
     ev_subrc = 0.
@@ -525,16 +523,13 @@ CLASS zcl_res_process IMPLEMENTATION.
           ls_headret TYPE bapi2017_gm_head_ret,
           lt_ret     TYPE STANDARD TABLE OF bapiret2.
 
-    CONSTANTS lc_tab_matdoc TYPE tabname VALUE 'MATDOC'. " Verify table MATDOC / MSEG in SE11
-
     CLEAR: ev_mblnr, ev_mjahr, et_return, ev_subrc.
 
-    " Issue 7: GI Retry Guard - Check if already posted for this reservation item or PROCESS_ID ref
-    IF iv_rsnum IS NOT INITIAL.
+    " Issue 5 & 7: GI Retry Guard - Match strictly on process step reference in MATDOC-SGTXT
+    IF iv_ref_text IS NOT INITIAL.
       SELECT SINGLE mblnr, mjahr
-        FROM (lc_tab_matdoc)
-        WHERE ( rsnum = @iv_rsnum AND rspos = @iv_rspos )
-           OR ( bktxt = @iv_ref_text AND bktxt <> @space )
+        FROM matdoc
+        WHERE sgtxt = @iv_ref_text
         INTO (@ev_mblnr, @ev_mjahr).
 
       IF sy-subrc = 0 AND ev_mblnr IS NOT INITIAL.
@@ -544,7 +539,7 @@ CLASS zcl_res_process IMPLEMENTATION.
             iv_type    = 'W'
             iv_id      = 'M7'
             iv_number  = '060'
-            iv_message = |Material document { ev_mblnr }/{ ev_mjahr } already exists for reservation { iv_rsnum }/{ iv_rspos } or ref { iv_ref_text }. Re-posting skipped.|
+            iv_message = |Material document { ev_mblnr }/{ ev_mjahr } already exists for process reference { iv_ref_text }. Re-posting skipped.|
           CHANGING
             ct_return  = et_return ).
         RETURN.
@@ -565,7 +560,7 @@ CLASS zcl_res_process IMPLEMENTATION.
     ls_head-doc_date   = sy-datum.
     ls_head-ref_doc_no = |RES { iv_rsnum }|.
     IF iv_ref_text IS NOT INITIAL.
-      ls_head-bktxt    = iv_ref_text.
+      ls_head-bktxt    = iv_ref_text(25). " Truncate safely to 25 chars for header display only
     ELSE.
       ls_head-bktxt    = |RES { iv_rsnum }|.
     ENDIF.
@@ -580,6 +575,7 @@ CLASS zcl_res_process IMPLEMENTATION.
     ls_item-reserv_no  = iv_rsnum.
     ls_item-res_item   = iv_rspos.
     ls_item-no_more_gr = iv_complete_res. " Close reservation item if complete flag is set
+    ls_item-item_text  = iv_ref_text.     " Holds full PROCESS_ID (CHAR 50), maps directly to MATDOC-SGTXT
 
     IF iv_umwrk IS NOT INITIAL.
       ls_item-move_plant = iv_umwrk.
