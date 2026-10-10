@@ -103,3 +103,74 @@
 - **Generated Function Modules:**
   - Enqueue: `ENQUEUE_EMRESB`
   - Dequeue: `DEQUEUE_EMRESB`
+
+---
+
+## 6. Interface of Function Module `Z_WM_TO_CREATE_FROM_TR`
+
+*Read live from SAP S/4HANA Client 220 via RFC (`RFC_GET_FUNCTION_INTERFACE`).*
+
+### Importing Parameters
+| Parameter | Type | Default | Optional | Description |
+|---|---|---|---|---|
+| `IV_COMMIT` | `CHAR1` | `'X'` | Yes | Commit work flag (`'X'` = execute COMMIT WORK) |
+| `IV_LGNUM` | `LGNUM` (CHAR 3) | | No | Warehouse number (e.g. `'W01'`) |
+| `IV_SQUIT` | `CHAR1` | `' '` | Yes | Immediate confirmation indicator (`'X'` = immediate confirm, `' '` = create only) |
+| `IV_TBNUM` | `LTBK` (CHAR 10) | | No | Transfer Requirement number |
+
+### Exporting Parameters
+| Parameter | Type | Optional | Description |
+|---|---|---|---|
+| `EV_MESSAGE` | `BAPI_MSG` (CHAR 220) | No | Formatted return message text |
+| `EV_SUCCESS` | `CHAR1` | No | Execution status flag (`'S'` = Success, `'E'` = Error) |
+| `EV_TANUM` | `LTAK` (CHAR 10) | No | Generated Transfer Order number |
+
+### Table Parameters
+| Parameter | Type | Optional | Description |
+|---|---|---|---|
+| `ET_MESSAGES` | `BAPIRET2_T` | Yes | Table of BAPI return messages |
+| `IT_ITEMS` | `L03B_TRITE_T` | Yes | Table of TR items to convert (`TBPOS`, `ANFME`, `ALTME`, `CHARG`, `LETYP`, `NLTYP`, `NLPLA`, `VLTYP`, `VLPLA`, `VLENR`) |
+
+### Exceptions
+- None declared in interface (errors returned via `EV_SUCCESS = 'E'`, `EV_MESSAGE`, and `ET_MESSAGES`).
+
+---
+
+## 7. Interface of Function Module `L_TO_CONFIRM` (TO Confirmation)
+
+*Read live from SAP S/4HANA Client 220 via RFC (`RFC_GET_FUNCTION_INTERFACE`).*
+
+### Importing Parameters
+| Parameter | Type | Default | Optional | Description |
+|---|---|---|---|---|
+| `I_LGNUM` | `LTAK` (CHAR 3) | | No | Warehouse number |
+| `I_TANUM` | `LTAK` (CHAR 10) | | No | Transfer order number |
+| `I_SQUIT` | `RL03T` (CHAR 1) | `SPACE` | Yes | Confirmation target = actual (`'X'` confirms entire TO target qty) |
+| `I_COMMIT_WORK` | `RL03B` (CHAR 1) | `'X'` | Yes | Indicator whether COMMIT WORK in function module |
+| `I_QNAME` | `LTAP` (CHAR 12) | `SY-UNAME` | Yes | User who is executing confirmation |
+| `I_SUBST` | `RL03T` (CHAR 1) | `SPACE` | Yes | Confirm also items to subsystems |
+| `I_TBELI` | `RL03T` (CHAR 1) | `SPACE` | Yes | Set transfer requirement to processing complete |
+| `I_UPDATE_TASK` | `RL03A` (CHAR 1) | `SPACE` | Yes | Indicator: update via update task |
+
+### Table Parameters
+| Parameter | Type | Optional | Description |
+|---|---|---|---|
+| `T_LTAP_CONF` | `LTAP_CONF` | No (if SQUIT space) | Table of TO items to confirm (`TANUM`, `TAPOS`, `PISTA`/`NISTA`, `SQUIT`) |
+| `T_LTAP_CONF_HU` | `LTAP_CONF_HU` | Yes | Handling Unit Data for TO Item at Confirmation |
+| `T_LTAP_CONF_HU_SERIAL` | `LTAP_CONF_HU_SERIAL` | Yes | Serial Number Data for TO Item at Confirmation |
+
+### Key Exceptions
+- `TO_CONFIRMED` (1): Transfer order already confirmed
+- `TO_DOESNT_EXIST` (2): Transfer order does not exist
+- `ITEM_CONFIRMED` (3): TO item already confirmed
+- `FOREIGN_LOCK` (12): SAP lock set by another user
+- `SQUIT_OR_QUANTITIES` (13): Must confirm via `I_SQUIT = 'X'` OR provide item quantities in `T_LTAP_CONF`
+- `NO_AUTHORITY` (30): No authorization
+
+---
+
+## 8. Immediate-Confirm Parameter Check for `Z_WM_TO_CREATE_FROM_TR`
+
+- **Parameter Exists in System:** **YES** (`IV_SQUIT TYPE CHAR1 DEFAULT ' '`).
+- **Policy Enforcement:** Per design instruction, `IV_SQUIT` is left as `' '` (space), and TO confirmation is executed via a separate, explicit second call (`L_TO_CONFIRM` / `confirmTO`).
+- **TODO Note Added in Code:** `// TODO: Z_WM_TO_CREATE_FROM_TR supports IV_SQUIT = 'X' for immediate confirmation in one call, but chained 2-call architecture is enforced here.`

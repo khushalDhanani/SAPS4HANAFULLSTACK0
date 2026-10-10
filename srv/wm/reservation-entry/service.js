@@ -479,67 +479,177 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             MessageText: `Retry successful: Transfer Requirement ${trNo} created via L_TR_CREATE`
           });
         } else if (requestedStep === 'LT04') {
-          const toResult = await adapter.createTransferOrderFromTR({
-            warehouseNumber: track.WarehouseNumber || 'W01',
-            trNumber: track.TransferRequirement
-          });
+          // Never create a second TO when TANUM is already set for this process.
+          // Retry logic: status 12 retries create. Status 13 retries confirm only.
+          let toNo = track.TransferOrder;
+          if (toNo) {
+            if (track.Status_code === '04') {
+              return req.error(400, `Transfer Order ${toNo} is already confirmed for this process. Creating a second TO is blocked.`);
+            }
+            // Status 13: retry confirm only
+          } else {
+            let toResult;
+            try {
+              toResult = await adapter.createTransferOrderFromTR({
+                warehouseNumber: track.WarehouseNumber || 'W01',
+                trNumber: track.TransferRequirement
+              });
+              toNo = toResult.toNumberRaw || String(toResult.toNumber).padStart(10, '0');
 
-          const toNo = toResult.toNumberRaw || String(toResult.toNumber).padStart(10, '0');
+              // Persist TANUM and status 03
+              await UPDATE(ReservationEntries).set({
+                TransferOrder: toNo,
+                Status_code: '03',
+                ErrorMessage: '',
+                ErrorStep: '',
+                LogHandle: sLogHandle,
+                ExternalId: extId
+              }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
 
-          await adapter.confirmTransferOrder({
-            warehouseNumber: track.WarehouseNumber || 'W01',
-            toNumber: toNo
-          });
+              await INSERT.into(ReservationLogs).entries({
+                ID: cds.utils.uuid(),
+                ReservationNo: sResNo,
+                ReservationItem: sResItem,
+                LogHandle: sLogHandle,
+                ExternalId: extId,
+                SubObject: 'PROCESS',
+                Step: 'LT04',
+                Status: '03',
+                MessageType: 'S',
+                MessageId: 'L3',
+                MessageNo: '001',
+                MessageText: `Transfer Order ${toNo} created from TR ${track.TransferRequirement}`
+              });
+            } catch (createErr) {
+              await UPDATE(ReservationEntries).set({
+                Status_code: '12',
+                ErrorMessage: createErr.message,
+                ErrorStep: 'LT04',
+                LogHandle: sLogHandle,
+                ExternalId: extId
+              }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+              throw createErr;
+            }
+          }
 
-          await UPDATE(ReservationEntries).set({
-            TransferOrder: toNo,
-            Status_code: '04',
-            ErrorMessage: '',
-            LogHandle: sLogHandle,
-            ExternalId: extId
-          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+          // Real second call: Confirm TO
+          try {
+            await adapter.confirmTransferOrder({
+              warehouseNumber: track.WarehouseNumber || 'W01',
+              toNumber: toNo
+            });
 
-          await INSERT.into(ReservationLogs).entries({
-            ID: cds.utils.uuid(),
-            ReservationNo: sResNo,
-            ReservationItem: sResItem,
-            LogHandle: sLogHandle,
-            ExternalId: extId,
-            SubObject: 'PROCESS',
-            Step: 'LT04',
-            Status: '04',
-            MessageType: 'S',
-            MessageId: 'L3',
-            MessageNo: '025',
-            MessageText: `Retry successful: Transfer Order ${toNo} created and confirmed`
-          });
+            await UPDATE(ReservationEntries).set({
+              TransferOrder: toNo,
+              Status_code: '04',
+              ErrorMessage: '',
+              ErrorStep: '',
+              LogHandle: sLogHandle,
+              ExternalId: extId
+            }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+            await INSERT.into(ReservationLogs).entries({
+              ID: cds.utils.uuid(),
+              ReservationNo: sResNo,
+              ReservationItem: sResItem,
+              LogHandle: sLogHandle,
+              ExternalId: extId,
+              SubObject: 'PROCESS',
+              Step: 'LT12',
+              Status: '04',
+              MessageType: 'S',
+              MessageId: 'L3',
+              MessageNo: '025',
+              MessageText: `Retry successful: Transfer Order ${toNo} created and confirmed`
+            });
+          } catch (confirmErr) {
+            await UPDATE(ReservationEntries).set({
+              TransferOrder: toNo,
+              Status_code: '13',
+              ErrorMessage: confirmErr.message,
+              ErrorStep: 'LT12',
+              LogHandle: sLogHandle,
+              ExternalId: extId
+            }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+            await INSERT.into(ReservationLogs).entries({
+              ID: cds.utils.uuid(),
+              ReservationNo: sResNo,
+              ReservationItem: sResItem,
+              LogHandle: sLogHandle,
+              ExternalId: extId,
+              SubObject: 'PROCESS',
+              Step: 'LT12',
+              Status: '13',
+              MessageType: 'E',
+              MessageId: 'L3',
+              MessageNo: '026',
+              MessageText: `Confirmation failed for Transfer Order ${toNo}: ${confirmErr.message}`
+            });
+            throw confirmErr;
+          }
         } else if (requestedStep === 'LT12') {
-          await adapter.confirmTransferOrder({
-            warehouseNumber: track.WarehouseNumber || 'W01',
-            toNumber: track.TransferOrder
-          });
+          // Retry confirm only
+          if (!track.TransferOrder) {
+            return req.error(400, `Cannot confirm TO: No Transfer Order document exists on reservation ${sResNo}/${sResItem}`);
+          }
+          if (track.Status_code === '04') {
+            return req.error(400, `Transfer Order ${track.TransferOrder} is already confirmed for this process. Creating a second TO is blocked.`);
+          }
 
-          await UPDATE(ReservationEntries).set({
-            Status_code: '04',
-            ErrorMessage: '',
-            LogHandle: sLogHandle,
-            ExternalId: extId
-          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+          try {
+            await adapter.confirmTransferOrder({
+              warehouseNumber: track.WarehouseNumber || 'W01',
+              toNumber: track.TransferOrder
+            });
 
-          await INSERT.into(ReservationLogs).entries({
-            ID: cds.utils.uuid(),
-            ReservationNo: sResNo,
-            ReservationItem: sResItem,
-            LogHandle: sLogHandle,
-            ExternalId: extId,
-            SubObject: 'PROCESS',
-            Step: 'LT12',
-            Status: '04',
-            MessageType: 'S',
-            MessageId: 'L3',
-            MessageNo: '025',
-            MessageText: `Retry successful: Transfer Order ${track.TransferOrder} confirmed via L_TO_CONFIRM`
-          });
+            await UPDATE(ReservationEntries).set({
+              Status_code: '04',
+              ErrorMessage: '',
+              ErrorStep: '',
+              LogHandle: sLogHandle,
+              ExternalId: extId
+            }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+            await INSERT.into(ReservationLogs).entries({
+              ID: cds.utils.uuid(),
+              ReservationNo: sResNo,
+              ReservationItem: sResItem,
+              LogHandle: sLogHandle,
+              ExternalId: extId,
+              SubObject: 'PROCESS',
+              Step: 'LT12',
+              Status: '04',
+              MessageType: 'S',
+              MessageId: 'L3',
+              MessageNo: '025',
+              MessageText: `Retry successful: Transfer Order ${track.TransferOrder} confirmed via L_TO_CONFIRM`
+            });
+          } catch (confirmErr) {
+            await UPDATE(ReservationEntries).set({
+              Status_code: '13',
+              ErrorMessage: confirmErr.message,
+              ErrorStep: 'LT12',
+              LogHandle: sLogHandle,
+              ExternalId: extId
+            }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+            await INSERT.into(ReservationLogs).entries({
+              ID: cds.utils.uuid(),
+              ReservationNo: sResNo,
+              ReservationItem: sResItem,
+              LogHandle: sLogHandle,
+              ExternalId: extId,
+              SubObject: 'PROCESS',
+              Step: 'LT12',
+              Status: '13',
+              MessageType: 'E',
+              MessageId: 'L3',
+              MessageNo: '026',
+              MessageText: `Confirmation failed for Transfer Order ${track.TransferOrder}: ${confirmErr.message}`
+            });
+            throw confirmErr;
+          }
         } else if (requestedStep === 'MIGO') {
           const migoRes = await adapter.postGoodsMovement({
             reservationNo: sResNo,

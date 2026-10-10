@@ -178,13 +178,33 @@ class TrToHandler {
 
     // Chunk 4 & Chunk 5: Create TO from TR + Auto Confirm + Optional Auto MIGO
     const handleCreateTOFromTR = async (req) => {
+      const cds = require('@sap/cds');
+      const db = cds.db;
+      const data = req.data || {};
+      let existing = null;
+
+      if (db) {
+        try {
+          const { ReservationTrack } = db.entities('saps4hana.wm');
+          if (ReservationTrack) {
+            const tbnum = data.tbnum ? String(data.tbnum).trim().padStart(10, '0') : '';
+            const rsnum = data.ReservationNo ? String(data.ReservationNo).trim() : '';
+            existing = await SELECT.one.from(ReservationTrack).where(
+              tbnum ? { TransferRequirement: tbnum } : (rsnum ? { ReservationNo: rsnum } : { 1: 0 })
+            );
+          }
+        } catch (_) {}
+      }
+
+      if (existing && existing.TransferOrder) {
+        data.existingToNumber = existing.TransferOrder;
+        data.status = existing.Status_code;
+      }
+
       try {
-        const result = await adapter.createTOFromTR(req.data || {});
+        const result = await adapter.createTOFromTR(data);
 
         // Update ZRES_TRACK and ZRES_LOG if CDS entities are available
-        const cds = require('@sap/cds');
-        const db = cds.db;
-        let existing = null;
         if (db && result.TransferOrder) {
           try {
             const { ReservationTrack, ReservationLog } = db.entities('saps4hana.wm');
@@ -192,16 +212,19 @@ class TrToHandler {
               const tbnum = result.TransferRequirement;
               const rsnum = result.ReservationNo;
 
-              // Find tracking record
-              existing = await SELECT.one.from(ReservationTrack).where(
-                tbnum ? { TransferRequirement: tbnum } : { ReservationNo: rsnum }
-              );
+              if (!existing) {
+                existing = await SELECT.one.from(ReservationTrack).where(
+                  tbnum ? { TransferRequirement: tbnum } : (rsnum ? { ReservationNo: rsnum } : { 1: 0 })
+                );
+              }
 
               if (existing) {
                 await UPDATE(ReservationTrack)
                   .set({
                     TransferOrder: result.TransferOrder,
-                    Status_code: result.Status
+                    Status_code: result.Status,
+                    ErrorMessage: result.ErrorMessage || '',
+                    ErrorStep: result.ErrorStep || ''
                   })
                   .where({
                     ReservationNo: existing.ReservationNo,
@@ -222,7 +245,7 @@ class TrToHandler {
                     MessageText: `Transfer Order ${result.TransferOrder} created from TR ${result.TransferRequirement}`
                   });
 
-                  // Log Step LT12 (TO Confirmed)
+                  // Log Step LT12 (TO Confirmed or Failed)
                   if (result.Confirmed) {
                     await INSERT.into(ReservationLog).entries({
                       ID: cds.utils.uuid(),
@@ -234,6 +257,18 @@ class TrToHandler {
                       MessageId: 'L3',
                       MessageNo: '025',
                       MessageText: `Transfer Order ${result.TransferOrder} auto-confirmed via L_TO_CONFIRM`
+                    });
+                  } else if (result.Status === '13') {
+                    await INSERT.into(ReservationLog).entries({
+                      ID: cds.utils.uuid(),
+                      ReservationNo: existing.ReservationNo,
+                      ReservationItem: existing.ReservationItem,
+                      Step: 'LT12',
+                      Status: '13',
+                      MessageType: 'E',
+                      MessageId: 'L3',
+                      MessageNo: '026',
+                      MessageText: result.ErrorMessage || `Transfer Order ${result.TransferOrder} confirmation failed (LT12)`
                     });
                   }
                 }
@@ -288,7 +323,32 @@ class TrToHandler {
 
         return result;
       } catch (err) {
-        return req.error(err.status || 500, err.message || 'CreateTOFromTR failed');
+        if (db && existing) {
+          try {
+            const { ReservationTrack, ReservationLog } = db.entities('saps4hana.wm');
+            if (ReservationTrack) {
+              await UPDATE(ReservationTrack).set({
+                Status_code: err.Status || '12',
+                ErrorMessage: err.message || '',
+                ErrorStep: err.ErrorStep || 'LT04'
+              }).where({ ReservationNo: existing.ReservationNo, ReservationItem: existing.ReservationItem });
+            }
+            if (ReservationLog) {
+              await INSERT.into(ReservationLog).entries({
+                ID: cds.utils.uuid(),
+                ReservationNo: existing.ReservationNo,
+                ReservationItem: existing.ReservationItem,
+                Step: err.ErrorStep || 'LT04',
+                Status: err.Status || '12',
+                MessageType: 'E',
+                MessageId: 'L3',
+                MessageNo: '110',
+                MessageText: err.message || 'TO Step failed'
+              });
+            }
+          } catch (_) {}
+        }
+        return req.error(err.status || 400, err.message || 'CreateTOFromTR failed');
       }
     };
 

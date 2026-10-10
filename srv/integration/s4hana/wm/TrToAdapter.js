@@ -462,10 +462,30 @@ class TrToAdapter {
   }
 
   /**
-   * Step 2 Service: Create TO from TR + Auto-Confirm (wraps L_TO_CREATE_TR and L_TO_CONFIRM)
+   * Step 2 Service: Chained TO step: CREATE TO, then CONFIRM TO in one step,
+   * with confirmation as a real second call.
    * Validates quantity against TR open quantity, validates batch and serial requirements.
+   * Status progression:
+   *   03 = TO Created (persisted after create succeeds)
+   *   04 = TO Confirmed (persisted after confirm succeeds)
+   *   12 = TO Create Failed (error on create, retryable via create)
+   *   13 = TO Confirm Failed (error on confirm, keeps TANUM, retryable via confirm only)
    */
-  async createTOFromTR({ lgnum = 'W01', tbnum, tbpos = '0001', qty, unit, batch = '', serials = [], storageUnit = '', autoConfirm = true, autoPostMigo = false } = {}) {
+  async createTOFromTR({
+    lgnum = 'W01',
+    tbnum,
+    tbpos = '0001',
+    qty,
+    unit,
+    batch = '',
+    serials = [],
+    storageUnit = '',
+    autoConfirm = true,
+    autoPostMigo = false,
+    existingToNumber = '',
+    status = '',
+    confMenge
+  } = {}) {
     const quantity = Number(qty);
     if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
 
@@ -499,80 +519,110 @@ class TrToAdapter {
 
     const selectedBatch = batch || item.Batch || '';
 
-    // Create TO via Z_WM_TO_CREATE_FROM_TR (creation without immediate confirmation)
-    LOG.info(`Creating TO from TR ${tr.Tbnum} item ${item.Tbpos}, qty ${quantity} ${unit || item.Unit}`);
-    const itItems = [{
-      TBPOS: item.Tbpos,
-      ANFME: quantity.toFixed(3),
-      ALTME: unit || item.Unit,
-      CHARG: selectedBatch,
-      LETYP: item.StorageUnitType || profile.storageUnitType || '',
-      NLTYP: item.DestStorageType || tr.Nltyp || '',
-      NLPLA: item.DestStorageBin || tr.Nlpla || '',
-      VLTYP: item.SourceStorageType || tr.Vltyp || '',
-      VLPLA: item.SourceStorageBin || tr.Vlpla || '',
-      VLENR: storageUnit || ''
-    }];
+    // Guard: Never create a second TO when TANUM is already set for this process.
+    // Retry logic: status 12 retries create. Status 13 retries confirm only.
+    let tanum = existingToNumber ? alphaOut(existingToNumber) : '';
+    let isRetryConfirmOnly = false;
 
-    let res;
-    try {
-      res = await this._rfc(
-        () => this.rfc.call('Z_WM_TO_CREATE_FROM_TR', {
-          IV_LGNUM: wh,
-          IV_TBNUM: tr.Tbnum,
-          IV_COMMIT: 'X',
-          IV_SQUIT: ' ',
-          IT_ITEMS: itItems
-        }),
-        `Create Transfer Order for TR ${alphaOut(tr.Tbnum)}`
-      );
-    } catch (primaryErr) {
-      // Only fall back to ZWM_TO_CREATE_FROM_TR if Z_WM_TO_CREATE_FROM_TR is completely missing from the system
-      const isMissingFm = primaryErr.message && (
-        primaryErr.message.includes('FU_NOT_FOUND') ||
-        primaryErr.message.includes('NOT_FOUND') ||
-        primaryErr.message.includes('does not exist')
-      );
-      if (isMissingFm) {
-        LOG.warn(`Z_WM_TO_CREATE_FROM_TR not found on system (${primaryErr.message}), trying ZWM_TO_CREATE_FROM_TR`);
+    if (tanum) {
+      if (status === '04') {
+        throw httpError(400, `Transfer Order ${tanum} is already confirmed for this process. Creating a second TO is blocked.`);
+      }
+      // Status 13 (or existing unconfirmed TO) retries confirm only
+      isRetryConfirmOnly = true;
+      LOG.info(`TANUM ${tanum} already exists on process; skipping create and retrying confirmation only.`);
+    }
+
+    if (!isRetryConfirmOnly) {
+      // Chained TO step: CREATE TO via Z_WM_TO_CREATE_FROM_TR, then CONFIRM TO via L_TO_CONFIRM as a real second call
+      // TODO: Z_WM_TO_CREATE_FROM_TR supports IV_SQUIT = 'X' for immediate confirmation in one call, but chained 2-call architecture is enforced here.
+      LOG.info(`Creating TO from TR ${tr.Tbnum} item ${item.Tbpos}, qty ${quantity} ${unit || item.Unit}`);
+      const itItems = [{
+        TBPOS: item.Tbpos,
+        ANFME: quantity.toFixed(3),
+        ALTME: unit || item.Unit,
+        CHARG: selectedBatch,
+        LETYP: item.StorageUnitType || profile.storageUnitType || '',
+        NLTYP: item.DestStorageType || tr.Nltyp || '',
+        NLPLA: item.DestStorageBin || tr.Nlpla || '',
+        VLTYP: item.SourceStorageType || tr.Vltyp || '',
+        VLPLA: item.SourceStorageBin || tr.Vlpla || '',
+        VLENR: storageUnit || ''
+      }];
+
+      let res;
+      try {
         res = await this._rfc(
-          () => this.rfc.call('ZWM_TO_CREATE_FROM_TR', {
+          () => this.rfc.call('Z_WM_TO_CREATE_FROM_TR', {
             IV_LGNUM: wh,
             IV_TBNUM: tr.Tbnum,
             IV_COMMIT: 'X',
+            IV_SQUIT: ' ',
             IT_ITEMS: itItems
           }),
-          `Create Transfer Order for TR ${alphaOut(tr.Tbnum)} (fallback)`
+          `Create Transfer Order for TR ${alphaOut(tr.Tbnum)}`
         );
-      } else {
-        // Business / customizing / authorization error from SAP: preserve and surface the real error
-        let msg = primaryErr.message || 'Error creating Transfer Order in SAP';
-        if (msg.includes('Data for storage type search is not defined')) {
-          msg = `SAP WM storage type search error: Stock removal search strategy is not defined in customizing (table T334T) for material ${item.Material} in warehouse ${wh}. Please select an open TR with configured storage search (e.g. TR 1000750) or configure T334T in SPRO.`;
+      } catch (primaryErr) {
+        // Only fall back to ZWM_TO_CREATE_FROM_TR if Z_WM_TO_CREATE_FROM_TR is completely missing from the system
+        const isMissingFm = primaryErr.message && (
+          primaryErr.message.includes('FU_NOT_FOUND') ||
+          primaryErr.message.includes('NOT_FOUND') ||
+          primaryErr.message.includes('does not exist')
+        );
+        if (isMissingFm) {
+          LOG.warn(`Z_WM_TO_CREATE_FROM_TR not found on system (${primaryErr.message}), trying ZWM_TO_CREATE_FROM_TR`);
+          res = await this._rfc(
+            () => this.rfc.call('ZWM_TO_CREATE_FROM_TR', {
+              IV_LGNUM: wh,
+              IV_TBNUM: tr.Tbnum,
+              IV_COMMIT: 'X',
+              IT_ITEMS: itItems
+            }),
+            `Create Transfer Order for TR ${alphaOut(tr.Tbnum)} (fallback)`
+          );
+        } else {
+          // Business / customizing / authorization error from SAP: preserve and surface the real error
+          let msg = primaryErr.message || 'Error creating Transfer Order in SAP';
+          if (msg.includes('Data for storage type search is not defined')) {
+            msg = `SAP WM storage type search error: Stock removal search strategy is not defined in customizing (table T334T) for material ${item.Material} in warehouse ${wh}. Please select an open TR with configured storage search (e.g. TR 1000750) or configure T334T in SPRO.`;
+          }
+          const err = httpError(400, msg);
+          err.Status = '12';
+          err.ErrorStep = 'LT04';
+          throw err;
         }
-        throw httpError(400, msg);
       }
+
+      if (res?.EV_SUCCESS !== 'S' || !res.EV_TANUM) {
+        let errMsg = res?.EV_MESSAGE;
+        if (!errMsg && Array.isArray(res?.ET_MESSAGES) && res.ET_MESSAGES.length > 0) {
+          errMsg = res.ET_MESSAGES.map((m) => m.MESSAGE).filter(Boolean).join('; ');
+        }
+        const err = httpError(400, errMsg || `SAP did not create a Transfer Order for TR ${alphaOut(tr.Tbnum)}`);
+        err.Status = '12';
+        err.ErrorStep = 'LT04';
+        throw err;
+      }
+
+      tanum = alphaOut(res.EV_TANUM);
     }
 
-    if (res?.EV_SUCCESS !== 'S' || !res.EV_TANUM) {
-      let errMsg = res?.EV_MESSAGE;
-      if (!errMsg && Array.isArray(res?.ET_MESSAGES) && res.ET_MESSAGES.length > 0) {
-        errMsg = res.ET_MESSAGES.map((m) => m.MESSAGE).filter(Boolean).join('; ');
-      }
-      throw httpError(400, errMsg || `SAP did not create a Transfer Order for TR ${alphaOut(tr.Tbnum)}`);
-    }
-
-    const tanum = alphaOut(res.EV_TANUM);
+    // Step 2: Confirm TO as a real second call
     let confirmed = false;
+    let confirmErr = null;
 
     if (autoConfirm) {
       try {
         await this.confirmTO({ lgnum: wh, toNumber: tanum });
         confirmed = true;
-      } catch (confirmErr) {
-        LOG.warn(`Auto-confirmation of TO ${tanum} failed: ${confirmErr.message}`);
+      } catch (err) {
+        confirmErr = err;
+        LOG.warn(`Confirmation of TO ${tanum} failed: ${err.message}`);
       }
     }
+
+    const currentStatus = confirmed ? '04' : (autoConfirm ? '13' : '03');
+    const statusText = confirmed ? 'TO Confirmed' : (autoConfirm ? 'TO Confirmation Failed' : 'TO Created');
 
     return {
       TransferOrder: tanum,
@@ -580,17 +630,24 @@ class TrToAdapter {
       TRItem: item.Tbpos,
       ReservationNo: alphaOut(tr.Rsnum) || '',
       ReservationItem: '0001',
-      Status: confirmed ? '04' : '03',
-      StatusText: confirmed ? 'TO Confirmed' : 'TO Created',
+      Status: currentStatus,
+      StatusText: statusText,
       Confirmed: confirmed,
+      ErrorStep: confirmed ? '' : (autoConfirm ? 'LT12' : ''),
+      ErrorMessage: confirmed ? '' : (confirmErr?.message || ''),
       Material: item.Material,
       MaterialName: item.MaterialDesc,
       Quantity: quantity,
+      ConfirmedQuantity: confirmed ? (confMenge || quantity) : 0,
       Unit: unit || item.Unit,
       Batch: selectedBatch,
       Serials: serials || [],
-      Success: true,
-      Message: `Transfer Order ${tanum} created ${confirmed ? 'and auto-confirmed' : ''} successfully.`
+      Success: confirmed || !autoConfirm,
+      Message: confirmed
+        ? `Transfer Order ${tanum} created and confirmed successfully.`
+        : (autoConfirm
+            ? `Transfer Order ${tanum} created, but confirmation failed (status 13): ${confirmErr?.message}`
+            : `Transfer Order ${tanum} created successfully (status 03).`)
     };
   }
 }

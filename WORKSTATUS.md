@@ -5,6 +5,39 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Feature: Chained TO Execution (Create TO then Confirm TO as Two Real Sequential Calls) & Retry Separation — Resolved & Validated (2026-10-10):**
+  - **Change Request:** Implement chained Transfer Order execution (CREATE TO via `Z_WM_TO_CREATE_FROM_TR`, then CONFIRM TO via `L_TO_CONFIRM` as a real second call) in one step across both Node/CAP adapters and ABAP repository classes (`docs/abap/`).
+  - **Interface Discoveries from Live SAP Client 220 (via RFC):**
+    1. `Z_WM_TO_CREATE_FROM_TR`:
+       - Importing: `IV_LGNUM` (LGNUM), `IV_TBNUM` (LTBK-TBNUM), `IV_SQUIT` (CHAR1, default `' '`), `IV_COMMIT` (CHAR1, default `'X'`).
+       - Exporting: `EV_TANUM` (LTAK-TANUM), `EV_SUCCESS` (CHAR1), `EV_MESSAGE` (BAPI_MSG).
+       - Tables: `IT_ITEMS` (L03B_TRITE_T), `ET_MESSAGES` (BAPIRET2_T).
+       - Immediate confirmation parameter: **CONFIRMED: YES (`IV_SQUIT` exists in `Z_WM_TO_CREATE_FROM_TR`)**.
+    2. `L_TO_CONFIRM`:
+       - Importing: `I_LGNUM`, `I_TANUM`, `I_SQUIT` (RL03T), `I_COMMIT_WORK` (RL03B).
+       - Tables: `T_LTAP_CONF` (LTAP_CONF).
+       - Exceptions: `TO_CONFIRMED` (1), `TO_DOESNT_EXIST` (2), `ITEM_CONFIRMED` (3), `FOREIGN_LOCK` (12), `SQUIT_OR_QUANTITIES` (13).
+  - **Implementation Architecture Delivered:**
+    1. Chained Execution: `createTOFromTR` in `TrToAdapter.js` calls `Z_WM_TO_CREATE_FROM_TR` with `IV_SQUIT: ' '`. Upon create success, `tanum` is captured and status `03` persisted. Then `confirmTO` calls `L_TO_CONFIRM` with `tanum`. On confirm success, status advances to `04` (`TO Confirmed`).
+    2. Error Handling & State Preservation:
+       - Create failure: Status `12`, `ErrorStep: 'LT04'`, error message preserved.
+       - Confirm failure: Status `13`, `ErrorStep: 'LT12'`, `TransferOrder` (`TANUM`) strictly preserved.
+    3. Duplicate TO Prevention & Retry Separation:
+       - Never creates a second TO when `TANUM` already exists on the tracking record.
+       - If `TANUM` exists with status `04`: duplicate creation is rejected with 400.
+       - If `TANUM` exists with status `13`: skips create step and retries confirm only.
+    4. ABAP Parity:
+       - `docs/abap/zcl_res_process.clas.abap`: Implemented `create_and_confirm_to` and updated `confirm_to` to accept `iv_conf_menge`.
+       - `docs/abap/zcl_res_process_bgpf.clas.abap`: Implemented chained execution in `WHEN 'LT04'`, intermediate commit after create, duplicate TO guard, and retry confirm in `WHEN 'LT12'`.
+    5. Unit Testing:
+       - `test/unit/wm/createTOFromTR.test.js` updated and labeled `"[mock only, not SAP verification]"`.
+       - Added 4 test scenarios: (A) create ok + confirm ok, (B) create ok + confirm fail (keeps `TANUM`, status `13`), (C) retry confirm only, (D) retry blocked on already confirmed TO.
+  - **Validation & Results:**
+    - Live RFC Interface Read from SAP Client 220: Verified and documented in `docs/abap/system-metadata.md`.
+    - `test/unit/wm/createTOFromTR.test.js`: **10/10 tests passed**.
+    - Full WM Test Suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,280/1,280 unit tests passed (100% green)**.
+    - `git diff --check`: 0 errors.
+
 - **Fix: Eliminate Masking Fallback in TrToAdapter & Surface Authentic SAP Error on createTOFromTR — Resolved & Proven Live (2026-10-10):**
   - **Issue Reported:** Calling `POST http://localhost:4004/odata/v4/tr-to/createTOFromTR` returned:
     `400 Bad Request: {"error":{"message":"Movement type 000 does not allow immediate confirmation","code":"400"}}`.
@@ -495,6 +528,34 @@ The previous log was removed in commit `b741337`; this file restarts it.
 11. **Create Sales Order fixes (Unresolved Issue 10):** ~~(1) Incoterms removed (no SAP API on this system writes them on create; user chose "Fix All"), (2) RFC value helps honour `$filter`, no 50-row cap, (3) validation on `change` only, (4) fallback lists deleted (503 when RFC is unavailable), (5) no defaulted ShipToParty / CustomerPurchaseOrderDate, (6) read-back mismatch shown as created, form reset~~ — all done 2026-10-06. **Open: (7) with the user's go, prove one live ZDOM create end to end through the changed path (sold-to 10135, one ZFRT material, payment terms + contact person from the value helps), read it back via `HeaderSet('<id>')?$expand=HeaderPartnerSet` and RFC VBKD/VBPA, and record the document number here.** **Incoterms (2026-10-08): resolved via customer-master defaulting (no code) — maintain INCO1/INCO2 on the sold-to for the order's sales area; LORD cannot carry Incoterms on create. Explicit per-order entry would need `API_SALES_ORDER_SRV`, currently **Blocked (no System Alias, Issue 11)**. See Changes Log 2026-10-08.**
 
 ## Changes Log
+
+### 2026-10-10 16:00 IST — Feature: Chained Create TO and Confirm TO in One Sequential Step with Retry Separation
+- **Change Request.** Update TO step to: CREATE TO via `Z_WM_TO_CREATE_FROM_TR`, then CONFIRM TO via `L_TO_CONFIRM`, chained in one step, with confirmation as a real second call.
+- **Affected Files.**
+  - `docs/abap/system-metadata.md`
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `srv/wm/tr-to/handlers/trTo.handler.js`
+  - `srv/wm/reservation-entry/service.js`
+  - `docs/abap/zcl_res_process.clas.abap`
+  - `docs/abap/zcl_res_process_bgpf.clas.abap`
+  - `test/unit/wm/createTOFromTR.test.js`
+- **Reason.** Satisfy workflow requirements: (1) After create call succeeds, persist `TANUM` and status `03`, then commit. (2) Call confirm function with TO number and confirmed quantity (`CONF_MENGE` if set, otherwise full quantity), on success set status `04`. (3) On create failure set status `12`, on confirm failure set status `13` and keep `TANUM`. Store error message in `ERR_MSG` and failing step in `ERROR_STEP`. (4) Status `12` retries create; status `13` retries confirm only. Never create a second TO when `TANUM` is already set for this process.
+- **System Metadata Read via RFC (Live SAP Client 220):**
+  - `Z_WM_TO_CREATE_FROM_TR`: Importing `IV_COMMIT` (CHAR1), `IV_LGNUM` (LGNUM), `IV_SQUIT` (CHAR1, default `' '`), `IV_TBNUM` (LTBK-TBNUM); Exporting `EV_MESSAGE` (BAPI_MSG), `EV_SUCCESS` (CHAR1), `EV_TANUM` (LTAK-TANUM); Tables `ET_MESSAGES` (BAPIRET2_T), `IT_ITEMS` (L03B_TRITE_T). Immediate confirm parameter `IV_SQUIT` confirmed present.
+  - `L_TO_CONFIRM`: Importing `I_LGNUM`, `I_TANUM`, `I_SQUIT` (RL03T), `I_COMMIT_WORK` (RL03B); Tables `T_LTAP_CONF` (LTAP_CONF); Exceptions `TO_CONFIRMED` (1), `TO_DOESNT_EXIST` (2), `ITEM_CONFIRMED` (3), `FOREIGN_LOCK` (12), `SQUIT_OR_QUANTITIES` (13).
+- **Implementation Highlights:**
+  1. Comment updated to: `// Chained TO step: CREATE TO via Z_WM_TO_CREATE_FROM_TR, then CONFIRM TO via L_TO_CONFIRM as a real second call`.
+  2. Added TODO: `// TODO: Z_WM_TO_CREATE_FROM_TR supports IV_SQUIT = 'X' for immediate confirmation in one call, but chained 2-call architecture is enforced here.`
+  3. Strict duplicate TO guard: Throws 400 blocking duplicate TO creation if `TANUM` is already set and status is `04`.
+  4. Failure isolation: Status `12` on create failure; status `13` on confirm failure with `TransferOrder: tanum` preserved.
+  5. Retry routing: Status `13` skips create and invokes `L_TO_CONFIRM` only.
+  6. ABAP methods in `zcl_res_process` and `zcl_res_process_bgpf` aligned to exact status values (`03`, `04`, `12`, `13`) and parameter contracts.
+  7. Unit tests updated with label `"[mock only, not SAP verification]"` covering all 4 scenarios.
+- **Validation.**
+  - RFC interface query on SAP Client 220: Verified and recorded in `docs/abap/system-metadata.md`.
+  - Targeted unit tests (`npx jest test/unit/wm/createTOFromTR.test.js`): **10/10 passed**.
+  - Full WM unit test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,280/1,280 tests passed (100% green)**.
+  - `git diff --check`: 0 errors.
 
 ### 2026-10-10 15:35 IST — Fix: Eliminate Masking Fallback in TrToAdapter & Surface Authentic SAP Error on createTOFromTR
 - **Issue.** Calling `POST http://localhost:4004/odata/v4/tr-to/createTOFromTR` returned `400 Bad Request: {"error":{"message":"Movement type 000 does not allow immediate confirmation"}}`.

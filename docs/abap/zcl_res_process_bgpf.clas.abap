@@ -32,15 +32,16 @@ CLASS zcl_res_process_bgpf IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD if_bgmc_op_single_tx_uncontr~execute.
-    DATA: lo_proc   TYPE REF TO zcl_res_process,
-          ls_track  TYPE zres_track,
-          lt_return TYPE zcl_res_process=>tt_bapiret2,
-          lv_subrc  TYPE sysubrc,
-          lv_tbnum  TYPE tbnum,
-          lv_tbpos  TYPE tbpos,
-          lv_tanum  TYPE tanum,
-          lv_mblnr  TYPE mblnr,
-          lv_mjahr  TYPE mjahr.
+    DATA: lo_proc     TYPE REF TO zcl_res_process,
+          ls_track    TYPE zres_track,
+          lt_return   TYPE zcl_res_process=>tt_bapiret2,
+          lv_subrc    TYPE sysubrc,
+          lv_tbnum    TYPE tbnum,
+          lv_tbpos    TYPE tbpos,
+          lv_tanum    TYPE tanum,
+          lv_conf_qty TYPE erfmg,
+          lv_mblnr    TYPE mblnr,
+          lv_mjahr    TYPE mjahr.
 
     CREATE OBJECT lo_proc.
 
@@ -92,17 +93,49 @@ CLASS zcl_res_process_bgpf IMPLEMENTATION.
             iv_msgty      = 'E' ).
         ENDIF.
 
-      WHEN 'LT04'. " Create Transfer Order
-        lo_proc->create_to_from_tr(
-          EXPORTING
-            iv_lgnum  = ls_track-lgnum
-            iv_tbnum  = ls_track-tbnum
-          IMPORTING
-            ev_tanum  = lv_tanum
-            et_return = lt_return
-            ev_subrc  = lv_subrc ).
+      WHEN 'LT04'. " Chained TO step: CREATE TO via Z_WM_TO_CREATE_FROM_TR / L_TO_CREATE_TR, then CONFIRM TO via L_TO_CONFIRM as a real second call
+        " TODO: Z_WM_TO_CREATE_FROM_TR supports IV_SQUIT = 'X' for immediate confirmation in one call, but chained 2-call architecture is enforced here.
 
-        IF lv_subrc = 0.
+        " Guard: Never create a second TO when TANUM is already set for this process
+        IF ls_track-tanum IS NOT INITIAL.
+          IF ls_track-status = zcl_res_process=>gc_status_04.
+            lo_proc->update_status(
+              iv_rsnum      = ls_track-rsnum
+              iv_rspos      = ls_track-rspos
+              iv_process_id = ls_track-process_id
+              iv_status     = zcl_res_process=>gc_status_04
+              iv_error_step = 'LT04'
+              iv_err_msg    = |TO { ls_track-tanum } is already confirmed. Duplicate TO creation blocked.|
+              iv_step       = 'LT04'
+              iv_msgty      = 'E' ).
+            RETURN.
+          ENDIF.
+          " Status 13 retries confirm only
+          lv_tanum = ls_track-tanum.
+        ELSE.
+          lo_proc->create_to_from_tr(
+            EXPORTING
+              iv_lgnum  = ls_track-lgnum
+              iv_tbnum  = ls_track-tbnum
+            IMPORTING
+              ev_tanum  = lv_tanum
+              et_return = lt_return
+              ev_subrc  = lv_subrc ).
+
+          IF lv_subrc <> 0 OR lv_tanum IS INITIAL.
+            lo_proc->update_status(
+              iv_rsnum      = ls_track-rsnum
+              iv_rspos      = ls_track-rspos
+              iv_process_id = ls_track-process_id
+              iv_status     = zcl_res_process=>gc_status_12
+              iv_error_step = 'LT04'
+              iv_err_msg    = VALUE #( lt_return[ 1 ]-message DEFAULT 'TO creation failed' )
+              iv_step       = 'LT04'
+              iv_msgty      = 'E' ).
+            RETURN.
+          ENDIF.
+
+          " 1. After create succeeds, persist TANUM and status 03, then commit
           lo_proc->update_status(
             iv_rsnum      = ls_track-rsnum
             iv_rspos      = ls_track-rspos
@@ -111,33 +144,95 @@ CLASS zcl_res_process_bgpf IMPLEMENTATION.
             iv_status     = zcl_res_process=>gc_status_03
             iv_step       = 'LT04'
             iv_message    = |TO { lv_tanum } created| ).
-        ELSE.
+          COMMIT WORK AND WAIT.
+        ENDIF.
+
+        " 2. Then call confirm function with TO number and confirmed quantity (CONF_MENGE if set, otherwise full quantity)
+        lv_conf_qty = COND #( WHEN ls_track-conf_menge IS NOT INITIAL
+                              THEN ls_track-conf_menge
+                              ELSE ls_track-menge ).
+        CLEAR: lt_return, lv_subrc.
+        lo_proc->confirm_to(
+          EXPORTING
+            iv_lgnum      = ls_track-lgnum
+            iv_tanum      = lv_tanum
+            iv_conf_menge = lv_conf_qty
+          IMPORTING
+            ev_subrc      = lv_subrc
+            et_return     = lt_return ).
+
+        IF lv_subrc = 0.
+          " On success set status 04
           lo_proc->update_status(
             iv_rsnum      = ls_track-rsnum
             iv_rspos      = ls_track-rspos
             iv_process_id = ls_track-process_id
-            iv_status     = zcl_res_process=>gc_status_12
-            iv_error_step = 'LT04'
-            iv_err_msg    = VALUE #( lt_return[ 1 ]-message DEFAULT 'TO creation failed' )
-            iv_step       = 'LT04'
+            iv_tanum      = lv_tanum
+            iv_conf_menge = lv_conf_qty
+            iv_status     = zcl_res_process=>gc_status_04
+            iv_step       = 'LT12'
+            iv_message    = |TO { lv_tanum } confirmed| ).
+        ELSE.
+          " 3. On confirm failure set status 13 and keep TANUM
+          lo_proc->update_status(
+            iv_rsnum      = ls_track-rsnum
+            iv_rspos      = ls_track-rspos
+            iv_process_id = ls_track-process_id
+            iv_tanum      = lv_tanum
+            iv_status     = zcl_res_process=>gc_status_13
+            iv_error_step = 'LT12'
+            iv_err_msg    = VALUE #( lt_return[ 1 ]-message DEFAULT 'TO confirmation failed' )
+            iv_step       = 'LT12'
             iv_msgty      = 'E' ).
         ENDIF.
 
-      WHEN 'LT12'. " Confirm Transfer Order
+      WHEN 'LT12'. " Confirm Transfer Order (retry confirm only)
+        IF ls_track-tanum IS INITIAL.
+          lo_proc->update_status(
+            iv_rsnum      = ls_track-rsnum
+            iv_rspos      = ls_track-rspos
+            iv_process_id = ls_track-process_id
+            iv_status     = zcl_res_process=>gc_status_13
+            iv_error_step = 'LT12'
+            iv_err_msg    = 'No Transfer Order found to confirm'
+            iv_step       = 'LT12'
+            iv_msgty      = 'E' ).
+          RETURN.
+        ENDIF.
+
+        IF ls_track-status = zcl_res_process=>gc_status_04.
+          lo_proc->update_status(
+            iv_rsnum      = ls_track-rsnum
+            iv_rspos      = ls_track-rspos
+            iv_process_id = ls_track-process_id
+            iv_status     = zcl_res_process=>gc_status_04
+            iv_error_step = 'LT12'
+            iv_err_msg    = |TO { ls_track-tanum } is already confirmed|
+            iv_step       = 'LT12'
+            iv_msgty      = 'W' ).
+          RETURN.
+        ENDIF.
+
+        lv_conf_qty = COND #( WHEN ls_track-conf_menge IS NOT INITIAL
+                              THEN ls_track-conf_menge
+                              ELSE ls_track-menge ).
+        CLEAR: lt_return, lv_subrc.
         lo_proc->confirm_to(
           EXPORTING
-            iv_lgnum  = ls_track-lgnum
-            iv_tanum  = ls_track-tanum
+            iv_lgnum      = ls_track-lgnum
+            iv_tanum      = ls_track-tanum
+            iv_conf_menge = lv_conf_qty
           IMPORTING
-            ev_subrc  = lv_subrc
-            et_return = lt_return ).
+            ev_subrc      = lv_subrc
+            et_return     = lt_return ).
 
         IF lv_subrc = 0.
           lo_proc->update_status(
             iv_rsnum      = ls_track-rsnum
             iv_rspos      = ls_track-rspos
             iv_process_id = ls_track-process_id
-            iv_conf_menge = ls_track-menge
+            iv_tanum      = ls_track-tanum
+            iv_conf_menge = lv_conf_qty
             iv_status     = zcl_res_process=>gc_status_04
             iv_step       = 'LT12'
             iv_message    = |TO { ls_track-tanum } confirmed| ).
@@ -146,6 +241,7 @@ CLASS zcl_res_process_bgpf IMPLEMENTATION.
             iv_rsnum      = ls_track-rsnum
             iv_rspos      = ls_track-rspos
             iv_process_id = ls_track-process_id
+            iv_tanum      = ls_track-tanum
             iv_status     = zcl_res_process=>gc_status_13
             iv_error_step = 'LT12'
             iv_err_msg    = VALUE #( lt_return[ 1 ]-message DEFAULT 'TO confirmation failed' )

@@ -96,13 +96,28 @@ CLASS zcl_res_process DEFINITION
     "! Step 4: Confirm Transfer Order via L_TO_CONFIRM (LT12)
     METHODS confirm_to
       IMPORTING
-        !iv_lgnum  TYPE lgnum
-        !iv_tanum  TYPE tanum
-        !iv_squit  TYPE rl03t DEFAULT 'X'
-        !iv_commit TYPE rl03b DEFAULT 'X'
+        !iv_lgnum      TYPE lgnum
+        !iv_tanum      TYPE tanum
+        !iv_squit      TYPE rl03t DEFAULT 'X'
+        !iv_conf_menge TYPE erfmg OPTIONAL
+        !iv_commit     TYPE rl03b DEFAULT 'X'
       EXPORTING
-        !ev_subrc  TYPE sysubrc
-        !et_return TYPE tt_bapiret2 .
+        !ev_subrc      TYPE sysubrc
+        !et_return     TYPE tt_bapiret2 .
+
+    "! Chained Step: Create TO then Confirm TO as a real second call
+    METHODS create_and_confirm_to
+      IMPORTING
+        !iv_lgnum      TYPE lgnum
+        !iv_tbnum      TYPE tbnum
+        !iv_tanum      TYPE tanum OPTIONAL
+        !iv_conf_menge TYPE erfmg OPTIONAL
+        !iv_commit     TYPE rl03b DEFAULT 'X'
+      EXPORTING
+        !ev_tanum      TYPE tanum
+        !ev_status     TYPE zres_status
+        !et_return     TYPE tt_bapiret2
+        !ev_subrc      TYPE sysubrc .
 
     "! Step 5: Post Goods Issue via BAPI_GOODSMVT_CREATE (MIGO)
     METHODS post_migo
@@ -423,15 +438,28 @@ CLASS zcl_res_process IMPLEMENTATION.
 
 
   METHOD confirm_to.
-    DATA: lt_conf TYPE STANDARD TABLE OF ltap_conf.
+    DATA: lt_conf  TYPE STANDARD TABLE OF ltap_conf,
+          lv_squit TYPE rl03t.
 
     CLEAR: ev_subrc, et_return.
+    lv_squit = iv_squit.
+
+    " If specific confirmed quantity is provided, specify in T_LTAP_CONF
+    IF iv_conf_menge IS NOT INITIAL.
+      APPEND VALUE ltap_conf(
+        tanum = iv_tanum
+        tapos = '0001'
+        nista = iv_conf_menge
+        squit = 'X'
+      ) TO lt_conf.
+      lv_squit = space. " Per L_TO_CONFIRM exception SQUIT_OR_QUANTITIES: pass item table or I_SQUIT, not both
+    ENDIF.
 
     CALL FUNCTION 'L_TO_CONFIRM'
       EXPORTING
         i_lgnum                        = iv_lgnum
         i_tanum                        = iv_tanum
-        i_squit                        = iv_squit
+        i_squit                        = lv_squit
         i_commit_work                  = iv_commit
       TABLES
         t_ltap_conf                    = lt_conf
@@ -512,6 +540,58 @@ CLASS zcl_res_process IMPLEMENTATION.
       CHANGING
         ct_return  = et_return ).
 
+  ENDMETHOD.
+
+
+  METHOD create_and_confirm_to.
+    CLEAR: ev_tanum, ev_status, et_return, ev_subrc.
+    " TODO: Z_WM_TO_CREATE_FROM_TR supports IV_SQUIT = 'X' for immediate confirmation in one call, but chained 2-call architecture is enforced here.
+
+    " Step 1: Create Transfer Order via L_TO_CREATE_TR (skip if TANUM already set)
+    IF iv_tanum IS NOT INITIAL.
+      ev_tanum  = iv_tanum.
+      ev_status = gc_status_03.
+    ELSE.
+      create_to_from_tr(
+        EXPORTING
+          iv_lgnum  = iv_lgnum
+          iv_tbnum  = iv_tbnum
+          iv_commit = iv_commit
+        IMPORTING
+          ev_tanum  = ev_tanum
+          et_return = et_return
+          ev_subrc  = ev_subrc ).
+
+      IF ev_subrc <> 0 OR ev_tanum IS INITIAL.
+        ev_status = gc_status_12. " TO Creation Error
+        RETURN.
+      ENDIF.
+
+      ev_status = gc_status_03. " TO Created
+    ENDIF.
+
+    " Step 2: Confirm Transfer Order via L_TO_CONFIRM as a real second call
+    DATA: lt_conf_ret TYPE tt_bapiret2,
+          lv_conf_rc  TYPE sysubrc.
+
+    confirm_to(
+      EXPORTING
+        iv_lgnum      = iv_lgnum
+        iv_tanum      = ev_tanum
+        iv_conf_menge = iv_conf_menge
+        iv_commit     = iv_commit
+      IMPORTING
+        ev_subrc      = lv_conf_rc
+        et_return     = lt_conf_ret ).
+
+    IF lv_conf_rc = 0.
+      ev_status = gc_status_04. " TO Confirmed
+      ev_subrc  = 0.
+    ELSE.
+      ev_status = gc_status_13. " TO Confirmation Error (keep TANUM)
+      ev_subrc  = lv_conf_rc.
+      APPEND LINES OF lt_conf_ret TO et_return.
+    ENDIF.
   ENDMETHOD.
 
 

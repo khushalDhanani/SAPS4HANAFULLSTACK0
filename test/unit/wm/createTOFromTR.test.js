@@ -1,17 +1,20 @@
 /**
  * Unit Tests for Chunk 4: Step 2 Service — CreateTOFromTR & Auto-Confirm
+ * [mock only, not SAP verification]
+ *
  * Testing:
  * - OData action createTOFromTR & function lookupTR
  * - TR lookup & quantity check against open quantity
  * - Batch capture for batch-managed materials
  * - Serial number capture for serial-managed materials
- * - Auto-confirm TO execution (L_TO_CONFIRM)
- * - Status update to 04 (TO Confirmed) in ZRES_TRACK & ZRES_LOG
+ * - Chained TO step: CREATE TO via Z_WM_TO_CREATE_FROM_TR, then CONFIRM TO via L_TO_CONFIRM
+ * - Status 03 (TO Created), Status 04 (TO Confirmed), Status 12 (TO Create Error), Status 13 (TO Confirm Error)
+ * - Retry logic: status 13 retries confirm only; duplicate TO blocked when TANUM is already confirmed
  */
 
 const TrToAdapter = require('../../../srv/integration/s4hana/wm/TrToAdapter');
 
-describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm', () => {
+describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, not SAP verification]', () => {
     let mockRfc;
     let adapter;
 
@@ -195,9 +198,8 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm', () => {
         });
     });
 
-    describe('4. Create TO and Auto-Confirm Execution', () => {
-        it('creates TO and automatically confirms it via L_TO_CONFIRM', async () => {
-            // Mock getTR
+    describe('4. Chained Create and Confirm TO Execution [mock only, not SAP verification]', () => {
+        const mockTrSetup = () => {
             mockRfc.call.mockResolvedValueOnce({
                 ET_TR_HEADER: [{
                     LGNUM: 'W01',
@@ -222,8 +224,12 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm', () => {
             });
             mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Standard Mat' }]);
             mockRfc.readTable.mockResolvedValueOnce([{ MATNR: '000000001000000045', XCHPF: '', SERNP: '' }]);
+        };
 
-            // Mock ZWM_TO_CREATE_FROM_TR -> generates TO 0001012966
+        it('scenario A: create ok + confirm ok -> status 04, Confirmed true', async () => {
+            mockTrSetup();
+
+            // Mock Z_WM_TO_CREATE_FROM_TR -> generates TO 0001012966
             mockRfc.call.mockResolvedValueOnce({
                 EV_SUCCESS: 'S',
                 EV_TANUM: '0001012966',
@@ -256,20 +262,87 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm', () => {
             }));
         });
 
-        it('supports autoConfirm=false leaving TO in status 03 (TO Created)', async () => {
-            // Mock getTR
-            mockRfc.call.mockResolvedValueOnce({
-                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001001839', BWLVS: '311', RSNUM: '0000524979' }],
-                ET_TR_ITEMS: [{
-                    LGNUM: 'W01', TBNUM: '0001001839', TBPOS: '0001',
-                    MATNR: '000000001000000045', WERKS: '1120', LGORT: 'HS01',
-                    CHARG: '', MENGE: '10.000', TAMEN: '0.000', MEINS: 'KG'
-                }]
-            });
-            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Standard Mat' }]);
-            mockRfc.readTable.mockResolvedValueOnce([{ MATNR: '000000001000000045', XCHPF: '', SERNP: '' }]);
+        it('scenario B: create ok + confirm fail -> TANUM kept, status 13, Confirmed false', async () => {
+            mockTrSetup();
 
-            // Mock ZWM_TO_CREATE_FROM_TR
+            // Mock Z_WM_TO_CREATE_FROM_TR -> succeeds and returns TANUM
+            mockRfc.call.mockResolvedValueOnce({
+                EV_SUCCESS: 'S',
+                EV_TANUM: '0001012966',
+                EV_MESSAGE: 'TO 0001012966 created'
+            });
+
+            // Mock L_TO_CONFIRM -> fails with foreign lock
+            mockRfc.call.mockRejectedValueOnce(new Error('L_TO_CONFIRM: foreign_lock'));
+
+            const result = await adapter.createTOFromTR({
+                tbnum: '0001001839',
+                qty: 5,
+                autoConfirm: true
+            });
+
+            // TANUM must be kept!
+            expect(result.TransferOrder).toBe('1012966');
+            expect(result.Status).toBe('13');
+            expect(result.StatusText).toBe('TO Confirmation Failed');
+            expect(result.Confirmed).toBe(false);
+            expect(result.ErrorStep).toBe('LT12');
+            expect(result.ErrorMessage).toContain('foreign_lock');
+        });
+
+        it('scenario C: retry confirm only -> invokes L_TO_CONFIRM, does NOT call create FM', async () => {
+            mockTrSetup();
+
+            // Mock L_TO_CONFIRM -> succeeds
+            mockRfc.call.mockResolvedValueOnce({
+                E_SUBRC: 0
+            });
+
+            const result = await adapter.createTOFromTR({
+                tbnum: '0001001839',
+                qty: 5,
+                autoConfirm: true,
+                existingToNumber: '1012966',
+                status: '13'
+            });
+
+            expect(result.TransferOrder).toBe('1012966');
+            expect(result.Status).toBe('04');
+            expect(result.Confirmed).toBe(true);
+            expect(result.StatusText).toBe('TO Confirmed');
+
+            // Verify Z_WM_TO_CREATE_FROM_TR was NOT called
+            expect(mockRfc.call).not.toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.anything());
+            expect(mockRfc.call).not.toHaveBeenCalledWith('ZWM_TO_CREATE_FROM_TR', expect.anything());
+
+            // Verify L_TO_CONFIRM was called
+            expect(mockRfc.call).toHaveBeenCalledWith('L_TO_CONFIRM', expect.objectContaining({
+                I_LGNUM: 'W01',
+                I_TANUM: '0001012966',
+                I_SQUIT: 'X'
+            }));
+        });
+
+        it('scenario D: retry blocked when TANUM set and TO already confirmed (status 04)', async () => {
+            mockTrSetup();
+
+            await expect(adapter.createTOFromTR({
+                tbnum: '0001001839',
+                qty: 5,
+                autoConfirm: true,
+                existingToNumber: '1012966',
+                status: '04'
+            })).rejects.toThrow(/Transfer Order 1012966 is already confirmed for this process\. Creating a second TO is blocked\./);
+
+            // Neither create nor confirm should be called
+            expect(mockRfc.call).not.toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.anything());
+            expect(mockRfc.call).not.toHaveBeenCalledWith('L_TO_CONFIRM', expect.anything());
+        });
+
+        it('supports autoConfirm=false leaving TO in status 03 (TO Created)', async () => {
+            mockTrSetup();
+
+            // Mock Z_WM_TO_CREATE_FROM_TR
             mockRfc.call.mockResolvedValueOnce({
                 EV_SUCCESS: 'S',
                 EV_TANUM: '0001012966',
