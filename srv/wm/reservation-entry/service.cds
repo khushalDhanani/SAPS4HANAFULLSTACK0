@@ -33,6 +33,7 @@ service ReservationEntryService {
         AssetNo                 : String(12),
         SubNumber               : String(4),
         WarehouseNumber         : String(3),
+        Batch                   : String(10),
         SerialNo                : String(18),
         Serials                 : array of String(18)
     ) returns ReservationEntries;
@@ -52,6 +53,7 @@ service ReservationEntryService {
         CostCenter               : String(10),
         AssetNo                  : String(12),
         SubNumber                : String(4),
+        Batch                    : String(10),
         SerialNo                 : String(18),
         Serials                  : array of String(18)
     ) returns ReservationEntries;
@@ -61,6 +63,7 @@ service ReservationEntryService {
         ReservationNo   : String(10),
         ReservationItem : String(4),
         Step            : String(10),
+        Batch           : String(10),
         SerialNo        : String(18),
         Serials         : array of String(18)
     ) returns ReservationEntries;

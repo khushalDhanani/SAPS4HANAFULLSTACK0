@@ -290,7 +290,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           const s4Rsnum = String(sResNo).padStart(10, '0');
           const s4Rspos = String(sResItem).padStart(4, '0');
           const [rkpfRows, resbRows] = await Promise.all([
-            adapter.rfc.readTable('RKPF', ['RSNUM', 'BWART', 'KOSTL', 'USNAM'], [`RSNUM = '${s4Rsnum}'`], 1),
+            adapter.rfc.readTable('RKPF', ['RSNUM', 'BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'USNAM'], [`RSNUM = '${s4Rsnum}'`], 1),
             adapter.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
           ]);
           if (resbRows && resbRows[0]) {
@@ -299,6 +299,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
               ReservationItem: sResItem,
               MovementType: rkpfRows?.[0]?.BWART || data.MovementType || '201',
               CostCenter: rkpfRows?.[0]?.KOSTL || data.CostCenter || '',
+              AssetNo: rkpfRows?.[0]?.ANLN1 || data.AssetNo || '',
+              SubNumber: rkpfRows?.[0]?.ANLN2 || data.SubNumber || '',
               Material: resbRows[0].MATNR,
               Plant: resbRows[0].WERKS,
               StorageLocation: resbRows[0].LGORT,
@@ -328,6 +330,31 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const extId = `${sResNo}/${sResItem}`;
       const sLogHandle = existing?.LogHandle || `LOG_${Date.now().toString(36).toUpperCase()}`;
 
+      let sBatch = data.Batch || data.batch || existing?.Batch || '';
+      if (!sBatch && adapter.rfc) {
+        try {
+          const s4Rsnum = String(sResNo).padStart(10, '0');
+          const s4Rspos = String(sResItem).padStart(4, '0');
+          const resbBatch = await adapter.rfc.readTable('RESB', ['CHARG'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1);
+          if (resbBatch?.[0]?.CHARG?.trim()) {
+            sBatch = resbBatch[0].CHARG.trim();
+          } else {
+            const cleanMat = String(sMat || '').replace(/^0+/, '');
+            const lquaBatch = await adapter.rfc.readTable('LQUA', ['CHARG'], [
+              "LGNUM = 'W01'",
+              `AND MATNR LIKE '%${cleanMat}%'`,
+              "AND LGTYP = '921'",
+              "AND VERME > 0"
+            ], 1);
+            if (lquaBatch?.[0]?.CHARG?.trim()) {
+              sBatch = lquaBatch[0].CHARG.trim();
+            }
+          }
+        } catch (_bErr) {
+          // ignore batch lookup error
+        }
+      }
+
       const sSerials = data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : (existing?.SerialNo ? [existing.SerialNo] : []));
 
       try {
@@ -345,6 +372,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           costCenter: sCostCenter,
           assetNo: sAssetNo,
           subNumber: sSubNumber,
+          batch: sBatch,
           deriveGmCode: true,
           serials: sSerials
         });
@@ -704,6 +732,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             costCenter: track.CostCenter,
             assetNo: track.AssetNo,
             subNumber: track.SubNumber,
+            batch: data.Batch || data.batch || track.Batch || '',
             deriveGmCode: true,
             serials: data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : (track.SerialNo ? [track.SerialNo] : []))
           });

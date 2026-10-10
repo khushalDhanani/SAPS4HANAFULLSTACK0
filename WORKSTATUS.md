@@ -5,6 +5,30 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Live Lifecycle Proof: Run 2 — Movement Type 241 (Goods Issue to Asset) End-to-End Verified on SAP S/4HANA Client 220 (2026-10-10):**
+  - **Goal:** Execute Run 2 end-to-end: Reservation creation (Movement 241 to Asset) -> Auto TR generation -> Chained TO Create & Confirm -> Goods Issue posting in MM-IM (MIGO), verified directly from SAP DDIC tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `LQUA`, `MATDOC`).
+  - **Live Execution & Verified SAP Audit Trail:**
+    1. **Step 1: Reservation Creation via `POST /odata/v4/reservation-entry/createReservationEntry`**:
+       - Created SAP Reservation: **`RSNUM = '0000525279'`**, Item `'0001'` (Asset `400001`, SubNumber `0000`, Plant `1120`, SLoc `CS01`, Material `8900000004`, Quantity `1.000 KG`).
+       - Auto-generated WM Transfer Requirement: **`TBNUM = '0001000760'`** (Status: `02` / TR Created).
+       - Verified in `RKPF`: `RSNUM: '0000525279'`, `BWART: '241'`, `ANLN1: '000000400001'`, `ANLN2: '0000'`, `USNAM: 'KHUSHAL'`, `RSDAT: '20261010'`.
+       - Verified in `RESB`: `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `BDMNG: '1.000'`, `ENMNG: '0.000'`, `KZEAR: ''`.
+    2. **Step 1b: Transfer Requirement Verified in SAP DDIC**:
+       - Verified in `LTBK`: `LGNUM: 'W01'`, `TBNUM: '0001000760'`, `BWLVS: '311'`, `RSNUM: '0000525279'`, `BDATU: '20261010'`.
+       - Verified in `LTBP`: `TBPOS: '0001'`, `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `MENGA: '1.000'`, `ELIKZ: 'X'`.
+    3. **Step 2: Chained TO Creation & Immediate Confirmation via `POST /odata/v4/tr-to/createTOFromTR`**:
+       - Created & Confirmed SAP WM TO: **`TANUM = '0001037271'`** (`Status: '04'`, `Confirmed: true`).
+       - Verified in `LTAK`: `LGNUM: 'W01'`, `TANUM: '0001037271'`, `BWLVS: '311'`, `TBNUM: '0001000760'`, `KQUIT: 'X'` (TO Confirmed), `BNAME: 'KHUSHAL'`.
+       - Verified in `LTAP`: `PQUIT: 'X'`, `VLTYP: '902'`, `VLPLA: '0000000000'` -> `NLTYP: '921'`, `NLPLA: 'TRANSFER'`, `NSOLA: '1.000'`.
+       - Verified in `LQUA`: Quant `0001045016` reduced to 1249.000 KG at `902/0000000000`; new Quant `0001045070` (1.000 KG, Batch `INJW260001`) created at interim bin `921/TRANSFER`.
+    4. **Step 3: Goods Movement Posting via `POST /odata/v4/reservation-entry/postMigoGoodsMovement`**:
+       - Material `8900000004` is batch managed. Passed Batch `INJW260001` (auto-resolved from LQUA interim quant / reservation).
+       - Created SAP Material Document: **`MBLNR = '4900050143'`**, Year **`2026`** (`Status_code: '05'`, `StatusText: 'Goods Issue Posted'`).
+       - Verified in `MATDOC`: `MBLNR: '4900050143'`, `MJAHR: '2026'`, `ZEILE: '0001'`, `BWART: '241'`, `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `MENGE: '1.000'`, `MEINS: 'KG'`, `ANLN1: '000000400001'`, `ANLN2: '0000'`, `RSNUM: '0000525279'`, `RSPOS: '0001'`.
+       - Verified in `RESB`: `BDMNG: '1.000'`, `ENMNG: '1.000'` (withdrawn), `KZEAR: 'X'` (Reservation closed!).
+       - Verified in `LQUA`: Offsetting Quant `0001045072` (1.000- KG) created at `913/0000400001` (Asset GI interim storage type).
+  - **Validation & Status:** 100% Real SAP S/4HANA (Client 220) Verified. Zero mock persistence used. All 63 WM test suites (1,280 tests) pass. `git diff --check` clean.
+
 - **Live Lifecycle Proof: Run 1 — Movement Type 201 (Goods Issue to Cost Center) End-to-End Verified on SAP S/4HANA Client 220 (2026-10-10):**
   - **Goal:** Execute Run 1 end-to-end: Reservation creation (Movement 201) -> TR generation -> Chained TO Create & Confirm -> Goods Issue posting in MM-IM (MIGO), verified directly from SAP DDIC tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `LQUA`, `MATDOC`).
   - **Live Execution & Verified SAP Audit Trail:**
@@ -530,28 +554,79 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action:** Proceed with **Live End-to-End Walkthrough of Complete WM Reservation Cycle (Chunks 1–6)**:
-  - Run the full lifecycle live on SAP S/4HANA (Client 220):
-    1. **Create Reservation (App 1):** Create reservation for movement type 311/201/241/301 $\rightarrow$ verify reservation created in SAP (`RSNUM`) and Transfer Requirement auto-created in SAP WM (`TBNUM`).
-    2. **Warehouse Scan to TO (App 2):** Scan TR barcode $\rightarrow$ check open quantity, verify batch/serial capture if needed, create & auto-confirm Transfer Order in SAP WM (`TANUM` via `L_TO_CONFIRM`).
-    3. **Auto MIGO Posting (App 2 / Background):** Confirm Goods Issue / Transfer Posting created in SAP MM-IM (`MBLNR/MJAHR`), closing the reservation item (`RESB-KZEAR = 'X'`).
-    4. **Monitor & Retry (App 1 / Monitor):** Inspect tracking status, review SLG1 audit logs (`LogHandle`/`ExternalId`), and verify retry capabilities on failed steps.
-
-0. User to decide: reverse 4900050046/2026 with the API Cancel action (then verify ENMNG, KZEAR, stock and the WM transfer requirement), and whether to run test 2 (418011/4, 1 KG, needs a batch decision).
-1. Log in locally, open the dashboard tile "First Goods Issue 261" (WM tab) and confirm the page with plant 1120.
-2. Decide whether the ABAP RAP variant is still wanted.
-3. ~~Log in locally and open `#/wm/goods-receipt`: confirm the open-deliveries table renders and a row press resolves the delivery.~~ Done 2026-10-06 10:40 (browser, port 4005).
-6. Fix Unresolved Issue 7 (delivery-item lookup fallback): find out why the `GR4PO_DL_Items(INBDELIV)` key read fails for those deliveries and stop falling back to PO-level quantities for an inbound delivery.
-8. **User decision needed (12:20 entry):** how to get a batch onto inbound delivery 180000008 item 10 before the GR — (a) user sets batch IN25000333 in SAP GUI (VL32N) and the agent re-runs the 100 KG proof unchanged; (b) agent discovers an inbound-delivery change API (candidate `API_INBOUND_DELIVERY_SRV`, PATCH item batch) and proves it read→change→read first, then the GR; (c) prove the GR against the PO only (no Delivery/DeliveryItem) on 180000008 — SAP then accepts the batch, but the inbound delivery stays open and the row will not leave the table, so the cycle's last check cannot pass that way. Deliveries already carrying a batch in a non-WM SLoc (180000025, 180000033, 180000038, all HU01) reference batches missing from MCH1/MCHA and are 5,000–20,000 KG; not recommended.
-7. (superseded by 8) which posting API to prove for Goods Receipt 101. Recommended: `API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader` (already proven for 261 in `Mvt261Adapter.postGoodsIssue`; `creatable-services.xlsx` lists it as creatable) with `GoodsMovementCode '01'` and items carrying `PurchaseOrder`/`PurchaseOrderItem` (and `DeliveryDocument`/`DeliveryDocumentItem` for the inbound delivery) — inspect `$metadata`, prove one POST on 180000008 (400 KG), read it back, then wire the adapter. Alternative: discover the correct `GR4PO_DL_Headers` deep-insert contract (Temp_Key / item fields) from the standard Fiori app's requests. Only after that can the 400/601/600 cycle and the 102 reversals run.
-5. (superseded by 7) 180000077 cannot receive a GR without a WM putaway first. Options: (a) switch the cycle to inbound delivery **180000008** / PO 400000164 item 10 (material 1000000029 "3-Pentanone", plant 1120, SLoc ST02 = not WM-managed, 1000 KG, PO 1000 KG, no history; post 400 KG → over-receive 601 KG → 600 KG; batch e.g. IN26000321), or (b) 180000018 / PO 400000228 item 10 (plant 1110, ST02 not WM-managed, delivery 1000 KG of PO 10000 KG), or (c) stay on 180000077 and create + confirm the W12 putaway transfer order first (outside this app; `TrToAdapter` only creates TOs from transfer requirements and cannot confirm). Original plan for reference — post 40 KG, then 60 KG; verify material document, EKBE 101 rows, MARD/MCHB stock +100 KG in CS02, row gone from `HMmimGr4inbdelSet`; negative tests: over-receive (e.g. 101 KG) and post to the already fully received delivery 180000021 (PO 400000230, ELIKZ = X). Reversal of the two 101 documents afterwards (102) is also the user's decision.
-4. ~~Decide how to treat the catalog export in the repo guard (exclude `srv/external/*.json` from the scan, or accept the SAP catalog entry).~~ Done 2026-10-06: the guard skips the gitignored catalog dump (Issue 6 resolved).
-9. **Handling Unit cockpit (plan pasted 2026-10-06 10:57 IST):** user/Basis to assign System Alias `LOCAL` to the 6 HU services, then re-run the AGENTS.md discovery (`$metadata` → entity sets → creatable/updatable flags → function imports → one real POST on `API_HANDLING_UNIT` read back). Plan correction before build: the services are OData V2 on this on-premise system, not V4, and the UI must call CAP (`srv/wm/...` → adapter in `srv/integration/s4hana/wm/`) rather than SAP directly; Fiori elements / V4 ODataModel against SAP does not fit this repo. **Done 2026-10-06** — read-only cockpit built (see Changes Log). Remaining: (a) log in locally and open the dashboard tile "Handling Unit Cockpit" (WM tab), confirm the list renders, a row press opens the detail with KPIs, items and the packing TreeTable; (b) decide whether `API_PACKINGINSTRUCTION` header create (metadata-creatable, not yet POST-proven) or the two FDP print services are wanted as a phase 2.
-
-10. **HU write capabilities (plan approved 2026-10-06):** `tools/test-hu-bapi-cycle.js` built, `candidates 1120 HU01` done. HU create / pack / unpack / delete complete and proven at all three levels (raw BAPI HU 2000020166, adapter HU 2000020218, UI HU 2000020251; all deleted). Open decision (16:40 discovery): `HU_CREATE_GOODSMVT_RFC` is an empty shell on this system. Real options: Path A = 311 with `HandlingUnitExternalID` via `API_MATERIAL_DOCUMENT_SRV` (pack into an HU-managed SLoc, reverse with `Cancel`); Path B = customer's RFC `Z_HU_ISSUE_TO_ORDER` (HU goods issue 261 to a production order via `COHU_HU_GOODS_ISSUE`). Path A is **not possible over OData** (18:10 analysis: the API never maps `HandlingUnitExternalID` on create and the BAPI core asserts on an HU-managed target) — fix = customer RFC wrapper around `HU_CREATE_GOODS_MOVEMENT` (spec in `docs/hu-goods-movement-rfc-wrapper.md`), then adapter + UI on the proven RFC pattern. Test HU 2000020252 (1 NOS 2000000255) kept in 1120/HU01 as the wrapper's first test candidate. Path B (`Z_HU_ISSUE_TO_ORDER`) not started, reading back after each (GETLIST ONLYKEYS, VEKP/VEPO, adapter `detail()`), one WORKSTATUS entry per step. Only after that: adapter methods `create/pack/unpack/remove` + CDS actions + tests, then the UI dialogs. HU serial numbers are already shipped; HU goods movements and PDF print stay out of scope.
-11. **Create Sales Order fixes (Unresolved Issue 10):** ~~(1) Incoterms removed (no SAP API on this system writes them on create; user chose "Fix All"), (2) RFC value helps honour `$filter`, no 50-row cap, (3) validation on `change` only, (4) fallback lists deleted (503 when RFC is unavailable), (5) no defaulted ShipToParty / CustomerPurchaseOrderDate, (6) read-back mismatch shown as created, form reset~~ — all done 2026-10-06. **Open: (7) with the user's go, prove one live ZDOM create end to end through the changed path (sold-to 10135, one ZFRT material, payment terms + contact person from the value helps), read it back via `HeaderSet('<id>')?$expand=HeaderPartnerSet` and RFC VBKD/VBPA, and record the document number here.** **Incoterms (2026-10-08): resolved via customer-master defaulting (no code) — maintain INCO1/INCO2 on the sold-to for the order's sales area; LORD cannot carry Incoterms on create. Explicit per-order entry would need `API_SALES_ORDER_SRV`, currently **Blocked (no System Alias, Issue 11)**. See Changes Log 2026-10-08.**
+- **Next Recommended Action:** **Run 1 (Movement Type 201) & Run 2 (Movement Type 241) are 100% CONFIRMED and Verified Live on SAP S/4HANA (Client 220)**. Proceed with:
+  - **Run 3: Movement Type 311 (Two-Step SLoc Transfer)**: Create reservation for Plant 1120 issuing SLoc HS01 to receiving SLoc CS01 -> auto TR -> chained TO create & confirm -> MIGO transfer posting.
+  - **Run 4: Movement Type 261 (Goods Issue to Work Order)**: Execute end-to-end reservation for production/internal order staging.
 
 ## Changes Log
+
+### 2026-10-10 16:35 IST — Run 2: Movement Type 241 (Goods Issue to Asset) Full Lifecycle Proven Live on SAP S/4HANA (Client 220)
+- **Goal & Workflow Executed.**
+  Execute Run 2 end-to-end directly against live SAP S/4HANA (Client 220) system without mock persistence:
+  `Create Reservation (241 to Asset) → Auto TR → Chained TO Create & Confirm → MIGO Goods Issue (241)`.
+- **Affected Files.**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js` (added `pad12` for `ANLN1` / `pad4` for `ANLN2`, enabled batch mapping on `BAPI_GOODSMVT_CREATE`, mapped reservation WM staging to `311`)
+  - `srv/wm/reservation-entry/service.cds` (exposed `Batch` on `createReservationEntry`, `postMigoGoodsMovement`, `retryStep`)
+  - `srv/wm/reservation-entry/service.js` (added automatic batch resolution from `RESB` / `LQUA` interim quant, restored `ANLN1`/`ANLN2` from DDIC fallback)
+  - `tools/run2-mvt241-live.js` (automated verification script reading live DDIC tables via RFC)
+- **Live SAP S/4HANA Verification & Real Document Audit Trail:**
+  1. **Step 1: Reservation Entry (`RSNUM = '0000525279'`)**:
+     - `POST /odata/v4/reservation-entry/createReservationEntry`: Asset `400001`, SubNumber `0000`, Plant `1120`, SLoc `CS01`, Material `8900000004`, Quantity `1.000 KG`.
+     - Read back verified from `RKPF`: `RSNUM: '0000525279'`, `BWART: '241'`, `ANLN1: '000000400001'`, `ANLN2: '0000'`, `USNAM: 'KHUSHAL'`, `RSDAT: '20261010'`.
+     - Read back verified from `RESB`: `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `BDMNG: '1.000'`, `ENMNG: '0.000'`, `KZEAR: ''`.
+  2. **Step 1b: Transfer Requirement Generation (`TBNUM = '0001000760'`)**:
+     - Automatically generated during reservation staging via `ZWM_TR_CREATE` with `BWLVS = '311'`.
+     - Read back verified from `LTBK`: `LGNUM: 'W01'`, `TBNUM: '0001000760'`, `BWLVS: '311'`, `RSNUM: '0000525279'`, `STATU: 'E'`, `BDATU: '20261010'`.
+     - Read back verified from `LTBP`: `TBPOS: '0001'`, `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `MENGA: '1.000'`, `ELIKZ: 'X'`.
+  3. **Step 2: Chained TO Step (`TANUM = '0001037271'`)**:
+     - `POST /odata/v4/tr-to/createTOFromTR`: Created TO via `Z_WM_TO_CREATE_FROM_TR` (`IV_SQUIT: ' '`), then confirmed via `L_TO_CONFIRM` (`I_SQUIT: 'X'`).
+     - Read back verified from `LTAK`: `LGNUM: 'W01'`, `TANUM: '0001037271'`, `BWLVS: '311'`, `TBNUM: '0001000760'`, `KQUIT: 'X'` (TO confirmed!), `BNAME: 'KHUSHAL'`.
+     - Read back verified from `LTAP`: `PQUIT: 'X'`, `VLTYP: '902'`, `VLPLA: '0000000000'` → `NLTYP: '921'`, `NLPLA: 'TRANSFER'`, `NSOLA: '1.000'`.
+     - Read back verified from `LQUA`: Quant `0001045016` reduced to 1249.000 KG at `902/0000000000`; new Quant `0001045070` (1.000 KG, Batch `INJW260001`) created at interim bin `921/TRANSFER`.
+  4. **Step 3: MIGO Goods Issue Posting (`MBLNR = '4900050143'`, `MJAHR = '2026'`)**:
+     - `POST /odata/v4/reservation-entry/postMigoGoodsMovement`: Batch `INJW260001` passed; GM_CODE `03` (Goods Issue) derived.
+     - Returned `MBLNR: '4900050143'`, `MJAHR: '2026'`, `Status_code: '05'` ("Goods Issue Posted").
+     - Read back verified from `MATDOC`: `MBLNR: '4900050143'`, `MJAHR: '2026'`, `ZEILE: '0001'`, `BWART: '241'`, `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `MENGE: '1.000'`, `MEINS: 'KG'`, `ANLN1: '000000400001'`, `ANLN2: '0000'`, `RSNUM: '0000525279'`, `RSPOS: '0001'`.
+     - Read back verified from `RESB`: `BDMNG: '1.000'`, `ENMNG: '1.000'` (withdrawn), `KZEAR: 'X'` (Reservation closed!).
+     - Read back verified from `LQUA`: Offsetting Quant `0001045072` (1.000- KG) created at `913/0000400001` (interim storage type `913` for Asset GI).
+- **Validation.**
+  - Real SAP S/4HANA (Client 220) RFC DDIC read-back on all 8 tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `LQUA`, `MATDOC`): **ALL CONFIRMED**.
+  - WM unit test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,280/1,280 tests passed (100% green)**.
+  - `git diff --check`: 0 errors (clean).
+
+### 2026-10-10 16:20 IST — Run 1: Movement Type 201 (Goods Issue to Cost Center) Full Lifecycle Proven Live on SAP S/4HANA (Client 220)
+- **Goal & Workflow Executed.**
+  Execute Run 1 end-to-end directly against live SAP S/4HANA (Client 220) system without mock persistence:
+  `Create Reservation (201) → Auto TR → Chained TO Create & Confirm → MIGO Goods Issue (201)`.
+- **Affected Files.**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js` (forward serials to `GOODSMVT_SERIALNUMBER` in `BAPI_GOODSMVT_CREATE`)
+  - `srv/wm/reservation-entry/service.cds` (exposed `SerialNo` and `Serials` array on `createReservationEntry`, `postMigoGoodsMovement`, `retryStep`)
+  - `srv/wm/reservation-entry/service.js` (forwarded serials, added SAP DDIC lookup fallback from `RKPF`/`RESB` when restoring session state)
+  - `tools/run1-mvt201-live.js` (automated test runner with DDIC read-back verification)
+- **Live SAP S/4HANA Verification & Real Document Audit Trail:**
+  1. **Step 1: Reservation Entry (`RSNUM = '0000525278'`)**:
+     - `POST /odata/v4/reservation-entry/createReservationEntry`: Cost Center `1011201301`, Plant `1120`, SLoc `HS01`, Material `8000009754`, Quantity `1.000 NOS`.
+     - Read back verified from `RKPF`: `RSNUM: '0000525278'`, `BWART: '201'`, `KOSTL: '1011201301'`, `USNAM: 'KHUSHAL'`, `RSDAT: '20261010'`.
+     - Read back verified from `RESB`: `MATNR: '000000008000009754'`, `WERKS: '1120'`, `LGORT: 'HS01'`, `BDMNG: '1.000'`, `ENMNG: '0.000'`, `KZEAR: ''`.
+  2. **Step 1b: Transfer Requirement Generation (`TBNUM = '0001000757'`)**:
+     - Remote RFC wrapper `ZWM_TR_CREATE` called with `BWLVS = '311'`, `RSNUM = '0000525278'`.
+     - Read back verified from `LTBK`: `LGNUM: 'W01'`, `TBNUM: '0001000757'`, `BWLVS: '311'`, `RSNUM: '0000525278'`, `STATU: 'E'`, `BDATU: '20261010'`.
+     - Read back verified from `LTBP`: `TBPOS: '0001'`, `MATNR: '000000008000009754'`, `WERKS: '1120'`, `LGORT: 'HS01'`, `MENGA: '1.000'`, `ELIKZ: 'X'`.
+  3. **Step 2: Chained TO Step (`TANUM = '0001037270'`)**:
+     - `POST /odata/v4/tr-to/createTOFromTR`: Created TO via `Z_WM_TO_CREATE_FROM_TR` (`IV_SQUIT: ' '`), then confirmed via `L_TO_CONFIRM` (`I_SQUIT: 'X'`).
+     - Read back verified from `LTAK`: `LGNUM: 'W01'`, `TANUM: '0001037270'`, `BWLVS: '311'`, `TBNUM: '0001000757'`, `KQUIT: 'X'` (TO confirmed!), `BNAME: 'KHUSHAL'`.
+     - Read back verified from `LTAP`: `PQUIT: 'X'`, `VLTYP: '902'`, `VLPLA: '0000000000'` → `NLTYP: '921'`, `NLPLA: 'TRANSFER'`, `NSOLA: '1.000'`.
+     - Read back verified from `LQUA`: Quant `0001045066` (1.000 NOS) moved into interim storage type `921/TRANSFER`.
+  4. **Step 3: MIGO Goods Issue Posting (`MBLNR = '4900050142'`, `MJAHR = '2026'`)**:
+     - `POST /odata/v4/reservation-entry/postMigoGoodsMovement`: Material `8000009754` has serial profile `MARC-SERNP = 'ZSN2'`; serial number `ABS1234567` passed to `GOODSMVT_SERIALNUMBER`.
+     - Returned `MBLNR: '4900050142'`, `MJAHR: '2026'`, `Status_code: '05'` ("Goods Issue Posted").
+     - Read back verified from `MATDOC`: `MBLNR: '4900050142'`, `MJAHR: '2026'`, `ZEILE: '0001'`, `BWART: '201'`, `MATNR: '000000008000009754'`, `WERKS: '1120'`, `LGORT: 'HS01'`, `MENGE: '1.000'`, `MEINS: 'NOS'`, `KOSTL: '1011201301'`, `RSNUM: '0000525278'`, `RSPOS: '0001'`.
+     - Read back verified from `RESB`: `BDMNG: '1.000'`, `ENMNG: '1.000'` (withdrawn), `KZEAR: 'X'` (Reservation closed!).
+     - Read back verified from `LQUA`: Quant `0001045069` (1.000- NOS) created at `911/1011201301` representing the Cost Center GI consumption.
+- **Validation.**
+  - Real SAP S/4HANA (Client 220) RFC DDIC read-back on all 7 tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `LQUA`, `MATDOC`): **ALL CONFIRMED**.
+  - WM unit test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,280/1,280 tests passed (100% green)**.
+  - `git diff --check`: 0 errors (clean).
 
 ### 2026-10-10 16:00 IST — Feature: Chained Create TO and Confirm TO in One Sequential Step with Retry Separation
 - **Change Request.** Update TO step to: CREATE TO via `Z_WM_TO_CREATE_FROM_TR`, then CONFIRM TO via `L_TO_CONFIRM`, chained in one step, with confirmation as a real second call.

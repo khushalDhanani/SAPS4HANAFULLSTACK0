@@ -6,6 +6,7 @@ const { RfcClient } = require('../RfcClient');
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
 const pad10 = (v) => String(v || '').trim().padStart(10, '0');
+const pad12 = (v) => String(v || '').trim().padStart(12, '0');
 const pad4 = (v) => String(v || '').trim().padStart(4, '0');
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 
@@ -54,9 +55,9 @@ class ReservationProcessAdapter {
       MOVE_TYPE: String(movementType).trim(),
       ...(targetMovePlant ? { MOVE_PLANT: String(targetMovePlant).trim() } : {}),
       ...(receivingStorageLocation ? { MOVE_STLOC: String(receivingStorageLocation).trim() } : {}),
-      ...(costCenter ? { COSTCENTER: String(costCenter).trim() } : {}),
-      ...(assetNo ? { ASSET_NO: String(assetNo).trim() } : {}),
-      ...(subNumber ? { SUB_NUMBER: String(subNumber).trim() } : {})
+      ...(costCenter ? { COSTCENTER: pad10(costCenter) } : {}),
+      ...(assetNo ? { ASSET_NO: pad12(assetNo) } : {}),
+      ...(subNumber ? { SUB_NUMBER: pad4(subNumber) } : {})
     };
 
     const s4Mat = /^\d+$/.test(material) ? pad10(material).padStart(18, '0') : material;
@@ -123,7 +124,8 @@ class ReservationProcessAdapter {
     const s4Rsnum = pad10(reservationNo);
     const s4Rspos = pad4(reservationItem);
     const s4Lgnum = String(warehouseNumber).trim();
-    const s4Bwlvs = String(wmMovementType || '311').trim();
+    // In WM customizing (T333), movement 201/241 require BENUM (Cost Center/Asset). For reservation-based staging, WM movement 311 links cleanly to RSNUM without requiring BENUM.
+    const s4Bwlvs = String(wmMovementType === '201' || wmMovementType === '241' ? '311' : (wmMovementType || '311')).trim();
     const s4Werks = String(plant || '1120').trim();
     const s4Lgort = String(storageLocation || 'CS01').trim();
     const s4Menga = Number(quantity || 1);
@@ -338,6 +340,7 @@ class ReservationProcessAdapter {
       costCenter,
       assetNo,
       subNumber,
+      batch,
       serials = [],
       testrun = false
     } = params;
@@ -376,14 +379,15 @@ class ReservationProcessAdapter {
       MOVE_TYPE: String(movementType).trim(),
       ENTRY_QNT: Number(quantity),
       ENTRY_UOM: String(unit || 'EA').trim(),
+      ...(batch ? { BATCH: String(batch).trim().toUpperCase() } : {}),
       RESERV_NO: pad10(reservationNo),
       RES_ITEM: pad4(reservationItem),
       NO_MORE_GR: 'X', // Closes the reservation item (final issue)
       ...(receivingPlant ? { MOVE_PLANT: String(receivingPlant).trim() } : {}),
       ...(receivingStorageLocation ? { MOVE_STLOC: String(receivingStorageLocation).trim() } : {}),
-      ...(costCenter ? { COSTCENTER: String(costCenter).trim() } : {}),
-      ...(assetNo ? { ASSET_NO: String(assetNo).trim() } : {}),
-      ...(subNumber ? { SUB_NUMBER: String(subNumber).trim() } : {})
+      ...(costCenter ? { COSTCENTER: pad10(costCenter) } : {}),
+      ...(assetNo ? { ASSET_NO: pad12(assetNo) } : {}),
+      ...(subNumber ? { SUB_NUMBER: pad4(subNumber) } : {})
     };
 
     const serialItems = (Array.isArray(serials) ? serials : [serials]).filter(Boolean).map((s) => ({
