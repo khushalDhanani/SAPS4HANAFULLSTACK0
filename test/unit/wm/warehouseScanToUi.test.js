@@ -498,6 +498,12 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanTo', {}, true);
         });
 
+        it('fixed button: btnReset cancels and navigates back to main list [mock only, not browser verification]', () => {
+            sMockPreviousHash = undefined;
+            detailCtrl.onReset();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanTo', {}, true);
+        });
+
         it('fixed button: btnSetMaxQty sets pick quantity to full open TR amount [mock only, not browser verification]', () => {
             detailModel.setProperty('/hasTR', true);
             detailModel.setProperty('/tr', { TRItem: '0001', OpenQty: 50, IsBatchManaged: false, IsSerialManaged: false });

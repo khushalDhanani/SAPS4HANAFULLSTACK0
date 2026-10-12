@@ -51,6 +51,12 @@ sap.ui.define([
             if (BarcodeScanService && typeof BarcodeScanService.attachHardwareScanner === "function") {
                 BarcodeScanService.attachHardwareScanner(this._scannerHandler);
             }
+            var oModel = this.getModel("scanView");
+            if (oModel) {
+                oModel.setProperty("/scannedTR", "");
+                oModel.setProperty("/hasMessage", false);
+                oModel.setProperty("/messageText", "");
+            }
             this._loadOpenTRs();
             this._focusTRInput();
         },

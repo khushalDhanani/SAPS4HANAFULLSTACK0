@@ -54,6 +54,10 @@ sap.ui.define([
                 this._updateShell("salesInquiryDetail", { SalesInquiry: sInqId });
             } else if (sHash.indexOf("sd/sales-inquiries") === 0) {
                 this._updateShell("salesInquiries");
+            } else if (sHash.indexOf("wm/scan-to/") === 0) {
+                this._updateShell("wmWarehouseScanToDetail");
+            } else if (sHash.indexOf("wm/scan-to") === 0) {
+                this._updateShell("wmWarehouseScanTo");
             } else if (sHash.indexOf("wm/tr-to") === 0) {
                 this._updateShell("wmTrTo");
             } else if (sHash.indexOf("wm/mvt261/open/") === 0) {

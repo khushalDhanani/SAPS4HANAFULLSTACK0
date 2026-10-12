@@ -5,23 +5,17 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **/wm/scan-to Main & Detail View Split, Routing, Error State & Direct URL Support (2026-10-12, 15:35 IST):**
-  - **User Request:** Fix `/wm/scan-to` (main + detail). Minimal diffs. Cite file/line for every claim. No assumptions.
-    1. Audit first (table of control id | binding/handler | works? | defect). Show exact lines of every broken item.
-    2. Routes: main stays `wm/scan-to`. Add detail route `wm/scan-to/{docType}/{number}` (TR|RES, digits, max 10). Direct URL, refresh and bookmark must load data from the number alone. Invalid number: clear error state, no blank page.
-    3. Detail Page: separate view + controller with form (item, qty, batch, serials, flags) and Create & Confirm. Main page keeps scan input + open TR list; scan or row select navigates to detail.
-    4. Back: detail page has its own back button (navTo main, history fallback). Browser back works the same. Main list refreshes after a successful TO.
-    5. Fix every audited defect. Keep business logic, wmStatus.js codes and validations unchanged.
-    6. Tests: route parse, direct URL, invalid number, back, each fixed button. Labeled "mock only, not browser verification".
-  - **Delivered Architecture:**
-    1. `manifest.json`: Added route `wmWarehouseScanToDetail` (`pattern: wm/scan-to/{docType}/{number}`) and target `TargetWarehouseScanToDetail`.
-    2. `App.controller.js`: Added `wmWarehouseScanTo` and `wmWarehouseScanToDetail` to ShellBar title handler and nav-button handler with fallback.
-    3. `WarehouseScanTo.view.xml` & `WarehouseScanTo.controller.js`: Dedicated Main page keeping scan input (with segmented docType button, barcode input, camera button, value help dialog) and open TR list. Scan submit, camera scan, value help confirm, hardware scan, and open TR row tap navigate directly to `wmWarehouseScanToDetail`.
-    4. `WarehouseScanToDetail.view.xml` & `WarehouseScanToDetail.controller.js`: Dedicated Detail page with form (items select for multi-item TR, pick quantity, batch with FIFO recommendations, serial numbers capture, flags), Create & Confirm button, and outcome banner with MIGO retry. Back button uses `History.getInstance().getPreviousHash()` with route fallback. Direct URL / refresh / bookmark loads data from the number alone. Invalid document number or docType surfaces a clean error state without a blank page.
-    5. `test/unit/wm/warehouseScanToUi.test.js`: Comprehensive unit tests covering main controller routing, detail controller direct URL loading, invalid numbers/types, history fallback, and each fixed button.
+- **/wm/scan-to Main & Detail Split, Full Field Audit, Initial Hash Sync & Data Integrity (2026-10-12, 15:50 IST):**
+  - **User Request:** Double Check And Fix if any data is missing.
+  - **Audit & Remediation Delivered:**
+    1. `App.controller.js`: Added direct hash handling for `wm/scan-to/` and `wm/scan-to` in `_syncInitialShellState` (ensuring immediate ShellBar title synchronization on direct bookmark / refresh without waiting for asynchronous route event).
+    2. `WarehouseScanToDetail.view.xml`: Added Document Number display (`Transfer Requirement` / `Reservation` number + item) in `panelTRDetails` so the operator always has visible header document context on the detail page; sanitized reservation display to show `"-"` when `ReservationNo` is `"0"` or blank (preventing `"0 / "` artifact); wired `btnReset` to `.onReset`.
+    3. `WarehouseScanToDetail.controller.js`: Implemented `onReset` delegating to `onNavBack` with browser history fallback.
+    4. `WarehouseScanTo.controller.js`: In `_onRouteMatched`, resets `/scannedTR` to empty string and clears message strips so returning from a completed TO presents a clean barcode input ready for the next scan while refreshing open TRs.
+    5. `test/unit/wm/warehouseScanToUi.test.js`: Added test for `btnReset` / `onReset` navigation.
   - **Validation & Test Results:**
-    - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **32/32 tests PASS** (mock only, not browser verification).
-    - Full WM suite: `npx jest test/unit/wm/`: **65/65 test suites PASS, 1,348/1,348 tests PASS**.
+    - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **33/33 tests PASS** (mock only, not browser verification).
+    - Full WM suite: `npx jest test/unit/wm/`: **65/65 test suites PASS, 1,349/1,349 tests PASS**.
     - `npx cds compile srv --to sql`: Clean (0 errors).
     - `git diff --check`: Clean (0 errors).
 
@@ -799,7 +793,36 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (2026-10-12, 22:10 IST):** (1) re-run `node tools/sandbox-matrix.js --mvt 311 --case full --execute`; (2) optionally finish reservation 525874 by posting its goods movement to a non-HU location (tr-to `postMigoGoodsMovement` with `ReceivingStorageLocation` HS01, TransferOrder 1037289) — a live write, user's decision; (3) leftovers from the earlier attempt: reservation 525872 / TR 1000800 (not removable by TO).
+- **Next Recommended Action (2026-10-12, 15:50 IST):**
+  1. Complete manual browser verification of the 9-step checklist at `http://localhost:4004/index.html#/wm/scan-to` (open TR list rendering, row selection, direct URL refresh `#/wm/scan-to/TR/1000027`, invalid document input handling, back button navigation with history fallback, and TO creation with list refresh).
+  2. Push commits to `origin/feature/mvt261_01`.
+
+- **Previous Recommended Action (2026-10-12, 22:10 IST):** (1) re-run `node tools/sandbox-matrix.js --mvt 311 --case full --execute`; (2) optionally finish reservation 525874 by posting its goods movement to a non-HU location (tr-to `postMigoGoodsMovement` with `ReceivingStorageLocation` HS01, TransferOrder 1037289) — a live write, user's decision; (3) leftovers from the earlier attempt: reservation 525872 / TR 1000800 (not removable by TO).
+
+## Changes Log
+
+### 2026-10-12 15:50 IST — /wm/scan-to Data Integrity, Initial Route Hash Synchronization & Document Number Display
+
+- **User Request:** Double Check And Fix if any data is missing.
+- **Audit Findings & Fixes Delivered:**
+  1. `app/fiori-app/webapp/controller/App.controller.js`:
+     - Issue: `_syncInitialShellState` lacked handlers for `wm/scan-to/` and `wm/scan-to`, causing initial page loads via bookmark or direct URL to defer ShellBar title and navigation synchronization until asynchronous route event fired.
+     - Fix: Added checks for `sHash.indexOf("wm/scan-to/") === 0` (syncing `wmWarehouseScanToDetail`) and `sHash.indexOf("wm/scan-to") === 0` (syncing `wmWarehouseScanTo`).
+  2. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml`:
+     - Issue: Transfer Requirement / Reservation document number was not rendered as a field in `panelTRDetails`, leaving the operator with no document number visible on the form until after TO creation. Additionally, reservation item displayed `"0 / "` when no reservation was associated.
+     - Fix: Added primary document number label and text (`TRNumber` + item) to `panelTRDetails`. Sanitized reservation field to display `"-"` when `ReservationNo` is `"0"` or blank.
+     - Wired `btnReset` to `.onReset` handler.
+  3. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`:
+     - Added `onReset` handler delegating to `onNavBack` with browser history fallback.
+  4. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanTo.controller.js`:
+     - In `_onRouteMatched`: Clears `/scannedTR` to empty string and resets message banner state so returning from a completed TO or back navigation presents a clean barcode input ready for the next scan while refreshing open TRs.
+  5. `test/unit/wm/warehouseScanToUi.test.js`:
+     - Added unit test for `btnReset` / `onReset` navigation.
+- **Commands Executed & Validation Results:**
+  - `npx jest test/unit/wm/warehouseScanToUi.test.js`: 33/33 tests PASS (mock only, not browser verification).
+  - `npx jest test/unit/wm/`: 65/65 test suites PASS, 1,349/1,349 tests PASS.
+  - `npx cds compile srv --to sql`: 0 errors (clean).
+  - `git diff --check`: 0 errors (clean).
 - **Previous (21:50 IST):** re-run `node tools/sandbox-matrix.js --mvt 311 --case full --execute` (pick now 8900000004 from 902, removable per T334T); open leftovers in SAP from the failed attempts: reservation 525872 / TR 1000800 (material 1000000204, not removable by TO) — decide manually whether to delete them in SAP.
 - **Previous (21:10 IST):** start the CAP server (`npm start`), then run `node tools/sandbox-matrix.js --mvt 311 --case full --execute`, review `docs/abap/sandbox-results.md`, continue with 311 partial, 301 full, 201 full, 241 full, batch cases, gi-failure-retry cases; serial cases need serial numbers in stock first. Keep `S4_RES_LOCK_ENABLED` off until `Z_WM_RES_LOCK` is activated and the one-session collision test passes.
 - **Previous recommended action (18:40 IST):** paste the sandbox results (case | pass/fail | error text | RESB/LTBK/LTBP/LTAK/LTAP/LQUA/MATDOC rows) so Task 1 can be done; if a blank-destination TO failed, implement proposal (a) (T333 lookup by LGNUM+BWLVS). Provide a non-SAP_ALL RFC user for the negative authorization test. Activate `Z_WM_RES_LOCK` in a development system before any lock test.

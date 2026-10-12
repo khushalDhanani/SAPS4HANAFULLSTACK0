@@ -264,6 +264,10 @@ sap.ui.define([
             }
         },
 
+        onReset: function () {
+            this.onNavBack();
+        },
+
         onScanNextTR: function () {
             var oRouter = this.getRouter();
             if (oRouter) {

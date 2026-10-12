@@ -186,6 +186,9 @@
                         columnsM="2">
                         <form:content>
                             <core:Title text="{i18n>scanToGroupMaterialInfo}" />
+                            <Label text="{= ${scanView>/docType} === 'RES' ? 'Reservation' : 'Transfer Requirement' }" design="Bold" />
+                            <Text text="{scanView>/tr/TRNumber}{= ${scanView>/tr/TRItem} ? ' / Item ' + ${scanView>/tr/TRItem} : ''}" />
+
                             <Label text="{i18n>scanToLabelTRItem}" design="Bold" required="true" visible="{= ${scanView>/trItems}.length > 1 }" />
                             <Select
                                 id="selTRItem"
@@ -208,7 +211,7 @@
                                 state="Information" />
 
                             <Label text="{i18n>scanToLabelReservation}" design="Bold" />
-                            <Text text="{scanView>/tr/ReservationNo} / {scanView>/tr/ReservationItem}" />
+                            <Text text="{= (${scanView>/tr/ReservationNo} &amp;&amp; ${scanView>/tr/ReservationNo} !== '0') ? (${scanView>/tr/ReservationNo} + (${scanView>/tr/ReservationItem} ? ' / ' + ${scanView>/tr/ReservationItem} : '')) : '-' }" />
 
                             <core:Title text="{i18n>scanToGroupQuantitiesAndLocations}" />
                             <Label text="{i18n>scanToLabelOpenQty}" design="Bold" />
@@ -526,7 +529,7 @@
                     id="btnReset"
                     text="{i18n>commonCancel}"
                     icon="sap-icon://reset"
-                    press=".onNavBack" />
+                    press=".onReset" />
                 <ToolbarSpacer />
                 <Button
                     id="btnProcessTO"
