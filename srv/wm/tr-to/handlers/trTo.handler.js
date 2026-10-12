@@ -1,5 +1,10 @@
+const cds = require('@sap/cds');
 const TrToAdapter = require('../../../integration/s4hana/wm/TrToAdapter');
 const ReservationProcessAdapter = require('../../../integration/s4hana/wm/ReservationProcessAdapter');
+const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
+const { sapKey, sapKeyOpt } = require('../../../integration/s4hana/sapKey');
+
+const httpError = (status, message) => Object.assign(new Error(message), { status });
 
 /** Thin CAP binding; all validation lives in TrToAdapter and ReservationProcessAdapter. */
 class TrToHandler {
@@ -17,95 +22,90 @@ class TrToHandler {
 
     srv.on('getOpenTRs', run(({ lgnum, mvt }) => adapter.getOpenTRs(lgnum, mvt)));
     srv.on('getTR', run(({ tbnum, lgnum }) => adapter.getTR(tbnum, lgnum)));
-    srv.on('lookupTR', run(({ tbnum, lgnum }) => adapter.lookupTR(tbnum, lgnum)));
+    srv.on('lookupTR', run(({ tbnum, lgnum, docType, tbpos }) => adapter.lookupTR(tbnum, lgnum, docType, tbpos)));
     srv.on('getAvailableSUs', run(({ tbnum, lgnum, tbpos }) => adapter.getAvailableSUs(tbnum, lgnum, tbpos)));
     srv.on('checkSU', run(({ lenum, tbnum, lgnum }) => adapter.checkSU(lenum, tbnum, lgnum)));
     srv.on('createTO', run(({ lgnum, tbnum, lenum, qty }) => adapter.createTO({ lgnum, tbnum, lenum, qty })));
 
-    // Chunk 5: Step 3 Service (MIGO Goods Movement Posting & Retry)
+    const entities = () => {
+      const db = cds.db;
+      if (!db) return {};
+      try { return db.entities('saps4hana.wm'); } catch (_) { return {}; }
+    };
+    const userOf = (req) => req.user?.id || process.env.S4_USERNAME || '';
+    const log = async (ReservationLog, row) => {
+      if (!ReservationLog) return;
+      await INSERT.into(ReservationLog).entries({ ID: cds.utils.uuid(), ...row });
+    };
+    /** Row lock for the duration of the request transaction (HANA; a no-op on SQLite). */
+    const lockTrack = (ReservationTrack, where) => SELECT.one.from(ReservationTrack).where(where).forUpdate();
+
+    // Step 3 Service (MIGO Goods Movement Posting & Retry)
     const handlePostMigoGoodsMovement = async (req) => {
       const data = req.data || {};
-      const cds = require('@sap/cds');
-      const db = cds.db;
+      const { ReservationTrack, ReservationLog } = entities();
       let existingTrack = null;
 
-      if (db) {
+      const sResNoIn = sapKeyOpt(data.ReservationNo, 'rsnum');
+      const sTanumIn = sapKeyOpt(data.TransferOrder, 'tanum');
+      if (!sResNoIn && !sTanumIn) throw httpError(400, 'ReservationNo or TransferOrder is required');
+      const sResItemIn = sapKeyOpt(data.ReservationItem, 'rspos');
+
+      if (ReservationTrack) {
         try {
-          const { ReservationTrack } = db.entities('saps4hana.wm');
-          if (ReservationTrack) {
-            existingTrack = await SELECT.one.from(ReservationTrack).where(
-              data.ReservationNo
-                ? { ReservationNo: data.ReservationNo, ReservationItem: data.ReservationItem || '0001' }
-                : (data.TransferOrder ? { TransferOrder: data.TransferOrder } : {})
-            );
-          }
+          existingTrack = await lockTrack(ReservationTrack,
+            sResNoIn
+              ? { ReservationNo: data.ReservationNo, ReservationItem: data.ReservationItem || '0001' }
+              : { TransferOrder: data.TransferOrder });
         } catch (dbErr) {
           console.warn('[trTo.handler] ReservationTrack lookup warning:', dbErr.message);
         }
       }
 
-      const sResNo = data.ReservationNo || existingTrack?.ReservationNo;
-      const sResItem = data.ReservationItem || existingTrack?.ReservationItem || '0001';
-      const sMvt = data.MovementType || existingTrack?.MovementType || '311';
+      const sResNo = sResNoIn || existingTrack?.ReservationNo || '';
+      const sResItem = sResItemIn || existingTrack?.ReservationItem || '0001';
+      const sMvt = data.MovementType || existingTrack?.MovementType;
       const sMat = data.Material || existingTrack?.Material;
-      const sPlant = data.Plant || existingTrack?.Plant || '1120';
-      const sSLoc = data.StorageLocation || existingTrack?.StorageLocation || 'HS01';
-      const nQty = data.Quantity || existingTrack?.Quantity || 1;
-      const sUnit = data.Unit || existingTrack?.Unit || 'EA';
+      const sPlant = data.Plant || existingTrack?.Plant;
+      const sSLoc = data.StorageLocation || existingTrack?.StorageLocation;
+      const nQty = data.Quantity || existingTrack?.Quantity;
+      const sUnit = data.Unit || existingTrack?.Unit;
       const sRecPlant = data.ReceivingPlant || existingTrack?.ReceivingPlant;
       const sRecSLoc = data.ReceivingStorageLocation || existingTrack?.ReceivingStorageLocation;
       const sCostCenter = data.CostCenter || existingTrack?.CostCenter;
       const sAssetNo = data.AssetNo || existingTrack?.AssetNo;
       const sSubNumber = data.SubNumber || existingTrack?.SubNumber;
-      const sTanum = data.TransferOrder || existingTrack?.TransferOrder || '';
-
-      // Multi-tier Batch Resolution:
-      // 1) From incoming data or existing tracking
-      let sBatch = data.Batch || data.batch || existingTrack?.Batch || '';
+      const sTanum = sTanumIn || existingTrack?.TransferOrder || '';
+      const sBatch = data.Batch || data.batch || existingTrack?.Batch || '';
       const sSerials = data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : []);
+      const completeReservation = data.CompleteReservation === true;
+      for (const [v, label] of [[sMvt, 'MovementType'], [sMat, 'Material'], [sPlant, 'Plant'], [nQty, 'Quantity'], [sUnit, 'Unit']]) {
+        if (!v) throw httpError(400, `${label} is required (not in the request and not on the tracking record)`);
+      }
 
-      // 2) From confirmed TO in LTAP if sTanum is present
-      if (!sBatch && sTanum && resProcessAdapter.rfc) {
-        try {
-          const s4To = String(sTanum).padStart(10, '0');
-          const ltapRows = await resProcessAdapter.rfc.readTable('LTAP', ['CHARG'], [
-            `TANUM = '${s4To}'`,
-            "AND CHARG <> ''"
-          ], 1);
-          if (ltapRows?.[0]?.CHARG?.trim()) {
-            sBatch = ltapRows[0].CHARG.trim();
-          }
-        } catch (_ltapErr) {}
+      // PROCESS_ID of this GI step: reused on retry so an already posted document is found, never posted twice.
+      const processId = data.ProcessId || existingTrack?.ProcessId || cds.utils.uuid();
+      const trackKey = existingTrack ? { ReservationNo: existingTrack.ReservationNo, ReservationItem: existingTrack.ReservationItem } : null;
+      if (trackKey && existingTrack.ProcessId !== processId) {
+        await UPDATE(ReservationTrack).set({ ProcessId: processId }).where(trackKey);
       }
-      // 3) From reservation in RESB if sResNo is present
-      if (!sBatch && sResNo && sResNo !== '0' && resProcessAdapter.rfc) {
-        try {
-          const s4Rs = String(sResNo).padStart(10, '0');
-          const resbRows = await resProcessAdapter.rfc.readTable('RESB', ['CHARG'], [
-            `RSNUM = '${s4Rs}'`,
-            "AND CHARG <> ''"
-          ], 1);
-          if (resbRows?.[0]?.CHARG?.trim()) {
-            sBatch = resbRows[0].CHARG.trim();
-          }
-        } catch (_resbErr) {}
-      }
-      // 4) From interim staging quant in LQUA (921 / 920)
-      if (!sBatch && sMat && resProcessAdapter.rfc) {
-        try {
-          const s4Mat = /^\d+$/.test(sMat) ? String(sMat).padStart(18, '0') : sMat;
-          const lquaRows = await resProcessAdapter.rfc.readTable('LQUA', ['CHARG'], [
-            `MATNR = '${s4Mat}'`,
-            "AND LGTYP IN ('921', '920')",
-            "AND VERME > 0"
-          ], 1);
-          if (lquaRows?.[0]?.CHARG?.trim()) {
-            sBatch = lquaRows[0].CHARG.trim();
-          }
-        } catch (_lquaErr) {}
-      }
+
+      const result = {
+        ProcessId: processId,
+        ReservationNo: sResNo,
+        ReservationItem: sResItem,
+        TransferOrder: sTanum,
+        MovementType: sMvt,
+        Quantity: Number(nQty),
+        Unit: sUnit,
+        Batch: sBatch,
+        Serials: sSerials
+      };
 
       try {
+        await resProcessAdapter.checkAuthorization('M_MSEG_BWA', { ACTVT: '01', BWART: sapKey(sMvt, 'mvt') });
+        await resProcessAdapter.checkAuthorization('M_MSEG_WWA', { ACTVT: '01', WERKS: sapKey(sPlant, 'plant') });
+
         const migoRes = await resProcessAdapter.postGoodsMovement({
           reservationNo: sResNo,
           reservationItem: sResItem,
@@ -123,243 +123,163 @@ class TrToHandler {
           transferOrder: sTanum,
           batch: sBatch,
           serials: sSerials,
-          deriveGmCode: true
+          completeReservation,
+          processId
         });
 
-        // Update tracking to 05 (GI_POSTED)
-        if (db && sResNo) {
+        if (trackKey) {
           try {
-            const { ReservationTrack, ReservationLog } = db.entities('saps4hana.wm');
-            if (ReservationTrack) {
-              await UPDATE(ReservationTrack)
-                .set({
-                  MaterialDocument: migoRes.materialDocument,
-                  MaterialDocYear: migoRes.materialDocYear,
-                  Status_code: '05',
-                  ErrorMessage: ''
-                })
-                .where({ ReservationNo: sResNo, ReservationItem: sResItem });
-
-              if (ReservationLog) {
-                await INSERT.into(ReservationLog).entries({
-                  ID: cds.utils.uuid(),
-                  ReservationNo: sResNo,
-                  ReservationItem: sResItem,
-                  Step: 'MIGO',
-                  Status: '05',
-                  MessageType: 'S',
-                  MessageId: 'M7',
-                  MessageNo: '060',
-                  MessageText: `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect})`
-                });
-              }
-            }
+            await UPDATE(ReservationTrack)
+              .set({ MaterialDocument: migoRes.materialDocument, MaterialDocYear: migoRes.materialDocYear, Status_code: STATUS.GI_POSTED, ErrorMessage: '', ErrorStep: '' })
+              .where(trackKey);
+            await log(ReservationLog, {
+              ...trackKey, ProcessId: processId, DocumentNo: migoRes.materialDocument,
+              Step: 'MIGO', Status: STATUS.GI_POSTED, MessageType: 'S', MessageId: 'M7', MessageNo: '060',
+              MessageText: migoRes.alreadyPosted
+                ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for process ${processId}; not posted again`
+                : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect})`
+            });
           } catch (dbErr) {
             console.warn('[trTo.handler] DB post-MIGO tracking update warning:', dbErr.message);
           }
         }
 
         return {
+          ...result,
           Success: true,
           MaterialDocument: migoRes.materialDocument,
           MaterialDocYear: migoRes.materialDocYear,
-          Status: '05',
-          StatusText: 'Goods Issue Posted',
+          Status: STATUS.GI_POSTED,
+          StatusText: STATUS_TEXT[STATUS.GI_POSTED],
           ReservationNo: migoRes.reservationNo || sResNo,
-          ReservationItem: sResItem,
-          TransferOrder: sTanum,
-          MovementType: sMvt,
-          Quantity: Number(nQty),
-          Unit: sUnit,
           Batch: migoRes.batch || sBatch,
-          Serials: sSerials,
           StockEffect: migoRes.stockEffect,
-          Message: `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} posted successfully.`,
+          Message: migoRes.alreadyPosted
+            ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for this process step; not posted again.`
+            : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} posted successfully.`,
+          ErrorStep: '',
           ErrorMessage: ''
         };
       } catch (err) {
-        // Rollback executed; update tracking to 99 (ERROR)
-        if (db && sResNo) {
+        // Rollback executed by the adapter; tracking goes to 90 (GI error, retryable)
+        if (trackKey) {
           try {
-            const { ReservationTrack, ReservationLog } = db.entities('saps4hana.wm');
-            if (ReservationTrack) {
-              await UPDATE(ReservationTrack)
-                .set({
-                  Status_code: '99',
-                  ErrorMessage: err.message
-                })
-                .where({ ReservationNo: sResNo, ReservationItem: sResItem });
-
-              if (ReservationLog) {
-                await INSERT.into(ReservationLog).entries({
-                  ID: cds.utils.uuid(),
-                  ReservationNo: sResNo,
-                  ReservationItem: sResItem,
-                  Step: 'MIGO',
-                  Status: '99',
-                  MessageType: 'E',
-                  MessageId: 'M7',
-                  MessageNo: '021',
-                  MessageText: `MIGO failed: ${err.message}`
-                });
-              }
-            }
+            await UPDATE(ReservationTrack).set({ Status_code: STATUS.GI_ERROR, ErrorMessage: err.message, ErrorStep: 'MIGO' }).where(trackKey);
+            await log(ReservationLog, {
+              ...trackKey, ProcessId: processId, DocumentNo: '',
+              Step: 'MIGO', Status: STATUS.GI_ERROR, MessageType: 'E', MessageId: 'M7', MessageNo: '021',
+              MessageText: `Goods movement failed: ${err.message}`
+            });
           } catch (dbErr) {
             console.warn('[trTo.handler] DB MIGO error status update warning:', dbErr.message);
           }
         }
         return {
+          ...result,
           Success: false,
           MaterialDocument: '',
           MaterialDocYear: '',
-          Status: '99',
-          StatusText: 'MIGO Failed (Retry Available)',
-          ReservationNo: sResNo,
-          ReservationItem: sResItem,
-          TransferOrder: sTanum,
-          MovementType: sMvt,
-          Quantity: Number(nQty),
-          Unit: sUnit,
-          Batch: sBatch,
-          Serials: sSerials,
+          Status: STATUS.GI_ERROR,
+          StatusText: STATUS_TEXT[STATUS.GI_ERROR],
           StockEffect: '',
-          Message: `MIGO failed: ${err.message}`,
+          Message: `Goods movement failed: ${err.message}`,
+          ErrorStep: 'MIGO',
           ErrorMessage: err.message
         };
       }
     };
 
-    // Chunk 4 & Chunk 5: Create TO from TR + Auto Confirm + Optional Auto MIGO
+    // Step 2: Create TO from TR + Auto Confirm + Optional Auto MIGO
     const handleCreateTOFromTR = async (req) => {
-      const cds = require('@sap/cds');
-      const db = cds.db;
       const data = req.data || {};
+      const { ReservationTrack, ReservationLog } = entities();
       let existing = null;
 
-      if (db) {
+      if (ReservationTrack) {
         try {
-          const { ReservationTrack } = db.entities('saps4hana.wm');
-          if (ReservationTrack) {
-            const tbnum = data.tbnum ? String(data.tbnum).trim().padStart(10, '0') : '';
-            const rsnum = data.ReservationNo ? String(data.ReservationNo).trim() : '';
-            existing = await SELECT.one.from(ReservationTrack).where(
-              tbnum ? { TransferRequirement: tbnum } : (rsnum ? { ReservationNo: rsnum } : { 1: 0 })
-            );
+          const tbnum = sapKeyOpt(data.tbnum, 'tbnum').padStart(10, '0');
+          const rsnum = sapKeyOpt(data.ReservationNo, 'rsnum');
+          if (tbnum.trim() || rsnum) {
+            existing = await lockTrack(ReservationTrack, tbnum.trim() ? { TransferRequirement: tbnum } : { ReservationNo: rsnum });
           }
         } catch (_) {}
       }
 
-      if (existing && existing.TransferOrder) {
+      // A tracked TO that is not yet confirmed (03/13) is confirmed again, never re-created. A confirmed TO does not
+      // block another TO for the remaining quantity.
+      if (existing?.TransferOrder && UNCONFIRMED_TO.includes(existing.Status_code)) {
         data.existingToNumber = existing.TransferOrder;
         data.status = existing.Status_code;
       }
+      const isRetry = Boolean(data.existingToNumber);
+      const processId = (isRetry && existing?.ProcessId) || cds.utils.uuid();
+      const trackKey = existing ? { ReservationNo: existing.ReservationNo, ReservationItem: existing.ReservationItem } : null;
 
       try {
         const result = await adapter.createTOFromTR(data);
+        result.ProcessId = processId;
 
-        // Update ZRES_TRACK and ZRES_LOG if CDS entities are available
-        if (db && result.TransferOrder) {
+        if (trackKey && result.TransferOrder) {
           try {
-            const { ReservationTrack, ReservationLog } = db.entities('saps4hana.wm');
-            if (ReservationTrack) {
-              const tbnum = result.TransferRequirement;
-              const rsnum = result.ReservationNo;
-
-              if (!existing) {
-                existing = await SELECT.one.from(ReservationTrack).where(
-                  tbnum ? { TransferRequirement: tbnum } : (rsnum ? { ReservationNo: rsnum } : { 1: 0 })
-                );
-              }
-
-              if (existing) {
-                await UPDATE(ReservationTrack)
-                  .set({
-                    TransferOrder: result.TransferOrder,
-                    Status_code: result.Status,
-                    ErrorMessage: result.ErrorMessage || '',
-                    ErrorStep: result.ErrorStep || ''
-                  })
-                  .where({
-                    ReservationNo: existing.ReservationNo,
-                    ReservationItem: existing.ReservationItem
-                  });
-
-                if (ReservationLog) {
-                  // Log Step LT04 (TO Created)
-                  await INSERT.into(ReservationLog).entries({
-                    ID: cds.utils.uuid(),
-                    ReservationNo: existing.ReservationNo,
-                    ReservationItem: existing.ReservationItem,
-                    Step: 'LT04',
-                    Status: '03',
-                    MessageType: 'S',
-                    MessageId: 'L3',
-                    MessageNo: '001',
-                    MessageText: `Transfer Order ${result.TransferOrder} created from TR ${result.TransferRequirement}`
-                  });
-
-                  // Log Step LT12 (TO Confirmed or Failed)
-                  if (result.Confirmed) {
-                    await INSERT.into(ReservationLog).entries({
-                      ID: cds.utils.uuid(),
-                      ReservationNo: existing.ReservationNo,
-                      ReservationItem: existing.ReservationItem,
-                      Step: 'LT12',
-                      Status: '04',
-                      MessageType: 'S',
-                      MessageId: 'L3',
-                      MessageNo: '025',
-                      MessageText: `Transfer Order ${result.TransferOrder} auto-confirmed via L_TO_CONFIRM`
-                    });
-                  } else if (result.Status === '13') {
-                    await INSERT.into(ReservationLog).entries({
-                      ID: cds.utils.uuid(),
-                      ReservationNo: existing.ReservationNo,
-                      ReservationItem: existing.ReservationItem,
-                      Step: 'LT12',
-                      Status: '13',
-                      MessageType: 'E',
-                      MessageId: 'L3',
-                      MessageNo: '026',
-                      MessageText: result.ErrorMessage || `Transfer Order ${result.TransferOrder} confirmation failed (LT12)`
-                    });
-                  }
-                }
-              }
+            await UPDATE(ReservationTrack)
+              .set({ TransferOrder: result.TransferOrder, Status_code: result.Status, ErrorMessage: result.ErrorMessage || '', ErrorStep: result.ErrorStep || '', ProcessId: processId })
+              .where(trackKey);
+            if (!isRetry) {
+              await log(ReservationLog, {
+                ...trackKey, ProcessId: processId, DocumentNo: result.TransferOrder,
+                Step: 'LT04', Status: STATUS.TO_CREATED, MessageType: 'S', MessageId: 'L3', MessageNo: '001',
+                MessageText: `Transfer Order ${result.TransferOrder} created from TR ${result.TransferRequirement} item ${result.TRItem} (${result.Quantity} ${result.Unit})`
+              });
+            }
+            if (result.Confirmed) {
+              await log(ReservationLog, {
+                ...trackKey, ProcessId: processId, DocumentNo: result.TransferOrder,
+                Step: 'LT12', Status: STATUS.TO_CONFIRMED, MessageType: 'S', MessageId: 'L3', MessageNo: '025',
+                MessageText: `Transfer Order ${result.TransferOrder} confirmed via L_TO_CONFIRM`
+              });
+            } else if (result.Status === STATUS.TO_CONFIRM_ERROR) {
+              await log(ReservationLog, {
+                ...trackKey, ProcessId: processId, DocumentNo: result.TransferOrder,
+                Step: 'LT12', Status: STATUS.TO_CONFIRM_ERROR, MessageType: 'E', MessageId: 'L3', MessageNo: '026',
+                MessageText: result.ErrorMessage || `Transfer Order ${result.TransferOrder} confirmation failed (LT12)`
+              });
             }
           } catch (dbErr) {
             console.warn('[trTo.handler] Tracking update warning:', dbErr.message);
           }
         }
 
-        // Chunk 5: Auto-trigger MIGO if requested and TO confirmed
-        if (req.data && req.data.autoPostMigo && result.Confirmed) {
+        // Auto-trigger MIGO if requested and TO confirmed
+        if (data.autoPostMigo && result.Confirmed) {
           try {
             const migoResult = await handlePostMigoGoodsMovement({
+              user: req.user,
               data: {
                 ReservationNo: existing?.ReservationNo || result.ReservationNo,
-                ReservationItem: existing?.ReservationItem || result.ReservationItem || '0001',
+                ReservationItem: existing?.ReservationItem || result.ReservationItem,
                 TransferOrder: result.TransferOrder,
                 Quantity: result.Quantity,
                 Unit: result.Unit,
-                MovementType: existing?.MovementType,
+                MovementType: existing?.MovementType || result.MovementType,
                 Material: result.Material || existing?.Material,
-                Plant: existing?.Plant,
-                StorageLocation: existing?.StorageLocation,
+                Plant: existing?.Plant || result.Plant,
+                StorageLocation: existing?.StorageLocation || result.StorageLocation,
                 CostCenter: existing?.CostCenter,
                 AssetNo: existing?.AssetNo,
                 SubNumber: existing?.SubNumber,
                 ReceivingPlant: existing?.ReceivingPlant,
                 ReceivingStorageLocation: existing?.ReceivingStorageLocation,
-                Batch: result.Batch || req.data.batch || existing?.Batch || '',
-                Serials: result.Serials || req.data.serials || []
-              },
-              error: (code, msg) => { throw new Error(msg); }
+                Batch: result.Batch || data.batch || existing?.Batch || '',
+                Serials: result.Serials || data.serials || [],
+                CompleteReservation: data.CompleteReservation === true,
+                ProcessId: cds.utils.uuid() // the goods movement is its own step
+              }
             });
 
+            result.ProcessId = migoResult.ProcessId || result.ProcessId;
             if (migoResult && migoResult.MaterialDocument) {
-              result.Status = '05';
-              result.StatusText = 'Goods Issue Posted';
+              result.Status = STATUS.GI_POSTED;
+              result.StatusText = STATUS_TEXT[STATUS.GI_POSTED];
               result.MaterialDocument = migoResult.MaterialDocument;
               result.MaterialDocYear = migoResult.MaterialDocYear;
               result.StockEffect = migoResult.StockEffect;
@@ -367,47 +287,39 @@ class TrToHandler {
               result.ReservationNo = migoResult.ReservationNo || result.ReservationNo;
               result.MovementType = migoResult.MovementType || result.MovementType || existing?.MovementType || '';
               result.Message = `Transfer Order ${result.TransferOrder} confirmed and Material Document ${migoResult.MaterialDocument} posted successfully.`;
-            } else if (migoResult && (!migoResult.Success || migoResult.Status === '99')) {
-              result.Status = '99';
-              result.StatusText = 'MIGO Failed (Retry Available)';
-              result.ErrorMessage = migoResult.ErrorMessage || 'MIGO posting failed';
+            } else {
+              result.Status = STATUS.GI_ERROR;
+              result.StatusText = STATUS_TEXT[STATUS.GI_ERROR];
+              result.ErrorStep = 'MIGO';
+              result.ErrorMessage = migoResult?.ErrorMessage || 'Goods movement posting failed';
             }
           } catch (migoErr) {
-            result.Status = '99';
-            result.StatusText = 'MIGO Failed (Retry Available)';
+            result.Status = STATUS.GI_ERROR;
+            result.StatusText = STATUS_TEXT[STATUS.GI_ERROR];
+            result.ErrorStep = 'MIGO';
             result.ErrorMessage = migoErr.message;
           }
         }
 
-        result.IsConfirmed = Boolean(result.Confirmed || result.Status === '04' || result.Status === '05');
+        result.IsConfirmed = Boolean(result.Confirmed || result.Status === STATUS.TO_CONFIRMED || result.Status === STATUS.GI_POSTED);
         result.ConfirmationNumber = result.ConfirmationNumber || result.TransferOrder;
-        result.ConfirmedBy = result.ConfirmedBy || (result.IsConfirmed ? (req.user?.id || process.env.S4_USERNAME || 'KHUSHAL') : '');
+        result.ConfirmedBy = result.ConfirmedBy || (result.IsConfirmed ? userOf(req) : '');
 
         return result;
       } catch (err) {
-        if (db && existing) {
+        if (trackKey) {
           try {
-            const { ReservationTrack, ReservationLog } = db.entities('saps4hana.wm');
-            if (ReservationTrack) {
-              await UPDATE(ReservationTrack).set({
-                Status_code: err.Status || '12',
-                ErrorMessage: err.message || '',
-                ErrorStep: err.ErrorStep || 'LT04'
-              }).where({ ReservationNo: existing.ReservationNo, ReservationItem: existing.ReservationItem });
-            }
-            if (ReservationLog) {
-              await INSERT.into(ReservationLog).entries({
-                ID: cds.utils.uuid(),
-                ReservationNo: existing.ReservationNo,
-                ReservationItem: existing.ReservationItem,
-                Step: err.ErrorStep || 'LT04',
-                Status: err.Status || '12',
-                MessageType: 'E',
-                MessageId: 'L3',
-                MessageNo: '110',
-                MessageText: err.message || 'TO Step failed'
-              });
-            }
+            await UPDATE(ReservationTrack).set({
+              Status_code: err.Status || STATUS.TO_ERROR,
+              ErrorMessage: err.message || '',
+              ErrorStep: err.ErrorStep || 'LT04',
+              ProcessId: processId
+            }).where(trackKey);
+            await log(ReservationLog, {
+              ...trackKey, ProcessId: processId, DocumentNo: existing?.TransferOrder || '',
+              Step: err.ErrorStep || 'LT04', Status: err.Status || STATUS.TO_ERROR, MessageType: 'E', MessageId: 'L3', MessageNo: '110',
+              MessageText: err.message || 'TO Step failed'
+            });
           } catch (_) {}
         }
         return req.error(err.status || 400, err.message || 'CreateTOFromTR failed');

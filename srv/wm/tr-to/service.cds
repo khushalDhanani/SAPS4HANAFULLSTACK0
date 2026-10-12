@@ -76,6 +76,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
     };
 
     type TOProcessResult {
+        ProcessId           : UUID;       // PROCESS_ID of this TO/GI step
+        ErrorStep           : String(10);
         TransferOrder       : String(10);
         TransferRequirement : String(10);
         TRItem              : String(4);
@@ -90,6 +92,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         ConfirmedBy         : String(12);
         Material            : String(40);
         MaterialName        : String(80);
+        Plant               : String(4);
+        StorageLocation     : String(4);
         Quantity            : Decimal(13, 3);
         Unit                : String(3);
         Batch               : String(10);
@@ -103,6 +107,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
     };
 
     type MigoProcessResult {
+        ProcessId           : UUID;       // PROCESS_ID of this TO/GI step
+        ErrorStep           : String(10);
         Success             : Boolean;
         MaterialDocument    : String(10);
         MaterialDocYear     : String(4);
@@ -148,6 +154,7 @@ service TrToService @(path: '/odata/v4/tr-to') {
         DeliveryCompleted       : Boolean;
         Status                  : String(2);
         StatusText              : String(40);
+        Items                   : array of TRItem; // all open items; TRItem is '' until one of several is chosen
     };
 
     type TRListItem {
@@ -170,7 +177,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
     function getTR(tbnum: String(10), lgnum: String(3)) returns TRHeader;
 
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
-    function lookupTR(tbnum: String(10), lgnum: String(3)) returns TRDetail;
+    // docType: 'TR' (number is a Transfer Requirement) or 'RES' (number is a Reservation); mandatory, never guessed.
+    function lookupTR(tbnum: String(10), lgnum: String(3), docType: String(3), tbpos: String(4)) returns TRDetail;
 
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getAvailableSUs(tbnum: String(10), lgnum: String(3), tbpos: String(4)) returns array of SUQuant;
@@ -198,7 +206,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         serials     : array of String(18),
         storageUnit : String(20),
         autoConfirm : Boolean,
-        autoPostMigo: Boolean
+        autoPostMigo: Boolean,
+        CompleteReservation : Boolean // sets NO_MORE_GR on the goods movement; never defaulted to true
     ) returns TOProcessResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -212,7 +221,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         serials     : array of String(18),
         storageUnit : String(20),
         autoConfirm : Boolean,
-        autoPostMigo: Boolean
+        autoPostMigo: Boolean,
+        CompleteReservation : Boolean // sets NO_MORE_GR on the goods movement; never defaulted to true
     ) returns TOProcessResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -232,7 +242,9 @@ service TrToService @(path: '/odata/v4/tr-to') {
         SubNumber                : String(4),
         TransferOrder            : String(10),
         Batch                    : String(10),
-        Serials                  : array of String(18)
+        Serials                  : array of String(18),
+        CompleteReservation      : Boolean,
+        ProcessId                : UUID // PROCESS_ID of the GI step; reused on retry so an existing material document is found
     ) returns MigoProcessResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -252,6 +264,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         SubNumber                : String(4),
         TransferOrder            : String(10),
         Batch                    : String(10),
-        Serials                  : array of String(18)
+        Serials                  : array of String(18),
+        CompleteReservation      : Boolean,
+        ProcessId                : UUID // PROCESS_ID of the GI step; reused on retry so an existing material document is found
     ) returns MigoProcessResult;
 }

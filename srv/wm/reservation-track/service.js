@@ -1,6 +1,8 @@
 'use strict';
 
 const cds = require('@sap/cds');
+const { STATUS, ERROR_STATUSES } = require('../../common/wmStatus');
+const isError = (c) => ERROR_STATUSES.includes(c) || c === STATUS.CANCELLED;
 
 module.exports = class ReservationTrackService extends cds.ApplicationService {
   async init() {
@@ -11,7 +13,7 @@ module.exports = class ReservationTrackService extends cds.ApplicationService {
       if (!statusCode) return;
       const status = await SELECT.one.from(ReservationStatuses).where({ code: statusCode });
       if (!status) {
-        req.error(400, `Invalid reservation status code '${statusCode}'. Valid codes are: 01, 02, 03, 04, 05, 99`);
+        req.error(400, `Invalid reservation status code '${statusCode}'. Valid codes are: 01, 11, 02, 12, 03, 13, 04, 90, 05, 99`);
       }
     }
 
@@ -140,7 +142,7 @@ module.exports = class ReservationTrackService extends cds.ApplicationService {
         }
       }
 
-      if (Message && NextStatus === '99') {
+      if (Message && isError(NextStatus)) {
         updateData.ErrorMessage = Message;
       }
 
@@ -151,9 +153,9 @@ module.exports = class ReservationTrackService extends cds.ApplicationService {
         ID: cds.utils.uuid(),
         ReservationNo,
         ReservationItem,
-        Step: Step || (NextStatus === '01' ? 'MB21' : NextStatus === '02' ? 'LB01' : NextStatus === '03' ? 'LT04' : NextStatus === '04' ? 'LT12' : NextStatus === '05' ? 'MIGO' : 'ERROR'),
+        Step: Step || ({ '01': 'MB21', '02': 'LB01', '11': 'LB01', '03': 'LT04', '12': 'LT04', '04': 'LT12', '13': 'LT12', '05': 'MIGO', '90': 'MIGO' }[NextStatus] || 'ERROR'),
         Status: NextStatus,
-        MessageType: NextStatus === '99' ? 'E' : 'S',
+        MessageType: isError(NextStatus) ? 'E' : 'S',
         MessageId: 'ZRES',
         MessageNo: NextStatus,
         MessageText: Message || `Status advanced to ${NextStatus}${DocumentNo ? ` (Doc: ${DocumentNo})` : ''}`

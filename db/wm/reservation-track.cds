@@ -42,6 +42,8 @@ entity ReservationTrack : managed {
     ExternalId              : String(100);   // BALEXTN (SLG1 External ID)
     Status                  : Association to ReservationStatus; // STATUS
     ErrorMessage            : String(255);   // ERR_MSG
+    ErrorStep               : String(10);    // ERROR_STEP (LB01 | LT04 | LT12 | MIGO)
+    ProcessId               : UUID;          // PROCESS_ID of the current TO/GI step (see ReservationLog.ProcessId)
     Logs                    : Association to many ReservationLog
                                   on Logs.ReservationNo = ReservationNo
                                  and Logs.ReservationItem = ReservationItem;
@@ -63,6 +65,8 @@ entity ReservationLog : cuid, managed {
     MessageId       : String(20);    // Message Class (e.g. M7, L3)
     MessageNo       : String(3);     // Message Number (e.g. 060, 529)
     MessageText     : String(255);   // Descriptive message text
+    ProcessId       : UUID;          // PROCESS_ID of the TO/GI step this row belongs to (one per TO / goods movement)
+    DocumentNo      : String(10);    // TANUM / MBLNR produced by the step
     Track           : Association to ReservationTrack
                           on Track.ReservationNo = ReservationNo
                          and Track.ReservationItem = ReservationItem;

@@ -36,7 +36,7 @@ sap.ui.define([
          * @returns {Promise<Array>}
          */
         getOpenTRs: function (sLgnum, sMvt) {
-            var sWh = sLgnum || "W01";
+            var sWh = sLgnum || "";
             var sMvtParam = sMvt ? sMvt.trim() : "";
             var sUrl = BASE_PATH + "/getOpenTRs(lgnum='" + encodeURIComponent(sWh.trim()) + "',mvt='" + encodeURIComponent(sMvtParam) + "')";
             return ODataClient.get(sUrl).then(function (oData) {
@@ -55,7 +55,7 @@ sap.ui.define([
             if (!sTbnum) {
                 return Promise.reject(new Error("Transfer Requirement number is required"));
             }
-            var sWh = sLgnum || "W01";
+            var sWh = sLgnum || "";
             var sUrl = BASE_PATH + "/getTR(tbnum='" + encodeURIComponent(sTbnum.trim()) + "',lgnum='" + encodeURIComponent(sWh.trim()) + "')";
 
             return ODataClient.get(sUrl).then(function (oData) {
@@ -74,7 +74,7 @@ sap.ui.define([
             if (!sTbnum) {
                 return Promise.reject(new Error("Transfer Requirement number is required"));
             }
-            var sWh = sLgnum || "W01";
+            var sWh = sLgnum || "";
             var sPos = sTbpos ? sTbpos.trim() : "";
             var sUrl = BASE_PATH + "/getAvailableSUs(tbnum='" + encodeURIComponent(sTbnum.trim()) + "',lgnum='" + encodeURIComponent(sWh.trim()) + "',tbpos='" + encodeURIComponent(sPos) + "')";
 
@@ -95,7 +95,7 @@ sap.ui.define([
             if (!sLenum) {
                 return Promise.reject(new Error("Storage Unit number is required"));
             }
-            var sWh = sLgnum || "W01";
+            var sWh = sLgnum || "";
             var sUrl = BASE_PATH + "/checkSU(lenum='" + encodeURIComponent(sLenum.trim()) + "',tbnum='" + encodeURIComponent(sTbnum ? sTbnum.trim() : "") + "',lgnum='" + encodeURIComponent(sWh.trim()) + "')";
 
             return ODataClient.get(sUrl).then(function (oData) {
@@ -147,8 +147,8 @@ sap.ui.define([
             if (!sTbnum) {
                 return Promise.reject(new Error("Transfer Requirement number is required"));
             }
-            var sWh = sLgnum || "W01";
-            var sUrl = BASE_PATH + "/lookupTR(tbnum='" + encodeURIComponent(sTbnum.trim()) + "',lgnum='" + encodeURIComponent(sWh.trim()) + "')";
+            var sWh = sLgnum || "";
+            var sUrl = BASE_PATH + "/lookupTR(tbnum='" + encodeURIComponent(sTbnum.trim()) + "',lgnum='" + encodeURIComponent(sWh.trim()) + "',docType='TR',tbpos='')";
             return ODataClient.get(sUrl).then(function (oData) {
                 return (oData && oData.value) ? oData.value : oData;
             });

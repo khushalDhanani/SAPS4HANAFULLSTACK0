@@ -20,7 +20,8 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
   beforeEach(() => {
     mockRfc = {
       session: jest.fn(async (fn) => fn(mockRfc.call)),
-      call: jest.fn()
+      call: jest.fn(),
+      readTable: jest.fn((table) => Promise.resolve(table === 'MARD' ? [{ LGORT: 'HS01' }, { LGORT: 'CS01' }] : [])) // MARD preflight: material extended; other reads empty
     };
     adapter = new ReservationProcessAdapter({ rfc: mockRfc });
   });
@@ -80,6 +81,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         plant: '1120',
         storageLocation: 'HS01',
         material: '8000000023',
+        unit: 'NOS',
         quantity: 5,
         costCenter: '1011201301'
       });
@@ -110,6 +112,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         plant: '1120',
         storageLocation: 'HS01',
         material: '8000000023',
+        unit: 'NOS',
         quantity: 1,
         assetNo: '000000400092',
         subNumber: '0000'
@@ -142,6 +145,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         storageLocation: 'HS01',
         receivingPlant: '1130',
         material: '8000000023',
+        unit: 'NOS',
         quantity: 2
       });
 
@@ -167,6 +171,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         movementType: '311',
         plant: '1120',
         material: '8000000023',
+        unit: 'NOS',
         quantity: 1,
         testrun: true
       });
@@ -263,7 +268,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       );
     });
 
-    test('Throws classified UCON Note 2295840 error when L_TR_CREATE is blacklisted and wrapper is unavailable', async () => {
+    test('Surfaces SAP\'s own rejection of L_TR_CREATE unchanged when no wrapper creates a TR (caller records status 11)', async () => {
       mockRfc.call
         .mockRejectedValueOnce(new Error('Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE'))
         .mockRejectedValueOnce(new Error('Function ZWM_TR_CREATE not found'));
@@ -279,7 +284,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
           unit: 'NOS',
           reservationNo: '524979'
         })
-      ).rejects.toThrow(/restricted under SAP Note 2295840/);
+      ).rejects.toThrow('Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE');
     });
   });
 
@@ -384,7 +389,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       expect(mockRfc.call).toHaveBeenCalledWith(
         'BAPI_GOODSMVT_CREATE',
         expect.objectContaining({
-          GOODSMVT_CODE: { GM_CODE: '06' },
+          GOODSMVT_CODE: { GM_CODE: '04' }, // 311 -> MB1B; no '06' fallback
           GOODSMVT_ITEM: [
             expect.objectContaining({
               MOVE_TYPE: '311',
@@ -415,6 +420,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
           movementType: '311',
           plant: '1120',
           material: '8000000023',
+        unit: 'NOS',
           quantity: 999999
         })
       ).rejects.toThrow('Deficit of BA Unrestricted-use stock');

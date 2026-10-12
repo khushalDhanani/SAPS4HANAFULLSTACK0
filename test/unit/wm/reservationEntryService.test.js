@@ -295,7 +295,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(data.Status_code).toBe('02');
     });
 
-    test('Fallback: when TR creation fails, reservation is preserved with status 01 and warning log', async () => {
+    test('When TR creation fails the reservation is kept and tracked as status 11 (TR error, backend issue)', async () => {
       createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValueOnce({
         success: true,
         reservationNo: '777001',
@@ -325,12 +325,13 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
 
       expect(status).toBe(200);
       expect(data.ReservationNo).toBe(testResNo);
-      expect(data.Status_code).toBe('01'); // Preserved in status 01
-      expect(data.ErrorMessage).toContain('Warehouse movement not active');
+      expect(data.Status_code).toBe('11'); // TR error: backend created no TR
+      expect(data.ErrorMessage).toContain('TR creation failed in SAP backend: Warehouse movement not active');
 
       const logs = await cds.db.run(SELECT.from(LOG_ENTITY).where({ ReservationNo: testResNo }));
       expect(logs).toHaveLength(2);
-      expect(logs[1].MessageType).toBe('W');
+      expect(logs[1].MessageType).toBe('E');
+      expect(logs[1].Status).toBe('11');
     });
   });
 
@@ -393,7 +394,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(log.MessageType).toBe('S');
     });
 
-    test('POST /odata/v4/reservation-entry/postMigoGoodsMovement handles failure with status 99 and error log', async () => {
+    test('POST /odata/v4/reservation-entry/postMigoGoodsMovement handles failure with status 90 (GI error) and error log', async () => {
       postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement').mockRejectedValueOnce(
         new Error('Posting period 10/2026 closed')
       );
@@ -409,17 +410,17 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
 
       expect(status).toBe(200);
       expect(data.ReservationNo).toBe(testMigoResNo);
-      expect(data.Status_code).toBe('99');
+      expect(data.Status_code).toBe('90');
       expect(data.ErrorMessage).toContain('Posting period 10/2026 closed');
 
-      // Verify DB update to 99
+      // Verify DB update to 90
       const track = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testMigoResNo }));
-      expect(track.Status_code).toBe('99');
+      expect(track.Status_code).toBe('90');
       expect(track.ErrorMessage).toContain('Posting period 10/2026 closed');
 
       // Verify error log entry
       const log = await cds.db.run(
-        SELECT.one.from(LOG_ENTITY).where({ ReservationNo: testMigoResNo, Step: 'MIGO', Status: '99' })
+        SELECT.one.from(LOG_ENTITY).where({ ReservationNo: testMigoResNo, Step: 'MIGO', Status: '90' })
       );
       expect(log).toBeTruthy();
       expect(log.MessageType).toBe('E');

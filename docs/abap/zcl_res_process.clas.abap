@@ -20,6 +20,7 @@ CLASS zcl_res_process DEFINITION
       gc_step_lt12 TYPE char10 VALUE 'LT12',
       gc_step_migo TYPE char10 VALUE 'MIGO',
 
+      " Status codes: identical to srv/common/wmStatus.js (JS layer owns the process) and domain ZRES_STATUS (zres_track.ddl)
       gc_status_01 TYPE zres_status VALUE '01', " Reservation Created
       gc_status_11 TYPE zres_status VALUE '11', " TR Creation Error
       gc_status_02 TYPE zres_status VALUE '02', " TR Created
@@ -29,7 +30,7 @@ CLASS zcl_res_process DEFINITION
       gc_status_04 TYPE zres_status VALUE '04', " TO Confirmed
       gc_status_90 TYPE zres_status VALUE '90', " Goods Issue Error
       gc_status_05 TYPE zres_status VALUE '05', " Goods Issue Posted
-      gc_status_99 TYPE zres_status VALUE '99'. " Error / Exception
+      gc_status_99 TYPE zres_status VALUE '99'. " Cancelled / Reversed (never used for a failed step; MIGO failure = 90)
 
     "! Step 0: Derive Warehouse Number from Plant + Storage Location (Table T320)
     METHODS derive_warehouse
@@ -136,7 +137,7 @@ CLASS zcl_res_process DEFINITION
         !iv_anln1        TYPE anln1 OPTIONAL
         !iv_anln2        TYPE anln2 OPTIONAL
         !iv_ref_text     TYPE bktxt OPTIONAL
-        !iv_complete_res TYPE xfeld DEFAULT 'X'
+        !iv_complete_res TYPE xfeld DEFAULT space  " NO_MORE_GR only when the operator ticks "Complete reservation"
         !iv_testrun      TYPE bapi2017_gm_gen OPTIONAL
       EXPORTING
         !ev_mblnr        TYPE mblnr
@@ -455,6 +456,18 @@ CLASS zcl_res_process IMPLEMENTATION.
       lv_squit = space. " Per L_TO_CONFIRM exception SQUIT_OR_QUANTITIES: pass item table or I_SQUIT, not both
     ENDIF.
 
+    " Authorization object verified in TOBJ (docs/abap/system-metadata.md §15); verify in SU21 before transport
+    AUTHORITY-CHECK OBJECT 'L_LGNUM'
+      ID 'LGNUM' FIELD iv_lgnum
+      ID 'LGTYP' DUMMY.
+    IF sy-subrc <> 0.
+      ev_subrc = 30.
+      add_bapiret2( EXPORTING iv_type = 'E' iv_id = 'L3' iv_number = '000'
+                              iv_message = |No authorization for warehouse { iv_lgnum } (L_LGNUM)|
+                    CHANGING  ct_return = et_return ).
+      RETURN.
+    ENDIF.
+
     CALL FUNCTION 'L_TO_CONFIRM'
       EXPORTING
         i_lgnum                        = iv_lgnum
@@ -672,6 +685,28 @@ CLASS zcl_res_process IMPLEMENTATION.
     ENDIF.
 
     APPEND ls_item TO lt_items.
+
+    " Authorization objects verified in TOBJ (docs/abap/system-metadata.md §15); verify in SU21 before transport
+    AUTHORITY-CHECK OBJECT 'M_MSEG_BWA'
+      ID 'ACTVT' FIELD '01'
+      ID 'BWART' FIELD iv_bwart.
+    IF sy-subrc <> 0.
+      ev_subrc = 4.
+      add_bapiret2( EXPORTING iv_type = 'E' iv_id = 'M7' iv_number = '000'
+                              iv_message = |No authorization for goods movement type { iv_bwart } (M_MSEG_BWA)|
+                    CHANGING  ct_return = et_return ).
+      RETURN.
+    ENDIF.
+    AUTHORITY-CHECK OBJECT 'M_MSEG_WWA'
+      ID 'ACTVT' FIELD '01'
+      ID 'WERKS' FIELD iv_werks.
+    IF sy-subrc <> 0.
+      ev_subrc = 4.
+      add_bapiret2( EXPORTING iv_type = 'E' iv_id = 'M7' iv_number = '000'
+                              iv_message = |No authorization for goods movements in plant { iv_werks } (M_MSEG_WWA)|
+                    CHANGING  ct_return = et_return ).
+      RETURN.
+    ENDIF.
 
     CALL FUNCTION 'BAPI_GOODSMVT_CREATE'
       EXPORTING

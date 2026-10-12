@@ -97,7 +97,7 @@ CLASS lhc_ReservationEntry IMPLEMENTATION.
                                    severity = if_abap_behv_message=>severity-error
                                    text     = |Movement type { ls_entry-MovementType } not supported. Allowed: 201, 241, 311, 301| )
                         ) TO reported-reservationentry.
-      ENDCASE>
+      ENDCASE.
     ENDLOOP.
   ENDMETHOD.
 

@@ -2,6 +2,11 @@
 
 const LOG = require('../logger')('tr-to-adapter');
 const { RfcClient } = require('../RfcClient');
+const { sapKey, sapKeyOpt, httpError } = require('../sapKey');
+const s4Config = require('../s4Config');
+const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
+const { isToFullyConfirmed, findUnconfirmedToItems } = require('./toState');
+const { checkAuthorization } = require('./authCheck');
 
 /**
  * TR -> TO over RFC, using only objects that already exist in SAP (no ABAP change):
@@ -13,16 +18,8 @@ const { RfcClient } = require('../RfcClient');
  * Unlike ZTO (built for batch-less 319 staging TRs), a TR item that names a batch only matches that batch.
  */
 
-const RE = { lgnum: /^[A-Z0-9]{1,3}$/, tbnum: /^\d{1,10}$/, lenum: /^[A-Z0-9]{1,20}$/ };
-
-const httpError = (status, message) => Object.assign(new Error(message), { status });
-
-/** Trust-boundary check: values go into RFC_READ_TABLE WHERE clauses, so only [A-Z0-9] passes. */
-function required(value, label, re) {
-  const s = String(value ?? '').trim().toUpperCase();
-  if (!re.test(s)) throw httpError(400, `${label} is missing or invalid`);
-  return s;
-}
+/** Warehouse from the caller, else from configuration (cds.s4.warehouseNumber / S4_WAREHOUSE_NUMBER); never a literal. */
+const warehouse = (lgnum) => sapKey(lgnum || s4Config.getWarehouseNumber(), 'lgnum');
 
 const alphaIn = (v, len) => (/^\d+$/.test(v) ? v.padStart(len, '0') : v);
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
@@ -59,7 +56,7 @@ class TrToAdapter {
 
   async _descriptions(matnrs) {
     const out = {};
-    for (const m of [...new Set(matnrs.filter(Boolean))]) {
+    for (const m of [...new Set(matnrs.filter(Boolean).map((v) => sapKey(v, 'matnr')))]) {
       const rows = await this._rfc(
         () => this.rfc.readTable('MAKT', ['MAKTX'], [`MATNR = '${m}'`, "AND SPRAS = 'E'"]),
         `Read description of material ${alphaOut(m)}`
@@ -69,13 +66,11 @@ class TrToAdapter {
     return out;
   }
 
-  async getOpenTRs(lgnum = 'W01', mvt = '') {
-    const wh = required(lgnum, 'Warehouse', RE.lgnum);
+  async getOpenTRs(lgnum = '', mvt = '') {
+    const wh = warehouse(lgnum);
     const where = [`LGNUM = '${wh}'`, "AND STATU <> 'E'"];
-    if (mvt) {
-      const sMvt = String(mvt).trim().toUpperCase();
-      if (/^[A-Z0-9]{1,3}$/.test(sMvt)) where.push(`AND BWLVS = '${sMvt}'`);
-    }
+    const sMvt = sapKeyOpt(mvt, 'mvt');
+    if (sMvt) where.push(`AND BWLVS = '${sMvt}'`);
 
     const rows = await this._rfc(
       () => this.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'BETYP', 'BENUM', 'RSNUM', 'STATU', 'BDATU'], where),
@@ -110,46 +105,18 @@ class TrToAdapter {
     });
   }
 
+  /** A number scanned as a TR is read as a TR only; a reservation number goes through getTRByReservation. */
   async getTR(tbnum, lgnum) {
-    const wh = required(lgnum, 'Warehouse', RE.lgnum);
-    const sClean = String(tbnum ?? '').trim().replace(/^TR[\s:-]*/i, '');
-    const tr = alphaIn(required(sClean, 'Transfer Requirement number', RE.tbnum), 10);
+    const wh = warehouse(lgnum);
+    const tr = sapKey(tbnum, 'tbnum').padStart(10, '0');
     LOG.info(`Reading TR ${tr} in warehouse ${wh}`);
 
-    let res = await this._rfc(
+    const res = await this._rfc(
       () => this.rfc.call('Z_WM_GET_TR_MATERIAL_LIST', { IV_TR_NUMBER: tr, IV_LGNUM: wh }),
       `Read Transfer Requirement ${alphaOut(tr)}`
     );
-    let h = (res.ET_TR_HEADER || [])[0];
-    if (!h) {
-      try {
-        res = await this._rfc(
-          () => this.rfc.call('Z_WM_GET_TR_MATERIAL_LIST', { IV_RESERVATION: tr, IV_LGNUM: wh }),
-          `Read Transfer Requirement by Reservation ${alphaOut(tr)}`
-        );
-        h = (res.ET_TR_HEADER || [])[0];
-      } catch (_resErr) {
-        // Continue to not found check
-      }
-    }
-    if (!h) {
-      let isReservation = false;
-      try {
-        const rkpfRows = await this._rfc(
-          () => this.rfc.readTable('RKPF', ['RSNUM', 'BWART'], [`RSNUM = '${tr}'`]),
-          `Check reservation ${alphaOut(tr)}`
-        );
-        if (rkpfRows && rkpfRows.length > 0 && rkpfRows[0].RSNUM) isReservation = true;
-      } catch (_rkpfErr) {
-        // Ignore table read error
-      }
-
-      if (isReservation) {
-        throw httpError(404, `Reservation ${alphaOut(tr)} exists, but no Transfer Requirement has been created for it yet in warehouse ${wh} (TR creation deferred under SAP Note 2295840; create via transaction LB01 or deploy ZWM_TR_CREATE). To test scan-to, select an open TR (e.g. 1000750) via the Value Help dialog.`);
-      }
-
-      throw httpError(404, `Transfer Requirement ${alphaOut(tr)} not found in warehouse ${wh}`);
-    }
+    const h = (res.ET_TR_HEADER || [])[0];
+    if (!h) throw httpError(404, `Transfer Requirement ${alphaOut(tr)} not found in warehouse ${wh}`);
 
     const items = res.ET_TR_ITEMS || [];
     const desc = await this._descriptions(items.map((i) => i.MATNR));
@@ -172,10 +139,31 @@ class TrToAdapter {
     };
   }
 
+  /**
+   * Reservation -> its open TR(s) via LTBK-RSNUM (field use proven by getOpenTRs). No TR means the backend
+   * did not create one: status 11 (TR error), to be fixed in SAP, not by the operator.
+   */
+  async getTRByReservation(rsnum, lgnum) {
+    const wh = warehouse(lgnum);
+    const rs = sapKey(rsnum, 'rsnum').padStart(10, '0');
+    const rows = await this._rfc(
+      () => this.rfc.readTable('LTBK', ['TBNUM', 'STATU'], [`LGNUM = '${wh}'`, `AND RSNUM = '${rs}'`]),
+      `Read Transfer Requirements of reservation ${alphaOut(rs)}`
+    );
+    const open = (rows || []).filter((r) => r.TBNUM && r.STATU !== 'E').map((r) => r.TBNUM);
+    if (!open.length) {
+      throw httpError(404, `Reservation ${alphaOut(rs)} has no open Transfer Requirement in warehouse ${wh} (status ${STATUS.TR_ERROR} TR error, backend issue)`);
+    }
+    if (open.length > 1) {
+      throw httpError(400, `Reservation ${alphaOut(rs)} has ${open.length} open Transfer Requirements (${open.map(alphaOut).join(', ')}); scan the TR number`);
+    }
+    return this.getTR(open[0], wh);
+  }
+
   /** Shared by checkSU and createTO so the server never trusts client quantities. */
   async _validate(lenum, tbnum, lgnum) {
-    const wh = required(lgnum, 'Warehouse', RE.lgnum);
-    const su = alphaIn(required(lenum, 'Storage Unit number', RE.lenum), 20);
+    const wh = warehouse(lgnum);
+    const su = sapKey(lenum, 'lenum').padStart(20, '0');
     const tr = await this.getTR(tbnum, wh);
 
     const quants = (await this._rfc(
@@ -220,12 +208,12 @@ class TrToAdapter {
 
   /** Retrieve available Storage Units in the warehouse that can satisfy open TR line items. */
   async getAvailableSUs(tbnum, lgnum, tbpos = '') {
-    const wh = required(lgnum, 'Warehouse', RE.lgnum);
+    const wh = warehouse(lgnum);
     const tr = await this.getTR(tbnum, wh);
 
     let items = tr.Items.filter((i) => !i.DeliveryCompleted && i.OpenQty > 0);
     if (tbpos) {
-      const sPos = alphaIn(required(tbpos, 'Item position', /^\d{1,4}$/), 4);
+      const sPos = sapKey(tbpos, 'tbpos').padStart(4, '0');
       items = items.filter((i) => i.Tbpos === sPos);
     }
     if (!items.length) {
@@ -236,7 +224,7 @@ class TrToAdapter {
     const seenQuants = new Set();
 
     for (const item of items) {
-      const matPadded = /^\d+$/.test(item.Material) ? item.Material.padStart(18, '0') : item.Material;
+      const matPadded = alphaIn(sapKey(item.Material, 'matnr'), 18);
       const where = [
         `LGNUM = '${wh}'`,
         `AND MATNR = '${matPadded}'`,
@@ -244,10 +232,10 @@ class TrToAdapter {
         "AND VERME > 0"
       ];
       if (item.Batch) {
-        where.push(`AND CHARG = '${item.Batch}'`);
+        where.push(`AND CHARG = '${sapKey(item.Batch, 'batch')}'`);
       }
       if (item.Plant) {
-        where.push(`AND WERKS = '${item.Plant}'`);
+        where.push(`AND WERKS = '${sapKey(item.Plant, 'plant')}'`);
       }
 
       const rows = await this._rfc(
@@ -348,9 +336,9 @@ class TrToAdapter {
    */
   async _materialProfiles(matnrs, plant = '') {
     const out = {};
-    const s4Plant = String(plant || '').trim();
+    const s4Plant = sapKeyOpt(plant, 'plant');
     for (const m of [...new Set(matnrs.filter(Boolean))]) {
-      const s4Mat = /^\d+$/.test(m) ? m.padStart(18, '0') : m;
+      const s4Mat = alphaIn(sapKey(m, 'matnr'), 18);
       let xchpf = '';
       let sernp = '';
       try {
@@ -379,61 +367,81 @@ class TrToAdapter {
     return out;
   }
 
+  /** Open items of a TR mapped to the TRDetail shape the scan screen shows. */
+  _openItems(tr) {
+    return tr.Items.filter((i) => !i.DeliveryCompleted && i.OpenQty > 0);
+  }
+
   /**
-   * TR Lookup with material requirements and open quantities for warehouse scanning
+   * Scan lookup. docType says what was scanned: 'TR' (Transfer Requirement number) or 'RES' (Reservation
+   * number); it is mandatory, the server never guesses. With several open items the caller must pick one
+   * (tbpos); the response then carries TRItem '' and all Items so the UI can offer the choice.
    */
-  async lookupTR(tbnum, lgnum = 'W01') {
-    const wh = required(lgnum, 'Warehouse', RE.lgnum);
-    const tr = await this.getTR(tbnum, wh);
-    const item = tr.Items.find((i) => i.OpenQty > 0) || tr.Items[0];
-    if (!item) throw httpError(404, `No item found for TR ${alphaOut(tbnum)}`);
+  async lookupTR(tbnum, lgnum = '', docType = '', tbpos = '') {
+    const wh = warehouse(lgnum);
+    const type = String(docType || '').trim().toUpperCase();
+    if (type !== 'TR' && type !== 'RES') throw httpError(400, 'Select whether the scanned number is a Transfer Requirement (TR) or a Reservation (RES)');
+    const tr = type === 'RES' ? await this.getTRByReservation(tbnum, wh) : await this.getTR(tbnum, wh);
 
-    const profiles = await this._materialProfiles([item.Material], item.Plant);
-    const profile = profiles[item.Material] || {};
+    const open = this._openItems(tr);
+    if (!open.length) throw httpError(404, `Transfer Requirement ${alphaOut(tr.Tbnum)} has no open items`);
+    let item = null;
+    if (tbpos) {
+      const pos = sapKey(tbpos, 'tbpos').padStart(4, '0');
+      item = open.find((i) => i.Tbpos === pos);
+      if (!item) throw httpError(400, `TR ${alphaOut(tr.Tbnum)} has no open item ${pos}; open items: ${open.map((i) => i.Tbpos).join(', ')}`);
+    } else if (open.length === 1) {
+      item = open[0];
+    }
 
+    const profile = item ? (await this._materialProfiles([item.Material], item.Plant))[item.Material] || {} : {};
+    const sel = item || {};
     return {
       TransferRequirement: alphaOut(tr.Tbnum),
       TRNumber: alphaOut(tr.Tbnum),
-      TRItem: item.Tbpos,
+      TRItem: item ? item.Tbpos : '',
       WarehouseNumber: wh,
-      MovementType: tr.Bwlvs || '311',
+      MovementType: tr.Bwlvs || '',
       RequirementType: tr.Betyp || '',
       RequirementNumber: alphaOut(tr.Benum) || '',
       ReservationNo: alphaOut(tr.Rsnum) || '',
-      ReservationItem: '0001',
-      Material: item.Material,
-      MaterialName: item.MaterialDesc,
-      MaterialDescription: item.MaterialDesc,
-      Plant: item.Plant,
-      StorageLocation: item.StorageLocation,
-      DestinationStorageType: tr.Nltyp || item.DestStorageType || '921',
-      DestinationType: tr.Nltyp || item.DestStorageType || '921',
-      DestinationStorageBin: tr.Nlpla || item.DestStorageBin || 'TRANSFER',
-      DestinationBin: tr.Nlpla || item.DestStorageBin || 'TRANSFER',
-      SourceStorageType: tr.Vltyp || '911',
+      ReservationItem: '',
+      Material: sel.Material || '',
+      MaterialName: sel.MaterialDesc || '',
+      MaterialDescription: sel.MaterialDesc || '',
+      Plant: sel.Plant || '',
+      StorageLocation: sel.StorageLocation || '',
+      DestinationStorageType: tr.Nltyp || '',
+      DestinationType: tr.Nltyp || '',
+      DestinationStorageBin: tr.Nlpla || '',
+      DestinationBin: tr.Nlpla || '',
+      SourceStorageType: tr.Vltyp || '',
       SourceStorageBin: tr.Vlpla || '',
-      RequiredQuantity: item.RequiredQty,
-      TargetQty: item.RequiredQty,
-      ProcessedQuantity: item.ProcessedQty,
-      OpenQuantity: item.OpenQty,
-      OpenQty: item.OpenQty,
-      Unit: item.Unit,
-      Batch: item.Batch || '',
-      IsBatchManaged: Boolean(profile.isBatchManaged || item.Batch),
+      RequiredQuantity: sel.RequiredQty || 0,
+      TargetQty: sel.RequiredQty || 0,
+      ProcessedQuantity: sel.ProcessedQty || 0,
+      OpenQuantity: sel.OpenQty || 0,
+      OpenQty: sel.OpenQty || 0,
+      Unit: sel.Unit || '',
+      Batch: sel.Batch || '',
+      IsBatchManaged: Boolean(profile.isBatchManaged || sel.Batch),
       IsSerialManaged: Boolean(profile.isSerialManaged),
-      DeliveryCompleted: item.DeliveryCompleted,
-      Status: tr.Statu === 'E' ? '04' : '02',
-      StatusText: tr.Statu === 'E' ? 'Completed' : 'TR Auto-Created'
+      DeliveryCompleted: Boolean(sel.DeliveryCompleted),
+      Status: tr.Statu === 'E' ? STATUS.TO_CONFIRMED : STATUS.TR_CREATED,
+      StatusText: tr.Statu === 'E' ? 'Completed' : STATUS_TEXT[STATUS.TR_CREATED],
+      Items: open
     };
   }
 
   /**
-   * Confirm Transfer Order (wraps L_TO_CONFIRM)
+   * Confirm Transfer Order (wraps L_TO_CONFIRM). When SAP rejects the call, the TO's real state is read
+   * from LTAP-PQUIT: fully confirmed -> success, otherwise the SAP error is surfaced unchanged.
    */
   async confirmTO({ lgnum, toNumber, squit = 'X' } = {}) {
-    const wh = required(lgnum || 'W01', 'Warehouse', RE.lgnum);
-    const s4To = alphaIn(required(toNumber, 'Transfer Order number', /^\d{1,10}$/), 10);
+    const wh = warehouse(lgnum);
+    const s4To = sapKey(toNumber, 'tanum').padStart(10, '0');
     LOG.info(`Confirming Transfer Order ${alphaOut(s4To)} in warehouse ${wh}`);
+    await checkAuthorization(this.rfc, 'L_LGNUM', { LGNUM: wh });
 
     try {
       await this._rfc(
@@ -446,16 +454,10 @@ class TrToAdapter {
         `Confirm Transfer Order ${alphaOut(s4To)}`
       );
     } catch (err) {
-      if (err.message?.includes('055') || err.message?.toLowerCase().includes('already confirmed')) {
-        LOG.info(`Transfer Order ${alphaOut(s4To)} is already confirmed in SAP`);
-        return {
-          TransferOrder: alphaOut(s4To),
-          Success: true,
-          Confirmed: true,
-          Message: `Transfer Order ${alphaOut(s4To)} confirmed.`
-        };
-      }
-      throw err;
+      let confirmedInSap = false;
+      try { confirmedInSap = await isToFullyConfirmed(this.rfc, wh, s4To); } catch (_readErr) { /* keep the original error */ }
+      if (!confirmedInSap) throw err;
+      LOG.info(`Transfer Order ${alphaOut(s4To)} is already confirmed in SAP (LTAP-PQUIT)`);
     }
 
     return {
@@ -475,11 +477,13 @@ class TrToAdapter {
    *   04 = TO Confirmed (persisted after confirm succeeds)
    *   12 = TO Create Failed (error on create, retryable via create)
    *   13 = TO Confirm Failed (error on confirm, keeps TANUM, retryable via confirm only)
+   * A further TO for the remaining open quantity is allowed once earlier TOs are confirmed; it is blocked
+   * only while an unconfirmed TO item (LTAP-PQUIT blank) exists for the same TR item.
    */
   async createTOFromTR({
-    lgnum = 'W01',
+    lgnum = '',
     tbnum,
-    tbpos = '0001',
+    tbpos = '',
     qty,
     unit,
     batch = '',
@@ -494,12 +498,22 @@ class TrToAdapter {
     const quantity = Number(qty);
     if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
 
-    const wh = required(lgnum, 'Warehouse', RE.lgnum);
+    const wh = warehouse(lgnum);
     const tr = await this.getTR(tbnum, wh);
 
-    const sItemPos = alphaIn(tbpos || '1', 4);
-    const item = tr.Items.find((i) => i.Tbpos === sItemPos) || tr.Items.find((i) => i.OpenQty > 0) || tr.Items[0];
-    if (!item) throw httpError(404, `No item found for TR ${alphaOut(tbnum)}`);
+    const open = this._openItems(tr);
+    let item = null;
+    if (tbpos) {
+      const pos = sapKey(tbpos, 'tbpos').padStart(4, '0');
+      item = open.find((i) => i.Tbpos === pos);
+      if (!item) throw httpError(400, `TR ${alphaOut(tr.Tbnum)} has no open item ${pos}; open items: ${open.map((i) => i.Tbpos).join(', ') || 'none'}`);
+    } else if (open.length === 1) {
+      item = open[0];
+    } else if (!open.length) {
+      throw httpError(404, `Transfer Requirement ${alphaOut(tr.Tbnum)} has no open items`);
+    } else {
+      throw httpError(400, `TR ${alphaOut(tr.Tbnum)} has ${open.length} open items (${open.map((i) => i.Tbpos).join(', ')}); choose one (tbpos)`);
+    }
 
     if (quantity > item.OpenQty) {
       throw httpError(400, `Requested quantity (${quantity}) exceeds open TR quantity (${item.OpenQty} ${item.Unit})`);
@@ -509,83 +523,54 @@ class TrToAdapter {
     const profiles = await this._materialProfiles([item.Material], item.Plant);
     const profile = profiles[item.Material] || {};
 
-    if (profile.isBatchManaged && !batch && !item.Batch) {
+    const selectedBatch = sapKeyOpt(batch, 'batch') || item.Batch || '';
+    if (profile.isBatchManaged && !selectedBatch) {
       throw httpError(400, `Batch is mandatory for batch-managed material ${item.Material}`);
     }
 
+    const serialList = (Array.isArray(serials) ? serials : []).map((v) => sapKey(v, 'serial'));
     if (profile.isSerialManaged) {
-      if (!Array.isArray(serials) || serials.length === 0) {
+      if (serialList.length === 0) {
         throw httpError(400, `Serial numbers are mandatory for serial-managed material ${item.Material}`);
       }
-      if (serials.length !== Math.round(quantity)) {
-        throw httpError(400, `Number of serials (${serials.length}) must equal requested quantity (${quantity})`);
+      if (serialList.length !== Math.round(quantity)) {
+        throw httpError(400, `Number of serials (${serialList.length}) must equal requested quantity (${quantity})`);
       }
     }
 
-    const selectedBatch = batch || item.Batch || '';
-
-    // Guard: Never create a second TO when TANUM is already set for this process.
-    // Retry logic: status 12 retries create. Status 13 retries confirm only.
+    // Retry of a tracked, unconfirmed TO (status 03/13): confirm only, never create.
     let tanum = existingToNumber ? alphaOut(existingToNumber) : '';
-    let isRetryConfirmOnly = false;
-
-    if (tanum) {
-      if (status === '04') {
-        throw httpError(400, `Transfer Order ${tanum} is already confirmed for this process. Creating a second TO is blocked.`);
-      }
-      // Status 13 (or existing unconfirmed TO) retries confirm only
-      isRetryConfirmOnly = true;
-      LOG.info(`TANUM ${tanum} already exists on process; skipping create and retrying confirmation only.`);
-    }
+    const isRetryConfirmOnly = Boolean(tanum && UNCONFIRMED_TO.includes(String(status)));
+    if (tanum && !isRetryConfirmOnly) tanum = '';
 
     if (!isRetryConfirmOnly) {
+      // Guard: an unconfirmed TO item for this TR item (read from SAP) blocks another TO; confirmed TOs do not.
+      const pending = await this._rfc(
+        () => findUnconfirmedToItems(this.rfc, wh, tr.Tbnum, item.Tbpos),
+        `Check open Transfer Orders of TR ${alphaOut(tr.Tbnum)}`
+      );
+      if (pending.length) {
+        throw httpError(400, `Unconfirmed Transfer Order ${alphaOut(pending[0].TANUM)} exists for TR ${alphaOut(tr.Tbnum)} item ${item.Tbpos}; confirm it before creating another TO`);
+      }
+
+      await checkAuthorization(this.rfc, 'L_BWLVS', { LGNUM: wh, BWLVS: tr.Bwlvs });
+
       // Chained TO step: CREATE TO via Z_WM_TO_CREATE_FROM_TR, then CONFIRM TO via L_TO_CONFIRM as a real second call
       // TODO: Z_WM_TO_CREATE_FROM_TR supports IV_SQUIT = 'X' for immediate confirmation in one call, but chained 2-call architecture is enforced here.
       LOG.info(`Creating TO from TR ${tr.Tbnum} item ${item.Tbpos}, qty ${quantity} ${unit || item.Unit}`);
 
-      let sSourceType = item.SourceStorageType || tr.Vltyp || '';
-      let sSourceBin = item.SourceStorageBin || tr.Vlpla || '';
-      let sResolvedBatch = selectedBatch;
-
-      if (!sSourceType && this.rfc) {
-        try {
-          const s4Mat = /^\d+$/.test(item.Material) ? item.Material.padStart(18, '0') : item.Material;
-          const lquaWhere = [
-            `LGNUM = '${wh}'`,
-            `AND MATNR = '${s4Mat}'`,
-            "AND VERME > 0"
-          ];
-          if (sResolvedBatch) lquaWhere.push(`AND CHARG = '${sResolvedBatch}'`);
-          const quants = await this._rfc(
-            () => this.rfc.readTable('LQUA', ['LGTYP', 'LGPLA', 'CHARG', 'VERME'], lquaWhere, 5),
-            `Lookup available stock for material ${item.Material} in warehouse ${wh}`
-          );
-          if (quants && quants.length > 0) {
-            const preferred = quants.find((q) => q.LGTYP === '902') ||
-                              quants.find((q) => !['921', '911', '913', '904'].includes(q.LGTYP)) ||
-                              quants[0];
-            sSourceType = preferred.LGTYP;
-            sSourceBin = preferred.LGPLA;
-            if (!sResolvedBatch && preferred.CHARG?.trim()) {
-              sResolvedBatch = preferred.CHARG.trim();
-            }
-          }
-        } catch (_qErr) {
-          LOG.warn('Stock quant lookup note:', _qErr.message);
-        }
-      }
-
+      // Storage types/bins come from the TR header or the caller; blank lets SAP's search strategy decide.
       const itItems = [{
         TBPOS: item.Tbpos,
         ANFME: quantity.toFixed(3),
         ALTME: unit || item.Unit,
-        CHARG: sResolvedBatch,
-        LETYP: item.StorageUnitType || profile.storageUnitType || '',
-        NLTYP: item.DestStorageType || tr.Nltyp || '921',
-        NLPLA: item.DestStorageBin || tr.Nlpla || 'TRANSFER',
-        VLTYP: sSourceType,
-        VLPLA: sSourceBin,
-        VLENR: storageUnit || ''
+        CHARG: selectedBatch,
+        LETYP: '',
+        NLTYP: tr.Nltyp || '',
+        NLPLA: tr.Nlpla || '',
+        VLTYP: tr.Vltyp || '',
+        VLPLA: tr.Vlpla || '',
+        VLENR: storageUnit ? sapKey(storageUnit, 'lenum') : ''
       }];
 
       let res;
@@ -620,12 +605,8 @@ class TrToAdapter {
           );
         } else {
           // Business / customizing / authorization error from SAP: preserve and surface the real error
-          let msg = primaryErr.message || 'Error creating Transfer Order in SAP';
-          if (msg.includes('Data for storage type search is not defined')) {
-            msg = `SAP WM storage type search error: Stock removal search strategy is not defined in customizing (table T334T) for material ${item.Material} in warehouse ${wh}. Please select an open TR with configured storage search (e.g. TR 1000750) or configure T334T in SPRO.`;
-          }
-          const err = httpError(400, msg);
-          err.Status = '12';
+          const err = httpError(400, primaryErr.message || 'Error creating Transfer Order in SAP');
+          err.Status = STATUS.TO_ERROR;
           err.ErrorStep = 'LT04';
           throw err;
         }
@@ -637,12 +618,14 @@ class TrToAdapter {
           errMsg = res.ET_MESSAGES.map((m) => m.MESSAGE).filter(Boolean).join('; ');
         }
         const err = httpError(400, errMsg || `SAP did not create a Transfer Order for TR ${alphaOut(tr.Tbnum)}`);
-        err.Status = '12';
+        err.Status = STATUS.TO_ERROR;
         err.ErrorStep = 'LT04';
         throw err;
       }
 
       tanum = alphaOut(res.EV_TANUM);
+    } else {
+      LOG.info(`TANUM ${tanum} is tracked as unconfirmed (status ${status}); skipping create and retrying confirmation only.`);
     }
 
     // Step 2: Confirm TO as a real second call
@@ -659,37 +642,38 @@ class TrToAdapter {
       }
     }
 
-    const currentStatus = confirmed ? '04' : (autoConfirm ? '13' : '03');
-    const statusText = confirmed ? 'TO Confirmed' : (autoConfirm ? 'TO Confirmation Failed' : 'TO Created');
+    const currentStatus = confirmed ? STATUS.TO_CONFIRMED : (autoConfirm ? STATUS.TO_CONFIRM_ERROR : STATUS.TO_CREATED);
 
     return {
       TransferOrder: tanum,
       TransferRequirement: alphaOut(tr.Tbnum),
       TRItem: item.Tbpos,
       ReservationNo: alphaOut(tr.Rsnum) || '',
-      ReservationItem: '0001',
+      ReservationItem: '',
       MovementType: tr.Bwlvs || '',
       Status: currentStatus,
-      StatusText: statusText,
+      StatusText: STATUS_TEXT[currentStatus],
       Confirmed: confirmed,
       IsConfirmed: confirmed,
       ConfirmationNumber: confirmed ? tanum : '',
-      ConfirmedBy: confirmed ? (process.env.S4_USERNAME || 'KHUSHAL') : '',
+      ConfirmedBy: confirmed ? (process.env.S4_USERNAME || '') : '',
       ErrorStep: confirmed ? '' : (autoConfirm ? 'LT12' : ''),
       ErrorMessage: confirmed ? '' : (confirmErr?.message || ''),
       Material: item.Material,
       MaterialName: item.MaterialDesc,
+      Plant: item.Plant,
+      StorageLocation: item.StorageLocation,
       Quantity: quantity,
       ConfirmedQuantity: confirmed ? (confMenge || quantity) : 0,
       Unit: unit || item.Unit,
       Batch: selectedBatch,
-      Serials: serials || [],
+      Serials: serialList,
       Success: confirmed || !autoConfirm,
       Message: confirmed
         ? `Transfer Order ${tanum} created and confirmed successfully.`
         : (autoConfirm
-            ? `Transfer Order ${tanum} created, but confirmation failed (status 13): ${confirmErr?.message}`
-            : `Transfer Order ${tanum} created successfully (status 03).`)
+            ? `Transfer Order ${tanum} created, but confirmation failed (status ${STATUS.TO_CONFIRM_ERROR}): ${confirmErr?.message}`
+            : `Transfer Order ${tanum} created successfully (status ${STATUS.TO_CREATED}).`)
     };
   }
 }

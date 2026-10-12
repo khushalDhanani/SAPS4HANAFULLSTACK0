@@ -4,16 +4,16 @@
  * Unit Test Suite for Chunk 5: Step 3 Auto MIGO Posting & Retry
  * Validates:
  * 1. Movement type to GM_CODE and item fields mapping:
- *    - 201: GM_CODE '03' (or '06') + COSTCENTER + NO_MORE_GR = 'X' -> "Stock consumed to Cost Center <cc>"
- *    - 241: GM_CODE '03' (or '06') + ASSET_NO/SUB_NUMBER + NO_MORE_GR = 'X' -> "Stock consumed to Asset <asset>"
- *    - 311: GM_CODE '04' (or '06') + MOVE_STLOC + NO_MORE_GR = 'X' -> "Stock transferred to Storage Location <sloc>"
- *    - 301: GM_CODE '04' (or '06') + MOVE_PLANT + NO_MORE_GR = 'X' -> "Stock transferred to Plant <plant>"
+ *    - 201: GM_CODE '03' COSTCENTER -> "Stock consumed to Cost Center <cc>"
+ *    - 241: GM_CODE '03' ASSET_NO/SUB_NUMBER -> "Stock consumed to Asset <asset>"
+ *    - 311: GM_CODE '04' MOVE_STLOC -> "Stock transferred to Storage Location <sloc>"
+ *    - 301: GM_CODE '04' MOVE_PLANT -> "Stock transferred to Plant <plant>"
  * 2. Reservation closure indicator:
- *    - BAPI_GOODSMVT_ITEM contains NO_MORE_GR = 'X' referencing RESERV_NO and RES_ITEM
+ *    - NO_MORE_GR = 'X' only when completeReservation is true; RESERV_NO and RES_ITEM always when a reservation exists
  * 3. Rollback & ERROR status on failure:
  *    - BAPI_TRANSACTION_ROLLBACK called when BAPI_GOODSMVT_CREATE returns error
  * 4. Chained Auto-MIGO trigger after TO confirmation (createTOFromTR with autoPostMigo: true)
- * 5. Standalone MIGO Posting and Retry capability (Status 99 -> 05)
+ * 5. Standalone MIGO Posting and Retry capability (Status 90 -> 05)
  */
 
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
@@ -26,7 +26,8 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
   beforeEach(() => {
     mockRfc = {
       session: jest.fn(async (fn) => fn(mockRfc.call)),
-      call: jest.fn()
+      call: jest.fn(),
+      readTable: jest.fn().mockResolvedValue([]) // RESB / LTAP / MARC reads: nothing found, material not batch-managed
     };
     adapter = new ReservationProcessAdapter({ rfc: mockRfc });
   });
@@ -51,7 +52,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         quantity: 5,
         unit: 'NOS',
         costCenter: '1011201301',
-        deriveGmCode: true
+        completeReservation: true // operator ticked "complete reservation" -> NO_MORE_GR
       });
 
       expect(res.success).toBe(true);
@@ -77,7 +78,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       );
     });
 
-    test('Movement 241: maps GM_CODE 03, ASSET_NO, SUB_NUMBER, and closes reservation', async () => {
+    test('Movement 241: maps GM_CODE 03, ASSET_NO, SUB_NUMBER, without NO_MORE_GR unless completeReservation is set', async () => {
       mockRfc.call
         .mockResolvedValueOnce({
           MATERIALDOCUMENT: '4900050241',
@@ -97,13 +98,13 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         unit: 'NOS',
         assetNo: '000000400092',
         subNumber: '0000',
-        deriveGmCode: true
       });
 
       expect(res.success).toBe(true);
       expect(res.materialDocument).toBe('4900050241');
       expect(res.stockEffect).toBe('Stock consumed to Asset 000000400092/0000');
 
+      expect(mockRfc.call.mock.calls[0][1].GOODSMVT_ITEM[0].NO_MORE_GR).toBeUndefined();
       expect(mockRfc.call).toHaveBeenCalledWith(
         'BAPI_GOODSMVT_CREATE',
         expect.objectContaining({
@@ -114,15 +115,14 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
               ASSET_NO: '000000400092',
               SUB_NUMBER: '0000',
               RESERV_NO: '0000524981',
-              RES_ITEM: '0001',
-              NO_MORE_GR: 'X'
+              RES_ITEM: '0001'
             })
           ]
         })
       );
     });
 
-    test('Movement 311: maps GM_CODE 04, MOVE_STLOC, and closes reservation', async () => {
+    test('Movement 311: maps GM_CODE 04, MOVE_STLOC, without NO_MORE_GR unless completeReservation is set', async () => {
       mockRfc.call
         .mockResolvedValueOnce({
           MATERIALDOCUMENT: '4900050311',
@@ -141,7 +141,6 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         receivingStorageLocation: 'CS01',
         quantity: 2,
         unit: 'NOS',
-        deriveGmCode: true
       });
 
       expect(res.success).toBe(true);
@@ -157,15 +156,14 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
               MOVE_TYPE: '311',
               MOVE_STLOC: 'CS01',
               RESERV_NO: '0000524979',
-              RES_ITEM: '0001',
-              NO_MORE_GR: 'X'
+              RES_ITEM: '0001'
             })
           ]
         })
       );
     });
 
-    test('Movement 301: maps GM_CODE 04, MOVE_PLANT, and closes reservation', async () => {
+    test('Movement 301: maps GM_CODE 04, MOVE_PLANT, without NO_MORE_GR unless completeReservation is set', async () => {
       mockRfc.call
         .mockResolvedValueOnce({
           MATERIALDOCUMENT: '4900050301',
@@ -184,7 +182,6 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         receivingPlant: '1130',
         quantity: 4,
         unit: 'NOS',
-        deriveGmCode: true
       });
 
       expect(res.success).toBe(true);
@@ -200,8 +197,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
               MOVE_TYPE: '301',
               MOVE_PLANT: '1130',
               RESERV_NO: '0000524982',
-              RES_ITEM: '0001',
-              NO_MORE_GR: 'X'
+              RES_ITEM: '0001'
             })
           ]
         })
@@ -228,7 +224,6 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         quantity: 1,
         unit: 'KG',
         batch: 'INJW260001',
-        deriveGmCode: true
       });
 
       expect(res.success).toBe(true);
@@ -276,7 +271,6 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         receivingPlant: '1110',
         quantity: 1,
         unit: 'KG',
-        deriveGmCode: true
       });
 
       expect(res.success).toBe(true);
@@ -312,8 +306,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           receivingStorageLocation: 'CS01',
           quantity: 5,
           unit: 'NOS',
-          deriveGmCode: true
-        })
+          })
       ).rejects.toThrow('Deficit of BA Unrestricted-use stock 5 EA');
 
       expect(mockRfc.call).toHaveBeenCalledWith('BAPI_TRANSACTION_ROLLBACK', {});
@@ -339,7 +332,8 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       };
 
       mockResAdapter = {
-        postGoodsMovement: jest.fn()
+        postGoodsMovement: jest.fn(),
+        checkAuthorization: jest.fn().mockResolvedValue(true)
       };
 
       TrToHandler.init(mockSrv, {
@@ -360,6 +354,9 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         Confirmed: true,
         Quantity: 5,
         Unit: 'EA',
+        MovementType: '311',
+        Plant: '1120',
+        StorageLocation: 'HS01',
         Material: '8000000023',
         Batch: 'INJW260001'
       });
@@ -394,12 +391,11 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         expect.objectContaining({
           reservationNo: '0000524979',
           batch: 'INJW260001',
-          deriveGmCode: true
-        })
+          })
       );
     });
 
-    test('Handles MIGO failure in chain by marking status 99 while preserving confirmed TO', async () => {
+    test('Handles MIGO failure in chain by marking status 90 (GI error) while preserving confirmed TO', async () => {
       mockTrAdapter.createTOFromTR.mockResolvedValueOnce({
         TransferOrder: '1012976',
         TransferRequirement: '1001839',
@@ -410,6 +406,9 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         Confirmed: true,
         Quantity: 5,
         Unit: 'EA',
+        MovementType: '311',
+        Plant: '1120',
+        StorageLocation: 'HS01',
         Material: '8000000023'
       });
 
@@ -430,8 +429,8 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       const result = await handlers.createTOFromTR(req);
 
       expect(result.TransferOrder).toBe('1012976');
-      expect(result.Status).toBe('99');
-      expect(result.StatusText).toBe('MIGO Failed (Retry Available)');
+      expect(result.Status).toBe('90');
+      expect(result.StatusText).toBe('Goods Issue Error');
       expect(result.ErrorMessage).toBe('Posting period 10/2026 closed');
     });
 
@@ -451,6 +450,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           MovementType: '201',
           CostCenter: '1011201301',
           Material: '8000000023',
+          Plant: '1120',
           Quantity: 5,
           Unit: 'EA',
           Batch: 'INJW260001'

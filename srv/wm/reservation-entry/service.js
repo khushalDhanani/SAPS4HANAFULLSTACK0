@@ -3,6 +3,9 @@
 const cds = require('@sap/cds');
 const ReservationProcessAdapter = require('../../integration/s4hana/wm/ReservationProcessAdapter');
 const GoodsIssueAdapter = require('../../integration/s4hana/wm/GoodsIssueAdapter');
+const { findUnconfirmedToItems } = require('../../integration/s4hana/wm/toState');
+const { STATUS, STEP_ERROR, ERROR_STATUSES, UNCONFIRMED_TO } = require('../../common/wmStatus');
+const { sapKey, sapKeyOpt } = require('../../integration/s4hana/sapKey');
 
 module.exports = class ReservationEntryService extends cds.ApplicationService {
   async init() {
@@ -28,6 +31,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       if (!StorageLocation) req.error(400, 'StorageLocation is mandatory');
       if (!Material) req.error(400, 'Material is mandatory');
       if (!Quantity || Number(Quantity) <= 0) req.error(400, 'Quantity must be greater than 0');
+      if (!data.Unit) req.error(400, 'Unit is mandatory');
 
       switch (MovementType) {
         case '201':
@@ -59,6 +63,21 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
     }
 
+    /** Warehouse from the request, else from plant/storage location assignment (T320); never a literal. */
+    async function warehouseFor(plant, sloc, given) {
+      if (given) return sapKey(given, 'lgnum');
+      const rows = await adapter.rfc.readTable('T320', ['LGNUM'], [`( WERKS = '${sapKey(plant, 'plant')}' AND LGORT = '${sapKey(sloc, 'lgort')}' )`], 1);
+      const wh = rows?.[0]?.LGNUM?.trim();
+      if (!wh) {
+        const e = new Error(`No warehouse number assigned to plant ${plant} / storage location ${sloc} (T320)`);
+        e.status = 400;
+        throw e;
+      }
+      return wh;
+    }
+    const lockEntry = (key) => SELECT.one.from(ReservationEntries).where(key).forUpdate();
+    const logRow = (row) => INSERT.into(ReservationLogs).entries({ ID: cds.utils.uuid(), ...row });
+
     // Common execution handler for creating reservation and auto-TR
     async function executeReservationAndAutoTR(payload, req) {
       validateMovementType(payload, req);
@@ -77,7 +96,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         CostCenter,
         AssetNo,
         SubNumber,
-        WarehouseNumber = 'W01'
+        WarehouseNumber
       } = payload;
 
       let resResult;
@@ -89,7 +108,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           storageLocation: StorageLocation,
           material: Material,
           quantity: Quantity,
-          unit: Unit || 'KG',
+          unit: Unit,
           receivingPlant: ReceivingPlant || (MovementType === '311' ? Plant : undefined),
           receivingStorageLocation: ReceivingStorageLocation,
           costCenter: CostCenter,
@@ -114,7 +133,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           reservationNo: resNo,
           reservationItem: resItem,
           step: 'MB21',
-          status: '01',
+          status: STATUS.RES_CREATED,
           messageType: 'S',
           messageId: 'M7',
           messageNo: '060',
@@ -134,7 +153,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         ExternalId: extId,
         SubObject: 'TRACK',
         Step: 'MB21',
-        Status: '01',
+        Status: STATUS.RES_CREATED,
         MessageType: 'S',
         MessageId: 'M7',
         MessageNo: '060',
@@ -143,23 +162,14 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       // Step 2: Auto-create Transfer Requirement (background/immediate step)
       let trNumber = '';
-      let currentStatus = '01';
+      let currentStatus = STATUS.RES_CREATED;
       let trError = null;
-      let determinedWh = WarehouseNumber;
-      if (!determinedWh || determinedWh === 'W01') {
-        try {
-          const t320 = await adapter.rfc.readTable('T320', ['LGNUM'], [`( WERKS = '${Plant}' AND LGORT = '${StorageLocation}' )`], 1);
-          if (t320 && t320[0] && t320[0].LGNUM) {
-            determinedWh = t320[0].LGNUM;
-          }
-        } catch (_t320Err) {
-          determinedWh = WarehouseNumber || 'W01';
-        }
-      }
+      let determinedWh = '';
 
       try {
+        determinedWh = await warehouseFor(Plant, StorageLocation, WarehouseNumber);
         const trResult = await adapter.createTransferRequirement({
-          warehouseNumber: determinedWh || WarehouseNumber || 'W01',
+          warehouseNumber: determinedWh,
           wmMovementType: MovementType,
           movementType: MovementType,
           isTransferPosting: MovementType === '311' || MovementType === '301',
@@ -167,13 +177,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           plant: Plant,
           storageLocation: StorageLocation,
           quantity: Quantity,
-          unit: Unit || 'KG',
+          unit: Unit,
           reservationNo: resNo,
           reservationItem: resItem
         });
 
         trNumber = trResult.trNumberRaw || String(trResult.trNumber).padStart(10, '0');
-        currentStatus = '02'; // TR Created
+        currentStatus = STATUS.TR_CREATED;
 
         // Log Step 2 (LB01)
         await INSERT.into(ReservationLogs).entries({
@@ -184,38 +194,29 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           ExternalId: extId,
           SubObject: 'TRACK',
           Step: 'LB01',
-          Status: '02',
+          Status: STATUS.TR_CREATED,
           MessageType: 'S',
           MessageId: 'L3',
           MessageNo: '001',
           MessageText: `Transfer Requirement ${trNumber} auto-created via L_TR_CREATE`
         });
       } catch (err) {
-        trError = err.message;
-        const isUcon = err.code === 'UCON_BLOCKED' || (err.message && (err.message.includes('2295840') || err.message.includes('Incompatible Call Rejected')));
-        const cleanMsg = isUcon
-          ? 'Auto TR creation deferred: restricted by SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)'
-          : `Auto TR creation deferred/failed: ${err.message}`;
-
-        // Reservation is created, but TR failed: log warning
-        await INSERT.into(ReservationLogs).entries({
-          ID: cds.utils.uuid(),
+        // Reservation exists but the backend created no TR: status 11 (TR error), a backend issue to fix in SAP.
+        currentStatus = STATUS.TR_ERROR;
+        trError = `TR creation failed in SAP backend: ${err.message}`;
+        await logRow({
           ReservationNo: resNo,
           ReservationItem: resItem,
           LogHandle: sLogHandle,
           ExternalId: extId,
           SubObject: 'TRACK',
           Step: 'LB01',
-          Status: '01',
-          MessageType: 'W',
+          Status: STATUS.TR_ERROR,
+          MessageType: 'E',
           MessageId: 'L3',
           MessageNo: '999',
-          MessageText: cleanMsg
+          MessageText: trError
         });
-
-        if (isUcon) {
-          trError = 'TR deferred: restricted under SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)';
-        }
       }
 
       // Step 3: Upsert into ReservationTrack
@@ -223,13 +224,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         ReservationNo: resNo,
         ReservationItem: resItem,
         MovementType,
-        WarehouseNumber: determinedWh || WarehouseNumber || 'W01',
+        WarehouseNumber: determinedWh || WarehouseNumber || '',
         Plant,
         StorageLocation,
         Material,
         MaterialName: MaterialName || '',
         Quantity: Number(Quantity),
-        Unit: Unit || 'NOS',
+        Unit,
         ReceivingPlant: ReceivingPlant || '',
         ReceivingStorageLocation: ReceivingStorageLocation || '',
         CostCenter: CostCenter || '',
@@ -239,6 +240,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         LogHandle: sLogHandle,
         ExternalId: extId,
         Status_code: currentStatus,
+        ErrorStep: trError ? 'LB01' : '',
         ErrorMessage: trError || ''
       };
 
@@ -272,7 +274,62 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       return await executeReservationAndAutoTR(req.data, req);
     });
 
-    // Chunk 5: Action handler for MIGO Goods Movement posting
+    /** Goods movement for a tracked reservation item (step MIGO). Shares one adapter path with tr-to. */
+    async function postMigoForTrack(track, data, req, { sLogHandle, extId, subObject }) {
+      const sResNo = track.ReservationNo;
+      const sResItem = track.ReservationItem;
+      const key = { ReservationNo: sResNo, ReservationItem: sResItem };
+      const sMvt = data.MovementType || track.MovementType;
+      const sPlant = data.Plant || track.Plant;
+      // PROCESS_ID of this GI step; persisted before posting so a retry finds an already posted document.
+      const processId = data.ProcessId || track.ProcessId || cds.utils.uuid();
+      if (track.ProcessId !== processId) await UPDATE(ReservationEntries).set({ ProcessId: processId }).where(key);
+
+      await adapter.checkAuthorization('M_MSEG_BWA', { ACTVT: '01', BWART: sapKey(sMvt, 'mvt') });
+      await adapter.checkAuthorization('M_MSEG_WWA', { ACTVT: '01', WERKS: sapKey(sPlant, 'plant') });
+
+      const migoRes = await adapter.postGoodsMovement({
+        reservationNo: sResNo,
+        reservationItem: sResItem,
+        movementType: sMvt,
+        material: data.Material || track.Material,
+        plant: sPlant,
+        storageLocation: data.StorageLocation || track.StorageLocation,
+        quantity: data.Quantity != null ? data.Quantity : track.Quantity,
+        unit: data.Unit || track.Unit,
+        receivingPlant: data.ReceivingPlant || track.ReceivingPlant,
+        receivingStorageLocation: data.ReceivingStorageLocation || track.ReceivingStorageLocation,
+        costCenter: data.CostCenter || track.CostCenter,
+        assetNo: data.AssetNo || track.AssetNo,
+        subNumber: data.SubNumber || track.SubNumber,
+        transferOrder: track.TransferOrder || '',
+        batch: data.Batch || data.batch || track.Batch || '',
+        serials: data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : (track.SerialNo ? [track.SerialNo] : [])),
+        completeReservation: data.CompleteReservation === true,
+        processId
+      });
+
+      await UPDATE(ReservationEntries).set({
+        MaterialDocument: migoRes.materialDocument,
+        MaterialDocYear: migoRes.materialDocYear,
+        Status_code: STATUS.GI_POSTED,
+        ErrorMessage: '',
+        ErrorStep: '',
+        LogHandle: sLogHandle,
+        ExternalId: extId
+      }).where(key);
+
+      await logRow({
+        ...key, LogHandle: sLogHandle, ExternalId: extId, SubObject: subObject, ProcessId: processId, DocumentNo: migoRes.materialDocument,
+        Step: 'MIGO', Status: STATUS.GI_POSTED, MessageType: 'S', MessageId: 'M7', MessageNo: '060',
+        MessageText: migoRes.alreadyPosted
+          ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for process ${processId}; not posted again`
+          : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect})`
+      });
+      return migoRes;
+    }
+
+    // Action handler for MIGO Goods Movement posting
     this.on('postMigoGoodsMovement', async (req) => {
       const data = req.data || {};
       const sResNo = data.ReservationNo;
@@ -281,17 +338,15 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       if (!sResNo) {
         return req.error(400, 'ReservationNo is mandatory for MIGO posting');
       }
+      const key = { ReservationNo: sResNo, ReservationItem: sResItem };
 
-      // Read current record to fill in any omitted fields
-      let existing = await SELECT.one.from(ReservationEntries).where({
-        ReservationNo: sResNo,
-        ReservationItem: sResItem
-      });
+      // Read (and lock) the current record to fill in any omitted fields
+      let existing = await lockEntry(key);
 
       if (!existing && adapter.rfc) {
         try {
-          const s4Rsnum = String(sResNo).padStart(10, '0');
-          const s4Rspos = String(sResItem).padStart(4, '0');
+          const s4Rsnum = sapKey(sResNo, 'rsnum').padStart(10, '0');
+          const s4Rspos = sapKey(sResItem, 'rspos').padStart(4, '0');
           const [rkpfRows, resbRows] = await Promise.all([
             adapter.rfc.readTable('RKPF', ['RSNUM', 'BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'USNAM'], [`RSNUM = '${s4Rsnum}'`], 1),
             adapter.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
@@ -300,17 +355,17 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             existing = {
               ReservationNo: sResNo,
               ReservationItem: sResItem,
-              MovementType: rkpfRows?.[0]?.BWART || data.MovementType || '201',
+              MovementType: rkpfRows?.[0]?.BWART || data.MovementType || '',
               CostCenter: rkpfRows?.[0]?.KOSTL || data.CostCenter || '',
               AssetNo: rkpfRows?.[0]?.ANLN1 || data.AssetNo || '',
               SubNumber: rkpfRows?.[0]?.ANLN2 || data.SubNumber || '',
               Material: resbRows[0].MATNR,
               Plant: resbRows[0].WERKS,
               StorageLocation: resbRows[0].LGORT,
-              Quantity: parseFloat(resbRows[0].BDMNG) || 1,
-              Unit: resbRows[0].MEINS || 'NOS',
-              WarehouseNumber: 'W01',
-              Status_code: '04'
+              Quantity: parseFloat(resbRows[0].BDMNG) || 0,
+              Unit: resbRows[0].MEINS || '',
+              WarehouseNumber: await warehouseFor(resbRows[0].WERKS, resbRows[0].LGORT, data.WarehouseNumber),
+              Status_code: STATUS.TO_CONFIRMED
             };
             await INSERT.into(ReservationEntries).entries(existing);
           }
@@ -318,147 +373,36 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           // ignore DDIC read error
         }
       }
+      if (!existing) return req.error(404, `Reservation ${sResNo}/${sResItem} not found`);
 
-      const sMvt = data.MovementType || existing?.MovementType;
-      const sMat = data.Material || existing?.Material;
-      const sPlant = data.Plant || existing?.Plant;
-      const sSLoc = data.StorageLocation || existing?.StorageLocation;
-      const nQty = data.Quantity != null ? data.Quantity : existing?.Quantity;
-      const sUnit = data.Unit || existing?.Unit || 'NOS';
-      const sRecPlant = data.ReceivingPlant || existing?.ReceivingPlant;
-      const sRecSLoc = data.ReceivingStorageLocation || existing?.ReceivingStorageLocation;
-      const sCostCenter = data.CostCenter || existing?.CostCenter;
-      const sAssetNo = data.AssetNo || existing?.AssetNo;
-      const sSubNumber = data.SubNumber || existing?.SubNumber;
       const extId = `${sResNo}/${sResItem}`;
       const sLogHandle = existing?.LogHandle || `LOG_${Date.now().toString(36).toUpperCase()}`;
 
-      let sBatch = data.Batch || data.batch || existing?.Batch || '';
-      if (!sBatch && adapter.rfc) {
-        try {
-          const s4Rsnum = String(sResNo).padStart(10, '0');
-          const s4Rspos = String(sResItem).padStart(4, '0');
-          const resbBatch = await adapter.rfc.readTable('RESB', ['CHARG'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1);
-          if (resbBatch?.[0]?.CHARG?.trim()) {
-            sBatch = resbBatch[0].CHARG.trim();
-          } else {
-            const cleanMat = String(sMat || '').replace(/^0+/, '');
-            const lquaBatch = await adapter.rfc.readTable('LQUA', ['CHARG'], [
-              "LGNUM = 'W01'",
-              `AND MATNR LIKE '%${cleanMat}%'`,
-              "AND LGTYP = '921'",
-              "AND VERME > 0"
-            ], 1);
-            if (lquaBatch?.[0]?.CHARG?.trim()) {
-              sBatch = lquaBatch[0].CHARG.trim();
-            }
-          }
-        } catch (_bErr) {
-          // ignore batch lookup error
-        }
-      }
-
-      const sSerials = data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : (existing?.SerialNo ? [existing.SerialNo] : []));
-
       try {
-        const migoRes = await adapter.postGoodsMovement({
-          reservationNo: sResNo,
-          reservationItem: sResItem,
-          movementType: sMvt,
-          material: sMat,
-          plant: sPlant,
-          storageLocation: sSLoc,
-          quantity: nQty,
-          unit: sUnit,
-          receivingPlant: sRecPlant,
-          receivingStorageLocation: sRecSLoc,
-          costCenter: sCostCenter,
-          assetNo: sAssetNo,
-          subNumber: sSubNumber,
-          batch: sBatch,
-          deriveGmCode: true,
-          serials: sSerials
-        });
-
-        // Update status to 05 (Goods Issue Posted)
-        await UPDATE(ReservationEntries)
-          .set({
-            MaterialDocument: migoRes.materialDocument,
-            MaterialDocYear: migoRes.materialDocYear,
-            Status_code: '05',
-            ErrorMessage: '',
-            LogHandle: sLogHandle,
-            ExternalId: extId
-          })
-          .where({
-            ReservationNo: sResNo,
-            ReservationItem: sResItem
-          });
-
-        // Insert log entry
-        await INSERT.into(ReservationLogs).entries({
-          ID: cds.utils.uuid(),
-          ReservationNo: sResNo,
-          ReservationItem: sResItem,
-          LogHandle: sLogHandle,
-          ExternalId: extId,
-          SubObject: 'PROCESS',
-          Step: 'MIGO',
-          Status: '05',
-          MessageType: 'S',
-          MessageId: 'M7',
-          MessageNo: '060',
-          MessageText: `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect})`
-        });
-
-        const updated = await SELECT.one.from(ReservationEntries).where({
-          ReservationNo: sResNo,
-          ReservationItem: sResItem
-        });
-        return updated || {
-          ReservationNo: sResNo,
-          ReservationItem: sResItem,
-          MaterialDocument: migoRes.materialDocument,
-          MaterialDocYear: migoRes.materialDocYear,
-          Status_code: '05'
-        };
+        const migoRes = await postMigoForTrack(existing, data, req, { sLogHandle, extId, subObject: 'PROCESS' });
+        const updated = await SELECT.one.from(ReservationEntries).where(key);
+        return updated || { ...key, MaterialDocument: migoRes.materialDocument, MaterialDocYear: migoRes.materialDocYear, Status_code: STATUS.GI_POSTED };
       } catch (err) {
-        // Rollback already executed by adapter; update status to 99 (Error) and record log
-        await UPDATE(ReservationEntries)
-          .set({
-            Status_code: '99',
-            ErrorMessage: err.message,
-            LogHandle: sLogHandle,
-            ExternalId: extId
-          })
-          .where({
-            ReservationNo: sResNo,
-            ReservationItem: sResItem
-          });
-
-        await INSERT.into(ReservationLogs).entries({
-          ID: cds.utils.uuid(),
-          ReservationNo: sResNo,
-          ReservationItem: sResItem,
+        // Rollback already executed by adapter; status 90 (GI error, retryable) and log
+        await UPDATE(ReservationEntries).set({
+          Status_code: STATUS.GI_ERROR,
+          ErrorMessage: err.message,
+          ErrorStep: 'MIGO',
           LogHandle: sLogHandle,
-          ExternalId: extId,
-          SubObject: 'PROCESS',
-          Step: 'MIGO',
-          Status: '99',
-          MessageType: 'E',
-          MessageId: 'M7',
-          MessageNo: '021',
-          MessageText: `MIGO failed: ${err.message}`
+          ExternalId: extId
+        }).where(key);
+
+        await logRow({
+          ...key, LogHandle: sLogHandle, ExternalId: extId, SubObject: 'PROCESS', ProcessId: existing.ProcessId || null, DocumentNo: '',
+          Step: 'MIGO', Status: STATUS.GI_ERROR, MessageType: 'E', MessageId: 'M7', MessageNo: '021',
+          MessageText: `Goods movement failed: ${err.message}`
         });
 
-        return await SELECT.one.from(ReservationEntries).where({
-          ReservationNo: sResNo,
-          ReservationItem: sResItem
-        });
+        return await SELECT.one.from(ReservationEntries).where(key);
       }
     });
 
-    // Chunk 6: Retry Action per failed step
+    // Retry Action per failed step
     this.on('retryStep', async (req) => {
       const data = req.data || {};
       const sResNo = data.ReservationNo;
@@ -468,29 +412,34 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       if (!sResNo) {
         return req.error(400, 'ReservationNo is mandatory for retryStep');
       }
+      const key = { ReservationNo: sResNo, ReservationItem: sResItem };
 
-      const track = await SELECT.one.from(ReservationEntries).where({
-        ReservationNo: sResNo,
-        ReservationItem: sResItem
-      });
+      const track = await lockEntry(key);
 
       if (!track) {
         return req.error(404, `Reservation ${sResNo}/${sResItem} not found`);
       }
 
-      // Auto-detect step if not specified
+      // Auto-detect step if not specified: the failed step's status, else the next open step
       if (!requestedStep || requestedStep === 'AUTO') {
-        if (!track.TransferRequirement || track.Status_code === '01') {
+        const byStatus = { [STATUS.TR_ERROR]: 'LB01', [STATUS.TO_ERROR]: 'LT04', [STATUS.TO_CONFIRM_ERROR]: 'LT12', [STATUS.GI_ERROR]: 'MIGO' }[track.Status_code];
+        if (byStatus) {
+          requestedStep = byStatus;
+        } else if (!track.TransferRequirement || track.Status_code === STATUS.RES_CREATED) {
           requestedStep = 'LB01';
-        } else if (!track.TransferOrder || track.Status_code === '02') {
+        } else if (!track.TransferOrder || track.Status_code === STATUS.TR_CREATED) {
           requestedStep = 'LT04';
-        } else if (track.Status_code === '03') {
+        } else if (track.Status_code === STATUS.TO_CREATED) {
           requestedStep = 'LT12';
-        } else if (!track.MaterialDocument || track.Status_code === '04' || track.Status_code === '99') {
-          requestedStep = 'MIGO';
         } else {
           requestedStep = 'MIGO';
         }
+      }
+      if (!STEP_ERROR[requestedStep]) {
+        return req.error(400, `Unsupported retry step: '${requestedStep}'. Supported: LB01, LT04, LT12, MIGO`);
+      }
+      if (requestedStep === 'MIGO' && track.MaterialDocument && track.Status_code === STATUS.GI_POSTED) {
+        return req.error(400, `Material Document ${track.MaterialDocument} is already posted for reservation ${sResNo}/${sResItem}`);
       }
 
       const extId = `${sResNo}/${sResItem}`;
@@ -509,302 +458,125 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         slg1Log = { logHandle: `LOG_${Date.now().toString(36).toUpperCase()}` };
       }
       const sLogHandle = slg1Log?.logHandle || track.LogHandle || '';
+      const common = { ...key, LogHandle: sLogHandle, ExternalId: extId, SubObject: 'PROCESS' };
+      const fail = async (status, step, message, processId = track.ProcessId || null) => {
+        await UPDATE(ReservationEntries).set({ Status_code: status, ErrorMessage: message, ErrorStep: step, LogHandle: sLogHandle, ExternalId: extId }).where(key);
+        await logRow({ ...common, ProcessId: processId, DocumentNo: '', Step: step, Status: status, MessageType: 'E', MessageId: 'L3', MessageNo: '999', MessageText: message });
+      };
+      const wh = () => {
+        if (!track.WarehouseNumber) throw Object.assign(new Error(`Reservation ${sResNo}/${sResItem} has no warehouse number on its tracking record`), { status: 400 });
+        return track.WarehouseNumber;
+      };
 
       try {
         if (requestedStep === 'LB01') {
-          const trResult = await adapter.createTransferRequirement({
-            warehouseNumber: track.WarehouseNumber || 'W01',
-            wmMovementType: track.MovementType || '311',
-            movementType: track.MovementType,
-            isTransferPosting: track.MovementType === '311' || track.MovementType === '301',
-            material: track.Material,
-            plant: track.Plant || '1120',
-            storageLocation: track.StorageLocation || 'HS01',
-            quantity: track.Quantity,
-            unit: track.Unit || 'EA',
-            reservationNo: sResNo,
-            reservationItem: sResItem
-          });
+          let trResult;
+          try {
+            trResult = await adapter.createTransferRequirement({
+              warehouseNumber: track.WarehouseNumber || await warehouseFor(track.Plant, track.StorageLocation, ''),
+              wmMovementType: track.MovementType,
+              movementType: track.MovementType,
+              isTransferPosting: track.MovementType === '311' || track.MovementType === '301',
+              material: track.Material,
+              plant: track.Plant,
+              storageLocation: track.StorageLocation,
+              quantity: track.Quantity,
+              unit: track.Unit,
+              reservationNo: sResNo,
+              reservationItem: sResItem
+            });
+          } catch (trErr) {
+            await fail(STATUS.TR_ERROR, 'LB01', `TR creation failed in SAP backend: ${trErr.message}`);
+            throw Object.assign(trErr, { handled: true });
+          }
 
           const trNo = trResult.trNumberRaw || String(trResult.trNumber).padStart(10, '0');
 
           await UPDATE(ReservationEntries).set({
             TransferRequirement: trNo,
-            Status_code: '02',
+            Status_code: STATUS.TR_CREATED,
             ErrorMessage: '',
+            ErrorStep: '',
             LogHandle: sLogHandle,
             ExternalId: extId
-          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+          }).where(key);
 
-          await INSERT.into(ReservationLogs).entries({
-            ID: cds.utils.uuid(),
-            ReservationNo: sResNo,
-            ReservationItem: sResItem,
-            LogHandle: sLogHandle,
-            ExternalId: extId,
-            SubObject: 'PROCESS',
-            Step: 'LB01',
-            Status: '02',
-            MessageType: 'S',
-            MessageId: 'L3',
-            MessageNo: '001',
-            MessageText: `Retry successful: Transfer Requirement ${trNo} created via L_TR_CREATE`
-          });
-        } else if (requestedStep === 'LT04') {
-          // Never create a second TO when TANUM is already set for this process.
-          // Retry logic: status 12 retries create. Status 13 retries confirm only.
-          let toNo = track.TransferOrder;
-          if (toNo) {
-            if (track.Status_code === '04') {
-              return req.error(400, `Transfer Order ${toNo} is already confirmed for this process. Creating a second TO is blocked.`);
+          await logRow({ ...common, DocumentNo: trNo, Step: 'LB01', Status: STATUS.TR_CREATED, MessageType: 'S', MessageId: 'L3', MessageNo: '001',
+            MessageText: `Retry successful: Transfer Requirement ${trNo} created via L_TR_CREATE` });
+        } else if (requestedStep === 'LT04' || requestedStep === 'LT12') {
+          // A tracked unconfirmed TO (03/13) is confirmed only; a confirmed TO never blocks another TO for the open quantity.
+          let toNo = UNCONFIRMED_TO.includes(track.Status_code) ? track.TransferOrder : '';
+          let processId = toNo ? (track.ProcessId || cds.utils.uuid()) : cds.utils.uuid();
+          if (requestedStep === 'LT12' && !toNo) {
+            return req.error(400, `Cannot confirm TO: no unconfirmed Transfer Order is tracked for reservation ${sResNo}/${sResItem}`);
+          }
+          if (!toNo) {
+            if (!track.TransferRequirement) return req.error(400, `Cannot create TO: no Transfer Requirement on reservation ${sResNo}/${sResItem}`);
+            // Guard read from SAP: any unconfirmed TO item for this TR blocks another TO (L_TO_CREATE_TR works on the whole TR).
+            const pending = await findUnconfirmedToItems(adapter.rfc, wh(), track.TransferRequirement);
+            if (pending.length) {
+              return req.error(400, `Unconfirmed Transfer Order ${pending[0].TANUM.replace(/^0+/, '')} exists for TR ${track.TransferRequirement.replace(/^0+/, '')}; confirm it before creating another TO`);
             }
-            // Status 13: retry confirm only
-          } else {
+            await adapter.checkAuthorization('L_BWLVS', { LGNUM: wh(), BWLVS: sapKey(track.MovementType, 'mvt') });
             let toResult;
             try {
-              toResult = await adapter.createTransferOrderFromTR({
-                warehouseNumber: track.WarehouseNumber || 'W01',
-                trNumber: track.TransferRequirement
-              });
+              toResult = await adapter.createTransferOrderFromTR({ warehouseNumber: wh(), trNumber: track.TransferRequirement });
               toNo = toResult.toNumberRaw || String(toResult.toNumber).padStart(10, '0');
 
-              // Persist TANUM and status 03
               await UPDATE(ReservationEntries).set({
                 TransferOrder: toNo,
-                Status_code: '03',
+                Status_code: STATUS.TO_CREATED,
                 ErrorMessage: '',
                 ErrorStep: '',
+                ProcessId: processId,
                 LogHandle: sLogHandle,
                 ExternalId: extId
-              }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+              }).where(key);
 
-              await INSERT.into(ReservationLogs).entries({
-                ID: cds.utils.uuid(),
-                ReservationNo: sResNo,
-                ReservationItem: sResItem,
-                LogHandle: sLogHandle,
-                ExternalId: extId,
-                SubObject: 'PROCESS',
-                Step: 'LT04',
-                Status: '03',
-                MessageType: 'S',
-                MessageId: 'L3',
-                MessageNo: '001',
-                MessageText: `Transfer Order ${toNo} created from TR ${track.TransferRequirement}`
-              });
+              await logRow({ ...common, ProcessId: processId, DocumentNo: toNo, Step: 'LT04', Status: STATUS.TO_CREATED, MessageType: 'S', MessageId: 'L3', MessageNo: '001',
+                MessageText: `Transfer Order ${toNo} created from TR ${track.TransferRequirement}` });
             } catch (createErr) {
-              await UPDATE(ReservationEntries).set({
-                Status_code: '12',
-                ErrorMessage: createErr.message,
-                ErrorStep: 'LT04',
-                LogHandle: sLogHandle,
-                ExternalId: extId
-              }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
-              throw createErr;
+              await fail(STATUS.TO_ERROR, 'LT04', createErr.message, processId);
+              throw Object.assign(createErr, { handled: true });
             }
           }
 
           // Real second call: Confirm TO
           try {
-            await adapter.confirmTransferOrder({
-              warehouseNumber: track.WarehouseNumber || 'W01',
-              toNumber: toNo
-            });
+            await adapter.checkAuthorization('L_LGNUM', { LGNUM: wh() });
+            await adapter.confirmTransferOrder({ warehouseNumber: wh(), toNumber: toNo });
 
             await UPDATE(ReservationEntries).set({
               TransferOrder: toNo,
-              Status_code: '04',
+              Status_code: STATUS.TO_CONFIRMED,
               ErrorMessage: '',
               ErrorStep: '',
+              ProcessId: processId,
               LogHandle: sLogHandle,
               ExternalId: extId
-            }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+            }).where(key);
 
-            await INSERT.into(ReservationLogs).entries({
-              ID: cds.utils.uuid(),
-              ReservationNo: sResNo,
-              ReservationItem: sResItem,
-              LogHandle: sLogHandle,
-              ExternalId: extId,
-              SubObject: 'PROCESS',
-              Step: 'LT12',
-              Status: '04',
-              MessageType: 'S',
-              MessageId: 'L3',
-              MessageNo: '025',
-              MessageText: `Retry successful: Transfer Order ${toNo} created and confirmed`
-            });
+            await logRow({ ...common, ProcessId: processId, DocumentNo: toNo, Step: 'LT12', Status: STATUS.TO_CONFIRMED, MessageType: 'S', MessageId: 'L3', MessageNo: '025',
+              MessageText: `Retry successful: Transfer Order ${toNo} confirmed via L_TO_CONFIRM` });
           } catch (confirmErr) {
-            await UPDATE(ReservationEntries).set({
-              TransferOrder: toNo,
-              Status_code: '13',
-              ErrorMessage: confirmErr.message,
-              ErrorStep: 'LT12',
-              LogHandle: sLogHandle,
-              ExternalId: extId
-            }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
-
-            await INSERT.into(ReservationLogs).entries({
-              ID: cds.utils.uuid(),
-              ReservationNo: sResNo,
-              ReservationItem: sResItem,
-              LogHandle: sLogHandle,
-              ExternalId: extId,
-              SubObject: 'PROCESS',
-              Step: 'LT12',
-              Status: '13',
-              MessageType: 'E',
-              MessageId: 'L3',
-              MessageNo: '026',
-              MessageText: `Confirmation failed for Transfer Order ${toNo}: ${confirmErr.message}`
-            });
-            throw confirmErr;
-          }
-        } else if (requestedStep === 'LT12') {
-          // Retry confirm only
-          if (!track.TransferOrder) {
-            return req.error(400, `Cannot confirm TO: No Transfer Order document exists on reservation ${sResNo}/${sResItem}`);
-          }
-          if (track.Status_code === '04') {
-            return req.error(400, `Transfer Order ${track.TransferOrder} is already confirmed for this process. Creating a second TO is blocked.`);
-          }
-
-          try {
-            await adapter.confirmTransferOrder({
-              warehouseNumber: track.WarehouseNumber || 'W01',
-              toNumber: track.TransferOrder
-            });
-
-            await UPDATE(ReservationEntries).set({
-              Status_code: '04',
-              ErrorMessage: '',
-              ErrorStep: '',
-              LogHandle: sLogHandle,
-              ExternalId: extId
-            }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
-
-            await INSERT.into(ReservationLogs).entries({
-              ID: cds.utils.uuid(),
-              ReservationNo: sResNo,
-              ReservationItem: sResItem,
-              LogHandle: sLogHandle,
-              ExternalId: extId,
-              SubObject: 'PROCESS',
-              Step: 'LT12',
-              Status: '04',
-              MessageType: 'S',
-              MessageId: 'L3',
-              MessageNo: '025',
-              MessageText: `Retry successful: Transfer Order ${track.TransferOrder} confirmed via L_TO_CONFIRM`
-            });
-          } catch (confirmErr) {
-            await UPDATE(ReservationEntries).set({
-              Status_code: '13',
-              ErrorMessage: confirmErr.message,
-              ErrorStep: 'LT12',
-              LogHandle: sLogHandle,
-              ExternalId: extId
-            }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
-
-            await INSERT.into(ReservationLogs).entries({
-              ID: cds.utils.uuid(),
-              ReservationNo: sResNo,
-              ReservationItem: sResItem,
-              LogHandle: sLogHandle,
-              ExternalId: extId,
-              SubObject: 'PROCESS',
-              Step: 'LT12',
-              Status: '13',
-              MessageType: 'E',
-              MessageId: 'L3',
-              MessageNo: '026',
-              MessageText: `Confirmation failed for Transfer Order ${track.TransferOrder}: ${confirmErr.message}`
-            });
-            throw confirmErr;
+            await UPDATE(ReservationEntries).set({ TransferOrder: toNo, ProcessId: processId }).where(key);
+            await fail(STATUS.TO_CONFIRM_ERROR, 'LT12', `Confirmation failed for Transfer Order ${toNo}: ${confirmErr.message}`, processId);
+            throw Object.assign(confirmErr, { handled: true });
           }
         } else if (requestedStep === 'MIGO') {
-          const migoRes = await adapter.postGoodsMovement({
-            reservationNo: sResNo,
-            reservationItem: sResItem,
-            movementType: track.MovementType,
-            material: track.Material,
-            plant: track.Plant,
-            storageLocation: track.StorageLocation,
-            quantity: track.Quantity,
-            unit: track.Unit,
-            receivingPlant: track.ReceivingPlant,
-            receivingStorageLocation: track.ReceivingStorageLocation,
-            costCenter: track.CostCenter,
-            assetNo: track.AssetNo,
-            subNumber: track.SubNumber,
-            batch: data.Batch || data.batch || track.Batch || '',
-            deriveGmCode: true,
-            serials: data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : (track.SerialNo ? [track.SerialNo] : []))
-          });
-
-          await UPDATE(ReservationEntries).set({
-            MaterialDocument: migoRes.materialDocument,
-            MaterialDocYear: migoRes.materialDocYear,
-            Status_code: '05',
-            ErrorMessage: '',
-            LogHandle: sLogHandle,
-            ExternalId: extId
-          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
-
-          await INSERT.into(ReservationLogs).entries({
-            ID: cds.utils.uuid(),
-            ReservationNo: sResNo,
-            ReservationItem: sResItem,
-            LogHandle: sLogHandle,
-            ExternalId: extId,
-            SubObject: 'PROCESS',
-            Step: 'MIGO',
-            Status: '05',
-            MessageType: 'S',
-            MessageId: 'M7',
-            MessageNo: '060',
-            MessageText: `Retry successful: Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect})`
-          });
-        } else {
-          return req.error(400, `Unsupported retry step: '${requestedStep}'. Supported: LB01, LT04, LT12, MIGO`);
+          try {
+            await postMigoForTrack(track, data, req, { sLogHandle, extId, subObject: 'PROCESS' });
+          } catch (migoErr) {
+            await fail(STATUS.GI_ERROR, 'MIGO', `Goods movement failed: ${migoErr.message}`);
+            throw Object.assign(migoErr, { handled: true });
+          }
         }
 
-        return await SELECT.one.from(ReservationEntries).where({
-          ReservationNo: sResNo,
-          ReservationItem: sResItem
-        });
+        return await SELECT.one.from(ReservationEntries).where(key);
       } catch (err) {
-        const isUcon = err.code === 'UCON_BLOCKED' || (err.message && (err.message.includes('2295840') || err.message.includes('Incompatible Call Rejected')));
-        const cleanErrMsg = isUcon
-          ? `Retry ${requestedStep} deferred: L_TR_CREATE restricted by SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)`
-          : `Retry ${requestedStep} failed: ${err.message}`;
-
-        await UPDATE(ReservationEntries).set({
-          Status_code: '99',
-          ErrorMessage: cleanErrMsg,
-          LogHandle: sLogHandle,
-          ExternalId: extId
-        }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
-
-        await INSERT.into(ReservationLogs).entries({
-          ID: cds.utils.uuid(),
-          ReservationNo: sResNo,
-          ReservationItem: sResItem,
-          LogHandle: sLogHandle,
-          ExternalId: extId,
-          SubObject: 'PROCESS',
-          Step: requestedStep,
-          Status: '99',
-          MessageType: 'E',
-          MessageId: 'ZWM',
-          MessageNo: '999',
-          MessageText: cleanErrMsg
-        });
-
-        return await SELECT.one.from(ReservationEntries).where({
-          ReservationNo: sResNo,
-          ReservationItem: sResItem
-        });
+        // The failed step's own status (11/12/13/90) is already recorded; never overwrite it with another code.
+        if (!err.handled) await fail(STEP_ERROR[requestedStep], requestedStep, `Retry ${requestedStep} failed: ${err.message}`);
+        return await SELECT.one.from(ReservationEntries).where(key);
       }
     });
 
@@ -849,8 +621,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           CostCenter: String((h && h.KOSTL) || '').trim(),
           AssetNo: strip((h && h.ANLN1) || ''),
           SubNumber: String((h && h.ANLN2) || '').trim(),
-          WarehouseNumber: 'W01',
-          Status_code: closed ? '05' : '01',
+          WarehouseNumber: await warehouseFor(i.WERKS, i.LGORT, '').catch(() => ''),
+          Status_code: closed ? STATUS.GI_POSTED : STATUS.RES_CREATED,
           StatusText: closed ? 'Goods Issue Posted' : 'Open (not tracked in this app)',
           TransferRequirement: '',
           TransferOrder: '',

@@ -5,6 +5,13 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **13-fix remediation of the reservation → TR → TO → confirm → goods-movement process (2026-10-12, 14:30–17:40 IST):**
+  - **Source of truth:** the JS adapter layer (`srv/integration/s4hana/wm/TrToAdapter.js`, `ReservationProcessAdapter.js`, handlers `srv/wm/tr-to/handlers/trTo.handler.js`, `srv/wm/reservation-entry/service.js`) owns the process; `docs/abap/zcl_res_process*.abap` is a mirror nothing in `srv/` calls (CONFIRMED by grep). Status codes come from one module `srv/common/wmStatus.js` (01, 11, 02, 12, 03, 13, 04, 90, 05, 99); the ABAP constants carry identical values and cite that file (asserted by a mock test).
+  - **Step 0 (read-only, CONFIRMED from system):** `tools/read-system-metadata.js` → `docs/abap/system-metadata.md` §9–§20: FM interfaces (`Z_WM_TO_CREATE_FROM_TR`, `L_TO_CONFIRM`, `AUTHORITY_CHECK`), LTBK/LTBP/LTAP/LTAK fields, LTBK-STATU domain (`E`, `T`), MARC-XCHPF/SERNP, text lengths (BKTXT 25, ITEM_TEXT/SGTXT 50), MATDOC `CANCELLED`/`REVERSAL_MOVEMENT`, TOBJ auth objects, TFDIR FMODE. No read failed ("NOT READ" nowhere needed). Key facts: LTAP has **no TBNUM** (TR number is on LTAK), `AUTHORITY_CHECK` is RFC-enabled and always raises (`USER_IS_AUTHORIZED` = ok), `ENQUEUE_EMRESB` is not RFC-enabled.
+  - **Delivered (all mock-tested, none SAP-verified):** 1 status 90 = GI failed / 99 = cancelled; 2 `NO_MORE_GR` only with `CompleteReservation = true` (new CDS param + UI checkbox); 3 no `W01`/`921`/`TRANSFER`/`902`/exclusion-list/`1120`/`HS01`/`KHUSHAL` defaults (warehouse from `cds.s4.warehouseNumber` or T320; storage types blank → SAP decides; missing values → 400); 4 LQUA batch tier removed, batch-managed material without batch → 400; 5 second TO allowed after confirmation, blocked only while an unconfirmed TO item exists (LTAK `KQUIT` → LTAP `PQUIT` read from SAP), `ProcessId` per TO/GI step on `ReservationTrack`/`ReservationLog`; 6 GM_CODE 03 (201/241) / 04 (311/301), no 06, RESB "any open reservation" auto-resolve removed; 7 `sapKey` validation (strict regex + length) before every RFC filter → 400; 8 LB01/ZWM_TR_CREATE/Note texts removed, TR failure = status 11 with SAP's message; 9 MATDOC search by `SGTXT = ProcessId` (36-char UUID in `ITEM_TEXT`, CHAR 50) before any goods-movement retry; 10 explicit TR/Reservation selector + barcode prefix rule, no guessing, reservation → TR via LTBK-RSNUM; 11 multi-item TR item choice in UI and backend; 12 `SELECT … forUpdate()` on the tracking row per step + `AUTHORITY_CHECK` (L_BWLVS, L_LGNUM, M_MSEG_BWA, M_MSEG_WWA) before create TO / confirm TO / post GM; 13 "already confirmed" decided from LTAP-PQUIT, `055` substring removed.
+  - **Validation:** `npx jest test/unit` → 141 suites, 2535/2539 pass; the 4 failures are in `test/unit/controller/uiConsistency.test.js` and fail identically on the unmodified tree (pre-existing). `npx jest test/unit/wm` → **64 suites, 1,336/1,336 PASS** (incl. new `processFixes.test.js`, 23 tests). `npx cds compile srv --to sql` OK; `npx eslint` on touched folders: 0 errors; `git diff --check` clean. **No live SAP write was executed**; the sandbox test matrix is in the final report and must be run before this is called working.
+  - **Migration (NOT run):** existing rows with `Status_code = '99'` and no material document must become `'90'` (statement in `docs/abap/status-codes.md`).
+
 - **UI & Data Reflection: `/wm/scan-to` Post-Outcome Full Field Normalization & Result Panel Redesign (2026-10-12):**
   - **Issue Reported:** When posting `/wm/scan-to`, outcome panel data was not properly reflecting (raw numeric status code '04'/'05' shown instead of text, status badge permanently 'Warning', Confirmation Number & Confirmed By blank, and Material, Description, Pick Quantity, Unit, Batch, Movement Type missing from the result panel after TR details hid).
   - **Root Cause Isolated:**
@@ -648,9 +655,14 @@ The previous log was removed in commit `b741337`; this file restarts it.
    - **Post-alias runbook (doc-only, no code): `docs/incoterms-create-post-alias-runbook.md`** — re-verify metadata, one proof POST + VA03/VBKD read-back, the exact-files change plan (view / service.cds / mapper / adapter) preserving ContactPerson/PaymentTerms/HeaderPartner/deep-item, a feature-flag rollback keeping LORD as fallback, and the order-type/sales-area test matrix.
    - **Blocker (unchanged): Basis to assign System Alias `LOCAL` to `ZAPI_SALES_ORDER_SRV_0001` in `/IWFND/MAINT_SERVICE`.** Status: **Blocked on Basis; Path A decided, runbook ready, C interim active**.
 
+## Unresolved Issues (continued)
+
+- **13-fix remediation, open points (2026-10-12):** (a) all fixes are mock-tested only; the sandbox matrix (201/241/311/301 × full / partial + second TO / batch / serial / forced GI failure + retry) has not been run. (b) Storage types/bins are now sent blank when the TR header has none; whether `Z_WM_TO_CREATE_FROM_TR` then applies the SAP search strategy is UNSURE until a live TO is created. (c) `AUTHORITY_CHECK` negative path (`USER_NOT_AUTHORIZED`) is unobserved: the RFC user holds SAP_ALL. (d) `forUpdate()` is a no-op on SQLite; the row lock only acts on HANA. (e) Old `99` rows need the migration statement in `docs/abap/status-codes.md`. (f) `ReservationTrackAdapter.js` still requests `ERNAM/ERDAT/AENAM/AEDAT`, which `ZRES_TRACK` does not have (unused adapter, unchanged).
+
 ## Next Steps
 
-- **Next Recommended Action:** **Runs 1, 2, 3, and 4 are 100% CONFIRMED and Verified Live on SAP S/4HANA (Client 220)**:
+- **Next Recommended Action (2026-10-12):** run the sandbox matrix from the 13-fix report on Client 220 (one movement type at a time, starting with 311 full pick), check RESB/LTBK/LTBP/LTAK/LTAP/LQUA/MATDOC after each step, then run the status-99→90 migration statement after backup.
+- **Previous recommended action:** **Runs 1, 2, 3, and 4 are 100% CONFIRMED and Verified Live on SAP S/4HANA (Client 220)**:
   - **Run 1 (Movement 201 — GI to Cost Center)**: RSNUM `0000525278`, TBNUM `0001000757`, TANUM `0001037270`, MATDOC `4900050142/2026`.
   - **Run 2 (Movement 241 — GI to Asset)**: RSNUM `0000525279`, TBNUM `0001000760`, TANUM `0001037271`, MATDOC `4900050143/2026`.
   - **Run 3 (Movement 311 — SLoc to SLoc Transfer Posting)**: RSNUM `0000525862`, TBNUM `0001000786`, TANUM `0001037279`, MATDOC `4900050145/2026`.
@@ -660,6 +672,89 @@ The previous log was removed in commit `b741337`; this file restarts it.
   - Browser verification of UI5 Reservation Entry Cockpit with the verified movement types (201, 241, 311, 301).
 
 ## Changes Log
+
+### 2026-10-12 14:30 IST — Step 0: read-only system metadata export (no code change)
+
+- **Files:** `tools/read-system-metadata.js` (new), `docs/abap/system-metadata.md` (§9–§20 appended).
+- **Reads (RFC_GET_FUNCTION_INTERFACE, RFC_READ_TABLE on DD03L/DD07L/DD07T/DD04T/TOBJ/TOBJT/TFDIR):** `Z_WM_TO_CREATE_FROM_TR`, `L_TO_CONFIRM`, `AUTHORITY_CHECK` interfaces; LTBK/LTBP/LTAP full field lists and LTAK link fields; LTBK-STATU domain `LTBK_STATU` values `E` Processing Complete, `T` Partially Delivered; MARC-XCHPF (XFELD, CHAR 1) and MARC-SERNP (SERAIL, CHAR 4); MKPF-BKTXT 25, BAPI2017_GM_ITEM_CREATE-ITEM_TEXT 50, MATDOC/MSEG-SGTXT 50, BAPI2017_GM_HEAD_01-HEADER_TXT 25; MATDOC `CANCELLED`, `REVERSAL_MOVEMENT`, `SMBLN`; TOBJ: L_LGNUM, L_TCODE, L_BWLVS, M_MSEG_BWA, M_MSEG_WWA, M_MRES_BWA, M_MRES_WWA all exist; TFDIR: `AUTHORITY_CHECK` and `SUSR_USER_AUTH_FOR_OBJ_GET` FMODE `R`, `ENQUEUE_EMRESB` not remote-enabled. Live probe: `AUTHORITY_CHECK` raises `USER_IS_AUTHORIZED` (node-rfc `err.key`).
+- **Result:** every read succeeded; no "NOT READ" entry. Zero writes.
+
+### 2026-10-12 14:50 IST — Shared: status constants, key validator, warehouse configuration, model
+
+- **Files:** `srv/common/wmStatus.js` (new), `srv/integration/s4hana/sapKey.js` (new; `TrToAdapter.required()` moved here and extended), `srv/common/s4Config.js` (`getWarehouseNumber()`), `package.json` (`cds.s4.warehouseNumber`), `.env.example` (`S4_WAREHOUSE_NUMBER`), `db/wm/reservation-track.cds` (`ProcessId`, `ErrorStep` on ReservationTrack; `ProcessId`, `DocumentNo` on ReservationLog), `db/data/saps4hana.wm-ReservationStatus.csv` (10 codes), `srv/wm/tr-to/service.cds` (`CompleteReservation`, `ProcessId`, `docType`/`tbpos` on `lookupTR`, `TRDetail.Items`, `TOProcessResult`/`MigoProcessResult.ProcessId/ErrorStep/Plant/StorageLocation`), `srv/wm/reservation-entry/service.cds` (`CompleteReservation`).
+- **Validation:** `npx cds compile srv --to sql` OK (16:20 IST).
+
+### 2026-10-12 15:10 IST — Fix 1: status 90 = GI failed, 99 = cancelled/reversed
+
+- **Files:** `trTo.handler.js`, `reservation-entry/service.js` (retry catch now writes the failed step's own code via `STEP_ERROR`, never 99; auto-detect routes 11/12/13/90), `reservation-track/service.js` (code list message, error set), `WarehouseScanTo.controller.js`/`.view.xml` (99→90), `ReservationEntryList/Detail.controller.js` (11/12/13/90 texts, 99 = Cancelled / Reversed), i18n `resStatus11/12/13/90/99`, `docs/abap/zcl_res_process.clas.abap:32` comment, `docs/abap/status-codes.md` (table + migration note, not run).
+- **Tests:** `processFixes.test.js` Fix 1 (CSV ⊆ constants, ABAP values identical, handler writes 90); updated `autoMigoPosting`, `reservationEntryService`, `reservationMonitorRetry`, `warehouseScanToUi`, `reservationEntryUi`.
+
+### 2026-10-12 15:25 IST — Fix 2: NO_MORE_GR only with CompleteReservation
+
+- **Files:** `ReservationProcessAdapter.postGoodsMovement` (`completeReservation === true`), handler (forwards `CompleteReservation`, incl. the internal auto-MIGO chain), `reservation-entry/service.js`, UI checkbox `chkCompleteReservation` (default false) sent by `onProcessTO`/`onRetryMigo`, i18n `scanToCompleteReservationLabel`, ABAP `iv_complete_res DEFAULT space`.
+- **Tests:** `processFixes.test.js` Fix 2; `autoMigoPosting.test.js` 241/311/301 now assert NO_MORE_GR absent.
+
+### 2026-10-12 15:40 IST — Fix 3: hardcoded values removed
+
+- **Files:** `TrToAdapter.js` (`warehouse()` = caller or `s4Config.getWarehouseNumber()`; `'921'/'TRANSFER'/'911'` and the LQUA source-type guess with `'902'` / `['921','911','913','904']` deleted; blank storage types pass through to SAP; `ConfirmedBy` from `S4_USERNAME` only), `trTo.handler.js` (no `'311'/'1120'/'HS01'/1/'EA'`; 400 when a value is neither in the request nor tracked; `.where({})` removed), `ReservationProcessAdapter.js` (no `'1120'/'CS01'/'KG'/'EA'`/qty 1; unit required), `reservation-entry/service.js` (`warehouseFor()` = request or T320, 400 if no T320 row; no `'W01'` anywhere), UI: `WarehouseScanTo.controller.js`, `WarehouseScanToService.js`, `tr-to/service/TrToService.js` send `''` (server resolves), `KHUSHAL` fallbacks removed from controller and view.
+- **Behaviour change (stated):** TR headers without NLTYP/NLPLA/VLTYP/VLPLA now send blanks; SAP's search strategy decides. UNSURE until a live TO is created.
+- **Tests:** `processFixes.test.js` Fix 3; `trToAdapter.test.js` config case.
+
+### 2026-10-12 15:55 IST — Fix 4: LQUA batch tier removed, batch-managed check
+
+- **Files:** `trTo.handler.js` (own tier reads removed; adapter does RESB/LTAP), `ReservationProcessAdapter.postGoodsMovement` (tiers: input → RESB by RSNUM+RSPOS → LTAP; then MARC-XCHPF read, `X` without batch → 400 naming the sources checked), `reservation-entry/service.js` (LQUA `MATNR LIKE '%x%'` block deleted).
+- **Tests:** `processFixes.test.js` Fix 4 (LQUA never read).
+
+### 2026-10-12 16:10 IST — Fix 5: partial quantity, unconfirmed-TO guard, ProcessId per step
+
+- **Files:** `srv/integration/s4hana/wm/toState.js` (new: `findUnconfirmedToItems` = LTAK by LGNUM+TBNUM, KQUIT blank → LTAP by TANUM(+TBPOS) PQUIT blank), `TrToAdapter.createTOFromTR` (confirm-only retry only for tracked 03/13; create branch blocked only by an unconfirmed TO item; the `status === '04'` block removed; `OpenQty` remains the quantity guard), `trTo.handler.js` (`existingToNumber` only for 03/13; `ProcessId` per TO step and a separate one per goods movement; log rows carry `ProcessId` + `DocumentNo`), `reservation-entry/service.js` retryStep (guard by LGNUM+TBNUM for the whole-TR `L_TO_CREATE_TR`).
+- **Tests:** `processFixes.test.js` Fix 5; `createTOFromTR.test.js` scenarios D (rewritten) and E (new).
+
+### 2026-10-12 16:20 IST — Fix 6: GM_CODE 03/04 only, reservation never guessed
+
+- **Files:** `ReservationProcessAdapter.js` (`GM_CODE` map, other movement types → 400, `// VERIFY IN SE37 / TEST` note for 06, `deriveGmCode` dropped, RESB "any open reservation" auto-resolve deleted per user decision).
+- **Tests:** `reservationProcess.test.js` (311 → 04); `autoMigoPosting.test.js`.
+
+### 2026-10-12 16:30 IST — Fix 7: strict input validation before RFC filters
+
+- **Files:** `sapKey.js` applied in `TrToAdapter.js`, `ReservationProcessAdapter.js`, `trTo.handler.js`, `reservation-entry/service.js`, `ReservationTrackAdapter.js`; quote/space-free patterns with length limits; invalid → HTTP 400.
+- **Tests:** `processFixes.test.js` Fix 7 (9 rejection cases); `trToAdapter.test.js`.
+
+### 2026-10-12 16:40 IST — Fix 8: TR deferred texts removed, status 11
+
+- **Files:** `TrToAdapter.js` (404 text), `ReservationProcessAdapter.createTransferRequirement` (note-number / `UCON_BLOCKED` wording removed, SAP's own message rethrown; FM fallbacks kept), `reservation-entry/service.js` (TR failure → `Status_code '11'`, `ErrorStep 'LB01'`, log type E with `TR creation failed in SAP backend: <SAP message>`).
+- **Tests:** `reservationEntryService.test.js` (status 11, log E), `reservationProcess.test.js` (SAP message passthrough).
+
+### 2026-10-12 16:50 IST — Fix 9: goods-movement retry guard by PROCESS_ID
+
+- **Files:** `ReservationProcessAdapter.postGoodsMovement` (`processId` → MATDOC read `SGTXT = <uuid> AND MATNR AND WERKS AND CANCELLED = '' AND REVERSAL_MOVEMENT = ''`, found → `alreadyPosted`, no BAPI; else `ITEM_TEXT = <36-char uuid>`, SGTXT CHAR 50 CONFIRMED §13; BKTXT never used), handler and reservation-entry service persist `ProcessId` on the track row before posting and reuse it on retry; results carry `ProcessId`; UI `onRetryMigo` sends it.
+- **Tests:** `processFixes.test.js` Fix 9 (3 tests).
+
+### 2026-10-12 17:00 IST — Fix 10: explicit TR / Reservation selector, no guessing
+
+- **Files:** `TrToAdapter.js` (`lookupTR(tbnum, lgnum, docType, tbpos)`, `docType` mandatory; `getTR` reads only `IV_TR_NUMBER`; the unverified `IV_RESERVATION` retry and the RKPF guess deleted; new `getTRByReservation` via LTBK-RSNUM, 404 "status 11 TR error, backend issue" when none, 400 when several), CDS `lookupTR`, UI `SegmentedButton` TR / Reservation (`/docType`), controller `_classifyScan` (barcode prefix `TR`/`RES`/`RS` decides, bare number takes the selector, anything else rejected), `WarehouseScanToService.lookupTR` passes `docType`/`tbpos`, `TrToService.lookupTR` passes `'TR'`.
+- **Tests:** `processFixes.test.js` Fix 10; `warehouseScanToUi.test.js` (+2).
+
+### 2026-10-12 17:10 IST — Fix 11: multi-item TR item choice
+
+- **Files:** `TrToAdapter.lookupTR` returns `Items` and `TRItem ''` when several open items and no `tbpos`; `createTOFromTR` requires `tbpos` to match an open item, takes the single open item when omitted, 400 otherwise (first-item fallbacks removed); UI `Select` `selTRItem` (visible for >1 items), `onTRItemChange` reloads the chosen item, `_validateForm` blocks without an item, `onProcessTO` sends `oTR.TRItem` (no `"0001"` fallback).
+- **Tests:** `processFixes.test.js` Fix 11; `warehouseScanToUi.test.js` (+1).
+
+### 2026-10-12 17:20 IST — Fix 12: row lock per step + SAP authorization checks
+
+- **Files:** `trTo.handler.js`, `reservation-entry/service.js` (`SELECT.one…forUpdate()` on the tracking row in createTOFromTR / postMigo / retryStep; HANA row lock, SQLite no-op), `srv/integration/s4hana/wm/authCheck.js` (new; `AUTHORITY_CHECK`, `USER_IS_AUTHORIZED` = ok, `USER_NOT_AUTHORIZED` → 403), `TrToAdapter` (L_BWLVS before create, L_LGNUM before confirm), handler/service (M_MSEG_BWA + M_MSEG_WWA with ACTVT 01 before post GM), ABAP mirror `AUTHORITY-CHECK` statements in `post_migo` and `confirm_to` with "verify in SU21" comments; `ENDCASE>` typo fixed in `zbp_r_res_entry.clas.locals_imp.abap`.
+- **UNSURE:** ACTVT `01` as the activity for goods movements is standard practice, not read from the system; the negative path is unobserved (RFC user has SAP_ALL).
+
+### 2026-10-12 17:25 IST — Fix 13: confirmation state from LTAP-PQUIT
+
+- **Files:** `toState.js` (`isToFullyConfirmed`), `TrToAdapter.confirmTO` and `ReservationProcessAdapter.confirmTransferOrder` (on L_TO_CONFIRM error: all items `PQUIT = 'X'` → confirmed, else the SAP error is rethrown; `'055'`/`'already confirmed'` substring deleted).
+- **Tests:** `processFixes.test.js` Fix 13 (2 tests); `createTOFromTR.test.js` scenario B.
+
+### 2026-10-12 17:40 IST — Tests and validation pass for the 13 fixes
+
+- **Files:** `test/unit/wm/processFixes.test.js` (new, 23 tests, all labelled "mock only, not SAP verification"); updated `autoMigoPosting`, `createTOFromTR`, `reservationProcess`, `reservationEntryService`, `reservationMonitorRetry`, `reservationEntryUi`, `warehouseScanToUi`, `trToAdapter` tests.
+- **Commands and results:** `npx jest test/unit/wm --silent` → 64 suites, 1,336/1,336 PASS. `npx jest test/unit --silent` → 141 suites, 2535/2539 PASS; the 4 failures (`test/unit/controller/uiConsistency.test.js`: page title/back button, ShellBar title, pixel widths, literal "NOS") fail identically on the stashed unmodified tree → pre-existing, not caused by this change. `npx cds compile srv --to sql` → OK. `npx eslint` (touched app/srv/test folders) → 0 errors (pre-existing warnings only). `git diff --check` → clean. `git status` → 38 files changed/added, nothing committed.
+- **Not run:** any live SAP write; `mbt validate` (no MTA change); integration/e2e suites (need live systems).
 
 ### 2026-10-12 11:45 IST — /wm/reservation-entry/{res}/{item}: detail 404 for reservations created outside this app; added a live SAP fallback
 

@@ -2,7 +2,7 @@
  * Unit Tests for WarehouseScanTo Freestyle UI5 App & Controller (Chunk 4: App 2)
  *
  * Verifies:
- * 1. View model initialization, defaults (autoConfirm=true, lgnum='W01')
+ * 1. View model initialization, defaults (autoConfirm=true, lgnum='' -> server-side configured warehouse, docType='TR')
  * 2. Hardware and camera scanning integration
  * 3. Transfer Requirement (TR) lookup and details population
  * 4. Pick quantity check against open TR quantity
@@ -151,7 +151,9 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
 
     describe('1. Initialization & State Defaults', () => {
         it('initializes default model values correctly', () => {
-            expect(viewModel.getProperty('/lgnum')).toBe('W01');
+            expect(viewModel.getProperty('/lgnum')).toBe('');
+            expect(viewModel.getProperty('/docType')).toBe('TR');
+            expect(viewModel.getProperty('/completeReservation')).toBe(false);
             expect(viewModel.getProperty('/autoConfirm')).toBe(true);
             expect(viewModel.getProperty('/audioEnabled')).toBe(true);
             expect(viewModel.getProperty('/hasTR')).toBe(false);
@@ -283,9 +285,57 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
             viewModel.setProperty('/scannedTR', 'TR 1000750');
             await controller.onLookupTR();
 
-            expect(mockWarehouseScanToService.lookupTR).toHaveBeenCalledWith('1000750', 'W01');
+            expect(mockWarehouseScanToService.lookupTR).toHaveBeenCalledWith('1000750', '', 'TR', '');
             expect(viewModel.getProperty('/scannedTR')).toBe('1000750');
             expect(viewModel.getProperty('/hasTR')).toBe(true);
+        });
+
+        it('classifies a RES/RS prefix as a reservation lookup and a TR prefix as a TR lookup, never guessing [mock only, not SAP verification]', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValue({ TransferRequirement: '1000790', TRNumber: '1000790', TRItem: '0001', OpenQuantity: 1, Unit: 'KG' });
+            viewModel.setProperty('/scannedTR', 'RES 525866');
+            await controller.onLookupTR();
+            expect(mockWarehouseScanToService.lookupTR).toHaveBeenLastCalledWith('525866', '', 'RES', '');
+            expect(viewModel.getProperty('/docType')).toBe('TR'); // the loaded document is now a TR
+
+            viewModel.setProperty('/docType', 'RES');
+            viewModel.setProperty('/scannedTR', '525866');
+            await controller.onLookupTR();
+            expect(mockWarehouseScanToService.lookupTR).toHaveBeenLastCalledWith('525866', '', 'RES', '');
+        });
+
+        it('an explicit barcode prefix overrides the selector; a non-numeric scan or a missing selector fails', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValue({ TransferRequirement: '1000790', TRNumber: '1000790', TRItem: '0001', OpenQuantity: 1, Unit: 'KG' });
+            viewModel.setProperty('/docType', 'RES');
+            viewModel.setProperty('/scannedTR', 'TR 1000790');
+            await controller.onLookupTR();
+            expect(mockWarehouseScanToService.lookupTR).toHaveBeenLastCalledWith('1000790', '', 'TR', '');
+
+            mockWarehouseScanToService.lookupTR.mockClear();
+            viewModel.setProperty('/docType', '');
+            viewModel.setProperty('/scannedTR', '1000790');
+            await controller.onLookupTR();
+            expect(mockWarehouseScanToService.lookupTR).not.toHaveBeenCalled();
+            expect(viewModel.getProperty('/messageText')).toContain('scanToErrSelectDocType');
+
+            viewModel.setProperty('/docType', 'TR');
+            viewModel.setProperty('/scannedTR', 'ABC-1');
+            await controller.onLookupTR();
+            expect(mockWarehouseScanToService.lookupTR).not.toHaveBeenCalled();
+            expect(viewModel.getProperty('/messageText')).toContain('scanToErrNotANumber');
+        });
+
+        it('shows the item choice for a multi-item TR and loads the chosen item', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({ TransferRequirement: '1000790', TRNumber: '1000790', TRItem: '', Items: [{ Tbpos: '0001' }, { Tbpos: '0002' }], OpenQuantity: 0 });
+            viewModel.setProperty('/scannedTR', '1000790');
+            await controller.onLookupTR();
+            expect(viewModel.getProperty('/trItems').length).toBe(2);
+            expect(viewModel.getProperty('/canSubmit')).toBe(false);
+
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({ TransferRequirement: '1000790', TRNumber: '1000790', TRItem: '0002', Items: [{ Tbpos: '0001' }, { Tbpos: '0002' }], OpenQuantity: 3, Unit: 'KG' });
+            await controller.onTRItemChange({ getParameter: () => ({ getKey: () => '0002' }), getSource: () => ({ getSelectedKey: () => '0002' }) });
+            expect(mockWarehouseScanToService.lookupTR).toHaveBeenLastCalledWith('1000790', '', 'TR', '0002');
+            expect(viewModel.getProperty('/tr/TRItem')).toBe('0002');
+            expect(viewModel.getProperty('/canSubmit')).toBe(true);
         });
 
         it('extracts numeric Tbnum from value help item title when context is unavailable', () => {
@@ -318,7 +368,7 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
         it('loads open TRs into the view model (shown directly on the page)', async () => {
             await controller._loadOpenTRs();
 
-            expect(mockWarehouseScanToService.getOpenTRs).toHaveBeenCalledWith('W01');
+            expect(mockWarehouseScanToService.getOpenTRs).toHaveBeenCalledWith('');
             expect(viewModel.getProperty('/openTRs').length).toBe(1);
             expect(viewModel.getProperty('/openTRs')[0].Tbnum).toBe('0001001839');
             expect(viewModel.getProperty('/isLoadingTRs')).toBe(false);
@@ -340,6 +390,7 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
         beforeEach(() => {
             viewModel.setProperty('/hasTR', true);
             viewModel.setProperty('/tr', {
+                TRItem: '0001',
                 OpenQty: 10,
                 IsBatchManaged: false,
                 IsSerialManaged: false
@@ -375,6 +426,7 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
         beforeEach(() => {
             viewModel.setProperty('/hasTR', true);
             viewModel.setProperty('/tr', {
+                TRItem: '0001',
                 OpenQty: 10,
                 IsBatchManaged: true,
                 IsSerialManaged: false
@@ -400,6 +452,7 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
         beforeEach(() => {
             viewModel.setProperty('/hasTR', true);
             viewModel.setProperty('/tr', {
+                TRItem: '0001',
                 OpenQty: 3,
                 IsBatchManaged: false,
                 IsSerialManaged: true
@@ -502,7 +555,7 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
             await controller.onProcessTO();
 
             expect(mockWarehouseScanToService.createTOFromTR).toHaveBeenCalledWith({
-                lgnum: 'W01',
+                lgnum: '',
                 tbnum: '0001001839',
                 tbpos: '0001',
                 qty: 5,
@@ -511,6 +564,7 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
                 serials: [],
                 autoConfirm: true,
                 autoPostMigo: true,
+                CompleteReservation: false,
                 storageUnit: ''
             });
 
@@ -527,12 +581,12 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
             expect(mockMessageToast.show).toHaveBeenCalledWith(expect.stringContaining('4900050128'));
         });
 
-        it('handles MIGO failure (status 99) by displaying warning message and enabling Retry button', async () => {
+        it('handles goods movement failure (status 90) by displaying warning message and enabling Retry button', async () => {
             mockWarehouseScanToService.createTOFromTR.mockResolvedValueOnce({
                 TransferOrder: '1012971',
                 ConfirmationNumber: '0002',
                 WarehouseNumber: 'W01',
-                Status: '99',
+                Status: '90',
                 IsConfirmed: true,
                 ConfirmedBy: 'SAP_OPERATOR',
                 ReservationNo: '0000524979',
@@ -560,7 +614,8 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
                 Quantity: 5,
                 Unit: 'KG',
                 MovementType: '311',
-                Status: '99'
+                Status: '90',
+                ProcessId: 'A1B2C3D4-0000-4000-8000-000000000001'
             });
             viewModel.setProperty('/canRetryMigo', true);
 
@@ -580,7 +635,9 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
                 MovementType: '311',
                 Material: '8000000023',
                 Quantity: 5,
-                Unit: 'KG'
+                Unit: 'KG',
+                CompleteReservation: false,
+                ProcessId: 'A1B2C3D4-0000-4000-8000-000000000001'
             });
 
             expect(viewModel.getProperty('/canRetryMigo')).toBe(false);

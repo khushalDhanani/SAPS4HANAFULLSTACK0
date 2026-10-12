@@ -55,7 +55,8 @@ service ReservationEntryService {
         SubNumber                : String(4),
         Batch                    : String(10),
         SerialNo                 : String(18),
-        Serials                  : array of String(18)
+        Serials                  : array of String(18),
+        CompleteReservation      : Boolean
     ) returns ReservationEntries;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -65,7 +66,8 @@ service ReservationEntryService {
         Step            : String(10),
         Batch           : String(10),
         SerialNo        : String(18),
-        Serials         : array of String(18)
+        Serials         : array of String(18),
+        CompleteReservation : Boolean
     ) returns ReservationEntries;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])

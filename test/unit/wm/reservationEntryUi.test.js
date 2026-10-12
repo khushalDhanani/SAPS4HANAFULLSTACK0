@@ -325,11 +325,13 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(detailCtrl.formatStatusText('03')).toBe('TO Created');
             expect(detailCtrl.formatStatusText('04')).toBe('TO Confirmed');
             expect(detailCtrl.formatStatusText('05')).toBe('Goods Issue Posted');
-            expect(detailCtrl.formatStatusText('99')).toBe('Error');
+            expect(detailCtrl.formatStatusText('90')).toBe('Goods Issue Error');
+            expect(detailCtrl.formatStatusText('99')).toBe('Cancelled / Reversed');
 
             expect(detailCtrl.formatStatusState('01')).toBe('Information');
             expect(detailCtrl.formatStatusState('02')).toBe('Warning');
             expect(detailCtrl.formatStatusState('05')).toBe('Success');
+            expect(detailCtrl.formatStatusState('90')).toBe('Error');
             expect(detailCtrl.formatStatusState('99')).toBe('Error');
 
             expect(detailCtrl.formatStatusIcon('01')).toBe('sap-icon://create');

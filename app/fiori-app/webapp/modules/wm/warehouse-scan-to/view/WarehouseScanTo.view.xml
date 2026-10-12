@@ -32,6 +32,11 @@
                     customTextOff="{i18n>commonNo}"
                     change=".onAutoMigoChange"
                     class="sapUiSmallMarginEnd" />
+                <CheckBox
+                    id="chkCompleteReservation"
+                    text="{i18n>scanToCompleteReservationLabel}"
+                    selected="{scanView>/completeReservation}"
+                    class="sapUiSmallMarginEnd" />
                 <Button
                     id="btnToggleAudio"
                     icon="{= ${scanView>/audioEnabled} ? 'sap-icon://sound' : 'sap-icon://sound-off' }"
@@ -68,6 +73,16 @@
                             design="Bold"
                             required="true"
                             class="sapUiTinyMarginBottom" />
+                        <SegmentedButton
+                            id="segDocType"
+                            selectedKey="{scanView>/docType}"
+                            selectionChange=".onDocTypeChange"
+                            class="sapUiTinyMarginBottom">
+                            <items>
+                                <SegmentedButtonItem key="TR" text="{i18n>scanToDocTypeTR}" />
+                                <SegmentedButtonItem key="RES" text="{i18n>scanToDocTypeRES}" />
+                            </items>
+                        </SegmentedButton>
                         <HBox width="100%" alignItems="Center">
                             <Input
                                 id="inputBarcodeTR"
@@ -137,7 +152,7 @@
                     class="sapUiSmallMarginBottom">
                     <VBox class="sapUiSmallMargin">
                         <MessageStrip
-                            type="{= ${scanView>/result/Status} === '99' ? 'Warning' : (${scanView>/result/Status} === '13' ? 'Error' : 'Success') }"
+                            type="{= ${scanView>/result/Status} === '90' ? 'Warning' : (${scanView>/result/Status} === '13' ? 'Error' : 'Success') }"
                             text="{scanView>/resultMessage}"
                             showIcon="true"
                             class="sapUiSmallMarginBottom" />
@@ -167,11 +182,11 @@
 
                                 <Label text="{i18n>scanToLabelStatus}" design="Bold" />
                                 <ObjectStatus
-                                    text="{= ${scanView>/result/StatusText} || (${scanView>/result/Status} === '05' ? 'Goods Issue Posted' : (${scanView>/result/Status} === '04' ? 'TO Confirmed' : (${scanView>/result/Status} === '99' ? 'MIGO Failed' : (${scanView>/result/Status} === '13' ? 'Confirmation Failed' : 'TO Created')))) }"
-                                    state="{= (${scanView>/result/Confirmed} || ${scanView>/result/IsConfirmed} || ${scanView>/result/Status} === '04' || ${scanView>/result/Status} === '05') ? 'Success' : (${scanView>/result/Status} === '99' ? 'Warning' : 'Information') }" />
+                                    text="{= ${scanView>/result/StatusText} || (${scanView>/result/Status} === '05' ? 'Goods Issue Posted' : (${scanView>/result/Status} === '04' ? 'TO Confirmed' : (${scanView>/result/Status} === '90' ? 'Goods Issue Error' : (${scanView>/result/Status} === '13' ? 'TO Confirmation Error' : 'TO Created')))) }"
+                                    state="{= (${scanView>/result/Confirmed} || ${scanView>/result/IsConfirmed} || ${scanView>/result/Status} === '04' || ${scanView>/result/Status} === '05') ? 'Success' : (${scanView>/result/Status} === '90' ? 'Warning' : 'Information') }" />
 
                                 <Label text="{i18n>scanToLabelConfirmedBy}" design="Bold" visible="{= !!(${scanView>/result/Confirmed} || ${scanView>/result/IsConfirmed}) }" />
-                                <Text text="{= ${scanView>/result/ConfirmedBy} || 'KHUSHAL' }" visible="{= !!(${scanView>/result/Confirmed} || ${scanView>/result/IsConfirmed}) }" />
+                                <Text text="{scanView>/result/ConfirmedBy}" visible="{= !!(${scanView>/result/Confirmed} || ${scanView>/result/IsConfirmed}) }" />
 
                                 <core:Title text="Material &amp; Stock Posting" />
                                 <Label text="{i18n>scanToLabelMaterial}" design="Bold" visible="{= !!${scanView>/result/Material} }" />
@@ -203,11 +218,11 @@
                                     state="Success"
                                     visible="{= !!${scanView>/result/StockEffect} }" />
 
-                                <Label text="Error Details" design="Bold" visible="{= ${scanView>/result/Status} === '99' || !!${scanView>/result/ErrorMessage} }" />
+                                <Label text="Error Details" design="Bold" visible="{= ${scanView>/result/Status} === '90' || !!${scanView>/result/ErrorMessage} }" />
                                 <ObjectStatus
                                     text="{scanView>/result/ErrorMessage}"
                                     state="Error"
-                                    visible="{= ${scanView>/result/Status} === '99' || !!${scanView>/result/ErrorMessage} }" />
+                                    visible="{= ${scanView>/result/Status} === '90' || !!${scanView>/result/ErrorMessage} }" />
                             </form:content>
                         </form:SimpleForm>
 
@@ -255,6 +270,17 @@
                         columnsM="2">
                         <form:content>
                             <core:Title text="{i18n>scanToGroupMaterialInfo}" />
+                            <Label text="{i18n>scanToLabelTRItem}" design="Bold" required="true" visible="{= ${scanView>/trItems}.length > 1 }" />
+                            <Select
+                                id="selTRItem"
+                                selectedKey="{scanView>/selectedTbpos}"
+                                forceSelection="false"
+                                items="{scanView>/trItems}"
+                                change=".onTRItemChange"
+                                visible="{= ${scanView>/trItems}.length > 1 }"
+                                width="100%">
+                                <core:Item key="{scanView>Tbpos}" text="{scanView>Tbpos} - {scanView>Material} {scanView>MaterialDesc} ({scanView>OpenQty} {scanView>Unit} open)" />
+                            </Select>
                             <Label text="{i18n>scanToLabelMaterial}" design="Bold" />
                             <ObjectIdentifier
                                 title="{scanView>/tr/Material}"

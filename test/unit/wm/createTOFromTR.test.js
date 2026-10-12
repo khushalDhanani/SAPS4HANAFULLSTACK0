@@ -69,7 +69,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 { MATNR: '000000008000000001', XCHPF: 'X', SERNP: 'Z001' }
             ]);
 
-            const tr = await adapter.lookupTR('0001001839', 'W01');
+            const tr = await adapter.lookupTR('0001001839', 'W01', 'TR');
 
             expect(tr.TransferRequirement).toBe('1001839');
             expect(tr.TRItem).toBe('0001');
@@ -82,8 +82,14 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             expect(tr.Batch).toBe('IN25000133');
             expect(tr.IsBatchManaged).toBe(true);
             expect(tr.IsSerialManaged).toBe(true);
-            expect(tr.DestinationStorageType).toBe('921');
+            expect(tr.DestinationStorageType).toBe('921'); // from the TR header, no default
             expect(tr.DestinationStorageBin).toBe('TRANSFER');
+            expect(tr.Items).toHaveLength(1);
+        });
+
+        it('rejects a lookup without an explicit document type (TR / RES) with 400 [mock only, not SAP verification]', async () => {
+            await expect(adapter.lookupTR('0001001839', 'W01')).rejects.toMatchObject({ status: 400 });
+            expect(mockRfc.call).not.toHaveBeenCalled();
         });
     });
 
@@ -224,10 +230,13 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             });
             mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Standard Mat' }]);
             mockRfc.readTable.mockResolvedValueOnce([{ MATNR: '000000001000000045', XCHPF: '', SERNP: '' }]);
+            mockRfc.readTable.mockResolvedValueOnce([]); // LTAK: no TO yet for this TR (double-TO guard)
         };
+        const authOk = () => mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // AUTHORITY_CHECK always raises
 
         it('scenario A: create ok + confirm ok -> status 04, Confirmed true', async () => {
             mockTrSetup();
+            authOk(); // L_BWLVS before create
 
             // Mock Z_WM_TO_CREATE_FROM_TR -> generates TO 0001012966
             mockRfc.call.mockResolvedValueOnce({
@@ -236,6 +245,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 EV_MESSAGE: 'TO 0001012966 created'
             });
 
+            authOk(); // L_LGNUM before confirm
             // Mock L_TO_CONFIRM
             mockRfc.call.mockResolvedValueOnce({
                 E_SUBRC: 0
@@ -264,6 +274,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
 
         it('scenario B: create ok + confirm fail -> TANUM kept, status 13, Confirmed false', async () => {
             mockTrSetup();
+            authOk();
 
             // Mock Z_WM_TO_CREATE_FROM_TR -> succeeds and returns TANUM
             mockRfc.call.mockResolvedValueOnce({
@@ -272,8 +283,10 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 EV_MESSAGE: 'TO 0001012966 created'
             });
 
-            // Mock L_TO_CONFIRM -> fails with foreign lock
+            authOk();
+            // Mock L_TO_CONFIRM -> fails with foreign lock; LTAP then shows the item unconfirmed
             mockRfc.call.mockRejectedValueOnce(new Error('L_TO_CONFIRM: foreign_lock'));
+            mockRfc.readTable.mockResolvedValueOnce([{ TAPOS: '0001', PQUIT: '' }]);
 
             const result = await adapter.createTOFromTR({
                 tbnum: '0001001839',
@@ -284,7 +297,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             // TANUM must be kept!
             expect(result.TransferOrder).toBe('1012966');
             expect(result.Status).toBe('13');
-            expect(result.StatusText).toBe('TO Confirmation Failed');
+            expect(result.StatusText).toBe('TO Confirmation Error');
             expect(result.Confirmed).toBe(false);
             expect(result.ErrorStep).toBe('LT12');
             expect(result.ErrorMessage).toContain('foreign_lock');
@@ -292,6 +305,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
 
         it('scenario C: retry confirm only -> invokes L_TO_CONFIRM, does NOT call create FM', async () => {
             mockTrSetup();
+            authOk(); // L_LGNUM before confirm
 
             // Mock L_TO_CONFIRM -> succeeds
             mockRfc.call.mockResolvedValueOnce({
@@ -323,24 +337,47 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             }));
         });
 
-        it('scenario D: retry blocked when TANUM set and TO already confirmed (status 04)', async () => {
+        it('scenario D: a confirmed earlier TO (status 04) does not block a further TO for the open quantity', async () => {
             mockTrSetup();
+            authOk();
+            mockRfc.call.mockResolvedValueOnce({ EV_SUCCESS: 'S', EV_TANUM: '0001012967', EV_MESSAGE: 'TO created' });
+            authOk();
+            mockRfc.call.mockResolvedValueOnce({ E_SUBRC: 0 });
 
-            await expect(adapter.createTOFromTR({
+            const result = await adapter.createTOFromTR({
                 tbnum: '0001001839',
                 qty: 5,
                 autoConfirm: true,
                 existingToNumber: '1012966',
                 status: '04'
-            })).rejects.toThrow(/Transfer Order 1012966 is already confirmed for this process\. Creating a second TO is blocked\./);
+            });
 
-            // Neither create nor confirm should be called
+            expect(result.TransferOrder).toBe('1012967');
+            expect(result.Status).toBe('04');
+            expect(mockRfc.call).toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.anything());
+        });
+
+        it('scenario E: an unconfirmed TO item in SAP (LTAK/LTAP PQUIT blank) blocks a second TO for the same TR item', async () => {
+            mockRfc.call.mockResolvedValueOnce({
+                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001001839', BWLVS: '311', RSNUM: '0000524979' }],
+                ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001001839', TBPOS: '0001', MATNR: '000000001000000045', WERKS: '1120', LGORT: 'HS01', CHARG: '', MENGE: '10.000', TAMEN: '5.000', MEINS: 'KG' }]
+            });
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Standard Mat' }]);
+            mockRfc.readTable.mockResolvedValueOnce([{ XCHPF: '', SERNP: '' }]);
+            mockRfc.readTable.mockResolvedValueOnce([{ TANUM: '0001012966', KQUIT: '' }]); // LTAK: TO header for the TR, not confirmed
+            mockRfc.readTable.mockResolvedValueOnce([{ TAPOS: '0001', TBPOS: '0001' }]);   // LTAP: its item with PQUIT blank
+
+            await expect(adapter.createTOFromTR({ tbnum: '0001001839', qty: 5, autoConfirm: true }))
+                .rejects.toThrow(/Unconfirmed Transfer Order 1012966 exists for TR 1001839 item 0001/);
+
+            expect(mockRfc.readTable).toHaveBeenCalledWith('LTAK', ['TANUM', 'KQUIT'], ["LGNUM = 'W01'", "AND TBNUM = '0001001839'"]);
+            expect(mockRfc.readTable).toHaveBeenCalledWith('LTAP', ['TAPOS', 'TBPOS'], expect.arrayContaining(["AND PQUIT = ''", "AND TBPOS = '0001'"]));
             expect(mockRfc.call).not.toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.anything());
-            expect(mockRfc.call).not.toHaveBeenCalledWith('L_TO_CONFIRM', expect.anything());
         });
 
         it('supports autoConfirm=false leaving TO in status 03 (TO Created)', async () => {
             mockTrSetup();
+            authOk();
 
             // Mock Z_WM_TO_CREATE_FROM_TR
             mockRfc.call.mockResolvedValueOnce({

@@ -35,7 +35,7 @@ sap.ui.define([
          * @returns {Promise<Array>}
          */
         getOpenTRs: function (sLgnum, sMvt) {
-            var sWh = sLgnum || "W01";
+            var sWh = sLgnum || ""; // empty: the server resolves the configured warehouse
             var sMvtParam = sMvt ? sMvt.trim() : "";
             var sUrl = BASE_PATH + "/getOpenTRs(lgnum='" + encodeURIComponent(sWh.trim()) + "',mvt='" + encodeURIComponent(sMvtParam) + "')";
             return ODataClient.get(sUrl).then(function (oData) {
@@ -51,13 +51,16 @@ sap.ui.define([
          * @param {string} [sLgnum='W01'] - Warehouse Number
          * @returns {Promise<Object>}
          */
-        lookupTR: function (sTbnum, sLgnum) {
+        lookupTR: function (sTbnum, sLgnum, sDocType, sTbpos) {
             if (!sTbnum || !sTbnum.trim()) {
                 return Promise.reject(new Error("Transfer Requirement number is required"));
             }
-            var sWh = sLgnum || "W01";
-            var sCleanTbnum = sTbnum.trim().replace(/^TR[\s:-]*/i, "");
-            var sUrl = BASE_PATH + "/lookupTR(tbnum='" + encodeURIComponent(sCleanTbnum) + "',lgnum='" + encodeURIComponent(sWh.trim()) + "')";
+            if (sDocType !== "TR" && sDocType !== "RES") {
+                return Promise.reject(new Error("Select whether the scanned number is a Transfer Requirement (TR) or a Reservation (RES)"));
+            }
+            var sWh = sLgnum || "";
+            var sUrl = BASE_PATH + "/lookupTR(tbnum='" + encodeURIComponent(sTbnum.trim()) + "',lgnum='" + encodeURIComponent(sWh.trim()) +
+                "',docType='" + sDocType + "',tbpos='" + encodeURIComponent(sTbpos || "") + "')";
             return ODataClient.get(sUrl).then(function (oData) {
                 var oDetail = (oData && oData.value) ? oData.value : oData;
                 if (oDetail) {

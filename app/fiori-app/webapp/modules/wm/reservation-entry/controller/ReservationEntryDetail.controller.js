@@ -121,7 +121,7 @@ sap.ui.define([
             this._oService.retryStep(this._sCurrentResNo, this._sCurrentResItem || "0001", "AUTO").then(function (oUpdated) {
                 that._oViewModel.setProperty("/busy", false);
                 const sStatus = oUpdated.Status_code;
-                if (sStatus === "99") {
+                if (["11", "12", "13", "90", "99"].indexOf(sStatus) >= 0) {
                     const sErr = oUpdated.ErrorMessage || "Retry completed with errors";
                     that._oViewModel.setProperty("/errorMessage", sErr);
                     MessageBox.warning(sErr);
@@ -468,7 +468,11 @@ sap.ui.define([
                 case "03": return "TO Created";
                 case "04": return "TO Confirmed";
                 case "05": return "Goods Issue Posted";
-                case "99": return "Error";
+                case "11": return "TR Creation Error";
+                case "12": return "TO Creation Error";
+                case "13": return "TO Confirmation Error";
+                case "90": return "Goods Issue Error";
+                case "99": return "Cancelled / Reversed";
                 default: return sCode || "Pending";
             }
         },
@@ -480,7 +484,7 @@ sap.ui.define([
                 case "03": return "Warning";
                 case "04": return "Warning";
                 case "05": return "Success";
-                case "99": return "Error";
+                case "11": case "12": case "13": case "90": case "99": return "Error";
                 default: return "None";
             }
         },
@@ -492,7 +496,8 @@ sap.ui.define([
                 case "03": return "sap-icon://cart";
                 case "04": return "sap-icon://accept";
                 case "05": return "sap-icon://sys-enter-2";
-                case "99": return "sap-icon://error";
+                case "11": case "12": case "13": case "90": return "sap-icon://error";
+                case "99": return "sap-icon://cancel";
                 default: return "";
             }
         },

@@ -2,13 +2,21 @@
 
 const LOG = require('../logger')('reservation-process-adapter');
 const { RfcClient } = require('../RfcClient');
+const { sapKey, sapKeyOpt, httpError } = require('../sapKey');
+const { STATUS } = require('../../../common/wmStatus');
+const { isToFullyConfirmed } = require('./toState');
+const { checkAuthorization } = require('./authCheck');
 
-const httpError = (status, message) => Object.assign(new Error(message), { status });
+/** GM_CODE per movement type. Only the four supported types; nothing is derived for other types. */
+const GM_CODE = Object.freeze({ '201': '03', '241': '03', '311': '04', '301': '04' });
+// VERIFY IN SE37 / TEST: GM_CODE '06' (MB11) used to be the fallback for other movement types; it is not applied
+// until a live posting proves it for a concrete movement type.
 
 const pad10 = (v) => String(v || '').trim().padStart(10, '0');
 const pad12 = (v) => String(v || '').trim().padStart(12, '0');
 const pad4 = (v) => String(v || '').trim().padStart(4, '0');
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
+const padMat = (m) => (/^\d+$/.test(m) ? m.padStart(18, '0') : m);
 
 class ReservationProcessAdapter {
   constructor(options = {}) {
@@ -48,6 +56,7 @@ class ReservationProcessAdapter {
     if (!plant) throw httpError(400, 'Plant is mandatory');
     if (!material) throw httpError(400, 'Material is mandatory');
     if (!quantity || Number(quantity) <= 0) throw httpError(400, 'Valid Quantity is mandatory');
+    if (!unit) throw httpError(400, 'Unit is mandatory');
 
     const targetMovePlant = receivingPlant || (String(movementType).trim() === '311' ? plant : '');
     const header = {
@@ -60,13 +69,13 @@ class ReservationProcessAdapter {
       ...(subNumber ? { SUB_NUMBER: pad4(subNumber) } : {})
     };
 
-    const s4Mat = /^\d+$/.test(material) ? pad10(material).padStart(18, '0') : material;
+    const s4Mat = padMat(sapKey(material, 'matnr'));
     const item = {
       MATERIAL: s4Mat,
-      PLANT: String(plant).trim(),
+      PLANT: sapKey(plant, 'plant'),
       ...(storageLocation ? { STGE_LOC: String(storageLocation).trim() } : {}),
       ENTRY_QNT: Number(quantity),
-      ENTRY_UOM: String(unit || 'KG').trim().toUpperCase(),
+      ENTRY_UOM: String(unit).trim().toUpperCase(),
       MOVEMENT: 'X'
     };
 
@@ -74,9 +83,9 @@ class ReservationProcessAdapter {
     // (MARD), returning a cryptic "No storage location data for <mat> in <plant> <sloc>; ... BUS2093 not
     // created". Validate every SLoc the reservation touches up front and fail with the SLocs it IS in.
     if (this.rfc && storageLocation) {
-      const slocChecks = [{ plant: String(plant).trim(), sloc: String(storageLocation).trim(), role: 'issuing' }];
+      const slocChecks = [{ plant: sapKey(plant, 'plant'), sloc: sapKey(storageLocation, 'lgort'), role: 'issuing' }];
       if (header.MOVE_STLOC) {
-        slocChecks.push({ plant: String(targetMovePlant).trim(), sloc: header.MOVE_STLOC, role: 'receiving' });
+        slocChecks.push({ plant: sapKey(targetMovePlant, 'plant'), sloc: sapKey(header.MOVE_STLOC, 'lgort'), role: 'receiving' });
       }
       for (const chk of slocChecks) {
         let extended;
@@ -116,7 +125,7 @@ class ReservationProcessAdapter {
         reservationNo: resNo,
         reservationNoRaw: res.RESERVATION,
         reservationItem: '0001',
-        status: '01',
+        status: STATUS.RES_CREATED,
         messages: res.RETURN || []
       };
     });
@@ -144,17 +153,20 @@ class ReservationProcessAdapter {
     if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
     if (!material) throw httpError(400, 'Material is mandatory');
     if (!reservationNo) throw httpError(400, 'ReservationNo is mandatory');
+    if (!wmMovementType) throw httpError(400, 'MovementType is mandatory');
+    if (!(Number(quantity) > 0)) throw httpError(400, 'Valid Quantity is mandatory');
+    if (!unit) throw httpError(400, 'Unit is mandatory');
 
-    const s4Mat = /^\d+$/.test(material) ? pad10(material).padStart(18, '0') : material;
-    const s4Rsnum = pad10(reservationNo);
-    const s4Rspos = pad4(reservationItem);
-    const s4Lgnum = String(warehouseNumber).trim();
+    const s4Mat = padMat(sapKey(material, 'matnr'));
+    const s4Rsnum = sapKey(reservationNo, 'rsnum').padStart(10, '0');
+    const s4Rspos = sapKey(reservationItem, 'rspos').padStart(4, '0');
+    const s4Lgnum = sapKey(warehouseNumber, 'lgnum');
     // In WM customizing (T333), movement 201/241 require BENUM (Cost Center/Asset). For reservation-based staging, WM movement 311 links cleanly to RSNUM without requiring BENUM.
-    const s4Bwlvs = String(wmMovementType === '201' || wmMovementType === '241' ? '311' : (wmMovementType || '311')).trim();
-    const s4Werks = String(plant || '1120').trim();
-    const s4Lgort = String(storageLocation || 'CS01').trim();
-    const s4Menga = Number(quantity || 1);
-    const s4Altme = String(unit || 'KG').trim().toUpperCase();
+    const s4Bwlvs = sapKey(wmMovementType === '201' || wmMovementType === '241' ? '311' : wmMovementType, 'mvt');
+    const s4Werks = sapKey(plant, 'plant');
+    const s4Lgort = sapKey(storageLocation, 'lgort');
+    const s4Menga = Number(quantity);
+    const s4Altme = String(unit).trim().toUpperCase();
 
     // For transfer postings (311 and 301), linking RSNUM directly on the TR header causes standard SAP L_TO_CREATE_TR
     // to execute restrictive reservation checks that throw XFELD_WRONG. Omitting RSNUM on the WM staging TR allows clean TO creation and confirmation.
@@ -196,7 +208,7 @@ class ReservationProcessAdapter {
         tbnum = returnedItem.TBNUM ? alphaOut(returnedItem.TBNUM) : '';
         tbpos = returnedItem.TBPOS || '0001';
       } catch (err) {
-        // Fallback to custom RFC wrapper (ZWM_TR_CREATE / Z_WM_TR_CREATE) if L_TR_CREATE is UCON-blocked (Note 2295840) or fails
+        // Fallback to the custom RFC wrappers (ZWM_TR_CREATE / Z_WM_TR_CREATE) when L_TR_CREATE is rejected
         try {
           let resZ;
           try {
@@ -238,7 +250,7 @@ class ReservationProcessAdapter {
               trNumber: tbnum,
               trNumberRaw: rawTbnum,
               trItem: tbpos,
-              status: '02',
+              status: STATUS.TR_CREATED,
               item: resZ
             };
           } else if (resZ && resZ.EV_SUCCESS === 'E' && resZ.EV_MESSAGE) {
@@ -250,14 +262,7 @@ class ReservationProcessAdapter {
           }
         }
 
-        // Check if error was UCON / Note 2295840
-        if (err.message && (err.message.includes('2295840') || err.message.includes('Incompatible Call Rejected'))) {
-          const uconErr = new Error('L_TR_CREATE is restricted under SAP Note 2295840 (RFC blacklist). Requires custom RFC wrapper ZWM_TR_CREATE or manual creation via transaction LB01.');
-          uconErr.code = 'UCON_BLOCKED';
-          uconErr.originalError = err.message;
-          throw uconErr;
-        }
-
+        // No wrapper produced a TR: surface SAP's own message; the caller records status 11 (TR error).
         throw err;
       }
 
@@ -267,7 +272,7 @@ class ReservationProcessAdapter {
         trNumber: tbnum,
         trNumberRaw: returnedItem.TBNUM,
         trItem: tbpos,
-        status: '02',
+        status: STATUS.TR_CREATED,
         item: returnedItem
       };
     });
@@ -283,7 +288,8 @@ class ReservationProcessAdapter {
     if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
     if (!trNumber) throw httpError(400, 'TRNumber is mandatory');
 
-    const s4Tr = pad10(trNumber);
+    const s4Tr = sapKey(trNumber, 'tbnum').padStart(10, '0');
+    sapKey(warehouseNumber, 'lgnum');
 
     return await this.rfc.session(async (call) => {
       let res;
@@ -321,7 +327,7 @@ class ReservationProcessAdapter {
         warehouseNumber,
         toNumber: alphaOut(tanum),
         toNumberRaw: tanum,
-        status: '03'
+        status: STATUS.TO_CREATED
       };
     });
   }
@@ -336,29 +342,46 @@ class ReservationProcessAdapter {
     if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
     if (!toNumber) throw httpError(400, 'TransferOrder (toNumber) is mandatory');
 
-    const s4To = pad10(toNumber);
+    const s4To = sapKey(toNumber, 'tanum').padStart(10, '0');
+    const s4Lgnum = sapKey(warehouseNumber, 'lgnum');
 
-    return await this.rfc.session(async (call) => {
-      await call('L_TO_CONFIRM', {
-        I_LGNUM: String(warehouseNumber).trim(),
+    try {
+      await this.rfc.session(async (call) => call('L_TO_CONFIRM', {
+        I_LGNUM: s4Lgnum,
         I_TANUM: s4To,
         I_SQUIT: squit,
         I_COMMIT_WORK: commitWork ? 'X' : ' '
-      });
+      }));
+    } catch (err) {
+      // SAP rejected the call: decide from the TO's real state (LTAP-PQUIT), not from a message number.
+      let confirmedInSap = false;
+      try { confirmedInSap = await isToFullyConfirmed(this.rfc, s4Lgnum, s4To); } catch (_readErr) { /* keep original error */ }
+      if (!confirmedInSap) throw err;
+      LOG.info(`Transfer Order ${alphaOut(s4To)} is already confirmed in SAP (LTAP-PQUIT)`);
+    }
 
-      return {
-        success: true,
-        warehouseNumber,
-        toNumber: alphaOut(toNumber),
-        status: '04',
-        confirmed: true
-      };
-    });
+    return {
+      success: true,
+      warehouseNumber,
+      toNumber: alphaOut(toNumber),
+      status: STATUS.TO_CONFIRMED,
+      confirmed: true
+    };
+  }
+
+  /** SAP authorization pre-check (see ./authCheck.js). */
+  checkAuthorization(object, fields = {}) {
+    return checkAuthorization(this.rfc, object, fields);
   }
 
   /**
    * Step 5: post_migo
-   * Wraps BAPI_GOODSMVT_CREATE
+   * Wraps BAPI_GOODSMVT_CREATE.
+   *  - RESERV_NO/RES_ITEM only when the caller/tracking row names a reservation (never looked up by material).
+   *  - NO_MORE_GR only when completeReservation === true (operator ticked "complete reservation").
+   *  - processId: PROCESS_ID of this GI step, written to ITEM_TEXT (MATDOC-SGTXT, CHAR 50, §13); before posting,
+   *    MATDOC is searched for it so a retry never posts twice.
+   *  - Batch: input -> reservation (RESB) -> TO (LTAP); none for a batch-managed material (MARC-XCHPF) stops with 400.
    */
   async postGoodsMovement(params = {}) {
     const {
@@ -377,117 +400,112 @@ class ReservationProcessAdapter {
       subNumber,
       batch,
       serials = [],
+      completeReservation = false,
+      processId = '',
       testrun = false
     } = params;
 
-    let sResNo = reservationNo && reservationNo !== '0' && reservationNo !== '0000000000' ? pad10(reservationNo) : '';
-    let sResItem = reservationItem ? pad4(reservationItem) : '0001';
-    let sRecPlant = receivingPlant ? String(receivingPlant).trim() : '';
-    let sRecSLoc = receivingStorageLocation ? String(receivingStorageLocation).trim() : '';
-
-    const s4Mat = /^\d+$/.test(material) ? pad10(material).padStart(18, '0') : material;
-    const sPlant = String(plant || '1120').trim();
-    const today = this._sapDate();
-
-    let sBatch = batch ? String(batch).trim().toUpperCase() : '';
-
-    // Auto-resolve from open reservations in RESB if reservationNo was not provided
-    if (!sResNo && this.rfc && (params.transferOrder || params.autoResolveReservation)) {
-      try {
-        const resbOpen = await this.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'UMWRK', 'UMLGO', 'CHARG'], [
-          `MATNR = '${s4Mat}'`,
-          `AND WERKS = '${sPlant}'`,
-          `AND BWART = '${String(movementType).trim()}'`,
-          "AND KZEAR = ''"
-        ], 1);
-        if (resbOpen?.[0]?.RSNUM?.trim()) {
-          sResNo = resbOpen[0].RSNUM.trim();
-          if (resbOpen[0].RSPOS?.trim()) sResItem = pad4(resbOpen[0].RSPOS.trim());
-          if (!sRecPlant && resbOpen[0].UMWRK?.trim()) sRecPlant = resbOpen[0].UMWRK.trim();
-          if (!sRecSLoc && resbOpen[0].UMLGO?.trim()) sRecSLoc = resbOpen[0].UMLGO.trim();
-          if (!sBatch && resbOpen[0].CHARG?.trim()) sBatch = resbOpen[0].CHARG.trim().toUpperCase();
-        }
-      } catch (_rOpenErr) {}
-    }
-
-    const hasRes = Boolean(sResNo);
-    if (!hasRes && !params.transferOrder && !params.allowDirectMovement) {
-      throw httpError(400, 'ReservationNo is mandatory');
-    }
     if (!movementType) throw httpError(400, 'MovementType is mandatory');
     if (!material) throw httpError(400, 'Material is mandatory');
+    if (!plant) throw httpError(400, 'Plant is mandatory');
     if (!quantity || Number(quantity) <= 0) throw httpError(400, 'Valid Quantity is mandatory');
+    if (!unit) throw httpError(400, 'Unit is mandatory');
 
-    // Auto-resolve missing plant/sloc or batch from RESB if reservation is known
+    const sMvt = sapKey(movementType, 'mvt');
+    const sGmCode = params.gmCode || GM_CODE[sMvt];
+    if (!sGmCode) throw httpError(400, `Unsupported movement type for goods movement: ${sMvt} (supported: 201, 241, 311, 301)`);
+
+    const sResNo = reservationNo && reservationNo !== '0' && reservationNo !== '0000000000' ? sapKey(reservationNo, 'rsnum').padStart(10, '0') : '';
+    const sResItem = sapKey(reservationItem || '0001', 'rspos').padStart(4, '0');
+    let sRecPlant = sapKeyOpt(receivingPlant, 'plant');
+    let sRecSLoc = sapKeyOpt(receivingStorageLocation, 'lgort');
+    const s4Mat = padMat(sapKey(material, 'matnr'));
+    const sPlant = sapKey(plant, 'plant');
+    const sSLoc = sapKeyOpt(storageLocation, 'lgort');
+    const sTanum = sapKeyOpt(params.transferOrder, 'tanum');
+    const sProcessId = processId ? sapKey(processId, 'uuid') : '';
+    const today = this._sapDate();
+
+    const hasRes = Boolean(sResNo);
+    if (!hasRes && !sTanum && !params.allowDirectMovement) {
+      throw httpError(400, 'ReservationNo is mandatory');
+    }
+
+    // Retry guard: a material document already carrying this PROCESS_ID means the step was posted.
+    if (sProcessId && this.rfc) {
+      const where = [`SGTXT = '${sProcessId}'`, `AND MATNR = '${s4Mat}'`, `AND WERKS = '${sPlant}'`, "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
+      const found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], where, 1);
+      if (found?.[0]?.MBLNR) {
+        LOG.info(`Material document ${found[0].MBLNR}/${found[0].MJAHR} already exists for process ${sProcessId}; not posting again`);
+        return {
+          success: true,
+          alreadyPosted: true,
+          materialDocument: found[0].MBLNR,
+          materialDocYear: found[0].MJAHR,
+          status: STATUS.GI_POSTED,
+          reservationNo: sResNo,
+          processId: sProcessId,
+          batch: sapKeyOpt(batch, 'batch'),
+          stockEffect: this._computeStockEffect(sMvt, { ...params, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
+          messages: []
+        };
+      }
+    }
+
+    // Batch tier 1: caller
+    let sBatch = sapKeyOpt(batch, 'batch');
+
+    // Tier 2 (and receiving plant/sloc) from the reservation item itself
     if (hasRes && (!sRecPlant || !sRecSLoc || !sBatch) && this.rfc) {
       try {
         const resbRows = await this.rfc.readTable('RESB', ['UMWRK', 'UMLGO', 'CHARG'], [
-          `RSNUM = '${pad10(sResNo)}'`,
-          `AND RSPOS = '${pad4(sResItem)}'`
+          `RSNUM = '${sResNo}'`,
+          `AND RSPOS = '${sResItem}'`
         ], 1);
         if (resbRows?.[0]) {
           if (!sRecPlant && resbRows[0].UMWRK?.trim()) sRecPlant = resbRows[0].UMWRK.trim();
           if (!sRecSLoc && resbRows[0].UMLGO?.trim()) sRecSLoc = resbRows[0].UMLGO.trim();
           if (!sBatch && resbRows[0].CHARG?.trim()) sBatch = resbRows[0].CHARG.trim().toUpperCase();
         }
-      } catch (_rErr) {}
+      } catch (_rErr) { /* RESB read is best effort; the batch check below decides */ }
     }
 
-    // Auto-resolve batch from LTAP if transferOrder is present
-    if (!sBatch && this.rfc && params.transferOrder) {
+    // Tier 3: the confirmed TO item
+    if (!sBatch && this.rfc && sTanum) {
       try {
         const toRows = await this.rfc.readTable('LTAP', ['CHARG'], [
-          `TANUM = '${pad10(params.transferOrder)}'`,
+          `TANUM = '${sTanum.padStart(10, '0')}'`,
           "AND CHARG <> ''"
         ], 1);
         if (toRows?.[0]?.CHARG?.trim()) sBatch = toRows[0].CHARG.trim().toUpperCase();
-      } catch (_tErr) {}
+      } catch (_tErr) { /* same as above */ }
     }
 
-    // Auto-resolve batch from interim storage quants (921/920) in LQUA
-    if (!sBatch && this.rfc && s4Mat) {
-      try {
-        const lquaRows = await this.rfc.readTable('LQUA', ['CHARG'], [
-          `MATNR = '${s4Mat}'`,
-          "AND LGTYP IN ('921', '920')",
-          "AND VERME > 0"
-        ], 1);
-        if (lquaRows?.[0]?.CHARG?.trim()) sBatch = lquaRows[0].CHARG.trim().toUpperCase();
-      } catch (_qErr) {}
-    }
-
-    // Map GM_CODE: allow explicit override or derive per movement type
-    // GM_CODE 03 = MB1A (GI 201/241), 04 = MB1B (Transfer 311/301), 06 = MB11 (Reservation)
-    let sGmCode = params.gmCode;
-    if (!sGmCode) {
-      if (params.deriveGmCode) {
-        if (movementType === '201' || movementType === '241') sGmCode = '03';
-        else if (movementType === '311' || movementType === '301') sGmCode = '04';
-        else sGmCode = hasRes ? '06' : '04';
-      } else {
-        sGmCode = hasRes ? '06' : '04';
+    // No tier 4: a batch is never taken from interim storage quants. Batch-managed material without a batch stops here.
+    if (!sBatch && this.rfc) {
+      const marc = await this.rfc.readTable('MARC', ['XCHPF'], [`MATNR = '${s4Mat}'`, `AND WERKS = '${sPlant}'`], 1);
+      if (String(marc?.[0]?.XCHPF || '').trim() === 'X') {
+        throw httpError(400, `Batch is required for batch-managed material ${alphaOut(s4Mat)} in plant ${sPlant}: none supplied, none on reservation ${alphaOut(sResNo) || '-'} (RESB), none on Transfer Order ${alphaOut(sTanum) || '-'} (LTAP)`);
       }
     }
 
     const header = {
       PSTNG_DATE: today,
       DOC_DATE: today,
-      REF_DOC_NO: hasRes ? `RES ${sResNo}` : (params.transferOrder ? `TO ${params.transferOrder}` : 'WM SCAN-TO')
+      REF_DOC_NO: hasRes ? `RES ${sResNo}` : (sTanum ? `TO ${sTanum}` : 'WM SCAN-TO')
     };
 
     const item = {
       MATERIAL: s4Mat,
       PLANT: sPlant,
-      ...(storageLocation ? { STGE_LOC: String(storageLocation).trim() } : {}),
-      MOVE_TYPE: String(movementType).trim(),
+      ...(sSLoc ? { STGE_LOC: sSLoc } : {}),
+      MOVE_TYPE: sMvt,
       ENTRY_QNT: Number(quantity),
-      ENTRY_UOM: String(unit || 'EA').trim(),
+      ENTRY_UOM: String(unit).trim(),
       ...(sBatch ? { BATCH: sBatch } : {}),
-      ...(hasRes ? {
-        RESERV_NO: pad10(sResNo),
-        RES_ITEM: pad4(sResItem),
-        NO_MORE_GR: 'X' // Closes the reservation item (final issue)
-      } : {}),
+      ...(hasRes ? { RESERV_NO: sResNo, RES_ITEM: sResItem } : {}),
+      ...(hasRes && completeReservation === true ? { NO_MORE_GR: 'X' } : {}),
+      ...(sProcessId ? { ITEM_TEXT: sProcessId } : {}),
       ...(sRecPlant ? { MOVE_PLANT: sRecPlant } : {}),
       ...(sRecSLoc ? { MOVE_STLOC: sRecSLoc } : {}),
       ...(costCenter ? { COSTCENTER: pad10(costCenter) } : {}),
@@ -497,7 +515,7 @@ class ReservationProcessAdapter {
 
     const serialItems = (Array.isArray(serials) ? serials : [serials]).filter(Boolean).map((s) => ({
       MATDOC_ITM: '0001',
-      SERIALNO: String(s).trim()
+      SERIALNO: sapKey(s, 'serial')
     }));
 
     return await this.rfc.session(async (call) => {
@@ -531,12 +549,14 @@ class ReservationProcessAdapter {
 
       return {
         success: true,
+        alreadyPosted: false,
         materialDocument: matDoc,
         materialDocYear: docYear,
-        status: '05',
-        reservationNo: sResNo || reservationNo || '',
+        status: STATUS.GI_POSTED,
+        reservationNo: sResNo,
+        processId: sProcessId,
         batch: sBatch,
-        stockEffect: this._computeStockEffect(movementType, { ...params, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
+        stockEffect: this._computeStockEffect(sMvt, { ...params, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
         messages: res.RETURN || []
       };
     });

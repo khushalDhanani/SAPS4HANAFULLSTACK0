@@ -182,7 +182,7 @@ describe('Chunk 6: Monitor App, Retry Handling & SLG1 Integration', () => {
         WarehouseNumber: 'W01',
         TransferRequirement: '0000010001',
         TransferOrder: '0000020002',
-        Status_code: '99',
+        Status_code: '90',
         ErrorMessage: 'Deficit of BA St.Loc. unrestricted-use stock'
       });
 
@@ -244,7 +244,7 @@ describe('Chunk 6: Monitor App, Retry Handling & SLG1 Integration', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(res.data.Status_code).toBe('99');
+      expect(res.data.Status_code).toBe('12'); // the failed step's own status, never 99
       expect(res.data.ErrorMessage).toContain('Storage bin 01-01-01 locked');
 
       spyTo.mockRestore();

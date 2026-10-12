@@ -44,13 +44,19 @@ describe('TrToAdapter (RFC)', () => {
   });
 
   it.each([
-    ['missing warehouse', ['1000663', '']],
     ['non-numeric TR', ["1' OR '1", 'W01']],
+    ['TR with a prefix (prefix handling is the scan screen\'s job)', ['TR 1000663', 'W01']],
     ['injection in warehouse', ['1000663', "W' OR"]]
   ])('rejects %s with 400 before calling SAP', async (_, [tbnum, lgnum]) => {
     const rfc = fakeRfc();
     await expect(new TrToAdapter({ rfc }).getTR(tbnum, lgnum)).rejects.toMatchObject({ status: 400 });
     expect(rfc.call).not.toHaveBeenCalled();
+  });
+
+  it('uses the configured warehouse (cds.s4.warehouseNumber) when the caller sends none, never a literal', async () => {
+    const rfc = fakeRfc();
+    await new TrToAdapter({ rfc }).getTR('1000663', '');
+    expect(rfc.call).toHaveBeenCalledWith('Z_WM_GET_TR_MATERIAL_LIST', { IV_TR_NUMBER: '0001000663', IV_LGNUM: require('@sap/cds').env.s4.warehouseNumber });
   });
 
   it('checkSU accepts an SU holding an open TR material in the same plant (batch ignored, as ZTO)', async () => {
