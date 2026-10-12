@@ -750,4 +750,128 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(appControllerSrc).toContain('sRoute === "wmReservationEntryList"');
         });
     });
+
+    describe('ReservationEntryList: Create & Refresh with ReservationNo and TR No [mock only, not browser verification]', () => {
+        it('create -> row appears in list with ReservationNo and TR No filled [mock only, not browser verification]', async () => {
+            const createdRecord = {
+                ReservationNo: '0000525870',
+                ReservationItem: '0001',
+                MovementType: '311',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Material: '1000000045',
+                MaterialName: 'Raw Material 45',
+                Quantity: 10,
+                Unit: 'KG',
+                TransferRequirement: '0001001840',
+                Status_code: '02'
+            };
+
+            const serviceMock = {
+                createReservationEntry: jest.fn().mockResolvedValue(createdRecord),
+                getEntries: jest.fn().mockResolvedValue([createdRecord]),
+                getOpenReservations: jest.fn().mockResolvedValue([])
+            };
+            const routerMock = { navTo: jest.fn() };
+
+            // 1. Create reservation
+            const detailSubject = createDetailSubject(serviceMock, routerMock);
+            detailSubject._oCreateModel.setData({
+                MovementType: '311',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Material: '1000000045',
+                Quantity: 10,
+                Unit: 'KG',
+                ReceivingStorageLocation: 'ST02'
+            });
+
+            await detailSubject.onSave();
+            expect(serviceMock.createReservationEntry).toHaveBeenCalled();
+            expect(routerMock.navTo).toHaveBeenCalledWith('wmReservationEntryDetail', {
+                ReservationNo: '0000525870',
+                ReservationItem: '0001'
+            });
+
+            // 2. List loads/refreshes
+            const viewModel = new FakeJSONModel({
+                entries: [],
+                allEntries: [],
+                filterMvtType: '',
+                filterPlant: '',
+                busy: false
+            });
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oService: serviceMock,
+                _oViewModel: viewModel
+            });
+
+            await listSubject.loadData();
+
+            const aEntries = viewModel.getProperty('/entries');
+            expect(aEntries).toHaveLength(1);
+            expect(aEntries[0].ReservationNo).toBe('0000525870');
+            expect(aEntries[0].TransferRequirement).toBe('0001001840');
+            expect(aEntries[0].Status_code).toBe('02');
+        });
+
+        it('TR created later -> column updates on refresh [mock only, not browser verification]', async () => {
+            const initialRecord = {
+                ReservationNo: '0000525870',
+                ReservationItem: '0001',
+                MovementType: '311',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Material: '1000000045',
+                TransferRequirement: '',
+                Status_code: '11',
+                ErrorMessage: 'TR creation failed in SAP backend'
+            };
+
+            const updatedRecord = {
+                ...initialRecord,
+                TransferRequirement: '0001001840',
+                Status_code: '02',
+                ErrorMessage: ''
+            };
+
+            const serviceMock = {
+                retryStep: jest.fn().mockResolvedValue(updatedRecord),
+                getEntries: jest.fn()
+                    .mockResolvedValueOnce([initialRecord])
+                    .mockResolvedValueOnce([updatedRecord]),
+                getOpenReservations: jest.fn().mockResolvedValue([])
+            };
+
+            const viewModel = new FakeJSONModel({
+                entries: [],
+                allEntries: [],
+                filterMvtType: '',
+                filterPlant: '',
+                selectedEntry: initialRecord,
+                hasRetryableSelection: true,
+                busy: false
+            });
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oService: serviceMock,
+                _oViewModel: viewModel
+            });
+
+            // Initial load: TR is empty
+            await listSubject.loadData();
+            expect(viewModel.getProperty('/entries')[0].ReservationNo).toBe('0000525870');
+            expect(viewModel.getProperty('/entries')[0].TransferRequirement).toBe('');
+            expect(viewModel.getProperty('/entries')[0].Status_code).toBe('11');
+
+            // Select the item and trigger retry
+            listSubject._oViewModel.setProperty('/selectedEntry', viewModel.getProperty('/entries')[0]);
+            await listSubject.onRetryPress();
+            expect(serviceMock.retryStep).toHaveBeenCalledWith('0000525870', '0001', 'AUTO');
+
+            // List is refreshed with updated TR
+            expect(viewModel.getProperty('/entries')[0].ReservationNo).toBe('0000525870');
+            expect(viewModel.getProperty('/entries')[0].TransferRequirement).toBe('0001001840');
+            expect(viewModel.getProperty('/entries')[0].Status_code).toBe('02');
+        });
+    });
 });

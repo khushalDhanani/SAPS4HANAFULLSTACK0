@@ -44,21 +44,51 @@ sap.ui.define([
             const that = this;
             this._oViewModel.setProperty("/busy", true);
 
-            // All open reservations, read live from SAP. Only Movement Type and Plant narrow the SAP query.
+            // Filters narrow the query by Movement Type and Plant
             const oFilters = {
                 MovementType: this._oViewModel.getProperty("/filterMvtType"),
                 Plant: this._oViewModel.getProperty("/filterPlant")
             };
 
-            return this._oService.getOpenReservations(oFilters).then(function (aEntries) {
-                that._oViewModel.setProperty("/entries", aEntries);
-                that._oViewModel.setProperty("/allEntries", aEntries);
+            const pTracked = (this._oService && typeof this._oService.getEntries === "function")
+                ? this._oService.getEntries(oFilters).catch(function () { return []; })
+                : Promise.resolve([]);
+
+            const pOpen = (this._oService && typeof this._oService.getOpenReservations === "function")
+                ? this._oService.getOpenReservations(oFilters).catch(function () { return []; })
+                : Promise.resolve([]);
+
+            return Promise.all([pTracked, pOpen]).then(function (aResults) {
+                const aTracked = aResults[0] || [];
+                const aOpen = aResults[1] || [];
+
+                // Tracked entries take priority: they have TransferRequirement, Status_code, etc.
+                const mSeen = {};
+                const aCombined = [];
+
+                aTracked.forEach(function (e) {
+                    if (e && e.ReservationNo) {
+                        mSeen[e.ReservationNo] = true;
+                        aCombined.push(e);
+                    }
+                });
+
+                aOpen.forEach(function (o) {
+                    if (o && o.ReservationNo && !mSeen[o.ReservationNo]) {
+                        mSeen[o.ReservationNo] = true;
+                        aCombined.push(o);
+                    }
+                });
+
+                that._oViewModel.setProperty("/entries", aCombined);
+                that._oViewModel.setProperty("/allEntries", aCombined);
                 that._oViewModel.setProperty("/hasRetryableSelection", false);
                 that._oViewModel.setProperty("/selectedEntry", null);
                 that._oViewModel.setProperty("/busy", false);
+                return aCombined;
             }).catch(function (err) {
                 that._oViewModel.setProperty("/busy", false);
-                MessageToast.show("Error loading open reservations: " + err.message);
+                MessageToast.show("Error loading reservations: " + err.message);
             });
         },
 
@@ -111,11 +141,11 @@ sap.ui.define([
             const oSelected = this._oViewModel.getProperty("/selectedEntry");
             if (!oSelected) {
                 MessageToast.show("Please select a reservation entry to retry");
-                return;
+                return Promise.resolve();
             }
 
             this._oViewModel.setProperty("/busy", true);
-            this._oService.retryStep(oSelected.ReservationNo, oSelected.ReservationItem, "AUTO").then(function (oUpdated) {
+            return this._oService.retryStep(oSelected.ReservationNo, oSelected.ReservationItem, "AUTO").then(function (oUpdated) {
                 that._oViewModel.setProperty("/busy", false);
                 const sStatus = oUpdated.Status_code;
                 if (["11", "12", "13", "90", "99"].indexOf(sStatus) >= 0) {
@@ -123,7 +153,7 @@ sap.ui.define([
                 } else {
                     MessageToast.show("Step retried successfully. Current Status: " + sStatus);
                 }
-                that.loadData();
+                return that.loadData();
             }).catch(function (err) {
                 that._oViewModel.setProperty("/busy", false);
                 MessageToast.show("Retry failed: " + err.message);

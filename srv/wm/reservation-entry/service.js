@@ -161,6 +161,45 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         MessageText: `Reservation ${resNo} created via BAPI_RESERVATION_CREATE1`
       });
 
+      // Step 1b: Persist tracking row immediately with RSNUM as soon as SAP returns it
+      const initialTrackRecord = {
+        ReservationNo: resNo,
+        ReservationItem: resItem,
+        MovementType,
+        WarehouseNumber: WarehouseNumber || '',
+        Plant,
+        StorageLocation,
+        Material,
+        MaterialName: MaterialName || '',
+        Quantity: Number(Quantity),
+        Unit,
+        ReceivingPlant: ReceivingPlant || '',
+        ReceivingStorageLocation: ReceivingStorageLocation || '',
+        CostCenter: CostCenter || '',
+        AssetNo: AssetNo || '',
+        SubNumber: SubNumber || '',
+        TransferRequirement: '',
+        LogHandle: sLogHandle,
+        ExternalId: extId,
+        Status_code: STATUS.RES_CREATED,
+        ErrorStep: '',
+        ErrorMessage: ''
+      };
+
+      const existing = await SELECT.one.from(ReservationEntries).where({
+        ReservationNo: resNo,
+        ReservationItem: resItem
+      });
+
+      if (existing) {
+        await UPDATE(ReservationEntries).set(initialTrackRecord).where({
+          ReservationNo: resNo,
+          ReservationItem: resItem
+        });
+      } else {
+        await INSERT.into(ReservationEntries).entries(initialTrackRecord);
+      }
+
       // Step 2: Auto-create Transfer Requirement (background/immediate step)
       let trNumber = '';
       let currentStatus = STATUS.RES_CREATED;
@@ -186,6 +225,18 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         trNumber = trResult.trNumberRaw || String(trResult.trNumber).padStart(10, '0');
         currentStatus = STATUS.TR_CREATED;
 
+        // Persist TBNUM immediately as soon as SAP returns it
+        await UPDATE(ReservationEntries).set({
+          WarehouseNumber: determinedWh || WarehouseNumber || '',
+          TransferRequirement: trNumber,
+          Status_code: STATUS.TR_CREATED,
+          ErrorStep: '',
+          ErrorMessage: ''
+        }).where({
+          ReservationNo: resNo,
+          ReservationItem: resItem
+        });
+
         // Log Step 2 (LB01)
         await INSERT.into(ReservationLogs).entries({
           ID: cds.utils.uuid(),
@@ -205,6 +256,17 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         // Reservation exists but the backend created no TR: status 11 (TR error), a backend issue to fix in SAP.
         currentStatus = STATUS.TR_ERROR;
         trError = `TR creation failed in SAP backend: ${err.message}`;
+
+        await UPDATE(ReservationEntries).set({
+          WarehouseNumber: determinedWh || WarehouseNumber || '',
+          Status_code: STATUS.TR_ERROR,
+          ErrorStep: 'LB01',
+          ErrorMessage: trError
+        }).where({
+          ReservationNo: resNo,
+          ReservationItem: resItem
+        });
+
         await logRow({
           ReservationNo: resNo,
           ReservationItem: resItem,
@@ -218,45 +280,6 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           MessageNo: '999',
           MessageText: trError
         });
-      }
-
-      // Step 3: Upsert into ReservationTrack
-      const trackRecord = {
-        ReservationNo: resNo,
-        ReservationItem: resItem,
-        MovementType,
-        WarehouseNumber: determinedWh || WarehouseNumber || '',
-        Plant,
-        StorageLocation,
-        Material,
-        MaterialName: MaterialName || '',
-        Quantity: Number(Quantity),
-        Unit,
-        ReceivingPlant: ReceivingPlant || '',
-        ReceivingStorageLocation: ReceivingStorageLocation || '',
-        CostCenter: CostCenter || '',
-        AssetNo: AssetNo || '',
-        SubNumber: SubNumber || '',
-        TransferRequirement: trNumber,
-        LogHandle: sLogHandle,
-        ExternalId: extId,
-        Status_code: currentStatus,
-        ErrorStep: trError ? 'LB01' : '',
-        ErrorMessage: trError || ''
-      };
-
-      const existing = await SELECT.one.from(ReservationEntries).where({
-        ReservationNo: resNo,
-        ReservationItem: resItem
-      });
-
-      if (existing) {
-        await UPDATE(ReservationEntries).set(trackRecord).where({
-          ReservationNo: resNo,
-          ReservationItem: resItem
-        });
-      } else {
-        await INSERT.into(ReservationEntries).entries(trackRecord);
       }
 
       return await SELECT.one.from(ReservationEntries).where({

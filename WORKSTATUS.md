@@ -5,6 +5,74 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **MCP Servers: spawn ENOENT Fix & Absolute Path Hardening (2026-10-12, 17:05 IST):**
+  - **User Request:** "Still Showing MCP errors." -> Confirmed: `"Failed to start / spawn ENOENT" on command names`.
+  - **Diagnose & Root Cause:**
+    - On macOS, GUI applications (like Antigravity IDE) spawned from Dock/Finder inherit a minimal system PATH (`/usr/bin:/bin:/usr/sbin:/sbin`) that excludes user-space directories like `~/.gemini/antigravity-ide/bin` or `~/.npm-global/node_modules/.bin`.
+    - Spawning bare command names (`cds-mcp`, `fiori-mcp`, `ui5mcp`, `sap-devs`) caused immediate `spawn ENOENT` failures.
+  - **Remediation Delivered:**
+    1. In `/Users/khushaldhanani/.gemini/config/mcp_config.json`:
+       - Bound `sap-cap`, `sap-fiori`, and `sap-ui5` directly to `/usr/local/bin/node` with absolute paths to their installed entry-point JavaScript files in `~/.npm-global/node_modules/`.
+       - Bound `sap-developers-cli` to absolute binary path `/Users/khushaldhanani/.gemini/antigravity-ide/bin/sap-devs`.
+       - Added explicit `env: { "PATH": "..." }` block to each server so any spawned sub-processes inherit the complete path.
+       - Configured dual `serverUrl` (SSE standard) and `type: "http", url: "..."` for `sap-developers-search` and `sap-developers-graph` ensuring multi-client compatibility.
+  - **Validation & Results:**
+    - Ran isolated test suite with zero environment (`PATH=""`) via `python3` subprocess: all 4 servers (`sap-cap`, `sap-fiori`, `sap-ui5`, `sap-devs`) pass `initialize` handshake in 0ms without depending on environment variables.
+    - `git diff --check`: Clean (0 errors).
+
+- **SAP MCP Servers Architecture Setup & Native Binary Optimization (2026-10-12, 17:00 IST):**
+  - **User Request:** "Setup proper MCP Servers."
+  - **Audit & Diagnosed Root Causes:**
+    1. `sap-developers-cli`: Configured to invoke `sap-devs mcp serve`, but `sap-devs` binary was not present on the macOS machine, had no profile initialized, no content synced, and no tool schemas generated.
+    2. `sap-cap`, `sap-fiori`, and `sap-ui5`: Configured via dynamic `npx` invocations. `npx` emitted package check messages and warnings to `stdout` before protocol handshake, resulting in JSON-RPC stream parser corruption (`invalid character '@' looking for beginning of value`) and network latency timeouts.
+  - **Remediation Delivered:**
+    1. **Installed & Synced `sap-devs` (v0.0.15):**
+       - Downloaded official Apple Silicon (Darwin ARM64) binary from `SAP-samples/sap-devs-cli` and placed in `/Users/khushaldhanani/.gemini/antigravity-ide/bin/sap-devs`.
+       - Initialized profile to `all` (`sap-devs profile set all`) and synced developer packs (`sap-devs sync`).
+       - Generated and registered 32 native tool definitions and instructions under `/Users/khushaldhanani/.gemini/antigravity-ide/mcp/sap-developers-cli/`.
+    2. **Installed & Symlinked Native MCP Binaries:**
+       - Installed `@cap-js/mcp-server`, `@sap-ux/fiori-mcp-server`, and `@ui5/mcp-server` into `~/.npm-global`.
+       - Symlinked native binaries `cds-mcp`, `fiori-mcp`, `ui5mcp`, and `ui5lint` directly into `/Users/khushaldhanani/.gemini/antigravity-ide/bin/`.
+    3. **Optimized Global `~/.gemini/config/mcp_config.json`:**
+       - Replaced slow/noisy `npx` calls with direct binary executables (`cds-mcp`, `fiori-mcp`, `ui5mcp`), eliminating `npx` stdout pollution and network startup latency.
+       - Configured stdio transport for `sap-developers-cli` (`sap-devs mcp serve`).
+       - Maintained active HTTP endpoints for `sap-developers-search` and `sap-developers-graph`.
+  - **Validation & Results:**
+    - `python3`: Verified JSON-RPC protocol initialization across all 4 local stdio servers (`sap-cap`, `sap-fiori`, `sap-ui5`, `sap-devs`) — all initialized cleanly in milliseconds.
+    - Verified `tools/call` execution on `fiori-mcp` (`list_sap_systems`), `ui5mcp` (`get_version_info`), `sap-devs` (`get_tip`), and `cds-mcp` (`search_model`).
+    - Verified `call_mcp_tool` execution against `sap-developers-search` (`describe`).
+    - `git diff --check`: Clean (0 errors).
+
+- **/wm/reservation-entry: New Row Appearance, Immediate RSNUM/TBNUM Persistence & TR Column Binding Fix (2026-10-12, 16:35 IST):**
+  - **User Request:** "Bug on /wm/reservation-entry: after creating a reservation, the new row does not appear in the list, and Reservation No and TR No show empty. Minimal diffs. Cite file/line for every claim. No assumptions."
+  - **Diagnose & Root Cause:**
+    - Traced `create -> save -> response -> list refresh` with exact file/lines and values.
+    - Confirmed in commit `382dc160a2`, `ReservationEntryList.controller.js:L53` swapped `this._oService.getEntries(oFilters)` for `this._oService.getOpenReservations(oFilters)` and `ReservationEntryList.view.xml` deleted the `TransferRequirement` (TR No) column and cell.
+    - Because `getOpenReservations` only queries SAP remote OData `UI_RESERVATION_ITM_MNG_V2`, it does not contain the locally created reservation record from `ReservationTrack` (`saps4hana_wm_ReservationTrack`), nor does `OpenReservationRow` project `TransferRequirement` (TBNUM) or `Status_code`.
+    - In `srv/wm/reservation-entry/service.js`, the row was only written to `ReservationEntries` after Step 2 rather than immediately when Step 1 returned RSNUM.
+  - **Remediation Delivered:**
+    1. `srv/wm/reservation-entry/service.js`:
+       - Writes RSNUM (`ReservationNo: resNo`, `ReservationItem: resItem`) to `ReservationEntries` immediately after Step 1 (`BAPI_RESERVATION_CREATE1`) returns.
+       - Writes TBNUM (`TransferRequirement: trNumber`, `Status_code: '02'`) to `ReservationEntries` immediately after Step 2 (`L_TR_CREATE` / `ZWM_TR_CREATE`) returns (or status `'11'` if TR creation fails in SAP backend).
+    2. `ReservationEntryList.view.xml`:
+       - Restored missing `TransferRequirement` (TR No) column (`resEntryColAutoTR`, width `10rem`).
+       - Restored cell binding with `{= ${view>TransferRequirement} ? ${view>TransferRequirement} : '-' }` and `{= ${view>TransferRequirement} ? ${i18n>resBadgeAutoCreated} : ${i18n>resBadgePending} }`.
+       - Formatted ReservationNo sub-text cleanly for tracked single-item reservations as well as grouped open reservation rows.
+    3. `ReservationEntryList.controller.js`:
+       - In `loadData()`: fetches `this._oService.getEntries(oFilters)` alongside `this._oService.getOpenReservations(oFilters)`, merging prioritizing tracked records so newly created entries immediately appear with `ReservationNo`, `TransferRequirement`, and `Status_code`.
+       - In `onRetryPress`: returned Promise chain allowing callers/tests to await reload.
+    4. `test/unit/wm/reservationEntryUi.test.js`:
+       - Added 2 unit tests labelled `[mock only, not browser verification]`:
+         * `create -> row appears in list with ReservationNo and TR No filled`
+         * `TR created later -> column updates on refresh`
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/reservationEntryUi.test.js`: **41/41 tests PASS** (mock only, not browser verification).
+    - `npx jest test/unit/wm/reservationEntryService.test.js`: **18/18 tests PASS**.
+    - `npx jest test/unit/controller/uiConsistency.test.js`: **7/7 tests PASS**.
+    - Full WM suite: `npx jest test/unit/wm/`: **65/65 test suites PASS, 1,356/1,356 tests PASS**.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+
 - **/wm/reservation-entry/ & Detail Page Audit, Defect Remediation & ShellBar Synchronization (2026-10-12, 16:15 IST):**
   - **User Request:** "Find issues and fix /wm/reservation-entry/ And Detailed page also."
   - **Audit & Remediation Delivered:**

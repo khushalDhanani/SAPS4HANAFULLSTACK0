@@ -93,6 +93,7 @@
                     <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColMvt}" /></Column>
                     <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColMaterial}" /></Column>
                     <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColLocation}" /></Column>
+                    <Column width="10rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resEntryColAutoTR}" /></Column>
                     <Column width="8rem"><Text text="{i18n>resEntryColStatus}" /></Column>
                 </columns>
 
@@ -101,7 +102,7 @@
                         <cells>
                             <ObjectIdentifier
                                 title="{view>ReservationNo}"
-                                text="{= (${view>ItemCount} || 0) + ' item(s)' + (${view>OrderNo} ? ' &#183; Order ' + ${view>OrderNo} : '') }" />
+                                text="{= ${view>ItemCount} ? (${view>ItemCount} + ' item(s)' + (${view>OrderNo} ? ' &#183; Order ' + ${view>OrderNo} : '')) : ('Item ' + (${view>ReservationItem} || '0001')) }" />
 
                             <ObjectStatus
                                 text="{= ${view>MovementType} + (${view>MovementTypeName} ? ' &#183; ' + ${view>MovementTypeName} : '') }"
@@ -118,6 +119,10 @@
                                     class="textMuted"
                                     visible="{= !!${view>ReceivingPlant} || !!${view>ReceivingStorageLocation} }" />
                             </VBox>
+
+                            <ObjectIdentifier
+                                title="{= ${view>TransferRequirement} ? ${view>TransferRequirement} : '-' }"
+                                text="{= ${view>TransferRequirement} ? ${i18n>resBadgeAutoCreated} : ${i18n>resBadgePending} }" />
 
                             <ObjectStatus
                                 text="{= ${view>Status_code} ? ${path: 'view>Status_code', formatter: '.formatStatusText'} : (${view>StatusText} || ${i18n>resEntryStatusOpen}) }"
