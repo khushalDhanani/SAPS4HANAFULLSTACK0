@@ -15,6 +15,7 @@
 
 const cds = require('@sap/cds');
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
+const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 
 const { POST, GET } = cds.test(__dirname + '/../../../');
 const { SELECT, DELETE } = cds.ql;
@@ -421,6 +422,48 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       );
       expect(log).toBeTruthy();
       expect(log.MessageType).toBe('E');
+    });
+  });
+
+  describe('getOpenReservations (all open reservations, live from SAP)', () => {
+    let openResvSpy;
+    afterEach(() => openResvSpy?.mockRestore());
+
+    test('maps the shared open-reservations reader into the list rows', async () => {
+      openResvSpy = jest.spyOn(GoodsIssueAdapter, 'getOpenReservations').mockResolvedValue([
+        {
+          ReservationNo: '0000525868', MovementType: '301', MovementTypeName: 'TF trfr.plnt to plnt',
+          SampleMaterial: '8000009753', SampleMaterialDesc: 'iPhone 16', Plant: '1120', StorageLocation: 'CS01',
+          ReceivingPlant: '1110', ReceivingStorageLocation: 'CS01', OrderNo: '', CreatedByUser: 'KHUSHAL',
+          ItemCount: 1, DisplayText: 'Reservation 0000525868 (TF • Plant 1120 • 1 item)'
+        }
+      ]);
+
+      const { status, data } = await GET(
+        "/odata/v4/reservation-entry/getOpenReservations(plant='1120',movementType='')",
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(openResvSpy).toHaveBeenCalledWith('', '1120');
+      expect(data.value).toHaveLength(1);
+      expect(data.value[0]).toMatchObject({
+        ReservationNo: '0000525868',
+        ReservationItem: '0001',
+        MovementType: '301',
+        Material: '8000009753',
+        MaterialName: 'iPhone 16',
+        Plant: '1120',
+        ReceivingPlant: '1110',
+        ItemCount: 1
+      });
+    });
+
+    test('surfaces a reader failure as a 502', async () => {
+      openResvSpy = jest.spyOn(GoodsIssueAdapter, 'getOpenReservations').mockRejectedValue(new Error('S/4 unreachable'));
+      await expect(
+        GET("/odata/v4/reservation-entry/getOpenReservations(plant='',movementType='')", authClerk)
+      ).rejects.toMatchObject({ response: { status: 502 } });
     });
   });
 });

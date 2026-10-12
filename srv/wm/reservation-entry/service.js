@@ -2,6 +2,7 @@
 
 const cds = require('@sap/cds');
 const ReservationProcessAdapter = require('../../integration/s4hana/wm/ReservationProcessAdapter');
+const GoodsIssueAdapter = require('../../integration/s4hana/wm/GoodsIssueAdapter');
 
 module.exports = class ReservationEntryService extends cds.ApplicationService {
   async init() {
@@ -815,6 +816,33 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       return await SELECT.from(ReservationLogs)
         .where({ ReservationNo, ReservationItem })
         .orderBy('createdAt desc');
+    });
+
+    // All open reservations, read live from SAP S/4HANA (reuses the proven open-reservations reader).
+    this.on('getOpenReservations', async (req) => {
+      const plant = String(req.data.plant || '').trim();
+      const mvt = String(req.data.movementType || '').trim();
+      try {
+        const rows = await GoodsIssueAdapter.getOpenReservations(mvt, plant);
+        return (rows || []).map((r) => ({
+          ReservationNo: r.ReservationNo || '',
+          ReservationItem: '0001',
+          MovementType: r.MovementType || '',
+          MovementTypeName: r.MovementTypeName || '',
+          Material: r.SampleMaterial || '',
+          MaterialName: r.SampleMaterialDesc || '',
+          Plant: r.Plant || '',
+          StorageLocation: r.StorageLocation || '',
+          ReceivingPlant: r.ReceivingPlant || '',
+          ReceivingStorageLocation: r.ReceivingStorageLocation || '',
+          OrderNo: r.OrderNo || '',
+          CreatedByUser: r.CreatedByUser || '',
+          ItemCount: r.ItemCount || 0,
+          DisplayText: r.DisplayText || ''
+        }));
+      } catch (err) {
+        return req.error(err.status || 502, `Failed to load open reservations: ${err.message}`);
+      }
     });
 
     return super.init();

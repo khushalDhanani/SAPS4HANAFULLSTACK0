@@ -43,6 +43,15 @@ sap.ui.define([
             });
         },
 
+        getOpenReservations: function (oFilterParams) {
+            const p = oFilterParams || {};
+            const sUrl = SERVICE_URL + "/getOpenReservations(plant='" + encodeURIComponent((p.Plant || "").trim()) +
+                "',movementType='" + encodeURIComponent((p.MovementType || "").trim()) + "')";
+            return ODataClient.get(sUrl).then(function (data) {
+                return (data && data.value) ? data.value : (Array.isArray(data) ? data : []);
+            });
+        },
+
         getEntry: function (sResNo, sItem) {
             const sUrl = SERVICE_URL + "/ReservationEntries(ReservationNo='" + sResNo + "',ReservationItem='" + (sItem || "0001") + "')?$expand=Status,Logs";
             return ODataClient.get(sUrl);

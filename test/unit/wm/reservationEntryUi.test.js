@@ -407,6 +407,28 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             });
         });
 
+        it('loadData loads all open reservations from SAP (Movement Type + Plant filters only)', async () => {
+            const serviceMock = {
+                getOpenReservations: jest.fn().mockResolvedValue([
+                    { ReservationNo: '0000525868', MovementType: '301', Material: '8000009753', Plant: '1120', ItemCount: 1 }
+                ])
+            };
+            const viewModel = new FakeJSONModel({
+                filterMvtType: '', filterPlant: '1120', entries: [], allEntries: [], busy: false
+            });
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oService: serviceMock,
+                _oViewModel: viewModel
+            });
+
+            await listSubject.loadData();
+
+            expect(serviceMock.getOpenReservations).toHaveBeenCalledWith({ MovementType: '', Plant: '1120' });
+            expect(viewModel.getProperty('/entries')).toHaveLength(1);
+            expect(viewModel.getProperty('/entries')[0].ReservationNo).toBe('0000525868');
+            expect(viewModel.getProperty('/busy')).toBe(false);
+        });
+
         it('formats Date ISO string correctly via _formatDateIso', () => {
             const listSubject = Object.create(listCtrl);
             expect(listSubject._formatDateIso(null)).toBe('');

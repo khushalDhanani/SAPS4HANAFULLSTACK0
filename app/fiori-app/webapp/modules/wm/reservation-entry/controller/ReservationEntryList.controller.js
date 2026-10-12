@@ -44,18 +44,13 @@ sap.ui.define([
             const that = this;
             this._oViewModel.setProperty("/busy", true);
 
-            const dFrom = this._oViewModel.getProperty("/filterDateFrom");
-            const dTo = this._oViewModel.getProperty("/filterDateTo");
-
+            // All open reservations, read live from SAP. Only Movement Type and Plant narrow the SAP query.
             const oFilters = {
                 MovementType: this._oViewModel.getProperty("/filterMvtType"),
-                Status: this._oViewModel.getProperty("/filterStatus"),
-                Plant: this._oViewModel.getProperty("/filterPlant"),
-                DateFrom: this._formatDateIso(dFrom),
-                DateTo: this._formatDateIso(dTo)
+                Plant: this._oViewModel.getProperty("/filterPlant")
             };
 
-            this._oService.getEntries(oFilters).then(function (aEntries) {
+            return this._oService.getOpenReservations(oFilters).then(function (aEntries) {
                 that._oViewModel.setProperty("/entries", aEntries);
                 that._oViewModel.setProperty("/allEntries", aEntries);
                 that._oViewModel.setProperty("/hasRetryableSelection", false);
@@ -63,7 +58,7 @@ sap.ui.define([
                 that._oViewModel.setProperty("/busy", false);
             }).catch(function (err) {
                 that._oViewModel.setProperty("/busy", false);
-                MessageToast.show("Error loading entries: " + err.message);
+                MessageToast.show("Error loading open reservations: " + err.message);
             });
         },
 

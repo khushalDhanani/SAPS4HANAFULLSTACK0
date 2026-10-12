@@ -73,4 +73,28 @@ service ReservationEntryService {
         ReservationNo   : String(10),
         ReservationItem : String(4)
     ) returns array of ReservationLogs;
+
+    type OpenReservationRow {
+        ReservationNo            : String(10);
+        ReservationItem          : String(4);
+        MovementType             : String(3);
+        MovementTypeName         : String(60);
+        Material                 : String(40);
+        MaterialName             : String(80);
+        Plant                    : String(4);
+        StorageLocation          : String(4);
+        ReceivingPlant           : String(4);
+        ReceivingStorageLocation : String(4);
+        OrderNo                  : String(12);
+        CreatedByUser            : String(12);
+        ItemCount                : Integer;
+        DisplayText              : String(150);
+    }
+
+    // All open reservations read live from SAP S/4HANA (every open item, all movement types).
+    @readonly
+    function getOpenReservations(
+        plant        : String(4),
+        movementType : String(3)
+    ) returns array of OpenReservationRow;
 }

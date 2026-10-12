@@ -661,6 +661,23 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-12 11:30 IST — /wm/reservation-entry: list now shows ALL open reservations live from SAP (was app-tracked only)
+
+- **Trigger:** user — on `/wm/reservation-entry`, show all open reservations. Decisions (via clarifying prompt): **replace** the list with a live SAP open-reservations worklist; **row click → reservation detail page**.
+- **Before:** the list bound to the local `ReservationEntries` (ZRES_TRACK) — only reservations created through this app, with their TR/TO/MIGO lifecycle columns. Reservations created elsewhere in SAP never appeared.
+- **Change (reuse the proven reader, no new SAP client):** the goods-issue module already reads open reservations from SAP via `GoodsIssueAdapter.getOpenReservations(movementType, plant)` (OData `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem`, filter `ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false`; empty movementType = all types). Exposed it on the reservation-entry page:
+  - `srv/wm/reservation-entry/service.cds` — new `@readonly function getOpenReservations(plant, movementType) returns array of OpenReservationRow` (+ the row type).
+  - `srv/wm/reservation-entry/service.js` — require the `GoodsIssueAdapter` singleton and register `getOpenReservations`: delegates to the reader and maps each grouped reservation to the row (ReservationNo, ReservationItem '0001', MovementType(+Name), Material/Name from the sample item, Plant/SLoc, Receiving Plant/SLoc, OrderNo, CreatedByUser, ItemCount, DisplayText); reader failure → `req.error(502, …)`.
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/service/ReservationEntryService.js` — new `getOpenReservations(filters)` calling the function import.
+  - `ReservationEntryList.controller.js` — `loadData` now calls `getOpenReservations` (Movement Type + Plant filters only) and returns the promise.
+  - `ReservationEntryList.view.xml` — removed the Status and Date-range filters (every row is open; the reader has no date filter) and the per-row Retry button + selection (worklist rows aren't app-processing entries); columns remapped to the open-reservation shape (Res No + item count/order, Movement + name, Material + desc, Plant/SLoc → receiving, Status = "Open"). Row press still routes to `wmReservationEntryDetail` (item 0001).
+  - i18n (both `i18n.properties`, `i18n_en.properties`): added `resEntryStatusOpen=Open`; updated subhead → "All open reservations in SAP S/4HANA (WM)", table heading → "Open Reservations", no-data → "No open reservations found".
+  - Kept the Create button and all existing controller methods (formatters, retry, selection, `_formatDateIso`) so existing UI tests stay valid.
+- **Tests (+3):** `reservationEntryService.test.js` — `getOpenReservations` maps the reader output into rows and is called with `('', plant)`; reader failure → 502. `reservationEntryUi.test.js` — `loadData` calls `getOpenReservations` with Movement Type + Plant only and fills `/entries`.
+- **Validation (2026-10-12 11:30 IST):** `npx jest test/unit/wm` → **63 suites, 1293/1293 PASS** (was 1290 + 3); `npx cds compile srv` → OK; `cd app/fiori-app && npx ui5lint` → no findings; `git diff --check` → clean. **Live read-only proof:** `GET /odata/v4/reservation-entry/getOpenReservations(plant='1120',movementType='')` on the running server (Client 220) → **235 open reservations** with fully populated fields (e.g. 525869 / 311 / 8000009753 "Apple Macbook Pro 14\", M5" / HS01).
+- **Known limitation (follow-up):** row click opens the existing detail page, which reads the local ZRES_TRACK via `getEntry`. For a reservation **created outside this app** (most of the 235) that record doesn't exist, so the detail page will be empty. Making the detail page fall back to a live SAP read for untracked reservations is a separate change (not done). Also: the live list caps at ~2000 items / 235 shown for 1120 — filter by Plant/Movement Type for large warehouses; the in-page search box filters the loaded rows client-side only.
+- **Result:** PASS — `/wm/reservation-entry` now lists every open reservation in SAP (all movement types), proven live.
+
 ### 2026-10-12 11:15 IST — /wm/scan-to: serial-managed materials were undetected (SERNP read from wrong table) → MIGO "Maintain serial numbers"; fixed to read MARC
 
 - **Trigger:** user on `/wm/scan-to` — `Transfer Order 1037288 confirmed, but MIGO Goods Movement failed: BAPI_GOODSMVT_CREATE failed: Maintain serial numbers for total quantity`. Asked for a proper serial-entry option so the process is easy when a material is serial-managed.
