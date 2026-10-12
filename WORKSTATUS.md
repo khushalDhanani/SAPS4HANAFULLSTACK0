@@ -5,6 +5,26 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **/wm/scan-to Main & Detail View Split, Routing, Error State & Direct URL Support (2026-10-12, 15:35 IST):**
+  - **User Request:** Fix `/wm/scan-to` (main + detail). Minimal diffs. Cite file/line for every claim. No assumptions.
+    1. Audit first (table of control id | binding/handler | works? | defect). Show exact lines of every broken item.
+    2. Routes: main stays `wm/scan-to`. Add detail route `wm/scan-to/{docType}/{number}` (TR|RES, digits, max 10). Direct URL, refresh and bookmark must load data from the number alone. Invalid number: clear error state, no blank page.
+    3. Detail Page: separate view + controller with form (item, qty, batch, serials, flags) and Create & Confirm. Main page keeps scan input + open TR list; scan or row select navigates to detail.
+    4. Back: detail page has its own back button (navTo main, history fallback). Browser back works the same. Main list refreshes after a successful TO.
+    5. Fix every audited defect. Keep business logic, wmStatus.js codes and validations unchanged.
+    6. Tests: route parse, direct URL, invalid number, back, each fixed button. Labeled "mock only, not browser verification".
+  - **Delivered Architecture:**
+    1. `manifest.json`: Added route `wmWarehouseScanToDetail` (`pattern: wm/scan-to/{docType}/{number}`) and target `TargetWarehouseScanToDetail`.
+    2. `App.controller.js`: Added `wmWarehouseScanTo` and `wmWarehouseScanToDetail` to ShellBar title handler and nav-button handler with fallback.
+    3. `WarehouseScanTo.view.xml` & `WarehouseScanTo.controller.js`: Dedicated Main page keeping scan input (with segmented docType button, barcode input, camera button, value help dialog) and open TR list. Scan submit, camera scan, value help confirm, hardware scan, and open TR row tap navigate directly to `wmWarehouseScanToDetail`.
+    4. `WarehouseScanToDetail.view.xml` & `WarehouseScanToDetail.controller.js`: Dedicated Detail page with form (items select for multi-item TR, pick quantity, batch with FIFO recommendations, serial numbers capture, flags), Create & Confirm button, and outcome banner with MIGO retry. Back button uses `History.getInstance().getPreviousHash()` with route fallback. Direct URL / refresh / bookmark loads data from the number alone. Invalid document number or docType surfaces a clean error state without a blank page.
+    5. `test/unit/wm/warehouseScanToUi.test.js`: Comprehensive unit tests covering main controller routing, detail controller direct URL loading, invalid numbers/types, history fallback, and each fixed button.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **32/32 tests PASS** (mock only, not browser verification).
+    - Full WM suite: `npx jest test/unit/wm/`: **65/65 test suites PASS, 1,348/1,348 tests PASS**.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+
 - **/wm/scan-to Transfer Order Creation & Posting Fix: Source Storage Type/Bin Determination & Live S/4HANA Verification (2026-10-12, 15:15 IST):**
   - **User Request:** `/wm/scan-to` — "Not post working here check and fix."
   - **Root Cause Isolated (CONFIRMED from live Client 220 RFC & standard ABAP `LL03AF18`):**
@@ -794,6 +814,29 @@ The previous log was removed in commit `b741337`; this file restarts it.
   - Browser verification of UI5 Reservation Entry Cockpit with the verified movement types (201, 241, 311, 301).
 
 ## Changes Log
+
+### 2026-10-12 15:35 IST — /wm/scan-to Main & Detail View Split, Routing, Error State & Direct URL Support
+
+- **User Request:** Fix `/wm/scan-to` (main + detail). Minimal diffs. Cite file/line for every claim. No assumptions.
+  1. Audit first (table of control id | binding/handler | works? | defect). Show exact lines of every broken item.
+  2. Routes: main stays `wm/scan-to`. Add detail route `wm/scan-to/{docType}/{number}` (TR|RES, digits, max 10). Direct URL, refresh and bookmark must load data from the number alone. Invalid number: clear error state, no blank page.
+  3. Detail Page: separate view + controller with form (item, qty, batch, serials, flags) and Create & Confirm. Main page keeps scan input + open TR list; scan or row select navigates to detail.
+  4. Back: detail page has its own back button (navTo main, history fallback). Browser back works the same. Main list refreshes after a successful TO.
+  5. Fix every audited defect. Keep business logic, wmStatus.js codes and validations unchanged.
+  6. Tests: route parse, direct URL, invalid number, back, each fixed button. Labeled "mock only, not browser verification".
+- **Files Modified & Created:**
+  1. `app/fiori-app/webapp/manifest.json`: Added route `wmWarehouseScanToDetail` (`wm/scan-to/{docType}/{number}`) and target `TargetWarehouseScanToDetail` mapped to `saps4hana.fiori.modules.wm.warehouse-scan-to.view` (`WarehouseScanToDetail`).
+  2. `app/fiori-app/webapp/controller/App.controller.js`: Added route title mapping for `wmWarehouseScanTo` / `wmWarehouseScanToDetail` in `_updateShellBar` and route fallback in `onNavButtonPressed`.
+  3. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanTo.view.xml`: Refactored to dedicated Main page holding scan input panel (`panelScanTR`) and open TR list (`panelOpenTRs`).
+  4. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanTo.controller.js`: Main controller managing TR scan, value help dialog, hardware scan, open TRs list reload, and navigation to `wmWarehouseScanToDetail`.
+  5. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml`: Created dedicated Detail page with `<Page id="warehouseScanToDetailPage" showNavButton="true" navButtonPress=".onNavBack">`, header flags, `detailMessageStrip`, `panelResult`, `panelTRDetails`, `panelQuantityCheck`, `panelBatch`, `panelSerials`, and footer actions.
+  6. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`: Created dedicated Detail controller managing route pattern parsing, direct URL loading, error states for invalid document types and non-digit numbers, form validations, TO creation & auto-confirmation, MIGO retry, back button with history fallback, and next scan flow.
+  7. `test/unit/wm/warehouseScanToUi.test.js`: Added comprehensive unit tests covering route parsing, direct URL loading, invalid inputs, history fallback, and each fixed button labeled "[mock only, not browser verification]".
+- **Commands Executed & Validation Results:**
+  - `npx jest test/unit/wm/warehouseScanToUi.test.js`: 32/32 tests PASS.
+  - `npx jest test/unit/wm/`: 65/65 test suites PASS, 1,348/1,348 tests PASS.
+  - `git diff --check`: 0 errors (clean).
+  - `npx cds compile srv --to sql`: 0 errors (clean).
 
 ### 2026-10-12 15:15 IST — /wm/scan-to Transfer Order Creation & Posting Fix: Source Storage Type/Bin Determination & Live S/4HANA Verification
 

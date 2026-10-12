@@ -1,18 +1,37 @@
 /**
- * Unit Tests for WarehouseScanTo Freestyle UI5 App & Controller (Chunk 4: App 2)
+ * Unit Tests for WarehouseScanTo Freestyle UI5 Main & Detail Controllers
  *
- * Verifies:
- * 1. View model initialization, defaults (autoConfirm=true, lgnum='' -> server-side configured warehouse, docType='TR')
- * 2. Hardware and camera scanning integration
- * 3. Transfer Requirement (TR) lookup and details population
- * 4. Pick quantity check against open TR quantity
- * 5. Dynamic batch capture requirement when material is batch-managed
- * 6. Dynamic serial number scanning, duplicate check, and count validation
- * 7. Transfer Order creation and Auto-Confirm orchestration (Status 04)
- * 8. Error handling, reset, and next scan workflow
+ * Verifies (mock only, not browser verification):
+ * 1. Main Route ("wm/scan-to"):
+ *    - Open TR list loading directly on the page
+ *    - Barcode input submit / lookup navigating to detail route wm/scan-to/{docType}/{number}
+ *    - Open TR row press navigating to detail route wm/scan-to/TR/{Tbnum}
+ *    - Value help selection navigating to detail route
+ *    - Hardware and camera scanners triggering navigation
+ *    - Invalid scan error handling
+ *    - Main back button navigating to dashboard
+ * 2. Detail Route ("wm/scan-to/{docType}/{number}"):
+ *    - Route pattern parsing and loading data from number alone (direct URL, refresh, bookmark)
+ *    - Invalid document number (non-digits, >10 digits) showing clear error state with no blank page
+ *    - Invalid docType showing clear error state with no blank page
+ *    - Detail back button with browser history fallback (history.go(-1) vs navTo wmWarehouseScanTo)
+ *    - Each fixed button:
+ *      * btnSetMaxQty (Max Qty button)
+ *      * btnApplyFifoBatch (Apply FIFO batch)
+ *      * onSelectBatchSuggestion (Select batch in FIFO table)
+ *      * onSuggestionBatchSelected (Select batch suggestion in input)
+ *      * btnAutoFillSerials (Auto-fill series button)
+ *      * onAddSuggestedSerial (Clickable serial chip)
+ *      * btnAddSerial (Add serial button)
+ *      * onRemoveSerial (Remove serial button)
+ *      * btnReset (Cancel button)
+ *      * btnProcessTO (Create & Confirm TO button)
+ *      * btnRetryMigo (Retry MIGO button)
+ *      * btnScanNextTR (Scan Next TR button navigating to main list)
  */
 
 let WarehouseScanToController;
+let WarehouseScanToDetailController;
 
 const mockMessageBox = {
     error: jest.fn(),
@@ -28,7 +47,7 @@ const mockBarcodeScanService = {
     detachHardwareScanner: jest.fn(),
     openCameraScanner: jest.fn((title, cb) => {
         if (typeof cb === 'function') {
-            cb('SCANNED_123');
+            cb('1000027');
         }
     })
 };
@@ -40,6 +59,14 @@ const mockWarehouseScanToService = {
     lookupTR: jest.fn(),
     createTOFromTR: jest.fn(),
     postMigoGoodsMovement: jest.fn()
+};
+
+let sMockPreviousHash = undefined;
+const mockHistoryInstance = {
+    getPreviousHash: jest.fn(() => sMockPreviousHash)
+};
+const mockHistory = {
+    getInstance: jest.fn(() => mockHistoryInstance)
 };
 
 class MockJSONModel {
@@ -73,36 +100,72 @@ class MockJSONModel {
     }
 }
 
-describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
-    let controller;
-    let viewModel;
-    let mockRouter;
-    let mockRoute;
+describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser verification]', () => {
 
     beforeAll(() => {
         global.window = global.window || {};
+        global.window.history = {
+            go: jest.fn()
+        };
+
+        const BaseController = {
+            extend: (name, proto) => {
+                const ctor = function () {
+                    Object.assign(this, proto);
+                };
+                if (name.endsWith('WarehouseScanToDetail')) {
+                    WarehouseScanToDetailController = ctor;
+                } else {
+                    WarehouseScanToController = ctor;
+                }
+                return ctor;
+            },
+            prototype: {
+                onNavBack: jest.fn(function (sFallback) {
+                    const oHist = mockHistory.getInstance();
+                    const sPrev = oHist.getPreviousHash();
+                    if (sPrev !== undefined) {
+                        global.window.history.go(-1);
+                    } else {
+                        const r = this.getRouter();
+                        if (r) r.navTo(sFallback, {}, true);
+                    }
+                })
+            }
+        };
+
         global.sap = {
             ui: {
                 define: (deps, factory) => {
-                    const BaseController = {
-                        extend: (name, proto) => {
-                            WarehouseScanToController = function () {
-                                Object.assign(this, proto);
-                            };
-                            return WarehouseScanToController;
-                        }
-                    };
-                    factory(
-                        BaseController,
-                        MockJSONModel,
-                        { load: jest.fn() },
-                        mockMessageBox,
-                        mockMessageToast,
-                        jest.fn(function (opts) { Object.assign(this, opts); }),
-                        { Contains: 'Contains' },
-                        mockBarcodeScanService,
-                        mockWarehouseScanToService
-                    );
+                    if (deps.includes('sap/ui/core/routing/History')) {
+                        // WarehouseScanToDetail
+                        factory(
+                            BaseController,
+                            MockJSONModel,
+                            mockMessageBox,
+                            mockMessageToast,
+                            mockHistory,
+                            mockBarcodeScanService,
+                            mockWarehouseScanToService
+                        );
+                    } else {
+                        // WarehouseScanTo
+                        factory(
+                            BaseController,
+                            MockJSONModel,
+                            { load: jest.fn() },
+                            mockMessageToast,
+                            jest.fn(function (opts) { Object.assign(this, opts); }),
+                            { Contains: 'Contains' },
+                            mockBarcodeScanService,
+                            mockWarehouseScanToService
+                        );
+                    }
+                },
+                core: {
+                    routing: {
+                        History: mockHistory
+                    }
                 },
                 model: {
                     Filter: jest.fn(function (opts) { Object.assign(this, opts); }),
@@ -112,114 +175,200 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
         };
 
         require('../../../app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanTo.controller.js');
+        require('../../../app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js');
     });
 
-    beforeEach(() => {
-        jest.clearAllMocks();
+    describe('A. Main Controller (WarehouseScanTo) [mock only, not browser verification]', () => {
+        let mainCtrl;
+        let mainModel;
+        let mockRouter;
+        let mockRoute;
 
-        mockRoute = {
-            attachPatternMatched: jest.fn()
-        };
-        mockRouter = {
-            getRoute: jest.fn().mockReturnValue(mockRoute),
-            navTo: jest.fn()
-        };
+        beforeEach(() => {
+            jest.clearAllMocks();
 
-        controller = new WarehouseScanToController();
+            mockRoute = { attachPatternMatched: jest.fn() };
+            mockRouter = {
+                getRoute: jest.fn().mockReturnValue(mockRoute),
+                navTo: jest.fn()
+            };
 
-        const modelStore = {};
-        controller.setModel = jest.fn((m, name) => {
-            modelStore[name || ''] = m;
+            mainCtrl = new WarehouseScanToController();
+            const modelStore = {};
+            mainCtrl.setModel = jest.fn((m, name) => { modelStore[name || ''] = m; });
+            mainCtrl.getModel = jest.fn((name) => modelStore[name || '']);
+            mainCtrl.getRouter = jest.fn().mockReturnValue(mockRouter);
+            mainCtrl.byId = jest.fn().mockReturnValue({ focus: jest.fn() });
+            mainCtrl.getView = jest.fn().mockReturnValue({
+                getId: () => 'mainViewId',
+                addDependent: jest.fn()
+            });
+            mainCtrl.getText = jest.fn((key, args) => args && args.length ? `${key}: ${args.join(', ')}` : key);
+
+            mainCtrl.onInit();
+            mainModel = mainCtrl.getModel('scanView');
         });
-        controller.getModel = jest.fn((name) => modelStore[name || '']);
-        controller.getRouter = jest.fn().mockReturnValue(mockRouter);
-        controller.byId = jest.fn().mockReturnValue({ focus: jest.fn() });
-        controller.getView = jest.fn().mockReturnValue({
-            getId: () => 'viewId',
-            addDependent: jest.fn()
-        });
-        controller.getText = jest.fn((key, args) => {
-            if (args && args.length) {
-                return `${key}: ${args.join(', ')}`;
-            }
-            return key;
-        });
 
-        controller.onInit();
-        viewModel = controller.getModel('scanView');
-    });
-
-    describe('1. Initialization & State Defaults', () => {
         it('initializes default model values correctly', () => {
-            expect(viewModel.getProperty('/lgnum')).toBe('');
-            expect(viewModel.getProperty('/docType')).toBe('TR');
-            expect(viewModel.getProperty('/completeReservation')).toBe(false);
-            expect(viewModel.getProperty('/autoConfirm')).toBe(true);
-            expect(viewModel.getProperty('/audioEnabled')).toBe(true);
-            expect(viewModel.getProperty('/hasTR')).toBe(false);
-            expect(viewModel.getProperty('/canSubmit')).toBe(false);
-            expect(viewModel.getProperty('/serials')).toEqual([]);
-            expect(viewModel.getProperty('/scannedTR')).toBe('');
+            expect(mainModel.getProperty('/lgnum')).toBe('');
+            expect(mainModel.getProperty('/docType')).toBe('TR');
+            expect(mainModel.getProperty('/scannedTR')).toBe('');
+            expect(mainModel.getProperty('/audioEnabled')).toBe(true);
+            expect(mainModel.getProperty('/openTRs')).toEqual([]);
+            expect(mainModel.getProperty('/isLoadingTRs')).toBe(false);
         });
 
         it('attaches pattern matched listener to router on init', () => {
             expect(mockRouter.getRoute).toHaveBeenCalledWith('wmWarehouseScanTo');
-            expect(mockRoute.attachPatternMatched).toHaveBeenCalledWith(expect.any(Function), controller);
+            expect(mockRoute.attachPatternMatched).toHaveBeenCalledWith(expect.any(Function), mainCtrl);
         });
-    });
 
-    describe('2. Hardware & Camera Scanner Handling', () => {
-        it('attaches hardware scanner on route matched', () => {
-            controller._onRouteMatched();
+        it('attaches hardware scanner and loads open TRs on route matched', async () => {
+            mainCtrl._onRouteMatched();
             expect(mockBarcodeScanService.attachHardwareScanner).toHaveBeenCalledWith(expect.any(Function));
+            await mainCtrl._loadOpenTRs();
+            expect(mockWarehouseScanToService.getOpenTRs).toHaveBeenCalledWith('');
+            expect(mainModel.getProperty('/openTRs').length).toBe(1);
         });
 
         it('detaches hardware scanner on exit', () => {
-            controller.onExit();
+            mainCtrl.onExit();
             expect(mockBarcodeScanService.detachHardwareScanner).toHaveBeenCalled();
         });
 
-        it('handles hardware scan for TR when no TR is loaded', () => {
-            const lookupSpy = jest.spyOn(controller, 'onLookupTR').mockImplementation(() => {});
-            controller._onHardwareScan('0001001839');
+        it('navigates to detail route wmWarehouseScanToDetail on TR lookup submit [mock only, not browser verification]', async () => {
+            mainModel.setProperty('/scannedTR', '0001001839');
+            mainModel.setProperty('/docType', 'TR');
 
-            expect(viewModel.getProperty('/scannedTR')).toBe('0001001839');
-            expect(lookupSpy).toHaveBeenCalled();
+            await mainCtrl.onLookupTR();
+
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanToDetail', {
+                docType: 'TR',
+                number: '0001001839'
+            });
         });
 
-        it('handles hardware scan as serial when TR is loaded and material is serial-managed', () => {
-            viewModel.setProperty('/hasTR', true);
-            viewModel.setProperty('/tr', { IsSerialManaged: true, OpenQty: 3 });
-            viewModel.setProperty('/pickQty', 3);
+        it('extracts barcode prefix (RES) and navigates to detail route with docType RES [mock only, not browser verification]', async () => {
+            mainModel.setProperty('/scannedTR', 'RES 525866');
 
-            const addSerialSpy = jest.spyOn(controller, 'onAddSerial').mockImplementation(() => {});
-            controller._onHardwareScan('SER-99901');
+            await mainCtrl.onLookupTR();
 
-            expect(viewModel.getProperty('/serialInput')).toBe('SER-99901');
-            expect(addSerialSpy).toHaveBeenCalled();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanToDetail', {
+                docType: 'RES',
+                number: '525866'
+            });
         });
 
-        it('opens camera scanner for TR scan and triggers lookup', () => {
-            const lookupSpy = jest.spyOn(controller, 'onLookupTR').mockImplementation(() => {});
-            controller.onCameraScanTR();
+        it('shows warning when scanning empty TR without navigating', async () => {
+            mainModel.setProperty('/scannedTR', '');
+            await mainCtrl.onLookupTR();
 
+            expect(mainModel.getProperty('/hasMessage')).toBe(true);
+            expect(mainModel.getProperty('/messageType')).toBe('Warning');
+            expect(mockRouter.navTo).not.toHaveBeenCalled();
+        });
+
+        it('shows error for non-numeric scan without navigating', async () => {
+            mainModel.setProperty('/scannedTR', 'INVALID-SCAN');
+            await mainCtrl.onLookupTR();
+
+            expect(mainModel.getProperty('/hasMessage')).toBe(true);
+            expect(mainModel.getProperty('/messageType')).toBe('Error');
+            expect(mockRouter.navTo).not.toHaveBeenCalled();
+        });
+
+        it('row press in open TR list navigates to detail route [mock only, not browser verification]', () => {
+            mainCtrl.onOpenTRPress({
+                getParameter: () => null,
+                getSource: () => ({ getBindingContext: () => ({ getProperty: () => '1000800' }) })
+            });
+
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanToDetail', {
+                docType: 'TR',
+                number: '1000800'
+            });
+        });
+
+        it('value help selection navigates to detail route [mock only, not browser verification]', () => {
+            mainCtrl.onConfirmTRValueHelp({
+                getParameter: () => ({
+                    getBindingContext: () => ({ getProperty: () => '1000027' }),
+                    getTitle: () => 'TR 1000027'
+                })
+            });
+
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanToDetail', {
+                docType: 'TR',
+                number: '1000027'
+            });
+        });
+
+        it('camera scan triggers lookup and navigates to detail route [mock only, not browser verification]', () => {
+            mainCtrl.onCameraScanTR();
             expect(mockBarcodeScanService.openCameraScanner).toHaveBeenCalled();
-            expect(viewModel.getProperty('/scannedTR')).toBe('SCANNED_123');
-            expect(lookupSpy).toHaveBeenCalled();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanToDetail', {
+                docType: 'TR',
+                number: '1000027'
+            });
+        });
+
+        it('hardware scan triggers lookup and navigates to detail route [mock only, not browser verification]', () => {
+            mainCtrl._onHardwareScan('1000027');
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanToDetail', {
+                docType: 'TR',
+                number: '1000027'
+            });
+        });
+
+        it('main onNavBack navigates to dashboard [mock only, not browser verification]', () => {
+            sMockPreviousHash = undefined;
+            mainCtrl.onNavBack();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('dashboard', {}, true);
         });
     });
 
-    describe('3. TR Lookup (onLookupTR)', () => {
-        it('shows warning when scanning empty TR', () => {
-            viewModel.setProperty('/scannedTR', '');
-            controller.onLookupTR();
+    describe('B. Detail Controller (WarehouseScanToDetail) [mock only, not browser verification]', () => {
+        let detailCtrl;
+        let detailModel;
+        let mockRouter;
+        let mockRoute;
 
-            expect(viewModel.getProperty('/hasMessage')).toBe(true);
-            expect(viewModel.getProperty('/messageType')).toBe('Warning');
-            expect(mockWarehouseScanToService.lookupTR).not.toHaveBeenCalled();
+        beforeEach(() => {
+            jest.clearAllMocks();
+            sMockPreviousHash = undefined;
+
+            mockRoute = { attachPatternMatched: jest.fn() };
+            mockRouter = {
+                getRoute: jest.fn().mockReturnValue(mockRoute),
+                navTo: jest.fn()
+            };
+
+            detailCtrl = new WarehouseScanToDetailController();
+            const modelStore = {};
+            detailCtrl.setModel = jest.fn((m, name) => { modelStore[name || ''] = m; });
+            detailCtrl.getModel = jest.fn((name) => modelStore[name || '']);
+            detailCtrl.getRouter = jest.fn().mockReturnValue(mockRouter);
+            detailCtrl.byId = jest.fn().mockReturnValue({ focus: jest.fn() });
+            detailCtrl.getView = jest.fn().mockReturnValue({
+                getId: () => 'detailViewId',
+                addDependent: jest.fn()
+            });
+            detailCtrl.getText = jest.fn((key, args) => args && args.length ? `${key}: ${args.join(', ')}` : key);
+
+            detailCtrl.onInit();
+            detailModel = detailCtrl.getModel('scanView');
         });
 
-        it('successfully loads standard non-batch TR and initializes pick quantity', async () => {
+        it('initializes detail model state and binds route wmWarehouseScanToDetail', () => {
+            expect(mockRouter.getRoute).toHaveBeenCalledWith('wmWarehouseScanToDetail');
+            expect(mockRoute.attachPatternMatched).toHaveBeenCalledWith(expect.any(Function), detailCtrl);
+            expect(detailModel.getProperty('/hasTR')).toBe(false);
+            expect(detailModel.getProperty('/autoConfirm')).toBe(true);
+            expect(detailModel.getProperty('/autoPostMigo')).toBe(true);
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
+        });
+
+        it('route parse: loads TR data from number alone on direct URL / refresh / bookmark [mock only, not browser verification]', async () => {
             mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
                 WarehouseNumber: 'W01',
                 TRNumber: '0001001839',
@@ -234,557 +383,335 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
                 Batch: ''
             });
 
-            viewModel.setProperty('/scannedTR', '0001001839');
-            await controller.onLookupTR();
+            const mockEvent = {
+                getParameter: jest.fn((param) => {
+                    if (param === 'arguments') return { docType: 'TR', number: '0001001839' };
+                    return null;
+                })
+            };
 
-            expect(viewModel.getProperty('/hasTR')).toBe(true);
-            expect(viewModel.getProperty('/tr/Material')).toBe('1000000156');
-            expect(viewModel.getProperty('/pickQty')).toBe(25.5);
-            expect(viewModel.getProperty('/canSubmit')).toBe(true);
-            expect(mockMessageToast.show).toHaveBeenCalledWith('scanToMsgTRLoaded');
+            await detailCtrl._onRouteMatched(mockEvent);
+
+            expect(mockWarehouseScanToService.lookupTR).toHaveBeenCalledWith('0001001839', '', 'TR', '');
+            expect(detailModel.getProperty('/hasTR')).toBe(true);
+            expect(detailModel.getProperty('/tr/Material')).toBe('1000000156');
+            expect(detailModel.getProperty('/pickQty')).toBe(25.5);
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
+            expect(detailModel.getProperty('/hasMessage')).toBe(false);
         });
 
-        it('successfully loads TR returned with backend OData V4 field names (TransferRequirement, OpenQuantity)', async () => {
+        it('route parse: loads reservation data from number alone [mock only, not browser verification]', async () => {
             mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
                 WarehouseNumber: 'W01',
-                TransferRequirement: '1000750',
+                TransferRequirement: '1000790',
+                TRNumber: '1000790',
                 TRItem: '0001',
-                Material: '8900000007',
-                MaterialName: 'Distilled THF',
-                OpenQuantity: 3000,
-                RequiredQuantity: 3000,
-                Unit: 'KG',
-                IsBatchManaged: true,
-                IsSerialManaged: false,
-                Batch: 'IN26001220'
-            });
-
-            viewModel.setProperty('/scannedTR', '1000750');
-            await controller.onLookupTR();
-
-            expect(viewModel.getProperty('/hasTR')).toBe(true);
-            expect(viewModel.getProperty('/tr/TRNumber')).toBe('1000750');
-            expect(viewModel.getProperty('/tr/OpenQty')).toBe(3000);
-            expect(viewModel.getProperty('/tr/MaterialDescription')).toBe('Distilled THF');
-            expect(viewModel.getProperty('/pickQty')).toBe(3000);
-            expect(viewModel.getProperty('/batch')).toBe('IN26001220');
-            expect(viewModel.getProperty('/canSubmit')).toBe(true);
-        });
-
-        it('strips TR prefix and extracts numeric TR number when scanned with prefix', async () => {
-            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
-                WarehouseNumber: 'W01',
-                TransferRequirement: '1000750',
-                TRItem: '0001',
-                Material: '8900000007',
-                MaterialName: 'Distilled THF',
-                OpenQuantity: 3000,
+                Material: '8900000004',
+                OpenQty: 10,
                 Unit: 'KG'
             });
 
-            viewModel.setProperty('/scannedTR', 'TR 1000750');
-            await controller.onLookupTR();
-
-            expect(mockWarehouseScanToService.lookupTR).toHaveBeenCalledWith('1000750', '', 'TR', '');
-            expect(viewModel.getProperty('/scannedTR')).toBe('1000750');
-            expect(viewModel.getProperty('/hasTR')).toBe(true);
-        });
-
-        it('classifies a RES/RS prefix as a reservation lookup and a TR prefix as a TR lookup, never guessing [mock only, not SAP verification]', async () => {
-            mockWarehouseScanToService.lookupTR.mockResolvedValue({ TransferRequirement: '1000790', TRNumber: '1000790', TRItem: '0001', OpenQuantity: 1, Unit: 'KG' });
-            viewModel.setProperty('/scannedTR', 'RES 525866');
-            await controller.onLookupTR();
-            expect(mockWarehouseScanToService.lookupTR).toHaveBeenLastCalledWith('525866', '', 'RES', '');
-            expect(viewModel.getProperty('/docType')).toBe('TR'); // the loaded document is now a TR
-
-            viewModel.setProperty('/docType', 'RES');
-            viewModel.setProperty('/scannedTR', '525866');
-            await controller.onLookupTR();
-            expect(mockWarehouseScanToService.lookupTR).toHaveBeenLastCalledWith('525866', '', 'RES', '');
-        });
-
-        it('an explicit barcode prefix overrides the selector; a non-numeric scan or a missing selector fails', async () => {
-            mockWarehouseScanToService.lookupTR.mockResolvedValue({ TransferRequirement: '1000790', TRNumber: '1000790', TRItem: '0001', OpenQuantity: 1, Unit: 'KG' });
-            viewModel.setProperty('/docType', 'RES');
-            viewModel.setProperty('/scannedTR', 'TR 1000790');
-            await controller.onLookupTR();
-            expect(mockWarehouseScanToService.lookupTR).toHaveBeenLastCalledWith('1000790', '', 'TR', '');
-
-            mockWarehouseScanToService.lookupTR.mockClear();
-            viewModel.setProperty('/docType', '');
-            viewModel.setProperty('/scannedTR', '1000790');
-            await controller.onLookupTR();
-            expect(mockWarehouseScanToService.lookupTR).not.toHaveBeenCalled();
-            expect(viewModel.getProperty('/messageText')).toContain('scanToErrSelectDocType');
-
-            viewModel.setProperty('/docType', 'TR');
-            viewModel.setProperty('/scannedTR', 'ABC-1');
-            await controller.onLookupTR();
-            expect(mockWarehouseScanToService.lookupTR).not.toHaveBeenCalled();
-            expect(viewModel.getProperty('/messageText')).toContain('scanToErrNotANumber');
-        });
-
-        it('shows the item choice for a multi-item TR and loads the chosen item', async () => {
-            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({ TransferRequirement: '1000790', TRNumber: '1000790', TRItem: '', Items: [{ Tbpos: '0001' }, { Tbpos: '0002' }], OpenQuantity: 0 });
-            viewModel.setProperty('/scannedTR', '1000790');
-            await controller.onLookupTR();
-            expect(viewModel.getProperty('/trItems').length).toBe(2);
-            expect(viewModel.getProperty('/canSubmit')).toBe(false);
-
-            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({ TransferRequirement: '1000790', TRNumber: '1000790', TRItem: '0002', Items: [{ Tbpos: '0001' }, { Tbpos: '0002' }], OpenQuantity: 3, Unit: 'KG' });
-            await controller.onTRItemChange({ getParameter: () => ({ getKey: () => '0002' }), getSource: () => ({ getSelectedKey: () => '0002' }) });
-            expect(mockWarehouseScanToService.lookupTR).toHaveBeenLastCalledWith('1000790', '', 'TR', '0002');
-            expect(viewModel.getProperty('/tr/TRItem')).toBe('0002');
-            expect(viewModel.getProperty('/canSubmit')).toBe(true);
-        });
-
-        it('extracts numeric Tbnum from value help item title when context is unavailable', () => {
-            const lookupSpy = jest.spyOn(controller, 'onLookupTR').mockImplementation(() => {});
-            controller.onConfirmTRValueHelp({
-                getParameter: () => ({
-                    getBindingContext: () => null,
-                    getTitle: () => 'TR 1000750 (Mvt 101)'
+            const mockEvent = {
+                getParameter: jest.fn((param) => {
+                    if (param === 'arguments') return { docType: 'RES', number: '525866' };
+                    return null;
                 })
-            });
+            };
 
-            expect(viewModel.getProperty('/scannedTR')).toBe('1000750');
-            expect(lookupSpy).toHaveBeenCalled();
+            await detailCtrl._onRouteMatched(mockEvent);
+
+            expect(mockWarehouseScanToService.lookupTR).toHaveBeenCalledWith('525866', '', 'RES', '');
+            expect(detailModel.getProperty('/hasTR')).toBe(true);
+            expect(detailModel.getProperty('/docType')).toBe('TR');
         });
 
-        it('displays error message when TR lookup fails or rejects', async () => {
-            mockWarehouseScanToService.lookupTR.mockRejectedValueOnce(new Error('TR not found in warehouse W01'));
+        it('invalid number (letters or >10 digits): sets clear error state, no blank page [mock only, not browser verification]', async () => {
+            const mockEvent = {
+                getParameter: jest.fn((param) => {
+                    if (param === 'arguments') return { docType: 'TR', number: 'INVALID123456' };
+                    return null;
+                })
+            };
 
-            viewModel.setProperty('/scannedTR', '9999999999');
-            await controller.onLookupTR();
+            await detailCtrl._onRouteMatched(mockEvent);
 
-            expect(viewModel.getProperty('/hasTR')).toBe(false);
-            expect(viewModel.getProperty('/hasMessage')).toBe(true);
-            expect(viewModel.getProperty('/messageType')).toBe('Error');
-            expect(viewModel.getProperty('/messageText')).toContain('TR not found');
-        });
-    });
-
-    describe('3b. Inline Open TR List (direct selection)', () => {
-        it('loads open TRs into the view model (shown directly on the page)', async () => {
-            await controller._loadOpenTRs();
-
-            expect(mockWarehouseScanToService.getOpenTRs).toHaveBeenCalledWith('');
-            expect(viewModel.getProperty('/openTRs').length).toBe(1);
-            expect(viewModel.getProperty('/openTRs')[0].Tbnum).toBe('0001001839');
-            expect(viewModel.getProperty('/isLoadingTRs')).toBe(false);
+            expect(mockWarehouseScanToService.lookupTR).not.toHaveBeenCalled();
+            expect(detailModel.getProperty('/hasTR')).toBe(false);
+            expect(detailModel.getProperty('/tr')).toBeNull();
+            expect(detailModel.getProperty('/hasMessage')).toBe(true);
+            expect(detailModel.getProperty('/messageType')).toBe('Error');
+            expect(detailModel.getProperty('/messageText')).toContain('scanToErrNotANumber');
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
         });
 
-        it('row press loads the selected TR and triggers the next process (onLookupTR)', () => {
-            const lookupSpy = jest.spyOn(controller, 'onLookupTR').mockImplementation(() => {});
-            controller.onOpenTRPress({
-                getParameter: () => null,
-                getSource: () => ({ getBindingContext: () => ({ getProperty: () => '0001001839' }) })
-            });
+        it('invalid docType: sets clear error state, no blank page [mock only, not browser verification]', async () => {
+            const mockEvent = {
+                getParameter: jest.fn((param) => {
+                    if (param === 'arguments') return { docType: 'PO', number: '1000027' };
+                    return null;
+                })
+            };
 
-            expect(viewModel.getProperty('/scannedTR')).toBe('0001001839');
-            expect(lookupSpy).toHaveBeenCalled();
-        });
-    });
+            await detailCtrl._onRouteMatched(mockEvent);
 
-    describe('4. Pick Quantity Validation & Max Qty Setting', () => {
-        beforeEach(() => {
-            viewModel.setProperty('/hasTR', true);
-            viewModel.setProperty('/tr', {
-                TRItem: '0001',
-                OpenQty: 10,
-                IsBatchManaged: false,
-                IsSerialManaged: false
-            });
-            viewModel.setProperty('/pickQty', 10);
+            expect(mockWarehouseScanToService.lookupTR).not.toHaveBeenCalled();
+            expect(detailModel.getProperty('/hasTR')).toBe(false);
+            expect(detailModel.getProperty('/hasMessage')).toBe(true);
+            expect(detailModel.getProperty('/messageType')).toBe('Error');
+            expect(detailModel.getProperty('/messageText')).toContain('scanToErrSelectDocType');
         });
 
-        it('sets error state when pick quantity is zero or negative', () => {
-            controller.onPickQtyChange({ getParameter: () => '0' });
+        it('direct URL lookup failure (404): sets clear error state, no blank page [mock only, not browser verification]', async () => {
+            mockWarehouseScanToService.lookupTR.mockRejectedValueOnce(new Error('TR 999999 not found'));
 
-            expect(viewModel.getProperty('/qtyValueState')).toBe('Error');
-            expect(viewModel.getProperty('/canSubmit')).toBe(false);
+            const mockEvent = {
+                getParameter: jest.fn((param) => {
+                    if (param === 'arguments') return { docType: 'TR', number: '999999' };
+                    return null;
+                })
+            };
+
+            await detailCtrl._onRouteMatched(mockEvent);
+
+            expect(detailModel.getProperty('/hasTR')).toBe(false);
+            expect(detailModel.getProperty('/hasMessage')).toBe(true);
+            expect(detailModel.getProperty('/messageType')).toBe('Error');
+            expect(detailModel.getProperty('/messageText')).toContain('TR 999999 not found');
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
         });
 
-        it('sets error state when pick quantity exceeds open TR quantity', () => {
-            controller.onPickQtyChange({ getParameter: () => '15' });
-
-            expect(viewModel.getProperty('/qtyValueState')).toBe('Error');
-            expect(viewModel.getProperty('/canSubmit')).toBe(false);
+        it('back button: uses browser history fallback when previous hash exists [mock only, not browser verification]', () => {
+            sMockPreviousHash = 'wm/scan-to';
+            detailCtrl.onNavBack();
+            expect(global.window.history.go).toHaveBeenCalledWith(-1);
+            expect(mockRouter.navTo).not.toHaveBeenCalled();
         });
 
-        it('resets to valid state when set to max open quantity', () => {
-            viewModel.setProperty('/pickQty', 5);
-            controller.onSetMaxQty();
-
-            expect(viewModel.getProperty('/pickQty')).toBe(10);
-            expect(viewModel.getProperty('/qtyValueState')).toBe('None');
-            expect(viewModel.getProperty('/canSubmit')).toBe(true);
-        });
-    });
-
-    describe('5. Batch Management Validation', () => {
-        beforeEach(() => {
-            viewModel.setProperty('/hasTR', true);
-            viewModel.setProperty('/tr', {
-                TRItem: '0001',
-                OpenQty: 10,
-                IsBatchManaged: true,
-                IsSerialManaged: false
-            });
-            viewModel.setProperty('/pickQty', 10);
-            viewModel.setProperty('/batch', '');
+        it('back button: navigates to wmWarehouseScanTo when direct URL / no previous history [mock only, not browser verification]', () => {
+            sMockPreviousHash = undefined;
+            detailCtrl.onNavBack();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanTo', {}, true);
         });
 
-        it('blocks submission when batch is empty for batch-managed material', () => {
-            controller._validateForm();
-            expect(viewModel.getProperty('/canSubmit')).toBe(false);
+        it('fixed button: btnScanNextTR navigates to wmWarehouseScanTo [mock only, not browser verification]', () => {
+            detailCtrl.onScanNextTR();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanTo', {}, true);
         });
 
-        it('enables submission when valid batch is supplied', () => {
-            controller.onBatchLiveChange({ getParameter: () => 'BATCH-2026-A' });
-            expect(viewModel.getProperty('/batch')).toBe('BATCH-2026-A');
-            expect(viewModel.getProperty('/batchValueState')).toBe('None');
-            expect(viewModel.getProperty('/canSubmit')).toBe(true);
+        it('fixed button: btnSetMaxQty sets pick quantity to full open TR amount [mock only, not browser verification]', () => {
+            detailModel.setProperty('/hasTR', true);
+            detailModel.setProperty('/tr', { TRItem: '0001', OpenQty: 50, IsBatchManaged: false, IsSerialManaged: false });
+            detailModel.setProperty('/pickQty', 5);
+
+            detailCtrl.onSetMaxQty();
+
+            expect(detailModel.getProperty('/pickQty')).toBe(50);
+            expect(detailModel.getProperty('/qtyValueState')).toBe('None');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
         });
 
-        it('pre-fills FIFO batch on TR lookup when TR specifies no batch', async () => {
-            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
-                TransferRequirement: '1000663',
-                TRNumber: '1000663',
-                TRItem: '0001',
-                OpenQuantity: 10,
-                IsBatchManaged: true,
-                IsSerialManaged: false,
-                Batch: '',
-                FifoBatch: 'IN26001216',
-                SuggestedBatches: [
-                    { Batch: 'IN26001216', FifoRank: 1, IsRecommended: true, AvailableStock: 3000, Recommendation: 'FIFO Recommended' },
-                    { Batch: 'IN26001220', FifoRank: 2, IsRecommended: false, AvailableStock: 1000, Recommendation: 'FIFO Rank #2' }
-                ]
-            });
-            viewModel.setProperty('/scannedTR', '1000663');
-            await controller.onLookupTR();
+        it('fixed button: btnApplyFifoBatch applies recommended FIFO batch [mock only, not browser verification]', () => {
+            detailModel.setProperty('/hasTR', true);
+            detailModel.setProperty('/tr', { TRItem: '0001', OpenQty: 10, IsBatchManaged: true });
+            detailModel.setProperty('/pickQty', 10);
+            detailModel.setProperty('/fifoBatch', 'FIFO-B1');
+            detailModel.setProperty('/suggestedBatches', [
+                { Batch: 'FIFO-B1', StorageType: 'RM1', StorageBin: '0-L0001-01' }
+            ]);
 
-            expect(viewModel.getProperty('/batch')).toBe('IN26001216');
-            expect(viewModel.getProperty('/fifoBatch')).toBe('IN26001216');
-            expect(viewModel.getProperty('/isFifoApplied')).toBe(true);
-            expect(viewModel.getProperty('/suggestedBatches')).toHaveLength(2);
-            expect(viewModel.getProperty('/canSubmit')).toBe(true);
+            detailCtrl.onApplyFifoBatch();
+
+            expect(detailModel.getProperty('/batch')).toBe('FIFO-B1');
+            expect(detailModel.getProperty('/sourceStorageType')).toBe('RM1');
+            expect(detailModel.getProperty('/sourceStorageBin')).toBe('0-L0001-01');
+            expect(detailModel.getProperty('/isFifoApplied')).toBe(true);
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
         });
 
-        it('onApplyFifoBatch applies the recommended FIFO batch and marks it valid', () => {
-            viewModel.setProperty('/fifoBatch', 'FIFO-REC-01');
-            viewModel.setProperty('/batch', '');
-            controller.onApplyFifoBatch();
+        it('fixed button: onSelectBatchSuggestion selects batch from FIFO table [mock only, not browser verification]', () => {
+            detailModel.setProperty('/hasTR', true);
+            detailModel.setProperty('/tr', { TRItem: '0001', OpenQty: 10, IsBatchManaged: true });
+            detailModel.setProperty('/pickQty', 10);
+            detailModel.setProperty('/fifoBatch', 'FIFO-B1');
 
-            expect(viewModel.getProperty('/batch')).toBe('FIFO-REC-01');
-            expect(viewModel.getProperty('/isFifoApplied')).toBe(true);
-            expect(viewModel.getProperty('/batchValueState')).toBe('None');
-            expect(viewModel.getProperty('/canSubmit')).toBe(true);
-        });
-
-        it('onSelectBatchSuggestion selects a batch from the FIFO table context', () => {
-            viewModel.setProperty('/fifoBatch', 'FIFO-REC-01');
             const mockEvent = {
                 getSource: () => ({
                     getBindingContext: () => ({
-                        getProperty: (prop) => (prop === 'Batch' ? 'FIFO-REC-02' : null)
+                        getProperty: (prop) => (prop === 'Batch' ? 'FIFO-B2' : (prop === 'StorageType' ? 'RM2' : '0-L0002-01'))
                     })
                 })
             };
-            controller.onSelectBatchSuggestion(mockEvent);
 
-            expect(viewModel.getProperty('/batch')).toBe('FIFO-REC-02');
-            expect(viewModel.getProperty('/isFifoApplied')).toBe(false);
-            expect(viewModel.getProperty('/canSubmit')).toBe(true);
+            detailCtrl.onSelectBatchSuggestion(mockEvent);
+
+            expect(detailModel.getProperty('/batch')).toBe('FIFO-B2');
+            expect(detailModel.getProperty('/sourceStorageType')).toBe('RM2');
+            expect(detailModel.getProperty('/sourceStorageBin')).toBe('0-L0002-01');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
         });
 
-        it('onSuggestionBatchSelected applies batch from Input suggestions', () => {
-            controller.onSuggestionBatchSelected({
-                getParameter: () => ({
-                    getKey: () => 'BATCH-SUGG-99',
-                    getText: () => 'BATCH-SUGG-99'
-                })
-            });
-
-            expect(viewModel.getProperty('/batch')).toBe('BATCH-SUGG-99');
-            expect(viewModel.getProperty('/canSubmit')).toBe(true);
-        });
-
-        it('onApplyFifoBatch records sourceStorageType and sourceStorageBin from suggestedBatches', () => {
-            viewModel.setProperty('/fifoBatch', 'BATCH-FIFO-01');
-            viewModel.setProperty('/suggestedBatches', [
-                { Batch: 'BATCH-FIFO-01', StorageType: 'RM1', StorageBin: '0-L0001-03' }
+        it('fixed button: onSuggestionBatchSelected applies batch from input suggestions [mock only, not browser verification]', () => {
+            detailModel.setProperty('/hasTR', true);
+            detailModel.setProperty('/tr', { TRItem: '0001', OpenQty: 10, IsBatchManaged: true });
+            detailModel.setProperty('/pickQty', 10);
+            detailModel.setProperty('/suggestedBatches', [
+                { Batch: 'SUGG-99', StorageType: 'EN1', StorageBin: '0-L0001-02' }
             ]);
-            controller.onApplyFifoBatch();
 
-            expect(viewModel.getProperty('/batch')).toBe('BATCH-FIFO-01');
-            expect(viewModel.getProperty('/sourceStorageType')).toBe('RM1');
-            expect(viewModel.getProperty('/sourceStorageBin')).toBe('0-L0001-03');
-        });
-    });
-
-    describe('6. Serial Number Capture & Validation', () => {
-        beforeEach(() => {
-            viewModel.setProperty('/hasTR', true);
-            viewModel.setProperty('/tr', {
-                TRItem: '0001',
-                OpenQty: 3,
-                IsBatchManaged: false,
-                IsSerialManaged: true
+            detailCtrl.onSuggestionBatchSelected({
+                getParameter: () => ({ getKey: () => 'SUGG-99', getText: () => 'SUGG-99' })
             });
-            viewModel.setProperty('/pickQty', 3);
-            viewModel.setProperty('/serials', []);
+
+            expect(detailModel.getProperty('/batch')).toBe('SUGG-99');
+            expect(detailModel.getProperty('/sourceStorageType')).toBe('EN1');
+            expect(detailModel.getProperty('/sourceStorageBin')).toBe('0-L0001-02');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
         });
 
-        it('blocks submission until scanned serial count equals pick quantity', () => {
-            controller._validateForm();
-            expect(viewModel.getProperty('/canSubmit')).toBe(false);
+        it('fixed button: btnAutoFillSerials auto-fills serial series up to pickQty [mock only, not browser verification]', () => {
+            detailModel.setProperty('/hasTR', true);
+            detailModel.setProperty('/tr', { TRItem: '0001', OpenQty: 2, IsSerialManaged: true });
+            detailModel.setProperty('/pickQty', 2);
+            detailModel.setProperty('/suggestedSerials', ['SER-001', 'SER-002', 'SER-003']);
+            detailModel.setProperty('/serials', []);
+
+            detailCtrl.onAutoFillSerials();
+
+            const serials = detailModel.getProperty('/serials');
+            expect(serials).toHaveLength(2);
+            expect(serials.map(s => s.serial)).toEqual(['SER-001', 'SER-002']);
+            expect(detailModel.getProperty('/serialsStatusState')).toBe('Success');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
         });
 
-        it('adds scanned serials and updates counter status', () => {
-            viewModel.setProperty('/serialInput', 'SN-001');
-            controller.onAddSerial();
+        it('fixed button: onAddSuggestedSerial adds clicked stock serial chip [mock only, not browser verification]', () => {
+            detailModel.setProperty('/hasTR', true);
+            detailModel.setProperty('/tr', { TRItem: '0001', OpenQty: 1, IsSerialManaged: true });
+            detailModel.setProperty('/pickQty', 1);
+            detailModel.setProperty('/serials', []);
 
-            expect(viewModel.getProperty('/serials').length).toBe(1);
-            expect(viewModel.getProperty('/serialsStatusState')).toBe('Warning');
-            expect(viewModel.getProperty('/canSubmit')).toBe(false);
+            detailCtrl.onAddSuggestedSerial({
+                getSource: () => ({ getText: () => 'SER-CHIP-1' })
+            });
 
-            viewModel.setProperty('/serialInput', 'SN-002');
-            controller.onAddSerial();
-            viewModel.setProperty('/serialInput', 'SN-003');
-            controller.onAddSerial();
-
-            expect(viewModel.getProperty('/serials').length).toBe(3);
-            expect(viewModel.getProperty('/serialsStatusState')).toBe('Success');
-            expect(viewModel.getProperty('/canSubmit')).toBe(true);
+            const serials = detailModel.getProperty('/serials');
+            expect(serials).toHaveLength(1);
+            expect(serials[0].serial).toBe('SER-CHIP-1');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
         });
 
-        it('prevents adding duplicate serial number', () => {
-            viewModel.setProperty('/serialInput', 'SN-DUPLICATE');
-            controller.onAddSerial();
+        it('fixed button: btnAddSerial adds entered serial and prevents duplicate [mock only, not browser verification]', () => {
+            detailModel.setProperty('/hasTR', true);
+            detailModel.setProperty('/tr', { TRItem: '0001', OpenQty: 2, IsSerialManaged: true });
+            detailModel.setProperty('/pickQty', 2);
+            detailModel.setProperty('/serials', []);
 
-            viewModel.setProperty('/serialInput', 'SN-DUPLICATE');
-            controller.onAddSerial();
+            detailModel.setProperty('/serialInput', 'SN-100');
+            detailCtrl.onAddSerial();
+            expect(detailModel.getProperty('/serials')).toHaveLength(1);
 
-            expect(viewModel.getProperty('/serials').length).toBe(1);
+            detailModel.setProperty('/serialInput', 'SN-100');
+            detailCtrl.onAddSerial();
+            expect(detailModel.getProperty('/serials')).toHaveLength(1);
             expect(mockMessageToast.show).toHaveBeenCalledWith(expect.stringContaining('scanToErrSerialDuplicate'));
         });
 
-        it('removes serial and recalculates status', () => {
-            viewModel.setProperty('/serialInput', 'SN-A');
-            controller.onAddSerial();
-            viewModel.setProperty('/serialInput', 'SN-B');
-            controller.onAddSerial();
+        it('fixed button: onRemoveSerial removes serial and updates status [mock only, not browser verification]', () => {
+            detailModel.setProperty('/hasTR', true);
+            detailModel.setProperty('/tr', { TRItem: '0001', OpenQty: 2, IsSerialManaged: true });
+            detailModel.setProperty('/pickQty', 2);
+            detailModel.setProperty('/serials', [{ index: 1, serial: 'SN-1' }, { index: 2, serial: 'SN-2' }]);
 
-            // Mock remove event from row 0
-            const mockEvent = {
+            detailCtrl.onRemoveSerial({
                 getSource: () => ({
                     getParent: () => ({
-                        getBindingContext: () => ({
-                            getPath: () => '/serials/0'
-                        })
+                        getBindingContext: () => ({ getPath: () => '/serials/0' })
                     })
                 })
-            };
+            });
 
-            controller.onRemoveSerial(mockEvent);
-
-            const remaining = viewModel.getProperty('/serials');
-            expect(remaining.length).toBe(1);
-            expect(remaining[0].serial).toBe('SN-B');
-            expect(remaining[0].index).toBe(1);
+            expect(detailModel.getProperty('/serials')).toHaveLength(1);
+            expect(detailModel.getProperty('/serials')[0].serial).toBe('SN-2');
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
         });
 
-        it('auto-fills required serial series from suggestedSerials up to pickQty', () => {
-            viewModel.setProperty('/pickQty', 3);
-            viewModel.setProperty('/suggestedSerials', ['CON-40-001', 'CON-40-002', 'CON-40-003', 'CON-40-004']);
-            viewModel.setProperty('/serials', []);
-
-            controller.onAutoFillSerials();
-
-            const serials = viewModel.getProperty('/serials');
-            expect(serials).toHaveLength(3);
-            expect(serials.map((s) => s.serial)).toEqual(['CON-40-001', 'CON-40-002', 'CON-40-003']);
-            expect(viewModel.getProperty('/serialsStatusState')).toBe('Success');
-            expect(viewModel.getProperty('/canSubmit')).toBe(true);
-        });
-
-        it('onAddSuggestedSerial adds a clicked serial from suggestion strip', () => {
-            viewModel.setProperty('/pickQty', 2);
-            viewModel.setProperty('/serials', []);
-            const mockBtn = {
-                getSource: () => ({
-                    getText: () => 'CON-40-001'
-                })
-            };
-            controller.onAddSuggestedSerial(mockBtn);
-
-            const serials = viewModel.getProperty('/serials');
-            expect(serials).toHaveLength(1);
-            expect(serials[0].serial).toBe('CON-40-001');
-        });
-    });
-
-    describe('7. Transfer Order Processing (onProcessTO) & Auto-Confirm', () => {
-        beforeEach(() => {
-            viewModel.setProperty('/hasTR', true);
-            viewModel.setProperty('/tr', {
-                TRNumber: '0001001839',
+        it('fixed button: btnProcessTO creates TO, presents result panel and auto-confirms [mock only, not browser verification]', async () => {
+            detailModel.setProperty('/hasTR', true);
+            detailModel.setProperty('/tr', {
+                TRNumber: '1000800',
                 TRItem: '0001',
-                Material: '8000000023',
-                MaterialDescription: 'Drive Belt B20',
-                OpenQty: 5,
+                Material: '1000000204',
+                MaterialDescription: 'Chemical Solvent',
+                OpenQty: 10,
                 Unit: 'KG',
                 IsBatchManaged: false,
                 IsSerialManaged: false
             });
-            viewModel.setProperty('/pickQty', 5);
-            viewModel.setProperty('/autoConfirm', true);
-            controller._validateForm();
-        });
+            detailModel.setProperty('/pickQty', 10);
+            detailModel.setProperty('/sourceStorageType', 'RM1');
+            detailModel.setProperty('/sourceStorageBin', '0-L0001-00');
+            detailCtrl._validateForm();
 
-        it('calls createTOFromTR with autoConfirm=true and autoPostMigo=true and presents confirmed result with material document', async () => {
             mockWarehouseScanToService.createTOFromTR.mockResolvedValueOnce({
-                TransferOrder: '1012970',
-                ConfirmationNumber: '0001',
-                WarehouseNumber: 'W01',
+                TransferOrder: '1037293',
+                ConfirmationNumber: '1037293',
                 Status: '05',
                 IsConfirmed: true,
                 ConfirmedBy: 'SAP_OPERATOR',
-                MaterialDocument: '4900050128',
+                MaterialDocument: '4900050130',
                 MaterialDocYear: '2026',
-                StockEffect: 'Stock transferred to Storage Location CS01'
+                StockEffect: 'Stock posted'
             });
 
-            await controller.onProcessTO();
+            await detailCtrl.onProcessTO();
 
             expect(mockWarehouseScanToService.createTOFromTR).toHaveBeenCalledWith({
                 lgnum: '',
-                tbnum: '0001001839',
+                tbnum: '1000800',
                 tbpos: '0001',
-                qty: 5,
+                qty: 10,
                 unit: 'KG',
                 batch: '',
                 serials: [],
                 autoConfirm: true,
                 autoPostMigo: true,
                 CompleteReservation: false,
-                sourceStorageType: '',
-                sourceStorageBin: '',
+                sourceStorageType: 'RM1',
+                sourceStorageBin: '0-L0001-00',
                 storageUnit: ''
             });
 
-            expect(viewModel.getProperty('/hasResult')).toBe(true);
-            expect(viewModel.getProperty('/result/TransferOrder')).toBe('1012970');
-            expect(viewModel.getProperty('/result/IsConfirmed')).toBe(true);
-            expect(viewModel.getProperty('/result/StatusText')).toBe('Goods Issue Posted');
-            expect(viewModel.getProperty('/result/Material')).toBe('8000000023');
-            expect(viewModel.getProperty('/result/Quantity')).toBe(5);
-            expect(viewModel.getProperty('/result/MaterialDocument')).toBe('4900050128');
-            expect(viewModel.getProperty('/result/StockEffect')).toBe('Stock transferred to Storage Location CS01');
-            expect(viewModel.getProperty('/canRetryMigo')).toBe(false);
-            expect(viewModel.getProperty('/hasTR')).toBe(false);
-            expect(mockMessageToast.show).toHaveBeenCalledWith(expect.stringContaining('4900050128'));
+            expect(detailModel.getProperty('/hasResult')).toBe(true);
+            expect(detailModel.getProperty('/result/TransferOrder')).toBe('1037293');
+            expect(detailModel.getProperty('/result/MaterialDocument')).toBe('4900050130');
+            expect(detailModel.getProperty('/hasTR')).toBe(false);
         });
 
-        it('handles goods movement failure (status 90) by displaying warning message and enabling Retry button', async () => {
-            mockWarehouseScanToService.createTOFromTR.mockResolvedValueOnce({
-                TransferOrder: '1012971',
-                ConfirmationNumber: '0002',
-                WarehouseNumber: 'W01',
-                Status: '90',
-                IsConfirmed: true,
-                ConfirmedBy: 'SAP_OPERATOR',
-                ReservationNo: '0000524979',
+        it('fixed button: btnRetryMigo recovers failed goods movement to status 05 [mock only, not browser verification]', async () => {
+            detailModel.setProperty('/result', {
+                TransferOrder: '1037290',
+                ReservationNo: '525866',
                 ReservationItem: '0001',
-                Material: '8000000023',
-                Quantity: 5,
-                Unit: 'KG',
                 MovementType: '311',
-                ErrorMessage: 'Posting date 20261010 period closed'
+                Material: '8000009753',
+                Quantity: 1,
+                Unit: 'EA',
+                Status: '90'
             });
-
-            await controller.onProcessTO();
-
-            expect(viewModel.getProperty('/hasResult')).toBe(true);
-            expect(viewModel.getProperty('/canRetryMigo')).toBe(true);
-            expect(viewModel.getProperty('/resultMessage')).toContain('Posting date 20261010 period closed');
-        });
-
-        it('onRetryMigo triggers postMigoGoodsMovement and recovers to status 05 on success', async () => {
-            viewModel.setProperty('/result', {
-                TransferOrder: '1012971',
-                ReservationNo: '0000524979',
-                ReservationItem: '0001',
-                Material: '8000000023',
-                Quantity: 5,
-                Unit: 'KG',
-                MovementType: '311',
-                Status: '90',
-                ProcessId: 'A1B2C3D4-0000-4000-8000-000000000001'
-            });
-            viewModel.setProperty('/canRetryMigo', true);
+            detailModel.setProperty('/canRetryMigo', true);
 
             mockWarehouseScanToService.postMigoGoodsMovement.mockResolvedValueOnce({
-                MaterialDocument: '4900050129',
+                MaterialDocument: '4900050135',
                 MaterialDocYear: '2026',
-                Status: '05',
-                StockEffect: 'Stock transferred to Storage Location CS01'
+                Status: '05'
             });
 
-            await controller.onRetryMigo();
+            await detailCtrl.onRetryMigo();
 
-            expect(mockWarehouseScanToService.postMigoGoodsMovement).toHaveBeenCalledWith({
-                ReservationNo: '0000524979',
-                ReservationItem: '0001',
-                TransferOrder: '1012971',
-                MovementType: '311',
-                Material: '8000000023',
-                Quantity: 5,
-                Unit: 'KG',
-                CompleteReservation: false,
-                ProcessId: 'A1B2C3D4-0000-4000-8000-000000000001'
-            });
-
-            expect(viewModel.getProperty('/canRetryMigo')).toBe(false);
-            expect(viewModel.getProperty('/result/MaterialDocument')).toBe('4900050129');
-            expect(viewModel.getProperty('/result/Status')).toBe('05');
-            expect(mockMessageToast.show).toHaveBeenCalledWith(expect.stringContaining('4900050129'));
-        });
-
-        it('handles createTOFromTR failure gracefully via MessageBox.error', async () => {
-            mockWarehouseScanToService.createTOFromTR.mockRejectedValueOnce(new Error('SAP Lock error'));
-
-            await controller.onProcessTO();
-
-            expect(mockMessageBox.error).toHaveBeenCalledWith('SAP Lock error');
-            expect(viewModel.getProperty('/canSubmit')).toBe(true);
-        });
-    });
-
-    describe('8. Reset & Next Scan Flow', () => {
-        it('clears all TR, batch, serials, and result state on reset', () => {
-            viewModel.setProperty('/hasResult', true);
-            viewModel.setProperty('/hasTR', true);
-            viewModel.setProperty('/batch', 'BATCH-1');
-            viewModel.setProperty('/serials', [{ index: 1, serial: 'S1' }]);
-
-            controller.onReset();
-
-            expect(viewModel.getProperty('/hasResult')).toBe(false);
-            expect(viewModel.getProperty('/hasTR')).toBe(false);
-            expect(viewModel.getProperty('/batch')).toBe('');
-            expect(viewModel.getProperty('/serials')).toEqual([]);
-            expect(viewModel.getProperty('/scannedTR')).toBe('');
-        });
-
-        it('toggles audio enabled state', () => {
-            expect(viewModel.getProperty('/audioEnabled')).toBe(true);
-            controller.onToggleAudio();
-            expect(viewModel.getProperty('/audioEnabled')).toBe(false);
-            controller.onToggleAudio();
-            expect(viewModel.getProperty('/audioEnabled')).toBe(true);
+            expect(mockWarehouseScanToService.postMigoGoodsMovement).toHaveBeenCalled();
+            expect(detailModel.getProperty('/canRetryMigo')).toBe(false);
+            expect(detailModel.getProperty('/result/MaterialDocument')).toBe('4900050135');
+            expect(detailModel.getProperty('/result/Status')).toBe('05');
         });
     });
 });

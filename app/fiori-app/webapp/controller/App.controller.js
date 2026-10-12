@@ -233,6 +233,11 @@ sap.ui.define([
                     sTitle = oBundle ? oBundle.getText("trToTitle") : "TO Creation (ZTO)";
                     bShowNav = true;
                     break;
+                case "wmWarehouseScanTo":
+                case "wmWarehouseScanToDetail":
+                    sTitle = oBundle ? oBundle.getText("scanToPageTitle") : "Scan TR to Transfer Order";
+                    bShowNav = true;
+                    break;
                 case "wmScan261":
                     sTitle = oBundle ? oBundle.getText("scan261Title") : "Scan for Goods Issue 261";
                     bShowNav = true;
@@ -325,6 +330,10 @@ sap.ui.define([
                 this.onNavBack("wmHandlingUnits");
             } else if (sRoute === "wmPackingInstructionDetail") {
                 this.onNavBack("wmPackingInstructions");
+            } else if (sRoute === "wmWarehouseScanToDetail") {
+                this.onNavBack("wmWarehouseScanTo");
+            } else if (sRoute === "wmWarehouseScanTo") {
+                this.onNavBack("dashboard");
             } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
                 this.onNavBack("dashboard");
             } else {

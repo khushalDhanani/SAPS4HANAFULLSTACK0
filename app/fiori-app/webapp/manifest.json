@@ -410,6 +410,11 @@
           "name": "wmWarehouseScanTo",
           "pattern": "wm/scan-to",
           "target": "TargetWarehouseScanTo"
+        },
+        {
+          "name": "wmWarehouseScanToDetail",
+          "pattern": "wm/scan-to/{docType}/{number}",
+          "target": "TargetWarehouseScanToDetail"
         }
       ],
       "targets": {
@@ -579,6 +584,11 @@
         "TargetWarehouseScanTo": {
           "id": "warehouseScanTo",
           "name": "WarehouseScanTo",
+          "path": "saps4hana.fiori.modules.wm.warehouse-scan-to.view"
+        },
+        "TargetWarehouseScanToDetail": {
+          "id": "warehouseScanToDetail",
+          "name": "WarehouseScanToDetail",
           "path": "saps4hana.fiori.modules.wm.warehouse-scan-to.view"
         }
       }
