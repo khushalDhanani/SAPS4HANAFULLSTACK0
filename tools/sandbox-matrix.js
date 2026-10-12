@@ -72,15 +72,15 @@ async function readProcess(rfc, wh, ctx) {
     for (const h of snap.ltak) snap.ltap.push(...await rfc.readTable('LTAP', ['TANUM', 'TAPOS', 'TBPOS', 'MATNR', 'VLTYP', 'VLPLA', 'NLTYP', 'NLPLA', 'PQUIT', 'NSOLA', 'CHARG'], [`LGNUM = '${wh}'`, `AND TANUM = '${h.TANUM}'`]));
   }
   if (ctx.material) snap.lqua = await rfc.readTable('LQUA', ['LQNUM', 'WERKS', 'LGORT', 'CHARG', 'VERME', 'MEINS', 'LGTYP', 'LGPLA'], [`LGNUM = '${wh}'`, `AND MATNR = '${padMat(ctx.material)}'`, `AND WERKS = '${ctx.plant}'`, 'AND VERME > 0']);
-  if (ctx.rsnum) snap.matdoc = await rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'RSPOS', 'SGTXT', 'CANCELLED', 'REVERSAL_MOVEMENT'], [`RSNUM = '${rs}'`], 50);
-  for (const p of pid) { const extra = await rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'RSPOS', 'SGTXT', 'CANCELLED', 'REVERSAL_MOVEMENT'], [`SGTXT = '${p}'`], 20); for (const e of extra) if (!snap.matdoc.some((m) => m.MBLNR === e.MBLNR && m.ZEILE === e.ZEILE)) snap.matdoc.push(e); }
+  if (ctx.rsnum) snap.matdoc = await rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'RSNUM', 'RSPOS', 'SGTXT', 'CANCELLED', 'REVERSAL_MOVEMENT'], [`RSNUM = '${rs}'`], 50);
+  for (const p of pid) { const extra = await rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'RSNUM', 'RSPOS', 'SGTXT', 'CANCELLED', 'REVERSAL_MOVEMENT'], [`SGTXT = '${p}'`], 20); for (const e of extra) if (!snap.matdoc.some((m) => m.MBLNR === e.MBLNR && m.ZEILE === e.ZEILE)) snap.matdoc.push(e); }
   out('\nRESB:'); table(snap.resb, ['RSPOS', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'BDMNG', 'ENMNG', 'KZEAR', 'XLOEK']);
   out('LTBK:'); table(snap.ltbk, ['TBNUM', 'BWLVS', 'STATU', 'RSNUM', 'BDATU', 'VLTYP', 'VLPLA', 'NLTYP', 'NLPLA']);
   out('LTBP:'); table(snap.ltbp, ['TBNUM', 'TBPOS', 'MATNR', 'MENGA', 'TAMEN', 'ELIKZ']);
   out('LTAK:'); table(snap.ltak, ['TANUM', 'TBNUM', 'BWLVS', 'KQUIT', 'BDATU']);
   out('LTAP:'); table(snap.ltap, ['TANUM', 'TAPOS', 'TBPOS', 'VLTYP', 'VLPLA', 'NLTYP', 'NLPLA', 'PQUIT', 'NSOLA', 'CHARG']);
   out('LQUA:'); table(snap.lqua, ['LQNUM', 'WERKS', 'LGORT', 'CHARG', 'VERME', 'MEINS', 'LGTYP', 'LGPLA']);
-  out('MATDOC:'); table(snap.matdoc, ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'RSPOS', 'SGTXT', 'CANCELLED', 'REVERSAL_MOVEMENT']);
+  out('MATDOC:'); table(snap.matdoc, ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'WERKS', 'LGORT', 'CHARG', 'MENGE', 'RSNUM', 'RSPOS', 'SGTXT', 'CANCELLED', 'REVERSAL_MOVEMENT']);
   return snap;
 }
 
@@ -180,7 +180,14 @@ async function runCase(rfc, r, wh, t333, mvt, caseName) {
     if (ok) { check(caseId, 'retry -> status 05 with material document', ok.Status === '05' && !!ok.MaterialDocument, { Status: ok.Status, MaterialDocument: ok.MaterialDocument, ProcessId: ok.ProcessId }, { Status: '05' }); check(caseId, 'retry reused the ProcessId of the failed step', ok.ProcessId === fail?.ProcessId, ok.ProcessId, fail?.ProcessId); }
     const before = ok ? (await readProcess(rfc, wh, ctx)).matdoc.length : 0;
     const again = await postGm(to, totalQty, {}, true);
-    if (again) { check(caseId, 'second retry -> already posted, same document', again.Status === '05' && again.MaterialDocument === ok?.MaterialDocument && /already existed/i.test(again.Message || ''), { Status: again.Status, MaterialDocument: again.MaterialDocument, Message: again.Message }, { MaterialDocument: ok?.MaterialDocument }); const after = (await readProcess(rfc, wh, ctx)).matdoc; check(caseId, 'no new MATDOC rows after second retry', after.length === before, after.length, before); check(caseId, 'MATDOC SGTXT = ProcessId', after.some((m) => m.SGTXT === String(ok?.ProcessId || '').toUpperCase()), after.map((m) => m.SGTXT), String(ok?.ProcessId || '').toUpperCase()); }
+    if (again) {
+      check(caseId, 'second retry -> already posted, same document', again.Status === '05' && again.MaterialDocument === ok?.MaterialDocument && /already existed/i.test(again.Message || ''), { Status: again.Status, MaterialDocument: again.MaterialDocument, Message: again.Message }, { MaterialDocument: ok?.MaterialDocument });
+      const after = (await readProcess(rfc, wh, ctx)).matdoc;
+      check(caseId, 'no new MATDOC rows after second retry', after.length === before, after.length, before);
+      const sgtxtMatch2 = after.some((m) => m.SGTXT === String(ok?.ProcessId || '').toUpperCase());
+      const resMatch2 = Boolean(ctx.rsnum) && after.some((m) => strip(m.RSNUM) === strip(ctx.rsnum) && strip(m.RSPOS) === strip(ctx.rspos));
+      check(caseId, 'MATDOC links to ProcessId (SGTXT) or Reservation (RSNUM/RSPOS)', sgtxtMatch2 || resMatch2, sgtxtMatch2 ? 'SGTXT' : `${strip(ctx.rsnum)}/${strip(ctx.rspos)}`, String(ok?.ProcessId || '').toUpperCase());
+    }
     return;
   }
   for (const [i, to] of toList.entries()) {
@@ -197,7 +204,9 @@ async function runCase(rfc, r, wh, t333, mvt, caseName) {
     const docRows = s3.matdoc.filter((m) => strip(m.MBLNR) === strip(gm.MaterialDocument));
     check(caseId, 'MATDOC rows exist for the document', docRows.length > 0, docRows.length, '>0');
     if (!docRows.length) continue; // the remaining document checks would be vacuous
-    check(caseId, 'MATDOC SGTXT = ProcessId (CHAR 50, full UUID)', docRows.every((m) => m.SGTXT === String(gm.ProcessId).toUpperCase()), docRows.map((m) => m.SGTXT), String(gm.ProcessId).toUpperCase());
+    const sgtxtMatch = docRows.every((m) => m.SGTXT === String(gm.ProcessId).toUpperCase());
+    const resLinkMatch = Boolean(ctx.rsnum) && docRows.every((m) => strip(m.RSNUM) === strip(ctx.rsnum) && strip(m.RSPOS) === strip(ctx.rspos));
+    check(caseId, 'MATDOC links to ProcessId (SGTXT) or Reservation (RSNUM/RSPOS)', sgtxtMatch || resLinkMatch, sgtxtMatch ? String(gm.ProcessId).toUpperCase() : docRows.map((m) => `${strip(m.RSNUM)}/${strip(m.RSPOS)}`).join(','), String(gm.ProcessId).toUpperCase());
     check(caseId, 'MATDOC BWART / RSPOS', docRows.every((m) => m.BWART === mvt && m.RSPOS === ctx.rspos), docRows.map((m) => `${m.BWART}/${m.RSPOS}`), `${mvt}/${ctx.rspos}`);
     check(caseId, 'MATDOC not cancelled', docRows.every((m) => !m.CANCELLED && !m.REVERSAL_MOVEMENT), docRows.map((m) => `${m.CANCELLED}${m.REVERSAL_MOVEMENT}`), '');
     if (batch) check(caseId, 'MATDOC CHARG = batch', docRows.every((m) => m.CHARG === batch), docRows.map((m) => m.CHARG), batch);

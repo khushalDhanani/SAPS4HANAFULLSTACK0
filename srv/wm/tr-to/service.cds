@@ -149,12 +149,32 @@ service TrToService @(path: '/odata/v4/tr-to') {
         OpenQuantity            : Decimal(13, 3);
         Unit                    : String(3);
         Batch                   : String(10);
+        FifoBatch               : String(10);
+        SuggestedBatches        : array of BatchSuggestion;
+        SuggestedSerials        : array of String(18);
         IsBatchManaged          : Boolean;
         IsSerialManaged         : Boolean;
         DeliveryCompleted       : Boolean;
         Status                  : String(2);
         StatusText              : String(40);
         Items                   : array of TRItem; // all open items; TRItem is '' until one of several is chosen
+    };
+
+    type BatchSuggestion {
+        Batch            : String(10);
+        Material         : String(40);
+        Plant            : String(4);
+        StorageLocation  : String(4);
+        StorageType      : String(3);
+        StorageBin       : String(10);
+        AvailableStock   : Decimal(13, 3);
+        Unit             : String(3);
+        GoodsReceiptDate : String(10);
+        PutawayDate      : String(10);
+        ExpiryDate       : String(10);
+        FifoRank         : Integer;
+        IsRecommended    : Boolean;
+        Recommendation   : String(80);
     };
 
     type TRListItem {
@@ -179,6 +199,12 @@ service TrToService @(path: '/odata/v4/tr-to') {
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     // docType: 'TR' (number is a Transfer Requirement) or 'RES' (number is a Reservation); mandatory, never guessed.
     function lookupTR(tbnum: String(10), lgnum: String(3), docType: String(3), tbpos: String(4)) returns TRDetail;
+
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getFifoBatches(material: String(40), plant: String(4), storageLocation: String(4), warehouseNumber: String(3)) returns array of BatchSuggestion;
+
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getAvailableSerials(material: String(40), plant: String(4), storageLocation: String(4), batch: String(10)) returns array of String(18);
 
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getAvailableSUs(tbnum: String(10), lgnum: String(3), tbpos: String(4)) returns array of SUQuant;

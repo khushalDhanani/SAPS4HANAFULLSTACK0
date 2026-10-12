@@ -241,6 +241,12 @@ describe('Fix 9: goods-movement retry guard by PROCESS_ID [mock only, not SAP ve
     expect(rfc.readTable).toHaveBeenCalledWith('MATDOC', ['MBLNR', 'MJAHR'], expect.arrayContaining([`SGTXT = '${pid.toUpperCase()}'`, "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"]), 1);
     expect(rfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
   });
+  it('does not post again when MATDOC holds document matching reservation even if SGTXT is blank (SAP standard reservation behavior)', async () => {
+    const rfc = fakeRfc({ fm: {}, tables: { MATDOC: (where) => (where.some((w) => w.includes("RSNUM = '0000524979'")) ? [{ MBLNR: '4900050148', MJAHR: '2026' }] : []) } });
+    const res = await new ReservationProcessAdapter({ rfc }).postGoodsMovement(base);
+    expect(res).toMatchObject({ success: true, alreadyPosted: true, materialDocument: '4900050148', materialDocYear: '2026' });
+    expect(rfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
+  });
   it('posts with the full 36-character PROCESS_ID in ITEM_TEXT (SGTXT CHAR 50), never truncated', async () => {
     const rfc = fakeRfc({ fm: { BAPI_GOODSMVT_CREATE: { MATERIALDOCUMENT: '4900000009', MATDOCUMENTYEAR: '2026', RETURN: [] }, BAPI_TRANSACTION_COMMIT: {} }, tables: { MATDOC: [], RESB: [], MARC: [{ XCHPF: '' }] } });
     await new ReservationProcessAdapter({ rfc }).postGoodsMovement(base);

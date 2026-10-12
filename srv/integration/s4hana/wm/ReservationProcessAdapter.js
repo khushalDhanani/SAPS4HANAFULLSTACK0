@@ -436,12 +436,25 @@ class ReservationProcessAdapter {
       throw httpError(400, 'ReservationNo is mandatory');
     }
 
-    // Retry guard: a material document already carrying this PROCESS_ID means the step was posted.
-    if (sProcessId && this.rfc) {
-      const where = [`SGTXT = '${sProcessId}'`, `AND MATNR = '${s4Mat}'`, `AND WERKS = '${sPlant}'`, "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
-      const found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], where, 1);
+    // Retry guard: a material document already carrying this PROCESS_ID (or matching reservation/TO) means the step was posted.
+    if (this.rfc) {
+      let found = null;
+      if (sProcessId) {
+        const where = [`SGTXT = '${sProcessId}'`, `AND MATNR = '${s4Mat}'`, `AND WERKS = '${sPlant}'`, "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
+        found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], where, 1);
+      }
+      // SAP standard BAPI_GOODSMVT_CREATE leaves MSEG-SGTXT blank when referencing reservations (KBA 1518592 / ZXMBCU02);
+      // fallback to reservation reference (RSNUM + RSPOS) so retrying an already completed step never double-posts in SAP.
+      if (!found?.[0]?.MBLNR && hasRes) {
+        const resWhere = [`RSNUM = '${sResNo}'`, `AND RSPOS = '${sResItem}'`, `AND BWART = '${sMvt}'`, "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
+        found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], resWhere, 1);
+      }
+      if (!found?.[0]?.MBLNR && sTanum && !hasRes) {
+        const toWhere = [`XBLNR = 'TO ${sTanum}'`, `AND BWART = '${sMvt}'`, "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
+        found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], toWhere, 1);
+      }
       if (found?.[0]?.MBLNR) {
-        LOG.info(`Material document ${found[0].MBLNR}/${found[0].MJAHR} already exists for process ${sProcessId}; not posting again`);
+        LOG.info(`Material document ${found[0].MBLNR}/${found[0].MJAHR} already exists for process/reservation; not posting again`);
         return {
           success: true,
           alreadyPosted: true,
@@ -497,7 +510,8 @@ class ReservationProcessAdapter {
     const header = {
       PSTNG_DATE: today,
       DOC_DATE: today,
-      REF_DOC_NO: hasRes ? `RES ${sResNo}` : (sTanum ? `TO ${sTanum}` : 'WM SCAN-TO')
+      REF_DOC_NO: hasRes ? `RES ${sResNo}` : (sTanum ? `TO ${sTanum}` : 'WM SCAN-TO'),
+      ...(sProcessId ? { HEADER_TXT: sProcessId.replace(/-/g, '').slice(0, 25) } : {})
     };
 
     const item = {
