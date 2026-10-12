@@ -47,7 +47,7 @@ sap.ui.define([
                 MovementType: "311",
                 Plant: "1120",
                 StorageLocation: "CS01",
-                WarehouseNumber: "W01",
+                WarehouseNumber: "",
                 Material: "1000000045",
                 MaterialName: "Raw Material 45",
                 Quantity: 10,
@@ -62,6 +62,7 @@ sap.ui.define([
 
         _onRouteCreateMatched: function () {
             this._oViewModel.setProperty("/isCreate", true);
+            this._oViewModel.setProperty("/isTracked", false);
             this._oViewModel.setProperty("/busy", false);
             this._oViewModel.setProperty("/errorMessage", "");
             this._oViewModel.setProperty("/successMessage", "");
@@ -87,8 +88,17 @@ sap.ui.define([
             this._sCurrentResItem = sResItem;
             this._oViewModel.setProperty("/busy", true);
 
+            if (!sResNo || !String(sResNo).trim()) {
+                this._oViewModel.setProperty("/busy", false);
+                this._oViewModel.setProperty("/isTracked", false);
+                this._oViewModel.setProperty("/errorMessage", "Reservation number is required");
+                this._oDetailModel.setData({});
+                return Promise.resolve();
+            }
+
             return this._oService.getEntry(sResNo, sResItem).then(function (oData) {
                 that._oDetailModel.setData(oData || {});
+                that._oViewModel.setProperty("/isTracked", true);
                 that._oViewModel.setProperty("/busy", false);
             }).catch(function () {
                 // Not tracked locally (reservation created outside this app) -> read it live from SAP.
@@ -96,9 +106,11 @@ sap.ui.define([
                     oLive = oLive || {};
                     if (!oLive.Logs) { oLive.Logs = []; }
                     that._oDetailModel.setData(oLive);
+                    that._oViewModel.setProperty("/isTracked", false);
                     that._oViewModel.setProperty("/busy", false);
                 });
             }).catch(function (err) {
+                that._oViewModel.setProperty("/isTracked", false);
                 that._oViewModel.setProperty("/busy", false);
                 that._oViewModel.setProperty("/errorMessage", err.message || "Failed to load reservation");
             });
@@ -352,6 +364,9 @@ sap.ui.define([
             if (!oData.Quantity || Number(oData.Quantity) <= 0) {
                 return "Quantity must be greater than 0";
             }
+            if (oData.Unit !== undefined && oData.Unit !== null && !String(oData.Unit).trim()) {
+                return "Unit of Measure is required";
+            }
 
             switch (oData.MovementType) {
                 case "201":
@@ -404,11 +419,11 @@ sap.ui.define([
                 MovementType: oData.MovementType,
                 Plant: oData.Plant.trim(),
                 StorageLocation: oData.StorageLocation.trim(),
-                WarehouseNumber: (oData.WarehouseNumber || "W01").trim(),
+                WarehouseNumber: (oData.WarehouseNumber || "").trim(),
                 Material: oData.Material.trim(),
                 MaterialName: (oData.MaterialName || "").trim(),
                 Quantity: Number(oData.Quantity),
-                Unit: (oData.Unit || "NOS").trim(),
+                Unit: (oData.Unit || "").trim().toUpperCase(),
                 ReceivingStorageLocation: (oData.ReceivingStorageLocation || "").trim(),
                 ReceivingPlant: (oData.ReceivingPlant || "").trim(),
                 CostCenter: (oData.CostCenter || "").trim(),
@@ -457,8 +472,16 @@ sap.ui.define([
         },
 
         onNavBack: function () {
-            const oRouter = this.getRouter();
-            oRouter.navTo("wmReservationEntryList");
+            if (BaseController && BaseController.prototype && typeof BaseController.prototype.onNavBack === "function") {
+                BaseController.prototype.onNavBack.call(this, "wmReservationEntryList");
+            } else if (BaseController && typeof BaseController.onNavBack === "function") {
+                BaseController.onNavBack.call(this, "wmReservationEntryList");
+            } else {
+                const oRouter = this.getRouter();
+                if (oRouter) {
+                    oRouter.navTo("wmReservationEntryList");
+                }
+            }
         },
 
         formatStatusText: function (sCode) {

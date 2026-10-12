@@ -82,18 +82,18 @@
                         <ToolbarSpacer />
                         <SearchField
                             id="searchFieldList"
-                            width="250px"
+                            width="16rem"
                             placeholder="{i18n>commonSearchPlaceholder}"
                             search=".onSearchFieldSearch" />
                     </OverflowToolbar>
                 </headerToolbar>
 
                 <columns>
-                    <Column width="200px"><Text text="{i18n>resEntryColResNo}" /></Column>
+                    <Column width="14rem"><Text text="{i18n>resEntryColResNo}" /></Column>
                     <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColMvt}" /></Column>
                     <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColMaterial}" /></Column>
                     <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColLocation}" /></Column>
-                    <Column width="120px"><Text text="{i18n>resEntryColStatus}" /></Column>
+                    <Column width="8rem"><Text text="{i18n>resEntryColStatus}" /></Column>
                 </columns>
 
                 <items>
@@ -120,9 +120,9 @@
                             </VBox>
 
                             <ObjectStatus
-                                text="{i18n>resEntryStatusOpen}"
-                                state="Information"
-                                icon="sap-icon://pending" />
+                                text="{= ${view>Status_code} ? ${path: 'view>Status_code', formatter: '.formatStatusText'} : (${view>StatusText} || ${i18n>resEntryStatusOpen}) }"
+                                state="{= ${view>Status_code} ? ${path: 'view>Status_code', formatter: '.formatStatusState'} : (${view>StatusCriticality} || 'Information') }"
+                                icon="{= ${view>Status_code} ? ${path: 'view>Status_code', formatter: '.formatStatusIcon'} : 'sap-icon://pending' }" />
                         </cells>
                     </ColumnListItem>
                 </items>

@@ -5,6 +5,42 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **/wm/reservation-entry/ & Detail Page Audit, Defect Remediation & ShellBar Synchronization (2026-10-12, 16:15 IST):**
+  - **User Request:** "Find issues and fix /wm/reservation-entry/ And Detailed page also."
+  - **Audit & Remediation Delivered:**
+    1. `App.controller.js`:
+       - `_syncInitialShellState`: Added direct hash handling for `wm/reservation-entry/create`, `wm/reservation-entry/`, and `wm/reservation-entry` for instant ShellBar synchronization on bookmarks, refreshes, or direct URL entry without blank titles.
+       - `_updateShell`: Added route cases for `wmReservationEntryList`, `wmReservationEntryCreate`, and `wmReservationEntryDetail` (setting dynamic titles `Reservation Entries`, `Create Reservation Entry`, and `Reservation {ReservationNo}`).
+       - `onNavButtonPressed`: Added back-button routing (`wmReservationEntryDetail` / `wmReservationEntryCreate` fall back to `wmReservationEntryList`; `wmReservationEntryList` falls back to `dashboard`).
+    2. `ReservationEntryList.controller.js`:
+       - `onRowPress`: Fixed row press navigation when invoked from Table `itemPress` event. Previously `oEvent.getSource()` referenced the `Table` (which lacked row binding context), causing silent navigation failure. Resolved item via `oEvent.getParameter("listItem") || oEvent.getSource()`.
+    3. `ReservationEntryList.view.xml`:
+       - Fixed pixel widths to rem (`width="16rem"`, `14rem"`, `8rem"`).
+       - Bound status cell dynamically to `{= ${view>Status_code} ? ${path: 'view>Status_code', formatter: '.formatStatusText'} : (${view>StatusText} || ${i18n>resEntryStatusOpen}) }` with appropriate status state and icon.
+    4. `ReservationEntryDetail.controller.js`:
+       - Removed hardcoded `"W01"` default in `_getDefaultCreateData()` and `onSave()`, setting `WarehouseNumber: ""` and allowing backend `warehouseFor` to dynamically resolve the warehouse via `T320`.
+       - `validateForm`: Enforced Unit of Measure validation when empty/whitespace (`Unit of Measure is required`), preventing SAP conversion failures.
+       - `_loadDetail`: Validated reservation number to avoid blank requests; tracked `_oViewModel.setProperty("/isTracked", true)` on local `getEntry` success and `false` on SAP `getReservationDetail` live fallback.
+       - `onNavBack`: Delegated to `BaseController.prototype.onNavBack.call(this, "wmReservationEntryList")` with browser history fallback.
+    5. `ReservationEntryDetail.view.xml`:
+       - Gated `btnRetryDetail` on `view>/isTracked === true`, preventing `404: Reservation X not found` on untracked live SAP reservations.
+       - Replaced hardcoded `"W01"` and `"NOS"` with i18n placeholders `{i18n>resPlaceholderWh}` and `{i18n>resPlaceholderUnit}`.
+       - Replaced pixel widths with rem (`6rem`, `8rem`, `12rem`, `11rem`).
+    6. `WarehouseScanToDetail.view.xml`:
+       - Removed `showNavButton` and `navButtonPress` from `<Page>` (ShellBar owns both).
+       - Replaced 4 hardcoded string literals with `{i18n>...}` bindings.
+    7. `i18n.properties` & `i18n_en.properties`:
+       - Added missing placeholder and result section keys (`resPlaceholderUnit`, `resPlaceholderWh`, `resPlaceholderSelectPlant` through `resPlaceholderRecSLoc`, `scanToResultSectionTO`, `scanToResultLabelTrRes`, `scanToResultSectionMaterial`, `scanToResultLabelError`).
+    8. `test/unit/wm/reservationEntryUi.test.js`:
+       - Added unit tests for Unit validation, Table `itemPress` row resolution, BaseController `onNavBack` delegation, `isTracked` tracking on detail load, and `App.controller.js` ShellBar routes/back navigation.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/reservationEntryUi.test.js`: **39/39 tests PASS** (mock only, not browser verification).
+    - `npx jest test/unit/controller/uiConsistency.test.js`: **7/7 tests PASS**.
+    - `npx jest test/unit/wm/reservationEntry`: **57/57 tests PASS** across 2 suites.
+    - Full WM suite: `npx jest test/unit/wm/`: **65/65 test suites PASS, 1,354/1,354 tests PASS**.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+
 - **/wm/scan-to Main & Detail Split, Full Field Audit, Initial Hash Sync & Data Integrity (2026-10-12, 15:50 IST):**
   - **User Request:** Double Check And Fix if any data is missing.
   - **Audit & Remediation Delivered:**
@@ -4323,3 +4359,50 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `npx cds compile srv --to sql` → Clean SQL generation (0 errors).
   - `git diff --check` → Clean (0 whitespace/formatting errors).
 - **Result:** Complete end-to-end FIFO batch suggestion and serial series auto-fill delivered and validated.
+
+### 2026-10-12 16:15 IST — Reservation Entry List & Detailed Page Audit, Defect Remediation & ShellBar Synchronization
+- **User Request:** Find issues and fix /wm/reservation-entry/ And Detailed page also.
+- **Affected Files:**
+  - `app/fiori-app/webapp/controller/App.controller.js`
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryList.controller.js`
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryList.view.xml`
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/wm/reservationEntryUi.test.js`
+- **Root Cause & Defect Analysis:**
+  1. `App.controller.js`:
+     - Routes `wmReservationEntryList`, `wmReservationEntryCreate`, and `wmReservationEntryDetail` were absent from `_syncInitialShellState`, `_updateShell`, and `onNavButtonPressed`, causing blank ShellBar titles on direct URL bookmarking/refresh and fallback navigation directly to Dashboard rather than List.
+  2. `ReservationEntryList.controller.js`:
+     - In `onRowPress`, `oEvent.getSource()` referenced `<Table>` rather than the row item when invoked from `itemPress`, resulting in `undefined` binding context and silent navigation failure.
+  3. `ReservationEntryList.view.xml`:
+     - Contained hardcoded pixel widths (`250px`, `200px`, `120px`) violating project UI consistency rules; status column hardcoded `resEntryStatusOpen` rather than dynamic status text/state formatting.
+  4. `ReservationEntryDetail.controller.js`:
+     - Defaulted `WarehouseNumber: "W01"`, bypassing plant-to-warehouse mapping resolution (`T320`) in backend `service.js:warehouseFor`.
+     - `validateForm` failed to validate empty/whitespace `Unit`, falling back to `"NOS"` at save and causing conversion issues in SAP for materials with base UoM `KG`.
+     - `_loadDetail` did not differentiate between local tracked entries and live SAP untracked reservations, leading to `404: Reservation X not found` when clicking `btnRetryDetail`.
+     - `onNavBack` unconditionally routed to `wmReservationEntryList` instead of using `BaseController.prototype.onNavBack` history fallback.
+  5. `ReservationEntryDetail.view.xml`:
+     - `btnRetryDetail` visible on untracked reservations; hardcoded placeholder `"W01"` and `"NOS"`; raw pixel widths on log table columns (`85px`, `80px`, `110px`, `180px`, `170px`).
+  6. `WarehouseScanToDetail.view.xml`:
+     - `<Page>` retained `showNavButton` and `navButtonPress`, violating one-page-chrome rule where ShellBar owns both.
+- **Remediation Delivered:**
+  - Synchronized ShellBar in `App.controller.js` for list, create, and detail routes and connected back navigation hierarchy.
+  - Safe row context resolution in `ReservationEntryList.controller.js:onRowPress` via `oEvent.getParameter("listItem") || oEvent.getSource()`.
+  - Replaced all pixel sizing with rem units in both list and detail views.
+  - Dynamic status formatter binding on list view table cells.
+  - Gated detail retry button on `view>/isTracked === true`.
+  - Defaulted `WarehouseNumber: ""` to allow dynamic `T320` resolution.
+  - Validated `Unit` in `validateForm` and added all missing i18n placeholders to both English resource bundles.
+  - Conformed `WarehouseScanToDetail.view.xml` to UI consistency rules by delegating page header navigation to ShellBar and replacing literals with i18n keys.
+- **Validation Commands Executed & Results:**
+  - `npx jest test/unit/wm/reservationEntryUi.test.js` → **39/39 tests passed**.
+  - `npx jest test/unit/controller/uiConsistency.test.js` → **7/7 tests passed**.
+  - `npx jest test/unit/wm/reservationEntry` → **57/57 tests passed** across 2 suites.
+  - `npx jest test/unit/wm/` → **65/65 test suites passed, 1,354/1,354 tests passed**.
+  - `npx cds compile srv --to sql` → Clean SQL generation (0 errors).
+  - `git diff --check` → Clean (0 whitespace/formatting errors).
+- **Result:** Complete end-to-end fix for list, create, and detail views for `/wm/reservation-entry/` fully validated and documented.
+

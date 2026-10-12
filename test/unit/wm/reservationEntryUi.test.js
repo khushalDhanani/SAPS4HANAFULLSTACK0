@@ -93,7 +93,7 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(defaults.ReceivingStorageLocation).toBe('ST02');
             expect(defaults.Quantity).toBe(10);
             expect(defaults.Unit).toBe('KG');
-            expect(defaults.WarehouseNumber).toBe('W01');
+            expect(defaults.WarehouseNumber).toBe('');
         });
 
         it('switches to Movement 201: sets Cost Center default and clears destination locations', () => {
@@ -649,6 +649,105 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(subject._oCreateModel.getProperty('/Material')).toBe('1000000045');
             expect(subject._oCreateModel.getProperty('/MaterialName')).toBe('Raw Material 45');
             expect(subject._oCreateModel.getProperty('/Unit')).toBe('KG');
+        });
+    });
+
+    describe('Reservation Entry Remediation & UI Defect Fixes [mock only, not browser verification]', () => {
+        it('Defect 6: validateForm rejects whitespace or empty Unit', () => {
+            const subject = createDetailSubject();
+            const err = subject.validateForm({
+                MovementType: '311',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                ReceivingStorageLocation: 'ST02',
+                Material: '1000000045',
+                Quantity: 10,
+                Unit: '   '
+            });
+            expect(err).toMatch(/Unit of Measure is required/);
+        });
+
+        it('Defect 2: onRowPress correctly resolves listItem from Table itemPress event', () => {
+            const routerMock = { navTo: jest.fn() };
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                getOwnerComponent: () => ({ getRouter: () => routerMock })
+            });
+
+            const mockListItem = {
+                getBindingContext: (modelName) => modelName === 'view' ? {
+                    getObject: () => ({ ReservationNo: '0000004812', ReservationItem: '0002' })
+                } : null
+            };
+            const mockTable = {
+                getBindingContext: () => null // Table itself has no row context
+            };
+
+            // Event fired from Table itemPress: getSource() is Table, getParameter("listItem") is the row
+            const mockItemPressEvent = {
+                getSource: () => mockTable,
+                getParameter: (param) => param === 'listItem' ? mockListItem : null
+            };
+
+            listSubject.onRowPress(mockItemPressEvent);
+            expect(routerMock.navTo).toHaveBeenCalledWith('wmReservationEntryDetail', {
+                ReservationNo: '0000004812',
+                ReservationItem: '0002'
+            });
+        });
+
+        it('Defect 3: Detail onNavBack delegates to BaseController history fallback', () => {
+            const subject = createDetailSubject();
+            let baseNavBackCalledWith = null;
+            BaseController.onNavBack = function (fallback) {
+                baseNavBackCalledWith = fallback;
+            };
+
+            subject.onNavBack();
+            expect(baseNavBackCalledWith).toBe('wmReservationEntryList');
+        });
+
+        it('Defect 5: _loadDetail sets isTracked=true on tracked reservation and isTracked=false on live fallback', async () => {
+            const serviceMock = {
+                getEntry: jest.fn().mockResolvedValue({ ReservationNo: '10001', Status_code: '02' }),
+                getReservationDetail: jest.fn().mockResolvedValue({ ReservationNo: '20002', Status_code: '01' })
+            };
+            const subject = createDetailSubject(serviceMock);
+
+            // 1. Tracked reservation
+            await subject._loadDetail('10001', '0001');
+            expect(subject._oViewModel.getProperty('/isTracked')).toBe(true);
+            expect(subject._oDetailModel.getProperty('/ReservationNo')).toBe('10001');
+
+            // 2. Untracked reservation (getEntry rejects, getReservationDetail succeeds)
+            serviceMock.getEntry.mockRejectedValueOnce(new Error('404 Not Found'));
+            await subject._loadDetail('20002', '0001');
+            expect(subject._oViewModel.getProperty('/isTracked')).toBe(false);
+            expect(subject._oDetailModel.getProperty('/ReservationNo')).toBe('20002');
+
+            // 3. Blank reservation number handled cleanly without calling service
+            await subject._loadDetail('', '');
+            expect(subject._oViewModel.getProperty('/isTracked')).toBe(false);
+            expect(subject._oViewModel.getProperty('/errorMessage')).toMatch(/Reservation number is required/);
+        });
+
+        it('Defect 1: App.controller syncs ShellBar routes and navigates back to list', () => {
+            const fs = require('fs');
+            const appControllerSrc = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/controller/App.controller.js'), 'utf8');
+
+            // Route matching in _updateShell
+            expect(appControllerSrc).toContain('case "wmReservationEntryList":');
+            expect(appControllerSrc).toContain('case "wmReservationEntryCreate":');
+            expect(appControllerSrc).toContain('case "wmReservationEntryDetail":');
+
+            // Hash handling in _syncInitialShellState
+            expect(appControllerSrc).toContain('sHash.indexOf("wm/reservation-entry/create") === 0');
+            expect(appControllerSrc).toContain('sHash.indexOf("wm/reservation-entry/") === 0');
+            expect(appControllerSrc).toContain('sHash.indexOf("wm/reservation-entry") === 0');
+
+            // Back button handling in onNavButtonPressed
+            expect(appControllerSrc).toContain('sRoute === "wmReservationEntryDetail" || sRoute === "wmReservationEntryCreate"');
+            expect(appControllerSrc).toContain('this.onNavBack("wmReservationEntryList");');
+            expect(appControllerSrc).toContain('sRoute === "wmReservationEntryList"');
         });
     });
 });

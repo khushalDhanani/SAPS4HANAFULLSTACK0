@@ -158,8 +158,8 @@ sap.ui.define([
         },
 
         onRowPress: function (oEvent) {
-            const oItem = oEvent.getSource();
-            const oCtx = oItem.getBindingContext("view");
+            const oItem = (oEvent && typeof oEvent.getParameter === "function" && oEvent.getParameter("listItem")) || (oEvent && oEvent.getSource ? oEvent.getSource() : null);
+            const oCtx = oItem ? oItem.getBindingContext("view") : null;
             if (!oCtx) return;
 
             const oData = oCtx.getObject();

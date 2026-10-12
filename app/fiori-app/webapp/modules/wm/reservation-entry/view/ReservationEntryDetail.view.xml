@@ -58,7 +58,7 @@
                         icon="sap-icon://restart"
                         type="Emphasized"
                         press=".onRetryStepPress"
-                        visible="{= !${view>/isCreate} &amp;&amp; ${detail>/Status_code} !== '05' }" />
+                        visible="{= !${view>/isCreate} &amp;&amp; ${view>/isTracked} === true &amp;&amp; ${detail>/Status_code} !== '05' }" />
                     <Button
                         id="btnDetailRefresh"
                         icon="sap-icon://refresh"
@@ -201,7 +201,7 @@
                                         <Input
                                             id="inputWarehouseNumber"
                                             value="{create>/WarehouseNumber}"
-                                            placeholder="W01"
+                                            placeholder="{i18n>resPlaceholderWh}"
                                             maxLength="3" />
 
                                         <core:Title text="{i18n>resGroupMaterialAndQty}" />
@@ -245,7 +245,7 @@
                                             <Input
                                                 id="inputUnit"
                                                 value="{create>/Unit}"
-                                                placeholder="NOS"
+                                                placeholder="{i18n>resPlaceholderUnit}"
                                                 maxLength="3"
                                                 width="35%" />
                                         </HBox>
@@ -521,13 +521,13 @@
                                 items="{detail>/Logs}"
                                 noDataText="{i18n>resNoLogsData}">
                                 <columns>
-                                    <Column width="85px"><Text text="{i18n>resColStep}" /></Column>
-                                    <Column width="80px"><Text text="{i18n>resColMsgType}" /></Column>
-                                    <Column width="85px"><Text text="{i18n>resColStatus}" /></Column>
-                                    <Column width="110px" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resColMsgClassNo}" /></Column>
-                                    <Column width="180px" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resColLogHandle}" /></Column>
+                                    <Column width="6rem"><Text text="{i18n>resColStep}" /></Column>
+                                    <Column width="6rem"><Text text="{i18n>resColMsgType}" /></Column>
+                                    <Column width="6rem"><Text text="{i18n>resColStatus}" /></Column>
+                                    <Column width="8rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resColMsgClassNo}" /></Column>
+                                    <Column width="12rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resColLogHandle}" /></Column>
                                     <Column><Text text="{i18n>resColMsgText}" /></Column>
-                                    <Column width="170px" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resColCreatedAt}" /></Column>
+                                    <Column width="11rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resColCreatedAt}" /></Column>
                                 </columns>
                                 <items>
                                     <ColumnListItem>

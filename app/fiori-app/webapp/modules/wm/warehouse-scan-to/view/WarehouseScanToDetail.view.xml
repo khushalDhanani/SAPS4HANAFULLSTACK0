@@ -9,8 +9,6 @@
 
     <Page
         id="warehouseScanToDetailPage"
-        showNavButton="true"
-        navButtonPress=".onNavBack"
         class="sapUiSizeCompact">
 
         <headerContent>
@@ -89,11 +87,11 @@
                             columnsL="2"
                             columnsM="2">
                             <form:content>
-                                <core:Title text="Transfer Order Details" />
+                                <core:Title text="{i18n>scanToResultSectionTO}" />
                                 <Label text="{i18n>scanToLabelTO}" design="Bold" />
                                 <Text text="{scanView>/result/TransferOrder}" />
 
-                                <Label text="TR / Reservation" design="Bold" />
+                                <Label text="{i18n>scanToResultLabelTrRes}" design="Bold" />
                                 <Text text="{scanView>/result/TransferRequirement}{= (${scanView>/result/ReservationNo} &amp;&amp; ${scanView>/result/ReservationNo} !== '0') ? ' / Res: ' + ${scanView>/result/ReservationNo} : '' }" />
 
                                 <Label text="{i18n>scanToLabelStatus}" design="Bold" />
@@ -104,7 +102,7 @@
                                 <Label text="{i18n>scanToLabelConfirmedBy}" design="Bold" visible="{= !!(${scanView>/result/Confirmed} || ${scanView>/result/IsConfirmed}) }" />
                                 <Text text="{scanView>/result/ConfirmedBy}" visible="{= !!(${scanView>/result/Confirmed} || ${scanView>/result/IsConfirmed}) }" />
 
-                                <core:Title text="Material &amp; Stock Posting" />
+                                <core:Title text="{i18n>scanToResultSectionMaterial}" />
                                 <Label text="{i18n>scanToLabelMaterial}" design="Bold" visible="{= !!${scanView>/result/Material} }" />
                                 <ObjectIdentifier
                                     title="{scanView>/result/Material}"
@@ -134,7 +132,7 @@
                                     state="Success"
                                     visible="{= !!${scanView>/result/StockEffect} }" />
 
-                                <Label text="Error Details" design="Bold" visible="{= ${scanView>/result/Status} === '90' || !!${scanView>/result/ErrorMessage} }" />
+                                <Label text="{i18n>scanToResultLabelError}" design="Bold" visible="{= ${scanView>/result/Status} === '90' || !!${scanView>/result/ErrorMessage} }" />
                                 <ObjectStatus
                                     text="{scanView>/result/ErrorMessage}"
                                     state="Error"
