@@ -46,6 +46,11 @@ sap.ui.define([
                 batch: "",
                 batchValueState: "None",
                 batchValueStateText: "",
+                suggestedBatches: [],
+                fifoBatch: "",
+                fifoBatchRecommendation: "",
+                isFifoApplied: false,
+                suggestedSerials: [],
                 serialInput: "",
                 serials: [],
                 serialsCount: 0,
@@ -374,8 +379,20 @@ sap.ui.define([
                 oModel.setProperty("/qtyValueState", "None");
                 oModel.setProperty("/qtyValueStateText", "");
 
-                // Initialize batch
-                oModel.setProperty("/batch", oDetail.Batch || "");
+                // Initialize FIFO suggested batches and serials
+                var aSuggestedBatches = oDetail.SuggestedBatches || [];
+                var sFifoBatch = oDetail.FifoBatch || (aSuggestedBatches[0] ? aSuggestedBatches[0].Batch : "");
+                var aSuggestedSerials = oDetail.SuggestedSerials || [];
+
+                oModel.setProperty("/suggestedBatches", aSuggestedBatches);
+                oModel.setProperty("/fifoBatch", sFifoBatch);
+                oModel.setProperty("/fifoBatchRecommendation", aSuggestedBatches[0] ? aSuggestedBatches[0].Recommendation : "");
+                oModel.setProperty("/suggestedSerials", aSuggestedSerials);
+
+                // Initialize batch: if TR specifies a batch use it, else auto-suggest FIFO batch
+                var sInitialBatch = oDetail.Batch || sFifoBatch || "";
+                oModel.setProperty("/batch", sInitialBatch);
+                oModel.setProperty("/isFifoApplied", Boolean(!oDetail.Batch && sFifoBatch));
                 oModel.setProperty("/batchValueState", "None");
                 oModel.setProperty("/batchValueStateText", "");
 
@@ -437,6 +454,7 @@ sap.ui.define([
             var sVal = (oEvent.getParameter("value") || "").trim();
             var oModel = this.getModel("scanView");
             oModel.setProperty("/batch", sVal);
+            oModel.setProperty("/isFifoApplied", sVal && sVal === oModel.getProperty("/fifoBatch"));
 
             var oTR = oModel.getProperty("/tr");
             if (oTR && oTR.IsBatchManaged && !sVal) {
@@ -448,6 +466,101 @@ sap.ui.define([
             }
 
             this._validateForm();
+        },
+
+        onApplyFifoBatch: function () {
+            var oModel = this.getModel("scanView");
+            var sFifo = oModel.getProperty("/fifoBatch");
+            if (sFifo) {
+                oModel.setProperty("/batch", sFifo);
+                oModel.setProperty("/batchValueState", "None");
+                oModel.setProperty("/batchValueStateText", "");
+                oModel.setProperty("/isFifoApplied", true);
+                this._validateForm();
+                MessageToast.show(this.getText("scanToMsgFifoApplied", [sFifo]));
+                this._playAudio("success");
+            }
+        },
+
+        onSuggestionBatchSelected: function (oEvent) {
+            var oSelectedItem = oEvent.getParameter("selectedItem");
+            if (oSelectedItem) {
+                var sBatch = oSelectedItem.getKey() || oSelectedItem.getText();
+                var oModel = this.getModel("scanView");
+                oModel.setProperty("/batch", sBatch);
+                oModel.setProperty("/batchValueState", "None");
+                oModel.setProperty("/batchValueStateText", "");
+                oModel.setProperty("/isFifoApplied", sBatch === oModel.getProperty("/fifoBatch"));
+                this._validateForm();
+                MessageToast.show(this.getText("scanToMsgFifoApplied", [sBatch]));
+                this._playAudio("success");
+            }
+        },
+
+        onSelectBatchSuggestion: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var oCtx = oSource.getBindingContext("scanView");
+            if (oCtx) {
+                var sBatch = oCtx.getProperty("Batch");
+                var oModel = this.getModel("scanView");
+                oModel.setProperty("/batch", sBatch);
+                oModel.setProperty("/batchValueState", "None");
+                oModel.setProperty("/batchValueStateText", "");
+                oModel.setProperty("/isFifoApplied", sBatch === oModel.getProperty("/fifoBatch"));
+                this._validateForm();
+                MessageToast.show(this.getText("scanToMsgFifoApplied", [sBatch]));
+                this._playAudio("success");
+            }
+        },
+
+        onAutoFillSerials: function () {
+            var oModel = this.getModel("scanView");
+            var aSuggested = oModel.getProperty("/suggestedSerials") || [];
+            var aSerials = oModel.getProperty("/serials") || [];
+            var nPickQty = parseFloat(oModel.getProperty("/pickQty") || 0);
+            var nRequired = Math.round(nPickQty);
+
+            if (!aSuggested.length) {
+                MessageToast.show(this.getText("scanToNoSerialsAvailable"));
+                return;
+            }
+
+            var aExistingSet = new Set(aSerials.map(function (s) { return (s.serial || "").toUpperCase(); }));
+            var nAddedCount = 0;
+
+            for (var i = 0; i < aSuggested.length && aSerials.length < nRequired; i++) {
+                var sCand = aSuggested[i];
+                if (!aExistingSet.has(sCand.toUpperCase())) {
+                    aSerials.push({
+                        index: aSerials.length + 1,
+                        serial: sCand
+                    });
+                    aExistingSet.add(sCand.toUpperCase());
+                    nAddedCount++;
+                }
+            }
+
+            oModel.setProperty("/serials", aSerials);
+            oModel.setProperty("/serialsCount", aSerials.length);
+            this._updateSerialsStatus();
+            this._validateForm();
+
+            if (nAddedCount > 0) {
+                MessageToast.show(this.getText("scanToMsgSerialsAutoFilled", [nAddedCount]));
+                this._playAudio("success");
+            } else {
+                MessageToast.show(this.getText("scanToErrSerialLimitReached", [nRequired]));
+            }
+        },
+
+        onAddSuggestedSerial: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var sSerial = oSource.getText();
+            if (sSerial) {
+                var oModel = this.getModel("scanView");
+                oModel.setProperty("/serialInput", sSerial);
+                this.onAddSerial();
+            }
         },
 
         onAddSerial: function () {
@@ -760,6 +873,11 @@ sap.ui.define([
             oModel.setProperty("/batch", "");
             oModel.setProperty("/batchValueState", "None");
             oModel.setProperty("/batchValueStateText", "");
+            oModel.setProperty("/suggestedBatches", []);
+            oModel.setProperty("/fifoBatch", "");
+            oModel.setProperty("/fifoBatchRecommendation", "");
+            oModel.setProperty("/isFifoApplied", false);
+            oModel.setProperty("/suggestedSerials", []);
             oModel.setProperty("/serialInput", "");
             oModel.setProperty("/serials", []);
             oModel.setProperty("/serialsCount", 0);

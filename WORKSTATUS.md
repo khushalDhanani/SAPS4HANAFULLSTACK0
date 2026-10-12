@@ -5,6 +5,31 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Freestyle `/wm/scan-to` FIFO Batch & Serial Series Suggestion Implemented & Validated (2026-10-12, 14:02 IST):**
+  - **User Request:** `/index.html#/wm/scan-to` — based on FIFO Basic show Suggest series batch as per the material.
+  - **Feature Architecture Delivered:**
+    1. **CAP OData V4 Service (`srv/wm/tr-to/service.cds`):**
+       - Extended `TRDetail` with `FifoBatch: String(10)`, `SuggestedBatches: array of BatchSuggestion`, and `SuggestedSerials: array of String(18)`.
+       - Declared `BatchSuggestion` type (`Batch`, `Material`, `Plant`, `StorageLocation`, `StorageType`, `StorageBin`, `AvailableStock`, `Unit`, `GoodsReceiptDate`, `PutawayDate`, `ExpiryDate`, `FifoRank`, `IsRecommended`, `Recommendation`).
+       - Added OData function endpoints `getFifoBatches(material, plant, storageLocation, warehouseNumber)` and `getAvailableSerials(material, plant, storageLocation, batch)`.
+    2. **S/4HANA WM Adapter (`srv/integration/s4hana/wm/TrToAdapter.js`):**
+       - Implemented `getFifoBatches`: reads quants directly from `LQUA` (`VERME > 0`, `CHARG <> ' '`), groups by batch, computes cumulative stock, extracts earliest `WDATU` (Goods Receipt Date) and `EDATU` (Putaway Date), and ranks strictly by FIFO (earliest GR date ascending). Falls back to `MCHA` (`ERSDA ASC`) if no warehouse quants exist.
+       - Implemented `getAvailableSerials`: reads authentic stock serial numbers from `EQUI` (`SERNR`, `MATNR`) with natural collation sorting to provide sequential serial series (e.g. `CON-40-001`, `CON-40-002`, `CON-40-003`).
+       - Enriched `lookupTR`: automatically calls `getFifoBatches` and `getAvailableSerials` when material is batch- or serial-managed, pre-populating recommendations.
+    3. **UI5 Client Service (`WarehouseScanToService.js`):**
+       - Added `getFifoBatches` and `getAvailableSerials` OData client helper methods.
+    4. **UI5 View (`WarehouseScanTo.view.xml`):**
+       - `panelBatch`: Added FIFO Recommendation Banner with highlight badge (`#1 Recommended`, earliest GR date, and "Apply FIFO Batch" one-click button); enhanced `inputBatch` with suggestion list/dropdown (`showSuggestion="true"`, `suggestionItems="{scanView>/suggestedBatches}"`); added embedded "Available Batches (FIFO Priority)" table with rank, batch, stock, GR date, storage bin, and select button.
+       - `panelSerials`: Added Serial Series Suggestion Strip with count of available serials and "Auto-Fill Series ({pickQty})" button; added clickable serial chips for rapid scanning.
+    5. **UI5 Controller (`WarehouseScanTo.controller.js`):**
+       - Auto-prefills `scanView>/batch` with `FifoBatch` if TR item has no pre-assigned batch; handles `onApplyFifoBatch`, `onSelectBatchSuggestion`, `onSuggestionBatchSelected`, `onAutoFillSerials` (auto-adds up to `pickQty` serial numbers from available series), and `onAddSuggestedSerial`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/trToAdapter.test.js test/unit/wm/trToHandler.test.js`: **34/34 tests passed** (+5 new tests).
+    - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **39/39 tests passed** (+6 new tests).
+    - Full WM suite: `npx jest test/unit/wm/`: **65/65 test suites passed, 1,350/1,350 tests passed**.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+
 - **Live S/4HANA Sandbox Run 311/full (--execute) 100% PASS (2026-10-12, 13:45 IST):**
   - **Execution & Audit Trail:** `node tools/sandbox-matrix.js --mvt 311 --case full --execute` executed against live CAP (`http://localhost:4004`) and SAP S/4HANA Client 220.
   - **Results (19/19 checks PASS, 0 FAIL, exit code 0):**
@@ -4054,3 +4079,39 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Not verified live:** running-app repro (dev server credential-gated this session). Fixes reuse proven SO patterns/readers and are unit-tested; a server restart + create-inquiry run confirms end to end. Contact Person VH data loads only when SAP/RFC is reachable (KNVK read, same as SO).
 - **No live SAP data was modified.**
 - **Result:** PASS — #1 duplicate-on-retry closed, #2/#3 error handling added, #4 Contact Person value help added; tests + lint + compile green.
+
+### 2026-10-12 14:02 IST — `/index.html#/wm/scan-to` FIFO Basic Batch & Serial Series Suggestion as per Material
+
+- **Trigger:** User request: `/index.html#/wm/scan-to based on FIFO Basic show Sugger series batch as per the material.`
+- **Context:** Warehouse Scan-TO operator needs FIFO (First In, First Out) batch suggestion and available serial number series when picking batch-managed and serial-managed materials.
+- **Changes Delivered:**
+  1. `srv/wm/tr-to/service.cds`:
+     - Added `FifoBatch: String(10)`, `SuggestedBatches: array of BatchSuggestion`, and `SuggestedSerials: array of String(18)` to `TRDetail`.
+     - Added `BatchSuggestion` structure type with `Batch`, `Material`, `Plant`, `StorageLocation`, `StorageType`, `StorageBin`, `AvailableStock`, `Unit`, `GoodsReceiptDate`, `PutawayDate`, `ExpiryDate`, `FifoRank`, `IsRecommended`, `Recommendation`.
+     - Added callable functions `getFifoBatches` and `getAvailableSerials`.
+  2. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - Registered handlers for `getFifoBatches` and `getAvailableSerials` delegating directly to `TrToAdapter`.
+  3. `srv/integration/s4hana/wm/TrToAdapter.js`:
+     - Implemented `getFifoBatches`: reads `LQUA` stock quants (`VERME > 0`, `CHARG <> ' '`), groups by batch, calculates total available stock, finds earliest `WDATU` (Goods Receipt Date) / `EDATU` (Putaway Date), and ranks batches in FIFO order. Falls back to `MCHA` (`ERSDA ASC`) if no warehouse quants exist.
+     - Implemented `getAvailableSerials`: queries `EQUI` for serial numbers in stock (`SERNR <> ' '`), naturally sorts serials into sequential series (`CON-40-001`, `CON-40-002`...).
+     - Updated `lookupTR`: automatically calls `getFifoBatches` and `getAvailableSerials`, returning recommendations alongside TR detail.
+  4. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/service/WarehouseScanToService.js`:
+     - Added `getFifoBatches` and `getAvailableSerials` OData client methods.
+  5. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanTo.view.xml`:
+     - In `panelBatch`: Added FIFO Recommendation Banner with highlight badge (`#1 Recommended`, earliest GR date, and "Apply FIFO Batch" button); added Input suggestion dropdown; added embedded "Available Batches (FIFO Priority)" table with rank, batch, stock, GR date, storage bin, and select button.
+     - In `panelSerials`: Added Serial Series Suggestion Strip with count of available serials and "Auto-Fill Series ({pickQty})" button; added clickable serial chips for rapid scanning.
+  6. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanTo.controller.js`:
+     - Auto-prefills `scanView>/batch` with `FifoBatch` if TR item has no pre-assigned batch; handles `onApplyFifoBatch`, `onSelectBatchSuggestion`, `onSuggestionBatchSelected`, `onAutoFillSerials` (auto-adds up to `pickQty` serial numbers from available series), and `onAddSuggestedSerial`.
+  7. `app/fiori-app/webapp/i18n/i18n.properties`:
+     - Added i18n keys for FIFO badge, recommendations, table columns, series auto-fill, and user feedback.
+  8. Tests:
+     - `test/unit/wm/trToAdapter.test.js` (+4 tests): verifies FIFO ranking by `WDATU`, `MCHA` fallback, `EQUI` serial collation, and `lookupTR` enrichment.
+     - `test/unit/wm/trToHandler.test.js` (+1 test): verifies handler delegation.
+     - `test/unit/wm/warehouseScanToUi.test.js` (+6 tests): verifies FIFO pre-fill, `onApplyFifoBatch`, `onSelectBatchSuggestion`, `onSuggestionBatchSelected`, `onAutoFillSerials`, and `onAddSuggestedSerial`.
+- **Validation Commands Executed & Results:**
+  - `npx jest test/unit/wm/trToAdapter.test.js test/unit/wm/trToHandler.test.js` → **34/34 tests passed**.
+  - `npx jest test/unit/wm/warehouseScanToUi.test.js` → **39/39 tests passed**.
+  - `npx jest test/unit/wm/` → **65/65 test suites passed, 1,350/1,350 tests passed**.
+  - `npx cds compile srv --to sql` → Clean SQL generation (0 errors).
+  - `git diff --check` → Clean (0 whitespace/formatting errors).
+- **Result:** Complete end-to-end FIFO batch suggestion and serial series auto-fill delivered and validated.

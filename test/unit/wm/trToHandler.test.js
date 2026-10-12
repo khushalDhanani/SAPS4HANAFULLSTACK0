@@ -31,6 +31,19 @@ describe('TrToHandler', () => {
     expect(adapter.getAvailableSUs).toHaveBeenCalledWith('1000663', 'W01', '0001');
   });
 
+  it('delegates getFifoBatches and getAvailableSerials to adapter', async () => {
+    adapter.getFifoBatches = jest.fn().mockResolvedValue([{ Batch: 'B01', FifoRank: 1 }]);
+    adapter.getAvailableSerials = jest.fn().mockResolvedValue(['SER001', 'SER002']);
+
+    await expect(handlers.getFifoBatches(req({ material: '1000000867', plant: '1120', storageLocation: 'CS01', warehouseNumber: 'W01' })))
+      .resolves.toEqual([{ Batch: 'B01', FifoRank: 1 }]);
+    expect(adapter.getFifoBatches).toHaveBeenCalledWith('1000000867', '1120', 'CS01', 'W01');
+
+    await expect(handlers.getAvailableSerials(req({ material: '8000006485', plant: '1120', storageLocation: 'CS01', batch: 'B01' })))
+      .resolves.toEqual(['SER001', 'SER002']);
+    expect(adapter.getAvailableSerials).toHaveBeenCalledWith('8000006485', '1120', 'CS01', 'B01');
+  });
+
   it('passes only operator input to createTO (item, unit, limits come from SAP)', async () => {
     adapter.createTO.mockResolvedValue({ TransferOrder: '1036601', Success: true, Confirmed: false });
     const r = req({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 50, unit: 'KG', openQty: 999, confirmImmediate: true });

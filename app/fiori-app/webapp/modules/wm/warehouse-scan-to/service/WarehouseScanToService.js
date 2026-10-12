@@ -93,6 +93,56 @@ sap.ui.define([
         },
 
         /**
+         * Retrieve FIFO-ordered batch suggestions for a material
+         * @param {string} sMaterial
+         * @param {string} [sPlant]
+         * @param {string} [sStorageLocation]
+         * @param {string} [sWarehouseNumber]
+         * @returns {Promise<Array>}
+         */
+        getFifoBatches: function (sMaterial, sPlant, sStorageLocation, sWarehouseNumber) {
+            if (!sMaterial || !sMaterial.trim()) {
+                return Promise.resolve([]);
+            }
+            var sMat = encodeURIComponent(sMaterial.trim());
+            var sPlt = encodeURIComponent((sPlant || "").trim());
+            var sSloc = encodeURIComponent((sStorageLocation || "").trim());
+            var sWh = encodeURIComponent((sWarehouseNumber || "").trim());
+            var sUrl = BASE_PATH + "/getFifoBatches(material='" + sMat + "',plant='" + sPlt + "',storageLocation='" + sSloc + "',warehouseNumber='" + sWh + "')";
+            return ODataClient.get(sUrl).then(function (oData) {
+                var aItems = (oData && oData.value) ? oData.value : (Array.isArray(oData) ? oData : []);
+                return aItems;
+            }).catch(function () {
+                return [];
+            });
+        },
+
+        /**
+         * Retrieve available serial numbers series for a material
+         * @param {string} sMaterial
+         * @param {string} [sPlant]
+         * @param {string} [sStorageLocation]
+         * @param {string} [sBatch]
+         * @returns {Promise<Array<string>>}
+         */
+        getAvailableSerials: function (sMaterial, sPlant, sStorageLocation, sBatch) {
+            if (!sMaterial || !sMaterial.trim()) {
+                return Promise.resolve([]);
+            }
+            var sMat = encodeURIComponent(sMaterial.trim());
+            var sPlt = encodeURIComponent((sPlant || "").trim());
+            var sSloc = encodeURIComponent((sStorageLocation || "").trim());
+            var sBat = encodeURIComponent((sBatch || "").trim());
+            var sUrl = BASE_PATH + "/getAvailableSerials(material='" + sMat + "',plant='" + sPlt + "',storageLocation='" + sSloc + "',batch='" + sBat + "')";
+            return ODataClient.get(sUrl).then(function (oData) {
+                var aItems = (oData && oData.value) ? oData.value : (Array.isArray(oData) ? oData : []);
+                return aItems;
+            }).catch(function () {
+                return [];
+            });
+        },
+
+        /**
          * Create Transfer Order from TR with batch/serials and auto-confirm (Step 2)
          * @param {Object} oPayload
          * @param {string} oPayload.lgnum

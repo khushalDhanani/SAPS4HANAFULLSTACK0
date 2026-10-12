@@ -168,6 +168,99 @@ describe('TrToAdapter (RFC)', () => {
     expect(rfc.readTable).not.toHaveBeenCalledWith('LQUA', expect.anything(), expect.anything());
   });
 
+  it('getFifoBatches returns batches sorted by earliest goods receipt date (FIFO)', async () => {
+    const quants = [
+      { LQNUM: '1', CHARG: 'BATCH_NEW', VERME: '50.000', MEINS: 'KG', WDATU: '20261010', EDATU: '20261011', LGTYP: 'OH1', LGPLA: 'BIN2', WERKS: '1120', LGORT: 'CS01' },
+      { LQNUM: '2', CHARG: 'BATCH_OLD', VERME: '20.000', MEINS: 'KG', WDATU: '20261001', EDATU: '20261002', LGTYP: 'OH1', LGPLA: 'BIN1', WERKS: '1120', LGORT: 'CS01' },
+      { LQNUM: '3', CHARG: 'BATCH_OLD', VERME: '30.000', MEINS: 'KG', WDATU: '20261001', EDATU: '20261002', LGTYP: 'OH1', LGPLA: 'BIN1', WERKS: '1120', LGORT: 'CS01' }
+    ];
+    const rfc = {
+      readTable: jest.fn(async (table) => (table === 'LQUA' ? quants : []))
+    };
+    const adapter = new TrToAdapter({ rfc });
+    const batches = await adapter.getFifoBatches('1000000867', '1120', 'CS01', 'W01');
+
+    expect(batches).toHaveLength(2);
+    expect(batches[0]).toMatchObject({
+      Batch: 'BATCH_OLD',
+      FifoRank: 1,
+      IsRecommended: true,
+      AvailableStock: 50,
+      GoodsReceiptDate: '2026-10-01'
+    });
+    expect(batches[0].Recommendation).toContain('FIFO Recommended');
+    expect(batches[1]).toMatchObject({
+      Batch: 'BATCH_NEW',
+      FifoRank: 2,
+      IsRecommended: false,
+      AvailableStock: 50,
+      GoodsReceiptDate: '2026-10-10'
+    });
+  });
+
+  it('getFifoBatches falls back to MCHA when LQUA has no stock quants', async () => {
+    const mcha = [
+      { CHARG: 'MCHA_BATCH_2', WERKS: '1120', ERSDA: '20261009', VFDAT: '20271009', HSDAT: '00000000' },
+      { CHARG: 'MCHA_BATCH_1', WERKS: '1120', ERSDA: '20261005', VFDAT: '20271005', HSDAT: '00000000' }
+    ];
+    const rfc = {
+      readTable: jest.fn(async (table) => (table === 'MCHA' ? mcha : []))
+    };
+    const adapter = new TrToAdapter({ rfc });
+    const batches = await adapter.getFifoBatches('1000000867', '1120', '', 'W01');
+
+    expect(batches).toHaveLength(2);
+    expect(batches[0].Batch).toBe('MCHA_BATCH_1');
+    expect(batches[0].FifoRank).toBe(1);
+    expect(batches[0].IsRecommended).toBe(true);
+    expect(batches[1].Batch).toBe('MCHA_BATCH_2');
+    expect(batches[1].FifoRank).toBe(2);
+  });
+
+  it('getAvailableSerials queries EQUI and returns naturally sorted serial series', async () => {
+    const equi = [
+      { SERNR: 'CON-40-003', EQUNR: '3' },
+      { SERNR: 'CON-40-001', EQUNR: '1' },
+      { SERNR: 'CON-40-002', EQUNR: '2' }
+    ];
+    const rfc = {
+      readTable: jest.fn(async (table) => (table === 'EQUI' ? equi : []))
+    };
+    const adapter = new TrToAdapter({ rfc });
+    const serials = await adapter.getAvailableSerials('8000006485');
+
+    expect(serials).toEqual(['CON-40-001', 'CON-40-002', 'CON-40-003']);
+  });
+
+  it('lookupTR enriches TRDetail with FIFO suggested batches and serials', async () => {
+    const quants = [
+      { LQNUM: '1', CHARG: 'IN26001216', VERME: '100.000', MEINS: 'KG', WDATU: '20261008', EDATU: '20261008', LGTYP: 'OH1', LGPLA: 'BIN1', WERKS: '1000', LGORT: 'RM01' }
+    ];
+    const equi = [{ SERNR: 'SN001', EQUNR: '1' }, { SERNR: 'SN002', EQUNR: '2' }];
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') return { ET_TR_HEADER: [HEADER], ET_TR_ITEMS: [ITEMS[0]] };
+        throw new Error(`unexpected ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'MAKT') return [{ MAKTX: 'IPA' }];
+        if (table === 'MARC') return [{ XCHPF: 'X', SERNP: 'Z001' }];
+        if (table === 'LQUA') return quants;
+        if (table === 'EQUI') return equi;
+        return [];
+      })
+    };
+    const tr = await new TrToAdapter({ rfc }).lookupTR('1000663', 'W01', 'TR');
+
+    expect(tr.IsBatchManaged).toBe(true);
+    expect(tr.IsSerialManaged).toBe(true);
+    expect(tr.FifoBatch).toBe('IN26001216');
+    expect(tr.SuggestedBatches).toHaveLength(1);
+    expect(tr.SuggestedBatches[0].Batch).toBe('IN26001216');
+    expect(tr.SuggestedBatches[0].IsRecommended).toBe(true);
+    expect(tr.SuggestedSerials).toEqual(['SN001', 'SN002']);
+  });
+
   it('sapNum reads both SAP number formats', () => {
     expect(sapNum('11.210,000')).toBe(11210);
     expect(sapNum('11,210.000')).toBe(11210);

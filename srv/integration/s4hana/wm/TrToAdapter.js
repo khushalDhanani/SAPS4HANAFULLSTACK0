@@ -378,6 +378,189 @@ class TrToAdapter {
   }
 
   /**
+   * FIFO Batch Suggestion for a material in WM:
+   * First queries LQUA (quants with stock in warehouse), grouping by batch (CHARG),
+   * aggregating available stock (VERME), and finding the earliest goods receipt date (WDATU)
+   * and putaway date (EDATU). Sorts by earliest WDATU (FIFO).
+   * If LQUA has no stock/batches, falls back to MCHA (material batch master) sorted by creation date (ERSDA).
+   */
+  async getFifoBatches(material, plant = '', storageLocation = '', warehouseNumber = '') {
+    if (!material) throw httpError(400, 'Material is required for batch suggestion');
+    const matClean = alphaOut(material);
+    const matPadded = alphaIn(sapKey(matClean, 'matnr'), 18);
+    const wh = warehouse(warehouseNumber);
+    const s4Plant = sapKeyOpt(plant, 'plant');
+    const s4Lgort = sapKeyOpt(storageLocation, 'lgort');
+
+    const whereLqua = [
+      `LGNUM = '${wh}'`,
+      `AND MATNR = '${matPadded}'`,
+      "AND VERME > 0",
+      "AND CHARG <> ' '"
+    ];
+    if (s4Plant) whereLqua.push(`AND WERKS = '${s4Plant}'`);
+    if (s4Lgort) whereLqua.push(`AND LGORT = '${s4Lgort}'`);
+
+    let quants = [];
+    try {
+      quants = await this._rfc(
+        () => this.rfc.readTable(
+          'LQUA',
+          ['LQNUM', 'CHARG', 'VERME', 'MEINS', 'WDATU', 'EDATU', 'BDATU', 'LGTYP', 'LGPLA', 'WERKS', 'LGORT'],
+          whereLqua
+        ),
+        `Read FIFO quants for material ${matClean} in warehouse ${wh}`
+      );
+    } catch (err) {
+      LOG.warn(`LQUA query failed for material ${matClean}: ${err.message}`);
+    }
+
+    const byBatch = {};
+    for (const q of quants || []) {
+      const ch = String(q.CHARG || '').trim();
+      if (!ch) continue;
+      const stock = sapNum(q.VERME);
+      if (stock <= 0) continue;
+
+      if (!byBatch[ch]) {
+        byBatch[ch] = {
+          Batch: ch,
+          Material: matClean,
+          Plant: q.WERKS || s4Plant || '',
+          StorageLocation: q.LGORT || s4Lgort || '',
+          StorageType: q.LGTYP || '',
+          StorageBin: q.LGPLA || '',
+          AvailableStock: 0,
+          Unit: q.MEINS || '',
+          GoodsReceiptDate: (q.WDATU && q.WDATU !== '00000000') ? q.WDATU : '',
+          PutawayDate: (q.EDATU && q.EDATU !== '00000000') ? q.EDATU : '',
+          ExpiryDate: ''
+        };
+      }
+      byBatch[ch].AvailableStock += stock;
+      if (q.WDATU && q.WDATU !== '00000000') {
+        if (!byBatch[ch].GoodsReceiptDate || q.WDATU < byBatch[ch].GoodsReceiptDate) {
+          byBatch[ch].GoodsReceiptDate = q.WDATU;
+        }
+      }
+      if (q.EDATU && q.EDATU !== '00000000') {
+        if (!byBatch[ch].PutawayDate || q.EDATU < byBatch[ch].PutawayDate) {
+          byBatch[ch].PutawayDate = q.EDATU;
+        }
+      }
+    }
+
+    let batchList = Object.values(byBatch);
+
+    // Fallback to MCHA if no stock in LQUA
+    if (!batchList.length) {
+      try {
+        const whereMcha = [`MATNR = '${matPadded}'`];
+        if (s4Plant) whereMcha.push(`AND WERKS = '${s4Plant}'`);
+        const mchaRows = await this._rfc(
+          () => this.rfc.readTable('MCHA', ['CHARG', 'WERKS', 'ERSDA', 'VFDAT', 'HSDAT'], whereMcha, 50),
+          `Read MCHA batches for material ${matClean}`
+        );
+        for (const r of mchaRows || []) {
+          const ch = String(r.CHARG || '').trim();
+          if (!ch) continue;
+          batchList.push({
+            Batch: ch,
+            Material: matClean,
+            Plant: r.WERKS || s4Plant || '',
+            StorageLocation: s4Lgort || '',
+            StorageType: '',
+            StorageBin: '',
+            AvailableStock: 0,
+            Unit: '',
+            GoodsReceiptDate: (r.ERSDA && r.ERSDA !== '00000000') ? r.ERSDA : '',
+            PutawayDate: (r.HSDAT && r.HSDAT !== '00000000') ? r.HSDAT : '',
+            ExpiryDate: sapDate(r.VFDAT) || ''
+          });
+        }
+      } catch (_mchaErr) {
+        // tolerate offline / read failure
+      }
+    }
+
+    // Sort FIFO: Earliest GoodsReceiptDate, then Earliest PutawayDate, then Batch ASC
+    batchList.sort((a, b) => {
+      const dA = a.GoodsReceiptDate || '99999999';
+      const dB = b.GoodsReceiptDate || '99999999';
+      if (dA !== dB) return dA.localeCompare(dB);
+      const pA = a.PutawayDate || '99999999';
+      const pB = b.PutawayDate || '99999999';
+      if (pA !== pB) return pA.localeCompare(pB);
+      return a.Batch.localeCompare(b.Batch);
+    });
+
+    return batchList.map((b, idx) => {
+      const rank = idx + 1;
+      const isRec = idx === 0;
+      const grFormatted = sapDate(b.GoodsReceiptDate) || b.GoodsReceiptDate;
+      const pwFormatted = sapDate(b.PutawayDate) || b.PutawayDate;
+      let recText = '';
+      if (isRec) {
+        recText = grFormatted ? `FIFO Recommended (Earliest GR: ${grFormatted})` : 'FIFO Recommended (Oldest Stock)';
+      } else {
+        recText = `FIFO Rank #${rank}${grFormatted ? ` (GR: ${grFormatted})` : ''}`;
+      }
+
+      return {
+        Batch: b.Batch,
+        Material: b.Material,
+        Plant: b.Plant,
+        StorageLocation: b.StorageLocation,
+        StorageType: b.StorageType,
+        StorageBin: b.StorageBin,
+        AvailableStock: Math.round(b.AvailableStock * 1000) / 1000,
+        Unit: b.Unit,
+        GoodsReceiptDate: grFormatted,
+        PutawayDate: pwFormatted,
+        ExpiryDate: b.ExpiryDate,
+        FifoRank: rank,
+        IsRecommended: isRec,
+        Recommendation: recText
+      };
+    });
+  }
+
+  /**
+   * Available serial series suggestion for a material:
+   * Queries EQUI for serial numbers created/maintained for the material.
+   * Natural sort creates clean sequential series (e.g. CON-40-001, CON-40-002...).
+   */
+  async getAvailableSerials(material, plant = '', storageLocation = '', batch = '') {
+    if (!material) throw httpError(400, 'Material is required for serial series lookup');
+    const matClean = alphaOut(material);
+    const matPadded = alphaIn(sapKey(matClean, 'matnr'), 18);
+
+    try {
+      const rows = await this._rfc(
+        () => this.rfc.readTable(
+          'EQUI',
+          ['SERNR', 'EQUNR'],
+          [`MATNR = '${matPadded}'`, "AND SERNR <> ' '"],
+          100
+        ),
+        `Read serial numbers for material ${matClean}`
+      );
+
+      const serials = (rows || [])
+        .map((r) => String(r.SERNR || '').trim())
+        .filter(Boolean);
+
+      // Unique and natural sort (handles sequential series nicely)
+      const unique = [...new Set(serials)];
+      unique.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+      return unique;
+    } catch (err) {
+      LOG.warn(`EQUI serial query failed for material ${matClean}: ${err.message}`);
+      return [];
+    }
+  }
+
+  /**
    * Scan lookup. docType says what was scanned: 'TR' (Transfer Requirement number) or 'RES' (Reservation
    * number); it is mandatory, the server never guesses. With several open items the caller must pick one
    * (tbpos); the response then carries TRItem '' and all Items so the UI can offer the choice.
@@ -401,6 +584,31 @@ class TrToAdapter {
 
     const profile = item ? (await this._materialProfiles([item.Material], item.Plant))[item.Material] || {} : {};
     const sel = item || {};
+    const isBatchManaged = Boolean(profile.isBatchManaged || sel.Batch);
+    const isSerialManaged = Boolean(profile.isSerialManaged);
+
+    let suggestedBatches = [];
+    let fifoBatch = sel.Batch || '';
+    if (item && isBatchManaged) {
+      try {
+        suggestedBatches = await this.getFifoBatches(sel.Material, sel.Plant, sel.StorageLocation, wh);
+        if (!fifoBatch && suggestedBatches.length > 0) {
+          fifoBatch = suggestedBatches[0].Batch;
+        }
+      } catch (err) {
+        LOG.warn(`Failed to fetch FIFO batches for material ${sel.Material}: ${err.message}`);
+      }
+    }
+
+    let suggestedSerials = [];
+    if (item && isSerialManaged) {
+      try {
+        suggestedSerials = await this.getAvailableSerials(sel.Material, sel.Plant, sel.StorageLocation, fifoBatch || sel.Batch || '');
+      } catch (err) {
+        LOG.warn(`Failed to fetch available serials for material ${sel.Material}: ${err.message}`);
+      }
+    }
+
     return {
       TransferRequirement: alphaOut(tr.Tbnum),
       TRNumber: alphaOut(tr.Tbnum),
@@ -429,8 +637,11 @@ class TrToAdapter {
       OpenQty: sel.OpenQty || 0,
       Unit: sel.Unit || '',
       Batch: sel.Batch || '',
-      IsBatchManaged: Boolean(profile.isBatchManaged || sel.Batch),
-      IsSerialManaged: Boolean(profile.isSerialManaged),
+      FifoBatch: fifoBatch,
+      SuggestedBatches: suggestedBatches,
+      SuggestedSerials: suggestedSerials,
+      IsBatchManaged: isBatchManaged,
+      IsSerialManaged: isSerialManaged,
       DeliveryCompleted: Boolean(sel.DeliveryCompleted),
       Status: tr.Statu === 'E' ? STATUS.TO_CONFIRMED : STATUS.TR_CREATED,
       StatusText: tr.Statu === 'E' ? 'Completed' : STATUS_TEXT[STATUS.TR_CREATED],

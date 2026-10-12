@@ -446,6 +446,70 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
             expect(viewModel.getProperty('/batchValueState')).toBe('None');
             expect(viewModel.getProperty('/canSubmit')).toBe(true);
         });
+
+        it('pre-fills FIFO batch on TR lookup when TR specifies no batch', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '1000663',
+                TRNumber: '1000663',
+                TRItem: '0001',
+                OpenQuantity: 10,
+                IsBatchManaged: true,
+                IsSerialManaged: false,
+                Batch: '',
+                FifoBatch: 'IN26001216',
+                SuggestedBatches: [
+                    { Batch: 'IN26001216', FifoRank: 1, IsRecommended: true, AvailableStock: 3000, Recommendation: 'FIFO Recommended' },
+                    { Batch: 'IN26001220', FifoRank: 2, IsRecommended: false, AvailableStock: 1000, Recommendation: 'FIFO Rank #2' }
+                ]
+            });
+            viewModel.setProperty('/scannedTR', '1000663');
+            await controller.onLookupTR();
+
+            expect(viewModel.getProperty('/batch')).toBe('IN26001216');
+            expect(viewModel.getProperty('/fifoBatch')).toBe('IN26001216');
+            expect(viewModel.getProperty('/isFifoApplied')).toBe(true);
+            expect(viewModel.getProperty('/suggestedBatches')).toHaveLength(2);
+            expect(viewModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('onApplyFifoBatch applies the recommended FIFO batch and marks it valid', () => {
+            viewModel.setProperty('/fifoBatch', 'FIFO-REC-01');
+            viewModel.setProperty('/batch', '');
+            controller.onApplyFifoBatch();
+
+            expect(viewModel.getProperty('/batch')).toBe('FIFO-REC-01');
+            expect(viewModel.getProperty('/isFifoApplied')).toBe(true);
+            expect(viewModel.getProperty('/batchValueState')).toBe('None');
+            expect(viewModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('onSelectBatchSuggestion selects a batch from the FIFO table context', () => {
+            viewModel.setProperty('/fifoBatch', 'FIFO-REC-01');
+            const mockEvent = {
+                getSource: () => ({
+                    getBindingContext: () => ({
+                        getProperty: (prop) => (prop === 'Batch' ? 'FIFO-REC-02' : null)
+                    })
+                })
+            };
+            controller.onSelectBatchSuggestion(mockEvent);
+
+            expect(viewModel.getProperty('/batch')).toBe('FIFO-REC-02');
+            expect(viewModel.getProperty('/isFifoApplied')).toBe(false);
+            expect(viewModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('onSuggestionBatchSelected applies batch from Input suggestions', () => {
+            controller.onSuggestionBatchSelected({
+                getParameter: () => ({
+                    getKey: () => 'BATCH-SUGG-99',
+                    getText: () => 'BATCH-SUGG-99'
+                })
+            });
+
+            expect(viewModel.getProperty('/batch')).toBe('BATCH-SUGG-99');
+            expect(viewModel.getProperty('/canSubmit')).toBe(true);
+        });
     });
 
     describe('6. Serial Number Capture & Validation', () => {
@@ -518,6 +582,35 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
             expect(remaining.length).toBe(1);
             expect(remaining[0].serial).toBe('SN-B');
             expect(remaining[0].index).toBe(1);
+        });
+
+        it('auto-fills required serial series from suggestedSerials up to pickQty', () => {
+            viewModel.setProperty('/pickQty', 3);
+            viewModel.setProperty('/suggestedSerials', ['CON-40-001', 'CON-40-002', 'CON-40-003', 'CON-40-004']);
+            viewModel.setProperty('/serials', []);
+
+            controller.onAutoFillSerials();
+
+            const serials = viewModel.getProperty('/serials');
+            expect(serials).toHaveLength(3);
+            expect(serials.map((s) => s.serial)).toEqual(['CON-40-001', 'CON-40-002', 'CON-40-003']);
+            expect(viewModel.getProperty('/serialsStatusState')).toBe('Success');
+            expect(viewModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('onAddSuggestedSerial adds a clicked serial from suggestion strip', () => {
+            viewModel.setProperty('/pickQty', 2);
+            viewModel.setProperty('/serials', []);
+            const mockBtn = {
+                getSource: () => ({
+                    getText: () => 'CON-40-001'
+                })
+            };
+            controller.onAddSuggestedSerial(mockBtn);
+
+            const serials = viewModel.getProperty('/serials');
+            expect(serials).toHaveLength(1);
+            expect(serials[0].serial).toBe('CON-40-001');
         });
     });
 

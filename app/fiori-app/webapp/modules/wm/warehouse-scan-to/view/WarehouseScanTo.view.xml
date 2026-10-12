@@ -357,6 +357,40 @@
                     expanded="true"
                     class="sapUiSmallMarginBottom">
                     <VBox class="sapUiSmallMargin">
+                        <!-- FIFO Recommendation Banner -->
+                        <HBox
+                            alignItems="Center"
+                            justifyContent="SpaceBetween"
+                            visible="{= !!${scanView>/fifoBatch} }"
+                            class="sapUiTinyMarginBottom">
+                            <HBox alignItems="Center">
+                                <core:Icon
+                                    src="sap-icon://activate"
+                                    color="#107e3e"
+                                    class="sapUiTinyMarginEnd" />
+                                <VBox>
+                                    <HBox alignItems="Center">
+                                        <Text
+                                            text="{i18n>scanToFifoBadge}"
+                                            class="sapUiTinyMarginEnd" />
+                                        <ObjectStatus
+                                            text="{scanView>/fifoBatch}"
+                                            state="Success"
+                                            inverted="true" />
+                                    </HBox>
+                                    <Text
+                                        text="{scanView>/fifoBatchRecommendation}"
+                                        class="sapUiExtraTinyMarginTop" />
+                                </VBox>
+                            </HBox>
+                            <Button
+                                id="btnApplyFifoBatch"
+                                text="{i18n>scanToFifoApplyBtn}"
+                                icon="sap-icon://accept"
+                                type="Emphasized"
+                                press=".onApplyFifoBatch" />
+                        </HBox>
+
                         <Label
                             text="{i18n>scanToLabelBatch}"
                             design="Bold"
@@ -368,10 +402,16 @@
                                 value="{scanView>/batch}"
                                 placeholder="{i18n>scanToPlaceholderBatch}"
                                 liveChange=".onBatchLiveChange"
+                                showSuggestion="true"
+                                suggestionItemSelected=".onSuggestionBatchSelected"
+                                suggestionItems="{scanView>/suggestedBatches}"
                                 valueState="{scanView>/batchValueState}"
                                 valueStateText="{scanView>/batchValueStateText}"
                                 width="100%"
                                 class="sapUiTinyMarginEnd">
+                                <suggestionItems>
+                                    <core:Item key="{scanView>Batch}" text="{scanView>Batch}" />
+                                </suggestionItems>
                                 <layoutData>
                                     <FlexItemData growFactor="1" />
                                 </layoutData>
@@ -382,6 +422,67 @@
                                 tooltip="{i18n>scanToBtnCameraBatch}"
                                 press=".onCameraScanBatch" />
                         </HBox>
+
+                        <!-- SUGGESTED FIFO BATCHES TABLE -->
+                        <VBox visible="{= !!${scanView>/suggestedBatches} &amp;&amp; ${scanView>/suggestedBatches}.length > 0 }" class="sapUiSmallMarginTop">
+                            <HBox alignItems="Center" justifyContent="SpaceBetween" class="sapUiTinyMarginBottom">
+                                <Label text="{i18n>scanToBatchesSuggestedTitle}" design="Bold" />
+                                <Text text="{= ${scanView>/suggestedBatches}.length + ' batches found in warehouse' }" class="sapUiExtraTinyMarginTop" />
+                            </HBox>
+                            <Table
+                                id="tableSuggestedBatches"
+                                items="{scanView>/suggestedBatches}"
+                                class="sapUiSizeCompact">
+                                <columns>
+                                    <Column width="5rem">
+                                        <Text text="{i18n>scanToColFifoRank}" />
+                                    </Column>
+                                    <Column>
+                                        <Text text="{i18n>scanToColBatch}" />
+                                    </Column>
+                                    <Column hAlign="End">
+                                        <Text text="{i18n>scanToColAvailStock}" />
+                                    </Column>
+                                    <Column>
+                                        <Text text="{i18n>scanToColGRDate}" />
+                                    </Column>
+                                    <Column>
+                                        <Text text="{i18n>scanToColStorageBin}" />
+                                    </Column>
+                                    <Column hAlign="End" width="6rem">
+                                        <Text text="{i18n>scanToColAction}" />
+                                    </Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem highlight="{= ${scanView>IsRecommended} ? 'Success' : 'None' }">
+                                        <cells>
+                                            <ObjectStatus
+                                                text="{= '#' + ${scanView>FifoRank} }"
+                                                state="{= ${scanView>IsRecommended} ? 'Success' : 'None' }" />
+                                            <HBox alignItems="Center">
+                                                <Text text="{scanView>Batch}" class="sapUiTinyMarginEnd" />
+                                                <core:Icon
+                                                    src="sap-icon://favorite"
+                                                    color="#107e3e"
+                                                    size="0.75rem"
+                                                    visible="{scanView>IsRecommended}"
+                                                    tooltip="{i18n>scanToFifoBadge}" />
+                                            </HBox>
+                                            <ObjectNumber
+                                                number="{scanView>AvailableStock}"
+                                                unit="{scanView>Unit}" />
+                                            <Text text="{= ${scanView>GoodsReceiptDate} || '-' }" />
+                                            <Text text="{= ${scanView>StorageType} ? (${scanView>StorageType} + '/' + ${scanView>StorageBin}) : '-' }" />
+                                            <Button
+                                                text="{i18n>scanToBtnSelectBatch}"
+                                                type="{= ${scanView>Batch} === ${scanView>/batch} ? 'Emphasized' : 'Transparent' }"
+                                                icon="{= ${scanView>Batch} === ${scanView>/batch} ? 'sap-icon://accept' : '' }"
+                                                press=".onSelectBatchSuggestion" />
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                        </VBox>
                     </VBox>
                 </Panel>
 
@@ -394,6 +495,40 @@
                     expanded="true"
                     class="sapUiSmallMarginBottom">
                     <VBox class="sapUiSmallMargin">
+                        <!-- SERIAL SERIES AUTO-FILL STRIP -->
+                        <HBox
+                            alignItems="Center"
+                            justifyContent="SpaceBetween"
+                            visible="{= !!${scanView>/suggestedSerials} &amp;&amp; ${scanView>/suggestedSerials}.length > 0 }"
+                            class="sapUiTinyMarginBottom">
+                            <HBox alignItems="Center">
+                                <core:Icon
+                                    src="sap-icon://dimension"
+                                    color="#0a6ed1"
+                                    class="sapUiTinyMarginEnd" />
+                                <Text
+                                    text="{= 'Available Serial Series: ' + ${scanView>/suggestedSerials}.length + ' serial numbers found in stock.' }" />
+                            </HBox>
+                            <Button
+                                id="btnAutoFillSerials"
+                                text="{= 'Auto-Fill Series (' + ${scanView>/pickQty} + ')' }"
+                                icon="sap-icon://multi-select"
+                                type="Emphasized"
+                                press=".onAutoFillSerials" />
+                        </HBox>
+
+                        <!-- QUICK-SELECT SERIAL CHIPS -->
+                        <VBox visible="{= !!${scanView>/suggestedSerials} &amp;&amp; ${scanView>/suggestedSerials}.length > 0 }" class="sapUiTinyMarginBottom">
+                            <Label text="{i18n>scanToSuggestedSerialsLabel}" class="sapUiTinyMarginBottom" />
+                            <HBox wrap="Wrap" items="{scanView>/suggestedSerials}">
+                                <Button
+                                    text="{scanView>}"
+                                    type="Transparent"
+                                    press=".onAddSuggestedSerial"
+                                    class="sapUiTinyMarginEnd sapUiTinyMarginBottom" />
+                            </HBox>
+                        </VBox>
+
                         <HBox alignItems="Center" justifyContent="SpaceBetween" class="sapUiTinyMarginBottom">
                             <Label text="{i18n>scanToLabelSerialInput}" design="Bold" required="true" />
                             <ObjectStatus
