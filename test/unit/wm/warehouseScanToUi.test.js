@@ -314,6 +314,28 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
         });
     });
 
+    describe('3b. Inline Open TR List (direct selection)', () => {
+        it('loads open TRs into the view model (shown directly on the page)', async () => {
+            await controller._loadOpenTRs();
+
+            expect(mockWarehouseScanToService.getOpenTRs).toHaveBeenCalledWith('W01');
+            expect(viewModel.getProperty('/openTRs').length).toBe(1);
+            expect(viewModel.getProperty('/openTRs')[0].Tbnum).toBe('0001001839');
+            expect(viewModel.getProperty('/isLoadingTRs')).toBe(false);
+        });
+
+        it('row press loads the selected TR and triggers the next process (onLookupTR)', () => {
+            const lookupSpy = jest.spyOn(controller, 'onLookupTR').mockImplementation(() => {});
+            controller.onOpenTRPress({
+                getParameter: () => null,
+                getSource: () => ({ getBindingContext: () => ({ getProperty: () => '0001001839' }) })
+            });
+
+            expect(viewModel.getProperty('/scannedTR')).toBe('0001001839');
+            expect(lookupSpy).toHaveBeenCalled();
+        });
+    });
+
     describe('4. Pick Quantity Validation & Max Qty Setting', () => {
         beforeEach(() => {
             viewModel.setProperty('/hasTR', true);
@@ -452,6 +474,8 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
             viewModel.setProperty('/tr', {
                 TRNumber: '0001001839',
                 TRItem: '0001',
+                Material: '8000000023',
+                MaterialDescription: 'Drive Belt B20',
                 OpenQty: 5,
                 Unit: 'KG',
                 IsBatchManaged: false,
@@ -492,6 +516,10 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
 
             expect(viewModel.getProperty('/hasResult')).toBe(true);
             expect(viewModel.getProperty('/result/TransferOrder')).toBe('1012970');
+            expect(viewModel.getProperty('/result/IsConfirmed')).toBe(true);
+            expect(viewModel.getProperty('/result/StatusText')).toBe('Goods Issue Posted');
+            expect(viewModel.getProperty('/result/Material')).toBe('8000000023');
+            expect(viewModel.getProperty('/result/Quantity')).toBe(5);
             expect(viewModel.getProperty('/result/MaterialDocument')).toBe('4900050128');
             expect(viewModel.getProperty('/result/StockEffect')).toBe('Stock transferred to Storage Location CS01');
             expect(viewModel.getProperty('/canRetryMigo')).toBe(false);

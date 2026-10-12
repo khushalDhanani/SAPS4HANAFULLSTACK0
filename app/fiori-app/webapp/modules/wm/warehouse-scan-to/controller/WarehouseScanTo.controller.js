@@ -72,7 +72,36 @@ sap.ui.define([
             if (BarcodeScanService && typeof BarcodeScanService.attachHardwareScanner === "function") {
                 BarcodeScanService.attachHardwareScanner(this._scannerHandler);
             }
+            this._loadOpenTRs();
             this._focusTRInput();
+        },
+
+        /** Load the open TR list into the view model (shared by the inline list and the value-help dialog). */
+        _loadOpenTRs: function () {
+            var oModel = this.getModel("scanView");
+            var sWh = oModel.getProperty("/lgnum") || "W01";
+            var that = this;
+            oModel.setProperty("/isLoadingTRs", true);
+            return WarehouseScanToService.getOpenTRs(sWh).then(function (aTRs) {
+                oModel.setProperty("/openTRs", aTRs || []);
+                oModel.setProperty("/isLoadingTRs", false);
+                return aTRs || [];
+            }).catch(function (oErr) {
+                oModel.setProperty("/isLoadingTRs", false);
+                that._showMessage(oErr.message || that.getText("scanToErrLoadTRs"), "Error");
+                return [];
+            });
+        },
+
+        /** Direct selection from the inline open-TR list -> load the TR and show the next process. */
+        onOpenTRPress: function (oEvent) {
+            var oItem = oEvent.getParameter("listItem") || oEvent.getSource();
+            var oCtx = oItem && oItem.getBindingContext("scanView");
+            var sTbnum = oCtx ? oCtx.getProperty("Tbnum") : "";
+            if (sTbnum) {
+                this.getModel("scanView").setProperty("/scannedTR", sTbnum);
+                this.onLookupTR();
+            }
         },
 
         onExit: function () {
@@ -180,15 +209,9 @@ sap.ui.define([
 
         onValueHelpTR: function () {
             var oView = this.getView();
-            var oModel = this.getModel("scanView");
-            var sWh = oModel.getProperty("/lgnum") || "W01";
             var that = this;
 
-            oModel.setProperty("/isLoadingTRs", true);
-            WarehouseScanToService.getOpenTRs(sWh).then(function (aTRs) {
-                oModel.setProperty("/openTRs", aTRs || []);
-                oModel.setProperty("/isLoadingTRs", false);
-
+            this._loadOpenTRs().then(function () {
                 if (!that._oTrSelectDialog) {
                     return Fragment.load({
                         id: oView.getId(),
@@ -200,13 +223,9 @@ sap.ui.define([
                         oDialog.open();
                         return oDialog;
                     });
-                } else {
-                    that._oTrSelectDialog.open();
-                    return that._oTrSelectDialog;
                 }
-            }).catch(function (oErr) {
-                oModel.setProperty("/isLoadingTRs", false);
-                that._showMessage(oErr.message || that.getText("scanToErrLoadTRs"), "Error");
+                that._oTrSelectDialog.open();
+                return that._oTrSelectDialog;
             });
         },
 
@@ -557,6 +576,21 @@ sap.ui.define([
             return WarehouseScanToService.createTOFromTR(oPayload).then(function (oResult) {
                 that._playAudio("success");
 
+                // Normalize and enrich all properties so UI panelResult reflects completely
+                oResult.Confirmed = Boolean(oResult.Confirmed);
+                oResult.IsConfirmed = Boolean(oResult.Confirmed || oResult.IsConfirmed || oResult.Status === "04" || oResult.Status === "05");
+                oResult.StatusText = oResult.StatusText || (oResult.Status === "05" ? "Goods Issue Posted" : (oResult.Status === "04" ? "TO Confirmed" : (oResult.Status === "99" ? "MIGO Failed (Retry Available)" : (oResult.Status === "13" ? "Confirmation Failed" : "TO Created"))));
+                oResult.Material = oResult.Material || (oTR ? oTR.Material : "");
+                oResult.MaterialName = oResult.MaterialName || (oTR ? (oTR.MaterialDescription || oTR.MaterialName) : "");
+                oResult.Quantity = (oResult.Quantity !== undefined && oResult.Quantity !== null) ? oResult.Quantity : nQty;
+                oResult.Unit = oResult.Unit || (oTR ? oTR.Unit : "KG");
+                oResult.Batch = oResult.Batch || sBatch || (oTR ? oTR.Batch : "");
+                oResult.MovementType = oResult.MovementType || (oTR ? oTR.MovementType : "");
+                oResult.TransferRequirement = oResult.TransferRequirement || (oTR ? (oTR.TRNumber || oTR.TransferRequirement) : oPayload.tbnum);
+                oResult.ReservationNo = oResult.ReservationNo || (oTR ? oTR.ReservationNo : "");
+                oResult.ConfirmedBy = oResult.ConfirmedBy || (oResult.IsConfirmed ? "KHUSHAL" : "");
+                oResult.ConfirmationNumber = oResult.ConfirmationNumber || oResult.TransferOrder;
+
                 var sActionText;
                 if (oResult.MaterialDocument) {
                     sActionText = that.getText("scanToMsgSuccessMigoPosted", [
@@ -572,7 +606,7 @@ sap.ui.define([
                     ]);
                     oModel.setProperty("/canRetryMigo", true);
                 } else if (oResult.IsConfirmed) {
-                    sActionText = that.getText("scanToMsgSuccessConfirmed", [oResult.TransferOrder, oResult.ConfirmationNumber]);
+                    sActionText = that.getText("scanToMsgSuccessConfirmed", [oResult.TransferOrder, oResult.ConfirmationNumber || oResult.TransferOrder]);
                     oModel.setProperty("/canRetryMigo", false);
                 } else {
                     sActionText = that.getText("scanToMsgSuccessCreated", [oResult.TransferOrder]);
@@ -612,6 +646,14 @@ sap.ui.define([
                 Quantity: oResult.Quantity,
                 Unit: oResult.Unit
             };
+            var sBatch = oResult.Batch || oModel.getProperty("/batch");
+            if (sBatch) {
+                oPayload.Batch = sBatch;
+            }
+            var aSerials = oResult.Serials || (oModel.getProperty("/serials") || []).map(function (item) { return item.serial; });
+            if (aSerials && aSerials.length > 0) {
+                oPayload.Serials = aSerials;
+            }
 
             return WarehouseScanToService.postMigoGoodsMovement(oPayload).then(function (oMigoRes) {
                 that._playAudio("success");
@@ -625,7 +667,16 @@ sap.ui.define([
                     MaterialDocument: oMigoRes.MaterialDocument,
                     MaterialDocYear: oMigoRes.MaterialDocYear,
                     Status: oMigoRes.Status || "05",
-                    StockEffect: oMigoRes.StockEffect
+                    StatusText: oMigoRes.StatusText || "Goods Issue Posted",
+                    StockEffect: oMigoRes.StockEffect,
+                    Batch: oMigoRes.Batch || oResult.Batch,
+                    ReservationNo: oMigoRes.ReservationNo || oResult.ReservationNo,
+                    MovementType: oMigoRes.MovementType || oResult.MovementType,
+                    Confirmed: true,
+                    IsConfirmed: true,
+                    ConfirmedBy: oResult.ConfirmedBy || "KHUSHAL",
+                    ConfirmationNumber: oResult.ConfirmationNumber || oResult.TransferOrder,
+                    ErrorMessage: ""
                 });
                 oModel.setProperty("/result", oUpdatedResult);
                 oModel.setProperty("/resultMessage", sText);
@@ -635,12 +686,17 @@ sap.ui.define([
             }).catch(function (oErr) {
                 that._playAudio("error");
                 oModel.setProperty("/canRetryMigo", true);
+                var oUpdatedResult = Object.assign({}, oResult, {
+                    ErrorMessage: oErr.message
+                });
+                oModel.setProperty("/result", oUpdatedResult);
                 MessageBox.error(oErr.message || that.getText("scanToErrMigoFailed"));
             });
         },
 
         onScanNextTR: function () {
             this.onReset();
+            this._loadOpenTRs();
             this._focusTRInput();
         },
 

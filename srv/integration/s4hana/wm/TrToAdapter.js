@@ -537,16 +537,49 @@ class TrToAdapter {
       // Chained TO step: CREATE TO via Z_WM_TO_CREATE_FROM_TR, then CONFIRM TO via L_TO_CONFIRM as a real second call
       // TODO: Z_WM_TO_CREATE_FROM_TR supports IV_SQUIT = 'X' for immediate confirmation in one call, but chained 2-call architecture is enforced here.
       LOG.info(`Creating TO from TR ${tr.Tbnum} item ${item.Tbpos}, qty ${quantity} ${unit || item.Unit}`);
+
+      let sSourceType = item.SourceStorageType || tr.Vltyp || '';
+      let sSourceBin = item.SourceStorageBin || tr.Vlpla || '';
+      let sResolvedBatch = selectedBatch;
+
+      if (!sSourceType && this.rfc) {
+        try {
+          const s4Mat = /^\d+$/.test(item.Material) ? item.Material.padStart(18, '0') : item.Material;
+          const lquaWhere = [
+            `LGNUM = '${wh}'`,
+            `AND MATNR = '${s4Mat}'`,
+            "AND VERME > 0"
+          ];
+          if (sResolvedBatch) lquaWhere.push(`AND CHARG = '${sResolvedBatch}'`);
+          const quants = await this._rfc(
+            () => this.rfc.readTable('LQUA', ['LGTYP', 'LGPLA', 'CHARG', 'VERME'], lquaWhere, 5),
+            `Lookup available stock for material ${item.Material} in warehouse ${wh}`
+          );
+          if (quants && quants.length > 0) {
+            const preferred = quants.find((q) => q.LGTYP === '902') ||
+                              quants.find((q) => !['921', '911', '913', '904'].includes(q.LGTYP)) ||
+                              quants[0];
+            sSourceType = preferred.LGTYP;
+            sSourceBin = preferred.LGPLA;
+            if (!sResolvedBatch && preferred.CHARG?.trim()) {
+              sResolvedBatch = preferred.CHARG.trim();
+            }
+          }
+        } catch (_qErr) {
+          LOG.warn('Stock quant lookup note:', _qErr.message);
+        }
+      }
+
       const itItems = [{
         TBPOS: item.Tbpos,
         ANFME: quantity.toFixed(3),
         ALTME: unit || item.Unit,
-        CHARG: selectedBatch,
+        CHARG: sResolvedBatch,
         LETYP: item.StorageUnitType || profile.storageUnitType || '',
-        NLTYP: item.DestStorageType || tr.Nltyp || '',
-        NLPLA: item.DestStorageBin || tr.Nlpla || '',
-        VLTYP: item.SourceStorageType || tr.Vltyp || '',
-        VLPLA: item.SourceStorageBin || tr.Vlpla || '',
+        NLTYP: item.DestStorageType || tr.Nltyp || '921',
+        NLPLA: item.DestStorageBin || tr.Nlpla || 'TRANSFER',
+        VLTYP: sSourceType,
+        VLPLA: sSourceBin,
         VLENR: storageUnit || ''
       }];
 
@@ -630,9 +663,13 @@ class TrToAdapter {
       TRItem: item.Tbpos,
       ReservationNo: alphaOut(tr.Rsnum) || '',
       ReservationItem: '0001',
+      MovementType: tr.Bwlvs || '',
       Status: currentStatus,
       StatusText: statusText,
       Confirmed: confirmed,
+      IsConfirmed: confirmed,
+      ConfirmationNumber: confirmed ? tanum : '',
+      ConfirmedBy: confirmed ? (process.env.S4_USERNAME || 'KHUSHAL') : '',
       ErrorStep: confirmed ? '' : (autoConfirm ? 'LT12' : ''),
       ErrorMessage: confirmed ? '' : (confirmErr?.message || ''),
       Material: item.Material,

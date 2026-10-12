@@ -432,4 +432,61 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       await expect(adapter.postGoodsMovement({ movementType: '311', material: '123', quantity: 1 })).rejects.toMatchObject({ status: 400 });
     });
   });
+
+  describe('7. Storage-location extension preflight (MARD)', () => {
+    let rfc;
+    let adp;
+    const mard = { 1120: ['HS01', 'MT01', 'MT02'], 1110: ['CS01'] };
+
+    beforeEach(() => {
+      rfc = {
+        session: jest.fn(async (fn) => fn(rfc.call)),
+        call: jest.fn()
+          .mockResolvedValueOnce({ RESERVATION: '0000525900', RETURN: [{ TYPE: 'S', MESSAGE: 'ok' }] })
+          .mockResolvedValueOnce({}),
+        readTable: jest.fn(async (table, fields, where) => {
+          const w = (where || []).find((c) => c.includes('WERKS'));
+          const m = w && w.match(/WERKS = '(\d+)'/);
+          const plant = m ? m[1] : '';
+          return (mard[plant] || []).map((lgort) => ({ LGORT: lgort }));
+        })
+      };
+      adp = new ReservationProcessAdapter({ rfc });
+    });
+
+    test('passes when material is extended to both issuing and receiving SLocs (311)', async () => {
+      const result = await adp.createReservation({
+        movementType: '311', plant: '1120', storageLocation: 'HS01',
+        receivingStorageLocation: 'MT01', material: '8000009753', quantity: 1, unit: 'KG'
+      });
+      expect(result.success).toBe(true);
+      expect(rfc.readTable).toHaveBeenCalledWith('MARD', ['LGORT'], expect.arrayContaining([expect.stringContaining('WERKS')]), 50);
+      expect(rfc.call).toHaveBeenCalledWith('BAPI_RESERVATION_CREATE1', expect.anything());
+    });
+
+    test('rejects (400) and lists the valid SLocs when the issuing SLoc is not extended (201)', async () => {
+      await expect(adp.createReservation({
+        movementType: '201', plant: '1120', storageLocation: 'CS01',
+        costCenter: '1011201301', material: '8000009753', quantity: 1, unit: 'KG'
+      })).rejects.toThrow(/not extended to issuing storage location CS01 in plant 1120.*HS01, MT01, MT02/);
+      expect(rfc.call).not.toHaveBeenCalled(); // BAPI must not run when preflight fails
+    });
+
+    test('rejects (400) when the receiving SLoc is not extended (311)', async () => {
+      await expect(adp.createReservation({
+        movementType: '311', plant: '1120', storageLocation: 'HS01',
+        receivingStorageLocation: 'CS01', material: '8000009753', quantity: 1, unit: 'KG'
+      })).rejects.toThrow(/not extended to receiving storage location CS01 in plant 1120/);
+    });
+
+    test('does not block the create when the MARD read itself fails', async () => {
+      rfc.readTable = jest.fn(async () => { throw new Error('RFC_READ_TABLE blocked'); });
+      const result = await adp.createReservation({
+        movementType: '201', plant: '1120', storageLocation: 'CS01',
+        material: '8000009753', quantity: 1, unit: 'KG'
+      });
+      expect(result.success).toBe(true);
+      expect(rfc.call).toHaveBeenCalledWith('BAPI_RESERVATION_CREATE1', expect.anything());
+    });
+  });
 });

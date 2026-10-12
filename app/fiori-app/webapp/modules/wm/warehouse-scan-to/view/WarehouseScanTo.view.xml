@@ -103,6 +103,31 @@
                     </VBox>
                 </Panel>
 
+                <!-- SECTION 1b: OPEN TR LIST (DIRECT SELECTION -> NEXT PROCESS) -->
+                <Panel
+                    id="panelOpenTRs"
+                    headerText="{i18n>scanToSelectDialogTitle}"
+                    visible="{= !${scanView>/hasTR} &amp;&amp; !${scanView>/hasResult} }"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+                    <List
+                        id="listOpenTRs"
+                        items="{scanView>/openTRs}"
+                        busy="{scanView>/isLoadingTRs}"
+                        noDataText="{i18n>scanToSelectDialogNoData}"
+                        class="sapUiSizeCompact">
+                        <StandardListItem
+                            title="{scanView>Tbnum}"
+                            description="{scanView>DisplayText}"
+                            info="{= ${scanView>Statu} === 'T' ? 'Partial' : 'Open' }"
+                            infoState="{= ${scanView>Statu} === 'T' ? 'Warning' : 'Success' }"
+                            icon="sap-icon://document-text"
+                            type="Active"
+                            press=".onOpenTRPress" />
+                    </List>
+                </Panel>
+
                 <!-- SECTION 2: SUCCESS OUTCOME BANNER (IF TO POSTED) -->
                 <Panel
                     id="panelResult"
@@ -112,7 +137,7 @@
                     class="sapUiSmallMarginBottom">
                     <VBox class="sapUiSmallMargin">
                         <MessageStrip
-                            type="Success"
+                            type="{= ${scanView>/result/Status} === '99' ? 'Warning' : (${scanView>/result/Status} === '13' ? 'Error' : 'Success') }"
                             text="{scanView>/resultMessage}"
                             showIcon="true"
                             class="sapUiSmallMarginBottom" />
@@ -133,19 +158,36 @@
                             columnsL="2"
                             columnsM="2">
                             <form:content>
+                                <core:Title text="Transfer Order Details" />
                                 <Label text="{i18n>scanToLabelTO}" design="Bold" />
                                 <Text text="{scanView>/result/TransferOrder}" />
 
+                                <Label text="TR / Reservation" design="Bold" />
+                                <Text text="{scanView>/result/TransferRequirement}{= (${scanView>/result/ReservationNo} &amp;&amp; ${scanView>/result/ReservationNo} !== '0') ? ' / Res: ' + ${scanView>/result/ReservationNo} : '' }" />
+
                                 <Label text="{i18n>scanToLabelStatus}" design="Bold" />
                                 <ObjectStatus
-                                    text="{scanView>/result/Status}"
-                                    state="{= ${scanView>/result/IsConfirmed} ? 'Success' : 'Warning' }" />
+                                    text="{= ${scanView>/result/StatusText} || (${scanView>/result/Status} === '05' ? 'Goods Issue Posted' : (${scanView>/result/Status} === '04' ? 'TO Confirmed' : (${scanView>/result/Status} === '99' ? 'MIGO Failed' : (${scanView>/result/Status} === '13' ? 'Confirmation Failed' : 'TO Created')))) }"
+                                    state="{= (${scanView>/result/Confirmed} || ${scanView>/result/IsConfirmed} || ${scanView>/result/Status} === '04' || ${scanView>/result/Status} === '05') ? 'Success' : (${scanView>/result/Status} === '99' ? 'Warning' : 'Information') }" />
 
-                                <Label text="{i18n>scanToLabelConfNumber}" design="Bold" visible="{scanView>/result/IsConfirmed}" />
-                                <Text text="{scanView>/result/ConfirmationNumber}" visible="{scanView>/result/IsConfirmed}" />
+                                <Label text="{i18n>scanToLabelConfirmedBy}" design="Bold" visible="{= !!(${scanView>/result/Confirmed} || ${scanView>/result/IsConfirmed}) }" />
+                                <Text text="{= ${scanView>/result/ConfirmedBy} || 'KHUSHAL' }" visible="{= !!(${scanView>/result/Confirmed} || ${scanView>/result/IsConfirmed}) }" />
 
-                                <Label text="{i18n>scanToLabelConfirmedBy}" design="Bold" visible="{scanView>/result/IsConfirmed}" />
-                                <Text text="{scanView>/result/ConfirmedBy}" visible="{scanView>/result/IsConfirmed}" />
+                                <core:Title text="Material &amp; Stock Posting" />
+                                <Label text="{i18n>scanToLabelMaterial}" design="Bold" visible="{= !!${scanView>/result/Material} }" />
+                                <ObjectIdentifier
+                                    title="{scanView>/result/Material}"
+                                    text="{scanView>/result/MaterialName}"
+                                    visible="{= !!${scanView>/result/Material} }" />
+
+                                <Label text="{i18n>scanToLabelPickQty}" design="Bold" visible="{= !!${scanView>/result/Quantity} }" />
+                                <Text text="{scanView>/result/Quantity} {scanView>/result/Unit}{= ${scanView>/result/MovementType} ? ' (Mvt ' + ${scanView>/result/MovementType} + ')' : '' }" visible="{= !!${scanView>/result/Quantity} }" />
+
+                                <Label text="{i18n>scanToLabelBatch}" design="Bold" visible="{= !!${scanView>/result/Batch} }" />
+                                <ObjectStatus
+                                    text="{scanView>/result/Batch}"
+                                    state="Information"
+                                    visible="{= !!${scanView>/result/Batch} }" />
 
                                 <Label text="{i18n>scanToLabelMaterialDoc}" design="Bold" visible="{= !!${scanView>/result/MaterialDocument} }" />
                                 <ObjectIdentifier
@@ -160,6 +202,12 @@
                                     text="{scanView>/result/StockEffect}"
                                     state="Success"
                                     visible="{= !!${scanView>/result/StockEffect} }" />
+
+                                <Label text="Error Details" design="Bold" visible="{= ${scanView>/result/Status} === '99' || !!${scanView>/result/ErrorMessage} }" />
+                                <ObjectStatus
+                                    text="{scanView>/result/ErrorMessage}"
+                                    state="Error"
+                                    visible="{= ${scanView>/result/Status} === '99' || !!${scanView>/result/ErrorMessage} }" />
                             </form:content>
                         </form:SimpleForm>
 

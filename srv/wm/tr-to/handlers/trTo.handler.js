@@ -59,6 +59,52 @@ class TrToHandler {
       const sSubNumber = data.SubNumber || existingTrack?.SubNumber;
       const sTanum = data.TransferOrder || existingTrack?.TransferOrder || '';
 
+      // Multi-tier Batch Resolution:
+      // 1) From incoming data or existing tracking
+      let sBatch = data.Batch || data.batch || existingTrack?.Batch || '';
+      const sSerials = data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : []);
+
+      // 2) From confirmed TO in LTAP if sTanum is present
+      if (!sBatch && sTanum && resProcessAdapter.rfc) {
+        try {
+          const s4To = String(sTanum).padStart(10, '0');
+          const ltapRows = await resProcessAdapter.rfc.readTable('LTAP', ['CHARG'], [
+            `TANUM = '${s4To}'`,
+            "AND CHARG <> ''"
+          ], 1);
+          if (ltapRows?.[0]?.CHARG?.trim()) {
+            sBatch = ltapRows[0].CHARG.trim();
+          }
+        } catch (_ltapErr) {}
+      }
+      // 3) From reservation in RESB if sResNo is present
+      if (!sBatch && sResNo && sResNo !== '0' && resProcessAdapter.rfc) {
+        try {
+          const s4Rs = String(sResNo).padStart(10, '0');
+          const resbRows = await resProcessAdapter.rfc.readTable('RESB', ['CHARG'], [
+            `RSNUM = '${s4Rs}'`,
+            "AND CHARG <> ''"
+          ], 1);
+          if (resbRows?.[0]?.CHARG?.trim()) {
+            sBatch = resbRows[0].CHARG.trim();
+          }
+        } catch (_resbErr) {}
+      }
+      // 4) From interim staging quant in LQUA (921 / 920)
+      if (!sBatch && sMat && resProcessAdapter.rfc) {
+        try {
+          const s4Mat = /^\d+$/.test(sMat) ? String(sMat).padStart(18, '0') : sMat;
+          const lquaRows = await resProcessAdapter.rfc.readTable('LQUA', ['CHARG'], [
+            `MATNR = '${s4Mat}'`,
+            "AND LGTYP IN ('921', '920')",
+            "AND VERME > 0"
+          ], 1);
+          if (lquaRows?.[0]?.CHARG?.trim()) {
+            sBatch = lquaRows[0].CHARG.trim();
+          }
+        } catch (_lquaErr) {}
+      }
+
       try {
         const migoRes = await resProcessAdapter.postGoodsMovement({
           reservationNo: sResNo,
@@ -74,6 +120,9 @@ class TrToHandler {
           costCenter: sCostCenter,
           assetNo: sAssetNo,
           subNumber: sSubNumber,
+          transferOrder: sTanum,
+          batch: sBatch,
+          serials: sSerials,
           deriveGmCode: true
         });
 
@@ -116,12 +165,14 @@ class TrToHandler {
           MaterialDocYear: migoRes.materialDocYear,
           Status: '05',
           StatusText: 'Goods Issue Posted',
-          ReservationNo: sResNo,
+          ReservationNo: migoRes.reservationNo || sResNo,
           ReservationItem: sResItem,
           TransferOrder: sTanum,
           MovementType: sMvt,
           Quantity: Number(nQty),
           Unit: sUnit,
+          Batch: migoRes.batch || sBatch,
+          Serials: sSerials,
           StockEffect: migoRes.stockEffect,
           Message: `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} posted successfully.`,
           ErrorMessage: ''
@@ -169,6 +220,8 @@ class TrToHandler {
           MovementType: sMvt,
           Quantity: Number(nQty),
           Unit: sUnit,
+          Batch: sBatch,
+          Serials: sSerials,
           StockEffect: '',
           Message: `MIGO failed: ${err.message}`,
           ErrorMessage: err.message
@@ -297,7 +350,9 @@ class TrToHandler {
                 AssetNo: existing?.AssetNo,
                 SubNumber: existing?.SubNumber,
                 ReceivingPlant: existing?.ReceivingPlant,
-                ReceivingStorageLocation: existing?.ReceivingStorageLocation
+                ReceivingStorageLocation: existing?.ReceivingStorageLocation,
+                Batch: result.Batch || req.data.batch || existing?.Batch || '',
+                Serials: result.Serials || req.data.serials || []
               },
               error: (code, msg) => { throw new Error(msg); }
             });
@@ -308,6 +363,9 @@ class TrToHandler {
               result.MaterialDocument = migoResult.MaterialDocument;
               result.MaterialDocYear = migoResult.MaterialDocYear;
               result.StockEffect = migoResult.StockEffect;
+              result.Batch = migoResult.Batch || result.Batch;
+              result.ReservationNo = migoResult.ReservationNo || result.ReservationNo;
+              result.MovementType = migoResult.MovementType || result.MovementType || existing?.MovementType || '';
               result.Message = `Transfer Order ${result.TransferOrder} confirmed and Material Document ${migoResult.MaterialDocument} posted successfully.`;
             } else if (migoResult && (!migoResult.Success || migoResult.Status === '99')) {
               result.Status = '99';
@@ -320,6 +378,10 @@ class TrToHandler {
             result.ErrorMessage = migoErr.message;
           }
         }
+
+        result.IsConfirmed = Boolean(result.Confirmed || result.Status === '04' || result.Status === '05');
+        result.ConfirmationNumber = result.ConfirmationNumber || result.TransferOrder;
+        result.ConfirmedBy = result.ConfirmedBy || (result.IsConfirmed ? (req.user?.id || process.env.S4_USERNAME || 'KHUSHAL') : '');
 
         return result;
       } catch (err) {

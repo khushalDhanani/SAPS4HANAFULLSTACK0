@@ -5,6 +5,102 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **UI & Data Reflection: `/wm/scan-to` Post-Outcome Full Field Normalization & Result Panel Redesign (2026-10-12):**
+  - **Issue Reported:** When posting `/wm/scan-to`, outcome panel data was not properly reflecting (raw numeric status code '04'/'05' shown instead of text, status badge permanently 'Warning', Confirmation Number & Confirmed By blank, and Material, Description, Pick Quantity, Unit, Batch, Movement Type missing from the result panel after TR details hid).
+  - **Root Cause Isolated:**
+    1. `WarehouseScanTo.view.xml`: Bound status to `{scanView>/result/Status}` (numeric code) rather than `StatusText`; evaluated `state` and visibility against `IsConfirmed`, which was missing from backend `result` (only `Confirmed: true` was sent); hardcoded MessageStrip `type="Success"` even if MIGO failed (status 99).
+    2. `TOProcessResult` in `srv/wm/tr-to/service.cds`: Lacked `MovementType`, `IsConfirmed`, `ConfirmationNumber`, and `ConfirmedBy`.
+    3. `TrToAdapter.js` & `trTo.handler.js`: Omitted `MovementType`, `IsConfirmed`, `ConfirmationNumber`, `ConfirmedBy` from returned object; when MIGO succeeded, `result.Batch` and `result.ReservationNo` were not updated from resolved values.
+    4. `WarehouseScanTo.controller.js`: In `onProcessTO`, `oResult` was not normalized with TR context (Material, MaterialName, Quantity, Unit, Batch, MovementType, TransferRequirement, ReservationNo) before clearing `/tr`. On `onRetryMigo`, `StatusText`, `Batch`, `ReservationNo`, `MovementType`, and `IsConfirmed` were not updated.
+  - **Resolution Architecture Implemented:**
+    1. Extended `TOProcessResult` in `service.cds` and adapters/handlers with `MovementType: String(3)`, `IsConfirmed: Boolean`, `ConfirmationNumber: String(10)`, and `ConfirmedBy: String(12)`.
+    2. Normalized and enriched `oResult` in `WarehouseScanTo.controller.js` on both `onProcessTO` and `onRetryMigo`.
+    3. Redesigned `panelResult` in `WarehouseScanTo.view.xml` with two structured groups: (A) Transfer Order Details (TO, TR/Reservation, Human-readable Status text with semantic state, Confirmed By) and (B) Material & Stock Posting (Material & Description, Pick Quantity & Movement Type, Batch, Material Document & Year, Stock Effect, Error Details if any).
+    4. Dynamic MessageStrip type based on status (Success, Warning on 99, Error on 13).
+  - **Validation & Results:**
+    - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **28/28 tests passed**.
+    - `npx jest test/unit/wm/autoMigoPosting.test.js`: **10/10 tests passed**.
+    - `git diff --check`: Clean (0 errors).
+
+- **Bugfix & Live Proof: `/wm/scan-to` MIGO Goods Movement Batch Resolution & TO 1037284 MIGO Posting (2026-10-12):**
+  - **Issue Reported:** `/wm/scan-to`: `Transfer Order 1037284 confirmed, but MIGO Goods Movement failed: BAPI_GOODSMVT_CREATE failed: Enter Batch`.
+  - **Root Cause Isolated:**
+    1. In `srv/wm/tr-to/service.cds`, actions `postMigoGoodsMovement` and `PostMigoGoodsMovement` lacked `Batch: String(10)` and `Serials: array of String(18)` in parameters and `MigoProcessResult`.
+    2. In `srv/wm/tr-to/handlers/trTo.handler.js`, lines 285–303 (`handleCreateTOFromTR` auto-chaining MIGO when `autoPostMigo: true`) omitted `Batch` and `Serials` when calling `handlePostMigoGoodsMovement`.
+    3. In `handlePostMigoGoodsMovement`, batch and serials were neither extracted from incoming payload nor passed to `resProcessAdapter.postGoodsMovement`.
+    4. In `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanTo.controller.js` line 606 (`onRetryMigo`), `oPayload` omitted `Batch` and `Serials`.
+    5. In `ReservationProcessAdapter.js`, line 360 strictly required `ReservationNo` (`if (!reservationNo) throw httpError(400, 'ReservationNo is mandatory');`), blocking direct TO movements where `RSNUM` was all zeros, and lacked multi-tier fallback resolution.
+  - **Resolution Architecture Implemented:**
+    1. Added `Batch: String(10)` and `Serials: array of String(18)` to `MigoProcessResult`, `postMigoGoodsMovement`, and `PostMigoGoodsMovement` in CDS.
+    2. Multi-tier Batch Resolution in both handler and adapter:
+       - Tier 1: User / API provided `Batch` / `Serials`.
+       - Tier 2: Read batch from confirmed Transfer Order in `LTAP` (`TANUM`).
+       - Tier 3: Read batch from reservation in `RESB` (`RSNUM`).
+       - Tier 4: Read batch from interim storage quants in `LQUA` (`LGTYP IN ('921', '920')`).
+    3. Refined `ReservationProcessAdapter.postGoodsMovement`: Allows direct goods movement when `transferOrder` is provided or auto-resolves open reservations from `RESB` for the material/plant/movement type; properly sets `RESERV_NO`, `RES_ITEM`, `NO_MORE_GR` only when a reservation is present.
+    4. Propagated `Batch` and `Serials` in UI `WarehouseScanTo.controller.js` on `onRetryMigo`.
+  - **Live SAP S/4HANA Verification (Client 220):**
+    - Executed live MIGO posting for Transfer Order `1037284` (Material `8900000004`, Movement `301`, Batch `INJW260001`, Qty `1.000 KG`, Plant `1120 CS01` -> Receiving Plant `1110 CS01`).
+    - Successfully posted Material Document **`4900050147 / 2026`**!
+    - Verified in `MSEG`: Item 1 (Plant `1120 CS01`, Batch `INJW260001`, -1 KG) -> Item 2 (Plant `1110 CS01`, Batch `INJW260001`, +1 KG).
+    - Verified in `MKPF`: `MBLNR: '4900050147'`, `MJAHR: '2026'`, `XBLNR: 'RES 0000525863'`.
+    - Zero mock persistence.
+  - **Validation & Status:**
+    - Full WM Test Suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,282/1,282 tests passed (100% green)**.
+    - `git diff --check`: 0 errors.
+
+- **Live Lifecycle Proof: Run 4 — Movement Type 301 (Transfer Posting Plant to Plant, One-Step) End-to-End Verified on SAP S/4HANA Client 220 (2026-10-12):**
+  - **Goal:** Execute Run 4 end-to-end: Reservation creation (Movement 301 Plant 1120 CS01 -> Plant 1110 CS01) -> Auto TR generation -> Chained TO Create & Confirm -> Transfer Posting in MM-IM (MIGO), verified directly from SAP DDIC tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `MATDOC`, `MARD`).
+  - **Master Data & S/4HANA Accounting/WM Customizing Staged & Proven Live:**
+    1. Extended Accounting 1 view (`MBEW`) to Plant 1110 (`BWKEY: '1110'`, `BKLAS: '3005'`, `VPRSV: 'V'`, `VERPR: 503.15`, `PEINH: 1`) via `BAPI_MATERIAL_SAVEDATA` (resolved `M3 082 Accounting data not yet maintained for material 1110 8900000004`).
+    2. Extended Warehouse view (`MLGN`) for Warehouse `W10` via `BAPI_MATERIAL_SAVEDATA` (resolved `Material 8900000004 does not exist in warehouse W10`).
+    3. Maintained Profit Center in `MARC` for Plant 1110 (`PRCTR = '0001011154'`) via `BAPI_MATERIAL_SAVEDATA` (resolved document splitting error `GLT2 201 Balancing field Profit Center in line item 002 not filled`).
+  - **Live Execution & Verified SAP Audit Trail:**
+    1. **Step 1: Reservation Creation via `POST /odata/v4/reservation-entry/createReservationEntry`**:
+       - Created SAP Reservation: **`RSNUM = '0000525866'`**, Item `'0001'` (Plant `1120`, SLoc `CS01`, Receiving Plant `1110`, Receiving SLoc `CS01`, Material `8900000004`, Quantity `1.000 KG`, Batch `INJW260001`).
+       - Auto-generated WM Transfer Requirement: **`TBNUM = '0001000790'`** (Status: `02` / TR Created).
+       - Verified in `RKPF`: `RSNUM: '0000525866'`, `BWART: '301'`, `UMWRK: '1110'`, `UMLGO: 'CS01'`, `USNAM: 'KHUSHAL'`, `RSDAT: '20261012'`.
+       - Verified in `RESB`: `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `UMWRK: '1110'`, `UMLGO: 'CS01'`, `BDMNG: '1.000'`, `ENMNG: '0.000'`, `KZEAR: ''`.
+    2. **Step 1b: Transfer Requirement Verified in SAP DDIC**:
+       - Verified in `LTBK`: `LGNUM: 'W01'`, `TBNUM: '0001000790'`, `BWLVS: '301'`, `RSNUM: '0000000000'`, `BDATU: '20261012'`.
+       - Verified in `LTBP`: `TBPOS: '0001'`, `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `MENGA: '1.000'`, `ELIKZ: ''`.
+    3. **Step 2: Chained TO Creation & Immediate Confirmation via `POST /odata/v4/tr-to/createTOFromTR`**:
+       - Created & Confirmed SAP WM TO: **`TANUM = '0001037283'`** (`Status: '04'`, `Confirmed: true`).
+       - Verified in `LTAK`: `LGNUM: 'W01'`, `TANUM: '0001037283'`, `BWLVS: '301'`, `TBNUM: '0001000790'`, `KQUIT: 'X'` (TO Confirmed), `BNAME: 'KHUSHAL'`, `BDATU: '20261012'`.
+       - Verified in `LTAP`: `PQUIT: 'X'`, `VLTYP: '902'`, `VLPLA: '0000000000'` -> `NLTYP: '920'`, `NLPLA: 'TRANSFER'`, `NSOLA: '1.000'`.
+    4. **Step 3: Goods Movement Posting via `POST /odata/v4/reservation-entry/postMigoGoodsMovement`**:
+       - Created SAP Material Document: **`MBLNR = '4900050146'`**, Year **`2026`** (`Status_code: '05'`, `StatusText: 'Goods Issue Posted'`).
+       - Verified in `MATDOC`:
+         - Item 1: `MBLNR: '4900050146'`, `ZEILE: '0001'`, `BWART: '301'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `MENGE: '1.000'`, `MEINS: 'KG'`, `CHARG: 'INJW260001'`, `UMWRK: '1110'`, `UMLGO: 'CS01'`, `RSNUM: '0000525866'`, `RSPOS: '0001'`.
+         - Item 2: `MBLNR: '4900050146'`, `ZEILE: '0002'`, `BWART: '301'`, `WERKS: '1110'`, `LGORT: 'CS01'`, `MENGE: '1.000'`, `MEINS: 'KG'`, `CHARG: 'INJW260001'`, `UMWRK: '1120'`, `UMLGO: 'CS01'`, `RSNUM: '0000525866'`, `RSPOS: '0001'`.
+       - Verified in `RESB`: `BDMNG: '1.000'`, `ENMNG: '1.000'`, `KZEAR: 'X'` (Reservation closed!).
+       - Verified in `MARD`: `Plant 1120 CS01` decreased from 1247.000 to 1246.000 KG; `Plant 1110 CS01` increased from 0.000 to 1.000 KG!
+  - **Validation & Status:** 100% Real SAP S/4HANA (Client 220) Verified. Zero mock persistence used. All 63 WM test suites (1,280 tests) pass. 0 SM12 locks.
+
+- **Live Lifecycle Proof: Run 3 — Movement Type 311 (Transfer Posting SLoc to SLoc, One-Step) End-to-End Verified on SAP S/4HANA Client 220 (2026-10-12):**
+  - **Goal:** Execute Run 3 end-to-end: Reservation creation (Movement 311 Plant 1120 CS01 -> HS01) -> Auto TR generation -> Chained TO Create & Confirm -> Transfer Posting in MM-IM (MIGO), verified directly from SAP DDIC tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `MATDOC`, `MARD`).
+  - **Live Execution & Verified SAP Audit Trail:**
+    1. **Step 1: Reservation Creation via `POST /odata/v4/reservation-entry/createReservationEntry`**:
+       - Created SAP Reservation: **`RSNUM = '0000525862'`**, Item `'0001'` (Plant `1120`, SLoc `CS01`, Receiving SLoc `HS01`, Material `8900000004`, Quantity `1.000 KG`, Batch `INJW260001`).
+       - Auto-generated WM Transfer Requirement: **`TBNUM = '0001000786'`** (Status: `02` / TR Created).
+       - Verified in `RKPF`: `RSNUM: '0000525862'`, `BWART: '311'`, `UMWRK: '1120'`, `UMLGO: 'HS01'`, `USNAM: 'KHUSHAL'`, `RSDAT: '20261012'`.
+       - Verified in `RESB`: `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `UMWRK: '1120'`, `UMLGO: 'HS01'`, `BDMNG: '1.000'`, `ENMNG: '0.000'`, `KZEAR: ''`.
+    2. **Step 1b: Transfer Requirement Verified in SAP DDIC**:
+       - Verified in `LTBK`: `LGNUM: 'W01'`, `TBNUM: '0001000786'`, `BWLVS: '311'`, `RSNUM: '0000000000'`, `BDATU: '20261012'`.
+       - Verified in `LTBP`: `TBPOS: '0001'`, `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `MENGA: '1.000'`, `ELIKZ: ''`.
+    3. **Step 2: Chained TO Creation & Immediate Confirmation via `POST /odata/v4/tr-to/createTOFromTR`**:
+       - Created & Confirmed SAP WM TO: **`TANUM = '0001037279'`** (`Status: '04'`, `Confirmed: true`).
+       - Verified in `LTAK`: `LGNUM: 'W01'`, `TANUM: '0001037279'`, `BWLVS: '311'`, `TBNUM: '0001000786'`, `KQUIT: 'X'` (TO Confirmed), `BNAME: 'KHUSHAL'`, `BDATU: '20261012'`.
+       - Verified in `LTAP`: `PQUIT: 'X'`, `VLTYP: '902'`, `VLPLA: '0000000000'` -> `NLTYP: '921'`, `NLPLA: 'TRANSFER'`, `NSOLA: '1.000'`.
+    4. **Step 3: Goods Movement Posting via `POST /odata/v4/reservation-entry/postMigoGoodsMovement`**:
+       - Created SAP Material Document: **`MBLNR = '4900050145'`**, Year **`2026`** (`Status_code: '05'`, `StatusText: 'Goods Issue Posted'`).
+       - Verified in `MATDOC`:
+         - Item 1: `MBLNR: '4900050145'`, `ZEILE: '0001'`, `BWART: '311'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `MENGE: '1.000'`, `MEINS: 'KG'`, `CHARG: 'INJW260001'`, `UMWRK: '1120'`, `UMLGO: 'HS01'`, `RSNUM: '0000525862'`, `RSPOS: '0001'`.
+         - Item 2: `MBLNR: '4900050145'`, `ZEILE: '0002'`, `BWART: '311'`, `WERKS: '1120'`, `LGORT: 'HS01'`, `MENGE: '1.000'`, `MEINS: 'KG'`, `CHARG: 'INJW260001'`, `UMWRK: '1120'`, `UMLGO: 'CS01'`, `RSNUM: '0000525862'`, `RSPOS: '0001'`.
+       - Verified in `RESB`: `BDMNG: '1.000'`, `ENMNG: '1.000'`, `KZEAR: 'X'` (Reservation closed!).
+       - Verified in `MARD`: `Plant 1120 CS01` decreased from 1248.000 to 1247.000 KG; `Plant 1120 HS01` increased from 1.000 to 2.000 KG.
+  - **Validation & Status:** 100% Real SAP S/4HANA (Client 220) Verified. Zero mock persistence used. All 63 WM test suites (1,280 tests) pass. 0 SM12 locks.
+
 - **Live Lifecycle Proof: Run 2 — Movement Type 241 (Goods Issue to Asset) End-to-End Verified on SAP S/4HANA Client 220 (2026-10-10):**
   - **Goal:** Execute Run 2 end-to-end: Reservation creation (Movement 241 to Asset) -> Auto TR generation -> Chained TO Create & Confirm -> Goods Issue posting in MM-IM (MIGO), verified directly from SAP DDIC tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `LQUA`, `MATDOC`).
   - **Live Execution & Verified SAP Audit Trail:**
@@ -554,11 +650,183 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action:** **Run 1 (Movement Type 201) & Run 2 (Movement Type 241) are 100% CONFIRMED and Verified Live on SAP S/4HANA (Client 220)**. Proceed with:
-  - **Run 3: Movement Type 311 (Two-Step SLoc Transfer)**: Create reservation for Plant 1120 issuing SLoc HS01 to receiving SLoc CS01 -> auto TR -> chained TO create & confirm -> MIGO transfer posting.
-  - **Run 4: Movement Type 261 (Goods Issue to Work Order)**: Execute end-to-end reservation for production/internal order staging.
+- **Next Recommended Action:** **Runs 1, 2, 3, and 4 are 100% CONFIRMED and Verified Live on SAP S/4HANA (Client 220)**:
+  - **Run 1 (Movement 201 — GI to Cost Center)**: RSNUM `0000525278`, TBNUM `0001000757`, TANUM `0001037270`, MATDOC `4900050142/2026`.
+  - **Run 2 (Movement 241 — GI to Asset)**: RSNUM `0000525279`, TBNUM `0001000760`, TANUM `0001037271`, MATDOC `4900050143/2026`.
+  - **Run 3 (Movement 311 — SLoc to SLoc Transfer Posting)**: RSNUM `0000525862`, TBNUM `0001000786`, TANUM `0001037279`, MATDOC `4900050145/2026`.
+  - **Run 4 (Movement 301 — Plant to Plant Transfer Posting)**: RSNUM `0000525866`, TBNUM `0001000790`, TANUM `0001037283`, MATDOC `4900050146/2026`.
+- **Subsequent Cycles**:
+  - Run 5: Movement Type 261 (Goods Issue to Production / Internal Order staging).
+  - Browser verification of UI5 Reservation Entry Cockpit with the verified movement types (201, 241, 311, 301).
 
 ## Changes Log
+
+### 2026-10-12 11:02 IST — /wm/reservation-entry/create: preflight storage-location extension (MARD) so `BAPI_RESERVATION_CREATE1` fails clearly instead of "No storage location data … BUS2093 not created"
+
+- **Trigger:** user on `/wm/reservation-entry/create` — `Failed to create reservation: BAPI_RESERVATION_CREATE1 failed: No storage location data for 8000009753 in 1120 CIS1; No storage location data for 8000009753 in 1120 CS01; No instance of object type BUS2093 has been created.` — asked to check every scenario and fix.
+- **Root cause (evidence, read-only):** `BAPI_RESERVATION_CREATE1` rejects any storage location the material is not extended to (MARD). Live `RFC_READ_TABLE` of **MARD** showed material `8000009753` in plant `1120` is extended only to **HS01, MT01, MT02** — not `CS01` (issuing) or `CIS1` (receiving). The create form (`ReservationEntryDetail.controller.js`) ships generic demo defaults (`StorageLocation: "CS01"`, `ReceivingStorageLocation: "ST02"`) and its storage-location value help filters by **Plant only, not by the selected Material** (`onSuggest`/`onValueHelpRequest`, lines 189–233), so nothing stops an invalid material↔SLoc combination; SAP then returns the cryptic multi-message error with `BUS2093 not created` appended.
+- **Fix (backend, one place, covers every movement-type scenario):** `srv/integration/s4hana/wm/ReservationProcessAdapter.js` `createReservation` — before the BAPI call, read MARD for each SLoc the reservation touches and fail fast with an actionable message listing the SLocs the material IS extended to:
+  - **issuing** SLoc: `(material, plant, STGE_LOC)` — checked for every movement type (201/241/311/301);
+  - **receiving** SLoc: `(material, MOVE_PLANT, MOVE_STLOC)` — checked only when the header carries `MOVE_STLOC` (311 same-plant, 301 cross-plant); skipped for 201/241 which have no receiving SLoc.
+  - Message: `Material <m> is not extended to <issuing|receiving> storage location <sloc> in plant <p>. Choose one of: HS01, MT01, MT02.` (or `(none - extend via MM01)`). Surfaces to the UI as `Failed to create reservation: <that>`.
+  - **Fails before the write** (no partial state, no confusing `BUS2093`), and a MARD read error does **not** block — it falls through to let the BAPI validate, so a DDIC read hiccup can't break a valid create.
+- **Deliberately NOT changed (scope/risk):** the shared `/StorageLocationVH` value help (keyed by Plant, used across modules) was left as-is — making it material-aware needs a MARD-join reader that ripples into other screens. Recommended as a separate follow-up (filter the SLoc value help by the chosen Material so only valid SLocs are offered). The demo defaults in `_getDefaultCreateData` were left untouched.
+- **Does not regress the proven flows:** run3 (311, 8900000004 CS01→HS01) and run4 (301, 8900000004 1120/CS01→1110/CS01) use SLocs the material IS extended to (confirmed by their MATDOC readbacks), so the preflight passes them unchanged.
+- **Tests (+4):** `test/unit/wm/reservationProcess.test.js` new block "7. Storage-location extension preflight (MARD)" — passes when extended (311), rejects 400 + lists valid SLocs when issuing SLoc missing (201, asserts BAPI not called), rejects 400 when receiving SLoc missing (311), and does not block when the MARD read throws.
+- **Validation (2026-10-12 11:02 IST):** `npx jest test/unit/wm` → **63 suites, 1288/1288 PASS**; `npx cds compile srv/wm/reservation-entry/service.cds` → OK; `git diff --check` → clean.
+- **Not verified live:** did not post a live reservation (create is a SAP write; the 301 live script was classifier-blocked earlier). The preflight logic is validated against the **real** MARD data read this session (8000009753 → HS01/MT01/MT02 in 1120), so with CS01 the user now gets the actionable message, and a valid SLoc (e.g. HS01, with MT01/MT02 as receiving for 311) will pass the guard into the BAPI.
+- **Result:** PASS (code/tests) — invalid material↔storage-location combinations now fail with a clear, scenario-correct message naming the valid SLocs, instead of the cryptic `BUS2093` dump. Live retry with a valid SLoc confirms end to end.
+
+### 2026-10-12 10:52 IST — /wm/scan-to: show the open-TR list directly on the page; row press advances to the next process
+
+- **Trigger:** user — "on this page show TR List Direct. When I click on TR show the next process." Previously the open-TR list only appeared inside a value-help `SelectDialog` behind a button.
+- **Change (UI only, additive, reuses proven handlers):**
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanTo.controller.js` — extracted the TR-list load into `_loadOpenTRs()` (reused by both the inline list and the existing value-help dialog); call it from `_onRouteMatched` so the list is populated the moment the page opens, and from `onScanNextTR` so a just-processed TR drops off; added `onOpenTRPress(oEvent)` which reads `Tbnum` from the pressed row's `scanView` binding context, sets `/scannedTR`, and calls the existing `onLookupTR()` (the "next process" — loads the TR and reveals the qty/batch/serial panels). `onValueHelpTR` now delegates to `_loadOpenTRs()`.
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanTo.view.xml` — new Section 1b `panelOpenTRs`: a `List` bound to `scanView>/openTRs`, `busy="{scanView>/isLoadingTRs}"`, visible only when `!hasTR && !hasResult`, row template identical to `TrSelectDialog.fragment.xml` (Tbnum / DisplayText / Open|Partial status, `type="Active"`, `press=".onOpenTRPress"`). The list hides automatically once a TR is loaded (next-process panels take over) and reappears after Reset / Scan Next TR.
+  - **No new i18n** — reuses `scanToSelectDialogTitle`, `scanToSelectDialogNoData`, `scanToErrLoadTRs`.
+  - **No backend change** — `getOpenTRs` / `lookupTR` / `createTOFromTR` unchanged; the inline list calls the same reader already used by the dialog.
+- **Tests (+2):** `test/unit/wm/warehouseScanToUi.test.js` — `_loadOpenTRs` populates `/openTRs` and clears `/isLoadingTRs`; `onOpenTRPress` sets `/scannedTR` from the row context and calls `onLookupTR`.
+- **Validation (2026-10-12 10:52 IST):** `npx jest test/unit/wm/warehouseScanToUi.test.js` → **1 suite, 30/30 PASS** (was 28 + 2 new); `cd app/fiori-app && npx ui5lint` → **no findings**; `git diff --check` → clean.
+- **Not verified live:** did not render the running Fiori app to screenshot the inline list (deterministic UI change reusing handlers already proven live earlier today — see 10:37 entry). A browser load on the user's instance confirms visually.
+- **Note (left intentionally):** the value-help button (`btnValueHelpTR`) is now redundant with the inline list but was kept — removing it is out of scope and would touch the dialog path. The scan/type input is kept for handheld scanners.
+- **Result:** PASS — open TRs render directly on `/wm/scan-to`; tapping a row loads it and shows the pick/confirm flow.
+
+### 2026-10-12 10:37 IST — /wm/scan-to `XFELD_WRONG` re-report: re-verified live, root cause = stale server (no code change)
+
+- **Trigger:** user re-reported `XFELD_WRONG: Invalid indicator value passed.` on `/wm/scan-to` and asked to run the live repro and fix it.
+- **Inspect:** `/wm/scan-to` consumes an existing TR and calls `createTOFromTR` → `Z_WM_TO_CREATE_FROM_TR` → `L_TO_CONFIRM`; it does **not** create the TR. `XFELD_WRONG` is the documented exception `L_TO_CREATE_TR` raises when the TR header carries `RSNUM` (see `ReservationProcessAdapter.js:136`). The uncommitted fix (this morning's 09:26/09:30 entries) strips `RSNUM` for transfer-posting movement types 311/301 at TR-create time (`reservation-entry/service.js:164` passes `isTransferPosting` for both). Read-only `T333` check confirmed WM movement types **301 and 311 both exist** in W01, so the error was never an invalid-movement-type issue.
+- **Root cause of the user's sighting:** their running CAP server (PID 4436) was executing **pre-fix code** (fresh TR still carried `RSNUM`). That process had died by the time I checked; I restarted the server on the current working-tree code via `npm run watch` (PID 6544).
+- **No code changed this session.** The RSNUM-stripping fix was already in the working tree.
+- **Live validation (2026-10-12, SAP S/4HANA Client 220, user-authorised writes):**
+  - `node tools/run3-mvt311-live.js` → **SUCCESS.** Reservation `0000525867` → TR `0001000793` → TO `1037286` (confirmed) → material doc `4900050148/2026`; RESB `KZEAR='X'`.
+  - `node tools/run4-mvt301-live.js` → **SUCCESS.** Reservation `0000525868` → TR `0001000794` (**LTBK `RSNUM='0000000000'` — blank, proving the fix**) → TO `1037287` (confirmed, LTAK `KQUIT='X'`) → material doc `4900050149/2026` (plant 1120→1110); RESB `KZEAR='X'`; MARD 1110/CS01 = 3.000.
+  - No `XFELD_WRONG` on either run at any step.
+- **Result:** PASS — both transfer-posting movement types (311 SLoc→SLoc, 301 plant→plant) proven to create+confirm the TO and post MIGO on current code; the reported `XFELD_WRONG` does not reproduce. These runs wrote **real documents** to SAP (listed above); nothing was reversed.
+- **Next recommended action:** commit the pending working-tree changes (`ReservationProcessAdapter.js`, `TrToAdapter.js`, `reservation-entry/service.js`, the two `tools/run*-live.js`, `WORKSTATUS.md`) so a running server can't fall back to pre-fix behaviour again. Commits are left to the user.
+
+### 2026-10-12 09:55 IST — /wm/scan-to Post-Outcome Data Reflection & Full Field Normalization
+- **Problem Statement & Root Cause.**
+  User reported on `/wm/scan-to`: "When Post : /wm/scan-to Some Data is not proper reflactiing."
+  1. `WarehouseScanTo.view.xml`: Outcome panel status badge bound to `{scanView>/result/Status}`, rendering literal code `04` or `05` rather than `StatusText` ("TO Confirmed" / "Goods Issue Posted").
+  2. Status state bound to `${scanView>/result/IsConfirmed}`, which was undefined in backend response (only `Confirmed: true` was returned), making status permanently 'Warning' (orange).
+  3. Confirmation Number & Confirmed By were bound to missing fields and hidden.
+  4. Essential business context was completely missing from `panelResult`: Material number & description, Pick Quantity, Unit, Batch number, Movement Type, TR number, and Reservation number.
+  5. Hardcoded MessageStrip `type="Success"` even if MIGO or TO confirmation failed.
+- **Affected Files.**
+  - `srv/wm/tr-to/service.cds`: Added `MovementType: String(3)`, `IsConfirmed: Boolean`, `ConfirmationNumber: String(10)`, and `ConfirmedBy: String(12)` to `TOProcessResult`.
+  - `srv/integration/s4hana/wm/TrToAdapter.js`: Added `MovementType`, `IsConfirmed`, `ConfirmationNumber`, and `ConfirmedBy` in `createTOFromTR` response.
+  - `srv/wm/tr-to/handlers/trTo.handler.js`: Enriched `handleCreateTOFromTR` to forward `Batch`, `ReservationNo`, `MovementType`, `IsConfirmed`, and `ConfirmedBy`.
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanTo.controller.js`: In `onProcessTO` and `onRetryMigo`, fully normalized and enriched `oResult` and `oUpdatedResult` before binding to model.
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanTo.view.xml`: Redesigned `panelResult` with two clean structured groups ("Transfer Order Details" and "Material & Stock Posting") displaying all TO, TR, Reservation, Status text, Confirmed By, Material, Quantity, Unit, Movement Type, Batch, Material Document & Year, Stock Effect, and Error Details.
+  - `test/unit/wm/warehouseScanToUi.test.js`: Updated unit tests asserting enriched properties.
+- **Validation Commands & Results:**
+  - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **28/28 unit tests passed**.
+  - `npx jest test/unit/wm/autoMigoPosting.test.js`: **10/10 unit tests passed**.
+  - `git diff --check`: Clean (0 errors).
+
+### 2026-10-12 09:45 IST — /wm/scan-to MIGO Goods Movement Batch Resolution & TO 1037284 MIGO Posting (Live Verified on SAP S/4HANA Client 220)
+- **Problem Statement & Root Cause.**
+  User reported on `/wm/scan-to`: `Transfer Order 1037284 confirmed, but MIGO Goods Movement failed: BAPI_GOODSMVT_CREATE failed: Enter Batch`.
+  1. Material `8900000004` is batch-managed (`XCHPF = 'X'`). When Transfer Order 1037284 was created and confirmed (`LTAK-TANUM = '0001037284'`), it picked batch `INJW260001` (sitting in interim storage bin `920/TRANSFER`).
+  2. Auto-chaining MIGO in `handleCreateTOFromTR` (`srv/wm/tr-to/handlers/trTo.handler.js`) and UI retry in `WarehouseScanTo.controller.js` omitted `Batch` and `Serials` when invoking `postMigoGoodsMovement`.
+  3. `srv/wm/tr-to/service.cds` actions `postMigoGoodsMovement` / `PostMigoGoodsMovement` and `type MigoProcessResult` omitted `Batch` and `Serials`.
+  4. `ReservationProcessAdapter.js` strictly threw `ReservationNo is mandatory` when reservation was omitted or zero, and lacked multi-tier fallback resolution.
+- **Affected Files.**
+  - `srv/wm/tr-to/service.cds`: Added `Batch: String(10)` and `Serials: array of String(18)` to `MigoProcessResult` and `postMigoGoodsMovement`/`PostMigoGoodsMovement` actions.
+  - `srv/wm/tr-to/handlers/trTo.handler.js`: Multi-tier batch resolution in `handlePostMigoGoodsMovement` (`payload` -> `LTAP` via TO -> `RESB` via reservation -> `LQUA` interim quants 921/920); propagated `Batch` and `Serials` during auto-chain MIGO in `handleCreateTOFromTR`.
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: Refined `postGoodsMovement` to support direct TO goods movements without reservation; automated fallback resolution of open reservations from `RESB`; automated batch resolution from `LTAP` and `LQUA`.
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanTo.controller.js`: Propagated `Batch` and `Serials` in `onRetryMigo`.
+  - `test/unit/wm/autoMigoPosting.test.js`: Added unit tests for direct TO transfer without reservation and LTAP batch resolution.
+- **Live SAP S/4HANA Verification (Client 220):**
+  - Staging: Transfer Order `1037284` was in status confirmed in `LTAK` (`BWLVS: '301'`, `TBNUM: '0001000791'`). Stock was residing in `920/TRANSFER` under batch `INJW260001`.
+  - Executed live MIGO posting via `ReservationProcessAdapter.postGoodsMovement` with `transferOrder: '1037284'`, `movementType: '301'`, `material: '8900000004'`, `plant: '1120 CS01'`, `receivingPlant: '1110 CS01'`.
+  - Result: Auto-resolved batch `INJW260001` and open reservation `0000525863`.
+  - **Material Document Created**: **`MBLNR = '4900050147'`**, Year **`2026`**!
+  - Verified in `MSEG`:
+    - Zeile 0001: MBLNR `4900050147`, BWART `301`, MATNR `000000008900000004`, WERKS `1120`, LGORT `CS01`, CHARG `INJW260001`, MENGE `1.000 KG`, UMWRK `1110`, UMLGO `CS01`.
+    - Zeile 0002: MBLNR `4900050147`, BWART `301`, MATNR `000000008900000004`, WERKS `1110`, LGORT `CS01`, CHARG `INJW260001`, MENGE `1.000 KG`, UMWRK `1120`, UMLGO `CS01`.
+  - Verified in `MKPF`: `MBLNR: '4900050147'`, `VGART: 'WA'`, `BUDAT: '20261012'`, `XBLNR: 'RES 0000525863'`.
+- **Validation Commands & Results:**
+  - `npx jest test/unit/wm/`: **63/63 test suites passed, 1,282/1,282 unit tests passed (100% green)**.
+  - `git diff --check`: Clean (0 errors).
+
+### 2026-10-12 09:30 IST — Run 4: Movement Type 301 (Transfer Posting Plant to Plant, One-Step) Full Lifecycle Proven Live on SAP S/4HANA (Client 220)
+- **Goal & Workflow Executed.**
+  Execute Run 4 end-to-end directly against live SAP S/4HANA (Client 220) system without mock persistence:
+  `Create Reservation (301 Plant 1120 CS01 -> Plant 1110 CS01) → Auto TR → Chained TO Create & Confirm → MIGO Transfer Posting (301)`.
+- **Root Cause Discoveries & Real SAP Staging:**
+  1. **Accounting View in Receiving Plant**: Extended `MBEW` in Plant 1110 (`BWKEY: '1110'`, `BKLAS: '3005'`, `VPRSV: 'V'`, `VERPR: 503.15`, `PEINH: 1`) via `BAPI_MATERIAL_SAVEDATA` (resolved `M3 082 Accounting data not yet maintained for material 1110 8900000004`).
+  2. **Warehouse View in Receiving Plant**: Extended Warehouse view `W10` in `MLGN` via `BAPI_MATERIAL_SAVEDATA` (resolved `Material 8900000004 does not exist in warehouse W10`).
+  3. **Document Splitting Profit Center**: Maintained `PRCTR = '0001011154'` in `MARC` for Plant 1110 via `BAPI_MATERIAL_SAVEDATA` (resolved `GLT2 201 Balancing field "Profit Center" in line item 002 not filled`).
+- **Affected Files.**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js` (differentiated `isTransferPosting` / `movementType` so `RSNUM` is omitted only for 311/301 transfer postings to avoid `XFELD_WRONG` on TO creation; clean `IV_SQUIT: ' '`)
+  - `srv/wm/reservation-entry/service.js` (passed `movementType` and `isTransferPosting` into `createTransferRequirement` on reservation creation and retry)
+  - `tools/run4-mvt301-live.js` (automated verification script executing 301 transfer posting and reading live DDIC tables via RFC)
+- **Live SAP S/4HANA Verification & Real Document Audit Trail:**
+  1. **Step 1: Reservation Entry (`RSNUM = '0000525866'`)**:
+     - `POST /odata/v4/reservation-entry/createReservationEntry`: Plant `1120`, SLoc `CS01`, Receiving Plant `1110`, Receiving SLoc `CS01`, Material `8900000004`, Quantity `1.000 KG`, Batch `INJW260001`.
+     - Read back verified from `RKPF`: `RSNUM: '0000525866'`, `BWART: '301'`, `UMWRK: '1110'`, `UMLGO: 'CS01'`, `USNAM: 'KHUSHAL'`, `RSDAT: '20261012'`.
+     - Read back verified from `RESB`: `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `UMWRK: '1110'`, `UMLGO: 'CS01'`, `BDMNG: '1.000'`, `ENMNG: '0.000'`, `KZEAR: ''`.
+  2. **Step 1b: Transfer Requirement Generation (`TBNUM = '0001000790'`)**:
+     - Auto-generated during reservation staging via `ZWM_TR_CREATE` with `BWLVS = '301'`.
+     - Read back verified from `LTBK`: `LGNUM: 'W01'`, `TBNUM: '0001000790'`, `BWLVS: '301'`, `RSNUM: '0000000000'`, `STATU: ''`, `BDATU: '20261012'`.
+     - Read back verified from `LTBP`: `TBPOS: '0001'`, `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `MENGA: '1.000'`, `ELIKZ: ''`.
+  3. **Step 2: Chained TO Step (`TANUM = '0001037283'`)**:
+     - `POST /odata/v4/tr-to/createTOFromTR`: Created TO via `Z_WM_TO_CREATE_FROM_TR` (`IV_SQUIT: ' '`), then confirmed via `L_TO_CONFIRM` (`I_SQUIT: 'X'`).
+     - Read back verified from `LTAK`: `LGNUM: 'W01'`, `TANUM: '0001037283'`, `BWLVS: '301'`, `TBNUM: '0001000790'`, `KQUIT: 'X'` (TO confirmed!), `BNAME: 'KHUSHAL'`, `BDATU: '20261012'`.
+     - Read back verified from `LTAP`: `PQUIT: 'X'`, `VLTYP: '902'`, `VLPLA: '0000000000'` → `NLTYP: '920'`, `NLPLA: 'TRANSFER'`, `NSOLA: '1.000'`.
+  4. **Step 3: MIGO Goods Movement Posting (`MBLNR = '4900050146'`, `MJAHR = '2026'`)**:
+     - `POST /odata/v4/reservation-entry/postMigoGoodsMovement`: Batch `INJW260001` passed; GM_CODE `04` (Transfer Posting) derived.
+     - Returned `MBLNR: '4900050146'`, `MJAHR: '2026'`, `Status_code: '05'` ("Goods Issue Posted").
+     - Read back verified from `MATDOC`:
+       - Item 1: `MBLNR: '4900050146'`, `ZEILE: '0001'`, `BWART: '301'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `MENGE: '1.000'`, `MEINS: 'KG'`, `CHARG: 'INJW260001'`, `UMWRK: '1110'`, `UMLGO: 'CS01'`, `RSNUM: '0000525866'`, `RSPOS: '0001'`.
+       - Item 2: `MBLNR: '4900050146'`, `ZEILE: '0002'`, `BWART: '301'`, `WERKS: '1110'`, `LGORT: 'CS01'`, `MENGE: '1.000'`, `MEINS: 'KG'`, `CHARG: 'INJW260001'`, `UMWRK: '1120'`, `UMLGO: 'CS01'`, `RSNUM: '0000525866'`, `RSPOS: '0001'`.
+     - Read back verified from `RESB`: `BDMNG: '1.000'`, `ENMNG: '1.000'`, `KZEAR: 'X'` (Reservation closed!).
+     - Read back verified from `MARD`: `Plant 1120 CS01` decreased from 1247.000 to 1246.000 KG; `Plant 1110 CS01` increased from 0.000 to 1.000 KG!
+- **Validation.**
+  - Real SAP S/4HANA (Client 220) RFC DDIC read-back on all 8 tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `MATDOC`, `MARD`): **ALL CONFIRMED**.
+  - WM unit test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,280/1,280 tests passed (100% green)**.
+  - SM12 locks verified: **0 active locks**.
+  - `git diff --check`: 0 errors (clean).
+
+### 2026-10-12 09:26 IST — Run 3: Movement Type 311 (Transfer Posting SLoc to SLoc, One-Step) Full Lifecycle Proven Live on SAP S/4HANA (Client 220)
+- **Goal & Workflow Executed.**
+  Execute Run 3 end-to-end directly against live SAP S/4HANA (Client 220) system without mock persistence:
+  `Create Reservation (311 Plant 1120 CS01 -> HS01) → Auto TR → Chained TO Create & Confirm → MIGO Transfer Posting (311)`.
+- **Root Cause Discoveries & Real SAP Staging:**
+  1. **Handling Unit (HU) Customizing**: SLoc `CS02` in Plant `1120` has `XHUPF = 'X'` (HU-managed), while `CS01` has `XHUPF = ''` (Non-HU). In SAP, 1-step Mvt 311 transfer between non-HU and HU throws `L9 610`. Staged SLoc `HS01` (`XHUPF = ''`, non-HU, warehouse `W01`) where material `8900000004` is extended.
+  2. **Resolution of `XFELD_WRONG` on TO Creation**: Standard `L_TO_CREATE_TR` executes restrictive reservation checks when `LTBK-RSNUM` is filled for transfer postings. Omitting `RSNUM` on the TR for transfer postings (311 and 301) allows clean TO creation and confirmation (`LTAK-KQUIT = 'X'`, `LTAP-PQUIT = 'X'`).
+- **Affected Files.**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js` (omitted `RSNUM` on WM staging TR for 311/301 transfer postings)
+  - `srv/integration/s4hana/wm/TrToAdapter.js` (stock quant lookup, `IV_SQUIT: ' '`)
+  - `srv/wm/reservation-entry/service.js` (propagated `movementType` and `isTransferPosting`)
+  - `tools/run3-mvt311-live.js` (automated verification script executing 311 transfer posting and reading live DDIC tables via RFC)
+- **Live SAP S/4HANA Verification & Real Document Audit Trail:**
+  1. **Step 1: Reservation Entry (`RSNUM = '0000525862'`)**:
+     - `POST /odata/v4/reservation-entry/createReservationEntry`: Plant `1120`, SLoc `CS01`, Receiving SLoc `HS01`, Material `8900000004`, Quantity `1.000 KG`, Batch `INJW260001`.
+     - Read back verified from `RKPF`: `RSNUM: '0000525862'`, `BWART: '311'`, `UMWRK: '1120'`, `UMLGO: 'HS01'`, `USNAM: 'KHUSHAL'`, `RSDAT: '20261012'`.
+     - Read back verified from `RESB`: `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `UMWRK: '1120'`, `UMLGO: 'HS01'`, `BDMNG: '1.000'`, `ENMNG: '0.000'`, `KZEAR: ''`.
+  2. **Step 1b: Transfer Requirement Generation (`TBNUM = '0001000786'`)**:
+     - Auto-generated during reservation staging via `ZWM_TR_CREATE` with `BWLVS = '311'`.
+     - Read back verified from `LTBK`: `LGNUM: 'W01'`, `TBNUM: '0001000786'`, `BWLVS: '311'`, `RSNUM: '0000000000'`, `STATU: ''`, `BDATU: '20261012'`.
+     - Read back verified from `LTBP`: `TBPOS: '0001'`, `MATNR: '000000008900000004'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `MENGA: '1.000'`, `ELIKZ: ''`.
+  3. **Step 2: Chained TO Step (`TANUM = '0001037279'`)**:
+     - `POST /odata/v4/tr-to/createTOFromTR`: Created TO via `Z_WM_TO_CREATE_FROM_TR` (`IV_SQUIT: ' '`), then confirmed via `L_TO_CONFIRM` (`I_SQUIT: 'X'`).
+     - Read back verified from `LTAK`: `LGNUM: 'W01'`, `TANUM: '0001037279'`, `BWLVS: '311'`, `TBNUM: '0001000786'`, `KQUIT: 'X'` (TO confirmed!), `BNAME: 'KHUSHAL'`, `BDATU: '20261012'`.
+     - Read back verified from `LTAP`: `PQUIT: 'X'`, `VLTYP: '902'`, `VLPLA: '0000000000'` → `NLTYP: '921'`, `NLPLA: 'TRANSFER'`, `NSOLA: '1.000'`.
+  4. **Step 3: MIGO Goods Movement Posting (`MBLNR = '4900050145'`, `MJAHR = '2026'`)**:
+     - `POST /odata/v4/reservation-entry/postMigoGoodsMovement`: Batch `INJW260001` passed; GM_CODE `04` (Transfer Posting) derived.
+     - Returned `MBLNR: '4900050145'`, `MJAHR: '2026'`, `Status_code: '05'` ("Goods Issue Posted").
+     - Read back verified from `MATDOC`:
+       - Item 1: `MBLNR: '4900050145'`, `ZEILE: '0001'`, `BWART: '311'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `MENGE: '1.000'`, `MEINS: 'KG'`, `CHARG: 'INJW260001'`, `UMWRK: '1120'`, `UMLGO: 'HS01'`, `RSNUM: '0000525862'`, `RSPOS: '0001'`.
+       - Item 2: `MBLNR: '4900050145'`, `ZEILE: '0002'`, `BWART: '311'`, `WERKS: '1120'`, `LGORT: 'HS01'`, `MENGE: '1.000'`, `MEINS: 'KG'`, `CHARG: 'INJW260001'`, `UMWRK: '1120'`, `UMLGO: 'CS01'`, `RSNUM: '0000525862'`, `RSPOS: '0001'`.
+     - Read back verified from `RESB`: `BDMNG: '1.000'`, `ENMNG: '1.000'`, `KZEAR: 'X'` (Reservation closed!).
+     - Read back verified from `MARD`: `Plant 1120 CS01` decreased from 1248.000 to 1247.000 KG; `Plant 1120 HS01` increased from 1.000 to 2.000 KG!
+- **Validation.**
+  - Real SAP S/4HANA (Client 220) RFC DDIC read-back on all 8 tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `MATDOC`, `MARD`): **ALL CONFIRMED**.
+  - WM unit test suite (`npx jest test/unit/wm/`): **63/63 test suites passed, 1,280/1,280 tests passed (100% green)**.
+  - SM12 locks verified: **0 active locks**.
+  - `git diff --check`: 0 errors (clean).
 
 ### 2026-10-10 16:35 IST — Run 2: Movement Type 241 (Goods Issue to Asset) Full Lifecycle Proven Live on SAP S/4HANA (Client 220)
 - **Goal & Workflow Executed.**

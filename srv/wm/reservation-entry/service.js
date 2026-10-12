@@ -160,6 +160,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         const trResult = await adapter.createTransferRequirement({
           warehouseNumber: determinedWh || WarehouseNumber || 'W01',
           wmMovementType: MovementType,
+          movementType: MovementType,
+          isTransferPosting: MovementType === '311' || MovementType === '301',
           material: Material,
           plant: Plant,
           storageLocation: StorageLocation,
@@ -512,6 +514,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           const trResult = await adapter.createTransferRequirement({
             warehouseNumber: track.WarehouseNumber || 'W01',
             wmMovementType: track.MovementType || '311',
+            movementType: track.MovementType,
+            isTransferPosting: track.MovementType === '311' || track.MovementType === '301',
             material: track.Material,
             plant: track.Plant || '1120',
             storageLocation: track.StorageLocation || 'HS01',

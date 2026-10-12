@@ -207,6 +207,89 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         })
       );
     });
+
+    test('Direct TO Movement: allows posting without reservation when transferOrder is provided', async () => {
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '4900050999',
+          MATDOCUMENTYEAR: '2026',
+          RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document 4900050999 posted' }]
+        })
+        .mockResolvedValueOnce({});
+
+      const res = await adapter.postGoodsMovement({
+        transferOrder: '1037284',
+        movementType: '301',
+        material: '8900000004',
+        plant: '1120',
+        storageLocation: 'CS01',
+        receivingPlant: '1110',
+        receivingStorageLocation: 'CS01',
+        quantity: 1,
+        unit: 'KG',
+        batch: 'INJW260001',
+        deriveGmCode: true
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.materialDocument).toBe('4900050999');
+      expect(mockRfc.call).toHaveBeenCalledWith(
+        'BAPI_GOODSMVT_CREATE',
+        expect.objectContaining({
+          GOODSMVT_HEADER: expect.objectContaining({
+            REF_DOC_NO: 'TO 1037284'
+          }),
+          GOODSMVT_CODE: { GM_CODE: '04' },
+          GOODSMVT_ITEM: [
+            expect.objectContaining({
+              MOVE_TYPE: '301',
+              MOVE_PLANT: '1110',
+              BATCH: 'INJW260001'
+            })
+          ]
+        })
+      );
+      // Ensure RESERV_NO is NOT set when no reservation exists
+      const lastCallItem = mockRfc.call.mock.calls[0][1].GOODSMVT_ITEM[0];
+      expect(lastCallItem.RESERV_NO).toBeUndefined();
+    });
+
+    test('Batch Resolution: auto-resolves batch from LTAP when batch is omitted', async () => {
+      mockRfc.readTable = jest.fn((table) => {
+        if (table === 'LTAP') return Promise.resolve([{ CHARG: 'INJW260001' }]);
+        return Promise.resolve([]);
+      });
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '4900050998',
+          MATDOCUMENTYEAR: '2026',
+          RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document 4900050998 posted' }]
+        })
+        .mockResolvedValueOnce({});
+
+      const res = await adapter.postGoodsMovement({
+        transferOrder: '1037284',
+        movementType: '301',
+        material: '8900000004',
+        plant: '1120',
+        storageLocation: 'CS01',
+        receivingPlant: '1110',
+        quantity: 1,
+        unit: 'KG',
+        deriveGmCode: true
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.batch).toBe('INJW260001');
+      expect(mockRfc.readTable).toHaveBeenCalledWith(
+        'LTAP',
+        ['CHARG'],
+        expect.arrayContaining(["TANUM = '0001037284'", "AND CHARG <> ''"]),
+        1
+      );
+      const lastCallItem = mockRfc.call.mock.calls[0][1].GOODSMVT_ITEM[0];
+      expect(lastCallItem.BATCH).toBe('INJW260001');
+    });
   });
 
   describe('2. Rollback on Failure', () => {
@@ -277,7 +360,8 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         Confirmed: true,
         Quantity: 5,
         Unit: 'EA',
-        Material: '8000000023'
+        Material: '8000000023',
+        Batch: 'INJW260001'
       });
 
       // 2. Mock MIGO success
@@ -292,6 +376,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         data: {
           tbnum: '0001001839',
           qty: 5,
+          batch: 'INJW260001',
           autoConfirm: true,
           autoPostMigo: true
         },
@@ -308,6 +393,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       expect(mockResAdapter.postGoodsMovement).toHaveBeenCalledWith(
         expect.objectContaining({
           reservationNo: '0000524979',
+          batch: 'INJW260001',
           deriveGmCode: true
         })
       );
@@ -366,7 +452,8 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           CostCenter: '1011201301',
           Material: '8000000023',
           Quantity: 5,
-          Unit: 'EA'
+          Unit: 'EA',
+          Batch: 'INJW260001'
         },
         error: jest.fn()
       };
@@ -377,6 +464,12 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       expect(res.Status).toBe('05');
       expect(res.MaterialDocument).toBe('4900050356');
       expect(res.StockEffect).toBe('Stock consumed to Cost Center 1011201301');
+      expect(mockResAdapter.postGoodsMovement).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reservationNo: '0000524980',
+          batch: 'INJW260001'
+        })
+      );
     });
   });
 });

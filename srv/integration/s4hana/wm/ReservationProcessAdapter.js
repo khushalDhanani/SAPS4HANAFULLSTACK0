@@ -70,6 +70,29 @@ class ReservationProcessAdapter {
       MOVEMENT: 'X'
     };
 
+    // Preflight: BAPI_RESERVATION_CREATE1 rejects any storage location the material is not extended to
+    // (MARD), returning a cryptic "No storage location data for <mat> in <plant> <sloc>; ... BUS2093 not
+    // created". Validate every SLoc the reservation touches up front and fail with the SLocs it IS in.
+    if (this.rfc && storageLocation) {
+      const slocChecks = [{ plant: String(plant).trim(), sloc: String(storageLocation).trim(), role: 'issuing' }];
+      if (header.MOVE_STLOC) {
+        slocChecks.push({ plant: String(targetMovePlant).trim(), sloc: header.MOVE_STLOC, role: 'receiving' });
+      }
+      for (const chk of slocChecks) {
+        let extended;
+        try {
+          const rows = await this.rfc.readTable('MARD', ['LGORT'], [`MATNR = '${s4Mat}'`, `AND WERKS = '${chk.plant}'`], 50);
+          extended = (rows || []).map((r) => (r.LGORT || '').trim()).filter(Boolean);
+        } catch (_mardErr) {
+          continue; // MARD read failed: let the BAPI do its own validation rather than block a valid create
+        }
+        if (!extended.includes(chk.sloc)) {
+          const avail = extended.length ? extended.join(', ') : '(none - extend the material to a storage location via MM01)';
+          throw httpError(400, `Material ${alphaOut(s4Mat)} is not extended to ${chk.role} storage location ${chk.sloc} in plant ${chk.plant}. Choose one of: ${avail}.`);
+        }
+      }
+    }
+
     return await this.rfc.session(async (call) => {
       const res = await call('BAPI_RESERVATION_CREATE1', {
         RESERVATIONHEADER: header,
@@ -113,7 +136,9 @@ class ReservationProcessAdapter {
       quantity,
       unit,
       reservationNo,
-      reservationItem = '0001'
+      reservationItem = '0001',
+      movementType,
+      isTransferPosting: reqIsTransferPosting
     } = params;
 
     if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
@@ -131,6 +156,16 @@ class ReservationProcessAdapter {
     const s4Menga = Number(quantity || 1);
     const s4Altme = String(unit || 'KG').trim().toUpperCase();
 
+    // For transfer postings (311 and 301), linking RSNUM directly on the TR header causes standard SAP L_TO_CREATE_TR
+    // to execute restrictive reservation checks that throw XFELD_WRONG. Omitting RSNUM on the WM staging TR allows clean TO creation and confirmation.
+    const isTransferPosting = Boolean(
+      reqIsTransferPosting ||
+      movementType === '311' ||
+      movementType === '301'
+    );
+    const s4TrRsnum = isTransferPosting ? '' : s4Rsnum;
+    const s4TrRspos = isTransferPosting ? '' : s4Rspos;
+
     const ltbaItem = {
       LGNUM: s4Lgnum,
       BWLVS: s4Bwlvs,
@@ -139,8 +174,8 @@ class ReservationProcessAdapter {
       LGORT: s4Lgort,
       MENGA: s4Menga,
       ALTME: s4Altme,
-      RSNUM: s4Rsnum,
-      RSPOS: s4Rspos
+      RSNUM: s4TrRsnum,
+      RSPOS: s4TrRspos
     };
 
     return await this.rfc.session(async (call) => {
@@ -173,8 +208,8 @@ class ReservationProcessAdapter {
               IV_LGORT: s4Lgort,
               IV_MENGA: s4Menga,
               IV_ALTME: s4Altme,
-              IV_RSNUM: s4Rsnum,
-              IV_RSPOS: s4Rspos,
+              IV_RSNUM: s4TrRsnum,
+              IV_RSPOS: s4TrRspos,
               IV_COMMIT: 'X'
             });
           } catch (_z1Err) {
@@ -186,8 +221,8 @@ class ReservationProcessAdapter {
               IV_LGORT: s4Lgort,
               IV_MENGA: s4Menga,
               IV_ALTME: s4Altme,
-              IV_RSNUM: s4Rsnum,
-              IV_RSPOS: s4Rspos,
+              IV_RSNUM: s4TrRsnum,
+              IV_RSPOS: s4TrRspos,
               IV_COMMIT: 'X'
             });
           }
@@ -345,13 +380,81 @@ class ReservationProcessAdapter {
       testrun = false
     } = params;
 
-    if (!reservationNo) throw httpError(400, 'ReservationNo is mandatory');
+    let sResNo = reservationNo && reservationNo !== '0' && reservationNo !== '0000000000' ? pad10(reservationNo) : '';
+    let sResItem = reservationItem ? pad4(reservationItem) : '0001';
+    let sRecPlant = receivingPlant ? String(receivingPlant).trim() : '';
+    let sRecSLoc = receivingStorageLocation ? String(receivingStorageLocation).trim() : '';
+
+    const s4Mat = /^\d+$/.test(material) ? pad10(material).padStart(18, '0') : material;
+    const sPlant = String(plant || '1120').trim();
+    const today = this._sapDate();
+
+    let sBatch = batch ? String(batch).trim().toUpperCase() : '';
+
+    // Auto-resolve from open reservations in RESB if reservationNo was not provided
+    if (!sResNo && this.rfc && (params.transferOrder || params.autoResolveReservation)) {
+      try {
+        const resbOpen = await this.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'UMWRK', 'UMLGO', 'CHARG'], [
+          `MATNR = '${s4Mat}'`,
+          `AND WERKS = '${sPlant}'`,
+          `AND BWART = '${String(movementType).trim()}'`,
+          "AND KZEAR = ''"
+        ], 1);
+        if (resbOpen?.[0]?.RSNUM?.trim()) {
+          sResNo = resbOpen[0].RSNUM.trim();
+          if (resbOpen[0].RSPOS?.trim()) sResItem = pad4(resbOpen[0].RSPOS.trim());
+          if (!sRecPlant && resbOpen[0].UMWRK?.trim()) sRecPlant = resbOpen[0].UMWRK.trim();
+          if (!sRecSLoc && resbOpen[0].UMLGO?.trim()) sRecSLoc = resbOpen[0].UMLGO.trim();
+          if (!sBatch && resbOpen[0].CHARG?.trim()) sBatch = resbOpen[0].CHARG.trim().toUpperCase();
+        }
+      } catch (_rOpenErr) {}
+    }
+
+    const hasRes = Boolean(sResNo);
+    if (!hasRes && !params.transferOrder && !params.allowDirectMovement) {
+      throw httpError(400, 'ReservationNo is mandatory');
+    }
     if (!movementType) throw httpError(400, 'MovementType is mandatory');
     if (!material) throw httpError(400, 'Material is mandatory');
     if (!quantity || Number(quantity) <= 0) throw httpError(400, 'Valid Quantity is mandatory');
 
-    const s4Mat = /^\d+$/.test(material) ? pad10(material).padStart(18, '0') : material;
-    const today = this._sapDate();
+    // Auto-resolve missing plant/sloc or batch from RESB if reservation is known
+    if (hasRes && (!sRecPlant || !sRecSLoc || !sBatch) && this.rfc) {
+      try {
+        const resbRows = await this.rfc.readTable('RESB', ['UMWRK', 'UMLGO', 'CHARG'], [
+          `RSNUM = '${pad10(sResNo)}'`,
+          `AND RSPOS = '${pad4(sResItem)}'`
+        ], 1);
+        if (resbRows?.[0]) {
+          if (!sRecPlant && resbRows[0].UMWRK?.trim()) sRecPlant = resbRows[0].UMWRK.trim();
+          if (!sRecSLoc && resbRows[0].UMLGO?.trim()) sRecSLoc = resbRows[0].UMLGO.trim();
+          if (!sBatch && resbRows[0].CHARG?.trim()) sBatch = resbRows[0].CHARG.trim().toUpperCase();
+        }
+      } catch (_rErr) {}
+    }
+
+    // Auto-resolve batch from LTAP if transferOrder is present
+    if (!sBatch && this.rfc && params.transferOrder) {
+      try {
+        const toRows = await this.rfc.readTable('LTAP', ['CHARG'], [
+          `TANUM = '${pad10(params.transferOrder)}'`,
+          "AND CHARG <> ''"
+        ], 1);
+        if (toRows?.[0]?.CHARG?.trim()) sBatch = toRows[0].CHARG.trim().toUpperCase();
+      } catch (_tErr) {}
+    }
+
+    // Auto-resolve batch from interim storage quants (921/920) in LQUA
+    if (!sBatch && this.rfc && s4Mat) {
+      try {
+        const lquaRows = await this.rfc.readTable('LQUA', ['CHARG'], [
+          `MATNR = '${s4Mat}'`,
+          "AND LGTYP IN ('921', '920')",
+          "AND VERME > 0"
+        ], 1);
+        if (lquaRows?.[0]?.CHARG?.trim()) sBatch = lquaRows[0].CHARG.trim().toUpperCase();
+      } catch (_qErr) {}
+    }
 
     // Map GM_CODE: allow explicit override or derive per movement type
     // GM_CODE 03 = MB1A (GI 201/241), 04 = MB1B (Transfer 311/301), 06 = MB11 (Reservation)
@@ -360,31 +463,33 @@ class ReservationProcessAdapter {
       if (params.deriveGmCode) {
         if (movementType === '201' || movementType === '241') sGmCode = '03';
         else if (movementType === '311' || movementType === '301') sGmCode = '04';
-        else sGmCode = '06';
+        else sGmCode = hasRes ? '06' : '04';
       } else {
-        sGmCode = '06';
+        sGmCode = hasRes ? '06' : '04';
       }
     }
 
     const header = {
       PSTNG_DATE: today,
       DOC_DATE: today,
-      REF_DOC_NO: `RES ${reservationNo}`
+      REF_DOC_NO: hasRes ? `RES ${sResNo}` : (params.transferOrder ? `TO ${params.transferOrder}` : 'WM SCAN-TO')
     };
 
     const item = {
       MATERIAL: s4Mat,
-      PLANT: String(plant || '1120').trim(),
+      PLANT: sPlant,
       ...(storageLocation ? { STGE_LOC: String(storageLocation).trim() } : {}),
       MOVE_TYPE: String(movementType).trim(),
       ENTRY_QNT: Number(quantity),
       ENTRY_UOM: String(unit || 'EA').trim(),
-      ...(batch ? { BATCH: String(batch).trim().toUpperCase() } : {}),
-      RESERV_NO: pad10(reservationNo),
-      RES_ITEM: pad4(reservationItem),
-      NO_MORE_GR: 'X', // Closes the reservation item (final issue)
-      ...(receivingPlant ? { MOVE_PLANT: String(receivingPlant).trim() } : {}),
-      ...(receivingStorageLocation ? { MOVE_STLOC: String(receivingStorageLocation).trim() } : {}),
+      ...(sBatch ? { BATCH: sBatch } : {}),
+      ...(hasRes ? {
+        RESERV_NO: pad10(sResNo),
+        RES_ITEM: pad4(sResItem),
+        NO_MORE_GR: 'X' // Closes the reservation item (final issue)
+      } : {}),
+      ...(sRecPlant ? { MOVE_PLANT: sRecPlant } : {}),
+      ...(sRecSLoc ? { MOVE_STLOC: sRecSLoc } : {}),
       ...(costCenter ? { COSTCENTER: pad10(costCenter) } : {}),
       ...(assetNo ? { ASSET_NO: pad12(assetNo) } : {}),
       ...(subNumber ? { SUB_NUMBER: pad4(subNumber) } : {})
@@ -429,7 +534,9 @@ class ReservationProcessAdapter {
         materialDocument: matDoc,
         materialDocYear: docYear,
         status: '05',
-        stockEffect: this._computeStockEffect(movementType, params),
+        reservationNo: sResNo || reservationNo || '',
+        batch: sBatch,
+        stockEffect: this._computeStockEffect(movementType, { ...params, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
         messages: res.RETURN || []
       };
     });

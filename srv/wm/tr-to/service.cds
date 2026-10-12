@@ -81,9 +81,13 @@ service TrToService @(path: '/odata/v4/tr-to') {
         TRItem              : String(4);
         ReservationNo       : String(10);
         ReservationItem     : String(4);
+        MovementType        : String(3);
         Status              : String(2);
         StatusText          : String(40);
         Confirmed           : Boolean;
+        IsConfirmed         : Boolean;
+        ConfirmationNumber  : String(10);
+        ConfirmedBy         : String(12);
         Material            : String(40);
         MaterialName        : String(80);
         Quantity            : Decimal(13, 3);
@@ -110,6 +114,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         MovementType        : String(3);
         Quantity            : Decimal(13, 3);
         Unit                : String(3);
+        Batch               : String(10);
+        Serials             : array of String(18);
         StockEffect         : String(80);
         Message             : String(255);
         ErrorMessage        : String(255);
@@ -224,7 +230,9 @@ service TrToService @(path: '/odata/v4/tr-to') {
         CostCenter               : String(10),
         AssetNo                  : String(12),
         SubNumber                : String(4),
-        TransferOrder            : String(10)
+        TransferOrder            : String(10),
+        Batch                    : String(10),
+        Serials                  : array of String(18)
     ) returns MigoProcessResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -242,6 +250,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         CostCenter               : String(10),
         AssetNo                  : String(12),
         SubNumber                : String(4),
-        TransferOrder            : String(10)
+        TransferOrder            : String(10),
+        Batch                    : String(10),
+        Serials                  : array of String(18)
     ) returns MigoProcessResult;
 }
