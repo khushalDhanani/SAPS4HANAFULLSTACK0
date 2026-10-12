@@ -46,6 +46,8 @@ sap.ui.define([
                 batch: "",
                 batchValueState: "None",
                 batchValueStateText: "",
+                sourceStorageType: "",
+                sourceStorageBin: "",
                 suggestedBatches: [],
                 fifoBatch: "",
                 fifoBatchRecommendation: "",
@@ -108,6 +110,7 @@ sap.ui.define([
             var oCtx = oItem && oItem.getBindingContext("scanView");
             var sTbnum = oCtx ? oCtx.getProperty("Tbnum") : "";
             if (sTbnum) {
+                this.getModel("scanView").setProperty("/docType", "TR");
                 this.getModel("scanView").setProperty("/scannedTR", sTbnum);
                 this.onLookupTR();
             }
@@ -391,7 +394,10 @@ sap.ui.define([
 
                 // Initialize batch: if TR specifies a batch use it, else auto-suggest FIFO batch
                 var sInitialBatch = oDetail.Batch || sFifoBatch || "";
+                var oInitialMatch = aSuggestedBatches.find(function (b) { return b.Batch === sInitialBatch; });
                 oModel.setProperty("/batch", sInitialBatch);
+                oModel.setProperty("/sourceStorageType", oInitialMatch ? oInitialMatch.StorageType : (oDetail.SourceStorageType || ""));
+                oModel.setProperty("/sourceStorageBin", oInitialMatch ? oInitialMatch.StorageBin : (oDetail.SourceStorageBin || ""));
                 oModel.setProperty("/isFifoApplied", Boolean(!oDetail.Batch && sFifoBatch));
                 oModel.setProperty("/batchValueState", "None");
                 oModel.setProperty("/batchValueStateText", "");
@@ -471,8 +477,12 @@ sap.ui.define([
         onApplyFifoBatch: function () {
             var oModel = this.getModel("scanView");
             var sFifo = oModel.getProperty("/fifoBatch");
+            var aSuggested = oModel.getProperty("/suggestedBatches") || [];
+            var oMatch = aSuggested.find(function (b) { return b.Batch === sFifo; });
             if (sFifo) {
                 oModel.setProperty("/batch", sFifo);
+                oModel.setProperty("/sourceStorageType", oMatch ? oMatch.StorageType : "");
+                oModel.setProperty("/sourceStorageBin", oMatch ? oMatch.StorageBin : "");
                 oModel.setProperty("/batchValueState", "None");
                 oModel.setProperty("/batchValueStateText", "");
                 oModel.setProperty("/isFifoApplied", true);
@@ -487,7 +497,11 @@ sap.ui.define([
             if (oSelectedItem) {
                 var sBatch = oSelectedItem.getKey() || oSelectedItem.getText();
                 var oModel = this.getModel("scanView");
+                var aSuggested = oModel.getProperty("/suggestedBatches") || [];
+                var oMatch = aSuggested.find(function (b) { return b.Batch === sBatch; });
                 oModel.setProperty("/batch", sBatch);
+                oModel.setProperty("/sourceStorageType", oMatch ? oMatch.StorageType : "");
+                oModel.setProperty("/sourceStorageBin", oMatch ? oMatch.StorageBin : "");
                 oModel.setProperty("/batchValueState", "None");
                 oModel.setProperty("/batchValueStateText", "");
                 oModel.setProperty("/isFifoApplied", sBatch === oModel.getProperty("/fifoBatch"));
@@ -502,8 +516,12 @@ sap.ui.define([
             var oCtx = oSource.getBindingContext("scanView");
             if (oCtx) {
                 var sBatch = oCtx.getProperty("Batch");
+                var sType = oCtx.getProperty("StorageType");
+                var sBin = oCtx.getProperty("StorageBin");
                 var oModel = this.getModel("scanView");
                 oModel.setProperty("/batch", sBatch);
+                oModel.setProperty("/sourceStorageType", sType || "");
+                oModel.setProperty("/sourceStorageBin", sBin || "");
                 oModel.setProperty("/batchValueState", "None");
                 oModel.setProperty("/batchValueStateText", "");
                 oModel.setProperty("/isFifoApplied", sBatch === oModel.getProperty("/fifoBatch"));
@@ -723,6 +741,8 @@ sap.ui.define([
                 unit: oTR.Unit,
                 batch: sBatch,
                 serials: aSerials,
+                sourceStorageType: oModel.getProperty("/sourceStorageType") || "",
+                sourceStorageBin: oModel.getProperty("/sourceStorageBin") || "",
                 autoConfirm: bAutoConfirm,
                 autoPostMigo: bAutoPostMigo,
                 CompleteReservation: oModel.getProperty("/completeReservation") === true,
@@ -873,6 +893,8 @@ sap.ui.define([
             oModel.setProperty("/batch", "");
             oModel.setProperty("/batchValueState", "None");
             oModel.setProperty("/batchValueStateText", "");
+            oModel.setProperty("/sourceStorageType", "");
+            oModel.setProperty("/sourceStorageBin", "");
             oModel.setProperty("/suggestedBatches", []);
             oModel.setProperty("/fifoBatch", "");
             oModel.setProperty("/fifoBatchRecommendation", "");

@@ -323,6 +323,118 @@ describe('TrToAdapter (RFC)', () => {
       ErrorStep: 'LT04'
     });
   });
+
+  it('lookupTR enriches TRDetail with SourceStorageType and SourceStorageBin from FIFO batches', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000800', BWLVS: '311', STATU: '', NLTYP: '921', NLPLA: 'TRANSFER' }],
+            ET_TR_ITEMS: [
+              { LGNUM: 'W01', TBNUM: '0001000800', TBPOS: '0001', MATNR: '000000001000000204', WERKS: '1600', LGORT: 'CS01', CHARG: '', MENGE: '1.000', TAMEN: '0.000', MEINS: 'KG', ELIKZ: '' }
+            ]
+          };
+        }
+        if (fm === 'AUTHORITY_CHECK') return { USER_IS_AUTHORIZED: 'Y' };
+        throw new Error(`unexpected ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'LTAP') return [];
+        if (table === 'MAKT') return [{ MATNR: '000000001000000204', MAKTX: 'Test Material' }];
+        if (table === 'MARC') return [{ MATNR: '000000001000000204', WERKS: '1600', XCHPF: 'X', SERNP: '' }];
+        if (table === 'LQUA') {
+          return [
+            { LQNUM: '0001026101', CHARG: 'IN25002851', VERME: '250.000', MEINS: 'KG', WDATU: '20251215', EDATU: '20251215', LGTYP: 'RM1', LGPLA: '0-L0001-00', LENUM: '00000000001000028837' }
+          ];
+        }
+        return [];
+      })
+    };
+
+    const adapter = new TrToAdapter({ rfc });
+    const tr = await adapter.lookupTR('1000800', 'W01', 'TR');
+    expect(tr.SourceStorageType).toBe('RM1');
+    expect(tr.SourceStorageBin).toBe('0-L0001-00');
+    expect(tr.FifoBatch).toBe('IN25002851');
+  });
+
+  it('lookupTR enriches TRDetail with SourceStorageType and SourceStorageBin from LQUA for non-batch materials', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000799', BWLVS: '311', STATU: '', NLTYP: '921', NLPLA: 'TRANSFER' }],
+            ET_TR_ITEMS: [
+              { LGNUM: 'W01', TBNUM: '0001000799', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01', CHARG: '', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: '' }
+            ]
+          };
+        }
+        if (fm === 'AUTHORITY_CHECK') return { USER_IS_AUTHORIZED: 'Y' };
+        throw new Error(`unexpected ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'LTAP') return [];
+        if (table === 'MAKT') return [{ MATNR: '000000008000009753', MAKTX: 'MacBook Pro' }];
+        if (table === 'MARC') return [{ MATNR: '000000008000009753', WERKS: '1120', XCHPF: '', SERNP: '' }];
+        if (table === 'LQUA') {
+          return [
+            { LGTYP: 'EN1', LGPLA: '0-L0001-01', VERME: '1.000' }
+          ];
+        }
+        return [];
+      })
+    };
+
+    const adapter = new TrToAdapter({ rfc });
+    const tr = await adapter.lookupTR('1000799', 'W01', 'TR');
+    expect(tr.SourceStorageType).toBe('EN1');
+    expect(tr.SourceStorageBin).toBe('0-L0001-01');
+  });
+
+  it('createTOFromTR respects caller-provided sourceStorageType and sourceStorageBin (mock only, not SAP verification)', async () => {
+    let capturedItems = null;
+    const rfc = {
+      call: jest.fn(async (fm, params) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000800', BWLVS: '311', STATU: '', NLTYP: '921', NLPLA: 'TRANSFER' }],
+            ET_TR_ITEMS: [
+              { LGNUM: 'W01', TBNUM: '0001000800', TBPOS: '0001', MATNR: '000000001000000204', WERKS: '1600', LGORT: 'CS01', CHARG: '', MENGE: '1.000', TAMEN: '0.000', MEINS: 'KG', ELIKZ: '' }
+            ]
+          };
+        }
+        if (fm === 'AUTHORITY_CHECK') return { USER_IS_AUTHORIZED: 'Y' };
+        if (fm === 'Z_WM_TO_CREATE_FROM_TR') {
+          capturedItems = params.IT_ITEMS;
+          return { EV_SUCCESS: 'S', EV_TANUM: '0001037294', EV_MESSAGE: 'TO 1037294 created' };
+        }
+        if (fm === 'L_TO_CONFIRM') return { EV_SUCCESS: 'S' };
+        throw new Error(`unexpected ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'LTAP') return [];
+        if (table === 'MARC') return [];
+        return [];
+      })
+    };
+
+    const adapter = new TrToAdapter({ rfc });
+    const res = await adapter.createTOFromTR({
+      lgnum: 'W01',
+      tbnum: '1000800',
+      tbpos: '0001',
+      qty: 1,
+      unit: 'KG',
+      sourceStorageType: 'RM1',
+      sourceStorageBin: '0-L0001-03',
+      autoConfirm: false,
+      autoPostMigo: false
+    });
+
+    expect(res.TransferOrder).toBe('1037294');
+    expect(capturedItems[0].VLTYP).toBe('RM1');
+    expect(capturedItems[0].VLPLA).toBe('0-L0001-03');
+  });
 });
 
 describe('RfcClient', () => {

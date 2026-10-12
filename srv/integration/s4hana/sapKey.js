@@ -19,6 +19,8 @@ const PATTERNS = Object.freeze({
   plant: [/^[A-Z0-9]{4}$/, 'Plant'],
   lgort: [/^[A-Z0-9]{4}$/, 'Storage location'],
   lenum: [/^[A-Z0-9]{1,20}$/, 'Storage Unit number'],
+  lgtyp: [/^[A-Z0-9*]{1,3}$/, 'Storage type'],
+  lgpla: [/^[A-Z0-9_\-./]{1,10}$/, 'Storage bin'],
   serial: [/^[A-Z0-9_\-./]{1,18}$/, 'Serial number'],
   uuid: [/^[0-9A-F-]{36}$/, 'Process ID']
 });

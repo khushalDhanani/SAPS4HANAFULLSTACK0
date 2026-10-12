@@ -223,31 +223,35 @@ service TrToService @(path: '/odata/v4/tr-to') {
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action createTOFromTR(
-        lgnum       : String(3),
-        tbnum       : String(10),
-        tbpos       : String(4),
-        qty         : Decimal(13, 3),
-        unit        : String(3),
-        batch       : String(10),
-        serials     : array of String(18),
-        storageUnit : String(20),
-        autoConfirm : Boolean,
-        autoPostMigo: Boolean,
+        lgnum             : String(3),
+        tbnum             : String(10),
+        tbpos             : String(4),
+        qty               : Decimal(13, 3),
+        unit              : String(3),
+        batch             : String(10),
+        serials           : array of String(18),
+        storageUnit       : String(20),
+        sourceStorageType : String(3),
+        sourceStorageBin  : String(10),
+        autoConfirm       : Boolean,
+        autoPostMigo      : Boolean,
         CompleteReservation : Boolean // sets NO_MORE_GR on the goods movement; never defaulted to true
     ) returns TOProcessResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action CreateTOFromTR(
-        lgnum       : String(3),
-        tbnum       : String(10),
-        tbpos       : String(4),
-        qty         : Decimal(13, 3),
-        unit        : String(3),
-        batch       : String(10),
-        serials     : array of String(18),
-        storageUnit : String(20),
-        autoConfirm : Boolean,
-        autoPostMigo: Boolean,
+        lgnum             : String(3),
+        tbnum             : String(10),
+        tbpos             : String(4),
+        qty               : Decimal(13, 3),
+        unit              : String(3),
+        batch             : String(10),
+        serials           : array of String(18),
+        storageUnit       : String(20),
+        sourceStorageType : String(3),
+        sourceStorageBin  : String(10),
+        autoConfirm       : Boolean,
+        autoPostMigo      : Boolean,
         CompleteReservation : Boolean // sets NO_MORE_GR on the goods movement; never defaulted to true
     ) returns TOProcessResult;
 

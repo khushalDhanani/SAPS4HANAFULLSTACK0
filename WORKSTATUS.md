@@ -5,6 +5,37 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **/wm/scan-to Transfer Order Creation & Posting Fix: Source Storage Type/Bin Determination & Live S/4HANA Verification (2026-10-12, 15:15 IST):**
+  - **User Request:** `/wm/scan-to` — "Not post working here check and fix."
+  - **Root Cause Isolated (CONFIRMED from live Client 220 RFC & standard ABAP `LL03AF18`):**
+    1. In `/wm/scan-to`, posting `createTOFromTR` failed with SAP error `L3 007` ("Data for storage type search is not defined (A EN1 )") when source storage type and bin were blank.
+    2. Standard SAP `L_TO_CREATE_TR` executes `T334T_LESEN(W01, A, MLGN-LTKZA)` when `VLTYP` and `VLPLA` are blank. Warehouse `W01` has no customizing rows in `T334T` for stock removal (`KZEAR: A`) for indicator `EN1` or `RM1` (only blank `***` and `005` exist).
+    3. When explicit source storage type and bin are supplied in `IT_ITEMS` (e.g. `VLTYP: 'RM1', VLPLA: '0-L0001-00'`), SAP bypasses `T334T_LESEN` and creates the Transfer Order immediately (`EV_SUCCESS: 'S'`, verified live with TO `0001037293` created in Client 220).
+    4. For TR `1000799` (material `8000009753`), TR was created for storage location `HS01`, but `HS01` has zero physical stock in `LQUA` (all quants are in `MT01`), leading to `L3 037` ("Storage type EN1 does not allow negative stock figures") when attempting to pick from `MT01`.
+    5. For TR `1000800` (material `1000000204`, SLoc `CS01`), physical quants exist in `RM1 / 0-L0001-00` (>10,000 KG), allowing seamless TO creation.
+  - **Remediation Delivered:**
+    1. **CAP Service Model (`srv/wm/tr-to/service.cds`):**
+       - Added optional `sourceStorageType : String(3)` and `sourceStorageBin : String(10)` parameters to `action createTOFromTR` and `action CreateTOFromTR`.
+    2. **Key Validation (`srv/integration/s4hana/sapKey.js`):**
+       - Added regex patterns `lgtyp` (`/^[A-Z0-9*]{1,3}$/`) and `lgpla` (`/^[A-Z0-9_\-./]{1,10}$/`).
+    3. **S/4HANA Adapter (`srv/integration/s4hana/wm/TrToAdapter.js`):**
+       - `lookupTR`: Automatically enriches `TRDetail` with `SourceStorageType` and `SourceStorageBin` from `suggestedBatches[0]` (if batch-managed) or queries `LQUA` for the first available physical quant (`LGTYP < 900`, `VERME > 0`).
+       - `createTOFromTR`: Accepts `sourceStorageType` and `sourceStorageBin`. When provided by caller or UI, maps them directly into `IT_ITEMS[0].VLTYP` and `VLPLA`. If blank, leaves them blank (strictly respecting Fix 3 without unwanted LQUA queries inside `createTOFromTR`).
+    4. **UI5 View & Controller (`WarehouseScanTo`):**
+       - View: Added `scanToLabelSourceBin` displaying `Source Type / Bin (Pick From)` under TR Locations & Quantities.
+       - Removed `title`, `showNavButton`, and `navButtonPress` from `<Page id="warehouseScanToPage">` (ShellBar owns both, satisfying UI consistency rule).
+       - Added `noDataText="{i18n>scanToNoBatchesFound}"` to `tableSuggestedBatches`.
+       - i18n: Added `scanToLabelSourceBin`, `scanToNoBatchesFound`, and synced all FIFO batch/serial keys to both `i18n.properties` and `i18n_en.properties`.
+       - Controller: Tracks `sourceStorageType` and `sourceStorageBin` in `scanView` model; populates on `onLookupTR`, updates on `onApplyFifoBatch`, `onSelectBatchSuggestion`, `onSuggestionBatchSelected`; passes them in `oPayload` to `WarehouseScanToService.createTOFromTR`; resets to blank on `onReset`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/trToAdapter.test.js`: **34/34 tests PASS**.
+    - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **40/40 tests PASS**.
+    - `npx jest test/unit/wm/processFixes.test.js`: **36/36 tests PASS** (Fix 3 strictly verified).
+    - Full WM suite: `npx jest test/unit/wm/`: **65/65 test suites PASS, 1,356/1,356 tests PASS**.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+    - Live SAP Client 220 RFC: Verified TO creation (`EV_SUCCESS: 'S', EV_TANUM: '0001037293'`) and verified live endpoint `GET /odata/v4/tr-to/lookupTR(tbnum='1000027',lgnum='W01',docType='TR',tbpos='0001')` returning authentic stock and FIFO batches.
+
 - **TR 1000799 TO Creation Storage Type Search Bug (L3 007) Diagnosed & Clear Customizing Error Mapped (2026-10-12, 14:26 IST):**
   - **User Request:** Fix bug `POST /odata/v4/tr-to/createTOFromTR -> 400 "Create Transfer Order for TR 1000799: Data for storage type search is not defined (A EN1 )"`. Read-only RFC diagnosis of T100, TR 1000799, T334T/T334P/T333, LQUA, and parameter resolution; identify root cause; implement fix; add mock unit tests.
   - **STEP 1 Diagnosis Results (CONFIRMED from live Client 220 & SAP standard ABAP code):**
@@ -763,6 +794,51 @@ The previous log was removed in commit `b741337`; this file restarts it.
   - Browser verification of UI5 Reservation Entry Cockpit with the verified movement types (201, 241, 311, 301).
 
 ## Changes Log
+
+### 2026-10-12 15:15 IST — /wm/scan-to Transfer Order Creation & Posting Fix: Source Storage Type/Bin Determination & Live S/4HANA Verification
+
+- **User Request:** `/wm/scan-to` — "Not post working here check and fix."
+- **Root Cause Analysis (CONFIRMED via live Client 220 RFC & ABAP source):**
+  1. Standard SAP function module `L_TO_CREATE_TR` executes `T334T_LESEN(W01, A, MLGN-LTKZA)` only when `VLTYP` and `VLPLA` are blank in `IT_ITEMS`.
+  2. Customizing table `T334T` in warehouse `W01` has no rows for stock removal (`KZEAR: A`) for indicator `EN1` or `RM1` (only blank `***` and `005` exist). When `VLTYP`/`VLPLA` are blank, SAP raises `L3 007` ("Data for storage type search is not defined (A EN1 )").
+  3. Live RFC test against Client 220: Passing explicit source storage type and bin (e.g. `VLTYP: 'RM1', VLPLA: '0-L0001-00'`) to `Z_WM_TO_CREATE_FROM_TR` creates the Transfer Order immediately (`EV_SUCCESS: 'S', EV_TANUM: '0001037293'`) bypassing `T334T_LESEN`.
+  4. TR `1000799` (material `8000009753`): Created for SLoc `HS01`, but `HS01` has zero physical stock in `LQUA` (all 3 quants are in SLoc `MT01`). Standard SAP enforces `LTBP-LGORT = LQUA-LGORT`; picking `MT01` for `HS01` raises `L3 037` ("Storage type EN1 does not allow negative stock figures").
+  5. TR `1000800` (material `1000000204`, SLoc `CS01`): Has >10,000 KG in physical quants in `RM1 / 0-L0001-00` and `RM1 / 0-L0001-03`.
+- **Files Modified & Rationale:**
+  1. `srv/wm/tr-to/service.cds`: Added optional parameters `sourceStorageType : String(3)` and `sourceStorageBin : String(10)` to actions `createTOFromTR` and `CreateTOFromTR`.
+  2. `srv/integration/s4hana/sapKey.js`: Added regex validation patterns for `lgtyp` (`/^[A-Z0-9*]{1,3}$/`) and `lgpla` (`/^[A-Z0-9_\-./]{1,10}$/`).
+  3. `srv/integration/s4hana/wm/TrToAdapter.js`:
+     - In `lookupTR`: Populates `SourceStorageType` and `SourceStorageBin` on `TRDetail` from `suggestedBatches[0]` (if batch-managed) or queries `LQUA` for the first available physical quant (`LGTYP < 900`, `VERME > 0`) for that material/plant/sloc in warehouse `wh`.
+     - In `createTOFromTR`: Accepts `sourceStorageType = ''` and `sourceStorageBin = ''`. When provided by caller or UI, maps them into `itItems[0].VLTYP` and `VLPLA`. If blank, leaves them blank (strictly respecting Fix 3 without unwanted LQUA queries inside `createTOFromTR`).
+  4. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanTo.view.xml`:
+     - Added `scanToLabelSourceBin` displaying `Source Type / Bin (Pick From)` under TR Locations & Quantities.
+     - Removed `title`, `showNavButton`, and `navButtonPress` from `<Page id="warehouseScanToPage">` (ShellBar owns both, satisfying UI consistency rule).
+     - Added `noDataText="{i18n>scanToNoBatchesFound}"` to `tableSuggestedBatches`.
+  5. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanTo.controller.js`:
+     - Tracks `sourceStorageType` and `sourceStorageBin` in `scanView` model.
+     - Populated on `onLookupTR`, updated on `onApplyFifoBatch`, `onSelectBatchSuggestion`, and `onSuggestionBatchSelected`.
+     - Passed in `oPayload` to `WarehouseScanToService.createTOFromTR`.
+     - Reset to blank on `onReset`.
+     - Sets `docType: "TR"` on `onOpenTRPress`.
+  6. `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+     - Added `scanToLabelSourceBin=Source Type / Bin (Pick From)` and `scanToNoBatchesFound=No batches found in warehouse.`. Synced all FIFO batch and serial keys between both property bundles.
+  7. `test/unit/wm/trToAdapter.test.js`:
+     - Added tests for `lookupTR` enriching `SourceStorageType` and `SourceStorageBin` from suggested FIFO batches and from LQUA for non-batch materials.
+     - Verified `createTOFromTR` respects caller-provided `sourceStorageType` and `sourceStorageBin`.
+  8. `test/unit/wm/warehouseScanToUi.test.js`:
+     - Added tests for recording FIFO source bin and passing `sourceStorageType` and `sourceStorageBin` in `createTOFromTR` payload.
+- **Commands Executed & Validation Results:**
+  - `npx jest test/unit/wm/trToAdapter.test.js`: **34/34 tests passed** (0 failures).
+  - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **40/40 tests passed** (0 failures).
+  - `npx jest test/unit/wm/processFixes.test.js`: **36/36 tests passed** (Fix 3 strictly verified).
+  - Full WM test suite `npx jest test/unit/wm/`: **65/65 test suites passed, 1,356/1,356 tests passed**.
+  - `npx cds compile srv --to sql`: Succeeded with 0 errors.
+  - `git diff --check`: Succeeded with 0 errors.
+  - Live SAP S/4HANA Client 220 RFC:
+    - `Z_WM_TO_CREATE_FROM_TR` with explicit `VLTYP: 'RM1', VLPLA: '0-L0001-00'` created Transfer Order `0001037293` with status `S`.
+    - Live CAP endpoint `GET /odata/v4/tr-to/lookupTR(tbnum='1000027',lgnum='W01',docType='TR',tbpos='0001')` returned HTTP 200 with authentic stock and FIFO batches from Client 220.
+- **Errors / Blockers:** None.
+- **Next Recommended Action:** Test the full Fiori UI workflow in the browser (`/wm/scan-to`) using open TR `1000027` or TR `1000805`.
 
 ### 2026-10-12 14:26 IST — TR 1000799 TO Creation Storage Type Search Error (L3 007): Diagnosis, Root Cause & Actionable Error Mapping
 

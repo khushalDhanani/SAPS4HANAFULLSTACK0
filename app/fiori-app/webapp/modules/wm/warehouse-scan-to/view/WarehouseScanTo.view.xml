@@ -9,9 +9,6 @@
 
     <Page
         id="warehouseScanToPage"
-        title="{i18n>scanToPageTitle}"
-        showNavButton="true"
-        navButtonPress=".onNavBack"
         class="sapUiSizeCompact">
 
         <headerContent>
@@ -307,6 +304,9 @@
                             <Label text="{i18n>scanToLabelLocation}" design="Bold" />
                             <Text text="{scanView>/tr/Plant} / {scanView>/tr/StorageLocation} (WH: {scanView>/tr/WarehouseNumber})" />
 
+                            <Label text="{i18n>scanToLabelSourceBin}" design="Bold" visible="{= !!${scanView>/sourceStorageBin} || !!${scanView>/tr/SourceStorageBin} }" />
+                            <Text text="{= (${scanView>/sourceStorageType} || ${scanView>/tr/SourceStorageType}) + ' / ' + (${scanView>/sourceStorageBin} || ${scanView>/tr/SourceStorageBin}) }" visible="{= !!${scanView>/sourceStorageBin} || !!${scanView>/tr/SourceStorageBin} }" />
+
                             <Label text="{i18n>scanToLabelDestinationBin}" design="Bold" />
                             <Text text="{scanView>/tr/DestinationType} / {scanView>/tr/DestinationBin}" />
                         </form:content>
@@ -432,6 +432,7 @@
                             <Table
                                 id="tableSuggestedBatches"
                                 items="{scanView>/suggestedBatches}"
+                                noDataText="{i18n>scanToNoBatchesFound}"
                                 class="sapUiSizeCompact">
                                 <columns>
                                     <Column width="5rem">

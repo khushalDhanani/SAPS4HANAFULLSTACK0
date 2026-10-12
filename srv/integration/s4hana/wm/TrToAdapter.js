@@ -634,6 +634,40 @@ class TrToAdapter {
       }
     }
 
+    let sourceStorageType = tr.Vltyp || '';
+    let sourceStorageBin = tr.Vlpla || '';
+    if (!sourceStorageType && !sourceStorageBin && suggestedBatches.length > 0 && suggestedBatches[0].StorageBin) {
+      sourceStorageType = suggestedBatches[0].StorageType || '';
+      sourceStorageBin = suggestedBatches[0].StorageBin || '';
+    }
+    if (!sourceStorageType && !sourceStorageBin && sel.Material) {
+      try {
+        const matPadded = alphaIn(sapKey(sel.Material, 'matnr'), 18);
+        const lquaRows = await this._rfc(
+          () => this.rfc.readTable(
+            'LQUA',
+            ['LGTYP', 'LGPLA', 'VERME'],
+            [
+              `LGNUM = '${wh}'`,
+              `AND MATNR = '${matPadded}'`,
+              `AND WERKS = '${sel.Plant}'`,
+              `AND LGORT = '${sel.StorageLocation}'`,
+              "AND LGTYP < '900'",
+              "AND VERME > 0"
+            ],
+            1
+          ),
+          `Read physical bin for TR material ${sel.Material}`
+        );
+        if (lquaRows && lquaRows.length > 0) {
+          sourceStorageType = String(lquaRows[0].LGTYP || '').trim();
+          sourceStorageBin = String(lquaRows[0].LGPLA || '').trim();
+        }
+      } catch (err) {
+        LOG.warn(`Failed to fetch physical bin for material ${sel.Material}: ${err.message}`);
+      }
+    }
+
     return {
       TransferRequirement: alphaOut(tr.Tbnum),
       TRNumber: alphaOut(tr.Tbnum),
@@ -653,8 +687,8 @@ class TrToAdapter {
       DestinationType: tr.Nltyp || '',
       DestinationStorageBin: tr.Nlpla || '',
       DestinationBin: tr.Nlpla || '',
-      SourceStorageType: tr.Vltyp || '',
-      SourceStorageBin: tr.Vlpla || '',
+      SourceStorageType: sourceStorageType,
+      SourceStorageBin: sourceStorageBin,
       RequiredQuantity: sel.RequiredQty || 0,
       TargetQty: sel.RequiredQty || 0,
       ProcessedQuantity: sel.ProcessedQty || 0,
@@ -730,6 +764,8 @@ class TrToAdapter {
     batch = '',
     serials = [],
     storageUnit = '',
+    sourceStorageType = '',
+    sourceStorageBin = '',
     autoConfirm = true,
     autoPostMigo = false,
     existingToNumber = '',
@@ -815,7 +851,11 @@ class TrToAdapter {
           throw httpError(400, `No destination storage type in T333 for warehouse ${wh}, WM movement type ${tr.Bwlvs}; maintain T333 or the Transfer Requirement`);
         }
       }
-      // Source type/bin: TR header or caller only; blank lets SAP's stock removal strategy decide.
+      // Source type/bin: caller-provided or TR header; blank lets SAP's stock removal strategy decide.
+      const vltyp = sapKeyOpt(sourceStorageType, 'lgtyp') || tr.Vltyp || '';
+      const vlpla = sapKeyOpt(sourceStorageBin, 'lgpla') || tr.Vlpla || '';
+      const vlenr = storageUnit ? sapKey(storageUnit, 'lenum') : '';
+
       const itItems = [{
         TBPOS: item.Tbpos,
         ANFME: quantity.toFixed(3),
@@ -824,9 +864,9 @@ class TrToAdapter {
         LETYP: '',
         NLTYP: nltyp,
         NLPLA: nlpla,
-        VLTYP: tr.Vltyp || '',
-        VLPLA: tr.Vlpla || '',
-        VLENR: storageUnit ? sapKey(storageUnit, 'lenum') : ''
+        VLTYP: vltyp,
+        VLPLA: vlpla,
+        VLENR: vlenr
       }];
 
       let res;

@@ -510,6 +510,18 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
             expect(viewModel.getProperty('/batch')).toBe('BATCH-SUGG-99');
             expect(viewModel.getProperty('/canSubmit')).toBe(true);
         });
+
+        it('onApplyFifoBatch records sourceStorageType and sourceStorageBin from suggestedBatches', () => {
+            viewModel.setProperty('/fifoBatch', 'BATCH-FIFO-01');
+            viewModel.setProperty('/suggestedBatches', [
+                { Batch: 'BATCH-FIFO-01', StorageType: 'RM1', StorageBin: '0-L0001-03' }
+            ]);
+            controller.onApplyFifoBatch();
+
+            expect(viewModel.getProperty('/batch')).toBe('BATCH-FIFO-01');
+            expect(viewModel.getProperty('/sourceStorageType')).toBe('RM1');
+            expect(viewModel.getProperty('/sourceStorageBin')).toBe('0-L0001-03');
+        });
     });
 
     describe('6. Serial Number Capture & Validation', () => {
@@ -658,6 +670,8 @@ describe('WarehouseScanTo UI Controller (Chunk 4: Step 2 App)', () => {
                 autoConfirm: true,
                 autoPostMigo: true,
                 CompleteReservation: false,
+                sourceStorageType: '',
+                sourceStorageBin: '',
                 storageUnit: ''
             });
 
