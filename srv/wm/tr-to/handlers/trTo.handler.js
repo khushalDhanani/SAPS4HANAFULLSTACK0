@@ -3,6 +3,7 @@ const TrToAdapter = require('../../../integration/s4hana/wm/TrToAdapter');
 const ReservationProcessAdapter = require('../../../integration/s4hana/wm/ReservationProcessAdapter');
 const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
 const { sapKey, sapKeyOpt } = require('../../../integration/s4hana/sapKey');
+const { withReservationLock } = require('../../../integration/s4hana/wm/resLock');
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
@@ -102,11 +103,15 @@ class TrToHandler {
         Serials: sSerials
       };
 
+      // SAP-side lock (feature flag, off by default): lock conflicts leave here as 409 before any step runs.
+      const lockKey = sResNo ? { rsnum: sResNo, rspos: sResItem } : null;
+      return withReservationLock(lockKey ? resProcessAdapter.rfc : null, lockKey, async (scopedRfc) => {
+      const gm = scopedRfc && resProcessAdapter.withRfc ? resProcessAdapter.withRfc(scopedRfc) : resProcessAdapter;
       try {
-        await resProcessAdapter.checkAuthorization('M_MSEG_BWA', { ACTVT: '01', BWART: sapKey(sMvt, 'mvt') });
-        await resProcessAdapter.checkAuthorization('M_MSEG_WWA', { ACTVT: '01', WERKS: sapKey(sPlant, 'plant') });
+        await gm.checkAuthorization('M_MSEG_BWA', { ACTVT: '01', BWART: sapKey(sMvt, 'mvt') });
+        await gm.checkAuthorization('M_MSEG_WWA', { ACTVT: '01', WERKS: sapKey(sPlant, 'plant') });
 
-        const migoRes = await resProcessAdapter.postGoodsMovement({
+        const migoRes = await gm.postGoodsMovement({
           reservationNo: sResNo,
           reservationItem: sResItem,
           movementType: sMvt,
@@ -187,6 +192,7 @@ class TrToHandler {
           ErrorMessage: err.message
         };
       }
+      });
     };
 
     // Step 2: Create TO from TR + Auto Confirm + Optional Auto MIGO
@@ -216,7 +222,10 @@ class TrToHandler {
       const trackKey = existing ? { ReservationNo: existing.ReservationNo, ReservationItem: existing.ReservationItem } : null;
 
       try {
-        const result = await adapter.createTOFromTR(data);
+        // SAP-side lock (feature flag, off by default) around the TO step only; a conflict leaves as 409.
+        const lockKey = existing?.ReservationNo ? { rsnum: existing.ReservationNo, rspos: existing.ReservationItem } : null;
+        const result = await withReservationLock(lockKey ? adapter.rfc : null, lockKey, (scopedRfc) =>
+          (scopedRfc && adapter.withRfc ? adapter.withRfc(scopedRfc) : adapter).createTOFromTR(data));
         result.ProcessId = processId;
 
         if (trackKey && result.TransferOrder) {
@@ -307,6 +316,7 @@ class TrToHandler {
 
         return result;
       } catch (err) {
+        if (err.code === 'RES_LOCKED') throw err;
         if (trackKey) {
           try {
             await UPDATE(ReservationTrack).set({

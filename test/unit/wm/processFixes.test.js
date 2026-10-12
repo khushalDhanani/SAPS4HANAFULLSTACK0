@@ -105,15 +105,31 @@ describe('Fix 2: NO_MORE_GR only with an explicit complete flag [mock only, not 
 });
 
 describe('Fix 3: no hardcoded warehouse / storage type / plant defaults [mock only, not SAP verification]', () => {
-  it('sends blank storage types and bins when the TR header carries none (SAP decides), no 921/TRANSFER/902', async () => {
+  it('TR header without destination: reads T333 (LGNUM + BWLVS) for NLTYP/NLPLA; source type/bin stay blank; never 921/TRANSFER/902 literals, never LQUA', async () => {
     const rfc = fakeRfc({
       fm: { Z_WM_GET_TR_MATERIAL_LIST: { ET_TR_HEADER: [HEADER], ET_TR_ITEMS: [ITEM('0001', '000000008000000023', '10.000', '0.000')] }, Z_WM_TO_CREATE_FROM_TR: { EV_SUCCESS: 'S', EV_TANUM: '0001012966' } },
-      tables: { MAKT: [{ MAKTX: 'Mat' }], MARC: [{ XCHPF: '', SERNP: '' }], LTAK: [], LQUA: [{ LGTYP: '902', LGPLA: 'X', CHARG: 'B1', VERME: '5' }] }
+      tables: { MAKT: [{ MAKTX: 'Mat' }], MARC: [{ XCHPF: '', SERNP: '' }], LTAK: [], T333: [{ NLTYP: '911', NLPLA: '' }], LQUA: [{ LGTYP: '902', LGPLA: 'X', CHARG: 'B1', VERME: '5' }] }
     });
     await new TrToAdapter({ rfc }).createTOFromTR({ tbnum: '1001839', qty: 1, autoConfirm: false });
     const item = rfc.call.mock.calls.find((c) => c[0] === 'Z_WM_TO_CREATE_FROM_TR')[1].IT_ITEMS[0];
-    expect(item).toMatchObject({ NLTYP: '', NLPLA: '', VLTYP: '', VLPLA: '', CHARG: '' });
+    expect(item).toMatchObject({ NLTYP: '911', NLPLA: '', VLTYP: '', VLPLA: '', CHARG: '' }); // blank NLPLA = dynamic bin (T333 rows for 201/241)
+    expect(rfc.readTable).toHaveBeenCalledWith('T333', ['NLTYP', 'NLPLA'], ["LGNUM = 'W01'", "AND BWLVS = '311'"], 1);
     expect(rfc.readTable).not.toHaveBeenCalledWith('LQUA', expect.anything(), expect.anything(), expect.anything());
+  });
+
+  it('TR header with destination: T333 is not read; no T333 row for a blank header: 400 and no TO create call', async () => {
+    const withHeader = fakeRfc({
+      fm: { Z_WM_GET_TR_MATERIAL_LIST: { ET_TR_HEADER: [{ ...HEADER, NLTYP: '921', NLPLA: 'TRANSFER' }], ET_TR_ITEMS: [ITEM('0001', '000000008000000023', '10.000', '0.000')] }, Z_WM_TO_CREATE_FROM_TR: { EV_SUCCESS: 'S', EV_TANUM: '0001012966' } },
+      tables: { MAKT: [], MARC: [{ XCHPF: '', SERNP: '' }], LTAK: [], T333: [{ NLTYP: '999', NLPLA: 'WRONG' }] }
+    });
+    await new TrToAdapter({ rfc: withHeader }).createTOFromTR({ tbnum: '1001839', qty: 1, autoConfirm: false });
+    expect(withHeader.call.mock.calls.find((c) => c[0] === 'Z_WM_TO_CREATE_FROM_TR')[1].IT_ITEMS[0]).toMatchObject({ NLTYP: '921', NLPLA: 'TRANSFER' });
+    expect(withHeader.readTable).not.toHaveBeenCalledWith('T333', expect.anything(), expect.anything(), expect.anything());
+
+    const noRow = fakeRfc({ fm: { Z_WM_GET_TR_MATERIAL_LIST: { ET_TR_HEADER: [HEADER], ET_TR_ITEMS: [ITEM('0001', '000000008000000023', '10.000', '0.000')] } }, tables: { MAKT: [], MARC: [{ XCHPF: '', SERNP: '' }], LTAK: [], T333: [] } });
+    await expect(new TrToAdapter({ rfc: noRow }).createTOFromTR({ tbnum: '1001839', qty: 1, autoConfirm: false }))
+      .rejects.toMatchObject({ status: 400, message: /No destination storage type in T333 for warehouse W01, WM movement type 311/ });
+    expect(noRow.call).not.toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.anything());
   });
 
   it('resolves the warehouse from configuration when the caller sends none, and rejects an unconfigured one', async () => {
@@ -171,7 +187,7 @@ describe('Fix 5: partial quantity and the unconfirmed-TO guard [mock only, not S
   const tr = { ET_TR_HEADER: [HEADER], ET_TR_ITEMS: [ITEM('0001', '000000008000000023', '10.000', '4.000')] }; // 6 open after a first TO
   it('allows a second TO for the remaining quantity when the earlier TO is confirmed (LTAK KQUIT = X)', async () => {
     const rfc = fakeRfc({ fm: { Z_WM_GET_TR_MATERIAL_LIST: tr, Z_WM_TO_CREATE_FROM_TR: { EV_SUCCESS: 'S', EV_TANUM: '0001012967' }, L_TO_CONFIRM: {} },
-      tables: { MAKT: [], MARC: [{ XCHPF: '', SERNP: '' }], LTAK: [{ TANUM: '0001012966', KQUIT: 'X' }] } });
+      tables: { MAKT: [], MARC: [{ XCHPF: '', SERNP: '' }], LTAK: [{ TANUM: '0001012966', KQUIT: 'X' }], T333: [{ NLTYP: '921', NLPLA: 'TRANSFER' }] } });
     const res = await new TrToAdapter({ rfc }).createTOFromTR({ tbnum: '1001839', qty: 6, existingToNumber: '1012966', status: '04' });
     expect(res).toMatchObject({ TransferOrder: '1012967', Status: '04', Quantity: 6 });
     expect(rfc.readTable).not.toHaveBeenCalledWith('LTAP', expect.anything(), expect.anything());

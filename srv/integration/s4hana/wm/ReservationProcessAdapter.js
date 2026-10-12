@@ -23,6 +23,11 @@ class ReservationProcessAdapter {
     this.rfc = options.rfc || new RfcClient();
   }
 
+  /** Same adapter bound to another RFC client (used to run a step inside one locked RFC session). */
+  withRfc(rfc) {
+    return new this.constructor({ rfc });
+  }
+
   /**
    * Helper to format dates to SAP format (YYYYMMDD)
    */

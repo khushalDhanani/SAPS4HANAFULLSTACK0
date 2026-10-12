@@ -6,6 +6,7 @@ const GoodsIssueAdapter = require('../../integration/s4hana/wm/GoodsIssueAdapter
 const { findUnconfirmedToItems } = require('../../integration/s4hana/wm/toState');
 const { STATUS, STEP_ERROR, ERROR_STATUSES, UNCONFIRMED_TO } = require('../../common/wmStatus');
 const { sapKey, sapKeyOpt } = require('../../integration/s4hana/sapKey');
+const { withReservationLock, isLockConflict } = require('../../integration/s4hana/wm/resLock');
 
 module.exports = class ReservationEntryService extends cds.ApplicationService {
   async init() {
@@ -285,10 +286,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const processId = data.ProcessId || track.ProcessId || cds.utils.uuid();
       if (track.ProcessId !== processId) await UPDATE(ReservationEntries).set({ ProcessId: processId }).where(key);
 
-      await adapter.checkAuthorization('M_MSEG_BWA', { ACTVT: '01', BWART: sapKey(sMvt, 'mvt') });
-      await adapter.checkAuthorization('M_MSEG_WWA', { ACTVT: '01', WERKS: sapKey(sPlant, 'plant') });
+      // SAP-side lock (feature flag, off by default); lock, authorization checks and posting share one RFC session.
+      const migoRes = await withReservationLock(adapter.rfc, { rsnum: sResNo, rspos: sResItem }, async (scopedRfc) => {
+      const gm = scopedRfc ? adapter.withRfc(scopedRfc) : adapter;
+      await gm.checkAuthorization('M_MSEG_BWA', { ACTVT: '01', BWART: sapKey(sMvt, 'mvt') });
+      await gm.checkAuthorization('M_MSEG_WWA', { ACTVT: '01', WERKS: sapKey(sPlant, 'plant') });
 
-      const migoRes = await adapter.postGoodsMovement({
+      return gm.postGoodsMovement({
         reservationNo: sResNo,
         reservationItem: sResItem,
         movementType: sMvt,
@@ -307,6 +311,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         serials: data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : (track.SerialNo ? [track.SerialNo] : [])),
         completeReservation: data.CompleteReservation === true,
         processId
+      });
       });
 
       await UPDATE(ReservationEntries).set({
@@ -383,6 +388,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         const updated = await SELECT.one.from(ReservationEntries).where(key);
         return updated || { ...key, MaterialDocument: migoRes.materialDocument, MaterialDocYear: migoRes.materialDocYear, Status_code: STATUS.GI_POSTED };
       } catch (err) {
+        if (isLockConflict(err)) throw err;
         // Rollback already executed by adapter; status 90 (GI error, retryable) and log
         await UPDATE(ReservationEntries).set({
           Status_code: STATUS.GI_ERROR,
@@ -469,10 +475,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       };
 
       try {
+        // SAP-side lock (feature flag, off by default) around the whole retried step; conflicts leave as 409.
+        await withReservationLock(adapter.rfc, { rsnum: sResNo, rspos: sResItem }, async (scopedRfc) => {
+        const stepAdapter = scopedRfc ? adapter.withRfc(scopedRfc) : adapter;
         if (requestedStep === 'LB01') {
           let trResult;
           try {
-            trResult = await adapter.createTransferRequirement({
+            trResult = await stepAdapter.createTransferRequirement({
               warehouseNumber: track.WarehouseNumber || await warehouseFor(track.Plant, track.StorageLocation, ''),
               wmMovementType: track.MovementType,
               movementType: track.MovementType,
@@ -513,14 +522,14 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           if (!toNo) {
             if (!track.TransferRequirement) return req.error(400, `Cannot create TO: no Transfer Requirement on reservation ${sResNo}/${sResItem}`);
             // Guard read from SAP: any unconfirmed TO item for this TR blocks another TO (L_TO_CREATE_TR works on the whole TR).
-            const pending = await findUnconfirmedToItems(adapter.rfc, wh(), track.TransferRequirement);
+            const pending = await findUnconfirmedToItems(stepAdapter.rfc, wh(), track.TransferRequirement);
             if (pending.length) {
               return req.error(400, `Unconfirmed Transfer Order ${pending[0].TANUM.replace(/^0+/, '')} exists for TR ${track.TransferRequirement.replace(/^0+/, '')}; confirm it before creating another TO`);
             }
-            await adapter.checkAuthorization('L_BWLVS', { LGNUM: wh(), BWLVS: sapKey(track.MovementType, 'mvt') });
+            await stepAdapter.checkAuthorization('L_BWLVS', { LGNUM: wh(), BWLVS: sapKey(track.MovementType, 'mvt') });
             let toResult;
             try {
-              toResult = await adapter.createTransferOrderFromTR({ warehouseNumber: wh(), trNumber: track.TransferRequirement });
+              toResult = await stepAdapter.createTransferOrderFromTR({ warehouseNumber: wh(), trNumber: track.TransferRequirement });
               toNo = toResult.toNumberRaw || String(toResult.toNumber).padStart(10, '0');
 
               await UPDATE(ReservationEntries).set({
@@ -543,8 +552,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
           // Real second call: Confirm TO
           try {
-            await adapter.checkAuthorization('L_LGNUM', { LGNUM: wh() });
-            await adapter.confirmTransferOrder({ warehouseNumber: wh(), toNumber: toNo });
+            await stepAdapter.checkAuthorization('L_LGNUM', { LGNUM: wh() });
+            await stepAdapter.confirmTransferOrder({ warehouseNumber: wh(), toNumber: toNo });
 
             await UPDATE(ReservationEntries).set({
               TransferOrder: toNo,
@@ -563,10 +572,15 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             await fail(STATUS.TO_CONFIRM_ERROR, 'LT12', `Confirmation failed for Transfer Order ${toNo}: ${confirmErr.message}`, processId);
             throw Object.assign(confirmErr, { handled: true });
           }
-        } else if (requestedStep === 'MIGO') {
+        }
+        });
+
+        if (requestedStep === 'MIGO') {
+          // postMigoForTrack takes its own lock (same flag); it must not run inside the step lock above.
           try {
             await postMigoForTrack(track, data, req, { sLogHandle, extId, subObject: 'PROCESS' });
           } catch (migoErr) {
+            if (isLockConflict(migoErr)) throw migoErr;
             await fail(STATUS.GI_ERROR, 'MIGO', `Goods movement failed: ${migoErr.message}`);
             throw Object.assign(migoErr, { handled: true });
           }
@@ -574,6 +588,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
         return await SELECT.one.from(ReservationEntries).where(key);
       } catch (err) {
+        if (isLockConflict(err)) throw err;
         // The failed step's own status (11/12/13/90) is already recorded; never overwrite it with another code.
         if (!err.handled) await fail(STEP_ERROR[requestedStep], requestedStep, `Retry ${requestedStep} failed: ${err.message}`);
         return await SELECT.one.from(ReservationEntries).where(key);

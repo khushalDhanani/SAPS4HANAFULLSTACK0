@@ -180,6 +180,12 @@ class S4Config {
     return this._requireString('warehouseNumber', ['CDS_S4_WAREHOUSE_NUMBER', 'S4_WAREHOUSE_NUMBER']);
   }
 
+  /** SAP-side reservation lock via Z_WM_RES_LOCK. OFF unless explicitly 'true'/'X'; never required. */
+  getResLockEnabled() {
+    const v = this._getRaw('resLockEnabled', ['CDS_S4_RES_LOCK_ENABLED', 'S4_RES_LOCK_ENABLED']);
+    return v === true || ['TRUE', 'X'].includes(String(v ?? '').trim().toUpperCase());
+  }
+
   /** Specific Shipping Points (e.g. ['1120', '1112', '1108', '1109']) */
   getShippingPoints() {
     return this._requireArray('shippingPoints', ['CDS_S4_SHIPPING_POINTS', 'S4_SHIPPING_POINTS']);

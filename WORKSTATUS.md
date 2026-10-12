@@ -5,6 +5,12 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Phase A/B/C: read-only discovery, T333 lookup + flagged SAP lock, sandbox matrix tool (2026-10-12, 19:00–21:10 IST):**
+  - **Phase A (CONFIRMED, every read succeeded, no "NOT READ"):** `tools/sandbox-discovery.js` → `docs/abap/system-metadata.md` section "Discovery". W01 = 24 plant/SLoc pairs (plants 1120, 1600). T333 W01: 201→911, 241→913 (dynamic bin), 311→921/TRANSFER, 301→920/TRANSFER, VLTYP blank. IM→WM link found by DDIC search: T156S (`RBLVS`) → T321; W01 has T321 rows only for RBLVS 311 (`TBFKZ` blank, `TAFKZ` A) → no automatic TR from IM goods movements; the app creates staging TRs itself. T156-`RSTYP` (account assignment of reservation): 301 = U, reservation-capable (five live 301 reservations). Test data: batch material 8900000007 (1120/CS01), serial-managed 8000009700 (1120/CS01, 1 NOS) but no serial numbers in EQUI/EQBS; cost centers/assets proven by recent RKPF rows (1011201601, 400092) and CSKS/ANLA of company code 1000; receiving targets from T320/T001L and MARC+MARD. Users without SAP_ALL exist (ZIETA_PM, ZIETA_FI, KISHANSHIYAL …) but no credentials → negative authorization test **not verified**.
+  - **Phase B:** B1 T333 destination lookup in `TrToAdapter.createTOFromTR` (only when the TR header has no NLTYP; blank NLPLA allowed = dynamic bin; no row → 400). B2 `srv/integration/s4hana/wm/resLock.js` + `s4Config.getResLockEnabled()` (OFF by default, fails closed) + `withRfc()` on both adapters; lock/step/unlock on one RFC session; wired into tr-to handler (TO step, goods movement) and reservation-entry (`postMigoForTrack`, `retryStep`); lock conflicts leave as HTTP 409 before any tracking update. `Z_WM_RES_LOCK` is still only a proposal (not deployed) — UNSURE until activated; one-session collision with the step FMs' own EMRESB enqueue untested.
+  - **Phase C:** `tools/sandbox-matrix.js` (DRY RUN default, `--execute` for live writes, `--mvt`, `--case`, `--base`, `--out`), test data read at run time from the discovery readers, 20 cases (4 movement types × full / partial+second TO / batch / serial / gi-failure+retry+second retry), read-backs of RESB/LTBK/LTBP/LTAK/LTAP/LQUA/MATDOC after every step, PASS/FAIL with raw values, writes `docs/abap/sandbox-results.md`. Dry run executed: 16 cases planned, 4 serial cases SKIPPED (no serial numbers in stock). **`--execute` was not run.**
+  - **Validation:** `npx jest test/unit/wm` → 65 suites, 1,338/1,338 PASS (new `resLock.test.js` 4, `processFixes.test.js` +1); `npx cds compile srv --to sql` OK; eslint 0 errors on touched files; `git diff --check` clean.
+
 - **Sandbox follow-up request (2026-10-12, 18:10–18:40 IST) — Task 1 BLOCKED, Tasks 2–5 done:**
   - **Task 1 (fix failed sandbox cases): BLOCKED.** The request still contained the placeholder text `[For each case ... Paste raw values.]` instead of results; no case, error text or table rows were provided, so no root cause could be derived and no code was changed for it.
   - **Task 2 (blank storage types):** read-only reads added to `docs/abap/system-metadata.md` §21–§24: live source of `Z_WM_TO_CREATE_FROM_TR` (via `RPY_FUNCTIONMODULE_READ_NEW`, RFC-enabled) — blank item `NLTYP`/`NLPLA` are filled from the LTBK header, `VLTYP`/`VLPLA` pass through, T333 is not read, then `L_TO_CREATE_TR` (CONFIRMED). T333 for W01 (CONFIRMED): 201 → NLTYP 911; 241 → 913; 311 → 921/TRANSFER; 301 → 920/TRANSFER; VLTYP/VLPLA blank for all four. **Proposal (a)** recorded: when the TR header carries no NLTYP/NLPLA, read T333 by (LGNUM, BWLVS) — a customizing lookup, not a default; no code change until a sandbox result shows blank destinations fail. No change request for the FM is needed for the destination; one would only be needed if a per-item `VLTYP` default were wanted.
@@ -669,7 +675,10 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (2026-10-12, 18:40 IST):** paste the sandbox results (case | pass/fail | error text | RESB/LTBK/LTBP/LTAK/LTAP/LQUA/MATDOC rows) so Task 1 can be done; if a blank-destination TO failed, implement proposal (a) (T333 lookup by LGNUM+BWLVS). Provide a non-SAP_ALL RFC user for the negative authorization test. Activate `Z_WM_RES_LOCK` in a development system before any lock test.
+- **Next Recommended Action (2026-10-12, 22:10 IST):** (1) re-run `node tools/sandbox-matrix.js --mvt 311 --case full --execute`; (2) optionally finish reservation 525874 by posting its goods movement to a non-HU location (tr-to `postMigoGoodsMovement` with `ReceivingStorageLocation` HS01, TransferOrder 1037289) — a live write, user's decision; (3) leftovers from the earlier attempt: reservation 525872 / TR 1000800 (not removable by TO).
+- **Previous (21:50 IST):** re-run `node tools/sandbox-matrix.js --mvt 311 --case full --execute` (pick now 8900000004 from 902, removable per T334T); open leftovers in SAP from the failed attempts: reservation 525872 / TR 1000800 (material 1000000204, not removable by TO) — decide manually whether to delete them in SAP.
+- **Previous (21:10 IST):** start the CAP server (`npm start`), then run `node tools/sandbox-matrix.js --mvt 311 --case full --execute`, review `docs/abap/sandbox-results.md`, continue with 311 partial, 301 full, 201 full, 241 full, batch cases, gi-failure-retry cases; serial cases need serial numbers in stock first. Keep `S4_RES_LOCK_ENABLED` off until `Z_WM_RES_LOCK` is activated and the one-session collision test passes.
+- **Previous recommended action (18:40 IST):** paste the sandbox results (case | pass/fail | error text | RESB/LTBK/LTBP/LTAK/LTAP/LQUA/MATDOC rows) so Task 1 can be done; if a blank-destination TO failed, implement proposal (a) (T333 lookup by LGNUM+BWLVS). Provide a non-SAP_ALL RFC user for the negative authorization test. Activate `Z_WM_RES_LOCK` in a development system before any lock test.
 - **Earlier recommended action:** run the sandbox matrix from the 13-fix report on Client 220 (one movement type at a time, starting with 311 full pick), check RESB/LTBK/LTBP/LTAK/LTAP/LQUA/MATDOC after each step, then run the status-99→90 migration statement after backup.
 - **Previous recommended action:** **Runs 1, 2, 3, and 4 are 100% CONFIRMED and Verified Live on SAP S/4HANA (Client 220)**:
   - **Run 1 (Movement 201 — GI to Cost Center)**: RSNUM `0000525278`, TBNUM `0001000757`, TANUM `0001037270`, MATDOC `4900050142/2026`.
@@ -681,6 +690,55 @@ The previous log was removed in commit `b741337`; this file restarts it.
   - Browser verification of UI5 Reservation Entry Cockpit with the verified movement types (201, 241, 311, 301).
 
 ## Changes Log
+
+### 2026-10-12 22:10 IST — Sandbox run 311/full (--execute, third attempt): TR + TO confirmed live, goods movement refused (HU-managed receiving location); pick corrected
+
+- **Sandbox result (CONFIRMED, docs/abap/sandbox-results.md 07:51 UTC):** reservation **0000525874**, TR **0001000801** (LTBK NLTYP 921/TRANSFER from T333), TO **0001037289** created and confirmed via `Z_WM_TO_CREATE_FROM_TR` + `L_TO_CONFIRM` — LTAK KQUIT X, LTAP 902/0000000000 → 921/TRANSFER PQUIT X, LTBP TAMEN 1.000 ELIKZ X, LTBK STATU E, LQUA 921/TRANSFER 7.000 (was 6.000): 15 checks PASS. `postMigoGoodsMovement` → Status 90, SAP: `BAPI_GOODSMVT_CREATE failed: Transfer posting with WM only possible if both storage locs subject to HU` (4 checks FAIL). Tracking row 525874/0001 is at 90 with ProcessId 29cc776a-…; 1 KG remains staged in 921/TRANSFER.
+- **Root cause (read from system, system-metadata §26):** `T001L-XHUPF` ("Handling unit requirement") is X for CS02 (partner HU01) and blank for CS01; the pick chose CS02 because it is WM-managed and MARD-extended, without comparing the HU flag.
+- **Fix:** `tools/sandbox-discovery.js` — `huFlag()` reader; 311 and 301 receiving locations must carry the same `XHUPF` as the issuing one. `tools/sandbox-matrix.js` — document checks are skipped (not vacuously PASS) when no MATDOC rows exist.
+- **Proven live by this run (no longer UNSURE):** blank item/header storage types → SAP's stock removal strategy chose 902; destination from the T333 lookup (921/TRANSFER); `AUTHORITY_CHECK` L_BWLVS / L_LGNUM pass for the RFC user; ProcessId carried on the TO step.
+- **Validation:** dry runs 311/301 show the corrected picks; eslint 0 errors; `git diff --check` clean. Live run to be repeated by the user; the open goods movement of 525874 can be retried with a non-HU location (see Next Steps).
+
+### 2026-10-12 21:50 IST — Sandbox run 311/full (--execute, second attempt): reservation + TR created, TO failed on stock-removal customizing; pick corrected
+
+- **Sandbox result (CONFIRMED, docs/abap/sandbox-results.md 07:45 UTC):** `createReservationEntry` → reservation **0000525872** / TR **0001000800** (material 1000000204, 1600/CS01 → CS02, LTBK NLTYP 921/TRANSFER from T333, STATU blank, RESB BDMNG 1.000). `createTOFromTR` → HTTP 400 from SAP: `Data for storage type search is not defined (A RM1  )`. No TO, no material document. Reservation 525872 and TR 1000800 remain open in SAP (no deletion performed).
+- **Root cause (read from system, system-metadata §25):** T334T (stock removal search, `KZEAR = 'A'`) in W01 has rows only for storage type indicator `LGTKZ` blank and `005`; material 1000000204 has `MLGN-LTKZA = RM1`, for which no `A` row exists, so `L_TO_CREATE_TR` cannot determine a source bin. The materials of the verified runs (8900000004, 8900000007) have `LTKZA` blank → search list `***` (all types), which is why they could be removed from 902. Customizing was not changed (no SPRO).
+- **Fix:** `tools/sandbox-discovery.js` — `removalSearch(wh)` (T334T `A` rows → searchable types per indicator) and `mlgn(matnr)` readers; `pickTestData` offers only quants whose material indicator has a T334T `A` row and whose storage type is in that row's list (`***` = any); staging destinations (T333 NLTYP of the four movement types) and the repo's not-ready types stay excluded; candidates ordered by free quantity. Dry-run picks now: 311/301 → 8900000004 (1120/CS01, 902, LTKZA blank → `***`), 201/241 → 8900000007 (1120/CS01, 902).
+- **Validation:** dry runs `--mvt 311/301/201/241 --case full`; eslint 0 errors; `git diff --check` clean. Live run to be repeated by the user.
+
+### 2026-10-12 21:30 IST — Sandbox run 311/full (--execute) stopped at step 1; test-data pick for 311 corrected
+
+- **Sandbox result (CONFIRMED, docs/abap/sandbox-results.md 07:42 UTC):** `createReservationEntry` returned HTTP 400 "Material 8900000007 is not extended to receiving storage location CIS1 in plant 1120. Choose one of: CS01." — the adapter's MARD preflight rejected the call, so **no SAP document was created**.
+- **Root cause:** `pickTestData` (311) took the first other T320 storage location of the plant without checking the material's MARD extension.
+- **Fix:** `tools/sandbox-discovery.js` — 311 now reads MARD of each candidate material (same plant), prefers a WM-managed (T320) receiving location across candidates, falls back to any extended one, and skips with a reason when none exists. The dry run now picks a material extended to a second WM storage location.
+- **Also corrected in the same pass:** interim storage types are now every VLTYP/NLTYP/RLTYP named by any T333 row of the warehouse (19 types for W01 incl. 902 and 922, read live) plus the repo's not-ready types, so quants in GR / posting-change zones are no longer offered; the 311/301 candidate scan covers up to 60 materials. Dry-run picks now: 311 → material 1000000204, 1600/CS01 (RM1 bin) → CS02 (WM-managed, MARD + T320); 301 → 1000000579, 1600/CS01 → 1120/PWIP (MARC + MARD).
+- **Validation:** `node tools/sandbox-matrix.js --mvt 311 --case full` and `--mvt 301 --case full` (dry runs) show the corrected picks; eslint 0 errors; `git diff --check` clean. Live run still to be repeated by the user.
+
+### 2026-10-12 19:20 IST — Phase A: tools/sandbox-discovery.js and the "Discovery" section (read-only)
+
+- **Files:** `tools/sandbox-discovery.js` (new: exported readers + CLI), `docs/abap/system-metadata.md` (section "Discovery", ~700 lines incl. summary).
+- **Reads (RFC_READ_TABLE only):** T320, T333 (all 41 DD03L fields), DD02T/DD03L search for the IM→WM mapping table, T156S, T321 (+DD04T texts for TBFKZ/TAFKZ/UBFKZ), T156 fields with "reserv" text + live rows, RKPF/RESB/LTBK/LTBP/LTAK/LTAP/MATDOC chains of the last 30 days per movement type, LQUA+MARC+MARD stock, MARC SERNP + LQUA serial candidates, T001K, CSKS, ANLA, T001L, USR02 (no password columns) + UST04.
+- **Iterations:** the T321 OR-list had to be split into one WHERE line per value (SAP "suspicious WHERE condition"); UST04 read without a row cap (a 2,000-row cap hid the RFC user's SAP_ALL); 311/301 staging TRs carry no RSNUM, so the chain shows same-day/material/quantity candidates with blank RSNUM and the app's WM movement type, labelled as candidates.
+- **Result:** no NOT READ entry. Zero writes.
+
+### 2026-10-12 19:50 IST — Phase B1: T333 destination lookup
+
+- **Files:** `srv/integration/s4hana/wm/TrToAdapter.js` (`createTOFromTR`), `test/unit/wm/processFixes.test.js` (Fix 3 tests rewritten, +1; Fix 5 fixture gets a T333 row).
+- **Behaviour:** only when the TR header has no `NLTYP`: `readTable('T333', ['NLTYP','NLPLA'], LGNUM + BWLVS, 1)`; no row or blank `NLTYP` → 400 "No destination storage type in T333 …"; blank `NLPLA` accepted (dynamic bin, CONFIRMED for 201/241). Header with destination → T333 not read. Field names from system-metadata §24.
+- **Validation:** `npx jest test/unit/wm/processFixes.test.js` PASS.
+
+### 2026-10-12 20:15 IST — Phase B2: Z_WM_RES_LOCK caller behind an OFF-by-default flag
+
+- **Files:** `srv/integration/s4hana/wm/resLock.js` (new), `srv/common/s4Config.js` (`getResLockEnabled`), `.env.example` (`S4_RES_LOCK_ENABLED=false`, duplicate warehouse line removed), `TrToAdapter.js` / `ReservationProcessAdapter.js` (`withRfc`), `srv/wm/tr-to/handlers/trTo.handler.js`, `srv/wm/reservation-entry/service.js`, `test/unit/wm/resLock.test.js` (new, 4 tests).
+- **Behaviour:** flag off → `fn(undefined)`, no RFC call (injected mocks untouched). Flag on → one `rfc.session`: `Z_WM_RES_LOCK` L → step FMs via a scoped rfc (same `call`) → U in `finally` (unlock failure only logged). Refused lock → 409 `RES_LOCKED` before any step; handlers/service rethrow it before any tracking update. Parameter names only from `docs/abap/z_wm_res_lock.fugr.abap` (FM not deployed → UNSURE).
+- **Validation:** `npx jest test/unit/wm` → 65 suites, 1,338 PASS; eslint 0 errors.
+
+### 2026-10-12 21:00 IST — Phase C: tools/sandbox-matrix.js (dry run executed, no live write)
+
+- **Files:** `tools/sandbox-matrix.js` (new), `docs/abap/sandbox-results.md` (DRY RUN output), `tools/sandbox-discovery.js` (`pickTestData`: 301 needs a material extended to a second plant via MARC+MARD; proven RKPF account assignments preferred over CSKS/ANLA; `mardPlant` reader).
+- **Behaviour:** DRY RUN default prints every HTTP call and payload with the live-read test data; `--execute` sends them; per step read-backs of RESB, LTBK, LTBP, LTAK, LTAP, LQUA, MATDOC; checks (RESB ENMNG/KZEAR, LTBK STATU, LTBP TAMEN, LTAK KQUIT, LTAP PQUIT + destination vs TR header/T333, LQUA at destination type, MATDOC SGTXT = ProcessId / BWART / RSPOS / CANCELLED, retry: same document, no new rows) printed as PASS/FAIL with raw values; summary table; results file written.
+- **Dry run result:** 16 cases DRY RUN, 4 serial cases SKIPPED (serial-managed material 8000009700 has no serial numbers in EQUI/EQBS; UNSURE whether profile ZSN1 keeps stock serials elsewhere). `--execute` NOT run.
+- **Validation:** eslint 0 errors; `git diff --check` clean.
 
 ### 2026-10-12 18:10 IST — Task 2: read-only reads for the blank-storage-type question (no code change)
 

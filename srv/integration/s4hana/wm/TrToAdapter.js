@@ -44,6 +44,11 @@ class TrToAdapter {
     this.rfc = options.rfc || new RfcClient();
   }
 
+  /** Same adapter bound to another RFC client (used to run a step inside one locked RFC session). */
+  withRfc(rfc) {
+    return new this.constructor({ rfc });
+  }
+
   async _rfc(fn, context) {
     try {
       return await fn();
@@ -559,15 +564,30 @@ class TrToAdapter {
       // TODO: Z_WM_TO_CREATE_FROM_TR supports IV_SQUIT = 'X' for immediate confirmation in one call, but chained 2-call architecture is enforced here.
       LOG.info(`Creating TO from TR ${tr.Tbnum} item ${item.Tbpos}, qty ${quantity} ${unit || item.Unit}`);
 
-      // Storage types/bins come from the TR header or the caller; blank lets SAP's search strategy decide.
+      // Destination: TR header, else the warehouse movement-type customizing T333 (NLTYP/NLPLA, read from the
+      // system: docs/abap/system-metadata.md §24). Never a literal default; no T333 row is an error.
+      let nltyp = tr.Nltyp || '';
+      let nlpla = tr.Nlpla || '';
+      if (!nltyp) {
+        const t333 = await this._rfc(
+          () => this.rfc.readTable('T333', ['NLTYP', 'NLPLA'], [`LGNUM = '${wh}'`, `AND BWLVS = '${sapKey(tr.Bwlvs, 'mvt')}'`], 1),
+          `Read T333 for warehouse ${wh} movement type ${tr.Bwlvs}`
+        );
+        nltyp = String(t333?.[0]?.NLTYP || '').trim();
+        nlpla = String(t333?.[0]?.NLPLA || '').trim();
+        if (!nltyp) {
+          throw httpError(400, `No destination storage type in T333 for warehouse ${wh}, WM movement type ${tr.Bwlvs}; maintain T333 or the Transfer Requirement`);
+        }
+      }
+      // Source type/bin: TR header or caller only; blank lets SAP's stock removal strategy decide.
       const itItems = [{
         TBPOS: item.Tbpos,
         ANFME: quantity.toFixed(3),
         ALTME: unit || item.Unit,
         CHARG: selectedBatch,
         LETYP: '',
-        NLTYP: tr.Nltyp || '',
-        NLPLA: tr.Nlpla || '',
+        NLTYP: nltyp,
+        NLPLA: nlpla,
         VLTYP: tr.Vltyp || '',
         VLPLA: tr.Vlpla || '',
         VLENR: storageUnit ? sapKey(storageUnit, 'lenum') : ''
