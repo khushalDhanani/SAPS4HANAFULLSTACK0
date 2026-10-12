@@ -661,6 +661,20 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-12 11:45 IST — /wm/reservation-entry/{res}/{item}: detail 404 for reservations created outside this app; added a live SAP fallback
+
+- **Trigger:** user opened `/wm/reservation-entry/525869/0001` → `GET …/ReservationEntries(ReservationNo='525869',ReservationItem='0001')?$expand=Status,Logs` **404 (Not Found)**. This is the follow-up flagged in the 11:30 entry: the open-reservations worklist lists all SAP reservations, but the detail page read only the local ZRES_TRACK table.
+- **Root cause:** `ReservationEntryService.getEntry` does a keyed OData read of `ReservationEntries` (projection on ZRES_TRACK). Reservation 525869 was created outside this app, so there is no tracked row → 404.
+- **Fix (live fallback, low-risk — no override of the entity READ/$expand):**
+  - `srv/wm/reservation-entry/service.cds` — new `@readonly function getReservationDetail(ReservationNo, ReservationItem) returns ReservationDetailRow` (+ the flat row type).
+  - `srv/wm/reservation-entry/service.js` — `fetchSapReservation(resNo, resItem)` reads `RKPF` (BWART, KOSTL, ANLN1/2, UMWRK, UMLGO) + `RESB` (MATNR, WERKS, LGORT, BDMNG, MEINS, CHARG, KZEAR) and synthesizes the detail row (Status `05` if `KZEAR='X'` else `01` = "Open (not tracked in this app)"); the `getReservationDetail` handler returns it, or `req.error(404)` if the item isn't in SAP.
+  - `app/fiori-app/.../service/ReservationEntryService.js` — new `getReservationDetail(resNo, item)` function-import call.
+  - `app/fiori-app/.../controller/ReservationEntryDetail.controller.js` — `_loadDetail` now returns its chain and, when the local `getEntry` rejects (untracked → 404), falls back to `getReservationDetail` and defaults `Logs` to `[]`. Tracked reservations still load from ZRES_TRACK exactly as before (with Status/Logs expand).
+- **Tests (+3):** `reservationEntryService.test.js` — `getReservationDetail` reads RKPF/RESB live (mocked `RfcClient.prototype.readTable`) and 404s when the item is absent. `reservationEntryUi.test.js` — `_loadDetail` falls back to `getReservationDetail` on a local-read rejection and populates the detail model with `Logs: []`.
+- **Validation (2026-10-12 11:45 IST):** `npx jest test/unit/wm` → **63 suites, 1296/1296 PASS** (was 1293 + 3); `npx cds compile srv` → OK; `cd app/fiori-app && npx ui5lint` → no findings; `git diff --check` → clean. **Live read-only proof:** `GET …/getReservationDetail(ReservationNo='525869',ReservationItem='0001')` on the running server → 200 with `{MovementType:'311', Material:'8000009753', Plant:'1120', StorageLocation:'HS01', ReceivingPlant:'1120', ReceivingStorageLocation:'CIS1', Quantity:1, Unit:'NOS', Status_code:'01'}` (was 404).
+- **Known limitations (follow-up):** (1) the live fallback leaves `MaterialName` blank (no MAKT read, kept minimal) — the detail shows the material number only. (2) The detail page's **Retry** action operates on ZRES_TRACK; pressing it for an untracked reservation will error (no local record) — the page loads and displays fine, but retry/processing for untracked reservations is out of scope here.
+- **Result:** PASS — the reservation detail page now opens for reservations created outside this app (live from SAP) instead of 404.
+
 ### 2026-10-12 11:30 IST — /wm/reservation-entry: list now shows ALL open reservations live from SAP (was app-tracked only)
 
 - **Trigger:** user — on `/wm/reservation-entry`, show all open reservations. Decisions (via clarifying prompt): **replace** the list with a live SAP open-reservations worklist; **row click → reservation detail page**.

@@ -16,6 +16,7 @@
 const cds = require('@sap/cds');
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
+const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
 const { POST, GET } = cds.test(__dirname + '/../../../');
 const { SELECT, DELETE } = cds.ql;
@@ -464,6 +465,45 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       await expect(
         GET("/odata/v4/reservation-entry/getOpenReservations(plant='',movementType='')", authClerk)
       ).rejects.toMatchObject({ response: { status: 502 } });
+    });
+  });
+
+  describe('getReservationDetail (live detail for untracked reservations)', () => {
+    let rtSpy;
+    afterEach(() => rtSpy?.mockRestore());
+
+    test('reads an untracked reservation live from SAP RKPF/RESB', async () => {
+      rtSpy = jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(async (table) => {
+        if (table === 'RKPF') return [{ BWART: '311', KOSTL: '', ANLN1: '', ANLN2: '', UMWRK: '1120', UMLGO: 'CIS1' }];
+        if (table === 'RESB') return [{ MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01', BDMNG: '1.000', MEINS: 'NOS', CHARG: '', KZEAR: '' }];
+        return [];
+      });
+
+      const { status, data } = await GET(
+        "/odata/v4/reservation-entry/getReservationDetail(ReservationNo='525869',ReservationItem='0001')",
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(data).toMatchObject({
+        ReservationNo: '525869',
+        ReservationItem: '0001',
+        MovementType: '311',
+        Material: '8000009753',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        ReceivingStorageLocation: 'CIS1',
+        Quantity: 1,
+        Unit: 'NOS',
+        Status_code: '01'
+      });
+    });
+
+    test('returns 404 when the reservation item does not exist in SAP', async () => {
+      rtSpy = jest.spyOn(RfcClient.prototype, 'readTable').mockResolvedValue([]);
+      await expect(
+        GET("/odata/v4/reservation-entry/getReservationDetail(ReservationNo='999999',ReservationItem='0001')", authClerk)
+      ).rejects.toMatchObject({ response: { status: 404 } });
     });
   });
 });

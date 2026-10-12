@@ -87,9 +87,17 @@ sap.ui.define([
             this._sCurrentResItem = sResItem;
             this._oViewModel.setProperty("/busy", true);
 
-            this._oService.getEntry(sResNo, sResItem).then(function (oData) {
+            return this._oService.getEntry(sResNo, sResItem).then(function (oData) {
                 that._oDetailModel.setData(oData || {});
                 that._oViewModel.setProperty("/busy", false);
+            }).catch(function () {
+                // Not tracked locally (reservation created outside this app) -> read it live from SAP.
+                return that._oService.getReservationDetail(sResNo, sResItem).then(function (oLive) {
+                    oLive = oLive || {};
+                    if (!oLive.Logs) { oLive.Logs = []; }
+                    that._oDetailModel.setData(oLive);
+                    that._oViewModel.setProperty("/busy", false);
+                });
             }).catch(function (err) {
                 that._oViewModel.setProperty("/busy", false);
                 that._oViewModel.setProperty("/errorMessage", err.message || "Failed to load reservation");

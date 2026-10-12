@@ -57,6 +57,15 @@ sap.ui.define([
             return ODataClient.get(sUrl);
         },
 
+        // Live detail from SAP for a reservation not tracked locally (created outside this app).
+        getReservationDetail: function (sResNo, sItem) {
+            const sUrl = SERVICE_URL + "/getReservationDetail(ReservationNo='" + encodeURIComponent(sResNo) +
+                "',ReservationItem='" + encodeURIComponent(sItem || "0001") + "')";
+            return ODataClient.get(sUrl).then(function (data) {
+                return (data && data.value) ? data.value : data;
+            });
+        },
+
         getStatuses: function () {
             const sUrl = SERVICE_URL + "/ReservationStatuses";
             return ODataClient.get(sUrl).then(function (data) {

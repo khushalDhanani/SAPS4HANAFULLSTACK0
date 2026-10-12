@@ -97,4 +97,39 @@ service ReservationEntryService {
         plant        : String(4),
         movementType : String(3)
     ) returns array of OpenReservationRow;
+
+    type ReservationDetailRow {
+        ReservationNo            : String(10);
+        ReservationItem          : String(4);
+        MovementType             : String(3);
+        Material                 : String(40);
+        MaterialName             : String(80);
+        Plant                    : String(4);
+        StorageLocation          : String(4);
+        ReceivingPlant           : String(4);
+        ReceivingStorageLocation : String(4);
+        Quantity                 : Decimal(13,3);
+        Unit                     : String(3);
+        Batch                    : String(10);
+        CostCenter               : String(10);
+        AssetNo                  : String(12);
+        SubNumber                : String(4);
+        WarehouseNumber          : String(3);
+        Status_code              : String(2);
+        StatusText               : String(40);
+        TransferRequirement      : String(10);
+        TransferOrder            : String(10);
+        MaterialDocument         : String(10);
+        MaterialDocYear          : String(4);
+        ErrorMessage             : String(255);
+        ExternalId               : String(25);
+        LogHandle                : String(40);
+    }
+
+    // Live detail for a reservation not tracked locally (created outside this app): read from SAP RKPF/RESB.
+    @readonly
+    function getReservationDetail(
+        ReservationNo   : String(10),
+        ReservationItem : String(4)
+    ) returns ReservationDetailRow;
 }

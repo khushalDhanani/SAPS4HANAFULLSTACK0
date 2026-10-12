@@ -818,6 +818,61 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         .orderBy('createdAt desc');
     });
 
+    // Live detail for a reservation with no local ZRES_TRACK row (created outside this app): read RKPF/RESB.
+    const fetchSapReservation = async (resNo, resItem) => {
+      if (!adapter.rfc) return null;
+      const strip = (v) => String(v || '').replace(/^0+(?=\d)/, '');
+      const s4Rsnum = String(resNo).padStart(10, '0');
+      const s4Rspos = String(resItem || '0001').padStart(4, '0');
+      try {
+        const [rkpf, resb] = await Promise.all([
+          adapter.rfc.readTable('RKPF', ['BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO'], [`RSNUM = '${s4Rsnum}'`], 1),
+          adapter.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS', 'CHARG', 'KZEAR'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
+        ]);
+        const h = rkpf && rkpf[0];
+        const i = resb && resb[0];
+        if (!i) return null;
+        const closed = String(i.KZEAR || '').trim() === 'X';
+        return {
+          ReservationNo: strip(resNo),
+          ReservationItem: s4Rspos,
+          MovementType: String((h && h.BWART) || '').trim(),
+          Material: strip(i.MATNR),
+          MaterialName: '',
+          Plant: String(i.WERKS || '').trim(),
+          StorageLocation: String(i.LGORT || '').trim(),
+          ReceivingPlant: String((h && h.UMWRK) || '').trim(),
+          ReceivingStorageLocation: String((h && h.UMLGO) || '').trim(),
+          Quantity: Number(i.BDMNG) || 0,
+          Unit: String(i.MEINS || '').trim(),
+          Batch: String(i.CHARG || '').trim(),
+          CostCenter: String((h && h.KOSTL) || '').trim(),
+          AssetNo: strip((h && h.ANLN1) || ''),
+          SubNumber: String((h && h.ANLN2) || '').trim(),
+          WarehouseNumber: 'W01',
+          Status_code: closed ? '05' : '01',
+          StatusText: closed ? 'Goods Issue Posted' : 'Open (not tracked in this app)',
+          TransferRequirement: '',
+          TransferOrder: '',
+          MaterialDocument: '',
+          MaterialDocYear: '',
+          ErrorMessage: '',
+          ExternalId: `${strip(resNo)}/${s4Rspos}`,
+          LogHandle: ''
+        };
+      } catch (_e) {
+        return null;
+      }
+    };
+
+    this.on('getReservationDetail', async (req) => {
+      const { ReservationNo, ReservationItem = '0001' } = req.data || {};
+      if (!ReservationNo) return req.error(400, 'ReservationNo is mandatory');
+      const live = await fetchSapReservation(ReservationNo, ReservationItem);
+      if (!live) return req.error(404, `Reservation ${ReservationNo}/${ReservationItem} not found in SAP`);
+      return live;
+    });
+
     // All open reservations, read live from SAP S/4HANA (reuses the proven open-reservations reader).
     this.on('getOpenReservations', async (req) => {
       const plant = String(req.data.plant || '').trim();

@@ -509,6 +509,28 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             await Promise.resolve();
             expect(detailSubject._loadDetail).toHaveBeenCalledWith('0000001001', '0001');
         });
+
+        it('_loadDetail falls back to a live SAP read when the reservation is not tracked locally', async () => {
+            const serviceMock = {
+                getEntry: jest.fn().mockRejectedValue({ message: 'Not Found' }),
+                getReservationDetail: jest.fn().mockResolvedValue({
+                    ReservationNo: '525869', ReservationItem: '0001', MovementType: '311',
+                    Material: '8000009753', Plant: '1120', StorageLocation: 'HS01',
+                    Status_code: '01', StatusText: 'Open (not tracked in this app)'
+                })
+            };
+            const detailSubject = createDetailSubject(serviceMock);
+
+            await detailSubject._loadDetail('525869', '0001');
+
+            expect(serviceMock.getEntry).toHaveBeenCalledWith('525869', '0001');
+            expect(serviceMock.getReservationDetail).toHaveBeenCalledWith('525869', '0001');
+            const oData = detailSubject._oDetailModel.getData();
+            expect(oData.ReservationNo).toBe('525869');
+            expect(oData.Material).toBe('8000009753');
+            expect(oData.Logs).toEqual([]);
+            expect(detailSubject._oViewModel.getProperty('/busy')).toBe(false);
+        });
     });
 
     describe('ValueHelp & Selection Options for Material, Plant, and Storage Location', () => {
