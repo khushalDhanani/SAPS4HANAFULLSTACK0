@@ -5,6 +5,14 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Sandbox follow-up request (2026-10-12, 18:10–18:40 IST) — Task 1 BLOCKED, Tasks 2–5 done:**
+  - **Task 1 (fix failed sandbox cases): BLOCKED.** The request still contained the placeholder text `[For each case ... Paste raw values.]` instead of results; no case, error text or table rows were provided, so no root cause could be derived and no code was changed for it.
+  - **Task 2 (blank storage types):** read-only reads added to `docs/abap/system-metadata.md` §21–§24: live source of `Z_WM_TO_CREATE_FROM_TR` (via `RPY_FUNCTIONMODULE_READ_NEW`, RFC-enabled) — blank item `NLTYP`/`NLPLA` are filled from the LTBK header, `VLTYP`/`VLPLA` pass through, T333 is not read, then `L_TO_CREATE_TR` (CONFIRMED). T333 for W01 (CONFIRMED): 201 → NLTYP 911; 241 → 913; 311 → 921/TRANSFER; 301 → 920/TRANSFER; VLTYP/VLPLA blank for all four. **Proposal (a)** recorded: when the TR header carries no NLTYP/NLPLA, read T333 by (LGNUM, BWLVS) — a customizing lookup, not a default; no code change until a sandbox result shows blank destinations fail. No change request for the FM is needed for the destination; one would only be needed if a per-item `VLTYP` default were wanted.
+  - **Task 3 (SAP-side lock):** `docs/abap/z_wm_res_lock.fugr.abap` — proposed RFC wrapper `Z_WM_RES_LOCK` around `ENQUEUE_EMRESB`/`DEQUEUE_EMRESB`, parameters taken from the interfaces read in §21. **Not deployed, not activated, not tested**; lock scope bound to the RFC session (`_SCOPE = '1'`), so the Node layer must lock/step/unlock on one `RfcClient.session`.
+  - **Task 4 (negative authorization test):** **not verified** — no non-SAP_ALL user was provided.
+  - **Task 5:** `srv/integration/s4hana/wm/ReservationTrackAdapter.js` removed (grep over srv/app/db/test/tools/docs/config: only its own file and its test block referenced it); the test block in `test/unit/wm/reservationTrack.test.js` removed.
+  - **Validation:** `npx jest test/unit/wm --silent` → 64 suites, 1,333/1,333 PASS (3 adapter tests removed); `git diff --check` clean; no live SAP write.
+
 - **13-fix remediation of the reservation → TR → TO → confirm → goods-movement process (2026-10-12, 14:30–17:40 IST):**
   - **Source of truth:** the JS adapter layer (`srv/integration/s4hana/wm/TrToAdapter.js`, `ReservationProcessAdapter.js`, handlers `srv/wm/tr-to/handlers/trTo.handler.js`, `srv/wm/reservation-entry/service.js`) owns the process; `docs/abap/zcl_res_process*.abap` is a mirror nothing in `srv/` calls (CONFIRMED by grep). Status codes come from one module `srv/common/wmStatus.js` (01, 11, 02, 12, 03, 13, 04, 90, 05, 99); the ABAP constants carry identical values and cite that file (asserted by a mock test).
   - **Step 0 (read-only, CONFIRMED from system):** `tools/read-system-metadata.js` → `docs/abap/system-metadata.md` §9–§20: FM interfaces (`Z_WM_TO_CREATE_FROM_TR`, `L_TO_CONFIRM`, `AUTHORITY_CHECK`), LTBK/LTBP/LTAP/LTAK fields, LTBK-STATU domain (`E`, `T`), MARC-XCHPF/SERNP, text lengths (BKTXT 25, ITEM_TEXT/SGTXT 50), MATDOC `CANCELLED`/`REVERSAL_MOVEMENT`, TOBJ auth objects, TFDIR FMODE. No read failed ("NOT READ" nowhere needed). Key facts: LTAP has **no TBNUM** (TR number is on LTAK), `AUTHORITY_CHECK` is RFC-enabled and always raises (`USER_IS_AUTHORIZED` = ok), `ENQUEUE_EMRESB` is not RFC-enabled.
@@ -661,7 +669,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (2026-10-12):** run the sandbox matrix from the 13-fix report on Client 220 (one movement type at a time, starting with 311 full pick), check RESB/LTBK/LTBP/LTAK/LTAP/LQUA/MATDOC after each step, then run the status-99→90 migration statement after backup.
+- **Next Recommended Action (2026-10-12, 18:40 IST):** paste the sandbox results (case | pass/fail | error text | RESB/LTBK/LTBP/LTAK/LTAP/LQUA/MATDOC rows) so Task 1 can be done; if a blank-destination TO failed, implement proposal (a) (T333 lookup by LGNUM+BWLVS). Provide a non-SAP_ALL RFC user for the negative authorization test. Activate `Z_WM_RES_LOCK` in a development system before any lock test.
+- **Earlier recommended action:** run the sandbox matrix from the 13-fix report on Client 220 (one movement type at a time, starting with 311 full pick), check RESB/LTBK/LTBP/LTAK/LTAP/LQUA/MATDOC after each step, then run the status-99→90 migration statement after backup.
 - **Previous recommended action:** **Runs 1, 2, 3, and 4 are 100% CONFIRMED and Verified Live on SAP S/4HANA (Client 220)**:
   - **Run 1 (Movement 201 — GI to Cost Center)**: RSNUM `0000525278`, TBNUM `0001000757`, TANUM `0001037270`, MATDOC `4900050142/2026`.
   - **Run 2 (Movement 241 — GI to Asset)**: RSNUM `0000525279`, TBNUM `0001000760`, TANUM `0001037271`, MATDOC `4900050143/2026`.
@@ -672,6 +681,29 @@ The previous log was removed in commit `b741337`; this file restarts it.
   - Browser verification of UI5 Reservation Entry Cockpit with the verified movement types (201, 241, 311, 301).
 
 ## Changes Log
+
+### 2026-10-12 18:10 IST — Task 2: read-only reads for the blank-storage-type question (no code change)
+
+- **Files:** `docs/abap/system-metadata.md` §21–§24 (scratch read scripts, not committed as tools).
+- **Reads:** `RFC_GET_FUNCTION_INTERFACE` for `ENQUEUE_EMRESB`/`DEQUEUE_EMRESB`; TFDIR FMODE for `RPY_FUNCTIONMODULE_READ_NEW` (R), `RPY_FUNCTIONMODULE_READ` (R), `FUNCTION_INCLUDE_INFO` (not remote), `RFC_READ_REPORT` (does not exist); full source of `Z_WM_TO_CREATE_FROM_TR` (159 lines, group `SAPLZ_VENDOR_REMOTES`); DD03L of T333 (41 fields incl. `VLTYP`, `VLPLA`, `NLTYP`, `NLPLA`) and live T333 rows for W01 / 201, 241, 311, 301.
+- **Result:** all reads succeeded. Proposal (a) — T333 lookup — documented in Current Status; nothing implemented because no sandbox failure was provided.
+
+### 2026-10-12 18:20 IST — Task 3: proposed Z_WM_RES_LOCK (docs only)
+
+- **Files:** `docs/abap/z_wm_res_lock.fugr.abap` (new).
+- **Content:** remote-enabled wrapper with `IV_RSNUM`, `IV_RSPOS`, `IV_ACTION` (L/U), `IV_WAIT`; exports `EV_SUCCESS`, `EV_MESSAGE`, `EV_LOCK_USER`; calls `ENQUEUE_EMRESB` (`MODE_RESB 'E'`, `RSNUM`, `RSPOS`, `_SCOPE '1'`, `_WAIT`, exceptions `FOREIGN_LOCK`, `SYSTEM_FAILURE`) and `DEQUEUE_EMRESB`. Every parameter and exception name is from the interface read in §21. UNSURE: whether `sy-msgv1` carries the lock holder after `FOREIGN_LOCK`.
+- **Status:** not deployed, not activated, not tested; no JS caller added.
+
+### 2026-10-12 18:30 IST — Task 5: ReservationTrackAdapter.js removed
+
+- **Grep:** `grep -rn ReservationTrackAdapter srv app db test tools docs config server.js package.json` → only `srv/integration/s4hana/wm/ReservationTrackAdapter.js` itself and `test/unit/wm/reservationTrack.test.js:314-397`.
+- **Files:** `srv/integration/s4hana/wm/ReservationTrackAdapter.js` deleted (`git rm`); the `describe('4. ReservationTrackAdapter')` block and its header comment removed from `test/unit/wm/reservationTrack.test.js`.
+- **Validation:** `npx jest test/unit/wm/reservationTrack.test.js` → 11/11 PASS; `npx jest test/unit/wm` → 64 suites, 1,333/1,333 PASS; `npx eslint` on the test file → 0 errors; `git diff --check` clean.
+
+### 2026-10-12 18:40 IST — Task 1 and Task 4 not executable (no file change)
+
+- **Task 1:** no sandbox results were supplied (placeholder text in the request); no case could be analysed, nothing changed.
+- **Task 4:** no non-SAP_ALL user supplied → negative authorization path remains **not verified**.
 
 ### 2026-10-12 14:30 IST — Step 0: read-only system metadata export (no code change)
 

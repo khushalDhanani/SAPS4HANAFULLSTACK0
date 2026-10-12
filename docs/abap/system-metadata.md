@@ -664,3 +664,265 @@ The function module never returns normally: it always raises one of its classic 
 Consequence for the adapter: treat `err.key === 'USER_IS_AUTHORIZED'` as success, `USER_NOT_AUTHORIZED` as HTTP 403, anything else as HTTP 502.
 Same mechanism applies to every classic exception (e.g. `L_TO_CONFIRM` `TO_CONFIRMED`): `err.key` carries the exception name.
 `ENQUEUE_EMRESB` / `DEQUEUE_EMRESB` are **not** remote-enabled (§16, FMODE blank), so no SAP-side lock can be taken from the Node layer.
+
+## 21. Interfaces of ENQUEUE_EMRESB / DEQUEUE_EMRESB (for the proposed Z_WM_RES_LOCK wrapper)
+
+### ENQUEUE_EMRESB
+| PARAMCLASS | PARAMETER | TABNAME | FIELDNAME | EXID | DEFAULT | OPTIONAL | PARAMTEXT |
+|---|---|---|---|---|---|---|---|
+| I | MANDT | RESB | MANDT | C | SY-MANDT | X | Enqueue argument 01 |
+| I | MODE_RESB | ENQMODE |  | C | 'E' | X | Lock mode for table RESB |
+| I | RSART | RESB | RSART | C |  | X | Enqueue argument 04 |
+| I | RSNUM | RESB | RSNUM | N |  | X | Enqueue argument 02 |
+| I | RSPOS | RESB | RSPOS | N |  | X | Enqueue argument 03 |
+| I | X_RSART |  |  |  | SPACE | X | Fill argument 04 with initial value? |
+| I | X_RSNUM |  |  |  | SPACE | X | Fill argument 02 with initial value? |
+| I | X_RSPOS |  |  |  | SPACE | X | Fill argument 03 with initial value? |
+| I | _COLLECT | DDENQCOLL |  | C | ' ' | X | Initially only collect lock |
+| I | _SCOPE |  |  |  | '2' | X |  |
+| I | _WAIT |  |  |  | SPACE | X |  |
+| X | FOREIGN_LOCK |  |  |  |  |  | Object already locked |
+| X | SYSTEM_FAILURE |  |  |  |  |  | Internal error from enqueue server |
+
+### DEQUEUE_EMRESB
+| PARAMCLASS | PARAMETER | TABNAME | FIELDNAME | EXID | DEFAULT | OPTIONAL | PARAMTEXT |
+|---|---|---|---|---|---|---|---|
+| I | MANDT | RESB | MANDT | C | SY-MANDT | X | Enqueue argument 01 |
+| I | MODE_RESB | ENQMODE |  | C | 'E' | X | Lock mode for table RESB |
+| I | RSART | RESB | RSART | C |  | X | Enqueue argument 04 |
+| I | RSNUM | RESB | RSNUM | N |  | X | Enqueue argument 02 |
+| I | RSPOS | RESB | RSPOS | N |  | X | Enqueue argument 03 |
+| I | X_RSART |  |  |  | SPACE | X | Fill argument 04 with initial value? |
+| I | X_RSNUM |  |  |  | SPACE | X | Fill argument 02 with initial value? |
+| I | X_RSPOS |  |  |  | SPACE | X | Fill argument 03 with initial value? |
+| I | _COLLECT | DDENQCOLL |  | C | ' ' | X | Initially only collect lock |
+| I | _SCOPE |  |  |  | '3' | X |  |
+| I | _SYNCHRON |  |  |  | SPACE | X | Synchonous unlock |
+
+## 22. RFC-enabled source readers (TFDIR.FMODE)
+| FM | Exists | FMODE | Group | Include |
+|---|---|---|---|---|
+| RPY_FUNCTIONMODULE_READ_NEW | YES | R | SAPLSIFP | 21 |
+| RPY_FUNCTIONMODULE_READ | YES | R | SAPLSIFP | 12 |
+| RFC_READ_REPORT | NO |  |  |  |
+| FUNCTION_INCLUDE_INFO | YES |  | SAPLSUNI | 13 |
+
+Z_WM_TO_CREATE_FROM_TR: group SAPLZ_VENDOR_REMOTES, include 05
+
+## 23. Source of Z_WM_TO_CREATE_FROM_TR (read-only, `RPY_FUNCTIONMODULE_READ_NEW`, 159 lines, 2026-10-12)
+
+Findings (CONFIRMED from this source): blank `NLTYP`/`NLPLA` on an item are filled from the LTBK header; blank `VLTYP`/`VLPLA` are passed through unchanged; T333 is **not** read by the wrapper; the item table goes to `L_TO_CREATE_TR` (`IT_TRITE`), which applies the standard WM determination. Whether `L_TO_CREATE_TR` then takes `NLTYP`/`NLPLA` from T333 when both item and LTBK header are blank is standard SAP behaviour and UNSURE until a sandbox TO is created that way.
+
+```abap
+FUNCTION z_wm_to_create_from_tr.
+*"----------------------------------------------------------------------
+*"*"Local Interface:
+*"  IMPORTING
+*"     VALUE(IV_LGNUM) TYPE  LGNUM
+*"     VALUE(IV_TBNUM) TYPE  LTBK-TBNUM
+*"     VALUE(IV_COMMIT) TYPE  CHAR1 DEFAULT 'X'
+*"     VALUE(IV_SQUIT) TYPE  CHAR1 DEFAULT ' '
+*"  EXPORTING
+*"     VALUE(EV_TANUM) TYPE  LTAK-TANUM
+*"     VALUE(EV_SUCCESS) TYPE  CHAR1
+*"     VALUE(EV_MESSAGE) TYPE  BAPI_MSG
+*"  TABLES
+*"      IT_ITEMS TYPE  L03B_TRITE_T OPTIONAL
+*"      ET_MESSAGES TYPE  BAPIRET2_T OPTIONAL
+*"----------------------------------------------------------------------
+  DATA: ls_hdr      TYPE ltbk,
+        lt_trite    TYPE TABLE OF l03b_trite,
+        ls_trite    TYPE l03b_trite,
+        lt_ltak     TYPE TABLE OF ltak_vb,
+        lt_ltap_vb  TYPE TABLE OF ltap_vb,
+        lv_tbnum    TYPE ltbk-tbnum,
+        lv_squit    TYPE rl03t-squit,
+        lv_commit   TYPE rl03b-comit,
+        ls_return   TYPE bapiret2.
+
+  CLEAR: ev_tanum, ev_success, ev_message, et_messages[].
+
+  lv_tbnum = |{ iv_tbnum ALPHA = IN }|.
+
+  " Ensure valid XFELD values (only space or X)
+  IF iv_squit = 'X'.
+    lv_squit = 'X'.
+  ELSE.
+    lv_squit = space.
+  ENDIF.
+
+  IF iv_commit = 'X'.
+    lv_commit = 'X'.
+  ELSE.
+    lv_commit = space.
+  ENDIF.
+
+  SELECT SINGLE *
+    FROM ltbk
+    INTO ls_hdr
+   WHERE lgnum = iv_lgnum
+     AND tbnum = lv_tbnum.
+
+  IF sy-subrc <> 0.
+    ev_success = 'E'.
+    ev_message = |Transfer Requirement { lv_tbnum } not found in warehouse { iv_lgnum }.|.
+
+    ls_return-type       = 'E'.
+    ls_return-id         = 'L3'.
+    ls_return-number     = '000'.
+    ls_return-message    = ev_message.
+    APPEND ls_return TO et_messages.
+    RETURN.
+  ENDIF.
+
+  LOOP AT it_items INTO DATA(ls_item).
+    CLEAR ls_trite.
+    MOVE-CORRESPONDING ls_item TO ls_trite.
+
+    IF ls_trite-nltyp IS INITIAL.
+      ls_trite-nltyp = ls_hdr-nltyp.
+    ENDIF.
+    IF ls_trite-nlpla IS INITIAL.
+      ls_trite-nlpla = ls_hdr-nlpla.
+    ENDIF.
+
+    IF ls_trite-vlenr IS NOT INITIAL.
+      ls_trite-vlenr = |{ ls_trite-vlenr ALPHA = IN }|.
+    ENDIF.
+
+    APPEND ls_trite TO lt_trite.
+  ENDLOOP.
+
+  CALL FUNCTION 'L_TO_CREATE_TR'
+    EXPORTING
+      i_lgnum                       = ls_hdr-lgnum
+      i_tbnum                       = ls_hdr-tbnum
+      i_commit_work                 = lv_commit
+      i_bname                       = sy-uname
+      i_squit                       = lv_squit
+      i_rsnum                       = ls_hdr-rsnum
+      it_trite                      = lt_trite
+    TABLES
+      t_ltak                        = lt_ltak
+      t_ltap_vb                     = lt_ltap_vb
+    EXCEPTIONS
+      foreign_lock                  = 1
+      qm_relevant                   = 2
+      tr_completed                  = 3
+      xfeld_wrong                   = 4
+      ldest_wrong                   = 5
+      drukz_wrong                   = 6
+      tr_wrong                      = 7
+      squit_forbidden               = 8
+      no_to_created                 = 9
+      update_without_commit         = 10
+      no_authority                  = 11
+      preallocated_stock            = 12
+      partial_transfer_req_forbidden = 13
+      input_error                   = 14
+      OTHERS                        = 15.
+
+  IF sy-subrc = 0.
+    READ TABLE lt_ltak INTO DATA(ls_ltak) INDEX 1.
+    IF sy-subrc = 0 AND ls_ltak-tanum IS NOT INITIAL.
+      ev_tanum = ls_ltak-tanum.
+    ELSE.
+      READ TABLE lt_ltap_vb INTO DATA(ls_ltap) INDEX 1.
+      IF sy-subrc = 0 AND ls_ltap-tanum IS NOT INITIAL.
+        ev_tanum = ls_ltap-tanum.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+  IF ev_tanum IS NOT INITIAL.
+    ev_success = 'S'.
+    ev_message = |Transfer Order { ev_tanum } created successfully.|.
+
+    ls_return-type    = 'S'.
+    ls_return-message = ev_message.
+    APPEND ls_return TO et_messages.
+
+    IF lv_commit = 'X'.
+      COMMIT WORK AND WAIT.
+    ENDIF.
+  ELSE.
+    ev_success = 'E'.
+
+    IF sy-msgid IS NOT INITIAL AND ( sy-msgid <> 'L3' OR sy-msgno <> '362' ).
+      MESSAGE ID sy-msgid TYPE 'S' NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+        INTO ev_message.
+    ELSE.
+      CASE sy-subrc.
+        WHEN 1.  ev_message = 'TR locked by another user (foreign_lock).'.
+        WHEN 2.  ev_message = 'Material is QM relevant.'.
+        WHEN 3.  ev_message = 'Transfer Requirement is already completed.'.
+        WHEN 4.  ev_message = 'XFELD_WRONG: Invalid indicator value passed.'.
+        WHEN 7.  ev_message = 'Transfer Requirement is incorrect or invalid.'.
+        WHEN 8.  ev_message = 'Immediate confirmation (squit) forbidden by WM config.'.
+        WHEN 9.  ev_message = 'No Transfer Order created. Check stock and bin assignment.'.
+        WHEN 11. ev_message = 'No authorization to create Transfer Order.'.
+        WHEN 14. ev_message = 'Input error in item quantities or bins.'.
+        WHEN OTHERS. ev_message = |Failed to create TO. Subrc error code: { sy-subrc }.|.
+      ENDCASE.
+    ENDIF.
+
+    ls_return-type    = 'E'.
+    ls_return-message = ev_message.
+    APPEND ls_return TO et_messages.
+  ENDIF.
+
+ENDFUNCTION.
+```
+
+## 24. T333 fields and live rows (CONFIRMED): the WM movement type carries NLTYP/NLPLA defaults; VLTYP/VLPLA are blank for W01
+| POSITION | FIELDNAME | KEYFLAG | ROLLNAME | DATATYPE | LENG |
+|---|---|---|---|---|---|
+| 0001 | MANDT | X | MANDT | CLNT | 000003 |
+| 0002 | LGNUM | X | LGNUM | CHAR | 000003 |
+| 0003 | BWLVS | X | BWLVS | NUMC | 000003 |
+| 0004 | TRART |  | LVS_TRART | CHAR | 000001 |
+| 0005 | VLTYP |  | T333_VLTYP | CHAR | 000003 |
+| 0006 | VLPLA |  | T333_VLPLA | CHAR | 000010 |
+| 0007 | NLTYP |  | T333_NLTYP | CHAR | 000003 |
+| 0008 | NLPLA |  | T333_NLPLA | CHAR | 000010 |
+| 0009 | RLTYP |  | T333_RLTYP | CHAR | 000003 |
+| 0010 | RLPLA |  | T333_RLPLA | CHAR | 000010 |
+| 0011 | BETYP |  | LVS_BETYP | CHAR | 000001 |
+| 0012 | TBOBL |  | T333_TBOBL | CHAR | 000001 |
+| 0013 | DRUKZ |  | LVS_DRUKZ | CHAR | 000002 |
+| 0014 | SQUIT |  | T333_SQUIT | CHAR | 000001 |
+| 0015 | TBMAN |  | T333_TBMAN | CHAR | 000001 |
+| 0016 | DUNKL |  | LVS_DUNKL | CHAR | 000001 |
+| 0017 | VQUIT |  | T333_VQUIT | CHAR | 000001 |
+| 0018 | TBPRI |  | TBPRI | CHAR | 000001 |
+| 0019 | WEDAT |  | T333_WEDAT | CHAR | 000001 |
+| 0020 | LPMAN |  | T333_LPMAN | CHAR | 000001 |
+| 0021 | VKDYN |  | T333_VKDYN | CHAR | 000001 |
+| 0022 | NKDYN |  | T333_NKDYN | CHAR | 000001 |
+| 0023 | ABILD |  | T333_ABILD | CHAR | 000001 |
+| 0024 | FEHLT |  | T333_FEHLT | CHAR | 000001 |
+| 0025 | VFIXP |  | T333_VFIXP | CHAR | 000001 |
+| 0026 | NFIXP |  | T333_NFIXP | CHAR | 000001 |
+| 0027 | KZUAP |  | LVS_KZUAP | CHAR | 000001 |
+| 0028 | BWREF |  | LVS_BWREF | NUMC | 000003 |
+| 0029 | UELIE |  | T333_UELIE | CHAR | 000001 |
+| 0030 | AUTTA |  | LVS_AUTTA | CHAR | 000001 |
+| 0031 | ZUSTE |  | LVS_ZUSTE | CHAR | 000001 |
+| 0032 | CHSWM |  | KALSMA_CH | CHAR | 000006 |
+| 0033 | QBILD |  | T333_QBILD | CHAR | 000001 |
+| 0034 | RULES |  | T333_RULES | CHAR | 000004 |
+| 0035 | VEPST |  | T333_VEPST | CHAR | 000001 |
+| 0036 | DBILD |  | T333_DBILD | CHAR | 000001 |
+| 0037 | NO2ST |  | T333_NO2ST | CHAR | 000001 |
+| 0038 | PIKTA |  | T333_PIKTA | CHAR | 000001 |
+| 0039 | WMMUE |  | T333_WMMUE | CHAR | 000001 |
+| 0041 | XDREL |  | LXDCK_XDREL | CHAR | 000001 |
+
+### Live rows for warehouse W01, movement types 201 / 241 / 311 / 301
+| LGNUM | BWLVS | VLTYP | VLPLA | NLTYP | NLPLA | TBOBL | SQUIT |
+|---|---|---|---|---|---|---|---|
+| W01 | 201 |  |  | 911 |  |  |  |
+| W01 | 241 |  |  | 913 |  |  |  |
+| W01 | 311 |  |  | 921 | TRANSFER | X |  |
+| W01 | 301 |  |  | 920 | TRANSFER | X |  |

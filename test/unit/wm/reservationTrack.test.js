@@ -6,7 +6,6 @@
  * 3. Test data insertable & queryable
  * 4. Step-wise progression: MB21 -> LB01 -> LT04 -> LT12 -> MIGO
  * 5. Validation constraints & log recording
- * 6. ReservationTrackAdapter normalization
  */
 const cds = require('@sap/cds');
 
@@ -308,91 +307,6 @@ describe('Chunk 1: Data Model — ZRES_TRACK & ZRES_LOG', () => {
           authViewer
         )
       ).rejects.toMatchObject({ response: { status: 403 } });
-    });
-  });
-
-  describe('4. ReservationTrackAdapter', () => {
-    const ReservationTrackAdapter = require('../../../srv/integration/s4hana/wm/ReservationTrackAdapter');
-
-    test('getTrack normalizes leading zeros and formats response', async () => {
-      const mockRfc = {
-        readTable: jest.fn().mockResolvedValue([
-          {
-            RSNUM: '0000524979',
-            RSPOS: '0001',
-            MOVE_TYPE: '311',
-            LGNUM: 'W01',
-            TBNUM: '0001000123',
-            TANUM: '0001000456',
-            MBLNR: '0000000000',
-            MJAHR: '0000',
-            STATUS: '03',
-            ERR_MSG: '',
-            ERNAM: 'KHUSHAL',
-            ERDAT: '20261010',
-            AENAM: 'KHUSHAL',
-            AEDAT: '20261010'
-          }
-        ])
-      };
-
-      const adapter = new ReservationTrackAdapter({ rfc: mockRfc });
-      const track = await adapter.getTrack('524979', '1');
-
-      expect(mockRfc.readTable).toHaveBeenCalledWith(
-        'ZRES_TRACK',
-        expect.any(Array),
-        ["RSNUM = '0000524979' AND RSPOS = '0001'"]
-      );
-      expect(track).toMatchObject({
-        ReservationNo: '524979',
-        ReservationItem: '1',
-        MovementType: '311',
-        WarehouseNumber: 'W01',
-        TransferRequirement: '1000123',
-        TransferOrder: '1000456',
-        Status: '03',
-        CreatedBy: 'KHUSHAL'
-      });
-    });
-
-    test('getTrack returns null when row does not exist', async () => {
-      const mockRfc = { readTable: jest.fn().mockResolvedValue([]) };
-      const adapter = new ReservationTrackAdapter({ rfc: mockRfc });
-      const track = await adapter.getTrack('999999');
-      expect(track).toBeNull();
-    });
-
-    test('getLogs returns mapped log array', async () => {
-      const mockRfc = {
-        readTable: jest.fn().mockResolvedValue([
-          {
-            LOG_ID: 'uuid-1',
-            RSNUM: '0000524979',
-            RSPOS: '0001',
-            STEP: 'MB21',
-            STATUS: '01',
-            MSGTY: 'S',
-            MSGID: 'M7',
-            MSGNO: '060',
-            MESSAGE: 'Reservation created',
-            ERNAM: 'KHUSHAL',
-            ERDAT: '20261010',
-            ERZET: '103000'
-          }
-        ])
-      };
-
-      const adapter = new ReservationTrackAdapter({ rfc: mockRfc });
-      const logs = await adapter.getLogs('524979');
-      expect(logs).toHaveLength(1);
-      expect(logs[0]).toMatchObject({
-        ReservationNo: '524979',
-        Step: 'MB21',
-        Status: '01',
-        MessageType: 'S',
-        MessageText: 'Reservation created'
-      });
     });
   });
 });
