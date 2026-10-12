@@ -5,7 +5,7 @@ const { RfcClient } = require('../RfcClient');
 const { sapKey, sapKeyOpt, httpError } = require('../sapKey');
 const s4Config = require('../s4Config');
 const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
-const { isToFullyConfirmed, findUnconfirmedToItems } = require('./toState');
+const { isToFullyConfirmed, findUnconfirmedToItems, getHuConfirmationItems } = require('./toState');
 const { checkAuthorization } = require('./authCheck');
 
 /**
@@ -420,6 +420,7 @@ class TrToAdapter {
     const whereLqua = [
       `LGNUM = '${wh}'`,
       `AND MATNR = '${matPadded}'`,
+      "AND LGTYP NOT LIKE '9%'",
       "AND VERME > 0",
       "AND CHARG <> ' '"
     ];
@@ -652,7 +653,7 @@ class TrToAdapter {
               `AND MATNR = '${matPadded}'`,
               `AND WERKS = '${sel.Plant}'`,
               `AND LGORT = '${sel.StorageLocation}'`,
-              "AND LGTYP < '900'",
+              "AND LGTYP NOT LIKE '9%'",
               "AND VERME > 0"
             ],
             1
@@ -718,17 +719,47 @@ class TrToAdapter {
     LOG.info(`Confirming Transfer Order ${alphaOut(s4To)} in warehouse ${wh}`);
     await checkAuthorization(this.rfc, 'L_LGNUM', { LGNUM: wh });
 
+    const confirmParams = {
+      I_LGNUM: wh,
+      I_TANUM: s4To,
+      I_SQUIT: squit,
+      I_COMMIT_WORK: 'X'
+    };
+
     try {
       await this._rfc(
-        () => this.rfc.call('L_TO_CONFIRM', {
-          I_LGNUM: wh,
-          I_TANUM: s4To,
-          I_SQUIT: squit,
-          I_COMMIT_WORK: 'X'
-        }),
+        () => this.rfc.call('L_TO_CONFIRM', confirmParams),
         `Confirm Transfer Order ${alphaOut(s4To)}`
       );
     } catch (err) {
+      const errMsg = String(err?.message || '');
+      // When TO items originate from Handling Units, SAP raises L3 848 ("does not contain a destination handling unit").
+      // Retry with T_LTAP_CONF_HU to perform complete HU takeover (HUENT = 'X').
+      const isMissingDestHu = errMsg.includes('destination handling unit') || errMsg.includes('848');
+      if (isMissingDestHu) {
+        try {
+          const confHu = await this._rfc(
+            () => getHuConfirmationItems(this.rfc, wh, s4To),
+            `Inspect HU items for TO ${alphaOut(s4To)}`
+          );
+          if (confHu.length > 0) {
+            confirmParams.T_LTAP_CONF_HU = confHu;
+            await this._rfc(
+              () => this.rfc.call('L_TO_CONFIRM', confirmParams),
+              `Confirm Transfer Order ${alphaOut(s4To)} with HU table`
+            );
+            return {
+              TransferOrder: alphaOut(s4To),
+              Success: true,
+              Confirmed: true,
+              Message: `Transfer Order ${alphaOut(s4To)} confirmed.`
+            };
+          }
+        } catch (huErr) {
+          LOG.warn(`HU confirmation retry for TO ${alphaOut(s4To)} failed: ${huErr.message}`);
+        }
+      }
+
       let confirmedInSap = false;
       try { confirmedInSap = await isToFullyConfirmed(this.rfc, wh, s4To); } catch (_readErr) { /* keep the original error */ }
       if (!confirmedInSap) throw err;

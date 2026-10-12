@@ -389,6 +389,8 @@ describe('TrToAdapter (RFC)', () => {
     const tr = await adapter.lookupTR('1000799', 'W01', 'TR');
     expect(tr.SourceStorageType).toBe('EN1');
     expect(tr.SourceStorageBin).toBe('0-L0001-01');
+    const lquaCall = rfc.readTable.mock.calls.find((call) => call[0] === 'LQUA');
+    expect(lquaCall[2]).toContain("AND LGTYP NOT LIKE '9%'");
   });
 
   it('createTOFromTR respects caller-provided sourceStorageType and sourceStorageBin (mock only, not SAP verification)', async () => {
@@ -434,6 +436,43 @@ describe('TrToAdapter (RFC)', () => {
     expect(res.TransferOrder).toBe('1037294');
     expect(capturedItems[0].VLTYP).toBe('RM1');
     expect(capturedItems[0].VLPLA).toBe('0-L0001-03');
+  });
+
+  it('confirmTO reactively retries with T_LTAP_CONF_HU when SAP raises destination handling unit error L3 848 (mock only, not SAP verification)', async () => {
+    let callCount = 0;
+    let huParamsCaptured = null;
+    const rfc = {
+      call: jest.fn(async (fm, params) => {
+        if (fm === 'AUTHORITY_CHECK') return { USER_IS_AUTHORIZED: 'Y' };
+        if (fm === 'L_TO_CONFIRM') {
+          callCount++;
+          if (callCount === 1) {
+            throw new Error('Confirm Transfer Order 1037298: TO item 0001037298 0001 does not contain a destination handling unit');
+          }
+          huParamsCaptured = params.T_LTAP_CONF_HU;
+          return { I_SQUIT: 'X' };
+        }
+        throw new Error(`unexpected FM ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'LTAP') {
+          return [
+            { TAPOS: '0001', VLENR: '00000000002000020148', NLENR: '', NSOLA: '1.000', ALTME: 'NOS', FHUTA: '1' },
+            { TAPOS: '0002', VLENR: '00000000002000020149', NLENR: '', NSOLA: '1.000', ALTME: 'NOS', FHUTA: '1' }
+          ];
+        }
+        return [];
+      })
+    };
+
+    const adapter = new TrToAdapter({ rfc });
+    const res = await adapter.confirmTO({ lgnum: 'W01', toNumber: '1037298' });
+    expect(res.Confirmed).toBe(true);
+    expect(callCount).toBe(2);
+    expect(huParamsCaptured).toEqual([
+      { TANUM: '0001037298', TAPOS: '0001', VONHU: '00000000002000020148', NACHU: '00000000002000020148', HUENT: 'X', MENGA: '1.000', ALTME: 'NOS' },
+      { TANUM: '0001037298', TAPOS: '0002', VONHU: '00000000002000020149', NACHU: '00000000002000020149', HUENT: 'X', MENGA: '1.000', ALTME: 'NOS' }
+    ]);
   });
 });
 

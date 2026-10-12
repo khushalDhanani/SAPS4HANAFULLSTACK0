@@ -34,4 +34,43 @@ async function findUnconfirmedToItems(rfc, lgnum, tbnum, tbpos = '') {
   return open;
 }
 
-module.exports = { isToFullyConfirmed, findUnconfirmedToItems };
+/**
+ * Builds Handling Unit confirmation table (T_LTAP_CONF_HU) for a Transfer Order.
+ * When LTAP items involve Handling Units (VLENR is present), L_TO_CONFIRM requires
+ * T_LTAP_CONF_HU with complete HU withdrawal (HUENT = 'X') to avoid error L3 848
+ * ("TO item ... does not contain a destination handling unit").
+ */
+async function getHuConfirmationItems(rfc, lgnum, tanum) {
+  const wh = sapKey(lgnum, 'lgnum');
+  const to = sapKey(tanum, 'tanum').padStart(10, '0');
+  const ltapItems = await rfc.readTable(
+    'LTAP',
+    ['TAPOS', 'VLENR', 'NLENR', 'NSOLA', 'ALTME', 'FHUTA'],
+    [`LGNUM = '${wh}'`, `AND TANUM = '${to}'`]
+  );
+
+  const huItems = (ltapItems || []).filter((item) => {
+    const vlenr = String(item.VLENR || '').trim();
+    const fhuta = String(item.FHUTA || '').trim();
+    return Boolean(vlenr && (fhuta !== '' || vlenr !== ''));
+  });
+
+  if (!huItems.length) return [];
+
+  return huItems.map((item) => {
+    const vlenr = String(item.VLENR || '').trim();
+    const nlenr = String(item.NLENR || '').trim() || vlenr;
+    const qty = Number(item.NSOLA || 0);
+    return {
+      TANUM: to,
+      TAPOS: item.TAPOS,
+      VONHU: vlenr,
+      NACHU: nlenr,
+      HUENT: 'X',
+      MENGA: qty.toFixed(3),
+      ALTME: String(item.ALTME || '').trim()
+    };
+  });
+}
+
+module.exports = { isToFullyConfirmed, findUnconfirmedToItems, getHuConfirmationItems };

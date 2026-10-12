@@ -5,6 +5,54 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **WM Handling Unit TO Confirmation Error (L3 848) Resolved & Complete HU Takeover Implemented (2026-10-12, 17:35 IST):**
+  - **User Request:** `POST /odata/v4/tr-to/createTOFromTR` -> `Transfer Order 1037298 created, but confirmation failed (status 13): Confirm Transfer Order 1037298: TO item 0001037298 0001 does not contain a destination handling unit`.
+  - **Diagnose & Root Cause:**
+    1. **Transfer Order Created Successfully in SAP:** Transfer Order `1037298` was created for material `8000006485` (Plant `1120`, SLoc `CS02`) with 2 items for 2 NOS.
+    2. **Handling Unit Sourced TO (`VEKP` / `LEIN`):** In `LTAP`, both items originated from Handling Units (`VLENR = 00000000002000020148` and `00000000002000020149`), with `FHUTA = '1'`.
+    3. **Standard SAP HUM Confirmation Requirement:** When confirming an HU-managed TO, calling `L_TO_CONFIRM` without `T_LTAP_CONF_HU` triggers error `L3 848 ("TO item & & does not contain a destination handling unit")`. If `NACHU` is passed equal to `VONHU` without complete withdrawal, SAP throws `L3 893 ("Dest.handling same as source handling unit only allowed for HU takeover")`.
+    4. **Solution Mechanism:** Passing `T_LTAP_CONF_HU` with complete HU withdrawal (`HUENT: 'X'`, `VONHU: item.VLENR`, `NACHU: item.NLENR || item.VLENR`) performs an authentic HU takeover, moving the source HU directly into the destination location and confirming the TO in SAP.
+  - **Remediation Delivered:**
+    1. `srv/integration/s4hana/wm/toState.js`:
+       - Added `getHuConfirmationItems(rfc, lgnum, tanum)` to inspect `LTAP` items and construct `T_LTAP_CONF_HU` entries with complete HU withdrawal (`HUENT: 'X'`).
+    2. `srv/integration/s4hana/wm/TrToAdapter.js` & `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+       - Updated `confirmTO` and `confirmTransferOrder` with reactive handling: attempts standard confirmation (zero overhead for non-HU items); when SAP rejects with `L3 848` (`destination handling unit`), dynamically calls `getHuConfirmationItems` and retries confirmation with `T_LTAP_CONF_HU`.
+    3. `test/unit/wm/trToAdapter.test.js`:
+       - Added unit test verifying reactive HU confirmation retry on `L3 848`.
+    4. Live S/4HANA Verification:
+       - Confirmed live TO `1037298` directly on S/4HANA Client 220: verified `LTAK-KQUIT = 'X'` and `LTAP-PQUIT = 'X'` across both items.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/trToAdapter.test.js`: **35/35 tests PASS**.
+    - Full WM suite: `npx jest test/unit/wm/`: **65/65 test suites PASS, 1,357/1,357 tests PASS**.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+
+
+- **WM Storage Type Search Error (T334T / L3 007) Root Cause, SPRO Solution & LQUA ASCII Query Fix (2026-10-12, 17:15 IST):**
+  - **User Request:** "Data for storage type search is not defined in warehouse W01 for WM movement type 311: missing customizing key in table T334T (Warehouse: W01, Operation: A [Stock Removal], Storage Type Indicator: 'EN1'). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > Stock Removal Strategies > Determine Storage Type Search."
+  - **Diagnose & Root Cause:**
+    1. **SAP S/4HANA Customizing (Client 220):**
+       - Querying `T334T` directly via RFC confirmed: Warehouse `W01` has stock placement (`KZEAR = 'E'`) entries for `EN1`, `FG1`, `GS1`, `OH1`, `RM1`, but stock removal (`KZEAR = 'A'`) ONLY has rows for blank (`***`) and `005`.
+       - When standard SAP `L_TO_CREATE_TR` executes without explicit source storage type/bin (`VLTYP`/`VLPLA`), it executes `T334T_LESEN(W01, A, MLGN-LTKZA)`. Because the material master has `MLGN-LTKZA = 'EN1'`, SAP fails with `L3 007` because `(W01, A, EN1)` is missing from `T334T`.
+    2. **Application Layer Bug in `srv/integration/s4hana/wm/TrToAdapter.js`:**
+       - In `lookupTR` (line 655), the physical quant lookup in `LQUA` used `"AND LGTYP < '900'"`.
+       - In ABAP OpenSQL / RFC_READ_TABLE, `LGTYP` is `CHAR(3)`. In ASCII collation, alphabetic characters are greater than '9' (`'E'` = 69, `'O'` = 79, `'R'` = 82 vs `'9'` = 57).
+       - Consequently, all alphabetic storage types (`EN1`, `OH1`, `RM1`, `FG1`, `GS1`) were filtered out, causing `lookupTR` to return empty `SourceStorageType` and `SourceStorageBin`. When the UI called `createTOFromTR`, it sent blank values, forcing SAP into the failing `T334T` search.
+  - **Remediation Delivered:**
+    1. `srv/integration/s4hana/wm/TrToAdapter.js`:
+       - Replaced `"AND LGTYP < '900'"` with `"AND LGTYP NOT LIKE '9%'"` in `lookupTR` so physical storage types starting with letters are not excluded.
+       - Added `"AND LGTYP NOT LIKE '9%'"` to `whereLqua` in `getFifoBatches` to prevent recommending interim staging storage types (9xx).
+    2. `test/unit/wm/trToAdapter.test.js`:
+       - Added assertion that `readTable` for `LQUA` contains `"AND LGTYP NOT LIKE '9%'"`.
+    3. Live S/4HANA Verification:
+       - Verified live `lookupTR` for TR `1000809` (material `8000006485`, plant `1120`, SLoc `CS02`) immediately resolves `SourceStorageType: 'OH1'` and `SourceStorageBin: 'ONHOLD'` from `LQUA` instead of blank.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/trToAdapter.test.js`: **34/34 tests PASS**.
+    - Full WM suite: `npx jest test/unit/wm/`: **65/65 test suites PASS, 1,356/1,356 tests PASS**.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+
+
 - **MCP Servers: spawn ENOENT Fix & Absolute Path Hardening (2026-10-12, 17:05 IST):**
   - **User Request:** "Still Showing MCP errors." -> Confirmed: `"Failed to start / spawn ENOENT" on command names`.
   - **Diagnose & Root Cause:**

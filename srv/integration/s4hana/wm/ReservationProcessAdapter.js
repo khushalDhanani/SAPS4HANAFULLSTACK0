@@ -4,7 +4,7 @@ const LOG = require('../logger')('reservation-process-adapter');
 const { RfcClient } = require('../RfcClient');
 const { sapKey, sapKeyOpt, httpError } = require('../sapKey');
 const { STATUS } = require('../../../common/wmStatus');
-const { isToFullyConfirmed } = require('./toState');
+const { isToFullyConfirmed, getHuConfirmationItems } = require('./toState');
 const { checkAuthorization } = require('./authCheck');
 
 /** GM_CODE per movement type. Only the four supported types; nothing is derived for other types. */
@@ -350,14 +350,37 @@ class ReservationProcessAdapter {
     const s4To = sapKey(toNumber, 'tanum').padStart(10, '0');
     const s4Lgnum = sapKey(warehouseNumber, 'lgnum');
 
+    const confirmParams = {
+      I_LGNUM: s4Lgnum,
+      I_TANUM: s4To,
+      I_SQUIT: squit,
+      I_COMMIT_WORK: commitWork ? 'X' : ' '
+    };
+
     try {
-      await this.rfc.session(async (call) => call('L_TO_CONFIRM', {
-        I_LGNUM: s4Lgnum,
-        I_TANUM: s4To,
-        I_SQUIT: squit,
-        I_COMMIT_WORK: commitWork ? 'X' : ' '
-      }));
+      await this.rfc.session(async (call) => call('L_TO_CONFIRM', confirmParams));
     } catch (err) {
+      const errMsg = String(err?.message || '');
+      const isMissingDestHu = errMsg.includes('destination handling unit') || errMsg.includes('848');
+      if (isMissingDestHu) {
+        try {
+          const confHu = await getHuConfirmationItems(this.rfc, s4Lgnum, s4To);
+          if (confHu.length > 0) {
+            confirmParams.T_LTAP_CONF_HU = confHu;
+            await this.rfc.session(async (call) => call('L_TO_CONFIRM', confirmParams));
+            return {
+              success: true,
+              warehouseNumber,
+              toNumber: alphaOut(toNumber),
+              status: STATUS.TO_CONFIRMED,
+              confirmed: true
+            };
+          }
+        } catch (huErr) {
+          LOG.warn(`HU confirmation retry for TO ${alphaOut(s4To)} failed: ${huErr.message}`);
+        }
+      }
+
       // SAP rejected the call: decide from the TO's real state (LTAP-PQUIT), not from a message number.
       let confirmedInSap = false;
       try { confirmedInSap = await isToFullyConfirmed(this.rfc, s4Lgnum, s4To); } catch (_readErr) { /* keep original error */ }
