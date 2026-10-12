@@ -5,7 +5,42 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **Freestyle `/wm/scan-to` FIFO Batch & Serial Series Suggestion Implemented & Validated (2026-10-12, 14:02 IST):**
+- **TR 1000799 TO Creation Storage Type Search Bug (L3 007) Diagnosed & Clear Customizing Error Mapped (2026-10-12, 14:26 IST):**
+  - **User Request:** Fix bug `POST /odata/v4/tr-to/createTOFromTR -> 400 "Create Transfer Order for TR 1000799: Data for storage type search is not defined (A EN1 )"`. Read-only RFC diagnosis of T100, TR 1000799, T334T/T334P/T333, LQUA, and parameter resolution; identify root cause; implement fix; add mock unit tests.
+  - **STEP 1 Diagnosis Results (CONFIRMED from live Client 220 & SAP standard ABAP code):**
+    1. Message Class & Number: `L3 007` (`T100: "Data for storage type search is not defined (& & & &)"`). Placeholders verified from ABAP include `LL03AF18` line 44 (`MESSAGE E007 WITH HLP_KZEAR I_MLVS-LTKZA LTAP-BESTQ LTAP-SOBKZ`):
+       - `&1`: `HLP_KZEAR` = `'A'` (Stock Removal / Auslagerung; `'E'` is Putaway).
+       - `&2`: `I_MLVS-LTKZA` = `'EN1'` (Stock removal indicator from material master `MLGN-LTKZA`).
+       - `&3`: `LTAP-BESTQ` = `''` (Stock category blank = unrestricted).
+       - `&4`: `LTAP-SOBKZ` = `''` (Special stock indicator blank = normal stock).
+    2. TR 1000799 raw rows:
+       - `LTBK`: `LGNUM: 'W01', TBNUM: '0001000799', BWLVS: '311', BETYP: '', BENUM: '', RSNUM: '0000000000', STATU: '', BDATU: '20261012', BZEIT: '122630', VLTYP: '', VLPLA: '', NLTYP: '921', NLPLA: 'TRANSFER'`.
+       - `LTBP` item `0001`: `LGNUM: 'W01', TBNUM: '0001000799', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01', CHARG: '', BESTQ: '', SOBKZ: '', SONUM: '', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: ''`.
+       - Material `8000009753` in `MLGN` (W01): `LTKZE: 'EN1'` (putaway indicator), `LTKZA: 'EN1'` (stock removal indicator), `LETY1: 'E10'`. `MLGT`: `LGTYP: 'EN1', LGPLA: ''`.
+    3. Customizing DDIC & Tables:
+       - `T333` for `W01 / 311`: `BWREF: '000', TRART: 'A', VLTYP: '', VLPLA: '', NLTYP: '921', NLPLA: 'TRANSFER'`.
+       - `T331` for `W01 / EN1`: `STAUS: 'F'` (FIFO stock removal), `STEIN: 'C'` (open storage putaway).
+       - `T334P` (Storage Bin Type Search): 0 entries for `W01` (`TABLE_WITHOUT_DATA`).
+       - `T334U` (Access Strategy): 0 entries for `W01` (no fallback search sequences enabled).
+       - `T334T` (Storage Type Search Sequence): Putaway (`KZEAR: E`) has `EN1` defined (`W01/E/EN1 -> LGTY0: 'EN1', LGTY1: '003'`). Stock Removal (`KZEAR: A`) only has rows for `LGTKZ = ''` (`***`) and `LGTKZ = '005'` (`005`). Key `(LGNUM = 'W01', KZEAR = 'A', LGTKZ = 'EN1')` is missing from `T334T`.
+    4. Quants in `LQUA` for material `8000009753` in `W01`:
+       - Quant `0001043208`: interim bin `921 / TRANSFER`, `VERME: 2.000 NOS`.
+       - Quants `0001043052`, `0001043053`, `0001043058`: storage type `EN1`, bin `0-L0001-01`, `VERME: 1.000 NOS` each, SUs `1000057774`, `1000057775`, `1000057792`.
+       - Quants `0001044448`, `0001044449`: interim dynamic bins `911` (-1) and `914` (-1).
+    5. Parameter Resolution:
+       - Payload `lgnum: ""` resolves at line 717 via `warehouse(lgnum)` to `s4Config.getWarehouseNumber()` (`'W01'`).
+       - Values reaching `Z_WM_TO_CREATE_FROM_TR`: `IV_LGNUM = 'W01'`, `IV_TBNUM = '0001000799'`, `VLTYP = ''`, `VLPLA = ''`, `NLTYP = '921'`, `NLPLA = 'TRANSFER'`, `VLENR = ''`.
+    6. Root Cause: **(a) missing customizing in table T334T for stock removal key `(LGNUM = 'W01', KZEAR = 'A', LGTKZ = 'EN1')`**. In SAP WM, blank source storage type/bin triggers automatic stock removal search. SAP finds indicator `EN1` on `MLGN-LTKZA`, queries `T334T` for `(W01, A, EN1)`, finds no row, and raises `L3 007`.
+  - **STEP 2 Fix Architecture Implemented (Minimal Diff, No SPRO Changes, No Workaround Guessing):**
+    - Added helper `mapStorageTypeSearchError` in `srv/integration/s4hana/wm/TrToAdapter.js`.
+    - Automatically parses SAP message `L3 007` (German and English), extracts operation (`A`), indicator (`EN1`), and surfaces an actionable error specifying the warehouse (`W01`), WM movement type (`311`), missing `T334T` key, and exact SPRO maintenance path (`SPRO > Logistics Execution > Warehouse Management > Strategies > Stock Removal Strategies > Determine Storage Type Search`).
+    - Wired into `createTOFromTR` and `createTO` error handling.
+  - **STEP 3 Tests & Validation:**
+    - Added mock unit tests in `test/unit/wm/trToAdapter.test.js` labeled `(mock only, not SAP verification)`.
+    - Unit tests: `npx jest test/unit/wm/trToAdapter.test.js` (31/31 PASS).
+    - Full WM suite: `npx jest test/unit/wm/` (65/65 test suites PASS, 1,352/1,352 tests PASS).
+    - CDS compilation: `npx cds compile srv --to sql` clean (0 errors).
+    - Diff check: `git diff --check` clean (0 errors).
   - **User Request:** `/index.html#/wm/scan-to` — based on FIFO Basic show Suggest series batch as per the material.
   - **Feature Architecture Delivered:**
     1. **CAP OData V4 Service (`srv/wm/tr-to/service.cds`):**
@@ -728,6 +763,37 @@ The previous log was removed in commit `b741337`; this file restarts it.
   - Browser verification of UI5 Reservation Entry Cockpit with the verified movement types (201, 241, 311, 301).
 
 ## Changes Log
+
+### 2026-10-12 14:26 IST — TR 1000799 TO Creation Storage Type Search Error (L3 007): Diagnosis, Root Cause & Actionable Error Mapping
+
+- **User Request:** Fix bug `POST /odata/v4/tr-to/createTOFromTR -> 400 "Create Transfer Order for TR 1000799: Data for storage type search is not defined (A EN1 )"`.
+- **Diagnosis (Read-Only via RFC Adapter, SAP Client 220):**
+  1. Message `L3 007` ("Data for storage type search is not defined (& & & &)"):
+     - Found in include `LL03AF18` line 44 (`MESSAGE E007 WITH HLP_KZEAR I_MLVS-LTKZA LTAP-BESTQ LTAP-SOBKZ`).
+     - `&1`: `HLP_KZEAR` = `'A'` (Stock Removal / Auslagerung).
+     - `&2`: `I_MLVS-LTKZA` = `'EN1'` (Stock removal indicator from material master `MLGN-LTKZA`).
+     - `&3`: `LTAP-BESTQ` = `''` (Stock category blank = unrestricted).
+     - `&4`: `LTAP-SOBKZ` = `''` (Special stock blank = standard stock).
+  2. TR 1000799 (`LTBK` / `LTBP`):
+     - `LTBK`: `LGNUM: 'W01', TBNUM: '0001000799', BWLVS: '311', BDATU: '20261012', BZEIT: '122630', VLTYP: '', VLPLA: '', NLTYP: '921', NLPLA: 'TRANSFER'`.
+     - `LTBP` item `0001`: `MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS'`.
+     - `MLGN`: `LTKZE: 'EN1', LTKZA: 'EN1'`. `MLGT`: `LGTYP: 'EN1', LGPLA: ''`.
+  3. Customizing (`T334T`, `T334P`, `T333`, `T331`):
+     - `T333`: `LGNUM = 'W01', BWLVS = '311' -> BWREF: '000', NLTYP: '921', NLPLA: 'TRANSFER'`.
+     - `T331`: `LGNUM = 'W01', LGTYP = 'EN1' -> STAUS: 'F'` (FIFO stock removal), `STEIN: 'C'` (open storage putaway).
+     - `T334P`: 0 rows in `W01`. `T334U`: 0 rows in `W01`.
+     - `T334T`: Has rows for Putaway (`KZEAR: E`) including `EN1` (`W01/E/EN1 -> EN1, 003`). Has **no row** for Stock Removal (`KZEAR: A`) with `EN1` (only blank and 005 exist). Missing key: `(LGNUM = 'W01', KZEAR = 'A', LGTKZ = 'EN1')`.
+  4. Quants in `LQUA`: Quant 0001043208 in `921/TRANSFER` (2.000 NOS); Quants 0001043052, 0001043053, 0001043058 in `EN1/0-L0001-01` (1.000 NOS each, SUs 1000057774, 1000057775, 1000057792); Quants 0001044448/0001044449 in 911/914 (-1 NOS).
+  5. Parameter resolution: `lgnum: ""` resolves at `TrToAdapter.js:717` via `warehouse(lgnum)` to `s4Config.getWarehouseNumber()` (`'W01'`). Sent values: `IV_LGNUM = 'W01'`, `IT_ITEMS[0].VLTYP = ''`, `IT_ITEMS[0].VLPLA = ''`, `IT_ITEMS[0].NLTYP = '921'`, `IT_ITEMS[0].NLPLA = 'TRANSFER'`.
+  6. Root cause: **(a) missing customizing in table T334T for key `(W01, A, EN1)`**. Blank source storage type/bin correctly invokes SAP standard stock removal determination, which fails because the search sequence is missing in `T334T`.
+- **Implementation Delivered:**
+  - `srv/integration/s4hana/wm/TrToAdapter.js`: Added helper `mapStorageTypeSearchError`. Maps SAP message `L3 007` to an actionable error specifying warehouse (`W01`), WM movement type (`311`), missing `T334T` key, and exact SPRO path (`SPRO > Logistics Execution > Warehouse Management > Strategies > Stock Removal Strategies > Determine Storage Type Search`). Wired into `createTOFromTR` and `createTO`.
+  - `test/unit/wm/trToAdapter.test.js`: Added mock tests labeled `(mock only, not SAP verification)`.
+- **Validation:**
+  - `npx jest test/unit/wm/trToAdapter.test.js`: 31/31 PASS.
+  - `npx jest test/unit/wm/`: 65/65 suites PASS, 1,352/1,352 PASS.
+  - `npx cds compile srv --to sql`: 0 errors.
+  - `git diff --check`: Clean (0 errors).
 
 ### 2026-10-12 13:45 IST — Live S/4HANA Sandbox Run 311/full (--execute) 100% PASS (19/19 checks): Root Cause of Blank MSEG/MATDOC-SGTXT Isolated & Resolved via Reservation/Document Linkage Fallback
 

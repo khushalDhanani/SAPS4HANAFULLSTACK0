@@ -39,6 +39,30 @@ function sapNum(v) {
   return neg ? -n : n;
 }
 
+/**
+ * Maps SAP L3 007 ("Data for storage type search is not defined (& & & &)") to an actionable error
+ * naming warehouse, WM movement type, the exact missing T334T key, and the SPRO customizing path.
+ */
+function mapStorageTypeSearchError(rawMsg, wh, mvt) {
+  if (!rawMsg) return rawMsg;
+  const match = String(rawMsg).match(
+    /(?:Data for storage type search is not defined|Daten zur Lagertypfindung sind nicht definiert)\s*\(([^)]*)\)/i
+  );
+  if (!match) return rawMsg;
+
+  const tokens = match[1].trim().split(/\s+/).filter(Boolean);
+  const op = tokens[0] || 'A';
+  const indicator = tokens[1] || '(blank)';
+  const opText = op === 'A' ? 'Stock Removal' : (op === 'E' ? 'Stock Placement' : op);
+  const sproStrategy = op === 'A' ? 'Stock Removal Strategies' : 'Stock Placement Strategies';
+  const extra = [];
+  if (tokens[2]) extra.push(`Stock Category: '${tokens[2]}'`);
+  if (tokens[3]) extra.push(`Special Stock: '${tokens[3]}'`);
+  const extraStr = extra.length ? `, ${extra.join(', ')}` : '';
+
+  return `Data for storage type search is not defined in warehouse ${wh} for WM movement type ${mvt}: missing customizing key in table T334T (Warehouse: ${wh}, Operation: ${op} [${opText}], Storage Type Indicator: '${indicator}'${extraStr}). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > ${sproStrategy} > Determine Storage Type Search.`;
+}
+
 class TrToAdapter {
   constructor(options = {}) {
     this.rfc = options.rfc || new RfcClient();
@@ -324,7 +348,8 @@ class TrToAdapter {
     );
 
     if (res?.EV_SUCCESS !== 'S' || !res.EV_TANUM) {
-      throw httpError(400, res?.EV_MESSAGE || `SAP did not create a Transfer Order for TR ${alphaOut(tr.Tbnum)}`);
+      const errMsg = mapStorageTypeSearchError(res?.EV_MESSAGE, wh, tr.Bwlvs);
+      throw httpError(400, errMsg || `SAP did not create a Transfer Order for TR ${alphaOut(tr.Tbnum)}`);
     }
     return {
       TransferOrder: alphaOut(res.EV_TANUM),
@@ -836,7 +861,9 @@ class TrToAdapter {
           );
         } else {
           // Business / customizing / authorization error from SAP: preserve and surface the real error
-          const err = httpError(400, primaryErr.message || 'Error creating Transfer Order in SAP');
+          const rawMessage = primaryErr.message || 'Error creating Transfer Order in SAP';
+          const mappedMsg = mapStorageTypeSearchError(rawMessage, wh, tr.Bwlvs);
+          const err = httpError(400, mappedMsg);
           err.Status = STATUS.TO_ERROR;
           err.ErrorStep = 'LT04';
           throw err;
@@ -848,6 +875,7 @@ class TrToAdapter {
         if (!errMsg && Array.isArray(res?.ET_MESSAGES) && res.ET_MESSAGES.length > 0) {
           errMsg = res.ET_MESSAGES.map((m) => m.MESSAGE).filter(Boolean).join('; ');
         }
+        errMsg = mapStorageTypeSearchError(errMsg, wh, tr.Bwlvs);
         const err = httpError(400, errMsg || `SAP did not create a Transfer Order for TR ${alphaOut(tr.Tbnum)}`);
         err.Status = STATUS.TO_ERROR;
         err.ErrorStep = 'LT04';
@@ -909,5 +937,5 @@ class TrToAdapter {
   }
 }
 
-TrToAdapter._internals = { sapNum, alphaIn, alphaOut, sapDate };
+TrToAdapter._internals = { sapNum, alphaIn, alphaOut, sapDate, mapStorageTypeSearchError };
 module.exports = TrToAdapter;

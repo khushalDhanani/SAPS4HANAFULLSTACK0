@@ -1,7 +1,7 @@
 const TrToAdapter = require('../../../srv/integration/s4hana/wm/TrToAdapter');
 const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
-const { sapNum } = TrToAdapter._internals;
+const { sapNum, mapStorageTypeSearchError } = TrToAdapter._internals;
 
 // Shapes as returned by Z_WM_GET_TR_MATERIAL_LIST / RFC_READ_TABLE (values from W01, TR 1000663).
 const HEADER = { LGNUM: 'W01', TBNUM: '0001000663', BWLVS: '319', BETYP: 'P', BENUM: '0001002749', RSNUM: '0000517858',
@@ -267,6 +267,61 @@ describe('TrToAdapter (RFC)', () => {
     expect(sapNum('17323.200')).toBe(17323.2);
     expect(sapNum('1,500 -')).toBe(-1.5);
     expect(sapNum('')).toBe(0);
+  });
+
+  it('mapStorageTypeSearchError parses SAP L3 007 and produces actionable customizing error with SPRO path (mock only, not SAP verification)', () => {
+    const msg = mapStorageTypeSearchError(
+      'Create Transfer Order for TR 1000799: Data for storage type search is not defined (A EN1 )',
+      'W01',
+      '311'
+    );
+    expect(msg).toContain('warehouse W01 for WM movement type 311');
+    expect(msg).toContain("missing customizing key in table T334T (Warehouse: W01, Operation: A [Stock Removal], Storage Type Indicator: 'EN1')");
+    expect(msg).toContain('SPRO: Logistics Execution > Warehouse Management > Strategies > Stock Removal Strategies > Determine Storage Type Search');
+  });
+
+  it('createTOFromTR maps SAP L3 007 error to actionable customizing error (mock only, not SAP verification)', async () => {
+    const tr1000799Header = {
+      LGNUM: 'W01', TBNUM: '0001000799', BWLVS: '311', BETYP: '', BENUM: '', RSNUM: '0000000000',
+      STATU: '', BDATU: '20261012', VLTYP: '', VLPLA: '', NLTYP: '921', NLPLA: 'TRANSFER'
+    };
+    const tr1000799Items = [{
+      LGNUM: 'W01', TBNUM: '0001000799', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01',
+      CHARG: '', BESTQ: '', SOBKZ: '', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: ''
+    }];
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') return { ET_TR_HEADER: [tr1000799Header], ET_TR_ITEMS: tr1000799Items };
+        if (fm === 'AUTHORITY_CHECK') return { USER_IS_AUTHORIZED: 'Y' };
+        if (fm === 'Z_WM_TO_CREATE_FROM_TR') {
+          throw new Error('Data for storage type search is not defined (A EN1 )');
+        }
+        throw new Error(`unexpected ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'LTAP') return [];
+        if (table === 'MARC') return [];
+        return [];
+      })
+    };
+
+    const adapter = new TrToAdapter({ rfc });
+    const p = adapter.createTOFromTR({
+      lgnum: '',
+      tbnum: '1000799',
+      tbpos: '0001',
+      qty: 1,
+      unit: 'NOS',
+      batch: '',
+      serials: [],
+      storageUnit: ''
+    });
+    await expect(p).rejects.toThrow(/missing customizing key in table T334T \(Warehouse: W01, Operation: A \[Stock Removal\], Storage Type Indicator: 'EN1'\)/);
+    await expect(p).rejects.toMatchObject({
+      status: 400,
+      Status: '12',
+      ErrorStep: 'LT04'
+    });
   });
 });
 
