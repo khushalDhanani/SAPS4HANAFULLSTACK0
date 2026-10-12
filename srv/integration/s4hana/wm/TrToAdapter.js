@@ -342,22 +342,27 @@ class TrToAdapter {
   }
 
   /**
-   * Material profile lookup for batch management (MARA-XCHPF) and serial management (MARA-SERNP)
+   * Material profile lookup for batch management (MARC-XCHPF) and serial management (MARC-SERNP).
+   * Both are plant-level fields in MARC — SERNP does not exist in MARA (reading it there raises AD 718),
+   * which previously made every material silently look non-serial and hid the scan-to serial capture.
    */
-  async _materialProfiles(matnrs) {
+  async _materialProfiles(matnrs, plant = '') {
     const out = {};
+    const s4Plant = String(plant || '').trim();
     for (const m of [...new Set(matnrs.filter(Boolean))]) {
       const s4Mat = /^\d+$/.test(m) ? m.padStart(18, '0') : m;
       let xchpf = '';
       let sernp = '';
       try {
+        const where = [`MATNR = '${s4Mat}'`];
+        if (s4Plant) where.push(`AND WERKS = '${s4Plant}'`);
         const rows = await this._rfc(
-          () => this.rfc.readTable('MARA', ['MATNR', 'XCHPF', 'SERNP'], [`MATNR = '${s4Mat}'`]),
+          () => this.rfc.readTable('MARC', ['XCHPF', 'SERNP'], where, 1),
           `Read material profile for ${m}`
         );
         if (rows && rows[0]) {
-          xchpf = rows[0].XCHPF || '';
-          sernp = rows[0].SERNP || '';
+          xchpf = String(rows[0].XCHPF || '').trim();
+          sernp = String(rows[0].SERNP || '').trim();
         }
       } catch (_err) {
         // Fallback for offline/test environments
@@ -383,7 +388,7 @@ class TrToAdapter {
     const item = tr.Items.find((i) => i.OpenQty > 0) || tr.Items[0];
     if (!item) throw httpError(404, `No item found for TR ${alphaOut(tbnum)}`);
 
-    const profiles = await this._materialProfiles([item.Material]);
+    const profiles = await this._materialProfiles([item.Material], item.Plant);
     const profile = profiles[item.Material] || {};
 
     return {
@@ -501,7 +506,7 @@ class TrToAdapter {
     }
 
     // Material Profiles (Batch & Serial check)
-    const profiles = await this._materialProfiles([item.Material]);
+    const profiles = await this._materialProfiles([item.Material], item.Plant);
     const profile = profiles[item.Material] || {};
 
     if (profile.isBatchManaged && !batch && !item.Batch) {

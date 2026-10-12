@@ -365,4 +365,30 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             expect(mockRfc.call).not.toHaveBeenCalledWith('L_TO_CONFIRM', expect.anything());
         });
     });
+
+    describe('9. Material profile reads the serial profile from MARC (not MARA)', () => {
+        it('detects a serial-managed material from MARC-SERNP, filtered by plant', async () => {
+            mockRfc.readTable.mockResolvedValueOnce([{ XCHPF: '', SERNP: 'ZSN1' }]);
+
+            const profiles = await adapter._materialProfiles(['8000009753'], '1120');
+
+            expect(profiles['8000009753'].isSerialManaged).toBe(true);
+            expect(profiles['8000009753'].isBatchManaged).toBe(false);
+            expect(mockRfc.readTable).toHaveBeenCalledWith(
+                'MARC',
+                ['XCHPF', 'SERNP'],
+                expect.arrayContaining([expect.stringContaining("WERKS = '1120'")]),
+                1
+            );
+        });
+
+        it('treats a material as non-serial when MARC-SERNP is blank', async () => {
+            mockRfc.readTable.mockResolvedValueOnce([{ XCHPF: 'X', SERNP: '' }]);
+
+            const profiles = await adapter._materialProfiles(['8900000004'], '1120');
+
+            expect(profiles['8900000004'].isSerialManaged).toBe(false);
+            expect(profiles['8900000004'].isBatchManaged).toBe(true);
+        });
+    });
 });
