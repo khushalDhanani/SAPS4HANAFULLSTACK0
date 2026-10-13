@@ -8,6 +8,7 @@ const { STATUS, STEP_ERROR, ERROR_STATUSES, UNCONFIRMED_TO } = require('../../co
 const { sapKey, sapKeyOpt } = require('../../integration/s4hana/sapKey');
 const { withReservationLock, isLockConflict } = require('../../integration/s4hana/wm/resLock');
 const LOG = cds.log('reservation-entry');
+const SUPPORTED_MOVEMENT_TYPES = Object.freeze(['311', '201', '241', '301']);
 
 module.exports = class ReservationEntryService extends cds.ApplicationService {
   async init() {
@@ -370,6 +371,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         const h = rkpf && rkpf[0];
         const i = resb && resb[0];
         if (!i) return null;
+        const mvt = String((h && h.BWART) || '').trim();
+        if (!SUPPORTED_MOVEMENT_TYPES.includes(mvt)) return null;
         const closed = String(i.KZEAR || '').trim() === 'X';
         const sMat = strip(i.MATNR);
         const sMatPad = String(i.MATNR).padStart(18, '0');
@@ -911,9 +914,18 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
     this.on('getOpenReservations', async (req) => {
       const plant = String(req.data.plant || '').trim();
       const mvt = String(req.data.movementType || '').trim();
+
+      if (mvt && !SUPPORTED_MOVEMENT_TYPES.includes(mvt)) {
+        return [];
+      }
+
+      const targetMvt = mvt || SUPPORTED_MOVEMENT_TYPES.join(',');
       try {
-        const rows = await GoodsIssueAdapter.getOpenReservations(mvt, plant);
-        return (rows || []).map((r) => ({
+        const rows = await GoodsIssueAdapter.getOpenReservations(targetMvt, plant);
+        const filteredRows = (rows || []).filter((r) =>
+          SUPPORTED_MOVEMENT_TYPES.includes(String(r.MovementType || '').trim())
+        );
+        return filteredRows.map((r) => ({
           ReservationNo: r.ReservationNo || '',
           ReservationItem: '0001',
           MovementType: r.MovementType || '',

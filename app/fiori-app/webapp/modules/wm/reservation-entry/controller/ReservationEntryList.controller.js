@@ -58,9 +58,15 @@ sap.ui.define([
                 ? this._oService.getOpenReservations(oFilters).catch(function () { return []; })
                 : Promise.resolve([]);
 
+            const SUPPORTED_MVTS = ["311", "201", "241", "301"];
+
             return Promise.all([pTracked, pOpen]).then(function (aResults) {
-                const aTracked = aResults[0] || [];
-                const aOpen = aResults[1] || [];
+                const aTracked = (aResults[0] || []).filter(function (e) {
+                    return e && SUPPORTED_MVTS.includes(String(e.MovementType || "").trim());
+                });
+                const aOpen = (aResults[1] || []).filter(function (o) {
+                    return o && SUPPORTED_MVTS.includes(String(o.MovementType || "").trim());
+                });
 
                 // Tracked entries take priority: they have TransferRequirement, Status_code, etc.
                 const mSeen = {};

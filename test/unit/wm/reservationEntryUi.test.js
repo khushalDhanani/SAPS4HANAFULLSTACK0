@@ -489,6 +489,41 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(entries[1].ReservationNo).toBe('0000527595');
         });
 
+        it('loadData strictly filters out movement type 261 and non-supported movements from both tracked and open lists', async () => {
+            const serviceMock = {
+                getEntries: jest.fn().mockResolvedValue([
+                    { ReservationNo: '0000527594', ReservationItem: '0001', MovementType: '311', Status_code: '02' },
+                    { ReservationNo: '0000527599', ReservationItem: '0001', MovementType: '261', Status_code: '02' }
+                ]),
+                getOpenReservations: jest.fn().mockResolvedValue([
+                    { ReservationNo: '0000519944', ReservationItem: '0001', MovementType: '261', Status_code: '01' },
+                    { ReservationNo: '0000527595', ReservationItem: '0001', MovementType: '201', Status_code: '01' },
+                    { ReservationNo: '0000527596', ReservationItem: '0001', MovementType: '241', Status_code: '01' },
+                    { ReservationNo: '0000527597', ReservationItem: '0001', MovementType: '301', Status_code: '01' }
+                ])
+            };
+
+            const viewModel = new FakeJSONModel({
+                filterMvtType: '',
+                filterPlant: '',
+                entries: [],
+                allEntries: [],
+                busy: false
+            });
+
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oService: serviceMock,
+                _oViewModel: viewModel
+            });
+
+            await listSubject.loadData();
+            const entries = viewModel.getProperty('/entries');
+            expect(entries).toHaveLength(4);
+            const mvts = entries.map((e) => e.MovementType);
+            expect(mvts).toEqual(['311', '201', '241', '301']);
+            expect(entries.some((e) => e.MovementType === '261')).toBe(false);
+        });
+
         it('formats Date ISO string correctly via _formatDateIso', () => {
             const listSubject = Object.create(listCtrl);
             expect(listSubject._formatDateIso(null)).toBe('');
