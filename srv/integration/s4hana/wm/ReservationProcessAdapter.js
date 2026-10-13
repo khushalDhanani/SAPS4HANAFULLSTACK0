@@ -22,11 +22,16 @@ class ReservationProcessAdapter {
   constructor(options = {}) {
     this.rfc = options.rfc || new RfcClient();
     this._checkCsksExistence = Boolean(options.checkCsksExistence);
+    this._checkAssetExistence = Boolean(options.checkAssetExistence);
   }
 
   /** Same adapter bound to another RFC client (used to run a step inside one locked RFC session). */
   withRfc(rfc) {
-    return new this.constructor({ rfc, checkCsksExistence: this._checkCsksExistence });
+    return new this.constructor({
+      rfc,
+      checkCsksExistence: this._checkCsksExistence,
+      checkAssetExistence: this._checkAssetExistence
+    });
   }
 
   /**
@@ -81,6 +86,13 @@ class ReservationProcessAdapter {
       await this.validateCostCenter(costCenter);
     }
 
+    if (String(movementType).trim() === '241') {
+      if (!assetNo || !String(assetNo).trim()) {
+        throw httpError(400, 'Asset number is mandatory for Movement Type 241 (GI to Asset)');
+      }
+      await this.validateAsset(assetNo, subNumber, plant);
+    }
+
     if (this.rfc && String(movementType).trim() === '311' && receivingStorageLocation) {
       try {
         const t320Rec = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
@@ -95,7 +107,7 @@ class ReservationProcessAdapter {
       }
     }
 
-    if (this.rfc && String(movementType).trim() === '201' && storageLocation) {
+    if (this.rfc && (String(movementType).trim() === '201' || String(movementType).trim() === '241') && storageLocation) {
       try {
         const t320Iss = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
           `WERKS = '${sapKey(plant, 'plant')}'`,
@@ -116,8 +128,7 @@ class ReservationProcessAdapter {
       ...(targetMovePlant ? { MOVE_PLANT: String(targetMovePlant).trim() } : {}),
       ...(receivingStorageLocation ? { MOVE_STLOC: String(receivingStorageLocation).trim() } : {}),
       ...(costCenter ? { COSTCENTER: pad10(costCenter) } : {}),
-      ...(assetNo ? { ASSET_NO: pad12(assetNo) } : {}),
-      ...(subNumber ? { SUB_NUMBER: pad4(subNumber) } : {})
+      ...(assetNo ? { ASSET_NO: pad12(assetNo), SUB_NUMBER: pad4(subNumber || '0000') } : {})
     };
 
     const s4Mat = padMat(sapKey(material, 'matnr'));
@@ -668,6 +679,8 @@ class ReservationProcessAdapter {
     // Batch tier 1: caller
     let sBatch = sapKeyOpt(batch, 'batch');
     let sCostCenter = costCenter ? String(costCenter).trim() : '';
+    let sAssetNo = assetNo ? String(assetNo).trim() : '';
+    let sSubNumber = subNumber ? String(subNumber).trim() : '';
 
     // Tier 2 (and receiving plant/sloc) from the reservation item itself
     if (hasRes && (!sRecPlant || !sRecSLoc || !sBatch) && this.rfc) {
@@ -697,7 +710,7 @@ class ReservationProcessAdapter {
 
     // Confirmed TO quantity (CONF_MENGE): MIGO quantity must equal the confirmed TO quantity
     let quantityToPost = Number(params.confMenge || params.confirmedQuantity || quantity);
-    if (sMvt === '201' && this.rfc && sTanum && !params.confMenge && !params.confirmedQuantity) {
+    if ((sMvt === '201' || sMvt === '241') && this.rfc && sTanum && !params.confMenge && !params.confirmedQuantity) {
       try {
         const toQtyRows = await this.rfc.readTable('LTAP', ['VSOLM', 'NISTM'], [
           `TANUM = '${sTanum.padStart(10, '0')}'`
@@ -748,7 +761,42 @@ class ReservationProcessAdapter {
       await this.validateCostCenter(sCostCenter, today);
     }
 
-    if (sMvt === '201' && this.rfc && sSLoc) {
+    // For movement 241, resolve assetNo and subNumber from reservation header (RKPF) or TO if not supplied
+    if (sMvt === '241' && !sAssetNo && this.rfc) {
+      if (hasRes) {
+        try {
+          const rkpfRows = await this.rfc.readTable('RKPF', ['ANLN1', 'ANLN2'], [`RSNUM = '${sResNo}'`], 1);
+          if (rkpfRows?.[0]?.ANLN1?.trim()) {
+            sAssetNo = rkpfRows[0].ANLN1.trim();
+            if (!sSubNumber && rkpfRows[0].ANLN2?.trim()) {
+              sSubNumber = rkpfRows[0].ANLN2.trim();
+            }
+          }
+        } catch (_e) { /* tolerate */ }
+      }
+      if (!sAssetNo && sTanum) {
+        try {
+          const toRows = await this.rfc.readTable('LTAP', ['TBNUM'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
+          const tbnum = toRows?.[0]?.TBNUM?.trim();
+          if (tbnum) {
+            const trRows = await this.rfc.readTable('LTBK', ['BETYP', 'BENUM'], [`TBNUM = '${tbnum}'`], 1);
+            if (trRows?.[0]?.BETYP === 'A' && trRows[0].BENUM?.trim()) {
+              sAssetNo = trRows[0].BENUM.trim();
+              if (!sSubNumber) sSubNumber = '0000';
+            }
+          }
+        } catch (_e) { /* tolerate */ }
+      }
+    }
+
+    if (sMvt === '241') {
+      if (!sAssetNo) {
+        throw httpError(400, 'Asset number is mandatory for Movement Type 241 (GI to Asset)');
+      }
+      await this.validateAsset(sAssetNo, sSubNumber, sPlant, today);
+    }
+
+    if ((sMvt === '201' || sMvt === '241') && this.rfc && sSLoc) {
       try {
         const mardStock = await this.rfc.readTable('MARD', ['LABST'], [
           `MATNR = '${s4Mat}'`,
@@ -803,7 +851,7 @@ class ReservationProcessAdapter {
       }
     }
 
-    if ((sMvt === '311' || sMvt === '201') && this.rfc) {
+    if ((sMvt === '311' || sMvt === '201' || sMvt === '241') && this.rfc) {
       try {
         const marcSerial = await this.rfc.readTable('MARC', ['SERNP'], [
           `MATNR = '${s4Mat}'`,
@@ -845,8 +893,7 @@ class ReservationProcessAdapter {
       ...(sRecPlant ? { MOVE_PLANT: sRecPlant } : {}),
       ...(sRecSLoc ? { MOVE_STLOC: sRecSLoc } : {}),
       ...(sCostCenter ? { COSTCENTER: pad10(sCostCenter) } : {}),
-      ...(assetNo ? { ASSET_NO: pad12(assetNo) } : {}),
-      ...(subNumber ? { SUB_NUMBER: pad4(subNumber) } : {})
+      ...(sAssetNo ? { ASSET_NO: pad12(sAssetNo), SUB_NUMBER: pad4(sSubNumber || '0000') } : {})
     };
 
     const serialItems = (Array.isArray(serials) ? serials : [serials]).filter(Boolean).map((s) => ({
@@ -892,7 +939,7 @@ class ReservationProcessAdapter {
         reservationNo: sResNo,
         processId: sProcessId,
         batch: sBatch,
-        stockEffect: this._computeStockEffect(sMvt, { ...params, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
+        stockEffect: this._computeStockEffect(sMvt, { ...params, assetNo: sAssetNo, subNumber: sSubNumber, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
         messages: res.RETURN || [],
         ...(t321Warning ? { warning: t321Warning } : {})
       };
@@ -1051,6 +1098,64 @@ class ReservationProcessAdapter {
     }
     if (activeRow.BKZKP === 'X') {
       throw httpError(400, `Cost Center ${costCenter} is locked for actual primary postings (CSKS-BKZKP = X)`);
+    }
+  }
+
+  /**
+   * Validate Asset validity and lock status against ANLA before calling SAP.
+   */
+  async validateAsset(assetNo, subNumber = '0000', plant = '1120', date = new Date()) {
+    if (!assetNo || !String(assetNo).trim()) {
+      throw httpError(400, 'Asset number is mandatory for Movement Type 241 (GI to Asset)');
+    }
+    if (!this.rfc) return;
+    const s4Anln1 = pad12(assetNo);
+    const s4Anln2 = pad4(subNumber || '0000');
+    const dateStr = typeof date === 'string' && /^\d{8}$/.test(date) ? date : this._sapDate(date);
+
+    let bukrs = '1000';
+    if (plant) {
+      try {
+        const t001kRows = await this.rfc.readTable('T001K', ['BWKEY', 'BUKRS'], [`BWKEY = '${sapKey(plant, 'plant')}'`], 1);
+        if (t001kRows?.[0]?.BUKRS?.trim()) {
+          bukrs = t001kRows[0].BUKRS.trim();
+        }
+      } catch (_e) { /* fallback 1000 */ }
+    }
+
+    let rows = [];
+    try {
+      rows = await this.rfc.readTable('ANLA', ['BUKRS', 'ANLN1', 'ANLN2', 'AKTIV', 'DEAKT', 'XLOEV', 'XSPEB', 'TXT50'], [
+        `BUKRS = '${bukrs}'`,
+        `AND ANLN1 = '${s4Anln1}'`,
+        `AND ANLN2 = '${s4Anln2}'`
+      ], 1);
+    } catch (_anlaErr) {
+      return;
+    }
+
+    if (!rows || !rows.length) {
+      if (!this.rfc.readTable?.mock || this._checkAssetExistence) {
+        throw httpError(400, `Asset ${assetNo}/${subNumber || '0000'} does not exist in master data (ANLA)`);
+      }
+      return;
+    }
+
+    const row = rows[0];
+    if (row.XLOEV === 'X') {
+      throw httpError(400, `Asset ${assetNo}/${subNumber || '0000'} is marked for deletion (ANLA-XLOEV = X)`);
+    }
+    if (row.XSPEB === 'X') {
+      throw httpError(400, `Asset ${assetNo}/${subNumber || '0000'} is locked for postings (ANLA-XSPEB = X)`);
+    }
+    if (row.DEAKT && row.DEAKT !== '00000000') {
+      throw httpError(400, `Asset ${assetNo}/${subNumber || '0000'} is deactivated on ${row.DEAKT} (ANLA-DEAKT)`);
+    }
+    if (!row.AKTIV || row.AKTIV === '00000000') {
+      throw httpError(400, `Asset ${assetNo}/${subNumber || '0000'} is not capitalized / active (ANLA-AKTIV)`);
+    }
+    if (row.AKTIV > dateStr) {
+      throw httpError(400, `Asset ${assetNo}/${subNumber || '0000'} is not yet capitalized on ${dateStr} (capitalized on ${row.AKTIV})`);
     }
   }
 

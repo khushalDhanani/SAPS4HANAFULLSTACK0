@@ -75,9 +75,9 @@ class TrToHandler {
       const sUnit = data.Unit || existingTrack?.Unit;
       const sRecPlant = data.ReceivingPlant || existingTrack?.ReceivingPlant;
       const sRecSLoc = data.ReceivingStorageLocation || existingTrack?.ReceivingStorageLocation;
-      const sCostCenter = data.CostCenter || existingTrack?.CostCenter;
-      const sAssetNo = data.AssetNo || existingTrack?.AssetNo;
-      const sSubNumber = data.SubNumber || existingTrack?.SubNumber;
+      const sCostCenter = data.CostCenter || data.costCenter || existingTrack?.CostCenter;
+      const sAssetNo = data.AssetNo || data.assetNo || existingTrack?.AssetNo;
+      const sSubNumber = data.SubNumber || data.subNumber || existingTrack?.SubNumber;
       const sTanum = sTanumIn || existingTrack?.TransferOrder || '';
       const sBatch = data.Batch || data.batch || existingTrack?.Batch || '';
       const sSerials = data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : []);
@@ -288,8 +288,8 @@ class TrToHandler {
                 Plant: existing?.Plant || result.Plant,
                 StorageLocation: existing?.StorageLocation || result.StorageLocation,
                 CostCenter: existing?.CostCenter || result.CostCenter || (result.Betyp === 'K' ? result.Benum : '') || data.CostCenter || data.costCenter,
-                AssetNo: existing?.AssetNo,
-                SubNumber: existing?.SubNumber,
+                AssetNo: existing?.AssetNo || result.AssetNo || (result.Betyp === 'A' ? result.Benum : '') || data.AssetNo || data.assetNo,
+                SubNumber: existing?.SubNumber || result.SubNumber || data.SubNumber || data.subNumber || (result.Betyp === 'A' ? '0000' : ''),
                 ReceivingPlant: existing?.ReceivingPlant || data.ReceivingPlant || data.receivingPlant,
                 ReceivingStorageLocation: existing?.ReceivingStorageLocation || data.ReceivingStorageLocation || data.receivingStorageLocation,
                 Batch: result.Batch || data.batch || existing?.Batch || '',

@@ -1232,6 +1232,8 @@ class TrToAdapter {
       ReservationItem: '',
       MovementType: tr.Bwlvs || '',
       CostCenter: tr.Betyp === 'K' ? alphaOut(tr.Benum) : '',
+      AssetNo: tr.Betyp === 'A' ? alphaOut(tr.Benum) : '',
+      SubNumber: tr.Betyp === 'A' ? '0000' : '',
       Betyp: tr.Betyp || '',
       Benum: tr.Benum || '',
       Status: currentStatus,

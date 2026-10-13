@@ -5,6 +5,36 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Movement Type 241 (Goods Issue to Asset) End-to-End Code Audit, Material Compatibility & Hardening (2026-10-13, 15:30 IST):**
+  - **Scope:** Movement Type 241 only in Warehouse `W01`, Plant `1120`, SAP S/4HANA Client 220. Other movement types (201, 301, 311) remain strictly untouched.
+  - **Constraints Enforced:** Zero commits, minimal diffs, zero SAP writes, zero SPRO changes. Every value sourced from system or repo with CONFIRMED / UNSURE labels.
+  - **Material Compatibility (Client 220 live reads across MARC, MARD, T320, LQUA, T331):**
+    - Class A (Plain: XCHPF='', SERNP=''): Material `8000008977` (Plant `1120`, SLoc `HS01`, Storage Type `OH1`, Bin `ONHOLD`, Qty `1000 KG`, LQUA `0001042738`, MARD `LABST = 1000 KG`) / `8000000995` (Plant `1120`, SLoc `HS01`, Storage Type `EN1`, Bin `0-L0001-01`, Qty `10000 NOS`, MARD `LABST = 10002 NOS`). `CONFIRMED (read from system)`.
+    - Class B (Batch: XCHPF='X', SERNP=''): Material `8900000004` (Plant `1120`, SLoc `CS01`, Storage Type `921`, Bin `TRANSFER`, Qty `10 KG`, Batch `INJW260001`) / `8900000007` (Plant `1120`, SLoc `CS01`, Storage Type `OH1`, Bin `ONHOLD`, Qty `100 KG`, Batch `IN26001220`, SU `00000000001000058618`). `CONFIRMED (read from system)`.
+    - Class C (Serial: XCHPF='', SERNP='ZSN2'): Material `8000006485` (Plant `1120`, SLoc `CS02`, Storage Type `EN1`, Bin `0-L0001-03`, Qty `1 NOS`, SU `00000000002000020148`, MARC `SERNP = 'ZSN2'`). `CONFIRMED (read from system)`.
+    - Class D (Batch + Serial: XCHPF='X', SERNP!=''): `NO MATERIAL FOUND` (Confirmed: only `8000009787` has profile in MARC, but MARD and LQUA stock is 0). `CONFIRMED (read from system)`.
+    - Class E (Stock in Small SU: VOLLE=''): Material `8000006485` (Plant `1120`, SLoc `CS02`, Storage Type `921`, Bin `TRANSFER`, Qty `1 NOS`, SU `00000000002000020148`, T331 `VOLLE = ''`). `CONFIRMED (read from system)`.
+    - Class F (Stock in Large SU: VOLLE='X'): Material `8900000007` (Plant `1120`, SLoc `CS01`, Storage Type `OH1`, Bin `ONHOLD`, Qty `100 KG`, Batch `IN26001220`, SU `00000000001000058618`, T331 `VOLLE = 'X'`, `STAUS = 'H'`, `LENVW = 'X'`). `CONFIRMED (read from system)`.
+  - **System Reads (Live RFC from Client 220):**
+    - `T333` (`W01` / `241`): `LGNUM = 'W01'`, `BWLVS = '241'`, `TRART = 'A'`, `NLTYP = '913'`, `NLPLA = ''`, `BETYP = 'A'`, `TBMAN = 'X'`, `DRUKZ = '02'`, `NKDYN = 'X'`. Dynamic bin in interim storage type `913` is generated directly from `BENUM` (rightmost 10 chars of asset number `ANLN1`). `CONFIRMED (read from system)`.
+    - `T321`: For `RBLVS = '241'` / `BWLVS = '241'`, 2 rows exist in fallback `LGNUM = '***'` (`SOBKZ = ''` and `SOBKZ = 'K'`) with `LFART = 'DOG'`, `TBFKZ = 'X'`, `TAFKZ = ''` (blank), `UBFKZ = ''`. Direct MIGO 241 creates an additional TR because `TBFKZ = 'X'`. `CONFIRMED (read from system)`.
+    - `T320`: Plant `1120` mapped SLocs: `CIS1, CS01, CS02, FG01, HS01, IM01, IP01, MT01, MT02, OH01, OH02, PWIP, RA01, RJ02, SU01`. `CONFIRMED (read from system)`.
+    - `T331`: Storage types with `VOLLE = 'X'` (full removal required): `001, COR, EN1, FG1, FLM, GS1, OH1, POW, QC1, RM1, TOX`. Storage types with `VOLLE = ''`: `002, 003, 004, 005, 150, 1FL..5FL, 901..999, GFL, IP1..IP5`. `CONFIRMED (read from system)`.
+    - `ANLA`: Key fields `BUKRS = '1000'`, `ANLN1` (CHAR 12), `ANLN2` (CHAR 4), `AKTIV` (capitalization date), `DEAKT` (deactivation date), `XLOEV` (deletion flag), `XSPEB` (lock flag). Verified live assets: `000000400001` / `0000` (active), `000000400000` / `0000` (deactivated `20250521`). `CONFIRMED (read from system)`.
+    - `LTBK`: Live TR `0001000761` (`BWLVS: '241'`, `BETYP: 'A'`, `BENUM: '0000400001'`, `NLTYP: '913'`, `NLPLA: '0000400001'`, `MBLNR: '4900050143'`). Proven asset BENUM rule: `ANLN1` (`000000400001`, 12 chars) maps to `BENUM` (`0000400001`, rightmost 10 chars, `padStart(10, '0').slice(-10)`). `CONFIRMED (read from system)`.
+    - `MATDOC`: Document `4900050143` (`BWART: '241'`, `MATNR: '000000008900000004'`, `ANLN1: '000000400001'`, `ANLN2: '0000'`). `CONFIRMED (read from system)`.
+    - `RKPF` / `RESB`: `ANLN1` and `ANLN2` exist on header table `RKPF` (DD03L confirmed), NOT on `RESB`. `CONFIRMED (read from system)`.
+  - **Defects Audited & Fixed:**
+    1. `ReservationProcessAdapter.js`: Added `validateAsset` method checking `ANLA` existence, active status (`AKTIV`), deactivation date (`DEAKT`), deletion flag (`XLOEV`), and posting lock (`XSPEB`); in `createReservation`, validated `assetNo` mandatory for 241, validated asset against `ANLA`, validated issuing SLoc `T320` assignment, and passed `ASSET_NO: pad12(assetNo)` and `SUB_NUMBER: pad4(subNumber || '0000')` in reservation header; in `postGoodsMovement`, resolved missing `assetNo`/`subNumber` from `RKPF-ANLN1`/`ANLN2` or `LTBK-BENUM`, enforced `assetNo` mandatory, validated asset against `ANLA`, added serial pre-check (`MARC-SERNP`) failing 400 naming missing serials, checked SLoc stock against `MARD-LABST` failing 400 naming insufficient stock, scoped confirmed TO quantity (`CONF_MENGE`) from `LTAP`, passed `ASSET_NO` and `SUB_NUMBER` in `GOODSMVT_ITEM`, and enriched `stockEffect` with asset/subnumber.
+    2. `srv/integration/s4hana/wm/TrToAdapter.js`: Returned `AssetNo` (alpha-stripped `BENUM`) and `SubNumber: '0000'` on `createTOFromTR` when `tr.Betyp === 'A'`.
+    3. `srv/wm/tr-to/handlers/trTo.handler.js`: Fixed auto-MIGO to forward `AssetNo` and `SubNumber` from `result.AssetNo` / `result.Benum` / `data.AssetNo` / `data.assetNo`.
+    4. `test/unit/wm/mvt241Process.test.js`: Created comprehensive test suite (20 tests) covering all material classes (A, B, C, E, F), happy paths, missing batch, missing serial, wrong SU quantity (VOLLE), no stock in SLoc, missing asset number, nonexistent asset in ANLA, deactivated asset in ANLA, uncapitalized asset in ANLA, deletion flag in ANLA, posting lock in ANLA, GI failure then retry, T321 warning, confirmed TO quantity posting, and NO_MORE_GR rules. Labeled `[mock only, not SAP verification]`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/mvt241Process.test.js`: **PASS** (20/20 tests passed).
+    - `npx jest test/unit/wm`: **PASS** (68/68 test suites passed, 1,452/1,452 tests passed).
+    - `git diff --check`: Clean (0 whitespace errors).
+    - Zero commits created; working tree preserved.
+
 - **Movement Type 201 (Goods Issue to Cost Center) End-to-End Code Audit, Material Compatibility & Hardening (2026-10-13, 15:05 IST):**
   - **Scope:** Movement Type 201 only in Warehouse `W01`, Plant `1120`, SAP S/4HANA Client 220. Other movement types (241, 301, 311) remain strictly untouched.
   - **Constraints Enforced:** Zero commits, minimal diffs, zero SAP writes, zero SPRO changes. Every value sourced from system or repo with CONFIRMED / UNSURE labels.
@@ -1664,6 +1694,34 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-13 15:30 IST — Movement Type 241 (Goods Issue to Asset) End-to-End Audit, Material Compatibility & Hardening
+
+- **User Request:**
+  - Repo: UI5 + CAP/Node, RFC adapter, SAP S/4HANA Client 220, warehouse W01.
+  - Fix code for ONE movement type only: 241 (GI to asset). Do not touch the other three.
+  - Minimal diffs, one issue at a time. Commit nothing. No SAP writes, no SPRO changes.
+  - No assumptions: every value comes from the system or the repo, with its source.
+  - Material compatibility: Find real materials in the system for Classes A to F.
+  - Read T333, T321, T331, T320, requirement fields. Audit code path end-to-end. Fix every defect found. Add tests per material class labeled `[mock only, not SAP verification]`. Update WORKSTATUS.md.
+- **Root Cause & System Analysis:**
+  - `T333` (`W01` / `241`): `LGNUM = 'W01'`, `BWLVS = '241'`, `TRART = 'A'`, `NLTYP = '913'`, `NLPLA = ''`, `BETYP = 'A'`, `TBMAN = 'X'`, `DRUKZ = '02'`, `NKDYN = 'X'`. Dynamic bin in `913` is generated directly from `BENUM` (asset number rightmost 10 digits).
+  - `T321`: For `RBLVS = '241'` / `BWLVS = '241'`, 2 rows exist in fallback `LGNUM = '***'` (`SOBKZ = ''` and `SOBKZ = 'K'`) with `LFART = 'DOG'`, `TBFKZ = 'X'`, `TAFKZ = ''` (blank), `UBFKZ = ''`. Direct MIGO 241 creates an additional TR because `TBFKZ = 'X'`.
+  - `T320`: Plant `1120` mapped SLocs: `CIS1, CS01, CS02, FG01, HS01, IM01, IP01, MT01, MT02, OH01, OH02, PWIP, RA01, RJ02, SU01`.
+  - `ANLA`: Key fields `BUKRS = '1000'`, `ANLN1` (CHAR 12), `ANLN2` (CHAR 4), `AKTIV` (capitalization date), `DEAKT` (deactivation date), `XLOEV` (deletion flag), `XSPEB` (lock flag). Verified live assets: `000000400001` / `0000` (active), `000000400000` / `0000` (deactivated `20250521`).
+  - `LTBK`: Live TR `0001000761` (`BWLVS: '241'`, `BETYP: 'A'`, `BENUM: '0000400001'`, `NLTYP: '913'`, `NLPLA: '0000400001'`, `MBLNR: '4900050143'`). Proven asset BENUM rule: `ANLN1` (`000000400001`, 12 chars) maps to `BENUM` (`0000400001`, rightmost 10 chars, `padStart(10, '0').slice(-10)`).
+  - `MATDOC`: Document `4900050143` (`BWART: '241'`, `MATNR: '000000008900000004'`, `ANLN1: '000000400001'`, `ANLN2: '0000'`).
+  - `RKPF` / `RESB`: `ANLN1` and `ANLN2` exist on header table `RKPF` (DD03L confirmed), NOT on `RESB`.
+- **Affected Files:**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `srv/wm/tr-to/handlers/trTo.handler.js`
+  - `test/unit/wm/mvt241Process.test.js`
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/mvt241Process.test.js`: PASS (20/20 tests passed).
+  - `npx jest test/unit/wm`: PASS (68/68 test suites passed, 1,452/1,452 tests passed).
+  - `git diff --check`: Clean (0 whitespace errors).
+  - Zero commits created.
 
 ### 2026-10-13 15:05 IST — Movement Type 201 (Goods Issue to Cost Center) End-to-End Audit, Material Compatibility & Hardening
 
