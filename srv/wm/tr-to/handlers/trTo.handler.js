@@ -146,6 +146,14 @@ class TrToHandler {
                 ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for process ${processId}; not posted again`
                 : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect})`
             });
+            if (migoRes.warning) {
+              if (req && typeof req.warn === 'function') req.warn(migoRes.warning);
+              await log(ReservationLog, {
+                ...trackKey, ProcessId: processId, DocumentNo: migoRes.materialDocument,
+                Step: 'MIGO', Status: STATUS.GI_POSTED, MessageType: 'W', MessageId: 'L3', MessageNo: '001',
+                MessageText: migoRes.warning
+              });
+            }
           } catch (dbErr) {
             console.warn('[trTo.handler] DB post-MIGO tracking update warning:', dbErr.message);
           }
@@ -161,6 +169,7 @@ class TrToHandler {
           ReservationNo: migoRes.reservationNo || sResNo,
           Batch: migoRes.batch || sBatch,
           StockEffect: migoRes.stockEffect,
+          Warning: migoRes.warning || '',
           Message: migoRes.alreadyPosted
             ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for this process step; not posted again.`
             : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} posted successfully.`,

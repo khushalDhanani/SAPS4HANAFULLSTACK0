@@ -415,6 +415,83 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
           ]
         })
       );
+      expect(result.warning).toBeUndefined();
+    });
+
+    test('Pre-MIGO check: when flag is on and T321 has TBFKZ = X, returns warning that goods movement will create an additional TR [mock only, not SAP verification]', async () => {
+      const origEnv = process.env.WM_PRE_MIGO_T321_CHECK;
+      process.env.WM_PRE_MIGO_T321_CHECK = 'true';
+      try {
+        mockRfc.readTable.mockImplementation(async (table) => {
+          if (table === 'T321') {
+            return [{ LGNUM: '***', RBLVS: '311', TBFKZ: 'X' }];
+          }
+          return [];
+        });
+
+        mockRfc.call
+          .mockResolvedValueOnce({
+            MATERIALDOCUMENT: '4900050128',
+            MATDOCUMENTYEAR: '2026',
+            RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document 4900050128 posted' }]
+          })
+          .mockResolvedValueOnce({});
+
+        const result = await adapter.postGoodsMovement({
+          reservationNo: '524979',
+          movementType: '311',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          receivingStorageLocation: 'CS01',
+          quantity: 1,
+          unit: 'NOS'
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.materialDocument).toBe('4900050128');
+        expect(result.warning).toBe('goods movement will create an additional TR');
+        expect(mockRfc.readTable).toHaveBeenCalledWith('T321', expect.any(Array), expect.any(Array));
+      } finally {
+        process.env.WM_PRE_MIGO_T321_CHECK = origEnv;
+      }
+    });
+
+    test('Pre-MIGO check: when flag is on but T321 has TBFKZ = "", returns no warning [mock only, not SAP verification]', async () => {
+      const origEnv = process.env.WM_PRE_MIGO_T321_CHECK;
+      process.env.WM_PRE_MIGO_T321_CHECK = 'true';
+      try {
+        mockRfc.readTable.mockImplementation(async (table) => {
+          if (table === 'T321') {
+            return [{ LGNUM: '***', RBLVS: '311', TBFKZ: '' }];
+          }
+          return [];
+        });
+
+        mockRfc.call
+          .mockResolvedValueOnce({
+            MATERIALDOCUMENT: '4900050128',
+            MATDOCUMENTYEAR: '2026',
+            RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document 4900050128 posted' }]
+          })
+          .mockResolvedValueOnce({});
+
+        const result = await adapter.postGoodsMovement({
+          reservationNo: '524979',
+          movementType: '311',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          receivingStorageLocation: 'CS01',
+          quantity: 1,
+          unit: 'NOS'
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.warning).toBeUndefined();
+      } finally {
+        process.env.WM_PRE_MIGO_T321_CHECK = origEnv;
+      }
     });
   });
 

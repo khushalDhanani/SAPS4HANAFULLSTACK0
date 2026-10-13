@@ -903,19 +903,48 @@ class TrToAdapter {
       return String(a.LQNUM).localeCompare(String(b.LQNUM));
     });
 
-    const chosen = physicalQuants[0];
-    const chosenLgtyp = String(chosen.LGTYP || '').trim();
-    const t331Row = t331Map.get(chosenLgtyp) || {};
-    const hasSU = Boolean(chosen.LENUM && String(chosen.LENUM).trim().replace(/^0+/, ''));
-    if (hasSU && t331Row.VOLLE === 'X') {
-      const suClean = String(chosen.LENUM).trim().replace(/^0+/, '');
-      const suQty = sapNum(chosen.VERME);
-      const reqQty = sapNum(requestedQty);
-      if (reqQty && reqQty !== suQty) {
-        throw httpError(400, `Storage unit ${suClean} in storage type ${chosenLgtyp} requires complete stock removal (T331-VOLLE = 'X'). Requested quantity ${requestedQty} must equal storage unit quantity ${suQty}`);
+    let chosen = null;
+    const reqQty = sapNum(requestedQty);
+
+    // Identify storage types where T331-VOLLE = 'X' (complete stock removal required; do not split SUs)
+    const volleTypes = new Set(
+      [...t331Map.entries()].filter(([_, row]) => row.VOLLE === 'X').map(([lgtyp]) => lgtyp)
+    );
+
+    if (volleTypes.size > 0) {
+      const volleQuants = physicalQuants.filter((q) => volleTypes.has(String(q.LGTYP || '').trim()));
+      if (volleQuants.length > 0) {
+        // Choose among quants one whose SU quantity equals requestedQty (FIFO among those)
+        const matchingQuant = volleQuants.find((q) => {
+          const suQty = sapNum(q.VERME);
+          return reqQty ? suQty === reqQty : true;
+        });
+
+        if (matchingQuant) {
+          chosen = matchingQuant;
+        } else {
+          // If none match, throw 400 listing SU numbers and quantities. Do not split SUs.
+          const suList = volleQuants.map((q) => {
+            const suClean = q.LENUM ? String(q.LENUM).trim().replace(/^0+/, '') : `Quant-${q.LQNUM}`;
+            const qty = sapNum(q.VERME);
+            return `${suClean} (qty: ${qty})`;
+          }).join(', ');
+          const typesList = [...volleTypes].join(', ');
+          const firstSu = volleQuants[0]?.LENUM ? String(volleQuants[0].LENUM).trim().replace(/^0+/, '') : '';
+          const suPrefix = firstSu ? `Storage unit ${firstSu} in storage type ${typesList}` : `Storage type ${typesList}`;
+          throw httpError(
+            400,
+            `${suPrefix} requires complete stock removal (T331-VOLLE = 'X'). No storage unit matches requested quantity ${requestedQty}. Available storage units: ${suList}`
+          );
+        }
       }
     }
 
+    if (!chosen) {
+      chosen = physicalQuants[0];
+    }
+
+    const chosenLgtyp = String(chosen.LGTYP || '').trim();
     return {
       vltyp: chosenLgtyp,
       vlpla: String(chosen.LGPLA || '').trim(),

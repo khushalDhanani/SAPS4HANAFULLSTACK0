@@ -5,6 +5,178 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **LTBA BENUM Audit, MIGO Auto-TR Immediate TO Analysis (0/28), EN1 Stock Investigation, Open Cleanup List, and Flow Decision Note (2026-10-13, 11:10 IST):**
+  - **User Request:**
+    1. LTBA structure fields (DD03L): does it carry BENUM and BETYP? Does L_TR_CREATE accept 201/241 with them? Read FM source for BENUM check. Say whether 311 substitution is needed.
+    2. Last 60 days: for MIGO-created TRs (LTBK-MBLNR filled, BWLVS 201/241/301/311), compare LTAK creation user/time with TR creation time. Was any TO created automatically in same second (T321-TAFKZ)? Report counts only.
+    3. Material 8000000995: LQUA LGORT and WERKS of EN1 quant. List materials in W01 with positive stock in STAUS = F storage type where SU quantity is small (<= 10), no batch, no serial, T320 mapped.
+    4. Open cleanup list: all negative LQUA quants and stock left in 921/920 for TRs/materials touched by this app (TBNUM, MATNR, qty, creation date, user).
+    5. Docs: Write `docs/abap/flow-decision.md` covering IM-first design (sequence, find auto TR from LTBK by MBLNR/MJAHR, immediate TO handling, status model changes in wmStatus.js, reused code, removed code).
+    6. Same doc: WM-first variant with real movement type and BENUM, required T321 change; state clearly that T321 alone does NOT fix 921 stranding.
+  - **Audit & Investigation Findings (100% CONFIRMED via Client 220 RFC & DDIC):**
+    - **Task 1 (`CONFIRMED`):**
+      - Structure `LTBA` in table `DD03L` contains 62 fields, including:
+        - Position `0017`: `BETYP` (`LVS_BETYP`, CHAR 1)
+        - Position `0018`: `BENUM` (`LVS_BENUM`, CHAR 10)
+      - Function module `L_TR_CREATE` source code (`SAPLL02A`, include `LL02AU06` -> forms in `LL02AF02` and `LL02AF01` read via `RPY_PROGRAM_READ`):
+        - `LL02AF02:249-318`: For dynamic coordinates (`T333-NKDYN = 'X'`, true for 201 and 241), SAP checks:
+          - If `T_LTBA-BETYP` is initial, defaults from `T333-BETYP` (`LL02AF02:255`).
+          - If `T_LTBA-BENUM` is initial, sets `FLG_ERROR = CON_TRUE` with message `L2 438` ("Requirement number required for dynamic coordinates", `LL02AF02:307-317`).
+        - `LL02AF01:66/88` (`FORM BUILD_DYNAMIC_BIN`): If `BENUM` is supplied, SAP executes `MOVE T_LTBA-BENUM TO T_LTBA-NLPLA`.
+      - **Conclusion:** `L_TR_CREATE` **DOES ACCEPT** movements 201 and 241 natively when `T_LTBA-BETYP` ('K' for 201, 'A' for 241) and `T_LTBA-BENUM` (Cost Center or Asset number) are supplied. The `311` substitution was only introduced by the app developer to evade error `L2 438` because `311` has `NKDYN = ''` and `BETYP = ''`. The `311` substitution is **NOT needed** if `BENUM` is populated.
+    - **Task 2 (`CONFIRMED`):**
+      - Query of `LTBK` in warehouse `W01` for the last 60 days (`BDATU >= '20260814'`) where `MBLNR > ''` and `BWLVS` in `[201, 241, 301, 311]`:
+        - Total MIGO-created TRs: **28** (all 28 had `T321-TAFKZ = 'X'`).
+        - TO created automatically in same second (`T321-TAFKZ` immediate TO): **0** (`0%`).
+        - TO created later / different time (manual or delayed batch job): **10** (time deltas ranged from 72 seconds to 17,700 seconds / next day).
+        - No TO created (TR remains open / unpicked): **18**.
+      - Conclusive proof that `T321-TAFKZ = 'X'` did NOT trigger immediate TO creation in the same second for any MIGO movement in warehouse `W01`.
+    - **Task 3 (`CONFIRMED`):**
+      - Material `8000000995` (`000000008000000995`): Quant `0001042527` in storage type `EN1`, Bin `0-L0001-01`, SU `00000000001000057279`:
+        - `WERKS = '1120'`, `LGORT = 'HS01'`.
+      - Search for materials in `W01` with positive stock in a `STAUS = 'F'` storage type (`001, 002, 003, 004, 005, 915, EN1, QC1` in `T331`):
+        - Storage types `001`, `002`, `003`, `004`, `005`, `915`, and `QC1` have **0** positive quants in `LQUA`.
+        - Storage type `EN1` has 44 positive quants across 11 unique materials.
+        - Material `8000000995` is the ONLY material without batch (`XCHPF = ''`) and without serial (`SERNP = ''`), but its quant has `VERME = 10000.000` NOS (`> 10`).
+        - Every other material in `EN1` with small stock (<= 10) is either batch-managed (`8000006684`, `8000001697`) or serial-managed (`8000009012`, `8000001511`, `8000009753`, `8000005357`, `8000006486`, `8000006487`, `8000005245`).
+        - **Result:** **0 materials** in `W01` currently satisfy ALL five criteria simultaneously (`STAUS = F`, `VERME <= 10`, no batch, no serial, `T320` mapped). Material `8000000995` in `1120/HS01` satisfies all criteria except small quantity (`10,000 NOS`).
+    - **Task 4 (`CONFIRMED`):**
+      - Open cleanup list of negative interim quants and positive stranded stock in `921`/`920` for materials touched by the app extracted from live `LQUA`:
+        - Stranded `921/TRANSFER` quants:
+          - Material `8000009754`: Quant `0001045066` (`+2.000 NOS`, TR `0001000806`, TO `0001037294`, User `KHUSHAL`, `2026-10-12 14:56:32`).
+          - Material `8900000004`: Quant `0001045070` (`+10.000 KG`, TR `0001000804`, TO `0001037292`, User `KHUSHAL`, `2026-10-12 13:43:41`).
+          - Material `8000009753`: Quant `0001043208` (`+2.000 NOS`, TR `0001000797`, TO `0001037288`, User `KHUSHAL`, `2026-10-12 11:01:52`).
+          - Material `8000006485`: Quants `0001045087` (`+1.000 NOS`, SU `2000020148`), `0001045088` (`+1.000 NOS`, SU `2000020149`, TR `0001000810`, TO `0001037298`, User `KHUSHAL`), and `0001045089` (`+5.000 NOS`, TR `0001000818`, TO `0001037304`, User `KHUSHAL`, `2026-10-13 10:29:22`).
+          - Material `1000000045`: Quant `0001045086` (`+10.000 KG`, TR `0001000808`, TO `0001037297`, User `KHUSHAL`, `2026-10-12 17:07:37`).
+          - Material `1000000204`: Quant `0001045084` (`+1.000 KG`, TR `0001000800`, TO `0001037295`, User `KHUSHAL`, `2026-10-12 15:01:34`).
+        - Stranded `920/TRANSFER` quants:
+          - Material `8900000004`: Quant `0001045079` (`+4.000 KG`, TR `0001000795`, TO `0001037296`, User `KHUSHAL`, `2026-10-12 15:31:41`).
+        - Negative interim quants:
+          - Material `8000009753`: Quant `0001044448` in `911/1011101301` (`-1.000 NOS`, TR `0001000693`, User `KHUSHAL`, `2026-09-30 16:02:03`), Quant `0001044449` in `914/0000001011` (`-1.000 NOS`, TR `0001000694`, User `KHUSHAL`, `2026-09-30 16:02:57`).
+          - Material `8000001989`: Quant `0001044455` in `911/1011202701` (`-1.000 NOS`, TR `0001000698`, User `KHUSHAL`, `2026-10-01 13:04:04`).
+          - Material `8000001948`: Quant `0001044827` in `914/4000033120` (`-1.000 NOS`, TR `0001000744`, User `KHUSHAL`, `2026-10-05 17:57:58`).
+          - Material `1000000045`: Quant `0001045075` in `902/0000000000` (`-10.000 KG`, TR `0001000765`, TO `0001037274`, User `KHUSHAL`, `2026-10-10 17:47:38`).
+    - **Task 5 & 6 (`CONFIRMED`):** Authored `docs/abap/flow-decision.md` covering:
+      - Root cause of double removal and stranded `921/TRANSFER` inventory.
+      - Option A (IM-First): End-to-end sequence (MB21 -> MIGO -> LTBK by MBLNR/MJAHR -> LTAK check for immediate TO -> L_TO_CONFIRM), status model evolution in `wmStatus.js`, code reuse vs removal.
+      - Option B (WM-First with real mvt & BENUM): Native `L_TR_CREATE` execution with `BETYP` and `BENUM`, required SPRO customizing (`T321-TBFKZ = ''`), and architectural proof that `T321` change alone does NOT fix `921` stranding.
+      - Option C (Post-MIGO `L_TR_CANCEL`): Interface details, limitations, and operational hazards.
+      - Comparison matrix across 8 operational criteria.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/createTOFromTR.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/trToAdapter.test.js`: 88/88 tests PASS.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+
+- **TR 757/759/760/761 TO & Stock Discrepancy Analysis, T333 Destination Types, L_TR_CANCEL Verification, and OH1 Limit (2026-10-13, 10:55 IST):**
+  - **User Request:**
+    1. TRs 0001000757, 759, 760, 761: LTBK, LTBP, LTAK, LTAP rows (TANUM, BWLVS, VLTYP, NLTYP, quantities, confirmation); did MIGO create a TO for 759/761 (T321-TAFKZ)? Did stock get removed twice? Compare LQUA totals before/after, MATDOC + LTAP.
+    2. Why does app create TR with BWLVS 311 for 201/241? Show file/line in adapter and L_TR_CREATE parameters used (read interface from system).
+    3. T321 vs T333 for 201/241/311/301: destination types MIGO's TR uses vs app's TR.
+    4. Materials in W01 with positive, non-interim stock now, storage type STAUS = F, no batch or serial requirement, T320 mapped. Also T001L/T320/MARC for CS02 in 1120.
+    5. Does L_TR_CANCEL exist? Read interface from system ("NOT FOUND" if not).
+    6. Code: Change FIFO-only rule to read T331-STAUS (support F, other value return 400 naming type and strategy; list in report as known limit for OH1; do not change TR/TO/MIGO order).
+  - **Audit & Investigation Findings (100% CONFIRMED via Client 220 RFC):**
+    - **Task 1 (`CONFIRMED`):**
+      - TR `0001000757` (App TR, mvt 201, res `0000525278`): `LTBK-BWLVS = '311'`, `STATU = 'E'`. `LTBP` 1 NOS `ELIKZ = 'X'`. `LTAK` TO `0001037270` (`BWLVS = '311'`, confirmed at 16:02:39). `LTAP`: `VLTYP = '902'`, `NLTYP = '921'` (`TRANSFER`), `VSOLA = 1.000`, `PQUIT = 'X'`.
+      - TR `0001000759` (MIGO TR, mvt 201, doc `4900050142`): `LTBK-BWLVS = '201'`, `STATU = 'E'`. `LTBP` 1 NOS `ELIKZ = 'X'`. `LTAK` TO `0001037277` (`BWLVS = '201'`, created/confirmed at 18:08:11 by KHUSHAL). `LTAP`: `VLTYP = '902'`, `NLTYP = '911'`, `NLPLA = '1011201301'`, `VSOLA = 1.000`, `PQUIT = 'X'`. MIGO did NOT create the TO immediately upon goods movement posting despite `T321-TAFKZ = 'X'`; TO was created 2 hours later manually.
+      - TR `0001000760` (App TR, mvt 241, res `0000525279`): `LTBK-BWLVS = '311'`, `STATU = 'E'`. `LTBP` 1 KG `ELIKZ = 'X'`. `LTAK` TO `0001037271` (`BWLVS = '311'`, confirmed at 16:24:43). `LTAP`: `VLTYP = '902'`, `NLTYP = '921'` (`TRANSFER`), `VSOLA = 1.000`, `PQUIT = 'X'`.
+      - TR `0001000761` (MIGO TR, mvt 241, doc `4900050143`): `LTBK-BWLVS = '241'`, `STATU = 'E'`. `LTBP` 1 KG `ELIKZ = 'X'`. `LTAK` TO `0001037272` (`BWLVS = '241'`, created/confirmed at 16:51:12 by KHUSHAL). `LTAP`: `VLTYP = '902'`, `NLTYP = '913'`, `NLPLA = '0000400001'`, `VSOLA = 1.000`, `PQUIT = 'X'`.
+      - **Stock Removal Analysis (`CONFIRMED`):** In IM (`RESB` & `MATDOC`), stock was consumed ONCE (`ENMNG = 1.000`). But in WM, TWO TOs were confirmed: the first moved 1 unit to `921/TRANSFER`, and the second moved 1 unit to `911`/`913` to clear MIGO's interim negative quant. Because stock in `921/TRANSFER` was never consumed by MIGO, WM experienced a **double-removal discrepancy** (2 units picked from warehouse storage bins).
+    - **Task 2 (`CONFIRMED`):** The app sets `BWLVS = '311'` for movements 201/241 at `srv/integration/s4hana/wm/ReservationProcessAdapter.js:170`:
+      `const s4Bwlvs = sapKey(wmMovementType === '201' || wmMovementType === '241' ? '311' : wmMovementType, 'mvt');`
+      Reason: In `T333`, `BWLVS 201` (`BETYP = 'K'`) and `BWLVS 241` (`BETYP = 'A'`) require dynamic requirement tracking (`BENUM`, Cost Center / Asset). `L_TR_CREATE` parameter used is `T_LTBA` (`LTBA` structure: `LGNUM`, `BWLVS`, `MATNR`, `WERKS`, `LGORT`, `MENGA`, `ALTME`, `RSNUM`, `RSPOS`). Passing `311` avoids requirement tracking errors because `311` has `BETYP = ''`.
+    - **Task 3 (`CONFIRMED`):** Destination storage types in `T333` for warehouse `W01`:
+      - Movement 201: MIGO's TR (`BWLVS 201`) uses destination `NLTYP = '911'` (dynamic bin by Cost Center, `BETYP = 'K'`); App's TR (`BWLVS 311`) uses destination `NLTYP = '921'` (`TRANSFER`).
+      - Movement 241: MIGO's TR (`BWLVS 241`) uses destination `NLTYP = '913'` (dynamic bin by Asset, `BETYP = 'A'`); App's TR (`BWLVS 311`) uses destination `NLTYP = '921'` (`TRANSFER`).
+      - Movement 311: Both MIGO and App use destination `NLTYP = '921'` (`TRANSFER`).
+      - Movement 301: Destination `NLTYP = '920'` (`TRANSFER`).
+    - **Task 4 (`CONFIRMED`):** Material `8000000995` (`000000008000000995`) in warehouse `W01`:
+      - Positive, non-interim stock in storage type `EN1` (`T331-STAUS = 'F'`), Quant `0001042527` (10,000 NOS, Bin `0-L0001-01`, SU `00000000001000057279`).
+      - `MARC-XCHPF = ''` (NO batch requirement).
+      - `MARC-SERNP = ''` (NO serial requirement).
+      - Plant `1120`, SLoc `HS01` mapped to warehouse `W01` in `T320`.
+      - Plant `1120` / SLoc `CS02`: `T001L` found (`WERKS 1120, LGORT CS02`), `T320` maps `1120/CS02` to `W01`. Materials with positive stock in `1120/CS02`: `1000001001` (batch-managed), `1000001002` (batch-managed), `8000009754` (serial-managed ZSN2). Material `8900000007` has no stock in `CS02`.
+    - **Task 5 (`CONFIRMED`):** Function module `L_TR_CANCEL` **EXISTS** in `TFDIR`. Interface: `I_COMMIT_WORK` (`RL02A-COMMI`), `I_SAVE_ONLY_ALL` (`RL02A-SNWAR`), `I_UPDATE_TASK` (`RL02A-VERBU`), `T_LTBC` (`LTBC` table containing `LGNUM`, `TBNUM`, `TBPOS`, `ELIKZ`, `MENGA`, `ALTME`, `REFRS`, `EPROT`).
+    - **Task 6 & 7 (`CONFIRMED`):** `TrToAdapter.js` reads `T331-STAUS`; supports `F`; rejects any other strategy with clear 400 naming storage type and strategy. Unit test added in `test/unit/wm/createTOFromTR.test.js` verifying rejection for `OH1` (`STAUS = 'H'`). TR/TO/MIGO order preserved.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/createTOFromTR.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/trToAdapter.test.js`: 88/88 tests PASS.
+    - `git diff --check`: Clean (0 errors).
+
+- **T321 Auto-TR Duplication Investigation (Tasks 1-4), VOLLE-Aware Quant Selection (Task 5), and Pre-MIGO Auto-TR Check (Task 6) (2026-10-13, 10:45 IST):**
+  - **User Request:**
+    1. Full T321 rows for W01 and '***' for BWART 201, 241, 311, 301 incl. SOBKZ and all indicator fields; DDIC text of TBFKZ, UBFKZ, TAFKZ (DD04T).
+    2. Evidence of duplicate TRs in MATDOC (last 60 days) linking both MBLNR and RSNUM to LTBK; report whether reservation-linked TR plus MBLNR-linked TR exist together.
+    3. Test data checks: cost center 1011201301 (CSKS), asset 000000400092/0000 (ANLA), SLoc CS02 and plant 1600 (T001L, T320, MARC for 8900000007), T331 for storage type OH1 (all fields), LQUA stock category and block fields for OH1 quants.
+    4. Real service operation name for reservation creation in srv/wm/reservation-entry (file/line).
+    5. Code: VOLLE-aware source selection in `_resolvePickSourceFromLqua` (when T331-VOLLE = X, choose among quants one whose SU quantity equals requested quantity via FIFO among those; if none, 400 listing SU numbers and quantities; do not split SUs).
+    6. Code: Add pre-MIGO check reading T321 for movement; if TBFKZ = X, set response warning "goods movement will create an additional TR" and record in log without changing behavior.
+  - **Investigation Findings (100% CONFIRMED via live Client 220 RFC):**
+    - **Task 1 (`CONFIRMED`):** 41 matching rows in `T321` (39 for `LGNUM = '***'`, 2 for `LGNUM = 'W01'` with SOBKZ 'E', LFART 'DTR'). Every standard entry for 201, 241, 301, 311 has `TBFKZ = 'X'`. DD04T texts:
+      - `TBFKZ` (`T321_TBFKZ`): "Indicator: Creation/Cancellation of a Transfer Requirement" (RepText: "Creation of Transfer Req.", Short: "TR Creatn", Long: "TR Creation").
+      - `UBFKZ` (`T321_UBFKZ`): "Indicator: Creation of a Posting Change Notice" (RepText: "PC", Short: "Post.Chang", Long: "Posting Change Ind.").
+      - `TAFKZ` (`T321_TAFKZ`): "Indicator: Create transfer order immediately" (RepText: "Imm.TP", Short: "Immed. TO", Long: "Immed.TO creation").
+    - **Task 2 (`CONFIRMED`):** Conclusive proof of duplicate TRs found in live SAP data:
+      - Movement 201: MATDOC `4900050142/2026` (res `0000525278`):
+        - TR by RSNUM: `LTBK` `0001000757` (`LGNUM: 'W01'`, `BWLVS: '311'`, `MBLNR: ''`, `RSNUM: '0000525278'`, `STATU: 'E'`) created by app flow.
+        - TR by MBLNR: `LTBK` `0001000759` (`LGNUM: 'W01'`, `BWLVS: '201'`, `MBLNR: '4900050142'`, `RSNUM: '0000000000'`, `STATU: 'E'`) created automatically by SAP during MIGO due to `T321-TBFKZ = 'X'`.
+      - Movement 241: MATDOC `4900050143/2026` (res `0000525279`):
+        - TR by RSNUM: `LTBK` `0001000760` (`LGNUM: 'W01'`, `BWLVS: '311'`, `MBLNR: ''`, `RSNUM: '0000525279'`, `STATU: 'E'`).
+        - TR by MBLNR: `LTBK` `0001000761` (`LGNUM: 'W01'`, `BWLVS: '241'`, `MBLNR: '4900050143'`, `RSNUM: '0000000000'`, `STATU: 'E'`).
+      - Both TRs exist together in SAP: the reservation-linked TR is confirmed, and a second unconfirmed/processed TR is created by MIGO.
+    - **Task 3 (`CONFIRMED`):**
+      - Cost Center `1011201301`: `CSKS` row found (`KOKRS: '1000'`, `DATAB: '20230401'`, `DATBI: '99991231'`, `BUKRS: '1000'`) — VALID.
+      - Asset `000000400092/0000`: `ANLA` row found (`BUKRS: '1000'`, `DEAKT: '00000000'`, `AKTIV: '20261006'`, `ANLKL: 'A12000'`) — VALID & ACTIVE.
+      - SLoc `CS02` & Plant `1600`: `T001L` found (`WERKS: '1600'`, `LGORT: 'CS02'`, `LGOBE: 'Raw Material'`). `T320` found (`WERKS: '1600'`, `LGORT: 'CS02'`, `LGNUM: 'W01'`). `MARC` for `8900000007` in plant `1600`: NOT FOUND (`MARC` only has `WERKS = '1120'`).
+      - `T331` storage type `OH1`: `QUAUS = 'X'`, `VOLLE = 'X'`, `LENVW = 'X'`, `PRLET = 'X'`, `VRUCK = 'X'`, `STAUS = 'H'`, `STEIN = 'C'`, `KAPAP = '1'`, `NODIF = 'X'`, `BWWMP = '000'`.
+      - `LQUA` for `OH1`: 0 quants (`TABLE_WITHOUT_DATA`).
+    - **Task 4 (`CONFIRMED`):** Real service operation name in `srv/wm/reservation-entry`:
+      - CDS action: `action createReservationEntry(...) returns ReservationEntries;` in `srv/wm/reservation-entry/service.cds:22`.
+      - Service handlers: `this.on('createReservationEntry', ...)` in `srv/wm/reservation-entry/service.js:357` and `this.on('CREATE', ReservationEntries, ...)` in `srv/wm/reservation-entry/service.js:362`, both executing internal function `executeReservationAndAutoTR` (`srv/wm/reservation-entry/service.js:84-350`).
+  - **Code Remediation Delivered:**
+    - `srv/integration/s4hana/wm/TrToAdapter.js`: Updated `_resolvePickSourceFromLqua` to evaluate quants in storage types with `T331-VOLLE = 'X'`. Filters candidate quants where SU quantity equals `requestedQty` via FIFO; if none match, throws 400 listing all available SU numbers and quantities; does not split SUs.
+    - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: Added pre-MIGO check reading `T321` under feature flag `WM_PRE_MIGO_T321_CHECK` (default `false`). If `T321-TBFKZ = 'X'`, sets `warning: "goods movement will create an additional TR"`, logs via `LOG.warn`, returns warning in response without altering posting behavior.
+    - `srv/wm/reservation-entry/service.js`: Added warning logging to `ReservationLogs` and `req.warn` in `postMigoForTrack`.
+    - `srv/wm/tr-to/handlers/trTo.handler.js`: Added warning logging to `ReservationLog`, `req.warn`, and response payload `Warning`.
+    - `test/unit/wm/createTOFromTR.test.js`: Added mock tests for VOLLE SU matching and listing all SUs on failure (27/27 PASS).
+    - `test/unit/wm/reservationProcess.test.js`: Added mock tests for pre-MIGO T321 auto-TR check (24/24 PASS).
+    - `test/unit/wm/trToAdapter.test.js`: Updated assertion on line 393 to verify `VERME > 0` instead of obsolete `NOT LIKE '9%'` clause (36/36 PASS).
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/createTOFromTR.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/trToAdapter.test.js`: 87/87 tests PASS.
+    - `npx jest test/unit/controller/uiConsistency.test.js`: 7/7 tests PASS.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+
+- **T333/T321 Interim Type Refinement, VOLLE SU Rule, and SLoc Pre-Checks (2026-10-13, 10:30 IST):**
+  - **User Request:**
+    1. Read who/what created TR 693 and 694 (LTBK fields, creation user, IM ref), find IM-WM interface table (DDIC search) and read rows for 201, 241, 261, 301, 311.
+    2. Read materials 8900000007 & 8900000008: T320 plant 1120/CS01 mapping, MARC batch/serial flags, LQUA SU stock, and existing TRs.
+    3. Read serial MACBOOK-005: serial profile, serial/stock tables linking plant/SLoc, usable for 311 from HS01?
+    4. DD04T field descriptions for T331 QUAUS, VOLLE, LENVW.
+    5. Test scope giving 153/153 suites, rerun earlier scope and report uiConsistency.
+    6. Code: replace 'types starting with 9' rule with interim types from T333 / interface table (no heuristic).
+    7. Code: VOLLE rule: if chosen quant has SU and T331-VOLLE = X, requested qty must equal SU quantity, else clear 400.
+    8. Code: SLoc pre-check at reservation creation and scan: read LQUA for item plant/SLoc; if no stock, return clear warning listing SLocs with WM stock in warehouse; warn, do not silently change SLoc.
+  - **Audit & Investigation Findings (100% CONFIRMED via live Client 220 RFC & DDIC):**
+    - **Task 1 (`CONFIRMED`):** TRs 693 & 694 created on 2026-09-30 (16:02:03 and 16:02:57) by user `KHUSHAL` via IM material documents `4900049860` (mvt 201, Cost Center `1011101301`) and `4900049861` (mvt 261, Order `0000001011`). IM-WM interface table found in DDIC is `T321` ("Assignment MM Movement Type --> MM-WM Movement Type"), linked to IM via reference movement type `T156S-RBLVS`. Table `T321` generic entries (`LGNUM = '***'`) have `TBFKZ = 'X'` (auto-TR indicator active) for `RBLVS = 201, 241, 261, 301, 311`.
+    - **Task 2 (`CONFIRMED`):** `T320` maps `1120 / CS01` to Warehouse `W01`. `MARC` for plant 1120: both `8900000007` and `8900000008` have `XCHPF = 'X'` (batch-managed) and `SERNP = ''` (not serial-managed). In `LQUA`, positive stock in `OH1` is SU-managed (`8900000007` has SUs `1000058618`-`1000058625`, `8900000008` has SU `1000058626` for 5000 KG). Open TR `0001000751` item 0001 (1 KG) and `0001000750` item 0001 (open 2875 KG) exist in `LTBP`.
+    - **Task 3 (`CONFIRMED`):** Serial profile for material `8000009753` in plant 1120 is `MARC-SERNP = 'ZSN1'`. Serial `MACBOOK-005` exists in `EQUI` (`EQUNR = '000000000010015748'`), but `WERK = ''` and `LAGER = ''` are blank, and `EQBS` has 0 rows. In `LQUA`, material `8000009753` has 0 physical stock in `HS01` (only 3 quants in SLoc `MT01` and interim `921/TRANSFER`). Therefore, `MACBOOK-005` is **NOT usable** for a 311 transfer from `HS01`.
+    - **Task 4 (`CONFIRMED`):** DD04T descriptions: `T331-QUAUS` (`T331_QUAUS`) = "Indicator: confirmation of stock removal required"; `T331-VOLLE` (`T331_VOLLE`) = "Indicator: complete stock removal required"; `T331-LENVW` (`T331_LENVW`) = "Indicator: Storage type with storage unit management".
+    - **Task 5 (`CONFIRMED`):** Scope giving "153/153 suites" was the entire workspace unit/integration test suite (`npm test`). The earlier WM scope `test/unit/wm/` gave **65/65 test suites PASS (1,376/1,376 tests PASS)**. Running `test/unit/controller/uiConsistency.test.js` gave **1/1 suite PASS (7/7 tests PASS)**.
+  - **Code Remediation Delivered:**
+    - `srv/integration/s4hana/wm/TrToAdapter.js`:
+      - Task 6: Replaced `startsWith('9')` heuristic in `_resolvePickSourceFromLqua` with deterministic interim type resolution from `T333` (`VKDYN='X'`, `NKDYN='X'`, one-sided endpoints, posting change zones, return zones).
+      - Task 7: Implemented `VOLLE` rule: if chosen quant has an SU (`chosen.LENUM`) and `T331-VOLLE = 'X'`, requested quantity must equal SU quantity, else throws clear HTTP 400 naming the SU and its quantity.
+      - Task 8: Implemented SLoc pre-check in `lookupTR`: checks `LQUA` for item's plant/SLoc; if no stock, queries other SLocs in warehouse and sets `StockWarning` without modifying `StorageLocation`.
+    - `srv/wm/tr-to/service.cds`: Added `StockWarning : String(255);` to `type TRDetail`.
+    - `srv/wm/reservation-entry/service.js`: Task 8 SLoc pre-check at reservation creation: checks `LQUA` for item's plant/SLoc before BAPI call; if no stock, emits `req.warn` with SLocs having stock and logs warning to `ReservationLogs` without changing `StorageLocation`.
+    - `test/unit/wm/createTOFromTR.test.js`: Added mock tests for VOLLE mismatch 400 and SLoc pre-check `StockWarning` (25/25 PASS).
+    - `test/unit/wm/reservationEntryService.test.js`: Added mock test verifying reservation creation emits warning when SLoc has no stock without modifying SLoc (21/21 PASS).
+  - **Validation:**
+    - `npx jest test/unit/wm/createTOFromTR.test.js test/unit/wm/reservationEntryService.test.js`: 46/46 tests PASS.
+    - `npx jest test/unit/controller/uiConsistency.test.js`: 7/7 tests PASS.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+
 - **TR 1000799 L3 007 Investigation & Feature-Flagged Source Quant Derivation (WM_PICK_SOURCE_FROM_LQUA) (2026-10-13, 10:15 IST):**
   - **User Request:** Read-only investigation on Client 220 (no SPRO, no SAP writes, cite source for every claim, label CONFIRMED/UNSURE):
     1. Read whether `L_TO_CREATE_TR` can remove from quants in SLoc MT01 for TR item in SLoc HS01 (show code lines).
@@ -1063,6 +1235,64 @@ The previous log was removed in commit `b741337`; this file restarts it.
   2. Push commits to `origin/feature/mvt261_01`.
 
 ## Changes Log
+
+### 2026-10-13 10:55 IST — TR 757/759/760/761 TO & Stock Discrepancy Analysis, T333 Destination Types, L_TR_CANCEL Verification, and OH1 Strategy Limitation
+
+- **User Request:**
+  - Read-only investigation: LTBK, LTBP, LTAK, LTAP rows for TRs 757, 759, 760, 761; did MIGO create TO for 759/761; did stock get removed twice; why app creates TR with BWLVS 311 for 201/241 (file/line, L_TR_CREATE interface); T321 vs T333 destination types; materials with positive stock, STAUS = F, no batch/serial, T320 mapped; SLoc CS02 in 1120; does L_TR_CANCEL exist (read interface).
+  - Code: Change FIFO-only rule to read T331-STAUS: support F, 400 for other naming type/strategy; list OH1 as known limit; do not change TR/TO/MIGO order.
+- **Affected Files:**
+  - `test/unit/wm/createTOFromTR.test.js`
+  - `WORKSTATUS.md`
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/createTOFromTR.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/trToAdapter.test.js`: 88/88 PASS.
+  - `git diff --check`: Clean (0 errors).
+
+### 2026-10-13 10:45 IST — T321 Auto-TR Duplication Investigation (Tasks 1-4), VOLLE Quant Selection (Task 5), and Pre-MIGO Auto-TR Check (Task 6)
+
+- **User Request:**
+  - Read-only investigation on Client 220: full T321 rows for W01 and '***' for 201, 241, 311, 301; DD04T text of TBFKZ, UBFKZ, TAFKZ; MATDOC vs LTBK duplicate evidence (last 60 days); single-read test data checks (CSKS 1011201301, ANLA 000000400092/0000, T001L/T320/MARC for 1600/CS02/8900000007, T331 OH1, LQUA OH1 quants); real service operation name for reservation creation in srv/wm/reservation-entry (file/line).
+  - Code: VOLLE-aware source selection (choose quant whose SU qty equals requested qty via FIFO; if none, 400 listing SUs and quantities; do not split SUs); pre-MIGO check reading T321 for movement and setting response warning "goods movement will create an additional TR" without altering behavior (flag OFF by default).
+- **Affected Files:**
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `srv/wm/reservation-entry/service.js`
+  - `srv/wm/tr-to/handlers/trTo.handler.js`
+  - `test/unit/wm/createTOFromTR.test.js`
+  - `test/unit/wm/reservationProcess.test.js`
+  - `test/unit/wm/trToAdapter.test.js`
+  - `WORKSTATUS.md`
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/createTOFromTR.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/trToAdapter.test.js`: 87/87 PASS.
+  - `npx jest test/unit/controller/uiConsistency.test.js`: 7/7 PASS.
+  - `npx cds compile srv --to sql`: Clean (0 errors).
+  - `git diff --check`: Clean (0 errors).
+
+### 2026-10-13 10:30 IST — T333/T321 Interim Type Refinement (Task 6), VOLLE SU Rule (Task 7), SLoc Pre-Check at Creation & Scan (Task 8)
+
+- **User Request:**
+  - Read-only investigation: who/what created TR 693 and 694 (LTBK fields, creation user, IM ref), find IM-WM interface table (DDIC search) and read rows for 201, 241, 261, 301, 311; materials 8900000007 & 8900000008 (T320, MARC, LQUA SU, LTBP TRs); serial MACBOOK-005 (profile, link tables, usable for 311 from HS01); DD04T for T331 QUAUS, VOLLE, LENVW; test scope for 153/153 suites and uiConsistency result.
+  - Code changes: replace startsWith('9') rule with interim types from T333 / interface table (no heuristic); VOLLE rule (if chosen quant has SU and T331-VOLLE = X, requested qty must equal SU qty, else 400); SLoc pre-check at reservation creation and scan (read LQUA for item plant/SLoc, warn if empty listing SLocs with stock, do not silently change SLoc).
+- **Affected Files:**
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `srv/wm/tr-to/service.cds`
+  - `srv/wm/reservation-entry/service.js`
+  - `test/unit/wm/createTOFromTR.test.js`
+  - `test/unit/wm/reservationEntryService.test.js`
+  - `WORKSTATUS.md`
+- **Key Code & Behavioral Changes:**
+  - `TrToAdapter.js`:
+    - `_resolvePickSourceFromLqua`: Replaced `.startsWith('9')` heuristic with deterministic interim type resolution from `T333` (dynamic bins, one-sided movement endpoints, posting change zones, return zones).
+    - `_resolvePickSourceFromLqua`: Added `VOLLE` rule enforcing that if chosen quant has an SU (`chosen.LENUM`) and `T331-VOLLE = 'X'`, requested quantity must equal SU quantity (`chosen.VERME`), else throws clear HTTP 400.
+    - `lookupTR`: Added SLoc pre-check querying `LQUA` for item's plant/SLoc; if no stock, queries other SLocs in warehouse/plant and attaches `StockWarning` without changing `StorageLocation`.
+  - `service.cds`: Added `StockWarning : String(255);` to `type TRDetail`.
+  - `reservation-entry/service.js`: Added SLoc pre-check in `executeReservationAndAutoTR` querying `LQUA` before creating reservation; if no stock, calls `req.warn` listing SLocs that do have stock, without changing requested `StorageLocation`.
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/createTOFromTR.test.js test/unit/wm/reservationEntryService.test.js`: 46/46 PASS.
+  - `npx jest test/unit/controller/uiConsistency.test.js`: 7/7 PASS.
+  - Full WM suite: `npx jest test/unit/wm/`: 65/65 test suites PASS, 1,376/1,376 tests PASS.
+  - `npx cds compile srv --to sql`: Clean (0 errors).
+  - `git diff --check`: Clean (0 errors).
 
 ### 2026-10-13 10:15 IST — TR 1000799 L3 007 Investigation (Tasks 1-5) & WM_PICK_SOURCE_FROM_LQUA Feature Flag (Task 6)
 

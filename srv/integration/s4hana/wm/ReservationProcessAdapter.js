@@ -465,6 +465,27 @@ class ReservationProcessAdapter {
       throw httpError(400, 'ReservationNo is mandatory');
     }
 
+    // Pre-MIGO check (Task 6): read T321 for the movement; if TBFKZ = X, set warning and log
+    let t321Warning = '';
+    const checkT321 = process.env.WM_PRE_MIGO_T321_CHECK === 'true' || process.env.WM_CHECK_T321_AUTO_TR === 'true';
+    if (checkT321 && this.rfc) {
+      try {
+        const wh = params.warehouseNumber || 'W01';
+        const t321Rows = await this.rfc.readTable(
+          'T321',
+          ['LGNUM', 'RBLVS', 'TBFKZ'],
+          [`( LGNUM = '***' OR LGNUM = '${wh}' )`, `AND RBLVS = '${sMvt}'`]
+        );
+        const autoTrRow = (t321Rows || []).find((r) => String(r.TBFKZ || '').trim() === 'X');
+        if (autoTrRow) {
+          t321Warning = 'goods movement will create an additional TR';
+          LOG.warn(`[postGoodsMovement] ${t321Warning} (movement ${sMvt}, T321-TBFKZ = X)`);
+        }
+      } catch (tErr) {
+        LOG.warn(`[postGoodsMovement] Pre-MIGO T321 check error: ${tErr.message}`);
+      }
+    }
+
     // Retry guard: a material document already carrying this PROCESS_ID (or matching reservation/TO) means the step was posted.
     if (this.rfc) {
       let found = null;
@@ -494,7 +515,8 @@ class ReservationProcessAdapter {
           processId: sProcessId,
           batch: sapKeyOpt(batch, 'batch'),
           stockEffect: this._computeStockEffect(sMvt, { ...params, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
-          messages: []
+          messages: [],
+          ...(t321Warning ? { warning: t321Warning } : {})
         };
       }
     }
@@ -605,7 +627,8 @@ class ReservationProcessAdapter {
         processId: sProcessId,
         batch: sBatch,
         stockEffect: this._computeStockEffect(sMvt, { ...params, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
-        messages: res.RETURN || []
+        messages: res.RETURN || [],
+        ...(t321Warning ? { warning: t321Warning } : {})
       };
     });
   }

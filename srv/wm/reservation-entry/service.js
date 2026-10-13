@@ -543,6 +543,16 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for process ${processId}; not posted again`
           : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect})`
       });
+
+      if (migoRes.warning) {
+        if (req && typeof req.warn === 'function') req.warn(migoRes.warning);
+        await logRow({
+          ...key, LogHandle: sLogHandle, ExternalId: extId, SubObject: subObject, ProcessId: processId, DocumentNo: migoRes.materialDocument,
+          Step: 'MIGO', Status: STATUS.GI_POSTED, MessageType: 'W', MessageId: 'L3', MessageNo: '001',
+          MessageText: migoRes.warning
+        });
+      }
+
       return migoRes;
     }
 

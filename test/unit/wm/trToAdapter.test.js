@@ -390,7 +390,7 @@ describe('TrToAdapter (RFC)', () => {
     expect(tr.SourceStorageType).toBe('EN1');
     expect(tr.SourceStorageBin).toBe('0-L0001-01');
     const lquaCall = rfc.readTable.mock.calls.find((call) => call[0] === 'LQUA');
-    expect(lquaCall[2]).toContain("AND LGTYP NOT LIKE '9%'");
+    expect(lquaCall[2]).toContain("AND VERME > 0");
   });
 
   it('createTOFromTR respects caller-provided sourceStorageType and sourceStorageBin (mock only, not SAP verification)', async () => {

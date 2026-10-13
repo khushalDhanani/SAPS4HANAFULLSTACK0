@@ -612,6 +612,57 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 });
         });
 
+        it('when multiple SUs exist and T331-VOLLE = X, chooses SU whose qty matches requested qty via FIFO without splitting SUs [mock only, not SAP verification]', async () => {
+            process.env.WM_PICK_SOURCE_FROM_LQUA = 'true';
+            setupTr();
+            // 1. T333 interim types
+            mockRfc.readTable.mockResolvedValueOnce([]);
+            // 2. LQUA quants (SU 1000057774 with 5.000 KG older, SU 1000057775 with 2.000 KG newer)
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LQNUM: '100', LGTYP: 'EN1', LGPLA: '0-L0001-01', LENUM: '00000000001000057774', CHARG: '', VERME: '5.000', WDATU: '20261001', BZEIT: '090000' },
+                { LQNUM: '101', LGTYP: 'EN1', LGPLA: '0-L0001-02', LENUM: '00000000001000057775', CHARG: '', VERME: '2.000', WDATU: '20261002', BZEIT: '100000' }
+            ]);
+            // 3. T331 for EN1: STAUS = 'F', VOLLE = 'X'
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LGTYP: 'EN1', STAUS: 'F', VOLLE: 'X' }
+            ]);
+            // 4. Z_WM_TO_CREATE_FROM_TR call
+            mockRfc.call.mockResolvedValueOnce(toCreated);
+
+            await adapter.createTOFromTR({ tbnum: '0001001839', qty: 2, autoConfirm: false });
+
+            // Must choose SU 1000057775 (qty 2) without splitting SU 1000057774 (qty 5)
+            expect(mockRfc.call).toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.objectContaining({
+                IT_ITEMS: [expect.objectContaining({
+                    VLTYP: 'EN1',
+                    VLPLA: '0-L0001-02',
+                    VLENR: '1000057775'
+                })]
+            }));
+        });
+
+        it('when multiple SUs exist and none match requested qty under T331-VOLLE = X, throws 400 listing all SU numbers and quantities [mock only, not SAP verification]', async () => {
+            process.env.WM_PICK_SOURCE_FROM_LQUA = 'true';
+            setupTr();
+            // 1. T333 interim types
+            mockRfc.readTable.mockResolvedValueOnce([]);
+            // 2. LQUA quants (SU 1 with 5 KG, SU 2 with 10 KG)
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LQNUM: '100', LGTYP: 'EN1', LGPLA: '0-L0001-01', LENUM: '00000000001000057774', CHARG: '', VERME: '5.000', WDATU: '20261001' },
+                { LQNUM: '101', LGTYP: 'EN1', LGPLA: '0-L0001-02', LENUM: '00000000001000057775', CHARG: '', VERME: '10.000', WDATU: '20261002' }
+            ]);
+            // 3. T331 for EN1: STAUS = 'F', VOLLE = 'X'
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LGTYP: 'EN1', STAUS: 'F', VOLLE: 'X' }
+            ]);
+
+            await expect(adapter.createTOFromTR({ tbnum: '0001001839', qty: 3, autoConfirm: false }))
+                .rejects.toMatchObject({
+                    status: 400,
+                    message: expect.stringMatching(/1000057774 \(qty: 5\).*1000057775 \(qty: 10\)/)
+                });
+        });
+
         it('when flag is true but caller explicitly passes sourceStorageType/Bin, skips LQUA lookup [mock only, not SAP verification]', async () => {
             process.env.WM_PICK_SOURCE_FROM_LQUA = 'true';
             setupTr();
@@ -665,6 +716,27 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 .rejects.toMatchObject({
                     status: 400,
                     message: expect.stringContaining("only FIFO ('F') is supported")
+                });
+        });
+
+        it('when storage type is OH1 with strategy H (user exit), throws 400 naming OH1 and strategy H [mock only, not SAP verification]', async () => {
+            process.env.WM_PICK_SOURCE_FROM_LQUA = 'true';
+            setupTr();
+            // T333
+            mockRfc.readTable.mockResolvedValueOnce([]);
+            // LQUA returns quant in OH1
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LQNUM: '300', LGTYP: 'OH1', LGPLA: 'ONHOLD', LENUM: '', CHARG: '', VERME: '5.000' }
+            ]);
+            // T331 for OH1 has STAUS = 'H' (User Exit)
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LGTYP: 'OH1', STAUS: 'H' }
+            ]);
+
+            await expect(adapter.createTOFromTR({ tbnum: '0001001839', qty: 1, autoConfirm: false }))
+                .rejects.toMatchObject({
+                    status: 400,
+                    message: expect.stringContaining("Storage type OH1 has stock removal strategy 'H'; only FIFO ('F') is supported under WM_PICK_SOURCE_FROM_LQUA")
                 });
         });
     });
