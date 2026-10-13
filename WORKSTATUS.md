@@ -5,6 +5,66 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Storage Type Search Customizing Error (T334T / L3 007) Root Cause, SPRO Resolution & Error Propagation Hardening (2026-10-13, 09:30 IST):**
+  - **User Request:** "Data for storage type search is not defined in warehouse W01 for WM movement type 311: missing customizing key in table T334T (Warehouse: W01, Operation: A [Stock Removal], Storage Type Indicator: 'EN1'). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > Stock Removal Strategies > Determine Storage Type Search."
+  - **Diagnose & Root Cause Confirmed via Live RFC on SAP S/4HANA (Client 220):**
+    1. **Missing Customizing Key in `T334T`:** Direct table query of `T334T` via RFC confirms Warehouse `W01` has stock placement (`KZEAR = 'E'`) entries for `EN1`, `001`, `005`, `FG1`, `GS1`, `OH1`, `RM1`, but stock removal (`KZEAR = 'A'`) ONLY contains entries for blank (`***`) and `005`. There is NO entry for `(W01, A, EN1)`.
+    2. **Physical Stock Distribution in `LQUA`:** Material `8000006485` has `MLGN-LTKZA = 'EN1'`. In `LQUA`, physical stock (2 NOS in `OH1` / `ONHOLD`) belongs to storage location `CS02`. Storage location `HS01` has ZERO positive physical quants (only interim `921 TRANSFER` and `902` interim negative).
+    3. **Operational Cause:** When a reservation is created with Issuing SLoc `HS01` (e.g. `0000527594`), `lookupTR` cannot derive a physical source bin from `LQUA`. When creating the TO without an explicit source bin, SAP invokes the automatic search strategy `T334T_LESEN(W01, A, EN1)`, failing with `L3 007`. Conversely, when creating a reservation with Issuing SLoc `CS02`, physical stock is resolved in `OH1` / `ONHOLD`, bypassing the `T334T` lookup.
+    4. **Error Masking Bug in `ReservationProcessAdapter.js`:** When `L_TO_CREATE_TR` failed with `Data for storage type search is not defined`, `ReservationProcessAdapter.js` previously caught the error and fell back to legacy wrapper `ZWM_TO_CREATE_FROM_TR`. Because `ZWM_TO_CREATE_FROM_TR` hardcodes `i_squit = 'X'`, SAP threw `squit_forbidden` (`Movement type 000 does not allow immediate confirmation`), obscuring the real customizing issue.
+  - **Remediation Delivered:**
+    1. `srv/integration/s4hana/wm/toState.js`: Added and exported `mapStorageTypeSearchError` converting SAP error `L3 007` into an actionable description specifying the exact missing key in `T334T` and the exact SPRO path.
+    2. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: Updated `createTransferOrderFromTR` to intercept `Data for storage type search is not defined` and format it with `mapStorageTypeSearchError` instead of falling back to legacy wrappers.
+    3. `srv/wm/reservation-entry/service.js`: Passed `movementType: track.MovementType` to `createTransferOrderFromTR` to ensure accurate movement type reporting in errors.
+    4. `test/unit/wm/reservationProcess.test.js`: Added unit test verifying `L3 007` storage type search error mapping in `createTransferOrderFromTR` (22/22 PASS).
+    5. Live SAP Verification: Verified live curl `retryStep(Step='LT04')` for reservation `0000527594` captures and records the exact SPRO message in `ReservationEntries.ErrorMessage` and `ReservationLogs`.
+  - **Validation & Test Results:**
+    - Full WM suite: `npx jest test/unit/wm/`: **65/65 test suites PASS, 1,363/1,363 tests PASS**.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+  - **SPRO Resolution for SAP Administrator:**
+    - Transaction: **SPRO**
+    - Path: `Logistics Execution > Warehouse Management > Strategies > Stock Removal Strategies > Determine Storage Type Search`
+    - Maintain entry:
+      - Warehouse: `W01`
+      - Operation: `A` (Stock Removal)
+      - Storage Type Indicator: `EN1`
+      - Search Sequence: `EN1`, `OH1`, `***` (or permitted storage types for picking `EN1` materials).
+
+- **SAP GUI-Created Reservation (0000527594) Retrieval, Auto-Import & Padded Search Fix (2026-10-13, 09:20 IST):**
+  - **User Request:** "Not get entri from when create from the GUI : 0000527594 Check Debug and Fix"
+  - **Diagnose & Root Cause:**
+    1. **Single Entity Read Missing Custom SAP Fallback:** `ReservationEntryService.ReservationEntries` is backed by `ReservationTrack` in local CDS SQLite/HANA persistence. Reservations created directly in SAP GUI (transaction `MB21`) exist in SAP tables `RKPF`/`RESB` but were not automatically seeded into `ReservationTrack`. Calling `GET /odata/v4/reservation-entry/ReservationEntries(ReservationNo='0000527594',ReservationItem='0001')` or `(ReservationNo='527594',ReservationItem='0001')` returned HTTP 404 because CAP default READ handler had no record in `ReservationTrack`.
+    2. **Padded vs. Unpadded Number Mismatch:** In `ReservationEntryList.controller.js`, the search filter performed strict `includes(sQuery)`. When an operator searched using SAP GUI's 10-digit number (`0000527594`), it failed to match `UI_RESERVATION_ITM_MNG_V2` unpadded number (`527594`).
+    3. **`retryStep` Rejected Untracked GUI Reservations:** When an operator attempted to create TR / execute `retryStep` on an unseeded GUI reservation, `lockEntry` returned null and the action rejected with 404.
+    4. **Scan-To (`/wm/scan-to`) 311 Transfer Posting Limitation:** In standard SAP WM, movement 311 transfer posting sets `LTBK-RSNUM` to `0000000000`. `getTRByReservation('0000527594')` in `TrToAdapter.js` queried `LTBK` with `RSNUM = '0000527594'`, throwing HTTP 404 even after a TR was generated.
+  - **Remediation Delivered:**
+    1. `srv/wm/reservation-entry/service.js`:
+       - Added custom `this.on('READ', ReservationEntries, ...)` handler: for single-key entity lookups, if the record is missing from local persistence, it queries live SAP via `fetchSapReservation(sResNo, sResItem)`, fetches material description from `MAKT` (`SPRAS = 'E'`), warehouse from `T320`, checks `LTBK` for open TR, auto-imports into `ReservationEntries` with initial status `01` ("Reservation Created"), and creates an audit entry in `ReservationLogs`. Also supports both padded (`0000527594`) and unpadded (`527594`) single key reads.
+       - Updated `retryStep`: if `track` is missing, auto-imports from SAP before proceeding to Step `LB01` (`L_TR_CREATE`) or `LT04`/`LT12`/`MIGO`.
+       - Updated `getOpenReservations`: adds `Status_code: STATUS.RES_CREATED` (`'01'`) and `StatusText: 'Reservation Created'`.
+    2. `srv/integration/s4hana/wm/TrToAdapter.js`:
+       - In `getTRByReservation(rsnum, lgnum)`: added fallback check to `ReservationTrack` in `cds.db` querying both padded (`rs`) and unpadded (`rs.replace(/^0+/, '')`) reservation numbers so when `LTBK-RSNUM` is `0000000000` (standard for movement 311 transfer posting), it retrieves the TR directly from the tracked row.
+    3. `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryList.controller.js`:
+       - In `loadData()`: normalized deduplication using `fnNorm` (stripped) and `fnPad` (10-digit) so `0000527594` and `527594` do not collide or double-list.
+       - In `onSearchFieldSearch`: matches against both `sQuery` and `sQueryClean` (`sQuery.replace(/^0+/, '')`) so searching `0000527594` matches `527594` and vice-versa.
+       - In `onRowPress`: pads `ReservationNo` to 10 digits when routing to detail.
+    4. Unit Tests Added:
+       - `test/unit/wm/reservationEntryService.test.js`: Verified single-key `READ` auto-import and `retryStep` auto-import for untracked GUI reservations.
+       - `test/unit/wm/trToAdapter.test.js`: Verified `getTRByReservation` fallback to `ReservationTrack`.
+       - `test/unit/wm/reservationEntryUi.test.js`: Verified padded (`0000527594`) and unpadded (`527594`) search matching and list deduplication.
+    5. Live SAP S/4HANA Verification:
+       - Verified live curl: `curl -u alice: "http://localhost:4004/odata/v4/reservation-entry/ReservationEntries(ReservationNo='0000527594',ReservationItem='0001')"` successfully returns live SAP reservation `0000527594` (Material `8000006485` "Graphite Condenser, 40m2", Plant `1120`, SLoc `HS01`, Receiving Plant `1120`, Receiving SLoc `MT01`, Qty `1.000 NOS`, Warehouse `W01`, Status `01` "Reservation Created").
+       - Verified live curl with unpadded `527594` returning identical entity.
+       - Verified live curl: `getReservationDetail(ReservationNo='0000527594',ReservationItem='0001')` returns full detail.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/reservationEntryService.test.js`: **20/20 tests PASS**.
+    - `npx jest test/unit/wm/trToAdapter.test.js`: **36/36 tests PASS**.
+    - `npx jest test/unit/wm/reservationEntryUi.test.js`: **43/43 tests PASS**.
+    - Full WM suite: `npx jest test/unit/wm/`: **65/65 test suites PASS, 1,362/1,362 tests PASS**.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+
 - **WM Handling Unit TO Confirmation Error (L3 848) Resolved & Complete HU Takeover Implemented (2026-10-12, 17:35 IST):**
   - **User Request:** `POST /odata/v4/tr-to/createTOFromTR` -> `Transfer Order 1037298 created, but confirmation failed (status 13): Confirm Transfer Order 1037298: TO item 0001037298 0001 does not contain a destination handling unit`.
   - **Diagnose & Root Cause:**
@@ -945,13 +1005,61 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (2026-10-12, 15:50 IST):**
+- **Next Recommended Action (2026-10-13, 09:20 IST):**
+  1. Test reservation entry UI in browser (`http://localhost:4004/index.html#/wm/reservation-entry`) by typing `0000527594` in search, verifying item row displays `Graphite Condenser, 40m2`, and opening detail view `#/wm/reservation-entry/detail/0000527594/0001`.
+  2. Verify creating TR / executing retryStep from the UI for reservation `0000527594`.
+  3. Push commits to `origin/feature/mvt261_01`.
+
+- **Previous Recommended Action (2026-10-12, 15:50 IST):**
   1. Complete manual browser verification of the 9-step checklist at `http://localhost:4004/index.html#/wm/scan-to` (open TR list rendering, row selection, direct URL refresh `#/wm/scan-to/TR/1000027`, invalid document input handling, back button navigation with history fallback, and TO creation with list refresh).
   2. Push commits to `origin/feature/mvt261_01`.
 
-- **Previous Recommended Action (2026-10-12, 22:10 IST):** (1) re-run `node tools/sandbox-matrix.js --mvt 311 --case full --execute`; (2) optionally finish reservation 525874 by posting its goods movement to a non-HU location (tr-to `postMigoGoodsMovement` with `ReceivingStorageLocation` HS01, TransferOrder 1037289) — a live write, user's decision; (3) leftovers from the earlier attempt: reservation 525872 / TR 1000800 (not removable by TO).
-
 ## Changes Log
+
+### 2026-10-13 09:30 IST — Storage Type Search (T334T / L3 007) Root Cause, SPRO Path & Error Propagation Hardening
+
+- **User Request:** "Data for storage type search is not defined in warehouse W01 for WM movement type 311: missing customizing key in table T334T (Warehouse: W01, Operation: A [Stock Removal], Storage Type Indicator: 'EN1'). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > Stock Removal Strategies > Determine Storage Type Search."
+- **Root Cause & Diagnosis:**
+  1. `T334T` Customizing Gap: Querying `T334T` via RFC confirmed Warehouse `W01` has stock placement (`KZEAR = 'E'`) entries for `EN1`, `001`, `005`, `FG1`, `GS1`, `OH1`, `RM1`, but stock removal (`KZEAR = 'A'`) ONLY contains entries for blank (`***`) and `005`.
+  2. Physical Stock: Material `8000006485` has `MLGN-LTKZA = 'EN1'`. In `LQUA`, positive stock is in SLoc `CS02` (`OH1` / `ONHOLD`). SLoc `HS01` has 0 positive physical quants.
+  3. When an operator creates a reservation with Issuing SLoc `HS01`, no source bin can be determined, forcing SAP `L_TO_CREATE_TR` into search strategy `T334T_LESEN(W01, A, EN1)`, which fails with `L3 007`.
+  4. In `ReservationProcessAdapter.js`, catching the error fell back to `ZWM_TO_CREATE_FROM_TR` (with hardcoded `i_squit = 'X'`), masking `L3 007` with `Movement type 000 does not allow immediate confirmation`.
+- **Fixes Delivered:**
+  1. `srv/integration/s4hana/wm/toState.js`: Added and exported `mapStorageTypeSearchError` mapping `L3 007` to actionable SPRO instructions.
+  2. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: Updated `createTransferOrderFromTR` to intercept `Data for storage type search is not defined` and format with `mapStorageTypeSearchError`.
+  3. `srv/wm/reservation-entry/service.js`: Passed `movementType: track.MovementType` into `createTransferOrderFromTR`.
+  4. `test/unit/wm/reservationProcess.test.js`: Added unit test for `L3 007` error mapping.
+- **Validation & Test Results:**
+  - Full WM suite: `npx jest test/unit/wm/`: 65/65 test suites PASS, 1,363/1,363 tests PASS.
+  - `npx cds compile srv --to sql`: 0 errors.
+  - `git diff --check`: 0 errors.
+  - Live curl: `retryStep(Step='LT04')` for `0000527594` records exact SPRO message in `ErrorMessage`.
+
+### 2026-10-13 09:20 IST — /wm/reservation-entry GUI Reservation (0000527594) Auto-Import, Key READ Fallback & Padded Search Fix
+
+- **User Request:** "Not get entri from when create from the GUI : 0000527594 Check Debug and Fix"
+- **Audit Findings & Fixes Delivered:**
+  1. `srv/wm/reservation-entry/service.js`:
+     - Issue: Single entity READ `GET /odata/v4/reservation-entry/ReservationEntries(ReservationNo='0000527594',ReservationItem='0001')` returned HTTP 404 because reservations created via SAP GUI (MB21) only exist in SAP `RKPF`/`RESB` and had no local `ReservationTrack` row.
+     - Fix: Implemented custom `this.on('READ', ReservationEntries, ...)` handler. For single-key entity lookups missing from local persistence, it queries live SAP via `fetchSapReservation`, retrieves `MAKT` material name, `T320` warehouse number, and `LTBK` TR; auto-seeds into `ReservationEntries` and creates an audit row in `ReservationLogs`.
+     - Supports both 10-digit padded (`0000527594`) and unpadded (`527594`) keys.
+     - Updated `retryStep`: If reservation is missing from local persistence, it auto-imports from SAP before running step `LB01` or subsequent steps.
+     - Updated `getOpenReservations`: Sets `Status_code: '01'` and `StatusText: 'Reservation Created'`.
+  2. `srv/integration/s4hana/wm/TrToAdapter.js`:
+     - Issue: For movement type 311 transfer posting, standard SAP leaves `LTBK-RSNUM` as `0000000000`. `getTRByReservation` failed with 404 when querying `LTBK` with `RSNUM = '0000527594'`.
+     - Fix: Added fallback query to `saps4hana.wm.ReservationTrack` in `cds.db` checking both padded and unpadded reservation numbers to retrieve `TransferRequirement` directly.
+  3. `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryList.controller.js`:
+     - In `onSearchFieldSearch`: Searches against both raw query and clean unpadded query (`sQuery.replace(/^0+/, '')`) so searching `0000527594` matches `527594` and vice versa.
+     - In `loadData()`: Normalized deduplication using padded and unpadded keys so GUI and tracked items do not duplicate.
+     - In `onRowPress`: Formats `ReservationNo` to 10-digit padded string on detail navigation.
+  4. Tests & Validation:
+     - `test/unit/wm/reservationEntryService.test.js`: Added unit tests for key READ auto-import and retryStep auto-import of untracked GUI reservations (20/20 PASS).
+     - `test/unit/wm/trToAdapter.test.js`: Added unit test for `getTRByReservation` fallback to `ReservationTrack` (36/36 PASS).
+     - `test/unit/wm/reservationEntryUi.test.js`: Added unit tests for padded/unpadded search matching and list deduplication (43/43 PASS).
+     - Full WM suite: `npx jest test/unit/wm/`: 65/65 test suites PASS, 1,362/1,362 tests PASS.
+     - Live SAP S/4HANA: Verified live curl returns `0000527594` with full material details from SAP Client 220.
+     - `npx cds compile srv --to sql`: 0 errors.
+     - `git diff --check`: 0 errors.
 
 ### 2026-10-12 15:50 IST — /wm/scan-to Data Integrity, Initial Route Hash Synchronization & Document Number Display
 

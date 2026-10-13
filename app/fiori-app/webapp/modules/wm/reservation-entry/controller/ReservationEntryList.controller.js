@@ -66,17 +66,33 @@ sap.ui.define([
                 const mSeen = {};
                 const aCombined = [];
 
+                const fnNorm = function (s) {
+                    return String(s || "").trim().replace(/^0+/, "");
+                };
+                const fnPad = function (s) {
+                    return String(s || "").trim().padStart(10, "0");
+                };
+
                 aTracked.forEach(function (e) {
                     if (e && e.ReservationNo) {
                         mSeen[e.ReservationNo] = true;
+                        mSeen[fnNorm(e.ReservationNo)] = true;
+                        mSeen[fnPad(e.ReservationNo)] = true;
                         aCombined.push(e);
                     }
                 });
 
                 aOpen.forEach(function (o) {
-                    if (o && o.ReservationNo && !mSeen[o.ReservationNo]) {
-                        mSeen[o.ReservationNo] = true;
-                        aCombined.push(o);
+                    if (o && o.ReservationNo) {
+                        const sClean = fnNorm(o.ReservationNo);
+                        const sPad = fnPad(o.ReservationNo);
+                        if (!mSeen[o.ReservationNo] && !mSeen[sClean] && !mSeen[sPad]) {
+                            mSeen[o.ReservationNo] = true;
+                            mSeen[sClean] = true;
+                            mSeen[sPad] = true;
+                            o.ReservationNo = sPad;
+                            aCombined.push(o);
+                        }
                     }
                 });
 
@@ -162,6 +178,7 @@ sap.ui.define([
 
         onSearchFieldSearch: function (oEvent) {
             const sQuery = (oEvent.getParameter("query") || "").trim().toLowerCase();
+            const sQueryClean = sQuery.replace(/^0+/, "");
             const aAll = this._oViewModel.getProperty("/allEntries") || [];
 
             if (!sQuery) {
@@ -170,7 +187,11 @@ sap.ui.define([
             }
 
             const aFiltered = aAll.filter(function (e) {
-                return (e.ReservationNo && e.ReservationNo.toLowerCase().includes(sQuery)) ||
+                const sRes = (e.ReservationNo || "").toLowerCase();
+                const sResClean = sRes.replace(/^0+/, "");
+                const bResMatch = sRes.includes(sQuery) || (sQueryClean && sResClean.includes(sQueryClean));
+
+                return bResMatch ||
                     (e.Material && e.Material.toLowerCase().includes(sQuery)) ||
                     (e.MaterialName && e.MaterialName.toLowerCase().includes(sQuery)) ||
                     (e.MovementType && e.MovementType.includes(sQuery)) ||
@@ -195,7 +216,7 @@ sap.ui.define([
             const oData = oCtx.getObject();
             const oRouter = this.getOwnerComponent().getRouter();
             oRouter.navTo("wmReservationEntryDetail", {
-                ReservationNo: oData.ReservationNo,
+                ReservationNo: String(oData.ReservationNo || "").padStart(10, "0"),
                 ReservationItem: oData.ReservationItem || "0001"
             });
         },

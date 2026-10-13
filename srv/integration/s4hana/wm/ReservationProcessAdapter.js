@@ -4,7 +4,7 @@ const LOG = require('../logger')('reservation-process-adapter');
 const { RfcClient } = require('../RfcClient');
 const { sapKey, sapKeyOpt, httpError } = require('../sapKey');
 const { STATUS } = require('../../../common/wmStatus');
-const { isToFullyConfirmed, getHuConfirmationItems } = require('./toState');
+const { isToFullyConfirmed, getHuConfirmationItems, mapStorageTypeSearchError } = require('./toState');
 const { checkAuthorization } = require('./authCheck');
 
 /** GM_CODE per movement type. Only the four supported types; nothing is derived for other types. */
@@ -288,33 +288,39 @@ class ReservationProcessAdapter {
    * Wraps L_TO_CREATE_TR
    */
   async createTransferOrderFromTR(params = {}) {
-    const { warehouseNumber, trNumber, commitWork = true } = params;
+    const { warehouseNumber, trNumber, commitWork = true, movementType = '311' } = params;
 
     if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
     if (!trNumber) throw httpError(400, 'TRNumber is mandatory');
 
     const s4Tr = sapKey(trNumber, 'tbnum').padStart(10, '0');
-    sapKey(warehouseNumber, 'lgnum');
+    const wh = sapKey(warehouseNumber, 'lgnum');
 
     return await this.rfc.session(async (call) => {
       let res;
       try {
         res = await call('L_TO_CREATE_TR', {
-          I_LGNUM: String(warehouseNumber).trim(),
+          I_LGNUM: wh,
           I_TBNUM: s4Tr,
           I_COMMIT_WORK: commitWork ? 'X' : ' '
         });
-      } catch (_err) {
+      } catch (err) {
+        if (err.message && err.message.includes('Data for storage type search is not defined')) {
+          throw new Error(mapStorageTypeSearchError(err.message, wh, movementType));
+        }
         // Fallback to ZWM_TO_CREATE_FROM_TR / Z_WM_TO_CREATE_FROM_TR wrapper if L_TO_CREATE_TR UCON blocked externally
         try {
           res = await call('ZWM_TO_CREATE_FROM_TR', {
-            IV_LGNUM: String(warehouseNumber).trim(),
+            IV_LGNUM: wh,
             IV_TBNUM: s4Tr,
             IV_COMMIT: commitWork ? 'X' : ' '
           });
-        } catch (_z1Err) {
+        } catch (z1Err) {
+          if (z1Err.message && z1Err.message.includes('Data for storage type search is not defined')) {
+            throw new Error(mapStorageTypeSearchError(z1Err.message, wh, movementType));
+          }
           res = await call('Z_WM_TO_CREATE_FROM_TR', {
-            IV_LGNUM: String(warehouseNumber).trim(),
+            IV_LGNUM: wh,
             IV_TBNUM: s4Tr,
             IV_COMMIT: commitWork ? 'X' : ' '
           });

@@ -181,6 +181,28 @@ class TrToAdapter {
     );
     const open = (rows || []).filter((r) => r.TBNUM && r.STATU !== 'E').map((r) => r.TBNUM);
     if (!open.length) {
+      // Check if tracked in ReservationTrack (e.g. movement 311 where LTBK-RSNUM is 0000000000)
+      try {
+        const cds = require('@sap/cds');
+        if (cds && cds.db) {
+          const unpadded = rs.replace(/^0+/, '');
+          let track = await cds.db.run(
+            cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
+              .where({ ReservationNo: rs })
+          );
+          if (!track && unpadded !== rs) {
+            track = await cds.db.run(
+              cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
+                .where({ ReservationNo: unpadded })
+            );
+          }
+          if (track && track.TransferRequirement) {
+            return this.getTR(track.TransferRequirement, wh);
+          }
+        }
+      } catch (_dbErr) {
+        // ignore DB read error
+      }
       throw httpError(404, `Reservation ${alphaOut(rs)} has no open Transfer Requirement in warehouse ${wh} (status ${STATUS.TR_ERROR} TR error, backend issue)`);
     }
     if (open.length > 1) {

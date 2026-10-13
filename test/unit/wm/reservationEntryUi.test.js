@@ -378,6 +378,32 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(viewModel.getProperty('/entries')).toHaveLength(2);
         });
 
+        it('matches reservation number across padded (0000527594) and unpadded (527594) formats', () => {
+            const all = [
+                { ReservationNo: '527594', Material: '8000006485', MaterialName: 'Condenser', MovementType: '311' },
+                { ReservationNo: '0000527595', Material: '8000006485', MaterialName: 'Condenser', MovementType: '311' }
+            ];
+
+            const viewModel = new FakeJSONModel({
+                allEntries: all,
+                entries: all
+            });
+
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oViewModel: viewModel
+            });
+
+            // Search with 10-digit padded GUI number
+            listSubject.onSearchFieldSearch({ getParameter: () => '0000527594' });
+            expect(viewModel.getProperty('/entries')).toHaveLength(1);
+            expect(viewModel.getProperty('/entries')[0].ReservationNo).toBe('527594');
+
+            // Search with unpadded number
+            listSubject.onSearchFieldSearch({ getParameter: () => '527595' });
+            expect(viewModel.getProperty('/entries')).toHaveLength(1);
+            expect(viewModel.getProperty('/entries')[0].ReservationNo).toBe('0000527595');
+        });
+
         it('navigates to create view on onCreatePress', () => {
             const routerMock = { navTo: jest.fn() };
             const listSubject = Object.assign(Object.create(listCtrl), {
@@ -429,6 +455,38 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(viewModel.getProperty('/entries')).toHaveLength(1);
             expect(viewModel.getProperty('/entries')[0].ReservationNo).toBe('0000525868');
             expect(viewModel.getProperty('/busy')).toBe(false);
+        });
+
+        it('deduplicates tracked and open reservations across padded and unpadded keys', async () => {
+            const serviceMock = {
+                getEntries: jest.fn().mockResolvedValue([
+                    { ReservationNo: '0000527594', ReservationItem: '0001', MovementType: '311', TransferRequirement: '1000810', Status_code: '02' }
+                ]),
+                getOpenReservations: jest.fn().mockResolvedValue([
+                    { ReservationNo: '527594', ReservationItem: '0001', MovementType: '311', Status_code: '01' },
+                    { ReservationNo: '527595', ReservationItem: '0001', MovementType: '311', Status_code: '01' }
+                ])
+            };
+
+            const viewModel = new FakeJSONModel({
+                filterMvtType: '',
+                filterPlant: '',
+                entries: [],
+                allEntries: [],
+                busy: false
+            });
+
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oService: serviceMock,
+                _oViewModel: viewModel
+            });
+
+            await listSubject.loadData();
+            const entries = viewModel.getProperty('/entries');
+            expect(entries).toHaveLength(2);
+            expect(entries[0].ReservationNo).toBe('0000527594');
+            expect(entries[0].TransferRequirement).toBe('1000810');
+            expect(entries[1].ReservationNo).toBe('0000527595');
         });
 
         it('formats Date ISO string correctly via _formatDateIso', () => {

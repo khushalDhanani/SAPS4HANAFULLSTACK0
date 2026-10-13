@@ -73,4 +73,30 @@ async function getHuConfirmationItems(rfc, lgnum, tanum) {
   });
 }
 
-module.exports = { isToFullyConfirmed, findUnconfirmedToItems, getHuConfirmationItems };
+/**
+ * Parses SAP storage type search errors (L3 007 / "Data for storage type search is not defined")
+ * and produces a detailed, actionable message identifying the exact customizing key in T334T
+ * and the specific SPRO navigation path required to resolve it.
+ */
+function mapStorageTypeSearchError(rawMsg, lgnum, mvt = '') {
+  if (!rawMsg) return rawMsg;
+  const wh = (lgnum || '').trim().toUpperCase() || 'W01';
+  const match = String(rawMsg).match(
+    /(?:Data for storage type search is not defined|Daten zur Lagertypfindung sind nicht definiert)\s*\(([^)]*)\)/i
+  );
+  if (!match) return rawMsg;
+
+  const tokens = match[1].trim().split(/\s+/).filter(Boolean);
+  const op = tokens[0] || 'A';
+  const indicator = tokens[1] || '(blank)';
+  const opText = op === 'A' ? 'Stock Removal' : (op === 'E' ? 'Stock Placement' : op);
+  const sproStrategy = op === 'A' ? 'Stock Removal Strategies' : 'Stock Placement Strategies';
+  const extra = [];
+  if (tokens[2]) extra.push(`Stock Category: '${tokens[2]}'`);
+  if (tokens[3]) extra.push(`Special Stock: '${tokens[3]}'`);
+  const extraStr = extra.length ? `, ${extra.join(', ')}` : '';
+
+  return `Data for storage type search is not defined in warehouse ${wh} for WM movement type ${mvt || '311'}: missing customizing key in table T334T (Warehouse: ${wh}, Operation: ${op} [${opText}], Storage Type Indicator: '${indicator}'${extraStr}). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > ${sproStrategy} > Determine Storage Type Search.`;
+}
+
+module.exports = { isToFullyConfirmed, findUnconfirmedToItems, getHuConfirmationItems, mapStorageTypeSearchError };

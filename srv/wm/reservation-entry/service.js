@@ -288,6 +288,71 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       });
     }
 
+    // Live detail for a reservation with no local ZRES_TRACK row (created outside this app): read RKPF/RESB.
+    const fetchSapReservation = async (resNo, resItem) => {
+      if (!adapter.rfc) return null;
+      const strip = (v) => String(v || '').replace(/^0+(?=\d)/, '');
+      const s4Rsnum = String(resNo).padStart(10, '0');
+      const s4Rspos = String(resItem || '0001').padStart(4, '0');
+      try {
+        const [rkpf, resb] = await Promise.all([
+          adapter.rfc.readTable('RKPF', ['BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO', 'USNAM'], [`RSNUM = '${s4Rsnum}'`], 1),
+          adapter.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS', 'CHARG', 'KZEAR'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
+        ]);
+        const h = rkpf && rkpf[0];
+        const i = resb && resb[0];
+        if (!i) return null;
+        const closed = String(i.KZEAR || '').trim() === 'X';
+        const sMat = strip(i.MATNR);
+        const sMatPad = String(i.MATNR).padStart(18, '0');
+
+        let matName = '';
+        try {
+          const makt = await adapter.rfc.readTable('MAKT', ['MAKTX'], [`MATNR = '${sMatPad}'`, `AND SPRAS = 'E'`], 1);
+          matName = (makt && makt[0]?.MAKTX) || '';
+        } catch (_mErr) {}
+
+        let existingTr = '';
+        try {
+          const ltbk = await adapter.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'STATU'], [`RSNUM = '${s4Rsnum}'`], 1);
+          existingTr = (ltbk || []).find((r) => r.TBNUM && r.STATU !== 'E')?.TBNUM || '';
+        } catch (_trErr) {}
+
+        const statusCode = closed ? STATUS.GI_POSTED : (existingTr ? STATUS.TR_CREATED : STATUS.RES_CREATED);
+        const statusText = closed ? 'Goods Issue Posted' : (existingTr ? 'TR Created' : 'Reservation Created');
+
+        return {
+          ReservationNo: strip(resNo),
+          ReservationItem: s4Rspos,
+          MovementType: String((h && h.BWART) || '').trim(),
+          Material: sMat,
+          MaterialName: matName,
+          Plant: String(i.WERKS || '').trim(),
+          StorageLocation: String(i.LGORT || '').trim(),
+          ReceivingPlant: String((h && h.UMWRK) || '').trim(),
+          ReceivingStorageLocation: String((h && h.UMLGO) || '').trim(),
+          Quantity: Number(i.BDMNG) || 0,
+          Unit: String(i.MEINS || '').trim(),
+          Batch: String(i.CHARG || '').trim(),
+          CostCenter: String((h && h.KOSTL) || '').trim(),
+          AssetNo: strip((h && h.ANLN1) || ''),
+          SubNumber: String((h && h.ANLN2) || '').trim(),
+          WarehouseNumber: await warehouseFor(i.WERKS, i.LGORT, '').catch(() => ''),
+          Status_code: statusCode,
+          StatusText: statusText,
+          TransferRequirement: existingTr ? String(existingTr).replace(/^0+/, '') : '',
+          TransferOrder: '',
+          MaterialDocument: '',
+          MaterialDocYear: '',
+          ErrorMessage: '',
+          ExternalId: `${strip(resNo)}/${s4Rspos}`,
+          LogHandle: ''
+        };
+      } catch (_e) {
+        return null;
+      }
+    };
+
     // Action handler
     this.on('createReservationEntry', async (req) => {
       return await executeReservationAndAutoTR(req.data, req);
@@ -296,6 +361,83 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
     // OData Standard CREATE handler on ReservationEntries
     this.on('CREATE', ReservationEntries, async (req) => {
       return await executeReservationAndAutoTR(req.data, req);
+    });
+
+    // OData Standard READ handler on ReservationEntries: supports auto-resolving GUI-created reservations from SAP
+    this.on('READ', ReservationEntries, async (req, next) => {
+      const result = await next();
+
+      const isSingleKeyRead = req.params && req.params.length > 0;
+      const keyResNo = (req.params && req.params[0] && (req.params[0].ReservationNo || req.params[0])) ||
+        req.data?.ReservationNo;
+      const keyResItem = (req.params && req.params[0] && req.params[0].ReservationItem) ||
+        req.data?.ReservationItem || '0001';
+
+      if (isSingleKeyRead && keyResNo) {
+        if (result) return result;
+
+        const sClean = String(keyResNo).trim().replace(/^0+/, '');
+        const sPadded = sClean.padStart(10, '0');
+        const altKey = keyResNo === sPadded ? sClean : sPadded;
+
+        const altEntry = await SELECT.one.from(ReservationEntries).where({
+          ReservationNo: altKey,
+          ReservationItem: keyResItem
+        });
+        if (altEntry) return altEntry;
+
+        // Auto-seed from SAP if created outside this app (e.g. SAP GUI)
+        const live = await fetchSapReservation(keyResNo, keyResItem);
+        if (live) {
+          const imported = {
+            ReservationNo: sPadded,
+            ReservationItem: keyResItem,
+            MovementType: live.MovementType,
+            WarehouseNumber: live.WarehouseNumber || '',
+            Plant: live.Plant,
+            StorageLocation: live.StorageLocation,
+            Material: live.Material,
+            MaterialName: live.MaterialName || '',
+            Quantity: live.Quantity,
+            Unit: live.Unit,
+            ReceivingPlant: live.ReceivingPlant || '',
+            ReceivingStorageLocation: live.ReceivingStorageLocation || '',
+            CostCenter: live.CostCenter || '',
+            AssetNo: live.AssetNo || '',
+            SubNumber: live.SubNumber || '',
+            TransferRequirement: live.TransferRequirement || '',
+            TransferOrder: live.TransferOrder || '',
+            LogHandle: `LOG_${Date.now().toString(36).toUpperCase()}`,
+            ExternalId: `${sPadded}/${keyResItem}`,
+            Status_code: live.Status_code || STATUS.RES_CREATED,
+            ErrorStep: '',
+            ErrorMessage: ''
+          };
+          await INSERT.into(ReservationEntries).entries(imported);
+
+          await INSERT.into(ReservationLogs).entries({
+            ID: cds.utils.uuid(),
+            ReservationNo: sPadded,
+            ReservationItem: keyResItem,
+            LogHandle: imported.LogHandle,
+            ExternalId: imported.ExternalId,
+            SubObject: 'TRACK',
+            Step: 'MB21',
+            Status: imported.Status_code,
+            MessageType: 'S',
+            MessageId: 'M7',
+            MessageNo: '060',
+            MessageText: `Reservation ${sPadded} imported from SAP GUI / S/4HANA`
+          });
+
+          return await SELECT.one.from(ReservationEntries).where({
+            ReservationNo: sPadded,
+            ReservationItem: keyResItem
+          });
+        }
+      }
+
+      return result;
     });
 
     /** Goods movement for a tracked reservation item (step MIGO). Shares one adapter path with tr-to. */
@@ -443,7 +585,47 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
       const key = { ReservationNo: sResNo, ReservationItem: sResItem };
 
-      const track = await lockEntry(key);
+      let track = await lockEntry(key);
+
+      if (!track) {
+        const sClean = String(sResNo).trim().replace(/^0+/, '');
+        const sPadded = sClean.padStart(10, '0');
+        track = await lockEntry({ ReservationNo: sPadded, ReservationItem: sResItem }) ||
+          await lockEntry({ ReservationNo: sClean, ReservationItem: sResItem });
+      }
+
+      if (!track && adapter.rfc) {
+        const live = await fetchSapReservation(sResNo, sResItem);
+        if (live) {
+          const sPadded = String(sResNo).padStart(10, '0');
+          const imported = {
+            ReservationNo: sPadded,
+            ReservationItem: sResItem,
+            MovementType: live.MovementType,
+            WarehouseNumber: live.WarehouseNumber || '',
+            Plant: live.Plant,
+            StorageLocation: live.StorageLocation,
+            Material: live.Material,
+            MaterialName: live.MaterialName || '',
+            Quantity: live.Quantity,
+            Unit: live.Unit,
+            ReceivingPlant: live.ReceivingPlant || '',
+            ReceivingStorageLocation: live.ReceivingStorageLocation || '',
+            CostCenter: live.CostCenter || '',
+            AssetNo: live.AssetNo || '',
+            SubNumber: live.SubNumber || '',
+            TransferRequirement: live.TransferRequirement || '',
+            TransferOrder: live.TransferOrder || '',
+            LogHandle: `LOG_${Date.now().toString(36).toUpperCase()}`,
+            ExternalId: `${sPadded}/${sResItem}`,
+            Status_code: live.Status_code || STATUS.RES_CREATED,
+            ErrorStep: '',
+            ErrorMessage: ''
+          };
+          await INSERT.into(ReservationEntries).entries(imported);
+          track = await lockEntry({ ReservationNo: sPadded, ReservationItem: sResItem });
+        }
+      }
 
       if (!track) {
         return req.error(404, `Reservation ${sResNo}/${sResItem} not found`);
@@ -552,7 +734,11 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             await stepAdapter.checkAuthorization('L_BWLVS', { LGNUM: wh(), BWLVS: sapKey(track.MovementType, 'mvt') });
             let toResult;
             try {
-              toResult = await stepAdapter.createTransferOrderFromTR({ warehouseNumber: wh(), trNumber: track.TransferRequirement });
+              toResult = await stepAdapter.createTransferOrderFromTR({
+                warehouseNumber: wh(),
+                trNumber: track.TransferRequirement,
+                movementType: track.MovementType
+              });
               toNo = toResult.toNumberRaw || String(toResult.toNumber).padStart(10, '0');
 
               await UPDATE(ReservationEntries).set({
@@ -628,53 +814,6 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         .orderBy('createdAt desc');
     });
 
-    // Live detail for a reservation with no local ZRES_TRACK row (created outside this app): read RKPF/RESB.
-    const fetchSapReservation = async (resNo, resItem) => {
-      if (!adapter.rfc) return null;
-      const strip = (v) => String(v || '').replace(/^0+(?=\d)/, '');
-      const s4Rsnum = String(resNo).padStart(10, '0');
-      const s4Rspos = String(resItem || '0001').padStart(4, '0');
-      try {
-        const [rkpf, resb] = await Promise.all([
-          adapter.rfc.readTable('RKPF', ['BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO'], [`RSNUM = '${s4Rsnum}'`], 1),
-          adapter.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS', 'CHARG', 'KZEAR'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
-        ]);
-        const h = rkpf && rkpf[0];
-        const i = resb && resb[0];
-        if (!i) return null;
-        const closed = String(i.KZEAR || '').trim() === 'X';
-        return {
-          ReservationNo: strip(resNo),
-          ReservationItem: s4Rspos,
-          MovementType: String((h && h.BWART) || '').trim(),
-          Material: strip(i.MATNR),
-          MaterialName: '',
-          Plant: String(i.WERKS || '').trim(),
-          StorageLocation: String(i.LGORT || '').trim(),
-          ReceivingPlant: String((h && h.UMWRK) || '').trim(),
-          ReceivingStorageLocation: String((h && h.UMLGO) || '').trim(),
-          Quantity: Number(i.BDMNG) || 0,
-          Unit: String(i.MEINS || '').trim(),
-          Batch: String(i.CHARG || '').trim(),
-          CostCenter: String((h && h.KOSTL) || '').trim(),
-          AssetNo: strip((h && h.ANLN1) || ''),
-          SubNumber: String((h && h.ANLN2) || '').trim(),
-          WarehouseNumber: await warehouseFor(i.WERKS, i.LGORT, '').catch(() => ''),
-          Status_code: closed ? STATUS.GI_POSTED : STATUS.RES_CREATED,
-          StatusText: closed ? 'Goods Issue Posted' : 'Open (not tracked in this app)',
-          TransferRequirement: '',
-          TransferOrder: '',
-          MaterialDocument: '',
-          MaterialDocYear: '',
-          ErrorMessage: '',
-          ExternalId: `${strip(resNo)}/${s4Rspos}`,
-          LogHandle: ''
-        };
-      } catch (_e) {
-        return null;
-      }
-    };
-
     this.on('getReservationDetail', async (req) => {
       const { ReservationNo, ReservationItem = '0001' } = req.data || {};
       if (!ReservationNo) return req.error(400, 'ReservationNo is mandatory');
@@ -703,7 +842,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           OrderNo: r.OrderNo || '',
           CreatedByUser: r.CreatedByUser || '',
           ItemCount: r.ItemCount || 0,
-          DisplayText: r.DisplayText || ''
+          DisplayText: r.DisplayText || '',
+          Status_code: STATUS.RES_CREATED,
+          StatusText: 'Reservation Created'
         }));
       } catch (err) {
         return req.error(err.status || 502, `Failed to load open reservations: ${err.message}`);

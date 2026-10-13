@@ -507,4 +507,68 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       ).rejects.toMatchObject({ response: { status: 404 } });
     });
   });
+
+  describe('READ ReservationEntries & retryStep for untracked GUI reservations', () => {
+    let rtSpy;
+    afterEach(() => rtSpy?.mockRestore());
+
+    test('auto-imports untracked GUI reservation on key READ', async () => {
+      rtSpy = jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(async (table) => {
+        if (table === 'RKPF') return [{ BWART: '311', KOSTL: '', ANLN1: '', ANLN2: '', UMWRK: '1120', UMLGO: 'MT01' }];
+        if (table === 'RESB') return [{ MATNR: '000000008000006485', WERKS: '1120', LGORT: 'HS01', BDMNG: '1.000', MEINS: 'NOS', CHARG: '', KZEAR: '' }];
+        if (table === 'MAKT') return [{ MATNR: '000000008000006485', MAKTX: 'Graphite Condenser, 40m2' }];
+        if (table === 'T320') return [{ LGNUM: 'W01' }];
+        return [];
+      });
+
+      const { status, data } = await GET(
+        "/odata/v4/reservation-entry/ReservationEntries(ReservationNo='0000527599',ReservationItem='0001')",
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(data).toMatchObject({
+        ReservationNo: '0000527599',
+        ReservationItem: '0001',
+        MovementType: '311',
+        Material: '8000006485',
+        MaterialName: 'Graphite Condenser, 40m2',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        ReceivingStorageLocation: 'MT01',
+        Status_code: '01'
+      });
+    });
+
+    test('retryStep auto-imports untracked GUI reservation and creates TR', async () => {
+      rtSpy = jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(async (table) => {
+        if (table === 'RKPF') return [{ BWART: '311', KOSTL: '', ANLN1: '', ANLN2: '', UMWRK: '1120', UMLGO: 'MT01' }];
+        if (table === 'RESB') return [{ MATNR: '000000008000006485', WERKS: '1120', LGORT: 'HS01', BDMNG: '1.000', MEINS: 'NOS', CHARG: '', KZEAR: '' }];
+        if (table === 'MAKT') return [{ MATNR: '000000008000006485', MAKTX: 'Graphite Condenser, 40m2' }];
+        if (table === 'T320') return [{ LGNUM: 'W01' }];
+        return [];
+      });
+
+      const trSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement')
+        .mockResolvedValue({ trNumber: '1000899', trNumberRaw: '0001000899' });
+
+      try {
+        const { status, data } = await POST(
+          '/odata/v4/reservation-entry/retryStep',
+          { ReservationNo: '0000527598', ReservationItem: '0001', Step: 'LB01' },
+          authClerk
+        );
+
+        expect(status).toBe(200);
+        expect(data).toMatchObject({
+          ReservationNo: '0000527598',
+          ReservationItem: '0001',
+          TransferRequirement: '0001000899',
+          Status_code: '02'
+        });
+      } finally {
+        trSpy.mockRestore();
+      }
+    });
+  });
 });

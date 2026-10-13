@@ -335,6 +335,22 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         })
       );
     });
+
+    test('Maps SAP L3 007 storage type search error into actionable message with SPRO path', async () => {
+      mockRfc.call.mockRejectedValueOnce(
+        new Error('Data for storage type search is not defined (A EN1 )')
+      );
+
+      await expect(
+        adapter.createTransferOrderFromTR({
+          warehouseNumber: 'W01',
+          trNumber: '1001839',
+          movementType: '311'
+        })
+      ).rejects.toThrow(
+        /missing customizing key in table T334T \(Warehouse: W01, Operation: A \[Stock Removal\], Storage Type Indicator: 'EN1'\)/
+      );
+    });
   });
 
   describe('4. confirmTransferOrder (L_TO_CONFIRM)', () => {

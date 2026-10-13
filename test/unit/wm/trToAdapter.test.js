@@ -474,6 +474,42 @@ describe('TrToAdapter (RFC)', () => {
       { TANUM: '0001037298', TAPOS: '0002', VONHU: '00000000002000020149', NACHU: '00000000002000020149', HUENT: 'X', MENGA: '1.000', ALTME: 'NOS' }
     ]);
   });
+
+  it('getTRByReservation falls back to ReservationTrack when LTBK has no open TR (e.g. mvt 311 LTBK-RSNUM is 0000000000)', async () => {
+    const cds = require('@sap/cds');
+    const origRun = cds.db && cds.db.run;
+    cds.db = cds.db || {};
+    cds.db.run = jest.fn().mockImplementation(async (query) => {
+      return { ReservationNo: '0000527594', TransferRequirement: '1000810' };
+    });
+
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000810', BWLVS: '311', STATU: '' }],
+            ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000810', TBPOS: '0001', MATNR: '000000008000006485', WERKS: '1120', LGORT: 'CS02', MENGE: '2.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: '' }]
+          };
+        }
+        throw new Error(`unexpected FM ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'LTBK') return []; // LTBK has no RSNUM row (standard 311)
+        if (table === 'MAKT') return [{ MAKTX: 'Graphite Condenser' }];
+        return [];
+      })
+    };
+
+    try {
+      const adapter = new TrToAdapter({ rfc });
+      const tr = await adapter.getTRByReservation('0000527594', 'W01');
+      expect(tr.Tbnum).toBe('0001000810');
+      expect(tr.Items[0].Material).toBe('8000006485');
+    } finally {
+      if (origRun) cds.db.run = origRun;
+      else delete cds.db.run;
+    }
+  });
 });
 
 describe('RfcClient', () => {
