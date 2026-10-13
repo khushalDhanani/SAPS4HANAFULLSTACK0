@@ -1598,17 +1598,50 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (2026-10-13, 13:15 IST):**
+- **Next Recommended Action (2026-10-13, 13:32 IST):**
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant to decide `T321` `TBFKZ` for movement 201/241 and clarify row 1/14 `LFART = 'DOG'` behavior for movement 311.
   2. Await consultant's execution of controlled snapshot runbook or authorization of live test stock in `EN1`.
   3. Evaluate Guard 5: Reject cross-plant 301 transfers to external warehouses like `W10` in `ReservationProcessAdapter.js`.
   4. Push commits to `origin/feature/mvt261_01`.
 
-- **Previous Recommended Action (2026-10-12, 15:50 IST):**
-  1. Complete manual browser verification of the 9-step checklist at `http://localhost:4004/index.html#/wm/scan-to` (open TR list rendering, row selection, direct URL refresh `#/wm/scan-to/TR/1000027`, invalid document input handling, back button navigation with history fallback, and TO creation with list refresh).
-  2. Push commits to `origin/feature/mvt261_01`.
+- **Previous Recommended Action (2026-10-13, 13:15 IST):**
+  1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-13 13:30 IST — Restrict `/wm/reservation-entry` Exclusively to Movement Types 311, 201, 241, 301 and Eliminate Movement 261
+
+- **User Request:**
+  - In `/wm/reservation-entry` list, diagnose why Movement Type 261 (GI for Production Order) is displayed.
+  - Enforce that `/wm/reservation-entry` strictly and exclusively displays reservations for Movement Types 311, 201, 241, and 301.
+- **Root Cause Analysis:**
+  - `ReservationEntryList.controller.js` defaulted `filterMvtType` to `""` ("All") and called `getOpenReservations({ MovementType: "" })`.
+  - Backend handler `srv/wm/reservation-entry/service.js` forwarded `mvt = ''` directly to `GoodsIssueAdapter.getOpenReservations('', plant)`.
+  - In `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`, when `movementType` was blank/empty, no filter condition on `GoodsMovementType` was attached to SAP Gateway OData call `UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem`.
+  - SAP S/4HANA returned all open reservations in the plant/system, including production order reservations (`GoodsMovementType = '261'`).
+  - Neither the backend handler nor the frontend list controller filtered the open reservations against the supported movement types (`311`, `201`, `241`, `301`), allowing 261 items to populate `/wm/reservation-entry`. (Movement 261 has its own dedicated production-order goods issue module `/wm/mvt261`).
+- **Affected Files:**
+  - `srv/wm/reservation-entry/service.js`
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryList.controller.js`
+  - `test/unit/wm/reservationEntryService.test.js`
+  - `test/unit/wm/reservationEntryUi.test.js`
+  - `WORKSTATUS.md`
+- **Implementation & Logic Details:**
+  - **Backend Handler (`srv/wm/reservation-entry/service.js`):**
+    - Declared `const SUPPORTED_MOVEMENT_TYPES = Object.freeze(['311', '201', '241', '301']);`.
+    - In `getOpenReservations`: if caller supplies an unsupported movement type (e.g. `'261'`), immediately returns `[]` without querying SAP; if `movementType` is blank, sets `targetMvt = '311,201,241,301'`, pushing the OData filter `(GoodsMovementType eq '311' or ...)` down to SAP S/4HANA; strictly filters returned rows so any non-supported movement type is stripped.
+    - In `fetchSapReservation`: rejects reservations with `!SUPPORTED_MOVEMENT_TYPES.includes(mvt)` (returns `null`), preventing untracked 261 production reservations from auto-seeding into `ReservationEntries` or returning details in `getReservationDetail`.
+  - **Frontend List Controller (`ReservationEntryList.controller.js`):**
+    - In `loadData()`: declared `const SUPPORTED_MVTS = ["311", "201", "241", "301"];` and strictly filtered both `aTracked` and `aOpen` lists before combining and binding them to the view model.
+  - **Unit Tests:**
+    - `test/unit/wm/reservationEntryService.test.js`: Verified `getOpenReservations` queries SAP with `'311,201,241,301'` when filter is empty; added tests verifying exclusion of 261 reservations from open items, immediate empty response on unsupported movement input `'261'`, and HTTP 404 in `getReservationDetail` when an untracked reservation is movement 261.
+    - `test/unit/wm/reservationEntryUi.test.js`: Added unit test verifying `loadData` filters out movement type 261 and non-supported movements from both tracked and open lists.
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/reservationEntryService.test.js`: **PASS** (24/24 tests passed).
+  - `npx jest test/unit/wm/reservationEntryUi.test.js`: **PASS** (44/44 tests passed).
+  - `npx jest test/unit/wm`: **PASS** (65/65 test suites passed, 1,402/1,402 tests passed).
+  - `npm test`: **PASS** (153/153 test suites passed, 2,656/2,656 tests passed).
+  - `git diff --check`: Clean (0 whitespace errors).
 
 ### 2026-10-13 13:13 IST — Interim Storage Type Removal Guard (Guard 2) Implementation
 
