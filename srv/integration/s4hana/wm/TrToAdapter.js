@@ -354,6 +354,10 @@ class TrToAdapter {
       throw httpError(400, `Source bin (${quant.LGTYP}/${quant.LGPLA}) and destination bin (${tr.Nltyp}/${tr.Nlpla}) cannot be identical; stock is already in destination bin`);
     }
 
+    if (quant.LGTYP && String(quant.LGTYP).trim().startsWith('9')) {
+      throw httpError(400, `Interim storage type ${quant.LGTYP} cannot be used as pick source; physical storage type required`);
+    }
+
     LOG.info(`Creating TO for TR ${tr.Tbnum} item ${item.Tbpos}, SU ${su}, qty ${quantity} ${quant.MEINS}`);
     const res = await this._rfc(
       () => this.rfc.call('ZWM_TO_CREATE_FROM_TR', {
@@ -690,7 +694,7 @@ class TrToAdapter {
           `Read stock for material ${sel.Material} in SLoc ${sel.StorageLocation}`
         );
 
-        const currentStock = (lquaCurrent || []).filter((q) => sapNum(q.VERME) > 0);
+        const currentStock = (lquaCurrent || []).filter((q) => sapNum(q.VERME) > 0 && !String(q.LGTYP || '').trim().startsWith('9'));
         if (!sourceStorageType && !sourceStorageBin && currentStock.length > 0) {
           sourceStorageType = String(currentStock[0].LGTYP || '').trim();
           sourceStorageBin = String(currentStock[0].LGPLA || '').trim();
@@ -877,7 +881,7 @@ class TrToAdapter {
     const physicalQuants = (quants || []).filter((q) => {
       const lgtyp = String(q.LGTYP || '').trim();
       const verme = sapNum(q.VERME);
-      return lgtyp && !interimTypes.has(lgtyp) && verme > 0;
+      return lgtyp && !lgtyp.startsWith('9') && !interimTypes.has(lgtyp) && verme > 0;
     });
 
     if (!physicalQuants.length) {
@@ -1091,6 +1095,10 @@ class TrToAdapter {
           vltyp.trim().toUpperCase() === nltyp.trim().toUpperCase() &&
           vlpla.trim().toUpperCase() === nlpla.trim().toUpperCase()) {
         throw httpError(400, `Source bin (${vltyp}/${vlpla}) and destination bin (${nltyp}/${nlpla}) cannot be identical; stock is already in destination bin`);
+      }
+
+      if (vltyp && String(vltyp).trim().startsWith('9')) {
+        throw httpError(400, `Interim storage type ${vltyp} cannot be used as pick source; physical storage type required`);
       }
 
       const itItems = [{

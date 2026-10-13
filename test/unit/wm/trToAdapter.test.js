@@ -131,6 +131,16 @@ describe('TrToAdapter (RFC)', () => {
       });
   });
 
+  it('createTO rejects creation when SU is located in an interim storage type (e.g. 902)', async () => {
+    const quant902 = { ...QUANT, LGTYP: '902', LGPLA: '0000000000' };
+    const rfc = fakeRfc({ quants: [quant902] });
+    await expect(new TrToAdapter({ rfc }).createTO({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 1 }))
+      .rejects.toMatchObject({
+        status: 400,
+        message: 'Interim storage type 902 cannot be used as pick source; physical storage type required'
+      });
+  });
+
   it('createTO surfaces the SAP message when ZWM_TO_CREATE_FROM_TR fails', async () => {
     const rfc = fakeRfc({ create: { EV_SUCCESS: 'E', EV_TANUM: '', EV_MESSAGE: 'Storage bin 100/1002749 does not exist' } });
     await expect(new TrToAdapter({ rfc }).createTO({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 1 }))
@@ -511,6 +521,72 @@ describe('TrToAdapter (RFC)', () => {
     })).rejects.toMatchObject({
       status: 400,
       message: 'Source bin (920/TRANSFER) and destination bin (920/TRANSFER) cannot be identical; stock is already in destination bin'
+    });
+  });
+
+  it('createTOFromTR rejects creation when caller-provided source storage type is an interim type (e.g. 902) [mock only, not SAP verification]', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000800', BWLVS: '311', STATU: '', NLTYP: '921', NLPLA: 'TRANSFER' }],
+            ET_TR_ITEMS: [
+              { LGNUM: 'W01', TBNUM: '0001000800', TBPOS: '0001', MATNR: '000000001000000204', WERKS: '1600', LGORT: 'CS01', CHARG: '', MENGE: '1.000', TAMEN: '0.000', MEINS: 'KG', ELIKZ: '' }
+            ]
+          };
+        }
+        if (fm === 'AUTHORITY_CHECK') return { USER_IS_AUTHORIZED: 'Y' };
+        throw new Error(`unexpected ${fm}`);
+      }),
+      readTable: jest.fn(async () => [])
+    };
+
+    const adapter = new TrToAdapter({ rfc });
+    await expect(adapter.createTOFromTR({
+      lgnum: 'W01',
+      tbnum: '1000800',
+      tbpos: '0001',
+      qty: 1,
+      unit: 'KG',
+      sourceStorageType: '902',
+      sourceStorageBin: '0000000000',
+      autoConfirm: false,
+      autoPostMigo: false
+    })).rejects.toMatchObject({
+      status: 400,
+      message: 'Interim storage type 902 cannot be used as pick source; physical storage type required'
+    });
+  });
+
+  it('createTOFromTR rejects creation when TR header source storage type is an interim type (e.g. 920) [mock only, not SAP verification]', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000795', BWLVS: '301', STATU: '', VLTYP: '920', VLPLA: 'TRANSFER', NLTYP: '921', NLPLA: 'TRANSFER' }],
+            ET_TR_ITEMS: [
+              { LGNUM: 'W01', TBNUM: '0001000795', TBPOS: '0001', MATNR: '000000008900000004', WERKS: '1120', LGORT: 'CS01', CHARG: '', MENGE: '1.000', TAMEN: '0.000', MEINS: 'KG', ELIKZ: '' }
+            ]
+          };
+        }
+        if (fm === 'AUTHORITY_CHECK') return { USER_IS_AUTHORIZED: 'Y' };
+        throw new Error(`unexpected ${fm}`);
+      }),
+      readTable: jest.fn(async () => [])
+    };
+
+    const adapter = new TrToAdapter({ rfc });
+    await expect(adapter.createTOFromTR({
+      lgnum: 'W01',
+      tbnum: '1000795',
+      tbpos: '0001',
+      qty: 1,
+      unit: 'KG',
+      autoConfirm: false,
+      autoPostMigo: false
+    })).rejects.toMatchObject({
+      status: 400,
+      message: 'Interim storage type 920 cannot be used as pick source; physical storage type required'
     });
   });
 
