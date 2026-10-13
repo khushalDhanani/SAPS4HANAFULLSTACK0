@@ -1,0 +1,310 @@
+{
+  "RESB": [
+    {
+      "RSNUM": "0000429011",
+      "RSPOS": "0001",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "HS01",
+      "CHARG": "",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "KZEAR": "",
+      "XLOEK": ""
+    },
+    {
+      "RSNUM": "0000523970",
+      "RSPOS": "0001",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "CS02",
+      "CHARG": "",
+      "BDMNG": "1.000",
+      "ENMNG": "1.000",
+      "KZEAR": "X",
+      "XLOEK": ""
+    },
+    {
+      "RSNUM": "0000524282",
+      "RSPOS": "0001",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "CS02",
+      "CHARG": "",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "KZEAR": "",
+      "XLOEK": "X"
+    },
+    {
+      "RSNUM": "0000524283",
+      "RSPOS": "0001",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "CS02",
+      "CHARG": "",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "KZEAR": "",
+      "XLOEK": ""
+    },
+    {
+      "RSNUM": "0000527588",
+      "RSPOS": "0001",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "CS02",
+      "CHARG": "",
+      "BDMNG": "10.000",
+      "ENMNG": "0.000",
+      "KZEAR": "",
+      "XLOEK": ""
+    },
+    {
+      "RSNUM": "0000527592",
+      "RSPOS": "0001",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "HS01",
+      "CHARG": "",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "KZEAR": "",
+      "XLOEK": ""
+    },
+    {
+      "RSNUM": "0000527593",
+      "RSPOS": "0001",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "HS01",
+      "CHARG": "",
+      "BDMNG": "10.000",
+      "ENMNG": "0.000",
+      "KZEAR": "",
+      "XLOEK": ""
+    },
+    {
+      "RSNUM": "0000527594",
+      "RSPOS": "0001",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "HS01",
+      "CHARG": "",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "KZEAR": "",
+      "XLOEK": ""
+    },
+    {
+      "RSNUM": "0000527595",
+      "RSPOS": "0001",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "HS01",
+      "CHARG": "",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "KZEAR": "",
+      "XLOEK": ""
+    },
+    {
+      "RSNUM": "0000527596",
+      "RSPOS": "0001",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "HS01",
+      "CHARG": "",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "KZEAR": "",
+      "XLOEK": ""
+    }
+  ],
+  "LTBK": [
+    {
+      "LGNUM": "W01",
+      "TBNUM": "0001000818",
+      "BWLVS": "311",
+      "BETYP": "",
+      "BENUM": "",
+      "RSNUM": "0000000000",
+      "STATU": "E",
+      "BDATU": "20261013",
+      "BZEIT": "092058"
+    }
+  ],
+  "LTBP": [
+    {
+      "LGNUM": "W01",
+      "TBNUM": "0001000818",
+      "TBPOS": "0001",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "HS01",
+      "CHARG": "",
+      "MENGA": "1.000",
+      "MENGE": "1.000",
+      "MEINS": "NOS",
+      "ELIKZ": "X"
+    }
+  ],
+  "LTAK": [
+    {
+      "LGNUM": "W01",
+      "TANUM": "0001037304",
+      "BWLVS": "311",
+      "BWART": "",
+      "BDATU": "20261013",
+      "BZEIT": "102922",
+      "BNAME": "KHUSHAL",
+      "TBNUM": "0001000818",
+      "KQUIT": "X"
+    }
+  ],
+  "LTAP": [
+    {
+      "LGNUM": "W01",
+      "TANUM": "0001037304",
+      "TAPOS": "0001",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "HS01",
+      "CHARG": "",
+      "VSOLA": "1.000",
+      "MEINS": "NOS",
+      "VLTYP": "921",
+      "VLPLA": "TRANSFER",
+      "NLTYP": "921",
+      "NLPLA": "TRANSFER",
+      "VLQNR": "0001045089",
+      "NLQNR": "0001045089",
+      "PQUIT": "X",
+      "TBPOS": "0001"
+    }
+  ],
+  "LQUA": [
+    {
+      "LQNUM": "0001044956",
+      "LGNUM": "W01",
+      "LGTYP": "902",
+      "LGPLA": "0180000113",
+      "LGORT": "HS01",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "CHARG": "",
+      "VERME": "5.000-",
+      "MEINS": "NOS"
+    },
+    {
+      "LQNUM": "0001045087",
+      "LGNUM": "W01",
+      "LGTYP": "921",
+      "LGPLA": "TRANSFER",
+      "LGORT": "CS02",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "CHARG": "",
+      "VERME": "1.000",
+      "MEINS": "NOS"
+    },
+    {
+      "LQNUM": "0001045088",
+      "LGNUM": "W01",
+      "LGTYP": "921",
+      "LGPLA": "TRANSFER",
+      "LGORT": "CS02",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "CHARG": "",
+      "VERME": "1.000",
+      "MEINS": "NOS"
+    },
+    {
+      "LQNUM": "0001045089",
+      "LGNUM": "W01",
+      "LGTYP": "921",
+      "LGPLA": "TRANSFER",
+      "LGORT": "HS01",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "CHARG": "",
+      "VERME": "5.000",
+      "MEINS": "NOS"
+    }
+  ],
+  "MATDOC": [
+    {
+      "MBLNR": "4900050172",
+      "MJAHR": "2026",
+      "ZEILE": "0001",
+      "BWART": "311",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "HS01",
+      "UMWRK": "1120",
+      "UMLGO": "HS01",
+      "MENGE": "1.000",
+      "MEINS": "NOS",
+      "CPUDT": "20261013",
+      "CPUTM": "102926"
+    },
+    {
+      "MBLNR": "4900050172",
+      "MJAHR": "2026",
+      "ZEILE": "0002",
+      "BWART": "311",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "HS01",
+      "UMWRK": "1120",
+      "UMLGO": "HS01",
+      "MENGE": "1.000",
+      "MEINS": "NOS",
+      "CPUDT": "20261013",
+      "CPUTM": "102926"
+    }
+  ],
+  "MARD": [
+    {
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "CS02",
+      "LABST": "4.000",
+      "UMLME": "0.000",
+      "INSME": "0.000"
+    },
+    {
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "HS01",
+      "LABST": "1.000",
+      "UMLME": "0.000",
+      "INSME": "0.000"
+    },
+    {
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "HU01",
+      "LABST": "0.000",
+      "UMLME": "0.000",
+      "INSME": "0.000"
+    },
+    {
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "MT01",
+      "LABST": "0.000",
+      "UMLME": "0.000",
+      "INSME": "0.000"
+    },
+    {
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "MT02",
+      "LABST": "0.000",
+      "UMLME": "0.000",
+      "INSME": "0.000"
+    }
+  ]
+}

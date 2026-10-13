@@ -1,0 +1,70 @@
+{
+  "ET_DATA": [],
+  "DELIMITER": "|",
+  "GET_SORTED": "",
+  "NO_DATA": "",
+  "QUERY_TABLE": "T320",
+  "ROWCOUNT": 0,
+  "ROWSKIPS": 0,
+  "USE_ET_DATA_4_RETURN": "",
+  "DATA": [
+    {
+      "WA": "1110|CS01|W10"
+    },
+    {
+      "WA": "1110|FG01|W10"
+    },
+    {
+      "WA": "1110|HS01|W10"
+    },
+    {
+      "WA": "1110|IP01|W10"
+    },
+    {
+      "WA": "1110|OH01|W10"
+    },
+    {
+      "WA": "1110|OH02|W10"
+    },
+    {
+      "WA": "1110|PWIP|W10"
+    },
+    {
+      "WA": "1110|RJ02|W10"
+    },
+    {
+      "WA": "1110|SC01|W10"
+    },
+    {
+      "WA": "1110|ST01|W10"
+    }
+  ],
+  "FIELDS": [
+    {
+      "FIELDNAME": "WERKS",
+      "OFFSET": "000000",
+      "LENGTH": "000004",
+      "TYPE": "C",
+      "FIELDTEXT": "Plant"
+    },
+    {
+      "FIELDNAME": "LGORT",
+      "OFFSET": "000005",
+      "LENGTH": "000004",
+      "TYPE": "C",
+      "FIELDTEXT": "Storage Location"
+    },
+    {
+      "FIELDNAME": "LGNUM",
+      "OFFSET": "000010",
+      "LENGTH": "000003",
+      "TYPE": "C",
+      "FIELDTEXT": "Warehouse Number / Warehouse Complex"
+    }
+  ],
+  "OPTIONS": [
+    {
+      "TEXT": "LGNUM = 'W10'"
+    }
+  ]
+}

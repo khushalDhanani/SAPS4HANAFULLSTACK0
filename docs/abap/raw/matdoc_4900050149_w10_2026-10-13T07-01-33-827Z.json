@@ -1,0 +1,116 @@
+{
+  "ET_DATA": [],
+  "DELIMITER": "|",
+  "GET_SORTED": "",
+  "NO_DATA": "",
+  "QUERY_TABLE": "MATDOC",
+  "ROWCOUNT": 0,
+  "ROWSKIPS": 0,
+  "USE_ET_DATA_4_RETURN": "",
+  "DATA": [
+    {
+      "WA": "4900050149|2026|0001|301|000000008900000004                      |1120|CS01|1110|CS01|         1.000 |KG |20261012|103640"
+    },
+    {
+      "WA": "4900050149|2026|0002|301|000000008900000004                      |1110|CS01|1120|CS01|         1.000 |KG |20261012|103640"
+    }
+  ],
+  "FIELDS": [
+    {
+      "FIELDNAME": "MBLNR",
+      "OFFSET": "000000",
+      "LENGTH": "000010",
+      "TYPE": "C",
+      "FIELDTEXT": "Number of Material Document"
+    },
+    {
+      "FIELDNAME": "MJAHR",
+      "OFFSET": "000011",
+      "LENGTH": "000004",
+      "TYPE": "N",
+      "FIELDTEXT": "Material Document Year"
+    },
+    {
+      "FIELDNAME": "ZEILE",
+      "OFFSET": "000016",
+      "LENGTH": "000004",
+      "TYPE": "N",
+      "FIELDTEXT": "Item in Material Document"
+    },
+    {
+      "FIELDNAME": "BWART",
+      "OFFSET": "000021",
+      "LENGTH": "000003",
+      "TYPE": "C",
+      "FIELDTEXT": "Movement Type (Inventory Management)"
+    },
+    {
+      "FIELDNAME": "MATNR",
+      "OFFSET": "000025",
+      "LENGTH": "000040",
+      "TYPE": "C",
+      "FIELDTEXT": "Material Number"
+    },
+    {
+      "FIELDNAME": "WERKS",
+      "OFFSET": "000066",
+      "LENGTH": "000004",
+      "TYPE": "C",
+      "FIELDTEXT": "Plant"
+    },
+    {
+      "FIELDNAME": "LGORT",
+      "OFFSET": "000071",
+      "LENGTH": "000004",
+      "TYPE": "C",
+      "FIELDTEXT": "Storage Location"
+    },
+    {
+      "FIELDNAME": "UMWRK",
+      "OFFSET": "000076",
+      "LENGTH": "000004",
+      "TYPE": "C",
+      "FIELDTEXT": "Plant"
+    },
+    {
+      "FIELDNAME": "UMLGO",
+      "OFFSET": "000081",
+      "LENGTH": "000004",
+      "TYPE": "C",
+      "FIELDTEXT": "Receiving/issuing storage location"
+    },
+    {
+      "FIELDNAME": "MENGE",
+      "OFFSET": "000086",
+      "LENGTH": "000015",
+      "TYPE": "P",
+      "FIELDTEXT": "Quantity"
+    },
+    {
+      "FIELDNAME": "MEINS",
+      "OFFSET": "000102",
+      "LENGTH": "000003",
+      "TYPE": "C",
+      "FIELDTEXT": "Base Unit of Measure"
+    },
+    {
+      "FIELDNAME": "CPUDT",
+      "OFFSET": "000106",
+      "LENGTH": "000008",
+      "TYPE": "D",
+      "FIELDTEXT": "Day On Which Accounting Document Was Entered"
+    },
+    {
+      "FIELDNAME": "CPUTM",
+      "OFFSET": "000115",
+      "LENGTH": "000006",
+      "TYPE": "T",
+      "FIELDTEXT": "Time of Entry"
+    }
+  ],
+  "OPTIONS": [
+    {
+      "TEXT": "MBLNR = '4900050149'"
+    }
+  ]
+}
