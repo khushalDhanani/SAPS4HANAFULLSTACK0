@@ -348,6 +348,12 @@ class TrToAdapter {
       throw httpError(400, `Quantity ${quantity} exceeds the allowed ${limit} ${item.Unit} (SU stock ${quant.VERME}, TR open ${item.OpenQty})`);
     }
 
+    if (quant.LGTYP && tr.Nltyp && quant.LGPLA && tr.Nlpla &&
+        quant.LGTYP.trim().toUpperCase() === tr.Nltyp.trim().toUpperCase() &&
+        quant.LGPLA.trim().toUpperCase() === tr.Nlpla.trim().toUpperCase()) {
+      throw httpError(400, `Source bin (${quant.LGTYP}/${quant.LGPLA}) and destination bin (${tr.Nltyp}/${tr.Nlpla}) cannot be identical; stock is already in destination bin`);
+    }
+
     LOG.info(`Creating TO for TR ${tr.Tbnum} item ${item.Tbpos}, SU ${su}, qty ${quantity} ${quant.MEINS}`);
     const res = await this._rfc(
       () => this.rfc.call('ZWM_TO_CREATE_FROM_TR', {
@@ -1079,6 +1085,12 @@ class TrToAdapter {
         if (!vlenr && picked.vlenr) {
           vlenr = picked.vlenr;
         }
+      }
+
+      if (vltyp && nltyp && vlpla && nlpla &&
+          vltyp.trim().toUpperCase() === nltyp.trim().toUpperCase() &&
+          vlpla.trim().toUpperCase() === nlpla.trim().toUpperCase()) {
+        throw httpError(400, `Source bin (${vltyp}/${vlpla}) and destination bin (${nltyp}/${nlpla}) cannot be identical; stock is already in destination bin`);
       }
 
       const itItems = [{

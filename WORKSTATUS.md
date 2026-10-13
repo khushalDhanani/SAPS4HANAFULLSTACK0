@@ -5,6 +5,22 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Source = Destination Bin Invariant Guard Implementation (2026-10-13, 12:58 IST):**
+  - **User Request:** Proceed with Option 1: Implement defensive code guards in `srv/integration/s4hana/wm/TrToAdapter.js` to reject Transfer Order creation when the resolved source and destination storage types and bins are identical (preventing redundant intra-bin TOs like `0001037296` in `920/TRANSFER` and `0001037304` in `921/TRANSFER`).
+  - **Implementation Details:**
+    - Modified [TrToAdapter.js](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/srv/integration/s4hana/wm/TrToAdapter.js):
+      - In `createTO`: Added invariant guard checking if `quant.LGTYP` and `tr.Nltyp` match AND `quant.LGPLA` and `tr.Nlpla` match (case-insensitive, trimmed). If identical, throws HTTP 400: `Source bin (${quant.LGTYP}/${quant.LGPLA}) and destination bin (${tr.Nltyp}/${tr.Nlpla}) cannot be identical; stock is already in destination bin`.
+      - In `createTOFromTR`: Added invariant guard checking if resolved `vltyp` and `nltyp` match AND resolved `vlpla` and `nlpla` match (case-insensitive, trimmed). If identical, throws HTTP 400: `Source bin (${vltyp}/${vlpla}) and destination bin (${nltyp}/${nlpla}) cannot be identical; stock is already in destination bin`. This prevents redundant intra-bin TOs whether identical bins are provided by the caller, the TR header, or LQUA resolution.
+    - Updated [test/unit/wm/trToAdapter.test.js](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/test/unit/wm/trToAdapter.test.js):
+      - Added unit test verifying `createTO` rejects creation when SU source bin matches TR destination bin.
+      - Added unit test verifying `createTOFromTR` rejects creation when caller-provided source bin matches destination bin (mock only, not SAP verification).
+      - Added unit test verifying `createTOFromTR` rejects creation when TR header source bin matches destination bin (e.g. intra-bin TR 920/TRANSFER).
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/trToAdapter.test.js`: **PASS** (39/39 tests passed).
+    - `npx jest test/unit/wm`: **PASS** (65/65 test suites passed, 1,395/1,395 tests passed).
+    - `npm test`: **PASS** (153/153 test suites passed, 2,649/2,649 tests passed).
+    - `git diff --check`: Clean (0 whitespace errors).
+
 - **WM Test Runbook Delivery, Consultant Handover Open Items & T321 Update, and 3 KG Gap Audit (2026-10-13, 12:45 IST):**
   - **User Request:**
     1. Write `docs/abap/test-runbook.md` for consultant, 1 page, numbered checklist: prerequisites (T321 TBFKZ decision for 201, small test stock spec, flag WM_TR_REAL_MOVEMENT), snapshot commands before/after each step (res, TR, TO, confirm, MIGO), per-step tables/fields to compare. No predicted outcomes; "record" fields.
@@ -1564,16 +1580,35 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (2026-10-13, 09:20 IST):**
-  1. Test reservation entry UI in browser (`http://localhost:4004/index.html#/wm/reservation-entry`) by typing `0000527594` in search, verifying item row displays `Graphite Condenser, 40m2`, and opening detail view `#/wm/reservation-entry/detail/0000527594/0001`.
-  2. Verify creating TR / executing retryStep from the UI for reservation `0000527594`.
-  3. Push commits to `origin/feature/mvt261_01`.
+- **Next Recommended Action (2026-10-13, 13:00 IST):**
+  1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant to decide `T321` `TBFKZ` for movement 201/241 and clarify row 1/14 `LFART = 'DOG'` behavior for movement 311.
+  2. Await consultant's execution of controlled snapshot runbook or authorization of live test stock in `EN1`.
+  3. Evaluate remaining recommended code guards (Guard 2: Block interim storage types `9*` as pick sources; Guard 5: Reject cross-plant 301 transfers to external warehouses like `W10`).
+  4. Push commits to `origin/feature/mvt261_01`.
 
 - **Previous Recommended Action (2026-10-12, 15:50 IST):**
   1. Complete manual browser verification of the 9-step checklist at `http://localhost:4004/index.html#/wm/scan-to` (open TR list rendering, row selection, direct URL refresh `#/wm/scan-to/TR/1000027`, invalid document input handling, back button navigation with history fallback, and TO creation with list refresh).
   2. Push commits to `origin/feature/mvt261_01`.
 
 ## Changes Log
+
+### 2026-10-13 12:58 IST — Source = Destination Bin Invariant Guard Implementation
+
+- **User Request:**
+  - Implement Option 1: Add defensive code guards in `srv/integration/s4hana/wm/TrToAdapter.js` to reject Transfer Order creation when the resolved source and destination storage types and bins are identical (preventing redundant intra-bin TOs like `0001037296` in `920/TRANSFER` and `0001037304` in `921/TRANSFER`).
+- **Affected Files:**
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `test/unit/wm/trToAdapter.test.js`
+  - `WORKSTATUS.md`
+- **Implementation & Logic Details:**
+  - In `createTO`: Added guard checking if `quant.LGTYP` and `tr.Nltyp` match AND `quant.LGPLA` and `tr.Nlpla` match (case-insensitive, trimmed). If identical, throws HTTP 400: `Source bin (${quant.LGTYP}/${quant.LGPLA}) and destination bin (${tr.Nltyp}/${tr.Nlpla}) cannot be identical; stock is already in destination bin`.
+  - In `createTOFromTR`: Added guard checking if resolved `vltyp` and `nltyp` match AND resolved `vlpla` and `nlpla` match (case-insensitive, trimmed). If identical, throws HTTP 400: `Source bin (${vltyp}/${vlpla}) and destination bin (${nltyp}/${nlpla}) cannot be identical; stock is already in destination bin`.
+  - In `test/unit/wm/trToAdapter.test.js`: Added 3 unit tests verifying rejection in `createTO`, caller-specified matching bins in `createTOFromTR`, and TR header matching bins in `createTOFromTR`.
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/trToAdapter.test.js`: **PASS** (39/39 tests passed).
+  - `npx jest test/unit/wm`: **PASS** (65/65 test suites passed, 1,395/1,395 tests passed).
+  - `npm test`: **PASS** (153/153 test suites passed, 2,649/2,649 tests passed).
+  - `git diff --check`: Clean (0 whitespace errors).
 
 ### 2026-10-13 10:55 IST — TR 757/759/760/761 TO & Stock Discrepancy Analysis, T333 Destination Types, L_TR_CANCEL Verification, and OH1 Strategy Limitation
 

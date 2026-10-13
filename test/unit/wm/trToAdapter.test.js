@@ -121,6 +121,16 @@ describe('TrToAdapter (RFC)', () => {
       .rejects.toMatchObject({ status: 400, message: expect.stringContaining('no available stock') });
   });
 
+  it('createTO rejects creation when SU source bin matches TR destination bin', async () => {
+    const headerSameBin = { ...HEADER, NLTYP: 'RM1', NLPLA: 'ONHOLD' };
+    const rfc = fakeRfc({ header: headerSameBin });
+    await expect(new TrToAdapter({ rfc }).createTO({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 1 }))
+      .rejects.toMatchObject({
+        status: 400,
+        message: 'Source bin (RM1/ONHOLD) and destination bin (RM1/ONHOLD) cannot be identical; stock is already in destination bin'
+      });
+  });
+
   it('createTO surfaces the SAP message when ZWM_TO_CREATE_FROM_TR fails', async () => {
     const rfc = fakeRfc({ create: { EV_SUCCESS: 'E', EV_TANUM: '', EV_MESSAGE: 'Storage bin 100/1002749 does not exist' } });
     await expect(new TrToAdapter({ rfc }).createTO({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 1 }))
@@ -436,6 +446,72 @@ describe('TrToAdapter (RFC)', () => {
     expect(res.TransferOrder).toBe('1037294');
     expect(capturedItems[0].VLTYP).toBe('RM1');
     expect(capturedItems[0].VLPLA).toBe('0-L0001-03');
+  });
+
+  it('createTOFromTR rejects creation when caller-provided source bin matches destination bin (mock only, not SAP verification)', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000800', BWLVS: '311', STATU: '', NLTYP: '921', NLPLA: 'TRANSFER' }],
+            ET_TR_ITEMS: [
+              { LGNUM: 'W01', TBNUM: '0001000800', TBPOS: '0001', MATNR: '000000001000000204', WERKS: '1600', LGORT: 'CS01', CHARG: '', MENGE: '1.000', TAMEN: '0.000', MEINS: 'KG', ELIKZ: '' }
+            ]
+          };
+        }
+        if (fm === 'AUTHORITY_CHECK') return { USER_IS_AUTHORIZED: 'Y' };
+        throw new Error(`unexpected ${fm}`);
+      }),
+      readTable: jest.fn(async () => [])
+    };
+
+    const adapter = new TrToAdapter({ rfc });
+    await expect(adapter.createTOFromTR({
+      lgnum: 'W01',
+      tbnum: '1000800',
+      tbpos: '0001',
+      qty: 1,
+      unit: 'KG',
+      sourceStorageType: '921',
+      sourceStorageBin: 'TRANSFER',
+      autoConfirm: false,
+      autoPostMigo: false
+    })).rejects.toMatchObject({
+      status: 400,
+      message: 'Source bin (921/TRANSFER) and destination bin (921/TRANSFER) cannot be identical; stock is already in destination bin'
+    });
+  });
+
+  it('createTOFromTR rejects creation when TR header source bin matches destination bin (e.g. intra-bin TR 920/TRANSFER)', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000795', BWLVS: '301', STATU: '', VLTYP: '920', VLPLA: 'TRANSFER', NLTYP: '920', NLPLA: 'TRANSFER' }],
+            ET_TR_ITEMS: [
+              { LGNUM: 'W01', TBNUM: '0001000795', TBPOS: '0001', MATNR: '000000008900000004', WERKS: '1120', LGORT: 'CS01', CHARG: '', MENGE: '1.000', TAMEN: '0.000', MEINS: 'KG', ELIKZ: '' }
+            ]
+          };
+        }
+        if (fm === 'AUTHORITY_CHECK') return { USER_IS_AUTHORIZED: 'Y' };
+        throw new Error(`unexpected ${fm}`);
+      }),
+      readTable: jest.fn(async () => [])
+    };
+
+    const adapter = new TrToAdapter({ rfc });
+    await expect(adapter.createTOFromTR({
+      lgnum: 'W01',
+      tbnum: '1000795',
+      tbpos: '0001',
+      qty: 1,
+      unit: 'KG',
+      autoConfirm: false,
+      autoPostMigo: false
+    })).rejects.toMatchObject({
+      status: 400,
+      message: 'Source bin (920/TRANSFER) and destination bin (920/TRANSFER) cannot be identical; stock is already in destination bin'
+    });
   });
 
   it('confirmTO reactively retries with T_LTAP_CONF_HU when SAP raises destination handling unit error L3 848 (mock only, not SAP verification)', async () => {
