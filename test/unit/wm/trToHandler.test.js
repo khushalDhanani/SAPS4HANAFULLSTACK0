@@ -64,4 +64,96 @@ describe('TrToHandler', () => {
     await handlers.createTO(r2);
     expect(r2.error).toHaveBeenCalledWith(500, 'boom');
   });
+
+  // ─── autoConfirm × autoPostMigo MIGO gate matrix (handler level) ───────────
+  // Tests the fix at trTo.handler.js: `data.autoConfirm !== false && data.autoPostMigo && result.Confirmed`
+  // [mock only, not SAP verification]
+  describe('autoConfirm × autoPostMigo MIGO gate [mock only, not SAP verification]', () => {
+    let resProcessAdapter;
+    const mkReq = (flags) => ({
+      data: { tbnum: '1001839', qty: 3, unit: 'KG', ...flags },
+      user: { id: 'tester' },
+      error: jest.fn()
+    });
+
+    beforeEach(() => {
+      resProcessAdapter = {
+        rfc: null,
+        withRfc: null,
+        checkAuthorization: jest.fn().mockResolvedValue(undefined),
+        postGoodsMovement: jest.fn()
+      };
+      // Re-init with both adapters wired
+      handlers = {};
+      adapter = {
+        createTOFromTR: jest.fn(),
+        rfc: null,
+        withRfc: null
+      };
+      TrToHandler.init(
+        { on: (event, fn) => { handlers[event] = fn; } },
+        { adapter, resProcessAdapter }
+      );
+    });
+
+    it('case 1: autoConfirm=true autoPostMigo=true — MIGO triggered after confirm', async () => {
+      adapter.createTOFromTR.mockResolvedValue({
+        TransferOrder: '99001', Confirmed: true, Status: '04',
+        ReservationNo: '524979', ReservationItem: '0001',
+        MovementType: '311', Material: '8000000023', Plant: '1120',
+        StorageLocation: 'HS01', Quantity: 3, Unit: 'KG', Batch: ''
+      });
+      resProcessAdapter.postGoodsMovement = jest.fn().mockResolvedValue({
+        materialDocument: '4900099001', materialDocYear: '2026',
+        status: '05', reservationNo: '524979', batch: '', stockEffect: 'transferred'
+      });
+
+      await handlers.createTOFromTR(mkReq({ autoConfirm: true, autoPostMigo: true }));
+
+      expect(resProcessAdapter.postGoodsMovement).toHaveBeenCalledTimes(1);
+    });
+
+    it('case 2: autoConfirm=true autoPostMigo=false — MIGO NOT triggered even though confirmed', async () => {
+      adapter.createTOFromTR.mockResolvedValue({
+        TransferOrder: '99002', Confirmed: true, Status: '04',
+        ReservationNo: '524979', ReservationItem: '0001',
+        MovementType: '311', Material: '8000000023', Plant: '1120',
+        StorageLocation: 'HS01', Quantity: 3, Unit: 'KG', Batch: ''
+      });
+      resProcessAdapter.postGoodsMovement = jest.fn();
+
+      await handlers.createTOFromTR(mkReq({ autoConfirm: true, autoPostMigo: false }));
+
+      expect(resProcessAdapter.postGoodsMovement).not.toHaveBeenCalled();
+    });
+
+    it('case 3: autoConfirm=false autoPostMigo=true — MIGO NOT triggered (confirm was skipped, Confirmed=false)', async () => {
+      adapter.createTOFromTR.mockResolvedValue({
+        TransferOrder: '99003', Confirmed: false, Status: '03',
+        ReservationNo: '524979', ReservationItem: '0001',
+        MovementType: '311', Material: '8000000023', Plant: '1120',
+        StorageLocation: 'HS01', Quantity: 3, Unit: 'KG', Batch: ''
+      });
+      resProcessAdapter.postGoodsMovement = jest.fn();
+
+      await handlers.createTOFromTR(mkReq({ autoConfirm: false, autoPostMigo: true }));
+
+      // autoConfirm=false → MIGO gate: `data.autoConfirm !== false` is false → MIGO skipped
+      expect(resProcessAdapter.postGoodsMovement).not.toHaveBeenCalled();
+    });
+
+    it('case 4: autoConfirm=false autoPostMigo=false — MIGO NOT triggered', async () => {
+      adapter.createTOFromTR.mockResolvedValue({
+        TransferOrder: '99004', Confirmed: false, Status: '03',
+        ReservationNo: '524979', ReservationItem: '0001',
+        MovementType: '311', Material: '8000000023', Plant: '1120',
+        StorageLocation: 'HS01', Quantity: 3, Unit: 'KG', Batch: ''
+      });
+      resProcessAdapter.postGoodsMovement = jest.fn();
+
+      await handlers.createTOFromTR(mkReq({ autoConfirm: false, autoPostMigo: false }));
+
+      expect(resProcessAdapter.postGoodsMovement).not.toHaveBeenCalled();
+    });
+  });
 });

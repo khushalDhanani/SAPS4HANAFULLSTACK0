@@ -157,6 +157,7 @@ service TrToService @(path: '/odata/v4/tr-to') {
         DeliveryCompleted       : Boolean;
         Status                  : String(2);
         StatusText              : String(40);
+        StockWarning            : String(255);
         Items                   : array of TRItem; // all open items; TRItem is '' until one of several is chosen
     };
 

@@ -7,6 +7,7 @@ const { findUnconfirmedToItems } = require('../../integration/s4hana/wm/toState'
 const { STATUS, STEP_ERROR, ERROR_STATUSES, UNCONFIRMED_TO } = require('../../common/wmStatus');
 const { sapKey, sapKeyOpt } = require('../../integration/s4hana/sapKey');
 const { withReservationLock, isLockConflict } = require('../../integration/s4hana/wm/resLock');
+const LOG = cds.log('reservation-entry');
 
 module.exports = class ReservationEntryService extends cds.ApplicationService {
   async init() {
@@ -99,6 +100,52 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         SubNumber,
         WarehouseNumber
       } = payload;
+
+      // Task 8: SLoc pre-check at reservation creation: read LQUA for item's plant/SLoc.
+      let slocWarning = '';
+      if (Material && Plant && StorageLocation) {
+        try {
+          const wh = await warehouseFor(Plant, StorageLocation, WarehouseNumber);
+          const matPadded = String(Material || '').trim().padStart(18, '0');
+          const lquaCurrent = await adapter.rfc.readTable(
+            'LQUA',
+            ['LGTYP', 'LGPLA', 'VERME'],
+            [
+              `LGNUM = '${wh}'`,
+              `AND MATNR = '${matPadded}'`,
+              `AND WERKS = '${Plant}'`,
+              `AND LGORT = '${StorageLocation}'`,
+              "AND VERME > 0"
+            ],
+            10
+          );
+          const currentStock = (lquaCurrent || []).filter((q) => Number(String(q.VERME || 0).replace(/[^\d.-]/g, '')) > 0);
+          if (!currentStock.length) {
+            const lquaOther = await adapter.rfc.readTable(
+              'LQUA',
+              ['LGORT', 'VERME'],
+              [
+                `LGNUM = '${wh}'`,
+                `AND MATNR = '${matPadded}'`,
+                `AND WERKS = '${Plant}'`,
+                "AND VERME > 0"
+              ],
+              100
+            );
+            const otherSlocs = [...new Set((lquaOther || []).map((r) => String(r.LGORT || '').trim()).filter(Boolean))];
+            if (otherSlocs.length > 0) {
+              slocWarning = `Storage location ${StorageLocation} has no WM stock for material ${Material} in warehouse ${wh}. Available in storage location(s): ${otherSlocs.join(', ')}.`;
+            } else {
+              slocWarning = `Material ${Material} has no WM stock in warehouse ${wh} (plant ${Plant}).`;
+            }
+            if (req && typeof req.warn === 'function') {
+              req.warn(slocWarning);
+            }
+          }
+        } catch (preErr) {
+          LOG.warn(`SLoc pre-check failed for material ${Material}: ${preErr.message}`);
+        }
+      }
 
       let resResult;
       try {

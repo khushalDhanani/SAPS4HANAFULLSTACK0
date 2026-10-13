@@ -570,5 +570,60 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
         trSpy.mockRestore();
       }
     });
+
+    test('SLoc pre-check at reservation creation warns when SLoc has no stock without changing SLoc [mock only, not SAP verification]', async () => {
+      rtSpy = jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(async (table, fields, where) => {
+        if (table === 'T320') return [{ LGNUM: 'W01' }];
+        if (table === 'LQUA') {
+          const isCurrentSLoc = where.some((w) => w.includes("LGORT = 'HS01'"));
+          if (isCurrentSLoc) return []; // no stock in HS01
+          return [{ LGORT: 'CS01', VERME: '500.000' }]; // stock in CS01
+        }
+        return [];
+      });
+
+      const resSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValueOnce({
+        success: true,
+        reservationNo: '527599',
+        reservationNoRaw: '0000527599',
+        reservationItem: '0001',
+        status: '01'
+      });
+
+      const trSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement').mockResolvedValueOnce({
+        success: true,
+        warehouseNumber: 'W01',
+        trNumber: '1007780',
+        trNumberRaw: '0001007780',
+        trItem: '0001',
+        status: '02'
+      });
+
+      try {
+        const { status, data } = await POST(
+          '/odata/v4/reservation-entry/createReservationEntry',
+          {
+            MovementType: '201',
+            Plant: '1120',
+            StorageLocation: 'HS01',
+            Material: '000000008000000023',
+            Quantity: 1,
+            Unit: 'NOS',
+            CostCenter: '1011201301',
+            WarehouseNumber: 'W01'
+          },
+          authClerk
+        );
+
+        expect(status).toBe(200);
+        expect(data.StorageLocation).toBe('HS01'); // Not silently changed!
+        expect(resSpy).toHaveBeenCalledWith(expect.objectContaining({
+          storageLocation: 'HS01'
+        }));
+      } finally {
+        resSpy.mockRestore();
+        trSpy.mockRestore();
+      }
+    });
   });
 });

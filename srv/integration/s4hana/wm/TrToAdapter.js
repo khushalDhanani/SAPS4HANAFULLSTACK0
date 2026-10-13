@@ -663,10 +663,12 @@ class TrToAdapter {
       sourceStorageType = suggestedBatches[0].StorageType || '';
       sourceStorageBin = suggestedBatches[0].StorageBin || '';
     }
-    if (!sourceStorageType && !sourceStorageBin && sel.Material) {
+
+    let stockWarning = '';
+    if (sel.Material && sel.Plant && sel.StorageLocation) {
       try {
         const matPadded = alphaIn(sapKey(sel.Material, 'matnr'), 18);
-        const lquaRows = await this._rfc(
+        const lquaCurrent = await this._rfc(
           () => this.rfc.readTable(
             'LQUA',
             ['LGTYP', 'LGPLA', 'VERME'],
@@ -675,19 +677,43 @@ class TrToAdapter {
               `AND MATNR = '${matPadded}'`,
               `AND WERKS = '${sel.Plant}'`,
               `AND LGORT = '${sel.StorageLocation}'`,
-              "AND LGTYP NOT LIKE '9%'",
               "AND VERME > 0"
             ],
-            1
+            10
           ),
-          `Read physical bin for TR material ${sel.Material}`
+          `Read stock for material ${sel.Material} in SLoc ${sel.StorageLocation}`
         );
-        if (lquaRows && lquaRows.length > 0) {
-          sourceStorageType = String(lquaRows[0].LGTYP || '').trim();
-          sourceStorageBin = String(lquaRows[0].LGPLA || '').trim();
+
+        const currentStock = (lquaCurrent || []).filter((q) => sapNum(q.VERME) > 0);
+        if (!sourceStorageType && !sourceStorageBin && currentStock.length > 0) {
+          sourceStorageType = String(currentStock[0].LGTYP || '').trim();
+          sourceStorageBin = String(currentStock[0].LGPLA || '').trim();
+        }
+
+        if (!currentStock.length) {
+          const lquaOther = await this._rfc(
+            () => this.rfc.readTable(
+              'LQUA',
+              ['LGORT', 'VERME'],
+              [
+                `LGNUM = '${wh}'`,
+                `AND MATNR = '${matPadded}'`,
+                `AND WERKS = '${sel.Plant}'`,
+                "AND VERME > 0"
+              ],
+              100
+            ),
+            `Read stock for material ${sel.Material} in other SLocs`
+          );
+          const otherSlocs = [...new Set((lquaOther || []).map((r) => String(r.LGORT || '').trim()).filter(Boolean))];
+          if (otherSlocs.length > 0) {
+            stockWarning = `Storage location ${sel.StorageLocation} has no WM stock for material ${sel.Material} in warehouse ${wh}. Available in storage location(s): ${otherSlocs.join(', ')}.`;
+          } else {
+            stockWarning = `Material ${sel.Material} has no WM stock in warehouse ${wh} (plant ${sel.Plant}).`;
+          }
         }
       } catch (err) {
-        LOG.warn(`Failed to fetch physical bin for material ${sel.Material}: ${err.message}`);
+        LOG.warn(`SLoc pre-check failed for material ${sel.Material}: ${err.message}`);
       }
     }
 
@@ -727,6 +753,7 @@ class TrToAdapter {
       DeliveryCompleted: Boolean(sel.DeliveryCompleted),
       Status: tr.Statu === 'E' ? STATUS.TO_CONFIRMED : STATUS.TR_CREATED,
       StatusText: tr.Statu === 'E' ? 'Completed' : STATUS_TEXT[STATUS.TR_CREATED],
+      StockWarning: stockWarning,
       Items: open
     };
   }
@@ -793,6 +820,106 @@ class TrToAdapter {
       Success: true,
       Confirmed: true,
       Message: `Transfer Order ${alphaOut(s4To)} confirmed.`
+    };
+  }
+
+  /**
+   * When WM_PICK_SOURCE_FROM_LQUA is enabled and the TR item has no source storage type/bin,
+   * reads available positive quants for the item in LQUA (excluding interim storage types from T333),
+   * verifies FIFO strategy in T331 (T331-STAUS = 'F'), orders by FIFO, and returns the source VLTYP/VLPLA/VLENR.
+   */
+  async _resolvePickSourceFromLqua({ wh, material, plant, storageLocation, batch, requestedQty }) {
+    const t333Rows = await this._rfc(
+      () => this.rfc.readTable('T333', ['VLTYP', 'NLTYP', 'RLTYP', 'VKDYN', 'NKDYN'], [`LGNUM = '${wh}'`], 500),
+      `Read T333 interim types for warehouse ${wh}`
+    );
+    const interimTypes = new Set();
+    for (const r of (t333Rows || [])) {
+      const v = String(r.VLTYP || '').trim();
+      const n = String(r.NLTYP || '').trim();
+      const ret = String(r.RLTYP || '').trim();
+      if (r.VKDYN === 'X' && v) interimTypes.add(v);
+      if (r.NKDYN === 'X' && n) interimTypes.add(n);
+      if (!v && n) interimTypes.add(n);
+      if (v && !n) interimTypes.add(v);
+      if (v && n && v === n) interimTypes.add(v);
+      if (ret) interimTypes.add(ret);
+    }
+
+    const matPadded = alphaIn(sapKey(material, 'matnr'), 18);
+    const whereClause = [
+      `LGNUM = '${wh}'`,
+      `AND MATNR = '${matPadded}'`,
+      `AND WERKS = '${plant}'`,
+      `AND LGORT = '${storageLocation}'`,
+      `AND VERME > 0`
+    ];
+    if (batch) {
+      whereClause.push(`AND CHARG = '${sapKey(batch, 'batch')}'`);
+    }
+
+    const quants = await this._rfc(
+      () => this.rfc.readTable(
+        'LQUA',
+        ['LQNUM', 'LGTYP', 'LGPLA', 'LENUM', 'CHARG', 'VERME', 'WDATU', 'BDATU', 'BZEIT'],
+        whereClause,
+        100
+      ),
+      `Read quants from LQUA for material ${material}`
+    );
+
+    const physicalQuants = (quants || []).filter((q) => {
+      const lgtyp = String(q.LGTYP || '').trim();
+      const verme = sapNum(q.VERME);
+      return lgtyp && !interimTypes.has(lgtyp) && verme > 0;
+    });
+
+    if (!physicalQuants.length) {
+      throw httpError(400, `No matching stock found in warehouse ${wh} for material ${material}, plant ${plant}, storage location ${storageLocation}`);
+    }
+
+    const distinctTypes = [...new Set(physicalQuants.map((q) => String(q.LGTYP || '').trim()))];
+    const t331Map = new Map();
+    for (const lgtyp of distinctTypes) {
+      const t331Rows = await this._rfc(
+        () => this.rfc.readTable('T331', ['LGTYP', 'STAUS', 'VOLLE', 'LENVW'], [`LGNUM = '${wh}'`, `AND LGTYP = '${lgtyp}'`], 1),
+        `Read T331 for storage type ${lgtyp}`
+      );
+      const row = t331Rows?.[0] || {};
+      const staus = String(row.STAUS || '').trim();
+      if (staus !== 'F') {
+        throw httpError(400, `Storage type ${lgtyp} has stock removal strategy '${staus || 'none'}'; only FIFO ('F') is supported under WM_PICK_SOURCE_FROM_LQUA`);
+      }
+      t331Map.set(lgtyp, row);
+    }
+
+    physicalQuants.sort((a, b) => {
+      const dateA = a.WDATU || a.BDATU || '';
+      const dateB = b.WDATU || b.BDATU || '';
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
+      const timeA = a.BZEIT || '';
+      const timeB = b.BZEIT || '';
+      if (timeA !== timeB) return timeA.localeCompare(timeB);
+      return String(a.LQNUM).localeCompare(String(b.LQNUM));
+    });
+
+    const chosen = physicalQuants[0];
+    const chosenLgtyp = String(chosen.LGTYP || '').trim();
+    const t331Row = t331Map.get(chosenLgtyp) || {};
+    const hasSU = Boolean(chosen.LENUM && String(chosen.LENUM).trim().replace(/^0+/, ''));
+    if (hasSU && t331Row.VOLLE === 'X') {
+      const suClean = String(chosen.LENUM).trim().replace(/^0+/, '');
+      const suQty = sapNum(chosen.VERME);
+      const reqQty = sapNum(requestedQty);
+      if (reqQty && reqQty !== suQty) {
+        throw httpError(400, `Storage unit ${suClean} in storage type ${chosenLgtyp} requires complete stock removal (T331-VOLLE = 'X'). Requested quantity ${requestedQty} must equal storage unit quantity ${suQty}`);
+      }
+    }
+
+    return {
+      vltyp: chosenLgtyp,
+      vlpla: String(chosen.LGPLA || '').trim(),
+      vlenr: chosen.LENUM ? String(chosen.LENUM).trim().replace(/^0+/, '') : ''
     };
   }
 
@@ -905,9 +1032,25 @@ class TrToAdapter {
         }
       }
       // Source type/bin: caller-provided or TR header; blank lets SAP's stock removal strategy decide.
-      const vltyp = sapKeyOpt(sourceStorageType, 'lgtyp') || tr.Vltyp || '';
-      const vlpla = sapKeyOpt(sourceStorageBin, 'lgpla') || tr.Vlpla || '';
-      const vlenr = storageUnit ? sapKey(storageUnit, 'lenum') : '';
+      let vltyp = sapKeyOpt(sourceStorageType, 'lgtyp') || tr.Vltyp || '';
+      let vlpla = sapKeyOpt(sourceStorageBin, 'lgpla') || tr.Vlpla || '';
+      let vlenr = storageUnit ? sapKey(storageUnit, 'lenum') : '';
+
+      if ((process.env.WM_PICK_SOURCE_FROM_LQUA === 'true' || process.env.WM_PICK_SOURCE_FROM_LQUA === '1') && !vltyp && !vlpla) {
+        const picked = await this._resolvePickSourceFromLqua({
+          wh,
+          material: item.Material,
+          plant: item.Plant,
+          storageLocation: item.StorageLocation,
+          batch: selectedBatch,
+          requestedQty: quantity
+        });
+        vltyp = picked.vltyp;
+        vlpla = picked.vlpla;
+        if (!vlenr && picked.vlenr) {
+          vlenr = picked.vlenr;
+        }
+      }
 
       const itItems = [{
         TBPOS: item.Tbpos,

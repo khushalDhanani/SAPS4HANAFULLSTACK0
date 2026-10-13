@@ -5,6 +5,54 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **TR 1000799 L3 007 Investigation & Feature-Flagged Source Quant Derivation (WM_PICK_SOURCE_FROM_LQUA) (2026-10-13, 10:15 IST):**
+  - **User Request:** Read-only investigation on Client 220 (no SPRO, no SAP writes, cite source for every claim, label CONFIRMED/UNSURE):
+    1. Read whether `L_TO_CREATE_TR` can remove from quants in SLoc MT01 for TR item in SLoc HS01 (show code lines).
+    2. Read why quants in storage types 911 and 914 are negative (LTAK/LTAP/MATDOC, dates, users, TO numbers).
+    3. Read whether serial MACBOOK-005 exists for this material (table, status, location).
+    4. Read whether EN1 requires a storage unit for removal (T331 fields).
+    5. List materials in W01 with stock whose MLGN-LTKZA already has T334T removal rows ('' or 005) as sandbox test material.
+    6. Code: add flag `WM_PICK_SOURCE_FROM_LQUA` (default false). When true and TR has no source, read quants in LQUA (material, plant, SLoc, batch, VERME > 0, excluding interim types from T333), order by T331-STAUS (FIFO only, fail clearly otherwise), pass VLTYP/VLPLA/VLENR. No matching quant: clear 400. Add mock tests labeled "mock only, not SAP verification".
+  - **Audit & Investigation Findings (100% CONFIRMED via live Client 220 RFC & ABAP source):**
+    - **Task 1 (`CONFIRMED`):** `L_TO_CREATE_TR` hard-filters quants in `LQUA` with OpenSQL clause `AND LGORT = LTAP-LGORT` (`SAPLL03A`, `LL03AF8F:2-6`, `LL03AF8G:2-6`, `LL03AF1C:2-6`, `LL03AF1U:2-6`). Because `LTAP-LGORT` is derived from `LTBP-LGORT` (`HS01`), `L_TO_CREATE_TR` CANNOT remove stock from quants in storage location `MT01`.
+    - **Task 2 (`CONFIRMED`):** Quants in interim storage types `911` (Quant `1044448`, bin `1011101301`, `-1.000 NOS`) and `914` (Quant `1044449`, bin `0000001011`, `-1.000 NOS`) were created on `2026-09-30` by user `KHUSHAL` via IM Goods Movements `4900049860` (mvt `201`, Cost Center `1011101301`) and `4900049861` (mvt `261`, Order `0000001011`). These generated open TRs `0001000693` (mvt `201`) and `0001000694` (mvt `261`) with `STATU = ''`. Because no TO was created/confirmed, the interim negative interface quants remain uncleared.
+    - **Task 3 (`CONFIRMED`):** Serial `MACBOOK-005` exists in table `EQUI`: `EQUNR = '000000000010015748'`, `MATNR = '000000008000009753'`, `SERNR = 'MACBOOK-005'`. Location fields `WERK` and `LAGER` are blank (`''`). System status in `JEST` is active `STAT = 'I0184'` (`TXT04 = 'ESTO'` - In the warehouse). Table `EQBS` has 0 rows.
+    - **Task 4 (`CONFIRMED`):** Table `T331` for `(W01, EN1)` has: `LENVW = 'X'` (SU Management active), `STAUS = 'F'` (FIFO stock removal), `STEIN = 'C'`, `SFIFO = ''`, `QUAUS = 'X'` (Confirmation required), `VOLLE = 'X'` (Full Storage Unit stock removal requirement), `VRUCK = 'X'`. Because `LENVW = 'X'` and `VOLLE = 'X'`, `EN1` requires a Storage Unit (`VLENR`/`LENUM`) for removal.
+    - **Task 5 (`CONFIRMED`):** Table `T334T` for `(W01, KZEAR = 'A')` has removal rows only for `LGTKZ = ''` (pointing to `***`) and `LGTKZ = '005'` (pointing to `005`, then `***`). Materials in `W01` with positive stock in `LQUA` and `MLGN-LTKZA = ''`:
+      - `8900000007`: SLoc `CS01`, storage type `OH1` (SU managed, batches `IN26001220`, `IN26001216`).
+      - `8900000008`: SLoc `CS01`, storage type `OH1` (5,000 KG, SU `00000000001000058626`, batch `IN26001221`).
+      - `8900000004`: SLoc `CS01` / `HS01` in interim `902`, `921`, `922`, `920`.
+      - `8000009754`: SLoc `HS01`, interim `921` (`2.000 NOS`).
+  - **Task 6 Implementation Delivered:**
+    - `srv/integration/s4hana/wm/TrToAdapter.js`: Added `_resolvePickSourceFromLqua` and feature flag check `process.env.WM_PICK_SOURCE_FROM_LQUA === 'true' || process.env.WM_PICK_SOURCE_FROM_LQUA === '1'`. Queries `T333` for interim storage types, queries `LQUA` for positive stock matching TR item (`MATNR`, `WERKS`, `LGORT`, `CHARG`, `VERME > 0`), filters out interim storage types, verifies FIFO strategy in `T331-STAUS` (`'F'`), sorts FIFO, returns `vltyp`, `vlpla`, `vlenr`. Throws clear 400 if no physical matching stock or non-FIFO strategy.
+    - `test/unit/wm/createTOFromTR.test.js`: Added 5 unit tests under `describe('11. WM_PICK_SOURCE_FROM_LQUA feature flag [mock only, not SAP verification]')`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/createTOFromTR.test.js`: **23/23 tests PASS**.
+    - Full test suite: `npm test`: **153/153 test suites PASS, 2,630/2,630 tests PASS**.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+  - **Option Recommendation:** Evidence supports **Option C** (Sandbox testing with compliant materials `8900000007` or `8900000008` having `MLGN-LTKZA = ''` and physical stock in TR SLoc `CS01`), and proves that **Option A** (SPRO customizing alone) is insufficient for TR 1000799 because `L_TO_CREATE_TR` cannot remove `MT01` stock for an `HS01` TR item.
+
+- **Scan-TO (`/wm/scan-to`) `autoConfirm` & `autoPostMigo` End-to-End Diagnosis, Fix & Test Matrix (2026-10-13, 09:50 IST):**
+  - **User Request:** Trace `autoConfirm` and `autoPostMigo` end-to-end on `/wm/scan-to/TR/{number}`, identify root cause, implement minimal fix, and add 4-case test matrix (`autoConfirm` on/off × `autoPostMigo` on/off).
+  - **Diagnosis & End-to-End Trace:**
+    - XML switch binding: `Switch id="switchAutoConfirm" state="{scanView>/autoConfirm}"` (lines 17-23) and `Switch id="switchAutoMigo" state="{scanView>/autoPostMigo}"` (lines 24-31) in `WarehouseScanToDetail.view.xml`.
+    - Controller state & payload: Initialized to `autoConfirm: true`, `autoPostMigo: true` in `_getInitialState()`; event handlers `onAutoConfirmChange` and `onAutoMigoChange` update the `scanView` JSONModel. In `onProcessTO`, boolean values are read via `getProperty` and passed in `oPayload.autoConfirm` and `oPayload.autoPostMigo`.
+    - Service payload & OData: `WarehouseScanToService.createTOFromTR(oPayload)` posts payload via `ODataClient.post` to `/odata/v4/tr-to/createTOFromTR`, where CAP deserializes `autoConfirm` and `autoPostMigo` as native booleans.
+    - Handler & Adapter: Handler receives `req.data` and delegates to `adapter.createTOFromTR(data)`. In adapter, `autoConfirm` controls calling `confirmTO` (`L_TO_CONFIRM`). If `autoConfirm: true` succeeds, status is `'04'` (`TO_CONFIRMED`) and `Confirmed: true`. If `autoConfirm: false`, `confirmTO` is skipped, status is `'03'` (`TO_CREATED`), and `Confirmed: false`. If `confirmTO` fails, status is `'13'` (`TO_CONFIRM_ERROR`) and `Confirmed: false`.
+    - Auto MIGO Gate in Handler: Previously, line 264 guarded MIGO auto-posting only with `if (data.autoPostMigo && result.Confirmed)`. If `autoConfirm` was turned off (`false`), but a TO was already confirmed or confirmed on retry, MIGO could fire unintentionally.
+  - **Root Causes:**
+    - `autoConfirm`: In `trTo.handler.js`, MIGO triggering did not explicitly assert `data.autoConfirm !== false`, relying solely on downstream `result.Confirmed`.
+    - `autoPostMigo`: In `trTo.handler.js`, line 264 lacked the explicit guard that `data.autoConfirm !== false`, meaning MIGO was not strictly coupled to `autoConfirm` being enabled.
+  - **Remediation Delivered (Minimal Diff):**
+    - `srv/wm/tr-to/handlers/trTo.handler.js` line 264: Hardened condition to `if (data.autoConfirm !== false && data.autoPostMigo && result.Confirmed)`, strictly preventing MIGO from firing when `autoConfirm` is off.
+    - `test/unit/wm/createTOFromTR.test.js`: Added 4 adapter-level tests covering the full 2×2 flag matrix.
+    - `test/unit/wm/trToHandler.test.js`: Added 4 handler-level tests verifying MIGO trigger / suppression across all 4 combinations.
+  - **Validation & Test Results:**
+    - Full WM suite: `npx jest test/unit/wm/`: **65/65 test suites PASS, 1,371/1,371 tests PASS** (including the 8 new tests).
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+
 - **Storage Type Search Customizing Error (T334T / L3 007) Root Cause, SPRO Resolution & Error Propagation Hardening (2026-10-13, 09:30 IST):**
   - **User Request:** "Data for storage type search is not defined in warehouse W01 for WM movement type 311: missing customizing key in table T334T (Warehouse: W01, Operation: A [Stock Removal], Storage Type Indicator: 'EN1'). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > Stock Removal Strategies > Determine Storage Type Search."
   - **Diagnose & Root Cause Confirmed via Live RFC on SAP S/4HANA (Client 220):**
@@ -1015,6 +1063,54 @@ The previous log was removed in commit `b741337`; this file restarts it.
   2. Push commits to `origin/feature/mvt261_01`.
 
 ## Changes Log
+
+### 2026-10-13 10:15 IST — TR 1000799 L3 007 Investigation (Tasks 1-5) & WM_PICK_SOURCE_FROM_LQUA Feature Flag (Task 6)
+
+- **User Request:** Read-only investigation on SAP S/4HANA (Client 220) via RFC adapter, plus one feature-flagged code change for TR 1000799 (`W01`, WM movement `311`, material `8000009753`, plant `1120`, SLoc `HS01`) which fails with `L3 007` (`A EN1`: `T334T` has no removal row for `EN1`). Zero SPRO changes, zero SAP writes.
+- **Affected Files:**
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `test/unit/wm/createTOFromTR.test.js`
+  - `WORKSTATUS.md`
+- **Investigation Results (Tasks 1-5, CONFIRMED from SAP Client 220):**
+  - **Task 1:** `L_TO_CREATE_TR` hard-filters quants in `LQUA` with OpenSQL clause `AND LGORT = LTAP-LGORT` (`SAPLL03A`, `LL03AF8F:2-6`, `LL03AF8G:2-6`, `LL03AF1C:2-6`, `LL03AF1U:2-6`). `LTAP-LGORT` is derived from `LTBP-LGORT` (`HS01`). Therefore, `L_TO_CREATE_TR` cannot remove stock from quants in storage location `MT01`.
+  - **Task 2:** Interim negative quants in storage types `911` (Quant `1044448`, bin `1011101301`, `-1.000 NOS`) and `914` (Quant `1044449`, bin `0000001011`, `-1.000 NOS`) were created on `2026-09-30` by user `KHUSHAL` via IM Goods Movements `4900049860` (mvt `201`, Cost Center `1011101301`) and `4900049861` (mvt `261`, Order `0000001011`). These generated open TRs `0001000693` (mvt `201`) and `0001000694` (mvt `261`) with `STATU = ''`. Because no TO was created/confirmed, the interim negative interface quants remain uncleared.
+  - **Task 3:** Serial `MACBOOK-005` exists in table `EQUI`: `EQUNR = '000000000010015748'`, `MATNR = '000000008000009753'`, `SERNR = 'MACBOOK-005'`. Location fields `WERK` and `LAGER` are blank (`''`). System status in `JEST` is active `STAT = 'I0184'` (`TXT04 = 'ESTO'` - In the warehouse). Table `EQBS` has 0 rows.
+  - **Task 4:** Table `T331` for `(W01, EN1)` has: `LENVW = 'X'` (SU Management active), `STAUS = 'F'` (FIFO stock removal), `STEIN = 'C'`, `SFIFO = ''`, `QUAUS = 'X'` (Confirmation required), `VOLLE = 'X'` (Full Storage Unit stock removal requirement), `VRUCK = 'X'`. Because `LENVW = 'X'` and `VOLLE = 'X'`, `EN1` requires a Storage Unit (`VLENR`/`LENUM`) for removal.
+  - **Task 5:** Table `T334T` for `(W01, KZEAR = 'A')` has removal rows only for `LGTKZ = ''` (pointing to `***`) and `LGTKZ = '005'` (pointing to `005`, then `***`). Materials in `W01` with positive stock in `LQUA` and `MLGN-LTKZA = ''`:
+    - `8900000007`: SLoc `CS01`, storage type `OH1` (SU managed, batches `IN26001220`, `IN26001216`).
+    - `8900000008`: SLoc `CS01`, storage type `OH1` (5,000 KG, SU `00000000001000058626`, batch `IN26001221`).
+    - `8900000004`: SLoc `CS01` / `HS01` in interim `902`, `921`, `922`, `920`.
+    - `8000009754`: SLoc `HS01`, interim `921` (`2.000 NOS`).
+- **Code Changes (Task 6):**
+  - `srv/integration/s4hana/wm/TrToAdapter.js`: Added helper `_resolvePickSourceFromLqua` and feature flag check `process.env.WM_PICK_SOURCE_FROM_LQUA === 'true' || process.env.WM_PICK_SOURCE_FROM_LQUA === '1'` when `!vltyp && !vlpla`. Queries `T333` for interim storage types, queries `LQUA` for positive stock matching TR item (`MATNR`, `WERKS`, `LGORT`, `CHARG`, `VERME > 0`), filters out interim storage types, verifies FIFO strategy in `T331-STAUS` (`'F'`), sorts FIFO, returns `vltyp`, `vlpla`, `vlenr`. Throws clear 400 if no physical matching stock or non-FIFO strategy.
+  - `test/unit/wm/createTOFromTR.test.js`: Added 5 unit tests under `describe('11. WM_PICK_SOURCE_FROM_LQUA feature flag [mock only, not SAP verification]')`.
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/createTOFromTR.test.js`: 23/23 tests PASS.
+  - Full repo test suite: `npm test`: 153/153 test suites PASS, 2,630/2,630 tests PASS.
+  - `npx cds compile srv --to sql`: Clean (0 errors).
+  - `git diff --check`: Clean (0 errors).
+- **Next Recommended Action:**
+  - For sandbox testing, use verified material `8900000007` or `8900000008` (Option C) whose `MLGN-LTKZA = ''` has active removal strategy `***` and matching physical stock in SLoc `CS01`.
+  - For TR 1000799, note that Option A alone (maintaining `T334T` for `EN1`) will still fail unless stock is transferred into SLoc `HS01` or TR is re-created for SLoc `MT01`.
+
+### 2026-10-13 09:50 IST — Scan-TO autoConfirm & autoPostMigo End-to-End Trace, MIGO Gate Fix & Test Matrix
+
+- **User Request:** Bug on /wm/scan-to/TR/{number}: autoConfirm (Auto TO) and autoPostMigo (Auto MIGO) switches do not work correctly. Minimal diffs. Cite file/line. Diagnose end-to-end, state root cause per flag, fix causes, add autoConfirm on/off × autoPostMigo on/off test matrix.
+- **Affected Files:**
+  - `srv/wm/tr-to/handlers/trTo.handler.js`
+  - `test/unit/wm/createTOFromTR.test.js`
+  - `test/unit/wm/trToHandler.test.js`
+  - `WORKSTATUS.md`
+- **Root Cause & Reason:**
+  - In `srv/wm/tr-to/handlers/trTo.handler.js` line 264, the MIGO auto-trigger checked `if (data.autoPostMigo && result.Confirmed)`. If an operator had `autoConfirm: false`, but the TO had been confirmed previously or on a retry path where `result.Confirmed` was true, MIGO was not strictly prevented from executing. Added explicit `data.autoConfirm !== false` check to enforce that MIGO is strictly suppressed if `autoConfirm` is false.
+- **Executed Commands & Tests:**
+  - `npx jest test/unit/wm/createTOFromTR.test.js test/unit/wm/trToHandler.test.js test/unit/wm/processFixes.test.js`: 63/63 PASS.
+  - `npx jest test/unit/wm/warehouseScanToUi.test.js`: 33/33 PASS.
+  - `npx jest test/unit/wm/`: 65/65 test suites PASS, 1,371/1,371 tests PASS.
+  - `npx cds compile srv --to sql`: 0 errors.
+  - `git diff --check`: 0 errors.
+- **Next Recommended Action:**
+  - Run manual browser verification of the switches on `/wm/scan-to` if needed.
 
 ### 2026-10-13 09:30 IST — Storage Type Search (T334T / L3 007) Root Cause, SPRO Path & Error Propagation Hardening
 

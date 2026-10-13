@@ -260,8 +260,8 @@ class TrToHandler {
           }
         }
 
-        // Auto-trigger MIGO if requested and TO confirmed
-        if (data.autoPostMigo && result.Confirmed) {
+        // Auto-trigger MIGO if both autoConfirm and autoPostMigo are on and the TO is confirmed
+        if (data.autoConfirm !== false && data.autoPostMigo && result.Confirmed) {
           try {
             const migoResult = await handlePostMigoGoodsMovement({
               user: req.user,

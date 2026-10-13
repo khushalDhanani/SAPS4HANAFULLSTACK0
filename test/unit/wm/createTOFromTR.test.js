@@ -428,4 +428,276 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             expect(profiles['8900000004'].isBatchManaged).toBe(true);
         });
     });
+
+    // ─── autoConfirm × autoPostMigo matrix (adapter level) ─────────────────────
+    // autoPostMigo is NOT handled by the adapter; it is handled by the handler.
+    // These 4 tests verify the adapter half: confirm called/skipped, status correct.
+    // [mock only, not SAP verification]
+    describe('10. autoConfirm × autoPostMigo flag matrix — adapter level [mock only, not SAP verification]', () => {
+        const trHeader = [{
+            LGNUM: 'W01', TBNUM: '0001001839', BWLVS: '311',
+            RSNUM: '0000524979', NLTYP: '921', NLPLA: 'TRANSFER', VLTYP: '', VLPLA: ''
+        }];
+        const trItem = [{
+            LGNUM: 'W01', TBNUM: '0001001839', TBPOS: '0001',
+            MATNR: '000000001000000045', WERKS: '1120', LGORT: 'HS01', CHARG: '',
+            MENGE: '10.000', TAMEN: '0.000', MEINS: 'KG', ELIKZ: ''
+        }];
+
+        /** Minimal TR + profile setup shared by all 4 cases */
+        const setupTr = () => {
+            mockRfc.call.mockResolvedValueOnce({ ET_TR_HEADER: trHeader, ET_TR_ITEMS: trItem }); // getTR
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Test Mat' }]);          // MAKT
+            mockRfc.readTable.mockResolvedValueOnce([{ XCHPF: '', SERNP: '' }]);       // MARC profile
+            mockRfc.readTable.mockResolvedValueOnce([]);                                // LTAK double-TO guard
+            // AUTHORITY_CHECK always throws (auth stub)
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' }));
+        };
+        const toCreated = { EV_SUCCESS: 'S', EV_TANUM: '0001099001', EV_MESSAGE: 'created' };
+
+        it('case 1: autoConfirm=true, autoPostMigo=true — adapter confirms, returns status 04, Confirmed true', async () => {
+            setupTr();
+            mockRfc.call.mockResolvedValueOnce(toCreated);      // Z_WM_TO_CREATE_FROM_TR
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // L_LGNUM auth
+            mockRfc.call.mockResolvedValueOnce({});             // L_TO_CONFIRM succeeds
+
+            const res = await adapter.createTOFromTR({
+                tbnum: '0001001839', qty: 3,
+                autoConfirm: true,
+                autoPostMigo: true   // adapter ignores this; handler uses it for MIGO
+            });
+
+            expect(res.Confirmed).toBe(true);
+            expect(res.Status).toBe('04');
+            expect(mockRfc.call).toHaveBeenCalledWith('L_TO_CONFIRM', expect.objectContaining({ I_TANUM: '0001099001' }));
+        });
+
+        it('case 2: autoConfirm=true, autoPostMigo=false — adapter confirms, returns status 04, Confirmed true', async () => {
+            setupTr();
+            mockRfc.call.mockResolvedValueOnce(toCreated);
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // L_LGNUM auth
+            mockRfc.call.mockResolvedValueOnce({});             // L_TO_CONFIRM
+
+            const res = await adapter.createTOFromTR({
+                tbnum: '0001001839', qty: 3,
+                autoConfirm: true,
+                autoPostMigo: false
+            });
+
+            expect(res.Confirmed).toBe(true);
+            expect(res.Status).toBe('04');
+            expect(mockRfc.call).toHaveBeenCalledWith('L_TO_CONFIRM', expect.objectContaining({ I_TANUM: '0001099001' }));
+        });
+
+        it('case 3: autoConfirm=false, autoPostMigo=true — adapter skips confirm, returns status 03, Confirmed false', async () => {
+            setupTr();
+            mockRfc.call.mockResolvedValueOnce(toCreated);  // Z_WM_TO_CREATE_FROM_TR
+
+            const res = await adapter.createTOFromTR({
+                tbnum: '0001001839', qty: 3,
+                autoConfirm: false,
+                autoPostMigo: true
+            });
+
+            expect(res.Confirmed).toBe(false);
+            expect(res.Status).toBe('03');
+            expect(mockRfc.call).not.toHaveBeenCalledWith('L_TO_CONFIRM', expect.anything());
+        });
+
+        it('case 4: autoConfirm=false, autoPostMigo=false — adapter skips confirm, returns status 03, Confirmed false', async () => {
+            setupTr();
+            mockRfc.call.mockResolvedValueOnce(toCreated);  // Z_WM_TO_CREATE_FROM_TR
+
+            const res = await adapter.createTOFromTR({
+                tbnum: '0001001839', qty: 3,
+                autoConfirm: false,
+                autoPostMigo: false
+            });
+
+            expect(res.Confirmed).toBe(false);
+            expect(res.Status).toBe('03');
+            expect(mockRfc.call).not.toHaveBeenCalledWith('L_TO_CONFIRM', expect.anything());
+        });
+    });
+
+    // ─── WM_PICK_SOURCE_FROM_LQUA Feature Flag Tests ─────────────────────────
+    // [mock only, not SAP verification]
+    describe('11. WM_PICK_SOURCE_FROM_LQUA feature flag [mock only, not SAP verification]', () => {
+        const origEnv = process.env.WM_PICK_SOURCE_FROM_LQUA;
+        afterEach(() => {
+            process.env.WM_PICK_SOURCE_FROM_LQUA = origEnv;
+        });
+
+        const trHeader = [{
+            LGNUM: 'W01', TBNUM: '0001001839', BWLVS: '311',
+            RSNUM: '0000524979', NLTYP: '921', NLPLA: 'TRANSFER', VLTYP: '', VLPLA: ''
+        }];
+        const trItem = [{
+            LGNUM: 'W01', TBNUM: '0001001839', TBPOS: '0001',
+            MATNR: '000000001000000045', WERKS: '1120', LGORT: 'HS01', CHARG: '',
+            MENGE: '10.000', TAMEN: '0.000', MEINS: 'KG', ELIKZ: ''
+        }];
+
+        const setupTr = () => {
+            mockRfc.call.mockResolvedValueOnce({ ET_TR_HEADER: trHeader, ET_TR_ITEMS: trItem }); // getTR
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Test Mat' }]);          // MAKT
+            mockRfc.readTable.mockResolvedValueOnce([{ XCHPF: '', SERNP: '' }]);       // MARC profile
+            mockRfc.readTable.mockResolvedValueOnce([]);                                // LTAK double-TO guard
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // checkAuthorization
+        };
+        const toCreated = { EV_SUCCESS: 'S', EV_TANUM: '0001099001', EV_MESSAGE: 'created' };
+
+        it('when flag is false (default), leaves VLTYP/VLPLA/VLENR blank without querying LQUA [mock only, not SAP verification]', async () => {
+            delete process.env.WM_PICK_SOURCE_FROM_LQUA;
+            setupTr();
+            mockRfc.call.mockResolvedValueOnce(toCreated); // Z_WM_TO_CREATE_FROM_TR
+
+            await adapter.createTOFromTR({ tbnum: '0001001839', qty: 3, autoConfirm: false });
+
+            expect(mockRfc.call).toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.objectContaining({
+                IT_ITEMS: [expect.objectContaining({ VLTYP: '', VLPLA: '', VLENR: '' })]
+            }));
+        });
+
+        it('when flag is true and TR has no source, reads LQUA, excludes interim T333, verifies FIFO T331-STAUS, and passes VLTYP/VLPLA/VLENR [mock only, not SAP verification]', async () => {
+            process.env.WM_PICK_SOURCE_FROM_LQUA = 'true';
+            setupTr();
+            // 1. T333 interim types
+            mockRfc.readTable.mockResolvedValueOnce([
+                { VLTYP: '', NLTYP: '921', VKDYN: '', NKDYN: 'X' },
+                { VLTYP: '902', NLTYP: '', VKDYN: 'X', NKDYN: '' }
+            ]);
+            // 2. LQUA quants (one interim 921, one newer physical EN1, one older physical EN1)
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LQNUM: '102', LGTYP: '921', LGPLA: 'TRANSFER', LENUM: '', CHARG: '', VERME: '5.000', WDATU: '20261001' },
+                { LQNUM: '101', LGTYP: 'EN1', LGPLA: '0-L0001-02', LENUM: '00000000001000057775', CHARG: '', VERME: '2.000', WDATU: '20261005', BZEIT: '120000' },
+                { LQNUM: '100', LGTYP: 'EN1', LGPLA: '0-L0001-01', LENUM: '00000000001000057774', CHARG: '', VERME: '1.000', WDATU: '20261001', BZEIT: '090000' }
+            ]);
+            // 3. T331 for EN1: STAUS = 'F' (FIFO), VOLLE = 'X' (Complete removal)
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LGTYP: 'EN1', STAUS: 'F', VOLLE: 'X', LENVW: 'X' }
+            ]);
+            // 4. Z_WM_TO_CREATE_FROM_TR call
+            mockRfc.call.mockResolvedValueOnce(toCreated);
+
+            await adapter.createTOFromTR({ tbnum: '0001001839', qty: 1, autoConfirm: false });
+
+            expect(mockRfc.call).toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.objectContaining({
+                IT_ITEMS: [expect.objectContaining({
+                    VLTYP: 'EN1',
+                    VLPLA: '0-L0001-01',
+                    VLENR: '1000057774'
+                })]
+            }));
+        });
+
+        it('when chosen quant has SU and T331-VOLLE = X but requested qty !== SU qty, throws clear 400 naming SU and qty [mock only, not SAP verification]', async () => {
+            process.env.WM_PICK_SOURCE_FROM_LQUA = 'true';
+            setupTr();
+            // 1. T333 interim types
+            mockRfc.readTable.mockResolvedValueOnce([]);
+            // 2. LQUA quants (SU with 5.000 KG)
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LQNUM: '100', LGTYP: 'EN1', LGPLA: '0-L0001-01', LENUM: '00000000001000057774', CHARG: '', VERME: '5.000', WDATU: '20261001' }
+            ]);
+            // 3. T331 for EN1: STAUS = 'F', VOLLE = 'X'
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LGTYP: 'EN1', STAUS: 'F', VOLLE: 'X' }
+            ]);
+
+            await expect(adapter.createTOFromTR({ tbnum: '0001001839', qty: 2, autoConfirm: false }))
+                .rejects.toMatchObject({
+                    status: 400,
+                    message: expect.stringContaining('Storage unit 1000057774 in storage type EN1 requires complete stock removal')
+                });
+        });
+
+        it('when flag is true but caller explicitly passes sourceStorageType/Bin, skips LQUA lookup [mock only, not SAP verification]', async () => {
+            process.env.WM_PICK_SOURCE_FROM_LQUA = 'true';
+            setupTr();
+            mockRfc.call.mockResolvedValueOnce(toCreated);
+
+            await adapter.createTOFromTR({
+                tbnum: '0001001839', qty: 1, autoConfirm: false,
+                sourceStorageType: 'RM1', sourceStorageBin: 'BIN-RM'
+            });
+
+            expect(mockRfc.call).toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.objectContaining({
+                IT_ITEMS: [expect.objectContaining({
+                    VLTYP: 'RM1',
+                    VLPLA: 'BIN-RM'
+                })]
+            }));
+        });
+
+        it('when flag is true and no physical matching stock in LQUA, throws clear 400 error [mock only, not SAP verification]', async () => {
+            process.env.WM_PICK_SOURCE_FROM_LQUA = 'true';
+            setupTr();
+            // T333
+            mockRfc.readTable.mockResolvedValueOnce([{ VLTYP: '', NLTYP: '921', VKDYN: '', NKDYN: 'X' }]);
+            // LQUA returns only interim stock (or empty)
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LQNUM: '102', LGTYP: '921', LGPLA: 'TRANSFER', LENUM: '', CHARG: '', VERME: '5.000' }
+            ]);
+
+            await expect(adapter.createTOFromTR({ tbnum: '0001001839', qty: 1, autoConfirm: false }))
+                .rejects.toMatchObject({
+                    status: 400,
+                    message: expect.stringContaining('No matching stock found')
+                });
+        });
+
+        it('when flag is true and storage type uses non-FIFO strategy, throws clear 400 error [mock only, not SAP verification]', async () => {
+            process.env.WM_PICK_SOURCE_FROM_LQUA = 'true';
+            setupTr();
+            // T333
+            mockRfc.readTable.mockResolvedValueOnce([]);
+            // LQUA returns quant in ST1
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LQNUM: '200', LGTYP: 'ST1', LGPLA: 'BIN-01', LENUM: '', CHARG: '', VERME: '2.000' }
+            ]);
+            // T331 for ST1 has STAUS = 'L' (LIFO)
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LGTYP: 'ST1', STAUS: 'L' }
+            ]);
+
+            await expect(adapter.createTOFromTR({ tbnum: '0001001839', qty: 1, autoConfirm: false }))
+                .rejects.toMatchObject({
+                    status: 400,
+                    message: expect.stringContaining("only FIFO ('F') is supported")
+                });
+        });
+    });
+
+    // ─── Task 8: SLoc Pre-Check in lookupTR ──────────────────────────────────
+    // [mock only, not SAP verification]
+    describe('12. SLoc pre-check in lookupTR [mock only, not SAP verification]', () => {
+        it('returns StockWarning listing other SLocs when requested SLoc has no stock in warehouse [mock only, not SAP verification]', async () => {
+            const trHeader = [{
+                LGNUM: 'W01', TBNUM: '0001000799', BWLVS: '311',
+                RSNUM: '0000525862', NLTYP: '921', NLPLA: 'TRANSFER', VLTYP: '', VLPLA: ''
+            }];
+            const trItem = [{
+                LGNUM: 'W01', TBNUM: '0001000799', TBPOS: '0001',
+                MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01', CHARG: '',
+                MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: ''
+            }];
+
+            mockRfc.call.mockResolvedValueOnce({ ET_TR_HEADER: trHeader, ET_TR_ITEMS: trItem }); // getTR
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Laptop' }]);                       // MAKT
+            mockRfc.readTable.mockResolvedValueOnce([{ XCHPF: '', SERNP: '' }]);                    // MARC
+            // LQUA for HS01: empty (no stock)
+            mockRfc.readTable.mockResolvedValueOnce([]);
+            // LQUA for other SLocs: stock in MT01
+            mockRfc.readTable.mockResolvedValueOnce([
+                { LGORT: 'MT01', VERME: '3.000' }
+            ]);
+
+            const res = await adapter.lookupTR('0001000799', 'W01', 'TR');
+
+            expect(res.StorageLocation).toBe('HS01'); // Not silently changed!
+            expect(res.StockWarning).toContain('Storage location HS01 has no WM stock for material 8000009753 in warehouse W01');
+            expect(res.StockWarning).toContain('Available in storage location(s): MT01');
+        });
+    });
 });
