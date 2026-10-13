@@ -5,6 +5,39 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **WM Test Runbook Delivery, Consultant Handover Open Items & T321 Update, and 3 KG Gap Audit (2026-10-13, 12:45 IST):**
+  - **User Request:**
+    1. Write `docs/abap/test-runbook.md` for consultant, 1 page, numbered checklist: prerequisites (T321 TBFKZ decision for 201, small test stock spec, flag WM_TR_REAL_MOVEMENT), snapshot commands before/after each step (res, TR, TO, confirm, MIGO), per-step tables/fields to compare. No predicted outcomes; "record" fields.
+    2. Mark T321 explanation for 311 UNSURE in `consultant-handover.md`; add rows 1 and 14 observation (plain stock, TBFKZ X) as open question.
+    3. Add open items: HS01 variance (MARD 1 vs LQUA 0 for 8000006485), 3 KG gap for 8900000004, TOs with source = destination (37296, 37304), open W10 TR. Keys and no interpretation.
+    4. Read-only check for 3 KG gap: list all LTAK/LTAP rows touching 8900000004 in 921/920 by ANY user, plus cancelled TOs (verify DDIC names). Report totals only.
+  - **Audit & Investigation Findings (100% CONFIRMED via Client 220 RFC & DDIC):**
+    - **Task 1 (Test Runbook Delivery):**
+      - Created [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md): 1-page numbered checklist covering prerequisites (1.1 T321 TBFKZ decision, 1.2 physical test stock in EN1, 1.3 WM_TR_REAL_MOVEMENT flag) and Step 0 to Step 5 execution with `tools/snapshot.js` before/after commands, diff commands, and specific "record" fields across RESB, LTBK, LTBP, LTAK, LTAP, LQUA, MARD, and MATDOC without predicted outcomes.
+    - **Task 2 (T321 311 Explanation Updated to UNSURE):**
+      - Marked 311 explanation in [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) as `UNSURE`.
+      - Added open question for consultant: In `T321`, fallback rows 1 and 14 (`LGNUM = '***'`, `RBLVS = '311'`) specify plain unrestricted stock (`SOBKZ = ' '`) with `TBFKZ = 'X'`, but require `LFART = 'DOG'`. Does the IM-WM interface strictly require delivery `LFART = 'DOG'` to trigger TR creation, or does another condition suppress TR creation during direct MIGO 311 postings?
+    - **Task 3 (Open Items Added to Consultant Handover):**
+      - Added Section (c) Open Items in [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) with exact keys and zero interpretation:
+        1. HS01 stock variance for `8000006485` (MARD-LABST 1.000 NOS vs LQUA net 0.000 NOS).
+        2. 3.000 KG gap for `8900000004` in interim 921/920 (Net TO delta 17.000 KG vs LQUA 14.000 KG).
+        3. TOs with source = destination: TO `0001037296` (920/TRANSFER $\rightarrow$ 920/TRANSFER) and TO `0001037304` (921/TRANSFER $\rightarrow$ 921/TRANSFER).
+        4. Open TR in Warehouse `W10`: TR `W10 / 0001001222` (mvt 302, open `STATU = ''`, MBLNR `4900050149`).
+    - **Task 4 (3 KG Gap Full Database Audit for 8900000004):**
+      - Verified cancellation fields in DDIC: `LTAP-STOAN` (`LVS_STOAN` - "Cancellation req. for TO item"), `LTAP-VDIFM` (`LVS_VDIFM`), `LTAP-KZDIF` (`LVS_KZDIF`). `LTAK` has confirmation flag `KQUIT` and no separate cancellation flag.
+      - Full scan of `LTAP` for `LGNUM = 'W01'` and `MATNR = '000000008900000004'` touching 921 or 920 across ALL users:
+        - Total `LTAP` rows: **18** (`CONFIRMED`).
+        - Distinct `LTAK` headers: **18** (`CONFIRMED`).
+        - Users involved: **`KHUSHAL`** only (`CONFIRMED`).
+        - Total quantity INTO 921/920: **18.000 KG** (`CONFIRMED`).
+        - Total quantity OUT OF 921/920: **1.000 KG** (TO `0001037296`) (`CONFIRMED`).
+        - Net TO delta (`IN - OUT`): **17.000 KG** (`CONFIRMED`).
+        - Total Cancelled TOs (`STOAN = 'X'` or `VDIFM > 0`): **0 rows, 0.000 KG** (`CONFIRMED`).
+        - Current `LQUA` balance in 921/920: **14.000 KG** (`CONFIRMED`).
+        - Unreconciled gap: **3.000 KG** (`CONFIRMED`).
+  - **Validation & Test Results:**
+    - `git diff --check`: Clean (0 whitespace errors).
+
 - **TO 37296 Re-Read Verification, T321 Movement 311 Analysis, Warehouse W10 Scope Audit, App TO Restricted Reconciliation, tools/snapshot.js Delivery, and Consultant Handover Update (2026-10-13, 12:40 IST):**
   - **User Request:**
     1. TO 0001037296: re-read LTAP and LTAK twice, 1 min apart; compare with earlier read (VLTYP 001, VLPLA 01-01-01, NPPOS 0001045079); show all 3 raw results and say which is right; report tool defect if values differ.

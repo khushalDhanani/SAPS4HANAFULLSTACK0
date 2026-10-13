@@ -99,19 +99,51 @@ Difference calculated strictly as $\text{MARD LABST} - \sum \text{LQUA VERME}$ (
 - **14 Pairs MIGO TR Count (`CONFIRMED: read from LTBK`):**
   - Movement 311 (12 pairs): **0 MIGO-created TRs**.
   - Movement 301 (2 pairs): **2 MIGO-created TRs** (Pair TO `0001037287` $\leftrightarrow$ MIGO `4900050149` created TR `W01/0001000795` for issuing warehouse and TR `W10/0001001222` for receiving warehouse).
-- **Why Movement 311 Gave No TR (`CONFIRMED: read from T321`):**
+- **Why Movement 311 Gave No TR (`UNSURE: open question on T321 rows 1 & 14`):**
   - In `T321` for `RBLVS = '311'`, warehouse-specific `W01` rows only exist for `SOBKZ = 'E'` (sales order stock) with `LFART = 'DTR'` and explicit `TBFKZ = ''`.
-  - Fallback `***` rows in `T321` only exist for `LFART = 'DOG'` (outbound delivery).
-  - The application's 311 transfer posting via BAPI operates on standard unrestricted stock (`SOBKZ = ''`) without delivery document (`LFART = ''`). Because no row matches `SOBKZ = ''` and `LFART = ''` with `TBFKZ = 'X'`, SAP suppresses TR creation for 311.
-  - In contrast, movements 201, 241, and 301 have active rows in `T321` with `TBFKZ = 'X'`, causing MIGO to auto-generate a TR when posted.
+  - Fallback `***` rows in `T321` have `LFART = 'DOG'` (outbound delivery).
+  - Hypothesis: Application 311 transfer posting via BAPI operates without delivery document (`LFART = ''`). If SAP matches `LFART`, no row matches.
+  - **Open Question for Consultant:** Rows 1 and 14 in `T321` (`LGNUM = '***'`, `RBLVS = '311'`, `BWLVS = '311'`) specify plain unrestricted stock (`SOBKZ = ' '`) with `TBFKZ = 'X'`, but have `LFART = 'DOG'` (Row 1: `KZBEW = ' '`; Row 14: `KZBEW = 'L'`). Why did direct IM posting 311 without delivery not trigger TR creation via fallback Rows 1 or 14? Is `LFART = 'DOG'` strictly required by the IM-WM interface, or does another condition suppress TR creation? (`UNSURE`).
 - **Warehouse W10 & TR `W10/0001001222` Scope:**
   - TR `W10/0001001222`: `LGNUM = 'W10'`, `BWLVS = '302'`, `STATU = ''` (open), `MATNR = '8900000004'`, `WERKS = '1110'`, `LGORT = 'CS01'`.
   - Warehouse `W10` is `"B21/7 HW Internal"` (`T300T`) assigned to Plant `1110` (`T320`).
-  - **Scope Status:** `W10` is **OUT OF PROJECT SCOPE** (the application scope is strictly Warehouse `W01`, Plant `1120`, per `package.json` `cds.s4.warehouseNumber`). TR `0001001222` was created automatically by SAP standard cross-plant posting into Plant 1110.
+  - **Scope Status:** `W10` is **OUT OF PROJECT SCOPE** (application scope is strictly Warehouse `W01`, Plant `1120`, per `package.json` `cds.s4.warehouseNumber`). TR `0001001222` was created automatically by SAP standard cross-plant posting into Plant 1110.
 
 ---
 
-## (c) The Single Sandbox Test Specification
+## (c) Open Items (Raw Keys & Quantities, No Interpretation)
+
+1. **HS01 Stock Variance for Material `8000006485` (`CONFIRMED: read from MARD/LQUA`):**
+   - Material: `8000006485`, Plant: `1120`, Storage Location: `HS01`.
+   - `MARD-LABST`: `1.000 NOS`.
+   - `LQUA` net balance in `HS01`: `0.000 NOS` (Quant `0001045089` in `921/TRANSFER`: `+5.000 NOS`; Quant `0001044956` in `902/0180000113`: `-5.000 NOS`).
+   - Difference: `+1.000 NOS`.
+
+2. **3.000 KG Gap for Material `8900000004` in Interim `921/920` (`CONFIRMED: read from LTAP/LQUA`):**
+   - Material: `8900000004`, Warehouse: `W01`, Storage Types: `921` and `920`.
+   - Sum of all `LTAP` items INTO `921/920` by any user: `18.000 KG` (18 TO items).
+   - Sum of all `LTAP` items OUT OF `921/920` by any user: `1.000 KG` (TO `0001037296`).
+   - Net TO Delta (`IN - OUT`): `17.000 KG`.
+   - Cancelled TOs (`STOAN = 'X'` or `VDIFM > 0`): `0.000 KG` (0 rows).
+   - Current `LQUA` Balance in `921/920`: `14.000 KG` (Quant `0001045070` in `921/TRANSFER`: `10.000 KG`; Quant `0001045079` in `920/TRANSFER`: `4.000 KG`).
+   - Difference (`LQUA - Net Delta`): `-3.000 KG`.
+
+3. **TOs with Source Storage Type/Bin Equal to Destination Storage Type/Bin (`CONFIRMED: read from LTAP`):**
+   - TO `0001037296`: `LGNUM = 'W01'`, Material `8900000004`, `VSOLA = 1.000 KG`. Source: `920 / TRANSFER` (`VLQNR 0001045079`). Destination: `920 / TRANSFER` (`NLQNR 0001045079`).
+   - TO `0001037304`: `LGNUM = 'W01'`, Material `8000006485`, `VSOLA = 1.000 NOS`. Source: `921 / TRANSFER` (`VLQNR 0001045089`). Destination: `921 / TRANSFER` (`NLQNR 0001045089`).
+
+4. **Open TR in Warehouse `W10` (`CONFIRMED: read from LTBK/LTBP`):**
+   - TR Key: `LGNUM = 'W10'`, `TBNUM = '0001001222'`.
+   - `LTBK-BWLVS`: `302`.
+   - `LTBK-STATU`: `''` (Open, 0 TOs created).
+   - `LTBK-MBLNR`: `4900050149`, `MJAHR: '2026'`.
+   - `LTBP`: Material `8900000004`, Plant `1110`, SLoc `CS01`, `MENGE = 1.000 KG`, `ELIKZ = ''`.
+
+---
+
+## (d) The Single Sandbox Test Specification (See docs/abap/test-runbook.md)
+
+Detailed numbered checklist and snapshot commands are in [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md). Summary:
 
 Before going live, the consultant must witness one controlled execution:
 
@@ -131,7 +163,7 @@ Before going live, the consultant must witness one controlled execution:
 
 ---
 
-## (d) What the Consultant Must NOT Do Before the Test
+## (e) What the Consultant Must NOT Do Before the Test
 
 1. **DO NOT clear or delete interim quants in `921`, `920`, `911`, `914`, or `902`:**
    - Clearing quants via `LT01` or `LI21` destroys the historical audit trail needed to verify why negative quants were generated.
