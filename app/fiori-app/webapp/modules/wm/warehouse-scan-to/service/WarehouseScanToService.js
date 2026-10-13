@@ -152,6 +152,11 @@ sap.ui.define([
          * @param {string} [oPayload.unit='KG']
          * @param {string} [oPayload.batch]
          * @param {Array<string>} [oPayload.serials]
+         * @param {string} [oPayload.receivingPlant]
+         * @param {string} [oPayload.receivingStorageLocation]
+         * @param {string} [oPayload.costCenter]
+         * @param {string} [oPayload.assetNo]
+         * @param {string} [oPayload.subNumber]
          * @param {boolean} [oPayload.autoConfirm=true]
          * @param {string} [oPayload.storageUnit]
          * @returns {Promise<Object>}

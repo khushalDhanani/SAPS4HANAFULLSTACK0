@@ -220,6 +220,21 @@ sap.ui.define([
                 oModel.setProperty("/serialInput", "");
                 oModel.setProperty("/serialsCount", 0);
 
+                // Initialize destination & account assignment
+                oModel.setProperty("/receivingPlant", oDetail.ReceivingPlant || "");
+                oModel.setProperty("/recPlantValueState", "None");
+                oModel.setProperty("/recPlantValueStateText", "");
+                oModel.setProperty("/receivingStorageLocation", oDetail.ReceivingStorageLocation || "");
+                oModel.setProperty("/recSLocValueState", "None");
+                oModel.setProperty("/recSLocValueStateText", "");
+                oModel.setProperty("/costCenter", oDetail.CostCenter || "");
+                oModel.setProperty("/costCenterValueState", "None");
+                oModel.setProperty("/costCenterValueStateText", "");
+                oModel.setProperty("/assetNo", oDetail.AssetNo || "");
+                oModel.setProperty("/assetValueState", "None");
+                oModel.setProperty("/assetValueStateText", "");
+                oModel.setProperty("/subNumber", oDetail.SubNumber || "0000");
+
                 that._updateSerialsStatus();
                 that._validateForm();
                 that._playAudio("success");
@@ -589,8 +604,100 @@ sap.ui.define([
                 }
             }
 
+            var sMvt = (oTR.MovementType || "").trim();
+
+            // Movement 301 (Plant to Plant Transfer) requires Receiving Plant
+            if (sMvt === "301") {
+                var sRecPlant = (oModel.getProperty("/receivingPlant") || "").trim();
+                if (!sRecPlant) {
+                    oModel.setProperty("/recPlantValueState", "Error");
+                    oModel.setProperty("/recPlantValueStateText", this.getText("scanToErrReceivingPlantRequired"));
+                    oModel.setProperty("/canSubmit", false);
+                    return false;
+                }
+                if (sRecPlant === (oTR.Plant || "").trim()) {
+                    oModel.setProperty("/recPlantValueState", "Error");
+                    oModel.setProperty("/recPlantValueStateText", this.getText("scanToErrReceivingPlantSame"));
+                    oModel.setProperty("/canSubmit", false);
+                    return false;
+                }
+                oModel.setProperty("/recPlantValueState", "None");
+                oModel.setProperty("/recPlantValueStateText", "");
+            }
+
+            // Movement 311 (Storage Location Transfer) requires Receiving Storage Location
+            if (sMvt === "311") {
+                var sRecSLoc = (oModel.getProperty("/receivingStorageLocation") || "").trim();
+                if (!sRecSLoc) {
+                    oModel.setProperty("/recSLocValueState", "Error");
+                    oModel.setProperty("/recSLocValueStateText", this.getText("scanToErrReceivingSLocRequired"));
+                    oModel.setProperty("/canSubmit", false);
+                    return false;
+                }
+                oModel.setProperty("/recSLocValueState", "None");
+                oModel.setProperty("/recSLocValueStateText", "");
+            }
+
+            // Movement 201 (Goods Issue to Cost Center) requires Cost Center
+            if (sMvt === "201") {
+                var sCostCenter = (oModel.getProperty("/costCenter") || "").trim();
+                if (!sCostCenter) {
+                    oModel.setProperty("/costCenterValueState", "Error");
+                    oModel.setProperty("/costCenterValueStateText", this.getText("scanToErrCostCenterRequired"));
+                    oModel.setProperty("/canSubmit", false);
+                    return false;
+                }
+                oModel.setProperty("/costCenterValueState", "None");
+                oModel.setProperty("/costCenterValueStateText", "");
+            }
+
+            // Movement 241 (GI to Asset) requires Asset Number
+            if (sMvt === "241") {
+                var sAssetNo = (oModel.getProperty("/assetNo") || "").trim();
+                if (!sAssetNo) {
+                    oModel.setProperty("/assetValueState", "Error");
+                    oModel.setProperty("/assetValueStateText", this.getText("scanToErrAssetNoRequired"));
+                    oModel.setProperty("/canSubmit", false);
+                    return false;
+                }
+                oModel.setProperty("/assetValueState", "None");
+                oModel.setProperty("/assetValueStateText", "");
+            }
+
             oModel.setProperty("/canSubmit", true);
             return true;
+        },
+
+        onReceivingPlantLiveChange: function (oEvent) {
+            if (oEvent && typeof oEvent.getParameter === "function") {
+                var sVal = (oEvent.getParameter("value") || "").trim().toUpperCase();
+                this.getModel("scanView").setProperty("/receivingPlant", sVal);
+            }
+            this._validateForm();
+        },
+
+        onReceivingSLocLiveChange: function (oEvent) {
+            if (oEvent && typeof oEvent.getParameter === "function") {
+                var sVal = (oEvent.getParameter("value") || "").trim().toUpperCase();
+                this.getModel("scanView").setProperty("/receivingStorageLocation", sVal);
+            }
+            this._validateForm();
+        },
+
+        onCostCenterLiveChange: function (oEvent) {
+            if (oEvent && typeof oEvent.getParameter === "function") {
+                var sVal = (oEvent.getParameter("value") || "").trim().toUpperCase();
+                this.getModel("scanView").setProperty("/costCenter", sVal);
+            }
+            this._validateForm();
+        },
+
+        onAssetNoLiveChange: function (oEvent) {
+            if (oEvent && typeof oEvent.getParameter === "function") {
+                var sVal = (oEvent.getParameter("value") || "").trim();
+                this.getModel("scanView").setProperty("/assetNo", sVal);
+            }
+            this._validateForm();
         },
 
         onCameraScanBatch: function () {
@@ -644,6 +751,11 @@ sap.ui.define([
                 serials: aSerials,
                 sourceStorageType: oModel.getProperty("/sourceStorageType") || "",
                 sourceStorageBin: oModel.getProperty("/sourceStorageBin") || "",
+                receivingPlant: (oModel.getProperty("/receivingPlant") || "").trim(),
+                receivingStorageLocation: (oModel.getProperty("/receivingStorageLocation") || "").trim(),
+                costCenter: (oModel.getProperty("/costCenter") || "").trim(),
+                assetNo: (oModel.getProperty("/assetNo") || "").trim(),
+                subNumber: (oModel.getProperty("/subNumber") || "").trim(),
                 autoConfirm: bAutoConfirm,
                 autoPostMigo: bAutoPostMigo,
                 CompleteReservation: oModel.getProperty("/completeReservation") === true,
@@ -666,10 +778,18 @@ sap.ui.define([
                 oResult.Unit = oResult.Unit || (oTR ? oTR.Unit : "");
                 oResult.Batch = oResult.Batch || sBatch || (oTR ? oTR.Batch : "");
                 oResult.MovementType = oResult.MovementType || (oTR ? oTR.MovementType : "");
+                oResult.ReceivingPlant = oResult.ReceivingPlant || oModel.getProperty("/receivingPlant") || "";
+                oResult.ReceivingStorageLocation = oResult.ReceivingStorageLocation || oModel.getProperty("/receivingStorageLocation") || "";
+                oResult.CostCenter = oResult.CostCenter || oModel.getProperty("/costCenter") || "";
+                oResult.AssetNo = oResult.AssetNo || oModel.getProperty("/assetNo") || "";
+                oResult.SubNumber = oResult.SubNumber || oModel.getProperty("/subNumber") || "";
                 oResult.TransferRequirement = oResult.TransferRequirement || (oTR ? (oTR.TRNumber || oTR.TransferRequirement) : oPayload.tbnum);
                 oResult.ReservationNo = oResult.ReservationNo || (oTR ? oTR.ReservationNo : "");
                 oResult.ConfirmedBy = oResult.ConfirmedBy || "";
                 oResult.ConfirmationNumber = oResult.ConfirmationNumber || oResult.TransferOrder;
+                oResult.Plant = oResult.Plant || (oTR ? (oTR.Plant || oTR.Werks) : "");
+                oResult.StorageLocation = oResult.StorageLocation || (oTR ? (oTR.StorageLocation || oTR.Lgort) : "");
+                oResult.Serials = (oResult.Serials && oResult.Serials.length > 0) ? oResult.Serials : aSerials;
 
                 var sActionText;
                 if (oResult.MaterialDocument) {
@@ -713,6 +833,30 @@ sap.ui.define([
             var oResult = oModel.getProperty("/result");
             if (!oResult) return Promise.resolve(null);
 
+            var sMvt = (oResult.MovementType || "").trim();
+            var sRecPlant = (oResult.ReceivingPlant || oModel.getProperty("/receivingPlant") || "").trim().toUpperCase();
+            var sRecSLoc = (oResult.ReceivingStorageLocation || oModel.getProperty("/receivingStorageLocation") || "").trim().toUpperCase();
+            var sCostCenter = (oResult.CostCenter || oModel.getProperty("/costCenter") || "").trim().toUpperCase();
+            var sAssetNo = (oResult.AssetNo || oModel.getProperty("/assetNo") || "").trim();
+            var sSubNo = (oResult.SubNumber || oModel.getProperty("/subNumber") || "").trim();
+
+            if (sMvt === "301" && !sRecPlant) {
+                this._showError(this.getText("scanToErrReceivingPlantRequired"));
+                return Promise.resolve(null);
+            }
+            if (sMvt === "311" && !sRecSLoc) {
+                this._showError(this.getText("scanToErrReceivingSLocRequired"));
+                return Promise.resolve(null);
+            }
+            if (sMvt === "201" && !sCostCenter) {
+                this._showError(this.getText("scanToErrCostCenterRequired"));
+                return Promise.resolve(null);
+            }
+            if (sMvt === "241" && !sAssetNo) {
+                this._showError(this.getText("scanToErrAssetNoRequired"));
+                return Promise.resolve(null);
+            }
+
             var that = this;
             oModel.setProperty("/canRetryMigo", false);
 
@@ -724,16 +868,30 @@ sap.ui.define([
                 Material: oResult.Material,
                 Quantity: oResult.Quantity,
                 Unit: oResult.Unit,
+                Plant: oResult.Plant || (oResult.IssuingPlant || ""),
+                StorageLocation: oResult.StorageLocation || (oResult.IssuingStorageLocation || ""),
+                receivingPlant: sRecPlant,
+                ReceivingPlant: sRecPlant,
+                receivingStorageLocation: sRecSLoc,
+                ReceivingStorageLocation: sRecSLoc,
+                costCenter: sCostCenter,
+                CostCenter: sCostCenter,
+                assetNo: sAssetNo,
+                AssetNo: sAssetNo,
+                subNumber: sSubNo,
+                SubNumber: sSubNo,
                 CompleteReservation: oModel.getProperty("/completeReservation") === true,
                 ProcessId: oResult.ProcessId || ""
             };
             var sBatch = oResult.Batch || oModel.getProperty("/batch");
             if (sBatch) {
                 oPayload.Batch = sBatch;
+                oPayload.batch = sBatch;
             }
             var aSerials = oResult.Serials || (oModel.getProperty("/serials") || []).map(function (item) { return item.serial; });
             if (aSerials && aSerials.length > 0) {
                 oPayload.Serials = aSerials;
+                oPayload.serials = aSerials;
             }
 
             return WarehouseScanToService.postMigoGoodsMovement(oPayload).then(function (oMigoRes) {
@@ -754,6 +912,11 @@ sap.ui.define([
                     Batch: oMigoRes.Batch || oResult.Batch,
                     ReservationNo: oMigoRes.ReservationNo || oResult.ReservationNo,
                     MovementType: oMigoRes.MovementType || oResult.MovementType,
+                    ReceivingPlant: sRecPlant,
+                    ReceivingStorageLocation: sRecSLoc,
+                    CostCenter: sCostCenter,
+                    AssetNo: sAssetNo,
+                    SubNumber: sSubNo,
                     Confirmed: true,
                     IsConfirmed: true,
                     ConfirmedBy: oResult.ConfirmedBy || "",
@@ -769,6 +932,11 @@ sap.ui.define([
                 that._playAudio("error");
                 oModel.setProperty("/canRetryMigo", true);
                 var oUpdatedResult = Object.assign({}, oResult, {
+                    ReceivingPlant: sRecPlant,
+                    ReceivingStorageLocation: sRecSLoc,
+                    CostCenter: sCostCenter,
+                    AssetNo: sAssetNo,
+                    SubNumber: sSubNo,
                     ErrorMessage: oErr.message
                 });
                 oModel.setProperty("/result", oUpdatedResult);

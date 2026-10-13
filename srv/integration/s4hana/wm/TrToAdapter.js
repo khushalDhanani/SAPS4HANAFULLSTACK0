@@ -741,6 +741,44 @@ class TrToAdapter {
       }
     }
 
+    let receivingPlant = '';
+    let receivingStorageLocation = '';
+    let costCenter = tr.Betyp === 'K' ? alphaOut(tr.Benum) : '';
+    let assetNo = tr.Betyp === 'A' ? alphaOut(tr.Benum) : '';
+    let subNumber = tr.Betyp === 'A' ? '0000' : '';
+
+    if (tr.Rsnum && String(tr.Rsnum).trim() !== '' && String(tr.Rsnum).trim() !== '0000000000' && this.rfc) {
+      try {
+        const rsnumPadded = sapKey(tr.Rsnum, 'rsnum').padStart(10, '0');
+        const resbRows = await this._rfc(
+          () => this.rfc.readTable('RESB', ['UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${rsnumPadded}'`], 1),
+          `Read RESB for reservation ${alphaOut(rsnumPadded)}`
+        );
+        if (resbRows?.[0]) {
+          receivingPlant = String(resbRows[0].UMWRK || '').trim();
+          receivingStorageLocation = String(resbRows[0].UMLGO || '').trim();
+          if (!sel.Batch && resbRows[0].CHARG?.trim()) {
+            sel.Batch = resbRows[0].CHARG.trim().toUpperCase();
+          }
+        }
+        if (!costCenter || !assetNo) {
+          const rkpfRows = await this._rfc(
+            () => this.rfc.readTable('RKPF', ['KOSTL', 'ANLN1', 'ANLN2'], [`RSNUM = '${rsnumPadded}'`], 1),
+            `Read RKPF for reservation ${alphaOut(rsnumPadded)}`
+          );
+          if (rkpfRows?.[0]) {
+            if (!costCenter && rkpfRows[0].KOSTL?.trim()) costCenter = rkpfRows[0].KOSTL.trim();
+            if (!assetNo && rkpfRows[0].ANLN1?.trim()) {
+              assetNo = rkpfRows[0].ANLN1.trim();
+              subNumber = rkpfRows[0].ANLN2?.trim() || '0000';
+            }
+          }
+        }
+      } catch (_rErr) {
+        LOG.warn(`Reservation lookup in lookupTR failed: ${_rErr.message}`);
+      }
+    }
+
     return {
       TransferRequirement: alphaOut(tr.Tbnum),
       TRNumber: alphaOut(tr.Tbnum),
@@ -762,6 +800,11 @@ class TrToAdapter {
       DestinationBin: tr.Nlpla || '',
       SourceStorageType: sourceStorageType,
       SourceStorageBin: sourceStorageBin,
+      ReceivingPlant: receivingPlant,
+      ReceivingStorageLocation: receivingStorageLocation,
+      CostCenter: costCenter,
+      AssetNo: assetNo,
+      SubNumber: subNumber,
       RequiredQuantity: sel.RequiredQty || 0,
       TargetQty: sel.RequiredQty || 0,
       ProcessedQuantity: sel.ProcessedQty || 0,
@@ -999,6 +1042,11 @@ class TrToAdapter {
     storageUnit = '',
     sourceStorageType = '',
     sourceStorageBin = '',
+    receivingPlant = '',
+    receivingStorageLocation = '',
+    costCenter = '',
+    assetNo = '',
+    subNumber = '',
     autoConfirm = true,
     autoPostMigo = false,
     existingToNumber = '',
@@ -1010,6 +1058,12 @@ class TrToAdapter {
 
     const wh = warehouse(lgnum);
     const tr = await this.getTR(tbnum, wh);
+
+    let finalRecPlant = receivingPlant ? String(receivingPlant).trim() : '';
+    let finalRecSLoc = receivingStorageLocation ? String(receivingStorageLocation).trim() : '';
+    let finalCostCenter = costCenter ? String(costCenter).trim() : (tr.Betyp === 'K' ? alphaOut(tr.Benum) : '');
+    let finalAssetNo = assetNo ? String(assetNo).trim() : (tr.Betyp === 'A' ? alphaOut(tr.Benum) : '');
+    let finalSubNumber = subNumber ? String(subNumber).trim() : (tr.Betyp === 'A' ? '0000' : '');
 
     const open = this._openItems(tr);
     let item = null;
@@ -1231,9 +1285,11 @@ class TrToAdapter {
       ReservationNo: alphaOut(tr.Rsnum) || '',
       ReservationItem: '',
       MovementType: tr.Bwlvs || '',
-      CostCenter: tr.Betyp === 'K' ? alphaOut(tr.Benum) : '',
-      AssetNo: tr.Betyp === 'A' ? alphaOut(tr.Benum) : '',
-      SubNumber: tr.Betyp === 'A' ? '0000' : '',
+      CostCenter: finalCostCenter,
+      AssetNo: finalAssetNo,
+      SubNumber: finalSubNumber,
+      ReceivingPlant: finalRecPlant,
+      ReceivingStorageLocation: finalRecSLoc,
       Betyp: tr.Betyp || '',
       Benum: tr.Benum || '',
       Status: currentStatus,

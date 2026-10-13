@@ -104,6 +104,13 @@ service TrToService @(path: '/odata/v4/tr-to') {
         MaterialDocYear     : String(4);
         StockEffect         : String(80);
         ErrorMessage        : String(255);
+        ReceivingPlant      : String(4);
+        ReceivingStorageLocation : String(4);
+        CostCenter          : String(10);
+        AssetNo             : String(12);
+        SubNumber           : String(4);
+        Warning             : String(255);
+        ReceivingTr         : String(10);
     };
 
     type MigoProcessResult {
@@ -144,6 +151,11 @@ service TrToService @(path: '/odata/v4/tr-to') {
         DestinationStorageBin   : String(10);
         SourceStorageType       : String(3);
         SourceStorageBin        : String(10);
+        ReceivingPlant          : String(4);
+        ReceivingStorageLocation : String(4);
+        CostCenter              : String(10);
+        AssetNo                 : String(12);
+        SubNumber               : String(4);
         RequiredQuantity        : Decimal(13, 3);
         ProcessedQuantity       : Decimal(13, 3);
         OpenQuantity            : Decimal(13, 3);
@@ -224,36 +236,46 @@ service TrToService @(path: '/odata/v4/tr-to') {
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action createTOFromTR(
-        lgnum             : String(3),
-        tbnum             : String(10),
-        tbpos             : String(4),
-        qty               : Decimal(13, 3),
-        unit              : String(3),
-        batch             : String(10),
-        serials           : array of String(18),
-        storageUnit       : String(20),
-        sourceStorageType : String(3),
-        sourceStorageBin  : String(10),
-        autoConfirm       : Boolean,
-        autoPostMigo      : Boolean,
-        CompleteReservation : Boolean // sets NO_MORE_GR on the goods movement; never defaulted to true
+        lgnum                    : String(3),
+        tbnum                    : String(10),
+        tbpos                    : String(4),
+        qty                      : Decimal(13, 3),
+        unit                     : String(3),
+        batch                    : String(10),
+        serials                  : array of String(18),
+        storageUnit              : String(20),
+        sourceStorageType        : String(3),
+        sourceStorageBin         : String(10),
+        receivingPlant           : String(4),
+        receivingStorageLocation : String(4),
+        costCenter               : String(10),
+        assetNo                  : String(12),
+        subNumber                : String(4),
+        autoConfirm              : Boolean,
+        autoPostMigo             : Boolean,
+        CompleteReservation      : Boolean // sets NO_MORE_GR on the goods movement; never defaulted to true
     ) returns TOProcessResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action CreateTOFromTR(
-        lgnum             : String(3),
-        tbnum             : String(10),
-        tbpos             : String(4),
-        qty               : Decimal(13, 3),
-        unit              : String(3),
-        batch             : String(10),
-        serials           : array of String(18),
-        storageUnit       : String(20),
-        sourceStorageType : String(3),
-        sourceStorageBin  : String(10),
-        autoConfirm       : Boolean,
-        autoPostMigo      : Boolean,
-        CompleteReservation : Boolean // sets NO_MORE_GR on the goods movement; never defaulted to true
+        lgnum                    : String(3),
+        tbnum                    : String(10),
+        tbpos                    : String(4),
+        qty                      : Decimal(13, 3),
+        unit                     : String(3),
+        batch                    : String(10),
+        serials                  : array of String(18),
+        storageUnit              : String(20),
+        sourceStorageType        : String(3),
+        sourceStorageBin         : String(10),
+        receivingPlant           : String(4),
+        receivingStorageLocation : String(4),
+        costCenter               : String(10),
+        assetNo                  : String(12),
+        subNumber                : String(4),
+        autoConfirm              : Boolean,
+        autoPostMigo             : Boolean,
+        CompleteReservation      : Boolean // sets NO_MORE_GR on the goods movement; never defaulted to true
     ) returns TOProcessResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -267,13 +289,20 @@ service TrToService @(path: '/odata/v4/tr-to') {
         Quantity                 : Decimal(13, 3),
         Unit                     : String(3),
         ReceivingPlant           : String(4),
+        receivingPlant           : String(4),
         ReceivingStorageLocation : String(4),
+        receivingStorageLocation : String(4),
         CostCenter               : String(10),
+        costCenter               : String(10),
         AssetNo                  : String(12),
+        assetNo                  : String(12),
         SubNumber                : String(4),
+        subNumber                : String(4),
         TransferOrder            : String(10),
         Batch                    : String(10),
+        batch                    : String(10),
         Serials                  : array of String(18),
+        serials                  : array of String(18),
         CompleteReservation      : Boolean,
         ProcessId                : UUID // PROCESS_ID of the GI step; reused on retry so an existing material document is found
     ) returns MigoProcessResult;
@@ -289,13 +318,20 @@ service TrToService @(path: '/odata/v4/tr-to') {
         Quantity                 : Decimal(13, 3),
         Unit                     : String(3),
         ReceivingPlant           : String(4),
+        receivingPlant           : String(4),
         ReceivingStorageLocation : String(4),
+        receivingStorageLocation : String(4),
         CostCenter               : String(10),
+        costCenter               : String(10),
         AssetNo                  : String(12),
+        assetNo                  : String(12),
         SubNumber                : String(4),
+        subNumber                : String(4),
         TransferOrder            : String(10),
         Batch                    : String(10),
+        batch                    : String(10),
         Serials                  : array of String(18),
+        serials                  : array of String(18),
         CompleteReservation      : Boolean,
         ProcessId                : UUID // PROCESS_ID of the GI step; reused on retry so an existing material document is found
     ) returns MigoProcessResult;

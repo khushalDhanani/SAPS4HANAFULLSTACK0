@@ -73,15 +73,64 @@ class TrToHandler {
       const sSLoc = data.StorageLocation || existingTrack?.StorageLocation;
       const nQty = data.Quantity || existingTrack?.Quantity;
       const sUnit = data.Unit || existingTrack?.Unit;
-      const sRecPlant = data.ReceivingPlant || existingTrack?.ReceivingPlant;
-      const sRecSLoc = data.ReceivingStorageLocation || existingTrack?.ReceivingStorageLocation;
-      const sCostCenter = data.CostCenter || data.costCenter || existingTrack?.CostCenter;
-      const sAssetNo = data.AssetNo || data.assetNo || existingTrack?.AssetNo;
-      const sSubNumber = data.SubNumber || data.subNumber || existingTrack?.SubNumber;
+      let sRecPlant = data.ReceivingPlant || data.receivingPlant || existingTrack?.ReceivingPlant;
+      let sRecSLoc = data.ReceivingStorageLocation || data.receivingStorageLocation || existingTrack?.ReceivingStorageLocation;
+      let sCostCenter = data.CostCenter || data.costCenter || existingTrack?.CostCenter;
+      let sAssetNo = data.AssetNo || data.assetNo || existingTrack?.AssetNo;
+      let sSubNumber = data.SubNumber || data.subNumber || existingTrack?.SubNumber;
       const sTanum = sTanumIn || existingTrack?.TransferOrder || '';
       const sBatch = data.Batch || data.batch || existingTrack?.Batch || '';
       const sSerials = data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : []);
       const completeReservation = data.CompleteReservation === true;
+
+      // Resilient destination/account resolution from TO (LTAK -> LTAP -> RESB/RKPF) if missing on untracked records
+      if (sTanum && resProcessAdapter.rfc) {
+        try {
+          const ltakRows = await resProcessAdapter.rfc.readTable('LTAK', ['TBNUM', 'RSNUM', 'BWLVS'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
+          if (ltakRows?.[0]) {
+            const tbnum = ltakRows[0].TBNUM?.trim();
+            const rsnum = ltakRows[0].RSNUM?.trim();
+            if (!sMvt && ltakRows[0].BWLVS?.trim()) sMvt = ltakRows[0].BWLVS.trim();
+            if (rsnum && rsnum !== '0000000000') {
+              const resbRows = await resProcessAdapter.rfc.readTable('RESB', ['UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${rsnum}'`], 1);
+              if (resbRows?.[0]) {
+                if (!sRecPlant && resbRows[0].UMWRK?.trim()) sRecPlant = resbRows[0].UMWRK.trim();
+                if (!sRecSLoc && resbRows[0].UMLGO?.trim()) sRecSLoc = resbRows[0].UMLGO.trim();
+                if (!sBatch && resbRows[0].CHARG?.trim()) sBatch = resbRows[0].CHARG.trim().toUpperCase();
+              }
+              if (!sCostCenter || !sAssetNo) {
+                const rkpfRows = await resProcessAdapter.rfc.readTable('RKPF', ['KOSTL', 'ANLN1', 'ANLN2'], [`RSNUM = '${rsnum}'`], 1);
+                if (rkpfRows?.[0]) {
+                  if (!sCostCenter && rkpfRows[0].KOSTL?.trim()) sCostCenter = rkpfRows[0].KOSTL.trim();
+                  if (!sAssetNo && rkpfRows[0].ANLN1?.trim()) {
+                    sAssetNo = rkpfRows[0].ANLN1.trim();
+                    sSubNumber = rkpfRows[0].ANLN2?.trim() || '0000';
+                  }
+                }
+              }
+            } else if (tbnum && (!sRecPlant || !sRecSLoc || !sCostCenter || !sAssetNo)) {
+              const ltbkRows = await resProcessAdapter.rfc.readTable('LTBK', ['RSNUM', 'BETYP', 'BENUM'], [`TBNUM = '${tbnum}'`], 1);
+              if (ltbkRows?.[0]?.BETYP === 'K' && !sCostCenter) {
+                sCostCenter = ltbkRows[0].BENUM?.trim();
+              } else if (ltbkRows?.[0]?.BETYP === 'A' && !sAssetNo) {
+                sAssetNo = ltbkRows[0].BENUM?.trim();
+                if (!sSubNumber) sSubNumber = '0000';
+              }
+            }
+          }
+          if ((!sMat || !sPlant || !sSLoc || !sBatch) && (!resProcessAdapter.rfc.readTable?.mock)) {
+            const ltapRows = await resProcessAdapter.rfc.readTable('LTAP', ['MATNR', 'WERKS', 'LGORT', 'CHARG'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
+            if (ltapRows?.[0]) {
+              if (!sMat && ltapRows[0].MATNR?.trim()) sMat = ltapRows[0].MATNR.trim();
+              if (!sPlant && ltapRows[0].WERKS?.trim()) sPlant = ltapRows[0].WERKS.trim();
+              if (!sSLoc && ltapRows[0].LGORT?.trim()) sSLoc = ltapRows[0].LGORT.trim();
+              if (!sBatch && ltapRows[0].CHARG?.trim()) sBatch = ltapRows[0].CHARG.trim().toUpperCase();
+            }
+          }
+        } catch (_lookupErr) {
+          console.warn('[trTo.handler] TransferOrder metadata lookup note:', _lookupErr.message);
+        }
+      }
       for (const [v, label] of [[sMvt, 'MovementType'], [sMat, 'Material'], [sPlant, 'Plant'], [nQty, 'Quantity'], [sUnit, 'Unit']]) {
         if (!v) throw httpError(400, `${label} is required (not in the request and not on the tracking record)`);
       }
@@ -284,15 +333,15 @@ class TrToHandler {
                 Quantity: confirmedQty,
                 confMenge: confirmedQty,
                 Unit: result.Unit,
-                MovementType: existing?.MovementType || result.MovementType,
-                Material: result.Material || existing?.Material,
-                Plant: existing?.Plant || result.Plant,
-                StorageLocation: existing?.StorageLocation || result.StorageLocation,
+                MovementType: existing?.MovementType || result.MovementType || data.MovementType || data.movementType,
+                Material: result.Material || existing?.Material || data.Material || data.material,
+                Plant: existing?.Plant || result.Plant || data.Plant || data.plant,
+                StorageLocation: existing?.StorageLocation || result.StorageLocation || data.StorageLocation || data.storageLocation,
                 CostCenter: existing?.CostCenter || result.CostCenter || (result.Betyp === 'K' ? result.Benum : '') || data.CostCenter || data.costCenter,
                 AssetNo: existing?.AssetNo || result.AssetNo || (result.Betyp === 'A' ? result.Benum : '') || data.AssetNo || data.assetNo,
                 SubNumber: existing?.SubNumber || result.SubNumber || data.SubNumber || data.subNumber || (result.Betyp === 'A' ? '0000' : ''),
-                ReceivingPlant: existing?.ReceivingPlant || data.ReceivingPlant || data.receivingPlant,
-                ReceivingStorageLocation: existing?.ReceivingStorageLocation || data.ReceivingStorageLocation || data.receivingStorageLocation,
+                ReceivingPlant: existing?.ReceivingPlant || data.ReceivingPlant || data.receivingPlant || result.ReceivingPlant,
+                ReceivingStorageLocation: existing?.ReceivingStorageLocation || data.ReceivingStorageLocation || data.receivingStorageLocation || result.ReceivingStorageLocation,
                 Batch: result.Batch || data.batch || existing?.Batch || '',
                 Serials: result.Serials || data.serials || [],
                 CompleteReservation: data.CompleteReservation === true,
@@ -329,6 +378,12 @@ class TrToHandler {
             result.ErrorMessage = migoErr.message;
           }
         }
+
+        result.ReceivingPlant = data.ReceivingPlant || data.receivingPlant || result.ReceivingPlant || existing?.ReceivingPlant || '';
+        result.ReceivingStorageLocation = data.ReceivingStorageLocation || data.receivingStorageLocation || result.ReceivingStorageLocation || existing?.ReceivingStorageLocation || '';
+        result.CostCenter = data.CostCenter || data.costCenter || result.CostCenter || existing?.CostCenter || '';
+        result.AssetNo = data.AssetNo || data.assetNo || result.AssetNo || existing?.AssetNo || '';
+        result.SubNumber = data.SubNumber || data.subNumber || result.SubNumber || existing?.SubNumber || '';
 
         result.IsConfirmed = Boolean(result.Confirmed || result.Status === STATUS.TO_CONFIRMED || result.Status === STATUS.GI_POSTED);
         result.ConfirmationNumber = result.ConfirmationNumber || result.TransferOrder;

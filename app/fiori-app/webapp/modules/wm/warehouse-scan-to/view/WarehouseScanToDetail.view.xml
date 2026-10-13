@@ -137,6 +137,46 @@
                                     text="{scanView>/result/ErrorMessage}"
                                     state="Error"
                                     visible="{= ${scanView>/result/Status} === '90' || !!${scanView>/result/ErrorMessage} }" />
+
+                                <Label text="{i18n>scanToLabelReceivingPlant}" design="Bold" required="true" visible="{= ${scanView>/canRetryMigo} &amp;&amp; ${scanView>/result/MovementType} === '301' }" />
+                                <Input
+                                    id="inputResultReceivingPlant"
+                                    value="{scanView>/result/ReceivingPlant}"
+                                    valueLiveUpdate="true"
+                                    placeholder="{i18n>scanToPlaceholderReceivingPlant}"
+                                    maxLength="4"
+                                    width="12rem"
+                                    visible="{= ${scanView>/canRetryMigo} &amp;&amp; ${scanView>/result/MovementType} === '301' }" />
+
+                                <Label text="{i18n>scanToLabelReceivingSLoc}" design="Bold" visible="{= ${scanView>/canRetryMigo} &amp;&amp; (${scanView>/result/MovementType} === '301' || ${scanView>/result/MovementType} === '311') }" />
+                                <Input
+                                    id="inputResultReceivingSLoc"
+                                    value="{scanView>/result/ReceivingStorageLocation}"
+                                    valueLiveUpdate="true"
+                                    placeholder="{i18n>scanToPlaceholderReceivingSLoc}"
+                                    maxLength="4"
+                                    width="12rem"
+                                    visible="{= ${scanView>/canRetryMigo} &amp;&amp; (${scanView>/result/MovementType} === '301' || ${scanView>/result/MovementType} === '311') }" />
+
+                                <Label text="{i18n>scanToLabelCostCenter}" design="Bold" required="true" visible="{= ${scanView>/canRetryMigo} &amp;&amp; ${scanView>/result/MovementType} === '201' }" />
+                                <Input
+                                    id="inputResultCostCenter"
+                                    value="{scanView>/result/CostCenter}"
+                                    valueLiveUpdate="true"
+                                    placeholder="{i18n>scanToPlaceholderCostCenter}"
+                                    maxLength="10"
+                                    width="12rem"
+                                    visible="{= ${scanView>/canRetryMigo} &amp;&amp; ${scanView>/result/MovementType} === '201' }" />
+
+                                <Label text="{i18n>scanToLabelAssetNo}" design="Bold" required="true" visible="{= ${scanView>/canRetryMigo} &amp;&amp; ${scanView>/result/MovementType} === '241' }" />
+                                <Input
+                                    id="inputResultAssetNo"
+                                    value="{scanView>/result/AssetNo}"
+                                    valueLiveUpdate="true"
+                                    placeholder="{i18n>scanToPlaceholderAssetNo}"
+                                    maxLength="12"
+                                    width="12rem"
+                                    visible="{= ${scanView>/canRetryMigo} &amp;&amp; ${scanView>/result/MovementType} === '241' }" />
                             </form:content>
                         </form:SimpleForm>
 
@@ -265,6 +305,118 @@
                                 type="Transparent"
                                 press=".onSetMaxQty" />
                         </HBox>
+                    </VBox>
+                </Panel>
+
+                <!-- SECTION: TRANSFER DESTINATION / ACCOUNT ASSIGNMENT -->
+                <Panel
+                    id="panelDestination"
+                    headerText="{= ${scanView>/tr/MovementType} === '301' ? ${i18n>scanToPanelDestination301} : (${scanView>/tr/MovementType} === '311' ? ${i18n>scanToPanelDestination311} : (${scanView>/tr/MovementType} === '201' ? ${i18n>scanToPanelAccount201} : (${scanView>/tr/MovementType} === '241' ? ${i18n>scanToPanelAccount241} : ${i18n>scanToPanelDestinationTitle}))) }"
+                    visible="{= ${scanView>/hasTR} &amp;&amp; (${scanView>/tr/MovementType} === '301' || ${scanView>/tr/MovementType} === '311' || ${scanView>/tr/MovementType} === '201' || ${scanView>/tr/MovementType} === '241') }"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+                    <VBox class="sapUiSmallMargin">
+                        <!-- MOVEMENT 301: PLANT TO PLANT -->
+                        <VBox visible="{= ${scanView>/tr/MovementType} === '301' }" class="sapUiTinyMarginBottom">
+                            <Label
+                                text="{i18n>scanToLabelReceivingPlant}"
+                                design="Bold"
+                                required="true"
+                                class="sapUiTinyMarginBottom" />
+                            <Input
+                                id="inputReceivingPlant"
+                                value="{scanView>/receivingPlant}"
+                                valueLiveUpdate="true"
+                                placeholder="{i18n>scanToPlaceholderReceivingPlant}"
+                                width="12rem"
+                                maxLength="4"
+                                liveChange=".onReceivingPlantLiveChange"
+                                valueState="{scanView>/recPlantValueState}"
+                                valueStateText="{scanView>/recPlantValueStateText}"
+                                class="sapUiSmallMarginBottom" />
+
+                            <Label
+                                text="{i18n>scanToLabelReceivingSLoc}"
+                                design="Bold"
+                                class="sapUiTinyMarginBottom" />
+                            <Input
+                                id="inputReceivingSLoc"
+                                value="{scanView>/receivingStorageLocation}"
+                                valueLiveUpdate="true"
+                                placeholder="{i18n>scanToPlaceholderReceivingSLoc}"
+                                width="12rem"
+                                maxLength="4"
+                                liveChange=".onReceivingSLocLiveChange" />
+                        </VBox>
+
+                        <!-- MOVEMENT 311: INTRA-PLANT -->
+                        <VBox visible="{= ${scanView>/tr/MovementType} === '311' }" class="sapUiTinyMarginBottom">
+                            <Label
+                                text="{i18n>scanToLabelReceivingSLoc}"
+                                design="Bold"
+                                required="true"
+                                class="sapUiTinyMarginBottom" />
+                            <Input
+                                id="inputReceivingSLoc311"
+                                value="{scanView>/receivingStorageLocation}"
+                                valueLiveUpdate="true"
+                                placeholder="{i18n>scanToPlaceholderReceivingSLoc}"
+                                width="12rem"
+                                maxLength="4"
+                                liveChange=".onReceivingSLocLiveChange"
+                                valueState="{scanView>/recSLocValueState}"
+                                valueStateText="{scanView>/recSLocValueStateText}" />
+                        </VBox>
+
+                        <!-- MOVEMENT 201: COST CENTER -->
+                        <VBox visible="{= ${scanView>/tr/MovementType} === '201' }" class="sapUiTinyMarginBottom">
+                            <Label
+                                text="{i18n>scanToLabelCostCenter}"
+                                design="Bold"
+                                required="true"
+                                class="sapUiTinyMarginBottom" />
+                            <Input
+                                id="inputCostCenter"
+                                value="{scanView>/costCenter}"
+                                valueLiveUpdate="true"
+                                placeholder="{i18n>scanToPlaceholderCostCenter}"
+                                width="12rem"
+                                maxLength="10"
+                                liveChange=".onCostCenterLiveChange"
+                                valueState="{scanView>/costCenterValueState}"
+                                valueStateText="{scanView>/costCenterValueStateText}" />
+                        </VBox>
+
+                        <!-- MOVEMENT 241: ASSET -->
+                        <VBox visible="{= ${scanView>/tr/MovementType} === '241' }" class="sapUiTinyMarginBottom">
+                            <Label
+                                text="{i18n>scanToLabelAssetNo}"
+                                design="Bold"
+                                required="true"
+                                class="sapUiTinyMarginBottom" />
+                            <Input
+                                id="inputAssetNo"
+                                value="{scanView>/assetNo}"
+                                valueLiveUpdate="true"
+                                placeholder="{i18n>scanToPlaceholderAssetNo}"
+                                width="12rem"
+                                maxLength="12"
+                                liveChange=".onAssetNoLiveChange"
+                                valueState="{scanView>/assetValueState}"
+                                valueStateText="{scanView>/assetValueStateText}"
+                                class="sapUiTinyMarginBottom" />
+                            <Label
+                                text="{i18n>scanToLabelSubNumber}"
+                                design="Bold"
+                                class="sapUiTinyMarginBottom" />
+                            <Input
+                                id="inputSubNumber"
+                                value="{scanView>/subNumber}"
+                                placeholder="{i18n>scanToPlaceholderSubNumber}"
+                                width="8rem"
+                                maxLength="4" />
+                        </VBox>
                     </VBox>
                 </Panel>
 

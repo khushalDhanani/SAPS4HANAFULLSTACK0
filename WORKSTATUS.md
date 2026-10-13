@@ -5,6 +5,29 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Transfer Order 1037307 (Movement 301) Missing Receiving Plant & Post-TO Goods Movement Resolution (2026-10-13, 17:00 IST):**
+  - **Issue:** Transfer Order 1037307 confirmed, but MIGO Goods Movement failed: `Receiving Plant is mandatory for Movement Type 301 (Plant to Plant Transfer)`.
+  - **Live S/4HANA Inspection (Client 220):**
+    - TO `0001037307` confirmed in Warehouse `W01`, movement 301 (`LTAK: LGNUM W01, BWLVS 301, TBNUM 0001000824, KQUIT X`).
+    - Associated TR `0001000824` has no reservation (`LTBK-RSNUM = '0000000000'`), material `8000009754`, issuing plant `1120`, SLoc `HS01`, qty 1 NOS.
+    - Proved in `DD03L`: `LTAP` has NO `TBNUM`/`RSNUM` fields. Field `TBNUM` belongs to header table `LTAK`. Previous code in fallback TO lookup queried `LTAP-TBNUM`, throwing silent RFC error `AD 718`.
+    - Proved in `MARC`/`MBEW`: Material `8000009754` in Plant `1110` lacks accounting data (`MBEW`) and serial profile (`SERNP` is blank in `1110`, while issuing plant `1120` has `ZSN2`). Plant `1150` has active valuation (`MBEW-BWKEY = '1150'`) and matching `MARC-SERNP = 'ZSN2'`.
+    - Live SAP testrun (`BAPI_GOODSMVT_CREATE` with `testrun: true` on TO `1037307` with `ReceivingPlant = '1150'` and Serial `000000000000000111`) executed and passed 100% (`stockEffect: Stock transferred to Plant 1150`).
+  - **Fix Implemented:**
+    1. UI inputs: Added `valueLiveUpdate="true"` and explicit property assignment in `liveChange` handlers (`onReceivingPlantLiveChange`, `onReceivingSLocLiveChange`, `onCostCenterLiveChange`, `onAssetNoLiveChange`) to avoid timing race conditions.
+    2. CAP actions: Declared both camelCase and PascalCase parameter aliases on `postMigoGoodsMovement` and `PostMigoGoodsMovement` in `service.cds`.
+    3. TO Handlers: Fixed `LTAP` -> `LTAK` field query for `TBNUM` and propagated `result.ReceivingPlant` / `result.ReceivingStorageLocation` in auto-MIGO.
+    4. Adapter Validation: Added `MBEW` valuation data check and receiving serial profile check for live SAP operations.
+    5. Unit Tests: Updated UI tests in `warehouseScanToUi.test.js` and added MBEW / serial profile tests in `mvt301Process.test.js`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **PASS** (33/33 tests passed).
+    - `npx jest test/unit/wm/mvt301Process.test.js`: **PASS** (23/23 tests passed).
+    - `npx jest test/unit/wm/createTOFromTR.test.js`: **PASS** (28/28 tests passed).
+    - `npx jest test/unit/wm/trToAdapter.test.js`: **PASS** (42/42 tests passed).
+    - `npx jest test/unit/wm`: **PASS** (69/69 test suites passed, 1,475/1,475 tests passed).
+    - `npx cds compile srv/wm/tr-to/service.cds`: **PASS** (0 errors).
+    - `git diff --check`: **PASS** (clean, 0 errors).
+
 - **Movement Type 301 (Plant to Plant Transfer) End-to-End Code Audit, Material Compatibility & Hardening (2026-10-13, 15:55 IST):**
   - **Scope:** Movement Type 301 only in Warehouse `W01`, Issuing Plant `1120`, Receiving Plant `1110`, SAP S/4HANA Client 220. Other movement types (201, 241, 311) remain strictly untouched.
   - **Constraints Enforced:** Zero commits, minimal diffs, zero SAP writes, zero SPRO changes. Every value sourced from system or repo with CONFIRMED / UNSURE labels.
@@ -1732,6 +1755,43 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-13 17:00 IST — Transfer Order 1037307 (Movement 301) Missing Receiving Plant & Post-TO Goods Movement Resolution
+
+- **User Request:**
+  - Fix issue: Transfer Order 1037307 confirmed, but MIGO Goods Movement failed: `Receiving Plant is mandatory for Movement Type 301 (Plant to Plant Transfer)` | Error Details: `Receiving Plant is mandatory for Movement Type 301 (Plant to Plant Transfer)`.
+- **Live S/4HANA Inspection (Client 220):**
+  - Confirmed TO `0001037307` in Warehouse `W01`, movement 301 (`LTAK: LGNUM W01, BWLVS 301, TBNUM 0001000824, KQUIT X`).
+  - Read associated TR `0001000824`: `LTBK-RSNUM = '0000000000'` (no reservation), material `8000009754`, plant `1120`, SLoc `HS01`, qty `1.000 NOS`.
+  - Investigated DD03L: Proved `LTAP` has NO `TBNUM` or `RSNUM` field; both exist on header table `LTAK`. Previous fallback TO query searched `LTAP` for `TBNUM`, raising silent RFC exception `AD 718`.
+  - Audited Material `8000009754` across plants:
+    - Issuing Plant `1120`: `MARC-SERNP = 'ZSN2'`, `MBEW-BWKEY = '1120'` active.
+    - Plant `1110`: Lacks accounting/valuation data (`MBEW` empty), lacks serial profile (`MARC-SERNP` blank). SAP BAPI rejects 301 with `Accounting data not yet maintained` and `Serial number profiles differ`.
+    - Plant `1150`: Valuation maintained (`MBEW-BWKEY = '1150'`), serial profile matching (`MARC-SERNP = 'ZSN2'`).
+  - Executed safe live SAP testrun (`BAPI_GOODSMVT_CREATE` with `testrun: true` on TO `1037307`, Receiving Plant `1150`, serial `000000000000000111`) → **Success: 100% PASS** (`stockEffect: Stock transferred to Plant 1150`).
+- **Defects Identified & Resolved:**
+  1. UI input binding synchronization: `inputReceivingPlant` and retry inputs lacked `valueLiveUpdate="true"`, and `onReceivingPlantLiveChange` did not update `scanView>/receivingPlant` from `oEvent.getParameter("value")`.
+  2. Action payload parameter casing: `postMigoGoodsMovement` and `PostMigoGoodsMovement` in `service.cds` only declared PascalCase parameters, causing HTTP 400 when client sent camelCase. Added camelCase aliases.
+  3. Handler data loss: In `handleCreateTOFromTR`, auto-MIGO failed to pass `result.ReceivingPlant` and `result.ReceivingStorageLocation`.
+  4. Invalid table query: In `handlePostMigoGoodsMovement` and `ReservationProcessAdapter.js`, changed invalid `LTAP-TBNUM` queries to `LTAK`.
+  5. Valuation and serial profile checks: Added `MBEW` existence check and serial profile match check for live SAP execution.
+- **Affected Files:**
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml`
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`
+  - `srv/wm/tr-to/service.cds`
+  - `srv/wm/tr-to/handlers/trTo.handler.js`
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `test/unit/wm/warehouseScanToUi.test.js`
+  - `test/unit/wm/mvt301Process.test.js`
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **PASS** (33/33 tests passed).
+  - `npx jest test/unit/wm/mvt301Process.test.js`: **PASS** (23/23 tests passed).
+  - `npx jest test/unit/wm/createTOFromTR.test.js`: **PASS** (28/28 tests passed).
+  - `npx jest test/unit/wm/trToAdapter.test.js`: **PASS** (42/42 tests passed).
+  - `npx jest test/unit/wm`: **PASS** (69/69 test suites passed, 1,475/1,475 tests passed).
+  - `npx cds compile srv/wm/tr-to/service.cds`: **PASS** (0 errors).
+  - `git diff --check`: **PASS** (clean, 0 errors).
 
 ### 2026-10-13 15:30 IST — Movement Type 241 (Goods Issue to Asset) End-to-End Audit, Material Compatibility & Hardening
 

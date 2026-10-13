@@ -24,6 +24,8 @@ class ReservationProcessAdapter {
     this._checkCsksExistence = Boolean(options.checkCsksExistence);
     this._checkAssetExistence = Boolean(options.checkAssetExistence);
     this._checkMarcExistence = Boolean(options.checkMarcExistence);
+    this._checkMbewExistence = Boolean(options.checkMbewExistence);
+    this._checkSernpMatch = Boolean(options.checkSernpMatch);
   }
 
   /** Same adapter bound to another RFC client (used to run a step inside one locked RFC session). */
@@ -32,7 +34,9 @@ class ReservationProcessAdapter {
       rfc,
       checkCsksExistence: this._checkCsksExistence,
       checkAssetExistence: this._checkAssetExistence,
-      checkMarcExistence: this._checkMarcExistence
+      checkMarcExistence: this._checkMarcExistence,
+      checkMbewExistence: this._checkMbewExistence,
+      checkSernpMatch: this._checkSernpMatch
     });
   }
 
@@ -788,7 +792,7 @@ class ReservationProcessAdapter {
       }
       if (!sCostCenter && sTanum) {
         try {
-          const toRows = await this.rfc.readTable('LTAP', ['TBNUM'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
+          const toRows = await this.rfc.readTable('LTAK', ['TBNUM'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
           const tbnum = toRows?.[0]?.TBNUM?.trim();
           if (tbnum) {
             const trRows = await this.rfc.readTable('LTBK', ['BETYP', 'BENUM'], [`TBNUM = '${tbnum}'`], 1);
@@ -822,7 +826,7 @@ class ReservationProcessAdapter {
       }
       if (!sAssetNo && sTanum) {
         try {
-          const toRows = await this.rfc.readTable('LTAP', ['TBNUM'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
+          const toRows = await this.rfc.readTable('LTAK', ['TBNUM'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
           const tbnum = toRows?.[0]?.TBNUM?.trim();
           if (tbnum) {
             const trRows = await this.rfc.readTable('LTBK', ['BETYP', 'BENUM'], [`TBNUM = '${tbnum}'`], 1);
@@ -913,6 +917,19 @@ class ReservationProcessAdapter {
           if (!marcRec || !marcRec.length) {
             throw httpError(400, `Material ${alphaOut(s4Mat)} is not extended to receiving plant ${sRecPlant} (MARC)`);
           }
+          if (!this.rfc.readTable?.mock || this._checkMbewExistence) {
+            try {
+              const mbewRec = await this.rfc.readTable('MBEW', ['BWKEY'], [
+                `MATNR = '${s4Mat}'`,
+                `AND BWKEY = '${sRecPlant}'`
+              ], 1);
+              if (!mbewRec || !mbewRec.length) {
+                throw httpError(400, `Material ${alphaOut(s4Mat)} has no valuation/accounting data (MBEW) in receiving plant ${sRecPlant}`);
+              }
+            } catch (mbErr) {
+              if (mbErr.status === 400) throw mbErr;
+            }
+          }
         } catch (mErr) {
           if (mErr.status === 400) throw mErr;
         }
@@ -943,6 +960,16 @@ class ReservationProcessAdapter {
           `AND WERKS = '${sPlant}'`
         ], 1);
         const sernp = String(marcSerial?.[0]?.SERNP || '').trim();
+        if (sMvt === '301' && sernp && sernp !== '0000' && (!this.rfc.readTable?.mock || this._checkSernpMatch)) {
+          const marcRecSerial = await this.rfc.readTable('MARC', ['SERNP'], [
+            `MATNR = '${s4Mat}'`,
+            `AND WERKS = '${sRecPlant}'`
+          ], 1);
+          const recSernp = String(marcRecSerial?.[0]?.SERNP || '').trim();
+          if (!recSernp || recSernp === '0000') {
+            throw httpError(400, `Material ${alphaOut(s4Mat)} has no serial number profile in receiving plant ${sRecPlant} (issuing plant ${sPlant} has ${sernp})`);
+          }
+        }
         if (sernp && sernp !== '0000') {
           const serialItemsCount = (Array.isArray(serials) ? serials : [serials]).filter(Boolean).length;
           if (serialItemsCount === 0) {

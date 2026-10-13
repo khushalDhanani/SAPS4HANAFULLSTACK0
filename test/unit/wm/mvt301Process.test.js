@@ -866,5 +866,63 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
         })
       );
     });
+
+    test('Fails 400 when receiving plant has no valuation/accounting data (MBEW) [mock only, not SAP verification]', async () => {
+      const mbewAdapter = new ReservationProcessAdapter({ rfc: mockRfc, checkMarcExistence: true, checkMbewExistence: true });
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'MARC') return [{ WERKS: '1110', XCHPF: '', SERNP: '' }, { WERKS: '1120', XCHPF: '', SERNP: '' }];
+        if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
+        if (table === 'MBEW') return []; // Empty MBEW in receiving plant
+        return [];
+      });
+
+      await expect(
+        mbewAdapter.postGoodsMovement({
+          reservationNo: '525301',
+          movementType: '301',
+          material: '8000001648',
+          plant: '1120',
+          storageLocation: 'HS01',
+          receivingPlant: '1110',
+          quantity: 1,
+          unit: 'NOS'
+        })
+      ).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringMatching(/has no valuation\/accounting data \(MBEW\) in receiving plant 1110/i)
+      });
+    });
+
+    test('Fails 400 when serial-managed material has no serial profile in receiving plant [mock only, not SAP verification]', async () => {
+      const sernpAdapter = new ReservationProcessAdapter({ rfc: mockRfc, checkMarcExistence: true, checkSernpMatch: true });
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        if (table === 'MARC') {
+          const werksClause = (where || []).find((w) => w.includes('WERKS'));
+          if (werksClause && werksClause.includes('1110')) {
+            return [{ WERKS: '1110', XCHPF: '', SERNP: '' }]; // blank in receiving plant
+          }
+          return [{ WERKS: '1120', XCHPF: '', SERNP: 'ZSN2' }]; // ZSN2 in issuing plant
+        }
+        if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
+        return [];
+      });
+
+      await expect(
+        sernpAdapter.postGoodsMovement({
+          reservationNo: '525301',
+          movementType: '301',
+          material: '8000006485',
+          plant: '1120',
+          storageLocation: 'HS01',
+          receivingPlant: '1110',
+          quantity: 1,
+          unit: 'NOS',
+          serials: ['SN001']
+        })
+      ).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringMatching(/has no serial number profile in receiving plant 1110/i)
+      });
+    });
   });
 });
