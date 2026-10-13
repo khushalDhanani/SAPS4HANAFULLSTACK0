@@ -170,6 +170,7 @@ class TrToHandler {
           ReservationNo: migoRes.reservationNo || sResNo,
           Batch: migoRes.batch || sBatch,
           StockEffect: migoRes.stockEffect,
+          ReceivingTr: migoRes.receivingTr || null,
           Warning: migoRes.warning || '',
           Message: migoRes.alreadyPosted
             ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for this process step; not posted again.`
@@ -310,6 +311,7 @@ class TrToHandler {
               result.ReservationNo = migoResult.ReservationNo || result.ReservationNo;
               result.MovementType = migoResult.MovementType || result.MovementType || existing?.MovementType || '';
               result.Warning = migoResult.Warning || migoResult.warning || '';
+              result.ReceivingTr = migoResult.ReceivingTr || migoResult.receivingTr || null;
               if (result.Warning && req && typeof req.warn === 'function') {
                 req.warn(result.Warning);
               }

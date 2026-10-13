@@ -5,6 +5,44 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Movement Type 301 (Plant to Plant Transfer) End-to-End Code Audit, Material Compatibility & Hardening (2026-10-13, 15:55 IST):**
+  - **Scope:** Movement Type 301 only in Warehouse `W01`, Issuing Plant `1120`, Receiving Plant `1110`, SAP S/4HANA Client 220. Other movement types (201, 241, 311) remain strictly untouched.
+  - **Constraints Enforced:** Zero commits, minimal diffs, zero SAP writes, zero SPRO changes. Every value sourced from system or repo with CONFIRMED / UNSURE labels.
+  - **Material Compatibility (Client 220 live reads across MARC, MARD, T320, LQUA, T331):**
+    - Class A (Plain: XCHPF='', SERNP=''): Material `8000001648` (Plant `1120`, SLoc `HS01` 52 NOS / `MT01` 1 NOS; Plant `1110` MARC/MARD extended in `HS01`, `MT01`, `MT02`; LQUA `W01` `922/TR-ZONE` 1 NOS) / Material `8000000023` (Plant `1120` SLoc `HS01` 3053 NOS; Plant `1110` SLoc `HS01` 1106 NOS). `CONFIRMED (read from system)`.
+    - Class B (Batch: XCHPF='X', SERNP=''): Material `8900000004` (Plant `1120` SLoc `CS01` 1240 KG; Plant `1110` SLoc `CS01` 3 KG; Batch `INJW260001` exists in MCHA for both Plant `1120` and `1110`, and in MCH1; LQUA `W01` `921/TRANSFER` 10 KG). `CONFIRMED (read from system)`.
+    - Class C (Serial: XCHPF='', SERNP='ZSN2'): Material `8000006485` (Plant `1120` SLoc `CS02` 4 NOS, MARC `SERNP = 'ZSN2'`; Plant `1110` MARC `SERNP = 'ZSN1'`, MARD extended in `HS01`, `MT01`, `MT02`; LQUA `W01` `921/TRANSFER` 1 NOS SU `00000000002000020148`). `CONFIRMED (read from system)`.
+    - Class D (Batch + Serial: XCHPF='X', SERNP!=''): `NO MATERIAL FOUND` in current stock (Confirmed: `8000009787` has profile in MARC, but MARD and LQUA stock is 0 in both plants). Fails early with 400. `CONFIRMED (read from system)`.
+    - Class E (Stock in Small SU: VOLLE=''): Material `8000006485` (Plant `1120`, SLoc `CS02`, Storage Type `921`, Bin `TRANSFER`, Qty 1 NOS, SU `00000000002000020148`, T331 `VOLLE = ''`; extended to Plant `1110` in MARC/MARD). `CONFIRMED (read from system)`.
+    - Class F (Stock in Large SU: VOLLE='X'): Material `8000006485` (Plant `1120`, SLoc `CS02`, Storage Type `OH1`, Bin `ONHOLD`, Qty 1 NOS, SU `00000000002000020150`, T331 `VOLLE = 'X'`, `STAUS = 'H'`, `LENVW = 'X'`; extended to Plant `1110` in MARC/MARD) / Material `8000000995` (Storage Type `EN1`, Bin `0-L0001-01`, Qty 10000 NOS, SU `00000000001000057279`, T331 `VOLLE = 'X'`; extended to Plant `1110` in MARC/MARD). `CONFIRMED (read from system)`.
+  - **System Reads (Live RFC from Client 220):**
+    - `T333` (`W01` / `301`): `LGNUM = 'W01'`, `BWLVS = '301'`, `TRART = 'A'`, `NLTYP = '920'`, `NLPLA = 'TRANSFER'`, `BETYP = ''`, `TBMAN = ''`, `DRUKZ = '02'`, `NKDYN = ''`. `CONFIRMED (read from system)`.
+    - `T321`: For `BWLVS = '301'` / `RBLVS = '301'`, fallback `LGNUM = '***'` has `LFART = 'DOG'`, `TBFKZ = 'X'`, `TAFKZ = ''` (blank), `UBFKZ = ''`. Direct MIGO 301 creates an issuing TR in W01 because `TBFKZ = 'X'`. `CONFIRMED (read from system)`.
+    - `T320`: Plant `1120` mapped to Warehouse `W01` (SLocs `CIS1, CS01, CS02, FG01, HS01, IM01, IP01, MT01, MT02, OH01, OH02, PWIP, RA01, RJ02, SU01`). Plant `1110` mapped to Warehouse `W10` (SLocs `CS01, FG01, HS01, IP01, OH01, OH02, PWIP, RJ02, SC01, ST01`). Warehouse `W10` is strictly outside project scope. `CONFIRMED (read from system)`.
+    - `T331`: Storage types with `VOLLE = 'X'` (full removal required): `001, COR, EN1, FG1, FLM, GS1, OH1, POW, QC1, RM1, TOX`. Storage types with `VOLLE = ''`: `002, 003, 004, 005, 150, 1FL..5FL, 901..999, GFL, IP1..IP5`. `CONFIRMED (read from system)`.
+    - `LTBK` / `MATDOC` Live Proofs for 301:
+      - Document `4900050149` (MATDOC):
+        - Zeile 1: `MATNR: 000000008900000004`, `WERKS: 1120`, `LGORT: CS01`, `UMWRK: 1110`, `UMLGO: CS01`, `CHARG: INJW260001`, `MENGE: 1.000 KG`
+        - Zeile 2: `MATNR: 000000008900000004`, `WERKS: 1110`, `LGORT: CS01`, `UMWRK: 1120`, `UMLGO: CS01`, `CHARG: INJW260001`, `MENGE: 1.000 KG`
+      - `LTBK` for `MBLNR = '4900050149'`:
+        - TR `0001000795`: `LGNUM = 'W01'`, `BWLVS = '301'`, `NLTYP = '920'`, `NLPLA = 'TRANSFER'`, `STATU = 'E'` (issuing TR in W01).
+        - TR `0001001222`: `LGNUM = 'W10'`, `BWLVS = '302'`, `STATU = ''` (open receiving-side TR in Warehouse W10, outside project scope). `CONFIRMED (read from system)`.
+    - `MCH1` / `MCHA`: Material `8900000004`, Batch `INJW260001` exists at client level (`MCH1`, `VFDAT: 20270720`) and plant level for both Plant `1120` and `1110` (`MCHA`). `CONFIRMED (read from system)`.
+  - **Defects Audited & Fixed:**
+    1. `ReservationProcessAdapter.js`:
+       - Added `validateReceivingBatch(material, batch, receivingPlant)` helper checking `MCHA` and `MCH1` existence and deletion flag (`LVORM = 'X'`).
+       - In `createReservation`: Enforced `receivingPlant` mandatory, `receivingPlant !== plant`, `receivingStorageLocation` validation in `MARD`, material extension check in `MARC` for `receivingPlant`, issuing SLoc warehouse assignment check in `T320`, and batch validation in receiving plant context (`MCHA`/`MCH1`).
+       - In `postGoodsMovement`: Enforced `sRecPlant` mandatory, `sRecPlant !== sPlant`, material extension check in `MARC` for `sRecPlant`, `MARD` check for `sRecSLoc`, batch validation in receiving plant context (`MCHA`/`MCH1`), added `301` to serial check (`MARC-SERNP`), added `301` to issuing SLoc stock sufficiency check (`MARD-LABST`), added `301` to confirmed TO quantity scoping (`CONF_MENGE`), and added detection of receiving-side TR in external warehouse (`W10`) via `LTBK` (`MBLNR`). Returned warning and `receivingTr` metadata without any automatic creation/confirmation/cancellation. Formatted `stockEffect` with receiving plant and SLoc.
+    2. `srv/wm/tr-to/handlers/trTo.handler.js`:
+       - Propagated `ReceivingTr` on `handlePostMigoGoodsMovement` and in auto-MIGO within `handleCreateTOFromTR`.
+    3. `test/unit/wm/mvt301Process.test.js`:
+       - Created comprehensive test suite (21 tests) covering all material classes (A, B, C, E, F), happy paths, missing receiving plant, receiving plant same as issuing plant, material not extended to receiving plant in MARC, material not extended to receiving SLoc in MARD, issuing SLoc not in T320, missing batch, batch marked for deletion in MCHA, batch nonexistent in MCHA/MCH1, missing serial numbers, wrong serial count, wrong SU quantity (VOLLE), insufficient stock in issuing SLoc, GI failure then retry, detection of receiving TR in Warehouse W10 without auto-touch, confirmed TO quantity scoping, NO_MORE_GR rules, and T321 warning. Labeled `[mock only, not SAP verification]`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/mvt301Process.test.js`: **PASS** (21/21 tests passed).
+    - `npx jest test/unit/wm`: **PASS** (69/69 test suites passed, 1,473/1,473 tests passed).
+    - `git diff --check`: Clean (0 whitespace errors).
+    - Zero commits created; working tree preserved.
+
 - **Movement Type 241 (Goods Issue to Asset) End-to-End Code Audit, Material Compatibility & Hardening (2026-10-13, 15:30 IST):**
   - **Scope:** Movement Type 241 only in Warehouse `W01`, Plant `1120`, SAP S/4HANA Client 220. Other movement types (201, 301, 311) remain strictly untouched.
   - **Constraints Enforced:** Zero commits, minimal diffs, zero SAP writes, zero SPRO changes. Every value sourced from system or repo with CONFIRMED / UNSURE labels.
@@ -5543,3 +5581,41 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git diff --check` → Clean (0 whitespace/formatting errors).
 - **Result:** Complete end-to-end fix for list, create, and detail views for `/wm/reservation-entry/` fully validated and documented.
 
+### 2026-10-13 15:55 IST — Movement Type 301 (Plant to Plant Transfer) End-to-End Code Audit, Material Compatibility & Hardening
+- **User Request:** Repo: UI5 + CAP/Node, RFC adapter, SAP S/4HANA Client 220, warehouse W01. Fix code for ONE movement type only (301). Do not touch the other three. Minimal diffs, one issue at a time. Commit nothing. No SAP writes, no SPRO changes. No assumptions: every value comes from the system or the repo, with its source.
+- **Scope:** Movement Type 301 (Plant to Plant Transfer, One-Step) only in Warehouse `W01`, Issuing Plant `1120`, Receiving Plant `1110`, SAP S/4HANA Client 220. Other movement types (201, 241, 311) remain strictly untouched.
+- **Constraints Enforced:** Zero commits, minimal diffs, zero SAP writes, zero SPRO changes. Every value sourced from system or repo with CONFIRMED / UNSURE labels.
+- **System Reads (Live RFC from Client 220):**
+  - `T333` (`W01` / `301`): `LGNUM = 'W01'`, `BWLVS = '301'`, `TRART = 'A'`, `NLTYP = '920'`, `NLPLA = 'TRANSFER'`, `BETYP = ''`, `TBMAN = ''`, `DRUKZ = '02'`, `NKDYN = ''`. `CONFIRMED (read from system)`.
+  - `T321`: For `BWLVS = '301'` / `RBLVS = '301'`, fallback `LGNUM = '***'` has `LFART = 'DOG'`, `TBFKZ = 'X'`, `TAFKZ = ''` (blank), `UBFKZ = ''`. Direct MIGO 301 creates an issuing TR in W01 because `TBFKZ = 'X'`. `CONFIRMED (read from system)`.
+  - `T320`: Plant `1120` mapped to Warehouse `W01` (SLocs `CIS1, CS01, CS02, FG01, HS01, IM01, IP01, MT01, MT02, OH01, OH02, PWIP, RA01, RJ02, SU01`). Plant `1110` mapped to Warehouse `W10` (SLocs `CS01, FG01, HS01, IP01, OH01, OH02, PWIP, RJ02, SC01, ST01`). Warehouse `W10` is strictly outside project scope. `CONFIRMED (read from system)`.
+  - `T331`: Storage types with `VOLLE = 'X'` (full removal required): `001, COR, EN1, FG1, FLM, GS1, OH1, POW, QC1, RM1, TOX`. Storage types with `VOLLE = ''`: `002, 003, 004, 005, 150, 1FL..5FL, 901..999, GFL, IP1..IP5`. `CONFIRMED (read from system)`.
+  - `LTBK` / `MATDOC` Live Proofs for 301:
+    - Document `4900050149` (MATDOC):
+      - Zeile 1: `MATNR: 000000008900000004`, `WERKS: 1120`, `LGORT: CS01`, `UMWRK: 1110`, `UMLGO: CS01`, `CHARG: INJW260001`, `MENGE: 1.000 KG`
+      - Zeile 2: `MATNR: 000000008900000004`, `WERKS: 1110`, `LGORT: CS01`, `UMWRK: 1120`, `UMLGO: CS01`, `CHARG: INJW260001`, `MENGE: 1.000 KG`
+    - `LTBK` for `MBLNR = '4900050149'`:
+      - TR `0001000795`: `LGNUM = 'W01'`, `BWLVS = '301'`, `NLTYP = '920'`, `NLPLA = 'TRANSFER'`, `STATU = 'E'` (issuing TR in W01).
+      - TR `0001001222`: `LGNUM = 'W10'`, `BWLVS = '302'`, `STATU = ''` (open receiving-side TR in Warehouse W10, outside project scope). `CONFIRMED (read from system)`.
+  - `MCH1` / `MCHA`: Material `8900000004`, Batch `INJW260001` exists at client level (`MCH1`, `VFDAT: 20270720`) and plant level for both Plant `1120` and `1110` (`MCHA`). `CONFIRMED (read from system)`.
+- **Material Compatibility (Client 220 live reads across MARC, MARD, T320, LQUA, T331):**
+  - Class A (Plain: XCHPF='', SERNP=''): Material `8000001648` (Plant `1120`, SLoc `HS01` 52 NOS / `MT01` 1 NOS; Plant `1110` MARC/MARD extended in `HS01`, `MT01`, `MT02`; LQUA `W01` `922/TR-ZONE` 1 NOS) / Material `8000000023` (Plant `1120` SLoc `HS01` 3053 NOS; Plant `1110` SLoc `HS01` 1106 NOS). `CONFIRMED (read from system)`.
+  - Class B (Batch: XCHPF='X', SERNP=''): Material `8900000004` (Plant `1120`, SLoc `CS01` 1240 KG; Plant `1110` SLoc `CS01` 3 KG; Batch `INJW260001` exists in MCHA for both Plant `1120` and `1110`, and in MCH1; LQUA `W01` `921/TRANSFER` 10 KG). `CONFIRMED (read from system)`.
+  - Class C (Serial: XCHPF='', SERNP='ZSN2'): Material `8000006485` (Plant `1120`, SLoc `CS02` 4 NOS, MARC `SERNP = 'ZSN2'`; Plant `1110` MARC `SERNP = 'ZSN1'`, MARD extended in `HS01`, `MT01`, `MT02`; LQUA `W01` `921/TRANSFER` 1 NOS SU `00000000002000020148`). `CONFIRMED (read from system)`.
+  - Class D (Batch + Serial: XCHPF='X', SERNP!=''): `NO MATERIAL FOUND` in current stock (Confirmed: `8000009787` has profile in MARC, but MARD and LQUA stock is 0 in both plants). Fails early with 400. `CONFIRMED (read from system)`.
+  - Class E (Stock in Small SU: VOLLE=''): Material `8000006485` (Plant `1120`, SLoc `CS02`, Storage Type `921`, Bin `TRANSFER`, Qty 1 NOS, SU `00000000002000020148`, T331 `VOLLE = ''`; extended to Plant `1110` in MARC/MARD). `CONFIRMED (read from system)`.
+  - Class F (Stock in Large SU: VOLLE='X'): Material `8000006485` (Plant `1120`, SLoc `CS02`, Storage Type `OH1`, Bin `ONHOLD`, Qty 1 NOS, SU `00000000002000020150`, T331 `VOLLE = 'X'`, `STAUS = 'H'`, `LENVW = 'X'`; extended to Plant `1110` in MARC/MARD) / Material `8000000995` (Storage Type `EN1`, Bin `0-L0001-01`, Qty 10000 NOS, SU `00000000001000057279`, T331 `VOLLE = 'X'`; extended to Plant `1110` in MARC/MARD). `CONFIRMED (read from system)`.
+- **Defects Audited & Fixed:**
+  1. `ReservationProcessAdapter.js`:
+     - Added `validateReceivingBatch(material, batch, receivingPlant)` helper checking `MCHA` and `MCH1` existence and deletion flag (`LVORM = 'X'`).
+     - In `createReservation`: Enforced `receivingPlant` mandatory, `receivingPlant !== plant`, `receivingStorageLocation` validation in `MARD`, material extension check in `MARC` for `receivingPlant`, issuing SLoc warehouse assignment check in `T320`, and batch validation in receiving plant context (`MCHA`/`MCH1`).
+     - In `postGoodsMovement`: Enforced `sRecPlant` mandatory, `sRecPlant !== sPlant`, material extension check in `MARC` for `sRecPlant`, `MARD` check for `sRecSLoc`, batch validation in receiving plant context (`MCHA`/`MCH1`), added `301` to serial check (`MARC-SERNP`), added `301` to issuing SLoc stock sufficiency check (`MARD-LABST`), added `301` to confirmed TO quantity scoping (`CONF_MENGE`), and added detection of receiving-side TR in external warehouse (`W10`) via `LTBK` (`MBLNR`). Returned warning and `receivingTr` metadata without any automatic creation/confirmation/cancellation. Formatted `stockEffect` with receiving plant and SLoc.
+  2. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - Propagated `ReceivingTr` on `handlePostMigoGoodsMovement` and in auto-MIGO within `handleCreateTOFromTR`.
+  3. `test/unit/wm/mvt301Process.test.js`:
+     - Created comprehensive test suite (21 tests) covering all material classes (A, B, C, E, F), happy paths, missing receiving plant, receiving plant same as issuing plant, material not extended to receiving plant in MARC, material not extended to receiving SLoc in MARD, issuing SLoc not in T320, missing batch, batch marked for deletion in MCHA, batch nonexistent in MCHA/MCH1, missing serial numbers, wrong serial count, wrong SU quantity (VOLLE), insufficient stock in issuing SLoc, GI failure then retry, detection of receiving TR in Warehouse W10 without auto-touch, confirmed TO quantity scoping, NO_MORE_GR rules, and T321 warning. Labeled `[mock only, not SAP verification]`.
+- **Validation Commands Executed & Results:**
+  - `npx jest test/unit/wm/mvt301Process.test.js` → **21/21 tests passed (100% green)**.
+  - `npx jest test/unit/wm` → **69/69 test suites passed, 1,473/1,473 tests passed (100% green)**.
+  - `git diff --check` → Clean (0 whitespace errors).
+  - Zero commits created; working tree preserved.

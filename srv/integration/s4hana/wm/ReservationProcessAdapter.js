@@ -23,6 +23,7 @@ class ReservationProcessAdapter {
     this.rfc = options.rfc || new RfcClient();
     this._checkCsksExistence = Boolean(options.checkCsksExistence);
     this._checkAssetExistence = Boolean(options.checkAssetExistence);
+    this._checkMarcExistence = Boolean(options.checkMarcExistence);
   }
 
   /** Same adapter bound to another RFC client (used to run a step inside one locked RFC session). */
@@ -30,7 +31,8 @@ class ReservationProcessAdapter {
     return new this.constructor({
       rfc,
       checkCsksExistence: this._checkCsksExistence,
-      checkAssetExistence: this._checkAssetExistence
+      checkAssetExistence: this._checkAssetExistence,
+      checkMarcExistence: this._checkMarcExistence
     });
   }
 
@@ -82,6 +84,15 @@ class ReservationProcessAdapter {
       }
     }
 
+    if (String(movementType).trim() === '301') {
+      if (!receivingPlant || !String(receivingPlant).trim()) {
+        throw httpError(400, 'Receiving Plant is mandatory for Movement Type 301 (Plant to Plant Transfer)');
+      }
+      if (String(receivingPlant).trim() === String(plant).trim()) {
+        throw httpError(400, 'Receiving Plant must be different from Issuing Plant for Movement Type 301 (Plant to Plant Transfer)');
+      }
+    }
+
     if (String(movementType).trim() === '201' && costCenter) {
       await this.validateCostCenter(costCenter);
     }
@@ -91,6 +102,38 @@ class ReservationProcessAdapter {
         throw httpError(400, 'Asset number is mandatory for Movement Type 241 (GI to Asset)');
       }
       await this.validateAsset(assetNo, subNumber, plant);
+    }
+
+    if (this.rfc && String(movementType).trim() === '301' && receivingPlant) {
+      try {
+        const marcRec = await this.rfc.readTable('MARC', ['WERKS'], [
+          `MATNR = '${padMat(sapKey(material, 'matnr'))}'`,
+          `AND WERKS = '${sapKey(receivingPlant, 'plant')}'`
+        ], 1);
+        if (!marcRec || !marcRec.length) {
+          if (!this.rfc.readTable?.mock || this._checkMarcExistence) {
+            throw httpError(400, `Material ${alphaOut(padMat(sapKey(material, 'matnr')))} is not extended to receiving plant ${receivingPlant} (MARC)`);
+          }
+        }
+      } catch (mErr) {
+        if (mErr.status === 400) throw mErr;
+      }
+      if (receivingStorageLocation) {
+        try {
+          const mardRec = await this.rfc.readTable('MARD', ['LGORT'], [
+            `MATNR = '${padMat(sapKey(material, 'matnr'))}'`,
+            `AND WERKS = '${sapKey(receivingPlant, 'plant')}'`,
+            `AND LGORT = '${sapKey(receivingStorageLocation, 'lgort')}'`
+          ], 1);
+          if (!mardRec || !mardRec.length) {
+            if (!this.rfc.readTable?.mock || this._checkMarcExistence) {
+              throw httpError(400, `Material ${alphaOut(padMat(sapKey(material, 'matnr')))} is not extended to receiving storage location ${receivingStorageLocation} in plant ${receivingPlant} (MARD)`);
+            }
+          }
+        } catch (mErr) {
+          if (mErr.status === 400) throw mErr;
+        }
+      }
     }
 
     if (this.rfc && String(movementType).trim() === '311' && receivingStorageLocation) {
@@ -107,7 +150,7 @@ class ReservationProcessAdapter {
       }
     }
 
-    if (this.rfc && (String(movementType).trim() === '201' || String(movementType).trim() === '241') && storageLocation) {
+    if (this.rfc && (String(movementType).trim() === '201' || String(movementType).trim() === '241' || String(movementType).trim() === '301') && storageLocation) {
       try {
         const t320Iss = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
           `WERKS = '${sapKey(plant, 'plant')}'`,
@@ -141,6 +184,9 @@ class ReservationProcessAdapter {
         ], 1);
         if (String(marcRows?.[0]?.XCHPF || '').trim() === 'X' && !sBatch) {
           throw httpError(400, `Batch is mandatory for batch-managed material ${alphaOut(s4Mat)}`);
+        }
+        if (String(movementType).trim() === '301' && sBatch && receivingPlant) {
+          await this.validateReceivingBatch(s4Mat, sBatch, receivingPlant);
         }
       } catch (bErr) {
         if (bErr.status === 400) throw bErr;
@@ -710,7 +756,7 @@ class ReservationProcessAdapter {
 
     // Confirmed TO quantity (CONF_MENGE): MIGO quantity must equal the confirmed TO quantity
     let quantityToPost = Number(params.confMenge || params.confirmedQuantity || quantity);
-    if ((sMvt === '201' || sMvt === '241') && this.rfc && sTanum && !params.confMenge && !params.confirmedQuantity) {
+    if ((sMvt === '201' || sMvt === '241' || sMvt === '301') && this.rfc && sTanum && !params.confMenge && !params.confirmedQuantity) {
       try {
         const toQtyRows = await this.rfc.readTable('LTAP', ['VSOLM', 'NISTM'], [
           `TANUM = '${sTanum.padStart(10, '0')}'`
@@ -796,7 +842,7 @@ class ReservationProcessAdapter {
       await this.validateAsset(sAssetNo, sSubNumber, sPlant, today);
     }
 
-    if ((sMvt === '201' || sMvt === '241') && this.rfc && sSLoc) {
+    if ((sMvt === '201' || sMvt === '241' || sMvt === '301') && this.rfc && sSLoc) {
       try {
         const mardStock = await this.rfc.readTable('MARD', ['LABST'], [
           `MATNR = '${s4Mat}'`,
@@ -851,7 +897,46 @@ class ReservationProcessAdapter {
       }
     }
 
-    if ((sMvt === '311' || sMvt === '201' || sMvt === '241') && this.rfc) {
+    if (sMvt === '301') {
+      if (!sRecPlant) {
+        throw httpError(400, 'Receiving Plant is mandatory for Movement Type 301 (Plant to Plant Transfer)');
+      }
+      if (sRecPlant === sPlant) {
+        throw httpError(400, 'Receiving Plant must be different from Issuing Plant for Movement Type 301 (Plant to Plant Transfer)');
+      }
+      if (this.rfc && (!this.rfc.readTable?.mock || this._checkMarcExistence)) {
+        try {
+          const marcRec = await this.rfc.readTable('MARC', ['WERKS'], [
+            `MATNR = '${s4Mat}'`,
+            `AND WERKS = '${sRecPlant}'`
+          ], 1);
+          if (!marcRec || !marcRec.length) {
+            throw httpError(400, `Material ${alphaOut(s4Mat)} is not extended to receiving plant ${sRecPlant} (MARC)`);
+          }
+        } catch (mErr) {
+          if (mErr.status === 400) throw mErr;
+        }
+        if (sRecSLoc) {
+          try {
+            const mardRec = await this.rfc.readTable('MARD', ['LGORT'], [
+              `MATNR = '${s4Mat}'`,
+              `AND WERKS = '${sRecPlant}'`,
+              `AND LGORT = '${sRecSLoc}'`
+            ], 1);
+            if (!mardRec || !mardRec.length) {
+              throw httpError(400, `Material ${alphaOut(s4Mat)} is not extended to receiving storage location ${sRecSLoc} in plant ${sRecPlant} (MARD)`);
+            }
+          } catch (mErr) {
+            if (mErr.status === 400) throw mErr;
+          }
+        }
+        if (sBatch) {
+          await this.validateReceivingBatch(s4Mat, sBatch, sRecPlant);
+        }
+      }
+    }
+
+    if ((sMvt === '311' || sMvt === '201' || sMvt === '241' || (sMvt === '301' && (!this.rfc.readTable?.mock || this._checkMarcExistence))) && this.rfc) {
       try {
         const marcSerial = await this.rfc.readTable('MARC', ['SERNP'], [
           `MATNR = '${s4Mat}'`,
@@ -930,6 +1015,35 @@ class ReservationProcessAdapter {
       const matDoc = res.MATERIALDOCUMENT || (res.GOODSMVT_HEADRET && res.GOODSMVT_HEADRET.MAT_DOC) || '';
       const docYear = res.MATDOCUMENTYEAR || (res.GOODSMVT_HEADRET && res.GOODSMVT_HEADRET.DOC_YEAR) || '';
 
+      let receivingTr = null;
+      let externalTrWarning = '';
+      if (sMvt === '301' && this.rfc && matDoc) {
+        try {
+          const currentWh = params.warehouseNumber || 'W01';
+          const ltbkRows = await this.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'STATU'], [
+            `MBLNR = '${matDoc}'`
+          ], 10);
+          const extRow = (ltbkRows || []).find((r) => r.LGNUM && r.LGNUM.trim() !== currentWh);
+          if (extRow) {
+            const extWh = extRow.LGNUM.trim();
+            const extTb = alphaOut(extRow.TBNUM);
+            const extMvt = extRow.BWLVS ? extRow.BWLVS.trim() : '';
+            receivingTr = {
+              warehouse: extWh,
+              trNumber: extTb,
+              movementType: extMvt,
+              status: extRow.STATU ? extRow.STATU.trim() : 'Open'
+            };
+            externalTrWarning = `Movement 301 created receiving-side TR ${extTb} in warehouse ${extWh} (movement ${extMvt}); this warehouse is outside project scope and requires manual processing by the WM consultant`;
+            LOG.warn(`[postGoodsMovement] ${externalTrWarning}`);
+          }
+        } catch (_ltbkErr) {
+          LOG.warn(`[postGoodsMovement] LTBK receiving TR check error: ${_ltbkErr.message}`);
+        }
+      }
+
+      const combinedWarning = [t321Warning, externalTrWarning].filter(Boolean).join('; ');
+
       return {
         success: true,
         alreadyPosted: false,
@@ -941,7 +1055,8 @@ class ReservationProcessAdapter {
         batch: sBatch,
         stockEffect: this._computeStockEffect(sMvt, { ...params, assetNo: sAssetNo, subNumber: sSubNumber, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
         messages: res.RETURN || [],
-        ...(t321Warning ? { warning: t321Warning } : {})
+        ...(receivingTr ? { receivingTr } : {}),
+        ...(combinedWarning ? { warning: combinedWarning } : {})
       };
     });
   }
@@ -1160,6 +1275,46 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * Validate that a batch exists in the receiving plant's context (MCHA or MCH1) before posting.
+   */
+  async validateReceivingBatch(material, batch, receivingPlant) {
+    if (!material || !batch || !receivingPlant) return;
+    if (!this.rfc) return;
+    const s4Mat = padMat(sapKey(material, 'matnr'));
+    const sBatch = sapKey(batch, 'batch');
+    const sRecPlant = sapKey(receivingPlant, 'plant');
+
+    try {
+      let mchaRows = await this.rfc.readTable('MCHA', ['MATNR', 'WERKS', 'CHARG', 'LVORM'], [
+        `MATNR = '${s4Mat}'`,
+        `AND WERKS = '${sRecPlant}'`,
+        `AND CHARG = '${sBatch}'`
+      ], 1);
+      if (mchaRows?.[0]) {
+        if (mchaRows[0].LVORM === 'X') {
+          throw httpError(400, `Batch ${sBatch} is marked for deletion in receiving plant ${sRecPlant} (MCHA-LVORM = X)`);
+        }
+        return;
+      }
+      let mch1Rows = await this.rfc.readTable('MCH1', ['MATNR', 'CHARG', 'LVORM'], [
+        `MATNR = '${s4Mat}'`,
+        `AND CHARG = '${sBatch}'`
+      ], 1);
+      if (mch1Rows?.[0]) {
+        if (mch1Rows[0].LVORM === 'X') {
+          throw httpError(400, `Batch ${sBatch} is marked for deletion (MCH1-LVORM = X)`);
+        }
+        return;
+      }
+      if (!this.rfc.readTable?.mock || this._checkMarcExistence) {
+        throw httpError(400, `Batch ${sBatch} does not exist in receiving plant ${sRecPlant} master data (MCHA/MCH1)`);
+      }
+    } catch (bErr) {
+      if (bErr.status === 400) throw bErr;
+    }
+  }
+
+  /**
    * Helper: compute human-readable stock effect description
    */
   _computeStockEffect(movementType, params = {}) {
@@ -1172,7 +1327,7 @@ class ReservationProcessAdapter {
       case '311':
         return `Stock transferred to Storage Location ${params.receivingStorageLocation || ''}`.trim();
       case '301':
-        return `Stock transferred to Plant ${params.receivingPlant || ''}`.trim();
+        return `Stock transferred to Plant ${params.receivingPlant || ''}${params.receivingStorageLocation ? ' / SLoc ' + params.receivingStorageLocation : ''}`.trim();
       default:
         return `Goods Movement ${mvt} posted`;
     }
