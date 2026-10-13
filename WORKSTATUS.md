@@ -5,7 +5,34 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **Interim Storage Type Removal Guard (Guard 2) Implementation (2026-10-13, 13:13 IST):**
+- **Movement Type 311 (SLoc to SLoc Transfer) End-to-End Code Audit, Material Compatibility & Hardening (2026-10-13, 14:18 IST):**
+  - **Scope:** Movement Type 311 only in Warehouse `W01`, Plant `1120`, SAP S/4HANA Client 220. Other movement types (201, 241, 301) remain strictly untouched.
+  - **Constraints Enforced:** Zero commits, minimal diffs, zero SAP writes, zero SPRO changes. Every value sourced from system or repo with CONFIRMED / UNSURE labels.
+  - **Material Compatibility (Client 220 live reads across MARC, MARD, T320, LQUA, T331):**
+    - Class A (Plain: XCHPF='', SERNP=''): Material `8000001648` (Plant `1120`, SLoc `MT01`, Storage Type `922`, Bin `TR-ZONE`, Qty `1 NOS`, LQUA `0001043324`) / `8000000023` in MARD (Plant `1120`, SLoc `HS01`, Qty `3053 NOS`). `CONFIRMED (read from system)`.
+    - Class B (Batch: XCHPF='X', SERNP=''): Material `8900000004` (Plant `1120`, SLoc `CS01`, Storage Type `902`/`921`, Qty `1232 KG` in 902 / `10 KG` in 921, Batch `INJW260001`) / Material `8900000007` (Plant `1120`, SLoc `CS01`, Storage Type `OH1`, Bin `ONHOLD`, Qty `100 KG`, Batch `IN26001220`). `CONFIRMED (read from system)`.
+    - Class C (Serial: XCHPF='', SERNP='ZSN2'): Material `8000006485` (Plant `1120`, SLoc `CS02` / `HS01`, Storage Type `EN1` / `921`, Qty `1 NOS` in EN1 / `5 NOS` in 921). `CONFIRMED (read from system)`.
+    - Class D (Batch + Serial: XCHPF='X', SERNP!=''): `NO MATERIAL FOUND` (Confirmed: only `8000009787` has profile in MARC, but MARD and LQUA stock is 0). `CONFIRMED (read from system)`.
+    - Class E (Stock in Small SU: VOLLE=''): Material `8000006485` (Plant `1120`, SLoc `CS02`, Storage Type `EN1`, Bin `0-L0001-03`, Qty `1 NOS`, SU `00000000002000020148`, T331 `VOLLE = ''`). `CONFIRMED (read from system)`.
+    - Class F (Stock in Large SU: VOLLE='X'): Material `8900000007` (Plant `1120`, SLoc `CS01`, Storage Type `OH1`, Bin `ONHOLD`, Qty `100 KG`, Batch `IN26001220`, SU `00000000001000058618`, T331 `VOLLE = 'X'`, `STAUS = 'H'`, `LENVW = 'X'`). `CONFIRMED (read from system)`.
+  - **System Reads (Live RFC from Client 220):**
+    - `T333` (`W01` / `311`): `BWLVS = '311'`, `NLTYP = '921'`, `NLPLA = 'TRANSFER'`, `TRART = 'A'`, `TBOBL = 'X'`, `DRUKZ = '02'`, `TBMAN = 'X'`. `CONFIRMED (read from system)`.
+    - `T321`: For `W01` / `RBLVS = '311'`, only `SOBKZ = 'E'` (Sales order stock) with `LFART = 'DTR'` exists (`TBFKZ = ''`, `UBFKZ = 'X'`). Generic fallback `LGNUM = '***'` has `LFART = 'DOG'` (`TBFKZ = 'X'`). Direct MIGO 311 without delivery passes `LFART = ''`, which matches 0 rows. This explains why 12 of 12 app 311 postings created 0 MIGO TRs. `CONFIRMED (read from system)`.
+    - `T320`: Plant `1120` mapped SLocs include `CIS1`, `CS01`, `CS02`, `FG01`, `HS01`, `IM01`, `IP01`, `MT01`, `MT02`, `OH01`, `OH02`, `PWIP`, `RA01`, `RJ02`, `SU01`. `CONFIRMED (read from system)`.
+    - `T331`: For `W01`, `STAUS = 'F'` on `001`, `002`, `005`, `EN1`, `QC1`. Storage types `OH1`, `RM1`, `FG1`, `1FL`..`5FL` have `STAUS = 'H'` (Shelf life expiration date). `VOLLE = 'X'` on `COR`, `EN1`, `FG1`, `FLM`, `GS1`, `OH1`, `POW`, `QC1`, `RM1`, `TOX`. `CONFIRMED (read from system)`.
+  - **Defects Audited & Fixed:**
+    1. `srv/wm/reservation-entry/service.js`: Added 311 check ensuring `ReceivingPlant` equals issuing `Plant`; destructured `Batch` from `payload`; passed `batch: Batch` to `adapter.createReservation` and `adapter.createTransferRequirement`; added `warehouseFor(Plant, ReceivingStorageLocation)` pre-check for 311 to validate `T320` assignment.
+    2. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+       - `createReservation`: Added mandatory checks for 311: `ReceivingStorageLocation` is mandatory, must differ from issuing `StorageLocation`, `ReceivingPlant` must equal `Plant`, `T320` assignment verified, `MARC-XCHPF` batch check throws 400 naming batch if missing, and mapped `item.BATCH = sBatch`.
+       - `createTransferRequirement`: Removed `movementType === '311'` from `isTransferPosting` so `RSNUM` and `RSPOS` are preserved on 311 TRs (confirmed by live TRs 757, 760); destructured `batch` and mapped `ltbaItem.CHARG = sTrBatch`.
+       - `postGoodsMovement`: Scoped 311 checks: enforced `ReceivingStorageLocation` is mandatory, must differ from `StorageLocation`, `ReceivingPlant` matches `Plant`, `T320` and `MARD` extended checks, and validated serial numbers for serial-managed materials (`MARC-SERNP`) failing with 400 naming serial numbers.
+    3. `srv/wm/tr-to/handlers/trTo.handler.js`: Fixed auto-MIGO payload mapping to pass `data.ReceivingPlant` and `data.ReceivingStorageLocation` when existing tracking record is missing them.
+    4. `test/unit/wm/mvt311Process.test.js`: Created comprehensive test suite (15 tests) covering all material classes (A, B, C, D, E, F), happy paths, missing batch, missing serial, wrong SU quantity (VOLLE), no stock in SLoc, GI failure then retry, anti-circular TO guard, and receiving SLoc validations. Labeled `[mock only, not SAP verification]`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/mvt311Process.test.js`: **PASS** (15/15 tests passed).
+    - `npx jest test/unit/wm`: **PASS** (66/66 test suites passed, 1,417/1,417 tests passed).
+    - `git diff --check`: Clean (0 whitespace errors).
+    - Zero commits created; working tree preserved.
   - **User Request:** Implement Guard 2 (Interim Storage Type Removal Guard): Explicitly block picking from interim storage types (`9*`, such as `902` or `920`) in `TrToAdapter.js` to eliminate negative quants (like Quant `0001045075` with `-10.000 KG` in `902/0000000000`).
   - **Implementation Details:**
     - Modified [TrToAdapter.js](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/srv/integration/s4hana/wm/TrToAdapter.js):

@@ -54,6 +54,7 @@ class ReservationProcessAdapter {
       costCenter,
       assetNo,
       subNumber,
+      batch,
       testrun = false
     } = params;
 
@@ -62,6 +63,32 @@ class ReservationProcessAdapter {
     if (!material) throw httpError(400, 'Material is mandatory');
     if (!quantity || Number(quantity) <= 0) throw httpError(400, 'Valid Quantity is mandatory');
     if (!unit) throw httpError(400, 'Unit is mandatory');
+
+    if (String(movementType).trim() === '311') {
+      if (!receivingStorageLocation || !String(receivingStorageLocation).trim()) {
+        throw httpError(400, 'Receiving Storage Location is mandatory for Movement Type 311 (SLoc Transfer)');
+      }
+      if (String(receivingStorageLocation).trim() === String(storageLocation).trim()) {
+        throw httpError(400, 'Receiving Storage Location must be different from Issuing Storage Location');
+      }
+      if (receivingPlant && String(receivingPlant).trim() !== String(plant).trim()) {
+        throw httpError(400, 'Receiving Plant must match Issuing Plant for Movement Type 311 (SLoc Transfer)');
+      }
+    }
+
+    if (this.rfc && String(movementType).trim() === '311' && receivingStorageLocation) {
+      try {
+        const t320Rec = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
+          `WERKS = '${sapKey(plant, 'plant')}'`,
+          `AND LGORT = '${sapKey(receivingStorageLocation, 'lgort')}'`
+        ], 1);
+        if (!t320Rec || !t320Rec.length) {
+          throw httpError(400, `Receiving storage location ${receivingStorageLocation} is not assigned to warehouse in plant ${plant} (T320)`);
+        }
+      } catch (tErr) {
+        if (tErr.status === 400) throw tErr;
+      }
+    }
 
     const targetMovePlant = receivingPlant || (String(movementType).trim() === '311' ? plant : '');
     const header = {
@@ -75,13 +102,29 @@ class ReservationProcessAdapter {
     };
 
     const s4Mat = padMat(sapKey(material, 'matnr'));
+    let sBatch = sapKeyOpt(batch, 'batch');
+    if (this.rfc) {
+      try {
+        const marcRows = await this.rfc.readTable('MARC', ['XCHPF'], [
+          `MATNR = '${s4Mat}'`,
+          `AND WERKS = '${sapKey(plant, 'plant')}'`
+        ], 1);
+        if (String(marcRows?.[0]?.XCHPF || '').trim() === 'X' && !sBatch) {
+          throw httpError(400, `Batch is mandatory for batch-managed material ${alphaOut(s4Mat)}`);
+        }
+      } catch (bErr) {
+        if (bErr.status === 400) throw bErr;
+      }
+    }
+
     const item = {
       MATERIAL: s4Mat,
       PLANT: sapKey(plant, 'plant'),
       ...(storageLocation ? { STGE_LOC: String(storageLocation).trim() } : {}),
       ENTRY_QNT: Number(quantity),
       ENTRY_UOM: String(unit).trim().toUpperCase(),
-      MOVEMENT: 'X'
+      MOVEMENT: 'X',
+      ...(sBatch ? { BATCH: sBatch } : {})
     };
 
     // Preflight: BAPI_RESERVATION_CREATE1 rejects any storage location the material is not extended to
@@ -155,7 +198,8 @@ class ReservationProcessAdapter {
       costCenter: reqCostCenter,
       assetNo: reqAssetNo,
       subNumber: reqSubNumber,
-      isTransferPosting: reqIsTransferPosting
+      isTransferPosting: reqIsTransferPosting,
+      batch
     } = params;
 
     if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
@@ -248,16 +292,17 @@ class ReservationProcessAdapter {
       }
     }
 
-    // For transfer postings (311 and 301), linking RSNUM directly on the TR header causes standard SAP L_TO_CREATE_TR
+    // For transfer postings (301), linking RSNUM directly on the TR header causes standard SAP L_TO_CREATE_TR
     // to execute restrictive reservation checks that throw XFELD_WRONG. Omitting RSNUM on the WM staging TR allows clean TO creation and confirmation.
+    // For SLoc transfer (311), RSNUM is preserved (confirmed by live TRs 0001000757, 0001000760).
     const isTransferPosting = Boolean(
       reqIsTransferPosting ||
-      movementType === '311' ||
       movementType === '301'
     );
     const s4TrRsnum = isTransferPosting ? '' : s4Rsnum;
     const s4TrRspos = isTransferPosting ? '' : s4Rspos;
 
+    const sTrBatch = sapKeyOpt(batch, 'batch');
     const ltbaItem = {
       LGNUM: s4Lgnum,
       BWLVS: s4Bwlvs,
@@ -268,6 +313,7 @@ class ReservationProcessAdapter {
       ALTME: s4Altme,
       RSNUM: s4TrRsnum,
       RSPOS: s4TrRspos,
+      ...(sTrBatch ? { CHARG: sTrBatch } : {}),
       ...(s4Betyp ? { BETYP: s4Betyp } : {}),
       ...(s4Benum ? { BENUM: s4Benum } : {})
     };
@@ -634,6 +680,64 @@ class ReservationProcessAdapter {
       const marc = await this.rfc.readTable('MARC', ['XCHPF'], [`MATNR = '${s4Mat}'`, `AND WERKS = '${sPlant}'`], 1);
       if (String(marc?.[0]?.XCHPF || '').trim() === 'X') {
         throw httpError(400, `Batch is required for batch-managed material ${alphaOut(s4Mat)} in plant ${sPlant}: none supplied, none on reservation ${alphaOut(sResNo) || '-'} (RESB), none on Transfer Order ${alphaOut(sTanum) || '-'} (LTAP)`);
+      }
+    }
+
+    if (sMvt === '311') {
+      if (!sRecSLoc) {
+        throw httpError(400, 'Receiving Storage Location is mandatory for Movement Type 311 (SLoc Transfer)');
+      }
+      if (sRecSLoc === sSLoc) {
+        throw httpError(400, 'Receiving Storage Location must be different from Issuing Storage Location');
+      }
+      if (sRecPlant && sRecPlant !== sPlant) {
+        throw httpError(400, 'Receiving Plant must match Issuing Plant for Movement Type 311 (SLoc Transfer)');
+      }
+      if (this.rfc) {
+        try {
+          const t320Rec = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
+            `WERKS = '${sPlant}'`,
+            `AND LGORT = '${sRecSLoc}'`
+          ], 1);
+          if (!t320Rec || !t320Rec.length) {
+            throw httpError(400, `Receiving storage location ${sRecSLoc} is not assigned to warehouse in plant ${sPlant} (T320)`);
+          }
+        } catch (tErr) {
+          if (tErr.status === 400) throw tErr;
+        }
+        try {
+          const mardRec = await this.rfc.readTable('MARD', ['LGORT'], [
+            `MATNR = '${s4Mat}'`,
+            `AND WERKS = '${sPlant}'`,
+            `AND LGORT = '${sRecSLoc}'`
+          ], 1);
+          if (!mardRec || !mardRec.length) {
+            throw httpError(400, `Material ${alphaOut(s4Mat)} is not extended to receiving storage location ${sRecSLoc} in plant ${sPlant} (MARD)`);
+          }
+        } catch (mErr) {
+          if (mErr.status === 400) throw mErr;
+        }
+      }
+    }
+
+    if (sMvt === '311' && this.rfc) {
+      try {
+        const marcSerial = await this.rfc.readTable('MARC', ['SERNP'], [
+          `MATNR = '${s4Mat}'`,
+          `AND WERKS = '${sPlant}'`
+        ], 1);
+        const sernp = String(marcSerial?.[0]?.SERNP || '').trim();
+        if (sernp && sernp !== '0000') {
+          const serialItemsCount = (Array.isArray(serials) ? serials : [serials]).filter(Boolean).length;
+          if (serialItemsCount === 0) {
+            throw httpError(400, `Serial numbers are mandatory for serial-managed material ${alphaOut(s4Mat)} (profile ${sernp})`);
+          }
+          if (serialItemsCount !== Math.round(Number(quantity))) {
+            throw httpError(400, `Number of serial numbers (${serialItemsCount}) must equal quantity (${Number(quantity)}) for material ${alphaOut(s4Mat)}`);
+          }
+        }
+      } catch (sErr) {
+        if (sErr.status === 400) throw sErr;
       }
     }
 

@@ -21,7 +21,11 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
     mockRfc = {
       session: jest.fn(async (fn) => fn(mockRfc.call)),
       call: jest.fn(),
-      readTable: jest.fn((table) => Promise.resolve(table === 'MARD' ? [{ LGORT: 'HS01' }, { LGORT: 'CS01' }] : [])) // MARD preflight: material extended; other reads empty
+      readTable: jest.fn((table) => Promise.resolve(
+        table === 'MARD' ? [{ LGORT: 'HS01' }, { LGORT: 'CS01' }] :
+        table === 'T320' ? [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }, { LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }] :
+        []
+      )) // MARD and T320 preflight mock
     };
     adapter = new ReservationProcessAdapter({ rfc: mockRfc });
   });
@@ -170,6 +174,8 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       const result = await adapter.createReservation({
         movementType: '311',
         plant: '1120',
+        storageLocation: 'HS01',
+        receivingStorageLocation: 'CS01',
         material: '8000000023',
         unit: 'NOS',
         quantity: 1,
@@ -689,6 +695,12 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
           if (table === 'T321') {
             return [{ LGNUM: '***', RBLVS: '311', TBFKZ: 'X' }];
           }
+          if (table === 'T320') {
+            return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
+          }
+          if (table === 'MARD') {
+            return [{ LGORT: 'CS01' }, { LGORT: 'HS01' }];
+          }
           return [];
         });
 
@@ -727,6 +739,12 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         mockRfc.readTable.mockImplementation(async (table) => {
           if (table === 'T321') {
             return [{ LGNUM: '***', RBLVS: '311', TBFKZ: '' }];
+          }
+          if (table === 'T320') {
+            return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
+          }
+          if (table === 'MARD') {
+            return [{ LGORT: 'CS01' }, { LGORT: 'HS01' }];
           }
           return [];
         });
@@ -775,8 +793,10 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         adapter.createReservation({
           movementType: '311',
           plant: '1120',
+          storageLocation: 'HS01',
+          receivingStorageLocation: 'CS01',
           material: '8000000023',
-        unit: 'NOS',
+          unit: 'NOS',
           quantity: 999999
         })
       ).rejects.toThrow('Deficit of BA Unrestricted-use stock');

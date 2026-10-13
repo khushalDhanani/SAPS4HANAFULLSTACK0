@@ -53,6 +53,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           } else if (String(ReceivingStorageLocation).trim() === String(StorageLocation).trim()) {
             req.error(400, 'Receiving Storage Location must be different from Issuing Storage Location');
           }
+          if (ReceivingPlant && String(ReceivingPlant).trim() !== String(Plant).trim()) {
+            req.error(400, 'Receiving Plant must match Issuing Plant for Movement Type 311 (SLoc Transfer)');
+          }
           break;
         case '301':
           if (!ReceivingPlant || !String(ReceivingPlant).trim()) {
@@ -99,7 +102,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         CostCenter,
         AssetNo,
         SubNumber,
-        WarehouseNumber
+        WarehouseNumber,
+        Batch
       } = payload;
 
       // Task 8: SLoc pre-check at reservation creation: read LQUA for item's plant/SLoc.
@@ -162,7 +166,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           receivingStorageLocation: ReceivingStorageLocation,
           costCenter: CostCenter,
           assetNo: AssetNo,
-          subNumber: SubNumber
+          subNumber: SubNumber,
+          batch: Batch
         });
       } catch (err) {
         return req.error(err.status || 500, `Failed to create reservation: ${err.message}`);
@@ -256,6 +261,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       try {
         determinedWh = await warehouseFor(Plant, StorageLocation, WarehouseNumber);
+        if (MovementType === '311' && ReceivingStorageLocation) {
+          await warehouseFor(Plant, ReceivingStorageLocation, WarehouseNumber);
+        }
         const trResult = await adapter.createTransferRequirement({
           warehouseNumber: determinedWh,
           wmMovementType: MovementType,
@@ -270,7 +278,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           reservationItem: resItem,
           costCenter: CostCenter,
           assetNo: AssetNo,
-          subNumber: SubNumber
+          subNumber: SubNumber,
+          batch: Batch
         });
 
         trNumber = trResult.trNumberRaw || String(trResult.trNumber).padStart(10, '0');

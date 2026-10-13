@@ -27,7 +27,11 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
     mockRfc = {
       session: jest.fn(async (fn) => fn(mockRfc.call)),
       call: jest.fn(),
-      readTable: jest.fn().mockResolvedValue([]) // RESB / LTAP / MARC reads: nothing found, material not batch-managed
+      readTable: jest.fn(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
+        if (table === 'MARD') return [{ LGORT: 'CS01' }, { LGORT: 'HS01' }];
+        return [];
+      }) // RESB / LTAP / MARC reads: nothing found, material not batch-managed
     };
     adapter = new ReservationProcessAdapter({ rfc: mockRfc });
   });
