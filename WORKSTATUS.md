@@ -5,6 +5,54 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **WM_TR_REAL_MOVEMENT Flag, T333 BETYP/BENUM Format Analysis, Cleanup List Split (In-Flight vs Orphaned), and Pre-TR T321 Check (2026-10-13, 11:25 IST):**
+  - **User Request:**
+    1. Cleanup split: for each stranded 921/920 quant, check if its TO belongs to a reservation with a later MIGO (MATDOC with same RSNUM); output two lists: "in-flight" (no MIGO yet) and "orphaned" (MIGO already posted). Same for negative quants: is there an open TR with no TO, or a TO already posted?
+    2. T333 for W01, BWLVS 201/241: BETYP, NKDYN, NLTYP, NLPLA. Which BENUM format does BETYP K / A expect (LVS_BETYP domain values, BENUM length, conversion exit in TR source for cost center/asset)?
+    3. How does 311 vs 201 reservation data map to BENUM in adapter today: file/line where KOSTL/ANLN1 are available at TR creation time.
+    4. Code (flag `WM_TR_REAL_MOVEMENT`, default false): when true, remove 311 substitution in `ReservationProcessAdapter.js`; pass BWLVS = real movement, T_LTBA-BETYP (from T333) and T_LTBA-BENUM (cost center for 201, asset for 241); if BENUM is missing, fail with clear 400 before calling SAP. Flag off keeps current behavior.
+    5. Pre-check before TR creation: read T321 for movement; if TBFKZ = X, return warning that MIGO will create an extra TR (reuse existing flag `WM_PRE_MIGO_T321_CHECK`).
+  - **Audit & Investigation Findings (100% CONFIRMED via Client 220 RFC & DDIC):**
+    - **Task 1 (`CONFIRMED`):**
+      - Stranded `920/921` quants split:
+        - All 9 stranded quants (`0001045066`, `0001045070`, `0001043208`, `0001045086`, `0001045084`, `0001045087`, `0001045088`, `0001045089`, `0001045079`) have `RSNUM = '0000000000'` on their TR headers (created as standalone staging transfers).
+        - **"In-Flight" (No MIGO yet):** All **9 quants** (0 have subsequent MATDOC material documents).
+        - **"Orphaned" (MIGO already posted):** **0 quants** among this set.
+      - Negative interim quants analysis:
+        - Quants `0001044448` (`911/1011101301`, TR `0001000693`), `0001044449` (`914/0000001011`, TR `0001000694`), `0001044455` (`911/1011202701`, TR `0001000698`), `0001044827` (`914/4000033120`, TR `0001000744`), and `0001045075` (`902/0000000000`, TR `0001000765`):
+        - **Classification:** All **5 negative quants** are **`OPEN_TR_NO_TO`** (open Transfer Requirements where NO Transfer Order was ever created).
+    - **Task 2 (`CONFIRMED`):**
+      - `T333` in warehouse `W01`:
+        - `BWLVS 201`: `BETYP = 'K'`, `VKDYN = ''`, `NKDYN = 'X'`, `VLTYP = ''`, `VLPLA = ''`, `NLTYP = '911'`, `NLPLA = ''`.
+        - `BWLVS 241`: `BETYP = 'A'`, `VKDYN = ''`, `NKDYN = 'X'`, `VLTYP = ''`, `VLPLA = ''`, `NLTYP = '913'`, `NLPLA = ''`.
+      - Requirement Type (`LVS_BETYP` domain / `T308T` table):
+        - `BETYP = 'K'`: Cost Center (`CSKS-KOSTL`: 10 chars, ALPHA exit).
+        - `BETYP = 'A'`: Fixed Asset (`ANLA-ANLN1`: 12 chars, ALPHA exit).
+      - Requirement Number (`LVS_BENUM` in `DD04L` / `DD03L`):
+        - Length is **10 characters** (`CHAR 10`, Conversion Exit `ALPHA`).
+        - For Cost Center (`BETYP = K`): Formatted to 10 chars with leading zeros (e.g. `'1011201301'`).
+        - For Asset (`BETYP = A`): Formatted to 10 chars (e.g. `'0000400001'` from `ANLN1` `000000400001`, as proven in live TR `0001000761` where `LTBK-BENUM = '0000400001'`).
+    - **Task 3 (`CONFIRMED`):**
+      - In `srv/wm/reservation-entry/service.js:88-102`, `CostCenter`, `AssetNo`, and `SubNumber` are extracted from payload.
+      - In `ReservationProcessAdapter.js:143-156`, `createTransferRequirement` receives parameters.
+      - Previously, `CostCenter` and `AssetNo` were omitted from `createTransferRequirement` at `service.js:258-270` and `service.js:746-758`.
+  - **Code Remediation Delivered (Flag `WM_TR_REAL_MOVEMENT`, default false):**
+    - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+      - Under flag `WM_TR_REAL_MOVEMENT = 'true'`:
+        - Uses real movement type (`s4Bwlvs = sapKey(wmMovementType, 'mvt')`).
+        - Movement 201: sets `BETYP = 'K'`, formats `BENUM` (Cost Center) to 10 characters with leading zeros; if missing (checked in params or `RKPF`), throws clear 400 error.
+        - Movement 241: sets `BETYP = 'A'`, formats `BENUM` (Asset) to 10 characters; if missing (checked in params or `RKPF`), throws clear 400 error.
+      - Pre-TR check under `WM_PRE_MIGO_T321_CHECK`: reads `T321`; if `TBFKZ = 'X'`, returns warning `"goods movement will create an additional TR"`.
+    - `srv/wm/reservation-entry/service.js`:
+      - Passes `costCenter`, `assetNo`, `subNumber` to `createTransferRequirement` during initial execution (`service.js:258-270`) and retry (`service.js:767-780`).
+      - Emits `req.warn` and logs `ReservationLogs` warning entry when `trResult.warning` is present.
+    - `test/unit/wm/reservationProcess.test.js`:
+      - Added 6 new unit tests covering default 311 substitution, real movement 201 (`BETYP K`, `BENUM` cost center), real movement 241 (`BETYP A`, `BENUM` asset), missing `BENUM` 400 validation, and pre-TR T321 auto-TR warning (all 30 tests PASS).
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/createTOFromTR.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/trToAdapter.test.js`: 94/94 tests PASS.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
+
 - **LTBA BENUM Audit, MIGO Auto-TR Immediate TO Analysis (0/28), EN1 Stock Investigation, Open Cleanup List, and Flow Decision Note (2026-10-13, 11:10 IST):**
   - **User Request:**
     1. LTBA structure fields (DD03L): does it carry BENUM and BETYP? Does L_TR_CREATE accept 201/241 with them? Read FM source for BENUM check. Say whether 311 substitution is needed.

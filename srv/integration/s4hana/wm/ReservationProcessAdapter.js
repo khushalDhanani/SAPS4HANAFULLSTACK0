@@ -152,6 +152,9 @@ class ReservationProcessAdapter {
       reservationNo,
       reservationItem = '0001',
       movementType,
+      costCenter: reqCostCenter,
+      assetNo: reqAssetNo,
+      subNumber: reqSubNumber,
       isTransferPosting: reqIsTransferPosting
     } = params;
 
@@ -166,12 +169,70 @@ class ReservationProcessAdapter {
     const s4Rsnum = sapKey(reservationNo, 'rsnum').padStart(10, '0');
     const s4Rspos = sapKey(reservationItem, 'rspos').padStart(4, '0');
     const s4Lgnum = sapKey(warehouseNumber, 'lgnum');
-    // In WM customizing (T333), movement 201/241 require BENUM (Cost Center/Asset). For reservation-based staging, WM movement 311 links cleanly to RSNUM without requiring BENUM.
-    const s4Bwlvs = sapKey(wmMovementType === '201' || wmMovementType === '241' ? '311' : wmMovementType, 'mvt');
+
+    const useRealMvt = process.env.WM_TR_REAL_MOVEMENT === 'true';
+    let s4Bwlvs;
+    let s4Betyp = '';
+    let s4Benum = '';
+
+    if (useRealMvt) {
+      s4Bwlvs = sapKey(wmMovementType, 'mvt');
+      if (s4Bwlvs === '201') {
+        s4Betyp = 'K';
+        let cc = reqCostCenter;
+        if (!cc && this.rfc && s4Rsnum) {
+          try {
+            const rkpfRows = await this.rfc.readTable('RKPF', ['RSNUM', 'KOSTL'], [`RSNUM = '${s4Rsnum}'`], 1);
+            if (rkpfRows?.[0]?.KOSTL) cc = rkpfRows[0].KOSTL;
+          } catch (_e) { /* tolerate */ }
+        }
+        if (!cc || !String(cc).trim()) {
+          throw httpError(400, 'Movement 201 requires Cost Center (BENUM) for dynamic coordinates; Cost Center is missing');
+        }
+        s4Benum = String(cc).trim().padStart(10, '0');
+      } else if (s4Bwlvs === '241') {
+        s4Betyp = 'A';
+        let an = reqAssetNo;
+        if (!an && this.rfc && s4Rsnum) {
+          try {
+            const rkpfRows = await this.rfc.readTable('RKPF', ['RSNUM', 'ANLN1'], [`RSNUM = '${s4Rsnum}'`], 1);
+            if (rkpfRows?.[0]?.ANLN1) an = rkpfRows[0].ANLN1;
+          } catch (_e) { /* tolerate */ }
+        }
+        if (!an || !String(an).trim()) {
+          throw httpError(400, 'Movement 241 requires Asset number (BENUM) for dynamic coordinates; Asset number is missing');
+        }
+        s4Benum = String(an).trim().padStart(10, '0').slice(-10);
+      }
+    } else {
+      // In WM customizing (T333), movement 201/241 require BENUM (Cost Center/Asset). For reservation-based staging, WM movement 311 links cleanly to RSNUM without requiring BENUM.
+      s4Bwlvs = sapKey(wmMovementType === '201' || wmMovementType === '241' ? '311' : wmMovementType, 'mvt');
+    }
+
     const s4Werks = sapKey(plant, 'plant');
     const s4Lgort = sapKey(storageLocation, 'lgort');
     const s4Menga = Number(quantity);
     const s4Altme = String(unit).trim().toUpperCase();
+
+    // Pre-check before TR creation (Task 5): read T321 for the movement; if TBFKZ = X, set warning that MIGO will create an extra TR
+    let t321Warning = '';
+    const checkT321 = process.env.WM_PRE_MIGO_T321_CHECK === 'true' || process.env.WM_CHECK_T321_AUTO_TR === 'true';
+    if (checkT321 && this.rfc) {
+      try {
+        const t321Rows = await this.rfc.readTable(
+          'T321',
+          ['LGNUM', 'RBLVS', 'TBFKZ'],
+          [`( LGNUM = '***' OR LGNUM = '${s4Lgnum}' )`, `AND RBLVS = '${s4Bwlvs}'`]
+        );
+        const autoTrRow = (t321Rows || []).find((r) => String(r.TBFKZ || '').trim() === 'X');
+        if (autoTrRow) {
+          t321Warning = 'goods movement will create an additional TR';
+          LOG.warn(`[createTransferRequirement] ${t321Warning} (movement ${s4Bwlvs}, T321-TBFKZ = X)`);
+        }
+      } catch (tErr) {
+        LOG.warn(`[createTransferRequirement] Pre-TR T321 check error: ${tErr.message}`);
+      }
+    }
 
     // For transfer postings (311 and 301), linking RSNUM directly on the TR header causes standard SAP L_TO_CREATE_TR
     // to execute restrictive reservation checks that throw XFELD_WRONG. Omitting RSNUM on the WM staging TR allows clean TO creation and confirmation.
@@ -192,7 +253,9 @@ class ReservationProcessAdapter {
       MENGA: s4Menga,
       ALTME: s4Altme,
       RSNUM: s4TrRsnum,
-      RSPOS: s4TrRspos
+      RSPOS: s4TrRspos,
+      ...(s4Betyp ? { BETYP: s4Betyp } : {}),
+      ...(s4Benum ? { BENUM: s4Benum } : {})
     };
 
     return await this.rfc.session(async (call) => {
@@ -256,7 +319,8 @@ class ReservationProcessAdapter {
               trNumberRaw: rawTbnum,
               trItem: tbpos,
               status: STATUS.TR_CREATED,
-              item: resZ
+              item: resZ,
+              ...(t321Warning ? { warning: t321Warning } : {})
             };
           } else if (resZ && resZ.EV_SUCCESS === 'E' && resZ.EV_MESSAGE) {
             throw new Error(resZ.EV_MESSAGE);
@@ -278,7 +342,8 @@ class ReservationProcessAdapter {
         trNumberRaw: returnedItem.TBNUM,
         trItem: tbpos,
         status: STATUS.TR_CREATED,
-        item: returnedItem
+        item: returnedItem,
+        ...(t321Warning ? { warning: t321Warning } : {})
       };
     });
   }

@@ -266,11 +266,32 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           quantity: Quantity,
           unit: Unit,
           reservationNo: resNo,
-          reservationItem: resItem
+          reservationItem: resItem,
+          costCenter: CostCenter,
+          assetNo: AssetNo,
+          subNumber: SubNumber
         });
 
         trNumber = trResult.trNumberRaw || String(trResult.trNumber).padStart(10, '0');
         currentStatus = STATUS.TR_CREATED;
+
+        if (trResult.warning) {
+          req?.warn?.(200, trResult.warning);
+          await INSERT.into(ReservationLogs).entries({
+            ID: cds.utils.uuid(),
+            ReservationNo: resNo,
+            ReservationItem: resItem,
+            LogHandle: sLogHandle,
+            ExternalId: extId,
+            SubObject: 'TRACK',
+            Step: 'LB01',
+            Status: STATUS.TR_CREATED,
+            MessageType: 'W',
+            MessageId: 'L3',
+            MessageNo: '001',
+            MessageText: trResult.warning
+          });
+        }
 
         // Persist TBNUM immediately as soon as SAP returns it
         await UPDATE(ReservationEntries).set({
@@ -754,8 +775,15 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
               quantity: track.Quantity,
               unit: track.Unit,
               reservationNo: sResNo,
-              reservationItem: sResItem
+              reservationItem: sResItem,
+              costCenter: track.CostCenter,
+              assetNo: track.AssetNo,
+              subNumber: track.SubNumber
             });
+
+            if (trResult.warning) {
+              req?.warn?.(200, trResult.warning);
+            }
           } catch (trErr) {
             await fail(STATUS.TR_ERROR, 'LB01', `TR creation failed in SAP backend: ${trErr.message}`);
             throw Object.assign(trErr, { handled: true });

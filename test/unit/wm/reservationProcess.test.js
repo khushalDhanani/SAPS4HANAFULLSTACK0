@@ -286,6 +286,195 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         })
       ).rejects.toThrow('Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE');
     });
+
+    test('when WM_TR_REAL_MOVEMENT is false (default), keeps BWLVS 311 substitution for 201 and 241 [mock only, not SAP verification]', async () => {
+      mockRfc.call.mockResolvedValueOnce({
+        T_LTBA: [{ TBNUM: '0001001839', TBPOS: '0001' }]
+      });
+
+      await adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        wmMovementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '524979',
+        costCenter: '1011201301'
+      });
+
+      expect(mockRfc.call).toHaveBeenCalledWith(
+        'L_TR_CREATE',
+        expect.objectContaining({
+          T_LTBA: [
+            expect.objectContaining({
+              BWLVS: '311'
+            })
+          ]
+        })
+      );
+      expect(mockRfc.call.mock.calls[0][1].T_LTBA[0].BETYP).toBeUndefined();
+      expect(mockRfc.call.mock.calls[0][1].T_LTBA[0].BENUM).toBeUndefined();
+    });
+
+    test('when WM_TR_REAL_MOVEMENT is true, passes real BWLVS 201, BETYP K and formatted BENUM cost center [mock only, not SAP verification]', async () => {
+      const origEnv = process.env.WM_TR_REAL_MOVEMENT;
+      process.env.WM_TR_REAL_MOVEMENT = 'true';
+      try {
+        mockRfc.call.mockResolvedValueOnce({
+          T_LTBA: [{ TBNUM: '0001001839', TBPOS: '0001' }]
+        });
+
+        await adapter.createTransferRequirement({
+          warehouseNumber: 'W01',
+          wmMovementType: '201',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          quantity: 1,
+          unit: 'NOS',
+          reservationNo: '524979',
+          costCenter: '1011201301'
+        });
+
+        expect(mockRfc.call).toHaveBeenCalledWith(
+          'L_TR_CREATE',
+          expect.objectContaining({
+            T_LTBA: [
+              expect.objectContaining({
+                BWLVS: '201',
+                BETYP: 'K',
+                BENUM: '1011201301'
+              })
+            ]
+          })
+        );
+      } finally {
+        process.env.WM_TR_REAL_MOVEMENT = origEnv;
+      }
+    });
+
+    test('when WM_TR_REAL_MOVEMENT is true, passes real BWLVS 241, BETYP A and formatted BENUM asset [mock only, not SAP verification]', async () => {
+      const origEnv = process.env.WM_TR_REAL_MOVEMENT;
+      process.env.WM_TR_REAL_MOVEMENT = 'true';
+      try {
+        mockRfc.call.mockResolvedValueOnce({
+          T_LTBA: [{ TBNUM: '0001001839', TBPOS: '0001' }]
+        });
+
+        await adapter.createTransferRequirement({
+          warehouseNumber: 'W01',
+          wmMovementType: '241',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          quantity: 1,
+          unit: 'NOS',
+          reservationNo: '524979',
+          assetNo: '000000400001'
+        });
+
+        expect(mockRfc.call).toHaveBeenCalledWith(
+          'L_TR_CREATE',
+          expect.objectContaining({
+            T_LTBA: [
+              expect.objectContaining({
+                BWLVS: '241',
+                BETYP: 'A',
+                BENUM: '0000400001'
+              })
+            ]
+          })
+        );
+      } finally {
+        process.env.WM_TR_REAL_MOVEMENT = origEnv;
+      }
+    });
+
+    test('when WM_TR_REAL_MOVEMENT is true and cost center is missing for 201, throws clear 400 error before calling SAP [mock only, not SAP verification]', async () => {
+      const origEnv = process.env.WM_TR_REAL_MOVEMENT;
+      process.env.WM_TR_REAL_MOVEMENT = 'true';
+      try {
+        await expect(
+          adapter.createTransferRequirement({
+            warehouseNumber: 'W01',
+            wmMovementType: '201',
+            material: '8000000023',
+            plant: '1120',
+            storageLocation: 'HS01',
+            quantity: 1,
+            unit: 'NOS',
+            reservationNo: '524979'
+          })
+        ).rejects.toMatchObject({
+          status: 400,
+          message: expect.stringContaining('Movement 201 requires Cost Center (BENUM)')
+        });
+        expect(mockRfc.call).not.toHaveBeenCalled();
+      } finally {
+        process.env.WM_TR_REAL_MOVEMENT = origEnv;
+      }
+    });
+
+    test('when WM_TR_REAL_MOVEMENT is true and asset is missing for 241, throws clear 400 error before calling SAP [mock only, not SAP verification]', async () => {
+      const origEnv = process.env.WM_TR_REAL_MOVEMENT;
+      process.env.WM_TR_REAL_MOVEMENT = 'true';
+      try {
+        await expect(
+          adapter.createTransferRequirement({
+            warehouseNumber: 'W01',
+            wmMovementType: '241',
+            material: '8000000023',
+            plant: '1120',
+            storageLocation: 'HS01',
+            quantity: 1,
+            unit: 'NOS',
+            reservationNo: '524979'
+          })
+        ).rejects.toMatchObject({
+          status: 400,
+          message: expect.stringContaining('Movement 241 requires Asset number (BENUM)')
+        });
+        expect(mockRfc.call).not.toHaveBeenCalled();
+      } finally {
+        process.env.WM_TR_REAL_MOVEMENT = origEnv;
+      }
+    });
+
+    test('Pre-check before TR creation: when WM_PRE_MIGO_T321_CHECK is true and T321 has TBFKZ = X, returns warning that goods movement will create an additional TR [mock only, not SAP verification]', async () => {
+      const origEnv = process.env.WM_PRE_MIGO_T321_CHECK;
+      process.env.WM_PRE_MIGO_T321_CHECK = 'true';
+      try {
+        mockRfc.readTable.mockImplementation(async (table) => {
+          if (table === 'T321') {
+            return [{ LGNUM: '***', RBLVS: '311', TBFKZ: 'X' }];
+          }
+          return [];
+        });
+
+        mockRfc.call.mockResolvedValueOnce({
+          T_LTBA: [{ TBNUM: '0001001839', TBPOS: '0001' }]
+        });
+
+        const result = await adapter.createTransferRequirement({
+          warehouseNumber: 'W01',
+          wmMovementType: '311',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          quantity: 1,
+          unit: 'NOS',
+          reservationNo: '524979'
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.warning).toBe('goods movement will create an additional TR');
+        expect(mockRfc.readTable).toHaveBeenCalledWith('T321', expect.any(Array), expect.any(Array));
+      } finally {
+        process.env.WM_PRE_MIGO_T321_CHECK = origEnv;
+      }
+    });
   });
 
   describe('3. createTransferOrderFromTR (L_TO_CREATE_TR)', () => {
