@@ -392,6 +392,80 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       }
     });
 
+    test('when WM_TR_REAL_MOVEMENT is true, passes alphanumeric cost center unchanged up to 10 chars with VERIFY rule [mock only, not SAP verification]', async () => {
+      const origEnv = process.env.WM_TR_REAL_MOVEMENT;
+      process.env.WM_TR_REAL_MOVEMENT = 'true';
+      try {
+        mockRfc.call.mockResolvedValueOnce({
+          T_LTBA: [{ TBNUM: '0001001840', TBPOS: '0001' }]
+        });
+
+        await adapter.createTransferRequirement({
+          warehouseNumber: 'W01',
+          wmMovementType: '201',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          quantity: 1,
+          unit: 'NOS',
+          reservationNo: '524979',
+          costCenter: 'SAP-DUMMY'
+        });
+
+        expect(mockRfc.call).toHaveBeenCalledWith(
+          'L_TR_CREATE',
+          expect.objectContaining({
+            T_LTBA: [
+              expect.objectContaining({
+                BWLVS: '201',
+                BETYP: 'K',
+                BENUM: 'SAP-DUMMY'
+              })
+            ]
+          })
+        );
+      } finally {
+        process.env.WM_TR_REAL_MOVEMENT = origEnv;
+      }
+    });
+
+    test('when WM_TR_REAL_MOVEMENT is true, pads short numeric asset number to 10 chars [mock only, not SAP verification]', async () => {
+      const origEnv = process.env.WM_TR_REAL_MOVEMENT;
+      process.env.WM_TR_REAL_MOVEMENT = 'true';
+      try {
+        mockRfc.call.mockResolvedValueOnce({
+          T_LTBA: [{ TBNUM: '0001001841', TBPOS: '0001' }]
+        });
+
+        await adapter.createTransferRequirement({
+          warehouseNumber: 'W01',
+          wmMovementType: '241',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          quantity: 1,
+          unit: 'NOS',
+          reservationNo: '524979',
+          assetNo: '400001'
+        });
+
+        expect(mockRfc.call).toHaveBeenCalledWith(
+          'L_TR_CREATE',
+          expect.objectContaining({
+            T_LTBA: [
+              expect.objectContaining({
+                BWLVS: '241',
+                BETYP: 'A',
+                BENUM: '0000400001'
+              })
+            ]
+          })
+        );
+      } finally {
+        process.env.WM_TR_REAL_MOVEMENT = origEnv;
+      }
+    });
+
     test('when WM_TR_REAL_MOVEMENT is true and cost center is missing for 201, throws clear 400 error before calling SAP [mock only, not SAP verification]', async () => {
       const origEnv = process.env.WM_TR_REAL_MOVEMENT;
       process.env.WM_TR_REAL_MOVEMENT = 'true';

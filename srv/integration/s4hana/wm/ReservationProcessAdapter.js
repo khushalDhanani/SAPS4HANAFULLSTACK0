@@ -189,7 +189,14 @@ class ReservationProcessAdapter {
         if (!cc || !String(cc).trim()) {
           throw httpError(400, 'Movement 201 requires Cost Center (BENUM) for dynamic coordinates; Cost Center is missing');
         }
-        s4Benum = String(cc).trim().padStart(10, '0');
+        const trimmedCc = String(cc).trim();
+        if (/^\d+$/.test(trimmedCc)) {
+          // CONFIRMED (read from system): numeric cost center padded to 10 chars with leading zeros (ALPHA exit; proven by LTBK TRs 0001000693, 0001000696, 0001000698)
+          s4Benum = trimmedCc.padStart(10, '0');
+        } else {
+          // VERIFY: alphanumeric cost center (e.g. 'SAP-DUMMY' in CSKS) - ALPHA exit does not pad leading zeros on non-digits. Alphanumeric cost center mapping not proven in live LTBK TRs; pass unchanged (up to 10 chars).
+          s4Benum = trimmedCc.slice(0, 10);
+        }
       } else if (s4Bwlvs === '241') {
         s4Betyp = 'A';
         let an = reqAssetNo;
@@ -202,7 +209,14 @@ class ReservationProcessAdapter {
         if (!an || !String(an).trim()) {
           throw httpError(400, 'Movement 241 requires Asset number (BENUM) for dynamic coordinates; Asset number is missing');
         }
-        s4Benum = String(an).trim().padStart(10, '0').slice(-10);
+        const trimmedAn = String(an).trim();
+        if (/^\d+$/.test(trimmedAn)) {
+          // CONFIRMED (read from system): ANLN1 is CHAR 12, LTBK-BENUM is CHAR 10. All 19 existing BETYP A TRs in LTBK map ANLN1 (e.g. 000000400001) to 10-char BENUM (0000400001) by stripping 2 leading zeros / slicing rightmost 10 digits.
+          s4Benum = trimmedAn.padStart(10, '0').slice(-10);
+        } else {
+          // VERIFY: alphanumeric asset number not proven in live ANLA / LTBK TRs; pass unchanged (up to 10 chars).
+          s4Benum = trimmedAn.slice(0, 10);
+        }
       }
     } else {
       // In WM customizing (T333), movement 201/241 require BENUM (Cost Center/Asset). For reservation-based staging, WM movement 311 links cleanly to RSNUM without requiring BENUM.

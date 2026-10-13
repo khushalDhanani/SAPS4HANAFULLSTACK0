@@ -5,7 +5,58 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **WM_TR_REAL_MOVEMENT Flag, T333 BETYP/BENUM Format Analysis, Cleanup List Split (In-Flight vs Orphaned), and Pre-TR T321 Check (2026-10-13, 11:25 IST):**
+- **9 Stranded / 5 Negative Quants TO-TR Linkage & 24h MATDOC Re-classification, CSKS/LTBK BENUM Formatting Rules, T308T/DD04T DDIC Texts, flow-decision.md Runbook & Section 7 (2026-10-13, 11:45 IST):**
+  - **User Request:**
+    1. Re-classify the 9 stranded 921/920 quants and 5 negative quants. Link each to its TO and TR by TBNUM/TANUM, then check for ANY later MATDOC for same material, plant, SLoc and quantity in 24h after TO creation ("has matching posting" / "no posting found" / "cannot tell").
+    2. Cost center formatting: read CSKS-KOSTL for 3 real cost centers, including one alphanumeric if present. Read LTBK-BENUM for existing 201 TRs with BETYP K and show how KOSTL maps to BENUM. Do the same for existing BETYP A TRs against ANLA-ANLN1.
+    3. DD04T texts for T308T BETYP K and A in English and German, shown as read.
+    4. Update `docs/abap/flow-decision.md` with "Test prerequisites" section (T321 TBFKZ state, small test stock spec, master table: scenario | flag state | expected rows | what a FAIL looks like).
+    5. Add two scenarios runbook lacks: 311 and 301 with flag ON.
+    6. In adapter, format BENUM using rules proven in step 2; unproven alphanumeric passed unchanged with "VERIFY" comment. Flag default unchanged.
+  - **Audit & Investigation Findings (100% CONFIRMED via Client 220 RFC & DDIC):**
+    - **Task 1 (Quant Linkage & 24h MATDOC Window):**
+      - **9 Stranded 920/921 Quants:**
+        - `0001045066` (`921/TRANSFER`, Mat `8000009754`, Qty `2.000 NOS`, Plant `1120`, SLoc `HS01`): TO `0001037294` (`BWLVS 311`, User `KHUSHAL`, `20261012 145632`), TR `0001000806` (`RSNUM 0`). MATDOC in 24h: 0. Output: `"no posting found"`.
+        - `0001045070` (`921/TRANSFER`, Mat `8900000004`, Qty `10.000 KG`, Plant `1120`, SLoc `CS01`): TO `0001037292` (`BWLVS 311`, User `KHUSHAL`, `20261012 134341`), TR `0001000804` (`RSNUM 0`). MATDOC in 24h: 0. Output: `"no posting found"`.
+        - `0001043208` (`921/TRANSFER`, Mat `8000009753`, Qty `2.000 NOS`, Plant `1120`, SLoc `HS01`): TO `0001037288` (`BWLVS 311`, User `KHUSHAL`, `20261012 110152`), TR `0001000797` (`RSNUM 0`). MATDOC in 24h: 0. Output: `"no posting found"`.
+        - `0001045086` (`921/TRANSFER`, Mat `1000000045`, Qty `10.000 KG`, Plant `1120`, SLoc `CS01`): TO `0001037297` (`BWLVS 311`, User `KHUSHAL`, `20261012 170737`), TR `0001000808` (`RSNUM 0`). MATDOC in 24h: 0. Output: `"no posting found"`.
+        - `0001045084` (`921/TRANSFER`, Mat `1000000204`, Qty `1.000 KG`, Plant `1600`, SLoc `CS01`): TO `0001037295` (`BWLVS 311`, User `KHUSHAL`, `20261012 150134`), TR `0001000800` (`RSNUM 0`). MATDOC in 24h: Found MBLNR `4900050155` lines 1 & 2 (`BWART 311`, `CPUDT 20261012 150137`, 3 sec after TO). Output: `"has matching posting"`.
+        - `0001045087` (`921/TRANSFER`, Mat `8000006485`, Qty `1.000 NOS`, Plant `1120`, SLoc `CS02`): TO `0001037298` (`BWLVS 311`, User `KHUSHAL`, `20261012 172415`), TR `0001000810` (`RSNUM 0`). MATDOC in 24h: 0. Output: `"no posting found"`.
+        - `0001045088` (`921/TRANSFER`, Mat `8000006485`, Qty `1.000 NOS`, Plant `1120`, SLoc `CS02`): TO `0001037298` (`BWLVS 311`, User `KHUSHAL`, `20261012 172415`), TR `0001000810` (`RSNUM 0`). MATDOC in 24h: 0. Output: `"no posting found"`.
+        - `0001045089` (`921/TRANSFER`, Mat `8000006485`, Qty `5.000 NOS`, Plant `1120`, SLoc `HS01`): TO `0001037304` (`BWLVS 311`, User `KHUSHAL`, `20261013 102922`), TR `0001000818` (`RSNUM 0`). MATDOC in 24h: 0. Output: `"no posting found"`.
+        - `0001045079` (`920/TRANSFER`, Mat `8900000004`, Qty `4.000 KG`, Plant `1120`, SLoc `CS01`): TO `0001037296` (`BWLVS 301`, User `KHUSHAL`, `20261012 153141`), TR `0001000795` (`MBLNR 4900050149`). MATDOC in 24h: 0. Output: `"no posting found"`.
+      - **5 Negative Interim Quants:**
+        - `0001044448` (`911/1011101301`, Mat `8000009753`, Qty `-1.000 NOS`, Plant `1120`, SLoc `HS01`): Origin MIGO `4900049860` (`BWART 201`, `20260930 160202`), TR `0001000693`, TOs: 0. Later MATDOC in 24h: Found `4900049861` (`BWART 261`, 54s later). Output: `"has matching posting"`.
+        - `0001044449` (`914/0000001011`, Mat `8000009753`, Qty `-1.000 NOS`, Plant `1120`, SLoc `HS01`): Origin MIGO `4900049861` (`BWART 261`, `20260930 160256`), TR `0001000694`, TOs: 0. Later MATDOC in 24h: 0. Output: `"no posting found"`.
+        - `0001044455` (`911/1011202701`, Mat `8000001989`, Qty `-1.000 NOS`, Plant `1120`, SLoc `HS01`): Origin MIGO `4900049869` (`BWART 201`, `20261001 130404`), TR `0001000698`, TOs: 0. Later MATDOC in 24h: 0. Output: `"no posting found"`.
+        - `0001044827` (`914/4000033120`, Mat `8000001948`, Qty `-1.000 NOS`, Plant `1120`, SLoc `HS01`): Origin MIGO `4900050046` (`BWART 261`, `20261005 175758`), TR `0001000744`, TOs: 0. Later MATDOC in 24h: 0. Output: `"no posting found"`.
+        - `0001045075` (`902/0000000000`, Mat `1000000045`, Qty `-10.000 KG`, Plant `1120`, SLoc `CS01`): Origin: TO `0001037274` picked 10 KG from `902/0000000000` to `920/TRANSFER` (TR `0001000765`, `20261010 174738`). Later MATDOC in 24h: 0. Output: `"no posting found"`.
+    - **Task 2 (Cost Center & Asset Formatting):**
+      - `CSKS-KOSTL` 3 real cost centers:
+        1. `1011201301` (`KOKRS 1000`, `BUKRS 1000`) - numeric 10 digits
+        2. `1011101301` (`KOKRS 1000`, `BUKRS 1000`) - numeric 10 digits
+        3. `SAP-DUMMY` (`KOKRS 0001`, `BUKRS 0001`) - alphanumeric 9 chars
+      - `LTBK 201 BETYP K` mapping:
+        - `KOSTL 1011101301` -> `LTBK-BENUM = '1011101301'` (TR `0001000693` & `0001000696`)
+        - `KOSTL 1011202701` -> `LTBK-BENUM = '1011202701'` (TR `0001000698`)
+        - Numeric `KOSTL` has `CONVEXIT ALPHA` -> padded to 10 chars with leading zeros (`padStart(10, '0')`).
+      - `LTBK BETYP A` vs `ANLA-ANLN1`:
+        - In all 19 system TRs across `W01`, `W12`, `W13` (e.g. TR `0001000761`), 12-char `ANLN1` (e.g. `'000000400001'`) maps to 10-char `BENUM` (`'0000400001'`) by slicing rightmost 10 digits (`padStart(10, '0').slice(-10)`).
+    - **Task 3 (DD04T & T308T Texts):**
+      - `T308T` for `LGNUM = 'W01'`:
+        - SPRAS `E`: `BETYP A` -> `BTYPT = 'Attachment'`, `BETYP K` -> `BTYPT = 'Cost center'`
+        - SPRAS `D`: `BETYP A` -> `BTYPT = 'Anlage'`, `BETYP K` -> `BTYPT = 'Kostenstelle'`
+      - `DD04T` for `ROLLNAME = 'LVS_BETYP'`:
+        - SPRAS `E`: `DDTEXT = 'Requirement Type'`, `SCRTEXT_S = 'Req. Type'`, `SCRTEXT_L = 'Requirement Type'`
+        - SPRAS `D`: `DDTEXT = 'Bedarfstyp'`, `SCRTEXT_S = 'Bedarfstyp'`, `SCRTEXT_L = 'Bedarfstyp'`
+  - **Code & Docs Delivered:**
+    - `ReservationProcessAdapter.js`: Updated BENUM formatting for numeric values (10-char ALPHA) and alphanumeric values (passed unchanged up to 10 chars with `VERIFY` comment). Flag default kept `false`.
+    - `test/unit/wm/reservationProcess.test.js`: Added 2 unit tests covering alphanumeric cost center and short asset padding (all 32 tests PASS).
+    - `docs/abap/flow-decision.md`: Added Section 7 ("Test Prerequisites & Sandbox Runbook"), master test matrix, scenarios 311 and 301 under flag ON, and consultant checklist.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/createTOFromTR.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/trToAdapter.test.js`: 96/96 tests PASS.
+    - `npx cds compile srv --to sql`: Clean (0 errors).
+    - `git diff --check`: Clean (0 errors).
   - **User Request:**
     1. Cleanup split: for each stranded 921/920 quant, check if its TO belongs to a reservation with a later MIGO (MATDOC with same RSNUM); output two lists: "in-flight" (no MIGO yet) and "orphaned" (MIGO already posted). Same for negative quants: is there an open TR with no TO, or a TO already posted?
     2. T333 for W01, BWLVS 201/241: BETYP, NKDYN, NLTYP, NLPLA. Which BENUM format does BETYP K / A expect (LVS_BETYP domain values, BENUM length, conversion exit in TR source for cost center/asset)?

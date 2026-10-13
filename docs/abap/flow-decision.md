@@ -206,3 +206,105 @@ Function module `L_TR_CANCEL` **EXISTS** in table `TFDIR`:
 2. **Path Selection:**
    - If Standard Goods Issue: Proceed with **Option A (IM-First)**.
    - If Pre-Picking Required: Approve SPRO transport to set `T321-TBFKZ = ''` in `W01`, and approve adding `BENUM`/`BETYP` mapping in `ReservationProcessAdapter.js`.
+
+---
+
+## 7. Test Prerequisites & Sandbox Runbook
+
+### 7.1 `T321-TBFKZ` Configuration State per Scenario
+*All customizing settings below cite table `T321` in SAP Client 220 (`CONFIRMED: read from system`)*:
+In warehouse `W01`, table `T321` currently has `TBFKZ = 'X'` for movement types `201`, `241`, `261`, `301`, and `311`.
+
+| Scenario / Flow | Desired `T321-TBFKZ` State | What Happens if `T321-TBFKZ` Remains `'X'` |
+|---|---|---|
+| **Option A (IM-First Flow)** | **`X`** (Standard SAP default) | **Required:** Standard MIGO triggers auto-TR in `LTBK` (`MBLNR` filled). Application discovers this TR and creates TO to pick physical stock and clear interim quant. Zero orphaned quants. |
+| **Option B (WM-First, Flag ON, Mvt 201/241)** | **`''`** (Blank via SPRO) | **TBFKZ = X Failure Mode:** MIGO creates an **extra unneeded TR** in `LTBK` and a negative interim quant in `911`/`913`. While the staging TO placed stock in `911`/`913` (clearing physical stock against MIGO), the MIGO-generated TR remains stranded as an open TR (`STATU = ''`) in `LTBK` with 0 TOs. Setting `TBFKZ = ''` suppresses this extra TR. |
+| **Current Baseline (WM-First, Flag OFF, 311 Sub)** | N/A (Defective Flow) | **Double Failure:** MIGO creates an extra TR and a negative quant in `911`/`913`. Staging stock sits in `921/TRANSFER`. Result: Double removal if second TR is picked, and permanent ghost stock stranded in `921`. |
+| **Transfer 311 (Flag ON)** | **`''`** (Blank) or **`X`** | If `TBFKZ = 'X'`, MIGO creates a second TR for 311. Staging stock in `921/TRANSFER` clears MIGO's interim movement, but an extra TR remains open in `LTBK`. |
+| **Transfer 301 (Flag ON)** | **`''`** (Blank) or **`X`** | If `TBFKZ = 'X'`, MIGO creates a second TR for 301. Staging stock in `920/TRANSFER` clears MIGO's interim movement, but an extra TR remains open in `LTBK`. |
+
+### 7.2 Small Test Stock Specification (Consultant Action in Client 220)
+To validate the real movement flow without storage unit split errors or serial/batch blocks, the WM consultant must stage a small test quant in Client 220:
+
+- **Material:** `8000000995` (`CONFIRMED: read from MARC/T320/LQUA`):
+  - Non-batch managed (`MARC-XCHPF = ''`)
+  - Non-serial managed (`MARC-SERNP = ''`)
+  - Extended to Plant `1120`, SLoc `HS01` (mapped to Warehouse `W01` in `T320`)
+- **Storage Type:** `EN1` (`CONFIRMED: read from T331`):
+  - Removal strategy FIFO (`T331-STAUS = 'F'`)
+  - Storage Unit managed (`T331-VOLLE = 'X'`)
+- **Storage Bin:** `0-L0001-02` (or any empty coordinate in `EN1`)
+- **Storage Unit (SU):** e.g. `1000059999`
+- **Quantity:** **`1.000` to `5.000 NOS`** (`CONFIRMED: read from T331`):
+  - *Critical Constraint:* Because `T331-VOLLE = 'X'` enforces full SU removal, the total stock on the SU must equal the test transfer order quantity (e.g., exactly 1.000 NOS). Creating a large SU (like existing 10,000 NOS quant) causes `VOLLE` partial-pick rejection.
+- **Master Data Test Values:**
+  - **Cost Center (Movement 201):** `1011201301` (`CONFIRMED: read from CSKS`, `BUKRS 1000`, `KOKRS 1000`, valid through 9999-12-31).
+  - **Fixed Asset (Movement 241):** `000000400092` / subnumber `0000` (`CONFIRMED: read from ANLA`, `BUKRS 1000`).
+
+### 7.3 Master Execution & Verification Matrix
+
+| Scenario | Feature Flag State | `T321-TBFKZ` | Expected `LTBK` Rows | Expected `LTAP` Rows | Expected `LQUA` Rows | Expected `MATDOC` Rows | What a FAIL Looks Like |
+|---|---|---|---|---|---|---|---|
+| **201 Baseline (Flag OFF)** | `WM_TR_REAL_MOVEMENT=false` | `X` | 2 rows: (1) App TR with `BWLVS 311`, `RSNUM` filled; (2) MIGO TR with `BWLVS 201`, `MBLNR` filled | TO 1: From `EN1` to `921/TRANSFER`. If MIGO TR picked: TO 2 from bin to `911/1011201301` | Positive quant left in `921/TRANSFER`; negative quant in `911/1011201301` if TO 2 not created | 1 row: `BWART 201`, `KOSTL 1011201301` | **FAIL:** Stock stranded in `921/TRANSFER`, negative quant open in `911`, or inventory removed twice. |
+| **201 Real Mvt (`TBFKZ = X`)** | `WM_TR_REAL_MOVEMENT=true` | `X` | 2 rows: (1) App TR with `BWLVS 201`, `BETYP K`, `BENUM 1011201301`; (2) MIGO TR with `BWLVS 201`, `MBLNR` filled | TO 1: From `EN1` to `911/1011201301` (`VSOLA 1.000`). No TO 2 created. | Net zero in `911/1011201301` (TO 1 stages +1; MIGO consumes -1). 0 quants stranded in 921! | 1 row: `BWART 201`, `KOSTL 1011201301` | **FAIL:** `L_TR_CREATE` rejects with `L2 438` (BENUM missing), or TO destinations to 921 instead of 911. |
+| **201 Real Mvt (`TBFKZ = ''`)** | `WM_TR_REAL_MOVEMENT=true` | `''` (SPRO) | **1 row only:** App TR with `BWLVS 201`, `BETYP K`, `BENUM 1011201301`. Zero MIGO TR generated. | 1 row: TO from `EN1` to `911/1011201301` | Net zero in `911/1011201301`. Zero stranded quants in 921 or 911. | 1 row: `BWART 201`, `KOSTL 1011201301` | **FAIL:** Second TR created in `LTBK` (`TBFKZ` not saved in SPRO), or `BENUM` format rejected. |
+| **241 Baseline (Flag OFF)** | `WM_TR_REAL_MOVEMENT=false` | `X` | 2 rows: (1) App TR with `BWLVS 311`; (2) MIGO TR with `BWLVS 241`, `MBLNR` filled | TO 1: From `EN1` to `921/TRANSFER` | Positive quant in `921/TRANSFER`; negative quant in `913/0000400092` | 1 row: `BWART 241`, `ANLN1 000000400092` | **FAIL:** Stock stranded in `921/TRANSFER`, negative quant open in `913`. |
+| **241 Real Mvt (`TBFKZ = X`)** | `WM_TR_REAL_MOVEMENT=true` | `X` | 2 rows: (1) App TR with `BWLVS 241`, `BETYP A`, `BENUM 0000400092`; (2) MIGO TR with `BWLVS 241`, `MBLNR` filled | TO 1: From `EN1` to `913/0000400092` | Net zero in `913/0000400092`. Zero quants stranded in 921. | 1 row: `BWART 241`, `ANLN1 000000400092` | **FAIL:** `BENUM` passed as 12 chars causing SAP coordinate truncation, or dest not 913. |
+| **241 Real Mvt (`TBFKZ = ''`)** | `WM_TR_REAL_MOVEMENT=true` | `''` (SPRO) | **1 row only:** App TR with `BWLVS 241`, `BETYP A`, `BENUM 0000400092`. Zero MIGO TR. | 1 row: TO from `EN1` to `913/0000400092` | Net zero in `913/0000400092`. | 1 row: `BWART 241`, `ANLN1 000000400092` | **FAIL:** Second TR created in `LTBK`, or asset number rejected. |
+| **311 Transfer (Flag ON)** | `WM_TR_REAL_MOVEMENT=true` | `X` | 1 or 2 rows: App TR with `BWLVS 311`, `RSNUM = ''` (`CONFIRMED: code`). Extra TR if `TBFKZ = X`. | 1 row: TO from `EN1` to `921/TRANSFER` | Net zero in `921/TRANSFER` after MIGO 311. | 2 rows: (1) Issue from issuing SLoc; (2) Receipt in receiving SLoc | **FAIL:** `L_TO_CREATE_TR` throws `XFELD_WRONG` (caused if `RSNUM` is populated on staging TR). |
+| **301 Plant Transfer (Flag ON)** | `WM_TR_REAL_MOVEMENT=true` | `X` | 1 or 2 rows: App TR with `BWLVS 301`, `RSNUM = ''`. Extra TR if `TBFKZ = X`. | 1 row: TO from `EN1` to `920/TRANSFER` | Net zero in `920/TRANSFER` after MIGO 301. | 2 rows: (1) Plant 1 issue; (2) Plant 2 receipt | **FAIL:** Destination bin not `920/TRANSFER`, or cross-plant receiving SLoc unextended in `MARD`. |
+
+### 7.4 Detailed Scenario Analysis: Movement 311 and Movement 301 with Flag ON
+
+#### Movement 311 (Storage Location to Storage Location) Under Flag ON
+- **Customizing Contract (`CONFIRMED: read from T333`):**
+  - Table `T333` for `LGNUM = 'W01'`, `BWLVS = '311'`: `BETYP = ''`, `VKDYN = ''`, `NKDYN = ''`, `NLTYP = '921'`, `NLPLA = 'TRANSFER'`.
+  - Movement 311 does **not** have dynamic coordinates. It stages into static bin `921/TRANSFER`.
+  - Therefore, `BETYP` and `BENUM` are left blank (`CONFIRMED: read from system`).
+- **Reservation Header Check (`CONFIRMED: read from code/system`):**
+  - In `ReservationProcessAdapter.js:239-245`, `isTransferPosting` is `true` for 311.
+  - The adapter intentionally leaves `T_LTBA-RSNUM = ''` and `RSPOS = ''` on the WM staging TR.
+  - *Why?* If `RSNUM` is passed on a 311 staging TR, SAP FM `L_TO_CREATE_TR` performs strict reservation validations against the issuing storage location that trigger `XFELD_WRONG` or `L3 007` because the reservation is an IM transfer posting, not a standard WM delivery (`CONFIRMED: read from code/tests`).
+- **MIGO Execution:**
+  - When MIGO posts movement 311, IM posts inventory out of the source SLoc and into the target SLoc.
+  - In WM, standard MIGO clears interim storage type `921/TRANSFER`.
+  - If `T321-TBFKZ = 'X'`, MIGO creates a second TR. If `T321-TBFKZ = ''`, zero extra TR is created.
+
+#### Movement 301 (Plant-to-Plant Transfer) Under Flag ON
+- **Customizing Contract (`CONFIRMED: read from T333`):**
+  - Table `T333` for `LGNUM = 'W01'`, `BWLVS = '301'`: `BETYP = ''`, `VKDYN = ''`, `NKDYN = ''`, `NLTYP = '920'`, `NLPLA = 'TRANSFER'`.
+  - Movement 301 stages into interim plant transfer zone `920/TRANSFER`.
+  - `BETYP` and `BENUM` are left blank (`CONFIRMED: read from system`).
+- **Cross-Plant Behavior & Prerequisite Check:**
+  - Issuing Plant: `1120`, SLoc `HS01` (Warehouse `W01`).
+  - Receiving Plant: e.g. `1600` or `1120`.
+  - *`UNSURE` (not read from system for plant 1600)*: Whether receiving plant SLoc is mapped to a warehouse in `T320` or is non-WM managed. If receiving plant is WM-managed in a different warehouse (e.g., `W12`), MIGO 301 will generate an inbound TR in the receiving warehouse.
+  - Material must be extended in `MARC`/`MARD` for BOTH plants before attempting 301.
+
+---
+
+### 7.5 Consultant Pre-Test Checklist (Must Do Before First Live Test)
+
+Before executing any live transaction test in Client 220, the WM consultant must perform the following actions:
+
+1. [ ] **Verify `T321` Customizing:**
+   - In SPRO (transaction `SPRO` $\rightarrow$ Logistics Execution $\rightarrow$ Warehouse Management $\rightarrow$ Interfaces $\rightarrow$ Inventory Management $\rightarrow$ Define Movement Types $\rightarrow$ Assign MM Movement Type to WM Movement Type):
+   - Check entries for Warehouse `W01`, movement types `201` and `241`.
+   - Note current `TBFKZ` value (currently `'X'`). Decide whether to test with `TBFKZ = 'X'` (extra TR expected) or apply transport to set `TBFKZ = ''`.
+2. [ ] **Post Small Test Stock (`EN1` Full SU):**
+   - Execute transaction `LT01` or `MIGO` (movement `561` or `101`) to post test stock for Material `8000000995`:
+     - Plant: `1120`
+     - Storage Location: `HS01`
+     - Storage Type: `EN1`
+     - Storage Bin: `0-L0001-02`
+     - Storage Unit: e.g. `1000059999`
+     - Exact Quantity: `1.000 NOS` (Must be $\le 5$ NOS so that total SU quantity matches TO requested quantity).
+3. [ ] **Confirm Cost Center & Asset Master Data:**
+   - Verify Cost Center `1011201301` is active in `KS03` for Controlling Area `1000`, Company Code `1000`.
+   - Verify Asset `000000400092` / `0000` is active and not deactivated in `AS03` for Company Code `1000`.
+4. [ ] **Verify Material Master Flags (`MM03`):**
+   - Confirm Material `8000000995` in Plant `1120` has `XCHPF = ''` (Batch management inactive) and `SERNP = ''` (Serial number profile blank).
+5. [ ] **Set Environment Flag in Sandbox:**
+   - Ensure `WM_TR_REAL_MOVEMENT=true` is exported in the runtime environment before testing the real movement branch. Keep `false` when testing baseline.
+6. [ ] **Monitor Interim Bins in `LS26` / `LS24`:**
+   - Open transaction `LS26` for Warehouse `W01` and monitor storage types `911`, `913`, and `921`. Confirm that after the full flow (TR $\rightarrow$ TO $\rightarrow$ MIGO), the quant balance in the interim storage type is exactly **0.000**.
