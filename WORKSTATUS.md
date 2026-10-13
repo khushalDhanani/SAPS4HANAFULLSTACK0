@@ -5,6 +5,24 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Interim Storage Type Removal Guard (Guard 2) Implementation (2026-10-13, 13:13 IST):**
+  - **User Request:** Implement Guard 2 (Interim Storage Type Removal Guard): Explicitly block picking from interim storage types (`9*`, such as `902` or `920`) in `TrToAdapter.js` to eliminate negative quants (like Quant `0001045075` with `-10.000 KG` in `902/0000000000`).
+  - **Implementation Details:**
+    - Modified [TrToAdapter.js](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/srv/integration/s4hana/wm/TrToAdapter.js):
+      - In `createTO`: Added guard checking if `quant.LGTYP && String(quant.LGTYP).trim().startsWith('9')`. Throws HTTP 400: `Interim storage type ${quant.LGTYP} cannot be used as pick source; physical storage type required`.
+      - In `createTOFromTR`: Added guard checking if `vltyp && String(vltyp).trim().startsWith('9')`. Throws HTTP 400: `Interim storage type ${vltyp} cannot be used as pick source; physical storage type required`.
+      - In `_resolvePickSourceFromLqua`: Added `!lgtyp.startsWith('9')` to `physicalQuants` filter so interim storage types starting with 9 are never selected as pick source candidates.
+      - In `lookupTR`: Filtered `currentStock` with `!String(q.LGTYP || '').trim().startsWith('9')` so interim storage types are never proposed as source storage type suggestions.
+    - Updated [test/unit/wm/trToAdapter.test.js](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/test/unit/wm/trToAdapter.test.js):
+      - Added unit test verifying `createTO` rejects creation when SU is located in an interim storage type (e.g. `902`).
+      - Added unit test verifying `createTOFromTR` rejects creation when caller-provided `sourceStorageType` is an interim storage type (e.g. `902`).
+      - Added unit test verifying `createTOFromTR` rejects creation when TR header `VLTYP` is an interim storage type (e.g. `920`).
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/trToAdapter.test.js`: **PASS** (42/42 tests passed).
+    - `npx jest test/unit/wm`: **PASS** (65/65 test suites passed, 1,398/1,398 tests passed).
+    - `npm test`: **PASS** (153/153 test suites passed, 2,652/2,652 tests passed).
+    - `git diff --check`: Clean (0 whitespace errors).
+
 - **Source = Destination Bin Invariant Guard Implementation (2026-10-13, 12:58 IST):**
   - **User Request:** Proceed with Option 1: Implement defensive code guards in `srv/integration/s4hana/wm/TrToAdapter.js` to reject Transfer Order creation when the resolved source and destination storage types and bins are identical (preventing redundant intra-bin TOs like `0001037296` in `920/TRANSFER` and `0001037304` in `921/TRANSFER`).
   - **Implementation Details:**
@@ -1580,10 +1598,10 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (2026-10-13, 13:00 IST):**
+- **Next Recommended Action (2026-10-13, 13:15 IST):**
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant to decide `T321` `TBFKZ` for movement 201/241 and clarify row 1/14 `LFART = 'DOG'` behavior for movement 311.
   2. Await consultant's execution of controlled snapshot runbook or authorization of live test stock in `EN1`.
-  3. Evaluate remaining recommended code guards (Guard 2: Block interim storage types `9*` as pick sources; Guard 5: Reject cross-plant 301 transfers to external warehouses like `W10`).
+  3. Evaluate Guard 5: Reject cross-plant 301 transfers to external warehouses like `W10` in `ReservationProcessAdapter.js`.
   4. Push commits to `origin/feature/mvt261_01`.
 
 - **Previous Recommended Action (2026-10-12, 15:50 IST):**
@@ -1591,6 +1609,26 @@ The previous log was removed in commit `b741337`; this file restarts it.
   2. Push commits to `origin/feature/mvt261_01`.
 
 ## Changes Log
+
+### 2026-10-13 13:13 IST — Interim Storage Type Removal Guard (Guard 2) Implementation
+
+- **User Request:**
+  - Implement Guard 2 (Interim Storage Type Removal Guard): Explicitly block picking from interim storage types (`9*`, such as `902` or `920`) in `TrToAdapter.js` to eliminate negative quants (like Quant `0001045075` with `-10.000 KG` in `902/0000000000`).
+- **Affected Files:**
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `test/unit/wm/trToAdapter.test.js`
+  - `WORKSTATUS.md`
+- **Implementation & Logic Details:**
+  - In `createTO`: Added guard checking if `quant.LGTYP && String(quant.LGTYP).trim().startsWith('9')`. Throws HTTP 400: `Interim storage type ${quant.LGTYP} cannot be used as pick source; physical storage type required`.
+  - In `createTOFromTR`: Added guard checking if `vltyp && String(vltyp).trim().startsWith('9')`. Throws HTTP 400: `Interim storage type ${vltyp} cannot be used as pick source; physical storage type required`.
+  - In `_resolvePickSourceFromLqua`: Added `!lgtyp.startsWith('9')` to `physicalQuants` filter so interim storage types starting with 9 are never selected as pick source candidates.
+  - In `lookupTR`: Filtered `currentStock` with `!String(q.LGTYP || '').trim().startsWith('9')` so interim storage types are never proposed as source storage type suggestions.
+  - In `test/unit/wm/trToAdapter.test.js`: Added 3 unit tests verifying rejection of interim storage types in `createTO`, caller-specified `sourceStorageType` in `createTOFromTR`, and TR header `VLTYP` in `createTOFromTR`.
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/trToAdapter.test.js`: **PASS** (42/42 tests passed).
+  - `npx jest test/unit/wm`: **PASS** (65/65 test suites passed, 1,398/1,398 tests passed).
+  - `npm test`: **PASS** (153/153 test suites passed, 2,652/2,652 tests passed).
+  - `git diff --check`: Clean (0 whitespace errors).
 
 ### 2026-10-13 12:58 IST — Source = Destination Bin Invariant Guard Implementation
 
