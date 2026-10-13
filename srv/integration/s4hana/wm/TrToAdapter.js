@@ -358,6 +358,20 @@ class TrToAdapter {
       throw httpError(400, `Interim storage type ${quant.LGTYP} cannot be used as pick source; physical storage type required`);
     }
 
+    if (this.rfc && quant.LGTYP) {
+      try {
+        const t331Rows = await this.rfc.readTable('T331', ['VOLLE'], [
+          `LGNUM = '${wh}'`,
+          `AND LGTYP = '${quant.LGTYP}'`
+        ], 1);
+        if (t331Rows?.[0]?.VOLLE === 'X' && quantity < quant.VERME) {
+          throw httpError(400, `Storage type ${quant.LGTYP} requires full stock removal (VOLLE = X); requested quantity (${quantity}) must equal total storage unit quantity (${quant.VERME})`);
+        }
+      } catch (vErr) {
+        if (vErr.status === 400) throw vErr;
+      }
+    }
+
     LOG.info(`Creating TO for TR ${tr.Tbnum} item ${item.Tbpos}, SU ${su}, qty ${quantity} ${quant.MEINS}`);
     const res = await this._rfc(
       () => this.rfc.call('ZWM_TO_CREATE_FROM_TR', {
@@ -1101,6 +1115,28 @@ class TrToAdapter {
         throw httpError(400, `Interim storage type ${vltyp} cannot be used as pick source; physical storage type required`);
       }
 
+      if (this.rfc && vlenr && vltyp) {
+        try {
+          const t331Rows = await this.rfc.readTable('T331', ['VOLLE'], [
+            `LGNUM = '${wh}'`,
+            `AND LGTYP = '${vltyp}'`
+          ], 1);
+          if (t331Rows?.[0]?.VOLLE === 'X') {
+            const suPadded = sapKey(vlenr, 'lenum').padStart(20, '0');
+            const suRows = await this.rfc.readTable('LQUA', ['VERME'], [
+              `LGNUM = '${wh}'`,
+              `AND LENUM = '${suPadded}'`
+            ], 1);
+            const totalSuQty = suRows?.[0] ? sapNum(suRows[0].VERME) : 0;
+            if (totalSuQty > 0 && quantity < totalSuQty) {
+              throw httpError(400, `Storage type ${vltyp} requires full stock removal (VOLLE = X); requested quantity (${quantity}) must equal total storage unit quantity (${totalSuQty})`);
+            }
+          }
+        } catch (vErr) {
+          if (vErr.status === 400) throw vErr;
+        }
+      }
+
       const itItems = [{
         TBPOS: item.Tbpos,
         ANFME: quantity.toFixed(3),
@@ -1195,6 +1231,9 @@ class TrToAdapter {
       ReservationNo: alphaOut(tr.Rsnum) || '',
       ReservationItem: '',
       MovementType: tr.Bwlvs || '',
+      CostCenter: tr.Betyp === 'K' ? alphaOut(tr.Benum) : '',
+      Betyp: tr.Betyp || '',
+      Benum: tr.Benum || '',
       Status: currentStatus,
       StatusText: STATUS_TEXT[currentStatus],
       Confirmed: confirmed,

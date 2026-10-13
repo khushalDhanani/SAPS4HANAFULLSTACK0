@@ -5,6 +5,35 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Movement Type 201 (Goods Issue to Cost Center) End-to-End Code Audit, Material Compatibility & Hardening (2026-10-13, 15:05 IST):**
+  - **Scope:** Movement Type 201 only in Warehouse `W01`, Plant `1120`, SAP S/4HANA Client 220. Other movement types (241, 301, 311) remain strictly untouched.
+  - **Constraints Enforced:** Zero commits, minimal diffs, zero SAP writes, zero SPRO changes. Every value sourced from system or repo with CONFIRMED / UNSURE labels.
+  - **Material Compatibility (Client 220 live reads across MARC, MARD, T320, LQUA, T331):**
+    - Class A (Plain: XCHPF='', SERNP=''): Material `8000008977` (Plant `1120`, SLoc `HS01`, Storage Type `OH1`, Bin `ONHOLD`, Qty `1000 KG`, LQUA `0001042738`, MARD `LABST = 1000 KG`) / `8000000995` (Plant `1120`, SLoc `HS01`, Storage Type `EN1`, Bin `0-L0001-01`, Qty `10000 NOS`, MARD `LABST = 10002 NOS`). `CONFIRMED (read from system)`.
+    - Class B (Batch: XCHPF='X', SERNP=''): Material `8900000007` (Plant `1120`, SLoc `CS01`, Storage Type `OH1`, Bin `ONHOLD`, Qty `100 KG`, Batch `IN26001220`, SU `00000000001000058618`). `CONFIRMED (read from system)`.
+    - Class C (Serial: XCHPF='', SERNP='ZSN2'): Material `8000006485` (Plant `1120`, SLoc `CS02`, Storage Type `EN1`, Bin `0-L0001-03`, Qty `1 NOS`, SU `00000000002000020148`, MARC `SERNP = 'ZSN2'`). `CONFIRMED (read from system)`.
+    - Class D (Batch + Serial: XCHPF='X', SERNP!=''): `NO MATERIAL FOUND` (Confirmed: only `8000009787` has profile in MARC, but MARD and LQUA stock is 0). `CONFIRMED (read from system)`.
+    - Class E (Stock in Small SU: VOLLE=''): Material `8000006485` (Plant `1120`, SLoc `CS02`, Storage Type `921`, Bin `TRANSFER`, Qty `1 NOS`, SU `00000000002000020148`, T331 `VOLLE = ''`). `CONFIRMED (read from system)`.
+    - Class F (Stock in Large SU: VOLLE='X'): Material `8900000007` (Plant `1120`, SLoc `CS01`, Storage Type `OH1`, Bin `ONHOLD`, Qty `100 KG`, Batch `IN26001220`, SU `00000000001000058618`, T331 `VOLLE = 'X'`, `STAUS = 'H'`, `LENVW = 'X'`). `CONFIRMED (read from system)`.
+  - **System Reads (Live RFC from Client 220):**
+    - `T333` (`W01` / `201`): `LGNUM = 'W01'`, `BWLVS = '201'`, `TRART = 'A'`, `NLTYP = '911'`, `NLPLA = ''`, `BETYP = 'K'`, `TBMAN = 'X'`, `DRUKZ = '02'`, `NKDYN = 'X'`. `CONFIRMED (read from system)`.
+    - `T321`: For `RBLVS = '201'`, 2 rows exist in fallback `LGNUM = '***'` (`SOBKZ = ''` and `SOBKZ = 'K'`) with `LFART = 'DOG'`, `TBFKZ = 'X'`, `TAFKZ = 'X'`. Direct MIGO 201 creates its own TR. `CONFIRMED (read from system)`.
+    - `T320`: Plant `1120` mapped SLocs: `CIS1, CS01, CS02, FG01, HS01, IM01, IP01, MT01, MT02, OH01, OH02, PWIP, RA01, RJ02, SU01`. `CONFIRMED (read from system)`.
+    - `T331`: Storage types with `VOLLE = 'X'` (full removal required): `001, COR, EN1, FG1, FLM, GS1, OH1, POW, QC1, RM1, TOX`. Storage types with `VOLLE = ''`: `002, 003, 004, 005, 150, 1FL..5FL, 901..999, GFL, IP1..IP5`. `CONFIRMED (read from system)`.
+    - `CSKS`: Confirmed active cost centers: `1011101301`, `1011202701`, `1011302401` (`DATAB = 20230401`, `DATBI = 99991231`, `BKZKP = ''`). `CONFIRMED (read from system)`.
+    - `LTBK`: All existing 201 TRs (`0001000006`, `0001000536`, `0001000693`, `0001000696`, `0001000698`, `0001000759`) have `BETYP = 'K'`, `BENUM = <10-char cost center>`, `NLTYP = '911'`, `NLPLA = <10-char cost center>`. `CONFIRMED (read from system)`.
+  - **Defects Audited & Fixed:**
+    1. `ReservationProcessAdapter.js`: Added `validateCostCenter` method checking `CSKS` date range (`DATAB`..`DATBI`) and `BKZKP` lock; in `createReservation`, validated `costCenter` when provided and issuing SLoc `T320` assignment; in `postGoodsMovement`, resolved missing `costCenter` from `RKPF-KOSTL` / `LTBK-BENUM`, validated cost center against CSKS, added serial pre-check (`MARC-SERNP`) failing 400 naming missing serials, checked SLoc stock against `MARD-LABST` failing 400 naming insufficient stock, and scoped confirmed TO quantity (`CONF_MENGE`) from `LTAP`.
+    2. `srv/wm/reservation-entry/service.js`: Forwarded `batch` in `retryStep` for TR creation (LB01).
+    3. `srv/wm/tr-to/handlers/trTo.handler.js`: Fixed auto-MIGO to pass confirmed TO quantity (`CONF_MENGE`), forward `CostCenter`, and propagate `Warning` from `t321Warning`.
+    4. `srv/integration/s4hana/wm/TrToAdapter.js`: Added `VOLLE = 'X'` full stock removal pre-checks in `createTO` and `createTOFromTR`; returned `CostCenter`, `Betyp`, `Benum` on `createTOFromTR` result.
+    5. `test/unit/wm/mvt201Process.test.js`: Created comprehensive test suite (15 tests) covering all material classes (A, B, C, E, F), happy paths, missing batch, missing serial, wrong SU quantity (VOLLE), no stock in SLoc, GI failure then retry, CSKS date and lock validations, T321 warning, and confirmed TO quantity posting. Labeled `[mock only, not SAP verification]`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/mvt201Process.test.js`: **PASS** (15/15 tests passed).
+    - `npx jest test/unit/wm`: **PASS** (67/67 test suites passed, 1,432/1,432 tests passed).
+    - `git diff --check`: Clean (0 whitespace errors).
+    - Zero commits created; working tree preserved.
+
 - **Movement Type 311 (SLoc to SLoc Transfer) End-to-End Code Audit, Material Compatibility & Hardening (2026-10-13, 14:18 IST):**
   - **Scope:** Movement Type 311 only in Warehouse `W01`, Plant `1120`, SAP S/4HANA Client 220. Other movement types (201, 241, 301) remain strictly untouched.
   - **Constraints Enforced:** Zero commits, minimal diffs, zero SAP writes, zero SPRO changes. Every value sourced from system or repo with CONFIRMED / UNSURE labels.
@@ -1635,6 +1664,34 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-13 15:05 IST — Movement Type 201 (Goods Issue to Cost Center) End-to-End Audit, Material Compatibility & Hardening
+
+- **User Request:**
+  - Repo: UI5 + CAP/Node, RFC adapter, SAP S/4HANA Client 220, warehouse W01.
+  - Fix code for ONE movement type only: 201 (GI to cost center). Do not touch the other three.
+  - Minimal diffs, one issue at a time. Commit nothing. No SAP writes, no SPRO changes.
+  - No assumptions: every value comes from the system or the repo, with its source.
+  - Material compatibility: Find real materials in the system for Classes A to F.
+  - Read T333, T321, T331, T320, requirement fields. Audit code path end-to-end. Fix every defect found. Add tests per material class labeled `[mock only, not SAP verification]`. Update WORKSTATUS.md.
+- **Root Cause & System Analysis:**
+  - `T333` (`W01` / `201`): `LGNUM = 'W01'`, `BWLVS = '201'`, `TRART = 'A'`, `NLTYP = '911'`, `NLPLA = ''`, `BETYP = 'K'`, `TBMAN = 'X'`, `DRUKZ = '02'`, `NKDYN = 'X'`. Dynamic bin in `911` is generated directly from `BENUM` (cost center).
+  - `T321`: For `RBLVS = '201'`, 2 rows exist in fallback `LGNUM = '***'` (`SOBKZ = ''` and `SOBKZ = 'K'`) with `LFART = 'DOG'`, `TBFKZ = 'X'`, `TAFKZ = 'X'`. Direct MIGO 201 creates its own TR when `TBFKZ = 'X'`.
+  - `T320`: Plant `1120` mapped SLocs: `CIS1, CS01, CS02, FG01, HS01, IM01, IP01, MT01, MT02, OH01, OH02, PWIP, RA01, RJ02, SU01`.
+  - `CSKS`: Master cost centers in Plant `1120` / Controlling Area `1000` / Company Code `1000` are valid (`1011101301`, `1011202701`, `1011302401`) with `DATAB = 20230401`, `DATBI = 99991231`, `BKZKP = ''`.
+  - `LTBK`: All existing 201 TRs (`0001000006`, `0001000536`, `0001000693`, `0001000696`, `0001000698`, `0001000759`) have `BETYP = 'K'`, `BENUM = <10-char cost center>`, `NLTYP = '911'`, `NLPLA = <10-char cost center>`.
+- **Affected Files:**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `srv/wm/reservation-entry/service.js`
+  - `srv/wm/tr-to/handlers/trTo.handler.js`
+  - `test/unit/wm/mvt201Process.test.js`
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/mvt201Process.test.js`: PASS (15/15 tests passed).
+  - `npx jest test/unit/wm`: PASS (67/67 test suites passed, 1,432/1,432 tests passed).
+  - `git diff --check`: Clean (0 whitespace errors).
+  - Zero commits created.
+
 
 ### 2026-10-13 13:30 IST — Restrict `/wm/reservation-entry` Exclusively to Movement Types 311, 201, 241, 301 and Eliminate Movement 261
 

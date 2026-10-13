@@ -21,11 +21,12 @@ const padMat = (m) => (/^\d+$/.test(m) ? m.padStart(18, '0') : m);
 class ReservationProcessAdapter {
   constructor(options = {}) {
     this.rfc = options.rfc || new RfcClient();
+    this._checkCsksExistence = Boolean(options.checkCsksExistence);
   }
 
   /** Same adapter bound to another RFC client (used to run a step inside one locked RFC session). */
   withRfc(rfc) {
-    return new this.constructor({ rfc });
+    return new this.constructor({ rfc, checkCsksExistence: this._checkCsksExistence });
   }
 
   /**
@@ -76,6 +77,10 @@ class ReservationProcessAdapter {
       }
     }
 
+    if (String(movementType).trim() === '201' && costCenter) {
+      await this.validateCostCenter(costCenter);
+    }
+
     if (this.rfc && String(movementType).trim() === '311' && receivingStorageLocation) {
       try {
         const t320Rec = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
@@ -84,6 +89,20 @@ class ReservationProcessAdapter {
         ], 1);
         if (!t320Rec || !t320Rec.length) {
           throw httpError(400, `Receiving storage location ${receivingStorageLocation} is not assigned to warehouse in plant ${plant} (T320)`);
+        }
+      } catch (tErr) {
+        if (tErr.status === 400) throw tErr;
+      }
+    }
+
+    if (this.rfc && String(movementType).trim() === '201' && storageLocation) {
+      try {
+        const t320Iss = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
+          `WERKS = '${sapKey(plant, 'plant')}'`,
+          `AND LGORT = '${sapKey(storageLocation, 'lgort')}'`
+        ], 1);
+        if (!t320Iss || !t320Iss.length) {
+          throw httpError(400, `Issuing storage location ${storageLocation} is not assigned to warehouse in plant ${plant} (T320)`);
         }
       } catch (tErr) {
         if (tErr.status === 400) throw tErr;
@@ -648,6 +667,7 @@ class ReservationProcessAdapter {
 
     // Batch tier 1: caller
     let sBatch = sapKeyOpt(batch, 'batch');
+    let sCostCenter = costCenter ? String(costCenter).trim() : '';
 
     // Tier 2 (and receiving plant/sloc) from the reservation item itself
     if (hasRes && (!sRecPlant || !sRecSLoc || !sBatch) && this.rfc) {
@@ -675,11 +695,74 @@ class ReservationProcessAdapter {
       } catch (_tErr) { /* same as above */ }
     }
 
+    // Confirmed TO quantity (CONF_MENGE): MIGO quantity must equal the confirmed TO quantity
+    let quantityToPost = Number(params.confMenge || params.confirmedQuantity || quantity);
+    if (sMvt === '201' && this.rfc && sTanum && !params.confMenge && !params.confirmedQuantity) {
+      try {
+        const toQtyRows = await this.rfc.readTable('LTAP', ['VSOLM', 'NISTM'], [
+          `TANUM = '${sTanum.padStart(10, '0')}'`
+        ], 1);
+        if (toQtyRows?.[0]) {
+          const confMenge = Number(toQtyRows[0].NISTM || toQtyRows[0].VSOLM || 0);
+          if (confMenge > 0) {
+            quantityToPost = confMenge;
+          }
+        }
+      } catch (_qErr) { /* tolerate */ }
+    }
+
     // No tier 4: a batch is never taken from interim storage quants. Batch-managed material without a batch stops here.
     if (!sBatch && this.rfc) {
       const marc = await this.rfc.readTable('MARC', ['XCHPF'], [`MATNR = '${s4Mat}'`, `AND WERKS = '${sPlant}'`], 1);
       if (String(marc?.[0]?.XCHPF || '').trim() === 'X') {
         throw httpError(400, `Batch is required for batch-managed material ${alphaOut(s4Mat)} in plant ${sPlant}: none supplied, none on reservation ${alphaOut(sResNo) || '-'} (RESB), none on Transfer Order ${alphaOut(sTanum) || '-'} (LTAP)`);
+      }
+    }
+
+    // For movement 201, resolve costCenter from reservation header (RKPF) or TO if not supplied
+    if (sMvt === '201' && !sCostCenter && this.rfc) {
+      if (hasRes) {
+        try {
+          const rkpfRows = await this.rfc.readTable('RKPF', ['KOSTL'], [`RSNUM = '${sResNo}'`], 1);
+          if (rkpfRows?.[0]?.KOSTL?.trim()) sCostCenter = rkpfRows[0].KOSTL.trim();
+        } catch (_e) { /* tolerate */ }
+      }
+      if (!sCostCenter && sTanum) {
+        try {
+          const toRows = await this.rfc.readTable('LTAP', ['TBNUM'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
+          const tbnum = toRows?.[0]?.TBNUM?.trim();
+          if (tbnum) {
+            const trRows = await this.rfc.readTable('LTBK', ['BETYP', 'BENUM'], [`TBNUM = '${tbnum}'`], 1);
+            if (trRows?.[0]?.BETYP === 'K' && trRows[0].BENUM?.trim()) {
+              sCostCenter = trRows[0].BENUM.trim();
+            }
+          }
+        } catch (_e) { /* tolerate */ }
+      }
+    }
+
+    if (sMvt === '201') {
+      if (!sCostCenter) {
+        throw httpError(400, 'Cost Center is mandatory for Movement Type 201 (Goods Issue to Cost Center)');
+      }
+      await this.validateCostCenter(sCostCenter, today);
+    }
+
+    if (sMvt === '201' && this.rfc && sSLoc) {
+      try {
+        const mardStock = await this.rfc.readTable('MARD', ['LABST'], [
+          `MATNR = '${s4Mat}'`,
+          `AND WERKS = '${sPlant}'`,
+          `AND LGORT = '${sSLoc}'`
+        ], 1);
+        if (mardStock?.[0] && mardStock[0].LABST !== undefined) {
+          const availLabst = Number(mardStock[0].LABST || 0);
+          if (availLabst < quantityToPost) {
+            throw httpError(400, `Insufficient stock in storage location ${sSLoc} for material ${alphaOut(s4Mat)} (available: ${availLabst}, requested: ${quantityToPost})`);
+          }
+        }
+      } catch (stkErr) {
+        if (stkErr.status === 400) throw stkErr;
       }
     }
 
@@ -720,7 +803,7 @@ class ReservationProcessAdapter {
       }
     }
 
-    if (sMvt === '311' && this.rfc) {
+    if ((sMvt === '311' || sMvt === '201') && this.rfc) {
       try {
         const marcSerial = await this.rfc.readTable('MARC', ['SERNP'], [
           `MATNR = '${s4Mat}'`,
@@ -732,8 +815,8 @@ class ReservationProcessAdapter {
           if (serialItemsCount === 0) {
             throw httpError(400, `Serial numbers are mandatory for serial-managed material ${alphaOut(s4Mat)} (profile ${sernp})`);
           }
-          if (serialItemsCount !== Math.round(Number(quantity))) {
-            throw httpError(400, `Number of serial numbers (${serialItemsCount}) must equal quantity (${Number(quantity)}) for material ${alphaOut(s4Mat)}`);
+          if (serialItemsCount !== Math.round(Number(quantityToPost))) {
+            throw httpError(400, `Number of serial numbers (${serialItemsCount}) must equal quantity (${Number(quantityToPost)}) for material ${alphaOut(s4Mat)}`);
           }
         }
       } catch (sErr) {
@@ -753,7 +836,7 @@ class ReservationProcessAdapter {
       PLANT: sPlant,
       ...(sSLoc ? { STGE_LOC: sSLoc } : {}),
       MOVE_TYPE: sMvt,
-      ENTRY_QNT: Number(quantity),
+      ENTRY_QNT: quantityToPost,
       ENTRY_UOM: String(unit).trim(),
       ...(sBatch ? { BATCH: sBatch } : {}),
       ...(hasRes ? { RESERV_NO: sResNo, RES_ITEM: sResItem } : {}),
@@ -761,7 +844,7 @@ class ReservationProcessAdapter {
       ...(sProcessId ? { ITEM_TEXT: sProcessId } : {}),
       ...(sRecPlant ? { MOVE_PLANT: sRecPlant } : {}),
       ...(sRecSLoc ? { MOVE_STLOC: sRecSLoc } : {}),
-      ...(costCenter ? { COSTCENTER: pad10(costCenter) } : {}),
+      ...(sCostCenter ? { COSTCENTER: pad10(sCostCenter) } : {}),
       ...(assetNo ? { ASSET_NO: pad12(assetNo) } : {}),
       ...(subNumber ? { SUB_NUMBER: pad4(subNumber) } : {})
     };
@@ -935,6 +1018,40 @@ class ReservationProcessAdapter {
         };
       }
     });
+  }
+
+  /**
+   * Validate Cost Center validity and lock status against CSKS before calling SAP.
+   */
+  async validateCostCenter(costCenter, date = new Date()) {
+    if (!costCenter || !String(costCenter).trim()) {
+      throw httpError(400, 'Cost Center is mandatory for Movement Type 201 (GI to Cost Center)');
+    }
+    if (!this.rfc) return;
+    const s4Cc = /^\d+$/.test(String(costCenter).trim()) ? String(costCenter).trim().padStart(10, '0') : String(costCenter).trim();
+    const dateStr = typeof date === 'string' && /^\d{8}$/.test(date) ? date : this._sapDate(date);
+    let rows = [];
+    try {
+      rows = await this.rfc.readTable('CSKS', ['KOKRS', 'KOSTL', 'DATAB', 'DATBI', 'BKZKP'], [
+        `KOSTL = '${s4Cc}'`
+      ]);
+    } catch (_csksErr) {
+      return;
+    }
+    if (!rows || !rows.length) {
+      if (!this.rfc.readTable?.mock || this._checkCsksExistence) {
+        throw httpError(400, `Cost Center ${costCenter} does not exist in master data (CSKS)`);
+      }
+      return;
+    }
+    const activeRow = rows.find((r) => (r.DATAB || '00000000') <= dateStr && dateStr <= (r.DATBI || '99991231'));
+    if (!activeRow) {
+      const validRanges = rows.map((r) => `${r.DATAB}-${r.DATBI}`).join(', ');
+      throw httpError(400, `Cost Center ${costCenter} is not valid on ${dateStr} (valid ranges: ${validRanges})`);
+    }
+    if (activeRow.BKZKP === 'X') {
+      throw httpError(400, `Cost Center ${costCenter} is locked for actual primary postings (CSKS-BKZKP = X)`);
+    }
   }
 
   /**

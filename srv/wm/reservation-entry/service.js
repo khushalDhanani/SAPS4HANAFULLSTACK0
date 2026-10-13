@@ -790,7 +790,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
               reservationItem: sResItem,
               costCenter: track.CostCenter,
               assetNo: track.AssetNo,
-              subNumber: track.SubNumber
+              subNumber: track.SubNumber,
+              batch: track.Batch
             });
 
             if (trResult.warning) {

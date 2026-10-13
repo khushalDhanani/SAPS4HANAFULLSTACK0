@@ -131,6 +131,7 @@ class TrToHandler {
           batch: sBatch,
           serials: sSerials,
           completeReservation,
+          confMenge: data.confMenge || data.ConfirmedQuantity,
           processId
         });
 
@@ -272,19 +273,21 @@ class TrToHandler {
         // Auto-trigger MIGO if both autoConfirm and autoPostMigo are on and the TO is confirmed
         if (data.autoConfirm !== false && data.autoPostMigo && result.Confirmed) {
           try {
+            const confirmedQty = Number(result.ConfirmedQuantity != null && result.ConfirmedQuantity > 0 ? result.ConfirmedQuantity : result.Quantity);
             const migoResult = await handlePostMigoGoodsMovement({
               user: req.user,
               data: {
                 ReservationNo: existing?.ReservationNo || result.ReservationNo,
                 ReservationItem: existing?.ReservationItem || result.ReservationItem,
                 TransferOrder: result.TransferOrder,
-                Quantity: result.Quantity,
+                Quantity: confirmedQty,
+                confMenge: confirmedQty,
                 Unit: result.Unit,
                 MovementType: existing?.MovementType || result.MovementType,
                 Material: result.Material || existing?.Material,
                 Plant: existing?.Plant || result.Plant,
                 StorageLocation: existing?.StorageLocation || result.StorageLocation,
-                CostCenter: existing?.CostCenter,
+                CostCenter: existing?.CostCenter || result.CostCenter || (result.Betyp === 'K' ? result.Benum : '') || data.CostCenter || data.costCenter,
                 AssetNo: existing?.AssetNo,
                 SubNumber: existing?.SubNumber,
                 ReceivingPlant: existing?.ReceivingPlant || data.ReceivingPlant || data.receivingPlant,
@@ -306,6 +309,10 @@ class TrToHandler {
               result.Batch = migoResult.Batch || result.Batch;
               result.ReservationNo = migoResult.ReservationNo || result.ReservationNo;
               result.MovementType = migoResult.MovementType || result.MovementType || existing?.MovementType || '';
+              result.Warning = migoResult.Warning || migoResult.warning || '';
+              if (result.Warning && req && typeof req.warn === 'function') {
+                req.warn(result.Warning);
+              }
               result.Message = `Transfer Order ${result.TransferOrder} confirmed and Material Document ${migoResult.MaterialDocument} posted successfully.`;
             } else {
               result.Status = STATUS.GI_ERROR;
