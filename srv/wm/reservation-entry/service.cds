@@ -46,6 +46,17 @@ service ReservationEntryService {
         movement          : String(3);
     };
 
+    type TOCreatedResponse {
+        success           : Boolean;
+        stage             : String(20);
+        error             : String(255);
+        reservationNumber : String(10);
+        trNumber          : String(10);
+        toNumber          : String(10);
+        warehouse         : String(3);
+        itemsCreated      : Integer;
+    };
+
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action createReservation(
         MovementType            : String(3),
@@ -72,6 +83,14 @@ service ReservationEntryService {
         ReservationItem : String(4),
         WarehouseNumber : String(3)
     ) returns TrCreatedResponse;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action createTOFromTR(
+        ReservationNo   : String(10),
+        ReservationItem : String(4),
+        WarehouseNumber : String(3),
+        TRNumber        : String(10)
+    ) returns TOCreatedResponse;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action createReservationEntry(

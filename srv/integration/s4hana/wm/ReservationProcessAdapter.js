@@ -618,17 +618,89 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * TR verification lookup: reads LTBK (header) or falls back to Z_WM_GET_TR_MATERIAL_LIST.
+   * Returns verified TR header data or null if not found in SAP.
+   */
+  async getTransferRequirement(trNumber, warehouseNumber = '') {
+    if (!trNumber) return null;
+    const s4Tr = sapKey(trNumber, 'tbnum').padStart(10, '0');
+    const wh = warehouseNumber ? sapKey(warehouseNumber, 'lgnum') : '';
+
+    if (this.rfc) {
+      try {
+        const where = [`TBNUM = '${s4Tr}'`];
+        if (wh) where.push(`AND LGNUM = '${wh}'`);
+        const rows = await this.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'BETYP', 'BENUM', 'RSNUM', 'STATU', 'BDATU'], where, 1);
+        if (rows && rows.length && rows[0].TBNUM) {
+          const r = rows[0];
+          return {
+            success: true,
+            trNumber: alphaOut(r.TBNUM),
+            trNumberRaw: r.TBNUM,
+            warehouse: r.LGNUM,
+            movement: r.BWLVS,
+            requirementType: r.BETYP || '',
+            requirementNo: r.BENUM || '',
+            reservationNo: alphaOut(r.RSNUM),
+            reservationNoRaw: r.RSNUM || '',
+            status: r.STATU || '',
+            source: 'LTBK'
+          };
+        }
+      } catch (_ltbkErr) {
+        // fallback to Z_WM_GET_TR_MATERIAL_LIST
+      }
+
+      try {
+        const res = await this.rfc.call('Z_WM_GET_TR_MATERIAL_LIST', {
+          IV_TR_NUMBER: s4Tr,
+          ...(wh ? { IV_LGNUM: wh } : {})
+        });
+        const h = res?.ET_TR_HEADER?.[0];
+        if (h && h.TBNUM) {
+          return {
+            success: true,
+            trNumber: alphaOut(h.TBNUM),
+            trNumberRaw: h.TBNUM,
+            warehouse: h.LGNUM,
+            movement: h.BWLVS,
+            requirementType: h.BETYP || '',
+            requirementNo: h.BENUM || '',
+            reservationNo: alphaOut(h.RSNUM),
+            reservationNoRaw: h.RSNUM || '',
+            status: h.STATU || '',
+            source: 'Z_WM_GET_TR_MATERIAL_LIST'
+          };
+        }
+      } catch (_zwmErr) {
+        // fallback
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Step 3: create_to_from_tr
    * Wraps L_TO_CREATE_TR
+   * Validates that the TR actually exists and is verified in SAP before attempting TO creation.
    */
   async createTransferOrderFromTR(params = {}) {
-    const { warehouseNumber, trNumber, commitWork = true, movementType = '311' } = params;
+    const { warehouseNumber, trNumber, commitWork = true, movementType = '311', skipTrValidation = false } = params;
 
     if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
     if (!trNumber) throw httpError(400, 'TRNumber is mandatory');
 
     const s4Tr = sapKey(trNumber, 'tbnum').padStart(10, '0');
     const wh = sapKey(warehouseNumber, 'lgnum');
+
+    // Architecture rule: Validate TR exists in SAP before creating TO
+    if (!skipTrValidation && this.rfc) {
+      const verifiedTR = await this.getTransferRequirement(s4Tr, wh);
+      if (!verifiedTR) {
+        throw httpError(400, `Created TR ${alphaOut(s4Tr)} cannot be verified in SAP before TO creation`);
+      }
+    }
 
     return await this.rfc.session(async (call) => {
       let res;

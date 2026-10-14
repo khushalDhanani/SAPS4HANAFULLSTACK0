@@ -672,6 +672,196 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       };
     });
 
+    // Action handler for Step 5: Separate TR creation from TO creation
+    this.on('createTOFromTR', async (req) => {
+      const { ReservationNo, ReservationItem, WarehouseNumber, TRNumber } = req.data || {};
+      if (!ReservationNo && !TRNumber) {
+        return req.error(400, 'ReservationNo or TRNumber is mandatory');
+      }
+
+      const sResNo = ReservationNo ? String(ReservationNo).padStart(10, '0') : '';
+      const sResItem = String(ReservationItem || '0001').padStart(4, '0');
+
+      let track = null;
+      if (sResNo) {
+        track = await SELECT.one.from(ReservationEntries).where({
+          ReservationNo: sResNo,
+          ReservationItem: sResItem
+        });
+      }
+
+      const rawTrNumber = TRNumber || track?.TransferRequirement || '';
+      if (!rawTrNumber || rawTrNumber === '0' || rawTrNumber === '0000000000') {
+        if (track) {
+          await UPDATE(ReservationEntries).set({
+            Status_code: STATUS.TR_ERROR,
+            ErrorStep: 'LT04',
+            ErrorMessage: 'TR was not created or TR number is missing'
+          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+        }
+        return {
+          success: false,
+          stage: 'TR',
+          error: 'TR was not created or TR number is missing',
+          reservationNumber: sResNo ? alphaOut(sResNo) : '',
+          trNumber: '',
+          toNumber: '',
+          warehouse: '',
+          itemsCreated: 0
+        };
+      }
+
+      let determinedWh = WarehouseNumber || track?.WarehouseNumber || '';
+      if (!determinedWh && track?.Plant && track?.StorageLocation) {
+        try {
+          determinedWh = await warehouseFor(track.Plant, track.StorageLocation, '');
+        } catch (_whErr) {
+          determinedWh = '';
+        }
+      }
+
+      // TR validation: Check that TR exists and is verified in SAP
+      const verifiedTR = await adapter.getTransferRequirement(rawTrNumber, determinedWh);
+      if (!verifiedTR) {
+        if (track) {
+          await UPDATE(ReservationEntries).set({
+            Status_code: STATUS.TR_ERROR,
+            ErrorStep: 'LT04',
+            ErrorMessage: `Created TR ${alphaOut(rawTrNumber)} cannot be verified in SAP`
+          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+          await INSERT.into(ReservationLogs).entries({
+            ID: cds.utils.uuid(),
+            ReservationNo: sResNo,
+            ReservationItem: sResItem,
+            LogHandle: track.LogHandle || '',
+            ExternalId: track.ExternalId || '',
+            SubObject: 'TRACK',
+            Step: 'LT04',
+            Status: STATUS.TR_ERROR,
+            MessageType: 'E',
+            MessageId: 'L3',
+            MessageNo: '999',
+            MessageText: `TR validation failed: TR ${alphaOut(rawTrNumber)} not found or unverified in SAP`
+          });
+        }
+
+        return {
+          success: false,
+          stage: 'TR_VALIDATION',
+          error: `Created TR ${alphaOut(rawTrNumber)} cannot be verified in SAP`,
+          reservationNumber: sResNo ? alphaOut(sResNo) : '',
+          trNumber: alphaOut(rawTrNumber),
+          toNumber: '',
+          warehouse: determinedWh,
+          itemsCreated: 0
+        };
+      }
+
+      const targetWh = determinedWh || verifiedTR.warehouse;
+      const targetTr = verifiedTR.trNumberRaw || rawTrNumber;
+
+      // Check unconfirmed TO items for this TR
+      try {
+        const pending = await findUnconfirmedToItems(adapter.rfc, targetWh, targetTr);
+        if (pending && pending.length) {
+          const pendingTo = pending[0].TANUM.replace(/^0+/, '');
+          return {
+            success: false,
+            stage: 'TO',
+            error: `Unconfirmed Transfer Order ${pendingTo} exists for TR ${alphaOut(targetTr)}; confirm it before creating another TO`,
+            reservationNumber: sResNo ? alphaOut(sResNo) : '',
+            trNumber: alphaOut(targetTr),
+            toNumber: pendingTo,
+            warehouse: targetWh,
+            itemsCreated: 0
+          };
+        }
+      } catch (_pErr) {
+        // tolerate read error
+      }
+
+      let toResult;
+      try {
+        toResult = await adapter.createTransferOrderFromTR({
+          warehouseNumber: targetWh,
+          trNumber: targetTr,
+          movementType: track?.MovementType || verifiedTR.movement || '311'
+        });
+      } catch (err) {
+        if (track) {
+          await UPDATE(ReservationEntries).set({
+            Status_code: STATUS.TO_ERROR,
+            ErrorStep: 'LT04',
+            ErrorMessage: err.message
+          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+          await INSERT.into(ReservationLogs).entries({
+            ID: cds.utils.uuid(),
+            ReservationNo: sResNo,
+            ReservationItem: sResItem,
+            LogHandle: track.LogHandle || '',
+            ExternalId: track.ExternalId || '',
+            SubObject: 'TRACK',
+            Step: 'LT04',
+            Status: STATUS.TO_ERROR,
+            MessageType: 'E',
+            MessageId: 'L3',
+            MessageNo: '999',
+            MessageText: `TO creation failed: ${err.message}`
+          });
+        }
+
+        return {
+          success: false,
+          stage: 'TO',
+          error: err.message,
+          reservationNumber: sResNo ? alphaOut(sResNo) : '',
+          trNumber: alphaOut(targetTr),
+          toNumber: '',
+          warehouse: targetWh,
+          itemsCreated: 0
+        };
+      }
+
+      const toNo = toResult.toNumberRaw || String(toResult.toNumber).padStart(10, '0');
+
+      if (track) {
+        await UPDATE(ReservationEntries).set({
+          WarehouseNumber: targetWh,
+          TransferRequirement: targetTr,
+          TransferOrder: toNo,
+          Status_code: STATUS.TO_CREATED,
+          ErrorStep: '',
+          ErrorMessage: ''
+        }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+        await INSERT.into(ReservationLogs).entries({
+          ID: cds.utils.uuid(),
+          ReservationNo: sResNo,
+          ReservationItem: sResItem,
+          LogHandle: track.LogHandle || '',
+          ExternalId: track.ExternalId || '',
+          SubObject: 'TRACK',
+          Step: 'LT04',
+          Status: STATUS.TO_CREATED,
+          MessageType: 'S',
+          MessageId: 'L3',
+          MessageNo: '001',
+          MessageText: `Transfer Order ${alphaOut(toNo)} created from verified TR ${alphaOut(targetTr)}`
+        });
+      }
+
+      return {
+        success: true,
+        reservationNumber: sResNo ? alphaOut(sResNo) : '',
+        trNumber: alphaOut(targetTr),
+        toNumber: alphaOut(toNo),
+        warehouse: targetWh,
+        itemsCreated: 1
+      };
+    });
+
     // Action handler
     this.on('createReservationEntry', async (req) => {
       return await executeReservationAndAutoTR(req.data, req);

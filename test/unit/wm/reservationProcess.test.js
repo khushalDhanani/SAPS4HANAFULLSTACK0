@@ -24,8 +24,9 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       readTable: jest.fn((table) => Promise.resolve(
         table === 'MARD' ? [{ LGORT: 'HS01' }, { LGORT: 'CS01' }] :
         table === 'T320' ? [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }, { LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }] :
+        table === 'LTBK' ? [{ LGNUM: 'W01', TBNUM: '0001001839', BWLVS: '311', RSNUM: '0000524979', STATU: '02' }] :
         []
-      )) // MARD and T320 preflight mock
+      )) // MARD, T320, and LTBK preflight mock
     };
     adapter = new ReservationProcessAdapter({ rfc: mockRfc });
   });
@@ -823,6 +824,67 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       ).rejects.toThrow(
         /missing customizing key in table T334T \(Warehouse: W01, Operation: A \[Stock Removal\], Storage Type Indicator: 'EN1'\)/
       );
+    });
+
+    test('Architecture Rule: Rejects TO creation when TR cannot be verified in SAP', async () => {
+      // trNumber '9999999' is not in LTBK mock
+      await expect(
+        adapter.createTransferOrderFromTR({
+          warehouseNumber: 'W01',
+          trNumber: '9999999'
+        })
+      ).rejects.toThrow(/Created TR 9999999 cannot be verified in SAP before TO creation/);
+    });
+  });
+
+  describe('3b. getTransferRequirement (TR Read & Verification)', () => {
+    test('Reads and verifies TR from LTBK table', async () => {
+      const tr = await adapter.getTransferRequirement('1001839', 'W01');
+      expect(tr).toMatchObject({
+        success: true,
+        trNumber: '1001839',
+        trNumberRaw: '0001001839',
+        warehouse: 'W01',
+        movement: '311',
+        reservationNo: '524979',
+        source: 'LTBK'
+      });
+    });
+
+    test('Falls back to Z_WM_GET_TR_MATERIAL_LIST when LTBK table yields no row', async () => {
+      mockRfc.call.mockResolvedValueOnce({
+        ET_TR_HEADER: [
+          {
+            LGNUM: 'W01',
+            TBNUM: '0001009999',
+            BWLVS: '201',
+            BETYP: 'K',
+            BENUM: '1011201301',
+            RSNUM: '0000529999',
+            STATU: '01'
+          }
+        ]
+      });
+
+      const tr = await adapter.getTransferRequirement('1009999', 'W01');
+      expect(tr).toMatchObject({
+        success: true,
+        trNumber: '1009999',
+        warehouse: 'W01',
+        movement: '201',
+        requirementNo: '1011201301',
+        reservationNo: '529999',
+        source: 'Z_WM_GET_TR_MATERIAL_LIST'
+      });
+    });
+
+    test('Returns null when TR is not found in LTBK or RFC fallback', async () => {
+      mockRfc.call.mockResolvedValueOnce({
+        ET_TR_HEADER: []
+      });
+
+      const tr = await adapter.getTransferRequirement('8888888', 'W01');
+      expect(tr).toBeNull();
     });
   });
 
