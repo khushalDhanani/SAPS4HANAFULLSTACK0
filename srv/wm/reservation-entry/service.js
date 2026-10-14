@@ -125,11 +125,28 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           batch: Batch
         });
       } catch (err) {
-        return req.error(err.status || 500, `Failed to create reservation: ${err.message}`);
+        const errorMsg = err.error || err.message;
+        req.error(err.status || 500, `Failed to create reservation: ${errorMsg}`);
+        return {
+          success: false,
+          stage: 'RESERVATION',
+          error: errorMsg
+        };
       }
 
-      const resNo = resResult.reservationNoRaw || String(resResult.reservationNo).padStart(10, '0');
-      const resItem = resResult.reservationItem || '0001';
+      if (!resResult || !resResult.success || (!resResult.reservation?.number && !resResult.reservationNo)) {
+        const errorMsg = resResult?.error || 'Failed to create reservation: No reservation number returned from SAP';
+        req.error(500, errorMsg);
+        return {
+          success: false,
+          stage: 'RESERVATION',
+          error: errorMsg
+        };
+      }
+
+      const resNumber = resResult.reservation?.number || resResult.reservationNo;
+      const resItem = resResult.reservation?.item || resResult.reservationItem || '0001';
+      const resNo = resResult.reservationNoRaw || String(resNumber).padStart(10, '0');
       const extId = `${resNo}/${resItem}`;
 
       // Initialize SLG1 Application Log header
@@ -388,6 +405,124 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         return null;
       }
     };
+
+    // Standalone MB21 reservation creation action (independent from TR creation)
+    this.on('createReservation', async (req) => {
+      validateMovementType(req.data, req);
+      if (req.errors && req.errors.length) {
+        return {
+          success: false,
+          stage: 'RESERVATION',
+          error: req.errors[0]?.message || 'Validation failed'
+        };
+      }
+
+      const payload = req.data;
+      const effResDate = payload.ReservationDate || payload.reservationDate || undefined;
+
+      let resResult;
+      try {
+        resResult = await adapter.createReservation({
+          movementType: payload.MovementType,
+          plant: payload.Plant,
+          storageLocation: payload.StorageLocation,
+          material: payload.Material,
+          quantity: payload.Quantity,
+          unit: payload.Unit,
+          reservationDate: effResDate,
+          receivingPlant: payload.ReceivingPlant || (payload.MovementType === '311' ? payload.Plant : undefined),
+          receivingStorageLocation: payload.ReceivingStorageLocation,
+          costCenter: payload.CostCenter,
+          assetNo: payload.AssetNo,
+          subNumber: payload.SubNumber,
+          batch: payload.Batch,
+          throwError: false
+        });
+      } catch (err) {
+        return {
+          success: false,
+          stage: 'RESERVATION',
+          error: err.error || err.message
+        };
+      }
+
+      if (!resResult || !resResult.success || (!resResult.reservation?.number && !resResult.reservationNo)) {
+        return {
+          success: false,
+          stage: 'RESERVATION',
+          error: resResult?.error || 'Failed to create reservation: No reservation number returned from SAP'
+        };
+      }
+
+      const resNumber = resResult.reservation?.number || resResult.reservationNo;
+      const resItem = resResult.reservation?.item || resResult.reservationItem || '0001';
+      const resNo = resResult.reservationNoRaw || String(resNumber).padStart(10, '0');
+      const extId = `${resNo}/${resItem}`;
+
+      // Persist reservation in tracking table with status RES_CREATED
+      const initialTrackRecord = {
+        ReservationNo: resNo,
+        ReservationItem: resItem,
+        MovementType: payload.MovementType,
+        WarehouseNumber: payload.WarehouseNumber || '',
+        Plant: payload.Plant,
+        StorageLocation: payload.StorageLocation,
+        Material: payload.Material,
+        MaterialName: payload.MaterialName || '',
+        Quantity: Number(payload.Quantity),
+        Unit: payload.Unit,
+        ReservationDate: effResDate || null,
+        ReceivingPlant: payload.ReceivingPlant || '',
+        ReceivingStorageLocation: payload.ReceivingStorageLocation || '',
+        CostCenter: payload.CostCenter || '',
+        AssetNo: payload.AssetNo || '',
+        SubNumber: payload.SubNumber || '',
+        TransferRequirement: '',
+        LogHandle: '',
+        ExternalId: extId,
+        Status_code: STATUS.RES_CREATED,
+        ErrorStep: '',
+        ErrorMessage: ''
+      };
+
+      const existing = await SELECT.one.from(ReservationEntries).where({
+        ReservationNo: resNo,
+        ReservationItem: resItem
+      });
+
+      if (existing) {
+        await UPDATE(ReservationEntries).set(initialTrackRecord).where({
+          ReservationNo: resNo,
+          ReservationItem: resItem
+        });
+      } else {
+        await INSERT.into(ReservationEntries).entries(initialTrackRecord);
+      }
+
+      await INSERT.into(ReservationLogs).entries({
+        ID: cds.utils.uuid(),
+        ReservationNo: resNo,
+        ReservationItem: resItem,
+        LogHandle: '',
+        ExternalId: extId,
+        SubObject: 'TRACK',
+        Step: 'MB21',
+        Status: STATUS.RES_CREATED,
+        MessageType: 'S',
+        MessageId: 'M7',
+        MessageNo: '060',
+        MessageText: `Reservation ${resNo} created via BAPI_RESERVATION_CREATE1`
+      });
+
+      return {
+        success: true,
+        reservation: {
+          number: resNumber,
+          item: resItem
+        },
+        movementType: String(payload.MovementType).trim()
+      };
+    });
 
     // Action handler
     this.on('createReservationEntry', async (req) => {

@@ -5,6 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 3: Make MB21 Creation Independently Reliable & Decouple TR Creation (2026-10-14, 12:50 IST):** Complete. Decoupled MB21 reservation creation from background TR creation in `srv/integration/s4hana/wm/ReservationProcessAdapter.js` and `srv/wm/reservation-entry/service.js`. Enforced strict sequence: `createReservation()` → SAP reservation created → reservation number returned → persist reservation in DB → create TR. If reservation creation fails, the process aborts immediately with structured `{ success: false, stage: 'RESERVATION', error: '...' }` and TR creation is never called. Exposed dedicated standalone action `createReservation` returning structured `{ success: true, reservation: { number, item }, movementType }`. All 7 WM unit test suites pass 100% green (169/169 tests). CDS compilation and `git diff --check` pass cleanly.
 - **Step 2: Fix the Reservation Creation Layer First & Single Normalized Movement Configuration (2026-10-14, 12:35 IST):** Complete. Implemented single normalized movement configuration (`MOVEMENT_CONFIG` supporting 201, 241, 311, 301) and strict pre-validation (`validateReservationInput`) across `srv/common/movementConfig.js`, `srv/wm/reservation-entry/service.js`, and `srv/integration/s4hana/wm/ReservationProcessAdapter.js`. Added `ReservationDate: Date` support to CDS persistence and actions. Resolved WM movement resolution (`resolveWmMovement`) with SAP WM staging fallback (311 for 201/241 unless `WM_TR_REAL_MOVEMENT === 'true'`). All 7 WM unit test suites pass 100% green (164/164 tests). CDS compilation, UI5 lint/tests, and `git diff --check` pass cleanly.
 - **Step 1: Freeze Expected Business Flow across Movement Types 201 → 241 → 311 → 301 (2026-10-14, 12:18 IST):** Complete. Master execution flow frozen across all four movement types and all seven sequential steps (MB21 → Background TR → Warehouse Scan → LT04 TO Create → LT12 TO Confirm → MIGO → Verification). Established non-negotiable rule: HTTP 200 is never considered success without verified SAP document persistence. Exact document types, SAP function modules, input payloads, validation gates, transparent table queries, and error status transitions (`01`, `11`, `02`, `12`, `03`, `13`, `04`, `90`, `05`) fully documented and frozen in specification artifact `business_flow_freeze_spec.md`. Unit test suites for all 4 movement types pass green (mvt201: 15/15, mvt241: 20/20, mvt311: 21/21, mvt301: 22/22).
 - **Tracked reservation movement mismatch regression fix (2026-10-14, 11:03 IST):** Code change and targeted validations complete. Exact app-tracked 201/241 → linked 311 flow is allowed after matching SAP TR, reservation, item, and movement keys; untracked mismatches remain blocked. Seven targeted suites pass (162/162). CDS compile, UI5 lint/build, and `git diff --check` pass. Full WM suite is In Progress because 11 suites fail on sandbox local-server bind/SAP RFC network restrictions (58 suites pass, 1,373/1,502 tests pass). One pre-existing `goodsIssueClients` test attempted an `API_MATERIAL_DOCUMENT_SRV` POST while exercising invalid-input handling; the sandbox denied the socket with `EPERM`. A follow-up read-only Client 220 `MATDOC` query for 2026-10-14, BWART 201, plant 1120, SLoc HS01, and material `MAT01` in both external and padded forms returned no rows. No matching material document was found. No live browser verification.
@@ -1749,7 +1750,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Step 3 — 2026-10-14, 12:35 IST):** Proceed to Step 3: Fix Warehouse Scan validation starting with Movement 201 (Material, Quantity, TR, Storage Unit, physical quant stock in LQUA, and account assignment checks).
+- **Next Recommended Action (Step 4 — 2026-10-14, 12:50 IST):** Proceed to Step 4: Make Background TR creation independently reliable (validate TR number and item generation, link to reservation, handle status transitions 01 → 02 / 11, and test independent failure modes).
+- **Previous Recommended Action (Step 3 — 2026-10-14, 12:35 IST):** Make MB21 creation independently reliable and decouple TR creation until reservation creation is confirmed.
 - **Next Recommended Action (2026-10-14, 10:55 IST):** Check the new persistent banner in the browser with the sandbox flag enabled. Separately obtain fresh read-only Client 220 rows for `RESB` and `RKPF` reservation `0000527870`, plus `LTBK`/`LTAK`/`LTAP`/`LQUA` for TR `0001000823`, before deciding whether a TO exists or stock remains in 921. Do not process any of the three listed mismatched TRs meanwhile.
 - **Next Recommended Action (2026-10-13, 13:32 IST):**
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant to decide `T321` `TBFKZ` for movement 201/241 and clarify row 1/14 `LFART = 'DOG'` behavior for movement 311.
@@ -6045,5 +6047,56 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git diff --check` → PASS (0 whitespace/formatting errors).
   - `git status` → Clean; zero commits created.
 - **Errors / blockers:** None.
-- **Next action:** Step 3: Fix Warehouse Scan validation starting with Movement 201.
+- **Next action:** Step 3: Make MB21 Creation Independently Reliable & Decouple TR Creation.
+
+### 2026-10-14 12:50 IST — Step 3: Make MB21 Creation Independently Reliable & Decouple TR Creation (Complete)
+
+- **User Request:**
+  - Make MB21 creation independently reliable.
+  - Do not immediately create the TR inside the reservation function until reservation creation itself is confirmed.
+  - Desired sequence:
+    `createReservation()` → SAP reservation created → reservation number returned → persist reservation → create TR.
+  - Success response structure:
+    `{ "success": true, "reservation": { "number": "520235", "item": "0001" }, "movementType": "201" }`
+  - Failure response structure:
+    `{ "success": false, "stage": "RESERVATION", "error": "..." }`
+  - Never continue to TR creation after reservation failure.
+- **Root Cause & Architectural Alignment:**
+  - Previously, `createReservationEntry` in `service.js` combined reservation execution, persistence, and auto-TR creation in a single block without a strict failure gate preventing auto-TR when reservation creation failed.
+  - S/4 integration layer (`ReservationProcessAdapter.js`) returned flat fields without explicit stage classification or option to return structured error objects rather than unhandled thrown exceptions.
+- **Implementation Delivered:**
+  1. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Wrapped `createReservation` in a dedicated `try ... catch` block with explicit stage handling.
+     - Structured output to return `{ success: true, reservation: { number, item }, movementType, reservationNo, reservationNoRaw, reservationItem, status, messages }`, providing both the required nested user structure and preserving full backward compatibility for existing callers.
+     - Enforced that non-testrun execution must produce a non-zero reservation number from SAP; throws or returns structured error with `stage: 'RESERVATION'`, `status: 500`.
+     - Added support for `throwError: false` to return `{ success: false, stage: 'RESERVATION', error: ... }` directly, while decorating any rethrown error with `err.stage = 'RESERVATION'` and `err.success = false`.
+     - Guaranteed that `createReservation` does NOT trigger or create TRs inside itself.
+  2. `srv/wm/reservation-entry/service.cds`:
+     - Defined structured CDS types `ReservationCreatedDoc` and `ReservationCreatedResponse`.
+     - Exposed standalone action `createReservation` returning `ReservationCreatedResponse`, enabling callers to create and persist MB21 reservations independently without TR creation.
+  3. `srv/wm/reservation-entry/service.js`:
+     - Refactored `executeReservationAndAutoTR` to enforce strict 5-stage sequential execution:
+       1. Call `adapter.createReservation()`.
+       2. If it fails (throws or returns `!resResult.success` or no number), halts immediately with `req.error(...)` and `{ success: false, stage: 'RESERVATION', error: ... }`; never calls `warehouseFor()` or `createTransferRequirement()`.
+       3. Validates returned reservation number (`resNumber`) and item (`resItem`).
+       4. Persists reservation immediately in `ReservationLogs` (Step: `MB21`, Status: `01`) and `ReservationEntries` (`Status_code: 01`, `TransferRequirement: ''`).
+       5. Only AFTER successful database persistence does it invoke `adapter.createTransferRequirement()`. If TR fails, the reservation remains safely tracked with `Status_code: 11` (`TR_ERROR`).
+     - Implemented handler for `action createReservation`: performs MB21 reservation creation + persistence without calling TR creation, returning the user's exact JSON shape.
+  4. Unit Tests Added:
+     - `test/unit/wm/reservationProcess.test.js`:
+       - Movement 201 returns structured `{ success: true, reservation: { number, item }, movementType }`.
+       - Returns `{ stage: 'RESERVATION', success: false }` on BAPI failure.
+       - Returns `{ success: false, stage: 'RESERVATION', error: '...' }` when `throwError: false`.
+       - Throws 500 when SAP returns empty reservation number in non-testrun mode.
+     - `test/unit/wm/reservationEntryService.test.js`:
+       - When reservation creation fails, TR creation is NEVER called and error is returned with stage `RESERVATION`.
+       - `action createReservation`: independently creates reservation and returns structured result without creating TR.
+       - `action createReservation`: returns `{ success: false, stage: 'RESERVATION', error: '...' }` on failure.
+- **Validation results:**
+  - `npx jest test/unit/wm/movementConfig.test.js test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/mvt201Process.test.js test/unit/wm/mvt241Process.test.js test/unit/wm/mvt311Process.test.js test/unit/wm/mvt301Process.test.js --runInBand` → **PASS, 7 test suites, 169 tests passed (100% green)**.
+  - `npx cds compile srv/wm/reservation-entry/service.cds` → PASS (exit code 0, clean compilation).
+  - `git diff --check` → PASS (0 whitespace/formatting errors).
+  - `git status` → Clean; zero commits created.
+- **Errors / blockers:** None.
+- **Next action:** Step 4: Make Background TR creation independently reliable.
 

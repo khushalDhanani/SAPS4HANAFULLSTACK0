@@ -18,6 +18,39 @@ service ReservationEntryService {
     @readonly
     entity ReservationLogs as projection on wm.ReservationLog;
 
+    type ReservationCreatedDoc {
+        number : String(10);
+        item   : String(4);
+    };
+
+    type ReservationCreatedResponse {
+        success      : Boolean;
+        stage        : String(20);
+        error        : String(255);
+        reservation  : ReservationCreatedDoc;
+        movementType : String(3);
+    };
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action createReservation(
+        MovementType            : String(3),
+        Plant                   : String(4),
+        StorageLocation         : String(4),
+        Material                : String(40),
+        MaterialName            : String(40),
+        Quantity                : Decimal(13,3),
+        Unit                    : String(3),
+        ReservationDate         : Date,
+        reservationDate         : Date,
+        ReceivingPlant          : String(4),
+        ReceivingStorageLocation: String(4),
+        CostCenter              : String(10),
+        AssetNo                 : String(12),
+        SubNumber               : String(4),
+        WarehouseNumber         : String(3),
+        Batch                   : String(10)
+    ) returns ReservationCreatedResponse;
+
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action createReservationEntry(
         MovementType            : String(3),

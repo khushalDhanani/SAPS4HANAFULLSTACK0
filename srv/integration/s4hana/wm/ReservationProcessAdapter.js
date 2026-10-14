@@ -78,169 +78,204 @@ class ReservationProcessAdapter {
       assetNo,
       subNumber,
       batch,
-      testrun = false
+      testrun = false,
+      throwError = true
     } = params;
 
-    // Single normalized pre-validation before calling SAP backend
-    validateReservationInput(params, { throwError: true });
+    try {
+      // Single normalized pre-validation before calling SAP backend
+      validateReservationInput(params, { throwError: true });
 
-    if (String(movementType).trim() === '201' && costCenter) {
-      await this.validateCostCenter(costCenter);
-    }
-
-    if (String(movementType).trim() === '241') {
-      await this.validateAsset(assetNo, subNumber, plant);
-    }
-
-    if (this.rfc && String(movementType).trim() === '301' && receivingPlant) {
-      try {
-        const marcRec = await this.rfc.readTable('MARC', ['WERKS'], [
-          `MATNR = '${padMat(sapKey(material, 'matnr'))}'`,
-          `AND WERKS = '${sapKey(receivingPlant, 'plant')}'`
-        ], 1);
-        if (!marcRec || !marcRec.length) {
-          if (!this.rfc.readTable?.mock || this._checkMarcExistence) {
-            throw httpError(400, `Material ${alphaOut(padMat(sapKey(material, 'matnr')))} is not extended to receiving plant ${receivingPlant} (MARC)`);
-          }
-        }
-      } catch (mErr) {
-        if (mErr.status === 400) throw mErr;
+      if (String(movementType).trim() === '201' && costCenter) {
+        await this.validateCostCenter(costCenter);
       }
-      if (receivingStorageLocation) {
+
+      if (String(movementType).trim() === '241') {
+        await this.validateAsset(assetNo, subNumber, plant);
+      }
+
+      if (this.rfc && String(movementType).trim() === '301' && receivingPlant) {
         try {
-          const mardRec = await this.rfc.readTable('MARD', ['LGORT'], [
+          const marcRec = await this.rfc.readTable('MARC', ['WERKS'], [
             `MATNR = '${padMat(sapKey(material, 'matnr'))}'`,
-            `AND WERKS = '${sapKey(receivingPlant, 'plant')}'`,
-            `AND LGORT = '${sapKey(receivingStorageLocation, 'lgort')}'`
+            `AND WERKS = '${sapKey(receivingPlant, 'plant')}'`
           ], 1);
-          if (!mardRec || !mardRec.length) {
+          if (!marcRec || !marcRec.length) {
             if (!this.rfc.readTable?.mock || this._checkMarcExistence) {
-              throw httpError(400, `Material ${alphaOut(padMat(sapKey(material, 'matnr')))} is not extended to receiving storage location ${receivingStorageLocation} in plant ${receivingPlant} (MARD)`);
+              throw httpError(400, `Material ${alphaOut(padMat(sapKey(material, 'matnr')))} is not extended to receiving plant ${receivingPlant} (MARC)`);
             }
           }
         } catch (mErr) {
           if (mErr.status === 400) throw mErr;
         }
-      }
-    }
-
-    if (this.rfc && String(movementType).trim() === '311' && receivingStorageLocation) {
-      try {
-        const t320Rec = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
-          `WERKS = '${sapKey(plant, 'plant')}'`,
-          `AND LGORT = '${sapKey(receivingStorageLocation, 'lgort')}'`
-        ], 1);
-        if (!t320Rec || !t320Rec.length) {
-          throw httpError(400, `Receiving storage location ${receivingStorageLocation} is not assigned to warehouse in plant ${plant} (T320)`);
+        if (receivingStorageLocation) {
+          try {
+            const mardRec = await this.rfc.readTable('MARD', ['LGORT'], [
+              `MATNR = '${padMat(sapKey(material, 'matnr'))}'`,
+              `AND WERKS = '${sapKey(receivingPlant, 'plant')}'`,
+              `AND LGORT = '${sapKey(receivingStorageLocation, 'lgort')}'`
+            ], 1);
+            if (!mardRec || !mardRec.length) {
+              if (!this.rfc.readTable?.mock || this._checkMarcExistence) {
+                throw httpError(400, `Material ${alphaOut(padMat(sapKey(material, 'matnr')))} is not extended to receiving storage location ${receivingStorageLocation} in plant ${receivingPlant} (MARD)`);
+              }
+            }
+          } catch (mErr) {
+            if (mErr.status === 400) throw mErr;
+          }
         }
-      } catch (tErr) {
-        if (tErr.status === 400) throw tErr;
       }
-    }
 
-    if (this.rfc && (String(movementType).trim() === '201' || String(movementType).trim() === '241' || String(movementType).trim() === '301') && storageLocation) {
-      try {
-        const t320Iss = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
-          `WERKS = '${sapKey(plant, 'plant')}'`,
-          `AND LGORT = '${sapKey(storageLocation, 'lgort')}'`
-        ], 1);
-        if (!t320Iss || !t320Iss.length) {
-          throw httpError(400, `Issuing storage location ${storageLocation} is not assigned to warehouse in plant ${plant} (T320)`);
-        }
-      } catch (tErr) {
-        if (tErr.status === 400) throw tErr;
-      }
-    }
-
-    const targetMovePlant = receivingPlant || (String(movementType).trim() === '311' ? plant : '');
-    const header = {
-      RES_DATE: this._sapDate(reservationDate),
-      MOVE_TYPE: String(movementType).trim(),
-      ...(targetMovePlant ? { MOVE_PLANT: String(targetMovePlant).trim() } : {}),
-      ...(receivingStorageLocation ? { MOVE_STLOC: String(receivingStorageLocation).trim() } : {}),
-      ...(costCenter ? { COSTCENTER: pad10(costCenter) } : {}),
-      ...(assetNo ? { ASSET_NO: pad12(assetNo), SUB_NUMBER: pad4(subNumber || '0000') } : {})
-    };
-
-    const s4Mat = padMat(sapKey(material, 'matnr'));
-    let sBatch = sapKeyOpt(batch, 'batch');
-    if (this.rfc) {
-      try {
-        const marcRows = await this.rfc.readTable('MARC', ['XCHPF'], [
-          `MATNR = '${s4Mat}'`,
-          `AND WERKS = '${sapKey(plant, 'plant')}'`
-        ], 1);
-        if (String(marcRows?.[0]?.XCHPF || '').trim() === 'X' && !sBatch) {
-          throw httpError(400, `Batch is mandatory for batch-managed material ${alphaOut(s4Mat)}`);
-        }
-        if (String(movementType).trim() === '301' && sBatch && receivingPlant) {
-          await this.validateReceivingBatch(s4Mat, sBatch, receivingPlant);
-        }
-      } catch (bErr) {
-        if (bErr.status === 400) throw bErr;
-      }
-    }
-
-    const item = {
-      MATERIAL: s4Mat,
-      PLANT: sapKey(plant, 'plant'),
-      ...(storageLocation ? { STGE_LOC: String(storageLocation).trim() } : {}),
-      ENTRY_QNT: Number(quantity),
-      ENTRY_UOM: String(unit).trim().toUpperCase(),
-      MOVEMENT: 'X',
-      ...(sBatch ? { BATCH: sBatch } : {})
-    };
-
-    // Preflight: BAPI_RESERVATION_CREATE1 rejects any storage location the material is not extended to
-    // (MARD), returning a cryptic "No storage location data for <mat> in <plant> <sloc>; ... BUS2093 not
-    // created". Validate every SLoc the reservation touches up front and fail with the SLocs it IS in.
-    if (this.rfc && storageLocation) {
-      const slocChecks = [{ plant: sapKey(plant, 'plant'), sloc: sapKey(storageLocation, 'lgort'), role: 'issuing' }];
-      if (header.MOVE_STLOC) {
-        slocChecks.push({ plant: sapKey(targetMovePlant, 'plant'), sloc: sapKey(header.MOVE_STLOC, 'lgort'), role: 'receiving' });
-      }
-      for (const chk of slocChecks) {
-        let extended;
+      if (this.rfc && String(movementType).trim() === '311' && receivingStorageLocation) {
         try {
-          const rows = await this.rfc.readTable('MARD', ['LGORT'], [`MATNR = '${s4Mat}'`, `AND WERKS = '${chk.plant}'`], 50);
-          extended = (rows || []).map((r) => (r.LGORT || '').trim()).filter(Boolean);
-        } catch (_mardErr) {
-          continue; // MARD read failed: let the BAPI do its own validation rather than block a valid create
+          const t320Rec = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
+            `WERKS = '${sapKey(plant, 'plant')}'`,
+            `AND LGORT = '${sapKey(receivingStorageLocation, 'lgort')}'`
+          ], 1);
+          if (!t320Rec || !t320Rec.length) {
+            throw httpError(400, `Receiving storage location ${receivingStorageLocation} is not assigned to warehouse in plant ${plant} (T320)`);
+          }
+        } catch (tErr) {
+          if (tErr.status === 400) throw tErr;
         }
-        if (!extended.includes(chk.sloc)) {
-          const avail = extended.length ? extended.join(', ') : '(none - extend the material to a storage location via MM01)';
-          throw httpError(400, `Material ${alphaOut(s4Mat)} is not extended to ${chk.role} storage location ${chk.sloc} in plant ${chk.plant}. Choose one of: ${avail}.`);
+      }
+
+      if (this.rfc && (String(movementType).trim() === '201' || String(movementType).trim() === '241' || String(movementType).trim() === '301') && storageLocation) {
+        try {
+          const t320Iss = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
+            `WERKS = '${sapKey(plant, 'plant')}'`,
+            `AND LGORT = '${sapKey(storageLocation, 'lgort')}'`
+          ], 1);
+          if (!t320Iss || !t320Iss.length) {
+            throw httpError(400, `Issuing storage location ${storageLocation} is not assigned to warehouse in plant ${plant} (T320)`);
+          }
+        } catch (tErr) {
+          if (tErr.status === 400) throw tErr;
         }
       }
-    }
 
-    return await this.rfc.session(async (call) => {
-      const res = await call('BAPI_RESERVATION_CREATE1', {
-        RESERVATIONHEADER: header,
-        RESERVATIONITEMS: [item],
-        ...(testrun ? { TESTRUN: 'X' } : {})
-      });
-
-      const errors = (res.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
-      if (errors.length) {
-        const msg = errors.map((e) => e.MESSAGE).join('; ');
-        throw httpError(400, `BAPI_RESERVATION_CREATE1 failed: ${msg}`);
-      }
-
-      if (!testrun) {
-        await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
-      }
-
-      const resNo = res.RESERVATION ? alphaOut(res.RESERVATION) : '';
-      return {
-        success: true,
-        reservationNo: resNo,
-        reservationNoRaw: res.RESERVATION,
-        reservationItem: '0001',
-        status: STATUS.RES_CREATED,
-        messages: res.RETURN || []
+      const targetMovePlant = receivingPlant || (String(movementType).trim() === '311' ? plant : '');
+      const header = {
+        RES_DATE: this._sapDate(reservationDate),
+        MOVE_TYPE: String(movementType).trim(),
+        ...(targetMovePlant ? { MOVE_PLANT: String(targetMovePlant).trim() } : {}),
+        ...(receivingStorageLocation ? { MOVE_STLOC: String(receivingStorageLocation).trim() } : {}),
+        ...(costCenter ? { COSTCENTER: pad10(costCenter) } : {}),
+        ...(assetNo ? { ASSET_NO: pad12(assetNo), SUB_NUMBER: pad4(subNumber || '0000') } : {})
       };
-    });
+
+      const s4Mat = padMat(sapKey(material, 'matnr'));
+      let sBatch = sapKeyOpt(batch, 'batch');
+      if (this.rfc) {
+        try {
+          const marcRows = await this.rfc.readTable('MARC', ['XCHPF'], [
+            `MATNR = '${s4Mat}'`,
+            `AND WERKS = '${sapKey(plant, 'plant')}'`
+          ], 1);
+          if (String(marcRows?.[0]?.XCHPF || '').trim() === 'X' && !sBatch) {
+            throw httpError(400, `Batch is mandatory for batch-managed material ${alphaOut(s4Mat)}`);
+          }
+          if (String(movementType).trim() === '301' && sBatch && receivingPlant) {
+            await this.validateReceivingBatch(s4Mat, sBatch, receivingPlant);
+          }
+        } catch (bErr) {
+          if (bErr.status === 400) throw bErr;
+        }
+      }
+
+      const item = {
+        MATERIAL: s4Mat,
+        PLANT: sapKey(plant, 'plant'),
+        ...(storageLocation ? { STGE_LOC: String(storageLocation).trim() } : {}),
+        ENTRY_QNT: Number(quantity),
+        ENTRY_UOM: String(unit).trim().toUpperCase(),
+        MOVEMENT: 'X',
+        ...(sBatch ? { BATCH: sBatch } : {})
+      };
+
+      // Preflight: BAPI_RESERVATION_CREATE1 rejects any storage location the material is not extended to
+      // (MARD), returning a cryptic "No storage location data for <mat> in <plant> <sloc>; ... BUS2093 not
+      // created". Validate every SLoc the reservation touches up front and fail with the SLocs it IS in.
+      if (this.rfc && storageLocation) {
+        const slocChecks = [{ plant: sapKey(plant, 'plant'), sloc: sapKey(storageLocation, 'lgort'), role: 'issuing' }];
+        if (header.MOVE_STLOC) {
+          slocChecks.push({ plant: sapKey(targetMovePlant, 'plant'), sloc: sapKey(header.MOVE_STLOC, 'lgort'), role: 'receiving' });
+        }
+        for (const chk of slocChecks) {
+          let extended;
+          try {
+            const rows = await this.rfc.readTable('MARD', ['LGORT'], [`MATNR = '${s4Mat}'`, `AND WERKS = '${chk.plant}'`], 50);
+            extended = (rows || []).map((r) => (r.LGORT || '').trim()).filter(Boolean);
+          } catch (_mardErr) {
+            continue; // MARD read failed: let the BAPI do its own validation rather than block a valid create
+          }
+          if (!extended.includes(chk.sloc)) {
+            const avail = extended.length ? extended.join(', ') : '(none - extend the material to a storage location via MM01)';
+            throw httpError(400, `Material ${alphaOut(s4Mat)} is not extended to ${chk.role} storage location ${chk.sloc} in plant ${chk.plant}. Choose one of: ${avail}.`);
+          }
+        }
+      }
+
+      return await this.rfc.session(async (call) => {
+        const res = await call('BAPI_RESERVATION_CREATE1', {
+          RESERVATIONHEADER: header,
+          RESERVATIONITEMS: [item],
+          ...(testrun ? { TESTRUN: 'X' } : {})
+        });
+
+        const errors = (res.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
+        if (errors.length) {
+          const msg = errors.map((e) => e.MESSAGE).join('; ');
+          const err = httpError(400, `BAPI_RESERVATION_CREATE1 failed: ${msg}`);
+          err.stage = 'RESERVATION';
+          err.success = false;
+          err.error = msg;
+          throw err;
+        }
+
+        if (!testrun) {
+          await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+        }
+
+        const rawResNo = String(res.RESERVATION || '').trim();
+        const resNo = rawResNo ? alphaOut(rawResNo) : '';
+
+        if (!testrun && (!resNo || resNo === '0')) {
+          const err = httpError(500, 'BAPI_RESERVATION_CREATE1 failed: No reservation number generated by SAP');
+          err.stage = 'RESERVATION';
+          err.success = false;
+          err.error = err.message;
+          throw err;
+        }
+
+        return {
+          success: true,
+          reservation: {
+            number: resNo,
+            item: '0001'
+          },
+          movementType: String(movementType).trim(),
+          reservationNo: resNo,
+          reservationNoRaw: rawResNo || (resNo ? resNo.padStart(10, '0') : ''),
+          reservationItem: '0001',
+          status: STATUS.RES_CREATED,
+          messages: res.RETURN || []
+        };
+      });
+    } catch (err) {
+      err.stage = 'RESERVATION';
+      err.success = false;
+      err.error = err.error || err.message;
+      if (throwError === false) {
+        return {
+          success: false,
+          stage: 'RESERVATION',
+          error: err.error || err.message,
+          status: err.status || 400
+        };
+      }
+      throw err;
+    }
   }
 
   /**

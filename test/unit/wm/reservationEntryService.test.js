@@ -339,6 +339,134 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(logs[1].MessageType).toBe('E');
       expect(logs[1].Status).toBe('11');
     });
+
+    test('When reservation creation fails, TR creation is NEVER called and error is returned with stage RESERVATION', async () => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockRejectedValueOnce(
+        Object.assign(new Error('Cost Center 1011201301 locked for postings'), {
+          status: 400,
+          stage: 'RESERVATION',
+          success: false
+        })
+      );
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement');
+
+      await expect(
+        POST(
+          '/odata/v4/reservation-entry/createReservationEntry',
+          {
+            MovementType: '201',
+            Plant: '1120',
+            StorageLocation: 'HS01',
+            Material: '000000008000000023',
+            Quantity: 10,
+            Unit: 'NOS',
+            CostCenter: '1011201301'
+          },
+          authClerk
+        )
+      ).rejects.toMatchObject({
+        response: {
+          status: 400,
+          data: {
+            error: {
+              message: expect.stringMatching(/Cost Center 1011201301 locked for postings/)
+            }
+          }
+        }
+      });
+
+      // TR creation must NEVER be called after reservation failure
+      expect(createTrSpy).not.toHaveBeenCalled();
+
+      // No reservation tracking entry persisted
+      const track = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ CostCenter: '1011201301', Material: '000000008000000023' }));
+      expect(track).toBeFalsy();
+    });
+
+    test('action createReservation: independently creates reservation and returns structured result without creating TR', async () => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValueOnce({
+        success: true,
+        reservation: {
+          number: '520235',
+          item: '0001'
+        },
+        movementType: '201',
+        reservationNo: '520235',
+        reservationNoRaw: '0000520235',
+        reservationItem: '0001',
+        status: '01'
+      });
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement');
+
+      const { status, data } = await POST(
+        '/odata/v4/reservation-entry/createReservation',
+        {
+          MovementType: '201',
+          Plant: '1120',
+          StorageLocation: 'HS01',
+          Material: '000000008000000023',
+          Quantity: 10,
+          Unit: 'NOS',
+          CostCenter: '1011201301'
+        },
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(data).toMatchObject({
+        success: true,
+        reservation: {
+          number: '520235',
+          item: '0001'
+        },
+        movementType: '201'
+      });
+
+      // TR creation must NOT be called by createReservation
+      expect(createTrSpy).not.toHaveBeenCalled();
+
+      // Reservation is persisted in DB with Status 01 (RES_CREATED)
+      const track = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: '0000520235' }));
+      expect(track).toBeTruthy();
+      expect(track.Status_code).toBe('01');
+      expect(track.TransferRequirement).toBe('');
+
+      // Clean up test row
+      await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: '0000520235' }));
+      await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: '0000520235' }));
+    });
+
+    test('action createReservation: returns { success: false, stage: "RESERVATION", error: "..." } on failure', async () => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValueOnce({
+        success: false,
+        stage: 'RESERVATION',
+        error: 'Deficit of BA Unrestricted-use stock'
+      });
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement');
+
+      const { status, data } = await POST(
+        '/odata/v4/reservation-entry/createReservation',
+        {
+          MovementType: '201',
+          Plant: '1120',
+          StorageLocation: 'HS01',
+          Material: '000000008000000023',
+          Quantity: 10,
+          Unit: 'NOS',
+          CostCenter: '1011201301'
+        },
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(data).toMatchObject({
+        success: false,
+        stage: 'RESERVATION',
+        error: 'Deficit of BA Unrestricted-use stock'
+      });
+
+      expect(createTrSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('3. Querying Reservation Entries & Statuses', () => {
