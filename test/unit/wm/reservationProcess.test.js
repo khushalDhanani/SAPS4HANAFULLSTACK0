@@ -21,12 +21,18 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
     mockRfc = {
       session: jest.fn(async (fn) => fn(mockRfc.call)),
       call: jest.fn(),
-      readTable: jest.fn((table) => Promise.resolve(
-        table === 'MARD' ? [{ LGORT: 'HS01' }, { LGORT: 'CS01' }] :
-        table === 'T320' ? [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }, { LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }] :
-        table === 'LTBK' ? [{ LGNUM: 'W01', TBNUM: '0001001839', BWLVS: '311', RSNUM: '0000524979', STATU: '02' }] :
-        []
-      )) // MARD, T320, and LTBK preflight mock
+      readTable: jest.fn((table, fields, options) => {
+        if (table === 'MARD') return Promise.resolve([{ LGORT: 'HS01' }, { LGORT: 'CS01' }]);
+        if (table === 'T320') return Promise.resolve([{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }, { LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }]);
+        if (table === 'LTBK') {
+          const optStr = JSON.stringify(options || []);
+          if (optStr.includes('0001001839') || optStr.includes('1001839')) {
+            return Promise.resolve([{ LGNUM: 'W01', TBNUM: '0001001839', BWLVS: '311', RSNUM: '0000524979', STATU: '02' }]);
+          }
+          return Promise.resolve([]);
+        }
+        return Promise.resolve([]);
+      })
     };
     adapter = new ReservationProcessAdapter({ rfc: mockRfc });
   });

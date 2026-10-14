@@ -615,6 +615,156 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: '0000520999' }));
       await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: '0000520999' }));
     });
+
+    test('action createTOFromTR: creates TO referencing verified SAP TR and returns structured result', async () => {
+      const testRes = '0000529993';
+      await cds.db.run(INSERT.into(TRACK_ENTITY).entries({
+        ReservationNo: testRes,
+        ReservationItem: '0001',
+        MovementType: '311',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        Material: '8000000023',
+        Quantity: 1,
+        Unit: 'NOS',
+        WarehouseNumber: 'W01',
+        TransferRequirement: '0001001839',
+        Status_code: '02'
+      }));
+
+      const getTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'getTransferRequirement').mockResolvedValueOnce({
+        success: true,
+        trNumber: '1001839',
+        trNumberRaw: '0001001839',
+        warehouse: 'W01',
+        movement: '311',
+        reservationNo: '529993'
+      });
+
+      const toSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferOrderFromTR').mockResolvedValueOnce({
+        success: true,
+        warehouseNumber: 'W01',
+        toNumber: '1012966',
+        toNumberRaw: '0001012966',
+        status: '03'
+      });
+
+      try {
+        const { status, data } = await POST(
+          '/odata/v4/reservation-entry/createTOFromTR',
+          {
+            ReservationNo: testRes,
+            ReservationItem: '0001',
+            WarehouseNumber: 'W01'
+          },
+          authClerk
+        );
+
+        expect(status).toBe(200);
+        expect(data).toMatchObject({
+          success: true,
+          reservationNumber: '529993',
+          trNumber: '1001839',
+          toNumber: '1012966',
+          warehouse: 'W01',
+          itemsCreated: 1
+        });
+
+        const track = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        expect(track.Status_code).toBe('03');
+        expect(track.TransferOrder).toBe('0001012966');
+      } finally {
+        getTrSpy.mockRestore();
+        toSpy.mockRestore();
+        await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: testRes }));
+      }
+    });
+
+    test('action createTOFromTR: rejects with stage TR_VALIDATION when TR cannot be verified in SAP', async () => {
+      const testRes = '0000529994';
+      await cds.db.run(INSERT.into(TRACK_ENTITY).entries({
+        ReservationNo: testRes,
+        ReservationItem: '0001',
+        MovementType: '311',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        Material: '8000000023',
+        Quantity: 1,
+        Unit: 'NOS',
+        WarehouseNumber: 'W01',
+        TransferRequirement: '0001009999',
+        Status_code: '02'
+      }));
+
+      const getTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'getTransferRequirement').mockResolvedValueOnce(null);
+
+      try {
+        const { status, data } = await POST(
+          '/odata/v4/reservation-entry/createTOFromTR',
+          {
+            ReservationNo: testRes,
+            ReservationItem: '0001',
+            WarehouseNumber: 'W01'
+          },
+          authClerk
+        );
+
+        expect(status).toBe(200);
+        expect(data).toMatchObject({
+          success: false,
+          stage: 'TR_VALIDATION',
+          error: expect.stringContaining('cannot be verified in SAP')
+        });
+
+        const track = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        expect(track.Status_code).toBe('11');
+        expect(track.ErrorStep).toBe('LT04');
+      } finally {
+        getTrSpy.mockRestore();
+        await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: testRes }));
+      }
+    });
+
+    test('action createTOFromTR: rejects with stage TR when TR is not created on reservation', async () => {
+      const testRes = '0000529995';
+      await cds.db.run(INSERT.into(TRACK_ENTITY).entries({
+        ReservationNo: testRes,
+        ReservationItem: '0001',
+        MovementType: '311',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        Material: '8000000023',
+        Quantity: 1,
+        Unit: 'NOS',
+        WarehouseNumber: 'W01',
+        TransferRequirement: '',
+        Status_code: '01'
+      }));
+
+      try {
+        const { status, data } = await POST(
+          '/odata/v4/reservation-entry/createTOFromTR',
+          {
+            ReservationNo: testRes,
+            ReservationItem: '0001',
+            WarehouseNumber: 'W01'
+          },
+          authClerk
+        );
+
+        expect(status).toBe(200);
+        expect(data).toMatchObject({
+          success: false,
+          stage: 'TR',
+          error: 'TR was not created or TR number is missing'
+        });
+      } finally {
+        await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: testRes }));
+      }
+    });
   });
 
   describe('3. Querying Reservation Entries & Statuses', () => {

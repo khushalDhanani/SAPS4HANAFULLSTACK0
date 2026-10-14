@@ -631,7 +631,7 @@ class ReservationProcessAdapter {
         const where = [`TBNUM = '${s4Tr}'`];
         if (wh) where.push(`AND LGNUM = '${wh}'`);
         const rows = await this.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'BETYP', 'BENUM', 'RSNUM', 'STATU', 'BDATU'], where, 1);
-        if (rows && rows.length && rows[0].TBNUM) {
+        if (rows && rows.length && rows[0].TBNUM && sapKey(rows[0].TBNUM, 'tbnum') === sapKey(s4Tr, 'tbnum')) {
           const r = rows[0];
           return {
             success: true,
@@ -657,7 +657,7 @@ class ReservationProcessAdapter {
           ...(wh ? { IV_LGNUM: wh } : {})
         });
         const h = res?.ET_TR_HEADER?.[0];
-        if (h && h.TBNUM) {
+        if (h && h.TBNUM && sapKey(h.TBNUM, 'tbnum') === sapKey(s4Tr, 'tbnum')) {
           return {
             success: true,
             trNumber: alphaOut(h.TBNUM),

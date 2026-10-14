@@ -5,6 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 5: Separate TR Creation from TO Creation & Enforce SAP TR Verification (2026-10-14, 13:20 IST):** Complete. Decoupled TO creation from raw reservation data across the entire architecture. Enforced sequence: `Reservation` → `TR` → `TR validation` → `TO`. The TO strictly references the verified SAP TR. Added `getTransferRequirement(trNumber, warehouseNumber)` to `ReservationProcessAdapter.js` to read and verify TR directly from SAP (`LTBK` table query and fallback `Z_WM_GET_TR_MATERIAL_LIST`). Gated `createTransferOrderFromTR` so that TO creation cannot be called on unverified TRs. Exposed standalone action `createTOFromTR(ReservationNo, ReservationItem, WarehouseNumber, TRNumber)` in `srv/wm/reservation-entry/service.cds` and implemented handler in `srv/wm/reservation-entry/service.js`, returning `TOCreatedResponse` (`{ success: true, reservationNumber, trNumber, toNumber, warehouse, itemsCreated }`). Added frontend service helper `createTOFromTR` in `ReservationEntryService.js`. All 7 core WM test suites pass 100% green (185/185 tests). `reservationMonitorRetry.test.js` and `createTOFromTR.test.js` also pass 100% green (40/40 tests). CDS compilation and `git diff --check` pass cleanly.
 - **Step 4: Fix Automatic TR Creation & Enforce Critical 8-Field Verification Rule (2026-10-14, 13:05 IST):** Complete. Implemented deterministic TR creation in `srv/integration/s4hana/wm/ReservationProcessAdapter.js` and `srv/wm/reservation-entry/service.js`. Output strictly returns `{ success: true, reservationNumber, trNumber, trItem }`. Enforced critical verification rule across both adapter and service: verifies TR number, TR item, material, quantity, plant, storage location, warehouse, and movement after SAP TR creation before allowing warehouse workflow to continue. If verification fails, flow aborts with `stage: 'TR'`, marks `Status_code: 11` (TR_ERROR) with explicit mismatch message, and blocks TO creation/warehouse scan. Exposed standalone action `createTransferRequirement` returning `TrCreatedResponse`. All 7 WM test suites pass 100% green (178/178 tests). CDS compilation and `git diff --check` pass cleanly.
 - **Step 3: Make MB21 Creation Independently Reliable & Decouple TR Creation (2026-10-14, 12:50 IST):** Complete. Decoupled MB21 reservation creation from background TR creation in `srv/integration/s4hana/wm/ReservationProcessAdapter.js` and `srv/wm/reservation-entry/service.js`. Enforced strict sequence: `createReservation()` → SAP reservation created → reservation number returned → persist reservation in DB → create TR. If reservation creation fails, the process aborts immediately with structured `{ success: false, stage: 'RESERVATION', error: '...' }` and TR creation is never called. Exposed dedicated standalone action `createReservation` returning structured `{ success: true, reservation: { number, item }, movementType }`. All 7 WM unit test suites pass 100% green (169/169 tests). CDS compilation and `git diff --check` pass cleanly.
 - **Step 2: Fix the Reservation Creation Layer First & Single Normalized Movement Configuration (2026-10-14, 12:35 IST):** Complete. Implemented single normalized movement configuration (`MOVEMENT_CONFIG` supporting 201, 241, 311, 301) and strict pre-validation (`validateReservationInput`) across `srv/common/movementConfig.js`, `srv/wm/reservation-entry/service.js`, and `srv/integration/s4hana/wm/ReservationProcessAdapter.js`. Added `ReservationDate: Date` support to CDS persistence and actions. Resolved WM movement resolution (`resolveWmMovement`) with SAP WM staging fallback (311 for 201/241 unless `WM_TR_REAL_MOVEMENT === 'true'`). All 7 WM unit test suites pass 100% green (164/164 tests). CDS compilation, UI5 lint/tests, and `git diff --check` pass cleanly.
@@ -6184,6 +6185,107 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git diff --check` → PASS (0 whitespace/formatting errors).
   - `git status` → Clean; zero commits created.
 - **Errors / blockers:** None.
-- **Next action:** Step 5: Fix Warehouse Scan validation starting with Movement 201.
+- **Next action:** Step 5: Separate TR creation from TO creation.
 
+### 2026-10-14 13:20 IST — Step 5: Separate TR Creation from TO Creation & Enforce SAP TR Verification (Complete)
 
+- **User Request:**
+  - Separate TR creation from TO creation.
+  - Do not create TO directly from reservation data.
+  - Sequence architecture:
+    ```
+    Reservation
+         ↓
+    TR
+         ↓
+    TR validation
+         ↓
+    TO
+    ```
+  - The TO should reference the actual SAP TR.
+  - Conceptual pattern:
+    ```javascript
+    const tr = await createTransferRequirement(...);
+    if (!tr?.number) {
+      throw new Error("TR was not created");
+    }
+    const verifiedTR = await getTransferRequirement(tr.number);
+    if (!verifiedTR) {
+      throw new Error("Created TR cannot be verified");
+    }
+    const to = await createTOFromTR({
+      trNumber: tr.number
+    });
+    ```
+  - Eliminates "application says success but SAP document doesn't exist" problems.
+- **Root Cause & Architectural Alignment:**
+  - TO creation must never bypass TR existence and must never synthesize a TO from reservation parameters.
+  - An explicit lookup and verification of the TR (`getTransferRequirement`) in SAP (`LTBK` table or `Z_WM_GET_TR_MATERIAL_LIST`) guarantees that SAP actually persisted the TR before any TO creation is initiated.
+- **Implementation Delivered:**
+  1. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Added `getTransferRequirement(trNumber, warehouseNumber)`:
+       - Normalizes TR key to 10 characters.
+       - Queries SAP transparent table `LTBK` (`LGNUM`, `TBNUM`, `BWLVS`, `BETYP`, `BENUM`, `RSNUM`, `STATU`, `BDATU`).
+       - Matches returned `TBNUM` against requested `s4Tr`.
+       - Falls back to RFC wrapper `Z_WM_GET_TR_MATERIAL_LIST` if table read fails.
+       - Returns structured TR verification object `{ success: true, trNumber, trNumberRaw, warehouse, movement, requirementType, requirementNo, reservationNo, status, source }` or `null` if not found in SAP.
+     - Updated `createTransferOrderFromTR(params = {})`:
+       - Enforced TR existence verification gate: calls `await this.getTransferRequirement(s4Tr, wh)` before executing `L_TO_CREATE_TR` / `ZWM_TO_CREATE_FROM_TR`.
+       - If TR cannot be verified in SAP, throws descriptive error: `Created TR ${trNumber} cannot be verified in SAP before TO creation`.
+  2. `srv/wm/reservation-entry/service.cds`:
+     - Defined structured CDS return type `TOCreatedResponse`:
+       ```cds
+       type TOCreatedResponse {
+           success           : Boolean;
+           stage             : String(20);
+           error             : String(255);
+           reservationNumber : String(10);
+           trNumber          : String(10);
+           toNumber          : String(10);
+           warehouse         : String(3);
+           itemsCreated      : Integer;
+       };
+       ```
+     - Added standalone action:
+       ```cds
+       @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+       action createTOFromTR(
+           ReservationNo   : String(10),
+           ReservationItem : String(4),
+           WarehouseNumber : String(3),
+           TRNumber        : String(10)
+       ) returns TOCreatedResponse;
+       ```
+  3. `srv/wm/reservation-entry/service.js`:
+     - Implemented action handler `this.on('createTOFromTR', async (req) => { ... })`:
+       - Resolves reservation tracking record and TR number.
+       - If TR number is missing or zero, aborts with `{ success: false, stage: 'TR', error: 'TR was not created or TR number is missing' }`.
+       - Performs SAP TR verification via `adapter.getTransferRequirement(rawTrNumber, determinedWh)`.
+       - If verification fails, marks reservation `Status_code: 11` (TR_ERROR) with step `LT04`, logs error, and returns `{ success: false, stage: 'TR_VALIDATION', error: 'Created TR cannot be verified in SAP' }`.
+       - Checks unconfirmed TO items guard (`findUnconfirmedToItems`).
+       - Creates TO referencing verified TR via `adapter.createTransferOrderFromTR({ warehouseNumber, trNumber: verifiedTR.trNumberRaw || rawTrNumber, movementType })`.
+       - Updates reservation tracking record with `Status_code: 03` (`TO_CREATED`), `TransferOrder`, and logs step `LT04`.
+       - Returns `{ success: true, reservationNumber, trNumber, toNumber, warehouse, itemsCreated: 1 }`.
+     - In `retryStep` (`LT04`), verified TR exists in SAP before attempting TO creation.
+  4. `app/fiori-app/webapp/modules/wm/reservation-entry/service/ReservationEntryService.js`:
+     - Added frontend service methods `createReservation`, `createTransferRequirement`, and `createTOFromTR` to support decoupled step execution from UI controllers.
+  5. Unit Tests Added & Updated:
+     - `test/unit/wm/reservationProcess.test.js`:
+       - Updated `beforeEach` mock for `LTBK` table filtering.
+       - Verified `getTransferRequirement` reads from `LTBK`.
+       - Verified `getTransferRequirement` fallback to `Z_WM_GET_TR_MATERIAL_LIST`.
+       - Verified `getTransferRequirement` returns `null` when not found.
+       - Verified `createTransferOrderFromTR` rejects when TR cannot be verified in SAP.
+       - Verified `createTransferOrderFromTR` succeeds when TR is verified.
+     - `test/unit/wm/reservationEntryService.test.js`:
+       - Verified `action createTOFromTR` creates TO referencing verified SAP TR and returns structured result.
+       - Verified `action createTOFromTR` rejects with `stage: 'TR_VALIDATION'` when TR cannot be verified in SAP and sets status 11.
+       - Verified `action createTOFromTR` rejects with `stage: 'TR'` when TR is not created on reservation.
+- **Validation results:**
+  - `npx jest test/unit/wm/movementConfig.test.js test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/mvt201Process.test.js test/unit/wm/mvt241Process.test.js test/unit/wm/mvt311Process.test.js test/unit/wm/mvt301Process.test.js` → **PASS, 7 test suites, 185 tests passed (100% green)**.
+  - `npx jest test/unit/wm/reservationMonitorRetry.test.js test/unit/wm/createTOFromTR.test.js` → **PASS, 2 test suites, 40 tests passed (100% green)**.
+  - `npx cds compile srv/wm/reservation-entry/service.cds` → PASS (exit code 0, clean compilation).
+  - `git diff --check` → PASS (0 whitespace/formatting errors).
+  - `git status` → Clean; zero commits created.
+- **Errors / blockers:** None.
+- **Next action:** Step 6: Warehouse Scan validation starting with Movement 201 & LT12 TO Confirmation.
