@@ -89,7 +89,8 @@ class TrToHandler {
           const ltakRows = await resProcessAdapter.rfc.readTable('LTAK', ['TBNUM', 'RSNUM', 'BWLVS'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
           if (ltakRows?.[0]) {
             const tbnum = ltakRows[0].TBNUM?.trim();
-            const rsnum = ltakRows[0].RSNUM?.trim();
+            const rsnumRaw = ltakRows[0].RSNUM?.trim();
+            const rsnum = rsnumRaw ? sapKey(rsnumRaw, 'rsnum').padStart(10, '0') : '';
             if (!sMvt && ltakRows[0].BWLVS?.trim()) sMvt = ltakRows[0].BWLVS.trim();
             if (rsnum && rsnum !== '0000000000') {
               const resbRows = await resProcessAdapter.rfc.readTable('RESB', ['BWART', 'UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${rsnum}'`], 1);
@@ -330,6 +331,21 @@ class TrToHandler {
         const result = await withReservationLock(lockKey ? adapter.rfc : null, lockKey, (scopedRfc) =>
           (scopedRfc && adapter.withRfc ? adapter.withRfc(scopedRfc) : adapter).createTOFromTR(data));
         result.ProcessId = processId;
+
+        if (result.TransferOrder && process.env.WM_ALLOW_MISMATCHED_TR === 'true' &&
+            result.ReservationMovementType && result.MovementType &&
+            result.ReservationMovementType !== result.MovementType) {
+          await log(ReservationLog, {
+            ReservationNo: result.ReservationNo || existing?.ReservationNo || '',
+            ReservationItem: result.ReservationItem || existing?.ReservationItem || '',
+            ProcessId: processId,
+            DocumentNo: result.TransferOrder,
+            Step: 'LT04',
+            Status: result.Status || STATUS.TO_CREATED,
+            MessageType: 'W',
+            MessageText: `Sandbox only: mismatched TR movement ${result.MovementType} / reservation movement ${result.ReservationMovementType}; stock staged into 921`
+          });
+        }
 
         if (trackKey && result.TransferOrder) {
           try {

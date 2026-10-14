@@ -5,6 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Mismatched TR safety and key normalization (2026-10-14, 10:57 IST):** Code/docs changes complete; focused mock-only suites pass (56/56), UI5 lint reports no findings, and UI5 build succeeds. Build warns that the third-party jsPDF source map is missing; the optional UI5 update check cannot access the local config store. No SAP writes or live browser verification. Historical Client 220 read notes establish `RKPF-KOSTL=1011201301` for reservation 0000527870; they do not include a raw `RESB-KOSTL` value, `LTBK-BETYP/BENUM`, or a current TO/LQUA read for TR 0001000823. Because lookupTR prefers LTBK-BENUM when BETYP=K, the source of the displayed cost center is UNSURE pending that LTBK read. No seed/default is evidenced; the tracking record is documented absent.
 - **Transfer Order 1037307 (Movement 301) Missing Receiving Plant & Post-TO Goods Movement Resolution (2026-10-13, 17:00 IST):**
   - **Issue:** Transfer Order 1037307 confirmed, but MIGO Goods Movement failed: `Receiving Plant is mandatory for Movement Type 301 (Plant to Plant Transfer)`.
   - **Live S/4HANA Inspection (Client 220):**
@@ -1745,6 +1746,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Next Recommended Action (2026-10-14, 10:55 IST):** Check the new persistent banner in the browser with the sandbox flag enabled. Separately obtain fresh read-only Client 220 rows for `RESB` and `RKPF` reservation `0000527870`, plus `LTBK`/`LTAK`/`LTAP`/`LQUA` for TR `0001000823`, before deciding whether a TO exists or stock remains in 921. Do not process any of the three listed mismatched TRs meanwhile.
 - **Next Recommended Action (2026-10-13, 13:32 IST):**
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant to decide `T321` `TBFKZ` for movement 201/241 and clarify row 1/14 `LFART = 'DOG'` behavior for movement 311.
   2. Await consultant's execution of controlled snapshot runbook or authorization of live test stock in `EN1`.
@@ -5903,3 +5905,59 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
     - `Create & Confirm TO` button blocked / disabled.
 - **Current Status:** Verified and complete. All 4 requirements satisfied and verified against code, tests, and live browser.
 - **Next Steps:** Ready for user review.
+### 2026-10-14 10:44 IST — RFC Reservation Key Normalization and Mismatched TO Warning Log (Complete)
+
+- **Plan:** Normalize the RFC-derived reservation key before filtering RESB; add a ReservationLog warning for mismatched TO results when the sandbox override is active. Follow with focused mock-only tests.
+- **Change:** `srv/wm/tr-to/handlers/trTo.handler.js` now passes `LTAK-RSNUM` through `sapKey(..., 'rsnum')` and pads it to the 10-character SAP key before use in the RESB filter. On a TO result that has differing TR and reservation movements while `WM_ALLOW_MISMATCHED_TR=true`, writes a `ReservationLog` warning identifying the TO and 921 staging.
+- **Validation:** `npx jest test/unit/wm/trToHandler.test.js test/unit/wm/warehouseScanToUi.test.js --runInBand` → PASS (2 suites, 56/56). Handler regression assertions are source-level mock-only checks. `git diff --check` → PASS. No SAP request or browser verification. TO warning is wired to the existing singular `ReservationLog` CAP entity and its existing fields.
+- **Errors / blockers:** No SAP write performed. Current status: Complete for requested code change, with live SAP verification not performed.
+- **Next action:** Review the diff and obtain fresh read-only 823 SAP rows before assigning its TO/921 balance.
+
+### 2026-10-14 10:45 IST — Permanent Sandbox Warning Banner (Complete)
+
+- **Change:** `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml` now renders a non-dismissible warning strip whenever the existing `scanView>/allowMismatchedTR` model value is true. Text: `sandbox only: stock will be staged into 921`.
+- **Validation:** Targeted Jest → PASS (56/56; banner assertion explicitly mock only, not browser verification). `cd app/fiori-app && npm run lint` → PASS, UI5 linter 0 findings (update-check warning: local config store permission). `npm run build` → PASS; builder warning: missing third-party jsPDF source map; optional update check warning: local config-store permission.
+- **Errors / blockers:** No browser verification performed. Current status: Complete for UI code and mock test.
+- **Next action:** Check the fixed warning strip in the browser when the sandbox flag is enabled; do not report browser verification until actually performed.
+
+### 2026-10-14 10:45 IST — Sandbox Override Documented with Safe Default (Complete)
+
+- **Change:** `.env.example` documents `WM_ALLOW_MISMATCHED_TR=false` with the requested sandbox-only note; runtime flag default remains false.
+- **Validation:** Confirmed `.env.example` has `WM_ALLOW_MISMATCHED_TR=false` and the sandbox-only comment; targeted Jest suites PASS (56/56).
+- **Errors / blockers:** None known. Current status: Complete.
+- **Next action:** No further template action.
+
+### 2026-10-14 10:46 IST — Mismatched TR Hold Note (Complete; current status unresolved for 823)
+
+- **Change:** Added `docs/abap/mismatched-trs.md` with TRs 0001000757, 0001000760 and 0001000823, the historically recorded TOs and 921 quants where available, and a do-not-process instruction. Explicitly labels 823 TO/stock and current balances UNSURE where the read records do not establish them.
+- **Validation:** Cross-checked 757/760 TO and historical 921 quant values against `WORKSTATUS.md` lines 2621–2663; 823 details against lines 5845–5855. `git diff --check` PASS. Current balance fields remain explicitly UNSURE where only historic snapshots exist or no LQUA read is present.
+- **Errors / blockers:** No live read or SAP write performed. Current status: Complete as a history-based note; live 823 stock/TO status remains unresolved.
+- **Next action:** Fresh read-only Client 220 snapshot for 823 before any future disposition.
+
+### 2026-10-14 10:47 IST — Mock-Only Regression Coverage for Key Filter and Sandbox Warning (Complete)
+
+- **Change:** Added explicitly labeled `[mock only, not browser verification]` tests in `test/unit/wm/trToHandler.test.js` for normalized RESB filtering and warning log behavior, and `test/unit/wm/warehouseScanToUi.test.js` for the permanent warning markup and enabled flag model state.
+- **Validation:** Targeted suites PASS (2 suites, 56/56). All newly added tests include `[mock only, not browser verification]` labels. UI5 lint PASS (0 findings); `git diff --check` PASS.
+- **Errors / blockers:** First run had 1 test setup failure / 55 pass; after setting mock model flag, rerun passed. No browser or SAP test performed. UI5 linter update-check emitted a local config store permission warning.
+- **Next action:** Check the fixed warning strip in the browser with flag enabled, and obtain fresh read-only Client 220 823 stock/TO rows.
+
+### 2026-10-14 10:49 IST — Correct Mock Setup After First Test Failure (Resolved)
+
+- **Change:** Initial Jest run found the banner test inspected the model before route data initialized it (expected true, received false). Updated the test to set `/allowMismatchedTR` explicitly; the separate route test asserts adapter-to-model mapping. `git diff --check` also reported an extra blank line at EOF in this log; attempted whitespace normalization was blocked by the host `python3` shim failing to create its xcrun cache under `/var/folders/...`.
+- **Validation:** Initial Jest run had 1 failed / 55 passed; after the test setup correction the rerun passed (56/56). `git diff --check` subsequently passed. UI5 lint passed with 0 findings; its update-check warned about the local config store.
+- **Errors / blockers:** Attempt to normalize trailing whitespace via host `python3` could not create its xcrun cache; subsequent `git diff --check` passed without requiring that edit. Current status: Resolved.
+- **Next action:** Final review and report; no browser or SAP validation is claimed.
+
+### 2026-10-14 10:56 IST — Remove Unspecified Message Identifiers from Warning Row (Complete)
+
+- **Change:** Removed optional `MessageId` and `MessageNo` values from the mismatch warning log insert to avoid introducing unverified identifier values. The row uses existing `MessageType='W'` and `MessageText` fields.
+- **Validation:** `npx jest test/unit/wm/trToHandler.test.js --runInBand` → PASS (12/12); `git diff --check` → PASS; final `git status --short` shows only the requested changed/new files.
+- **Errors / blockers:** None. Current status: Complete.
+- **Next action:** Check warning banner in browser and obtain fresh read-only SAP rows for TR 0001000823; no browser or live SAP validation is claimed here.
+
+### 2026-10-14 10:57 IST — Downgrade Cost-Center Source Attribution Pending LTBK Fields (Complete)
+
+- **Change:** Final source review found `lookupTR` initializes cost center from `LTBK-BENUM` when `BETYP='K'` before its `RKPF-KOSTL` fallback. Existing TR 0001000823 notes omit `LTBK-BETYP/BENUM`; corrected Current Status to say the displayed cost-center source is UNSURE, while preserving the confirmed raw `RKPF-KOSTL=1011201301`.
+- **Validation:** Source inspected at `TrToAdapter.js` lines 754 and 789–800; historical read notes at `WORKSTATUS.md` lines 5846–5851 show `RKPF-KOSTL` but omit `LTBK-BETYP/BENUM`. `git diff --check` → PASS.
+- **Errors / blockers:** No raw LTBK BETYP/BENUM read is available; no SAP request performed. Current status: attribution unresolved, no seed/default evidence found.
+- **Next action:** Read `LTBK-BETYP/BENUM` for TR 0001000823 and compare with RKPF to identify the actual source.

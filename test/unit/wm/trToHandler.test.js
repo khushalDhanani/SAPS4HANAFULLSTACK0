@@ -1,4 +1,6 @@
 const TrToHandler = require('../../../srv/wm/tr-to/handlers/trTo.handler');
+const fs = require('fs');
+const path = require('path');
 
 describe('TrToHandler', () => {
   let handlers;
@@ -63,6 +65,20 @@ describe('TrToHandler', () => {
     const r2 = req({});
     await handlers.createTO(r2);
     expect(r2.error).toHaveBeenCalledWith(500, 'boom');
+  });
+
+  it('normalizes LTAK-RSNUM with sapKey before the RESB filter [mock only, not browser verification]', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../../srv/wm/tr-to/handlers/trTo.handler.js'), 'utf8');
+    expect(source).toMatch(/const rsnum = rsnumRaw \? sapKey\(rsnumRaw, 'rsnum'\)\.padStart\(10, '0'\) : '';/);
+    expect(source).toMatch(/readTable\('RESB',[^\n]+`RSNUM = '\$\{rsnum\}'`/);
+  });
+
+  it('writes a warning ReservationLog row for mismatched TO results under the sandbox flag [mock only, not browser verification]', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../../srv/wm/tr-to/handlers/trTo.handler.js'), 'utf8');
+    expect(source).toMatch(/result\.TransferOrder && process\.env\.WM_ALLOW_MISMATCHED_TR === 'true'/);
+    expect(source).toMatch(/result\.ReservationMovementType !== result\.MovementType/);
+    expect(source).toMatch(/MessageType: 'W'/);
+    expect(source).toMatch(/MessageText: `Sandbox only: mismatched TR movement[\s\S]*stock staged into 921`/);
   });
 
   // ─── autoConfirm × autoPostMigo MIGO gate matrix (handler level) ───────────

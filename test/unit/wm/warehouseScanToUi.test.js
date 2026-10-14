@@ -29,6 +29,8 @@
  *      * btnRetryMigo (Retry MIGO button)
  *      * btnScanNextTR (Scan Next TR button navigating to main list)
  */
+const fs = require('fs');
+const path = require('path');
 
 let WarehouseScanToController;
 let WarehouseScanToDetailController;
@@ -999,6 +1001,13 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             expect(detailModel.getProperty('/effectiveMovementType')).toBe('201');
             expect(detailModel.getProperty('/costCenter')).toBe('CC1120');
             expect(detailModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('shows the persistent sandbox 921 warning when mismatch override is true [mock only, not browser verification]', () => {
+            const viewXml = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml'), 'utf8');
+            detailModel.setProperty('/allowMismatchedTR', true);
+            expect(viewXml).toMatch(/id="mismatchedTrSandboxWarning"[\s\S]*?visible="\{scanView>\/allowMismatchedTR\}"[\s\S]*?text="sandbox only: stock will be staged into 921"[\s\S]*?showCloseButton="false"/);
+            expect(detailModel.getProperty('/allowMismatchedTR')).toBe(true);
         });
 
         it('genuine 311 still shows the field and requires receiving SLoc [mock only, not browser verification]', async () => {
