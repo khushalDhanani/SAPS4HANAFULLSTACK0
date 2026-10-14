@@ -311,14 +311,14 @@
                 <!-- SECTION: TRANSFER DESTINATION / ACCOUNT ASSIGNMENT -->
                 <Panel
                     id="panelDestination"
-                    headerText="{= ${scanView>/tr/MovementType} === '301' ? ${i18n>scanToPanelDestination301} : (${scanView>/tr/MovementType} === '311' ? ${i18n>scanToPanelDestination311} : (${scanView>/tr/MovementType} === '201' ? ${i18n>scanToPanelAccount201} : (${scanView>/tr/MovementType} === '241' ? ${i18n>scanToPanelAccount241} : ${i18n>scanToPanelDestinationTitle}))) }"
-                    visible="{= ${scanView>/hasTR} &amp;&amp; (${scanView>/tr/MovementType} === '301' || ${scanView>/tr/MovementType} === '311' || ${scanView>/tr/MovementType} === '201' || ${scanView>/tr/MovementType} === '241') }"
+                    headerText="{= (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '301' ? ${i18n>scanToPanelDestination301} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '311' ? ${i18n>scanToPanelDestination311} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '201' ? ${i18n>scanToPanelAccount201} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '241' ? ${i18n>scanToPanelAccount241} : ${i18n>scanToPanelDestinationTitle}))) }"
+                    visible="{= ${scanView>/hasTR} &amp;&amp; ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '301' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '311' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '201' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '241') }"
                     expandable="false"
                     expanded="true"
                     class="sapUiSmallMarginBottom">
                     <VBox class="sapUiSmallMargin">
                         <!-- MOVEMENT 301: PLANT TO PLANT -->
-                        <VBox visible="{= ${scanView>/tr/MovementType} === '301' }" class="sapUiTinyMarginBottom">
+                        <VBox visible="{= (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '301' }" class="sapUiTinyMarginBottom">
                             <Label
                                 text="{i18n>scanToLabelReceivingPlant}"
                                 design="Bold"
@@ -363,7 +363,7 @@
                         </VBox>
 
                         <!-- MOVEMENT 311: INTRA-PLANT -->
-                        <VBox visible="{= ${scanView>/tr/MovementType} === '311' }" class="sapUiTinyMarginBottom">
+                        <VBox visible="{= (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '311' }" class="sapUiTinyMarginBottom">
                             <Label
                                 text="{i18n>scanToLabelReceivingSLoc}"
                                 design="Bold"
@@ -388,7 +388,7 @@
                         </VBox>
 
                         <!-- MOVEMENT 201: COST CENTER -->
-                        <VBox visible="{= ${scanView>/tr/MovementType} === '201' }" class="sapUiTinyMarginBottom">
+                        <VBox visible="{= (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '201' }" class="sapUiTinyMarginBottom">
                             <Label
                                 text="{i18n>scanToLabelCostCenter}"
                                 design="Bold"
@@ -407,7 +407,7 @@
                         </VBox>
 
                         <!-- MOVEMENT 241: ASSET -->
-                        <VBox visible="{= ${scanView>/tr/MovementType} === '241' }" class="sapUiTinyMarginBottom">
+                        <VBox visible="{= (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '241' }" class="sapUiTinyMarginBottom">
                             <Label
                                 text="{i18n>scanToLabelAssetNo}"
                                 design="Bold"

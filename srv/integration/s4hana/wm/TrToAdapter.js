@@ -94,7 +94,7 @@ class TrToAdapter {
         () => this.rfc.readTable('MAKT', ['MAKTX'], [`MATNR = '${m}'`, "AND SPRAS = 'E'"]),
         `Read description of material ${alphaOut(m)}`
       );
-      out[m] = rows[0]?.MAKTX || '';
+      out[m] = rows?.[0]?.MAKTX || '';
     }
     return out;
   }
@@ -755,12 +755,14 @@ class TrToAdapter {
     let assetNo = tr.Betyp === 'A' ? alphaOut(tr.Benum) : '';
     let subNumber = tr.Betyp === 'A' ? '0000' : '';
 
+    let reservationMovementType = '';
+
     // 1. RESB (via RSNUM/RSPOS)
     if (tr.Rsnum && String(tr.Rsnum).trim() !== '' && String(tr.Rsnum).trim() !== '0000000000' && this.rfc) {
       try {
         const rsnumPadded = sapKey(tr.Rsnum, 'rsnum').padStart(10, '0');
         const resbRows = await this._rfc(
-          () => this.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${rsnumPadded}'`], 10),
+          () => this.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'BWART', 'UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${rsnumPadded}'`], 10),
           `Read RESB for reservation ${alphaOut(rsnumPadded)}`
         );
         let matched = null;
@@ -769,6 +771,9 @@ class TrToAdapter {
         }
         matched = matched || (resbRows || [])[0];
         if (matched) {
+          if (matched.BWART?.trim()) {
+            reservationMovementType = matched.BWART.trim();
+          }
           if (matched.UMLGO?.trim()) {
             receivingStorageLocation = String(matched.UMLGO).trim().toUpperCase();
             recSLocSource = 'Reservation';
@@ -817,6 +822,9 @@ class TrToAdapter {
             );
           }
           if (track) {
+            if (!reservationMovementType && track.MovementType?.trim()) {
+              reservationMovementType = track.MovementType.trim();
+            }
             if (!receivingStorageLocation && track.ReceivingStorageLocation?.trim()) {
               receivingStorageLocation = String(track.ReceivingStorageLocation).trim().toUpperCase();
               recSLocSource = recSLocSource || 'Tracking';
@@ -867,6 +875,12 @@ class TrToAdapter {
       }
     }
 
+    let warning = '';
+    const allowMismatchedTR = process.env.WM_ALLOW_MISMATCHED_TR === 'true';
+    if (reservationMovementType && tr.Bwlvs && reservationMovementType !== tr.Bwlvs) {
+      warning = `TR movement ${tr.Bwlvs} does not match reservation movement ${reservationMovementType}`;
+    }
+
     return {
       TransferRequirement: alphaOut(tr.Tbnum),
       TRNumber: alphaOut(tr.Tbnum),
@@ -876,7 +890,10 @@ class TrToAdapter {
       RequirementType: tr.Betyp || '',
       RequirementNumber: alphaOut(tr.Benum) || '',
       ReservationNo: alphaOut(tr.Rsnum) || '',
-      ReservationItem: '',
+      ReservationItem: item?.Rspos ? alphaOut(item.Rspos) : '',
+      ReservationMovementType: reservationMovementType,
+      AllowMismatchedTR: allowMismatchedTR,
+      Warning: warning || (stockWarning ? `Stock deficit: ${stockWarning}` : ''),
       Material: sel.Material || '',
       MaterialName: sel.MaterialDesc || '',
       MaterialDescription: sel.MaterialDesc || '',
@@ -1146,13 +1163,34 @@ class TrToAdapter {
     autoPostMigo = false,
     existingToNumber = '',
     status = '',
-    confMenge
+    confMenge,
+    reservationMovementType = '',
+    ReservationMovementType = ''
   } = {}) {
     const quantity = Number(qty);
     if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
 
     const wh = warehouse(lgnum);
     const tr = await this.getTR(tbnum, wh);
+
+    let effResMvt = (ReservationMovementType || reservationMovementType || '').trim();
+    if (!effResMvt && tr.Rsnum && String(tr.Rsnum).trim() !== '' && String(tr.Rsnum).trim() !== '0000000000' && this.rfc && !this.rfc.readTable?.mock) {
+      try {
+        const rsnumPadded = sapKey(tr.Rsnum, 'rsnum').padStart(10, '0');
+        const resbRows = await this._rfc(
+          () => this.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'BWART'], [`RSNUM = '${rsnumPadded}'`], 1),
+          `Read RESB for reservation ${alphaOut(rsnumPadded)}`
+        );
+        if (resbRows?.[0]?.BWART?.trim()) {
+          effResMvt = resbRows[0].BWART.trim();
+        }
+      } catch (_) {}
+    }
+
+    const allowMismatchedTR = process.env.WM_ALLOW_MISMATCHED_TR === 'true';
+    if (effResMvt && tr.Bwlvs && effResMvt !== tr.Bwlvs && !allowMismatchedTR) {
+      throw httpError(400, `TR movement ${tr.Bwlvs} does not match reservation movement ${effResMvt}`);
+    }
 
     let finalRecPlant = (ReceivingPlant || receivingPlant) ? String(ReceivingPlant || receivingPlant).trim() : '';
     let finalRecSLoc = (ReceivingStorageLocation || receivingStorageLocation) ? String(ReceivingStorageLocation || receivingStorageLocation).trim() : '';
@@ -1421,6 +1459,7 @@ class TrToAdapter {
       TRItem: item.Tbpos,
       ReservationNo: alphaOut(tr.Rsnum) || '',
       ReservationItem: '',
+      ReservationMovementType: effResMvt,
       MovementType: tr.Bwlvs || '',
       CostCenter: finalCostCenter,
       AssetNo: finalAssetNo,

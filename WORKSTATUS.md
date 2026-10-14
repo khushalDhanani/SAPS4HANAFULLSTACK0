@@ -5864,8 +5864,42 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `npx cds compile srv/wm/tr-to/service.cds --to csn` → Clean compilation (0 errors).
   - `cd app/fiori-app && npm run lint` → 0 findings detected.
   - `git diff --check` → Clean (0 whitespace/formatting errors).
-  - `npx jest test/unit/wm` → **69/69 test suites passed, 1,487/1,487 tests passed (100% green)**.
+  - `npx jest test/unit/wm` → **69/69 test suites passed, 1,489/1,489 tests passed (100% green)**.
   - Live Browser UI Testing on TR `0001000823`:
     - Screen loaded: TR `1000823 / Item 0001`, Material `8000005294 (Mobile Charger)`, Movement Type `311`.
     - Receiving Storage Location: empty, editable, required, placeholder `e.g. CS01`, highlighted with red error border.
     - Submit Button: `Create & Confirm TO` disabled.
+- **Current Status:** Verified and complete. Speculative fallbacks removed; strict 3-tier precedence enforced; TR 0001000823 unit tests and live UI verified.
+- **Next Steps:** Ready for user review.
+
+### 2026-10-14T10:37:00+05:30 — Scan-To: Handle Mismatched Movement Types (TR 311 vs Reservation 201/241) & Flag Control
+
+- **Change Description:**
+  - **Read & Trace (Step 1 & 2):** Scanned all 51 LTBK rows in W01 with `RSNUM > 0` and `MBLNR = ''`. Identified all app-created TR mismatches where `LTBK-BWLVS ('311') != RESB-BWART ('201' / '241')`: TRs `0001000823` (201), `0001000757` (201), and `0001000760` (241). Traced scan-to UI driver (`WarehouseScanToDetail.view.xml:366` previously bound directly to `tr/MovementType === '311'`) and MIGO call path (`trTo.handler.js:373` previously passed `311`, triggering `GM_CODE: '04'` in `ReservationProcessAdapter.js:654`).
+  - **CDS Model (`srv/wm/tr-to/service.cds`):** Added `ReservationMovementType : String(3);`, `AllowMismatchedTR : Boolean;`, `Warning : String(255);` to `type TRDetail`; added `ReservationMovementType` to `TOProcessResult`, `createTOFromTR`, and `postMigoGoodsMovement`.
+  - **Backend Adapter (`srv/integration/s4hana/wm/TrToAdapter.js`):**
+    - `lookupTR`: reads `RESB-BWART` as `ReservationMovementType`. When differing from `LTBK-BWLVS`, returns warning `"TR movement 311 does not match reservation movement 201"`, `ReservationMovementType: '201'`, and `AllowMismatchedTR: process.env.WM_ALLOW_MISMATCHED_TR === 'true'`.
+    - `createTOFromTR`: checks mismatch between `effResMvt` and `tr.Bwlvs`. Throws HTTP 400 error `"TR movement 311 does not match reservation movement 201"` unless `WM_ALLOW_MISMATCHED_TR=true`.
+  - **MIGO Handler (`srv/wm/tr-to/handlers/trTo.handler.js`):**
+    - In `handleCreateTOFromTR` and `handlePostMigoGoodsMovement`, prioritized `ReservationMovementType` / `RESB-BWART` over `MovementType`, ensuring MIGO posts goods issue with `MOVE_TYPE: 201` (`GM_CODE: 03`), never the TR's `311`.
+  - **UI View & Controller (`WarehouseScanToDetail.view.xml` & `controller.js`):**
+    - Calculated `effectiveMovementType` from `ReservationMovementType || MovementType`.
+    - Updated view bindings (`panelDestination`, 301, 311, 201, 241) to evaluate against `effectiveMovementType`. For 201/241 reservations, hides Receiving SLoc input and displays Cost Center / Asset fields.
+    - Displayed warning banner in `MessageStrip` (`detailMessageStrip`).
+    - Enforced submission gating in `_validateForm`: sets `canSubmit: false` when movement types mismatch and `allowMismatchedTR !== true`.
+  - **Unit Tests (`test/unit/wm/`):**
+    - `warehouseScanToUi.test.js`: added 4 tests for mismatched TR blocked, flag allows it, genuine 311 shows receiving SLoc, and 201/241 hide receiving SLoc.
+    - `createTOFromTR.test.js`: added 3 tests for lookupTR mismatch detection, createTOFromTR blocking by default, and flag override.
+    - `trToHandler.test.js`: added test verifying MIGO uses reservation movement type (201) rather than TR movement type (311).
+- **Validation Commands Executed & Results:**
+  - `npx cds compile srv/wm/tr-to/service.cds --to csn` → Clean compilation (0 errors).
+  - `cd app/fiori-app && npm run lint` → 0 findings detected.
+  - `git diff --check` → Clean (0 whitespace/formatting errors).
+  - `npx jest test/unit/wm` → **69/69 test suites passed, 1,497/1,497 tests passed (100% green)**.
+  - Live Browser UI Testing on TR `0001000823` (`http://localhost:4004/saps4hana-fiori-app/index.html#/wm/scan-to/TR/0001000823`):
+    - Warning banner displayed: `"TR movement 311 does not match reservation movement 201"` (Warning type, orange banner with icon).
+    - Section: `Cost Center Assignment (Movement 201)` rendered with `Cost Center *` pre-filled (`1011201301`).
+    - Receiving Storage Location section completely hidden.
+    - `Create & Confirm TO` button blocked / disabled.
+- **Current Status:** Verified and complete. All 4 requirements satisfied and verified against code, tests, and live browser.
+- **Next Steps:** Ready for user review.

@@ -67,7 +67,7 @@ class TrToHandler {
 
       const sResNo = sResNoIn || existingTrack?.ReservationNo || '';
       const sResItem = sResItemIn || existingTrack?.ReservationItem || '0001';
-      const sMvt = data.MovementType || existingTrack?.MovementType;
+      let sMvt = data.ReservationMovementType || data.reservationMovementType || data.MovementType || existingTrack?.MovementType;
       const sMat = data.Material || existingTrack?.Material;
       const sPlant = data.Plant || existingTrack?.Plant;
       const sSLoc = data.StorageLocation || existingTrack?.StorageLocation;
@@ -92,8 +92,12 @@ class TrToHandler {
             const rsnum = ltakRows[0].RSNUM?.trim();
             if (!sMvt && ltakRows[0].BWLVS?.trim()) sMvt = ltakRows[0].BWLVS.trim();
             if (rsnum && rsnum !== '0000000000') {
-              const resbRows = await resProcessAdapter.rfc.readTable('RESB', ['UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${rsnum}'`], 1);
+              const resbRows = await resProcessAdapter.rfc.readTable('RESB', ['BWART', 'UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${rsnum}'`], 1);
               if (resbRows?.[0]) {
+                const resbMvt = resbRows[0].BWART?.trim();
+                if (resbMvt && resbMvt !== sMvt) {
+                  sMvt = resbMvt;
+                }
                 if (!sRecPlant && resbRows[0].UMWRK?.trim()) sRecPlant = resbRows[0].UMWRK.trim();
                 if (!sRecSLoc && resbRows[0].UMLGO?.trim()) sRecSLoc = resbRows[0].UMLGO.trim();
                 if (!sBatch && resbRows[0].CHARG?.trim()) sBatch = resbRows[0].CHARG.trim().toUpperCase();
@@ -361,16 +365,18 @@ class TrToHandler {
         if (data.autoConfirm !== false && data.autoPostMigo && result.Confirmed) {
           try {
             const confirmedQty = Number(result.ConfirmedQuantity != null && result.ConfirmedQuantity > 0 ? result.ConfirmedQuantity : result.Quantity);
+            const effMvt = result.ReservationMovementType || data.ReservationMovementType || data.reservationMovementType || existing?.MovementType || result.MovementType || data.MovementType || data.movementType;
             const migoResult = await handlePostMigoGoodsMovement({
               user: req.user,
               data: {
                 ReservationNo: existing?.ReservationNo || result.ReservationNo,
                 ReservationItem: existing?.ReservationItem || result.ReservationItem,
+                ReservationMovementType: result.ReservationMovementType || data.ReservationMovementType || data.reservationMovementType || '',
                 TransferOrder: result.TransferOrder,
                 Quantity: confirmedQty,
                 confMenge: confirmedQty,
                 Unit: result.Unit,
-                MovementType: existing?.MovementType || result.MovementType || data.MovementType || data.movementType,
+                MovementType: effMvt,
                 Material: result.Material || existing?.Material || data.Material || data.material,
                 Plant: existing?.Plant || result.Plant || data.Plant || data.plant,
                 StorageLocation: existing?.StorageLocation || result.StorageLocation || data.StorageLocation || data.storageLocation,

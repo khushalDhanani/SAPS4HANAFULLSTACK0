@@ -772,4 +772,117 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             expect(res.StockWarning).toContain('Available in storage location(s): MT01');
         });
     });
+
+    describe('13. Mismatched TR validation & flag control in lookupTR and createTOFromTR [mock only, not browser verification]', () => {
+        const origEnv = process.env.WM_ALLOW_MISMATCHED_TR;
+
+        afterEach(() => {
+            if (origEnv !== undefined) {
+                process.env.WM_ALLOW_MISMATCHED_TR = origEnv;
+            } else {
+                delete process.env.WM_ALLOW_MISMATCHED_TR;
+            }
+        });
+
+        it('lookupTR detects mismatch between LTBK-BWLVS (311) and RESB-BWART (201) and returns warning [mock only, not browser verification]', async () => {
+            delete process.env.WM_ALLOW_MISMATCHED_TR;
+
+            mockRfc.call.mockResolvedValueOnce({
+                ET_TR_HEADER: [{
+                    LGNUM: 'W01', TBNUM: '0001000823', BWLVS: '311',
+                    RSNUM: '0000527870', NLTYP: '921', NLPLA: 'TRANSFER'
+                }],
+                ET_TR_ITEMS: [{
+                    LGNUM: 'W01', TBNUM: '0001000823', TBPOS: '0001',
+                    MATNR: '000000008000005294', WERKS: '1120', LGORT: 'HS01',
+                    MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: ''
+                }]
+            });
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Mobile Charger' }]); // MAKT
+            mockRfc.readTable.mockResolvedValueOnce([{ XCHPF: '', SERNP: '' }]);    // MARC
+            mockRfc.readTable.mockResolvedValueOnce([{ LGTYP: '001', LGPLA: 'BIN1', VERME: '1.000' }]); // LQUA
+            mockRfc.readTable.mockResolvedValueOnce([                              // RESB
+                { RSNUM: '0000527870', RSPOS: '0001', BWART: '201', UMWRK: '', UMLGO: '', CHARG: '' }
+            ]);
+            mockRfc.readTable.mockResolvedValueOnce([                              // RKPF
+                { KOSTL: 'CC1120', ANLN1: '', ANLN2: '' }
+            ]);
+
+            const res = await adapter.lookupTR('0001000823', 'W01', 'TR');
+
+            expect(res.MovementType).toBe('311');
+            expect(res.ReservationMovementType).toBe('201');
+            expect(res.AllowMismatchedTR).toBe(false);
+            expect(res.Warning).toBe('TR movement 311 does not match reservation movement 201');
+            expect(res.CostCenter).toBe('CC1120');
+        });
+
+        it('createTOFromTR blocks mismatched TR when WM_ALLOW_MISMATCHED_TR is default false [mock only, not browser verification]', async () => {
+            delete process.env.WM_ALLOW_MISMATCHED_TR;
+
+            mockRfc.call.mockResolvedValueOnce({
+                ET_TR_HEADER: [{
+                    LGNUM: 'W01', TBNUM: '0001000823', BWLVS: '311',
+                    RSNUM: '0000527870', NLTYP: '921', NLPLA: 'TRANSFER'
+                }],
+                ET_TR_ITEMS: [{
+                    LGNUM: 'W01', TBNUM: '0001000823', TBPOS: '0001',
+                    MATNR: '000000008000005294', WERKS: '1120', LGORT: 'HS01',
+                    MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: ''
+                }]
+            });
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Mobile Charger' }]); // MAKT
+
+            await expect(adapter.createTOFromTR({
+                lgnum: 'W01',
+                tbnum: '0001000823',
+                tbpos: '0001',
+                qty: 1,
+                unit: 'NOS',
+                ReservationMovementType: '201'
+            })).rejects.toMatchObject({
+                status: 400,
+                message: 'TR movement 311 does not match reservation movement 201'
+            });
+        });
+
+        it('createTOFromTR succeeds on mismatched TR when WM_ALLOW_MISMATCHED_TR=true [mock only, not browser verification]', async () => {
+            process.env.WM_ALLOW_MISMATCHED_TR = 'true';
+
+            mockRfc.call.mockResolvedValueOnce({
+                ET_TR_HEADER: [{
+                    LGNUM: 'W01', TBNUM: '0001000823', BWLVS: '311',
+                    RSNUM: '0000527870', NLTYP: '921', NLPLA: 'TRANSFER'
+                }],
+                ET_TR_ITEMS: [{
+                    LGNUM: 'W01', TBNUM: '0001000823', TBPOS: '0001',
+                    MATNR: '000000008000005294', WERKS: '1120', LGORT: 'HS01',
+                    MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: ''
+                }]
+            });
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Mobile Charger' }]); // MAKT
+            mockRfc.readTable.mockResolvedValueOnce([{ XCHPF: '', SERNP: '' }]); // MARC
+            mockRfc.readTable.mockResolvedValueOnce([]); // findUnconfirmedToItems (LTAK)
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // L_BWLVS
+            mockRfc.call.mockResolvedValueOnce({ // Z_WM_TO_CREATE_FROM_TR
+                EV_SUCCESS: 'S',
+                EV_TANUM: '0001037310'
+            });
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // L_LGNUM
+            mockRfc.call.mockResolvedValueOnce({ E_SUBRC: 0 }); // L_TO_CONFIRM
+
+            const res = await adapter.createTOFromTR({
+                lgnum: 'W01',
+                tbnum: '0001000823',
+                tbpos: '0001',
+                qty: 1,
+                unit: 'NOS',
+                ReservationMovementType: '201'
+            });
+
+            expect(res.TransferOrder).toBe('1037310');
+            expect(res.Confirmed).toBe(true);
+            expect(res.ReservationMovementType).toBe('201');
+        });
+    });
 });

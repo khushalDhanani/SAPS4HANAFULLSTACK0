@@ -109,8 +109,9 @@ service TrToService @(path: '/odata/v4/tr-to') {
         CostCenter          : String(10);
         AssetNo             : String(12);
         SubNumber           : String(4);
-        Warning             : String(255);
-        ReceivingTr         : String(10);
+        Warning                 : String(255);
+        ReceivingTr             : String(10);
+        ReservationMovementType : String(3);
     };
 
     type MigoProcessResult {
@@ -143,6 +144,9 @@ service TrToService @(path: '/odata/v4/tr-to') {
         RequirementNumber       : String(10);
         ReservationNo           : String(10);
         ReservationItem         : String(4);
+        ReservationMovementType : String(3);
+        AllowMismatchedTR       : Boolean;
+        Warning                 : String(255);
         Material                : String(40);
         MaterialName            : String(80);
         Plant                   : String(4);
@@ -287,7 +291,9 @@ service TrToService @(path: '/odata/v4/tr-to') {
         SubNumber                : String(4),
         autoConfirm              : Boolean,
         autoPostMigo             : Boolean,
-        CompleteReservation      : Boolean // sets NO_MORE_GR on the goods movement; never defaulted to true
+        CompleteReservation      : Boolean, // sets NO_MORE_GR on the goods movement; never defaulted to true
+        ReservationMovementType  : String(3),
+        reservationMovementType  : String(3)
     ) returns TOProcessResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -295,6 +301,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         ReservationNo            : String(10),
         ReservationItem          : String(4),
         MovementType             : String(3),
+        ReservationMovementType  : String(3),
+        reservationMovementType  : String(3),
         Material                 : String(40),
         Plant                    : String(4),
         StorageLocation          : String(4),

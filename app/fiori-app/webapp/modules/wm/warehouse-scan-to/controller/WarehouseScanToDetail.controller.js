@@ -51,6 +51,10 @@ sap.ui.define([
                 receivingStorageLocation: "",
                 receivingStorageLocationSource: "",
                 hasTR: false,
+                effectiveMovementType: "",
+                reservationMovementType: "",
+                allowMismatchedTR: false,
+                isMovementMismatched: false,
                 hasMessage: false,
                 messageText: "",
                 messageType: "Information",
@@ -140,8 +144,19 @@ sap.ui.define([
             oModel.setProperty("/receivingPlantSource", "");
             oModel.setProperty("/receivingStorageLocation", "");
             oModel.setProperty("/receivingStorageLocationSource", "");
+            oModel.setProperty("/effectiveMovementType", "");
+            oModel.setProperty("/reservationMovementType", "");
+            oModel.setProperty("/allowMismatchedTR", false);
+            oModel.setProperty("/isMovementMismatched", false);
             oModel.setProperty("/canRetryMigo", false);
             this.onCloseMessage();
+        },
+
+        _showWarning: function (sText) {
+            var oModel = this.getModel("scanView");
+            oModel.setProperty("/hasMessage", true);
+            oModel.setProperty("/messageText", sText);
+            oModel.setProperty("/messageType", "Warning");
         },
 
         _showError: function (sText) {
@@ -196,6 +211,20 @@ sap.ui.define([
                 oModel.setProperty("/selectedTbpos", oDetail.TRItem || "");
                 oModel.setProperty("/scannedTR", oDetail.TRNumber || sNumber);
                 oModel.setProperty("/docType", "TR");
+
+                var sEffectiveMvt = oDetail.ReservationMovementType || oDetail.MovementType;
+                oModel.setProperty("/effectiveMovementType", sEffectiveMvt);
+                oModel.setProperty("/reservationMovementType", oDetail.ReservationMovementType || "");
+                oModel.setProperty("/allowMismatchedTR", Boolean(oDetail.AllowMismatchedTR));
+
+                var bMismatch = Boolean(oDetail.ReservationMovementType && oDetail.MovementType && oDetail.ReservationMovementType !== oDetail.MovementType);
+                oModel.setProperty("/isMovementMismatched", bMismatch);
+
+                if (oDetail.Warning) {
+                    that._showWarning(oDetail.Warning);
+                } else if (bMismatch) {
+                    that._showWarning("TR movement " + oDetail.MovementType + " does not match reservation movement " + oDetail.ReservationMovementType);
+                }
 
                 // Initialize pick quantity to open TR quantity
                 var nOpenQty = parseFloat(oDetail.OpenQty || 0);
@@ -589,6 +618,13 @@ sap.ui.define([
                 return false;
             }
 
+            var bMismatch = Boolean(oTR.ReservationMovementType && oTR.MovementType && oTR.ReservationMovementType !== oTR.MovementType);
+            var bAllowMismatch = Boolean(oModel.getProperty("/allowMismatchedTR"));
+            if (bMismatch && !bAllowMismatch) {
+                oModel.setProperty("/canSubmit", false);
+                return false;
+            }
+
             var nQty = parseFloat(oModel.getProperty("/pickQty") || 0);
             var nOpen = parseFloat(oTR.OpenQty || 0);
 
@@ -614,10 +650,10 @@ sap.ui.define([
                 }
             }
 
-            var sMvt = (oTR.MovementType || "").trim();
+            var sEffectiveMvt = (oModel.getProperty("/effectiveMovementType") || oTR.MovementType || "").trim();
 
             // Movement 301 (Plant to Plant Transfer) requires Receiving Plant
-            if (sMvt === "301") {
+            if (sEffectiveMvt === "301") {
                 var sRecPlant = (oModel.getProperty("/receivingPlant") || "").trim();
                 if (!sRecPlant) {
                     oModel.setProperty("/recPlantValueState", "Error");
@@ -636,7 +672,7 @@ sap.ui.define([
             }
 
             // Movement 311 (Storage Location Transfer) requires Receiving Storage Location
-            if (sMvt === "311") {
+            if (sEffectiveMvt === "311") {
                 var sRecSLoc = (oModel.getProperty("/receivingStorageLocation") || "").trim();
                 if (!sRecSLoc) {
                     oModel.setProperty("/recSLocValueState", "Error");
@@ -655,7 +691,7 @@ sap.ui.define([
             }
 
             // Movement 201 (Goods Issue to Cost Center) requires Cost Center
-            if (sMvt === "201") {
+            if (sEffectiveMvt === "201") {
                 var sCostCenter = (oModel.getProperty("/costCenter") || "").trim();
                 if (!sCostCenter) {
                     oModel.setProperty("/costCenterValueState", "Error");
@@ -668,7 +704,7 @@ sap.ui.define([
             }
 
             // Movement 241 (GI to Asset) requires Asset Number
-            if (sMvt === "241") {
+            if (sEffectiveMvt === "241") {
                 var sAssetNo = (oModel.getProperty("/assetNo") || "").trim();
                 if (!sAssetNo) {
                     oModel.setProperty("/assetValueState", "Error");
@@ -775,7 +811,8 @@ sap.ui.define([
                 autoConfirm: bAutoConfirm,
                 autoPostMigo: bAutoPostMigo,
                 CompleteReservation: oModel.getProperty("/completeReservation") === true,
-                storageUnit: ""
+                storageUnit: "",
+                ReservationMovementType: oTR.ReservationMovementType || ""
             };
 
             var that = this;

@@ -689,7 +689,8 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
                 CompleteReservation: false,
                 sourceStorageType: 'RM1',
                 sourceStorageBin: '0-L0001-00',
-                storageUnit: ''
+                storageUnit: '',
+                ReservationMovementType: ''
             });
 
             expect(detailModel.getProperty('/hasResult')).toBe(true);
@@ -858,6 +859,237 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             expect(detailModel.getProperty('/assetNo')).toBe('0000400001');
             expect(detailModel.getProperty('/receivingStorageLocation')).toBe('');
             expect(detailModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('TR 0001000823 real shape: value absent at source -> editable and blocked until entered [mock only, not browser verification]', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000823',
+                TRItem: '0001',
+                WarehouseNumber: 'W01',
+                MovementType: '311',
+                ReservationNo: '527870',
+                Material: '8000005294',
+                MaterialDescription: 'Mobile Charger',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                DestinationStorageType: '921',
+                DestinationStorageBin: 'TRANSFER',
+                OpenQuantity: 1,
+                ReceivingPlant: '',
+                ReceivingPlantSource: '',
+                ReceivingStorageLocation: '',
+                ReceivingStorageLocationSource: ''
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '0001000823' } : null))
+            });
+
+            // SLoc is absent -> empty and editable, blocked from submit
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('');
+            expect(detailModel.getProperty('/receivingStorageLocationSource')).toBe('');
+            expect(detailModel.getProperty('/recSLocValueState')).toBe('Error');
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
+
+            // User enters valid receiving SLoc
+            detailCtrl.onReceivingSLocLiveChange({
+                getParameter: jest.fn((p) => (p === 'value' ? 'CIS1' : null))
+            });
+
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('CIS1');
+            expect(detailModel.getProperty('/recSLocValueState')).toBe('None');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('TR 0001000823 shape: value present at source -> filled and read-only [mock only, not browser verification]', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000823',
+                TRItem: '0001',
+                WarehouseNumber: 'W01',
+                MovementType: '311',
+                ReservationNo: '527870',
+                Material: '8000005294',
+                MaterialDescription: 'Mobile Charger',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                DestinationStorageType: '921',
+                DestinationStorageBin: 'TRANSFER',
+                OpenQuantity: 1,
+                ReceivingPlant: '1120',
+                ReceivingPlantSource: 'Reservation',
+                ReceivingStorageLocation: 'CIS1',
+                ReceivingStorageLocationSource: 'Reservation'
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '0001000823' } : null))
+            });
+
+            // SLoc is present at source -> filled and read-only, submit permitted
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('CIS1');
+            expect(detailModel.getProperty('/receivingStorageLocationSource')).toBe('Reservation');
+            expect(detailModel.getProperty('/recSLocValueState')).toBe('None');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('mismatched TR blocked: TR 311 vs reservation 201 shows warning and blocks Create & Confirm TO [mock only, not browser verification]', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000823',
+                TRItem: '0001',
+                WarehouseNumber: 'W01',
+                MovementType: '311',
+                ReservationNo: '527870',
+                ReservationMovementType: '201',
+                AllowMismatchedTR: false,
+                Warning: 'TR movement 311 does not match reservation movement 201',
+                Material: '8000005294',
+                MaterialDescription: 'Mobile Charger',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                DestinationStorageType: '921',
+                DestinationStorageBin: 'TRANSFER',
+                OpenQuantity: 1,
+                CostCenter: 'CC1120'
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '0001000823' } : null))
+            });
+
+            // Warning banner is displayed
+            expect(detailModel.getProperty('/hasMessage')).toBe(true);
+            expect(detailModel.getProperty('/messageType')).toBe('Warning');
+            expect(detailModel.getProperty('/messageText')).toBe('TR movement 311 does not match reservation movement 201');
+            expect(detailModel.getProperty('/isMovementMismatched')).toBe(true);
+
+            // Submit is strictly blocked
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
+        });
+
+        it('flag allows it: AllowMismatchedTR allows mismatched TR submit when valid fields are present [mock only, not browser verification]', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000823',
+                TRItem: '0001',
+                WarehouseNumber: 'W01',
+                MovementType: '311',
+                ReservationNo: '527870',
+                ReservationMovementType: '201',
+                AllowMismatchedTR: true,
+                Warning: 'TR movement 311 does not match reservation movement 201',
+                Material: '8000005294',
+                MaterialDescription: 'Mobile Charger',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                DestinationStorageType: '921',
+                DestinationStorageBin: 'TRANSFER',
+                OpenQuantity: 1,
+                CostCenter: 'CC1120'
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '0001000823' } : null))
+            });
+
+            // Warning is shown
+            expect(detailModel.getProperty('/hasMessage')).toBe(true);
+            expect(detailModel.getProperty('/messageType')).toBe('Warning');
+            expect(detailModel.getProperty('/messageText')).toBe('TR movement 311 does not match reservation movement 201');
+
+            // But flag allows submit when cost center is populated
+            expect(detailModel.getProperty('/effectiveMovementType')).toBe('201');
+            expect(detailModel.getProperty('/costCenter')).toBe('CC1120');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('genuine 311 still shows the field and requires receiving SLoc [mock only, not browser verification]', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000782',
+                TRItem: '0001',
+                WarehouseNumber: 'W01',
+                MovementType: '311',
+                ReservationNo: '525295',
+                ReservationMovementType: '311',
+                AllowMismatchedTR: false,
+                Material: '8000000023',
+                MaterialDescription: 'Cable Assy',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                DestinationStorageType: '921',
+                DestinationStorageBin: 'TRANSFER',
+                OpenQuantity: 1,
+                ReceivingPlant: '',
+                ReceivingStorageLocation: ''
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '0001000782' } : null))
+            });
+
+            // Effective movement type is 311
+            expect(detailModel.getProperty('/effectiveMovementType')).toBe('311');
+            expect(detailModel.getProperty('/isMovementMismatched')).toBe(false);
+            expect(detailModel.getProperty('/hasMessage')).toBe(false);
+
+            // Receiving SLoc is empty, required, blocked until user fills it
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('');
+            expect(detailModel.getProperty('/recSLocValueState')).toBe('Error');
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
+        });
+
+        it('201/241 hide receiving SLoc and show their respective account assignments [mock only, not browser verification]', async () => {
+            // Case 1: 201 reservation
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000823',
+                TRItem: '0001',
+                WarehouseNumber: 'W01',
+                MovementType: '311',
+                ReservationNo: '527870',
+                ReservationMovementType: '201',
+                AllowMismatchedTR: true,
+                Material: '8000005294',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                OpenQuantity: 1,
+                CostCenter: ''
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '0001000823' } : null))
+            });
+
+            // Effective movement is 201 -> receiving SLoc is not required, Cost Center is required
+            expect(detailModel.getProperty('/effectiveMovementType')).toBe('201');
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('');
+            expect(detailModel.getProperty('/recSLocValueState')).toBe('None'); // NOT marked error
+            expect(detailModel.getProperty('/costCenterValueState')).toBe('Error'); // Cost Center required
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
+
+            // Case 2: 241 reservation
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000760',
+                TRItem: '0001',
+                WarehouseNumber: 'W01',
+                MovementType: '311',
+                ReservationNo: '525279',
+                ReservationMovementType: '241',
+                AllowMismatchedTR: true,
+                Material: '8000005294',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                OpenQuantity: 1,
+                AssetNo: ''
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '0001000760' } : null))
+            });
+
+            // Effective movement is 241 -> receiving SLoc is not required, Asset is required
+            expect(detailModel.getProperty('/effectiveMovementType')).toBe('241');
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('');
+            expect(detailModel.getProperty('/recSLocValueState')).toBe('None'); // NOT marked error
+            expect(detailModel.getProperty('/assetValueState')).toBe('Error'); // Asset required
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
         });
     });
 });

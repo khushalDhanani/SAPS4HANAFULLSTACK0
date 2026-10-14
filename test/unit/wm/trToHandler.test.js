@@ -155,5 +155,32 @@ describe('TrToHandler', () => {
 
       expect(resProcessAdapter.postGoodsMovement).not.toHaveBeenCalled();
     });
+
+    it('case 5: MIGO goods movement uses reservation movement type (201), never the TR (311), when they differ [mock only, not browser verification]', async () => {
+      adapter.createTOFromTR.mockResolvedValue({
+        TransferOrder: '99005', Confirmed: true, Status: '04',
+        ReservationNo: '527870', ReservationItem: '0001',
+        MovementType: '311', ReservationMovementType: '201',
+        Material: '8000005294', Plant: '1120',
+        StorageLocation: 'HS01', Quantity: 1, Unit: 'NOS', Batch: ''
+      });
+      resProcessAdapter.postGoodsMovement = jest.fn().mockResolvedValue({
+        MaterialDocument: '4900050199', MaterialDocYear: '2026', StockEffect: 'Goods issue posted'
+      });
+
+      await handlers.createTOFromTR(mkReq({
+        autoConfirm: true,
+        autoPostMigo: true,
+        ReservationMovementType: '201'
+      }));
+
+      expect(resProcessAdapter.postGoodsMovement).toHaveBeenCalledTimes(1);
+      expect(resProcessAdapter.postGoodsMovement).toHaveBeenCalledWith(
+        expect.objectContaining({
+          movementType: '201',
+          reservationNo: '527870'
+        })
+      );
+    });
   });
 });
