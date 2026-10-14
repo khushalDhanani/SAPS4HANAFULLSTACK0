@@ -146,6 +146,7 @@ describe('unconfirmed documents and re-confirm job', () => {
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
     attempts.clearMemoryStore();
     jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
+    jest.spyOn(GoodsIssueAdapter, 'revalidateStockBeforePosting').mockResolvedValue({ StockReadSuccess: true, StockSufficient: true });
   });
 
   test('unconfirmed documents are stored on attempt as unconfirmed', async () => {
@@ -156,7 +157,9 @@ describe('unconfirmed documents and re-confirm job', () => {
       Confirmed: false,
       ConfirmationStatus: 'POSTED_CONFIRMATION_PENDING'
     });
-    const res201 = await handlers.postGoodsIssue201(req(payload));
+    const request201 = req(payload);
+    const res201 = await handlers.postGoodsIssue201(request201);
+    expect(request201.error).not.toHaveBeenCalled();
     expect(res201).toBeDefined();
     expect(res201.Confirmed).toBe(false);
 

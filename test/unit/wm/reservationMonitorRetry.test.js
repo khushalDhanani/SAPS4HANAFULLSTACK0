@@ -6,6 +6,7 @@
 
 const cds = require('@sap/cds');
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
+const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
 const { POST, GET } = cds.test(__dirname + '/../../../');
 const { INSERT, UPDATE, DELETE } = cds.ql;
@@ -17,7 +18,16 @@ describe('Chunk 6: Monitor App, Retry Handling & SLG1 Integration', () => {
 
   beforeEach(() => {
     adapter = new ReservationProcessAdapter();
+    jest.spyOn(RfcClient.prototype, 'readTable').mockResolvedValue([]);
+    jest.spyOn(RfcClient.prototype, 'session').mockImplementation(async (fn) => fn(async (fm) => {
+      if (fm === 'BAL_LOG_CREATE') return { E_LOG_HANDLE: 'MOCK_LOG_HANDLE' };
+      if (fm === 'BAL_GLB_SEARCH_LOG') return { E_T_LOG_HANDLE: [] };
+      return {};
+    }));
+    jest.spyOn(ReservationProcessAdapter.prototype, 'checkAuthorization').mockResolvedValue(true);
   });
+
+  afterEach(() => jest.restoreAllMocks());
 
   describe('1. Backend SLG1 Application Log Wrapper in ReservationProcessAdapter', () => {
     test('writeApplicationLog creates structured log entry with LogHandle and ExternalId', async () => {

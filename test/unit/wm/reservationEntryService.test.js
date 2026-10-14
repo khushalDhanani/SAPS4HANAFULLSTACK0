@@ -29,10 +29,16 @@ const authClerk = { auth: { username: 'carol', password: '' } };
 describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservation + Auto-TR)', () => {
   let createResSpy;
   let createTrSpy;
+  let authSpy;
+
+  beforeEach(() => {
+    authSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'checkAuthorization').mockResolvedValue(true);
+  });
 
   afterEach(async () => {
     createResSpy?.mockRestore();
     createTrSpy?.mockRestore();
+    authSpy?.mockRestore();
   });
 
   describe('1. Movement Type Validations', () => {

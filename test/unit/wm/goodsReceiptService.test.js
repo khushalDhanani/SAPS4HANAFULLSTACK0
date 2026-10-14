@@ -1,4 +1,6 @@
 const GoodsReceiptAdapter = require('../../../srv/integration/s4hana/wm/GoodsReceiptAdapter');
+const { shouldRunLiveSapTests } = require('../../liveSapGate');
+const liveDescribe = shouldRunLiveSapTests() ? describe : describe.skip;
 
 describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', () => {
 
@@ -216,7 +218,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
         });
     });
 
-    describe('Verified Real SAP S/4HANA Integration Tests (Client 220)', () => {
+  liveDescribe('Verified Real SAP S/4HANA Integration Tests (Client 220)', () => {
         let origGet;
         beforeAll(() => {
             origGet = GoodsReceiptAdapter._get.bind(GoodsReceiptAdapter);

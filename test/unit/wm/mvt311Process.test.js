@@ -737,5 +737,163 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
       expect(doubleMigoResult.alreadyPosted).toBe(true);
       expect(doubleMigoResult.materialDocument).toBe('4900050210');
     });
+
+    // Known defect: reservation-level any-document matching blocks a later, valid partial pick.
+    test.failing('a later partial pick on the same reservation item is not treated as already posted [MOCK]', async () => {
+      let postedDocuments = [];
+      mockRfc.readTable.mockImplementation(async (table, fields, where = []) => {
+        if (table === 'MATDOC') {
+          if (where.some((condition) => condition.includes('SGTXT ='))) return [];
+          return postedDocuments;
+        }
+        if (table === 'T320') return [
+          { LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' },
+          { LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }
+        ];
+        if (table === 'MARD') return [{ LGORT: 'CS01', LABST: '100.000' }, { LGORT: 'HS01' }];
+        if (table === 'T333') return [{ LGNUM: 'W01', BWLVS: '311', NLTYP: '921', NLPLA: 'TRANSFER' }];
+        if (table === 'MARC') return [{ XCHPF: '', SERNP: '' }];
+        if (table === 'RESB') return [{ BWART: '311', UMWRK: '1120', UMLGO: 'HS01', CHARG: '' }];
+        return [];
+      });
+      mockRfc.call.mockImplementation(async (fm) => {
+        if (fm === 'BAPI_GOODSMVT_CREATE') {
+          const index = mockRfc.call.mock.calls.filter(([calledFm]) => calledFm === fm).length;
+          const document = index === 1 ? '4900050210' : '4900050211';
+          return { MATERIALDOCUMENT: document, MATDOCUMENTYEAR: '2026', RETURN: [] };
+        }
+        return {};
+      });
+
+      const common = {
+        reservationNo: '0000525280',
+        reservationItem: '0001',
+        movementType: '311',
+        material: '8000001648',
+        plant: '1120',
+        storageLocation: 'CS01',
+        receivingPlant: '1120',
+        receivingStorageLocation: 'HS01',
+        quantity: 5,
+        unit: 'NOS'
+      };
+      const first = await resAdapter.postGoodsMovement({
+        ...common,
+        processId: '11111111-2222-4333-8444-555555555551'
+      });
+      postedDocuments = [{ MBLNR: first.materialDocument, MJAHR: '2026', MENGE: '5.000' }];
+
+      const second = await resAdapter.postGoodsMovement({
+        ...common,
+        processId: '11111111-2222-4333-8444-555555555552'
+      });
+
+      expect(first.materialDocument).toBe('4900050210');
+      const bapiCalls = mockRfc.call.mock.calls.filter(([fm]) => fm === 'BAPI_GOODSMVT_CREATE');
+      expect(bapiCalls).toHaveLength(2);
+      expect(bapiCalls[1][1].GOODSMVT_ITEM[0]).toMatchObject({ ENTRY_QNT: 5, ENTRY_UOM: 'NOS' });
+      expect(second.materialDocument).toBe('4900050211');
+      expect(second.alreadyPosted).not.toBe(true);
+    });
+
+    test('the same TO retried under a new PROCESS_ID is still blocked after a successful post [MOCK]', async () => {
+      mockRfc.readTable.mockImplementation(async (table, _fields, where = []) => {
+        if (table === 'MATDOC') {
+          if (where.some((condition) => condition.includes('SGTXT ='))) return [];
+          return [{ MBLNR: '4900050210', MJAHR: '2026' }];
+        }
+        return [];
+      });
+
+      const result = await resAdapter.postGoodsMovement({
+        reservationNo: '0000525280', reservationItem: '0001', transferOrder: '0001039001',
+        movementType: '311', material: '8000001648', plant: '1120', storageLocation: 'CS01',
+        receivingPlant: '1120', receivingStorageLocation: 'HS01', quantity: 5, unit: 'NOS',
+        processId: '11111111-2222-4333-8444-555555555553'
+      });
+
+      expect(result.alreadyPosted).toBe(true);
+      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
+    });
+
+    test('a reversed prior document is ignored so the pick may be posted again [MOCK]', async () => {
+      const reversedDocument = {
+        MBLNR: '4900050209', MJAHR: '2026', MATNR: '000000008000001648', WERKS: '1120',
+        RSNUM: '0000525280', RSPOS: '0001', BWART: '311', CANCELLED: 'X', REVERSAL_MOVEMENT: ''
+      };
+      mockRfc.readTable.mockImplementation(async (table, _fields, where = []) => {
+        if (table === 'MATDOC') {
+          expect(where).toContain("AND CANCELLED = ''");
+          expect(where).toContain("AND REVERSAL_MOVEMENT = ''");
+          return [reversedDocument].filter((row) =>
+            (!where.includes("AND CANCELLED = ''") || row.CANCELLED === '') &&
+            (!where.includes("AND REVERSAL_MOVEMENT = ''") || row.REVERSAL_MOVEMENT === '')
+          );
+        }
+        if (table === 'T320') return [
+          { LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' },
+          { LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' },
+          ...(movementType === '301' ? [{ LGNUM: 'W01', WERKS: '1110', LGORT: 'CS01' }] : [])
+        ];
+        if (table === 'MARD') return [{ LGORT: 'CS01', LABST: '100.000' }, { LGORT: 'HS01' }];
+        if (table === 'T333') return [{ LGNUM: 'W01', BWLVS: '311', NLTYP: '921', NLPLA: 'TRANSFER' }];
+        if (table === 'MARC') return [{ XCHPF: '', SERNP: '' }];
+        if (table === 'RESB') return [{ BWART: '311', UMWRK: '1120', UMLGO: 'HS01', CHARG: '' }];
+        return [];
+      });
+      mockRfc.call.mockImplementation(async (fm) => fm === 'BAPI_GOODSMVT_CREATE'
+        ? { MATERIALDOCUMENT: '4900050212', MATDOCUMENTYEAR: '2026', RETURN: [] }
+        : {});
+
+      const result = await resAdapter.postGoodsMovement({
+        reservationNo: '0000525280', reservationItem: '0001', movementType: '311',
+        material: '8000001648', plant: '1120', storageLocation: 'CS01',
+        receivingPlant: '1120', receivingStorageLocation: 'HS01', quantity: 5, unit: 'NOS',
+        processId: '11111111-2222-4333-8444-555555555554'
+      });
+
+      expect(result.alreadyPosted).not.toBe(true);
+      expect(mockRfc.call).toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.objectContaining({
+        GOODSMVT_ITEM: [expect.objectContaining({ ENTRY_QNT: 5, ENTRY_UOM: 'NOS' })]
+      }));
+    });
+
+    // Known defect: the guard accepts any matching MATDOC row before line-aware quantity reconciliation.
+    test.failing.each(['311', '301'])('a two-line %s transfer document counts only the issuing line for cumulative progress [MOCK]', async (movementType) => {
+      const docs = [
+        { MBLNR: '4900050210', MJAHR: '2026', ZEILE: '0001', WERKS: '1120', LGORT: 'CS01', MENGE: '5.000', SHKZG: 'H' },
+        { MBLNR: '4900050210', MJAHR: '2026', ZEILE: '0002', WERKS: movementType === '301' ? '1110' : '1120', LGORT: movementType === '301' ? 'CS01' : 'HS01', MENGE: '5.000', SHKZG: 'S' }
+      ];
+      mockRfc.readTable.mockImplementation(async (table, _fields, where = []) => {
+        if (table === 'MATDOC') return where.some((condition) => condition.includes('SGTXT =')) ? [] : docs;
+        if (table === 'T320') return [
+          { LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' },
+          { LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' },
+          ...(movementType === '301' ? [{ LGNUM: 'W01', WERKS: '1110', LGORT: 'CS01' }] : [])
+        ];
+        if (table === 'MARD') return [{ LGORT: 'CS01', LABST: '100.000' }, { LGORT: 'HS01' }];
+        if (table === 'T333') return [{ LGNUM: 'W01', BWLVS: movementType, NLTYP: movementType === '301' ? '920' : '921', NLPLA: 'TRANSFER' }];
+        if (table === 'MARC') return [{ XCHPF: '', SERNP: '' }];
+        if (table === 'RESB') return [{ BWART: movementType, UMWRK: '1110', UMLGO: 'HS01', CHARG: '' }];
+        if (table === 'LTAP') return [{ NISTM: '5.000', VSOLM: '5.000', MEINS: 'NOS' }];
+        return [];
+      });
+      mockRfc.call.mockImplementation(async (fm) => fm === 'BAPI_GOODSMVT_CREATE'
+        ? { MATERIALDOCUMENT: '4900050213', MATDOCUMENTYEAR: '2026', RETURN: [] }
+        : {});
+
+      const result = await resAdapter.postGoodsMovement({
+        reservationNo: '0000525280', reservationItem: '0001', transferOrder: '0001039002',
+        movementType, material: '8000001648', plant: '1120', storageLocation: 'CS01',
+        receivingPlant: movementType === '301' ? '1110' : '1120',
+        receivingStorageLocation: movementType === '301' ? 'CS01' : 'HS01',
+        quantity: 5, unit: 'NOS', processId: '11111111-2222-4333-8444-555555555555'
+      });
+
+      expect(result.alreadyPosted).not.toBe(true);
+      expect(mockRfc.call).toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.objectContaining({
+        GOODSMVT_ITEM: [expect.objectContaining({ ENTRY_QNT: 5, ENTRY_UOM: 'NOS' })]
+      }));
+    });
   });
 });

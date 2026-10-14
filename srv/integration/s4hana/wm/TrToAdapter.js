@@ -5,6 +5,7 @@ const { RfcClient } = require('../RfcClient');
 const { sapKey, sapKeyOpt, httpError } = require('../sapKey');
 const s4Config = require('../s4Config');
 const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
+const { isMismatchOverrideEnabled } = require('../../../common/wmMismatchOverrideGuard');
 const { isToFullyConfirmed, findUnconfirmedToItems, getHuConfirmationItems } = require('./toState');
 const { checkAuthorization } = require('./authCheck');
 
@@ -882,7 +883,7 @@ class TrToAdapter {
       String(trackedReservation.ReservationItem || '').padStart(4, '0') === String(item?.Rspos || '').padStart(4, '0') &&
       String(trackedReservation.MovementType || '').trim() === reservationMovementType
     );
-    const allowMismatchedTR = process.env.WM_ALLOW_MISMATCHED_TR === 'true' || trackedMismatch;
+    const allowMismatchedTR = isMismatchOverrideEnabled() || trackedMismatch;
     if (reservationMovementType && tr.Bwlvs && reservationMovementType !== tr.Bwlvs) {
       warning = `TR movement ${tr.Bwlvs} does not match reservation movement ${reservationMovementType}`;
     }
@@ -1194,7 +1195,7 @@ class TrToAdapter {
       } catch (_) {}
     }
 
-    const allowConfiguredMismatch = process.env.WM_ALLOW_MISMATCHED_TR === 'true';
+    const allowConfiguredMismatch = isMismatchOverrideEnabled();
 
     let finalRecPlant = (ReceivingPlant || receivingPlant) ? String(ReceivingPlant || receivingPlant).trim() : '';
     let finalRecSLoc = (ReceivingStorageLocation || receivingStorageLocation) ? String(ReceivingStorageLocation || receivingStorageLocation).trim() : '';

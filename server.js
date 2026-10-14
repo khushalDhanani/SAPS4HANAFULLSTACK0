@@ -2,7 +2,7 @@ const cds = require('@sap/cds');
 require('./srv/common/logger');
 
 // In local development, load .env.local / .env once via dotenv (no-op in production)
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
     const fs = require('fs');
     const path = require('path');
     const dotenv = require('dotenv');
@@ -13,6 +13,8 @@ if (process.env.NODE_ENV !== 'production') {
     }
     dotenv.config({ path: path.resolve(__dirname, '.env') });
 }
+
+require('./srv/common/wmMismatchOverrideGuard').assertMismatchOverrideAllowed();
 
 // Register local development S4_USERNAME in mock auth users if running in development
 if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {

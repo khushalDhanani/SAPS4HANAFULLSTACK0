@@ -607,6 +607,11 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   /** Movement 201 (Goods Issue to Cost Center) - standard API only. */
   async post201(data) {
     this._assertPostable(data);
+    if (!String(data.CostCenter || '').trim()) {
+      const err = new Error('Property CostCenter is mandatory for GoodsMovementType 201');
+      err.status = 400;
+      throw err;
+    }
     await this._preflightPosting(data);
     const payload = GoodsIssue201Mapper.mapToMaterialDocumentPayload(data);
     try {

@@ -7,5 +7,8 @@ module.exports = {
     '**/test/integration/**/*.test.js',
     '**/test/e2e/**/*.test.js'
   ],
-  setupFiles: ['<rootDir>/test/setupEnv.js']
+  setupFiles: ['<rootDir>/test/setupEnv.js'],
+  moduleNameMapper: {
+    '^node-rfc$': '<rootDir>/test/mocks/node-rfc.js'
+  }
 };

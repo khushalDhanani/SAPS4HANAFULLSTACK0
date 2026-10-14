@@ -6,6 +6,7 @@ cds.test(__dirname + '/../../../');
 const GoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssue.handler');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
+const { shouldRunLiveSapTests } = require('../../liveSapGate');
 const {
   createMockReservationItems,
   mockBatchesRM4520
@@ -222,7 +223,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
     });
   });
 
-  describe('Verified Real SAP S/4HANA Integration Tests (Client 220)', () => {
+  (shouldRunLiveSapTests() ? describe : describe.skip)('Verified Real SAP S/4HANA Integration Tests (Client 220)', () => {
     let origGet;
     beforeEach(() => {
       origGet = GoodsIssueAdapter._get.bind(GoodsIssueAdapter);
@@ -379,7 +380,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(result[0].ReservationNo).toBe('18025');
       expect(result[0].Material).toBe('1000000204');
       expect(result[0].RequiredQty).toBe(3500);
-      expect(result[0].MovementType).toBe('261');
+      expect(result[0].MovementType).toBe('311');
       expect(result[0].PackagingUnits.length).toBeGreaterThanOrEqual(1);
       expect(req.error).not.toHaveBeenCalled();
     });

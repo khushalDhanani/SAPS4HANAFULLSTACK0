@@ -1,5 +1,5 @@
 /**
- * LIVE SAP RFC_READ_TABLE field-set contract checks (read-only).
+ * SAP RFC_READ_TABLE field-set contract checks (live reads disabled under Jest).
  *
  * This release's RFC parser rejects specific fields with AD 718 (e.g. STORNO/XAUTO/ERFMG on
  * MATDOC, anything beyond a narrow list on MSEG/LTBP) and rejects parentheses in OPTIONS.
@@ -9,14 +9,14 @@
  * Field acceptance is validated independently of data (an invalid field fails even for an
  * impossible key), so the WHERE clauses use keys that match nothing and return instantly.
  *
- * Skipped automatically when no SAP connection is configured.
+ * Jest setup removes SAP credentials and maps node-rfc to a blocking stub, so these checks skip
+ * during the test suite. Run a separately approved read-only SAP audit outside Jest if needed.
  */
-const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../../../.env.local') });
 const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
+const { shouldRunLiveSapTests } = require('../../liveSapGate');
 
 const hasSap = Boolean(process.env.S4_DESTINATION_URL && process.env.S4_USERNAME && process.env.S4_PASSWORD && RfcClient.isAvailable());
-const liveDescribe = hasSap ? describe : describe.skip;
+const liveDescribe = shouldRunLiveSapTests() && hasSap ? describe : describe.skip;
 
 liveDescribe('SAP RFC_READ_TABLE field-set contract (live, read-only)', () => {
   jest.setTimeout(60000);
