@@ -249,15 +249,31 @@ class TrToHandler {
 
         if (trackKey) {
           try {
+            const resVer = migoRes.reservationVerification;
+            const isCompletelyProcessed = resVer ? resVer.completelyProcessed === true : (completeReservation === true);
+            const updateFields = {
+              MaterialDocument: migoRes.materialDocument,
+              MaterialDocYear: migoRes.materialDocYear,
+              Status_code: STATUS.GI_POSTED,
+              ErrorMessage: '',
+              ErrorStep: ''
+            };
+            if (resVer) {
+              updateFields.WithdrawnQuantity = resVer.issuedQuantity;
+              updateFields.RemainingQuantity = resVer.remainingQuantity;
+              updateFields.CompletelyProcessed = isCompletelyProcessed;
+            }
             await UPDATE(ReservationTrack)
-              .set({ MaterialDocument: migoRes.materialDocument, MaterialDocYear: migoRes.materialDocYear, Status_code: STATUS.GI_POSTED, ErrorMessage: '', ErrorStep: '' })
+              .set(updateFields)
               .where(trackKey);
             await log(ReservationLog, {
               ...trackKey, ProcessId: processId, DocumentNo: migoRes.materialDocument,
               Step: 'MIGO', Status: STATUS.GI_POSTED, MessageType: 'S', MessageId: 'M7', MessageNo: '060',
               MessageText: migoRes.alreadyPosted
                 ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for process ${processId}; not posted again`
-                : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect})`
+                : (isCompletelyProcessed
+                    ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect}) - Reservation completely processed`
+                    : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect}) - Partial issue: remaining quantity ${resVer?.remainingQuantity ?? 'open'}`)
             });
             if (migoRes.warning) {
               if (req && typeof req.warn === 'function') req.warn(migoRes.warning);
@@ -288,6 +304,7 @@ class TrToHandler {
           Batch: migoRes.batch || sBatch,
           StockEffect: migoRes.stockEffect,
           stockVerification: migoRes.stockVerification || null,
+          reservationVerification: migoRes.reservationVerification || null,
           ReceivingTr: migoRes.receivingTr || null,
           Warning: migoRes.warning || '',
           Message: migoRes.alreadyPosted
@@ -532,6 +549,43 @@ class TrToHandler {
       }
     };
 
+    const handleVerifyReservation = async (req) => {
+      try {
+        return await resProcessAdapter.verifyReservation(req.data || {});
+      } catch (err) {
+        return req.error(err.status || 400, err.message);
+      }
+    };
+
+    const handleExecuteOrchestrator = async (req) => {
+      try {
+        const result = await resProcessAdapter.executeReservationWarehouseFlow(req.data || {});
+        return {
+          success: result.success,
+          stage: result.stage || result.state || '',
+          state: result.state || '',
+          currentState: result.currentState || '',
+          completed: Boolean(result.completed),
+          stages: result.stages || [],
+          reservationNumber: result.reservation?.reservationNo || result.reservation?.reservation?.number || '',
+          reservationItem: result.reservation?.reservationItem || '0001',
+          trNumber: result.tr?.trNumber || result.verifiedTR?.trNumber || '',
+          trItem: result.tr?.trItem || '0001',
+          toNumber: result.to?.toNumber || '',
+          toItem: result.to?.toItem || '0001',
+          toConfirmed: Boolean(result.confirmation?.confirmed),
+          materialDocument: result.migo?.materialDocument || '',
+          materialDocumentYear: result.migo?.materialDocumentYear || '',
+          stockVerified: Boolean(result.stock?.verified || result.stock?.success),
+          reservationVerified: Boolean(result.finalReservation?.verified || result.finalReservation?.success),
+          completelyProcessed: Boolean(result.finalReservation?.completelyProcessed),
+          error: result.error || ''
+        };
+      } catch (err) {
+        return req.error(err.status || 400, err.message);
+      }
+    };
+
     srv.on('createTOFromTR', handleCreateTOFromTR);
     srv.on('CreateTOFromTR', handleCreateTOFromTR);
     srv.on('postMigoGoodsMovement', handlePostMigoGoodsMovement);
@@ -542,6 +596,10 @@ class TrToHandler {
     srv.on('VerifyStock', handleVerifyStock);
     srv.on('verifyResultingStock', handleVerifyStock);
     srv.on('VerifyResultingStock', handleVerifyStock);
+    srv.on('verifyReservation', handleVerifyReservation);
+    srv.on('VerifyReservation', handleVerifyReservation);
+    srv.on('executeReservationWarehouseFlow', handleExecuteOrchestrator);
+    srv.on('ExecuteReservationWarehouseFlow', handleExecuteOrchestrator);
   }
 }
 

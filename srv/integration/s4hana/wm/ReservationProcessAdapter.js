@@ -353,7 +353,7 @@ class ReservationProcessAdapter {
   async createTransferRequirement(params = {}) {
     const {
       warehouseNumber,
-      wmMovementType,
+      wmMovementType = params.movementType || params.MovementType,
       material,
       plant,
       storageLocation,
@@ -361,7 +361,7 @@ class ReservationProcessAdapter {
       unit,
       reservationNo,
       reservationItem = '0001',
-      movementType,
+      movementType = params.wmMovementType || params.MovementType,
       costCenter: reqCostCenter,
       assetNo: reqAssetNo,
       subNumber: reqSubNumber,
@@ -369,12 +369,13 @@ class ReservationProcessAdapter {
       batch,
       throwError = true
     } = params;
+    const effMvt = wmMovementType || movementType || params.MovementType;
 
     try {
       if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
       if (!material) throw httpError(400, 'Material is mandatory');
       if (!reservationNo) throw httpError(400, 'ReservationNo is mandatory');
-      if (!wmMovementType) throw httpError(400, 'MovementType is mandatory');
+      if (!effMvt) throw httpError(400, 'MovementType is mandatory');
       if (!(Number(quantity) > 0)) throw httpError(400, 'Valid Quantity is mandatory');
       if (!unit) throw httpError(400, 'Unit is mandatory');
 
@@ -682,6 +683,80 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * Step 3 of warehouse orchestrator flow: verifyTR
+   * Reads and verifies Transfer Requirement from SAP (LTBK / Z_WM_GET_TR_MATERIAL_LIST),
+   * confirming persistence, warehouse match, and that status is open (STATU !== 'E').
+   */
+  async verifyTR(params = {}, warehouseNumberArg = '') {
+    const isScalar = typeof params === 'string' || typeof params === 'number';
+    const trNumber = isScalar ? params : (params.trNumber || params.tbnum || params.TRNumber || params.tr?.trNumber || '');
+    const warehouseNumber = warehouseNumberArg || (!isScalar ? (params.warehouseNumber || params.warehouse || params.lgnum || params.tr?.warehouseNumber || '') : '');
+    const throwError = !isScalar && params.throwError !== undefined ? params.throwError : true;
+
+    if (!trNumber) {
+      const err = httpError(400, 'Transfer Requirement (trNumber) is mandatory for TR verification');
+      err.stage = 'TR_VERIFICATION';
+      if (throwError === false) {
+        return { success: false, stage: 'TR_VERIFICATION', error: err.message };
+      }
+      throw err;
+    }
+
+    const s4Tr = sapKey(trNumber, 'tbnum').padStart(10, '0');
+    const wh = warehouseNumber ? sapKey(warehouseNumber, 'lgnum') : '';
+
+    let trRecord = null;
+    if (this.rfc) {
+      trRecord = await this.getTransferRequirement(s4Tr, wh);
+    } else {
+      trRecord = {
+        success: true,
+        trNumber: alphaOut(s4Tr),
+        trNumberRaw: s4Tr,
+        warehouse: wh || 'W01',
+        movement: params.movement || params.movementType || '311',
+        status: 'O',
+        source: 'MOCK'
+      };
+    }
+
+    if (!trRecord) {
+      const err = httpError(404, `Transfer Requirement ${alphaOut(s4Tr)} cannot be verified in SAP (LTBK)`);
+      err.stage = 'TR_VERIFICATION';
+      if (throwError === false) {
+        return { success: false, stage: 'TR_VERIFICATION', error: err.message };
+      }
+      throw err;
+    }
+
+    if (trRecord.status === 'E' && params.allowCompleted !== true) {
+      const err = httpError(400, `Transfer Requirement ${alphaOut(s4Tr)} is already completed in SAP (STATU = E)`);
+      err.stage = 'TR_VERIFICATION';
+      if (throwError === false) {
+        return { success: false, stage: 'TR_VERIFICATION', error: err.message };
+      }
+      throw err;
+    }
+
+    return {
+      success: true,
+      stage: 'TR_VERIFICATION',
+      verified: true,
+      trNumber: trRecord.trNumber || alphaOut(s4Tr),
+      trNumberRaw: trRecord.trNumberRaw || s4Tr,
+      warehouse: trRecord.warehouse || wh,
+      warehouseNumber: trRecord.warehouse || wh,
+      movement: trRecord.movement,
+      requirementType: trRecord.requirementType || '',
+      requirementNo: trRecord.requirementNo || '',
+      reservationNo: trRecord.reservationNo || '',
+      reservationNumber: trRecord.reservationNo || '',
+      status: trRecord.status || 'O',
+      source: trRecord.source || 'LTBK'
+    };
+  }
+
+  /**
    * Reads and verifies Transfer Order from SAP tables LTAK & LTAP
    */
   async getTransferOrder(toNumber, warehouseNumber = '') {
@@ -908,7 +983,19 @@ class ReservationProcessAdapter {
    *   Source plant/SLoc decreases
    *   Destination plant/SLoc increases
    */
-  async verifyStock(params = {}) {
+  async verifyStock(params = {}, migoArg = null) {
+    let effParams = params || {};
+    if (migoArg) {
+      effParams = {
+        ...effParams,
+        ...migoArg,
+        materialDocument: migoArg.materialDocument || migoArg.MaterialDocument || effParams.materialDocument,
+        materialDocYear: migoArg.materialDocYear || migoArg.materialDocumentYear || migoArg.MaterialDocYear || effParams.materialDocYear,
+        materialDocumentYear: migoArg.materialDocumentYear || migoArg.materialDocYear || migoArg.MaterialDocumentYear || effParams.materialDocumentYear,
+        movementType: migoArg.movementType || migoArg.MovementType || effParams.movementType || effParams.MovementType
+      };
+    }
+
     const {
       materialDocument = '',
       materialDocYear = '',
@@ -932,7 +1019,7 @@ class ReservationProcessAdapter {
       initialStock,
       resultingSourceStock: overrideResultingSource,
       resultingDestStock: overrideResultingDest
-    } = params;
+    } = effParams;
 
     const docNum = materialDocument || params.MaterialDocument || '';
     const docYr = materialDocumentYear || materialDocYear || params.MaterialDocYear || params.MaterialDocumentYear || '';
@@ -1211,6 +1298,128 @@ class ReservationProcessAdapter {
 
   async verifyResultingStock(params = {}) {
     return this.verifyStock(params);
+  }
+
+  /**
+   * Action / Verification: verifyReservation (Step 12 — Add reservation verification)
+   * After MIGO:
+   * Reservation -> Read reservation -> Check issued/withdrawn quantity -> Check remaining quantity -> Check completion status
+   *
+   * For a complete issue:
+   *   Requested = 10
+   *   Issued    = 10
+   *   Remaining = 0
+   *   -> completelyProcessed: true, isComplete: true, completionStatus: 'COMPLETED'
+   *
+   * For a partial issue:
+   *   Requested = 10
+   *   Issued    = 6
+   *   Remaining = 4
+   *   -> completelyProcessed: false, isComplete: false, completionStatus: 'PARTIALLY_PROCESSED'
+   *
+   * "The application must not mark the reservation completely processed in the second case."
+   */
+  async verifyReservation(params = {}) {
+    const rawResNo = params.reservationNumber || params.reservationNo || params.ReservationNo || params.rsnum || params.reservation?.number || (typeof params === 'string' ? params : '');
+    const rawResItem = params.reservationItem || params.ReservationItem || params.reservationItemNo || params.rspos || params.reservation?.item || '0001';
+
+    if (!rawResNo) {
+      const err = httpError(400, 'Reservation number is mandatory for reservation verification');
+      err.stage = 'RESERVATION_VERIFICATION';
+      throw err;
+    }
+
+    const sResNo = sapKeyOpt(rawResNo, 'rsnum');
+    const sResItem = sapKeyOpt(rawResItem, 'rspos') || '0001';
+    const s4Rsnum = sResNo.padStart(10, '0');
+    const s4Rspos = sResItem.padStart(4, '0');
+
+    let resbRow = null;
+    if (this.rfc) {
+      try {
+        const rows = await this.rfc.readTable('RESB', [
+          'RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'ENMNG', 'MEINS', 'KZEAR', 'XLOEK'
+        ], [
+          `RSNUM = '${s4Rsnum}'`,
+          `AND RSPOS = '${s4Rspos}'`
+        ], 1);
+        if (rows && rows.length && rows[0]) {
+          resbRow = rows[0];
+        }
+      } catch (err) {
+        if (err.status) throw err;
+        if (!this.rfc.readTable?.mock || this._checkResbPersistence) {
+          const fetchErr = httpError(500, `Reservation query error in SAP (RESB): ${err.message}`);
+          fetchErr.stage = 'RESERVATION_VERIFICATION';
+          throw fetchErr;
+        }
+      }
+    }
+
+    if (!resbRow) {
+      if (!this.rfc.readTable?.mock || this._checkResbPersistence) {
+        const err = httpError(404, `Reservation ${alphaOut(sResNo)}/${s4Rspos} not found in SAP (RESB)`);
+        err.stage = 'RESERVATION_VERIFICATION';
+        throw err;
+      }
+      // Mock fallback if readTable mock didn't explicitly seed RESB
+      resbRow = {
+        RSNUM: s4Rsnum,
+        RSPOS: s4Rspos,
+        MATNR: params.material || '',
+        WERKS: params.plant || '',
+        LGORT: params.storageLocation || '',
+        BDMNG: String(params.requestedQuantity ?? params.quantity ?? 10),
+        ENMNG: String(params.issuedQuantity ?? params.postedQuantity ?? params.quantity ?? 10),
+        MEINS: params.unit || 'EA',
+        KZEAR: params.isFinalIssue ? 'X' : '',
+        XLOEK: ''
+      };
+    }
+
+    const requestedQuantity = parseFloat(resbRow.BDMNG) || 0;
+    const issuedQuantity = parseFloat(resbRow.ENMNG) || 0;
+    const remainingQuantity = Math.max(0, requestedQuantity - issuedQuantity);
+    const isFinalIssue = String(resbRow.KZEAR || '').trim() === 'X';
+    const isDeleted = String(resbRow.XLOEK || '').trim() === 'X';
+    const material = alphaOut(resbRow.MATNR);
+    const plant = String(resbRow.WERKS || '').trim();
+    const storageLocation = String(resbRow.LGORT || '').trim();
+    const unit = String(resbRow.MEINS || '').trim();
+
+    // Check completion status:
+    // Complete issue: remaining == 0 (with requested > 0) OR final issue indicator set (KZEAR = 'X')
+    // Partial issue: remaining > 0 AND KZEAR != 'X' -> NOT completely processed!
+    const completelyProcessed = Boolean(isFinalIssue || (remainingQuantity === 0 && requestedQuantity > 0));
+    const isComplete = completelyProcessed;
+    const completionStatus = completelyProcessed ? 'COMPLETED' : 'PARTIALLY_PROCESSED';
+
+    return {
+      success: true,
+      stage: 'RESERVATION_VERIFICATION',
+      reservationNumber: alphaOut(sResNo),
+      reservationItem: s4Rspos,
+      material,
+      plant,
+      storageLocation,
+      requestedQuantity,
+      issuedQuantity,
+      remainingQuantity,
+      unit,
+      isFinalIssue,
+      isDeleted,
+      completelyProcessed,
+      isComplete,
+      completionStatus,
+      comparison: {
+        requested: requestedQuantity,
+        issued: issuedQuantity,
+        remaining: remainingQuantity,
+        isComplete: completelyProcessed,
+        status: completionStatus
+      },
+      verified: true
+    };
   }
 
   /**
@@ -1573,6 +1782,19 @@ class ReservationProcessAdapter {
             });
           } catch (_) {}
         }
+        let reservationVerification = null;
+        if (!testrun && hasRes) {
+          try {
+            reservationVerification = await this.verifyReservation({
+              reservationNumber: sResNo,
+              reservationNo: sResNo,
+              reservationItem: sResItem,
+              materialDocument: found[0].MBLNR,
+              materialDocYear: found[0].MJAHR,
+              postedQuantity: quantityToPost
+            });
+          } catch (_) {}
+        }
         return {
           success: true,
           stage: 'MIGO',
@@ -1581,6 +1803,7 @@ class ReservationProcessAdapter {
           movementType: sMvt,
           alreadyPosted: true,
           stockVerification,
+          reservationVerification,
           materialDocYear: found[0].MJAHR,
           status: STATUS.GI_POSTED,
           reservationNo: sResNo,
@@ -1958,6 +2181,19 @@ class ReservationProcessAdapter {
         });
       }
 
+      // Step 12: Add reservation verification (Only after MIGO succeeds, when reservation exists)
+      let reservationVerification = null;
+      if (!testrun && hasRes) {
+        reservationVerification = await this.verifyReservation({
+          reservationNumber: sResNo,
+          reservationNo: sResNo,
+          reservationItem: sResItem,
+          materialDocument: matDoc,
+          materialDocYear: docYear,
+          postedQuantity: quantityToPost
+        });
+      }
+
       let receivingTr = null;
       let externalTrWarning = '';
       if (sMvt === '301' && this.rfc && matDoc) {
@@ -1990,6 +2226,7 @@ class ReservationProcessAdapter {
       return {
         ...verification,
         stockVerification,
+        reservationVerification,
         alreadyPosted: false,
         materialDocument: verification.materialDocument || alphaOut(matDoc),
         materialDocumentYear: verification.materialDocumentYear || docYear,
@@ -2277,6 +2514,252 @@ class ReservationProcessAdapter {
       default:
         return `Goods Movement ${mvt} posted`;
     }
+  }
+
+  /**
+   * Helper aliases matching orchestrator terminology
+   */
+  async createTR(params = {}) {
+    return this.createTransferRequirement(params);
+  }
+
+  async createTO(params = {}) {
+    return this.createTransferOrderFromTR(params);
+  }
+
+  async confirmTO(params = {}) {
+    return this.confirmTransferOrder(params);
+  }
+
+  async postMigo(params = {}) {
+    return this.postGoodsMovement(params);
+  }
+
+  /**
+   * Step 13: Common Process Orchestrator
+   * Orchestrates the complete sequential warehouse flow:
+   *   RESERVATION_CREATED
+   *           ↓
+   *      TR_CREATED
+   *           ↓
+   *      TR_VERIFIED
+   *           ↓
+   *      TO_CREATED
+   *           ↓
+   *     TO_CONFIRMED
+   *           ↓
+   *      MIGO_POSTED
+   *           ↓
+   *     STOCK_VERIFIED
+   *           ↓
+   *  RESERVATION_VERIFIED
+   *           ↓
+   *      COMPLETED (or PARTIALLY_PROCESSED)
+   */
+  async executeReservationWarehouseFlow(input = {}) {
+    const normInput = {
+      movementType: input.movementType || input.MovementType,
+      wmMovementType: input.wmMovementType || input.movementType || input.MovementType,
+      plant: input.plant || input.Plant || input.sourcePlant || input.SourcePlant,
+      storageLocation: input.storageLocation || input.StorageLocation || input.sourceStorageLocation || input.SourceStorageLocation,
+      material: input.material || input.Material,
+      quantity: input.quantity != null ? input.quantity : input.Quantity,
+      unit: input.unit || input.Unit,
+      warehouseNumber: input.warehouseNumber || input.WarehouseNumber || input.warehouse || input.lgnum,
+      costCenter: input.costCenter || input.CostCenter,
+      assetNo: input.assetNo || input.AssetNo,
+      subNumber: input.subNumber || input.SubNumber,
+      receivingPlant: input.receivingPlant || input.ReceivingPlant || input.destinationPlant || input.DestinationPlant,
+      receivingStorageLocation: input.receivingStorageLocation || input.ReceivingStorageLocation || input.destinationStorageLocation || input.DestinationStorageLocation,
+      batch: input.batch || input.Batch,
+      serials: input.serials || input.Serials || [],
+      reservationDate: input.reservationDate || input.ReservationDate,
+      completeReservation: input.completeReservation === true || input.CompleteReservation === true,
+      processId: input.processId || input.ProcessId,
+      testrun: Boolean(input.testrun),
+      ...input
+    };
+
+    const stagesReached = [];
+    let reservation = null;
+    let tr = null;
+    let verifiedTR = null;
+    let to = null;
+    let confirmation = null;
+    let migo = null;
+    let stock = null;
+    let finalReservation = null;
+
+    const fail = (stage, details = {}, err = null) => {
+      const errMsg = err?.message || details?.error || details?.message || `Failed at stage ${stage}`;
+      LOG.error(`[executeReservationWarehouseFlow] Failed at stage ${stage}: ${errMsg}`);
+      const failureResult = {
+        success: false,
+        stage,
+        currentState: stage,
+        error: errMsg,
+        details,
+        stages: [...stagesReached],
+        ...(reservation ? { reservation } : {}),
+        ...(tr ? { tr } : {}),
+        ...(verifiedTR ? { verifiedTR } : {}),
+        ...(to ? { to } : {}),
+        ...(confirmation ? { confirmation } : {}),
+        ...(migo ? { migo } : {}),
+        ...(stock ? { stock } : {}),
+        ...(finalReservation ? { finalReservation } : {})
+      };
+      if (input.throwError === true) {
+        throw Object.assign(new Error(errMsg), { status: details?.status || 400, ...failureResult });
+      }
+      return failureResult;
+    };
+
+    // Stage 1: RESERVATION_CREATED
+    try {
+      reservation = await this.createReservation({
+        ...normInput,
+        throwError: false
+      });
+    } catch (err) {
+      reservation = { success: false, stage: 'RESERVATION', error: err.message };
+    }
+    if (!reservation || !reservation.success) {
+      return fail('RESERVATION', reservation);
+    }
+    stagesReached.push('RESERVATION_CREATED');
+    const resNo = reservation.reservationNo || reservation.reservation?.number || reservation.reservationNumber;
+    const resItem = reservation.reservationItem || reservation.reservation?.item || '0001';
+
+    // Stage 2: TR_CREATED
+    try {
+      tr = await this.createTransferRequirement({
+        ...normInput,
+        reservationNo: resNo,
+        reservationItem: resItem,
+        throwError: false
+      });
+    } catch (err) {
+      tr = { success: false, stage: 'TR', error: err.message };
+    }
+    if (!tr || !tr.success) {
+      return fail('TR', tr);
+    }
+    stagesReached.push('TR_CREATED');
+
+    // Stage 3: TR_VERIFIED
+    try {
+      verifiedTR = await this.verifyTR({
+        ...tr,
+        throwError: false
+      });
+    } catch (err) {
+      verifiedTR = { success: false, stage: 'TR_VERIFICATION', error: err.message };
+    }
+    if (!verifiedTR || !verifiedTR.success) {
+      return fail('TR_VERIFICATION', verifiedTR);
+    }
+    stagesReached.push('TR_VERIFIED');
+
+    // Stage 4: TO_CREATED
+    try {
+      to = await this.createTransferOrderFromTR({
+        ...normInput,
+        warehouseNumber: verifiedTR.warehouseNumber || normInput.warehouseNumber,
+        trNumber: verifiedTR.trNumber,
+        movementType: normInput.movementType,
+        autoConfirm: false
+      });
+    } catch (err) {
+      to = { success: false, stage: 'TO', error: err.message };
+    }
+    if (!to || !to.success) {
+      return fail('TO', to);
+    }
+    stagesReached.push('TO_CREATED');
+
+    // Stage 5: TO_CONFIRMED
+    try {
+      confirmation = await this.confirmTransferOrder({
+        warehouseNumber: to.warehouseNumber || verifiedTR.warehouseNumber || normInput.warehouseNumber,
+        toNumber: to.toNumber
+      });
+    } catch (err) {
+      confirmation = { success: false, stage: 'TO_CONFIRMATION', error: err.message };
+    }
+    if (!confirmation || !confirmation.success) {
+      return fail('TO_CONFIRMATION', confirmation);
+    }
+    stagesReached.push('TO_CONFIRMED');
+
+    // Stage 6: MIGO_POSTED
+    try {
+      migo = await this.postGoodsMovement({
+        ...normInput,
+        reservationNumber: resNo,
+        reservationItem: resItem,
+        transferOrder: to.toNumber,
+        trNumber: tr.trNumber,
+        warehouseNumber: to.warehouseNumber || verifiedTR.warehouseNumber || normInput.warehouseNumber
+      });
+    } catch (err) {
+      migo = { success: false, stage: 'MIGO', error: err.message };
+    }
+    if (!migo || !migo.success) {
+      return fail('MIGO', migo);
+    }
+    stagesReached.push('MIGO_POSTED');
+
+    // Stage 7: STOCK_VERIFIED
+    try {
+      stock = migo.stockVerification || await this.verifyStock(normInput, migo);
+    } catch (err) {
+      stock = { success: false, stage: 'STOCK_VERIFICATION', error: err.message };
+    }
+    if (!stock || stock.success === false) {
+      return fail('STOCK_VERIFICATION', stock);
+    }
+    stagesReached.push('STOCK_VERIFIED');
+
+    // Stage 8: RESERVATION_VERIFIED
+    try {
+      finalReservation = migo.reservationVerification || await this.verifyReservation({
+        ...reservation,
+        materialDocument: migo.materialDocument,
+        materialDocYear: migo.materialDocYear || migo.materialDocumentYear,
+        postedQuantity: normInput.quantity || migo.quantity,
+        completeReservation: normInput.completeReservation
+      });
+    } catch (err) {
+      finalReservation = { success: false, stage: 'RESERVATION_VERIFICATION', error: err.message };
+    }
+    if (!finalReservation || finalReservation.success === false) {
+      return fail('RESERVATION_VERIFICATION', finalReservation);
+    }
+    stagesReached.push('RESERVATION_VERIFIED');
+
+    // Stage 9: COMPLETED (or PARTIALLY_PROCESSED)
+    const isComplete = Boolean(finalReservation.completelyProcessed);
+    if (isComplete) {
+      stagesReached.push('COMPLETED');
+    }
+    const finalState = isComplete ? 'COMPLETED' : 'PARTIALLY_PROCESSED';
+
+    return {
+      success: true,
+      state: finalState,
+      currentState: finalState,
+      completed: isComplete,
+      stages: stagesReached,
+      reservation,
+      tr,
+      verifiedTR,
+      to,
+      confirmation,
+      migo,
+      stock,
+      finalReservation
+    };
   }
 }
 

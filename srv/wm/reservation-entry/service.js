@@ -372,14 +372,18 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       try {
         const [rkpf, resb] = await Promise.all([
           adapter.rfc.readTable('RKPF', ['BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO', 'USNAM'], [`RSNUM = '${s4Rsnum}'`], 1),
-          adapter.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS', 'CHARG', 'KZEAR'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
+          adapter.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'ENMNG', 'MEINS', 'CHARG', 'KZEAR'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
         ]);
         const h = rkpf && rkpf[0];
         const i = resb && resb[0];
         if (!i) return null;
         const mvt = String((h && h.BWART) || '').trim();
         if (!SUPPORTED_MOVEMENT_TYPES.includes(mvt)) return null;
-        const closed = String(i.KZEAR || '').trim() === 'X';
+        const reqQty = Number(i.BDMNG) || 0;
+        const wdnQty = Number(i.ENMNG) || 0;
+        const remQty = Math.max(0, reqQty - wdnQty);
+        const closed = String(i.KZEAR || '').trim() === 'X' || (remQty === 0 && reqQty > 0);
+        const completelyProcessed = closed;
         const sMat = strip(i.MATNR);
         const sMatPad = String(i.MATNR).padStart(18, '0');
 
@@ -408,8 +412,11 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           StorageLocation: String(i.LGORT || '').trim(),
           ReceivingPlant: String((h && h.UMWRK) || '').trim(),
           ReceivingStorageLocation: String((h && h.UMLGO) || '').trim(),
-          Quantity: Number(i.BDMNG) || 0,
+          Quantity: reqQty,
           Unit: String(i.MEINS || '').trim(),
+          WithdrawnQuantity: wdnQty,
+          RemainingQuantity: remQty,
+          CompletelyProcessed: completelyProcessed,
           Batch: String(i.CHARG || '').trim(),
           CostCenter: String((h && h.KOSTL) || '').trim(),
           AssetNo: strip((h && h.ANLN1) || ''),
@@ -1148,10 +1155,18 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       });
       });
 
+      const resVer = migoRes.reservationVerification;
+      const isCompletelyProcessed = resVer ? resVer.completelyProcessed === true : (data.completeReservation === true || data.CompleteReservation === true || (migoRes.Quantity && track.Quantity && Number(migoRes.Quantity) >= Number(track.Quantity)));
+      const withdrawnQty = resVer ? resVer.issuedQuantity : ((track.WithdrawnQuantity || 0) + Number(data.Quantity || migoRes.Quantity || 0));
+      const remainingQty = resVer ? resVer.remainingQuantity : Math.max(0, (track.Quantity || 0) - Number(data.Quantity || migoRes.Quantity || 0));
+
       await UPDATE(ReservationEntries).set({
         MaterialDocument: migoRes.materialDocument,
         MaterialDocYear: migoRes.materialDocYear,
         Status_code: STATUS.GI_POSTED,
+        WithdrawnQuantity: withdrawnQty,
+        RemainingQuantity: remainingQty,
+        CompletelyProcessed: isCompletelyProcessed,
         ErrorMessage: '',
         ErrorStep: '',
         LogHandle: sLogHandle,
@@ -1163,7 +1178,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         Step: 'MIGO', Status: STATUS.GI_POSTED, MessageType: 'S', MessageId: 'M7', MessageNo: '060',
         MessageText: migoRes.alreadyPosted
           ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for process ${processId}; not posted again`
-          : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect})`
+          : (isCompletelyProcessed
+              ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect}) - Reservation completely processed`
+              : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect}) - Partial issue: remaining quantity ${resVer?.remainingQuantity ?? remainingQty}`)
       });
 
       if (migoRes.warning) {
@@ -1272,6 +1289,15 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
     this.on('verifyResultingStock', async (req) => {
       try {
         return await adapter.verifyStock(req.data || {});
+      } catch (err) {
+        return req.error(err.status || 400, err.message);
+      }
+    });
+
+    // Action handler for Reservation Verification (Step 12)
+    this.on('verifyReservation', async (req) => {
+      try {
+        return await adapter.verifyReservation(req.data || {});
       } catch (err) {
         return req.error(err.status || 400, err.message);
       }
@@ -1589,6 +1615,35 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         }));
       } catch (err) {
         return req.error(err.status || 502, `Failed to load open reservations: ${err.message}`);
+      }
+    });
+
+    this.on('executeReservationWarehouseFlow', async (req) => {
+      try {
+        const result = await adapter.executeReservationWarehouseFlow(req.data || {});
+        return {
+          success: result.success,
+          stage: result.stage || result.state || '',
+          state: result.state || '',
+          currentState: result.currentState || '',
+          completed: Boolean(result.completed),
+          stages: result.stages || [],
+          reservationNumber: result.reservation?.reservationNo || result.reservation?.reservation?.number || '',
+          reservationItem: result.reservation?.reservationItem || '0001',
+          trNumber: result.tr?.trNumber || result.verifiedTR?.trNumber || '',
+          trItem: result.tr?.trItem || '0001',
+          toNumber: result.to?.toNumber || '',
+          toItem: result.to?.toItem || '0001',
+          toConfirmed: Boolean(result.confirmation?.confirmed),
+          materialDocument: result.migo?.materialDocument || '',
+          materialDocumentYear: result.migo?.materialDocumentYear || '',
+          stockVerified: Boolean(result.stock?.verified || result.stock?.success),
+          reservationVerified: Boolean(result.finalReservation?.verified || result.finalReservation?.success),
+          completelyProcessed: Boolean(result.finalReservation?.completelyProcessed),
+          error: result.error || ''
+        };
+      } catch (err) {
+        return req.error(err.status || 400, err.message);
       }
     });
 

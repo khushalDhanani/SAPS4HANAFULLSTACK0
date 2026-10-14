@@ -147,6 +147,7 @@ service TrToService @(path: '/odata/v4/tr-to') {
         Message              : String(255);
         ErrorMessage         : String(255);
         stockVerification    : StockVerificationResult;
+        reservationVerification : ReservationVerificationResult;
     };
 
     type MaterialDocumentVerification {
@@ -476,4 +477,98 @@ service TrToService @(path: '/odata/v4/tr-to') {
         initialSourceStock         : Decimal(13, 3),
         initialDestStock           : Decimal(13, 3)
     ) returns StockVerificationResult;
+
+    type ReservationVerificationResult {
+        success             : Boolean;
+        stage               : String(30);
+        reservationNumber   : String(10);
+        reservationItem     : String(4);
+        material            : String(40);
+        plant               : String(4);
+        storageLocation     : String(4);
+        requestedQuantity   : Decimal(13, 3);
+        issuedQuantity      : Decimal(13, 3);
+        remainingQuantity   : Decimal(13, 3);
+        unit                : String(3);
+        isFinalIssue        : Boolean;
+        isDeleted           : Boolean;
+        completelyProcessed : Boolean;
+        isComplete          : Boolean;
+        completionStatus    : String(30);
+        verified            : Boolean;
+        error               : String(255);
+    };
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action verifyReservation(
+        reservationNumber   : String(10),
+        reservationNo       : String(10),
+        reservationItem     : String(4)
+    ) returns ReservationVerificationResult;
+
+    type OrchestratorProcessResult {
+        success              : Boolean;
+        stage                : String(30);
+        state                : String(30);
+        currentState         : String(30);
+        completed            : Boolean;
+        stages               : array of String(30);
+        reservationNumber    : String(10);
+        reservationItem      : String(4);
+        trNumber             : String(10);
+        trItem               : String(4);
+        toNumber             : String(10);
+        toItem               : String(4);
+        toConfirmed          : Boolean;
+        materialDocument     : String(10);
+        materialDocumentYear : String(4);
+        stockVerified        : Boolean;
+        reservationVerified  : Boolean;
+        completelyProcessed  : Boolean;
+        error                : String(255);
+    };
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action executeReservationWarehouseFlow(
+        MovementType               : String(3),
+        movementType               : String(3),
+        Material                   : String(40),
+        material                   : String(40),
+        Plant                      : String(4),
+        plant                      : String(4),
+        sourcePlant                : String(4),
+        SourcePlant                : String(4),
+        StorageLocation            : String(4),
+        storageLocation            : String(4),
+        sourceStorageLocation      : String(4),
+        SourceStorageLocation      : String(4),
+        Quantity                   : Decimal(13, 3),
+        quantity                   : Decimal(13, 3),
+        Unit                       : String(3),
+        unit                       : String(3),
+        WarehouseNumber            : String(3),
+        warehouseNumber            : String(3),
+        ReceivingPlant             : String(4),
+        receivingPlant             : String(4),
+        destinationPlant           : String(4),
+        DestinationPlant           : String(4),
+        ReceivingStorageLocation   : String(4),
+        receivingStorageLocation   : String(4),
+        destinationStorageLocation : String(4),
+        DestinationStorageLocation : String(4),
+        CostCenter                 : String(10),
+        costCenter                 : String(10),
+        AssetNo                    : String(12),
+        assetNo                    : String(12),
+        SubNumber                  : String(4),
+        subNumber                  : String(4),
+        Batch                      : String(10),
+        batch                      : String(10),
+        Serials                    : array of String(18),
+        serials                    : array of String(18),
+        CompleteReservation        : Boolean,
+        completeReservation        : Boolean,
+        ReservationDate            : Date,
+        reservationDate            : Date
+    ) returns OrchestratorProcessResult;
 }

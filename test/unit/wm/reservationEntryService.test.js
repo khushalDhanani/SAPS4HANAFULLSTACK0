@@ -1083,6 +1083,104 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(log.MessageType).toBe('S');
     });
 
+    test('POST /odata/v4/reservation-entry/postMigoGoodsMovement with partial issue: sets WithdrawnQuantity=6, RemainingQuantity=4, and CompletelyProcessed=false (does NOT mark completely processed)', async () => {
+      postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement').mockResolvedValueOnce({
+        success: true,
+        materialDocument: '4900050889',
+        materialDocYear: '2026',
+        status: '05',
+        stockEffect: 'Stock consumed to Cost Center 1011201301',
+        reservationVerification: {
+          success: true,
+          stage: 'RESERVATION_VERIFICATION',
+          reservationNumber: testMigoResNo,
+          reservationItem: '0001',
+          requestedQuantity: 10,
+          issuedQuantity: 6,
+          remainingQuantity: 4,
+          completelyProcessed: false,
+          isComplete: false,
+          completionStatus: 'PARTIALLY_PROCESSED'
+        }
+      });
+
+      const { status, data } = await POST(
+        '/odata/v4/reservation-entry/postMigoGoodsMovement',
+        {
+          ReservationNo: testMigoResNo,
+          ReservationItem: '0001',
+          Quantity: 6
+        },
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(data.ReservationNo).toBe(testMigoResNo);
+      expect(data.MaterialDocument).toBe('4900050889');
+
+      // Verify DB update: CompletelyProcessed must be FALSE, RemainingQuantity must be 4
+      const track = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testMigoResNo }));
+      expect(Number(track.WithdrawnQuantity)).toBe(6);
+      expect(Number(track.RemainingQuantity)).toBe(4);
+      expect(Boolean(track.CompletelyProcessed)).toBe(false);
+
+      // Verify log message notes partial issue
+      const log = await cds.db.run(
+        SELECT.one.from(LOG_ENTITY).where({ ReservationNo: testMigoResNo, DocumentNo: '4900050889' })
+      );
+      expect(log).toBeTruthy();
+      expect(log.MessageText).toContain('Partial issue: remaining quantity 4');
+    });
+
+    test('POST /odata/v4/reservation-entry/postMigoGoodsMovement with complete issue: sets WithdrawnQuantity=10, RemainingQuantity=0, and CompletelyProcessed=true', async () => {
+      postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement').mockResolvedValueOnce({
+        success: true,
+        materialDocument: '4900050890',
+        materialDocYear: '2026',
+        status: '05',
+        stockEffect: 'Stock consumed to Cost Center 1011201301',
+        reservationVerification: {
+          success: true,
+          stage: 'RESERVATION_VERIFICATION',
+          reservationNumber: testMigoResNo,
+          reservationItem: '0001',
+          requestedQuantity: 10,
+          issuedQuantity: 10,
+          remainingQuantity: 0,
+          completelyProcessed: true,
+          isComplete: true,
+          completionStatus: 'COMPLETED'
+        }
+      });
+
+      const { status, data } = await POST(
+        '/odata/v4/reservation-entry/postMigoGoodsMovement',
+        {
+          ReservationNo: testMigoResNo,
+          ReservationItem: '0001',
+          Quantity: 10
+        },
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(data.ReservationNo).toBe(testMigoResNo);
+      expect(data.MaterialDocument).toBe('4900050890');
+
+      // Verify DB update: CompletelyProcessed must be TRUE, RemainingQuantity must be 0
+      const track = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testMigoResNo }));
+      expect(Number(track.WithdrawnQuantity)).toBe(10);
+      expect(Number(track.RemainingQuantity)).toBe(0);
+      expect(Boolean(track.CompletelyProcessed)).toBe(true);
+
+      // Verify log message notes completely processed
+      const log = await cds.db.run(
+        SELECT.one.from(LOG_ENTITY).where({ ReservationNo: testMigoResNo, DocumentNo: '4900050890' })
+      );
+      expect(log).toBeTruthy();
+      expect(log.MessageText).toContain('Reservation completely processed');
+    });
+
     test('POST /odata/v4/reservation-entry/postMigoGoodsMovement handles failure with status 90 (GI error) and error log', async () => {
       postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement').mockRejectedValueOnce(
         new Error('Posting period 10/2026 closed')
@@ -1368,6 +1466,55 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       } finally {
         resSpy.mockRestore();
         trSpy.mockRestore();
+      }
+    });
+
+    test('action executeReservationWarehouseFlow calls adapter orchestrator and returns OrchestratorProcessResult', async () => {
+      const orchestratorSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'executeReservationWarehouseFlow').mockResolvedValueOnce({
+        success: true,
+        state: 'COMPLETED',
+        currentState: 'COMPLETED',
+        completed: true,
+        stages: ['RESERVATION_CREATED', 'TR_CREATED', 'TR_VERIFIED', 'TO_CREATED', 'TO_CONFIRMED', 'MIGO_POSTED', 'STOCK_VERIFIED', 'RESERVATION_VERIFIED', 'COMPLETED'],
+        reservation: { reservationNo: '520235', reservationItem: '0001' },
+        tr: { trNumber: '1000850', trItem: '0001' },
+        verifiedTR: { trNumber: '1000850' },
+        to: { toNumber: '1037299', toItem: '0001' },
+        confirmation: { confirmed: true },
+        migo: { materialDocument: '5000999999', materialDocumentYear: '2026' },
+        stock: { success: true, verified: true },
+        finalReservation: { success: true, verified: true, completelyProcessed: true }
+      });
+
+      try {
+        const { status, data } = await POST(
+          '/odata/v4/reservation-entry/executeReservationWarehouseFlow',
+          {
+            MovementType: '201',
+            Plant: '1120',
+            StorageLocation: 'HS01',
+            Material: '000000008000000023',
+            Quantity: 10,
+            Unit: 'NOS',
+            CostCenter: '1011201301',
+            WarehouseNumber: 'W01'
+          },
+          authClerk
+        );
+
+        expect(status).toBe(200);
+        expect(data.success).toBe(true);
+        expect(data.state).toBe('COMPLETED');
+        expect(data.currentState).toBe('COMPLETED');
+        expect(data.completed).toBe(true);
+        expect(data.reservationNumber).toBe('520235');
+        expect(data.trNumber).toBe('1000850');
+        expect(data.toNumber).toBe('1037299');
+        expect(data.toConfirmed).toBe(true);
+        expect(data.materialDocument).toBe('5000999999');
+        expect(data.completelyProcessed).toBe(true);
+      } finally {
+        orchestratorSpy.mockRestore();
       }
     });
   });

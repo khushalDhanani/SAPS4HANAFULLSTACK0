@@ -5,6 +5,67 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 13: Create One Common Process Orchestrator (executeReservationWarehouseFlow) (2026-10-14, 16:35 IST):** Complete. Implemented and verified the unified end-to-end process orchestrator `executeReservationWarehouseFlow(input)` coordinating the 9 sequential stages:
+  $$\text{RESERVATION\_CREATED} \longrightarrow \text{TR\_CREATED} \longrightarrow \text{TR\_VERIFIED} \longrightarrow \text{TO\_CREATED} \longrightarrow \text{TO\_CONFIRMED} \longrightarrow \text{MIGO\_POSTED} \longrightarrow \text{STOCK\_VERIFIED} \longrightarrow \text{RESERVATION\_VERIFIED} \longrightarrow \text{COMPLETED}$$
+  - **Explicit Stage Machine & Halting Contract:**
+    Enforced clean sequential execution with early exit: if any stage fails, halts execution immediately and returns:
+    ```javascript
+    fail(stage, details) => ({
+      success: false,
+      stage,
+      currentState: stage,
+      error: details?.error || `Flow halted at stage: ${stage}`,
+      details,
+      stages: [...completedStages],
+      ...priorSuccessfulStageResults
+    })
+    ```
+  - **Completion State Differentiation:**
+    - **Complete Issue:** (Remaining = 0 or `KZEAR = 'X'`) $\longrightarrow$ state is `COMPLETED`, `completed = true`, `stages` includes `'COMPLETED'`.
+    - **Partial Issue:** (e.g. Requested = 10, Issued = 6, Remaining = 4) $\longrightarrow$ state is `PARTIALLY_PROCESSED`, `completed = false`, `stages` does NOT include `'COMPLETED'`.
+  - **Helper Aliases & Verification:**
+    - `verifyTR(params = {}, warehouseNumberArg = '')`: reads and validates TR from SAP (`LTBK` / `Z_WM_GET_TR_MATERIAL_LIST`), verifies persistence, warehouse matching, and rejects completed TR (`STATU === 'E'`).
+    - Helper aliases: `createTR(...)`, `createTO(...)`, `confirmTO(...)`, `postMigo(...)`.
+    - `verifyStock(params, migoArg)`: seamlessly handles two-argument invocation `verifyStock(input, migo)`.
+    - `verifyReservation(params)`: handles passing reservation result object directly.
+  - **CAP OData Service Exposure:**
+    - Added `type OrchestratorProcessResult` to `srv/wm/tr-to/service.cds` and `srv/wm/reservation-entry/service.cds`.
+    - Declared action `executeReservationWarehouseFlow(...) returns OrchestratorProcessResult` in both services.
+    - Implemented action handlers in `srv/wm/tr-to/handlers/trTo.handler.js` and `srv/wm/reservation-entry/service.js`.
+  - **Validation & Test Results:**
+    - `test/unit/wm/autoMigoPosting.test.js`: Added Section 10 tests covering full happy path flow, partial issue flow, stage failures (`RESERVATION`, `TR`, `TR_VERIFICATION`, `TO`, `TO_CONFIRMATION`, `MIGO`), `verifyTR` validations, helper aliases, and CAP handler execution.
+    - `test/unit/wm/reservationEntryService.test.js`: Added action execution test for `executeReservationWarehouseFlow`.
+    - `npx cds compile srv/wm/tr-to/service.cds && npx cds compile srv/wm/reservation-entry/service.cds`: Passed.
+    - `npx jest test/unit/wm`: 70 passed, 0 failed, 1,592 passed tests green.
+    - `git diff --check`: Passed with 0 warnings.
+
+- **Step 12: Add Reservation Verification & Enforce Partial/Complete Issue Contract (2026-10-14, 16:15 IST):** Complete. Implemented and enforced Step 12 reservation verification executing strictly after MIGO succeeds:
+  $$\text{Reservation} \longrightarrow \text{Read Reservation (RESB)} \longrightarrow \text{Check Issued/Withdrawn Qty} \longrightarrow \text{Check Remaining Qty} \longrightarrow \text{Check Completion Status}$$
+  Enforced completion rules:
+  - **Complete Issue:** Requested = 10, Issued = 10, Remaining = 0 (or `KZEAR = 'X'`) $\longrightarrow$ `completelyProcessed: true`, `isComplete: true`, `completionStatus: 'COMPLETED'`.
+  - **Partial Issue:** Requested = 10, Issued = 6, Remaining = 4 $\longrightarrow$ `completelyProcessed: false`, `isComplete: false`, `completionStatus: 'PARTIALLY_PROCESSED'`.
+  - **Strict Non-Complete Processing Rule:** The application must not mark the reservation completely processed in the second case. Enforced across `ReservationProcessAdapter.verifyReservation()`, `TrToHandler.handlePostMigoGoodsMovement()`, and `ReservationEntryService.postMigoForTrack()`.
+  Technical implementations:
+  1. `ReservationProcessAdapter.js`:
+     - Implemented `verifyReservation(params = {})`: queries SAP transparent table `RESB` (`RSNUM`, `RSPOS`, `MATNR`, `WERKS`, `LGORT`, `BDMNG`, `ENMNG`, `MEINS`, `KZEAR`, `XLOEK`).
+     - Computes `requestedQuantity` (`BDMNG`), `issuedQuantity` (`ENMNG`), `remainingQuantity` (`max(0, BDMNG - ENMNG)`), `completelyProcessed` (`Boolean(KZEAR === 'X' || (remaining === 0 && requested > 0))`), and structured `comparison: { requested, issued, remaining, isComplete, status }`.
+     - In `postGoodsMovement()`: automatically chains Step 12 `verifyReservation()` after Step 11 `verifyStock()` for reservation-backed movements (both fresh and already-posted branches); gracefully omits reservation verification for direct non-reservation 311/301 movements (`reservationVerification: null`).
+  2. `db/wm/reservation-track.cds`:
+     - Extended `ReservationTrack` entity with `WithdrawnQuantity: Decimal(13,3)`, `RemainingQuantity: Decimal(13,3)`, and `CompletelyProcessed: Boolean`.
+  3. `srv/wm/tr-to/service.cds` & `srv/wm/reservation-entry/service.cds`:
+     - Defined `type ReservationVerificationResult`.
+     - Added `reservationVerification : ReservationVerificationResult` to `type MigoProcessResult`.
+     - Declared action `verifyReservation(reservationNumber, reservationNo, reservationItem) returns ReservationVerificationResult`.
+     - Added `WithdrawnQuantity`, `RemainingQuantity`, `CompletelyProcessed` to `ReservationDetailRow`.
+  4. `srv/wm/tr-to/handlers/trTo.handler.js` & `srv/wm/reservation-entry/service.js`:
+     - Registered action handlers for `verifyReservation` and `VerifyReservation`.
+     - Updated `ReservationTrack` / `ReservationEntries` on MIGO posting: sets `WithdrawnQuantity`, `RemainingQuantity`, and sets `CompletelyProcessed: false` when remaining > 0 (and true when complete).
+     - Updated `fetchSapReservation`: reads `RESB-ENMNG`, computes `WithdrawnQuantity`, `RemainingQuantity`, and evaluates `CompletelyProcessed`.
+  5. Unit tests:
+     - `test/unit/wm/autoMigoPosting.test.js`: Added Section 9 (8 tests) covering complete issue, partial issue, KZEAR='X', missing reservation rejection, RESB persistence check, and automatic 3-stage chaining (Step 10 + 11 + 12).
+     - `test/unit/wm/reservationEntryService.test.js`: Added 2 tests verifying persistence and log message for partial issue vs complete issue.
+  All 70 WM test suites pass 100% green (1,579/1,579 tests). CDS compilation and `git diff --check` pass cleanly.
+
 - **Step 11: Add Final Stock Verification (Expected vs Actual per Movement Type) (2026-10-14, 15:55 IST):** Complete. Implemented and enforced Step 11 final stock verification executing strictly after MIGO succeeds:
   $$\text{Material Document} \longrightarrow \text{Read Resulting Stock} \longrightarrow \text{Compare Expected vs Actual}$$
   Enforced movement-specific stock verification rules:
@@ -1893,7 +1954,9 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Step 11 — 2026-10-14, 15:55 IST):** Final stock verification (expected vs actual comparison for 201, 241, 311, 301) is complete and verified across all services and 70 test suites. Next action: Execute full end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Next Recommended Action (Step 13 — 2026-10-14, 16:35 IST):** Unified end-to-end process orchestrator (`executeReservationWarehouseFlow`) coordinating all 9 stages (Reservation Create → TR Create → TR Verify → TO Create → TO Confirm → MIGO Post → Stock Verify → Reservation Verify → Completed / Partially Processed) is complete, exposed via CAP OData services, and fully verified across all 70 test suites. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Previous Recommended Action (Step 12 — 2026-10-14, 16:15 IST):** Reservation verification (checking issued/withdrawn quantity, remaining quantity, and completion status) is complete and verified across all services and 70 test suites. Next action: Execute full end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Previous Recommended Action (Step 11 — 2026-10-14, 15:55 IST):** Final stock verification (expected vs actual comparison for 201, 241, 311, 301) is complete and verified across all services and 70 test suites. Next action: Execute full end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 10 — 2026-10-14, 15:00 IST):** Material document verification pipeline is complete and verified across all services and 70 test suites. Next action: Execute end-to-end integration and UI verification of the material document verification pipeline across Fiori app and live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 9 — 2026-10-14, 14:50 IST):** Proceed to Step 10: Verify the Material Document (Pipeline: Material document number exists → Year exists → Movement type matches → Material matches → Quantity matches → Plant/SLoc matches → Reservation reference matches).
 - **Previous Recommended Action (Step 8 — 2026-10-14, 14:35 IST):** Make MIGO a separate final stage and standardize clear request shapes for 201, 311, 301.
@@ -1913,6 +1976,175 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-14 16:35 IST — Step 13: Create One Common Process Orchestrator (executeReservationWarehouseFlow)
+
+- **User Request:**
+  - Step 13 — Create one common process orchestrator.
+  - After individual stages work, make one orchestrator conceptually coordinating:
+    ```javascript
+    async function executeReservationWarehouseFlow(input) {
+      const reservation = await createReservation(input);
+      if (!reservation.success) return fail("RESERVATION", reservation);
+      const tr = await createTR(reservation);
+      if (!tr.success) return fail("TR", tr);
+      const verifiedTR = await verifyTR(tr);
+      if (!verifiedTR.success) return fail("TR_VERIFICATION", verifiedTR);
+      const to = await createTO(verifiedTR);
+      if (!to.success) return fail("TO", to);
+      const confirmation = await confirmTO(to);
+      if (!confirmation.success) return fail("TO_CONFIRMATION", confirmation);
+      const migo = await postMigo({ ...input, reservation, tr, to });
+      if (!migo.success) return fail("MIGO", migo);
+      const stock = await verifyStock(input, migo);
+      if (!stock.success) return fail("STOCK_VERIFICATION", stock);
+      const finalReservation = await verifyReservation(reservation);
+      if (!finalReservation.success) return fail("RESERVATION_VERIFICATION", finalReservation);
+      return { success: true, ... };
+    }
+    ```
+- **Implementation & Architectural Changes:**
+  1. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Implemented `verifyTR(params = {}, warehouseNumberArg = '')`:
+       - Resolves TR number (`trNumber`, `tbnum`, `TRNumber`, `TransferRequirement`) and warehouse number (`warehouseNumber`, `lgnum`, `WarehouseNumber`).
+       - Validates existence and retrieves header record via SAP table `LTBK` or `Z_WM_GET_TR_MATERIAL_LIST`.
+       - Enforces checks: TR exists, warehouse matches, and status is not `'E'` (already completed / closed).
+       - Returns `{ success: true, stage: 'TR_VERIFIED', trNumber, warehouseNumber, ...trRecord }`.
+     - Added aliases: `createTR(...)` -> `createTransferRequirement(...)`, `createTO(...)` -> `createTransferOrder(...)`, `confirmTO(...)` -> `confirmTransferOrder(...)`, `postMigo(...)` -> `postGoodsMovement(...)`.
+     - Enhanced `verifyStock(params, migoArg)`: accommodates two-argument signature `verifyStock(input, migo)` with merged payload.
+     - Enhanced `verifyReservation(params)`: supports receiving reservation result objects directly.
+     - Enhanced `createTransferRequirement`: ensures `wmMovementType = params.movementType || params.MovementType` and `effMvt = wmMovementType || movementType` for reliable parameter propagation.
+     - Implemented `executeReservationWarehouseFlow(input = {})`:
+       - Coordinates the full 9-stage sequence:
+         1. `createReservation(input)` $\longrightarrow$ halts with `fail('RESERVATION', ...)` on failure.
+         2. `createTR(reservation)` $\longrightarrow$ halts with `fail('TR', ...)` on failure.
+         3. `verifyTR(tr)` $\longrightarrow$ halts with `fail('TR_VERIFICATION', ...)` on failure.
+         4. `createTO(verifiedTR)` $\longrightarrow$ halts with `fail('TO', ...)` on failure.
+         5. `confirmTO(to)` $\longrightarrow$ halts with `fail('TO_CONFIRMATION', ...)` on failure.
+         6. `postMigo({ ...input, reservation, tr, to })` $\longrightarrow$ halts with `fail('MIGO', ...)` on failure.
+         7. `verifyStock(input, migo)` $\longrightarrow$ halts with `fail('STOCK_VERIFICATION', ...)` on failure.
+         8. `verifyReservation(reservation)` $\longrightarrow$ halts with `fail('RESERVATION_VERIFICATION', ...)` on failure.
+         9. Evaluates completion state: if `finalReservation.completelyProcessed === true`, marks state `COMPLETED`, `completed = true`, and appends `'COMPLETED'` to `stages`. If remaining quantity > 0, marks state `PARTIALLY_PROCESSED`, `completed = false`, without `'COMPLETED'`.
+       - Exposes structured result matching user expectations:
+         `{ success, stage, currentState, completed, completelyProcessed, reservationNumber, trNumber, toNumber, toConfirmed, materialDocument, materialDocumentYear, stockVerified, requestedQuantity, issuedQuantity, remainingQuantity, stages, reservation, tr, verifiedTR, to, confirmation, migo, stock, finalReservation }`.
+  2. `srv/wm/tr-to/service.cds` & `srv/wm/reservation-entry/service.cds`:
+     - Declared `type OrchestratorProcessResult`.
+     - Added action `executeReservationWarehouseFlow(...) returns OrchestratorProcessResult`.
+  3. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - Registered action handlers for `executeReservationWarehouseFlow` and `ExecuteReservationWarehouseFlow`.
+  4. `srv/wm/reservation-entry/service.js`:
+     - Registered action handler `this.on('executeReservationWarehouseFlow', ...)`.
+  5. `test/unit/wm/autoMigoPosting.test.js`:
+     - Added Section 10 tests (11 unit tests) covering:
+       - Full end-to-end happy path flow resulting in `COMPLETED`.
+       - Partial issue flow resulting in `PARTIALLY_PROCESSED` (remaining > 0).
+       - Stage halting on failures at `RESERVATION`, `TR`, `TR_VERIFICATION`, `TO`, `TO_CONFIRMATION`, and `MIGO`.
+       - `verifyTR` standalone validation (missing TR, completed TR, warehouse mismatch).
+       - Helper alias invocations (`createTR`, `createTO`, `confirmTO`, `postMigo`, `verifyTR`).
+       - CAP handler invocation on `TrToHandler`.
+  6. `test/unit/wm/reservationEntryService.test.js`:
+     - Added CAP action execution test for `executeReservationWarehouseFlow`.
+- **Validation Commands Run & Pass/Fail Results:**
+  - `npx cds compile srv/wm/tr-to/service.cds && npx cds compile srv/wm/reservation-entry/service.cds`: PASS (code 0).
+  - `npx jest test/unit/wm/autoMigoPosting.test.js`: PASS (54/54 tests passed).
+  - `npx jest test/unit/wm/reservationEntryService.test.js`: PASS (40/40 tests passed).
+  - `npx jest test/unit/wm`: PASS (70 test suites passed, 1,592 passed, 0 failed).
+  - `git diff --check`: PASS (clean diff, 0 warnings, code 0).
+- **Known Limitations & Open Points:**
+  - Full end-to-end sandbox execution against live SAP S/4HANA Client 220 pending authorization.
+
+### 2026-10-14 16:15 IST — Step 12: Add Reservation Verification (After MIGO: Read Reservation, Check Issued/Withdrawn, Remaining, and Completion Status)
+
+- **User Request:**
+  - Step 12 — Add reservation verification.
+  - After MIGO:
+    $$\text{Reservation} \longrightarrow \text{Read reservation} \longrightarrow \text{Check issued/withdrawn quantity} \longrightarrow \text{Check remaining quantity} \longrightarrow \text{Check completion status}$$
+  - For a complete issue:
+    - Requested = 10
+    - Issued = 10
+    - Remaining = 0
+  - For a partial issue:
+    - Requested = 10
+    - Issued = 6
+    - Remaining = 4
+  - The application must not mark the reservation completely processed in the second case.
+- **Implementation & Architectural Changes:**
+  1. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Implemented `verifyReservation(params = {})`:
+       - Requires `reservationNumber` / `reservationNo`; rejects with 400 Bad Request and `stage: 'RESERVATION_VERIFICATION'` if missing.
+       - Queries SAP transparent table `RESB` (`RSNUM`, `RSPOS`, `MATNR`, `WERKS`, `LGORT`, `BDMNG`, `ENMNG`, `MEINS`, `KZEAR`, `XLOEK`).
+       - Calculates:
+         - `requestedQuantity`: `parseFloat(resb.BDMNG) || 0`
+         - `issuedQuantity`: `parseFloat(resb.ENMNG) || 0`
+         - `remainingQuantity`: `Math.max(0, requestedQuantity - issuedQuantity)`
+         - `isFinalIssue`: `String(resb.KZEAR || '').trim() === 'X'`
+         - `completelyProcessed`: `Boolean(isFinalIssue || (remainingQuantity === 0 && requestedQuantity > 0))`
+         - `isComplete`: `completelyProcessed`
+         - `completionStatus`: `completelyProcessed ? 'COMPLETED' : 'PARTIALLY_PROCESSED'`
+       - Returns structured contract:
+         ```json
+         {
+           "success": true,
+           "stage": "RESERVATION_VERIFICATION",
+           "reservationNumber": "520235",
+           "reservationItem": "0001",
+           "material": "8000000023",
+           "plant": "1120",
+           "storageLocation": "HS01",
+           "requestedQuantity": 10,
+           "issuedQuantity": 6,
+           "remainingQuantity": 4,
+           "unit": "NOS",
+           "isFinalIssue": false,
+           "isDeleted": false,
+           "completelyProcessed": false,
+           "isComplete": false,
+           "completionStatus": "PARTIALLY_PROCESSED",
+           "comparison": {
+             "requested": 10,
+             "issued": 6,
+             "remaining": 4,
+             "isComplete": false,
+             "status": "PARTIALLY_PROCESSED"
+           },
+           "verified": true
+         }
+         ```
+     - In `postGoodsMovement()`:
+       - Automatically chains `verifyReservation()` after Step 11 `verifyStock()` whenever a reservation is referenced (`hasRes === true`).
+       - Attaches `reservationVerification` to both fresh posting and `alreadyPosted` results.
+       - Leaves `reservationVerification: null` for direct non-reservation 311/301 movements.
+  2. `db/wm/reservation-track.cds`:
+     - Extended `ReservationTrack` entity with:
+       - `WithdrawnQuantity: Decimal(13,3);`
+       - `RemainingQuantity: Decimal(13,3);`
+       - `CompletelyProcessed: Boolean;`
+  3. `srv/wm/tr-to/service.cds`:
+     - Defined `type ReservationVerificationResult`.
+     - Added `reservationVerification : ReservationVerificationResult` to `type MigoProcessResult`.
+     - Declared action `verifyReservation(reservationNumber, reservationNo, reservationItem) returns ReservationVerificationResult`.
+  4. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - Forwarded `reservationVerification` in `handlePostMigoGoodsMovement`.
+     - Registered action handlers for `verifyReservation` and `VerifyReservation`.
+     - Updated `ReservationTrack` persistence: sets `WithdrawnQuantity`, `RemainingQuantity`, and explicitly sets `CompletelyProcessed: false` for partial issues.
+  5. `srv/wm/reservation-entry/service.cds`:
+     - Defined `type ReservationVerificationResult`.
+     - Declared action `verifyReservation(...) returns ReservationVerificationResult`.
+     - Extended `ReservationDetailRow` with `WithdrawnQuantity`, `RemainingQuantity`, `CompletelyProcessed`.
+  6. `srv/wm/reservation-entry/service.js`:
+     - In `postMigoForTrack`: updates `ReservationEntries` with `WithdrawnQuantity`, `RemainingQuantity`, and sets `CompletelyProcessed: isCompletelyProcessed` (false on partial issue; log message explicitly notes `Partial issue: remaining quantity X`).
+     - In `fetchSapReservation`: reads `RESB-ENMNG` and populates `WithdrawnQuantity`, `RemainingQuantity`, `CompletelyProcessed`.
+     - Registered action handler for `verifyReservation`.
+  7. Tests:
+     - `test/unit/wm/autoMigoPosting.test.js`: Added Section 9 (8 unit tests) covering complete issue, partial issue, KZEAR='X', missing reservation rejection, RESB transparent table persistence check, automatic chaining of Step 10 + 11 + 12 in `postGoodsMovement()`, and handler action execution.
+     - `test/unit/wm/reservationEntryService.test.js`: Added 2 unit tests verifying that `postMigoGoodsMovement` records `WithdrawnQuantity`, `RemainingQuantity`, sets `CompletelyProcessed: false` for partial issue, and `CompletelyProcessed: true` for complete issue.
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/autoMigoPosting.test.js`: **PASS** (42/42 tests passed).
+  - `npx jest test/unit/wm/reservationEntryService.test.js`: **PASS** (39/39 tests passed).
+  - `npx jest test/unit/wm`: **PASS** (70/70 test suites passed, 1,579/1,579 tests passed).
+  - `npx cds compile srv/wm/reservation-entry/service.cds && npx cds compile srv/wm/tr-to/service.cds`: **PASS** (0 errors).
+  - `git diff --check`: **PASS** (clean, 0 errors).
+- **Status:** Complete.
 
 ### 2026-10-14 15:55 IST — Step 11: Add Final Stock Verification (Expected vs Actual per Movement Type)
 

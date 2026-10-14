@@ -1423,4 +1423,823 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       expect(mockRes.verifyStock).toHaveBeenCalledWith(req.data);
     });
   });
+
+  describe('9. Step 12: Add Reservation Verification (After MIGO: Read Reservation, Check Issued/Withdrawn, Remaining, and Completion Status)', () => {
+    test('Complete issue: Requested = 10, Issued = 10, Remaining = 0 -> completelyProcessed = true, completionStatus = COMPLETED', async () => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        if (table === 'RESB') {
+          return [{
+            RSNUM: '0000520235',
+            RSPOS: '0001',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            BDMNG: '10.000',
+            ENMNG: '10.000',
+            MEINS: 'NOS',
+            KZEAR: '',
+            XLOEK: ''
+          }];
+        }
+        return [];
+      });
+
+      const res = await adapter.verifyReservation({
+        reservationNumber: '520235',
+        reservationItem: '0001'
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.stage).toBe('RESERVATION_VERIFICATION');
+      expect(res.reservationNumber).toBe('520235');
+      expect(res.reservationItem).toBe('0001');
+      expect(res.requestedQuantity).toBe(10);
+      expect(res.issuedQuantity).toBe(10);
+      expect(res.remainingQuantity).toBe(0);
+      expect(res.completelyProcessed).toBe(true);
+      expect(res.isComplete).toBe(true);
+      expect(res.completionStatus).toBe('COMPLETED');
+      expect(res.comparison).toEqual({
+        requested: 10,
+        issued: 10,
+        remaining: 0,
+        isComplete: true,
+        status: 'COMPLETED'
+      });
+      expect(res.verified).toBe(true);
+    });
+
+    test('Partial issue: Requested = 10, Issued = 6, Remaining = 4 -> completelyProcessed = false, completionStatus = PARTIALLY_PROCESSED (application must NOT mark completely processed)', async () => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        if (table === 'RESB') {
+          return [{
+            RSNUM: '0000520235',
+            RSPOS: '0001',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            BDMNG: '10.000',
+            ENMNG: '6.000',
+            MEINS: 'NOS',
+            KZEAR: '',
+            XLOEK: ''
+          }];
+        }
+        return [];
+      });
+
+      const res = await adapter.verifyReservation({
+        reservationNumber: '520235',
+        reservationItem: '0001'
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.stage).toBe('RESERVATION_VERIFICATION');
+      expect(res.requestedQuantity).toBe(10);
+      expect(res.issuedQuantity).toBe(6);
+      expect(res.remainingQuantity).toBe(4);
+      expect(res.completelyProcessed).toBe(false);
+      expect(res.isComplete).toBe(false);
+      expect(res.completionStatus).toBe('PARTIALLY_PROCESSED');
+      expect(res.comparison).toEqual({
+        requested: 10,
+        issued: 6,
+        remaining: 4,
+        isComplete: false,
+        status: 'PARTIALLY_PROCESSED'
+      });
+    });
+
+    test('Partial issue with KZEAR = X: Requested = 10, Issued = 6, Remaining = 4 but final issue set -> completelyProcessed = true, completionStatus = COMPLETED', async () => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        if (table === 'RESB') {
+          return [{
+            RSNUM: '0000520235',
+            RSPOS: '0001',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            BDMNG: '10.000',
+            ENMNG: '6.000',
+            MEINS: 'NOS',
+            KZEAR: 'X',
+            XLOEK: ''
+          }];
+        }
+        return [];
+      });
+
+      const res = await adapter.verifyReservation({
+        reservationNumber: '520235',
+        reservationItem: '0001'
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.requestedQuantity).toBe(10);
+      expect(res.issuedQuantity).toBe(6);
+      expect(res.remainingQuantity).toBe(4);
+      expect(res.isFinalIssue).toBe(true);
+      expect(res.completelyProcessed).toBe(true);
+      expect(res.completionStatus).toBe('COMPLETED');
+    });
+
+    test('verifyReservation rejects missing reservation number with 400 Bad Request', async () => {
+      await expect(adapter.verifyReservation({}))
+        .rejects
+        .toMatchObject({
+          status: 400,
+          stage: 'RESERVATION_VERIFICATION',
+          message: expect.stringContaining('Reservation number is mandatory')
+        });
+    });
+
+    test('verifyReservation rejects when reservation not found in SAP RESB transparent table', async () => {
+      adapter._checkResbPersistence = true;
+      mockRfc.readTable.mockResolvedValue([]);
+
+      await expect(adapter.verifyReservation({ reservationNumber: '599999', reservationItem: '0001' }))
+        .rejects
+        .toMatchObject({
+          status: 404,
+          stage: 'RESERVATION_VERIFICATION',
+          message: expect.stringContaining('Reservation 599999/0001 not found in SAP (RESB)')
+        });
+      adapter._checkResbPersistence = false;
+    });
+
+    test('postGoodsMovement() automatically chains Step 10, Step 11, and Step 12 for reservations', async () => {
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '5000888888',
+          MATDOCUMENTYEAR: '2026',
+          RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document 5000888888 posted' }]
+        })
+        .mockResolvedValueOnce({}); // COMMIT
+
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+        if (table === 'MATDOC' && whereStr.includes("MBLNR = '5000888888'")) {
+          return [{
+            MBLNR: '5000888888',
+            MJAHR: '2026',
+            ZEILE: '0001',
+            BWART: '201',
+            MATNR: '000000008000000023',
+            MENGE: '6.000',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            RSNUM: '0000524980',
+            RSPOS: '0001',
+            KOSTL: '001011201301',
+            SHKZG: 'H'
+          }];
+        }
+        if (table === 'MATDOC') return []; // For idempotency check
+        if (table === 'MARD') {
+          return [{ LGORT: 'HS01', LABST: '94.000' }];
+        }
+        if (table === 'RESB') {
+          return [{
+            RSNUM: '0000524980',
+            RSPOS: '0001',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            BDMNG: '10.000',
+            ENMNG: '6.000',
+            MEINS: 'NOS',
+            KZEAR: '',
+            XLOEK: ''
+          }];
+        }
+        return [];
+      });
+
+      const res = await adapter.postGoodsMovement({
+        reservationNo: '524980',
+        reservationItem: '0001',
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 6,
+        unit: 'NOS',
+        costCenter: '1011201301'
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.materialDocument).toBe('5000888888');
+
+      // Step 10 verified
+      expect(res.stage).toBe('MIGO');
+      expect(res.materialDocumentYear).toBe('2026');
+
+      // Step 11 verified
+      expect(res.stockVerification).toBeDefined();
+      expect(res.stockVerification.stage).toBe('STOCK_VERIFICATION');
+      expect(res.stockVerification.success).toBe(true);
+
+      // Step 12 verified
+      expect(res.reservationVerification).toBeDefined();
+      expect(res.reservationVerification.stage).toBe('RESERVATION_VERIFICATION');
+      expect(res.reservationVerification.success).toBe(true);
+      expect(res.reservationVerification.requestedQuantity).toBe(10);
+      expect(res.reservationVerification.issuedQuantity).toBe(6);
+      expect(res.reservationVerification.remainingQuantity).toBe(4);
+      expect(res.reservationVerification.completelyProcessed).toBe(false);
+      expect(res.reservationVerification.completionStatus).toBe('PARTIALLY_PROCESSED');
+    });
+
+    test('postGoodsMovement() without reservation leaves reservationVerification null', async () => {
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '5000777777',
+          MATDOCUMENTYEAR: '2026',
+          RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document 5000777777 posted' }]
+        })
+        .mockResolvedValueOnce({});
+
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+        if (table === 'MATDOC' && whereStr.includes("MBLNR = '5000777777'")) {
+          return [{
+            MBLNR: '5000777777',
+            MJAHR: '2026',
+            ZEILE: '0001',
+            BWART: '311',
+            MATNR: '000000008000000023',
+            MENGE: '5.000',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            SHKZG: 'H'
+          }];
+        }
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS02' }];
+        if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '50.000' }];
+        return [];
+      });
+
+      const res = await adapter.postGoodsMovement({
+        movementType: '311',
+        plant: '1120',
+        sourceStorageLocation: 'HS01',
+        destinationStorageLocation: 'HS02',
+        material: '8000000023',
+        quantity: 5,
+        unit: 'NOS'
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.materialDocument).toBe('5000777777');
+      expect(res.reservationVerification).toBeNull();
+    });
+
+    test('TrToHandler verifyReservation action executes and returns ReservationVerificationResult', async () => {
+      const handlers = {};
+      const mockAdapter = {};
+      const mockRes = {
+        verifyReservation: jest.fn().mockResolvedValue({
+          success: true,
+          stage: 'RESERVATION_VERIFICATION',
+          reservationNumber: '520235',
+          reservationItem: '0001',
+          requestedQuantity: 10,
+          issuedQuantity: 6,
+          remainingQuantity: 4,
+          completelyProcessed: false,
+          isComplete: false,
+          completionStatus: 'PARTIALLY_PROCESSED',
+          verified: true
+        })
+      };
+
+      TrToHandler.init(
+        { on: (event, fn) => { handlers[event] = fn; } },
+        { adapter: mockAdapter, resProcessAdapter: mockRes }
+      );
+
+      const req = {
+        data: {
+          reservationNumber: '520235',
+          reservationItem: '0001'
+        },
+        error: jest.fn()
+      };
+
+      const result = await handlers.verifyReservation(req);
+      expect(result.success).toBe(true);
+      expect(result.stage).toBe('RESERVATION_VERIFICATION');
+      expect(result.completelyProcessed).toBe(false);
+      expect(result.completionStatus).toBe('PARTIALLY_PROCESSED');
+      expect(mockRes.verifyReservation).toHaveBeenCalledWith(req.data);
+    });
+  });
+
+  describe('10. Step 13: One Common Process Orchestrator (executeReservationWarehouseFlow)', () => {
+    const setupDefaultReadTable = (overrides = {}) => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where = []) => {
+        const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+        if (overrides[table]) return overrides[table](fields, where, whereStr);
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
+        if (table === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011201301', DATAB: '20200101', DATBI: '99991231', BKZKP: '' }];
+        if (table === 'MARC') return [{ XCHPF: '' }];
+        if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
+        if (table === 'LTBK') {
+          return [{
+            LGNUM: 'W01',
+            TBNUM: '0001000850',
+            BWLVS: '311',
+            BETYP: 'K',
+            BENUM: '001011201301',
+            RSNUM: '0000520235',
+            STATU: 'O',
+            BDATU: '20261014'
+          }];
+        }
+        if (table === 'LTAK') {
+          return [{
+            LGNUM: 'W01',
+            TANUM: '0001037299',
+            TBNUM: '0001000850',
+            BWLVS: '311',
+            KQUIT: ' ',
+            BDATU: '20261014'
+          }];
+        }
+        if (table === 'LTAP') {
+          return [{
+            LGNUM: 'W01',
+            TANUM: '0001037299',
+            TAPOS: '0001',
+            TBPOS: '0001',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            NSOLA: '10.000',
+            ALTME: 'NOS',
+            PQUIT: ' '
+          }];
+        }
+        if (table === 'MATDOC' && whereStr.includes("MBLNR = '5000999999'")) {
+          return [{
+            MBLNR: '5000999999',
+            MJAHR: '2026',
+            ZEILE: '0001',
+            BWART: '201',
+            MATNR: '000000008000000023',
+            MENGE: '10.000',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            RSNUM: '0000520235',
+            RSPOS: '0001',
+            KOSTL: '001011201301',
+            SHKZG: 'H'
+          }];
+        }
+        if (table === 'MATDOC') return [];
+        if (table === 'RESB') {
+          return [{
+            RSNUM: '0000520235',
+            RSPOS: '0001',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            BDMNG: '10.000',
+            ENMNG: '10.000',
+            MEINS: 'NOS',
+            KZEAR: 'X',
+            XLOEK: ''
+          }];
+        }
+        return [];
+      });
+    };
+
+    const setupDefaultFmCalls = (overrides = {}) => {
+      mockRfc.call.mockImplementation(async (fm, params) => {
+        if (overrides[fm]) return overrides[fm](params);
+        if (fm === 'BAPI_RESERVATION_CREATE1') return { RESERVATION: '0000520235', RETURN: [] };
+        if (fm === 'L_TR_CREATE') {
+          return {
+            T_LTBA: [{
+              TBNUM: '0001000850',
+              TBPOS: '0001',
+              MATNR: '000000008000000023',
+              MENGA: 10,
+              WERKS: '1120',
+              LGORT: 'HS01',
+              LGNUM: 'W01',
+              BWLVS: '311'
+            }]
+          };
+        }
+        if (fm === 'ZWM_TR_CREATE' || fm === 'Z_WM_TR_CREATE') {
+          return {
+            EV_TBNUM: '0001000850',
+            EV_TBPOS: '0001',
+            MATNR: '000000008000000023',
+            MENGA: 10,
+            WERKS: '1120',
+            LGORT: 'HS01',
+            LGNUM: 'W01',
+            BWLVS: '311'
+          };
+        }
+        if (fm === 'L_TO_CREATE_TR' || fm === 'ZWM_TO_CREATE_FROM_TR') return { E_TANUM: '0001037299' };
+        if (fm === 'L_TO_CONFIRM') return {};
+        if (fm === 'BAPI_GOODSMVT_CREATE') {
+          return {
+            MATERIALDOCUMENT: '5000999999',
+            MATDOCUMENTYEAR: '2026',
+            RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document posted' }]
+          };
+        }
+        if (fm === 'BAPI_TRANSACTION_COMMIT') return {};
+        return {};
+      });
+    };
+
+    test('State machine full execution: RESERVATION_CREATED -> TR_CREATED -> TR_VERIFIED -> TO_CREATED -> TO_CONFIRMED -> MIGO_POSTED -> STOCK_VERIFIED -> RESERVATION_VERIFIED -> COMPLETED', async () => {
+      setupDefaultFmCalls();
+      setupDefaultReadTable();
+
+      const result = await adapter.executeReservationWarehouseFlow({
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 10,
+        unit: 'NOS',
+        costCenter: '1011201301',
+        warehouseNumber: 'W01'
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.state).toBe('COMPLETED');
+      expect(result.currentState).toBe('COMPLETED');
+      expect(result.completed).toBe(true);
+      expect(result.stages).toEqual([
+        'RESERVATION_CREATED',
+        'TR_CREATED',
+        'TR_VERIFIED',
+        'TO_CREATED',
+        'TO_CONFIRMED',
+        'MIGO_POSTED',
+        'STOCK_VERIFIED',
+        'RESERVATION_VERIFIED',
+        'COMPLETED'
+      ]);
+
+      // Stage outputs verified
+      expect(result.reservation.reservationNo).toBe('520235');
+      expect(result.tr.trNumber).toBe('1000850');
+      expect(result.verifiedTR.trNumber).toBe('1000850');
+      expect(result.verifiedTR.status).toBe('O');
+      expect(result.to.toNumber).toBe('1037299');
+      expect(result.confirmation.confirmed).toBe(true);
+      expect(result.migo.materialDocument).toBe('5000999999');
+      expect(result.stock.success).toBe(true);
+      expect(result.finalReservation.completelyProcessed).toBe(true);
+      expect(result.finalReservation.completionStatus).toBe('COMPLETED');
+    });
+
+    test('Partial issue flow: Requested = 10, Issued = 6, Remaining = 4 -> PARTIALLY_PROCESSED, completed = false', async () => {
+      setupDefaultFmCalls({
+        L_TR_CREATE: () => ({
+          T_LTBA: [{
+            TBNUM: '0001000850',
+            TBPOS: '0001',
+            MATNR: '000000008000000023',
+            MENGA: 6,
+            WERKS: '1120',
+            LGORT: 'HS01',
+            LGNUM: 'W01',
+            BWLVS: '311'
+          }]
+        })
+      });
+      setupDefaultReadTable({
+        LTAP: () => [{
+          LGNUM: 'W01',
+          TANUM: '0001037299',
+          TAPOS: '0001',
+          TBPOS: '0001',
+          MATNR: '000000008000000023',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          NSOLA: '6.000',
+          ALTME: 'NOS',
+          PQUIT: ' '
+        }],
+        MATDOC: () => [{
+          MBLNR: '5000999999',
+          MJAHR: '2026',
+          ZEILE: '0001',
+          BWART: '201',
+          MATNR: '000000008000000023',
+          MENGE: '6.000',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          RSNUM: '0000520235',
+          RSPOS: '0001',
+          KOSTL: '001011201301',
+          SHKZG: 'H'
+        }],
+        RESB: () => [{
+          RSNUM: '0000520235',
+          RSPOS: '0001',
+          MATNR: '000000008000000023',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          BDMNG: '10.000',
+          ENMNG: '6.000',
+          MEINS: 'NOS',
+          KZEAR: '',
+          XLOEK: ''
+        }]
+      });
+
+      const result = await adapter.executeReservationWarehouseFlow({
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 6,
+        unit: 'NOS',
+        costCenter: '1011201301',
+        warehouseNumber: 'W01'
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.state).toBe('PARTIALLY_PROCESSED');
+      expect(result.currentState).toBe('PARTIALLY_PROCESSED');
+      expect(result.completed).toBe(false);
+      expect(result.stages).not.toContain('COMPLETED');
+      expect(result.finalReservation.remainingQuantity).toBe(4);
+      expect(result.finalReservation.completelyProcessed).toBe(false);
+    });
+
+    test('Stage failure: RESERVATION failure returns fail("RESERVATION", reservation)', async () => {
+      setupDefaultFmCalls({
+        BAPI_RESERVATION_CREATE1: () => {
+          throw new Error('BAPI_RESERVATION_CREATE1 failed: Material blocked');
+        }
+      });
+      setupDefaultReadTable();
+
+      const result = await adapter.executeReservationWarehouseFlow({
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 10,
+        unit: 'NOS',
+        costCenter: '1011201301',
+        warehouseNumber: 'W01'
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.stage).toBe('RESERVATION');
+      expect(result.currentState).toBe('RESERVATION');
+      expect(result.error).toContain('Material blocked');
+      expect(result.stages).toEqual([]);
+    });
+
+    test('Stage failure: TR failure returns fail("TR", tr)', async () => {
+      setupDefaultFmCalls({
+        L_TR_CREATE: () => {
+          throw new Error('L_TR_CREATE failed: Storage type not defined');
+        },
+        ZWM_TR_CREATE: () => {
+          throw new Error('ZWM_TR_CREATE failed: Storage type not defined');
+        },
+        Z_WM_TR_CREATE: () => {
+          throw new Error('Z_WM_TR_CREATE failed: Storage type not defined');
+        }
+      });
+      setupDefaultReadTable();
+
+      const result = await adapter.executeReservationWarehouseFlow({
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 10,
+        unit: 'NOS',
+        costCenter: '1011201301',
+        warehouseNumber: 'W01'
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.stage).toBe('TR');
+      expect(result.currentState).toBe('TR');
+      expect(result.reservation).toBeDefined();
+      expect(result.reservation.reservationNo).toBe('520235');
+      expect(result.stages).toEqual(['RESERVATION_CREATED']);
+    });
+
+    test('Stage failure: TR_VERIFICATION failure returns fail("TR_VERIFICATION", verifiedTR)', async () => {
+      setupDefaultFmCalls();
+      setupDefaultReadTable({
+        LTBK: () => [] // TR not found in SAP
+      });
+
+      const result = await adapter.executeReservationWarehouseFlow({
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 10,
+        unit: 'NOS',
+        costCenter: '1011201301',
+        warehouseNumber: 'W01'
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.stage).toBe('TR_VERIFICATION');
+      expect(result.currentState).toBe('TR_VERIFICATION');
+      expect(result.reservation).toBeDefined();
+      expect(result.tr).toBeDefined();
+      expect(result.stages).toEqual(['RESERVATION_CREATED', 'TR_CREATED']);
+    });
+
+    test('Stage failure: TO failure returns fail("TO", to)', async () => {
+      setupDefaultFmCalls({
+        L_TO_CREATE_TR: () => {
+          throw new Error('L_TO_CREATE_TR failed: No quants available in source storage bin');
+        },
+        ZWM_TO_CREATE_FROM_TR: () => {
+          throw new Error('ZWM_TO_CREATE_FROM_TR failed: No quants available in source storage bin');
+        },
+        Z_WM_TO_CREATE_FROM_TR: () => {
+          throw new Error('Z_WM_TO_CREATE_FROM_TR failed: No quants available in source storage bin');
+        }
+      });
+      setupDefaultReadTable();
+
+      const result = await adapter.executeReservationWarehouseFlow({
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 10,
+        unit: 'NOS',
+        costCenter: '1011201301',
+        warehouseNumber: 'W01'
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.stage).toBe('TO');
+      expect(result.currentState).toBe('TO');
+      expect(result.reservation).toBeDefined();
+      expect(result.tr).toBeDefined();
+      expect(result.verifiedTR).toBeDefined();
+      expect(result.stages).toEqual(['RESERVATION_CREATED', 'TR_CREATED', 'TR_VERIFIED']);
+    });
+
+    test('Stage failure: TO_CONFIRMATION failure returns fail("TO_CONFIRMATION", confirmation)', async () => {
+      setupDefaultFmCalls({
+        L_TO_CONFIRM: () => {
+          throw new Error('L_TO_CONFIRM failed: Differences exist');
+        }
+      });
+      setupDefaultReadTable();
+
+      const result = await adapter.executeReservationWarehouseFlow({
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 10,
+        unit: 'NOS',
+        costCenter: '1011201301',
+        warehouseNumber: 'W01'
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.stage).toBe('TO_CONFIRMATION');
+      expect(result.currentState).toBe('TO_CONFIRMATION');
+      expect(result.to).toBeDefined();
+      expect(result.stages).toEqual(['RESERVATION_CREATED', 'TR_CREATED', 'TR_VERIFIED', 'TO_CREATED']);
+    });
+
+    test('Stage failure: MIGO failure returns fail("MIGO", migo)', async () => {
+      setupDefaultFmCalls({
+        BAPI_GOODSMVT_CREATE: () => {
+          throw new Error('BAPI_GOODSMVT_CREATE failed: Posting period 10/2026 is closed');
+        }
+      });
+      setupDefaultReadTable();
+
+      const result = await adapter.executeReservationWarehouseFlow({
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 10,
+        unit: 'NOS',
+        costCenter: '1011201301',
+        warehouseNumber: 'W01'
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.stage).toBe('MIGO');
+      expect(result.currentState).toBe('MIGO');
+      expect(result.confirmation).toBeDefined();
+      expect(result.stages).toEqual(['RESERVATION_CREATED', 'TR_CREATED', 'TR_VERIFIED', 'TO_CREATED', 'TO_CONFIRMED']);
+    });
+
+    test('verifyTR rejects missing trNumber', async () => {
+      await expect(adapter.verifyTR({}))
+        .rejects
+        .toMatchObject({
+          status: 400,
+          stage: 'TR_VERIFICATION',
+          message: expect.stringContaining('Transfer Requirement (trNumber) is mandatory')
+        });
+    });
+
+    test('verifyTR rejects completed TR (STATU = E)', async () => {
+      setupDefaultReadTable({
+        LTBK: () => [{
+          LGNUM: 'W01',
+          TBNUM: '0001000850',
+          BWLVS: '201',
+          STATU: 'E',
+          RSNUM: '0000520235'
+        }]
+      });
+
+      await expect(adapter.verifyTR({ trNumber: '1000850', warehouseNumber: 'W01' }))
+        .rejects
+        .toMatchObject({
+          status: 400,
+          stage: 'TR_VERIFICATION',
+          message: expect.stringContaining('already completed in SAP (STATU = E)')
+        });
+    });
+
+    test('Adapter helper aliases createTR, createTO, confirmTO, postMigo are defined and callable', async () => {
+      expect(typeof adapter.createTR).toBe('function');
+      expect(typeof adapter.createTO).toBe('function');
+      expect(typeof adapter.confirmTO).toBe('function');
+      expect(typeof adapter.postMigo).toBe('function');
+      expect(typeof adapter.verifyTR).toBe('function');
+    });
+
+    test('TrToHandler executeReservationWarehouseFlow action executes and returns OrchestratorProcessResult', async () => {
+      const handlers = {};
+      const mockAdapter = {};
+      const mockRes = {
+        executeReservationWarehouseFlow: jest.fn().mockResolvedValue({
+          success: true,
+          state: 'COMPLETED',
+          currentState: 'COMPLETED',
+          completed: true,
+          stages: ['RESERVATION_CREATED', 'TR_CREATED', 'TR_VERIFIED', 'TO_CREATED', 'TO_CONFIRMED', 'MIGO_POSTED', 'STOCK_VERIFIED', 'RESERVATION_VERIFIED', 'COMPLETED'],
+          reservation: { reservationNo: '520235', reservationItem: '0001' },
+          tr: { trNumber: '1000850', trItem: '0001' },
+          verifiedTR: { trNumber: '1000850' },
+          to: { toNumber: '1037299', toItem: '0001' },
+          confirmation: { confirmed: true },
+          migo: { materialDocument: '5000999999', materialDocumentYear: '2026' },
+          stock: { success: true, verified: true },
+          finalReservation: { success: true, verified: true, completelyProcessed: true }
+        })
+      };
+
+      TrToHandler.init(
+        { on: (event, fn) => { handlers[event] = fn; } },
+        { adapter: mockAdapter, resProcessAdapter: mockRes }
+      );
+
+      const req = {
+        data: {
+          movementType: '201',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          quantity: 10,
+          unit: 'NOS',
+          costCenter: '1011201301',
+          warehouseNumber: 'W01'
+        },
+        error: jest.fn()
+      };
+
+      const result = await handlers.executeReservationWarehouseFlow(req);
+      expect(result.success).toBe(true);
+      expect(result.state).toBe('COMPLETED');
+      expect(result.currentState).toBe('COMPLETED');
+      expect(result.completed).toBe(true);
+      expect(result.reservationNumber).toBe('520235');
+      expect(result.trNumber).toBe('1000850');
+      expect(result.toNumber).toBe('1037299');
+      expect(result.toConfirmed).toBe(true);
+      expect(result.materialDocument).toBe('5000999999');
+      expect(result.stockVerified).toBe(true);
+      expect(result.completelyProcessed).toBe(true);
+      expect(mockRes.executeReservationWarehouseFlow).toHaveBeenCalledWith(req.data);
+    });
+  });
 });

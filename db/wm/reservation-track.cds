@@ -39,6 +39,9 @@ entity ReservationTrack : managed {
     TransferOrder           : String(10);    // TANUM (LT04)
     MaterialDocument        : String(10);    // MBLNR (MIGO)
     MaterialDocYear         : String(4);     // MJAHR (MIGO)
+    WithdrawnQuantity       : Decimal(13,3); // ENMNG (MIGO)
+    RemainingQuantity       : Decimal(13,3); // BDMNG - ENMNG
+    CompletelyProcessed     : Boolean;       // true when remaining == 0 or KZEAR = 'X'
     LogHandle               : String(22);    // BALLOGHNDL (SLG1 Application Log Handle)
     ExternalId              : String(100);   // BALEXTN (SLG1 External ID)
     Status                  : Association to ReservationStatus; // STATUS
