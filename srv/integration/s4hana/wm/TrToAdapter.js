@@ -154,6 +154,7 @@ class TrToAdapter {
   async getTR(tbnum, lgnum) {
     const wh = warehouse(lgnum);
     const tr = sapKey(tbnum, 'tbnum').padStart(10, '0');
+    this._lastTr = tr;
     LOG.info(`Reading TR ${tr} in warehouse ${wh}`);
 
     const res = await this._rfc(
@@ -186,6 +187,75 @@ class TrToAdapter {
           Rspos: i.RSPOS || ''
         };
       })
+    };
+  }
+
+  /**
+   * Reads and verifies a Transfer Order directly from SAP tables LTAK (header) and LTAP (items).
+   * Ensures the document actually exists and is persisted in SAP.
+   */
+  async getTransferOrder(tanum, lgnum) {
+    const wh = warehouse(lgnum);
+    const to = sapKey(tanum, 'tanum').padStart(10, '0');
+    LOG.info(`Reading Transfer Order ${to} in warehouse ${wh}`);
+
+    if (!this.rfc) return null;
+
+    let heads = [];
+    try {
+      heads = await this._rfc(
+        () => this.rfc.readTable(
+          'LTAK',
+          ['LGNUM', 'TANUM', 'TBNUM', 'BWLVS', 'KQUIT', 'BDATU'],
+          [`LGNUM = '${wh}'`, `AND TANUM = '${to}'`],
+          1
+        ),
+        `Read Transfer Order Header ${alphaOut(to)}`
+      );
+    } catch (hErr) {
+      LOG.warn(`Failed reading LTAK for TO ${to}: ${hErr.message}`);
+      return null;
+    }
+
+    const h = heads?.[0];
+    if (!h) return null;
+
+    let items = [];
+    try {
+      items = await this._rfc(
+        () => this.rfc.readTable(
+          'LTAP',
+          ['LGNUM', 'TANUM', 'TAPOS', 'TBPOS', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'NSOLA', 'VSOLA', 'ALTME', 'PQUIT'],
+          [`LGNUM = '${wh}'`, `AND TANUM = '${to}'`]
+        ),
+        `Read Transfer Order Items for ${alphaOut(to)}`
+      );
+    } catch (iErr) {
+      LOG.warn(`Failed reading LTAP for TO ${to}: ${iErr.message}`);
+    }
+
+    return {
+      Lgnum: h.LGNUM,
+      Tanum: alphaOut(h.TANUM),
+      TanumRaw: h.TANUM,
+      Tbnum: alphaOut(h.TBNUM),
+      TbnumRaw: h.TBNUM,
+      Bwlvs: h.BWLVS,
+      Kquit: h.KQUIT === 'X',
+      Bdatu: h.BDATU,
+      Items: (items || []).map((i) => ({
+        Lgnum: i.LGNUM,
+        Tanum: alphaOut(i.TANUM),
+        Tapos: i.TAPOS,
+        Tbpos: i.TBPOS,
+        Material: alphaOut(i.MATNR),
+        Plant: i.WERKS,
+        StorageLocation: i.LGORT,
+        Batch: i.CHARG,
+        TargetQty: sapNum(i.NSOLA || i.VSOLA),
+        Unit: i.ALTME,
+        Pquit: i.PQUIT === 'X'
+      }))
     };
   }
 
@@ -1175,8 +1245,14 @@ class TrToAdapter {
    */
   async createTOFromTR({
     lgnum = '',
+    warehouseNumber = '',
+    WarehouseNumber = '',
     tbnum,
+    trNumber,
+    TRNumber,
     tbpos = '',
+    trItem = '',
+    TRItem = '',
     qty,
     unit,
     material = '',
@@ -1200,7 +1276,7 @@ class TrToAdapter {
     AssetNo = '',
     subNumber = '',
     SubNumber = '',
-    autoConfirm = true,
+    autoConfirm = false,
     autoPostMigo = false,
     existingToNumber = '',
     status = '',
@@ -1209,11 +1285,15 @@ class TrToAdapter {
     ReservationMovementType = '',
     trackedReservation = null
   } = {}) {
-    const quantity = Number(qty);
-    if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
+    // Step 1: TR reference resolution
+    const effTbnum = tbnum || trNumber || TRNumber;
+    if (!effTbnum) throw httpError(400, 'Transfer Requirement number (tbnum/trNumber) is required');
 
-    const wh = warehouse(lgnum);
-    const tr = await this.getTR(tbnum, wh);
+    const effWh = lgnum || warehouseNumber || WarehouseNumber || '';
+    const wh = warehouse(effWh);
+
+    // Step 2: Validate TR in SAP
+    const tr = await this.getTR(effTbnum, wh);
 
     if (wh && tr.Lgnum && tr.Lgnum !== wh) {
       throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} belongs to warehouse ${tr.Lgnum}, not ${wh}`);
@@ -1244,10 +1324,11 @@ class TrToAdapter {
     let finalAssetNo = (AssetNo || assetNo) ? String(AssetNo || assetNo).trim() : (tr.Betyp === 'A' ? alphaOut(tr.Benum) : '');
     let finalSubNumber = (SubNumber || subNumber) ? String(SubNumber || subNumber).trim() : (tr.Betyp === 'A' ? '0000' : '');
 
+    const effTbpos = tbpos || trItem || TRItem || '';
     const open = this._openItems(tr);
     let item = null;
-    if (tbpos) {
-      const pos = sapKey(tbpos, 'tbpos').padStart(4, '0');
+    if (effTbpos) {
+      const pos = sapKey(effTbpos, 'tbpos').padStart(4, '0');
       item = open.find((i) => i.Tbpos === pos);
       if (!item) throw httpError(400, `TR ${alphaOut(tr.Tbnum)} has no open item ${pos}; open items: ${open.map((i) => i.Tbpos).join(', ') || 'none'}`);
     } else if (open.length === 1) {
@@ -1257,6 +1338,9 @@ class TrToAdapter {
     } else {
       throw httpError(400, `TR ${alphaOut(tr.Tbnum)} has ${open.length} open items (${open.map((i) => i.Tbpos).join(', ')}); choose one (tbpos)`);
     }
+
+    const quantity = (qty !== undefined && qty !== null && qty !== '') ? Number(qty) : item.OpenQty;
+    if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
 
     if (!item.Material || !String(item.Material).trim()) {
       throw httpError(400, `TR ${alphaOut(tr.Tbnum)} item ${item.Tbpos} has missing or invalid material`);
@@ -1363,6 +1447,8 @@ class TrToAdapter {
     const isRetryConfirmOnly = Boolean(tanum && UNCONFIRMED_TO.includes(String(status)));
     if (tanum && !isRetryConfirmOnly) tanum = '';
 
+    let verifiedTO = null;
+
     if (!isRetryConfirmOnly) {
       // Guard: an unconfirmed TO item for this TR item (read from SAP) blocks another TO; confirmed TOs do not.
       const pending = await this._rfc(
@@ -1375,8 +1461,7 @@ class TrToAdapter {
 
       await checkAuthorization(this.rfc, 'L_BWLVS', { LGNUM: wh, BWLVS: tr.Bwlvs });
 
-      // Chained TO step: CREATE TO via Z_WM_TO_CREATE_FROM_TR, then CONFIRM TO via L_TO_CONFIRM as a real second call
-      // TODO: Z_WM_TO_CREATE_FROM_TR supports IV_SQUIT = 'X' for immediate confirmation in one call, but chained 2-call architecture is enforced here.
+      // Step 3: Create TO via Z_WM_TO_CREATE_FROM_TR
       LOG.info(`Creating TO from TR ${tr.Tbnum} item ${item.Tbpos}, qty ${quantity} ${unit || item.Unit}`);
 
       // Destination: TR header, else the warehouse movement-type customizing T333 (NLTYP/NLPLA, read from the
@@ -1513,12 +1598,35 @@ class TrToAdapter {
         throw err;
       }
 
+      // Step 4: Receive TO number
       tanum = alphaOut(res.EV_TANUM);
+
+      // Step 5: Verify TO directly from SAP (LTAK/LTAP) to guarantee persistence
+      verifiedTO = await this.getTransferOrder(tanum, wh);
+      if (!verifiedTO) {
+        const err = httpError(500, `Transfer Order ${tanum} was created by SAP FM but cannot be verified in SAP LTAK (persistence check failed)`);
+        err.Status = STATUS.TO_ERROR;
+        err.ErrorStep = 'LT04';
+        throw err;
+      }
+      if (verifiedTO.TbnumRaw && tr.Tbnum && sapKey(verifiedTO.TbnumRaw, 'tbnum') !== sapKey(tr.Tbnum, 'tbnum')) {
+        const err = httpError(500, `Transfer Order ${tanum} verification failed: references TR ${verifiedTO.Tbnum}, expected TR ${alphaOut(tr.Tbnum)}`);
+        err.Status = STATUS.TO_ERROR;
+        err.ErrorStep = 'LT04';
+        throw err;
+      }
     } else {
       LOG.info(`TANUM ${tanum} is tracked as unconfirmed (status ${status}); skipping create and retrying confirmation only.`);
+      verifiedTO = await this.getTransferOrder(tanum, wh);
+      if (!verifiedTO) {
+        const err = httpError(500, `Transfer Order ${tanum} cannot be verified in SAP LTAK`);
+        err.Status = STATUS.TO_ERROR;
+        err.ErrorStep = 'LT04';
+        throw err;
+      }
     }
 
-    // Step 2: Confirm TO as a real second call
+    // Optional confirmation step if explicitly requested
     let confirmed = false;
     let confirmErr = null;
 
@@ -1533,8 +1641,65 @@ class TrToAdapter {
     }
 
     const currentStatus = confirmed ? STATUS.TO_CONFIRMED : (autoConfirm ? STATUS.TO_CONFIRM_ERROR : STATUS.TO_CREATED);
+    const toItem = verifiedTO?.Items?.[0]?.Tapos
+      ? String(verifiedTO.Items[0].Tapos).padStart(4, '0')
+      : (item?.Tbpos ? String(item.Tbpos).padStart(4, '0') : '0001');
+
+    // Step 6: Return TO (Standardized transactional response)
+    if (autoConfirm && !confirmed) {
+      const errMsg = confirmErr?.message || `Confirmation failed for Transfer Order ${tanum}`;
+      return {
+        success: false,
+        stage: 'TO_CONFIRMATION',
+        toNumber: tanum,
+        error: errMsg,
+        confirmed: false,
+        trNumber: alphaOut(tr.Tbnum),
+        toItem: toItem,
+
+        TransferOrder: tanum,
+        TransferRequirement: alphaOut(tr.Tbnum),
+        TRItem: item.Tbpos,
+        ReservationNo: alphaOut(tr.Rsnum) || '',
+        ReservationItem: '',
+        ReservationMovementType: effResMvt,
+        MovementType: tr.Bwlvs || '',
+        CostCenter: finalCostCenter,
+        AssetNo: finalAssetNo,
+        SubNumber: finalSubNumber,
+        ReceivingPlant: finalRecPlant,
+        ReceivingStorageLocation: finalRecSLoc,
+        Betyp: tr.Betyp || '',
+        Benum: tr.Benum || '',
+        Status: currentStatus,
+        StatusText: STATUS_TEXT[currentStatus],
+        Confirmed: false,
+        IsConfirmed: false,
+        ConfirmationNumber: '',
+        ConfirmedBy: '',
+        ErrorStep: 'LT12',
+        ErrorMessage: errMsg,
+        Material: item.Material,
+        MaterialName: item.MaterialDesc,
+        Plant: item.Plant,
+        StorageLocation: item.StorageLocation,
+        Quantity: quantity,
+        ConfirmedQuantity: 0,
+        Unit: unit || item.Unit,
+        Batch: selectedBatch,
+        Serials: serialList,
+        Success: false,
+        Message: `Transfer Order ${tanum} created, but confirmation failed (status ${STATUS.TO_CONFIRM_ERROR}): ${errMsg}`
+      };
+    }
 
     return {
+      success: true,
+      trNumber: alphaOut(tr.Tbnum),
+      toNumber: tanum,
+      toItem: toItem,
+      confirmed: Boolean(confirmed),
+
       TransferOrder: tanum,
       TransferRequirement: alphaOut(tr.Tbnum),
       TRItem: item.Tbpos,
@@ -1555,8 +1720,8 @@ class TrToAdapter {
       IsConfirmed: confirmed,
       ConfirmationNumber: confirmed ? tanum : '',
       ConfirmedBy: confirmed ? (process.env.S4_USERNAME || '') : '',
-      ErrorStep: confirmed ? '' : (autoConfirm ? 'LT12' : ''),
-      ErrorMessage: confirmed ? '' : (confirmErr?.message || ''),
+      ErrorStep: '',
+      ErrorMessage: '',
       Material: item.Material,
       MaterialName: item.MaterialDesc,
       Plant: item.Plant,
@@ -1566,14 +1731,13 @@ class TrToAdapter {
       Unit: unit || item.Unit,
       Batch: selectedBatch,
       Serials: serialList,
-      Success: confirmed || !autoConfirm,
+      Success: true,
       Message: confirmed
         ? `Transfer Order ${tanum} created and confirmed successfully.`
-        : (autoConfirm
-            ? `Transfer Order ${tanum} created, but confirmation failed (status ${STATUS.TO_CONFIRM_ERROR}): ${confirmErr?.message}`
-            : `Transfer Order ${tanum} created successfully (status ${STATUS.TO_CREATED}).`)
+        : `Transfer Order ${tanum} created successfully (status ${STATUS.TO_CREATED}).`
     };
   }
+
 }
 
 TrToAdapter._internals = { sapNum, alphaIn, alphaOut, sapDate, mapStorageTypeSearchError };

@@ -5,6 +5,36 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 8: Fix Automatic TO Confirmation & Enforce Strict MIGO Dependency (2026-10-14, 14:35 IST):** Complete. Implemented and enforced strict execution sequence:
+  `Create TO` → `TO number received` → `Confirm TO` → `SAP confirmation successful` → `confirmed = true`.
+  Enforced standardized failure payload if confirmation fails:
+  ```json
+  {
+    "success": false,
+    "stage": "TO_CONFIRMATION",
+    "toNumber": "987654",
+    "error": "..."
+  }
+  ```
+  Enforced strict dependency: `TO CREATED AND TO CONFIRMED` → `MIGO`. MIGO is strictly blocked if confirmation fails (`result.Confirmed !== true || result.success === false`). In `handlePostMigoGoodsMovement`, MIGO is also blocked if Transfer Order is in unconfirmed state (`STATUS.TO_CREATED`, `STATUS.TO_CONFIRM_ERROR`, `STATUS.TO_ERROR`, or `LTAK-KQUIT` blank).
+  Exposed standalone action `confirmTransferOrder(ReservationNo, ReservationItem, WarehouseNumber, TransferOrder)` in `srv/wm/reservation-entry/service.cds` returning `TOConfirmedResponse`, implemented handler in `srv/wm/reservation-entry/service.js`, and added client helper in `ReservationEntryService.js`. Added `stage` and `error` to `TOProcessResult` in `srv/wm/tr-to/service.cds`.
+  Updated `srv/integration/s4hana/wm/TrToAdapter.js`, `srv/integration/s4hana/wm/ReservationProcessAdapter.js`, `srv/wm/tr-to/handlers/trTo.handler.js`, `srv/wm/reservation-entry/service.js`, `srv/wm/reservation-entry/service.cds`, `srv/wm/tr-to/service.cds`, and `ReservationEntryService.js`.
+  Unit tests added across test suites: `createTOFromTR.test.js` (43/43 passing with Section 15), `reservationEntryService.test.js` (37/37 passing with Step 8 tests). All 70 WM test suites pass 100% green (1,545/1,545 tests). CDS compilation and `git diff --check` pass cleanly.
+
+- **Step 7: Make TO Creation Transactional & Enforce SAP TO Verification Pipeline (2026-10-14, 14:10 IST):** Complete. Implemented strict transactional 6-step flow in `createTOFromTR()`:
+  `TR` → `Validate TR` → `Create TO` → `Receive TO number` → `Verify TO` → `Return TO`.
+  Enforced definition of done: "Don't mark it completed just because TO creation returned without an exception." Document is verified directly from SAP transparent tables (`LTAK` header and `LTAP` items) to guarantee actual SAP persistence before returning success.
+  Standardized response payload delivered:
+  ```json
+  {
+    "success": true,
+    "trNumber": "123456",
+    "toNumber": "987654",
+    "toItem": "0001",
+    "confirmed": false
+  }
+  ```
+  Verified `LTAK` persistence check throws 500 error if TO is not found in SAP or references wrong TR. Updated `srv/integration/s4hana/wm/TrToAdapter.js`, `srv/integration/s4hana/wm/ReservationProcessAdapter.js`, `srv/wm/reservation-entry/service.js`, `srv/wm/reservation-entry/service.cds`, and `srv/wm/tr-to/service.cds`. Unit tests updated across 7 suites: `createTOFromTR.test.js` (37/37 passing with dedicated Section 14 transactional tests), `trToAdapter.test.js` (63/63 passing), `reservationProcess.test.js` (44/44 passing), `processFixes.test.js` (36/36 passing), `mvt301Process.test.js` (23/23 passing), `mvt241Process.test.js` (20/20 passing), `mvt311Process.test.js` (20/20 passing), `mvt201Process.test.js` (15/15 passing). All 70 WM test suites pass 100% green (1535/1535 tests). CDS compilation and `git diff --check` pass cleanly.
 - **Step 6: Fix Warehouse Scanning & Enforce SAP TR Verification Pipeline (2026-10-14, 13:35 IST):** Complete. Implemented end-to-end TR validation pipeline: `Scan TR` → `Read SAP TR` → `Validate (Material? Quantity? Plant? SLoc? Warehouse? Open Qty? Status?)` → `PASS / REJECT`. Scanner never simply trusts frontend payload. Backend rejects TR doesn't exist (404), TR already completed (`STATU = 'E'`, no open quantity, or delivery completed, 400), wrong material (missing or caller mismatch, 400), wrong plant (missing or mismatch, 400), wrong warehouse (`tr.Lgnum !== wh`, 400), wrong storage location (missing or mismatch, 400), and `quantity > open quantity` (400) in both `lookupTR` and `createTOFromTR` in `srv/integration/s4hana/wm/TrToAdapter.js`. Added dedicated UI SAP TR Verification card in `WarehouseScanToDetail.view.xml` showing TR, Material, Required, Scanned, and Status badge (`READY FOR TO` with Success state). Wired real-time scanned quantity updates and status transitions (`INVALID QUANTITY`, `QUANTITY EXCEEDS OPEN TR`, `PENDING BATCH`, `PENDING SERIALS`, `PENDING DESTINATION`) in `WarehouseScanToDetail.controller.js`. Added unit tests in `trToAdapter.test.js` (63/63 passing) and `warehouseScanToUi.test.js` (50/50 passing). All 10 WM test suites pass 100% green (331/331 tests). CDS compilation and `git diff --check` pass cleanly.
 - **Step 5: Separate TR Creation from TO Creation & Enforce SAP TR Verification (2026-10-14, 13:20 IST):** Complete. Decoupled TO creation from raw reservation data across the entire architecture. Enforced sequence: `Reservation` → `TR` → `TR validation` → `TO`. The TO strictly references the verified SAP TR. Added `getTransferRequirement(trNumber, warehouseNumber)` to `ReservationProcessAdapter.js` to read and verify TR directly from SAP (`LTBK` table query and fallback `Z_WM_GET_TR_MATERIAL_LIST`). Gated `createTransferOrderFromTR` so that TO creation cannot be called on unverified TRs. Exposed standalone action `createTOFromTR(ReservationNo, ReservationItem, WarehouseNumber, TRNumber)` in `srv/wm/reservation-entry/service.cds` and implemented handler in `srv/wm/reservation-entry/service.js`, returning `TOCreatedResponse` (`{ success: true, reservationNumber, trNumber, toNumber, warehouse, itemsCreated }`). Added frontend service helper `createTOFromTR` in `ReservationEntryService.js`. All 7 core WM test suites pass 100% green (185/185 tests). `reservationMonitorRetry.test.js` and `createTOFromTR.test.js` also pass 100% green (40/40 tests). CDS compilation and `git diff --check` pass cleanly.
 - **Step 4: Fix Automatic TR Creation & Enforce Critical 8-Field Verification Rule (2026-10-14, 13:05 IST):** Complete. Implemented deterministic TR creation in `srv/integration/s4hana/wm/ReservationProcessAdapter.js` and `srv/wm/reservation-entry/service.js`. Output strictly returns `{ success: true, reservationNumber, trNumber, trItem }`. Enforced critical verification rule across both adapter and service: verifies TR number, TR item, material, quantity, plant, storage location, warehouse, and movement after SAP TR creation before allowing warehouse workflow to continue. If verification fails, flow aborts with `stage: 'TR'`, marks `Status_code: 11` (TR_ERROR) with explicit mismatch message, and blocks TO creation/warehouse scan. Exposed standalone action `createTransferRequirement` returning `TrCreatedResponse`. All 7 WM test suites pass 100% green (178/178 tests). CDS compilation and `git diff --check` pass cleanly.
@@ -6355,4 +6385,177 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git diff --check` → PASS (0 whitespace/formatting errors).
   - `git status` → Clean; zero commits created.
 - **Errors / blockers:** None.
-- **Next action:** Step 6: Warehouse Scan validation starting with Movement 201 & LT12 TO Confirmation.
+- **Next action:** Step 6: Fix warehouse scanning & enforce SAP TR verification pipeline.
+
+### Step 6: Fix Warehouse Scanning & Enforce SAP TR Verification Pipeline (2026-10-14, 13:35 IST)
+
+- **Change description:** Implemented end-to-end TR validation pipeline for warehouse scanning: `Scan TR` → `Read SAP TR` → `Validate (Material? Quantity? Plant? SLoc? Warehouse? Open Qty? Status?)` → `PASS / REJECT`. Scanner never simply trusts frontend payload.
+- **Affected files:**
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml`
+  - `test/unit/wm/trToAdapter.test.js`
+  - `test/unit/wm/warehouseScanToUi.test.js`
+- **Reason:** Prevent invalid, mismatched, completed, or excessive-quantity TRs from entering the Transfer Order workflow. Enforce SAP TR verification directly from SAP backend rather than trusting client-provided scan payloads.
+- **Implementation Delivered:**
+  1. `srv/integration/s4hana/wm/TrToAdapter.js`:
+     - Added strict TR validation to `lookupTR` and `createTOFromTR`:
+       - Rejects when TR does not exist in SAP (404).
+       - Rejects when TR belongs to a different warehouse (`tr.Lgnum !== wh`, 400).
+       - Rejects when TR is already completed (`STATU = 'E'`, 400).
+       - Rejects when TR item has missing or mismatched material (400).
+       - Rejects when TR item has missing or mismatched plant (400).
+       - Rejects when TR item has missing or mismatched storage location (400).
+       - Rejects when TR item has zero or negative quantity (400).
+       - Rejects when requested quantity > open quantity (400).
+  2. `WarehouseScanToDetail.view.xml` & `WarehouseScanToDetail.controller.js`:
+     - Added dedicated SAP TR Verification Card displaying TR, Material, Required, Scanned, and Status badge (`READY FOR TO`).
+     - Added real-time scan verification and status transitions.
+  3. Tests:
+     - Added Section `Step 6: SAP TR Validation Discipline` in `trToAdapter.test.js` (63/63 passing).
+     - Added scanner UI tests in `warehouseScanToUi.test.js` (50/50 passing).
+- **Validation results:**
+  - `npx jest test/unit/wm/trToAdapter.test.js test/unit/wm/warehouseScanToUi.test.js` → **PASS (113/113 tests)**.
+  - `git diff --check` → PASS (clean).
+
+### Step 7: Make TO Creation Transactional & Enforce SAP TO Verification Pipeline (2026-10-14, 14:10 IST)
+
+- **Change description:** Enforced strict 6-step transactional sequence in `createTOFromTR()`:
+  $$\text{TR} \longrightarrow \text{Validate TR} \longrightarrow \text{Create TO} \longrightarrow \text{Receive TO number} \longrightarrow \text{Verify TO} \longrightarrow \text{Return TO}$$
+  Response payload strictly standardized:
+  ```json
+  {
+    "success": true,
+    "trNumber": "123456",
+    "toNumber": "987654",
+    "toItem": "0001",
+    "confirmed": false
+  }
+  ```
+  Rule strictly enforced: **"Don't mark it completed just because TO creation returned without an exception."** TO is verified directly from SAP transparent tables (`LTAK` header and `LTAP` items). If the document cannot be read back from SAP or references the wrong TR, the operation fails with HTTP 500 (`Transfer Order ... was created by SAP FM but cannot be verified in SAP LTAK (persistence check failed)`).
+- **Affected files:**
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `srv/wm/reservation-entry/service.js`
+  - `srv/wm/reservation-entry/service.cds`
+  - `srv/wm/tr-to/service.cds`
+  - `test/unit/wm/createTOFromTR.test.js`
+  - `test/unit/wm/trToAdapter.test.js`
+  - `test/unit/wm/reservationProcess.test.js`
+  - `test/unit/wm/processFixes.test.js`
+  - `test/unit/wm/mvt301Process.test.js`
+  - `test/unit/wm/mvt241Process.test.js`
+  - `test/unit/wm/mvt311Process.test.js`
+  - `test/unit/wm/mvt201Process.test.js`
+- **Reason:** Guarantee that TO creation is fully transactional and that no Transfer Order is marked complete or returned as successful to the frontend/caller without verified persistence in SAP `LTAK`/`LTAP`.
+- **Implementation Delivered:**
+  1. `srv/integration/s4hana/wm/TrToAdapter.js`:
+     - Added `getTransferOrder(tanum, lgnum)` querying SAP transparent table `LTAK` and `LTAP`.
+     - In `createTOFromTR()`:
+       - Step 1: Resolve TR references (`tbnum` || `trNumber` || `TRNumber`).
+       - Step 2: Validate TR in SAP via `getTR()`, validating warehouse, not completed, material, plant, storage location, and open quantity. Defaults `quantity` to `item.OpenQty` if not specified.
+       - Step 3: Create TO via RFC `Z_WM_TO_CREATE_FROM_TR` (fallback `ZWM_TO_CREATE_FROM_TR`).
+       - Step 4: Receive TO number (`tanum = alphaOut(res.EV_TANUM)`).
+       - Step 5: Verify TO in SAP: `verifiedTO = await this.getTransferOrder(tanum, wh)`. If null, throws HTTP 500 (`persistence check failed`). If references wrong TR, throws HTTP 500 (`verification failed: references TR ..., expected TR ...`).
+       - Step 6: Return TO: returns standardized shape with `success: true`, `trNumber`, `toNumber`, `toItem`, `confirmed: Boolean(confirmed)`.
+  2. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Added `getTransferOrder(toNumber, warehouseNumber)` method querying `LTAK` & `LTAP`.
+     - Added `createTOFromTR(params)` alias to `createTransferOrderFromTR()`.
+     - In `createTransferOrderFromTR()`: verifies TO via `getTransferOrder()` and returns `{ success: true, trNumber, toNumber, toNumberRaw, toItem, confirmed: Boolean(verifiedTO?.confirmed), warehouseNumber, status: STATUS.TO_CREATED }`.
+  3. `srv/wm/reservation-entry/service.js`:
+     - Updated action handler `createTOFromTR`: returns `{ success: true, trNumber, toNumber, toItem, confirmed: Boolean(toResult.confirmed), reservationNumber, warehouse, itemsCreated: 1 }` on success and `{ success: false, stage: 'TO', error, ... }` on failure.
+  4. `srv/wm/reservation-entry/service.cds` & `srv/wm/tr-to/service.cds`:
+     - Added `toItem : String(4)` and `confirmed : Boolean` to `TOCreatedResponse`.
+     - Added `success`, `trNumber`, `toNumber`, `toItem`, `confirmed` to `TOProcessResult`.
+  5. Test suites updated & verified:
+     - `test/unit/wm/createTOFromTR.test.js`: Section 14 added with 4 comprehensive transactional tests covering:
+       - 6-step transactional flow returning `{ success: true, trNumber, toNumber, toItem, confirmed: false }`.
+       - Persistence check failure when LTAK returns empty (throws 500).
+       - Verification failure when LTAK references wrong TR (throws 500).
+       - TR validation failure when TR is already completed (STATU = E, throws 400).
+       All 37/37 tests PASS.
+     - `test/unit/wm/trToAdapter.test.js`: 63/63 tests PASS.
+     - `test/unit/wm/reservationProcess.test.js`: 44/44 tests PASS.
+     - `test/unit/wm/processFixes.test.js`: 36/36 tests PASS.
+     - `test/unit/wm/mvt301Process.test.js`: 23/23 tests PASS.
+     - `test/unit/wm/mvt241Process.test.js`: 20/20 tests PASS.
+     - `test/unit/wm/mvt311Process.test.js`: 20/20 tests PASS.
+     - `test/unit/wm/mvt201Process.test.js`: 15/15 tests PASS.
+- **Validation results:**
+  - `npx jest test/unit/wm` → **PASS, 70 passed, 1 skipped, 1535 tests passed (100% green)**.
+  - `npx cds compile srv/wm/reservation-entry/service.cds && npx cds compile srv/wm/tr-to/service.cds` → **PASS (exit code 0, clean compilation)**.
+  - `git diff --check` → **PASS (clean diff, 0 whitespace errors)**.
+  - `git status` → Clean; zero commits created.
+- **Errors / blockers:** None.
+- **Next action:** Step 8: TO Confirmation (LT12) transactional verification (`confirmTO` / `confirmTransferOrder`) enforcing real SAP persistence and dual-call confirmation discipline.
+
+### Step 8: Fix Automatic TO Confirmation & Enforce Strict MIGO Dependency (2026-10-14, 14:35 IST)
+
+- **Change description:** Enforced strict execution sequence for automatic TO confirmation:
+  $$\text{Create TO} \longrightarrow \text{TO number received} \longrightarrow \text{Confirm TO} \longrightarrow \text{SAP confirmation successful} \longrightarrow \text{confirmed = true}$$
+  Standardized failure response payload if confirmation fails:
+  ```json
+  {
+    "success": false,
+    "stage": "TO_CONFIRMATION",
+    "toNumber": "987654",
+    "error": "..."
+  }
+  ```
+  Strict dependency enforced:
+  $$\text{TO CREATED} \quad \text{AND} \quad \text{TO CONFIRMED} \longrightarrow \text{MIGO}$$
+  "Do not call MIGO after confirmation failure."
+  MIGO is strictly blocked if confirmation fails in both chained flows (`handleCreateTOFromTR`) and direct invocations (`handlePostMigoGoodsMovement` enforces tracking status and rejects unconfirmed state or blank `LTAK-KQUIT`).
+- **Affected files:**
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `srv/wm/tr-to/handlers/trTo.handler.js`
+  - `srv/wm/reservation-entry/service.js`
+  - `srv/wm/reservation-entry/service.cds`
+  - `srv/wm/tr-to/service.cds`
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/service/ReservationEntryService.js`
+  - `test/unit/wm/createTOFromTR.test.js`
+  - `test/unit/wm/reservationEntryService.test.js`
+  - `WORKSTATUS.md`
+- **Reason:** Guarantee that MIGO is strictly dependent on both TO creation AND successful TO confirmation. Ensure all layers return a standardized `stage: 'TO_CONFIRMATION'` failure object and record status 13 (`STATUS.TO_CONFIRM_ERROR`, `ErrorStep: 'LT12'`) if confirmation fails in SAP.
+- **Implementation Delivered:**
+  1. `srv/integration/s4hana/wm/TrToAdapter.js`:
+     - In `createTOFromTR()`: When `autoConfirm: true` and `confirmTO()` fails, returns standardized failure object with `{ success: false, stage: 'TO_CONFIRMATION', toNumber: tanum, error: errMsg, confirmed: false, Status: '13', ErrorStep: 'LT12', Confirmed: false, IsConfirmed: false, Success: false }`.
+     - When `confirmTO()` succeeds, returns `{ success: true, trNumber, toNumber, toItem, confirmed: true, Confirmed: true, IsConfirmed: true, Status: '04', Success: true }`.
+     - When `autoConfirm: false`, returns `{ success: true, confirmed: false, Status: '03' }`.
+  2. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Added `autoConfirm = false` support to `createTransferOrderFromTR()` and `createTOFromTR()`.
+     - When `autoConfirm: true`: invokes `confirmTransferOrder()`; if it fails, returns structured failure `{ success: false, stage: 'TO_CONFIRMATION', toNumber: alphaOut(tanum), error: cErr.message, confirmed: false, status: STATUS.TO_CONFIRM_ERROR }`.
+     - In `confirmTransferOrder()`: enriches thrown errors with `err.stage = 'TO_CONFIRMATION'`, `err.toNumber = alphaOut(toNumber)`, `err.Status = STATUS.TO_CONFIRM_ERROR`, `err.ErrorStep = 'LT12'`.
+  3. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - In `handleCreateTOFromTR()`: auto-MIGO condition strictly requires `result.Confirmed && result.success !== false`. If confirmation failed, MIGO is NEVER triggered.
+     - Preserves `success: false`, `stage: 'TO_CONFIRMATION'`, `error`, `confirmed: false`, `IsConfirmed: false` on the return result.
+     - In `handlePostMigoGoodsMovement()`: enforces strict dependency check. Rejects with 400 if `existingTrack` is in unconfirmed state (`STATUS.TO_CREATED`, `STATUS.TO_CONFIRM_ERROR`, `STATUS.TO_ERROR`). If `LTAK` is read, verifies `KQUIT !== ''`, rejecting unconfirmed TOs with 400.
+  4. `srv/wm/reservation-entry/service.cds` & `srv/wm/tr-to/service.cds`:
+     - Added `stage : String(20)` and `error : String(255)` to `TOProcessResult`.
+     - Added `autoConfirm : Boolean` to `createTOFromTR` action in `ReservationEntryService`.
+     - Exposed standalone action `confirmTransferOrder(ReservationNo, ReservationItem, WarehouseNumber, TransferOrder)` returning `TOConfirmedResponse`.
+  5. `srv/wm/reservation-entry/service.js`:
+     - In `createTOFromTR`: forwards `autoConfirm`. If `toResult` returns `stage: 'TO_CONFIRMATION'` failure, updates tracking to `Status_code: STATUS.TO_CONFIRM_ERROR`, `ErrorStep: 'LT12'`, logs `LT12` error in `ReservationLogs`, and returns structured failure payload.
+     - If confirmed, updates tracking to `Status_code: STATUS.TO_CONFIRMED`, logs `LT12` success, and returns `confirmed: true`.
+     - Implemented action handler `confirmTransferOrder` handling standalone confirmation with tracking updates.
+  6. `ReservationEntryService.js`:
+     - Updated `createTOFromTR` to support `bAutoConfirm` argument.
+     - Added `confirmTransferOrder(sResNo, sItem, sWh, sTo)` method.
+  7. Test suites added & verified:
+     - `test/unit/wm/createTOFromTR.test.js`: Added Section 15 with 6 comprehensive tests:
+       - Strict sequence: Create TO -> TO number received -> Confirm TO -> SAP confirmation successful -> confirmed = true.
+       - Confirmation failure returns `{ success: false, stage: 'TO_CONFIRMATION', toNumber: '987654', error: '...', confirmed: false }`.
+       - Strict dependency: MIGO is NOT called when autoPostMigo: true and confirmation fails.
+       - Strict dependency: MIGO rejects with 400 when TransferOrder is unconfirmed in tracking record.
+       - Strict dependency: MIGO rejects with 400 when SAP LTAK-KQUIT is blank.
+       - `ReservationProcessAdapter.createTransferOrderFromTR` handles autoConfirm: true and returns structured failure on confirm error.
+       All 43/43 tests PASS.
+     - `test/unit/wm/reservationEntryService.test.js`: Added 4 tests for `autoConfirm` and standalone `confirmTransferOrder` action (all 37/37 tests PASS).
+- **Validation results:**
+  - `npx jest test/unit/wm` → **PASS, 70 passed, 1 skipped, 1545 tests passed (100% green)**.
+  - `npx cds compile srv/wm/reservation-entry/service.cds && npx cds compile srv/wm/tr-to/service.cds` → **PASS (clean compilation, exit code 0)**.
+  - `git diff --check` → **PASS (clean diff, 0 whitespace errors)**.
+  - `git status` → Working tree preserved; zero commits created.
+- **Errors / blockers:** None.
+- **Next action:** Step 9: Fix Post-TO Goods Movement (MIGO) & Material Document Verification Pipeline (validate BAPI_GOODSMVT_CREATE sequential posting, verify material document persistence in MATDOC/MSEG, verify reservation reduction in RESB).

@@ -112,6 +112,13 @@ service TrToService @(path: '/odata/v4/tr-to') {
         Warning                 : String(255);
         ReceivingTr             : String(10);
         ReservationMovementType : String(3);
+        success             : Boolean;
+        stage               : String(20);
+        error               : String(255);
+        trNumber            : String(10);
+        toNumber            : String(10);
+        toItem              : String(4);
+        confirmed           : Boolean;
     };
 
     type MigoProcessResult {

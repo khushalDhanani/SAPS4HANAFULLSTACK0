@@ -83,11 +83,19 @@ class TrToHandler {
       const sSerials = data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : []);
       const completeReservation = data.CompleteReservation === true;
 
+      // Enforce strict dependency: TO CREATED AND TO CONFIRMED -> MIGO
+      if (existingTrack && [STATUS.TO_CREATED, STATUS.TO_CONFIRM_ERROR, STATUS.TO_ERROR].includes(existingTrack.Status_code)) {
+        throw httpError(400, `Transfer Order ${sTanum || existingTrack.TransferOrder} is not confirmed (status ${existingTrack.Status_code}). TO must be confirmed before posting MIGO goods movement.`);
+      }
+
       // Resilient destination/account resolution from TO (LTAK -> LTAP -> RESB/RKPF) if missing on untracked records
       if (sTanum && resProcessAdapter.rfc) {
         try {
-          const ltakRows = await resProcessAdapter.rfc.readTable('LTAK', ['TBNUM', 'RSNUM', 'BWLVS'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
+          const ltakRows = await resProcessAdapter.rfc.readTable('LTAK', ['TBNUM', 'RSNUM', 'BWLVS', 'KQUIT'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
           if (ltakRows?.[0]) {
+            if (ltakRows[0].KQUIT !== undefined && ltakRows[0].KQUIT !== null && ltakRows[0].KQUIT.trim() === '') {
+              throw httpError(400, `Transfer Order ${sTanum} is not confirmed in SAP (LTAK-KQUIT is blank). TO must be confirmed before posting MIGO goods movement.`);
+            }
             const tbnum = ltakRows[0].TBNUM?.trim();
             const rsnumRaw = ltakRows[0].RSNUM?.trim();
             const rsnum = rsnumRaw ? sapKey(rsnumRaw, 'rsnum').padStart(10, '0') : '';
@@ -170,6 +178,7 @@ class TrToHandler {
             }
           }
         } catch (_lookupErr) {
+          if (_lookupErr.status === 400) throw _lookupErr;
           console.warn('[trTo.handler] TransferOrder metadata lookup note:', _lookupErr.message);
         }
       }
@@ -383,8 +392,8 @@ class TrToHandler {
           }
         }
 
-        // Auto-trigger MIGO if both autoConfirm and autoPostMigo are on and the TO is confirmed
-        if (data.autoConfirm !== false && data.autoPostMigo && result.Confirmed) {
+        // Auto-trigger MIGO only if both autoConfirm and autoPostMigo are on and the TO is confirmed successfully
+        if (data.autoConfirm !== false && data.autoPostMigo && result.Confirmed && result.success !== false) {
           try {
             const confirmedQty = Number(result.ConfirmedQuantity != null && result.ConfirmedQuantity > 0 ? result.ConfirmedQuantity : result.Quantity);
             const effMvt = result.ReservationMovementType || data.ReservationMovementType || data.reservationMovementType || existing?.MovementType || result.MovementType || data.MovementType || data.movementType;
@@ -452,9 +461,17 @@ class TrToHandler {
         result.AssetNo = data.AssetNo || data.assetNo || result.AssetNo || existing?.AssetNo || '';
         result.SubNumber = data.SubNumber || data.subNumber || result.SubNumber || existing?.SubNumber || '';
 
-        result.IsConfirmed = Boolean(result.Confirmed || result.Status === STATUS.TO_CONFIRMED || result.Status === STATUS.GI_POSTED);
-        result.ConfirmationNumber = result.ConfirmationNumber || result.TransferOrder;
-        result.ConfirmedBy = result.ConfirmedBy || (result.IsConfirmed ? userOf(req) : '');
+        if (result.success === false && result.stage === 'TO_CONFIRMATION') {
+          result.confirmed = false;
+          result.Confirmed = false;
+          result.IsConfirmed = false;
+          result.ConfirmationNumber = '';
+          result.ConfirmedBy = '';
+        } else {
+          result.IsConfirmed = Boolean(result.Confirmed || result.Status === STATUS.TO_CONFIRMED || result.Status === STATUS.GI_POSTED);
+          result.ConfirmationNumber = result.ConfirmationNumber || result.TransferOrder;
+          result.ConfirmedBy = result.ConfirmedBy || (result.IsConfirmed ? userOf(req) : '');
+        }
 
         return result;
       } catch (err) {

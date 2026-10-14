@@ -765,6 +765,263 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
         await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: testRes }));
       }
     });
+
+    test('action createTOFromTR: with autoConfirm=true succeeds and marks status 04 (TO Confirmed)', async () => {
+      const testRes = '0000529995';
+      await cds.db.run(INSERT.into(TRACK_ENTITY).entries({
+        ReservationNo: testRes,
+        ReservationItem: '0001',
+        MovementType: '311',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        ReceivingPlant: '1120',
+        ReceivingStorageLocation: 'CS01',
+        Material: '8000000023',
+        Quantity: 5,
+        Unit: 'NOS',
+        WarehouseNumber: 'W01',
+        TransferRequirement: '0001001839',
+        Status_code: '02'
+      }));
+
+      const getTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'getTransferRequirement').mockResolvedValueOnce({
+        trNumber: '1001839',
+        trNumberRaw: '0001001839',
+        warehouse: 'W01',
+        movement: '311',
+        material: '8000000023'
+      });
+      const createToSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferOrderFromTR').mockResolvedValueOnce({
+        success: true,
+        trNumber: '1001839',
+        toNumber: '987654',
+        toNumberRaw: '0000987654',
+        toItem: '0001',
+        confirmed: true,
+        warehouseNumber: 'W01',
+        status: '04'
+      });
+
+      try {
+        const { status, data } = await POST(
+          '/odata/v4/reservation-entry/createTOFromTR',
+          {
+            ReservationNo: testRes,
+            ReservationItem: '0001',
+            WarehouseNumber: 'W01',
+            TRNumber: '1001839',
+            autoConfirm: true
+          },
+          authClerk
+        );
+
+        expect(status).toBe(200);
+        expect(data).toMatchObject({
+          success: true,
+          toNumber: '987654',
+          confirmed: true,
+          itemsCreated: 1
+        });
+
+        const row = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        expect(row.Status_code).toBe('04');
+        expect(row.TransferOrder).toBe('0000987654');
+      } finally {
+        getTrSpy.mockRestore();
+        createToSpy.mockRestore();
+        await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: testRes }));
+      }
+    });
+
+    test('action createTOFromTR: with autoConfirm=true fails confirmation and returns { success: false, stage: TO_CONFIRMATION, toNumber: 987654, error: ... } with status 13', async () => {
+      const testRes = '0000529996';
+      await cds.db.run(INSERT.into(TRACK_ENTITY).entries({
+        ReservationNo: testRes,
+        ReservationItem: '0001',
+        MovementType: '311',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        ReceivingPlant: '1120',
+        ReceivingStorageLocation: 'CS01',
+        Material: '8000000023',
+        Quantity: 5,
+        Unit: 'NOS',
+        WarehouseNumber: 'W01',
+        TransferRequirement: '0001001839',
+        Status_code: '02'
+      }));
+
+      const getTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'getTransferRequirement').mockResolvedValueOnce({
+        trNumber: '1001839',
+        trNumberRaw: '0001001839',
+        warehouse: 'W01',
+        movement: '311',
+        material: '8000000023'
+      });
+      const createToSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferOrderFromTR').mockResolvedValueOnce({
+        success: false,
+        stage: 'TO_CONFIRMATION',
+        toNumber: '987654',
+        toNumberRaw: '0000987654',
+        toItem: '0001',
+        trNumber: '1001839',
+        warehouseNumber: 'W01',
+        status: '13',
+        error: 'Destination bin is blocked for stock placement',
+        confirmed: false
+      });
+
+      try {
+        const { status, data } = await POST(
+          '/odata/v4/reservation-entry/createTOFromTR',
+          {
+            ReservationNo: testRes,
+            ReservationItem: '0001',
+            WarehouseNumber: 'W01',
+            TRNumber: '1001839',
+            autoConfirm: true
+          },
+          authClerk
+        );
+
+        expect(status).toBe(200);
+        expect(data).toMatchObject({
+          success: false,
+          stage: 'TO_CONFIRMATION',
+          toNumber: '987654',
+          error: 'Destination bin is blocked for stock placement',
+          confirmed: false
+        });
+
+        const row = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        expect(row.Status_code).toBe('13');
+        expect(row.ErrorStep).toBe('LT12');
+        expect(row.ErrorMessage).toBe('Destination bin is blocked for stock placement');
+      } finally {
+        getTrSpy.mockRestore();
+        createToSpy.mockRestore();
+        await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: testRes }));
+      }
+    });
+
+    test('action confirmTransferOrder: successfully confirms TO and advances status to 04', async () => {
+      const testRes = '0000529997';
+      await cds.db.run(INSERT.into(TRACK_ENTITY).entries({
+        ReservationNo: testRes,
+        ReservationItem: '0001',
+        MovementType: '311',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        ReceivingPlant: '1120',
+        ReceivingStorageLocation: 'CS01',
+        Material: '8000000023',
+        Quantity: 5,
+        Unit: 'NOS',
+        WarehouseNumber: 'W01',
+        TransferRequirement: '0001001839',
+        TransferOrder: '0000987654',
+        Status_code: '13',
+        ErrorStep: 'LT12',
+        ErrorMessage: 'Previous confirmation failed'
+      }));
+
+      const confirmSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'confirmTransferOrder').mockResolvedValueOnce({
+        success: true,
+        warehouseNumber: 'W01',
+        toNumber: '987654',
+        status: '04',
+        confirmed: true
+      });
+
+      try {
+        const { status, data } = await POST(
+          '/odata/v4/reservation-entry/confirmTransferOrder',
+          {
+            ReservationNo: testRes,
+            ReservationItem: '0001',
+            WarehouseNumber: 'W01',
+            TransferOrder: '987654'
+          },
+          authClerk
+        );
+
+        expect(status).toBe(200);
+        expect(data).toMatchObject({
+          success: true,
+          stage: 'TO_CONFIRMATION',
+          toNumber: '987654',
+          confirmed: true,
+          status: '04'
+        });
+
+        const row = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        expect(row.Status_code).toBe('04');
+        expect(row.ErrorStep).toBe('');
+        expect(row.ErrorMessage).toBe('');
+      } finally {
+        confirmSpy.mockRestore();
+        await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: testRes }));
+      }
+    });
+
+    test('action confirmTransferOrder: returns structured error when confirmation fails', async () => {
+      const testRes = '0000529998';
+      await cds.db.run(INSERT.into(TRACK_ENTITY).entries({
+        ReservationNo: testRes,
+        ReservationItem: '0001',
+        MovementType: '311',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        ReceivingPlant: '1120',
+        ReceivingStorageLocation: 'CS01',
+        Material: '8000000023',
+        Quantity: 5,
+        Unit: 'NOS',
+        WarehouseNumber: 'W01',
+        TransferRequirement: '0001001839',
+        TransferOrder: '0000987654',
+        Status_code: '03'
+      }));
+
+      const confirmSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'confirmTransferOrder').mockRejectedValueOnce(
+        new Error('Bin blocked by operator')
+      );
+
+      try {
+        const { status, data } = await POST(
+          '/odata/v4/reservation-entry/confirmTransferOrder',
+          {
+            ReservationNo: testRes,
+            ReservationItem: '0001',
+            WarehouseNumber: 'W01',
+            TransferOrder: '987654'
+          },
+          authClerk
+        );
+
+        expect(status).toBe(200);
+        expect(data).toMatchObject({
+          success: false,
+          stage: 'TO_CONFIRMATION',
+          toNumber: '987654',
+          error: 'Bin blocked by operator',
+          confirmed: false,
+          status: '13'
+        });
+
+        const row = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        expect(row.Status_code).toBe('13');
+        expect(row.ErrorStep).toBe('LT12');
+        expect(row.ErrorMessage).toBe('Bin blocked by operator');
+      } finally {
+        confirmSpy.mockRestore();
+        await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+        await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: testRes }));
+      }
+    });
   });
 
   describe('3. Querying Reservation Entries & Statuses', () => {

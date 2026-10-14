@@ -31,6 +31,16 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
           }
           return Promise.resolve([]);
         }
+        if (table === 'LTAK') {
+          const optStr = JSON.stringify(options || []);
+          if (optStr.includes('0001012966') || optStr.includes('1012966')) {
+            return Promise.resolve([{ LGNUM: 'W01', TANUM: '0001012966', TBNUM: '0001001839', BWLVS: '311', KQUIT: '' }]);
+          }
+          return Promise.resolve([]);
+        }
+        if (table === 'LTAP') {
+          return Promise.resolve([{ LGNUM: 'W01', TANUM: '0001012966', TAPOS: '0001', TBPOS: '0001', NSOLA: '1.000', ALTME: 'NOS', PQUIT: '' }]);
+        }
         return Promise.resolve([]);
       })
     };

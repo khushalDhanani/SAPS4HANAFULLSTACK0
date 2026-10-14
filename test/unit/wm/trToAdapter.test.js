@@ -433,8 +433,14 @@ describe('TrToAdapter (RFC)', () => {
         if (fm === 'L_TO_CONFIRM') return { EV_SUCCESS: 'S' };
         throw new Error(`unexpected ${fm}`);
       }),
-      readTable: jest.fn(async (table) => {
-        if (table === 'LTAP') return [];
+      readTable: jest.fn(async (table, fields, options) => {
+        const opts = (options || []).join(' ');
+        if (table === 'LTAK' && opts.includes('TANUM = \'0001037294\'')) {
+          return [{ LGNUM: 'W01', TANUM: '0001037294', TBNUM: '0001000800', BWLVS: '311' }];
+        }
+        if (table === 'LTAP' && opts.includes('TANUM = \'0001037294\'')) {
+          return [{ LGNUM: 'W01', TANUM: '0001037294', TAPOS: '0001', TBPOS: '0001', MATNR: '000000001000000204', VSOLA: '1.000', VSOUM: 'KG', VLTYP: 'RM1', VLPLA: '0-L0001-03' }];
+        }
         if (table === 'MARC') return [];
         return [];
       })
@@ -453,6 +459,11 @@ describe('TrToAdapter (RFC)', () => {
       autoPostMigo: false
     });
 
+    expect(res.success).toBe(true);
+    expect(res.trNumber).toBe('1000800');
+    expect(res.toNumber).toBe('1037294');
+    expect(res.toItem).toBe('0001');
+    expect(res.confirmed).toBe(false);
     expect(res.TransferOrder).toBe('1037294');
     expect(capturedItems[0].VLTYP).toBe('RM1');
     expect(capturedItems[0].VLPLA).toBe('0-L0001-03');

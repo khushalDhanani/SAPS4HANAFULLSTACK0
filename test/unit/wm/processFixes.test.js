@@ -44,6 +44,17 @@ function fakeRfc({ fm = {}, tables = {} } = {}) {
     }),
     readTable: jest.fn(async (table, fields, where) => {
       const h = tables[table];
+      const optStr = (where || []).join(' ');
+      if (table === 'LTAK' && optStr.includes('TANUM') && (!h || (Array.isArray(h) && h.length === 0))) {
+        const match = optStr.match(/TANUM\s*=\s*'(\d+)'/);
+        const tanum = match ? match[1] : '0001012966';
+        return [{ LGNUM: 'W01', TANUM: tanum, TBNUM: '0001001839', BWLVS: '311', KQUIT: '' }];
+      }
+      if (table === 'LTAP' && optStr.includes('TANUM') && (!h || (Array.isArray(h) && h.length === 0))) {
+        const match = optStr.match(/TANUM\s*=\s*'(\d+)'/);
+        const tanum = match ? match[1] : '0001012966';
+        return [{ LGNUM: 'W01', TANUM: tanum, TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000000023', NSOLA: '1.000', ALTME: 'KG', PQUIT: '' }];
+      }
       return typeof h === 'function' ? h(where, fields) : (h || []);
     })
   };
@@ -188,9 +199,9 @@ describe('Fix 5: partial quantity and the unconfirmed-TO guard [mock only, not S
   it('allows a second TO for the remaining quantity when the earlier TO is confirmed (LTAK KQUIT = X)', async () => {
     const rfc = fakeRfc({ fm: { Z_WM_GET_TR_MATERIAL_LIST: tr, Z_WM_TO_CREATE_FROM_TR: { EV_SUCCESS: 'S', EV_TANUM: '0001012967' }, L_TO_CONFIRM: {} },
       tables: { MAKT: [], MARC: [{ XCHPF: '', SERNP: '' }], LTAK: [{ TANUM: '0001012966', KQUIT: 'X' }], T333: [{ NLTYP: '921', NLPLA: 'TRANSFER' }] } });
-    const res = await new TrToAdapter({ rfc }).createTOFromTR({ tbnum: '1001839', qty: 6, existingToNumber: '1012966', status: '04' });
+    const res = await new TrToAdapter({ rfc }).createTOFromTR({ tbnum: '1001839', qty: 6, existingToNumber: '1012966', status: '04', autoConfirm: true });
     expect(res).toMatchObject({ TransferOrder: '1012967', Status: '04', Quantity: 6 });
-    expect(rfc.readTable).not.toHaveBeenCalledWith('LTAP', expect.anything(), expect.anything());
+    expect(rfc.readTable).not.toHaveBeenCalledWith('LTAP', ['TAPOS', 'TBPOS'], expect.anything());
   });
   it('blocks while an unconfirmed TO item (PQUIT blank) exists for the same TR item', async () => {
     const rfc = fakeRfc({ fm: { Z_WM_GET_TR_MATERIAL_LIST: tr },

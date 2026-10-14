@@ -782,11 +782,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
 
       let toResult;
+      const bAutoConfirm = Boolean(req.data?.autoConfirm);
       try {
         toResult = await adapter.createTransferOrderFromTR({
           warehouseNumber: targetWh,
           trNumber: targetTr,
-          movementType: track?.MovementType || verifiedTR.movement || '311'
+          movementType: track?.MovementType || verifiedTR.movement || '311',
+          autoConfirm: bAutoConfirm
         });
       } catch (err) {
         if (track) {
@@ -819,19 +821,64 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           reservationNumber: sResNo ? alphaOut(sResNo) : '',
           trNumber: alphaOut(targetTr),
           toNumber: '',
+          toItem: '',
+          confirmed: false,
           warehouse: targetWh,
           itemsCreated: 0
         };
       }
 
       const toNo = toResult.toNumberRaw || String(toResult.toNumber).padStart(10, '0');
+      const toItem = toResult.toItem || '0001';
+
+      if (toResult.success === false && toResult.stage === 'TO_CONFIRMATION') {
+        if (track) {
+          await UPDATE(ReservationEntries).set({
+            WarehouseNumber: targetWh,
+            TransferRequirement: targetTr,
+            TransferOrder: toNo,
+            Status_code: STATUS.TO_CONFIRM_ERROR,
+            ErrorStep: 'LT12',
+            ErrorMessage: toResult.error
+          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+          await INSERT.into(ReservationLogs).entries({
+            ID: cds.utils.uuid(),
+            ReservationNo: sResNo,
+            ReservationItem: sResItem,
+            LogHandle: track.LogHandle || '',
+            ExternalId: track.ExternalId || '',
+            SubObject: 'TRACK',
+            Step: 'LT12',
+            Status: STATUS.TO_CONFIRM_ERROR,
+            MessageType: 'E',
+            MessageId: 'L3',
+            MessageNo: '026',
+            MessageText: `Transfer Order ${alphaOut(toNo)} confirmation failed: ${toResult.error}`
+          });
+        }
+
+        return {
+          success: false,
+          stage: 'TO_CONFIRMATION',
+          toNumber: alphaOut(toNo),
+          error: toResult.error,
+          reservationNumber: sResNo ? alphaOut(sResNo) : '',
+          trNumber: alphaOut(targetTr),
+          toItem: toItem,
+          confirmed: false,
+          warehouse: targetWh,
+          itemsCreated: 0
+        };
+      }
 
       if (track) {
+        const finalStatus = toResult.confirmed ? STATUS.TO_CONFIRMED : STATUS.TO_CREATED;
         await UPDATE(ReservationEntries).set({
           WarehouseNumber: targetWh,
           TransferRequirement: targetTr,
           TransferOrder: toNo,
-          Status_code: STATUS.TO_CREATED,
+          Status_code: finalStatus,
           ErrorStep: '',
           ErrorMessage: ''
         }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
@@ -848,18 +895,126 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           MessageType: 'S',
           MessageId: 'L3',
           MessageNo: '001',
-          MessageText: `Transfer Order ${alphaOut(toNo)} created from verified TR ${alphaOut(targetTr)}`
+          MessageText: `Transfer Order ${alphaOut(toNo)} item ${toItem} created from verified TR ${alphaOut(targetTr)}`
         });
+
+        if (toResult.confirmed) {
+          await INSERT.into(ReservationLogs).entries({
+            ID: cds.utils.uuid(),
+            ReservationNo: sResNo,
+            ReservationItem: sResItem,
+            LogHandle: track.LogHandle || '',
+            ExternalId: track.ExternalId || '',
+            SubObject: 'TRACK',
+            Step: 'LT12',
+            Status: STATUS.TO_CONFIRMED,
+            MessageType: 'S',
+            MessageId: 'L3',
+            MessageNo: '025',
+            MessageText: `Transfer Order ${alphaOut(toNo)} confirmed via L_TO_CONFIRM`
+          });
+        }
       }
 
       return {
         success: true,
-        reservationNumber: sResNo ? alphaOut(sResNo) : '',
         trNumber: alphaOut(targetTr),
         toNumber: alphaOut(toNo),
+        toItem: toItem,
+        confirmed: Boolean(toResult.confirmed),
+        reservationNumber: sResNo ? alphaOut(sResNo) : '',
         warehouse: targetWh,
         itemsCreated: 1
       };
+    });
+
+    // Action handler for Step 8: Standalone TO Confirmation
+    this.on('confirmTransferOrder', async (req) => {
+      const { ReservationNo, ReservationItem, WarehouseNumber, TransferOrder } = req.data || {};
+      if (!TransferOrder) return req.error(400, 'TransferOrder is mandatory');
+      const sResNo = ReservationNo ? String(ReservationNo).padStart(10, '0') : '';
+      const sResItem = String(ReservationItem || '0001').padStart(4, '0');
+
+      let track = null;
+      if (sResNo) {
+        track = await SELECT.one.from(ReservationEntries).where({
+          ReservationNo: sResNo,
+          ReservationItem: sResItem
+        });
+      }
+      const wh = WarehouseNumber || track?.WarehouseNumber || '';
+      try {
+        const confRes = await adapter.confirmTransferOrder({
+          warehouseNumber: wh,
+          toNumber: TransferOrder
+        });
+
+        if (track) {
+          await UPDATE(ReservationEntries).set({
+            Status_code: STATUS.TO_CONFIRMED,
+            ErrorStep: '',
+            ErrorMessage: ''
+          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+          await INSERT.into(ReservationLogs).entries({
+            ID: cds.utils.uuid(),
+            ReservationNo: sResNo,
+            ReservationItem: sResItem,
+            LogHandle: track.LogHandle || '',
+            ExternalId: track.ExternalId || '',
+            SubObject: 'TRACK',
+            Step: 'LT12',
+            Status: STATUS.TO_CONFIRMED,
+            MessageType: 'S',
+            MessageId: 'L3',
+            MessageNo: '025',
+            MessageText: `Transfer Order ${alphaOut(TransferOrder)} confirmed via L_TO_CONFIRM`
+          });
+        }
+
+        return {
+          success: true,
+          stage: 'TO_CONFIRMATION',
+          error: '',
+          warehouseNumber: wh,
+          toNumber: alphaOut(TransferOrder),
+          confirmed: true,
+          status: STATUS.TO_CONFIRMED
+        };
+      } catch (err) {
+        if (track) {
+          await UPDATE(ReservationEntries).set({
+            Status_code: STATUS.TO_CONFIRM_ERROR,
+            ErrorStep: 'LT12',
+            ErrorMessage: err.message
+          }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
+
+          await INSERT.into(ReservationLogs).entries({
+            ID: cds.utils.uuid(),
+            ReservationNo: sResNo,
+            ReservationItem: sResItem,
+            LogHandle: track.LogHandle || '',
+            ExternalId: track.ExternalId || '',
+            SubObject: 'TRACK',
+            Step: 'LT12',
+            Status: STATUS.TO_CONFIRM_ERROR,
+            MessageType: 'E',
+            MessageId: 'L3',
+            MessageNo: '026',
+            MessageText: `Transfer Order ${alphaOut(TransferOrder)} confirmation failed: ${err.message}`
+          });
+        }
+
+        return {
+          success: false,
+          stage: 'TO_CONFIRMATION',
+          error: err.message,
+          warehouseNumber: wh,
+          toNumber: alphaOut(TransferOrder),
+          confirmed: false,
+          status: STATUS.TO_CONFIRM_ERROR
+        };
+      }
     });
 
     // Action handler

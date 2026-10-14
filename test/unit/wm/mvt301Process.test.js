@@ -106,6 +106,17 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
         if (table === 'T321') {
           return [{ LGNUM: '***', RBLVS: '301', BWLVS: '301', TBFKZ: 'X', TAFKZ: '' }];
         }
+        const optStr = (where || []).join(' ');
+        if (table === 'LTAK' && optStr.includes('TANUM')) {
+          const match = optStr.match(/TANUM\s*=\s*'(\d+)'/);
+          const tanum = match ? match[1] : '0001015000';
+          return [{ LGNUM: 'W01', TANUM: tanum, TBNUM: '0001000795', BWLVS: '301', KQUIT: '' }];
+        }
+        if (table === 'LTAP' && optStr.includes('TANUM')) {
+          const match = optStr.match(/TANUM\s*=\s*'(\d+)'/);
+          const tanum = match ? match[1] : '0001015000';
+          return [{ LGNUM: 'W01', TANUM: tanum, TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000001648', NSOLA: '2.000', ALTME: 'NOS', PQUIT: '' }];
+        }
         return [];
       })
     };
@@ -328,9 +339,13 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
     });
 
     test('Class E: Stock in small SU (VOLLE = "") allows partial removal via TrToAdapter [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (table) => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
         if (table === 'T331') return [{ LGNUM: 'W01', LGTYP: '002', STAUS: 'F', VOLLE: '', LENVW: '' }];
         if (table === 'LQUA') return [{ LGNUM: 'W01', LGTYP: '002', LGPLA: 'BIN-01', LENUM: '00000000002000020148', VERME: '5.000' }];
+        const optStr = (where || []).join(' ');
+        if (table === 'LTAK' && optStr.includes('TANUM')) {
+          return [{ LGNUM: 'W01', TANUM: '0001015000', TBNUM: '0001000795', BWLVS: '301', KQUIT: '' }];
+        }
         return [];
       });
 
@@ -349,9 +364,13 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
     });
 
     test('Class F: Stock in large SU (VOLLE = "X") succeeds when full SU quantity is requested [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (table) => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
         if (table === 'T331') return [{ LGNUM: 'W01', LGTYP: 'OH1', STAUS: 'H', VOLLE: 'X', LENVW: 'X' }];
         if (table === 'LQUA') return [{ LGNUM: 'W01', LGTYP: 'OH1', LGPLA: 'ONHOLD', LENUM: '00000000002000020150', VERME: '1.000' }];
+        const optStr = (where || []).join(' ');
+        if (table === 'LTAK' && optStr.includes('TANUM')) {
+          return [{ LGNUM: 'W01', TANUM: '0001015000', TBNUM: '0001000795', BWLVS: '301', KQUIT: '' }];
+        }
         return [];
       });
 

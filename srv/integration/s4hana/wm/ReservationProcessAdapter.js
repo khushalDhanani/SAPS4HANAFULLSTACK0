@@ -23,6 +23,7 @@ const pad12 = (v) => String(v || '').trim().padStart(12, '0');
 const pad4 = (v) => String(v || '').trim().padStart(4, '0');
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 const padMat = (m) => (/^\d+$/.test(m) ? m.padStart(18, '0') : m);
+const sapNum = (v) => (v == null || v === '' ? 0 : Number(String(v).trim()));
 
 class ReservationProcessAdapter {
   constructor(options = {}) {
@@ -681,17 +682,83 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * Reads and verifies Transfer Order from SAP tables LTAK & LTAP
+   */
+  async getTransferOrder(toNumber, warehouseNumber = '') {
+    if (!toNumber) return null;
+    const s4Tanum = sapKey(toNumber, 'tanum').padStart(10, '0');
+    const wh = warehouseNumber ? sapKey(warehouseNumber, 'lgnum') : '';
+
+    if (this.rfc) {
+      try {
+        const where = [`TANUM = '${s4Tanum}'`];
+        if (wh) where.push(`AND LGNUM = '${wh}'`);
+
+        const ltak = await this.rfc.readTable('LTAK', ['LGNUM', 'TANUM', 'TBNUM', 'BWLVS', 'KQUIT', 'BDATU'], where, 1);
+        if (ltak && ltak.length > 0) {
+          const h = ltak[0];
+          let items = [];
+          try {
+            items = await this.rfc.readTable('LTAP', ['LGNUM', 'TANUM', 'TAPOS', 'TBPOS', 'MATNR', 'WERKS', 'LGORT', 'NSOLA', 'VSOLA', 'ALTME', 'PQUIT'], where);
+          } catch (_) {}
+
+          return {
+            success: true,
+            toNumber: alphaOut(h.TANUM),
+            toNumberRaw: h.TANUM,
+            trNumber: alphaOut(h.TBNUM),
+            trNumberRaw: h.TBNUM,
+            warehouse: h.LGNUM,
+            movement: h.BWLVS,
+            confirmed: h.KQUIT === 'X',
+            items: (items || []).map((i) => ({
+              tapos: i.TAPOS,
+              tbpos: i.TBPOS,
+              material: alphaOut(i.MATNR),
+              quantity: sapNum(i.NSOLA || i.VSOLA),
+              unit: i.ALTME,
+              confirmed: i.PQUIT === 'X'
+            })),
+            source: 'LTAK'
+          };
+        }
+      } catch (_ltakErr) {
+        // tolerate read error
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Action: createTOFromTR
+   * Enforces transactional sequence:
+   * TR -> Validate TR -> Create TO -> Receive TO number -> Verify TO -> Return TO
+   */
+  async createTOFromTR(params = {}) {
+    const { warehouseNumber = '', trNumber = '', TRNumber = '', movementType = '311', commitWork = true, autoConfirm = false } = params;
+    return await this.createTransferOrderFromTR({
+      warehouseNumber,
+      trNumber: trNumber || TRNumber,
+      movementType,
+      commitWork,
+      autoConfirm
+    });
+  }
+
+  /**
    * Step 3: create_to_from_tr
    * Wraps L_TO_CREATE_TR
    * Validates that the TR actually exists and is verified in SAP before attempting TO creation.
+   * Verifies the created TO actually exists in SAP LTAK before reporting success.
    */
   async createTransferOrderFromTR(params = {}) {
-    const { warehouseNumber, trNumber, commitWork = true, movementType = '311', skipTrValidation = false } = params;
+    const { warehouseNumber, trNumber, TRNumber, commitWork = true, movementType = '311', skipTrValidation = false, autoConfirm = false } = params;
 
+    const effTrNumber = trNumber || TRNumber;
     if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
-    if (!trNumber) throw httpError(400, 'TRNumber is mandatory');
+    if (!effTrNumber) throw httpError(400, 'TRNumber is mandatory');
 
-    const s4Tr = sapKey(trNumber, 'tbnum').padStart(10, '0');
+    const s4Tr = sapKey(effTrNumber, 'tbnum').padStart(10, '0');
     const wh = sapKey(warehouseNumber, 'lgnum');
 
     // Architecture rule: Validate TR exists in SAP before creating TO
@@ -739,11 +806,63 @@ class ReservationProcessAdapter {
         throw new Error(errMsg);
       }
 
+      // Step 5: Verify TO in SAP (persistence check)
+      let verifiedTO = null;
+      if (this.rfc) {
+        verifiedTO = await this.getTransferOrder(tanum, wh);
+        if (!verifiedTO) {
+          throw new Error(`Transfer Order ${alphaOut(tanum)} was created by SAP FM but cannot be verified in SAP LTAK (persistence check failed)`);
+        }
+        if (verifiedTO.trNumberRaw && sapKey(verifiedTO.trNumberRaw, 'tbnum') !== sapKey(s4Tr, 'tbnum')) {
+          throw new Error(`Transfer Order ${alphaOut(tanum)} verification failed: references TR ${verifiedTO.trNumber}, expected TR ${alphaOut(s4Tr)}`);
+        }
+      }
+
+      const toItem = verifiedTO?.items?.[0]?.tapos
+        ? String(verifiedTO.items[0].tapos).padStart(4, '0')
+        : '0001';
+
+      if (autoConfirm) {
+        try {
+          await this.confirmTransferOrder({
+            warehouseNumber: wh,
+            toNumber: alphaOut(tanum),
+            commitWork
+          });
+          return {
+            success: true,
+            trNumber: alphaOut(s4Tr),
+            toNumber: alphaOut(tanum),
+            toNumberRaw: tanum,
+            toItem,
+            confirmed: true,
+            warehouseNumber,
+            status: STATUS.TO_CONFIRMED
+          };
+        } catch (cErr) {
+          return {
+            success: false,
+            stage: 'TO_CONFIRMATION',
+            toNumber: alphaOut(tanum),
+            toNumberRaw: tanum,
+            toItem,
+            trNumber: alphaOut(s4Tr),
+            warehouseNumber,
+            status: STATUS.TO_CONFIRM_ERROR,
+            error: cErr.message,
+            confirmed: false
+          };
+        }
+      }
+
       return {
         success: true,
-        warehouseNumber,
+        trNumber: alphaOut(s4Tr),
         toNumber: alphaOut(tanum),
         toNumberRaw: tanum,
+        toItem,
+        confirmed: Boolean(verifiedTO?.confirmed),
+        warehouseNumber,
         status: STATUS.TO_CREATED
       };
     });
@@ -796,7 +915,13 @@ class ReservationProcessAdapter {
       // SAP rejected the call: decide from the TO's real state (LTAP-PQUIT), not from a message number.
       let confirmedInSap = false;
       try { confirmedInSap = await isToFullyConfirmed(this.rfc, s4Lgnum, s4To); } catch (_readErr) { /* keep original error */ }
-      if (!confirmedInSap) throw err;
+      if (!confirmedInSap) {
+        err.stage = 'TO_CONFIRMATION';
+        err.toNumber = alphaOut(toNumber);
+        err.Status = STATUS.TO_CONFIRM_ERROR;
+        err.ErrorStep = 'LT12';
+        throw err;
+      }
       LOG.info(`Transfer Order ${alphaOut(s4To)} is already confirmed in SAP (LTAP-PQUIT)`);
     }
 

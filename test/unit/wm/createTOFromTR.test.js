@@ -18,10 +18,47 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
     let mockRfc;
     let adapter;
 
+    let currentTr = '0001001839';
     beforeEach(() => {
+        currentTr = '0001001839';
         mockRfc = {
-            call: jest.fn(),
-            readTable: jest.fn()
+            call: jest.fn(async (fm, params) => {
+                if (params?.IV_TR_NUMBER) currentTr = params.IV_TR_NUMBER;
+                return {};
+            }),
+            readTable: jest.fn((table, fields, options) => {
+                const optStr = JSON.stringify(options || []);
+                if (table === 'LTAK' && optStr.includes('TANUM')) {
+                    const match = optStr.match(/TANUM\s*=\s*'(\d+)'/);
+                    const tanum = match ? match[1] : '0001012966';
+                    return Promise.resolve([{
+                        LGNUM: 'W01',
+                        TANUM: tanum,
+                        TBNUM: adapter?._lastTr || currentTr,
+                        BWLVS: '311',
+                        KQUIT: '',
+                        BDATU: '20261010'
+                    }]);
+                }
+                if (table === 'LTAP' && optStr.includes('TANUM')) {
+                    const match = optStr.match(/TANUM\s*=\s*'(\d+)'/);
+                    const tanum = match ? match[1] : '0001012966';
+                    return Promise.resolve([{
+                        LGNUM: 'W01',
+                        TANUM: tanum,
+                        TAPOS: '0001',
+                        TBPOS: '0001',
+                        MATNR: '000000001000000045',
+                        WERKS: '1120',
+                        LGORT: 'HS01',
+                        CHARG: '',
+                        NSOLA: '5.000',
+                        ALTME: 'KG',
+                        PQUIT: ''
+                    }]);
+                }
+                return Promise.resolve([]);
+            })
         };
         adapter = new TrToAdapter({ rfc: mockRfc });
     });
@@ -205,7 +242,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
     });
 
     describe('4. Chained Create and Confirm TO Execution [mock only, not SAP verification]', () => {
-        const mockTrSetup = () => {
+        const mockTrSetup = (includeGuard = true) => {
             mockRfc.call.mockResolvedValueOnce({
                 ET_TR_HEADER: [{
                     LGNUM: 'W01',
@@ -230,7 +267,9 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             });
             mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Standard Mat' }]);
             mockRfc.readTable.mockResolvedValueOnce([{ MATNR: '000000001000000045', XCHPF: '', SERNP: '' }]);
-            mockRfc.readTable.mockResolvedValueOnce([]); // LTAK: no TO yet for this TR (double-TO guard)
+            if (includeGuard) {
+                mockRfc.readTable.mockResolvedValueOnce([]); // LTAK: no TO yet for this TR (double-TO guard)
+            }
         };
         const authOk = () => mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // AUTHORITY_CHECK always raises
 
@@ -304,7 +343,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
         });
 
         it('scenario C: retry confirm only -> invokes L_TO_CONFIRM, does NOT call create FM', async () => {
-            mockTrSetup();
+            mockTrSetup(false);
             authOk(); // L_LGNUM before confirm
 
             // Mock L_TO_CONFIRM -> succeeds
@@ -903,6 +942,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 tbpos: '0001',
                 qty: 1,
                 unit: 'NOS',
+                autoConfirm: true,
                 ReservationMovementType: '201',
                 trackedReservation: {
                     TransferRequirement: '0001000823',
@@ -928,6 +968,471 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 lgnum: 'W01', tbnum: '0001000823', tbpos: '0001', qty: 1, unit: 'NOS', ReservationMovementType: '201',
                 trackedReservation: { TransferRequirement: '0001000823', ReservationNo: '0000527871', ReservationItem: '0001', MovementType: '201' }
             })).rejects.toMatchObject({ status: 400, message: 'TR movement 311 does not match reservation movement 201' });
+        });
+    });
+
+    describe('14. Step 7: Transactional TO Creation & Verification (createTOFromTR)', () => {
+        it('executes full transactional sequence: TR -> Validate TR -> Create TO -> Receive TO number -> Verify TO -> Return TO', async () => {
+            mockRfc.call.mockResolvedValueOnce({
+                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0000123456', BWLVS: '311', RSNUM: '0000524979', NLTYP: '921', NLPLA: 'TRANSFER' }],
+                ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0000123456', TBPOS: '0001', MATNR: '000000001000000045', WERKS: '1120', LGORT: 'HS01', MENGE: '10.000', TAMEN: '0.000', MEINS: 'KG' }]
+            });
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Transactional Mat' }]);
+            mockRfc.readTable.mockResolvedValueOnce([{ MATNR: '000000001000000045', XCHPF: '', SERNP: '' }]);
+            mockRfc.readTable.mockResolvedValueOnce([]); // double-TO guard: no pending unconfirmed TOs
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // L_BWLVS auth
+            mockRfc.call.mockResolvedValueOnce({
+                EV_SUCCESS: 'S',
+                EV_TANUM: '0000987654',
+                EV_MESSAGE: 'TO 0000987654 created'
+            });
+            // LTAK verification
+            mockRfc.readTable.mockResolvedValueOnce([{
+                LGNUM: 'W01',
+                TANUM: '0000987654',
+                TBNUM: '0000123456',
+                BWLVS: '311',
+                KQUIT: ''
+            }]);
+            // LTAP verification
+            mockRfc.readTable.mockResolvedValueOnce([{
+                LGNUM: 'W01',
+                TANUM: '0000987654',
+                TAPOS: '0001',
+                TBPOS: '0001',
+                MATNR: '000000001000000045',
+                NSOLA: '10.000',
+                ALTME: 'KG',
+                PQUIT: ''
+            }]);
+
+            const res = await adapter.createTOFromTR({
+                trNumber: '123456',
+                lgnum: 'W01'
+            });
+
+            expect(res).toMatchObject({
+                success: true,
+                trNumber: '123456',
+                toNumber: '987654',
+                toItem: '0001',
+                confirmed: false
+            });
+        });
+
+        it('does not mark it completed just because TO creation returned without an exception if LTAK verification fails', async () => {
+            mockRfc.call.mockResolvedValueOnce({
+                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0000123456', BWLVS: '311', RSNUM: '0000524979', NLTYP: '921', NLPLA: 'TRANSFER' }],
+                ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0000123456', TBPOS: '0001', MATNR: '000000001000000045', WERKS: '1120', LGORT: 'HS01', MENGE: '10.000', TAMEN: '0.000', MEINS: 'KG' }]
+            });
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Transactional Mat' }]);
+            mockRfc.readTable.mockResolvedValueOnce([{ MATNR: '000000001000000045', XCHPF: '', SERNP: '' }]);
+            mockRfc.readTable.mockResolvedValueOnce([]); // double-TO guard
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // L_BWLVS auth
+            mockRfc.call.mockResolvedValueOnce({
+                EV_SUCCESS: 'S',
+                EV_TANUM: '0000987654',
+                EV_MESSAGE: 'TO 0000987654 created'
+            });
+            // LTAK verification fails (table returns empty array -> document not persisted in SAP!)
+            mockRfc.readTable.mockResolvedValueOnce([]);
+
+            await expect(adapter.createTOFromTR({
+                trNumber: '123456',
+                lgnum: 'W01'
+            })).rejects.toMatchObject({
+                status: 500,
+                message: expect.stringContaining('Transfer Order 987654 was created by SAP FM but cannot be verified in SAP LTAK (persistence check failed)')
+            });
+        });
+
+        it('rejects when verified TO in SAP references a different TR', async () => {
+            mockRfc.call.mockResolvedValueOnce({
+                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0000123456', BWLVS: '311', RSNUM: '0000524979', NLTYP: '921', NLPLA: 'TRANSFER' }],
+                ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0000123456', TBPOS: '0001', MATNR: '000000001000000045', WERKS: '1120', LGORT: 'HS01', MENGE: '10.000', TAMEN: '0.000', MEINS: 'KG' }]
+            });
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Transactional Mat' }]);
+            mockRfc.readTable.mockResolvedValueOnce([{ MATNR: '000000001000000045', XCHPF: '', SERNP: '' }]);
+            mockRfc.readTable.mockResolvedValueOnce([]); // double-TO guard
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // L_BWLVS auth
+            mockRfc.call.mockResolvedValueOnce({
+                EV_SUCCESS: 'S',
+                EV_TANUM: '0000987654'
+            });
+            // LTAK verification returns TO but referencing TR 999999
+            mockRfc.readTable.mockResolvedValueOnce([{
+                LGNUM: 'W01',
+                TANUM: '0000987654',
+                TBNUM: '0000999999',
+                BWLVS: '311'
+            }]);
+            mockRfc.readTable.mockResolvedValueOnce([{
+                LGNUM: 'W01',
+                TANUM: '0000987654',
+                TAPOS: '0001',
+                TBPOS: '0001',
+                NSOLA: '10.000',
+                ALTME: 'KG'
+            }]);
+
+            await expect(adapter.createTOFromTR({
+                trNumber: '123456',
+                lgnum: 'W01'
+            })).rejects.toMatchObject({
+                status: 500,
+                message: expect.stringContaining('Transfer Order 987654 verification failed: references TR 999999, expected TR 123456')
+            });
+        });
+
+        it('rejects during TR validation if TR is already completed (STATU = E) before creating TO', async () => {
+            mockRfc.call.mockResolvedValueOnce({
+                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0000123456', BWLVS: '311', STATU: 'E' }],
+                ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0000123456', TBPOS: '0001', MATNR: '000000001000000045', WERKS: '1120', LGORT: 'HS01', MENGE: '10.000', TAMEN: '10.000', MEINS: 'KG' }]
+            });
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Transactional Mat' }]);
+
+            await expect(adapter.createTOFromTR({
+                trNumber: '123456',
+                lgnum: 'W01'
+            })).rejects.toMatchObject({
+                status: 400,
+                message: expect.stringContaining('already completed (STATU = E)')
+            });
+
+            // Create TO FM should NEVER have been called!
+            expect(mockRfc.call).not.toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.anything());
+        });
+    });
+
+    // ─── Step 8: Automatic TO Confirmation & MIGO Dependency ───────────────
+    describe('15. Step 8: Automatic TO Confirmation & MIGO Dependency', () => {
+        const TrToHandler = require('../../../srv/wm/tr-to/handlers/trTo.handler');
+        const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
+
+        it('executes strict sequence: Create TO -> TO number received -> Confirm TO -> SAP confirmation successful -> confirmed = true', async () => {
+            mockRfc.call.mockResolvedValueOnce({
+                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0000123456', BWLVS: '311', RSNUM: '0000524979', NLTYP: '921', NLPLA: 'TRANSFER' }],
+                ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0000123456', TBPOS: '0001', MATNR: '000000001000000045', WERKS: '1120', LGORT: 'HS01', MENGE: '10.000', TAMEN: '0.000', MEINS: 'KG' }]
+            });
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Test Mat' }]);
+            mockRfc.readTable.mockResolvedValueOnce([{ MATNR: '000000001000000045', XCHPF: '', SERNP: '' }]);
+            mockRfc.readTable.mockResolvedValueOnce([]); // double-TO guard
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // checkAuthorization
+            mockRfc.call.mockResolvedValueOnce({
+                EV_SUCCESS: 'S',
+                EV_TANUM: '0000987654',
+                EV_MESSAGE: 'TO 0000987654 created'
+            });
+            // LTAK verification
+            mockRfc.readTable.mockResolvedValueOnce([{
+                LGNUM: 'W01',
+                TANUM: '0000987654',
+                TBNUM: '0000123456',
+                BWLVS: '311'
+            }]);
+            mockRfc.readTable.mockResolvedValueOnce([{
+                LGNUM: 'W01',
+                TANUM: '0000987654',
+                TAPOS: '0001',
+                TBPOS: '0001',
+                NSOLA: '10.000',
+                ALTME: 'KG'
+            }]);
+            // Confirm TO: auth + L_TO_CONFIRM
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' }));
+            mockRfc.call.mockResolvedValueOnce({
+                E_TANUM: '0000987654'
+            });
+
+            const result = await adapter.createTOFromTR({
+                trNumber: '123456',
+                qty: 10,
+                autoConfirm: true,
+                lgnum: 'W01'
+            });
+
+            expect(result.success).toBe(true);
+            expect(result.confirmed).toBe(true);
+            expect(result.Confirmed).toBe(true);
+            expect(result.IsConfirmed).toBe(true);
+            expect(result.toNumber).toBe('987654');
+            expect(result.TransferOrder).toBe('987654');
+            expect(result.Status).toBe('04');
+            expect(result.StatusText).toBe('TO Confirmed');
+            expect(mockRfc.call).toHaveBeenCalledWith('L_TO_CONFIRM', expect.objectContaining({
+                I_LGNUM: 'W01',
+                I_TANUM: '0000987654',
+                I_SQUIT: 'X'
+            }));
+        });
+
+        it('if confirmation fails: returns { success: false, stage: "TO_CONFIRMATION", toNumber: "987654", error: "...", confirmed: false }', async () => {
+            mockRfc.call.mockResolvedValueOnce({
+                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0000123456', BWLVS: '311', RSNUM: '0000524979', NLTYP: '921', NLPLA: 'TRANSFER' }],
+                ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0000123456', TBPOS: '0001', MATNR: '000000001000000045', WERKS: '1120', LGORT: 'HS01', MENGE: '10.000', TAMEN: '0.000', MEINS: 'KG' }]
+            });
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Test Mat' }]);
+            mockRfc.readTable.mockResolvedValueOnce([{ MATNR: '000000001000000045', XCHPF: '', SERNP: '' }]);
+            mockRfc.readTable.mockResolvedValueOnce([]); // double-TO guard
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // checkAuthorization
+            mockRfc.call.mockResolvedValueOnce({
+                EV_SUCCESS: 'S',
+                EV_TANUM: '0000987654',
+                EV_MESSAGE: 'TO 0000987654 created'
+            });
+            // LTAK verification
+            mockRfc.readTable.mockResolvedValueOnce([{
+                LGNUM: 'W01',
+                TANUM: '0000987654',
+                TBNUM: '0000123456',
+                BWLVS: '311'
+            }]);
+            mockRfc.readTable.mockResolvedValueOnce([{
+                LGNUM: 'W01',
+                TANUM: '0000987654',
+                TAPOS: '0001',
+                TBPOS: '0001',
+                NSOLA: '10.000',
+                ALTME: 'KG'
+            }]);
+            // Confirm TO fails
+            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' }));
+            mockRfc.call.mockRejectedValueOnce(new Error('Destination bin 0-L0001-01 is blocked for stock placement'));
+
+            const result = await adapter.createTOFromTR({
+                trNumber: '123456',
+                qty: 10,
+                autoConfirm: true,
+                lgnum: 'W01'
+            });
+
+            expect(result).toMatchObject({
+                success: false,
+                stage: 'TO_CONFIRMATION',
+                toNumber: '987654',
+                confirmed: false
+            });
+            expect(result.error).toContain('Destination bin 0-L0001-01 is blocked for stock placement');
+            expect(result.TransferOrder).toBe('987654');
+            expect(result.Status).toBe('13');
+            expect(result.StatusText).toBe('TO Confirmation Error');
+            expect(result.ErrorStep).toBe('LT12');
+            expect(result.Confirmed).toBe(false);
+            expect(result.IsConfirmed).toBe(false);
+        });
+
+        it('strict dependency: do not call MIGO after confirmation failure', async () => {
+            const handlers = {};
+            const mockSrv = { on: (event, fn) => { handlers[event] = fn; } };
+            const mockTrAdapter = {
+                createTOFromTR: jest.fn().mockResolvedValue({
+                    success: false,
+                    stage: 'TO_CONFIRMATION',
+                    toNumber: '987654',
+                    error: 'L_TO_CONFIRM failed: foreign lock',
+                    confirmed: false,
+                    TransferOrder: '987654',
+                    Status: '13',
+                    StatusText: 'TO Confirmation Error',
+                    Confirmed: false,
+                    IsConfirmed: false,
+                    Quantity: 10,
+                    Unit: 'KG',
+                    MovementType: '311'
+                })
+            };
+            const mockResAdapter = {
+                postGoodsMovement: jest.fn(),
+                checkAuthorization: jest.fn().mockResolvedValue(true)
+            };
+
+            TrToHandler.init(mockSrv, {
+                adapter: mockTrAdapter,
+                resProcessAdapter: mockResAdapter
+            });
+
+            const req = {
+                data: {
+                    tbnum: '0000123456',
+                    qty: 10,
+                    autoConfirm: true,
+                    autoPostMigo: true
+                },
+                error: jest.fn()
+            };
+
+            const result = await handlers.createTOFromTR(req);
+
+            expect(result.success).toBe(false);
+            expect(result.stage).toBe('TO_CONFIRMATION');
+            expect(result.toNumber).toBe('987654');
+            expect(result.Confirmed).toBe(false);
+            expect(result.IsConfirmed).toBe(false);
+
+            // MIGO MUST NOT BE CALLED!
+            expect(mockResAdapter.postGoodsMovement).not.toHaveBeenCalled();
+        });
+
+        it('strict dependency: MIGO rejects when TransferOrder is not confirmed in tracking record', async () => {
+            const handlers = {};
+            const mockSrv = { on: (event, fn) => { handlers[event] = fn; } };
+            const postGoodsMovement = jest.fn();
+            TrToHandler.init(mockSrv, {
+                adapter: {},
+                resProcessAdapter: {
+                    rfc: { readTable: jest.fn() },
+                    checkAuthorization: jest.fn().mockResolvedValue(true),
+                    postGoodsMovement
+                }
+            });
+
+            const cds = require('@sap/cds');
+            const savedDb = cds.db;
+            cds.db = {
+                entities: () => ({ ReservationTrack: { name: 'ReservationTrack' } }),
+                run: jest.fn(async (q) => {
+                    if (q.SELECT) {
+                        return {
+                            ReservationNo: '524979',
+                            ReservationItem: '0001',
+                            TransferOrder: '987654',
+                            Status_code: '13',
+                            MovementType: '311'
+                        };
+                    }
+                    return 1;
+                })
+            };
+
+            try {
+                await expect(handlers.postMigoGoodsMovement({
+                    data: {
+                        TransferOrder: '987654',
+                        MovementType: '311',
+                        Material: '8000000023',
+                        Plant: '1120',
+                        StorageLocation: 'HS01',
+                        Quantity: 1,
+                        Unit: 'KG'
+                    }
+                })).rejects.toMatchObject({
+                    status: 400,
+                    message: expect.stringContaining('is not confirmed (status 13)')
+                });
+            } finally {
+                cds.db = savedDb;
+            }
+
+            expect(postGoodsMovement).not.toHaveBeenCalled();
+        });
+
+        it('strict dependency: MIGO rejects when SAP LTAK-KQUIT is blank (unconfirmed TO)', async () => {
+            const handlers = {};
+            const mockSrv = { on: (event, fn) => { handlers[event] = fn; } };
+            const postGoodsMovement = jest.fn();
+            const mockRfc = {
+                readTable: jest.fn().mockImplementation((table) => {
+                    if (table === 'LTAK') {
+                        return Promise.resolve([{
+                            TBNUM: '0000123456',
+                            RSNUM: '',
+                            BWLVS: '311',
+                            KQUIT: '' // unconfirmed!
+                        }]);
+                    }
+                    return Promise.resolve([]);
+                })
+            };
+
+            TrToHandler.init(mockSrv, {
+                adapter: {},
+                resProcessAdapter: {
+                    rfc: mockRfc,
+                    checkAuthorization: jest.fn().mockResolvedValue(true),
+                    postGoodsMovement
+                }
+            });
+
+            await expect(handlers.postMigoGoodsMovement({
+                data: {
+                    TransferOrder: '987654',
+                    MovementType: '311',
+                    Material: '8000000023',
+                    Plant: '1120',
+                    StorageLocation: 'HS01',
+                    Quantity: 1,
+                    Unit: 'KG'
+                }
+            })).rejects.toMatchObject({
+                status: 400,
+                message: expect.stringContaining('not confirmed in SAP (LTAK-KQUIT is blank)')
+            });
+
+            expect(postGoodsMovement).not.toHaveBeenCalled();
+        });
+
+        it('ReservationProcessAdapter: createTransferOrderFromTR handles autoConfirm: true and returns structured failure on confirm error', async () => {
+            const resRfc = {
+                session: jest.fn(async (fn) => fn(resRfc.call)),
+                call: jest.fn(),
+                readTable: jest.fn()
+            };
+            const resAdapter = new ReservationProcessAdapter({ rfc: resRfc });
+
+            // Mock getTransferRequirement (TR exists)
+            resRfc.readTable.mockResolvedValueOnce([{
+                TBNUM: '0000123456',
+                LGNUM: 'W01',
+                BWLVS: '311',
+                STATU: ''
+            }]);
+            // Mock L_TO_CREATE_TR succeeds
+            resRfc.call.mockResolvedValueOnce({
+                E_TANUM: '0000987654'
+            });
+            // Mock getTransferOrder (TO exists in LTAK)
+            resRfc.readTable.mockResolvedValueOnce([{
+                LGNUM: 'W01',
+                TANUM: '0000987654',
+                TBNUM: '0000123456',
+                BWLVS: '311',
+                KQUIT: ''
+            }]);
+            resRfc.readTable.mockResolvedValueOnce([{
+                LGNUM: 'W01',
+                TANUM: '0000987654',
+                TAPOS: '0001',
+                TBPOS: '0001',
+                NSOLA: '10.000',
+                ALTME: 'KG',
+                PQUIT: ''
+            }]);
+            // Mock L_TO_CONFIRM fails
+            resRfc.call.mockRejectedValueOnce(new Error('L_TO_CONFIRM failed: foreign lock'));
+            // Mock isToFullyConfirmed -> returns false
+            resRfc.readTable.mockResolvedValueOnce([{
+                TAPOS: '0001',
+                PQUIT: ''
+            }]);
+
+            const res = await resAdapter.createTransferOrderFromTR({
+                warehouseNumber: 'W01',
+                trNumber: '123456',
+                autoConfirm: true
+            });
+
+            expect(res).toEqual({
+                success: false,
+                stage: 'TO_CONFIRMATION',
+                toNumber: '987654',
+                toNumberRaw: '0000987654',
+                toItem: '0001',
+                trNumber: '123456',
+                warehouseNumber: 'W01',
+                status: '13',
+                error: 'L_TO_CONFIRM failed: foreign lock',
+                confirmed: false
+            });
         });
     });
 });

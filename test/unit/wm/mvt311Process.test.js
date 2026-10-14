@@ -130,9 +130,15 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
       });
 
       // Mock MARC for profile (plain)
-      mockRfc.readTable.mockImplementation(async (table) => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
         if (table === 'MARC') return [{ XCHPF: '', SERNP: '' }];
-        if (table === 'LTAP') return [];
+        const optStr = (where || []).join(' ');
+        if (table === 'LTAK' && optStr.includes('TANUM')) {
+          return [{ LGNUM: 'W01', TANUM: '0001037201', TBNUM: '0001000757', BWLVS: '311', KQUIT: '' }];
+        }
+        if (table === 'LTAP' && optStr.includes('TANUM')) {
+          return [{ LGNUM: 'W01', TANUM: '0001037201', TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000001648', NSOLA: '1.000', ALTME: 'NOS', PQUIT: '' }];
+        }
         return [];
       });
 

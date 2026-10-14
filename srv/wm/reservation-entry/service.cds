@@ -53,6 +53,8 @@ service ReservationEntryService {
         reservationNumber : String(10);
         trNumber          : String(10);
         toNumber          : String(10);
+        toItem            : String(4);
+        confirmed         : Boolean;
         warehouse         : String(3);
         itemsCreated      : Integer;
     };
@@ -84,13 +86,32 @@ service ReservationEntryService {
         WarehouseNumber : String(3)
     ) returns TrCreatedResponse;
 
+    type TOConfirmedResponse {
+        success         : Boolean;
+        stage           : String(20);
+        error           : String(255);
+        warehouseNumber : String(3);
+        toNumber        : String(10);
+        confirmed       : Boolean;
+        status          : String(2);
+    };
+
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action createTOFromTR(
         ReservationNo   : String(10),
         ReservationItem : String(4),
         WarehouseNumber : String(3),
-        TRNumber        : String(10)
+        TRNumber        : String(10),
+        autoConfirm     : Boolean
     ) returns TOCreatedResponse;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action confirmTransferOrder(
+        ReservationNo   : String(10),
+        ReservationItem : String(4),
+        WarehouseNumber : String(3),
+        TransferOrder   : String(10)
+    ) returns TOConfirmedResponse;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action createReservationEntry(

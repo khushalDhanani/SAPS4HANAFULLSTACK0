@@ -77,6 +77,17 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
         if (table === 'T321') {
           return [{ LGNUM: '***', RBLVS: '241', BWLVS: '241', TBFKZ: 'X', TAFKZ: '' }];
         }
+        const optStr = (where || []).join(' ');
+        if (table === 'LTAK' && optStr.includes('TANUM')) {
+          const match = optStr.match(/TANUM\s*=\s*'(\d+)'/);
+          const tanum = match ? match[1] : '0001014000';
+          return [{ LGNUM: 'W01', TANUM: tanum, TBNUM: '0001000761', BWLVS: '241', KQUIT: '' }];
+        }
+        if (table === 'LTAP' && optStr.includes('TANUM')) {
+          const match = optStr.match(/TANUM\s*=\s*'(\d+)'/);
+          const tanum = match ? match[1] : '0001014000';
+          return [{ LGNUM: 'W01', TANUM: tanum, TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000008977', NSOLA: '1.000', ALTME: 'KG', PQUIT: '' }];
+        }
         return [];
       })
     };
@@ -146,13 +157,20 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
       expect(trCall[1].T_LTBA[0].BENUM).toBe('0000400001');
 
       // Step 3: TO Creation from TR
-      mockRfc.readTable.mockImplementation(async (tbl) => {
+      mockRfc.readTable.mockImplementation(async (tbl, flds, where) => {
         if (tbl === 'MARC') return [{ XCHPF: '', SERNP: '' }];
         if (tbl === 'MAKT') return [{ MAKTX: 'Plain Material' }];
         if (tbl === 'T331') return [{ VOLLE: '' }];
         if (tbl === 'LQUA') return [{ LGNUM: 'W01', LGTYP: 'OH1', LGPLA: 'ONHOLD', VERME: '1000.000', MEINS: 'KG' }];
         if (tbl === 'ANLA') return [{ BUKRS: '1000', ANLN1: '000000400001', ANLN2: '0000', AKTIV: '20250529', DEAKT: '00000000' }];
         if (tbl === 'MARD') return [{ LGORT: 'HS01', LABST: '1000.000' }];
+        const optStr = (where || []).join(' ');
+        if (tbl === 'LTAK' && optStr.includes('TANUM')) {
+          return [{ LGNUM: 'W01', TANUM: '0001014000', TBNUM: '0001000761', BWLVS: '241', KQUIT: '' }];
+        }
+        if (tbl === 'LTAP' && optStr.includes('TANUM')) {
+          return [{ LGNUM: 'W01', TANUM: '0001014000', TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000008977', NSOLA: '1.000', ALTME: 'KG', PQUIT: '' }];
+        }
         return [];
       });
 
@@ -322,10 +340,17 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
     });
 
     test('Class E: Small SU stock (VOLLE = blank) allows partial pick [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (table) => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
         if (table === 'T331') return [{ VOLLE: '' }];
         if (table === 'MARC') return [{ XCHPF: '', SERNP: '' }];
         if (table === 'MAKT') return [{ MAKTX: 'Small SU Mat' }];
+        const optStr = (where || []).join(' ');
+        if (table === 'LTAK' && optStr.includes('TANUM')) {
+          return [{ LGNUM: 'W01', TANUM: '0001014000', TBNUM: '0001000761', BWLVS: '241', KQUIT: '' }];
+        }
+        if (table === 'LTAP' && optStr.includes('TANUM')) {
+          return [{ LGNUM: 'W01', TANUM: '0001014000', TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000008977', NSOLA: '1.000', ALTME: 'KG', PQUIT: '' }];
+        }
         return [];
       });
 
@@ -342,11 +367,18 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
     });
 
     test('Class F: Large SU stock (VOLLE = X) allows full SU pick [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (table) => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
         if (table === 'T331') return [{ VOLLE: 'X' }];
         if (table === 'LQUA') return [{ VERME: '100.000' }];
         if (table === 'MARC') return [{ XCHPF: 'X', SERNP: '' }];
         if (table === 'MAKT') return [{ MAKTX: 'Large SU Mat' }];
+        const optStr = (where || []).join(' ');
+        if (table === 'LTAK' && optStr.includes('TANUM')) {
+          return [{ LGNUM: 'W01', TANUM: '0001014000', TBNUM: '0001000761', BWLVS: '241', KQUIT: '' }];
+        }
+        if (table === 'LTAP' && optStr.includes('TANUM')) {
+          return [{ LGNUM: 'W01', TANUM: '0001014000', TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000008977', NSOLA: '100.000', ALTME: 'KG', PQUIT: '' }];
+        }
         return [];
       });
 

@@ -87,13 +87,27 @@ sap.ui.define([
             });
         },
 
-        createTOFromTR: function (sResNo, sItem, sWh, sTr) {
+        createTOFromTR: function (sResNo, sItem, sWh, sTr, bAutoConfirm) {
             const sUrl = SERVICE_URL + "/createTOFromTR";
-            return ODataClient.post(sUrl, {
+            const oPayload = {
                 ReservationNo: sResNo,
                 ReservationItem: sItem || "0001",
                 WarehouseNumber: sWh || "",
                 TRNumber: sTr || ""
+            };
+            if (bAutoConfirm !== undefined) {
+                oPayload.autoConfirm = Boolean(bAutoConfirm);
+            }
+            return ODataClient.post(sUrl, oPayload);
+        },
+
+        confirmTransferOrder: function (sResNo, sItem, sWh, sTo) {
+            const sUrl = SERVICE_URL + "/confirmTransferOrder";
+            return ODataClient.post(sUrl, {
+                ReservationNo: sResNo,
+                ReservationItem: sItem || "0001",
+                WarehouseNumber: sWh || "",
+                TransferOrder: sTo || ""
             });
         },
 
