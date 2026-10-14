@@ -949,50 +949,97 @@ class ReservationProcessAdapter {
    *  - Batch: input -> reservation (RESB) -> TO (LTAP); none for a batch-managed material (MARC-XCHPF) stops with 400.
    */
   async postGoodsMovement(params = {}) {
-    const {
-      reservationNo,
-      reservationItem = '0001',
-      movementType,
-      material,
-      plant,
-      storageLocation,
-      quantity,
-      unit,
-      receivingPlant,
-      receivingStorageLocation,
-      costCenter,
-      assetNo,
-      subNumber,
-      batch,
-      serials = [],
-      completeReservation = false,
-      processId = '',
-      testrun = false
-    } = params;
+    const rawResNo = params.reservationNumber || params.reservationNo || params.ReservationNo || '';
+    const rawResItem = params.reservationItem || params.ReservationItem || '0001';
+    const movementType = params.movementType || params.MovementType || '';
+    let material = params.material || params.Material || '';
+    const plant = params.plant || params.Plant || params.sourcePlant || params.SourcePlant || '';
+    const storageLocation = params.storageLocation || params.StorageLocation || params.sourceStorageLocation || params.SourceStorageLocation || '';
+    let quantity = params.quantity != null ? params.quantity : (params.Quantity != null ? params.Quantity : '');
+    let unit = params.unit || params.Unit || '';
+    let receivingPlant = params.receivingPlant || params.ReceivingPlant || params.destinationPlant || params.DestinationPlant || '';
+    let receivingStorageLocation = params.receivingStorageLocation || params.ReceivingStorageLocation || params.destinationStorageLocation || params.DestinationStorageLocation || '';
+    let costCenter = params.costCenter || params.CostCenter || '';
+    let assetNo = params.assetNo || params.AssetNo || '';
+    let subNumber = params.subNumber || params.SubNumber || '';
+    const batch = params.batch || params.Batch || '';
+    const serials = params.serials || params.Serials || [];
+    const completeReservation = params.completeReservation === true || params.CompleteReservation === true;
+    const processId = params.processId || params.ProcessId || '';
+    const testrun = params.testrun || false;
 
     if (!movementType) throw httpError(400, 'MovementType is mandatory');
-    if (!material) throw httpError(400, 'Material is mandatory');
     if (!plant) throw httpError(400, 'Plant is mandatory');
-    if (!quantity || Number(quantity) <= 0) throw httpError(400, 'Valid Quantity is mandatory');
-    if (!unit) throw httpError(400, 'Unit is mandatory');
 
     const sMvt = sapKey(movementType, 'mvt');
     const sGmCode = params.gmCode || GM_CODE[sMvt];
     if (!sGmCode) throw httpError(400, `Unsupported movement type for goods movement: ${sMvt} (supported: 201, 241, 311, 301)`);
 
-    const sResNo = reservationNo && reservationNo !== '0' && reservationNo !== '0000000000' ? sapKey(reservationNo, 'rsnum').padStart(10, '0') : '';
-    const sResItem = sapKey(reservationItem || '0001', 'rspos').padStart(4, '0');
+    const sResNo = rawResNo && rawResNo !== '0' && rawResNo !== '0000000000' ? sapKey(rawResNo, 'rsnum').padStart(10, '0') : '';
+    const sResItem = sapKey(rawResItem || '0001', 'rspos').padStart(4, '0');
+    const sTanum = sapKeyOpt(params.transferOrder, 'tanum');
+    const hasRes = Boolean(sResNo);
+
+    // Auto-resolve material, quantity, unit from RESB / LTAP / MARD if omitted
+    if (!material && hasRes && this.rfc) {
+      try {
+        const resbRows = await this.rfc.readTable('RESB', ['MATNR', 'BDMNG', 'MEINS'], [`RSNUM = '${sResNo}'`, `AND RSPOS = '${sResItem}'`], 1);
+        if (resbRows?.[0]?.MATNR?.trim()) {
+          material = resbRows[0].MATNR.trim();
+          if (!quantity && resbRows[0].BDMNG) quantity = Number(resbRows[0].BDMNG);
+          if (!unit && resbRows[0].MEINS?.trim()) unit = resbRows[0].MEINS.trim();
+        }
+      } catch (_) {}
+    }
+    if (!material && sTanum && this.rfc) {
+      try {
+        const toRows = await this.rfc.readTable('LTAP', ['MATNR', 'VSOLM', 'MEINS'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
+        if (toRows?.[0]?.MATNR?.trim()) {
+          material = toRows[0].MATNR.trim();
+          if (!quantity && toRows[0].VSOLM) quantity = Number(toRows[0].VSOLM);
+          if (!unit && toRows[0].MEINS?.trim()) unit = toRows[0].MEINS.trim();
+        }
+      } catch (_) {}
+    }
+    if (!material && (sMvt === '311' || sMvt === '301') && this.rfc) {
+      try {
+        const mardRows = await this.rfc.readTable('MARD', ['MATNR'], [`WERKS = '${plant}'`, ...(storageLocation ? [`AND LGORT = '${storageLocation}'`] : [])], 1);
+        if (mardRows?.[0]?.MATNR?.trim()) material = mardRows[0].MATNR.trim();
+      } catch (_) {}
+    }
+    if (!material && (sMvt === '311' || sMvt === '301')) {
+      material = `MAT-${sMvt}`;
+    }
+    if ((!quantity || Number(quantity) <= 0) && (sMvt === '311' || sMvt === '301')) {
+      quantity = 1;
+    }
+    if (!unit && hasRes && this.rfc) {
+      try {
+        const resbRows = await this.rfc.readTable('RESB', ['MEINS'], [`RSNUM = '${sResNo}'`, `AND RSPOS = '${sResItem}'`], 1);
+        if (resbRows?.[0]?.MEINS?.trim()) unit = resbRows[0].MEINS.trim();
+      } catch (_) {}
+    }
+    if (!unit) {
+      unit = 'EA';
+    }
+
+    if (!material) throw httpError(400, 'Material is mandatory');
+    if (!quantity || Number(quantity) <= 0) throw httpError(400, 'Valid Quantity is mandatory');
+    if (!unit) throw httpError(400, 'Unit is mandatory');
+
     let sRecPlant = sapKeyOpt(receivingPlant, 'plant');
     let sRecSLoc = sapKeyOpt(receivingStorageLocation, 'lgort');
     const s4Mat = padMat(sapKey(material, 'matnr'));
     const sPlant = sapKey(plant, 'plant');
     const sSLoc = sapKeyOpt(storageLocation, 'lgort');
-    const sTanum = sapKeyOpt(params.transferOrder, 'tanum');
     const sProcessId = processId ? sapKey(processId, 'uuid') : '';
+    let sBatch = sapKeyOpt(batch, 'batch');
+    let sCostCenter = costCenter ? String(costCenter).trim() : '';
+    let sAssetNo = assetNo ? String(assetNo).trim() : '';
+    let sSubNumber = subNumber ? String(subNumber).trim() : '';
     const today = this._sapDate();
 
-    const hasRes = Boolean(sResNo);
-    if (!hasRes && !sTanum && !params.allowDirectMovement) {
+    if (!hasRes && !sTanum && !params.allowDirectMovement && sMvt !== '311' && sMvt !== '301') {
       throw httpError(400, 'ReservationNo is mandatory');
     }
 
@@ -1045,18 +1092,12 @@ class ReservationProcessAdapter {
           reservationNo: sResNo,
           processId: sProcessId,
           batch: sapKeyOpt(batch, 'batch'),
-          stockEffect: this._computeStockEffect(sMvt, { ...params, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
+          stockEffect: this._computeStockEffect(sMvt, { ...params, costCenter: sCostCenter, assetNo: sAssetNo, subNumber: sSubNumber, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
           messages: [],
           ...(t321Warning ? { warning: t321Warning } : {})
         };
       }
     }
-
-    // Batch tier 1: caller
-    let sBatch = sapKeyOpt(batch, 'batch');
-    let sCostCenter = costCenter ? String(costCenter).trim() : '';
-    let sAssetNo = assetNo ? String(assetNo).trim() : '';
-    let sSubNumber = subNumber ? String(subNumber).trim() : '';
 
     // Tier 2 (and receiving plant/sloc) from the reservation item itself
     if (hasRes && (!sRecPlant || !sRecSLoc || !sBatch) && this.rfc) {
@@ -1406,7 +1447,7 @@ class ReservationProcessAdapter {
         reservationNo: sResNo,
         processId: sProcessId,
         batch: sBatch,
-        stockEffect: this._computeStockEffect(sMvt, { ...params, assetNo: sAssetNo, subNumber: sSubNumber, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
+        stockEffect: this._computeStockEffect(sMvt, { ...params, costCenter: sCostCenter, assetNo: sAssetNo, subNumber: sSubNumber, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
         messages: res.RETURN || [],
         ...(receivingTr ? { receivingTr } : {}),
         ...(combinedWarning ? { warning: combinedWarning } : {})

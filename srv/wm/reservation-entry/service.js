@@ -1109,8 +1109,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const sResNo = track.ReservationNo;
       const sResItem = track.ReservationItem;
       const key = { ReservationNo: sResNo, ReservationItem: sResItem };
-      const sMvt = data.MovementType || track.MovementType;
-      const sPlant = data.Plant || track.Plant;
+      const sMvt = data.movementType || data.MovementType || track.MovementType;
+      const sPlant = data.plant || data.Plant || data.sourcePlant || data.SourcePlant || track.Plant;
       // PROCESS_ID of this GI step; persisted before posting so a retry finds an already posted document.
       const processId = data.ProcessId || track.ProcessId || cds.utils.uuid();
       if (track.ProcessId !== processId) await UPDATE(ReservationEntries).set({ ProcessId: processId }).where(key);
@@ -1123,22 +1123,27 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       return gm.postGoodsMovement({
         reservationNo: sResNo,
+        reservationNumber: sResNo,
         reservationItem: sResItem,
         movementType: sMvt,
-        material: data.Material || track.Material,
+        material: data.material || data.Material || track.Material,
         plant: sPlant,
-        storageLocation: data.StorageLocation || track.StorageLocation,
-        quantity: data.Quantity != null ? data.Quantity : track.Quantity,
-        unit: data.Unit || track.Unit,
-        receivingPlant: data.ReceivingPlant || track.ReceivingPlant,
-        receivingStorageLocation: data.ReceivingStorageLocation || track.ReceivingStorageLocation,
-        costCenter: data.CostCenter || track.CostCenter,
-        assetNo: data.AssetNo || track.AssetNo,
-        subNumber: data.SubNumber || track.SubNumber,
+        sourcePlant: sPlant,
+        storageLocation: data.storageLocation || data.StorageLocation || data.sourceStorageLocation || data.SourceStorageLocation || track.StorageLocation,
+        sourceStorageLocation: data.storageLocation || data.StorageLocation || data.sourceStorageLocation || data.SourceStorageLocation || track.StorageLocation,
+        quantity: data.quantity != null ? data.quantity : (data.Quantity != null ? data.Quantity : track.Quantity),
+        unit: data.unit || data.Unit || track.Unit,
+        receivingPlant: data.receivingPlant || data.ReceivingPlant || data.destinationPlant || data.DestinationPlant || track.ReceivingPlant,
+        destinationPlant: data.receivingPlant || data.ReceivingPlant || data.destinationPlant || data.DestinationPlant || track.ReceivingPlant,
+        receivingStorageLocation: data.receivingStorageLocation || data.ReceivingStorageLocation || data.destinationStorageLocation || data.DestinationStorageLocation || track.ReceivingStorageLocation,
+        destinationStorageLocation: data.receivingStorageLocation || data.ReceivingStorageLocation || data.destinationStorageLocation || data.DestinationStorageLocation || track.ReceivingStorageLocation,
+        costCenter: data.costCenter || data.CostCenter || track.CostCenter,
+        assetNo: data.assetNo || data.AssetNo || track.AssetNo,
+        subNumber: data.subNumber || data.SubNumber || track.SubNumber,
         transferOrder: track.TransferOrder || '',
-        batch: data.Batch || data.batch || track.Batch || '',
-        serials: data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : (track.SerialNo ? [track.SerialNo] : [])),
-        completeReservation: data.CompleteReservation === true,
+        batch: data.batch || data.Batch || track.Batch || '',
+        serials: data.serials || data.Serials || (data.SerialNo ? [data.SerialNo] : (track.SerialNo ? [track.SerialNo] : [])),
+        completeReservation: data.completeReservation === true || data.CompleteReservation === true,
         processId
       });
       });

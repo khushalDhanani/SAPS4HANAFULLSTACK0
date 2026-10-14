@@ -476,4 +476,194 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       );
     });
   });
+
+  describe('6. Dedicated Standalone MIGO Final Stage with Clear Request Shapes (Step 9)', () => {
+    test('Movement 201 clear request: postGoodsMovement() with reservationNumber and cost center auto-resolution', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'RKPF') return [{ KOSTL: '1011201301' }];
+        if (table === 'CSKS') return [{ KOSTL: '1011201301', DATAB: '20200101', DATBI: '99991231' }];
+        if (table === 'RESB') return [{ MEINS: 'EA' }];
+        if (table === 'MARC') return [{ XCHPF: '' }];
+        return [];
+      });
+
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '4900060201',
+          MATDOCUMENTYEAR: '2026',
+          RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document 4900060201 posted' }]
+        })
+        .mockResolvedValueOnce({}); // COMMIT
+
+      const res = await adapter.postGoodsMovement({
+        movementType: '201',
+        reservationNumber: '520235',
+        reservationItem: '0001',
+        material: 'ABC123',
+        quantity: '10',
+        plant: '1000',
+        storageLocation: '0001'
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.materialDocument).toBe('4900060201');
+      expect(res.materialDocYear).toBe('2026');
+      expect(res.status).toBe('05');
+      expect(res.stockEffect).toBe('Stock consumed to Cost Center 1011201301');
+
+      expect(mockRfc.call).toHaveBeenCalledWith(
+        'BAPI_GOODSMVT_CREATE',
+        expect.objectContaining({
+          GOODSMVT_CODE: { GM_CODE: '03' },
+          GOODSMVT_ITEM: [
+            expect.objectContaining({
+              MOVE_TYPE: '201',
+              COSTCENTER: '1011201301',
+              RESERV_NO: '0000520235',
+              RES_ITEM: '0001',
+              PLANT: '1000',
+              STGE_LOC: '0001',
+              ENTRY_QNT: 10,
+              ENTRY_UOM: 'EA'
+            })
+          ]
+        })
+      );
+    });
+
+    test('Movement 311 clear request: postGoodsMovement() with plant, sourceStorageLocation, destinationStorageLocation', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1000', LGORT: '0002' }];
+        if (table === 'MARD') return [{ LGORT: '0002', MATNR: 'MAT-311' }];
+        if (table === 'MARC') return [{ XCHPF: '' }];
+        return [];
+      });
+
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '4900060311',
+          MATDOCUMENTYEAR: '2026',
+          RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document 4900060311 posted' }]
+        })
+        .mockResolvedValueOnce({}); // COMMIT
+
+      const res = await adapter.postGoodsMovement({
+        movementType: '311',
+        plant: '1000',
+        sourceStorageLocation: '0001',
+        destinationStorageLocation: '0002'
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.materialDocument).toBe('4900060311');
+      expect(res.status).toBe('05');
+      expect(res.stockEffect).toBe('Stock transferred to Storage Location 0002');
+
+      expect(mockRfc.call).toHaveBeenCalledWith(
+        'BAPI_GOODSMVT_CREATE',
+        expect.objectContaining({
+          GOODSMVT_CODE: { GM_CODE: '04' },
+          GOODSMVT_ITEM: [
+            expect.objectContaining({
+              MOVE_TYPE: '311',
+              PLANT: '1000',
+              STGE_LOC: '0001',
+              MOVE_STLOC: '0002'
+            })
+          ]
+        })
+      );
+    });
+
+    test('Movement 301 clear request: postGoodsMovement() with sourcePlant, sourceStorageLocation, destinationPlant, destinationStorageLocation', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1000', LGORT: '0001' }];
+        if (table === 'MARC') return [{ WERKS: '2000', MATNR: 'MAT-301', XCHPF: '' }];
+        if (table === 'MBEW') return [{ BWKEY: '2000' }];
+        if (table === 'MARD') return [{ LGORT: '0001', MATNR: 'MAT-301' }];
+        return [];
+      });
+
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '4900060301',
+          MATDOCUMENTYEAR: '2026',
+          RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document 4900060301 posted' }]
+        })
+        .mockResolvedValueOnce({}); // COMMIT
+
+      const res = await adapter.postGoodsMovement({
+        movementType: '301',
+        sourcePlant: '1000',
+        sourceStorageLocation: '0001',
+        destinationPlant: '2000',
+        destinationStorageLocation: '0001'
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.materialDocument).toBe('4900060301');
+      expect(res.status).toBe('05');
+      expect(res.stockEffect).toBe('Stock transferred to Plant 2000 / SLoc 0001');
+
+      expect(mockRfc.call).toHaveBeenCalledWith(
+        'BAPI_GOODSMVT_CREATE',
+        expect.objectContaining({
+          GOODSMVT_CODE: { GM_CODE: '04' },
+          GOODSMVT_ITEM: [
+            expect.objectContaining({
+              MOVE_TYPE: '301',
+              PLANT: '1000',
+              STGE_LOC: '0001',
+              MOVE_PLANT: '2000',
+              MOVE_STLOC: '0001'
+            })
+          ]
+        })
+      );
+    });
+
+    test('TrToHandler postMigoGoodsMovement supports clear request shape directly without prior TO coupling', async () => {
+      const handlers = {};
+      const mockAdapter = {};
+      const mockRes = {
+        checkAuthorization: jest.fn().mockResolvedValue(true),
+        postGoodsMovement: jest.fn().mockResolvedValue({
+          success: true,
+          materialDocument: '4900070311',
+          materialDocYear: '2026',
+          status: '05',
+          stockEffect: 'Stock transferred to Storage Location 0002'
+        })
+      };
+
+      TrToHandler.init(
+        { on: (event, fn) => { handlers[event] = fn; } },
+        { adapter: mockAdapter, resProcessAdapter: mockRes }
+      );
+
+      const req = {
+        data: {
+          movementType: '311',
+          plant: '1000',
+          sourceStorageLocation: '0001',
+          destinationStorageLocation: '0002'
+        },
+        error: jest.fn()
+      };
+
+      const res = await handlers.postMigoGoodsMovement(req);
+
+      expect(res.Success).toBe(true);
+      expect(res.MaterialDocument).toBe('4900070311');
+      expect(res.Status).toBe('05');
+      expect(mockRes.postGoodsMovement).toHaveBeenCalledWith(
+        expect.objectContaining({
+          movementType: '311',
+          plant: '1000',
+          storageLocation: '0001',
+          receivingStorageLocation: '0002'
+        })
+      );
+    });
+  });
 });

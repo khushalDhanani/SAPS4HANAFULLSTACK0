@@ -49,17 +49,20 @@ class TrToHandler {
       const { ReservationTrack, ReservationLog } = entities();
       let existingTrack = null;
 
-      const sResNoIn = sapKeyOpt(data.ReservationNo, 'rsnum');
-      const sTanumIn = sapKeyOpt(data.TransferOrder, 'tanum');
-      if (!sResNoIn && !sTanumIn) throw httpError(400, 'ReservationNo or TransferOrder is required');
-      const sResItemIn = sapKeyOpt(data.ReservationItem, 'rspos');
+      const sResNoIn = sapKeyOpt(data.ReservationNo || data.reservationNumber || data.reservationNo, 'rsnum');
+      const sTanumIn = sapKeyOpt(data.TransferOrder || data.transferOrder, 'tanum');
+      let sMvt = data.ReservationMovementType || data.reservationMovementType || data.MovementType || data.movementType;
+      if (!sResNoIn && !sTanumIn && sMvt !== '311' && sMvt !== '301') {
+        throw httpError(400, 'ReservationNo or TransferOrder is required');
+      }
+      const sResItemIn = sapKeyOpt(data.ReservationItem || data.reservationItem, 'rspos');
 
       if (ReservationTrack) {
         try {
           existingTrack = await lockTrack(ReservationTrack,
             sResNoIn
-              ? { ReservationNo: data.ReservationNo, ReservationItem: data.ReservationItem || '0001' }
-              : { TransferOrder: data.TransferOrder });
+              ? { ReservationNo: data.ReservationNo || data.reservationNumber || data.reservationNo, ReservationItem: data.ReservationItem || data.reservationItem || '0001' }
+              : (sTanumIn ? { TransferOrder: data.TransferOrder || data.transferOrder } : { ID: '__dummy__' }));
         } catch (dbErr) {
           console.warn('[trTo.handler] ReservationTrack lookup warning:', dbErr.message);
         }
@@ -67,21 +70,21 @@ class TrToHandler {
 
       const sResNo = sResNoIn || existingTrack?.ReservationNo || '';
       const sResItem = sResItemIn || existingTrack?.ReservationItem || '0001';
-      let sMvt = data.ReservationMovementType || data.reservationMovementType || data.MovementType || existingTrack?.MovementType;
-      const sMat = data.Material || existingTrack?.Material;
-      const sPlant = data.Plant || existingTrack?.Plant;
-      const sSLoc = data.StorageLocation || existingTrack?.StorageLocation;
-      const nQty = data.Quantity || existingTrack?.Quantity;
-      const sUnit = data.Unit || existingTrack?.Unit;
-      let sRecPlant = data.ReceivingPlant || data.receivingPlant || existingTrack?.ReceivingPlant;
-      let sRecSLoc = data.ReceivingStorageLocation || data.receivingStorageLocation || existingTrack?.ReceivingStorageLocation;
+      if (!sMvt) sMvt = existingTrack?.MovementType;
+      const sMat = data.Material || data.material || existingTrack?.Material;
+      const sPlant = data.Plant || data.plant || data.sourcePlant || data.SourcePlant || existingTrack?.Plant;
+      const sSLoc = data.StorageLocation || data.storageLocation || data.sourceStorageLocation || data.SourceStorageLocation || existingTrack?.StorageLocation;
+      const nQty = data.Quantity != null ? data.Quantity : (data.quantity != null ? data.quantity : existingTrack?.Quantity);
+      const sUnit = data.Unit || data.unit || existingTrack?.Unit;
+      let sRecPlant = data.ReceivingPlant || data.receivingPlant || data.destinationPlant || data.DestinationPlant || existingTrack?.ReceivingPlant;
+      let sRecSLoc = data.ReceivingStorageLocation || data.receivingStorageLocation || data.destinationStorageLocation || data.DestinationStorageLocation || existingTrack?.ReceivingStorageLocation;
       let sCostCenter = data.CostCenter || data.costCenter || existingTrack?.CostCenter;
       let sAssetNo = data.AssetNo || data.assetNo || existingTrack?.AssetNo;
       let sSubNumber = data.SubNumber || data.subNumber || existingTrack?.SubNumber;
       const sTanum = sTanumIn || existingTrack?.TransferOrder || '';
       const sBatch = data.Batch || data.batch || existingTrack?.Batch || '';
       const sSerials = data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : []);
-      const completeReservation = data.CompleteReservation === true;
+      const completeReservation = data.CompleteReservation === true || data.completeReservation === true;
 
       // Enforce strict dependency: TO CREATED AND TO CONFIRMED -> MIGO
       if (existingTrack && [STATUS.TO_CREATED, STATUS.TO_CONFIRM_ERROR, STATUS.TO_ERROR].includes(existingTrack.Status_code)) {
@@ -182,7 +185,11 @@ class TrToHandler {
           console.warn('[trTo.handler] TransferOrder metadata lookup note:', _lookupErr.message);
         }
       }
-      for (const [v, label] of [[sMvt, 'MovementType'], [sMat, 'Material'], [sPlant, 'Plant'], [nQty, 'Quantity'], [sUnit, 'Unit']]) {
+      const requiredFields = [[sMvt, 'MovementType'], [sPlant, 'Plant']];
+      if (sMvt !== '311' && sMvt !== '301') {
+        requiredFields.push([sMat, 'Material'], [nQty, 'Quantity'], [sUnit, 'Unit']);
+      }
+      for (const [v, label] of requiredFields) {
         if (!v) throw httpError(400, `${label} is required (not in the request and not on the tracking record)`);
       }
 
@@ -215,15 +222,20 @@ class TrToHandler {
 
         const migoRes = await gm.postGoodsMovement({
           reservationNo: sResNo,
+          reservationNumber: sResNo,
           reservationItem: sResItem,
           movementType: sMvt,
           material: sMat,
           plant: sPlant,
+          sourcePlant: sPlant,
           storageLocation: sSLoc,
+          sourceStorageLocation: sSLoc,
           quantity: nQty,
           unit: sUnit,
           receivingPlant: sRecPlant,
+          destinationPlant: sRecPlant,
           receivingStorageLocation: sRecSLoc,
+          destinationStorageLocation: sRecSLoc,
           costCenter: sCostCenter,
           assetNo: sAssetNo,
           subNumber: sSubNumber,

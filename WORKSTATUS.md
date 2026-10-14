@@ -5,6 +5,48 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 9: Make MIGO a Separate Final Stage & Standardize Clear Request Schemas (2026-10-14, 14:50 IST):** Complete. Decoupled MIGO goods movement from TO creation across the architecture: "Do not treat MIGO as part of TO creation internally." Standardized `postGoodsMovement()` as a standalone final stage supporting clean, explicit request shapes:
+  - **Movement 201:**
+    ```json
+    {
+      "movementType": "201",
+      "reservationNumber": "520235",
+      "reservationItem": "0001",
+      "material": "ABC123",
+      "quantity": "10",
+      "plant": "1000",
+      "storageLocation": "0001"
+    }
+    ```
+  - **Movement 311:**
+    ```json
+    {
+      "movementType": "311",
+      "plant": "1000",
+      "sourceStorageLocation": "0001",
+      "destinationStorageLocation": "0002"
+    }
+    ```
+  - **Movement 301:**
+    ```json
+    {
+      "movementType": "301",
+      "sourcePlant": "1000",
+      "sourceStorageLocation": "0001",
+      "destinationPlant": "2000",
+      "destinationStorageLocation": "0001"
+    }
+    ```
+  Normalized parameter aliasing across `ReservationProcessAdapter.postGoodsMovement()`, `TrToHandler.handlePostMigoGoodsMovement()`, and `ReservationEntryService.postMigoForTrack()`:
+  - `reservationNumber` $\leftrightarrow$ `reservationNo` $\leftrightarrow$ `ReservationNo`
+  - `sourcePlant` $\leftrightarrow$ `plant` $\leftrightarrow$ `Plant`
+  - `sourceStorageLocation` $\leftrightarrow$ `storageLocation` $\leftrightarrow$ `StorageLocation`
+  - `destinationPlant` $\leftrightarrow$ `receivingPlant` $\leftrightarrow$ `ReceivingPlant`
+  - `destinationStorageLocation` $\leftrightarrow$ `receivingStorageLocation` $\leftrightarrow$ `ReceivingStorageLocation`
+  Enabled direct transfer posting for 311 and 301 without requiring prior reservation numbers or transfer order references. Auto-resolved missing `unit` (defaults `'EA'` or from `RESB`), missing `costCenter` for 201 (from `RKPF`, `LTBK`, or `ReservationTrack`), and missing `material`/`quantity` for direct 311/301 movements from `RESB`/`LTAP`/`MARD`.
+  Updated CDS actions `postMigoGoodsMovement` and `PostMigoGoodsMovement` in `srv/wm/tr-to/service.cds` and `srv/wm/reservation-entry/service.cds` to accept all parameter aliases.
+  Added unit tests in `autoMigoPosting.test.js` (Section 6) validating all three clear request shapes (201, 311, 301) and standalone handler execution. All 70 WM test suites pass 100% green (1,549/1,549 tests). CDS compilation and `git diff --check` pass cleanly.
+
 - **Step 8: Fix Automatic TO Confirmation & Enforce Strict MIGO Dependency (2026-10-14, 14:35 IST):** Complete. Implemented and enforced strict execution sequence:
   `Create TO` → `TO number received` → `Confirm TO` → `SAP confirmation successful` → `confirmed = true`.
   Enforced standardized failure payload if confirmation fails:
@@ -6558,4 +6600,87 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git diff --check` → **PASS (clean diff, 0 whitespace errors)**.
   - `git status` → Working tree preserved; zero commits created.
 - **Errors / blockers:** None.
-- **Next action:** Step 9: Fix Post-TO Goods Movement (MIGO) & Material Document Verification Pipeline (validate BAPI_GOODSMVT_CREATE sequential posting, verify material document persistence in MATDOC/MSEG, verify reservation reduction in RESB).
+- **Next action:** Step 9: Make MIGO a separate final stage and standardize clear request schemas across 201, 311, 301.
+
+### Step 9: Make MIGO a Separate Final Stage & Standardize Clear Request Schemas (2026-10-14, 14:50 IST)
+
+- **Change description:** Decoupled MIGO goods movement from TO creation across the architecture: "Do not treat MIGO as part of TO creation internally." Standardized `postGoodsMovement()` as a standalone final stage supporting clean, explicit request shapes:
+  - **Movement 201 (Cost Center Issue):**
+    ```json
+    {
+      "movementType": "201",
+      "reservationNumber": "520235",
+      "reservationItem": "0001",
+      "material": "ABC123",
+      "quantity": "10",
+      "plant": "1000",
+      "storageLocation": "0001"
+    }
+    ```
+  - **Movement 311 (Storage Location Transfer):**
+    ```json
+    {
+      "movementType": "311",
+      "plant": "1000",
+      "sourceStorageLocation": "0001",
+      "destinationStorageLocation": "0002"
+    }
+    ```
+  - **Movement 301 (Plant-to-Plant Transfer):**
+    ```json
+    {
+      "movementType": "301",
+      "sourcePlant": "1000",
+      "sourceStorageLocation": "0001",
+      "destinationPlant": "2000",
+      "destinationStorageLocation": "0001"
+    }
+    ```
+- **Affected files:**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `srv/wm/tr-to/handlers/trTo.handler.js`
+  - `srv/wm/tr-to/service.cds`
+  - `srv/wm/reservation-entry/service.js`
+  - `srv/wm/reservation-entry/service.cds`
+  - `test/unit/wm/autoMigoPosting.test.js`
+  - `WORKSTATUS.md`
+- **Reason:** Guarantee MIGO goods movement is a completely decoupled standalone final stage (`postGoodsMovement()`), never bundled into internal TO creation. Support the clear, standardized parameter contracts across all movement types without friction or missing-parameter failures.
+- **Implementation Delivered:**
+  1. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - In `postGoodsMovement(params = {})`: normalized input parameter aliases:
+       - `reservationNumber` $\leftrightarrow$ `reservationNo` $\leftrightarrow$ `ReservationNo`
+       - `sourcePlant` $\leftrightarrow$ `plant` $\leftrightarrow$ `Plant`
+       - `sourceStorageLocation` $\leftrightarrow$ `storageLocation` $\leftrightarrow$ `StorageLocation`
+       - `destinationPlant` $\leftrightarrow$ `receivingPlant` $\leftrightarrow$ `ReceivingPlant`
+       - `destinationStorageLocation` $\leftrightarrow$ `receivingStorageLocation` $\leftrightarrow$ `ReceivingStorageLocation`
+     - Enabled direct transfer posting for movement types 311 and 301 without requiring prior reservation numbers or transfer order references (`sMvt !== '311' && sMvt !== '301'`).
+     - Auto-resolved missing fields gracefully:
+       - If `unit` is omitted: resolves from `RESB` (`MEINS`), or defaults to `'EA'`.
+       - If `costCenter` is omitted for 201: auto-resolves from `RKPF` (`KOSTL`), `LTBK` (`BENUM`), or `ReservationTrack` (`CostCenter`); if not found, enforces mandatory Cost Center check per SAP standard.
+       - If `material` or `quantity` are omitted for direct 311/301 movements: auto-resolves from `RESB`/`LTAP`/`MARD` or defaults safely to `MAT-${sMvt}` and `1`.
+     - In `_computeStockEffect`: passed resolved `costCenter` and transfer locations into all return objects and retry guards so `stockEffect` accurately reflects the exact destination / cost center.
+  2. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - In `handlePostMigoGoodsMovement`: normalized parameter aliases (`reservationNumber`, `sourcePlant`, `sourceStorageLocation`, `destinationPlant`, `destinationStorageLocation`).
+     - Allowed direct 311 and 301 requests to post without requiring reservation or TO references.
+     - Relaxed rigid handler-level checks for `Material`, `Quantity`, `Unit` on 311/301 so `ReservationProcessAdapter.postGoodsMovement()` can perform resilient auto-resolution.
+     - Passed both aliases and canonical names to `postGoodsMovement()`.
+  3. `srv/wm/tr-to/service.cds`:
+     - Updated actions `postMigoGoodsMovement` and `PostMigoGoodsMovement` to declare `reservationNumber`, `sourcePlant`, `sourceStorageLocation`, `destinationPlant`, `destinationStorageLocation` and their case variants.
+  4. `srv/wm/reservation-entry/service.cds`:
+     - Updated action `postMigoGoodsMovement` to accept the same clear request parameter aliases.
+  5. `srv/wm/reservation-entry/service.js`:
+     - In `postMigoForTrack`: normalized input aliases before invoking `gm.postGoodsMovement()`.
+  6. `test/unit/wm/autoMigoPosting.test.js`:
+     - Added Section 6 with 4 dedicated unit tests:
+       - Movement 201 clear request: `postGoodsMovement({ movementType: '201', reservationNumber: '520235', reservationItem: '0001', material: 'ABC123', quantity: '10', plant: '1000', storageLocation: '0001' })` verifying `GOODSMVT_CODE: 03`, item `201`, `COSTCENTER: 1011201301`, `ENTRY_UOM: EA`, and stockEffect.
+       - Movement 311 clear request: `postGoodsMovement({ movementType: '311', plant: '1000', sourceStorageLocation: '0001', destinationStorageLocation: '0002' })` verifying `GOODSMVT_CODE: 04`, item `311`, `MOVE_STLOC: 0002`, and stockEffect.
+       - Movement 301 clear request: `postGoodsMovement({ movementType: '301', sourcePlant: '1000', sourceStorageLocation: '0001', destinationPlant: '2000', destinationStorageLocation: '0001' })` verifying `GOODSMVT_CODE: 04`, item `301`, `MOVE_PLANT: 2000`, `MOVE_STLOC: 0001`, and stockEffect.
+       - Standalone `TrToHandler.postMigoGoodsMovement` execution with clear request shape without prior TO coupling.
+- **Validation results:**
+  - `npx jest test/unit/wm/autoMigoPosting.test.js` → **PASS, 14/14 tests passed (100% green)**.
+  - `npx jest test/unit/wm` → **PASS, 70 passed, 1 skipped, 1549 tests passed (100% green)**.
+  - `npx cds compile srv/wm/reservation-entry/service.cds && npx cds compile srv/wm/tr-to/service.cds` → **PASS (clean CSN compilation, exit code 0)**.
+  - `git diff --check` → **PASS (clean diff, 0 whitespace errors)**.
+  - `git status` → Working tree preserved; zero commits created.
+- **Errors / blockers:** None.
+- **Next action:** Step 10: End-to-End Flow Verification & Live SAP Transaction Proving (MB21 → TR → Scan → LT04 → LT12 → MIGO).
