@@ -326,13 +326,19 @@ class TrToHandler {
       const trackKey = existing ? { ReservationNo: existing.ReservationNo, ReservationItem: existing.ReservationItem } : null;
 
       try {
+        const trackedReservation = existing?.TransferRequirement && existing?.ReservationNo ? {
+          TransferRequirement: existing.TransferRequirement,
+          ReservationNo: existing.ReservationNo,
+          ReservationItem: existing.ReservationItem,
+          MovementType: existing.MovementType
+        } : null;
         // SAP-side lock (feature flag, off by default) around the TO step only; a conflict leaves as 409.
         const lockKey = existing?.ReservationNo ? { rsnum: existing.ReservationNo, rspos: existing.ReservationItem } : null;
         const result = await withReservationLock(lockKey ? adapter.rfc : null, lockKey, (scopedRfc) =>
-          (scopedRfc && adapter.withRfc ? adapter.withRfc(scopedRfc) : adapter).createTOFromTR(data));
+          (scopedRfc && adapter.withRfc ? adapter.withRfc(scopedRfc) : adapter).createTOFromTR({ ...data, trackedReservation }));
         result.ProcessId = processId;
 
-        if (result.TransferOrder && process.env.WM_ALLOW_MISMATCHED_TR === 'true' &&
+        if (result.TransferOrder &&
             result.ReservationMovementType && result.MovementType &&
             result.ReservationMovementType !== result.MovementType) {
           await log(ReservationLog, {
@@ -343,7 +349,7 @@ class TrToHandler {
             Step: 'LT04',
             Status: result.Status || STATUS.TO_CREATED,
             MessageType: 'W',
-            MessageText: `Sandbox only: mismatched TR movement ${result.MovementType} / reservation movement ${result.ReservationMovementType}; stock staged into 921`
+            MessageText: `Linked reservation staging: TR movement ${result.MovementType}, reservation/MIGO movement ${result.ReservationMovementType}; verify the TR destination before processing.`
           });
         }
 

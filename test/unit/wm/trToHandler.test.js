@@ -73,12 +73,12 @@ describe('TrToHandler', () => {
     expect(source).toMatch(/readTable\('RESB',[^\n]+`RSNUM = '\$\{rsnum\}'`/);
   });
 
-  it('writes a warning ReservationLog row for mismatched TO results under the sandbox flag [mock only, not browser verification]', () => {
+  it('passes only the database tracking row to validate a reservation/TR mismatch [mock only, not browser verification]', () => {
     const source = fs.readFileSync(path.join(__dirname, '../../../srv/wm/tr-to/handlers/trTo.handler.js'), 'utf8');
-    expect(source).toMatch(/result\.TransferOrder && process\.env\.WM_ALLOW_MISMATCHED_TR === 'true'/);
+    expect(source).toMatch(/const trackedReservation = existing\?\.TransferRequirement && existing\?\.ReservationNo/);
     expect(source).toMatch(/result\.ReservationMovementType !== result\.MovementType/);
     expect(source).toMatch(/MessageType: 'W'/);
-    expect(source).toMatch(/MessageText: `Sandbox only: mismatched TR movement[\s\S]*stock staged into 921`/);
+    expect(source).toMatch(/MessageText: `Linked reservation staging: TR movement[\s\S]*verify the TR destination before processing\.`/);
   });
 
   // ─── autoConfirm × autoPostMigo MIGO gate matrix (handler level) ───────────

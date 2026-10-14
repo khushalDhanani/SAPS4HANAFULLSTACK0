@@ -69,6 +69,17 @@ class TrToAdapter {
     this._checkSlocExistence = Boolean(options.checkSlocExistence);
   }
 
+  async _findTrackedReservationForTR(tbnum) {
+    const cds = require('@sap/cds');
+    if (!cds?.db) return null;
+    const raw = alphaOut(tbnum);
+    const read = (value) => cds.db.run(
+      cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
+        .where({ TransferRequirement: value })
+    );
+    return (await read(raw)) || (raw.padStart(10, '0') !== raw ? await read(raw.padStart(10, '0')) : null);
+  }
+
   /** Same adapter bound to another RFC client (used to run a step inside one locked RFC session). */
   withRfc(rfc) {
     return new this.constructor({
@@ -756,6 +767,7 @@ class TrToAdapter {
     let subNumber = tr.Betyp === 'A' ? '0000' : '';
 
     let reservationMovementType = '';
+    let trackedReservation = null;
 
     // 1. RESB (via RSNUM/RSPOS)
     if (tr.Rsnum && String(tr.Rsnum).trim() !== '' && String(tr.Rsnum).trim() !== '0000000000' && this.rfc) {
@@ -807,37 +819,24 @@ class TrToAdapter {
     // 2. Tracking table (ReservationTrack by TBNUM)
     if (!receivingStorageLocation || !receivingPlant) {
       try {
-        const cds = require('@sap/cds');
-        if (cds && cds.db) {
-          const tbnumRaw = alphaOut(tr.Tbnum);
-          const tbnumPad = tbnumRaw.padStart(10, '0');
-          let track = await cds.db.run(
-            cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
-              .where({ TransferRequirement: tbnumRaw })
-          );
-          if (!track && tbnumPad !== tbnumRaw) {
-            track = await cds.db.run(
-              cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
-                .where({ TransferRequirement: tbnumPad })
-            );
+        const track = await this._findTrackedReservationForTR(tr.Tbnum);
+        if (track) {
+          trackedReservation = track;
+          if (!reservationMovementType && track.MovementType?.trim()) {
+            reservationMovementType = track.MovementType.trim();
           }
-          if (track) {
-            if (!reservationMovementType && track.MovementType?.trim()) {
-              reservationMovementType = track.MovementType.trim();
-            }
-            if (!receivingStorageLocation && track.ReceivingStorageLocation?.trim()) {
-              receivingStorageLocation = String(track.ReceivingStorageLocation).trim().toUpperCase();
-              recSLocSource = recSLocSource || 'Tracking';
-            }
-            if (!receivingPlant && track.ReceivingPlant?.trim()) {
-              receivingPlant = String(track.ReceivingPlant).trim().toUpperCase();
-              recPlantSource = recPlantSource || 'Tracking';
-            }
-            if (!costCenter && track.CostCenter?.trim()) costCenter = track.CostCenter.trim();
-            if (!assetNo && track.AssetNo?.trim()) {
-              assetNo = track.AssetNo.trim();
-              subNumber = track.SubNumber?.trim() || '0000';
-            }
+          if (!receivingStorageLocation && track.ReceivingStorageLocation?.trim()) {
+            receivingStorageLocation = String(track.ReceivingStorageLocation).trim().toUpperCase();
+            recSLocSource = recSLocSource || 'Tracking';
+          }
+          if (!receivingPlant && track.ReceivingPlant?.trim()) {
+            receivingPlant = String(track.ReceivingPlant).trim().toUpperCase();
+            recPlantSource = recPlantSource || 'Tracking';
+          }
+          if (!costCenter && track.CostCenter?.trim()) costCenter = track.CostCenter.trim();
+          if (!assetNo && track.AssetNo?.trim()) {
+            assetNo = track.AssetNo.trim();
+            subNumber = track.SubNumber?.trim() || '0000';
           }
         }
       } catch (_trackErr) {
@@ -876,7 +875,14 @@ class TrToAdapter {
     }
 
     let warning = '';
-    const allowMismatchedTR = process.env.WM_ALLOW_MISMATCHED_TR === 'true';
+    const trackedMismatch = Boolean(
+      trackedReservation && reservationMovementType && tr.Bwlvs && reservationMovementType !== tr.Bwlvs &&
+      alphaOut(trackedReservation.TransferRequirement) === alphaOut(tr.Tbnum) &&
+      String(trackedReservation.ReservationNo || '').replace(/^0+/, '') === String(tr.Rsnum || '').replace(/^0+/, '') &&
+      String(trackedReservation.ReservationItem || '').padStart(4, '0') === String(item?.Rspos || '').padStart(4, '0') &&
+      String(trackedReservation.MovementType || '').trim() === reservationMovementType
+    );
+    const allowMismatchedTR = process.env.WM_ALLOW_MISMATCHED_TR === 'true' || trackedMismatch;
     if (reservationMovementType && tr.Bwlvs && reservationMovementType !== tr.Bwlvs) {
       warning = `TR movement ${tr.Bwlvs} does not match reservation movement ${reservationMovementType}`;
     }
@@ -1165,7 +1171,8 @@ class TrToAdapter {
     status = '',
     confMenge,
     reservationMovementType = '',
-    ReservationMovementType = ''
+    ReservationMovementType = '',
+    trackedReservation = null
   } = {}) {
     const quantity = Number(qty);
     if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
@@ -1187,10 +1194,7 @@ class TrToAdapter {
       } catch (_) {}
     }
 
-    const allowMismatchedTR = process.env.WM_ALLOW_MISMATCHED_TR === 'true';
-    if (effResMvt && tr.Bwlvs && effResMvt !== tr.Bwlvs && !allowMismatchedTR) {
-      throw httpError(400, `TR movement ${tr.Bwlvs} does not match reservation movement ${effResMvt}`);
-    }
+    const allowConfiguredMismatch = process.env.WM_ALLOW_MISMATCHED_TR === 'true';
 
     let finalRecPlant = (ReceivingPlant || receivingPlant) ? String(ReceivingPlant || receivingPlant).trim() : '';
     let finalRecSLoc = (ReceivingStorageLocation || receivingStorageLocation) ? String(ReceivingStorageLocation || receivingStorageLocation).trim() : '';
@@ -1210,6 +1214,17 @@ class TrToAdapter {
       throw httpError(404, `Transfer Requirement ${alphaOut(tr.Tbnum)} has no open items`);
     } else {
       throw httpError(400, `TR ${alphaOut(tr.Tbnum)} has ${open.length} open items (${open.map((i) => i.Tbpos).join(', ')}); choose one (tbpos)`);
+    }
+
+    const linkedTrackedMismatch = Boolean(
+      effResMvt && tr.Bwlvs && effResMvt !== tr.Bwlvs && trackedReservation &&
+      alphaOut(trackedReservation.TransferRequirement) === alphaOut(tr.Tbnum) &&
+      String(trackedReservation.ReservationNo || '').replace(/^0+/, '') === String(tr.Rsnum || '').replace(/^0+/, '') &&
+      String(trackedReservation.ReservationItem || '').padStart(4, '0') === String(item.Rspos || '').padStart(4, '0') &&
+      String(trackedReservation.MovementType || '').trim() === effResMvt
+    );
+    if (effResMvt && tr.Bwlvs && effResMvt !== tr.Bwlvs && !allowConfiguredMismatch && !linkedTrackedMismatch) {
+      throw httpError(400, `TR movement ${tr.Bwlvs} does not match reservation movement ${effResMvt}`);
     }
 
     if (quantity > item.OpenQty) {

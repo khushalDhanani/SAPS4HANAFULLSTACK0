@@ -794,6 +794,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 }],
                 ET_TR_ITEMS: [{
                     LGNUM: 'W01', TBNUM: '0001000823', TBPOS: '0001',
+                    RSPOS: '0001',
                     MATNR: '000000008000005294', WERKS: '1120', LGORT: 'HS01',
                     MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: ''
                 }]
@@ -817,6 +818,29 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             expect(res.CostCenter).toBe('CC1120');
         });
 
+        it('lookupTR allows only the exact app-tracked reservation/TR/item/movement link [mock only, not browser verification]', async () => {
+            delete process.env.WM_ALLOW_MISMATCHED_TR;
+            adapter._findTrackedReservationForTR = jest.fn().mockResolvedValue({
+                TransferRequirement: '0001000823', ReservationNo: '0000527870', ReservationItem: '0001', MovementType: '201'
+            });
+            mockRfc.call.mockResolvedValueOnce({
+                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000823', BWLVS: '311', RSNUM: '0000527870', NLTYP: '921', NLPLA: 'TRANSFER' }],
+                ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000823', TBPOS: '0001', RSPOS: '0001', MATNR: '000000008000005294', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: '' }]
+            });
+            mockRfc.readTable
+                .mockResolvedValueOnce([{ MAKTX: 'Mobile Charger' }])
+                .mockResolvedValueOnce([{ XCHPF: '', SERNP: '' }])
+                .mockResolvedValueOnce([{ LGTYP: '001', LGPLA: 'BIN1', VERME: '1.000' }])
+                .mockResolvedValueOnce([{ RSNUM: '0000527870', RSPOS: '0001', BWART: '201', UMWRK: '', UMLGO: '', CHARG: '' }])
+                .mockResolvedValueOnce([{ KOSTL: '1011201301', ANLN1: '', ANLN2: '' }]);
+
+            const result = await adapter.lookupTR('0001000823', 'W01', 'TR');
+
+            expect(result.ReservationMovementType).toBe('201');
+            expect(result.AllowMismatchedTR).toBe(true);
+            expect(adapter._findTrackedReservationForTR).toHaveBeenCalledWith('0001000823');
+        });
+
         it('createTOFromTR blocks mismatched TR when WM_ALLOW_MISMATCHED_TR is default false [mock only, not browser verification]', async () => {
             delete process.env.WM_ALLOW_MISMATCHED_TR;
 
@@ -827,6 +851,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 }],
                 ET_TR_ITEMS: [{
                     LGNUM: 'W01', TBNUM: '0001000823', TBPOS: '0001',
+                    RSPOS: '0001',
                     MATNR: '000000008000005294', WERKS: '1120', LGORT: 'HS01',
                     MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: ''
                 }]
@@ -846,8 +871,8 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             });
         });
 
-        it('createTOFromTR succeeds on mismatched TR when WM_ALLOW_MISMATCHED_TR=true [mock only, not browser verification]', async () => {
-            process.env.WM_ALLOW_MISMATCHED_TR = 'true';
+        it('createTOFromTR allows a mismatch only when its exact TR, reservation item, and movement are app-tracked [mock only, not browser verification]', async () => {
+            delete process.env.WM_ALLOW_MISMATCHED_TR;
 
             mockRfc.call.mockResolvedValueOnce({
                 ET_TR_HEADER: [{
@@ -856,6 +881,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 }],
                 ET_TR_ITEMS: [{
                     LGNUM: 'W01', TBNUM: '0001000823', TBPOS: '0001',
+                    RSPOS: '0001',
                     MATNR: '000000008000005294', WERKS: '1120', LGORT: 'HS01',
                     MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: ''
                 }]
@@ -877,12 +903,31 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 tbpos: '0001',
                 qty: 1,
                 unit: 'NOS',
-                ReservationMovementType: '201'
+                ReservationMovementType: '201',
+                trackedReservation: {
+                    TransferRequirement: '0001000823',
+                    ReservationNo: '0000527870',
+                    ReservationItem: '0001',
+                    MovementType: '201'
+                }
             });
 
             expect(res.TransferOrder).toBe('1037310');
             expect(res.Confirmed).toBe(true);
             expect(res.ReservationMovementType).toBe('201');
+        });
+
+        it('does not allow a tracked mismatch when the reservation key differs from the SAP TR [mock only, not browser verification]', async () => {
+            delete process.env.WM_ALLOW_MISMATCHED_TR;
+            mockRfc.call.mockResolvedValueOnce({
+                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000823', BWLVS: '311', RSNUM: '0000527870', NLTYP: '921', NLPLA: 'TRANSFER' }],
+                ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000823', TBPOS: '0001', RSPOS: '0001', MATNR: '000000008000005294', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: '' }]
+            });
+            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Mobile Charger' }]);
+            await expect(adapter.createTOFromTR({
+                lgnum: 'W01', tbnum: '0001000823', tbpos: '0001', qty: 1, unit: 'NOS', ReservationMovementType: '201',
+                trackedReservation: { TransferRequirement: '0001000823', ReservationNo: '0000527871', ReservationItem: '0001', MovementType: '201' }
+            })).rejects.toMatchObject({ status: 400, message: 'TR movement 311 does not match reservation movement 201' });
         });
     });
 });

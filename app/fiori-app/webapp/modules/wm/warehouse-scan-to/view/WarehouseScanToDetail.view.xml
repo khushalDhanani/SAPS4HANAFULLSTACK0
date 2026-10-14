@@ -48,8 +48,8 @@
 
                 <MessageStrip
                     id="mismatchedTrSandboxWarning"
-                    visible="{scanView>/allowMismatchedTR}"
-                    text="sandbox only: stock will be staged into 921"
+                    visible="{scanView>/isMovementMismatched}"
+                    text="Linked reservation flow: TO follows the TR movement and destination; MIGO posts the reservation movement. Verify the destination before processing."
                     type="Warning"
                     showIcon="true"
                     showCloseButton="false"
