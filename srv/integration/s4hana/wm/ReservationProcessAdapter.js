@@ -3,7 +3,7 @@
 const LOG = require('../logger')('reservation-process-adapter');
 const { RfcClient } = require('../RfcClient');
 const { sapKey, sapKeyOpt, httpError } = require('../sapKey');
-const { STATUS } = require('../../../common/wmStatus');
+const { STATUS, PROCESS_STATUS } = require('../../../common/wmStatus');
 const {
   MOVEMENT_CONFIG,
   getMovementConfig,
@@ -2161,7 +2161,7 @@ class ReservationProcessAdapter {
 
       // Step 11: Add final stock verification (Only after MIGO succeeds)
       let stockVerification = null;
-      if (!testrun && matDoc) {
+      if (!testrun && matDoc && !params.skipStockVerification) {
         stockVerification = await this.verifyStock({
           materialDocument: matDoc,
           materialDocYear: docYear,
@@ -2183,7 +2183,7 @@ class ReservationProcessAdapter {
 
       // Step 12: Add reservation verification (Only after MIGO succeeds, when reservation exists)
       let reservationVerification = null;
-      if (!testrun && hasRes) {
+      if (!testrun && hasRes && !params.skipReservationVerification) {
         reservationVerification = await this.verifyReservation({
           reservationNumber: sResNo,
           reservationNo: sResNo,
@@ -2536,7 +2536,49 @@ class ReservationProcessAdapter {
   }
 
   /**
-   * Step 13: Common Process Orchestrator
+   * Step 14: Persistent Process Status Helper
+   * Emits/persists process status transitions in real-time.
+   */
+  async _persistProcessStatus(status, details = {}, input = {}) {
+    try {
+      const fn = input.persistStatus || input.onProgress || this.persistStatus;
+      if (typeof fn === 'function') {
+        await fn(status, details);
+      }
+      if (global.cds?.db) {
+        const entities = global.cds.entities?.('saps4hana.wm') || {};
+        const ReservationTrack = entities.ReservationTrack;
+        const resNo = details.reservationNumber || details.reservationNo || details.ReservationNo;
+        const resItem = details.reservationItem || details.ReservationItem || '0001';
+        if (ReservationTrack && resNo) {
+          const sRes = String(resNo).padStart(10, '0');
+          const sItem = String(resItem).padStart(4, '0');
+          const updateData = { ProcessStatus: status };
+          if (details.trNumber) updateData.TransferRequirement = details.trNumber;
+          if (details.toNumber) updateData.TransferOrder = details.toNumber;
+          if (details.materialDocument) updateData.MaterialDocument = details.materialDocument;
+          if (details.materialDocYear || details.materialDocumentYear) {
+            updateData.MaterialDocYear = details.materialDocYear || details.materialDocumentYear;
+          }
+          if (details.withdrawnQuantity != null) updateData.WithdrawnQuantity = details.withdrawnQuantity;
+          if (details.remainingQuantity != null) updateData.RemainingQuantity = details.remainingQuantity;
+          if (details.completelyProcessed != null) updateData.CompletelyProcessed = details.completelyProcessed;
+          if (details.error) updateData.ErrorMessage = String(details.error).substring(0, 255);
+
+          await global.cds.db.run(
+            UPDATE(ReservationTrack)
+              .set(updateData)
+              .where({ ReservationNo: sRes, ReservationItem: sItem })
+          );
+        }
+      }
+    } catch (err) {
+      LOG.warn(`_persistProcessStatus failed for status ${status}: ${err.message}`);
+    }
+  }
+
+  /**
+   * Step 13 & 14: Common Process Orchestrator with Persistent Process Status
    * Orchestrates the complete sequential warehouse flow:
    *   RESERVATION_CREATED
    *           ↓
@@ -2590,16 +2632,34 @@ class ReservationProcessAdapter {
     let stock = null;
     let finalReservation = null;
 
-    const fail = (stage, details = {}, err = null) => {
+    // Persist initial CREATED status
+    await this._persistProcessStatus(PROCESS_STATUS.CREATED, { ...normInput }, input);
+
+    const fail = async (stage, details = {}, err = null) => {
       const errMsg = err?.message || details?.error || details?.message || `Failed at stage ${stage}`;
       LOG.error(`[executeReservationWarehouseFlow] Failed at stage ${stage}: ${errMsg}`);
+      const failureStatusMap = {
+        RESERVATION: PROCESS_STATUS.FAILED_RESERVATION,
+        TR: PROCESS_STATUS.FAILED_TR,
+        TR_VERIFICATION: PROCESS_STATUS.FAILED_TR,
+        TO: PROCESS_STATUS.FAILED_TO,
+        TO_CONFIRMATION: PROCESS_STATUS.FAILED_CONFIRMATION,
+        MIGO: PROCESS_STATUS.FAILED_MIGO,
+        STOCK_VERIFICATION: PROCESS_STATUS.FAILED_STOCK_VERIFICATION,
+        RESERVATION_VERIFICATION: PROCESS_STATUS.FAILED_STOCK_VERIFICATION
+      };
+      const failureProcessStatus = failureStatusMap[stage] || `FAILED_${stage}`;
+
       const failureResult = {
         success: false,
         stage,
         currentState: stage,
+        processStatus: failureProcessStatus,
         error: errMsg,
         details,
         stages: [...stagesReached],
+        reservationNumber: reservation?.reservationNo || reservation?.reservation?.number || reservation?.reservationNumber,
+        reservationItem: reservation?.reservationItem || reservation?.reservation?.item || '0001',
         ...(reservation ? { reservation } : {}),
         ...(tr ? { tr } : {}),
         ...(verifiedTR ? { verifiedTR } : {}),
@@ -2609,6 +2669,15 @@ class ReservationProcessAdapter {
         ...(stock ? { stock } : {}),
         ...(finalReservation ? { finalReservation } : {})
       };
+
+      await this._persistProcessStatus(failureProcessStatus, {
+        error: errMsg,
+        stage,
+        reservationNumber: failureResult.reservationNumber,
+        reservationItem: failureResult.reservationItem,
+        ...details
+      }, input);
+
       if (input.throwError === true) {
         throw Object.assign(new Error(errMsg), { status: details?.status || 400, ...failureResult });
       }
@@ -2625,11 +2694,12 @@ class ReservationProcessAdapter {
       reservation = { success: false, stage: 'RESERVATION', error: err.message };
     }
     if (!reservation || !reservation.success) {
-      return fail('RESERVATION', reservation);
+      return await fail('RESERVATION', reservation);
     }
     stagesReached.push('RESERVATION_CREATED');
     const resNo = reservation.reservationNo || reservation.reservation?.number || reservation.reservationNumber;
     const resItem = reservation.reservationItem || reservation.reservation?.item || '0001';
+    await this._persistProcessStatus(PROCESS_STATUS.RESERVATION_CREATED, { reservationNumber: resNo, reservationItem: resItem, reservation }, input);
 
     // Stage 2: TR_CREATED
     try {
@@ -2643,9 +2713,10 @@ class ReservationProcessAdapter {
       tr = { success: false, stage: 'TR', error: err.message };
     }
     if (!tr || !tr.success) {
-      return fail('TR', tr);
+      return await fail('TR', tr);
     }
     stagesReached.push('TR_CREATED');
+    await this._persistProcessStatus(PROCESS_STATUS.TR_CREATED, { reservationNumber: resNo, reservationItem: resItem, trNumber: tr.trNumber, trItem: tr.trItem, tr }, input);
 
     // Stage 3: TR_VERIFIED
     try {
@@ -2657,9 +2728,10 @@ class ReservationProcessAdapter {
       verifiedTR = { success: false, stage: 'TR_VERIFICATION', error: err.message };
     }
     if (!verifiedTR || !verifiedTR.success) {
-      return fail('TR_VERIFICATION', verifiedTR);
+      return await fail('TR_VERIFICATION', verifiedTR);
     }
     stagesReached.push('TR_VERIFIED');
+    await this._persistProcessStatus(PROCESS_STATUS.TR_VERIFIED, { reservationNumber: resNo, reservationItem: resItem, trNumber: verifiedTR.trNumber, verifiedTR }, input);
 
     // Stage 4: TO_CREATED
     try {
@@ -2674,9 +2746,10 @@ class ReservationProcessAdapter {
       to = { success: false, stage: 'TO', error: err.message };
     }
     if (!to || !to.success) {
-      return fail('TO', to);
+      return await fail('TO', to);
     }
     stagesReached.push('TO_CREATED');
+    await this._persistProcessStatus(PROCESS_STATUS.TO_CREATED, { reservationNumber: resNo, reservationItem: resItem, trNumber: verifiedTR.trNumber, toNumber: to.toNumber, toItem: to.toItem, to }, input);
 
     // Stage 5: TO_CONFIRMED
     try {
@@ -2688,9 +2761,10 @@ class ReservationProcessAdapter {
       confirmation = { success: false, stage: 'TO_CONFIRMATION', error: err.message };
     }
     if (!confirmation || !confirmation.success) {
-      return fail('TO_CONFIRMATION', confirmation);
+      return await fail('TO_CONFIRMATION', confirmation);
     }
     stagesReached.push('TO_CONFIRMED');
+    await this._persistProcessStatus(PROCESS_STATUS.TO_CONFIRMED, { reservationNumber: resNo, reservationItem: resItem, toNumber: to.toNumber, confirmed: true, confirmation }, input);
 
     // Stage 6: MIGO_POSTED
     try {
@@ -2700,30 +2774,34 @@ class ReservationProcessAdapter {
         reservationItem: resItem,
         transferOrder: to.toNumber,
         trNumber: tr.trNumber,
-        warehouseNumber: to.warehouseNumber || verifiedTR.warehouseNumber || normInput.warehouseNumber
+        warehouseNumber: to.warehouseNumber || verifiedTR.warehouseNumber || normInput.warehouseNumber,
+        skipStockVerification: true,
+        skipReservationVerification: true
       });
     } catch (err) {
       migo = { success: false, stage: 'MIGO', error: err.message };
     }
     if (!migo || !migo.success) {
-      return fail('MIGO', migo);
+      return await fail('MIGO', migo);
     }
     stagesReached.push('MIGO_POSTED');
+    await this._persistProcessStatus(PROCESS_STATUS.MIGO_POSTED, { reservationNumber: resNo, reservationItem: resItem, materialDocument: migo.materialDocument, materialDocYear: migo.materialDocYear || migo.materialDocumentYear, migo }, input);
 
     // Stage 7: STOCK_VERIFIED
     try {
-      stock = migo.stockVerification || await this.verifyStock(normInput, migo);
+      stock = await this.verifyStock(normInput, migo);
     } catch (err) {
       stock = { success: false, stage: 'STOCK_VERIFICATION', error: err.message };
     }
     if (!stock || stock.success === false) {
-      return fail('STOCK_VERIFICATION', stock);
+      return await fail('STOCK_VERIFICATION', stock);
     }
     stagesReached.push('STOCK_VERIFIED');
+    await this._persistProcessStatus(PROCESS_STATUS.STOCK_VERIFIED, { reservationNumber: resNo, reservationItem: resItem, stockVerified: true, stock }, input);
 
     // Stage 8: RESERVATION_VERIFIED
     try {
-      finalReservation = migo.reservationVerification || await this.verifyReservation({
+      finalReservation = await this.verifyReservation({
         ...reservation,
         materialDocument: migo.materialDocument,
         materialDocYear: migo.materialDocYear || migo.materialDocumentYear,
@@ -2734,7 +2812,7 @@ class ReservationProcessAdapter {
       finalReservation = { success: false, stage: 'RESERVATION_VERIFICATION', error: err.message };
     }
     if (!finalReservation || finalReservation.success === false) {
-      return fail('RESERVATION_VERIFICATION', finalReservation);
+      return await fail('RESERVATION_VERIFICATION', finalReservation);
     }
     stagesReached.push('RESERVATION_VERIFIED');
 
@@ -2744,13 +2822,35 @@ class ReservationProcessAdapter {
       stagesReached.push('COMPLETED');
     }
     const finalState = isComplete ? 'COMPLETED' : 'PARTIALLY_PROCESSED';
+    const finalProcessStatus = isComplete ? PROCESS_STATUS.COMPLETED : PROCESS_STATUS.PARTIALLY_PROCESSED;
+
+    await this._persistProcessStatus(finalProcessStatus, {
+      reservationNumber: resNo,
+      reservationItem: resItem,
+      completelyProcessed: isComplete,
+      withdrawnQuantity: finalReservation.issuedQuantity,
+      remainingQuantity: finalReservation.remainingQuantity,
+      finalReservation
+    }, input);
 
     return {
       success: true,
+      stage: finalState,
       state: finalState,
       currentState: finalState,
+      processStatus: finalProcessStatus,
       completed: isComplete,
+      completelyProcessed: isComplete,
       stages: stagesReached,
+      reservationNumber: resNo,
+      reservationItem: resItem,
+      trNumber: tr?.trNumber,
+      toNumber: to?.toNumber,
+      toConfirmed: Boolean(confirmation?.confirmed),
+      materialDocument: migo?.materialDocument,
+      materialDocumentYear: migo?.materialDocumentYear || migo?.materialDocYear,
+      stockVerified: Boolean(stock?.verified || stock?.success),
+      reservationVerified: Boolean(finalReservation?.verified || finalReservation?.success),
       reservation,
       tr,
       verifiedTR,

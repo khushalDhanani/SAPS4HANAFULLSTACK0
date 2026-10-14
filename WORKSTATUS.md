@@ -5,6 +5,30 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 14: Add Persistent Process Status (PROCESS_STATUS) (2026-10-14, 17:20 IST):** Complete. Implemented persistent process status across the database, CAP services, and S/4HANA integration orchestrator so that process state is never lost when warehouse operators refresh the page or SAP responds slowly.
+  - **Single Source of Truth (`srv/common/wmStatus.js`):**
+    Exported frozen `PROCESS_STATUS` mapping all requested values:
+    - Normal progression: `CREATED`, `RESERVATION_CREATED`, `TR_CREATED`, `TR_VERIFIED`, `TO_CREATED`, `TO_CONFIRMED`, `MIGO_POSTED`, `STOCK_VERIFIED`, `COMPLETED`, plus `PARTIALLY_PROCESSED`.
+    - Failures: `FAILED_RESERVATION`, `FAILED_TR`, `FAILED_TO`, `FAILED_CONFIRMATION`, `FAILED_MIGO`, `FAILED_STOCK_VERIFICATION`.
+  - **Database Persistence (`db/wm/reservation-track.cds`):**
+    Added `ProcessStatus : String(35);` to `ReservationTrack` and `ReservationLog`.
+  - **Service APIs (`srv/wm/reservation-entry/service.cds` & `srv/wm/tr-to/service.cds`):**
+    Exposed `ProcessStatus` on `ReservationDetailRow` and `processStatus : String(35)` on `OrchestratorProcessResult`.
+  - **S/4HANA Adapter Orchestration (`srv/integration/s4hana/wm/ReservationProcessAdapter.js`):**
+    - Implemented `_persistProcessStatus(status, details, input)` supporting caller callbacks (`input.persistStatus` / `input.onProgress`) and automatic `global.cds?.db` updates on `ReservationTrack`.
+    - Updated `executeReservationWarehouseFlow` to emit status transitions across all stages and failures, returning `processStatus`.
+    - Supported `skipStockVerification` and `skipReservationVerification` options in `postGoodsMovement` so orchestrator coordinates Stages 6, 7, and 8 cleanly, persisting each stage status independently.
+  - **CAP Service Handlers (`srv/wm/reservation-entry/service.js` & `srv/wm/tr-to/handlers/trTo.handler.js`):**
+    - Persisted `ProcessStatus` on initial track creation, reservation entry, TR creation, TO creation, TO confirmation, and MIGO posting.
+    - Updated `getReservationDetail` to load `ProcessStatus` from `ReservationEntries` on refresh.
+    - Injected real-time `persistStatus` handler into `executeReservationWarehouseFlow` to update DB status synchronously at each stage boundary.
+  - **Validation & Test Results:**
+    - `test/unit/wm/autoMigoPosting.test.js`: Added Section 11 test suite (8 tests) covering progression ending in `COMPLETED`, `PARTIALLY_PROCESSED`, and all 6 failures (`FAILED_RESERVATION`, `FAILED_TR`, `FAILED_TO`, `FAILED_CONFIRMATION`, `FAILED_MIGO`, `FAILED_STOCK_VERIFICATION`).
+    - `test/unit/wm/reservationEntryService.test.js`: Passed (40/40 tests).
+    - `npx cds compile srv/wm/tr-to/service.cds && npx cds compile srv/wm/reservation-entry/service.cds`: Passed.
+    - `npx jest test/unit/wm`: 70 test suites passed, 0 failed, 1,600 passed tests.
+    - `git diff --check`: Clean (0 warnings).
+
 - **Step 13: Create One Common Process Orchestrator (executeReservationWarehouseFlow) (2026-10-14, 16:35 IST):** Complete. Implemented and verified the unified end-to-end process orchestrator `executeReservationWarehouseFlow(input)` coordinating the 9 sequential stages:
   $$\text{RESERVATION\_CREATED} \longrightarrow \text{TR\_CREATED} \longrightarrow \text{TR\_VERIFIED} \longrightarrow \text{TO\_CREATED} \longrightarrow \text{TO\_CONFIRMED} \longrightarrow \text{MIGO\_POSTED} \longrightarrow \text{STOCK\_VERIFIED} \longrightarrow \text{RESERVATION\_VERIFIED} \longrightarrow \text{COMPLETED}$$
   - **Explicit Stage Machine & Halting Contract:**
@@ -1954,7 +1978,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Step 13 — 2026-10-14, 16:35 IST):** Unified end-to-end process orchestrator (`executeReservationWarehouseFlow`) coordinating all 9 stages (Reservation Create → TR Create → TR Verify → TO Create → TO Confirm → MIGO Post → Stock Verify → Reservation Verify → Completed / Partially Processed) is complete, exposed via CAP OData services, and fully verified across all 70 test suites. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Next Recommended Action (Step 14 — 2026-10-14, 17:20 IST):** Persistent process status (`PROCESS_STATUS`) across database, CAP services, and S/4HANA integration orchestrator is complete, handling both active progression and failure states resilient to page refreshes or slow SAP responses. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Previous Recommended Action (Step 13 — 2026-10-14, 16:35 IST):** Unified end-to-end process orchestrator (`executeReservationWarehouseFlow`) coordinating all 9 stages (Reservation Create → TR Create → TR Verify → TO Create → TO Confirm → MIGO Post → Stock Verify → Reservation Verify → Completed / Partially Processed) is complete, exposed via CAP OData services, and fully verified across all 70 test suites. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 12 — 2026-10-14, 16:15 IST):** Reservation verification (checking issued/withdrawn quantity, remaining quantity, and completion status) is complete and verified across all services and 70 test suites. Next action: Execute full end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 11 — 2026-10-14, 15:55 IST):** Final stock verification (expected vs actual comparison for 201, 241, 311, 301) is complete and verified across all services and 70 test suites. Next action: Execute full end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 10 — 2026-10-14, 15:00 IST):** Material document verification pipeline is complete and verified across all services and 70 test suites. Next action: Execute end-to-end integration and UI verification of the material document verification pipeline across Fiori app and live SAP S/4HANA Client 220 when live testing is authorized.
@@ -1976,6 +2001,57 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-14 17:20 IST — Step 14: Add Persistent Process Status (PROCESS_STATUS)
+
+- **User Request:**
+  - Step 14 — Add persistent process status.
+  - Do not depend only on frontend status.
+  - Persist something like: `PROCESS_STATUS` with values:
+    - Normal: `CREATED`, `RESERVATION_CREATED`, `TR_CREATED`, `TR_VERIFIED`, `TO_CREATED`, `TO_CONFIRMED`, `MIGO_POSTED`, `STOCK_VERIFIED`, `COMPLETED`.
+    - Failures: `FAILED_RESERVATION`, `FAILED_TR`, `FAILED_TO`, `FAILED_CONFIRMATION`, `FAILED_MIGO`, `FAILED_STOCK_VERIFICATION`.
+  - Useful when warehouse operator refreshes the page or SAP responds slowly.
+- **Implementation & Architectural Changes:**
+  1. `srv/common/wmStatus.js`:
+     - Added and exported frozen `PROCESS_STATUS` constant covering all required progress and failure values:
+       - Progression: `CREATED`, `RESERVATION_CREATED`, `TR_CREATED`, `TR_VERIFIED`, `TO_CREATED`, `TO_CONFIRMED`, `MIGO_POSTED`, `STOCK_VERIFIED`, `COMPLETED`, `PARTIALLY_PROCESSED`.
+       - Failures: `FAILED_RESERVATION`, `FAILED_TR`, `FAILED_TO`, `FAILED_CONFIRMATION`, `FAILED_MIGO`, `FAILED_STOCK_VERIFICATION`.
+  2. `db/wm/reservation-track.cds`:
+     - Added `ProcessStatus : String(35);` to entity `ReservationTrack` (`ZRES_TRACK`).
+     - Added `ProcessStatus : String(35);` to entity `ReservationLog`.
+  3. `srv/wm/reservation-entry/service.cds` & `srv/wm/tr-to/service.cds`:
+     - Added `ProcessStatus : String(35);` to `type ReservationDetailRow`.
+     - Added `processStatus : String(35);` to `type OrchestratorProcessResult`.
+  4. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Added `_persistProcessStatus(status, details = {}, input = {})` supporting caller callback handlers (`input.persistStatus` or `input.onProgress`) and automatic `global.cds?.db` updates on `ReservationTrack`.
+     - Updated `executeReservationWarehouseFlow`:
+       - Emits initial `CREATED` status.
+       - Emits sequential updates for `RESERVATION_CREATED`, `TR_CREATED`, `TR_VERIFIED`, `TO_CREATED`, `TO_CONFIRMED`, `MIGO_POSTED`, `STOCK_VERIFIED`, and `COMPLETED` (or `PARTIALLY_PROCESSED`).
+       - On any stage failure, maps the failing stage to the exact failure status (`FAILED_RESERVATION`, `FAILED_TR`, `FAILED_TO`, `FAILED_CONFIRMATION`, `FAILED_MIGO`, `FAILED_STOCK_VERIFICATION`), persists it, and returns `processStatus`.
+       - Supported `skipStockVerification` and `skipReservationVerification` in `postGoodsMovement` so orchestrator coordinates Stages 6, 7, and 8 cleanly, persisting each stage status independently.
+  5. `srv/wm/reservation-entry/service.js`:
+     - Imported `PROCESS_STATUS`.
+     - Assigned `ProcessStatus` on `initialTrackRecord`, `createReservationEntry`, `createTransferRequirement`, `createTOFromTR`, `confirmTransferOrder`, and `postMigoForTrack`.
+     - Updated `getReservationDetail` to load `ProcessStatus` from existing tracking records on page refresh.
+     - Updated action `executeReservationWarehouseFlow` to pass real-time `persistStatus` callback that updates SQLite/HANA table `ZRES_TRACK` synchronously at each stage boundary.
+  6. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - Imported `PROCESS_STATUS`.
+     - Updated `handleExecuteOrchestrator` to inject `persistStatus` updating `ReservationTrack` and return `processStatus`.
+- **Validation & Test Results:**
+  - `test/unit/wm/autoMigoPosting.test.js`: Added Section 11 test suite (8 tests) covering:
+    - Happy path progression ending in `COMPLETED`.
+    - Partial issue progression ending in `PARTIALLY_PROCESSED`.
+    - Stage failure `FAILED_RESERVATION`.
+    - Stage failure `FAILED_TR`.
+    - Stage failure `FAILED_TO`.
+    - Stage failure `FAILED_CONFIRMATION`.
+    - Stage failure `FAILED_MIGO`.
+    - Stage failure `FAILED_STOCK_VERIFICATION`.
+    - All 62 unit tests passing in suite.
+  - `test/unit/wm/reservationEntryService.test.js`: All 40 unit tests passing.
+  - `npx cds compile srv/wm/tr-to/service.cds && npx cds compile srv/wm/reservation-entry/service.cds`: Passed.
+  - `npx jest test/unit/wm`: All 70 test suites passing green (1,600 / 1,600 tests).
+  - `git diff --check`: Passed with 0 warnings.
 
 ### 2026-10-14 16:35 IST — Step 13: Create One Common Process Orchestrator (executeReservationWarehouseFlow)
 

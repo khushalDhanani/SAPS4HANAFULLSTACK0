@@ -1,7 +1,7 @@
 const cds = require('@sap/cds');
 const TrToAdapter = require('../../../integration/s4hana/wm/TrToAdapter');
 const ReservationProcessAdapter = require('../../../integration/s4hana/wm/ReservationProcessAdapter');
-const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
+const { STATUS, STATUS_TEXT, UNCONFIRMED_TO, PROCESS_STATUS } = require('../../../common/wmStatus');
 const { sapKey, sapKeyOpt } = require('../../../integration/s4hana/sapKey');
 const { withReservationLock } = require('../../../integration/s4hana/wm/resLock');
 
@@ -559,26 +559,53 @@ class TrToHandler {
 
     const handleExecuteOrchestrator = async (req) => {
       try {
-        const result = await resProcessAdapter.executeReservationWarehouseFlow(req.data || {});
+        const { ReservationTrack } = entities();
+        const persistStatus = async (status, extra = {}) => {
+          if (!ReservationTrack) return;
+          const resNo = extra.reservationNumber || extra.reservationNo;
+          const resItem = extra.reservationItem || '0001';
+          if (!resNo) return;
+          const sRes = String(resNo).padStart(10, '0');
+          const sItem = String(resItem).padStart(4, '0');
+          const updateData = { ProcessStatus: status };
+          if (extra.trNumber) updateData.TransferRequirement = extra.trNumber;
+          if (extra.toNumber) updateData.TransferOrder = extra.toNumber;
+          if (extra.materialDocument) updateData.MaterialDocument = extra.materialDocument;
+          if (extra.materialDocYear || extra.materialDocumentYear) updateData.MaterialDocYear = extra.materialDocYear || extra.materialDocumentYear;
+          if (extra.withdrawnQuantity != null) updateData.WithdrawnQuantity = extra.withdrawnQuantity;
+          if (extra.remainingQuantity != null) updateData.RemainingQuantity = extra.remainingQuantity;
+          if (extra.completelyProcessed != null) updateData.CompletelyProcessed = extra.completelyProcessed;
+          if (extra.error) updateData.ErrorMessage = String(extra.error).substring(0, 255);
+
+          try {
+            await UPDATE(ReservationTrack).set(updateData).where({ ReservationNo: sRes, ReservationItem: sItem });
+          } catch (_) { /* ignore */ }
+        };
+
+        const result = await resProcessAdapter.executeReservationWarehouseFlow({
+          ...req.data,
+          persistStatus
+        });
         return {
           success: result.success,
           stage: result.stage || result.state || '',
           state: result.state || '',
           currentState: result.currentState || '',
+          processStatus: result.processStatus || '',
           completed: Boolean(result.completed),
           stages: result.stages || [],
-          reservationNumber: result.reservation?.reservationNo || result.reservation?.reservation?.number || '',
-          reservationItem: result.reservation?.reservationItem || '0001',
-          trNumber: result.tr?.trNumber || result.verifiedTR?.trNumber || '',
+          reservationNumber: result.reservation?.reservationNo || result.reservation?.reservation?.number || result.reservationNumber || '',
+          reservationItem: result.reservation?.reservationItem || result.reservationItem || '0001',
+          trNumber: result.tr?.trNumber || result.verifiedTR?.trNumber || result.trNumber || '',
           trItem: result.tr?.trItem || '0001',
-          toNumber: result.to?.toNumber || '',
+          toNumber: result.to?.toNumber || result.toNumber || '',
           toItem: result.to?.toItem || '0001',
-          toConfirmed: Boolean(result.confirmation?.confirmed),
-          materialDocument: result.migo?.materialDocument || '',
-          materialDocumentYear: result.migo?.materialDocumentYear || '',
-          stockVerified: Boolean(result.stock?.verified || result.stock?.success),
-          reservationVerified: Boolean(result.finalReservation?.verified || result.finalReservation?.success),
-          completelyProcessed: Boolean(result.finalReservation?.completelyProcessed),
+          toConfirmed: Boolean(result.confirmation?.confirmed || result.toConfirmed),
+          materialDocument: result.migo?.materialDocument || result.materialDocument || '',
+          materialDocumentYear: result.migo?.materialDocumentYear || result.materialDocumentYear || '',
+          stockVerified: Boolean(result.stock?.verified || result.stock?.success || result.stockVerified),
+          reservationVerified: Boolean(result.finalReservation?.verified || result.finalReservation?.success || result.reservationVerified),
+          completelyProcessed: Boolean(result.finalReservation?.completelyProcessed || result.completelyProcessed),
           error: result.error || ''
         };
       } catch (err) {

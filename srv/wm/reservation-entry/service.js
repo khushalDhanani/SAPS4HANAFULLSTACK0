@@ -4,7 +4,7 @@ const cds = require('@sap/cds');
 const ReservationProcessAdapter = require('../../integration/s4hana/wm/ReservationProcessAdapter');
 const GoodsIssueAdapter = require('../../integration/s4hana/wm/GoodsIssueAdapter');
 const { findUnconfirmedToItems } = require('../../integration/s4hana/wm/toState');
-const { STATUS, STEP_ERROR, ERROR_STATUSES, UNCONFIRMED_TO } = require('../../common/wmStatus');
+const { STATUS, STEP_ERROR, ERROR_STATUSES, UNCONFIRMED_TO, PROCESS_STATUS } = require('../../common/wmStatus');
 const { sapKey, sapKeyOpt } = require('../../integration/s4hana/sapKey');
 const { withReservationLock, isLockConflict } = require('../../integration/s4hana/wm/resLock');
 const { validateReservationInput, MOVEMENT_CONFIG, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
@@ -209,6 +209,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         LogHandle: sLogHandle,
         ExternalId: extId,
         Status_code: STATUS.RES_CREATED,
+        ProcessStatus: PROCESS_STATUS.RESERVATION_CREATED,
         ErrorStep: '',
         ErrorMessage: ''
       };
@@ -305,6 +306,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           WarehouseNumber: determinedWh || WarehouseNumber || '',
           TransferRequirement: trNumber,
           Status_code: STATUS.TR_CREATED,
+          ProcessStatus: PROCESS_STATUS.TR_CREATED,
           ErrorStep: '',
           ErrorMessage: ''
         }).where({
@@ -322,6 +324,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           SubObject: 'TRACK',
           Step: 'LB01',
           Status: STATUS.TR_CREATED,
+          ProcessStatus: PROCESS_STATUS.TR_CREATED,
           MessageType: 'S',
           MessageId: 'L3',
           MessageNo: '001',
@@ -335,6 +338,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         await UPDATE(ReservationEntries).set({
           WarehouseNumber: determinedWh || WarehouseNumber || '',
           Status_code: STATUS.TR_ERROR,
+          ProcessStatus: PROCESS_STATUS.FAILED_TR,
           ErrorStep: 'LB01',
           ErrorMessage: trError
         }).where({
@@ -512,6 +516,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         LogHandle: '',
         ExternalId: extId,
         Status_code: STATUS.RES_CREATED,
+        ProcessStatus: PROCESS_STATUS.RESERVATION_CREATED,
         ErrorStep: '',
         ErrorMessage: ''
       };
@@ -604,6 +609,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       if (!trResult || !trResult.success) {
         await UPDATE(ReservationEntries).set({
           Status_code: STATUS.TR_ERROR,
+          ProcessStatus: PROCESS_STATUS.FAILED_TR,
           ErrorStep: 'LB01',
           ErrorMessage: trResult?.error || 'TR creation failed'
         }).where({
@@ -620,6 +626,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           SubObject: 'TRACK',
           Step: 'LB01',
           Status: STATUS.TR_ERROR,
+          ProcessStatus: PROCESS_STATUS.FAILED_TR,
           MessageType: 'E',
           MessageId: 'L3',
           MessageNo: '999',
@@ -643,6 +650,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         WarehouseNumber: determinedWh || track.WarehouseNumber || '',
         TransferRequirement: trNo,
         Status_code: STATUS.TR_CREATED,
+        ProcessStatus: PROCESS_STATUS.TR_CREATED,
         ErrorStep: '',
         ErrorMessage: ''
       }).where({
@@ -702,6 +710,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         if (track) {
           await UPDATE(ReservationEntries).set({
             Status_code: STATUS.TR_ERROR,
+            ProcessStatus: PROCESS_STATUS.FAILED_TR,
             ErrorStep: 'LT04',
             ErrorMessage: 'TR was not created or TR number is missing'
           }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
@@ -733,6 +742,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         if (track) {
           await UPDATE(ReservationEntries).set({
             Status_code: STATUS.TR_ERROR,
+            ProcessStatus: PROCESS_STATUS.FAILED_TR,
             ErrorStep: 'LT04',
             ErrorMessage: `Created TR ${alphaOut(rawTrNumber)} cannot be verified in SAP`
           }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
@@ -801,6 +811,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         if (track) {
           await UPDATE(ReservationEntries).set({
             Status_code: STATUS.TO_ERROR,
+            ProcessStatus: PROCESS_STATUS.FAILED_TO,
             ErrorStep: 'LT04',
             ErrorMessage: err.message
           }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
@@ -814,6 +825,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             SubObject: 'TRACK',
             Step: 'LT04',
             Status: STATUS.TO_ERROR,
+            ProcessStatus: PROCESS_STATUS.FAILED_TO,
             MessageType: 'E',
             MessageId: 'L3',
             MessageNo: '999',
@@ -845,6 +857,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             TransferRequirement: targetTr,
             TransferOrder: toNo,
             Status_code: STATUS.TO_CONFIRM_ERROR,
+            ProcessStatus: PROCESS_STATUS.FAILED_CONFIRMATION,
             ErrorStep: 'LT12',
             ErrorMessage: toResult.error
           }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
@@ -858,6 +871,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             SubObject: 'TRACK',
             Step: 'LT12',
             Status: STATUS.TO_CONFIRM_ERROR,
+            ProcessStatus: PROCESS_STATUS.FAILED_CONFIRMATION,
             MessageType: 'E',
             MessageId: 'L3',
             MessageNo: '026',
@@ -881,11 +895,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       if (track) {
         const finalStatus = toResult.confirmed ? STATUS.TO_CONFIRMED : STATUS.TO_CREATED;
+        const finalProcessStatus = toResult.confirmed ? PROCESS_STATUS.TO_CONFIRMED : PROCESS_STATUS.TO_CREATED;
         await UPDATE(ReservationEntries).set({
           WarehouseNumber: targetWh,
           TransferRequirement: targetTr,
           TransferOrder: toNo,
           Status_code: finalStatus,
+          ProcessStatus: finalProcessStatus,
           ErrorStep: '',
           ErrorMessage: ''
         }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
@@ -959,6 +975,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         if (track) {
           await UPDATE(ReservationEntries).set({
             Status_code: STATUS.TO_CONFIRMED,
+            ProcessStatus: PROCESS_STATUS.TO_CONFIRMED,
             ErrorStep: '',
             ErrorMessage: ''
           }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
@@ -972,6 +989,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             SubObject: 'TRACK',
             Step: 'LT12',
             Status: STATUS.TO_CONFIRMED,
+            ProcessStatus: PROCESS_STATUS.TO_CONFIRMED,
             MessageType: 'S',
             MessageId: 'L3',
             MessageNo: '025',
@@ -992,6 +1010,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         if (track) {
           await UPDATE(ReservationEntries).set({
             Status_code: STATUS.TO_CONFIRM_ERROR,
+            ProcessStatus: PROCESS_STATUS.FAILED_CONFIRMATION,
             ErrorStep: 'LT12',
             ErrorMessage: err.message
           }).where({ ReservationNo: sResNo, ReservationItem: sResItem });
@@ -1164,6 +1183,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         MaterialDocument: migoRes.materialDocument,
         MaterialDocYear: migoRes.materialDocYear,
         Status_code: STATUS.GI_POSTED,
+        ProcessStatus: isCompletelyProcessed ? PROCESS_STATUS.COMPLETED : PROCESS_STATUS.MIGO_POSTED,
         WithdrawnQuantity: withdrawnQty,
         RemainingQuantity: remainingQty,
         CompletelyProcessed: isCompletelyProcessed,
@@ -1253,6 +1273,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         // Rollback already executed by adapter; status 90 (GI error, retryable) and log
         await UPDATE(ReservationEntries).set({
           Status_code: STATUS.GI_ERROR,
+          ProcessStatus: PROCESS_STATUS.FAILED_MIGO,
           ErrorMessage: err.message,
           ErrorStep: 'MIGO',
           LogHandle: sLogHandle,
@@ -1577,6 +1598,23 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       if (!ReservationNo) return req.error(400, 'ReservationNo is mandatory');
       const live = await fetchSapReservation(ReservationNo, ReservationItem);
       if (!live) return req.error(404, `Reservation ${ReservationNo}/${ReservationItem} not found in SAP`);
+
+      const key = {
+        ReservationNo: String(ReservationNo).padStart(10, '0'),
+        ReservationItem: String(ReservationItem).padStart(4, '0')
+      };
+      const track = await SELECT.one.from(ReservationEntries).where(key);
+      if (track?.ProcessStatus) {
+        live.ProcessStatus = track.ProcessStatus;
+      } else if (!live.ProcessStatus) {
+        live.ProcessStatus = live.CompletelyProcessed
+          ? PROCESS_STATUS.COMPLETED
+          : (live.MaterialDocument
+              ? PROCESS_STATUS.MIGO_POSTED
+              : (live.TransferOrder
+                  ? PROCESS_STATUS.TO_CREATED
+                  : (live.TransferRequirement ? PROCESS_STATUS.TR_CREATED : PROCESS_STATUS.RESERVATION_CREATED)));
+      }
       return live;
     });
 
@@ -1620,26 +1658,66 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
     this.on('executeReservationWarehouseFlow', async (req) => {
       try {
-        const result = await adapter.executeReservationWarehouseFlow(req.data || {});
+        const persistStatus = async (status, extra = {}) => {
+          const resNo = extra.reservationNumber || extra.reservationNo;
+          const resItem = extra.reservationItem || '0001';
+          if (!resNo) return;
+          const key = {
+            ReservationNo: String(resNo).padStart(10, '0'),
+            ReservationItem: String(resItem).padStart(4, '0')
+          };
+          const existing = await SELECT.one.from(ReservationEntries).where(key);
+          const updateData = { ProcessStatus: status };
+          if (extra.trNumber) updateData.TransferRequirement = extra.trNumber;
+          if (extra.toNumber) updateData.TransferOrder = extra.toNumber;
+          if (extra.materialDocument) updateData.MaterialDocument = extra.materialDocument;
+          if (extra.materialDocYear || extra.materialDocumentYear) updateData.MaterialDocYear = extra.materialDocYear || extra.materialDocumentYear;
+          if (extra.withdrawnQuantity != null) updateData.WithdrawnQuantity = extra.withdrawnQuantity;
+          if (extra.remainingQuantity != null) updateData.RemainingQuantity = extra.remainingQuantity;
+          if (extra.completelyProcessed != null) updateData.CompletelyProcessed = extra.completelyProcessed;
+          if (extra.error) updateData.ErrorMessage = String(extra.error).substring(0, 255);
+
+          if (existing) {
+            await UPDATE(ReservationEntries).set(updateData).where(key);
+          } else {
+            await INSERT.into(ReservationEntries).entries({
+              ...key,
+              MovementType: req.data?.MovementType || req.data?.movementType || '201',
+              Plant: req.data?.Plant || req.data?.plant || '',
+              StorageLocation: req.data?.StorageLocation || req.data?.storageLocation || '',
+              Material: req.data?.Material || req.data?.material || '',
+              Quantity: req.data?.Quantity || req.data?.quantity || 0,
+              Unit: req.data?.Unit || req.data?.unit || 'EA',
+              Status_code: STATUS.RES_CREATED,
+              ...updateData
+            });
+          }
+        };
+
+        const result = await adapter.executeReservationWarehouseFlow({
+          ...req.data,
+          persistStatus
+        });
         return {
           success: result.success,
           stage: result.stage || result.state || '',
           state: result.state || '',
           currentState: result.currentState || '',
+          processStatus: result.processStatus || '',
           completed: Boolean(result.completed),
           stages: result.stages || [],
-          reservationNumber: result.reservation?.reservationNo || result.reservation?.reservation?.number || '',
-          reservationItem: result.reservation?.reservationItem || '0001',
-          trNumber: result.tr?.trNumber || result.verifiedTR?.trNumber || '',
+          reservationNumber: result.reservation?.reservationNo || result.reservation?.reservation?.number || result.reservationNumber || '',
+          reservationItem: result.reservation?.reservationItem || result.reservationItem || '0001',
+          trNumber: result.tr?.trNumber || result.verifiedTR?.trNumber || result.trNumber || '',
           trItem: result.tr?.trItem || '0001',
-          toNumber: result.to?.toNumber || '',
+          toNumber: result.to?.toNumber || result.toNumber || '',
           toItem: result.to?.toItem || '0001',
-          toConfirmed: Boolean(result.confirmation?.confirmed),
-          materialDocument: result.migo?.materialDocument || '',
-          materialDocumentYear: result.migo?.materialDocumentYear || '',
-          stockVerified: Boolean(result.stock?.verified || result.stock?.success),
-          reservationVerified: Boolean(result.finalReservation?.verified || result.finalReservation?.success),
-          completelyProcessed: Boolean(result.finalReservation?.completelyProcessed),
+          toConfirmed: Boolean(result.confirmation?.confirmed || result.toConfirmed),
+          materialDocument: result.migo?.materialDocument || result.materialDocument || '',
+          materialDocumentYear: result.migo?.materialDocumentYear || result.materialDocumentYear || '',
+          stockVerified: Boolean(result.stock?.verified || result.stock?.success || result.stockVerified),
+          reservationVerified: Boolean(result.finalReservation?.verified || result.finalReservation?.success || result.reservationVerified),
+          completelyProcessed: Boolean(result.finalReservation?.completelyProcessed || result.completelyProcessed),
           error: result.error || ''
         };
       } catch (err) {

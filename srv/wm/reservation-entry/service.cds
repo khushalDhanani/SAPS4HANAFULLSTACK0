@@ -341,6 +341,7 @@ service ReservationEntryService {
         ErrorMessage             : String(255);
         ExternalId               : String(25);
         LogHandle                : String(40);
+        ProcessStatus            : String(35);
     }
 
     // Live detail for a reservation not tracked locally (created outside this app): read from SAP RKPF/RESB.
@@ -355,6 +356,7 @@ service ReservationEntryService {
         stage                : String(30);
         state                : String(30);
         currentState         : String(30);
+        processStatus        : String(35);
         completed            : Boolean;
         stages               : array of String(30);
         reservationNumber    : String(10);

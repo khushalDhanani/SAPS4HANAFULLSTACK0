@@ -511,6 +511,7 @@ service TrToService @(path: '/odata/v4/tr-to') {
         stage                : String(30);
         state                : String(30);
         currentState         : String(30);
+        processStatus        : String(35);
         completed            : Boolean;
         stages               : array of String(30);
         reservationNumber    : String(10);
