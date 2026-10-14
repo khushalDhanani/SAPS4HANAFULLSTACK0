@@ -890,6 +890,117 @@ describe('TrToAdapter (RFC)', () => {
       message: 'Receiving Plant must be different from Issuing Plant for Movement Type 301 (Plant to Plant Transfer)'
     });
   });
+
+  describe('Step 6: SAP TR Validation Discipline (Scanner & Adapter)', () => {
+    it('getTR rejects TR belonging to a different warehouse with 400', async () => {
+      const headerOtherWh = { ...HEADER, LGNUM: 'W02' };
+      const rfc = fakeRfc({ header: headerOtherWh });
+      await expect(new TrToAdapter({ rfc }).getTR('1000663', 'W01'))
+        .rejects.toMatchObject({ status: 400, message: expect.stringContaining('belongs to warehouse W02, not W01') });
+    });
+
+    it('lookupTR rejects TR that is already completed (STATU = E) with 400', async () => {
+      const completedHeader = { ...HEADER, STATU: 'E' };
+      const rfc = fakeRfc({ header: completedHeader });
+      await expect(new TrToAdapter({ rfc }).lookupTR('1000663', 'W01', 'TR'))
+        .rejects.toMatchObject({ status: 400, message: expect.stringContaining('already completed (STATU = E)') });
+    });
+
+    it('lookupTR rejects TR that has no open items with 400', async () => {
+      const closedItems = [
+        { ...ITEMS[0], MENGE: '10.000', TAMEN: '10.000', ELIKZ: 'X' },
+        { ...ITEMS[1], MENGE: '5.000', TAMEN: '5.000', ELIKZ: 'X' }
+      ];
+      const rfc = fakeRfc({ items: closedItems });
+      await expect(new TrToAdapter({ rfc }).lookupTR('1000663', 'W01', 'TR'))
+        .rejects.toMatchObject({ status: 400, message: expect.stringContaining('has no open items (already completed)') });
+    });
+
+    it('lookupTR rejects TR item with missing material with 400', async () => {
+      const invalidMatItem = [{ ...ITEMS[0], MATNR: '' }];
+      const rfc = fakeRfc({ items: invalidMatItem });
+      await expect(new TrToAdapter({ rfc }).lookupTR('1000663', 'W01', 'TR', '0001'))
+        .rejects.toMatchObject({ status: 400, message: expect.stringContaining('missing or invalid material') });
+    });
+
+    it('lookupTR rejects TR item with missing plant with 400', async () => {
+      const invalidPlantItem = [{ ...ITEMS[0], WERKS: '' }];
+      const rfc = fakeRfc({ items: invalidPlantItem });
+      await expect(new TrToAdapter({ rfc }).lookupTR('1000663', 'W01', 'TR', '0001'))
+        .rejects.toMatchObject({ status: 400, message: expect.stringContaining('missing plant') });
+    });
+
+    it('lookupTR rejects TR item with missing storage location with 400', async () => {
+      const invalidSLocItem = [{ ...ITEMS[0], LGORT: '' }];
+      const rfc = fakeRfc({ items: invalidSLocItem });
+      await expect(new TrToAdapter({ rfc }).lookupTR('1000663', 'W01', 'TR', '0001'))
+        .rejects.toMatchObject({ status: 400, message: expect.stringContaining('missing storage location') });
+    });
+
+    it('lookupTR rejects TR item with zero or negative required quantity with 400', async () => {
+      const zeroQtyItem = [{ ...ITEMS[0], MENGE: '0.000', TAMEN: '0.000' }];
+      const rfc = fakeRfc({ items: zeroQtyItem });
+      await expect(new TrToAdapter({ rfc }).lookupTR('1000663', 'W01', 'TR', '0001'))
+        .rejects.toMatchObject({ status: 400, message: expect.stringContaining('has no open items (already completed)') });
+    });
+
+    it('createTOFromTR rejects wrong warehouse with 400', async () => {
+      const headerOtherWh = { ...HEADER, LGNUM: 'W02' };
+      const rfc = fakeRfc({ header: headerOtherWh });
+      await expect(new TrToAdapter({ rfc }).createTOFromTR({ lgnum: 'W01', tbnum: '1000663', tbpos: '0001', qty: 5 }))
+        .rejects.toMatchObject({ status: 400, message: expect.stringContaining('belongs to warehouse W02, not W01') });
+    });
+
+    it('createTOFromTR rejects TR already completed with 400', async () => {
+      const completedHeader = { ...HEADER, STATU: 'E' };
+      const rfc = fakeRfc({ header: completedHeader });
+      await expect(new TrToAdapter({ rfc }).createTOFromTR({ lgnum: 'W01', tbnum: '1000663', tbpos: '0001', qty: 5 }))
+        .rejects.toMatchObject({ status: 400, message: expect.stringContaining('already completed (STATU = E)') });
+    });
+
+    it('createTOFromTR rejects wrong material mismatch with 400', async () => {
+      const rfc = fakeRfc();
+      await expect(new TrToAdapter({ rfc }).createTOFromTR({
+        lgnum: 'W01',
+        tbnum: '1000663',
+        tbpos: '0001',
+        qty: 5,
+        material: 'WRONG_MATERIAL_XYZ'
+      })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('Material mismatch') });
+    });
+
+    it('createTOFromTR rejects wrong plant mismatch with 400', async () => {
+      const rfc = fakeRfc();
+      await expect(new TrToAdapter({ rfc }).createTOFromTR({
+        lgnum: 'W01',
+        tbnum: '1000663',
+        tbpos: '0001',
+        qty: 5,
+        plant: '9999'
+      })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('Plant mismatch') });
+    });
+
+    it('createTOFromTR rejects wrong storage location mismatch with 400', async () => {
+      const rfc = fakeRfc();
+      await expect(new TrToAdapter({ rfc }).createTOFromTR({
+        lgnum: 'W01',
+        tbnum: '1000663',
+        tbpos: '0001',
+        qty: 5,
+        storageLocation: 'WRNG'
+      })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('Storage location mismatch') });
+    });
+
+    it('createTOFromTR rejects quantity > open quantity with 400', async () => {
+      const rfc = fakeRfc();
+      await expect(new TrToAdapter({ rfc }).createTOFromTR({
+        lgnum: 'W01',
+        tbnum: '1000663',
+        tbpos: '0001',
+        qty: 20000
+      })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('exceeds open TR quantity') });
+    });
+  });
 });
 
 describe('RfcClient', () => {

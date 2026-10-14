@@ -162,6 +162,9 @@ class TrToAdapter {
     );
     const h = (res.ET_TR_HEADER || [])[0];
     if (!h) throw httpError(404, `Transfer Requirement ${alphaOut(tr)} not found in warehouse ${wh}`);
+    if (wh && h.LGNUM && h.LGNUM !== wh) {
+      throw httpError(400, `Transfer Requirement ${alphaOut(tr)} belongs to warehouse ${h.LGNUM}, not ${wh}`);
+    }
 
     const items = res.ET_TR_ITEMS || [];
     const desc = await this._descriptions(items.map((i) => i.MATNR));
@@ -661,8 +664,15 @@ class TrToAdapter {
     if (type !== 'TR' && type !== 'RES') throw httpError(400, 'Select whether the scanned number is a Transfer Requirement (TR) or a Reservation (RES)');
     const tr = type === 'RES' ? await this.getTRByReservation(tbnum, wh) : await this.getTR(tbnum, wh);
 
+    if (wh && tr.Lgnum && tr.Lgnum !== wh) {
+      throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} belongs to warehouse ${tr.Lgnum}, not ${wh}`);
+    }
+    if (tr.Statu === 'E') {
+      throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = E)`);
+    }
+
     const open = this._openItems(tr);
-    if (!open.length) throw httpError(404, `Transfer Requirement ${alphaOut(tr.Tbnum)} has no open items`);
+    if (!open.length) throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} has no open items (already completed)`);
     let item = null;
     if (tbpos) {
       const pos = sapKey(tbpos, 'tbpos').padStart(4, '0');
@@ -670,6 +680,24 @@ class TrToAdapter {
       if (!item) throw httpError(400, `TR ${alphaOut(tr.Tbnum)} has no open item ${pos}; open items: ${open.map((i) => i.Tbpos).join(', ')}`);
     } else if (open.length === 1) {
       item = open[0];
+    }
+
+    if (item) {
+      if (!item.Material || !String(item.Material).trim()) {
+        throw httpError(400, `TR ${alphaOut(tr.Tbnum)} item ${item.Tbpos} has missing or invalid material`);
+      }
+      if (!item.Plant || !String(item.Plant).trim()) {
+        throw httpError(400, `TR ${alphaOut(tr.Tbnum)} item ${item.Tbpos} has missing plant`);
+      }
+      if (!item.StorageLocation || !String(item.StorageLocation).trim()) {
+        throw httpError(400, `TR ${alphaOut(tr.Tbnum)} item ${item.Tbpos} has missing storage location`);
+      }
+      if (!(item.RequiredQty > 0)) {
+        throw httpError(400, `TR ${alphaOut(tr.Tbnum)} item ${item.Tbpos} has invalid required quantity (${item.RequiredQty})`);
+      }
+      if (!(item.OpenQty > 0)) {
+        throw httpError(400, `TR ${alphaOut(tr.Tbnum)} item ${item.Tbpos} has no open quantity (already completed)`);
+      }
     }
 
     const profile = item ? (await this._materialProfiles([item.Material], item.Plant))[item.Material] || {} : {};
@@ -1151,6 +1179,12 @@ class TrToAdapter {
     tbpos = '',
     qty,
     unit,
+    material = '',
+    Material = '',
+    plant = '',
+    Plant = '',
+    storageLocation = '',
+    StorageLocation = '',
     batch = '',
     serials = [],
     storageUnit = '',
@@ -1180,6 +1214,13 @@ class TrToAdapter {
 
     const wh = warehouse(lgnum);
     const tr = await this.getTR(tbnum, wh);
+
+    if (wh && tr.Lgnum && tr.Lgnum !== wh) {
+      throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} belongs to warehouse ${tr.Lgnum}, not ${wh}`);
+    }
+    if (tr.Statu === 'E') {
+      throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = E)`);
+    }
 
     let effResMvt = (ReservationMovementType || reservationMovementType || '').trim();
     if (!effResMvt && tr.Rsnum && String(tr.Rsnum).trim() !== '' && String(tr.Rsnum).trim() !== '0000000000' && this.rfc && !this.rfc.readTable?.mock) {
@@ -1212,9 +1253,33 @@ class TrToAdapter {
     } else if (open.length === 1) {
       item = open[0];
     } else if (!open.length) {
-      throw httpError(404, `Transfer Requirement ${alphaOut(tr.Tbnum)} has no open items`);
+      throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} has no open items (already completed)`);
     } else {
       throw httpError(400, `TR ${alphaOut(tr.Tbnum)} has ${open.length} open items (${open.map((i) => i.Tbpos).join(', ')}); choose one (tbpos)`);
+    }
+
+    if (!item.Material || !String(item.Material).trim()) {
+      throw httpError(400, `TR ${alphaOut(tr.Tbnum)} item ${item.Tbpos} has missing or invalid material`);
+    }
+    const reqMat = alphaOut(Material || material || '');
+    if (reqMat && alphaOut(item.Material) !== reqMat) {
+      throw httpError(400, `Material mismatch: requested ${reqMat}, but TR item has ${alphaOut(item.Material)}`);
+    }
+
+    if (!item.Plant || !String(item.Plant).trim()) {
+      throw httpError(400, `TR ${alphaOut(tr.Tbnum)} item ${item.Tbpos} has missing plant`);
+    }
+    const reqPlant = String(Plant || plant || '').trim().toUpperCase();
+    if (reqPlant && String(item.Plant).trim().toUpperCase() !== reqPlant) {
+      throw httpError(400, `Plant mismatch: requested ${reqPlant}, but TR item has ${item.Plant}`);
+    }
+
+    if (!item.StorageLocation || !String(item.StorageLocation).trim()) {
+      throw httpError(400, `TR ${alphaOut(tr.Tbnum)} item ${item.Tbpos} has missing storage location`);
+    }
+    const reqSLoc = String(StorageLocation || storageLocation || '').trim().toUpperCase();
+    if (reqSLoc && String(item.StorageLocation).trim().toUpperCase() !== reqSLoc) {
+      throw httpError(400, `Storage location mismatch: requested ${reqSLoc}, but TR item has ${item.StorageLocation}`);
     }
 
     const linkedTrackedMismatch = Boolean(

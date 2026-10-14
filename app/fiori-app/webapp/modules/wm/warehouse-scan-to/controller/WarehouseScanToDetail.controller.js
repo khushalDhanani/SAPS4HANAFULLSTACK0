@@ -78,6 +78,8 @@ sap.ui.define([
                 serialsStatusText: "",
                 serialsStatusState: "None",
                 canSubmit: false,
+                scanVerificationStatusText: "READY FOR TO",
+                scanVerificationStatusState: "Success",
                 hasResult: false,
                 resultMessage: "",
                 result: null
@@ -137,6 +139,8 @@ sap.ui.define([
             oModel.setProperty("/serials", []);
             oModel.setProperty("/serialsCount", 0);
             oModel.setProperty("/canSubmit", false);
+            oModel.setProperty("/scanVerificationStatusText", "");
+            oModel.setProperty("/scanVerificationStatusState", "None");
             oModel.setProperty("/hasResult", false);
             oModel.setProperty("/result", null);
             oModel.setProperty("/resultMessage", "");
@@ -167,6 +171,8 @@ sap.ui.define([
             oModel.setProperty("/hasTR", false);
             oModel.setProperty("/tr", null);
             oModel.setProperty("/canSubmit", false);
+            oModel.setProperty("/scanVerificationStatusText", "REJECTED");
+            oModel.setProperty("/scanVerificationStatusState", "Error");
             this._playAudio("error");
         },
 
@@ -203,8 +209,28 @@ sap.ui.define([
                     oDetail.DestinationBin = oDetail.DestinationStorageBin;
                 }
 
+                // Validate SAP TR data (do not simply trust frontend payload)
+                if (sLgnum && oDetail.WarehouseNumber && oDetail.WarehouseNumber !== sLgnum) {
+                    throw new Error(that.getText("scanToErrWrongWarehouse", [oDetail.WarehouseNumber, sLgnum]));
+                }
+                if (oDetail.Status === "E" || oDetail.Status === "04" || oDetail.Status === "05" || oDetail.DeliveryCompleted) {
+                    throw new Error(that.getText("scanToErrTrCompleted"));
+                }
+                var nOpenQtyCheck = parseFloat(oDetail.OpenQty !== undefined ? oDetail.OpenQty : (oDetail.OpenQuantity !== undefined ? oDetail.OpenQuantity : 0));
+                if (oDetail.TRItem && nOpenQtyCheck <= 0) {
+                    throw new Error(that.getText("scanToErrTrCompleted"));
+                }
+                if (oDetail.TRItem && oDetail.Material !== undefined && !String(oDetail.Material).trim()) {
+                    throw new Error(that.getText("scanToErrWrongMaterial"));
+                }
+                if (oDetail.TRItem && oDetail.RequiredQuantity !== undefined && !(oDetail.RequiredQuantity > 0) && !(oDetail.TargetQty > 0)) {
+                    throw new Error(that.getText("scanToErrQtyZero"));
+                }
+
                 oModel.setProperty("/tr", oDetail);
                 oModel.setProperty("/hasTR", true);
+                oModel.setProperty("/scanVerificationStatusText", "READY FOR TO");
+                oModel.setProperty("/scanVerificationStatusState", "Success");
                 oModel.setProperty("/hasResult", false);
                 oModel.setProperty("/result", null);
                 oModel.setProperty("/trItems", oDetail.Items || []);
@@ -373,12 +399,18 @@ sap.ui.define([
             if (isNaN(nQty) || nQty <= 0) {
                 oModel.setProperty("/qtyValueState", "Error");
                 oModel.setProperty("/qtyValueStateText", this.getText("scanToErrQtyZero"));
+                oModel.setProperty("/scanVerificationStatusText", "INVALID QUANTITY");
+                oModel.setProperty("/scanVerificationStatusState", "Error");
             } else if (nQty > nOpen) {
                 oModel.setProperty("/qtyValueState", "Error");
                 oModel.setProperty("/qtyValueStateText", this.getText("scanToErrQtyExceeds", [nOpen]));
+                oModel.setProperty("/scanVerificationStatusText", "QUANTITY EXCEEDS OPEN TR");
+                oModel.setProperty("/scanVerificationStatusState", "Error");
             } else {
                 oModel.setProperty("/qtyValueState", "None");
                 oModel.setProperty("/qtyValueStateText", "");
+                oModel.setProperty("/scanVerificationStatusText", "READY FOR TO");
+                oModel.setProperty("/scanVerificationStatusState", "Success");
             }
 
             this._updateSerialsStatus();
@@ -393,6 +425,8 @@ sap.ui.define([
                 oModel.setProperty("/pickQty", nOpen);
                 oModel.setProperty("/qtyValueState", "None");
                 oModel.setProperty("/qtyValueStateText", "");
+                oModel.setProperty("/scanVerificationStatusText", "READY FOR TO");
+                oModel.setProperty("/scanVerificationStatusState", "Success");
                 this._updateSerialsStatus();
                 this._validateForm();
             }
@@ -628,8 +662,17 @@ sap.ui.define([
             var nQty = parseFloat(oModel.getProperty("/pickQty") || 0);
             var nOpen = parseFloat(oTR.OpenQty || 0);
 
-            if (isNaN(nQty) || nQty <= 0 || nQty > nOpen) {
+            if (isNaN(nQty) || nQty <= 0) {
                 oModel.setProperty("/canSubmit", false);
+                oModel.setProperty("/scanVerificationStatusText", "INVALID QUANTITY");
+                oModel.setProperty("/scanVerificationStatusState", "Error");
+                return false;
+            }
+
+            if (nQty > nOpen) {
+                oModel.setProperty("/canSubmit", false);
+                oModel.setProperty("/scanVerificationStatusText", "QUANTITY EXCEEDS OPEN TR");
+                oModel.setProperty("/scanVerificationStatusState", "Error");
                 return false;
             }
 
@@ -637,6 +680,8 @@ sap.ui.define([
                 var sBatch = (oModel.getProperty("/batch") || "").trim();
                 if (!sBatch) {
                     oModel.setProperty("/canSubmit", false);
+                    oModel.setProperty("/scanVerificationStatusText", "PENDING BATCH");
+                    oModel.setProperty("/scanVerificationStatusState", "Warning");
                     return false;
                 }
             }
@@ -646,6 +691,8 @@ sap.ui.define([
                 var nRequired = Math.round(nQty);
                 if (aSerials.length !== nRequired) {
                     oModel.setProperty("/canSubmit", false);
+                    oModel.setProperty("/scanVerificationStatusText", "PENDING SERIALS");
+                    oModel.setProperty("/scanVerificationStatusState", "Warning");
                     return false;
                 }
             }
@@ -659,12 +706,16 @@ sap.ui.define([
                     oModel.setProperty("/recPlantValueState", "Error");
                     oModel.setProperty("/recPlantValueStateText", this.getText("scanToErrReceivingPlantRequired"));
                     oModel.setProperty("/canSubmit", false);
+                    oModel.setProperty("/scanVerificationStatusText", "PENDING DESTINATION");
+                    oModel.setProperty("/scanVerificationStatusState", "Warning");
                     return false;
                 }
                 if (sRecPlant === (oTR.Plant || "").trim()) {
                     oModel.setProperty("/recPlantValueState", "Error");
                     oModel.setProperty("/recPlantValueStateText", this.getText("scanToErrReceivingPlantSame"));
                     oModel.setProperty("/canSubmit", false);
+                    oModel.setProperty("/scanVerificationStatusText", "PENDING DESTINATION");
+                    oModel.setProperty("/scanVerificationStatusState", "Warning");
                     return false;
                 }
                 oModel.setProperty("/recPlantValueState", "None");
@@ -678,12 +729,16 @@ sap.ui.define([
                     oModel.setProperty("/recSLocValueState", "Error");
                     oModel.setProperty("/recSLocValueStateText", this.getText("scanToErrReceivingSLocRequired"));
                     oModel.setProperty("/canSubmit", false);
+                    oModel.setProperty("/scanVerificationStatusText", "PENDING DESTINATION");
+                    oModel.setProperty("/scanVerificationStatusState", "Warning");
                     return false;
                 }
                 if (sRecSLoc === (oTR.StorageLocation || "").trim()) {
                     oModel.setProperty("/recSLocValueState", "Error");
                     oModel.setProperty("/recSLocValueStateText", "Receiving Storage Location must be different from Issuing Storage Location");
                     oModel.setProperty("/canSubmit", false);
+                    oModel.setProperty("/scanVerificationStatusText", "PENDING DESTINATION");
+                    oModel.setProperty("/scanVerificationStatusState", "Warning");
                     return false;
                 }
                 oModel.setProperty("/recSLocValueState", "None");
@@ -697,6 +752,8 @@ sap.ui.define([
                     oModel.setProperty("/costCenterValueState", "Error");
                     oModel.setProperty("/costCenterValueStateText", this.getText("scanToErrCostCenterRequired"));
                     oModel.setProperty("/canSubmit", false);
+                    oModel.setProperty("/scanVerificationStatusText", "PENDING DESTINATION");
+                    oModel.setProperty("/scanVerificationStatusState", "Warning");
                     return false;
                 }
                 oModel.setProperty("/costCenterValueState", "None");
@@ -710,6 +767,8 @@ sap.ui.define([
                     oModel.setProperty("/assetValueState", "Error");
                     oModel.setProperty("/assetValueStateText", this.getText("scanToErrAssetNoRequired"));
                     oModel.setProperty("/canSubmit", false);
+                    oModel.setProperty("/scanVerificationStatusText", "PENDING DESTINATION");
+                    oModel.setProperty("/scanVerificationStatusState", "Warning");
                     return false;
                 }
                 oModel.setProperty("/assetValueState", "None");
@@ -717,6 +776,8 @@ sap.ui.define([
             }
 
             oModel.setProperty("/canSubmit", true);
+            oModel.setProperty("/scanVerificationStatusText", "READY FOR TO");
+            oModel.setProperty("/scanVerificationStatusState", "Success");
             return true;
         },
 

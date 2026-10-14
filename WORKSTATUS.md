@@ -5,6 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 6: Fix Warehouse Scanning & Enforce SAP TR Verification Pipeline (2026-10-14, 13:35 IST):** Complete. Implemented end-to-end TR validation pipeline: `Scan TR` → `Read SAP TR` → `Validate (Material? Quantity? Plant? SLoc? Warehouse? Open Qty? Status?)` → `PASS / REJECT`. Scanner never simply trusts frontend payload. Backend rejects TR doesn't exist (404), TR already completed (`STATU = 'E'`, no open quantity, or delivery completed, 400), wrong material (missing or caller mismatch, 400), wrong plant (missing or mismatch, 400), wrong warehouse (`tr.Lgnum !== wh`, 400), wrong storage location (missing or mismatch, 400), and `quantity > open quantity` (400) in both `lookupTR` and `createTOFromTR` in `srv/integration/s4hana/wm/TrToAdapter.js`. Added dedicated UI SAP TR Verification card in `WarehouseScanToDetail.view.xml` showing TR, Material, Required, Scanned, and Status badge (`READY FOR TO` with Success state). Wired real-time scanned quantity updates and status transitions (`INVALID QUANTITY`, `QUANTITY EXCEEDS OPEN TR`, `PENDING BATCH`, `PENDING SERIALS`, `PENDING DESTINATION`) in `WarehouseScanToDetail.controller.js`. Added unit tests in `trToAdapter.test.js` (63/63 passing) and `warehouseScanToUi.test.js` (50/50 passing). All 10 WM test suites pass 100% green (331/331 tests). CDS compilation and `git diff --check` pass cleanly.
 - **Step 5: Separate TR Creation from TO Creation & Enforce SAP TR Verification (2026-10-14, 13:20 IST):** Complete. Decoupled TO creation from raw reservation data across the entire architecture. Enforced sequence: `Reservation` → `TR` → `TR validation` → `TO`. The TO strictly references the verified SAP TR. Added `getTransferRequirement(trNumber, warehouseNumber)` to `ReservationProcessAdapter.js` to read and verify TR directly from SAP (`LTBK` table query and fallback `Z_WM_GET_TR_MATERIAL_LIST`). Gated `createTransferOrderFromTR` so that TO creation cannot be called on unverified TRs. Exposed standalone action `createTOFromTR(ReservationNo, ReservationItem, WarehouseNumber, TRNumber)` in `srv/wm/reservation-entry/service.cds` and implemented handler in `srv/wm/reservation-entry/service.js`, returning `TOCreatedResponse` (`{ success: true, reservationNumber, trNumber, toNumber, warehouse, itemsCreated }`). Added frontend service helper `createTOFromTR` in `ReservationEntryService.js`. All 7 core WM test suites pass 100% green (185/185 tests). `reservationMonitorRetry.test.js` and `createTOFromTR.test.js` also pass 100% green (40/40 tests). CDS compilation and `git diff --check` pass cleanly.
 - **Step 4: Fix Automatic TR Creation & Enforce Critical 8-Field Verification Rule (2026-10-14, 13:05 IST):** Complete. Implemented deterministic TR creation in `srv/integration/s4hana/wm/ReservationProcessAdapter.js` and `srv/wm/reservation-entry/service.js`. Output strictly returns `{ success: true, reservationNumber, trNumber, trItem }`. Enforced critical verification rule across both adapter and service: verifies TR number, TR item, material, quantity, plant, storage location, warehouse, and movement after SAP TR creation before allowing warehouse workflow to continue. If verification fails, flow aborts with `stage: 'TR'`, marks `Status_code: 11` (TR_ERROR) with explicit mismatch message, and blocks TO creation/warehouse scan. Exposed standalone action `createTransferRequirement` returning `TrCreatedResponse`. All 7 WM test suites pass 100% green (178/178 tests). CDS compilation and `git diff --check` pass cleanly.
 - **Step 3: Make MB21 Creation Independently Reliable & Decouple TR Creation (2026-10-14, 12:50 IST):** Complete. Decoupled MB21 reservation creation from background TR creation in `srv/integration/s4hana/wm/ReservationProcessAdapter.js` and `srv/wm/reservation-entry/service.js`. Enforced strict sequence: `createReservation()` → SAP reservation created → reservation number returned → persist reservation in DB → create TR. If reservation creation fails, the process aborts immediately with structured `{ success: false, stage: 'RESERVATION', error: '...' }` and TR creation is never called. Exposed dedicated standalone action `createReservation` returning structured `{ success: true, reservation: { number, item }, movementType }`. All 7 WM unit test suites pass 100% green (169/169 tests). CDS compilation and `git diff --check` pass cleanly.
@@ -1752,7 +1753,9 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Step 5 — 2026-10-14, 13:05 IST):** Proceed to Step 5: Fix Warehouse Scan validation (validate Material, Quantity, TR, Storage Unit, physical quant stock in LQUA, and account assignment checks before TO creation).
+- **Next Recommended Action (Step 7 — 2026-10-14, 13:35 IST):** Proceed to Step 7: Fix LT12 TO Confirmation & Auto-MIGO Posting (ensure sequential LT04 TO Create → LT12 TO Confirm → MIGO Material Document Posting pipeline with verified SAP persistence).
+- **Previous Recommended Action (Step 6 — 2026-10-14, 13:20 IST):** Fix Warehouse Scanning (`warehouse-scan-to`) to validate real SAP TR data instead of trusting frontend payload.
+- **Previous Recommended Action (Step 5 — 2026-10-14, 13:05 IST):** Separate TR creation from TO creation (Reservation → TR → TR validation → TO).
 - **Previous Recommended Action (Step 4 — 2026-10-14, 12:50 IST):** Make Background TR creation independently reliable and deterministic with critical 8-field verification rule.
 - **Previous Recommended Action (Step 3 — 2026-10-14, 12:35 IST):** Make MB21 creation independently reliable and decouple TR creation until reservation creation is confirmed.
 - **Next Recommended Action (2026-10-14, 10:55 IST):** Check the new persistent banner in the browser with the sandbox flag enabled. Separately obtain fresh read-only Client 220 rows for `RESB` and `RKPF` reservation `0000527870`, plus `LTBK`/`LTAK`/`LTAP`/`LQUA` for TR `0001000823`, before deciding whether a TO exists or stock remains in 921. Do not process any of the three listed mismatched TRs meanwhile.
@@ -1767,7 +1770,71 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
-### 2026-10-13 17:00 IST — Transfer Order 1037307 (Movement 301) Missing Receiving Plant & Post-TO Goods Movement Resolution
+### 2026-10-14 13:35 IST — Step 6: Fix Warehouse Scanning & Enforce SAP TR Verification Pipeline
+
+- **User Request:**
+  - Move to `warehouse-scan-to`. The scanner must validate the SAP TR, not simply trust the frontend payload.
+  - Expected: Scan TR → Read SAP TR → Validate (Material? Quantity? Plant? SLoc? Warehouse? Open quantity? Status?) → PASS.
+  - Reject scenarios: TR doesn't exist; TR already completed; wrong material; wrong quantity; wrong warehouse; wrong storage location; quantity > open quantity.
+  - UI presentation:
+    ```text
+    TR: 123456
+    Material: ABC123
+    Required: 10 EA
+    Scanned: 10 EA
+
+    Status: READY FOR TO
+    ```
+- **Backend Architecture & Hardening:**
+  1. `srv/integration/s4hana/wm/TrToAdapter.js`:
+     - In `getTR(tbnum, lgnum)`: Added check verifying that TR header `LGNUM` strictly matches the targeted warehouse (`wh`). Rejects with 400 (`Transfer Requirement ... belongs to warehouse ..., not ...`) if warehouse mismatch.
+     - In `lookupTR(tbnum, lgnum, docType, tbpos)`:
+       - Warehouse verification: `wh && tr.Lgnum && tr.Lgnum !== wh` throws 400.
+       - Completion status verification: `tr.Statu === 'E'` throws 400 (`Transfer Requirement ... is already completed (STATU = E)`).
+       - Open items check: `!open.length` throws 400 (`Transfer Requirement ... has no open items (already completed)`).
+       - Item-level validations:
+         - Missing/empty material throws 400.
+         - Missing/empty plant throws 400.
+         - Missing/empty storage location throws 400.
+         - Invalid required quantity (`!(item.RequiredQty > 0)`) throws 400.
+         - No open quantity (`!(item.OpenQty > 0)`) throws 400.
+     - In `createTOFromTR`:
+       - Added parameter support for `material`, `Material`, `plant`, `Plant`, `storageLocation`, `StorageLocation`.
+       - Re-verifies TR warehouse and completion status directly against SAP TR before creating TO.
+       - Re-verifies TR item material, plant, storage location, and required fields.
+       - Rejects caller material mismatch (`reqMat !== item.Material`), plant mismatch (`reqPlant !== item.Plant`), and storage location mismatch (`reqSLoc !== item.StorageLocation`).
+       - Enforces quantity validation (`quantity <= 0` throws 400) and `quantity > item.OpenQty` throws 400.
+- **Frontend Presentation & State Management:**
+  1. `WarehouseScanToDetail.view.xml`:
+     - Added prominent SAP TR Verification card (`panelScanVerification`) displaying:
+       - TR: `{scanView>/tr/TRNumber}`
+       - Material: `{scanView>/tr/Material}` (and description)
+       - Required: `{scanView>/tr/TargetQty} {scanView>/tr/Unit}`
+       - Scanned: `{scanView>/pickQty} {scanView>/tr/Unit}` (real-time bound)
+       - Status: ObjectStatus badge bound to `{scanView>/scanVerificationStatusText}` and `{scanView>/scanVerificationStatusState}` (`READY FOR TO` with Success state).
+  2. `WarehouseScanToDetail.controller.js`:
+     - Enforced client-side TR validation on returned SAP TR payload in `loadDetail`: rejects warehouse mismatch, completed status (`STATU = 'E'`, `04`, `05`, `DeliveryCompleted`), zero/negative required quantity, and zero open quantity.
+     - Wired real-time scan verification transitions in `onPickQtyChange`, `onSetMaxQty`, and `_validateForm`:
+       - `READY FOR TO` (`Success` state) when valid and ready to create TO.
+       - `QUANTITY EXCEEDS OPEN TR` (`Error` state) when scanned quantity > open quantity.
+       - `INVALID QUANTITY` (`Error` state) when quantity <= 0 or NaN.
+       - `PENDING BATCH`, `PENDING SERIALS`, `PENDING DESTINATION` (`Warning` state) when required attributes are pending.
+       - `REJECTED` (`Error` state) when TR fails verification.
+  3. `i18n.properties`: Added internationalization keys for verification labels, status messages, and error descriptions.
+- **Affected Files:**
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml`
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `test/unit/wm/trToAdapter.test.js`
+  - `test/unit/wm/warehouseScanToUi.test.js`
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/trToAdapter.test.js`: **PASS** (63/63 tests passed).
+  - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **PASS** (50/50 tests passed).
+  - `npx jest test/unit/wm/createTOFromTR.test.js`: **PASS** (33/33 tests passed).
+  - `npx jest test/unit/wm/movementConfig.test.js test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/mvt201Process.test.js test/unit/wm/mvt241Process.test.js test/unit/wm/mvt311Process.test.js test/unit/wm/mvt301Process.test.js test/unit/wm/createTOFromTR.test.js test/unit/wm/trToAdapter.test.js test/unit/wm/warehouseScanToUi.test.js`: **PASS** (10/10 test suites passed, 331/331 tests passed).
+  - `npx cds compile srv/wm/tr-to/service.cds`: **PASS** (0 errors).
+  - `git diff --check`: **PASS** (clean, 0 errors).
 
 - **User Request:**
   - Fix issue: Transfer Order 1037307 confirmed, but MIGO Goods Movement failed: `Receiving Plant is mandatory for Movement Type 301 (Plant to Plant Transfer)` | Error Details: `Receiving Plant is mandatory for Movement Type 301 (Plant to Plant Transfer)`.

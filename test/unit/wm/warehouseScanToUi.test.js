@@ -1100,5 +1100,146 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             expect(detailModel.getProperty('/assetValueState')).toBe('Error'); // Asset required
             expect(detailModel.getProperty('/canSubmit')).toBe(false);
         });
+
+        it('Step 6: scan verification card displays TR, Material, Required, Scanned, and READY FOR TO status', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                WarehouseNumber: 'W01',
+                TRNumber: '123456',
+                TRItem: '0001',
+                Material: 'ABC123',
+                MaterialDescription: 'Industrial Chemical',
+                OpenQty: 10,
+                TargetQty: 10,
+                Unit: 'EA',
+                IsBatchManaged: false,
+                IsSerialManaged: false
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '123456' } : null))
+            });
+
+            expect(detailModel.getProperty('/tr/TRNumber')).toBe('123456');
+            expect(detailModel.getProperty('/tr/Material')).toBe('ABC123');
+            expect(detailModel.getProperty('/tr/TargetQty')).toBe(10);
+            expect(detailModel.getProperty('/pickQty')).toBe(10);
+            expect(detailModel.getProperty('/scanVerificationStatusText')).toBe('READY FOR TO');
+            expect(detailModel.getProperty('/scanVerificationStatusState')).toBe('Success');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('Step 6: scanned quantity exceeding open TR quantity sets QUANTITY EXCEEDS OPEN TR with Error', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                WarehouseNumber: 'W01',
+                TRNumber: '123456',
+                TRItem: '0001',
+                Material: 'ABC123',
+                OpenQty: 10,
+                TargetQty: 10,
+                Unit: 'EA'
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '123456' } : null))
+            });
+
+            detailCtrl.onPickQtyChange({ getParameter: jest.fn(() => '15') });
+
+            expect(detailModel.getProperty('/pickQty')).toBe(15);
+            expect(detailModel.getProperty('/scanVerificationStatusText')).toBe('QUANTITY EXCEEDS OPEN TR');
+            expect(detailModel.getProperty('/scanVerificationStatusState')).toBe('Error');
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
+        });
+
+        it('Step 6: scanned quantity of 0 or negative sets INVALID QUANTITY with Error', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                WarehouseNumber: 'W01',
+                TRNumber: '123456',
+                TRItem: '0001',
+                Material: 'ABC123',
+                OpenQty: 10,
+                TargetQty: 10,
+                Unit: 'EA'
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '123456' } : null))
+            });
+
+            detailCtrl.onPickQtyChange({ getParameter: jest.fn(() => '0') });
+
+            expect(detailModel.getProperty('/pickQty')).toBe(0);
+            expect(detailModel.getProperty('/scanVerificationStatusText')).toBe('INVALID QUANTITY');
+            expect(detailModel.getProperty('/scanVerificationStatusState')).toBe('Error');
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
+        });
+
+        it('Step 6: onSetMaxQty resets pick quantity and status to READY FOR TO', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                WarehouseNumber: 'W01',
+                TRNumber: '123456',
+                TRItem: '0001',
+                Material: 'ABC123',
+                OpenQty: 10,
+                TargetQty: 10,
+                Unit: 'EA'
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '123456' } : null))
+            });
+
+            detailCtrl.onPickQtyChange({ getParameter: jest.fn(() => '20') });
+            expect(detailModel.getProperty('/scanVerificationStatusText')).toBe('QUANTITY EXCEEDS OPEN TR');
+
+            detailCtrl.onSetMaxQty();
+            expect(detailModel.getProperty('/pickQty')).toBe(10);
+            expect(detailModel.getProperty('/scanVerificationStatusText')).toBe('READY FOR TO');
+            expect(detailModel.getProperty('/scanVerificationStatusState')).toBe('Success');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('Step 6: rejects TR that is already completed (STATU = E) with clear error', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                WarehouseNumber: 'W01',
+                TRNumber: '123456',
+                TRItem: '0001',
+                Material: 'ABC123',
+                Status: 'E',
+                OpenQty: 0
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '123456' } : null))
+            });
+
+            expect(detailModel.getProperty('/hasTR')).toBe(false);
+            expect(detailModel.getProperty('/hasMessage')).toBe(true);
+            expect(detailModel.getProperty('/messageType')).toBe('Error');
+            expect(detailModel.getProperty('/messageText')).toContain('scanToErrTrCompleted');
+            expect(detailModel.getProperty('/scanVerificationStatusText')).toBe('REJECTED');
+            expect(detailModel.getProperty('/scanVerificationStatusState')).toBe('Error');
+        });
+
+        it('Step 6: rejects TR belonging to wrong warehouse with clear error', async () => {
+            detailModel.setProperty('/lgnum', 'W01');
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                WarehouseNumber: 'W02',
+                TRNumber: '123456',
+                TRItem: '0001',
+                Material: 'ABC123',
+                OpenQty: 10
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '123456' } : null))
+            });
+
+            expect(detailModel.getProperty('/hasTR')).toBe(false);
+            expect(detailModel.getProperty('/hasMessage')).toBe(true);
+            expect(detailModel.getProperty('/messageType')).toBe('Error');
+            expect(detailModel.getProperty('/messageText')).toContain('scanToErrWrongWarehouse');
+            expect(detailModel.getProperty('/scanVerificationStatusText')).toBe('REJECTED');
+        });
     });
 });

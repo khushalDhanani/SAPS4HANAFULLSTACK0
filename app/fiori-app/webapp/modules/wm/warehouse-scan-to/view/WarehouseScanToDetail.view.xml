@@ -208,6 +208,52 @@
                     </VBox>
                 </Panel>
 
+                <!-- SECTION 2.5: SAP TR SCAN VERIFICATION CARD -->
+                <Panel
+                    id="panelScanVerification"
+                    headerText="{i18n>scanToPanelScanVerification}"
+                    visible="{scanView>/hasTR}"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+                    <form:SimpleForm
+                        editable="false"
+                        layout="ResponsiveGridLayout"
+                        labelSpanXL="4"
+                        labelSpanL="4"
+                        labelSpanM="4"
+                        labelSpanS="12"
+                        adjustLabelSpan="false"
+                        emptySpanXL="0"
+                        emptySpanL="0"
+                        emptySpanM="0"
+                        emptySpanS="0"
+                        columnsXL="2"
+                        columnsL="2"
+                        columnsM="2">
+                        <form:content>
+                            <Label text="{i18n>scanToLabelVerifyTR}" design="Bold" />
+                            <Text id="txtVerifyTR" text="{scanView>/tr/TRNumber}{= ${scanView>/tr/TRItem} ? ' / Item ' + ${scanView>/tr/TRItem} : ''}" />
+
+                            <Label text="{i18n>scanToLabelVerifyMaterial}" design="Bold" />
+                            <Text id="txtVerifyMaterial" text="{scanView>/tr/Material}{= ${scanView>/tr/MaterialDescription} ? ' (' + ${scanView>/tr/MaterialDescription} + ')' : ''}" />
+
+                            <Label text="{i18n>scanToLabelVerifyRequired}" design="Bold" />
+                            <Text id="txtVerifyRequired" text="{scanView>/tr/TargetQty} {scanView>/tr/Unit}" />
+
+                            <Label text="{i18n>scanToLabelVerifyScanned}" design="Bold" />
+                            <Text id="txtVerifyScanned" text="{scanView>/pickQty} {scanView>/tr/Unit}" />
+
+                            <Label text="{i18n>scanToLabelStatus}" design="Bold" />
+                            <ObjectStatus
+                                id="statusScanVerification"
+                                text="{scanView>/scanVerificationStatusText}"
+                                state="{scanView>/scanVerificationStatusState}"
+                                inverted="true" />
+                        </form:content>
+                    </form:SimpleForm>
+                </Panel>
+
                 <!-- SECTION 3: TR DETAILS SUMMARY CARD -->
                 <Panel
                     id="panelTRDetails"
