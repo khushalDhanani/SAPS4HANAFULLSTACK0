@@ -279,6 +279,73 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * Validates that SAP returned a valid TR and that key fields match expected values.
+   */
+  _verifyTransferRequirement(returnedData, expectedParams) {
+    const {
+      tbnum,
+      tbpos,
+      returnedItem = {}
+    } = returnedData;
+    const {
+      s4Mat,
+      s4Menga,
+      s4Werks,
+      s4Lgort,
+      s4Lgnum,
+      s4Bwlvs
+    } = expectedParams;
+
+    // 1. TR Number: non-empty, non-zero
+    if (!tbnum || tbnum === '0' || tbnum === '0000000000') {
+      throw httpError(500, 'TR creation verification failed: missing or invalid TR number from SAP');
+    }
+
+    // 2. TR Item: non-empty
+    if (!tbpos) {
+      throw httpError(500, 'TR creation verification failed: missing TR item from SAP');
+    }
+
+    // 3. Material
+    const retMat = returnedItem.MATNR || returnedData.material;
+    if (retMat && alphaOut(retMat) !== alphaOut(s4Mat)) {
+      throw httpError(500, `TR verification failed: material mismatch (expected ${alphaOut(s4Mat)}, got ${alphaOut(retMat)})`);
+    }
+
+    // 4. Quantity
+    const retQty = returnedItem.MENGA !== undefined ? returnedItem.MENGA : returnedData.quantity;
+    if (retQty !== undefined && Number(retQty) !== Number(s4Menga)) {
+      throw httpError(500, `TR verification failed: quantity mismatch (expected ${Number(s4Menga)}, got ${Number(retQty)})`);
+    }
+
+    // 5. Plant
+    const retPlant = returnedItem.WERKS || returnedData.plant;
+    if (retPlant && String(retPlant).trim() !== String(s4Werks).trim()) {
+      throw httpError(500, `TR verification failed: plant mismatch (expected ${String(s4Werks).trim()}, got ${String(retPlant).trim()})`);
+    }
+
+    // 6. Storage Location
+    const retSLoc = returnedItem.LGORT || returnedData.storageLocation;
+    if (retSLoc && String(retSLoc).trim() !== String(s4Lgort).trim()) {
+      throw httpError(500, `TR verification failed: storage location mismatch (expected ${String(s4Lgort).trim()}, got ${String(retSLoc).trim()})`);
+    }
+
+    // 7. Warehouse
+    const retWh = returnedItem.LGNUM || returnedData.warehouse || returnedData.warehouseNumber;
+    if (retWh && String(retWh).trim() !== String(s4Lgnum).trim()) {
+      throw httpError(500, `TR verification failed: warehouse mismatch (expected ${String(s4Lgnum).trim()}, got ${String(retWh).trim()})`);
+    }
+
+    // 8. Movement
+    const retMvt = returnedItem.BWLVS || returnedData.movement;
+    if (retMvt && String(retMvt).trim() !== String(s4Bwlvs).trim()) {
+      throw httpError(500, `TR verification failed: movement mismatch (expected ${String(s4Bwlvs).trim()}, got ${String(retMvt).trim()})`);
+    }
+
+    return true;
+  }
+
+  /**
    * Step 2: create_tr
    * Wraps L_TR_CREATE with fallback to custom wrapper ZWM_TR_CREATE
    */
@@ -298,214 +365,256 @@ class ReservationProcessAdapter {
       assetNo: reqAssetNo,
       subNumber: reqSubNumber,
       isTransferPosting: reqIsTransferPosting,
-      batch
+      batch,
+      throwError = true
     } = params;
 
-    if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
-    if (!material) throw httpError(400, 'Material is mandatory');
-    if (!reservationNo) throw httpError(400, 'ReservationNo is mandatory');
-    if (!wmMovementType) throw httpError(400, 'MovementType is mandatory');
-    if (!(Number(quantity) > 0)) throw httpError(400, 'Valid Quantity is mandatory');
-    if (!unit) throw httpError(400, 'Unit is mandatory');
+    try {
+      if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
+      if (!material) throw httpError(400, 'Material is mandatory');
+      if (!reservationNo) throw httpError(400, 'ReservationNo is mandatory');
+      if (!wmMovementType) throw httpError(400, 'MovementType is mandatory');
+      if (!(Number(quantity) > 0)) throw httpError(400, 'Valid Quantity is mandatory');
+      if (!unit) throw httpError(400, 'Unit is mandatory');
 
-    const s4Mat = padMat(sapKey(material, 'matnr'));
-    const s4Rsnum = sapKey(reservationNo, 'rsnum').padStart(10, '0');
-    const s4Rspos = sapKey(reservationItem, 'rspos').padStart(4, '0');
-    const s4Lgnum = sapKey(warehouseNumber, 'lgnum');
+      const s4Mat = padMat(sapKey(material, 'matnr'));
+      const s4Rsnum = sapKey(reservationNo, 'rsnum').padStart(10, '0');
+      const s4Rspos = sapKey(reservationItem, 'rspos').padStart(4, '0');
+      const s4Lgnum = sapKey(warehouseNumber, 'lgnum');
 
-    const mvtConfig = getMovementConfig(wmMovementType || movementType);
-    const useRealMvt = process.env.WM_TR_REAL_MOVEMENT === 'true';
-    let s4Bwlvs;
-    let s4Betyp = '';
-    let s4Benum = '';
+      const mvtConfig = getMovementConfig(wmMovementType || movementType);
+      const useRealMvt = process.env.WM_TR_REAL_MOVEMENT === 'true';
+      let s4Bwlvs;
+      let s4Betyp = '';
+      let s4Benum = '';
 
-    if (useRealMvt) {
-      s4Bwlvs = sapKey(wmMovementType, 'mvt');
-      if (s4Bwlvs === '201') {
-        s4Betyp = mvtConfig?.requirementType || 'K';
-        let cc = reqCostCenter;
-        if (!cc && this.rfc && s4Rsnum) {
-          try {
-            const rkpfRows = await this.rfc.readTable('RKPF', ['RSNUM', 'KOSTL'], [`RSNUM = '${s4Rsnum}'`], 1);
-            if (rkpfRows?.[0]?.KOSTL) cc = rkpfRows[0].KOSTL;
-          } catch (_e) { /* tolerate */ }
+      if (useRealMvt) {
+        s4Bwlvs = sapKey(wmMovementType, 'mvt');
+        if (s4Bwlvs === '201') {
+          s4Betyp = mvtConfig?.requirementType || 'K';
+          let cc = reqCostCenter;
+          if (!cc && this.rfc && s4Rsnum) {
+            try {
+              const rkpfRows = await this.rfc.readTable('RKPF', ['RSNUM', 'KOSTL'], [`RSNUM = '${s4Rsnum}'`], 1);
+              if (rkpfRows?.[0]?.KOSTL) cc = rkpfRows[0].KOSTL;
+            } catch (_e) { /* tolerate */ }
+          }
+          if (!cc || !String(cc).trim()) {
+            throw httpError(400, 'Movement 201 requires Cost Center (BENUM) for dynamic coordinates; Cost Center is missing');
+          }
+          const trimmedCc = String(cc).trim();
+          if (/^\d+$/.test(trimmedCc)) {
+            // CONFIRMED (read from system): numeric cost center padded to 10 chars with leading zeros (ALPHA exit; proven by LTBK TRs 0001000693, 0001000696, 0001000698)
+            s4Benum = trimmedCc.padStart(10, '0');
+          } else {
+            // VERIFY: alphanumeric cost center (e.g. 'SAP-DUMMY' in CSKS) - ALPHA exit does not pad leading zeros on non-digits. Alphanumeric cost center mapping not proven in live LTBK TRs; pass unchanged (up to 10 chars).
+            s4Benum = trimmedCc.slice(0, 10);
+          }
+        } else if (s4Bwlvs === '241') {
+          s4Betyp = mvtConfig?.requirementType || 'A';
+          let an = reqAssetNo;
+          if (!an && this.rfc && s4Rsnum) {
+            try {
+              const rkpfRows = await this.rfc.readTable('RKPF', ['RSNUM', 'ANLN1'], [`RSNUM = '${s4Rsnum}'`], 1);
+              if (rkpfRows?.[0]?.ANLN1) an = rkpfRows[0].ANLN1;
+            } catch (_e) { /* tolerate */ }
+          }
+          if (!an || !String(an).trim()) {
+            throw httpError(400, 'Movement 241 requires Asset number (BENUM) for dynamic coordinates; Asset number is missing');
+          }
+          const trimmedAn = String(an).trim();
+          if (/^\d+$/.test(trimmedAn)) {
+            // CONFIRMED (read from system): ANLN1 is CHAR 12, LTBK-BENUM is CHAR 10. All 19 existing BETYP A TRs in LTBK map ANLN1 (e.g. 000000400001) to 10-char BENUM (0000400001) by stripping 2 leading zeros / slicing rightmost 10 digits.
+            s4Benum = trimmedAn.padStart(10, '0').slice(-10);
+          } else {
+            // VERIFY: alphanumeric asset number not proven in live ANLA / LTBK TRs; pass unchanged (up to 10 chars).
+            s4Benum = trimmedAn.slice(0, 10);
+          }
         }
-        if (!cc || !String(cc).trim()) {
-          throw httpError(400, 'Movement 201 requires Cost Center (BENUM) for dynamic coordinates; Cost Center is missing');
-        }
-        const trimmedCc = String(cc).trim();
-        if (/^\d+$/.test(trimmedCc)) {
-          // CONFIRMED (read from system): numeric cost center padded to 10 chars with leading zeros (ALPHA exit; proven by LTBK TRs 0001000693, 0001000696, 0001000698)
-          s4Benum = trimmedCc.padStart(10, '0');
-        } else {
-          // VERIFY: alphanumeric cost center (e.g. 'SAP-DUMMY' in CSKS) - ALPHA exit does not pad leading zeros on non-digits. Alphanumeric cost center mapping not proven in live LTBK TRs; pass unchanged (up to 10 chars).
-          s4Benum = trimmedCc.slice(0, 10);
-        }
-      } else if (s4Bwlvs === '241') {
-        s4Betyp = mvtConfig?.requirementType || 'A';
-        let an = reqAssetNo;
-        if (!an && this.rfc && s4Rsnum) {
-          try {
-            const rkpfRows = await this.rfc.readTable('RKPF', ['RSNUM', 'ANLN1'], [`RSNUM = '${s4Rsnum}'`], 1);
-            if (rkpfRows?.[0]?.ANLN1) an = rkpfRows[0].ANLN1;
-          } catch (_e) { /* tolerate */ }
-        }
-        if (!an || !String(an).trim()) {
-          throw httpError(400, 'Movement 241 requires Asset number (BENUM) for dynamic coordinates; Asset number is missing');
-        }
-        const trimmedAn = String(an).trim();
-        if (/^\d+$/.test(trimmedAn)) {
-          // CONFIRMED (read from system): ANLN1 is CHAR 12, LTBK-BENUM is CHAR 10. All 19 existing BETYP A TRs in LTBK map ANLN1 (e.g. 000000400001) to 10-char BENUM (0000400001) by stripping 2 leading zeros / slicing rightmost 10 digits.
-          s4Benum = trimmedAn.padStart(10, '0').slice(-10);
-        } else {
-          // VERIFY: alphanumeric asset number not proven in live ANLA / LTBK TRs; pass unchanged (up to 10 chars).
-          s4Benum = trimmedAn.slice(0, 10);
+      } else {
+        // In WM customizing (T333), movement 201/241 require BENUM (Cost Center/Asset). For reservation-based staging, WM movement 311 links cleanly to RSNUM without requiring BENUM.
+        s4Bwlvs = sapKey(resolveWmMovement(wmMovementType || movementType), 'mvt');
+      }
+
+      const s4Werks = sapKey(plant, 'plant');
+      const s4Lgort = sapKey(storageLocation, 'lgort');
+      const s4Menga = Number(quantity);
+      const s4Altme = String(unit).trim().toUpperCase();
+
+      // Pre-check before TR creation (Task 5): read T321 for the movement; if TBFKZ = X, set warning that MIGO will create an extra TR
+      let t321Warning = '';
+      const checkT321 = process.env.WM_PRE_MIGO_T321_CHECK === 'true' || process.env.WM_CHECK_T321_AUTO_TR === 'true';
+      if (checkT321 && this.rfc) {
+        try {
+          const t321Rows = await this.rfc.readTable(
+            'T321',
+            ['LGNUM', 'RBLVS', 'TBFKZ'],
+            [`( LGNUM = '***' OR LGNUM = '${s4Lgnum}' )`, `AND RBLVS = '${s4Bwlvs}'`]
+          );
+          const autoTrRow = (t321Rows || []).find((r) => String(r.TBFKZ || '').trim() === 'X');
+          if (autoTrRow) {
+            t321Warning = 'goods movement will create an additional TR';
+            LOG.warn(`[createTransferRequirement] ${t321Warning} (movement ${s4Bwlvs}, T321-TBFKZ = X)`);
+          }
+        } catch (tErr) {
+          LOG.warn(`[createTransferRequirement] Pre-TR T321 check error: ${tErr.message}`);
         }
       }
-    } else {
-      // In WM customizing (T333), movement 201/241 require BENUM (Cost Center/Asset). For reservation-based staging, WM movement 311 links cleanly to RSNUM without requiring BENUM.
-      s4Bwlvs = sapKey(resolveWmMovement(wmMovementType || movementType), 'mvt');
-    }
 
-    const s4Werks = sapKey(plant, 'plant');
-    const s4Lgort = sapKey(storageLocation, 'lgort');
-    const s4Menga = Number(quantity);
-    const s4Altme = String(unit).trim().toUpperCase();
+      // For transfer postings (301), linking RSNUM directly on the TR header causes standard SAP L_TO_CREATE_TR
+      // to execute restrictive reservation checks that throw XFELD_WRONG. Omitting RSNUM on the WM staging TR allows clean TO creation and confirmation.
+      // For SLoc transfer (311), RSNUM is preserved (confirmed by live TRs 0001000757, 0001000760).
+      const isTransferPosting = Boolean(
+        reqIsTransferPosting ||
+        movementType === '301'
+      );
+      const s4TrRsnum = isTransferPosting ? '' : s4Rsnum;
+      const s4TrRspos = isTransferPosting ? '' : s4Rspos;
 
-    // Pre-check before TR creation (Task 5): read T321 for the movement; if TBFKZ = X, set warning that MIGO will create an extra TR
-    let t321Warning = '';
-    const checkT321 = process.env.WM_PRE_MIGO_T321_CHECK === 'true' || process.env.WM_CHECK_T321_AUTO_TR === 'true';
-    if (checkT321 && this.rfc) {
-      try {
-        const t321Rows = await this.rfc.readTable(
-          'T321',
-          ['LGNUM', 'RBLVS', 'TBFKZ'],
-          [`( LGNUM = '***' OR LGNUM = '${s4Lgnum}' )`, `AND RBLVS = '${s4Bwlvs}'`]
-        );
-        const autoTrRow = (t321Rows || []).find((r) => String(r.TBFKZ || '').trim() === 'X');
-        if (autoTrRow) {
-          t321Warning = 'goods movement will create an additional TR';
-          LOG.warn(`[createTransferRequirement] ${t321Warning} (movement ${s4Bwlvs}, T321-TBFKZ = X)`);
+      const sTrBatch = sapKeyOpt(batch, 'batch');
+      const ltbaItem = {
+        LGNUM: s4Lgnum,
+        BWLVS: s4Bwlvs,
+        MATNR: s4Mat,
+        WERKS: s4Werks,
+        LGORT: s4Lgort,
+        MENGA: s4Menga,
+        ALTME: s4Altme,
+        RSNUM: s4TrRsnum,
+        RSPOS: s4TrRspos,
+        ...(sTrBatch ? { CHARG: sTrBatch } : {}),
+        ...(s4Betyp ? { BETYP: s4Betyp } : {}),
+        ...(s4Benum ? { BENUM: s4Benum } : {})
+      };
+
+      return await this.rfc.session(async (call) => {
+        let res;
+        let tbnum = '';
+        let tbpos = '0001';
+        let returnedItem = {};
+        let rawTbnum = '';
+
+        try {
+          res = await call('L_TR_CREATE', {
+            I_COMMIT_WORK: 'X',
+            I_SAVE_ONLY_ALL: 'X',
+            I_SINGLE_ITEM: 'X',
+            T_LTBA: [ltbaItem]
+          });
+
+          returnedItem = (res.T_LTBA || [])[0] || {};
+          tbnum = returnedItem.TBNUM ? alphaOut(returnedItem.TBNUM) : '';
+          tbpos = returnedItem.TBPOS || '0001';
+          rawTbnum = returnedItem.TBNUM || '';
+        } catch (err) {
+          // Fallback to the custom RFC wrappers (ZWM_TR_CREATE / Z_WM_TR_CREATE) when L_TR_CREATE is rejected
+          try {
+            let resZ;
+            try {
+              resZ = await call('ZWM_TR_CREATE', {
+                IV_LGNUM: s4Lgnum,
+                IV_BWLVS: s4Bwlvs,
+                IV_MATNR: s4Mat,
+                IV_WERKS: s4Werks,
+                IV_LGORT: s4Lgort,
+                IV_MENGA: s4Menga,
+                IV_ALTME: s4Altme,
+                IV_RSNUM: s4TrRsnum,
+                IV_RSPOS: s4TrRspos,
+                IV_COMMIT: 'X'
+              });
+            } catch (_z1Err) {
+              resZ = await call('Z_WM_TR_CREATE', {
+                IV_LGNUM: s4Lgnum,
+                IV_BWLVS: s4Bwlvs,
+                IV_MATNR: s4Mat,
+                IV_WERKS: s4Werks,
+                IV_LGORT: s4Lgort,
+                IV_MENGA: s4Menga,
+                IV_ALTME: s4Altme,
+                IV_RSNUM: s4TrRsnum,
+                IV_RSPOS: s4TrRspos,
+                IV_COMMIT: 'X'
+              });
+            }
+
+            rawTbnum = resZ && (resZ.EV_TBNUM || resZ.E_TBNUM);
+            const cleanTbnum = rawTbnum && rawTbnum !== '0000000000' ? alphaOut(rawTbnum) : '';
+            if (cleanTbnum) {
+              tbnum = cleanTbnum;
+              tbpos = resZ.EV_TBPOS || resZ.E_TBPOS || '0001';
+              returnedItem = resZ;
+            } else if (resZ && resZ.EV_SUCCESS === 'E' && resZ.EV_MESSAGE) {
+              throw new Error(resZ.EV_MESSAGE);
+            }
+          } catch (_zwmErr) {
+            if (_zwmErr.message && !_zwmErr.message.includes('NOT_FOUND') && !_zwmErr.message.includes('RFC_NO_AUTHORITY')) {
+              throw _zwmErr;
+            }
+          }
+
+          if (!tbnum) {
+            // No wrapper produced a TR: surface SAP's own message; the caller records status 11 (TR error).
+            throw err;
+          }
         }
-      } catch (tErr) {
-        LOG.warn(`[createTransferRequirement] Pre-TR T321 check error: ${tErr.message}`);
-      }
-    }
 
-    // For transfer postings (301), linking RSNUM directly on the TR header causes standard SAP L_TO_CREATE_TR
-    // to execute restrictive reservation checks that throw XFELD_WRONG. Omitting RSNUM on the WM staging TR allows clean TO creation and confirmation.
-    // For SLoc transfer (311), RSNUM is preserved (confirmed by live TRs 0001000757, 0001000760).
-    const isTransferPosting = Boolean(
-      reqIsTransferPosting ||
-      movementType === '301'
-    );
-    const s4TrRsnum = isTransferPosting ? '' : s4Rsnum;
-    const s4TrRspos = isTransferPosting ? '' : s4Rspos;
-
-    const sTrBatch = sapKeyOpt(batch, 'batch');
-    const ltbaItem = {
-      LGNUM: s4Lgnum,
-      BWLVS: s4Bwlvs,
-      MATNR: s4Mat,
-      WERKS: s4Werks,
-      LGORT: s4Lgort,
-      MENGA: s4Menga,
-      ALTME: s4Altme,
-      RSNUM: s4TrRsnum,
-      RSPOS: s4TrRspos,
-      ...(sTrBatch ? { CHARG: sTrBatch } : {}),
-      ...(s4Betyp ? { BETYP: s4Betyp } : {}),
-      ...(s4Benum ? { BENUM: s4Benum } : {})
-    };
-
-    return await this.rfc.session(async (call) => {
-      let res;
-      let tbnum = '';
-      let tbpos = '0001';
-      let returnedItem = {};
-
-      try {
-        res = await call('L_TR_CREATE', {
-          I_COMMIT_WORK: 'X',
-          I_SAVE_ONLY_ALL: 'X',
-          I_SINGLE_ITEM: 'X',
-          T_LTBA: [ltbaItem]
+        // Verify the returned TR details before continuing
+        this._verifyTransferRequirement({
+          tbnum,
+          tbpos,
+          returnedItem,
+          material: returnedItem.MATNR,
+          quantity: returnedItem.MENGA,
+          plant: returnedItem.WERKS,
+          storageLocation: returnedItem.LGORT,
+          warehouse: returnedItem.LGNUM,
+          movement: returnedItem.BWLVS
+        }, {
+          s4Mat,
+          s4Menga,
+          s4Werks,
+          s4Lgort,
+          s4Lgnum,
+          s4Bwlvs
         });
 
-        returnedItem = (res.T_LTBA || [])[0] || {};
-        tbnum = returnedItem.TBNUM ? alphaOut(returnedItem.TBNUM) : '';
-        tbpos = returnedItem.TBPOS || '0001';
-      } catch (err) {
-        // Fallback to the custom RFC wrappers (ZWM_TR_CREATE / Z_WM_TR_CREATE) when L_TR_CREATE is rejected
-        try {
-          let resZ;
-          try {
-            resZ = await call('ZWM_TR_CREATE', {
-              IV_LGNUM: s4Lgnum,
-              IV_BWLVS: s4Bwlvs,
-              IV_MATNR: s4Mat,
-              IV_WERKS: s4Werks,
-              IV_LGORT: s4Lgort,
-              IV_MENGA: s4Menga,
-              IV_ALTME: s4Altme,
-              IV_RSNUM: s4TrRsnum,
-              IV_RSPOS: s4TrRspos,
-              IV_COMMIT: 'X'
-            });
-          } catch (_z1Err) {
-            resZ = await call('Z_WM_TR_CREATE', {
-              IV_LGNUM: s4Lgnum,
-              IV_BWLVS: s4Bwlvs,
-              IV_MATNR: s4Mat,
-              IV_WERKS: s4Werks,
-              IV_LGORT: s4Lgort,
-              IV_MENGA: s4Menga,
-              IV_ALTME: s4Altme,
-              IV_RSNUM: s4TrRsnum,
-              IV_RSPOS: s4TrRspos,
-              IV_COMMIT: 'X'
-            });
-          }
-
-          const rawTbnum = resZ && (resZ.EV_TBNUM || resZ.E_TBNUM);
-          const cleanTbnum = rawTbnum && rawTbnum !== '0000000000' ? alphaOut(rawTbnum) : '';
-          if (cleanTbnum) {
-            tbnum = cleanTbnum;
-            tbpos = resZ.EV_TBPOS || resZ.E_TBPOS || '0001';
-            return {
-              success: true,
-              warehouseNumber,
-              trNumber: tbnum,
-              trNumberRaw: rawTbnum,
-              trItem: tbpos,
-              status: STATUS.TR_CREATED,
-              item: resZ,
-              ...(t321Warning ? { warning: t321Warning } : {})
-            };
-          } else if (resZ && resZ.EV_SUCCESS === 'E' && resZ.EV_MESSAGE) {
-            throw new Error(resZ.EV_MESSAGE);
-          }
-        } catch (_zwmErr) {
-          if (_zwmErr.message && !_zwmErr.message.includes('NOT_FOUND') && !_zwmErr.message.includes('RFC_NO_AUTHORITY')) {
-            throw _zwmErr;
-          }
-        }
-
-        // No wrapper produced a TR: surface SAP's own message; the caller records status 11 (TR error).
-        throw err;
+        const cleanResNo = s4Rsnum ? alphaOut(s4Rsnum) : alphaOut(reservationNo);
+        return {
+          success: true,
+          reservationNumber: cleanResNo,
+          trNumber: tbnum,
+          trItem: tbpos,
+          material: alphaOut(returnedItem.MATNR || s4Mat),
+          quantity: returnedItem.MENGA !== undefined ? Number(returnedItem.MENGA) : s4Menga,
+          plant: String(returnedItem.WERKS || s4Werks).trim(),
+          storageLocation: String(returnedItem.LGORT || s4Lgort).trim(),
+          warehouse: String(returnedItem.LGNUM || s4Lgnum).trim(),
+          warehouseNumber: s4Lgnum,
+          movement: String(returnedItem.BWLVS || s4Bwlvs).trim(),
+          movementType: s4Bwlvs,
+          trNumberRaw: rawTbnum || returnedItem.TBNUM || tbnum.padStart(10, '0'),
+          status: STATUS.TR_CREATED,
+          item: returnedItem,
+          ...(t321Warning ? { warning: t321Warning } : {})
+        };
+      });
+    } catch (err) {
+      err.stage = 'TR';
+      err.success = false;
+      err.error = err.message;
+      if (throwError === false) {
+        return {
+          success: false,
+          stage: 'TR',
+          error: err.message,
+          reservationNumber: alphaOut(sapKeyOpt(reservationNo, 'rsnum')),
+          trNumber: '',
+          trItem: ''
+        };
       }
-
-      return {
-        success: true,
-        warehouseNumber,
-        trNumber: tbnum,
-        trNumberRaw: returnedItem.TBNUM,
-        trItem: tbpos,
-        status: STATUS.TR_CREATED,
-        item: returnedItem,
-        ...(t321Warning ? { warning: t321Warning } : {})
-      };
-    });
+      throw err;
+    }
   }
 
   /**

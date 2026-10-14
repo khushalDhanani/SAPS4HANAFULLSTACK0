@@ -5,6 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 4: Fix Automatic TR Creation & Enforce Critical 8-Field Verification Rule (2026-10-14, 13:05 IST):** Complete. Implemented deterministic TR creation in `srv/integration/s4hana/wm/ReservationProcessAdapter.js` and `srv/wm/reservation-entry/service.js`. Output strictly returns `{ success: true, reservationNumber, trNumber, trItem }`. Enforced critical verification rule across both adapter and service: verifies TR number, TR item, material, quantity, plant, storage location, warehouse, and movement after SAP TR creation before allowing warehouse workflow to continue. If verification fails, flow aborts with `stage: 'TR'`, marks `Status_code: 11` (TR_ERROR) with explicit mismatch message, and blocks TO creation/warehouse scan. Exposed standalone action `createTransferRequirement` returning `TrCreatedResponse`. All 7 WM test suites pass 100% green (178/178 tests). CDS compilation and `git diff --check` pass cleanly.
 - **Step 3: Make MB21 Creation Independently Reliable & Decouple TR Creation (2026-10-14, 12:50 IST):** Complete. Decoupled MB21 reservation creation from background TR creation in `srv/integration/s4hana/wm/ReservationProcessAdapter.js` and `srv/wm/reservation-entry/service.js`. Enforced strict sequence: `createReservation()` → SAP reservation created → reservation number returned → persist reservation in DB → create TR. If reservation creation fails, the process aborts immediately with structured `{ success: false, stage: 'RESERVATION', error: '...' }` and TR creation is never called. Exposed dedicated standalone action `createReservation` returning structured `{ success: true, reservation: { number, item }, movementType }`. All 7 WM unit test suites pass 100% green (169/169 tests). CDS compilation and `git diff --check` pass cleanly.
 - **Step 2: Fix the Reservation Creation Layer First & Single Normalized Movement Configuration (2026-10-14, 12:35 IST):** Complete. Implemented single normalized movement configuration (`MOVEMENT_CONFIG` supporting 201, 241, 311, 301) and strict pre-validation (`validateReservationInput`) across `srv/common/movementConfig.js`, `srv/wm/reservation-entry/service.js`, and `srv/integration/s4hana/wm/ReservationProcessAdapter.js`. Added `ReservationDate: Date` support to CDS persistence and actions. Resolved WM movement resolution (`resolveWmMovement`) with SAP WM staging fallback (311 for 201/241 unless `WM_TR_REAL_MOVEMENT === 'true'`). All 7 WM unit test suites pass 100% green (164/164 tests). CDS compilation, UI5 lint/tests, and `git diff --check` pass cleanly.
 - **Step 1: Freeze Expected Business Flow across Movement Types 201 → 241 → 311 → 301 (2026-10-14, 12:18 IST):** Complete. Master execution flow frozen across all four movement types and all seven sequential steps (MB21 → Background TR → Warehouse Scan → LT04 TO Create → LT12 TO Confirm → MIGO → Verification). Established non-negotiable rule: HTTP 200 is never considered success without verified SAP document persistence. Exact document types, SAP function modules, input payloads, validation gates, transparent table queries, and error status transitions (`01`, `11`, `02`, `12`, `03`, `13`, `04`, `90`, `05`) fully documented and frozen in specification artifact `business_flow_freeze_spec.md`. Unit test suites for all 4 movement types pass green (mvt201: 15/15, mvt241: 20/20, mvt311: 21/21, mvt301: 22/22).
@@ -1750,7 +1751,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Step 4 — 2026-10-14, 12:50 IST):** Proceed to Step 4: Make Background TR creation independently reliable (validate TR number and item generation, link to reservation, handle status transitions 01 → 02 / 11, and test independent failure modes).
+- **Next Recommended Action (Step 5 — 2026-10-14, 13:05 IST):** Proceed to Step 5: Fix Warehouse Scan validation (validate Material, Quantity, TR, Storage Unit, physical quant stock in LQUA, and account assignment checks before TO creation).
+- **Previous Recommended Action (Step 4 — 2026-10-14, 12:50 IST):** Make Background TR creation independently reliable and deterministic with critical 8-field verification rule.
 - **Previous Recommended Action (Step 3 — 2026-10-14, 12:35 IST):** Make MB21 creation independently reliable and decouple TR creation until reservation creation is confirmed.
 - **Next Recommended Action (2026-10-14, 10:55 IST):** Check the new persistent banner in the browser with the sandbox flag enabled. Separately obtain fresh read-only Client 220 rows for `RESB` and `RKPF` reservation `0000527870`, plus `LTBK`/`LTAK`/`LTAP`/`LQUA` for TR `0001000823`, before deciding whether a TO exists or stock remains in 921. Do not process any of the three listed mismatched TRs meanwhile.
 - **Next Recommended Action (2026-10-13, 13:32 IST):**
@@ -6097,6 +6099,91 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `npx cds compile srv/wm/reservation-entry/service.cds` → PASS (exit code 0, clean compilation).
   - `git diff --check` → PASS (0 whitespace/formatting errors).
   - `git status` → Clean; zero commits created.
+- **Next action:** Step 4: Fix Automatic TR Creation & Enforce Critical 8-Field Verification Rule.
+
+### 2026-10-14 13:05 IST — Step 4: Fix Automatic TR Creation & Enforce Critical 8-Field Verification Rule (Complete)
+
+- **User Request:**
+  - Fix automatic TR creation: `Reservation` → `createTransferRequirement()`.
+  - TR creation needs to be deterministic.
+  - Return:
+    ```json
+    {
+      "success": true,
+      "reservationNumber": "520235",
+      "trNumber": "123456",
+      "trItem": "0001"
+    }
+    ```
+    (not merely `{ "success": true }`).
+  - Critical Rule: After SAP says the TR was created, verify the returned:
+    - TR number
+    - TR item
+    - material
+    - quantity
+    - plant
+    - storage location
+    - warehouse
+    - movement
+    before allowing the warehouse workflow to continue.
+- **Root Cause & Architectural Alignment:**
+  - `createTransferRequirement` previously returned partial fields without returning `reservationNumber` and without verifying that the returned SAP TR item attributes (`MATNR`, `MENGA`, `WERKS`, `LGORT`, `LGNUM`, `BWLVS`) matched requested parameters.
+  - In `service.js`, `executeReservationAndAutoTR` and `retryStep` previously assumed any returned TR was valid without performing post-creation consistency checks across the 8 critical fields.
+- **Implementation Delivered:**
+  1. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Added helper `_verifyTransferRequirement(returnedData, expectedParams)` validating:
+       1. `tbnum`: Non-empty, non-zero string from SAP.
+       2. `tbpos`: Valid TR item string.
+       3. `material`: `alphaOut(returnedItem.MATNR)` strictly matches `alphaOut(s4Mat)`.
+       4. `quantity`: `Number(returnedItem.MENGA)` strictly matches `Number(s4Menga)`.
+       5. `plant`: `returnedItem.WERKS` strictly matches `s4Werks`.
+       6. `storageLocation`: `returnedItem.LGORT` strictly matches `s4Lgort`.
+       7. `warehouse`: `returnedItem.LGNUM` strictly matches `s4Lgnum`.
+       8. `movement`: `returnedItem.BWLVS` strictly matches `s4Bwlvs`.
+     - Wrapped execution in a dedicated `try ... catch` block with `stage: 'TR'` decoration and support for `throwError: false`.
+     - Structured deterministic output matching user requirements:
+       ```json
+       {
+         "success": true,
+         "reservationNumber": "520235",
+         "trNumber": "1001839",
+         "trItem": "0001",
+         "material": "8000000023",
+         "quantity": 1,
+         "plant": "1120",
+         "storageLocation": "HS01",
+         "warehouse": "W01",
+         "warehouseNumber": "W01",
+         "movement": "311",
+         "status": "02"
+       }
+       ```
+  2. `srv/wm/reservation-entry/service.cds`:
+     - Defined structured CDS type `TrCreatedResponse` with fields `success`, `stage`, `error`, `reservationNumber`, `trNumber`, `trItem`, `material`, `quantity`, `plant`, `storageLocation`, `warehouse`, and `movement`.
+     - Exposed standalone action `createTransferRequirement(ReservationNo, ReservationItem, WarehouseNumber) returns TrCreatedResponse;`.
+  3. `srv/wm/reservation-entry/service.js`:
+     - Added `alphaOut` utility.
+     - In `executeReservationAndAutoTR`: added verification of the 8 returned fields. If any verification fails, updates `ReservationEntries` to `Status_code: 11` (`TR_ERROR`), writes error log `LB01`, and **blocks warehouse workflow from continuing**.
+     - In `retryStep` (`LB01`): added verification of returned TR fields before marking `02`.
+     - Added handler for `action createTransferRequirement`: fetches tracked reservation, invokes adapter `createTransferRequirement`, verifies returned fields, persists TR number and `Status_code: 02`, or sets `Status_code: 11` on failure, returning the deterministic response.
+  4. Unit Tests Added:
+     - `test/unit/wm/reservationProcess.test.js`:
+       - Deterministic TR return validation (`success`, `reservationNumber`, `trNumber`, `trItem`).
+       - Critical Rule: rejects when returned TR material mismatches.
+       - Critical Rule: rejects when returned TR quantity mismatches.
+       - Critical Rule: rejects when returned TR plant or storage location mismatches.
+       - Critical Rule: rejects when returned TR number is missing or zero.
+       - Error handling when `throwError: false`.
+     - `test/unit/wm/reservationEntryService.test.js`:
+       - `action createTransferRequirement`: independently creates TR for existing reservation and returns structured result.
+       - `action createTransferRequirement`: returns `{ success: false, stage: 'TR', error: '...' }` and sets status 11 on failure.
+       - `createReservationEntry`: when TR verification fails, reservation is kept with status 11 and warehouse workflow cannot continue.
+- **Validation results:**
+  - `npx jest test/unit/wm/movementConfig.test.js test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/mvt201Process.test.js test/unit/wm/mvt241Process.test.js test/unit/wm/mvt311Process.test.js test/unit/wm/mvt301Process.test.js --runInBand` → **PASS, 7 test suites, 178 tests passed (100% green)**.
+  - `npx cds compile srv/wm/reservation-entry/service.cds` → PASS (exit code 0, clean compilation).
+  - `git diff --check` → PASS (0 whitespace/formatting errors).
+  - `git status` → Clean; zero commits created.
 - **Errors / blockers:** None.
-- **Next action:** Step 4: Make Background TR creation independently reliable.
+- **Next action:** Step 5: Fix Warehouse Scan validation starting with Movement 201.
+
 

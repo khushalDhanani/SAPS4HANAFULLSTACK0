@@ -467,6 +467,154 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
 
       expect(createTrSpy).not.toHaveBeenCalled();
     });
+
+    test('action createTransferRequirement: independently creates TR for existing reservation and returns structured result', async () => {
+      const testRes = '0000529991';
+      await cds.db.run(INSERT.into(TRACK_ENTITY).entries({
+        ReservationNo: testRes,
+        ReservationItem: '0001',
+        MovementType: '311',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        Material: '8000000023',
+        Quantity: 1,
+        Unit: 'NOS',
+        WarehouseNumber: 'W01',
+        Status_code: '01'
+      }));
+
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement').mockResolvedValueOnce({
+        success: true,
+        reservationNumber: '529991',
+        trNumber: '1001839',
+        trNumberRaw: '0001001839',
+        trItem: '0001',
+        material: '8000000023',
+        quantity: 1,
+        plant: '1120',
+        storageLocation: 'HS01',
+        warehouse: 'W01',
+        warehouseNumber: 'W01',
+        movement: '311',
+        status: '02'
+      });
+
+      const { status, data } = await POST(
+        '/odata/v4/reservation-entry/createTransferRequirement',
+        {
+          ReservationNo: testRes,
+          ReservationItem: '0001',
+          WarehouseNumber: 'W01'
+        },
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(data).toMatchObject({
+        success: true,
+        reservationNumber: '529991',
+        trNumber: '1001839',
+        trItem: '0001'
+      });
+
+      const track = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+      expect(track.Status_code).toBe('02');
+      expect(track.TransferRequirement).toBe('0001001839');
+
+      await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+      await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: testRes }));
+    });
+
+    test('action createTransferRequirement: returns { success: false, stage: "TR", error: "..." } on failure and sets status 11', async () => {
+      const testRes = '0000529992';
+      await cds.db.run(INSERT.into(TRACK_ENTITY).entries({
+        ReservationNo: testRes,
+        ReservationItem: '0001',
+        MovementType: '311',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        Material: '8000000023',
+        Quantity: 1,
+        Unit: 'NOS',
+        WarehouseNumber: 'W01',
+        Status_code: '01'
+      }));
+
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement').mockResolvedValueOnce({
+        success: false,
+        stage: 'TR',
+        error: 'SAP TR creation rejected'
+      });
+
+      const { status, data } = await POST(
+        '/odata/v4/reservation-entry/createTransferRequirement',
+        {
+          ReservationNo: testRes,
+          ReservationItem: '0001',
+          WarehouseNumber: 'W01'
+        },
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(data).toMatchObject({
+        success: false,
+        stage: 'TR',
+        error: 'SAP TR creation rejected'
+      });
+
+      const track = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+      expect(track.Status_code).toBe('11');
+      expect(track.ErrorStep).toBe('LB01');
+
+      await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
+      await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: testRes }));
+    });
+
+    test('createReservationEntry: when TR verification fails, reservation is kept with status 11 and warehouse workflow cannot continue', async () => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValueOnce({
+        success: true,
+        reservation: { number: '520999', item: '0001' },
+        reservationNo: '520999',
+        reservationNoRaw: '0000520999',
+        reservationItem: '0001',
+        movementType: '201',
+        status: '01'
+      });
+
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement').mockRejectedValueOnce(
+        Object.assign(new Error('TR creation verification failed: material mismatch (expected 8000000023, got 8000009999)'), {
+          stage: 'TR',
+          status: 500
+        })
+      );
+
+      const { status, data } = await POST(
+        '/odata/v4/reservation-entry/createReservationEntry',
+        {
+          MovementType: '201',
+          Plant: '1120',
+          StorageLocation: 'HS01',
+          Material: '000000008000000023',
+          Quantity: 10,
+          Unit: 'NOS',
+          CostCenter: '1011201301',
+          WarehouseNumber: 'W01'
+        },
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(data.ReservationNo).toBe('0000520999');
+      expect(data.Status_code).toBe('11');
+      expect(data.TransferRequirement).toBe('');
+      expect(data.ErrorStep).toBe('LB01');
+      expect(data.ErrorMessage).toMatch(/material mismatch/);
+
+      // Clean up test row
+      await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: '0000520999' }));
+      await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: '0000520999' }));
+    });
   });
 
   describe('3. Querying Reservation Entries & Statuses', () => {

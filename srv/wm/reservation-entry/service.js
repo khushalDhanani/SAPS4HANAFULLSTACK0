@@ -9,6 +9,7 @@ const { sapKey, sapKeyOpt } = require('../../integration/s4hana/sapKey');
 const { withReservationLock, isLockConflict } = require('../../integration/s4hana/wm/resLock');
 const { validateReservationInput, MOVEMENT_CONFIG, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
 const LOG = cds.log('reservation-entry');
+const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 
 module.exports = class ReservationEntryService extends cds.ApplicationService {
   async init() {
@@ -254,6 +255,29 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           subNumber: SubNumber,
           batch: Batch
         });
+
+        if (!trResult || trResult.success === false || (!trResult.trNumber && !trResult.trNumberRaw) || trResult.trNumber === '0000000000') {
+          throw new Error('TR creation verification failed: missing or invalid TR number from SAP');
+        }
+        const verifiedTrItem = trResult.trItem || '0001';
+        if (!verifiedTrItem) {
+          throw new Error('TR creation verification failed: missing TR item from SAP');
+        }
+        if (trResult.material && alphaOut(trResult.material) !== alphaOut(Material)) {
+          throw new Error(`TR creation verification failed: material mismatch (expected ${alphaOut(Material)}, got ${alphaOut(trResult.material)})`);
+        }
+        if (trResult.quantity !== undefined && Number(trResult.quantity) !== Number(Quantity)) {
+          throw new Error(`TR creation verification failed: quantity mismatch (expected ${Number(Quantity)}, got ${Number(trResult.quantity)})`);
+        }
+        if (trResult.plant && String(trResult.plant).trim() !== String(Plant).trim()) {
+          throw new Error(`TR creation verification failed: plant mismatch (expected ${Plant}, got ${trResult.plant})`);
+        }
+        if (trResult.storageLocation && String(trResult.storageLocation).trim() !== String(StorageLocation).trim()) {
+          throw new Error(`TR creation verification failed: storage location mismatch (expected ${StorageLocation}, got ${trResult.storageLocation})`);
+        }
+        if (trResult.warehouseNumber && determinedWh && String(trResult.warehouseNumber).trim() !== String(determinedWh).trim()) {
+          throw new Error(`TR creation verification failed: warehouse mismatch (expected ${determinedWh}, got ${trResult.warehouseNumber})`);
+        }
 
         trNumber = trResult.trNumberRaw || String(trResult.trNumber).padStart(10, '0');
         currentStatus = STATUS.TR_CREATED;
@@ -521,6 +545,130 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           item: resItem
         },
         movementType: String(payload.MovementType).trim()
+      };
+    });
+
+    this.on('createTransferRequirement', async (req) => {
+      const { ReservationNo, ReservationItem, WarehouseNumber } = req.data;
+      if (!ReservationNo) return req.error(400, 'ReservationNo is mandatory');
+      const sResNo = String(ReservationNo).padStart(10, '0');
+      const sResItem = String(ReservationItem || '0001').padStart(4, '0');
+
+      const track = await SELECT.one.from(ReservationEntries).where({
+        ReservationNo: sResNo,
+        ReservationItem: sResItem
+      });
+
+      if (!track) {
+        return req.error(404, `Reservation ${alphaOut(sResNo)}/${sResItem} not found in tracking records`);
+      }
+
+      let determinedWh = '';
+      try {
+        determinedWh = WarehouseNumber || track.WarehouseNumber || await warehouseFor(track.Plant, track.StorageLocation, '');
+      } catch (_whErr) {
+        determinedWh = WarehouseNumber || track.WarehouseNumber || '';
+      }
+
+      let trResult;
+      try {
+        trResult = await adapter.createTransferRequirement({
+          warehouseNumber: determinedWh,
+          wmMovementType: track.MovementType,
+          movementType: track.MovementType,
+          isTransferPosting: track.MovementType === '311' || track.MovementType === '301',
+          material: track.Material,
+          plant: track.Plant,
+          storageLocation: track.StorageLocation,
+          quantity: track.Quantity,
+          unit: track.Unit,
+          reservationNo: sResNo,
+          reservationItem: sResItem,
+          costCenter: track.CostCenter,
+          assetNo: track.AssetNo,
+          subNumber: track.SubNumber,
+          batch: track.Batch,
+          throwError: false
+        });
+      } catch (err) {
+        trResult = { success: false, stage: 'TR', error: err.message };
+      }
+
+      if (!trResult || !trResult.success) {
+        await UPDATE(ReservationEntries).set({
+          Status_code: STATUS.TR_ERROR,
+          ErrorStep: 'LB01',
+          ErrorMessage: trResult?.error || 'TR creation failed'
+        }).where({
+          ReservationNo: sResNo,
+          ReservationItem: sResItem
+        });
+
+        await INSERT.into(ReservationLogs).entries({
+          ID: cds.utils.uuid(),
+          ReservationNo: sResNo,
+          ReservationItem: sResItem,
+          LogHandle: track.LogHandle || '',
+          ExternalId: track.ExternalId || '',
+          SubObject: 'TRACK',
+          Step: 'LB01',
+          Status: STATUS.TR_ERROR,
+          MessageType: 'E',
+          MessageId: 'L3',
+          MessageNo: '999',
+          MessageText: trResult?.error || 'TR creation failed'
+        });
+
+        return {
+          success: false,
+          stage: 'TR',
+          error: trResult?.error || 'TR creation failed',
+          reservationNumber: alphaOut(sResNo),
+          trNumber: '',
+          trItem: ''
+        };
+      }
+
+      const trNo = trResult.trNumberRaw || String(trResult.trNumber).padStart(10, '0');
+      const trItem = trResult.trItem || '0001';
+
+      await UPDATE(ReservationEntries).set({
+        WarehouseNumber: determinedWh || track.WarehouseNumber || '',
+        TransferRequirement: trNo,
+        Status_code: STATUS.TR_CREATED,
+        ErrorStep: '',
+        ErrorMessage: ''
+      }).where({
+        ReservationNo: sResNo,
+        ReservationItem: sResItem
+      });
+
+      await INSERT.into(ReservationLogs).entries({
+        ID: cds.utils.uuid(),
+        ReservationNo: sResNo,
+        ReservationItem: sResItem,
+        LogHandle: track.LogHandle || '',
+        ExternalId: track.ExternalId || '',
+        SubObject: 'TRACK',
+        Step: 'LB01',
+        Status: STATUS.TR_CREATED,
+        MessageType: 'S',
+        MessageId: 'L3',
+        MessageNo: '001',
+        MessageText: `Transfer Requirement ${trNo}/${trItem} created and verified via L_TR_CREATE`
+      });
+
+      return {
+        success: true,
+        reservationNumber: alphaOut(sResNo),
+        trNumber: trResult.trNumber,
+        trItem: trItem,
+        material: trResult.material,
+        quantity: trResult.quantity,
+        plant: trResult.plant,
+        storageLocation: trResult.storageLocation,
+        warehouse: trResult.warehouse,
+        movement: trResult.movement
       };
     });
 
@@ -887,6 +1035,26 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
             if (trResult.warning) {
               req?.warn?.(200, trResult.warning);
+            }
+
+            if (!trResult || trResult.success === false || (!trResult.trNumber && !trResult.trNumberRaw) || trResult.trNumber === '0000000000') {
+              throw new Error('TR creation verification failed: missing or invalid TR number from SAP');
+            }
+            const verifiedTrItem = trResult.trItem || '0001';
+            if (!verifiedTrItem) {
+              throw new Error('TR creation verification failed: missing TR item from SAP');
+            }
+            if (trResult.material && alphaOut(trResult.material) !== alphaOut(track.Material)) {
+              throw new Error(`TR creation verification failed: material mismatch (expected ${alphaOut(track.Material)}, got ${alphaOut(trResult.material)})`);
+            }
+            if (trResult.quantity !== undefined && Number(trResult.quantity) !== Number(track.Quantity)) {
+              throw new Error(`TR creation verification failed: quantity mismatch (expected ${Number(track.Quantity)}, got ${Number(trResult.quantity)})`);
+            }
+            if (trResult.plant && String(trResult.plant).trim() !== String(track.Plant).trim()) {
+              throw new Error(`TR creation verification failed: plant mismatch (expected ${track.Plant}, got ${trResult.plant})`);
+            }
+            if (trResult.storageLocation && String(trResult.storageLocation).trim() !== String(track.StorageLocation).trim()) {
+              throw new Error(`TR creation verification failed: storage location mismatch (expected ${track.StorageLocation}, got ${trResult.storageLocation})`);
             }
           } catch (trErr) {
             await fail(STATUS.TR_ERROR, 'LB01', `TR creation failed in SAP backend: ${trErr.message}`);

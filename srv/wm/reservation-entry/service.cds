@@ -31,6 +31,21 @@ service ReservationEntryService {
         movementType : String(3);
     };
 
+    type TrCreatedResponse {
+        success           : Boolean;
+        stage             : String(20);
+        error             : String(255);
+        reservationNumber : String(10);
+        trNumber          : String(10);
+        trItem            : String(4);
+        material          : String(40);
+        quantity          : Decimal(13,3);
+        plant             : String(4);
+        storageLocation   : String(4);
+        warehouse         : String(3);
+        movement          : String(3);
+    };
+
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action createReservation(
         MovementType            : String(3),
@@ -50,6 +65,13 @@ service ReservationEntryService {
         WarehouseNumber         : String(3),
         Batch                   : String(10)
     ) returns ReservationCreatedResponse;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action createTransferRequirement(
+        ReservationNo   : String(10),
+        ReservationItem : String(4),
+        WarehouseNumber : String(3)
+    ) returns TrCreatedResponse;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action createReservationEntry(

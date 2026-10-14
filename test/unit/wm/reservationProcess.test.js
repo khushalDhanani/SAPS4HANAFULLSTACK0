@@ -562,6 +562,203 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         process.env.WM_PRE_MIGO_T321_CHECK = origEnv;
       }
     });
+
+    test('Deterministic TR return: returns success, reservationNumber, trNumber, and trItem', async () => {
+      mockRfc.call.mockResolvedValueOnce({
+        T_LTBA: [
+          {
+            LGNUM: 'W01',
+            BWLVS: '311',
+            TBNUM: '0001001839',
+            TBPOS: '0001',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            MENGA: 5,
+            ALTME: 'NOS',
+            RSNUM: '0000520235',
+            RSPOS: '0001'
+          }
+        ]
+      });
+
+      const result = await adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        wmMovementType: '311',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 5,
+        unit: 'NOS',
+        reservationNo: '520235'
+      });
+
+      expect(result).toMatchObject({
+        success: true,
+        reservationNumber: '520235',
+        trNumber: '1001839',
+        trItem: '0001',
+        material: '8000000023',
+        quantity: 5,
+        plant: '1120',
+        storageLocation: 'HS01',
+        warehouse: 'W01',
+        movement: '311'
+      });
+    });
+
+    test('Critical Rule: rejects when returned TR material mismatches expected material', async () => {
+      mockRfc.call.mockResolvedValueOnce({
+        T_LTBA: [
+          {
+            LGNUM: 'W01',
+            BWLVS: '311',
+            TBNUM: '0001001839',
+            TBPOS: '0001',
+            MATNR: '000000008000009999', // Mismatched material!
+            WERKS: '1120',
+            LGORT: 'HS01',
+            MENGA: 1,
+            ALTME: 'NOS'
+          }
+        ]
+      });
+
+      await expect(
+        adapter.createTransferRequirement({
+          warehouseNumber: 'W01',
+          wmMovementType: '311',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          quantity: 1,
+          unit: 'NOS',
+          reservationNo: '524979'
+        })
+      ).rejects.toMatchObject({
+        stage: 'TR',
+        message: expect.stringContaining('material mismatch')
+      });
+    });
+
+    test('Critical Rule: rejects when returned TR quantity mismatches expected quantity', async () => {
+      mockRfc.call.mockResolvedValueOnce({
+        T_LTBA: [
+          {
+            LGNUM: 'W01',
+            BWLVS: '311',
+            TBNUM: '0001001839',
+            TBPOS: '0001',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            MENGA: 99, // Mismatched quantity!
+            ALTME: 'NOS'
+          }
+        ]
+      });
+
+      await expect(
+        adapter.createTransferRequirement({
+          warehouseNumber: 'W01',
+          wmMovementType: '311',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          quantity: 1,
+          unit: 'NOS',
+          reservationNo: '524979'
+        })
+      ).rejects.toMatchObject({
+        stage: 'TR',
+        message: expect.stringContaining('quantity mismatch')
+      });
+    });
+
+    test('Critical Rule: rejects when returned TR plant or storage location mismatches', async () => {
+      mockRfc.call.mockResolvedValueOnce({
+        T_LTBA: [
+          {
+            LGNUM: 'W01',
+            BWLVS: '311',
+            TBNUM: '0001001839',
+            TBPOS: '0001',
+            MATNR: '000000008000000023',
+            WERKS: '9999', // Mismatched plant!
+            LGORT: 'HS01',
+            MENGA: 1,
+            ALTME: 'NOS'
+          }
+        ]
+      });
+
+      await expect(
+        adapter.createTransferRequirement({
+          warehouseNumber: 'W01',
+          wmMovementType: '311',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          quantity: 1,
+          unit: 'NOS',
+          reservationNo: '524979'
+        })
+      ).rejects.toMatchObject({
+        stage: 'TR',
+        message: expect.stringContaining('plant mismatch')
+      });
+    });
+
+    test('Critical Rule: rejects when returned TR number is missing or zero', async () => {
+      mockRfc.call.mockResolvedValueOnce({
+        T_LTBA: [
+          {
+            LGNUM: 'W01',
+            BWLVS: '311',
+            TBNUM: '0000000000', // Invalid zero TR!
+            TBPOS: '0001'
+          }
+        ]
+      });
+
+      await expect(
+        adapter.createTransferRequirement({
+          warehouseNumber: 'W01',
+          wmMovementType: '311',
+          material: '8000000023',
+          plant: '1120',
+          storageLocation: 'HS01',
+          quantity: 1,
+          unit: 'NOS',
+          reservationNo: '524979'
+        })
+      ).rejects.toMatchObject({
+        stage: 'TR',
+        message: expect.stringContaining('missing or invalid TR number')
+      });
+    });
+
+    test('returns { success: false, stage: "TR", error: "..." } when throwError is false', async () => {
+      mockRfc.call.mockRejectedValueOnce(new Error('SAP connection failure'));
+
+      const result = await adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        wmMovementType: '311',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '524979',
+        throwError: false
+      });
+
+      expect(result).toMatchObject({
+        success: false,
+        stage: 'TR',
+        error: expect.stringMatching(/SAP connection failure/)
+      });
+    });
   });
 
   describe('3. createTransferOrderFromTR (L_TO_CREATE_TR)', () => {
