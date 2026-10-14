@@ -1252,6 +1252,31 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
     });
 
+    // Action handler for Material Document verification (Step 10)
+    this.on('verifyMaterialDocument', async (req) => {
+      try {
+        return await adapter.verifyMaterialDocument(req.data || {});
+      } catch (err) {
+        return req.error(err.status || 400, err.message);
+      }
+    });
+
+    // Action handler for Final Stock Verification (Step 11)
+    this.on('verifyStock', async (req) => {
+      try {
+        return await adapter.verifyStock(req.data || {});
+      } catch (err) {
+        return req.error(err.status || 400, err.message);
+      }
+    });
+    this.on('verifyResultingStock', async (req) => {
+      try {
+        return await adapter.verifyStock(req.data || {});
+      } catch (err) {
+        return req.error(err.status || 400, err.message);
+      }
+    });
+
     // Retry Action per failed step
     this.on('retryStep', async (req) => {
       const data = req.data || {};

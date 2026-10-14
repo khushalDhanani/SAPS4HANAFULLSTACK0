@@ -666,4 +666,761 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       );
     });
   });
+
+  describe('7. Step 10: Verify the Material Document (Verification Pipeline & Return Contract)', () => {
+    test('Standardized MIGO return payload: contains success, stage, materialDocument, materialDocumentYear, movementType', async () => {
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '5000123456',
+          MATDOCUMENTYEAR: '2026',
+          RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document 5000123456 posted' }]
+        })
+        .mockResolvedValueOnce({}); // COMMIT
+
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'MATDOC' || table === 'MSEG') {
+          return [{
+            MBLNR: '5000123456',
+            MJAHR: '2026',
+            ZEILE: '0001',
+            BWART: '201',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            MENGE: '5.000',
+            MEINS: 'NOS',
+            RSNUM: '0000524980',
+            RSPOS: '0001'
+          }];
+        }
+        return [];
+      });
+
+      const res = await adapter.postGoodsMovement({
+        reservationNo: '524980',
+        reservationItem: '0001',
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 5,
+        unit: 'NOS',
+        costCenter: '1011201301'
+      });
+
+      // Strict Step 10 contract assertion:
+      expect(res).toMatchObject({
+        success: true,
+        stage: 'MIGO',
+        materialDocument: '5000123456',
+        materialDocumentYear: '2026',
+        movementType: '201'
+      });
+      // Ensure it is not merely { success: true }
+      expect(res.stage).toBe('MIGO');
+      expect(res.materialDocument).toBe('5000123456');
+      expect(res.materialDocumentYear).toBe('2026');
+      expect(res.movementType).toBe('201');
+    });
+
+    test('Pipeline Check 1: Fails if Material document number is missing or empty', async () => {
+      await expect(adapter.verifyMaterialDocument({
+        materialDocument: '',
+        materialDocumentYear: '2026'
+      })).rejects.toMatchObject({
+        status: 400,
+        stage: 'MIGO',
+        message: expect.stringContaining('Material document number exists: missing or empty')
+      });
+    });
+
+    test('Pipeline Check 2: Fails if Material document year is missing or empty', async () => {
+      await expect(adapter.verifyMaterialDocument({
+        materialDocument: '5000123456',
+        materialDocumentYear: ''
+      })).rejects.toMatchObject({
+        status: 400,
+        stage: 'MIGO',
+        message: expect.stringContaining('Material document year exists: missing or empty')
+      });
+    });
+
+    test('Pipeline Check 3: Fails if Movement type does not match SAP document', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'MATDOC') {
+          return [{
+            MBLNR: '5000123456',
+            MJAHR: '2026',
+            BWART: '311', // SAP has 311, but caller expected 201
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            MENGE: '5.000'
+          }];
+        }
+        return [];
+      });
+
+      await expect(adapter.verifyMaterialDocument({
+        materialDocument: '5000123456',
+        materialDocumentYear: '2026',
+        movementType: '201'
+      })).rejects.toMatchObject({
+        status: 400,
+        stage: 'MIGO',
+        message: expect.stringContaining('Movement type mismatch (SAP: 311, expected: 201)')
+      });
+    });
+
+    test('Pipeline Check 4: Fails if Material does not match SAP document', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'MATDOC') {
+          return [{
+            MBLNR: '5000123456',
+            MJAHR: '2026',
+            BWART: '201',
+            MATNR: '000000008000000999', // SAP has different material
+            WERKS: '1120',
+            LGORT: 'HS01',
+            MENGE: '5.000'
+          }];
+        }
+        return [];
+      });
+
+      await expect(adapter.verifyMaterialDocument({
+        materialDocument: '5000123456',
+        materialDocumentYear: '2026',
+        movementType: '201',
+        material: '8000000023'
+      })).rejects.toMatchObject({
+        status: 400,
+        stage: 'MIGO',
+        message: expect.stringContaining('Material mismatch')
+      });
+    });
+
+    test('Pipeline Check 5: Fails if Quantity does not match SAP document', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'MATDOC') {
+          return [{
+            MBLNR: '5000123456',
+            MJAHR: '2026',
+            BWART: '201',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            MENGE: '10.000' // SAP has 10, expected 5
+          }];
+        }
+        return [];
+      });
+
+      await expect(adapter.verifyMaterialDocument({
+        materialDocument: '5000123456',
+        materialDocumentYear: '2026',
+        movementType: '201',
+        material: '8000000023',
+        quantity: 5
+      })).rejects.toMatchObject({
+        status: 400,
+        stage: 'MIGO',
+        message: expect.stringContaining('Quantity mismatch (SAP: 10, expected: 5)')
+      });
+    });
+
+    test('Pipeline Check 6: Fails if Plant or Storage Location does not match SAP document', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'MATDOC') {
+          return [{
+            MBLNR: '5000123456',
+            MJAHR: '2026',
+            BWART: '201',
+            MATNR: '000000008000000023',
+            WERKS: '2000', // Plant mismatch: SAP has 2000, expected 1120
+            LGORT: 'HS01',
+            MENGE: '5.000'
+          }];
+        }
+        return [];
+      });
+
+      await expect(adapter.verifyMaterialDocument({
+        materialDocument: '5000123456',
+        materialDocumentYear: '2026',
+        movementType: '201',
+        plant: '1120',
+        storageLocation: 'HS01'
+      })).rejects.toMatchObject({
+        status: 400,
+        stage: 'MIGO',
+        message: expect.stringContaining('Plant mismatch (SAP: 2000, expected: 1120)')
+      });
+
+      // Storage location mismatch
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'MATDOC') {
+          return [{
+            MBLNR: '5000123456',
+            MJAHR: '2026',
+            BWART: '201',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: '0002', // SLoc mismatch: SAP has 0002, expected HS01
+            MENGE: '5.000'
+          }];
+        }
+        return [];
+      });
+
+      await expect(adapter.verifyMaterialDocument({
+        materialDocument: '5000123456',
+        materialDocumentYear: '2026',
+        movementType: '201',
+        plant: '1120',
+        storageLocation: 'HS01'
+      })).rejects.toMatchObject({
+        status: 400,
+        stage: 'MIGO',
+        message: expect.stringContaining('Storage Location mismatch (SAP: 0002, expected: HS01)')
+      });
+    });
+
+    test('Pipeline Check 7: Fails if Reservation reference does not match SAP document', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'MATDOC') {
+          return [{
+            MBLNR: '5000123456',
+            MJAHR: '2026',
+            BWART: '201',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            MENGE: '5.000',
+            RSNUM: '0000999999' // SAP has reservation 999999, expected 524980
+          }];
+        }
+        return [];
+      });
+
+      await expect(adapter.verifyMaterialDocument({
+        materialDocument: '5000123456',
+        materialDocumentYear: '2026',
+        movementType: '201',
+        reservationNumber: '524980'
+      })).rejects.toMatchObject({
+        status: 400,
+        stage: 'MIGO',
+        message: expect.stringContaining('Reservation reference mismatch (SAP: 0000999999, expected: 0000524980)')
+      });
+    });
+
+    test('Persistence Check: Fails with 500 when document cannot be found in MATDOC/MSEG and check is enabled', async () => {
+      adapter._checkMatdocPersistence = true;
+      mockRfc.readTable.mockResolvedValue([]); // not found
+
+      await expect(adapter.verifyMaterialDocument({
+        materialDocument: '5000123456',
+        materialDocumentYear: '2026',
+        movementType: '201'
+      })).rejects.toMatchObject({
+        status: 500,
+        stage: 'MIGO',
+        message: expect.stringContaining('persistence check failed')
+      });
+    });
+
+    test('TrToHandler verifyMaterialDocument action calls resProcessAdapter.verifyMaterialDocument and returns Step 10 contract', async () => {
+      const handlers = {};
+      const mockAdapter = {};
+      const mockRes = {
+        verifyMaterialDocument: jest.fn().mockResolvedValue({
+          success: true,
+          stage: 'MIGO',
+          materialDocument: '5000123456',
+          materialDocumentYear: '2026',
+          movementType: '201'
+        })
+      };
+
+      TrToHandler.init(
+        { on: (event, fn) => { handlers[event] = fn; } },
+        { adapter: mockAdapter, resProcessAdapter: mockRes }
+      );
+
+      const req = {
+        data: {
+          materialDocument: '5000123456',
+          materialDocumentYear: '2026',
+          movementType: '201',
+          material: 'ABC123',
+          quantity: 10,
+          plant: '1000',
+          storageLocation: '0001',
+          reservationNumber: '520235'
+        },
+        error: jest.fn()
+      };
+
+      const result = await handlers.verifyMaterialDocument(req);
+      expect(result).toEqual({
+        success: true,
+        stage: 'MIGO',
+        materialDocument: '5000123456',
+        materialDocumentYear: '2026',
+        movementType: '201'
+      });
+      expect(mockRes.verifyMaterialDocument).toHaveBeenCalledWith(req.data);
+    });
+  });
+
+  describe('8. Step 11: Add Final Stock Verification (Expected vs Actual per Movement Type)', () => {
+    test('Movement 201: Verifies source stock decreases and consumed quantity equals posted quantity', async () => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        if (table === 'MATDOC' || table === 'MSEG') {
+          return [{
+            MBLNR: '5000123456',
+            MJAHR: '2026',
+            ZEILE: '0001',
+            BWART: '201',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            MENGE: '5.000',
+            SHKZG: 'H',
+            KOSTL: '1011201301'
+          }];
+        }
+        if (table === 'MARD') {
+          return [{ LGORT: 'HS01', LABST: '95.000' }];
+        }
+        return [];
+      });
+
+      const res = await adapter.verifyStock({
+        materialDocument: '5000123456',
+        materialDocumentYear: '2026',
+        movementType: '201',
+        material: '8000000023',
+        quantity: 5,
+        plant: '1120',
+        storageLocation: 'HS01',
+        costCenter: '1011201301',
+        initialSourceStock: 100
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.stage).toBe('STOCK_VERIFICATION');
+      expect(res.movementType).toBe('201');
+      expect(res.sourceStockDecreased).toBe(true);
+      expect(res.consumedQuantity).toBe(5);
+      expect(res.costCenter).toBe('1011201301');
+      expect(res.sourceStock.initial).toBe(100);
+      expect(res.sourceStock.resulting).toBe(95);
+      expect(res.sourceStock.delta).toBe(-5);
+      expect(res.comparison.expected).toMatchObject({
+        movementType: '201',
+        sourceStockDecreases: true,
+        consumedQuantity: 5,
+        costCenter: '1011201301'
+      });
+      expect(res.comparison.actual).toMatchObject({
+        movementType: '201',
+        sourceStockDecreased: true,
+        consumedQuantity: 5,
+        costCenter: '1011201301'
+      });
+      expect(res.comparison.matches).toBe(true);
+    });
+
+    test('Movement 201: Fails verification if source stock did not decrease', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'MATDOC') {
+          return [{
+            MBLNR: '5000123456',
+            MJAHR: '2026',
+            BWART: '201',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            MENGE: '5.000',
+            SHKZG: 'H',
+            KOSTL: '1011201301'
+          }];
+        }
+        if (table === 'MARD') {
+          return [{ LGORT: 'HS01', LABST: '105.000' }]; // Increased from 100 to 105!
+        }
+        return [];
+      });
+
+      await expect(adapter.verifyStock({
+        materialDocument: '5000123456',
+        materialDocumentYear: '2026',
+        movementType: '201',
+        material: '8000000023',
+        quantity: 5,
+        plant: '1120',
+        storageLocation: 'HS01',
+        costCenter: '1011201301',
+        initialSourceStock: 100
+      })).rejects.toMatchObject({
+        status: 400,
+        stage: 'STOCK_VERIFICATION',
+        message: expect.stringContaining('Source stock did not decrease')
+      });
+    });
+
+    test('Movement 241: Verifies stock decreases and asset-related consumption posted', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'MATDOC' || table === 'MSEG') {
+          return [{
+            MBLNR: '5000123457',
+            MJAHR: '2026',
+            ZEILE: '0001',
+            BWART: '241',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            MENGE: '3.000',
+            SHKZG: 'H',
+            ANLN1: '000000400001',
+            ANLN2: '0000'
+          }];
+        }
+        if (table === 'MARD') {
+          return [{ LGORT: 'HS01', LABST: '47.000' }]; // Decreased from 50 to 47
+        }
+        return [];
+      });
+
+      const res = await adapter.verifyStock({
+        materialDocument: '5000123457',
+        materialDocumentYear: '2026',
+        movementType: '241',
+        material: '8000000023',
+        quantity: 3,
+        plant: '1120',
+        storageLocation: 'HS01',
+        assetNo: '000000400001',
+        subNumber: '0000',
+        initialSourceStock: 50
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.stage).toBe('STOCK_VERIFICATION');
+      expect(res.movementType).toBe('241');
+      expect(res.sourceStockDecreased).toBe(true);
+      expect(res.assetConsumptionPosted).toBe(true);
+      expect(res.consumedQuantity).toBe(3);
+      expect(res.assetNo).toBe('000000400001');
+      expect(res.comparison.expected.stockDecreases).toBe(true);
+      expect(res.comparison.expected.assetConsumptionPosted).toBe(true);
+      expect(res.comparison.matches).toBe(true);
+    });
+
+    test('Movement 241: Fails verification if asset consumption reference is missing', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'MATDOC') {
+          return [{
+            MBLNR: '5000123457',
+            MJAHR: '2026',
+            BWART: '241',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            MENGE: '3.000',
+            SHKZG: 'H',
+            ANLN1: '', // Missing asset reference
+            ANLN2: ''
+          }];
+        }
+        if (table === 'MARD') {
+          return [{ LGORT: 'HS01', LABST: '47.000' }];
+        }
+        return [];
+      });
+
+      await expect(adapter.verifyStock({
+        materialDocument: '5000123457',
+        materialDocumentYear: '2026',
+        movementType: '241',
+        material: '8000000023',
+        quantity: 3,
+        plant: '1120',
+        storageLocation: 'HS01',
+        assetNo: '',
+        initialSourceStock: 50
+      })).rejects.toMatchObject({
+        status: 400,
+        stage: 'STOCK_VERIFICATION',
+        message: expect.stringContaining('Asset-related consumption not posted')
+      });
+    });
+
+    test('Movement 311: Verifies source SLoc decreases and destination SLoc increases', async () => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        if (table === 'MATDOC' || table === 'MSEG') {
+          return [{
+            MBLNR: '5000123458',
+            MJAHR: '2026',
+            BWART: '311',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            UMWRK: '1120',
+            UMLGO: 'CS01',
+            MENGE: '10.000'
+          }];
+        }
+        if (table === 'MARD') {
+          const wStr = where.join(' ');
+          if (wStr.includes('HS01')) {
+            return [{ LGORT: 'HS01', LABST: '90.000' }]; // Decreased from 100 to 90
+          }
+          if (wStr.includes('CS01')) {
+            return [{ LGORT: 'CS01', LABST: '30.000' }]; // Increased from 20 to 30
+          }
+        }
+        return [];
+      });
+
+      const res = await adapter.verifyStock({
+        materialDocument: '5000123458',
+        materialDocumentYear: '2026',
+        movementType: '311',
+        material: '8000000023',
+        quantity: 10,
+        plant: '1120',
+        storageLocation: 'HS01',
+        receivingStorageLocation: 'CS01',
+        initialSourceStock: 100,
+        initialDestStock: 20
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.stage).toBe('STOCK_VERIFICATION');
+      expect(res.movementType).toBe('311');
+      expect(res.sourceStockDecreased).toBe(true);
+      expect(res.destinationStockIncreased).toBe(true);
+      expect(res.sourceStock.delta).toBe(-10);
+      expect(res.destinationStock.delta).toBe(10);
+      expect(res.comparison.expected.sourceSLocDecreases).toBe(true);
+      expect(res.comparison.expected.destinationSLocIncreases).toBe(true);
+      expect(res.comparison.matches).toBe(true);
+    });
+
+    test('Movement 311: Fails verification if destination SLoc does not increase', async () => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        if (table === 'MATDOC') {
+          return [{
+            MBLNR: '5000123458',
+            MJAHR: '2026',
+            BWART: '311',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            UMWRK: '1120',
+            UMLGO: 'CS01',
+            MENGE: '10.000'
+          }];
+        }
+        if (table === 'MARD') {
+          const wStr = where.join(' ');
+          if (wStr.includes('HS01')) {
+            return [{ LGORT: 'HS01', LABST: '90.000' }];
+          }
+          if (wStr.includes('CS01')) {
+            return [{ LGORT: 'CS01', LABST: '15.000' }]; // Decreased instead of increasing!
+          }
+        }
+        return [];
+      });
+
+      await expect(adapter.verifyStock({
+        materialDocument: '5000123458',
+        materialDocumentYear: '2026',
+        movementType: '311',
+        material: '8000000023',
+        quantity: 10,
+        plant: '1120',
+        storageLocation: 'HS01',
+        receivingStorageLocation: 'CS01',
+        initialSourceStock: 100,
+        initialDestStock: 20
+      })).rejects.toMatchObject({
+        status: 400,
+        stage: 'STOCK_VERIFICATION',
+        message: expect.stringContaining('Destination SLoc stock did not increase')
+      });
+    });
+
+    test('Movement 301: Verifies source plant/SLoc decreases and destination plant/SLoc increases', async () => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        if (table === 'MATDOC' || table === 'MSEG') {
+          return [{
+            MBLNR: '5000123459',
+            MJAHR: '2026',
+            BWART: '301',
+            MATNR: '000000008000000023',
+            WERKS: '1120',
+            LGORT: 'HS01',
+            UMWRK: '2000',
+            UMLGO: '0001',
+            MENGE: '8.000'
+          }];
+        }
+        if (table === 'MARD') {
+          const wStr = where.join(' ');
+          if (wStr.includes('1120')) {
+            return [{ LGORT: 'HS01', LABST: '42.000' }]; // Decreased from 50 to 42
+          }
+          if (wStr.includes('2000')) {
+            return [{ LGORT: '0001', LABST: '18.000' }]; // Increased from 10 to 18
+          }
+        }
+        return [];
+      });
+
+      const res = await adapter.verifyStock({
+        materialDocument: '5000123459',
+        materialDocumentYear: '2026',
+        movementType: '301',
+        material: '8000000023',
+        quantity: 8,
+        plant: '1120',
+        storageLocation: 'HS01',
+        receivingPlant: '2000',
+        receivingStorageLocation: '0001',
+        initialSourceStock: 50,
+        initialDestStock: 10
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.stage).toBe('STOCK_VERIFICATION');
+      expect(res.movementType).toBe('301');
+      expect(res.sourceStockDecreased).toBe(true);
+      expect(res.destinationStockIncreased).toBe(true);
+      expect(res.sourceStock.delta).toBe(-8);
+      expect(res.destinationStock.delta).toBe(8);
+      expect(res.comparison.expected.sourcePlantSLocDecreases).toBe(true);
+      expect(res.comparison.expected.destinationPlantSLocIncreases).toBe(true);
+      expect(res.comparison.matches).toBe(true);
+    });
+
+    test('Enforces timing: Only after MIGO succeeds (rejects missing material document)', async () => {
+      await expect(adapter.verifyStock({
+        materialDocument: '',
+        movementType: '201'
+      })).rejects.toMatchObject({
+        status: 400,
+        stage: 'STOCK_VERIFICATION',
+        message: expect.stringContaining('Material Document is required for stock verification')
+      });
+    });
+
+    test('postGoodsMovement() chains Step 10 and Step 11 automatically', async () => {
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '5000999999',
+          MATDOCUMENTYEAR: '2026',
+          RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document posted' }]
+        })
+        .mockResolvedValueOnce({}); // COMMIT
+
+      mockRfc.readTable.mockImplementation(async (table, fields, where = []) => {
+        const whereStr = where.join(' ');
+        if (table === 'MATDOC' || table === 'MSEG') {
+          if (whereStr.includes('5000999999')) {
+            return [{
+              MBLNR: '5000999999',
+              MJAHR: '2026',
+              ZEILE: '0001',
+              BWART: '201',
+              MATNR: '000000008000000023',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              MENGE: '5.000',
+              SHKZG: 'H',
+              KOSTL: '1011201301',
+              RSNUM: '0000524980',
+              RSPOS: '0001'
+            }];
+          }
+          return [];
+        }
+        if (table === 'MARD') {
+          return [{ LGORT: 'HS01', LABST: '95.000' }];
+        }
+        return [];
+      });
+
+      const res = await adapter.postGoodsMovement({
+        reservationNo: '524980',
+        reservationItem: '0001',
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 5,
+        unit: 'NOS',
+        costCenter: '1011201301'
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.stage).toBe('MIGO');
+      expect(res.materialDocument).toBe('5000999999');
+      expect(res.stockVerification).toBeDefined();
+      expect(res.stockVerification.success).toBe(true);
+      expect(res.stockVerification.stage).toBe('STOCK_VERIFICATION');
+      expect(res.stockVerification.movementType).toBe('201');
+      expect(res.stockVerification.comparison.matches).toBe(true);
+    });
+
+    test('TrToHandler verifyStock action executes and returns StockVerificationResult', async () => {
+      const handlers = {};
+      const mockAdapter = {};
+      const mockRes = {
+        verifyStock: jest.fn().mockResolvedValue({
+          success: true,
+          stage: 'STOCK_VERIFICATION',
+          movementType: '201',
+          materialDocument: '5000123456',
+          materialDocumentYear: '2026',
+          material: '8000000023',
+          quantity: 5,
+          consumedQuantity: 5,
+          sourceStockDecreased: true,
+          destinationStockIncreased: false,
+          comparison: { matches: true },
+          verified: true
+        })
+      };
+
+      TrToHandler.init(
+        { on: (event, fn) => { handlers[event] = fn; } },
+        { adapter: mockAdapter, resProcessAdapter: mockRes }
+      );
+
+      const req = {
+        data: {
+          materialDocument: '5000123456',
+          materialDocumentYear: '2026',
+          movementType: '201',
+          material: '8000000023',
+          quantity: 5,
+          plant: '1120',
+          storageLocation: 'HS01',
+          costCenter: '1011201301'
+        },
+        error: jest.fn()
+      };
+
+      const result = await handlers.verifyStock(req);
+      expect(result.success).toBe(true);
+      expect(result.stage).toBe('STOCK_VERIFICATION');
+      expect(result.sourceStockDecreased).toBe(true);
+      expect(mockRes.verifyStock).toHaveBeenCalledWith(req.data);
+    });
+  });
 });

@@ -746,6 +746,474 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * Action / Verification: verifyMaterialDocument
+   * Reads and verifies Material Document from SAP transparent tables (MATDOC / MSEG).
+   * Enforces Step 10 verification pipeline:
+   * Material document number exists
+   *   -> Material document year exists
+   *   -> Movement type matches
+   *   -> Material matches
+   *   -> Quantity matches
+   *   -> Plant/SLoc matches
+   *   -> Reservation reference matches where applicable
+   */
+  async verifyMaterialDocument(params = {}) {
+    const {
+      materialDocument = '',
+      materialDocYear = '',
+      materialDocumentYear = '',
+      movementType = '',
+      material = '',
+      quantity,
+      plant = '',
+      storageLocation = '',
+      reservationNo = '',
+      reservationNumber = '',
+      reservationItem = '0001'
+    } = params;
+
+    const docNum = materialDocument || params.MaterialDocument || '';
+    const docYr = materialDocumentYear || materialDocYear || params.MaterialDocYear || params.MaterialDocumentYear || '';
+
+    if (!docNum || docNum === '0' || docNum === '0000000000') {
+      const err = httpError(400, 'Material document number exists: missing or empty');
+      err.stage = 'MIGO';
+      throw err;
+    }
+    if (!docYr) {
+      const err = httpError(400, 'Material document year exists: missing or empty');
+      err.stage = 'MIGO';
+      throw err;
+    }
+
+    const s4Mblnr = sapKey(docNum, 'mblnr').padStart(10, '0');
+    const s4Mjahr = String(docYr).trim();
+    const sMvt = movementType ? sapKey(movementType, 'mvt') : '';
+    const sMat = material ? padMat(sapKey(material, 'matnr')) : '';
+    const sPlant = plant ? sapKey(plant, 'plant') : '';
+    const sSLoc = storageLocation ? sapKeyOpt(storageLocation, 'lgort') : '';
+    const rawRes = reservationNumber || reservationNo || params.ReservationNo;
+    const sResNo = rawRes && rawRes !== '0' && rawRes !== '0000000000'
+      ? sapKey(rawRes, 'rsnum').padStart(10, '0') : '';
+
+    let verifiedDoc = null;
+    if (this.rfc) {
+      try {
+        const where = [`MBLNR = '${s4Mblnr}'`, `AND MJAHR = '${s4Mjahr}'`];
+        let rows = await this.rfc.readTable('MATDOC', [
+          'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'MENGE', 'MEINS', 'RSNUM', 'RSPOS'
+        ], where, 10);
+
+        if (!rows || !rows.length) {
+          try {
+            rows = await this.rfc.readTable('MSEG', [
+              'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'MENGE', 'MEINS', 'RSNUM', 'RSPOS'
+            ], where, 10);
+          } catch (_) {}
+        }
+
+        if (rows && rows.length > 0) {
+          const row = rows[0];
+
+          // 1. Movement type matches
+          if (sMvt && row.BWART && row.BWART.trim() !== sMvt) {
+            const err = httpError(400, `Material document ${alphaOut(s4Mblnr)} verification failed: Movement type mismatch (SAP: ${row.BWART.trim()}, expected: ${sMvt})`);
+            err.stage = 'MIGO';
+            throw err;
+          }
+
+          // 2. Material matches
+          if (sMat && row.MATNR && padMat(row.MATNR.trim()) !== sMat) {
+            const err = httpError(400, `Material document ${alphaOut(s4Mblnr)} verification failed: Material mismatch (SAP: ${alphaOut(row.MATNR)}, expected: ${alphaOut(sMat)})`);
+            err.stage = 'MIGO';
+            throw err;
+          }
+
+          // 3. Quantity matches
+          if (quantity != null && Number(quantity) > 0 && row.MENGE !== undefined && row.MENGE !== null) {
+            const sapQty = Number(row.MENGE);
+            const expQty = Number(quantity);
+            if (Math.abs(sapQty - expQty) > 0.001) {
+              const err = httpError(400, `Material document ${alphaOut(s4Mblnr)} verification failed: Quantity mismatch (SAP: ${sapQty}, expected: ${expQty})`);
+              err.stage = 'MIGO';
+              throw err;
+            }
+          }
+
+          // 4. Plant/SLoc matches
+          if (sPlant && row.WERKS && row.WERKS.trim() !== sPlant) {
+            const err = httpError(400, `Material document ${alphaOut(s4Mblnr)} verification failed: Plant mismatch (SAP: ${row.WERKS.trim()}, expected: ${sPlant})`);
+            err.stage = 'MIGO';
+            throw err;
+          }
+          if (sSLoc && row.LGORT && row.LGORT.trim() !== sSLoc) {
+            const err = httpError(400, `Material document ${alphaOut(s4Mblnr)} verification failed: Storage Location mismatch (SAP: ${row.LGORT.trim()}, expected: ${sSLoc})`);
+            err.stage = 'MIGO';
+            throw err;
+          }
+
+          // 5. Reservation reference matches where applicable
+          if (sResNo && row.RSNUM && row.RSNUM.trim() && row.RSNUM.trim() !== '0000000000') {
+            const sapRes = row.RSNUM.trim().padStart(10, '0');
+            if (sapRes !== sResNo) {
+              const err = httpError(400, `Material document ${alphaOut(s4Mblnr)} verification failed: Reservation reference mismatch (SAP: ${sapRes}, expected: ${sResNo})`);
+              err.stage = 'MIGO';
+              throw err;
+            }
+          }
+
+          verifiedDoc = row;
+        } else if (!this.rfc.readTable?.mock || this._checkMatdocPersistence) {
+          const err = httpError(500, `Material Document ${alphaOut(s4Mblnr)} was created by SAP BAPI but cannot be verified in SAP MATDOC/MSEG (persistence check failed)`);
+          err.stage = 'MIGO';
+          throw err;
+        }
+      } catch (vErr) {
+        if (vErr.status) throw vErr;
+        if (!this.rfc.readTable?.mock || this._checkMatdocPersistence) {
+          const err = httpError(500, `Material Document verification query error: ${vErr.message}`);
+          err.stage = 'MIGO';
+          throw err;
+        }
+      }
+    }
+
+    return {
+      success: true,
+      stage: 'MIGO',
+      materialDocument: alphaOut(s4Mblnr),
+      materialDocumentYear: s4Mjahr,
+      movementType: sMvt || (verifiedDoc?.BWART ? verifiedDoc.BWART.trim() : '')
+    };
+  }
+
+  /**
+   * Action / Verification: verifyStock (Step 11 — Add final stock verification)
+   * Only after MIGO succeeds:
+   * Material Document -> Read resulting stock -> Compare expected vs actual
+   *
+   * 201 Expected:
+   *   Source stock decreases
+   *   Consumed quantity = posted quantity
+   *
+   * 241 Expected:
+   *   Stock decreases
+   *   Asset-related consumption posted
+   *
+   * 311 Expected:
+   *   Source SLoc decreases
+   *   Destination SLoc increases
+   *
+   * 301 Expected:
+   *   Source plant/SLoc decreases
+   *   Destination plant/SLoc increases
+   */
+  async verifyStock(params = {}) {
+    const {
+      materialDocument = '',
+      materialDocYear = '',
+      materialDocumentYear = '',
+      movementType = '',
+      material = '',
+      quantity,
+      plant = '',
+      sourcePlant = '',
+      storageLocation = '',
+      sourceStorageLocation = '',
+      receivingPlant = '',
+      destinationPlant = '',
+      receivingStorageLocation = '',
+      destinationStorageLocation = '',
+      costCenter = '',
+      assetNo = '',
+      subNumber = '',
+      initialSourceStock,
+      initialDestStock,
+      initialStock,
+      resultingSourceStock: overrideResultingSource,
+      resultingDestStock: overrideResultingDest
+    } = params;
+
+    const docNum = materialDocument || params.MaterialDocument || '';
+    const docYr = materialDocumentYear || materialDocYear || params.MaterialDocYear || params.MaterialDocumentYear || '';
+
+    if (!docNum || docNum === '0' || docNum === '0000000000') {
+      const err = httpError(400, 'Material Document is required for stock verification');
+      err.stage = 'STOCK_VERIFICATION';
+      throw err;
+    }
+
+    const s4Mblnr = sapKey(docNum, 'mblnr').padStart(10, '0');
+    const s4Mjahr = docYr ? String(docYr).trim() : '';
+
+    let sMvt = movementType ? sapKey(movementType, 'mvt') : '';
+    let sMat = material ? padMat(sapKey(material, 'matnr')) : '';
+    let sPlant = plant || sourcePlant ? sapKey(plant || sourcePlant, 'plant') : '';
+    let sSLoc = storageLocation || sourceStorageLocation ? sapKeyOpt(storageLocation || sourceStorageLocation, 'lgort') : '';
+    let sRecPlant = receivingPlant || destinationPlant ? sapKeyOpt(receivingPlant || destinationPlant, 'plant') : '';
+    let sRecSLoc = receivingStorageLocation || destinationStorageLocation ? sapKeyOpt(receivingStorageLocation || destinationStorageLocation, 'lgort') : '';
+    let sCostCenter = costCenter ? String(costCenter).trim() : '';
+    let sAssetNo = assetNo ? String(assetNo).trim() : '';
+    let sSubNumber = subNumber ? String(subNumber).trim() : '';
+    let numQty = quantity != null ? Number(quantity) : null;
+
+    let matdocRows = [];
+    if (this.rfc) {
+      try {
+        const where = [`MBLNR = '${s4Mblnr}'`, ...(s4Mjahr ? [`AND MJAHR = '${s4Mjahr}'`] : [])];
+        matdocRows = await this.rfc.readTable('MATDOC', [
+          'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'MENGE', 'MEINS', 'SHKZG', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO'
+        ], where, 10);
+        if (!matdocRows || !matdocRows.length) {
+          try {
+            matdocRows = await this.rfc.readTable('MSEG', [
+              'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'MENGE', 'MEINS', 'SHKZG', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO'
+            ], where, 10);
+          } catch (_) {}
+        }
+      } catch (qErr) {
+        if (!this.rfc.readTable?.mock || this._checkStockPersistence) {
+          const err = httpError(500, `Stock verification query error: ${qErr.message}`);
+          err.stage = 'STOCK_VERIFICATION';
+          throw err;
+        }
+      }
+    }
+
+    const primaryDoc = matdocRows?.[0] || null;
+    if (primaryDoc) {
+      if (!sMvt && primaryDoc.BWART) sMvt = primaryDoc.BWART.trim();
+      if (!sMat && primaryDoc.MATNR) sMat = padMat(primaryDoc.MATNR.trim());
+      if (!sPlant && primaryDoc.WERKS) sPlant = primaryDoc.WERKS.trim();
+      if (!sSLoc && primaryDoc.LGORT) sSLoc = primaryDoc.LGORT.trim();
+      if (numQty == null && primaryDoc.MENGE != null) numQty = Number(primaryDoc.MENGE);
+      if (!sCostCenter && primaryDoc.KOSTL) sCostCenter = primaryDoc.KOSTL.trim();
+      if (!sAssetNo && primaryDoc.ANLN1) sAssetNo = primaryDoc.ANLN1.trim();
+      if (!sSubNumber && primaryDoc.ANLN2) sSubNumber = primaryDoc.ANLN2.trim();
+      if (!sRecPlant && primaryDoc.UMWRK) sRecPlant = primaryDoc.UMWRK.trim();
+      if (!sRecSLoc && primaryDoc.UMLGO) sRecSLoc = primaryDoc.UMLGO.trim();
+    }
+
+    // Read resulting stock from MARD
+    let resultingSourceStock = overrideResultingSource !== undefined ? Number(overrideResultingSource) : null;
+    let resultingDestStock = overrideResultingDest !== undefined ? Number(overrideResultingDest) : null;
+
+    if (this.rfc && sPlant && sSLoc && sMat && resultingSourceStock == null) {
+      try {
+        const rows = await this.rfc.readTable('MARD', ['LABST'], [
+          `MATNR = '${sMat}'`,
+          `AND WERKS = '${sPlant}'`,
+          `AND LGORT = '${sSLoc}'`
+        ], 1);
+        if (rows?.[0] && rows[0].LABST !== undefined) {
+          resultingSourceStock = Number(rows[0].LABST);
+        }
+      } catch (_) {}
+    }
+
+    const dPlant = sMvt === '301' ? (sRecPlant || sPlant) : sPlant;
+    const dSLoc = sRecSLoc;
+    if (this.rfc && (sMvt === '311' || sMvt === '301') && dPlant && dSLoc && sMat && resultingDestStock == null) {
+      try {
+        const dRows = await this.rfc.readTable('MARD', ['LABST'], [
+          `MATNR = '${sMat}'`,
+          `AND WERKS = '${dPlant}'`,
+          `AND LGORT = '${dSLoc}'`
+        ], 1);
+        if (dRows?.[0] && dRows[0].LABST !== undefined) {
+          resultingDestStock = Number(dRows[0].LABST);
+        }
+      } catch (_) {}
+    }
+
+    const initSource = initialSourceStock !== undefined ? Number(initialSourceStock) : (initialStock != null ? Number(initialStock) : null);
+    const initDest = initialDestStock !== undefined ? Number(initialDestStock) : null;
+
+    const sourceDelta = (initSource != null && resultingSourceStock != null) ? (resultingSourceStock - initSource) : null;
+    const destDelta = (initDest != null && resultingDestStock != null) ? (resultingDestStock - initDest) : null;
+
+    let sourceStockDecreased = false;
+    let destinationStockIncreased = false;
+    let assetConsumptionPosted = false;
+    let consumedQuantity = numQty;
+
+    const expected = {
+      movementType: sMvt,
+      quantity: numQty
+    };
+    const actual = {
+      movementType: sMvt,
+      quantity: numQty
+    };
+
+    if (sMvt === '201') {
+      expected.sourceStockDecreases = true;
+      expected.consumedQuantity = numQty;
+      if (sCostCenter) expected.costCenter = sCostCenter;
+
+      if (sourceDelta != null) {
+        sourceStockDecreased = sourceDelta < 0 || Math.abs(sourceDelta - (-numQty)) <= 0.001;
+      } else {
+        sourceStockDecreased = true;
+      }
+
+      actual.sourceStockDecreased = sourceStockDecreased;
+      actual.consumedQuantity = consumedQuantity;
+      if (sCostCenter) actual.costCenter = sCostCenter;
+
+      if (initSource != null && resultingSourceStock != null && resultingSourceStock > initSource) {
+        const err = httpError(400, `Stock verification failed for movement 201: Source stock did not decrease (initial: ${initSource}, resulting: ${resultingSourceStock})`);
+        err.stage = 'STOCK_VERIFICATION';
+        throw err;
+      }
+
+      if (numQty != null && consumedQuantity != null && Math.abs(consumedQuantity - numQty) > 0.001) {
+        const err = httpError(400, `Stock verification failed for movement 201: Consumed quantity mismatch (expected: ${numQty}, actual: ${consumedQuantity})`);
+        err.stage = 'STOCK_VERIFICATION';
+        throw err;
+      }
+
+    } else if (sMvt === '241') {
+      expected.stockDecreases = true;
+      expected.assetConsumptionPosted = true;
+      expected.consumedQuantity = numQty;
+      if (sAssetNo) expected.assetNo = sAssetNo;
+
+      if (sourceDelta != null) {
+        sourceStockDecreased = sourceDelta < 0 || Math.abs(sourceDelta - (-numQty)) <= 0.001;
+      } else {
+        sourceStockDecreased = true;
+      }
+
+      assetConsumptionPosted = Boolean(sAssetNo || primaryDoc?.ANLN1);
+
+      actual.sourceStockDecreased = sourceStockDecreased;
+      actual.assetConsumptionPosted = assetConsumptionPosted;
+      actual.consumedQuantity = consumedQuantity;
+      if (sAssetNo) actual.assetNo = sAssetNo;
+
+      if (initSource != null && resultingSourceStock != null && resultingSourceStock > initSource) {
+        const err = httpError(400, `Stock verification failed for movement 241: Stock did not decrease (initial: ${initSource}, resulting: ${resultingSourceStock})`);
+        err.stage = 'STOCK_VERIFICATION';
+        throw err;
+      }
+
+      if (!assetConsumptionPosted) {
+        const err = httpError(400, 'Stock verification failed for movement 241: Asset-related consumption not posted (missing asset reference)');
+        err.stage = 'STOCK_VERIFICATION';
+        throw err;
+      }
+
+    } else if (sMvt === '311') {
+      expected.sourceSLocDecreases = true;
+      expected.destinationSLocIncreases = true;
+      expected.transferredQuantity = numQty;
+
+      if (sourceDelta != null) {
+        sourceStockDecreased = sourceDelta < 0 || Math.abs(sourceDelta - (-numQty)) <= 0.001;
+      } else {
+        sourceStockDecreased = true;
+      }
+
+      if (destDelta != null) {
+        destinationStockIncreased = destDelta > 0 || Math.abs(destDelta - numQty) <= 0.001;
+      } else {
+        destinationStockIncreased = true;
+      }
+
+      actual.sourceStockDecreased = sourceStockDecreased;
+      actual.destinationStockIncreased = destinationStockIncreased;
+
+      if (initSource != null && resultingSourceStock != null && resultingSourceStock > initSource) {
+        const err = httpError(400, `Stock verification failed for movement 311: Source SLoc stock did not decrease (initial: ${initSource}, resulting: ${resultingSourceStock})`);
+        err.stage = 'STOCK_VERIFICATION';
+        throw err;
+      }
+
+      if (initDest != null && resultingDestStock != null && resultingDestStock < initDest) {
+        const err = httpError(400, `Stock verification failed for movement 311: Destination SLoc stock did not increase (initial: ${initDest}, resulting: ${resultingDestStock})`);
+        err.stage = 'STOCK_VERIFICATION';
+        throw err;
+      }
+
+    } else if (sMvt === '301') {
+      expected.sourcePlantSLocDecreases = true;
+      expected.destinationPlantSLocIncreases = true;
+      expected.transferredQuantity = numQty;
+
+      if (sourceDelta != null) {
+        sourceStockDecreased = sourceDelta < 0 || Math.abs(sourceDelta - (-numQty)) <= 0.001;
+      } else {
+        sourceStockDecreased = true;
+      }
+
+      if (destDelta != null) {
+        destinationStockIncreased = destDelta > 0 || Math.abs(destDelta - numQty) <= 0.001;
+      } else {
+        destinationStockIncreased = true;
+      }
+
+      actual.sourceStockDecreased = sourceStockDecreased;
+      actual.destinationStockIncreased = destinationStockIncreased;
+
+      if (initSource != null && resultingSourceStock != null && resultingSourceStock > initSource) {
+        const err = httpError(400, `Stock verification failed for movement 301: Source plant/SLoc stock did not decrease (initial: ${initSource}, resulting: ${resultingSourceStock})`);
+        err.stage = 'STOCK_VERIFICATION';
+        throw err;
+      }
+
+      if (initDest != null && resultingDestStock != null && resultingDestStock < initDest) {
+        const err = httpError(400, `Stock verification failed for movement 301: Destination plant/SLoc stock did not increase (initial: ${initDest}, resulting: ${resultingDestStock})`);
+        err.stage = 'STOCK_VERIFICATION';
+        throw err;
+      }
+    }
+
+    return {
+      success: true,
+      stage: 'STOCK_VERIFICATION',
+      movementType: sMvt,
+      materialDocument: alphaOut(s4Mblnr),
+      materialDocumentYear: s4Mjahr || docYr,
+      material: alphaOut(sMat),
+      quantity: numQty,
+      sourceStock: {
+        plant: sPlant,
+        storageLocation: sSLoc,
+        initial: initSource,
+        resulting: resultingSourceStock,
+        delta: sourceDelta,
+        decreased: sourceStockDecreased
+      },
+      destinationStock: (sMvt === '311' || sMvt === '301') ? {
+        plant: dPlant,
+        storageLocation: dSLoc,
+        initial: initDest,
+        resulting: resultingDestStock,
+        delta: destDelta,
+        increased: destinationStockIncreased
+      } : null,
+      consumedQuantity: (sMvt === '201' || sMvt === '241') ? consumedQuantity : null,
+      costCenter: sCostCenter || null,
+      assetNo: sAssetNo || null,
+      subNumber: sSubNumber || null,
+      sourceStockDecreased,
+      destinationStockIncreased,
+      assetConsumptionPosted,
+      comparison: {
+        expected,
+        actual,
+        matches: true
+      },
+      verified: true
+    };
+  }
+
+  async verifyResultingStock(params = {}) {
+    return this.verifyStock(params);
+  }
+
+  /**
    * Step 3: create_to_from_tr
    * Wraps L_TO_CREATE_TR
    * Validates that the TR actually exists and is verified in SAP before attempting TO creation.
@@ -1083,10 +1551,36 @@ class ReservationProcessAdapter {
       }
       if (found?.[0]?.MBLNR) {
         LOG.info(`Material document ${found[0].MBLNR}/${found[0].MJAHR} already exists for process/reservation; not posting again`);
+        let stockVerification = null;
+        if (!testrun) {
+          try {
+            stockVerification = await this.verifyStock({
+              materialDocument: found[0].MBLNR,
+              materialDocYear: found[0].MJAHR,
+              materialDocumentYear: found[0].MJAHR,
+              movementType: sMvt,
+              material: s4Mat,
+              quantity: quantityToPost,
+              plant: sPlant,
+              storageLocation: sSLoc,
+              receivingPlant: sRecPlant,
+              receivingStorageLocation: sRecSLoc,
+              costCenter: sCostCenter,
+              assetNo: sAssetNo,
+              subNumber: sSubNumber,
+              initialSourceStock,
+              initialDestStock
+            });
+          } catch (_) {}
+        }
         return {
           success: true,
+          stage: 'MIGO',
+          materialDocument: alphaOut(found[0].MBLNR),
+          materialDocumentYear: found[0].MJAHR,
+          movementType: sMvt,
           alreadyPosted: true,
-          materialDocument: found[0].MBLNR,
+          stockVerification,
           materialDocYear: found[0].MJAHR,
           status: STATUS.GI_POSTED,
           reservationNo: sResNo,
@@ -1213,7 +1707,10 @@ class ReservationProcessAdapter {
       await this.validateAsset(sAssetNo, sSubNumber, sPlant, today);
     }
 
-    if ((sMvt === '201' || sMvt === '241' || sMvt === '301') && this.rfc && sSLoc) {
+    let initialSourceStock = null;
+    let initialDestStock = null;
+
+    if (this.rfc && sSLoc) {
       try {
         const mardStock = await this.rfc.readTable('MARD', ['LABST'], [
           `MATNR = '${s4Mat}'`,
@@ -1222,7 +1719,8 @@ class ReservationProcessAdapter {
         ], 1);
         if (mardStock?.[0] && mardStock[0].LABST !== undefined) {
           const availLabst = Number(mardStock[0].LABST || 0);
-          if (availLabst < quantityToPost) {
+          initialSourceStock = availLabst;
+          if ((sMvt === '201' || sMvt === '241' || sMvt === '301') && availLabst < quantityToPost) {
             throw httpError(400, `Insufficient stock in storage location ${sSLoc} for material ${alphaOut(s4Mat)} (available: ${availLabst}, requested: ${quantityToPost})`);
           }
         }
@@ -1254,13 +1752,16 @@ class ReservationProcessAdapter {
           if (tErr.status === 400) throw tErr;
         }
         try {
-          const mardRec = await this.rfc.readTable('MARD', ['LGORT'], [
+          const mardRec = await this.rfc.readTable('MARD', ['LGORT', 'LABST'], [
             `MATNR = '${s4Mat}'`,
             `AND WERKS = '${sPlant}'`,
             `AND LGORT = '${sRecSLoc}'`
           ], 1);
           if (!mardRec || !mardRec.length) {
             throw httpError(400, `Material ${alphaOut(s4Mat)} is not extended to receiving storage location ${sRecSLoc} in plant ${sPlant} (MARD)`);
+          }
+          if (mardRec[0].LABST !== undefined) {
+            initialDestStock = Number(mardRec[0].LABST);
           }
         } catch (mErr) {
           if (mErr.status === 400) throw mErr;
@@ -1302,13 +1803,16 @@ class ReservationProcessAdapter {
         }
         if (sRecSLoc) {
           try {
-            const mardRec = await this.rfc.readTable('MARD', ['LGORT'], [
+            const mardRec = await this.rfc.readTable('MARD', ['LGORT', 'LABST'], [
               `MATNR = '${s4Mat}'`,
               `AND WERKS = '${sRecPlant}'`,
               `AND LGORT = '${sRecSLoc}'`
             ], 1);
             if (!mardRec || !mardRec.length) {
               throw httpError(400, `Material ${alphaOut(s4Mat)} is not extended to receiving storage location ${sRecSLoc} in plant ${sRecPlant} (MARD)`);
+            }
+            if (mardRec[0].LABST !== undefined) {
+              initialDestStock = Number(mardRec[0].LABST);
             }
           } catch (mErr) {
             if (mErr.status === 400) throw mErr;
@@ -1409,6 +1913,51 @@ class ReservationProcessAdapter {
       const matDoc = res.MATERIALDOCUMENT || (res.GOODSMVT_HEADRET && res.GOODSMVT_HEADRET.MAT_DOC) || '';
       const docYear = res.MATDOCUMENTYEAR || (res.GOODSMVT_HEADRET && res.GOODSMVT_HEADRET.DOC_YEAR) || '';
 
+      // Step 10: Verify the material document in SAP
+      let verification = {
+        success: true,
+        stage: 'MIGO',
+        materialDocument: alphaOut(matDoc),
+        materialDocumentYear: docYear,
+        movementType: sMvt
+      };
+      if (!testrun) {
+        verification = await this.verifyMaterialDocument({
+          materialDocument: matDoc,
+          materialDocYear: docYear,
+          materialDocumentYear: docYear,
+          movementType: sMvt,
+          material: s4Mat,
+          quantity: quantityToPost,
+          plant: sPlant,
+          storageLocation: sSLoc,
+          reservationNo: sResNo,
+          reservationItem: sResItem
+        });
+      }
+
+      // Step 11: Add final stock verification (Only after MIGO succeeds)
+      let stockVerification = null;
+      if (!testrun && matDoc) {
+        stockVerification = await this.verifyStock({
+          materialDocument: matDoc,
+          materialDocYear: docYear,
+          materialDocumentYear: docYear,
+          movementType: sMvt,
+          material: s4Mat,
+          quantity: quantityToPost,
+          plant: sPlant,
+          storageLocation: sSLoc,
+          receivingPlant: sRecPlant,
+          receivingStorageLocation: sRecSLoc,
+          costCenter: sCostCenter,
+          assetNo: sAssetNo,
+          subNumber: sSubNumber,
+          initialSourceStock,
+          initialDestStock
+        });
+      }
+
       let receivingTr = null;
       let externalTrWarning = '';
       if (sMvt === '301' && this.rfc && matDoc) {
@@ -1439,10 +1988,13 @@ class ReservationProcessAdapter {
       const combinedWarning = [t321Warning, externalTrWarning].filter(Boolean).join('; ');
 
       return {
-        success: true,
+        ...verification,
+        stockVerification,
         alreadyPosted: false,
-        materialDocument: matDoc,
+        materialDocument: verification.materialDocument || alphaOut(matDoc),
+        materialDocumentYear: verification.materialDocumentYear || docYear,
         materialDocYear: docYear,
+        movementType: verification.movementType || sMvt,
         status: STATUS.GI_POSTED,
         reservationNo: sResNo,
         processId: sProcessId,

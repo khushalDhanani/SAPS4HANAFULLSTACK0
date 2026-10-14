@@ -122,24 +122,60 @@ service TrToService @(path: '/odata/v4/tr-to') {
     };
 
     type MigoProcessResult {
-        ProcessId           : UUID;       // PROCESS_ID of this TO/GI step
-        ErrorStep           : String(10);
-        Success             : Boolean;
-        MaterialDocument    : String(10);
-        MaterialDocYear     : String(4);
-        Status              : String(2);
-        StatusText          : String(40);
-        ReservationNo       : String(10);
-        ReservationItem     : String(4);
-        TransferOrder       : String(10);
-        MovementType        : String(3);
-        Quantity            : Decimal(13, 3);
-        Unit                : String(3);
-        Batch               : String(10);
-        Serials             : array of String(18);
-        StockEffect         : String(80);
-        Message             : String(255);
-        ErrorMessage        : String(255);
+        ProcessId            : UUID;       // PROCESS_ID of this TO/GI step
+        ErrorStep            : String(10);
+        Success              : Boolean;
+        success              : Boolean;
+        stage                : String(20);
+        error                : String(255);
+        materialDocument     : String(10);
+        materialDocumentYear : String(4);
+        movementType         : String(3);
+        MaterialDocument     : String(10);
+        MaterialDocYear      : String(4);
+        Status               : String(2);
+        StatusText           : String(40);
+        ReservationNo        : String(10);
+        ReservationItem      : String(4);
+        TransferOrder        : String(10);
+        MovementType         : String(3);
+        Quantity             : Decimal(13, 3);
+        Unit                 : String(3);
+        Batch                : String(10);
+        Serials              : array of String(18);
+        StockEffect          : String(80);
+        Message              : String(255);
+        ErrorMessage         : String(255);
+        stockVerification    : StockVerificationResult;
+    };
+
+    type MaterialDocumentVerification {
+        success              : Boolean;
+        stage                : String(20);
+        materialDocument     : String(10);
+        materialDocumentYear : String(4);
+        movementType         : String(3);
+        error                : String(255);
+    };
+
+    type StockVerificationResult {
+        success                    : Boolean;
+        stage                      : String(20);
+        movementType               : String(3);
+        materialDocument           : String(10);
+        materialDocumentYear       : String(4);
+        material                   : String(40);
+        quantity                   : Decimal(13, 3);
+        consumedQuantity           : Decimal(13, 3);
+        costCenter                 : String(10);
+        assetNo                    : String(12);
+        subNumber                  : String(4);
+        assetConsumptionPosted     : Boolean;
+        sourceStockDecreased       : Boolean;
+        destinationStockIncreased : Boolean;
+        verified                   : Boolean;
+        message                    : String(255);
+        error                      : String(255);
     };
 
     type TRDetail {
@@ -402,4 +438,42 @@ service TrToService @(path: '/odata/v4/tr-to') {
         completeReservation        : Boolean,
         ProcessId                  : UUID // PROCESS_ID of the GI step; reused on retry so an existing material document is found
     ) returns MigoProcessResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action verifyMaterialDocument(
+        materialDocument     : String(10),
+        materialDocumentYear : String(4),
+        materialDocYear      : String(4),
+        movementType         : String(3),
+        material             : String(40),
+        quantity             : Decimal(13, 3),
+        plant                : String(4),
+        storageLocation      : String(4),
+        reservationNumber    : String(10),
+        reservationNo        : String(10),
+        reservationItem      : String(4)
+    ) returns MaterialDocumentVerification;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action verifyStock(
+        materialDocument           : String(10),
+        materialDocumentYear       : String(4),
+        materialDocYear            : String(4),
+        movementType               : String(3),
+        material                   : String(40),
+        quantity                   : Decimal(13, 3),
+        plant                      : String(4),
+        sourcePlant                : String(4),
+        storageLocation            : String(4),
+        sourceStorageLocation      : String(4),
+        receivingPlant             : String(4),
+        destinationPlant           : String(4),
+        receivingStorageLocation   : String(4),
+        destinationStorageLocation : String(4),
+        costCenter                 : String(10),
+        assetNo                    : String(12),
+        subNumber                  : String(4),
+        initialSourceStock         : Decimal(13, 3),
+        initialDestStock           : Decimal(13, 3)
+    ) returns StockVerificationResult;
 }

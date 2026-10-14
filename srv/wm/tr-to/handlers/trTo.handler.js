@@ -274,7 +274,12 @@ class TrToHandler {
 
         return {
           ...result,
+          success: true,
           Success: true,
+          stage: 'MIGO',
+          materialDocument: migoRes.materialDocument,
+          materialDocumentYear: migoRes.materialDocumentYear || migoRes.materialDocYear,
+          movementType: migoRes.movementType || sMvt,
           MaterialDocument: migoRes.materialDocument,
           MaterialDocYear: migoRes.materialDocYear,
           Status: STATUS.GI_POSTED,
@@ -282,6 +287,7 @@ class TrToHandler {
           ReservationNo: migoRes.reservationNo || sResNo,
           Batch: migoRes.batch || sBatch,
           StockEffect: migoRes.stockEffect,
+          stockVerification: migoRes.stockVerification || null,
           ReceivingTr: migoRes.receivingTr || null,
           Warning: migoRes.warning || '',
           Message: migoRes.alreadyPosted
@@ -306,7 +312,10 @@ class TrToHandler {
         }
         return {
           ...result,
+          success: false,
           Success: false,
+          stage: 'MIGO',
+          error: err.message,
           MaterialDocument: '',
           MaterialDocYear: '',
           Status: STATUS.GI_ERROR,
@@ -507,10 +516,32 @@ class TrToHandler {
       }
     };
 
+    const handleVerifyMaterialDocument = async (req) => {
+      try {
+        return await resProcessAdapter.verifyMaterialDocument(req.data || {});
+      } catch (err) {
+        return req.error(err.status || 400, err.message);
+      }
+    };
+
+    const handleVerifyStock = async (req) => {
+      try {
+        return await resProcessAdapter.verifyStock(req.data || {});
+      } catch (err) {
+        return req.error(err.status || 400, err.message);
+      }
+    };
+
     srv.on('createTOFromTR', handleCreateTOFromTR);
     srv.on('CreateTOFromTR', handleCreateTOFromTR);
     srv.on('postMigoGoodsMovement', handlePostMigoGoodsMovement);
     srv.on('PostMigoGoodsMovement', handlePostMigoGoodsMovement);
+    srv.on('verifyMaterialDocument', handleVerifyMaterialDocument);
+    srv.on('VerifyMaterialDocument', handleVerifyMaterialDocument);
+    srv.on('verifyStock', handleVerifyStock);
+    srv.on('VerifyStock', handleVerifyStock);
+    srv.on('verifyResultingStock', handleVerifyStock);
+    srv.on('VerifyResultingStock', handleVerifyStock);
   }
 }
 

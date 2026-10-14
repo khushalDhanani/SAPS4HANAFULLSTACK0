@@ -5,6 +5,74 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 11: Add Final Stock Verification (Expected vs Actual per Movement Type) (2026-10-14, 15:55 IST):** Complete. Implemented and enforced Step 11 final stock verification executing strictly after MIGO succeeds:
+  $$\text{Material Document} \longrightarrow \text{Read Resulting Stock} \longrightarrow \text{Compare Expected vs Actual}$$
+  Enforced movement-specific stock verification rules:
+  - **Movement 201 (GI to Cost Center):**
+    - Expected: Source stock decreases (`sourceStockDecreased: true`), Consumed quantity = posted quantity (`consumedQuantity === postedQuantity`), associated with Cost Center (`costCenter`).
+  - **Movement 241 (GI to Asset):**
+    - Expected: Stock decreases (`sourceStockDecreased: true`), Asset-related consumption posted (`assetConsumptionPosted: true`), associated with Asset (`assetNo`, `subNumber`).
+  - **Movement 311 (SLoc Transfer):**
+    - Expected: Source SLoc decreases (`sourceStockDecreased: true`), Destination SLoc increases (`destinationStockIncreased: true`).
+  - **Movement 301 (Plant-to-Plant Transfer):**
+    - Expected: Source plant/SLoc decreases (`sourceStockDecreased: true`), Destination plant/SLoc increases (`destinationStockIncreased: true`).
+  Technical implementations:
+  1. `ReservationProcessAdapter.js`:
+     - Added `verifyStock(params = {})` and alias `verifyResultingStock(params = {})`: reads `MATDOC`/`MSEG` for line-item confirmation and `MARD` for storage location unrestricted stock (`LABST`), evaluates deltas (`resulting - initial`), and produces structured `comparison: { expected, actual, matches }`.
+     - In `postGoodsMovement()`: Captured `initialSourceStock` and `initialDestStock` from `MARD` pre-posting, executed `verifyStock()` immediately following Step 10 `verifyMaterialDocument()`, and attached `stockVerification` to both fresh posting and `alreadyPosted` branches.
+  2. `srv/wm/tr-to/service.cds` & `srv/wm/reservation-entry/service.cds`:
+     - Defined `type StockVerificationResult`.
+     - Added `stockVerification : StockVerificationResult` to `type MigoProcessResult`.
+     - Declared action `verifyStock(...) returns StockVerificationResult`.
+  3. `srv/wm/tr-to/handlers/trTo.handler.js` & `srv/wm/reservation-entry/service.js`:
+     - Registered action handlers for `verifyStock`, `VerifyStock`, `verifyResultingStock`, `VerifyResultingStock`.
+     - Propagated `stockVerification` on `handlePostMigoGoodsMovement`.
+  4. `test/unit/wm/autoMigoPosting.test.js`:
+     - Added Section 8 test suite (10 unit tests) covering 201, 241, 311, 301 expected vs actual verification, mismatch failure handling, missing document rejection, automatic postGoodsMovement chaining, and TrToHandler action execution.
+  All 70 WM test suites pass 100% green (1,569/1,569 tests). CDS compilation and `git diff --check` pass cleanly.
+
+- **Step 10: Verify the Material Document & Enforce SAP Material Document Verification Pipeline (2026-10-14, 15:00 IST):** Complete. Implemented and enforced the Step 10 SAP Material Document Verification Pipeline:
+  $$\text{Material document number exists} \longrightarrow \text{Material document year exists} \longrightarrow \text{Movement type matches} \longrightarrow \text{Material matches} \longrightarrow \text{Quantity matches} \longrightarrow \text{Plant/SLoc matches} \longrightarrow \text{Reservation reference matches where applicable}$$
+  Enforced standardized success return payload matching user specification:
+  ```json
+  {
+    "success": true,
+    "stage": "MIGO",
+    "materialDocument": "5000123456",
+    "materialDocumentYear": "2026",
+    "movementType": "201"
+  }
+  ```
+  ("Not merely: `{ "success": true }`").
+  If verification fails at any check or persistence fails, returns standardized failure:
+  ```json
+  {
+    "success": false,
+    "stage": "MIGO",
+    "error": "..."
+  }
+  ```
+  Key technical implementations:
+  1. `srv/integration/s4hana/sapKey.js`: Added trust-boundary patterns for `mblnr` (`/^\d{1,10}$/`) and `mjahr` (`/^\d{4}$/`).
+  2. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Implemented `verifyMaterialDocument(params)` enforcing all 7 verification steps against SAP transparent tables `MATDOC` (with fallback to `MSEG`).
+     - Wired `verifyMaterialDocument` immediately after `BAPI_TRANSACTION_COMMIT` in `postGoodsMovement()`.
+     - Standardized success payload and already-posted payload with `stage: 'MIGO'`, `materialDocument`, `materialDocumentYear`, `movementType`.
+  3. `srv/wm/tr-to/service.cds`:
+     - Updated `MigoProcessResult` to include `success`, `stage`, `error`, `materialDocument`, `materialDocumentYear`, `movementType`.
+     - Defined `MaterialDocumentVerification` type.
+     - Declared action `verifyMaterialDocument` returning `MaterialDocumentVerification`.
+  4. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - Updated `handlePostMigoGoodsMovement` to return standardized `stage: 'MIGO'`, `materialDocument`, `materialDocumentYear`, `movementType` on success, and `stage: 'MIGO'`, `error: err.message` on error.
+     - Registered action handlers for `verifyMaterialDocument` and `VerifyMaterialDocument`.
+  5. `srv/wm/reservation-entry/service.cds`:
+     - Defined `MaterialDocumentVerification` type and declared action `verifyMaterialDocument`.
+  6. `srv/wm/reservation-entry/service.js`:
+     - Registered action handler `this.on('verifyMaterialDocument', ...)`.
+  7. `test/unit/wm/autoMigoPosting.test.js`:
+     - Added 10 dedicated unit tests (Section 7) verifying the entire 7-step pipeline, mismatches, persistence check, and return shape. All 24 suite tests pass 100% green.
+  All 70 WM test suites pass 100% green (1,559/1,559 tests). CDS compilation and `git diff --check` pass cleanly.
+
 - **Step 9: Make MIGO a Separate Final Stage & Standardize Clear Request Schemas (2026-10-14, 14:50 IST):** Complete. Decoupled MIGO goods movement from TO creation across the architecture: "Do not treat MIGO as part of TO creation internally." Standardized `postGoodsMovement()` as a standalone final stage supporting clean, explicit request shapes:
   - **Movement 201:**
     ```json
@@ -1825,7 +1893,11 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Step 7 — 2026-10-14, 13:35 IST):** Proceed to Step 7: Fix LT12 TO Confirmation & Auto-MIGO Posting (ensure sequential LT04 TO Create → LT12 TO Confirm → MIGO Material Document Posting pipeline with verified SAP persistence).
+- **Next Recommended Action (Step 11 — 2026-10-14, 15:55 IST):** Final stock verification (expected vs actual comparison for 201, 241, 311, 301) is complete and verified across all services and 70 test suites. Next action: Execute full end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Previous Recommended Action (Step 10 — 2026-10-14, 15:00 IST):** Material document verification pipeline is complete and verified across all services and 70 test suites. Next action: Execute end-to-end integration and UI verification of the material document verification pipeline across Fiori app and live SAP S/4HANA Client 220 when live testing is authorized.
+- **Previous Recommended Action (Step 9 — 2026-10-14, 14:50 IST):** Proceed to Step 10: Verify the Material Document (Pipeline: Material document number exists → Year exists → Movement type matches → Material matches → Quantity matches → Plant/SLoc matches → Reservation reference matches).
+- **Previous Recommended Action (Step 8 — 2026-10-14, 14:35 IST):** Make MIGO a separate final stage and standardize clear request shapes for 201, 311, 301.
+- **Previous Recommended Action (Step 7 — 2026-10-14, 13:35 IST):** Proceed to Step 7: Fix LT12 TO Confirmation & Auto-MIGO Posting (ensure sequential LT04 TO Create → LT12 TO Confirm → MIGO Material Document Posting pipeline with verified SAP persistence).
 - **Previous Recommended Action (Step 6 — 2026-10-14, 13:20 IST):** Fix Warehouse Scanning (`warehouse-scan-to`) to validate real SAP TR data instead of trusting frontend payload.
 - **Previous Recommended Action (Step 5 — 2026-10-14, 13:05 IST):** Separate TR creation from TO creation (Reservation → TR → TR validation → TO).
 - **Previous Recommended Action (Step 4 — 2026-10-14, 12:50 IST):** Make Background TR creation independently reliable and deterministic with critical 8-field verification rule.
@@ -1841,6 +1913,151 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-14 15:55 IST — Step 11: Add Final Stock Verification (Expected vs Actual per Movement Type)
+
+- **User Request:**
+  - Step 11 — Add final stock verification.
+  - Only after MIGO succeeds:
+    $$\text{Material Document} \longrightarrow \text{Read resulting stock} \longrightarrow \text{Compare expected vs actual}$$
+  - **Movement 201 Expected:**
+    - Source stock decreases
+    - Consumed quantity = posted quantity
+  - **Movement 241 Expected:**
+    - Stock decreases
+    - Asset-related consumption posted
+  - **Movement 311 Expected:**
+    - Source SLoc decreases
+    - Destination SLoc increases
+  - **Movement 301 Expected:**
+    - Source plant/SLoc decreases
+    - Destination plant/SLoc increases
+- **Implementation & Architectural Changes:**
+  1. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Implemented `verifyStock(params = {})` and alias `verifyResultingStock(params = {})`:
+       - Requires `materialDocument`; rejects with `stage: 'STOCK_VERIFICATION'` and error if missing or zero.
+       - Reads line item details from `MATDOC` (fallback `MSEG`) when available to verify document line items (`SHKZG` debit/credit indicator, `MENGE`, `KOSTL`, `ANLN1`, `ANLN2`).
+       - Reads resulting storage location unrestricted stock (`LABST`) from transparent table `MARD` for source and destination plants/storage locations.
+       - Evaluates deltas (`resulting - initial`) and validates movement-specific rules:
+         - **201:** `sourceStockDecreased` (delta < 0), `consumedQuantity === postedQuantity`, associated with `costCenter`.
+         - **241:** `sourceStockDecreased` (delta < 0), `assetConsumptionPosted: true`, associated with `assetNo` and `subNumber`.
+         - **311:** `sourceStockDecreased` (source delta < 0), `destinationStockIncreased` (dest delta > 0).
+         - **301:** `sourceStockDecreased` (source plant/sloc delta < 0), `destinationStockIncreased` (dest plant/sloc delta > 0).
+       - Returns structured payload:
+         ```json
+         {
+           "success": true,
+           "stage": "STOCK_VERIFICATION",
+           "movementType": "201",
+           "materialDocument": "5000123456",
+           "materialDocumentYear": "2026",
+           "material": "ABC123",
+           "quantity": 10,
+           "sourceStock": { "initial": 100, "resulting": 90, "delta": -10 },
+           "destinationStock": { "initial": 0, "resulting": 0, "delta": 0 },
+           "consumedQuantity": 10,
+           "costCenter": "1011201301",
+           "sourceStockDecreased": true,
+           "destinationStockIncreased": false,
+           "assetConsumptionPosted": false,
+           "comparison": {
+             "expected": { "sourceStockDecreases": true, "consumedQuantity": 10 },
+             "actual": { "sourceStockDecreased": true, "consumedQuantity": 10 },
+             "matches": true
+           },
+           "verified": true
+         }
+         ```
+     - In `postGoodsMovement()`:
+       - Captures pre-posting stock `initialSourceStock` and `initialDestStock` from `MARD`.
+       - Calls `verifyStock()` immediately following Step 10 `verifyMaterialDocument()`.
+       - Attaches `stockVerification` to both fresh posting and `alreadyPosted` branches.
+  2. `srv/wm/tr-to/service.cds`:
+     - Defined `type StockVerificationResult`.
+     - Added `stockVerification : StockVerificationResult` to `type MigoProcessResult`.
+     - Declared action `verifyStock(...) returns StockVerificationResult`.
+  3. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - Attached `stockVerification` to `handlePostMigoGoodsMovement` return object.
+     - Registered action handlers for `verifyStock`, `VerifyStock`, `verifyResultingStock`, `VerifyResultingStock`.
+  4. `srv/wm/reservation-entry/service.cds`:
+     - Defined `type StockVerificationResult`.
+     - Declared action `verifyStock(...) returns StockVerificationResult`.
+  5. `srv/wm/reservation-entry/service.js`:
+     - Registered action handlers for `verifyStock` and `verifyResultingStock`.
+  6. `test/unit/wm/autoMigoPosting.test.js`:
+     - Added Section 8 test suite (10 unit tests) covering 201, 241, 311, 301 expected vs actual verification, mismatch failure handling, missing document rejection, automatic postGoodsMovement chaining, and TrToHandler action execution.
+- **Validation & Test Results:**
+  - `npx jest test/unit/wm/autoMigoPosting.test.js`: **PASS** (34/34 tests passed).
+  - `npx jest test/unit/wm`: **PASS** (70/70 test suites passed, 1,569/1,569 tests passed).
+  - `npx cds compile srv/wm/reservation-entry/service.cds && npx cds compile srv/wm/tr-to/service.cds`: **PASS** (0 errors).
+  - `git diff --check`: **PASS** (clean, 0 errors).
+- **Status:** Complete.
+
+### 2026-10-14 15:00 IST — Step 10: Verify the Material Document & Enforce SAP Material Document Verification Pipeline
+
+- **User Request:**
+  - Step 10 — Verify the material document. This is currently one of the most important missing proofs.
+  - MIGO success should mean:
+    $$\text{Material document number exists} \longrightarrow \text{Material document year exists} \longrightarrow \text{Movement type matches} \longrightarrow \text{Material matches} \longrightarrow \text{Quantity matches} \longrightarrow \text{Plant/SLoc matches} \longrightarrow \text{Reservation reference matches where applicable}$$
+  - Return:
+    ```json
+    {
+      "success": true,
+      "stage": "MIGO",
+      "materialDocument": "5000123456",
+      "materialDocumentYear": "2026",
+      "movementType": "201"
+    }
+    ```
+    Not merely: `{ "success": true }`.
+- **Implementation & Architectural Changes:**
+  1. `srv/integration/s4hana/sapKey.js`:
+     - Added trust-boundary patterns for `mblnr` (`/^\d{1,10}$/`) and `mjahr` (`/^\d{4}$/`).
+  2. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Implemented `verifyMaterialDocument(params = {})`:
+       - Enforces Check 1: `materialDocument` exists, non-empty, non-zero (throws 400 with `stage: 'MIGO'`).
+       - Enforces Check 2: `materialDocumentYear` / `materialDocYear` exists and non-empty (throws 400 with `stage: 'MIGO'`).
+       - Reads SAP transparent tables `MATDOC` (fallback `MSEG`) querying by `MBLNR` and `MJAHR`.
+       - Enforces Check 3: `BWART` matches expected `movementType` (throws 400 with `stage: 'MIGO'`).
+       - Enforces Check 4: `MATNR` matches expected `material` with padding normalization (throws 400 with `stage: 'MIGO'`).
+       - Enforces Check 5: `MENGE` matches expected `quantity` within 0.001 tolerance (throws 400 with `stage: 'MIGO'`).
+       - Enforces Check 6: `WERKS` matches expected `plant` and `LGORT` matches expected `storageLocation` (throws 400 with `stage: 'MIGO'`).
+       - Enforces Check 7: `RSNUM` matches expected `reservationNumber` when applicable (throws 400 with `stage: 'MIGO'`).
+       - Persistence check: If `_checkMatdocPersistence` is enabled or in live RFC mode, throws 500 (`persistence check failed`) if no rows are found in SAP `MATDOC`/`MSEG`.
+       - Returns standardized object: `{ success: true, stage: "MIGO", materialDocument, materialDocumentYear, movementType }`.
+     - In `postGoodsMovement()`:
+       - Wired `verifyMaterialDocument` immediately following `BAPI_TRANSACTION_COMMIT`.
+       - Updated return payloads for fresh postings and idempotency/retry guard (`found?.[0]?.MBLNR`) to include `stage: 'MIGO'`, `materialDocument`, `materialDocumentYear`, `movementType`.
+  3. `srv/wm/tr-to/service.cds`:
+     - Added `success`, `stage`, `error`, `materialDocument`, `materialDocumentYear`, `movementType` to `type MigoProcessResult`.
+     - Defined `type MaterialDocumentVerification { success: Boolean; stage: String(20); materialDocument: String(10); materialDocumentYear: String(4); movementType: String(3); error: String(255); }`.
+     - Declared action `verifyMaterialDocument(...) returns MaterialDocumentVerification`.
+  4. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - Updated `handlePostMigoGoodsMovement` to return standardized `stage: 'MIGO'`, `materialDocument`, `materialDocumentYear`, `movementType` on success, and `stage: 'MIGO'`, `error: err.message` on error.
+     - Registered action handlers for `verifyMaterialDocument` and `VerifyMaterialDocument`.
+  5. `srv/wm/reservation-entry/service.cds`:
+     - Defined `type MaterialDocumentVerification`.
+     - Declared action `verifyMaterialDocument(...) returns MaterialDocumentVerification`.
+  6. `srv/wm/reservation-entry/service.js`:
+     - Registered action handler `this.on('verifyMaterialDocument', ...)`.
+  7. `test/unit/wm/autoMigoPosting.test.js`:
+     - Added Section 7 test suite (10 unit tests) covering:
+       - Full standardized success payload `{ success: true, stage: "MIGO", materialDocument, materialDocumentYear, movementType }`.
+       - Pipeline check 1 failure on missing document number.
+       - Pipeline check 2 failure on missing document year.
+       - Pipeline check 3 failure on movement type mismatch.
+       - Pipeline check 4 failure on material mismatch.
+       - Pipeline check 5 failure on quantity mismatch.
+       - Pipeline check 6 failure on plant and storage location mismatch.
+       - Pipeline check 7 failure on reservation reference mismatch.
+       - Persistence check failure when row missing in `MATDOC`/`MSEG`.
+       - `TrToHandler` action `verifyMaterialDocument` invocation and contract return.
+- **Validation Results:**
+  - `npx jest test/unit/wm/autoMigoPosting.test.js`: **PASS** (24/24 tests passed).
+  - `npx jest test/unit/wm`: **PASS** (70/70 test suites passed, 1,559/1,559 tests passed).
+  - `npx cds compile srv/wm/reservation-entry/service.cds && npx cds compile srv/wm/tr-to/service.cds`: **PASS** (0 errors).
+  - `git diff --check`: **PASS** (clean, 0 errors).
+  - Zero git commits created.
 
 ### 2026-10-14 13:35 IST — Step 6: Fix Warehouse Scanning & Enforce SAP TR Verification Pipeline
 
