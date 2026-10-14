@@ -7,66 +7,17 @@ const { findUnconfirmedToItems } = require('../../integration/s4hana/wm/toState'
 const { STATUS, STEP_ERROR, ERROR_STATUSES, UNCONFIRMED_TO } = require('../../common/wmStatus');
 const { sapKey, sapKeyOpt } = require('../../integration/s4hana/sapKey');
 const { withReservationLock, isLockConflict } = require('../../integration/s4hana/wm/resLock');
+const { validateReservationInput, MOVEMENT_CONFIG, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
 const LOG = cds.log('reservation-entry');
-const SUPPORTED_MOVEMENT_TYPES = Object.freeze(['311', '201', '241', '301']);
 
 module.exports = class ReservationEntryService extends cds.ApplicationService {
   async init() {
     const { ReservationEntries, ReservationLogs } = this.entities;
     const adapter = new ReservationProcessAdapter();
 
-    // Validation per movement type
+    // Validation per movement type backed by normalized MOVEMENT_CONFIG
     function validateMovementType(data, req) {
-      const {
-        MovementType,
-        Plant,
-        StorageLocation,
-        Material,
-        Quantity,
-        ReceivingPlant,
-        ReceivingStorageLocation,
-        CostCenter,
-        AssetNo
-      } = data;
-
-      if (!MovementType) req.error(400, 'MovementType is mandatory (201, 241, 311, 301)');
-      if (!Plant) req.error(400, 'Plant is mandatory');
-      if (!StorageLocation) req.error(400, 'StorageLocation is mandatory');
-      if (!Material) req.error(400, 'Material is mandatory');
-      if (!Quantity || Number(Quantity) <= 0) req.error(400, 'Quantity must be greater than 0');
-      if (!data.Unit) req.error(400, 'Unit is mandatory');
-
-      switch (MovementType) {
-        case '201':
-          if (!CostCenter || !String(CostCenter).trim()) {
-            req.error(400, 'Cost Center is mandatory for Movement Type 201 (GI to Cost Center)');
-          }
-          break;
-        case '241':
-          if (!AssetNo || !String(AssetNo).trim()) {
-            req.error(400, 'Asset Number is mandatory for Movement Type 241 (GI to Asset)');
-          }
-          break;
-        case '311':
-          if (!ReceivingStorageLocation || !String(ReceivingStorageLocation).trim()) {
-            req.error(400, 'Receiving Storage Location is mandatory for Movement Type 311 (SLoc Transfer)');
-          } else if (String(ReceivingStorageLocation).trim() === String(StorageLocation).trim()) {
-            req.error(400, 'Receiving Storage Location must be different from Issuing Storage Location');
-          }
-          if (ReceivingPlant && String(ReceivingPlant).trim() !== String(Plant).trim()) {
-            req.error(400, 'Receiving Plant must match Issuing Plant for Movement Type 311 (SLoc Transfer)');
-          }
-          break;
-        case '301':
-          if (!ReceivingPlant || !String(ReceivingPlant).trim()) {
-            req.error(400, 'Receiving Plant is mandatory for Movement Type 301 (Plant Transfer)');
-          } else if (String(ReceivingPlant).trim() === String(Plant).trim()) {
-            req.error(400, 'Receiving Plant must be different from Issuing Plant');
-          }
-          break;
-        default:
-          req.error(400, `Unsupported movement type '${MovementType}'. Valid movement types are: 201, 241, 311, 301`);
-      }
+      validateReservationInput(data, { req });
     }
 
     /** Warehouse from the request, else from plant/storage location assignment (T320); never a literal. */
@@ -97,6 +48,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         MaterialName,
         Quantity,
         Unit,
+        ReservationDate,
+        reservationDate,
         ReceivingPlant,
         ReceivingStorageLocation,
         CostCenter,
@@ -105,6 +58,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         WarehouseNumber,
         Batch
       } = payload;
+      const effResDate = ReservationDate || reservationDate || undefined;
 
       // Task 8: SLoc pre-check at reservation creation: read LQUA for item's plant/SLoc.
       let slocWarning = '';
@@ -162,6 +116,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           material: Material,
           quantity: Quantity,
           unit: Unit,
+          reservationDate: effResDate,
           receivingPlant: ReceivingPlant || (MovementType === '311' ? Plant : undefined),
           receivingStorageLocation: ReceivingStorageLocation,
           costCenter: CostCenter,
@@ -226,6 +181,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         MaterialName: MaterialName || '',
         Quantity: Number(Quantity),
         Unit,
+        ReservationDate: effResDate || null,
         ReceivingPlant: ReceivingPlant || '',
         ReceivingStorageLocation: ReceivingStorageLocation || '',
         CostCenter: CostCenter || '',
@@ -929,7 +885,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         return [];
       }
 
-      const targetMvt = mvt || SUPPORTED_MOVEMENT_TYPES.join(',');
+      const targetMvt = mvt || '311,201,241,301';
       try {
         const rows = await GoodsIssueAdapter.getOpenReservations(targetMvt, plant);
         const filteredRows = (rows || []).filter((r) =>

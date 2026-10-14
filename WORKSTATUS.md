@@ -5,6 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 2: Fix the Reservation Creation Layer First & Single Normalized Movement Configuration (2026-10-14, 12:35 IST):** Complete. Implemented single normalized movement configuration (`MOVEMENT_CONFIG` supporting 201, 241, 311, 301) and strict pre-validation (`validateReservationInput`) across `srv/common/movementConfig.js`, `srv/wm/reservation-entry/service.js`, and `srv/integration/s4hana/wm/ReservationProcessAdapter.js`. Added `ReservationDate: Date` support to CDS persistence and actions. Resolved WM movement resolution (`resolveWmMovement`) with SAP WM staging fallback (311 for 201/241 unless `WM_TR_REAL_MOVEMENT === 'true'`). All 7 WM unit test suites pass 100% green (164/164 tests). CDS compilation, UI5 lint/tests, and `git diff --check` pass cleanly.
 - **Step 1: Freeze Expected Business Flow across Movement Types 201 → 241 → 311 → 301 (2026-10-14, 12:18 IST):** Complete. Master execution flow frozen across all four movement types and all seven sequential steps (MB21 → Background TR → Warehouse Scan → LT04 TO Create → LT12 TO Confirm → MIGO → Verification). Established non-negotiable rule: HTTP 200 is never considered success without verified SAP document persistence. Exact document types, SAP function modules, input payloads, validation gates, transparent table queries, and error status transitions (`01`, `11`, `02`, `12`, `03`, `13`, `04`, `90`, `05`) fully documented and frozen in specification artifact `business_flow_freeze_spec.md`. Unit test suites for all 4 movement types pass green (mvt201: 15/15, mvt241: 20/20, mvt311: 21/21, mvt301: 22/22).
 - **Tracked reservation movement mismatch regression fix (2026-10-14, 11:03 IST):** Code change and targeted validations complete. Exact app-tracked 201/241 → linked 311 flow is allowed after matching SAP TR, reservation, item, and movement keys; untracked mismatches remain blocked. Seven targeted suites pass (162/162). CDS compile, UI5 lint/build, and `git diff --check` pass. Full WM suite is In Progress because 11 suites fail on sandbox local-server bind/SAP RFC network restrictions (58 suites pass, 1,373/1,502 tests pass). One pre-existing `goodsIssueClients` test attempted an `API_MATERIAL_DOCUMENT_SRV` POST while exercising invalid-input handling; the sandbox denied the socket with `EPERM`. A follow-up read-only Client 220 `MATDOC` query for 2026-10-14, BWART 201, plant 1120, SLoc HS01, and material `MAT01` in both external and padded forms returned no rows. No matching material document was found. No live browser verification.
 - **Mismatched TR safety and key normalization (2026-10-14, 10:57 IST):** Code/docs changes complete; focused mock-only suites pass (56/56), UI5 lint reports no findings, and UI5 build succeeds. Build warns that the third-party jsPDF source map is missing; the optional UI5 update check cannot access the local config store. No SAP writes or live browser verification. Historical Client 220 read notes establish `RKPF-KOSTL=1011201301` for reservation 0000527870; they do not include a raw `RESB-KOSTL` value, `LTBK-BETYP/BENUM`, or a current TO/LQUA read for TR 0001000823. Because lookupTR prefers LTBK-BENUM when BETYP=K, the source of the displayed cost center is UNSURE pending that LTBK read. No seed/default is evidenced; the tracking record is documented absent.
@@ -1748,6 +1749,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Next Recommended Action (Step 3 — 2026-10-14, 12:35 IST):** Proceed to Step 3: Fix Warehouse Scan validation starting with Movement 201 (Material, Quantity, TR, Storage Unit, physical quant stock in LQUA, and account assignment checks).
 - **Next Recommended Action (2026-10-14, 10:55 IST):** Check the new persistent banner in the browser with the sandbox flag enabled. Separately obtain fresh read-only Client 220 rows for `RESB` and `RKPF` reservation `0000527870`, plus `LTBK`/`LTAK`/`LTAP`/`LQUA` for TR `0001000823`, before deciding whether a TO exists or stock remains in 921. Do not process any of the three listed mismatched TRs meanwhile.
 - **Next Recommended Action (2026-10-13, 13:32 IST):**
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant to decide `T321` `TBFKZ` for movement 201/241 and clarify row 1/14 `LFART = 'DOG'` behavior for movement 311.
@@ -6003,3 +6005,45 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git diff --check` → PASS (0 errors).
 - **Errors / blockers:** None. Specification frozen prior to any code modification.
 - **Next action:** Proceed to implementation/audit of Movement 201 end-to-end flow with strict document validation gates.
+
+### 2026-10-14 12:35 IST — Step 2: Fix Reservation Creation Layer First & Single Normalized Movement Configuration (Complete)
+
+- **Plan:** Fix the reservation creation layer starting with `createReservationEntry` in `srv/wm/reservation-entry/` and `srv/integration/s4hana/wm/ReservationProcessAdapter.js`. Create a single normalized movement configuration (`MOVEMENT_CONFIG`) supporting 201, 241, 311, and 301. Respect SAP WM customizing (`T333`) and the `WM_TR_REAL_MOVEMENT` environment flag for 201/241 staging fallback (311). Implement strict pre-validation (`validateReservationInput`) before calling SAP across all 4 movement types.
+- **Files changed / created:**
+  - `srv/common/movementConfig.js` (NEW): Single normalized movement configuration (`MOVEMENT_CONFIG`), `SUPPORTED_MOVEMENT_TYPES`, `getMovementConfig(movementType)`, `resolveWmMovement(movementType)`, and `validateReservationInput(data, options)`.
+  - `srv/wm/reservation-entry/movementConfig.js` (NEW): Module re-export for service locality.
+  - `db/wm/reservation-track.cds`: Added `ReservationDate : Date;` to `ReservationEntries` entity.
+  - `srv/wm/reservation-entry/service.cds`: Added `ReservationDate : Date;` parameter to `createReservationEntry` action.
+  - `srv/wm/reservation-entry/service.js`: Adopted `validateReservationInput` in `validateMovementType`, parsed and persisted `ReservationDate`, preserved explicit default `'311,201,241,301'` in `getOpenReservations`.
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: Adopted `validateReservationInput(params, { throwError: true })` in `createReservation`, parsed `reservationDate` via `this._sapDate(reservationDate)`, utilized `resolveWmMovement(movementType)` in TR creation.
+  - `test/unit/wm/movementConfig.test.js` (NEW): Complete unit test suite (24 tests) covering movement config definitions, WM movement resolution (real vs staging), common mandatory validations, 201 (Cost Center), 241 (Asset), 311 (SLoc to SLoc), 301 (Plant to Plant), and error throwing options.
+  - `test/unit/wm/reservationProcess.test.js`: Added `receivingStorageLocation: 'CS01'` for 301 test fixture and `costCenter: '1011201301'` for 201 MARD failure resilience test.
+  - `test/unit/wm/mvt301Process.test.js`: Added `receivingStorageLocation: 'CS01'` / `'CS02'` and MARD table returns to negative/edge tests to satisfy normalized 301 input requirements before exercising targeted backend errors.
+- **Configuration & Pre-Validation Matrix Implemented:**
+  1. `201` (GI to Cost Center):
+     - Inventory Movement: `201`, WM Movement: `201` (staged via `311` unless `WM_TR_REAL_MOVEMENT === 'true'`).
+     - Required pre-validation before SAP: Plant, SLoc, Material, Quantity (> 0), Unit, Cost Center (`CostCenter` strictly mandatory).
+     - Receiving Plant / Receiving SLoc: Not required (`requiresReceivingPlant: false`, `requiresReceivingSloc: false`).
+  2. `241` (GI to Asset):
+     - Inventory Movement: `241`, WM Movement: `241` (staged via `311` unless `WM_TR_REAL_MOVEMENT === 'true'`).
+     - Required pre-validation before SAP: Plant, SLoc, Material, Quantity (> 0), Unit, Asset Number (`AssetNo` strictly mandatory).
+     - Receiving Plant / Receiving SLoc: Not required (`requiresReceivingPlant: false`, `requiresReceivingSloc: false`).
+  3. `311` (SLoc to SLoc Transfer):
+     - Inventory Movement: `311`, WM Movement: `311`.
+     - Required pre-validation before SAP: Plant, Issuing SLoc, Receiving SLoc (`ReceivingStorageLocation` strictly mandatory), Material, Quantity (> 0), Unit.
+     - Issuing SLoc and Receiving SLoc must differ. Receiving Plant must match Issuing Plant if supplied.
+     - Cost Center / Asset: Not required (`requiresCostCenter: false`, `requiresAsset: false`).
+  4. `301` (Plant to Plant Transfer):
+     - Inventory Movement: `301`, WM Movement: `301`.
+     - Required pre-validation before SAP: Issuing Plant, Issuing SLoc, Receiving Plant (`ReceivingPlant` strictly mandatory), Receiving SLoc (`ReceivingStorageLocation` strictly mandatory), Material, Quantity (> 0), Unit.
+     - Issuing Plant and Receiving Plant must differ.
+     - Cost Center / Asset: Not required (`requiresCostCenter: false`, `requiresAsset: false`).
+- **Validation results:**
+  - `npx jest test/unit/wm/movementConfig.test.js test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/mvt201Process.test.js test/unit/wm/mvt241Process.test.js test/unit/wm/mvt311Process.test.js test/unit/wm/mvt301Process.test.js --runInBand` → **PASS, 7 test suites, 164 tests passed (100% green)**.
+  - `npx cds compile srv/wm/reservation-entry/service.cds` → PASS (exit code 0, clean compilation).
+  - `cd app/fiori-app && npm test --if-present` → PASS (exit code 0).
+  - `git diff --check` → PASS (0 whitespace/formatting errors).
+  - `git status` → Clean; zero commits created.
+- **Errors / blockers:** None.
+- **Next action:** Step 3: Fix Warehouse Scan validation starting with Movement 201.
+

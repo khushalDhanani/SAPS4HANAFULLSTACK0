@@ -420,6 +420,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
           plant: '1120',
           receivingPlant: '1110',
           storageLocation: 'HS01',
+          receivingStorageLocation: 'CS01',
           material: '8900000007',
           quantity: 1,
           unit: 'NOS'
@@ -461,6 +462,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
     test('Fails 400 when issuing storage location is not assigned to warehouse in T320 [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
         if (table === 'MARC') return [{ WERKS: '1110', XCHPF: '', SERNP: '' }, { WERKS: '1120', XCHPF: '', SERNP: '' }];
+        if (table === 'MARD') return [{ LGORT: 'CS01' }];
         if (table === 'T320') return []; // SLoc not assigned to warehouse
         return [];
       });
@@ -471,6 +473,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
           plant: '1120',
           receivingPlant: '1110',
           storageLocation: 'SL99',
+          receivingStorageLocation: 'CS01',
           material: '8000001648',
           quantity: 1,
           unit: 'NOS'
@@ -484,6 +487,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
     test('Fails 400 when batch is missing for batch-managed material (Class B) [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
         if (table === 'MARC') return [{ WERKS: '1120', XCHPF: 'X', SERNP: '' }, { WERKS: '1110', XCHPF: 'X', SERNP: '' }];
+        if (table === 'MARD') return [{ LGORT: 'CS02' }];
         if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
         return [];
       });
@@ -494,6 +498,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
           plant: '1120',
           receivingPlant: '1110',
           storageLocation: 'CS01',
+          receivingStorageLocation: 'CS02',
           material: '8900000004',
           quantity: 1,
           unit: 'KG'
@@ -519,6 +524,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
           plant: '1120',
           receivingPlant: '1110',
           storageLocation: 'CS01',
+          receivingStorageLocation: 'CS02',
           material: '8900000004',
           batch: 'DEL001',
           quantity: 1,
@@ -546,6 +552,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
           plant: '1120',
           receivingPlant: '1110',
           storageLocation: 'CS01',
+          receivingStorageLocation: 'CS02',
           material: '8900000004',
           batch: 'FAKE000001', // 10 chars CHARG format
           quantity: 1,

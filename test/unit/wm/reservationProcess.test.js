@@ -148,6 +148,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         plant: '1120',
         storageLocation: 'HS01',
         receivingPlant: '1130',
+        receivingStorageLocation: 'CS01',
         material: '8000000023',
         unit: 'NOS',
         quantity: 2
@@ -159,7 +160,8 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         expect.objectContaining({
           RESERVATIONHEADER: expect.objectContaining({
             MOVE_TYPE: '301',
-            MOVE_PLANT: '1130'
+            MOVE_PLANT: '1130',
+            MOVE_STLOC: 'CS01'
           })
         })
       );
@@ -865,6 +867,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       rfc.readTable = jest.fn(async () => { throw new Error('RFC_READ_TABLE blocked'); });
       const result = await adp.createReservation({
         movementType: '201', plant: '1120', storageLocation: 'CS01',
+        costCenter: '1011201301',
         material: '8000009753', quantity: 1, unit: 'KG'
       });
       expect(result.success).toBe(true);

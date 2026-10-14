@@ -29,6 +29,7 @@ entity ReservationTrack : managed {
     MaterialName            : String(40);    // MAKTX
     Quantity                : Decimal(13,3); // MENGE
     Unit                    : String(3);     // MEINS
+    ReservationDate         : Date;          // RES_DATE (MB21)
     ReceivingPlant          : String(4);     // UMWRK (301)
     ReceivingStorageLocation: String(4);     // UMLGO (311)
     CostCenter              : String(10);    // KOSTL (201)

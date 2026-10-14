@@ -27,6 +27,8 @@ service ReservationEntryService {
         MaterialName            : String(40),
         Quantity                : Decimal(13,3),
         Unit                    : String(3),
+        ReservationDate         : Date,
+        reservationDate         : Date,
         ReceivingPlant          : String(4),
         ReceivingStorageLocation: String(4),
         CostCenter              : String(10),

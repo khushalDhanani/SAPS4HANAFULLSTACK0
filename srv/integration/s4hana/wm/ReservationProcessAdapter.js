@@ -4,6 +4,12 @@ const LOG = require('../logger')('reservation-process-adapter');
 const { RfcClient } = require('../RfcClient');
 const { sapKey, sapKeyOpt, httpError } = require('../sapKey');
 const { STATUS } = require('../../../common/wmStatus');
+const {
+  MOVEMENT_CONFIG,
+  getMovementConfig,
+  resolveWmMovement,
+  validateReservationInput
+} = require('../../../common/movementConfig');
 const { isToFullyConfirmed, getHuConfirmationItems, mapStorageTypeSearchError } = require('./toState');
 const { checkAuthorization } = require('./authCheck');
 
@@ -44,8 +50,12 @@ class ReservationProcessAdapter {
    * Helper to format dates to SAP format (YYYYMMDD)
    */
   _sapDate(date = new Date()) {
+    if (!date) date = new Date();
     if (typeof date === 'string' && /^\d{8}$/.test(date)) return date;
     const d = new Date(date);
+    if (isNaN(d.getTime())) {
+      throw httpError(400, 'Invalid ReservationDate');
+    }
     return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   }
 
@@ -61,6 +71,7 @@ class ReservationProcessAdapter {
       material,
       quantity,
       unit,
+      reservationDate,
       receivingPlant,
       receivingStorageLocation,
       costCenter,
@@ -70,41 +81,14 @@ class ReservationProcessAdapter {
       testrun = false
     } = params;
 
-    if (!movementType) throw httpError(400, 'MovementType is mandatory');
-    if (!plant) throw httpError(400, 'Plant is mandatory');
-    if (!material) throw httpError(400, 'Material is mandatory');
-    if (!quantity || Number(quantity) <= 0) throw httpError(400, 'Valid Quantity is mandatory');
-    if (!unit) throw httpError(400, 'Unit is mandatory');
-
-    if (String(movementType).trim() === '311') {
-      if (!receivingStorageLocation || !String(receivingStorageLocation).trim()) {
-        throw httpError(400, 'Receiving Storage Location is mandatory for Movement Type 311 (SLoc Transfer)');
-      }
-      if (String(receivingStorageLocation).trim() === String(storageLocation).trim()) {
-        throw httpError(400, 'Receiving Storage Location must be different from Issuing Storage Location');
-      }
-      if (receivingPlant && String(receivingPlant).trim() !== String(plant).trim()) {
-        throw httpError(400, 'Receiving Plant must match Issuing Plant for Movement Type 311 (SLoc Transfer)');
-      }
-    }
-
-    if (String(movementType).trim() === '301') {
-      if (!receivingPlant || !String(receivingPlant).trim()) {
-        throw httpError(400, 'Receiving Plant is mandatory for Movement Type 301 (Plant to Plant Transfer)');
-      }
-      if (String(receivingPlant).trim() === String(plant).trim()) {
-        throw httpError(400, 'Receiving Plant must be different from Issuing Plant for Movement Type 301 (Plant to Plant Transfer)');
-      }
-    }
+    // Single normalized pre-validation before calling SAP backend
+    validateReservationInput(params, { throwError: true });
 
     if (String(movementType).trim() === '201' && costCenter) {
       await this.validateCostCenter(costCenter);
     }
 
     if (String(movementType).trim() === '241') {
-      if (!assetNo || !String(assetNo).trim()) {
-        throw httpError(400, 'Asset number is mandatory for Movement Type 241 (GI to Asset)');
-      }
       await this.validateAsset(assetNo, subNumber, plant);
     }
 
@@ -170,7 +154,7 @@ class ReservationProcessAdapter {
 
     const targetMovePlant = receivingPlant || (String(movementType).trim() === '311' ? plant : '');
     const header = {
-      RES_DATE: this._sapDate(),
+      RES_DATE: this._sapDate(reservationDate),
       MOVE_TYPE: String(movementType).trim(),
       ...(targetMovePlant ? { MOVE_PLANT: String(targetMovePlant).trim() } : {}),
       ...(receivingStorageLocation ? { MOVE_STLOC: String(receivingStorageLocation).trim() } : {}),
@@ -294,6 +278,7 @@ class ReservationProcessAdapter {
     const s4Rspos = sapKey(reservationItem, 'rspos').padStart(4, '0');
     const s4Lgnum = sapKey(warehouseNumber, 'lgnum');
 
+    const mvtConfig = getMovementConfig(wmMovementType || movementType);
     const useRealMvt = process.env.WM_TR_REAL_MOVEMENT === 'true';
     let s4Bwlvs;
     let s4Betyp = '';
@@ -302,7 +287,7 @@ class ReservationProcessAdapter {
     if (useRealMvt) {
       s4Bwlvs = sapKey(wmMovementType, 'mvt');
       if (s4Bwlvs === '201') {
-        s4Betyp = 'K';
+        s4Betyp = mvtConfig?.requirementType || 'K';
         let cc = reqCostCenter;
         if (!cc && this.rfc && s4Rsnum) {
           try {
@@ -322,7 +307,7 @@ class ReservationProcessAdapter {
           s4Benum = trimmedCc.slice(0, 10);
         }
       } else if (s4Bwlvs === '241') {
-        s4Betyp = 'A';
+        s4Betyp = mvtConfig?.requirementType || 'A';
         let an = reqAssetNo;
         if (!an && this.rfc && s4Rsnum) {
           try {
@@ -344,7 +329,7 @@ class ReservationProcessAdapter {
       }
     } else {
       // In WM customizing (T333), movement 201/241 require BENUM (Cost Center/Asset). For reservation-based staging, WM movement 311 links cleanly to RSNUM without requiring BENUM.
-      s4Bwlvs = sapKey(wmMovementType === '201' || wmMovementType === '241' ? '311' : wmMovementType, 'mvt');
+      s4Bwlvs = sapKey(resolveWmMovement(wmMovementType || movementType), 'mvt');
     }
 
     const s4Werks = sapKey(plant, 'plant');
