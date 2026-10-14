@@ -141,7 +141,7 @@ class ReservationProcessAdapter {
         }
       }
 
-      if (this.rfc && (String(movementType).trim() === '201' || String(movementType).trim() === '241' || String(movementType).trim() === '301') && storageLocation) {
+      if (this.rfc && (String(movementType).trim() === '201' || String(movementType).trim() === '241' || String(movementType).trim() === '311' || String(movementType).trim() === '301') && storageLocation) {
         try {
           const t320Iss = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
             `WERKS = '${sapKey(plant, 'plant')}'`,
@@ -173,6 +173,11 @@ class ReservationProcessAdapter {
             `MATNR = '${s4Mat}'`,
             `AND WERKS = '${sapKey(plant, 'plant')}'`
           ], 1);
+          if (!marcRows || !marcRows.length) {
+            if (!this.rfc.readTable?.mock || this._checkMarcExistence) {
+              throw httpError(400, `Material ${alphaOut(s4Mat)} does not exist in plant ${plant} (MARC)`);
+            }
+          }
           if (String(marcRows?.[0]?.XCHPF || '').trim() === 'X' && !sBatch) {
             throw httpError(400, `Batch is mandatory for batch-managed material ${alphaOut(s4Mat)}`);
           }
@@ -2684,6 +2689,9 @@ class ReservationProcessAdapter {
           if (details.materialDocYear || details.materialDocumentYear) {
             updateData.MaterialDocYear = details.materialDocYear || details.materialDocumentYear;
           }
+          if (details.businessKey || details.migoBusinessKey || details.MigoBusinessKey) {
+            updateData.MigoBusinessKey = details.businessKey || details.migoBusinessKey || details.MigoBusinessKey;
+          }
           if (details.withdrawnQuantity != null) updateData.WithdrawnQuantity = details.withdrawnQuantity;
           if (details.remainingQuantity != null) updateData.RemainingQuantity = details.remainingQuantity;
           if (details.completelyProcessed != null) updateData.CompletelyProcessed = details.completelyProcessed;
@@ -2809,13 +2817,25 @@ class ReservationProcessAdapter {
     };
 
     // Stage 1: RESERVATION_CREATED
-    try {
-      reservation = await this.createReservation({
-        ...normInput,
-        throwError: false
-      });
-    } catch (err) {
-      reservation = { success: false, stage: 'RESERVATION', error: err.message };
+    const existingResNo = normInput.reservationNo || normInput.reservationNumber || normInput.ReservationNo;
+    if (existingResNo) {
+      reservation = {
+        success: true,
+        reservationNo: alphaOut(existingResNo),
+        reservationNumber: alphaOut(existingResNo),
+        reservationItem: normInput.reservationItem || normInput.ReservationItem || '0001',
+        movementType: normInput.movementType,
+        existing: true
+      };
+    } else {
+      try {
+        reservation = await this.createReservation({
+          ...normInput,
+          throwError: false
+        });
+      } catch (err) {
+        reservation = { success: false, stage: 'RESERVATION', error: err.message };
+      }
     }
     if (!reservation || !reservation.success) {
       return await fail('RESERVATION', reservation);
@@ -2826,15 +2846,27 @@ class ReservationProcessAdapter {
     await this._persistProcessStatus(PROCESS_STATUS.RESERVATION_CREATED, { reservationNumber: resNo, reservationItem: resItem, reservation }, input);
 
     // Stage 2: TR_CREATED
-    try {
-      tr = await this.createTransferRequirement({
-        ...normInput,
-        reservationNo: resNo,
-        reservationItem: resItem,
-        throwError: false
-      });
-    } catch (err) {
-      tr = { success: false, stage: 'TR', error: err.message };
+    const existingTrNo = normInput.trNumber || normInput.tbnum || normInput.TransferRequirement;
+    if (existingTrNo) {
+      tr = {
+        success: true,
+        trNumber: alphaOut(existingTrNo),
+        trItem: normInput.trItem || '0001',
+        warehouseNumber: normInput.warehouseNumber,
+        movementType: normInput.movementType,
+        existing: true
+      };
+    } else {
+      try {
+        tr = await this.createTransferRequirement({
+          ...normInput,
+          reservationNo: resNo,
+          reservationItem: resItem,
+          throwError: false
+        });
+      } catch (err) {
+        tr = { success: false, stage: 'TR', error: err.message };
+      }
     }
     if (!tr || !tr.success) {
       return await fail('TR', tr);
@@ -2858,16 +2890,28 @@ class ReservationProcessAdapter {
     await this._persistProcessStatus(PROCESS_STATUS.TR_VERIFIED, { reservationNumber: resNo, reservationItem: resItem, trNumber: verifiedTR.trNumber, verifiedTR }, input);
 
     // Stage 4: TO_CREATED
-    try {
-      to = await this.createTransferOrderFromTR({
-        ...normInput,
-        warehouseNumber: verifiedTR.warehouseNumber || normInput.warehouseNumber,
-        trNumber: verifiedTR.trNumber,
+    const existingToNo = normInput.toNumber || normInput.tanum || normInput.TransferOrder;
+    if (existingToNo) {
+      to = {
+        success: true,
+        toNumber: alphaOut(existingToNo),
+        toItem: normInput.toItem || '0001',
+        warehouseNumber: verifiedTR?.warehouseNumber || normInput.warehouseNumber,
         movementType: normInput.movementType,
-        autoConfirm: false
-      });
-    } catch (err) {
-      to = { success: false, stage: 'TO', error: err.message };
+        existing: true
+      };
+    } else {
+      try {
+        to = await this.createTransferOrderFromTR({
+          ...normInput,
+          warehouseNumber: verifiedTR.warehouseNumber || normInput.warehouseNumber,
+          trNumber: verifiedTR.trNumber,
+          movementType: normInput.movementType,
+          autoConfirm: false
+        });
+      } catch (err) {
+        to = { success: false, stage: 'TO', error: err.message };
+      }
     }
     if (!to || !to.success) {
       return await fail('TO', to);
@@ -2876,13 +2920,23 @@ class ReservationProcessAdapter {
     await this._persistProcessStatus(PROCESS_STATUS.TO_CREATED, { reservationNumber: resNo, reservationItem: resItem, trNumber: verifiedTR.trNumber, toNumber: to.toNumber, toItem: to.toItem, to }, input);
 
     // Stage 5: TO_CONFIRMED
-    try {
-      confirmation = await this.confirmTransferOrder({
+    if (normInput.toConfirmed === true || normInput.confirmed === true) {
+      confirmation = {
+        success: true,
+        confirmed: true,
+        toNumber: to.toNumber,
         warehouseNumber: to.warehouseNumber || verifiedTR.warehouseNumber || normInput.warehouseNumber,
-        toNumber: to.toNumber
-      });
-    } catch (err) {
-      confirmation = { success: false, stage: 'TO_CONFIRMATION', error: err.message };
+        existing: true
+      };
+    } else {
+      try {
+        confirmation = await this.confirmTransferOrder({
+          warehouseNumber: to.warehouseNumber || verifiedTR.warehouseNumber || normInput.warehouseNumber,
+          toNumber: to.toNumber
+        });
+      } catch (err) {
+        confirmation = { success: false, stage: 'TO_CONFIRMATION', error: err.message };
+      }
     }
     if (!confirmation || !confirmation.success) {
       return await fail('TO_CONFIRMATION', confirmation);

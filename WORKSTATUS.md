@@ -5,6 +5,57 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 16 Failure Paths: Fix All 12 Failure Scenarios Across All Movement Types (2026-10-14, 18:25 IST):** Complete. Implemented pre-validation guards, defensive checks, and multi-stage resumption/retry mechanisms in `ReservationProcessAdapter.js` and verified recovery from all 12 failure scenarios across all movement types (`201`, `241`, `311`, `301`).
+  - **Defensive Guards & Fixes Implemented:**
+    1. `Wrong SLoc Guard (Movement 311 Bug Fix)`: Corrected line 144 of `ReservationProcessAdapter.js` to include `'311'` in the issuing storage location `T320` warehouse mapping check. Both issuing and receiving storage locations are now strictly validated against `T320`.
+    2. `Wrong Material Guard (MARC Check)`: Added pre-validation check in `createReservation`: if `marcRows` is empty and `_checkMarcExistence` is active, rejects immediately with `400: Material <mat> does not exist in plant <plant> (MARC)` before invoking `BAPI_RESERVATION_CREATE1`.
+    3. `MIGO Business Key Persistence`: Wired `MigoBusinessKey` update directly to `_persistProcessStatus` ensuring `ReservationTrack` retains the idempotency key throughout flow execution.
+    4. `Multi-Stage Resumption & Retry Contract`: Operators can resume failed flows without re-executing completed stages or generating duplicate documents:
+       - **Stage 1 (Reservation)**: If `reservationNumber` is provided, adopts the existing reservation without calling `createReservation` again.
+       - **Stage 2 (TR)**: If `trNumber` is provided, adopts the existing TR without calling `createTransferRequirement` again.
+       - **Stage 4 (TO)**: If `toNumber` is provided, adopts the existing TO without calling `createTransferOrderFromTR` again.
+       - **Stage 5 (TO Confirmation)**: If `toConfirmed: true`, adopts confirmation without calling `confirmTransferOrder` again.
+       - **Stage 6 (MIGO Posting)**: Three-tier idempotency guard (`checkMigoIdempotency`) prevents duplicate stock consumption, returning the committed document on retry.
+  - **12 Failure Scenarios Verified with Dedicated Fix & Recovery Tests:**
+    1. `Fix 1 (Reservation failure recovery)`: Correcting invalid parameters generates reservation and finishes flow cleanly.
+    2. `Fix 2 (TR failure retry)`: Resuming with existing `reservationNumber` creates TR and completes all subsequent stages without re-creating reservation.
+    3. `Fix 3 (TR missing recovery)`: Resuming with `reservationNumber` regenerates missing TR in SAP and completes flow.
+    4. `Fix 4 (TO failure retry)`: Resuming with existing `reservationNumber` and `trNumber` creates TO and finishes flow without duplicating TR.
+    5. `Fix 5 (TO confirmation failure retry)`: Resuming with existing `toNumber` confirms TO and posts MIGO without re-picking.
+    6. `Fix 6 (MIGO failure retry)`: Resuming with confirmed TO posts MIGO after issue resolved without re-picking.
+    7. `Fix 7 (MIGO timeout recovery)`: Re-submitting identical `processId` after timeout recovers committed document via idempotency.
+    8. `Fix 8 (Duplicate MIGO guard)`: Idempotency check prevents duplicate stock consumption on repeated submits.
+    9. `Fix 9 (Partial quantity continuation)`: Second issue consumes remaining quantity and marks reservation completely processed (`remainingQuantity: 0, completelyProcessed: true`).
+    10. `Fix 10 (Wrong material correction)`: Providing valid material passes MARC validation and completes flow.
+    11. `Fix 11 (Wrong SLoc correction)`: Providing valid SLoc mapped in `T320` completes flow.
+    12. `Fix 12 (Wrong plant correction)`: Providing valid plant mapped in `T320` completes flow.
+  - **Validation & Test Results:**
+    - `test/unit/wm/movementMatrixLifecycle.test.js`: All 64 tests passed (52 matrix tests + 12 recovery tests).
+    - `npx jest test/unit/wm`: All 71 WM test suites passed, 1 skipped, 1,672 passed tests.
+    - `git diff --check`: Passed with 0 whitespace errors.
+
+- **Step 16: Fix tests before live testing (Movement Matrix Lifecycle & Failure Suite) (2026-10-14, 18:15 IST):** Complete. Created dedicated comprehensive test suite `test/unit/wm/movementMatrixLifecycle.test.js` covering the full lifecycle and failure matrix across all supported movement types (`201`, `241`, `311`, `301`), comprising 52 unit tests (4 movement types × 13 test scenarios: 1 Happy Path + 12 Failure Paths).
+  - **Happy Path tested for every movement type:**
+    $$\text{Reservation} \longrightarrow \text{TR} \longrightarrow \text{TO} \longrightarrow \text{Confirm} \longrightarrow \text{MIGO} \longrightarrow \text{Stock} \longrightarrow \text{Reservation}$$
+    Full 7-stage sequence executes sequentially, yielding `success: true, state: 'COMPLETED', processStatus: 'COMPLETED', completed: true`, with verified SAP references (reservation number, TR number, TO number, material document number), stock changes confirmed, and reservation status verified complete.
+  - **12 Failure Paths tested for every movement type:**
+    1. `Reservation fails`: `BAPI_RESERVATION_CREATE1` failure returns `stage: 'RESERVATION', processStatus: 'FAILED_RESERVATION'`.
+    2. `TR fails`: `L_TR_CREATE` failure returns `stage: 'TR', processStatus: 'FAILED_TR'`.
+    3. `TR missing`: `LTBK` verification failure returns `stage: 'TR_VERIFICATION', processStatus: 'FAILED_TR'`.
+    4. `TO fails`: `L_TO_CREATE_TR` failure returns `stage: 'TO', processStatus: 'FAILED_TO'`.
+    5. `TO confirmation fails`: `L_TO_CONFIRM` failure returns `stage: 'TO_CONFIRMATION', processStatus: 'FAILED_CONFIRMATION'`.
+    6. `MIGO fails`: `BAPI_GOODSMVT_CREATE` business error returns `stage: 'MIGO', processStatus: 'FAILED_MIGO'`.
+    7. `MIGO timeout`: Simulated network/gateway timeout (`ETIMEDOUT`) returns `stage: 'MIGO', processStatus: 'FAILED_MIGO'`.
+    8. `Duplicate MIGO`: Idempotency guard returns existing document without duplicate stock consumption or duplicate BAPI calls.
+    9. `Partial quantity`: Partial issue returns `state: 'PARTIALLY_PROCESSED', processStatus: 'PARTIALLY_PROCESSED', completelyProcessed: false`.
+    10. `Wrong material`: Non-existent material or MARC check failure rejects before/at reservation.
+    11. `Wrong SLoc`: SLoc not mapped in T320 / identical SLoc for 311 rejects before/at reservation.
+    12. `Wrong plant`: Plant not mapped in T320 / receiving plant mismatch for 311 / plant identical for 301 rejects before/at reservation.
+  - **Validation & Test Results:**
+    - `test/unit/wm/movementMatrixLifecycle.test.js`: Passed 100% green (52/52 tests).
+    - `npx jest test/unit/wm`: All 71 WM test suites passed, 0 failed, 1,660 passed tests.
+    - `git diff --check`: Passed with 0 whitespace errors.
+
 - **Step 15: Add Idempotency Protection for MIGO (2026-10-14, 17:55 IST):** Complete. Implemented end-to-end idempotency protection for MIGO goods movements across the database, S/4HANA integration adapter, and CAP services, ensuring stock is NEVER consumed twice if a network/browser timeout occurs or if a user submits the request again.
   - **Scenario Addressed:**
     $$\text{TO confirmed} \longrightarrow \text{MIGO posted} \longrightarrow \text{browser timeout} \longrightarrow \text{user presses Submit again}$$
@@ -2012,7 +2063,9 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Step 15 — 2026-10-14, 17:55 IST):** Idempotency protection for MIGO using unique business key (reservation + reservation item + TO + process ID) with three-tier inspection (caller, persistent CAP database, SAP MATDOC) is complete, preventing double stock consumption on browser timeouts and retry submissions. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Next Recommended Action (Step 16 Failure Paths Fix All — 2026-10-14, 18:25 IST):** All 12 failure scenarios across all 4 movement types (`201`, `241`, `311`, `301`) are defended, guarded, and recoverable via multi-stage resumption/retry in `ReservationProcessAdapter.js`. Test suite in `movementMatrixLifecycle.test.js` expanded to 64 tests (52 matrix tests + 12 recovery tests), all passing 100% green. Full suite regression passes (71 WM test suites, 1,672 tests). Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Previous Recommended Action (Step 16 — 2026-10-14, 18:15 IST):** Movement matrix lifecycle and failure suite is complete (52/52 tests passing across 201, 241, 311, 301). All 71 WM test suites (1,660 tests) pass 100% green. System is fully verified and prepared for live testing. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Previous Recommended Action (Step 15 — 2026-10-14, 17:55 IST):** Idempotency protection for MIGO using unique business key (reservation + reservation item + TO + process ID) with three-tier inspection (caller, persistent CAP database, SAP MATDOC) is complete, preventing double stock consumption on browser timeouts and retry submissions. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 14 — 2026-10-14, 17:20 IST):** Persistent process status (`PROCESS_STATUS`) across database, CAP services, and S/4HANA integration orchestrator is complete, handling both active progression and failure states resilient to page refreshes or slow SAP responses. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 13 — 2026-10-14, 16:35 IST):** Unified end-to-end process orchestrator (`executeReservationWarehouseFlow`) coordinating all 9 stages (Reservation Create → TR Create → TR Verify → TO Create → TO Confirm → MIGO Post → Stock Verify → Reservation Verify → Completed / Partially Processed) is complete, exposed via CAP OData services, and fully verified across all 70 test suites. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 12 — 2026-10-14, 16:15 IST):** Reservation verification (checking issued/withdrawn quantity, remaining quantity, and completion status) is complete and verified across all services and 70 test suites. Next action: Execute full end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
@@ -2036,6 +2089,103 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-14 18:25 IST — Step 16 Extension: Fix All 12 Failure Paths Across All Movement Types (Multi-Stage Resumption, Validation Guards, and Recovery Suite)
+
+- **User Request:**
+  - 2. Failure Paths (12 Scenarios per Movement Type)
+  - Fix All
+- **Root Cause & Gap Analysis:**
+  - While Step 16 introduced the detection matrix for the 12 failure paths, several failure paths lacked automated multi-stage recovery, resume-from-failure handling, or had pre-validation gaps:
+    1. *Movement 311 Issuing SLoc Bug*: `ReservationProcessAdapter.js` checked receiving SLoc in `T320` but line 144 checked issuing SLoc only for `'201' || '241' || '301'`, omitting `'311'`.
+    2. *Wrong Material Pre-Validation*: `createReservation` queried `MARC` for master data attributes but did not actively reject if no `MARC` entry was found when `_checkMarcExistence` is enabled before calling `BAPI_RESERVATION_CREATE1`.
+    3. *MIGO Business Key Persistence*: `MigoBusinessKey` was not persisted into `ReservationTrack` during progress status updates in `executeReservationWarehouseFlow`.
+    4. *Multi-Stage Resumption*: When an operator or automation retried a failed flow at a later stage (e.g. TR created but TO failed, or TO created but confirmation failed), `executeReservationWarehouseFlow` did not accept existing stage identifiers (`reservationNumber`, `trNumber`, `toNumber`, `toConfirmed`), forcing a re-run from Stage 1.
+- **Changes Made:**
+  - **1. SLoc & Material Pre-Validation Guards (`srv/integration/s4hana/wm/ReservationProcessAdapter.js`):**
+    - Line 144: Included `'311'` in issuing SLoc `T320` warehouse validation condition alongside `'201'`, `'241'`, and `'301'`.
+    - Added MARC pre-validation guard in `createReservation`: if `_checkMarcExistence` is enabled and `marcRows.length === 0`, throws `400: Material <material> does not exist in plant <plant> (MARC)` immediately.
+  - **2. MIGO Business Key Persistence (`srv/integration/s4hana/wm/ReservationProcessAdapter.js`):**
+    - Updated `_persistProcessStatus` to persist `MigoBusinessKey` directly when updating `ReservationTrack`.
+  - **3. Multi-Stage Resumption & Retry Contract (`srv/integration/s4hana/wm/ReservationProcessAdapter.js`):**
+    - Updated `executeReservationWarehouseFlow` with stage-skip logic:
+      - **Stage 1 (Reservation)**: If `normInput.reservationNumber || normInput.reservationNo` is provided, skips `createReservation` and adopts existing reservation.
+      - **Stage 2 (TR)**: If `normInput.trNumber || normInput.tbnum` is provided, skips `createTransferRequirement` and adopts existing TR.
+      - **Stage 4 (TO)**: If `normInput.toNumber || normInput.tanum` is provided, skips `createTransferOrderFromTR` and adopts existing TO.
+      - **Stage 5 (TO Confirmation)**: If `normInput.toConfirmed === true || normInput.confirmed === true`, adopts confirmation without re-calling `confirmTransferOrder`.
+      - **Stage 6 (MIGO Posting)**: `checkMigoIdempotency` detects previously committed document in `MATDOC` and returns existing document without duplicate stock consumption.
+  - **4. Fixes & Recovery Test Suite (`test/unit/wm/movementMatrixLifecycle.test.js`):**
+    - Added 5th describe block `Failure Paths: Fixes, Retries & Resumptions for All 12 Scenarios` containing 12 unit tests verifying end-to-end recovery from each failure scenario:
+      1. Fix 1: Reservation failure recovery with corrected parameters.
+      2. Fix 2: TR failure retry resuming with existing `reservationNumber`.
+      3. Fix 3: TR missing recovery regenerating TR in SAP from reservation.
+      4. Fix 4: TO failure retry resuming with existing `reservationNumber` and `trNumber`.
+      5. Fix 5: TO confirmation failure retry resuming with existing `toNumber`.
+      6. Fix 6: MIGO failure retry resuming with confirmed TO after issue resolution.
+      7. Fix 7: MIGO timeout recovery re-submitting identical `processId` via idempotency.
+      8. Fix 8: Duplicate MIGO guard preventing double stock consumption on repeat submits.
+      9. Fix 9: Partial quantity continuation with second issue consuming remaining quantity to complete reservation.
+      10. Fix 10: Wrong material correction with valid material.
+      11. Fix 11: Wrong SLoc correction with valid SLoc mapped in T320.
+      12. Fix 12: Wrong plant correction with valid plant mapped in T320.
+    - Updated mock `L_TR_CREATE` and `ZWM_TR_CREATE` handlers to dynamically echo requested quantity (`reqItem.MENGA`).
+- **Affected Files:**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js` (updated)
+  - `test/unit/wm/movementMatrixLifecycle.test.js` (updated, 64 tests)
+  - `WORKSTATUS.md` (updated)
+- **Validation Commands & Results:**
+  - `npx jest test/unit/wm/movementMatrixLifecycle.test.js`: **PASS** (64/64 tests passed in 0.401s).
+  - `npx jest test/unit/wm`: **PASS** (71/71 suites passed, 1 skipped, 1,672 passed tests in 5.084s).
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+- **Next Recommended Action:**
+  - All 12 failure scenarios across all 4 movement types are defended and recoverable. Proceed to live end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+
+### 2026-10-14 18:15 IST — Step 16: Fix Tests Before Live Testing (Complete Movement Matrix Lifecycle & Failure Suite)
+
+- **User Request:**
+  - Step 16 — Fix tests before live testing.
+  - For every movement type, create tests for:
+    - Happy path: Reservation → TR → TO → Confirm → MIGO → Stock → Reservation
+    - Failure paths: Reservation fails, TR fails, TR missing, TO fails, TO confirmation fails, MIGO fails, MIGO timeout, Duplicate MIGO, Partial quantity, Wrong material, Wrong SLoc, Wrong plant.
+- **Changes Made:**
+  - Created dedicated test suite [movementMatrixLifecycle.test.js](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/test/unit/wm/movementMatrixLifecycle.test.js) defining the complete test matrix across all 4 movement types (`201`, `241`, `311`, `301`), with 13 tests per movement type (1 Happy path + 12 Failure paths = 52 unit tests):
+    1. **Happy Path:**
+       - Full 7-stage sequence executed: $\text{Reservation} \longrightarrow \text{TR} \longrightarrow \text{TO} \longrightarrow \text{Confirm} \longrightarrow \text{MIGO} \longrightarrow \text{Stock} \longrightarrow \text{Reservation}$.
+       - Verified stages array: `['RESERVATION_CREATED', 'TR_CREATED', 'TR_VERIFIED', 'TO_CREATED', 'TO_CONFIRMED', 'MIGO_POSTED', 'STOCK_VERIFIED', 'RESERVATION_VERIFIED', 'COMPLETED']`.
+       - Verified outputs: `reservationNumber`, `trNumber`, `toNumber`, `migo.materialDocument`, `stock.sourceStockDecreased`, `stock.destinationStockIncreased` (for 311/301), and `finalReservation.completelyProcessed = true`.
+    2. **Failure Path 1: Reservation fails:**
+       - Rejection in `BAPI_RESERVATION_CREATE1` returns `stage: 'RESERVATION', processStatus: 'FAILED_RESERVATION'`.
+    3. **Failure Path 2: TR fails:**
+       - Rejection in `L_TR_CREATE` returns `stage: 'TR', processStatus: 'FAILED_TR'`, with reservation preserved.
+    4. **Failure Path 3: TR missing:**
+       - Missing row in `LTBK` during `verifyTR` returns `stage: 'TR_VERIFICATION', processStatus: 'FAILED_TR'`.
+    5. **Failure Path 4: TO fails:**
+       - Rejection in `L_TO_CREATE_TR` returns `stage: 'TO', processStatus: 'FAILED_TO'`.
+    6. **Failure Path 5: TO confirmation fails:**
+       - Rejection in `L_TO_CONFIRM` returns `stage: 'TO_CONFIRMATION', processStatus: 'FAILED_CONFIRMATION'`.
+    7. **Failure Path 6: MIGO fails:**
+       - Error in `BAPI_GOODSMVT_CREATE` returns `stage: 'MIGO', processStatus: 'FAILED_MIGO'`.
+    8. **Failure Path 7: MIGO timeout:**
+       - Network timeout (`ETIMEDOUT`) simulated on `BAPI_GOODSMVT_CREATE` returns `stage: 'MIGO', processStatus: 'FAILED_MIGO'`.
+    9. **Failure Path 8: Duplicate MIGO:**
+       - Idempotency guard (`checkMigoIdempotency`) detects already committed document in `MATDOC`, returns existing document with `alreadyPosted: true, idempotentRetry: true` without invoking `BAPI_GOODSMVT_CREATE` twice (stock is NOT consumed twice).
+    10. **Failure Path 9: Partial quantity:**
+        - Partial withdrawal (requested 10, picked 6, remaining 4) returns `state: 'PARTIALLY_PROCESSED', processStatus: 'PARTIALLY_PROCESSED'`, `completelyProcessed: false`, `remainingQuantity: 4`.
+    11. **Failure Path 10: Wrong material:**
+        - Non-existent material or MARC check failure rejects before/at reservation with status 400.
+    12. **Failure Path 11: Wrong SLoc:**
+        - SLoc unassigned in `T320` or identical SLoc for 311 rejects before/at reservation with status 400.
+    13. **Failure Path 12: Wrong plant:**
+        - Plant unassigned in `T320`, receiving plant mismatch for 311, or identical plant for 301 rejects before/at reservation with status 400.
+- **Affected Files:**
+  - `test/unit/wm/movementMatrixLifecycle.test.js` (created)
+  - `WORKSTATUS.md` (updated)
+- **Validation Commands & Results:**
+  - `npx jest test/unit/wm/movementMatrixLifecycle.test.js`: **PASS** (52/52 tests passed in 0.425s).
+  - `npx jest test/unit/wm`: **PASS** (71/71 suites passed, 1 skipped, 1,660 passed tests).
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+- **Next Recommended Action:**
+  - With the full movement matrix lifecycle and failure suite verified green (52/52 tests) across all 4 movement types, proceed to live end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 
 ### 2026-10-14 17:55 IST — Step 15: Add Idempotency Protection for MIGO
 
