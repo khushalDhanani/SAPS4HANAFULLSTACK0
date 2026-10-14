@@ -258,6 +258,9 @@ class TrToHandler {
               ErrorMessage: '',
               ErrorStep: ''
             };
+            if (migoRes.businessKey) {
+              updateFields.MigoBusinessKey = migoRes.businessKey;
+            }
             if (resVer) {
               updateFields.WithdrawnQuantity = resVer.issuedQuantity;
               updateFields.RemainingQuantity = resVer.remainingQuantity;
@@ -269,6 +272,7 @@ class TrToHandler {
             await log(ReservationLog, {
               ...trackKey, ProcessId: processId, DocumentNo: migoRes.materialDocument,
               Step: 'MIGO', Status: STATUS.GI_POSTED, MessageType: 'S', MessageId: 'M7', MessageNo: '060',
+              MigoBusinessKey: migoRes.businessKey || '',
               MessageText: migoRes.alreadyPosted
                 ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for process ${processId}; not posted again`
                 : (isCompletelyProcessed
@@ -280,6 +284,7 @@ class TrToHandler {
               await log(ReservationLog, {
                 ...trackKey, ProcessId: processId, DocumentNo: migoRes.materialDocument,
                 Step: 'MIGO', Status: STATUS.GI_POSTED, MessageType: 'W', MessageId: 'L3', MessageNo: '001',
+                MigoBusinessKey: migoRes.businessKey || '',
                 MessageText: migoRes.warning
               });
             }
@@ -303,6 +308,11 @@ class TrToHandler {
           ReservationNo: migoRes.reservationNo || sResNo,
           Batch: migoRes.batch || sBatch,
           StockEffect: migoRes.stockEffect,
+          alreadyPosted: Boolean(migoRes.alreadyPosted),
+          AlreadyPosted: Boolean(migoRes.alreadyPosted),
+          idempotentRetry: Boolean(migoRes.idempotentRetry),
+          businessKey: migoRes.businessKey || '',
+          BusinessKey: migoRes.businessKey || '',
           stockVerification: migoRes.stockVerification || null,
           reservationVerification: migoRes.reservationVerification || null,
           ReceivingTr: migoRes.receivingTr || null,
@@ -572,6 +582,7 @@ class TrToHandler {
           if (extra.toNumber) updateData.TransferOrder = extra.toNumber;
           if (extra.materialDocument) updateData.MaterialDocument = extra.materialDocument;
           if (extra.materialDocYear || extra.materialDocumentYear) updateData.MaterialDocYear = extra.materialDocYear || extra.materialDocumentYear;
+          if (extra.businessKey || extra.migoBusinessKey) updateData.MigoBusinessKey = extra.businessKey || extra.migoBusinessKey;
           if (extra.withdrawnQuantity != null) updateData.WithdrawnQuantity = extra.withdrawnQuantity;
           if (extra.remainingQuantity != null) updateData.RemainingQuantity = extra.remainingQuantity;
           if (extra.completelyProcessed != null) updateData.CompletelyProcessed = extra.completelyProcessed;
@@ -603,6 +614,9 @@ class TrToHandler {
           toConfirmed: Boolean(result.confirmation?.confirmed || result.toConfirmed),
           materialDocument: result.migo?.materialDocument || result.materialDocument || '',
           materialDocumentYear: result.migo?.materialDocumentYear || result.materialDocumentYear || '',
+          alreadyPosted: Boolean(result.migo?.alreadyPosted || result.alreadyPosted),
+          idempotentRetry: Boolean(result.migo?.idempotentRetry || result.idempotentRetry),
+          businessKey: result.migo?.businessKey || result.businessKey || '',
           stockVerified: Boolean(result.stock?.verified || result.stock?.success || result.stockVerified),
           reservationVerified: Boolean(result.finalReservation?.verified || result.finalReservation?.success || result.reservationVerified),
           completelyProcessed: Boolean(result.finalReservation?.completelyProcessed || result.completelyProcessed),

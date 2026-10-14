@@ -146,6 +146,9 @@ service TrToService @(path: '/odata/v4/tr-to') {
         StockEffect          : String(80);
         Message              : String(255);
         ErrorMessage         : String(255);
+        alreadyPosted        : Boolean;
+        idempotentRetry      : Boolean;
+        businessKey          : String(120);
         stockVerification    : StockVerificationResult;
         reservationVerification : ReservationVerificationResult;
     };
@@ -513,6 +516,9 @@ service TrToService @(path: '/odata/v4/tr-to') {
         currentState         : String(30);
         processStatus        : String(35);
         completed            : Boolean;
+        alreadyPosted        : Boolean;
+        idempotentRetry      : Boolean;
+        businessKey          : String(120);
         stages               : array of String(30);
         reservationNumber    : String(10);
         reservationItem      : String(4);

@@ -1184,6 +1184,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         MaterialDocYear: migoRes.materialDocYear,
         Status_code: STATUS.GI_POSTED,
         ProcessStatus: isCompletelyProcessed ? PROCESS_STATUS.COMPLETED : PROCESS_STATUS.MIGO_POSTED,
+        MigoBusinessKey: migoRes.businessKey || null,
         WithdrawnQuantity: withdrawnQty,
         RemainingQuantity: remainingQty,
         CompletelyProcessed: isCompletelyProcessed,
@@ -1263,6 +1264,26 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       const extId = `${sResNo}/${sResItem}`;
       const sLogHandle = existing?.LogHandle || `LOG_${Date.now().toString(36).toUpperCase()}`;
+
+      // Step 15: Idempotency Protection — if MIGO was already posted for this reservation item and TO/processId, return existing record
+      if (existing.MaterialDocument && (existing.Status_code === STATUS.GI_POSTED || existing.ProcessStatus === PROCESS_STATUS.MIGO_POSTED || existing.ProcessStatus === PROCESS_STATUS.COMPLETED)) {
+        const reqTo = data.TransferOrder || data.transferOrder || '';
+        const reqPid = data.ProcessId || '';
+        const toMatches = reqTo && existing.TransferOrder && sapKey(existing.TransferOrder, 'tanum') === sapKey(reqTo, 'tanum');
+        const pidMatches = reqPid && existing.ProcessId && existing.ProcessId === reqPid;
+        const bKeyMatches = existing.MigoBusinessKey && (data.businessKey === existing.MigoBusinessKey || (reqPid && existing.MigoBusinessKey.includes(reqPid)));
+        if (bKeyMatches || pidMatches || toMatches) {
+          const bKey = existing.MigoBusinessKey || `RES:${sResNo}/${sResItem}#TO:${existing.TransferOrder || reqTo || 'NONE'}#PID:${existing.ProcessId || reqPid || 'NONE'}`;
+          LOG.info(`[Idempotency Guard] Reservation ${sResNo}/${sResItem} already has Material Document ${existing.MaterialDocument}; returning existing record`);
+          await logRow({
+            ...key, LogHandle: sLogHandle, ExternalId: extId, SubObject: 'PROCESS', ProcessId: existing.ProcessId || reqPid || null, DocumentNo: existing.MaterialDocument,
+            Step: 'MIGO', Status: STATUS.GI_POSTED, MessageType: 'I', MessageId: 'M7', MessageNo: '060',
+            MigoBusinessKey: bKey,
+            MessageText: `Idempotency guard: Material Document ${existing.MaterialDocument}/${existing.MaterialDocYear || ''} already posted for business key ${bKey}; returning existing document`
+          });
+          return existing;
+        }
+      }
 
       try {
         const migoRes = await postMigoForTrack(existing, data, req, { sLogHandle, extId, subObject: 'PROCESS' });
@@ -1672,6 +1693,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           if (extra.toNumber) updateData.TransferOrder = extra.toNumber;
           if (extra.materialDocument) updateData.MaterialDocument = extra.materialDocument;
           if (extra.materialDocYear || extra.materialDocumentYear) updateData.MaterialDocYear = extra.materialDocYear || extra.materialDocumentYear;
+          if (extra.businessKey || extra.migoBusinessKey) updateData.MigoBusinessKey = extra.businessKey || extra.migoBusinessKey;
           if (extra.withdrawnQuantity != null) updateData.WithdrawnQuantity = extra.withdrawnQuantity;
           if (extra.remainingQuantity != null) updateData.RemainingQuantity = extra.remainingQuantity;
           if (extra.completelyProcessed != null) updateData.CompletelyProcessed = extra.completelyProcessed;
@@ -1715,6 +1737,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           toConfirmed: Boolean(result.confirmation?.confirmed || result.toConfirmed),
           materialDocument: result.migo?.materialDocument || result.materialDocument || '',
           materialDocumentYear: result.migo?.materialDocumentYear || result.materialDocumentYear || '',
+          alreadyPosted: Boolean(result.migo?.alreadyPosted || result.alreadyPosted),
+          idempotentRetry: Boolean(result.migo?.idempotentRetry || result.idempotentRetry),
+          businessKey: result.migo?.businessKey || result.businessKey || '',
           stockVerified: Boolean(result.stock?.verified || result.stock?.success || result.stockVerified),
           reservationVerified: Boolean(result.finalReservation?.verified || result.finalReservation?.success || result.reservationVerified),
           completelyProcessed: Boolean(result.finalReservation?.completelyProcessed || result.completelyProcessed),

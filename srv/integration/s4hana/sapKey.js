@@ -22,7 +22,7 @@ const PATTERNS = Object.freeze({
   lgtyp: [/^[A-Z0-9*]{1,3}$/, 'Storage type'],
   lgpla: [/^[A-Z0-9_\-./]{1,10}$/, 'Storage bin'],
   serial: [/^[A-Z0-9_\-./]{1,18}$/, 'Serial number'],
-  uuid: [/^[0-9A-F-]{36}$/, 'Process ID'],
+  uuid: [/^[0-9A-F-]{36}$/i, 'Process ID'],
   mblnr: [/^\d{1,10}$/, 'Material Document number'],
   mjahr: [/^\d{4}$/, 'Material Document year']
 });

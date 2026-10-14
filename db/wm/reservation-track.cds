@@ -43,6 +43,7 @@ entity ReservationTrack : managed {
     RemainingQuantity       : Decimal(13,3); // BDMNG - ENMNG
     CompletelyProcessed     : Boolean;       // true when remaining == 0 or KZEAR = 'X'
     ProcessStatus           : String(35);    // PROCESS_STATUS (CREATED, RESERVATION_CREATED, TR_CREATED, TR_VERIFIED, TO_CREATED, TO_CONFIRMED, MIGO_POSTED, STOCK_VERIFIED, COMPLETED, FAILED_*)
+    MigoBusinessKey         : String(120);   // Idempotency business key (RES:xxx/yy#TO:zzz#PID:ppp)
     LogHandle               : String(22);    // BALLOGHNDL (SLG1 Application Log Handle)
     ExternalId              : String(100);   // BALEXTN (SLG1 External ID)
     Status                  : Association to ReservationStatus; // STATUS
@@ -67,6 +68,7 @@ entity ReservationLog : cuid, managed {
     Step            : String(10);    // MB21 | LB01 | LT04 | LT12 | MIGO
     Status          : String(10);    // Status at time of step
     ProcessStatus   : String(35);    // Process Status at time of step
+    MigoBusinessKey : String(120);   // Idempotency business key (RES:xxx/yy#TO:zzz#PID:ppp)
     MessageType     : String(1);     // S | E | W | I
     MessageId       : String(20);    // Message Class (e.g. M7, L3)
     MessageNo       : String(3);     // Message Number (e.g. 060, 529)

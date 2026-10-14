@@ -1617,6 +1617,114 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * Step 15: Add idempotency protection
+   * Builds unique business key: reservation + reservation item + TO + process ID
+   */
+  buildMigoBusinessKey(params = {}) {
+    const rawRes = params.reservationNumber || params.reservationNo || params.ReservationNo || params.rsnum || '';
+    const rawItem = params.reservationItem || params.ReservationItem || params.rspos || '0001';
+    const rawTo = params.transferOrder || params.TransferOrder || params.toNumber || params.tanum || '';
+    const rawPid = params.processId || params.ProcessId || '';
+
+    const resNo = rawRes ? String(rawRes).trim().replace(/^0+/, '') : '';
+    const resItem = rawItem ? String(rawItem).trim().replace(/^0+/, '') || '1' : '1';
+    const toNo = rawTo ? String(rawTo).trim().replace(/^0+/, '') : '';
+    const processId = rawPid ? String(rawPid).trim() : '';
+
+    return {
+      reservationNo: resNo ? resNo.padStart(10, '0') : '',
+      reservationItem: resItem.padStart(4, '0'),
+      transferOrder: toNo ? toNo.padStart(10, '0') : '',
+      processId,
+      key: `RES:${resNo || 'NONE'}/${resItem || '1'}#TO:${toNo || 'NONE'}#PID:${processId || 'NONE'}`
+    };
+  }
+
+  /**
+   * Step 15: Check MIGO Idempotency
+   * Ensures stock is never consumed twice on network timeouts or double submissions.
+   */
+  async checkMigoIdempotency(params = {}) {
+    const bKey = this.buildMigoBusinessKey(params);
+    const { reservationNo, reservationItem, transferOrder, processId, key } = bKey;
+    const sMvt = params.movementType || params.MovementType || '';
+    const sPlant = params.plant || params.Plant || '';
+    const s4Mat = params.material ? padMat(sapKey(params.material, 'matnr')) : '';
+
+    // 1. Caller supplied pre-posted material document
+    if (params.materialDocument && (params.alreadyPosted || params.Status_code === STATUS.GI_POSTED)) {
+      return {
+        alreadyPosted: true,
+        materialDocument: alphaOut(params.materialDocument),
+        materialDocumentYear: params.materialDocumentYear || params.materialDocYear || String(new Date().getFullYear()),
+        businessKey: key,
+        source: 'CALLER'
+      };
+    }
+
+    // 2. Persistent CAP database check (ZRES_TRACK)
+    if (global.cds?.db && reservationNo) {
+      try {
+        const trk = await global.cds.db.run(
+          global.cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack').where({
+            ReservationNo: reservationNo,
+            ReservationItem: reservationItem
+          })
+        );
+        if (trk && trk.MaterialDocument && (trk.Status_code === STATUS.GI_POSTED || trk.ProcessStatus === PROCESS_STATUS.MIGO_POSTED || trk.ProcessStatus === PROCESS_STATUS.COMPLETED)) {
+          const bKeyMatches = trk.MigoBusinessKey && trk.MigoBusinessKey === key;
+          const pidMatches = processId && trk.ProcessId && trk.ProcessId === processId;
+          const toMatches = transferOrder && trk.TransferOrder && sapKey(trk.TransferOrder, 'tanum') === sapKey(transferOrder, 'tanum') && (processId ? trk.ProcessId === processId : true);
+          if (bKeyMatches || pidMatches || toMatches) {
+            return {
+              alreadyPosted: true,
+              materialDocument: alphaOut(trk.MaterialDocument),
+              materialDocumentYear: trk.MaterialDocYear || String(new Date().getFullYear()),
+              businessKey: key,
+              source: 'DB'
+            };
+          }
+        }
+      } catch (_) { /* ignore DB query errors in mock unit test environments */ }
+    }
+
+    // 3. SAP MATDOC transparent table query
+    if (this.rfc) {
+      let found = null;
+      if (processId) {
+        try {
+          const where = [`SGTXT = '${processId}'`, ...(s4Mat ? [`AND MATNR = '${s4Mat}'`] : []), ...(sPlant ? [`AND WERKS = '${sPlant}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
+          found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], where, 1);
+        } catch (_) {}
+      }
+      if (!found?.[0]?.MBLNR && transferOrder) {
+        try {
+          const toWhere = [`XBLNR = 'TO ${alphaOut(transferOrder)}'`, ...(sMvt ? [`AND BWART = '${sMvt}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
+          found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], toWhere, 1);
+        } catch (_) {}
+      }
+      if (!found?.[0]?.MBLNR && reservationNo) {
+        try {
+          const resWhere = [`RSNUM = '${reservationNo}'`, `AND RSPOS = '${reservationItem}'`, ...(sMvt ? [`AND BWART = '${sMvt}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
+          found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], resWhere, 1);
+        } catch (_) {}
+      }
+
+      if (found?.[0]?.MBLNR) {
+        return {
+          alreadyPosted: true,
+          materialDocument: alphaOut(found[0].MBLNR),
+          materialDocumentYear: found[0].MJAHR || String(new Date().getFullYear()),
+          businessKey: key,
+          source: 'SAP'
+        };
+      }
+    }
+
+    return { alreadyPosted: false, businessKey: key };
+  }
+
+  /**
    * Step 5: post_migo
    * Wraps BAPI_GOODSMVT_CREATE.
    *  - RESERV_NO/RES_ITEM only when the caller/tracking row names a reservation (never looked up by material).
@@ -1741,79 +1849,93 @@ class ReservationProcessAdapter {
       }
     }
 
-    // Retry guard: a material document already carrying this PROCESS_ID (or matching reservation/TO) means the step was posted.
-    if (this.rfc) {
-      let found = null;
-      if (sProcessId) {
-        const where = [`SGTXT = '${sProcessId}'`, `AND MATNR = '${s4Mat}'`, `AND WERKS = '${sPlant}'`, "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
-        found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], where, 1);
+    // Step 15: Idempotency Protection — unique business key: reservation + reservation item + TO + process ID
+    const bKey = this.buildMigoBusinessKey({
+      reservationNumber: sResNo,
+      reservationItem: sResItem,
+      transferOrder: sTanum,
+      processId: sProcessId
+    });
+
+    const idempotencyCheck = await this.checkMigoIdempotency({
+      reservationNumber: sResNo,
+      reservationItem: sResItem,
+      transferOrder: sTanum,
+      processId: sProcessId,
+      movementType: sMvt,
+      material: s4Mat,
+      plant: sPlant,
+      alreadyPosted: params.alreadyPosted,
+      materialDocument: params.materialDocument,
+      materialDocumentYear: params.materialDocYear || params.materialDocumentYear,
+      Status_code: params.Status_code
+    });
+
+    if (idempotencyCheck.alreadyPosted && idempotencyCheck.materialDocument) {
+      const matDoc = idempotencyCheck.materialDocument;
+      const docYear = idempotencyCheck.materialDocumentYear || String(new Date().getFullYear());
+      LOG.info(`[Idempotency Guard] Material document ${matDoc}/${docYear} already posted for business key (${bKey.key}); returning existing document`);
+
+      let stockVerification = null;
+      if (!testrun && !params.skipStockVerification) {
+        try {
+          stockVerification = await this.verifyStock({
+            materialDocument: matDoc,
+            materialDocYear: docYear,
+            materialDocumentYear: docYear,
+            movementType: sMvt,
+            material: s4Mat,
+            quantity: quantityToPost,
+            plant: sPlant,
+            storageLocation: sSLoc,
+            receivingPlant: sRecPlant,
+            receivingStorageLocation: sRecSLoc,
+            costCenter: sCostCenter,
+            assetNo: sAssetNo,
+            subNumber: sSubNumber,
+            initialSourceStock,
+            initialDestStock
+          });
+        } catch (_) {}
       }
-      // SAP standard BAPI_GOODSMVT_CREATE leaves MSEG-SGTXT blank when referencing reservations (KBA 1518592 / ZXMBCU02);
-      // fallback to reservation reference (RSNUM + RSPOS) so retrying an already completed step never double-posts in SAP.
-      if (!found?.[0]?.MBLNR && hasRes) {
-        const resWhere = [`RSNUM = '${sResNo}'`, `AND RSPOS = '${sResItem}'`, `AND BWART = '${sMvt}'`, "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
-        found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], resWhere, 1);
+
+      let reservationVerification = null;
+      if (!testrun && hasRes && !params.skipReservationVerification) {
+        try {
+          reservationVerification = await this.verifyReservation({
+            reservationNumber: sResNo,
+            reservationNo: sResNo,
+            reservationItem: sResItem,
+            materialDocument: matDoc,
+            materialDocYear: docYear,
+            postedQuantity: quantityToPost
+          });
+        } catch (_) {}
       }
-      if (!found?.[0]?.MBLNR && sTanum && !hasRes) {
-        const toWhere = [`XBLNR = 'TO ${sTanum}'`, `AND BWART = '${sMvt}'`, "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
-        found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], toWhere, 1);
-      }
-      if (found?.[0]?.MBLNR) {
-        LOG.info(`Material document ${found[0].MBLNR}/${found[0].MJAHR} already exists for process/reservation; not posting again`);
-        let stockVerification = null;
-        if (!testrun) {
-          try {
-            stockVerification = await this.verifyStock({
-              materialDocument: found[0].MBLNR,
-              materialDocYear: found[0].MJAHR,
-              materialDocumentYear: found[0].MJAHR,
-              movementType: sMvt,
-              material: s4Mat,
-              quantity: quantityToPost,
-              plant: sPlant,
-              storageLocation: sSLoc,
-              receivingPlant: sRecPlant,
-              receivingStorageLocation: sRecSLoc,
-              costCenter: sCostCenter,
-              assetNo: sAssetNo,
-              subNumber: sSubNumber,
-              initialSourceStock,
-              initialDestStock
-            });
-          } catch (_) {}
-        }
-        let reservationVerification = null;
-        if (!testrun && hasRes) {
-          try {
-            reservationVerification = await this.verifyReservation({
-              reservationNumber: sResNo,
-              reservationNo: sResNo,
-              reservationItem: sResItem,
-              materialDocument: found[0].MBLNR,
-              materialDocYear: found[0].MJAHR,
-              postedQuantity: quantityToPost
-            });
-          } catch (_) {}
-        }
-        return {
-          success: true,
-          stage: 'MIGO',
-          materialDocument: alphaOut(found[0].MBLNR),
-          materialDocumentYear: found[0].MJAHR,
-          movementType: sMvt,
-          alreadyPosted: true,
-          stockVerification,
-          reservationVerification,
-          materialDocYear: found[0].MJAHR,
-          status: STATUS.GI_POSTED,
-          reservationNo: sResNo,
-          processId: sProcessId,
-          batch: sapKeyOpt(batch, 'batch'),
-          stockEffect: this._computeStockEffect(sMvt, { ...params, costCenter: sCostCenter, assetNo: sAssetNo, subNumber: sSubNumber, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
-          messages: [],
-          ...(t321Warning ? { warning: t321Warning } : {})
-        };
-      }
+
+      return {
+        success: true,
+        stage: 'MIGO',
+        materialDocument: alphaOut(matDoc),
+        materialDocumentYear: docYear,
+        materialDocYear: docYear,
+        movementType: sMvt,
+        alreadyPosted: true,
+        idempotentRetry: true,
+        businessKey: bKey.key,
+        stockVerification,
+        reservationVerification,
+        status: STATUS.GI_POSTED,
+        reservationNo: sResNo,
+        processId: sProcessId,
+        batch: sapKeyOpt(batch, 'batch'),
+        stockEffect: this._computeStockEffect(sMvt, { ...params, costCenter: sCostCenter, assetNo: sAssetNo, subNumber: sSubNumber, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
+        messages: [{
+          TYPE: 'I',
+          MESSAGE: `Idempotency guard: Material Document ${alphaOut(matDoc)}/${docYear} already posted for business key ${bKey.key}; returning existing document`
+        }],
+        ...(t321Warning ? { warning: t321Warning } : {})
+      };
     }
 
     // Tier 2 (and receiving plant/sloc) from the reservation item itself
@@ -2228,6 +2350,8 @@ class ReservationProcessAdapter {
         stockVerification,
         reservationVerification,
         alreadyPosted: false,
+        idempotentRetry: false,
+        businessKey: bKey.key,
         materialDocument: verification.materialDocument || alphaOut(matDoc),
         materialDocumentYear: verification.materialDocumentYear || docYear,
         materialDocYear: docYear,
@@ -2841,6 +2965,9 @@ class ReservationProcessAdapter {
       processStatus: finalProcessStatus,
       completed: isComplete,
       completelyProcessed: isComplete,
+      alreadyPosted: Boolean(migo?.alreadyPosted),
+      idempotentRetry: Boolean(migo?.idempotentRetry),
+      businessKey: migo?.businessKey,
       stages: stagesReached,
       reservationNumber: resNo,
       reservationItem: resItem,

@@ -2568,4 +2568,344 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       ]);
     });
   });
+
+  describe('12. Step 15: Add Idempotency Protection', () => {
+    test('buildMigoBusinessKey constructs normalized key components and formatted string', () => {
+      const bKey = adapter.buildMigoBusinessKey({
+        reservationNumber: '0000520235',
+        reservationItem: '0001',
+        transferOrder: '0001037299',
+        processId: 'E5B42701-1111-4222-8333-000000000000'
+      });
+
+      expect(bKey).toEqual({
+        reservationNo: '0000520235',
+        reservationItem: '0001',
+        transferOrder: '0001037299',
+        processId: 'E5B42701-1111-4222-8333-000000000000',
+        key: 'RES:520235/1#TO:1037299#PID:E5B42701-1111-4222-8333-000000000000'
+      });
+    });
+
+    test('buildMigoBusinessKey handles missing / partial parameters safely', () => {
+      const bKey = adapter.buildMigoBusinessKey({});
+      expect(bKey).toEqual({
+        reservationNo: '',
+        reservationItem: '0001',
+        transferOrder: '',
+        processId: '',
+        key: 'RES:NONE/1#TO:NONE#PID:NONE'
+      });
+    });
+
+    test('Browser timeout retry simulation: returns existing material document and does NOT call BAPI_GOODSMVT_CREATE twice', async () => {
+      setupDefaultFmCalls();
+      setupDefaultReadTable();
+
+      const bapiCalls = [];
+      mockRfc.call.mockImplementation(async (fm, params) => {
+        if (fm === 'BAPI_GOODSMVT_CREATE') {
+          bapiCalls.push(params);
+          return {
+            MATERIALDOCUMENT: '5000999999',
+            MATDOCUMENTYEAR: '2026',
+            RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document posted' }]
+          };
+        }
+        if (fm === 'BAPI_TRANSACTION_COMMIT') return {};
+        return {};
+      });
+
+      const processId = 'E5B42701-1111-4222-8333-000000000001';
+      const requestParams = {
+        reservationNo: '0000520235',
+        reservationItem: '0001',
+        transferOrder: '0001037299',
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 10,
+        unit: 'NOS',
+        costCenter: '1011201301',
+        processId
+      };
+
+      // 1. Initial attempt: TO confirmed -> MIGO posted
+      const firstResult = await adapter.postGoodsMovement(requestParams);
+      expect(firstResult.success).toBe(true);
+      expect(firstResult.materialDocument).toBe('5000999999');
+      expect(firstResult.alreadyPosted).toBe(false);
+      expect(firstResult.idempotentRetry).toBe(false);
+      expect(bapiCalls.length).toBe(1);
+
+      // Now simulate MATDOC returning this document for the processId (as SAP would persist it)
+      setupDefaultReadTable({
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes(`SGTXT = '${processId}'`) || whereStr.includes("RSNUM = '0000520235'")) {
+            return [{
+              MBLNR: '5000999999',
+              MJAHR: '2026',
+              BWART: '201',
+              MATNR: '000000008000000023',
+              MENGE: '10.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              RSNUM: '0000520235',
+              RSPOS: '0001',
+              KOSTL: '001011201301',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        }
+      });
+
+      // 2. Retry after timeout: user clicks submit again with same processId and params
+      const retryResult = await adapter.postGoodsMovement(requestParams);
+
+      expect(retryResult.success).toBe(true);
+      expect(retryResult.materialDocument).toBe('5000999999');
+      expect(retryResult.alreadyPosted).toBe(true);
+      expect(retryResult.idempotentRetry).toBe(true);
+      expect(retryResult.businessKey).toContain('E5B42701-1111-4222-8333-000000000001');
+      // CRITICAL: Stock is NOT consumed twice! BAPI_GOODSMVT_CREATE was NOT called a second time!
+      expect(bapiCalls.length).toBe(1);
+    });
+
+    test('Persistent CAP DB (ReservationTrack) check returns existing document without SAP query', async () => {
+      setupDefaultFmCalls();
+      setupDefaultReadTable();
+
+      const origCds = global.cds;
+      try {
+        global.cds = {
+          db: {
+            run: jest.fn().mockResolvedValue({
+              ReservationNo: '0000520235',
+              ReservationItem: '0001',
+              TransferOrder: '0001037299',
+              ProcessId: 'E5B42701-1111-4222-8333-000000000002',
+              MaterialDocument: '5000888888',
+              MaterialDocYear: '2026',
+              Status_code: '05'
+            })
+          },
+          ql: {
+            SELECT: {
+              one: {
+                from: jest.fn().mockReturnValue({
+                  where: jest.fn().mockReturnValue({})
+                })
+              }
+            }
+          }
+        };
+
+        const idempotency = await adapter.checkMigoIdempotency({
+          reservationNumber: '0000520235',
+          reservationItem: '0001',
+          transferOrder: '0001037299',
+          processId: 'E5B42701-1111-4222-8333-000000000002'
+        });
+
+        expect(idempotency.alreadyPosted).toBe(true);
+        expect(idempotency.materialDocument).toBe('5000888888');
+        expect(idempotency.materialDocumentYear).toBe('2026');
+        expect(idempotency.source).toBe('DB');
+        expect(idempotency.businessKey).toBe('RES:520235/1#TO:1037299#PID:E5B42701-1111-4222-8333-000000000002');
+      } finally {
+        global.cds = origCds;
+      }
+    });
+
+    test('SAP MATDOC transparent table query detects committed document and filters cancelled documents', async () => {
+      setupDefaultFmCalls();
+
+      // Case A: Valid uncancelled document in MATDOC
+      setupDefaultReadTable({
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes("SGTXT = 'E5B42701-1111-4222-8333-000000000003'") && whereStr.includes("CANCELLED = ''")) {
+            return [{
+              MBLNR: '5000777777',
+              MJAHR: '2026',
+              BWART: '201'
+            }];
+          }
+          return [];
+        }
+      });
+
+      const validCheck = await adapter.checkMigoIdempotency({
+        reservationNumber: '0000520235',
+        reservationItem: '0001',
+        transferOrder: '0001037299',
+        processId: 'E5B42701-1111-4222-8333-000000000003'
+      });
+      expect(validCheck.alreadyPosted).toBe(true);
+      expect(validCheck.materialDocument).toBe('5000777777');
+      expect(validCheck.source).toBe('SAP');
+
+      // Case B: Cancelled document in MATDOC should NOT be treated as already posted
+      setupDefaultReadTable({
+        MATDOC: () => [] // Cancelled filter returns empty
+      });
+
+      const cancelledCheck = await adapter.checkMigoIdempotency({
+        reservationNumber: '0000520235',
+        reservationItem: '0001',
+        transferOrder: '0001037299',
+        processId: 'E5B42701-1111-4222-8333-000000000004'
+      });
+      expect(cancelledCheck.alreadyPosted).toBe(false);
+    });
+
+    test('Subsequent partial issue with a new TO and fresh ProcessId is NOT blocked by idempotency', async () => {
+      setupDefaultFmCalls();
+      const bapiCalls = [];
+      mockRfc.call.mockImplementation(async (fm, params) => {
+        if (fm === 'BAPI_GOODSMVT_CREATE') {
+          bapiCalls.push(params);
+          return {
+            MATERIALDOCUMENT: '5000999992',
+            MATDOCUMENTYEAR: '2026',
+            RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document posted' }]
+          };
+        }
+        if (fm === 'BAPI_TRANSACTION_COMMIT') return {};
+        return {};
+      });
+
+      setupDefaultReadTable({
+        MATDOC: (fields, where, whereStr) => {
+          // Only matches previous TO / process ID, not the new one
+          if (whereStr.includes("SGTXT = 'E5B42701-1111-4222-8333-000000000005'")) {
+            return [{ MBLNR: '5000999991', MJAHR: '2026', BWART: '201' }];
+          }
+          return [];
+        }
+      });
+
+      // Partial Issue 2 with new TO and new ProcessId
+      const partial2Result = await adapter.postGoodsMovement({
+        reservationNo: '0000520235',
+        reservationItem: '0001',
+        transferOrder: '0001037300', // newly created TO for remaining quantity
+        movementType: '201',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 4,
+        unit: 'NOS',
+        costCenter: '1011201301',
+        processId: 'E5B42701-1111-4222-8333-000000000006' // fresh process ID
+      });
+
+      expect(partial2Result.success).toBe(true);
+      expect(partial2Result.materialDocument).toBe('5000999992');
+      expect(partial2Result.alreadyPosted).toBe(false);
+      expect(partial2Result.idempotentRetry).toBe(false);
+      expect(bapiCalls.length).toBe(1);
+    });
+
+    test('TrToHandler handlePostMigoGoodsMovement returns idempotency fields and writes MigoBusinessKey', async () => {
+      const handlers = {};
+      const mockAdapter = {};
+      const mockRes = {
+        checkAuthorization: jest.fn().mockResolvedValue(true),
+        postGoodsMovement: jest.fn().mockResolvedValue({
+          success: true,
+          materialDocument: '5000999999',
+          materialDocYear: '2026',
+          movementType: '201',
+          alreadyPosted: true,
+          idempotentRetry: true,
+          businessKey: 'RES:520235/1#TO:1037299#PID:E5B42701-1111-4222-8333-000000000007',
+          stockEffect: 'Stock consumed to Cost Center 1011201301'
+        })
+      };
+
+      TrToHandler.init(
+        { on: (event, fn) => { handlers[event] = fn; } },
+        { adapter: mockAdapter, resProcessAdapter: mockRes }
+      );
+
+      const req = {
+        data: {
+          ReservationNo: '520235',
+          ReservationItem: '0001',
+          TransferOrder: '1037299',
+          MovementType: '201',
+          Material: '8000000023',
+          Plant: '1120',
+          StorageLocation: 'HS01',
+          Quantity: 10,
+          Unit: 'NOS',
+          CostCenter: '1011201301',
+          ProcessId: 'E5B42701-1111-4222-8333-000000000007'
+        },
+        error: jest.fn()
+      };
+
+      const result = await handlers.postMigoGoodsMovement(req);
+      expect(result.success).toBe(true);
+      expect(result.materialDocument).toBe('5000999999');
+      expect(result.alreadyPosted).toBe(true);
+      expect(result.idempotentRetry).toBe(true);
+      expect(result.businessKey).toBe('RES:520235/1#TO:1037299#PID:E5B42701-1111-4222-8333-000000000007');
+      expect(result.Message).toContain('already existed for this process step; not posted again');
+    });
+
+    test('TrToHandler handleExecuteOrchestrator propagates alreadyPosted, idempotentRetry, and businessKey', async () => {
+      const handlers = {};
+      const mockAdapter = {};
+      const mockRes = {
+        executeReservationWarehouseFlow: jest.fn().mockResolvedValue({
+          success: true,
+          state: 'COMPLETED',
+          currentState: 'COMPLETED',
+          completed: true,
+          stages: ['RESERVATION_CREATED', 'TR_CREATED', 'TR_VERIFIED', 'TO_CREATED', 'TO_CONFIRMED', 'MIGO_POSTED', 'STOCK_VERIFIED', 'RESERVATION_VERIFIED', 'COMPLETED'],
+          reservation: { reservationNo: '520235', reservationItem: '0001' },
+          tr: { trNumber: '1000850', trItem: '0001' },
+          to: { toNumber: '1037299', toItem: '0001' },
+          confirmation: { confirmed: true },
+          migo: {
+            materialDocument: '5000999999',
+            materialDocumentYear: '2026',
+            alreadyPosted: true,
+            idempotentRetry: true,
+            businessKey: 'RES:520235/1#TO:1037299#PID:E5B42701-1111-4222-8333-000000000008'
+          },
+          alreadyPosted: true,
+          idempotentRetry: true,
+          businessKey: 'RES:520235/1#TO:1037299#PID:E5B42701-1111-4222-8333-000000000008',
+          stock: { success: true, verified: true },
+          finalReservation: { success: true, verified: true, completelyProcessed: true }
+        })
+      };
+
+      TrToHandler.init(
+        { on: (event, fn) => { handlers[event] = fn; } },
+        { adapter: mockAdapter, resProcessAdapter: mockRes }
+      );
+
+      const req = {
+        data: {
+          reservationNumber: '520235',
+          reservationItem: '0001',
+          transferOrder: '1037299',
+          processId: 'E5B42701-1111-4222-8333-000000000008'
+        },
+        error: jest.fn()
+      };
+
+      const result = await handlers.executeReservationWarehouseFlow(req);
+      expect(result.success).toBe(true);
+      expect(result.alreadyPosted).toBe(true);
+      expect(result.idempotentRetry).toBe(true);
+      expect(result.businessKey).toBe('RES:520235/1#TO:1037299#PID:E5B42701-1111-4222-8333-000000000008');
+      expect(result.materialDocument).toBe('5000999999');
+    });
+  });
 });

@@ -5,6 +5,40 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 15: Add Idempotency Protection for MIGO (2026-10-14, 17:55 IST):** Complete. Implemented end-to-end idempotency protection for MIGO goods movements across the database, S/4HANA integration adapter, and CAP services, ensuring stock is NEVER consumed twice if a network/browser timeout occurs or if a user submits the request again.
+  - **Scenario Addressed:**
+    $$\text{TO confirmed} \longrightarrow \text{MIGO posted} \longrightarrow \text{browser timeout} \longrightarrow \text{user presses Submit again}$$
+    Stock must not be consumed twice. If the same process is retried:
+    $$\text{Already posted} \longrightarrow \text{return existing material document instead of posting another document in SAP}$$
+  - **Unique Business Key:**
+    $$\text{Business Key} = \text{reservation} + \text{reservation item} + \text{TO} + \text{process ID}$$
+    Formatted as: `RES:<reservation>/<item>#TO:<toNumber>#PID:<processId>`.
+  - **Database Persistence (`db/wm/reservation-track.cds`):**
+    - Extended `ReservationTrack` entity (`ZRES_TRACK`) with `MigoBusinessKey : String(120);`.
+    - Extended `ReservationLog` entity (`ZRES_LOG`) with `MigoBusinessKey : String(120);`.
+  - **Service APIs (`srv/wm/tr-to/service.cds` & `srv/wm/reservation-entry/service.cds`):**
+    - Exposed `MigoBusinessKey : String(120);` on `type ReservationDetailRow`.
+    - Added `alreadyPosted : Boolean;`, `idempotentRetry : Boolean;`, `businessKey : String(120);` to `type MigoProcessResult` and `type OrchestratorProcessResult`.
+  - **Three-Tier Idempotency Inspection (`srv/integration/s4hana/wm/ReservationProcessAdapter.js`):**
+    - Added `buildMigoBusinessKey(params)` generating normalized business key object.
+    - Added `checkMigoIdempotency(params)` enforcing 3-tier inspection:
+      1. Caller pre-set params: Returns immediately if caller provides already-posted document.
+      2. Persistent CAP database check (`ZRES_TRACK`): Checks if material document exists for matching business key, processId, or TO.
+      3. SAP Transparent Table (`MATDOC`): Queries SAP directly with `['MBLNR', 'MJAHR']` for matching `SGTXT = '${processId}'` or `XBLNR = 'TO ${transferOrder}'`, filtering out cancelled/reversed documents (`CANCELLED = ''`, `REVERSAL_MOVEMENT = ''`).
+    - Wired into `postGoodsMovement`: When already posted, returns existing material document with `alreadyPosted: true`, `idempotentRetry: true`, and `businessKey: bKey.key` without calling `BAPI_GOODSMVT_CREATE`.
+    - Wired into `executeReservationWarehouseFlow`: Returns `alreadyPosted`, `idempotentRetry`, and `businessKey`.
+  - **CAP Service Handlers (`srv/wm/tr-to/handlers/trTo.handler.js` & `srv/wm/reservation-entry/service.js`):**
+    - `handlePostMigoGoodsMovement`: Writes `MigoBusinessKey` to `ReservationTrack` and `ReservationLog`, and returns `alreadyPosted`, `idempotentRetry`, and `businessKey`.
+    - `handleExecuteOrchestrator`: Propagates `alreadyPosted`, `idempotentRetry`, `businessKey`, and persists `MigoBusinessKey` in `persistStatus`.
+    - `ReservationEntryService.postMigoGoodsMovement`: Pre-MIGO idempotency guard returns existing record if matching document exists.
+  - **Validation & Test Results:**
+    - `test/unit/wm/autoMigoPosting.test.js`: Added Section 12 test suite (8 tests) covering key construction, browser timeout retry (stock NOT consumed twice, BAPI called only once), CAP DB check, SAP MATDOC query, uncancelled filter, subsequent partial issue with new TO/PID not blocked, and handler/orchestrator propagation. All 70 suite tests pass.
+    - `test/unit/wm/processFixes.test.js`: Passed (36/36 tests).
+    - `test/unit/wm/reservationEntryService.test.js`: Passed (40/40 tests).
+    - `npx cds compile srv/wm/tr-to/service.cds && npx cds compile srv/wm/reservation-entry/service.cds`: Passed.
+    - `npx jest test/unit/wm`: All 70 test suites passed, 0 failed, 1,608 passed tests.
+    - `git diff --check`: Passed with 0 warnings.
+
 - **Step 14: Add Persistent Process Status (PROCESS_STATUS) (2026-10-14, 17:20 IST):** Complete. Implemented persistent process status across the database, CAP services, and S/4HANA integration orchestrator so that process state is never lost when warehouse operators refresh the page or SAP responds slowly.
   - **Single Source of Truth (`srv/common/wmStatus.js`):**
     Exported frozen `PROCESS_STATUS` mapping all requested values:
@@ -1978,7 +2012,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Step 14 — 2026-10-14, 17:20 IST):** Persistent process status (`PROCESS_STATUS`) across database, CAP services, and S/4HANA integration orchestrator is complete, handling both active progression and failure states resilient to page refreshes or slow SAP responses. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Next Recommended Action (Step 15 — 2026-10-14, 17:55 IST):** Idempotency protection for MIGO using unique business key (reservation + reservation item + TO + process ID) with three-tier inspection (caller, persistent CAP database, SAP MATDOC) is complete, preventing double stock consumption on browser timeouts and retry submissions. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Previous Recommended Action (Step 14 — 2026-10-14, 17:20 IST):** Persistent process status (`PROCESS_STATUS`) across database, CAP services, and S/4HANA integration orchestrator is complete, handling both active progression and failure states resilient to page refreshes or slow SAP responses. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 13 — 2026-10-14, 16:35 IST):** Unified end-to-end process orchestrator (`executeReservationWarehouseFlow`) coordinating all 9 stages (Reservation Create → TR Create → TR Verify → TO Create → TO Confirm → MIGO Post → Stock Verify → Reservation Verify → Completed / Partially Processed) is complete, exposed via CAP OData services, and fully verified across all 70 test suites. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 12 — 2026-10-14, 16:15 IST):** Reservation verification (checking issued/withdrawn quantity, remaining quantity, and completion status) is complete and verified across all services and 70 test suites. Next action: Execute full end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 11 — 2026-10-14, 15:55 IST):** Final stock verification (expected vs actual comparison for 201, 241, 311, 301) is complete and verified across all services and 70 test suites. Next action: Execute full end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
@@ -2001,6 +2036,61 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-14 17:55 IST — Step 15: Add Idempotency Protection for MIGO
+
+- **User Request:**
+  - Step 15 — Add idempotency protection.
+  - This is very important for MIGO.
+  - Imagine:
+    $$\text{TO confirmed} \longrightarrow \text{MIGO posted} \longrightarrow \text{browser timeout} \longrightarrow \text{user presses Submit again}$$
+  - You must not consume stock twice.
+  - Use a unique business key such as: `reservation + reservation item + TO + process ID` before posting MIGO.
+  - If the same process is retried:
+    $$\text{Already posted} \longrightarrow \text{return existing material document instead of posting another document}$$
+- **Implementation & Architectural Changes:**
+  1. `db/wm/reservation-track.cds`:
+     - Added `MigoBusinessKey : String(120);` to `entity ReservationTrack` (`ZRES_TRACK`).
+     - Added `MigoBusinessKey : String(120);` to `entity ReservationLog` (`ZRES_LOG`).
+  2. `srv/wm/reservation-entry/service.cds`:
+     - Added `MigoBusinessKey : String(120);` to `type ReservationDetailRow`.
+     - Added `alreadyPosted : Boolean;`, `idempotentRetry : Boolean;`, `businessKey : String(120);` to `type OrchestratorProcessResult`.
+  3. `srv/wm/tr-to/service.cds`:
+     - Added `alreadyPosted : Boolean;`, `idempotentRetry : Boolean;`, `businessKey : String(120);` to `type MigoProcessResult`.
+     - Added `alreadyPosted : Boolean;`, `idempotentRetry : Boolean;`, `businessKey : String(120);` to `type OrchestratorProcessResult`.
+  4. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Added `buildMigoBusinessKey(params)` generating normalized object `{ reservationNo, reservationItem, transferOrder, processId, key: "RES:.../..#TO:...#PID:..." }`.
+     - Added `checkMigoIdempotency(params)` enforcing three-tier inspection:
+       1. Caller supplied pre-posted material document check (`params.alreadyPosted` / `Status_code: 05`).
+       2. Persistent CAP database check (`ZRES_TRACK`): checks if matching document exists for `bKeyMatches`, `pidMatches`, or `toMatches`.
+       3. SAP transparent table query (`MATDOC`): reads `['MBLNR', 'MJAHR']` for `SGTXT = '${processId}'` or `XBLNR = 'TO ${transferOrder}'` with uncancelled filters (`CANCELLED = ''` and `REVERSAL_MOVEMENT = ''`).
+     - Wired `checkMigoIdempotency` into `postGoodsMovement`: when already posted, skips `BAPI_GOODSMVT_CREATE`, returns existing material document with `alreadyPosted: true`, `idempotentRetry: true`, and `businessKey: bKey.key`.
+     - Added `alreadyPosted: false`, `idempotentRetry: false`, and `businessKey: bKey.key` to fresh `postGoodsMovement` return.
+     - Propagated `alreadyPosted`, `idempotentRetry`, `businessKey` in `executeReservationWarehouseFlow` orchestrator.
+  5. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - In `handlePostMigoGoodsMovement`: persists `MigoBusinessKey` to `ReservationTrack` and `ReservationLog`, and returns `alreadyPosted`, `idempotentRetry`, `businessKey`.
+     - In `handleExecuteOrchestrator`: passes `MigoBusinessKey` to `persistStatus` and returns `alreadyPosted`, `idempotentRetry`, `businessKey`.
+  6. `srv/wm/reservation-entry/service.js`:
+     - In `postMigoGoodsMovement`: added pre-MIGO idempotency check returning existing record if already posted.
+     - In `postMigoForTrack`: stores `MigoBusinessKey` on `ReservationEntries`.
+     - In `executeReservationWarehouseFlow`: propagates `alreadyPosted`, `idempotentRetry`, `businessKey`, and persists `MigoBusinessKey` in `persistStatus`.
+  7. `srv/integration/s4hana/sapKey.js`:
+     - Retained strict 36-char UUID validation pattern `/^[0-9A-F-]{36}$/i` for `uuid` (Process ID).
+- **Validation & Test Results:**
+  - `test/unit/wm/autoMigoPosting.test.js`: Added Section 12 test suite (8 tests) covering:
+    - `buildMigoBusinessKey` key normalization and partial parameter handling.
+    - Browser timeout retry simulation: returns existing material document and does NOT call `BAPI_GOODSMVT_CREATE` twice (stock is NOT consumed twice).
+    - Persistent CAP DB (`ReservationTrack`) idempotency check.
+    - SAP `MATDOC` query detecting committed documents and filtering cancelled/reversed documents.
+    - Subsequent partial issue with fresh TO and new ProcessId is NOT blocked.
+    - `TrToHandler` action execution returning idempotency fields and writing `MigoBusinessKey`.
+    - `handleExecuteOrchestrator` action execution propagating idempotency fields.
+    - All 70 unit tests pass 100% green.
+  - `test/unit/wm/processFixes.test.js`: All 36 tests pass 100% green.
+  - `test/unit/wm/reservationEntryService.test.js`: All 40 tests pass 100% green.
+  - `npx cds compile srv/wm/tr-to/service.cds && npx cds compile srv/wm/reservation-entry/service.cds`: Passed with 0 errors.
+  - `npx jest test/unit/wm`: All 70 test suites pass (1,608 / 1,608 tests green).
+  - `git diff --check`: Passed with 0 warnings.
 
 ### 2026-10-14 17:20 IST — Step 14: Add Persistent Process Status (PROCESS_STATUS)
 

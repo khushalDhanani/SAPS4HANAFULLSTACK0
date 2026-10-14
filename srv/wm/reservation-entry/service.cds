@@ -342,6 +342,7 @@ service ReservationEntryService {
         ExternalId               : String(25);
         LogHandle                : String(40);
         ProcessStatus            : String(35);
+        MigoBusinessKey          : String(120);
     }
 
     // Live detail for a reservation not tracked locally (created outside this app): read from SAP RKPF/RESB.
@@ -358,6 +359,9 @@ service ReservationEntryService {
         currentState         : String(30);
         processStatus        : String(35);
         completed            : Boolean;
+        alreadyPosted        : Boolean;
+        idempotentRetry      : Boolean;
+        businessKey          : String(120);
         stages               : array of String(30);
         reservationNumber    : String(10);
         reservationItem      : String(4);
