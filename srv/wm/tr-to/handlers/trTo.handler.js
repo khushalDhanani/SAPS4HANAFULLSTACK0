@@ -154,40 +154,6 @@ class TrToHandler {
                 }
               } catch (_) {}
             }
-
-            // Fallback 2: Open RESB by (MATNR, WERKS, LGORT, BWART)
-            if ((!sRecPlant || !sRecSLoc) && (sMvt === '301' || sMvt === '311')) {
-              try {
-                let mat = sMat;
-                let pl = sPlant;
-                let sl = sSLoc;
-                if (!mat || !pl || !sl) {
-                  const ltapRows = await resProcessAdapter.rfc.readTable('LTAP', ['MATNR', 'WERKS', 'LGORT', 'CHARG'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
-                  if (ltapRows?.[0]) {
-                    if (!mat && ltapRows[0].MATNR?.trim()) mat = ltapRows[0].MATNR.trim();
-                    if (!pl && ltapRows[0].WERKS?.trim()) pl = ltapRows[0].WERKS.trim();
-                    if (!sl && ltapRows[0].LGORT?.trim()) sl = ltapRows[0].LGORT.trim();
-                    if (!sBatch && ltapRows[0].CHARG?.trim()) sBatch = ltapRows[0].CHARG.trim().toUpperCase();
-                  }
-                }
-                if (mat && pl && sl) {
-                  const matPadded = padMat(mat);
-                  const openResb = await resProcessAdapter.rfc.readTable('RESB', ['UMWRK', 'UMLGO', 'CHARG'], [
-                    `MATNR = '${matPadded}'`,
-                    `AND WERKS = '${pl}'`,
-                    `AND LGORT = '${sl}'`,
-                    `AND BWART = '${sMvt}'`,
-                    "AND KZEAR = ''",
-                    "AND XLOEK = ''"
-                  ], 1);
-                  if (openResb?.[0]) {
-                    if (!sRecPlant && openResb[0].UMWRK?.trim()) sRecPlant = openResb[0].UMWRK.trim().toUpperCase();
-                    if (!sRecSLoc && openResb[0].UMLGO?.trim()) sRecSLoc = openResb[0].UMLGO.trim().toUpperCase();
-                    if (!sBatch && openResb[0].CHARG?.trim()) sBatch = openResb[0].CHARG.trim().toUpperCase();
-                  }
-                }
-              } catch (_) {}
-            }
           }
           if ((!sMat || !sPlant || !sSLoc || !sBatch) && (!resProcessAdapter.rfc.readTable?.mock)) {
             const ltapRows = await resProcessAdapter.rfc.readTable('LTAP', ['MATNR', 'WERKS', 'LGORT', 'CHARG'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);

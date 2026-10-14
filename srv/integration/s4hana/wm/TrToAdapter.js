@@ -837,45 +837,6 @@ class TrToAdapter {
       }
     }
 
-    // 2b. Open RESB fallback by (MATNR, WERKS, LGORT, BWART) when LTBK-RSNUM is 0
-    if ((!receivingStorageLocation || !receivingPlant) && (tr.Bwlvs === '311' || tr.Bwlvs === '301') && this.rfc && sel.Material && sel.Plant && sel.StorageLocation) {
-      try {
-        const matPadded = alphaIn(sapKey(sel.Material, 'matnr'), 18);
-        const openResb = await this._rfc(
-          () => this.rfc.readTable(
-            'RESB',
-            ['RSNUM', 'RSPOS', 'BWART', 'WERKS', 'LGORT', 'UMWRK', 'UMLGO', 'CHARG'],
-            [
-              `MATNR = '${matPadded}'`,
-              `AND WERKS = '${sel.Plant}'`,
-              `AND LGORT = '${sel.StorageLocation}'`,
-              `AND BWART = '${tr.Bwlvs}'`,
-              "AND KZEAR = ''",
-              "AND XLOEK = ''"
-            ],
-            10
-          ),
-          `Read open RESB fallback for material ${sel.Material} (${sel.Plant}/${sel.StorageLocation})`
-        );
-        const matched = (openResb || []).find((r) => r.UMLGO?.trim() || r.UMWRK?.trim());
-        if (matched) {
-          if (!receivingStorageLocation && matched.UMLGO?.trim()) {
-            receivingStorageLocation = String(matched.UMLGO).trim().toUpperCase();
-            recSLocSource = recSLocSource || 'Reservation';
-          }
-          if (!receivingPlant && matched.UMWRK?.trim()) {
-            receivingPlant = String(matched.UMWRK).trim().toUpperCase();
-            recPlantSource = recPlantSource || 'Reservation';
-          }
-          if (!sel.Batch && matched.CHARG?.trim()) {
-            sel.Batch = matched.CHARG.trim().toUpperCase();
-          }
-        }
-      } catch (_fbErr) {
-        LOG.warn(`Open RESB fallback lookup in lookupTR failed: ${_fbErr.message}`);
-      }
-    }
-
     // 3. MATDOC (via MBLNR)
     if ((!receivingStorageLocation || !receivingPlant) && tr.Mblnr && String(tr.Mblnr).trim() !== '' && this.rfc) {
       try {
