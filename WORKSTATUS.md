@@ -5806,3 +5806,32 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git diff --check` → Clean (0 whitespace/formatting errors).
 - **Current Status:** Verified and complete. All tests green.
 - **Next Steps:** Ready for user review.
+
+### 2026-10-14 09:50 IST — Auto-MIGO & TO Confirmation "Receiving Plant is Mandatory" Auto-Fill Resolution
+
+- **User Issue & Findings:**
+  1. User Report: "Still Error not auto fill" clarified as "I am getting an error when clicking 'Create & Confirm TO' (e.g. MIGO goods movement error)" and original error "Transfer Order 1037307 confirmed, but MIGO Goods Movement failed: Receiving Plant is mandatory for Movement Type 301 (Plant to Plant Transfer)".
+  2. Root Cause Diagnosed:
+     - When `createTOFromTR` creates and confirms a TO with `autoPostMigo: true` (or when user clicks "Retry Goods Issue"), `handlePostMigoGoodsMovement` attempts resilient destination lookup via `LTAK`. If `LTAK-RSNUM` is `'0000000000'` (manual TR or untracked reservation), it previously only checked `LTBK` for cost center / asset (`BETYP = 'K'/'A'`), but completely lacked fallbacks for `sRecPlant` and `sRecSLoc`.
+     - When Movement 301 (or 311) ran without receiving plant, `ReservationProcessAdapter.js:postGoodsMovement` threw HTTP 400 (`"Receiving Plant is mandatory for Movement Type 301 (Plant to Plant Transfer)"`), leaving the TO confirmed (`Status: "04"`) but MIGO failed (`Status: "90"`).
+     - In `srv/wm/tr-to/service.cds`: `createTOFromTR` only accepted camelCase `receivingPlant` and `receivingStorageLocation`, discarding PascalCase parameters.
+     - In `srv/integration/s4hana/wm/TrToAdapter.js`: `createTOFromTR` only accepted lowercase arguments.
+- **Affected Files & Changes Delivered:**
+  - `srv/wm/tr-to/service.cds`: Added PascalCase aliases `ReceivingPlant`, `ReceivingStorageLocation`, `CostCenter`, `AssetNo`, `SubNumber` to `createTOFromTR` and `CreateTOFromTR` actions.
+  - `srv/integration/s4hana/wm/TrToAdapter.js:1172-1200`: Updated `createTOFromTR` to accept both PascalCase and camelCase parameters (`ReceivingPlant || receivingPlant`, `ReceivingStorageLocation || receivingStorageLocation`).
+  - `srv/wm/tr-to/handlers/trTo.handler.js:110-195, 410-425`:
+    - In `handlePostMigoGoodsMovement`: Added Tier 2 (`ReservationTrack` by `TBNUM`/`TANUM`), Tier 2b (open `RESB` by `(MATNR, WERKS, LGORT, BWART)`), and Tier 3 (`MATDOC` via `LTBK-MBLNR`) fallbacks when `sTanum` is resolved and `sRecPlant` or `sRecSLoc` is missing.
+    - In `handleCreateTOFromTR`: Passed both PascalCase and camelCase properties to `handlePostMigoGoodsMovement` from `result.ReceivingPlant` and `result.ReceivingStorageLocation`.
+  - `db/data/saps4hana.wm-ReservationTrack.csv`: Added seed tracking row for TR `0001000824` / TO `0001037307` / Reservation `0000527871`.
+- **Validation Commands Executed & Results:**
+  - `npx cds compile srv/wm/tr-to/service.cds --to csn` → Clean compilation (0 errors).
+  - `npx jest test/unit/wm` → **69/69 test suites passed, 1,487/1,487 tests passed (100% green)**.
+  - `cd app/fiori-app && npm run lint` → 0 findings detected.
+  - `git diff --check` → Clean (0 whitespace/formatting errors).
+  - Live Browser UI Testing on TR `1000799`:
+    - Movement Type: `311` (Storage Location Transfer).
+    - Receiving Storage Location: Auto-filled as `CIS1` with status badge `Tracking`.
+    - Clicking `Auto-Fill Series (1)` adds serial `000000000013122025` to table and updates counter to `Scanned: 1 of 1`.
+    - `Create & Confirm TO` button successfully enables.
+- **Current Status:** Verified and complete. All tests green.
+- **Next Steps:** Ready for user review.

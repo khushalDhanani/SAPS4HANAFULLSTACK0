@@ -1172,10 +1172,15 @@ class TrToAdapter {
     sourceStorageType = '',
     sourceStorageBin = '',
     receivingPlant = '',
+    ReceivingPlant = '',
     receivingStorageLocation = '',
+    ReceivingStorageLocation = '',
     costCenter = '',
+    CostCenter = '',
     assetNo = '',
+    AssetNo = '',
     subNumber = '',
+    SubNumber = '',
     autoConfirm = true,
     autoPostMigo = false,
     existingToNumber = '',
@@ -1188,11 +1193,11 @@ class TrToAdapter {
     const wh = warehouse(lgnum);
     const tr = await this.getTR(tbnum, wh);
 
-    let finalRecPlant = receivingPlant ? String(receivingPlant).trim() : '';
-    let finalRecSLoc = receivingStorageLocation ? String(receivingStorageLocation).trim() : '';
-    let finalCostCenter = costCenter ? String(costCenter).trim() : (tr.Betyp === 'K' ? alphaOut(tr.Benum) : '');
-    let finalAssetNo = assetNo ? String(assetNo).trim() : (tr.Betyp === 'A' ? alphaOut(tr.Benum) : '');
-    let finalSubNumber = subNumber ? String(subNumber).trim() : (tr.Betyp === 'A' ? '0000' : '');
+    let finalRecPlant = (ReceivingPlant || receivingPlant) ? String(ReceivingPlant || receivingPlant).trim() : '';
+    let finalRecSLoc = (ReceivingStorageLocation || receivingStorageLocation) ? String(ReceivingStorageLocation || receivingStorageLocation).trim() : '';
+    let finalCostCenter = (CostCenter || costCenter) ? String(CostCenter || costCenter).trim() : (tr.Betyp === 'K' ? alphaOut(tr.Benum) : '');
+    let finalAssetNo = (AssetNo || assetNo) ? String(AssetNo || assetNo).trim() : (tr.Betyp === 'A' ? alphaOut(tr.Benum) : '');
+    let finalSubNumber = (SubNumber || subNumber) ? String(SubNumber || subNumber).trim() : (tr.Betyp === 'A' ? '0000' : '');
 
     const open = this._openItems(tr);
     let item = null;

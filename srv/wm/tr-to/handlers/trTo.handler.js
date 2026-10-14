@@ -109,13 +109,84 @@ class TrToHandler {
                 }
               }
             } else if (tbnum && (!sRecPlant || !sRecSLoc || !sCostCenter || !sAssetNo)) {
-              const ltbkRows = await resProcessAdapter.rfc.readTable('LTBK', ['RSNUM', 'BETYP', 'BENUM'], [`TBNUM = '${tbnum}'`], 1);
+              const ltbkRows = await resProcessAdapter.rfc.readTable('LTBK', ['RSNUM', 'BETYP', 'BENUM', 'MBLNR', 'MJAHR'], [`TBNUM = '${tbnum}'`], 1);
               if (ltbkRows?.[0]?.BETYP === 'K' && !sCostCenter) {
                 sCostCenter = ltbkRows[0].BENUM?.trim();
               } else if (ltbkRows?.[0]?.BETYP === 'A' && !sAssetNo) {
                 sAssetNo = ltbkRows[0].BENUM?.trim();
                 if (!sSubNumber) sSubNumber = '0000';
               }
+              if ((!sRecPlant || !sRecSLoc) && ltbkRows?.[0]?.MBLNR?.trim()) {
+                try {
+                  const mblnr = ltbkRows[0].MBLNR.trim();
+                  const mjahr = (ltbkRows[0].MJAHR?.trim()) || '2026';
+                  const matdoc = await resProcessAdapter.rfc.readTable('MATDOC', ['UMWRK', 'UMLGO'], [
+                    `MBLNR = '${mblnr}'`,
+                    `AND MJAHR = '${mjahr}'`
+                  ], 1);
+                  if (matdoc?.[0]) {
+                    if (!sRecPlant && matdoc[0].UMWRK?.trim()) sRecPlant = matdoc[0].UMWRK.trim().toUpperCase();
+                    if (!sRecSLoc && matdoc[0].UMLGO?.trim()) sRecSLoc = matdoc[0].UMLGO.trim().toUpperCase();
+                  }
+                } catch (_) {}
+              }
+            }
+
+            // Fallback 1: ReservationTrack by TBNUM or TANUM
+            if ((!sRecPlant || !sRecSLoc) && ReservationTrack) {
+              try {
+                const tbPad = (tbnum || '').padStart(10, '0');
+                const tanumPad = sTanum.padStart(10, '0');
+                const conds = [];
+                if (tbnum) conds.push(`TransferRequirement = '${tbnum}'`, `TransferRequirement = '${tbPad}'`);
+                conds.push(`TransferOrder = '${sTanum}'`, `TransferOrder = '${tanumPad}'`);
+                const trk = await cds.db.run(
+                  cds.ql.SELECT.one.from(ReservationTrack).where(conds.join(' or '))
+                );
+                if (trk) {
+                  if (!sRecPlant && trk.ReceivingPlant?.trim()) sRecPlant = trk.ReceivingPlant.trim().toUpperCase();
+                  if (!sRecSLoc && trk.ReceivingStorageLocation?.trim()) sRecSLoc = trk.ReceivingStorageLocation.trim().toUpperCase();
+                  if (!sCostCenter && trk.CostCenter?.trim()) sCostCenter = trk.CostCenter.trim();
+                  if (!sAssetNo && trk.AssetNo?.trim()) {
+                    sAssetNo = trk.AssetNo.trim();
+                    sSubNumber = trk.SubNumber?.trim() || '0000';
+                  }
+                }
+              } catch (_) {}
+            }
+
+            // Fallback 2: Open RESB by (MATNR, WERKS, LGORT, BWART)
+            if ((!sRecPlant || !sRecSLoc) && (sMvt === '301' || sMvt === '311')) {
+              try {
+                let mat = sMat;
+                let pl = sPlant;
+                let sl = sSLoc;
+                if (!mat || !pl || !sl) {
+                  const ltapRows = await resProcessAdapter.rfc.readTable('LTAP', ['MATNR', 'WERKS', 'LGORT', 'CHARG'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
+                  if (ltapRows?.[0]) {
+                    if (!mat && ltapRows[0].MATNR?.trim()) mat = ltapRows[0].MATNR.trim();
+                    if (!pl && ltapRows[0].WERKS?.trim()) pl = ltapRows[0].WERKS.trim();
+                    if (!sl && ltapRows[0].LGORT?.trim()) sl = ltapRows[0].LGORT.trim();
+                    if (!sBatch && ltapRows[0].CHARG?.trim()) sBatch = ltapRows[0].CHARG.trim().toUpperCase();
+                  }
+                }
+                if (mat && pl && sl) {
+                  const matPadded = padMat(mat);
+                  const openResb = await resProcessAdapter.rfc.readTable('RESB', ['UMWRK', 'UMLGO', 'CHARG'], [
+                    `MATNR = '${matPadded}'`,
+                    `AND WERKS = '${pl}'`,
+                    `AND LGORT = '${sl}'`,
+                    `AND BWART = '${sMvt}'`,
+                    "AND KZEAR = ''",
+                    "AND XLOEK = ''"
+                  ], 1);
+                  if (openResb?.[0]) {
+                    if (!sRecPlant && openResb[0].UMWRK?.trim()) sRecPlant = openResb[0].UMWRK.trim().toUpperCase();
+                    if (!sRecSLoc && openResb[0].UMLGO?.trim()) sRecSLoc = openResb[0].UMLGO.trim().toUpperCase();
+                    if (!sBatch && openResb[0].CHARG?.trim()) sBatch = openResb[0].CHARG.trim().toUpperCase();
+                  }
+                }
+              } catch (_) {}
             }
           }
           if ((!sMat || !sPlant || !sSLoc || !sBatch) && (!resProcessAdapter.rfc.readTable?.mock)) {
@@ -340,8 +411,10 @@ class TrToHandler {
                 CostCenter: existing?.CostCenter || result.CostCenter || (result.Betyp === 'K' ? result.Benum : '') || data.CostCenter || data.costCenter,
                 AssetNo: existing?.AssetNo || result.AssetNo || (result.Betyp === 'A' ? result.Benum : '') || data.AssetNo || data.assetNo,
                 SubNumber: existing?.SubNumber || result.SubNumber || data.SubNumber || data.subNumber || (result.Betyp === 'A' ? '0000' : ''),
-                ReceivingPlant: existing?.ReceivingPlant || data.ReceivingPlant || data.receivingPlant || result.ReceivingPlant,
-                ReceivingStorageLocation: existing?.ReceivingStorageLocation || data.ReceivingStorageLocation || data.receivingStorageLocation || result.ReceivingStorageLocation,
+                ReceivingPlant: result.ReceivingPlant || data.ReceivingPlant || data.receivingPlant || existing?.ReceivingPlant || '',
+                receivingPlant: result.ReceivingPlant || data.ReceivingPlant || data.receivingPlant || existing?.ReceivingPlant || '',
+                ReceivingStorageLocation: result.ReceivingStorageLocation || data.ReceivingStorageLocation || data.receivingStorageLocation || existing?.ReceivingStorageLocation || '',
+                receivingStorageLocation: result.ReceivingStorageLocation || data.ReceivingStorageLocation || data.receivingStorageLocation || existing?.ReceivingStorageLocation || '',
                 Batch: result.Batch || data.batch || existing?.Batch || '',
                 Serials: result.Serials || data.serials || [],
                 CompleteReservation: data.CompleteReservation === true,
