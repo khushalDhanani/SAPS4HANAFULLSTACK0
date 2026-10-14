@@ -152,7 +152,9 @@ service TrToService @(path: '/odata/v4/tr-to') {
         SourceStorageType       : String(3);
         SourceStorageBin        : String(10);
         ReceivingPlant          : String(4);
+        ReceivingPlantSource    : String(40);
         ReceivingStorageLocation : String(4);
+        ReceivingStorageLocationSource : String(40);
         CostCenter              : String(10);
         AssetNo                 : String(12);
         SubNumber               : String(4);

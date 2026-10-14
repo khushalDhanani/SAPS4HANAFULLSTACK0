@@ -322,11 +322,12 @@
                             <Label
                                 text="{i18n>scanToLabelReceivingPlant}"
                                 design="Bold"
-                                required="true"
+                                required="{= !${scanView>/receivingPlantSource} }"
                                 class="sapUiTinyMarginBottom" />
                             <Input
                                 id="inputReceivingPlant"
                                 value="{scanView>/receivingPlant}"
+                                editable="{= !${scanView>/receivingPlantSource} }"
                                 valueLiveUpdate="true"
                                 placeholder="{i18n>scanToPlaceholderReceivingPlant}"
                                 width="12rem"
@@ -334,6 +335,11 @@
                                 liveChange=".onReceivingPlantLiveChange"
                                 valueState="{scanView>/recPlantValueState}"
                                 valueStateText="{scanView>/recPlantValueStateText}"
+                                class="sapUiTinyMarginBottom" />
+                            <ObjectStatus
+                                text="{scanView>/receivingPlantSource}"
+                                state="Information"
+                                visible="{= !!${scanView>/receivingPlantSource} }"
                                 class="sapUiSmallMarginBottom" />
 
                             <Label
@@ -343,11 +349,17 @@
                             <Input
                                 id="inputReceivingSLoc"
                                 value="{scanView>/receivingStorageLocation}"
+                                editable="{= !${scanView>/receivingStorageLocationSource} }"
                                 valueLiveUpdate="true"
                                 placeholder="{i18n>scanToPlaceholderReceivingSLoc}"
                                 width="12rem"
                                 maxLength="4"
                                 liveChange=".onReceivingSLocLiveChange" />
+                            <ObjectStatus
+                                text="{scanView>/receivingStorageLocationSource}"
+                                state="Information"
+                                visible="{= !!${scanView>/receivingStorageLocationSource} }"
+                                class="sapUiTinyMarginBottom" />
                         </VBox>
 
                         <!-- MOVEMENT 311: INTRA-PLANT -->
@@ -355,11 +367,12 @@
                             <Label
                                 text="{i18n>scanToLabelReceivingSLoc}"
                                 design="Bold"
-                                required="true"
+                                required="{= !${scanView>/receivingStorageLocationSource} }"
                                 class="sapUiTinyMarginBottom" />
                             <Input
                                 id="inputReceivingSLoc311"
                                 value="{scanView>/receivingStorageLocation}"
+                                editable="{= !${scanView>/receivingStorageLocationSource} }"
                                 valueLiveUpdate="true"
                                 placeholder="{i18n>scanToPlaceholderReceivingSLoc}"
                                 width="12rem"
@@ -367,6 +380,11 @@
                                 liveChange=".onReceivingSLocLiveChange"
                                 valueState="{scanView>/recSLocValueState}"
                                 valueStateText="{scanView>/recSLocValueStateText}" />
+                            <ObjectStatus
+                                text="{scanView>/receivingStorageLocationSource}"
+                                state="Information"
+                                visible="{= !!${scanView>/receivingStorageLocationSource} }"
+                                class="sapUiTinyMarginTop" />
                         </VBox>
 
                         <!-- MOVEMENT 201: COST CENTER -->

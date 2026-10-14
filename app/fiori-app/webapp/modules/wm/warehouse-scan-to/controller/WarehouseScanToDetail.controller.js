@@ -46,6 +46,10 @@ sap.ui.define([
                 autoPostMigo: true,
                 canRetryMigo: false,
                 audioEnabled: true,
+                receivingPlant: "",
+                receivingPlantSource: "",
+                receivingStorageLocation: "",
+                receivingStorageLocationSource: "",
                 hasTR: false,
                 hasMessage: false,
                 messageText: "",
@@ -132,6 +136,10 @@ sap.ui.define([
             oModel.setProperty("/hasResult", false);
             oModel.setProperty("/result", null);
             oModel.setProperty("/resultMessage", "");
+            oModel.setProperty("/receivingPlant", "");
+            oModel.setProperty("/receivingPlantSource", "");
+            oModel.setProperty("/receivingStorageLocation", "");
+            oModel.setProperty("/receivingStorageLocationSource", "");
             oModel.setProperty("/canRetryMigo", false);
             this.onCloseMessage();
         },
@@ -222,9 +230,11 @@ sap.ui.define([
 
                 // Initialize destination & account assignment
                 oModel.setProperty("/receivingPlant", oDetail.ReceivingPlant || "");
+                oModel.setProperty("/receivingPlantSource", oDetail.ReceivingPlantSource || "");
                 oModel.setProperty("/recPlantValueState", "None");
                 oModel.setProperty("/recPlantValueStateText", "");
                 oModel.setProperty("/receivingStorageLocation", oDetail.ReceivingStorageLocation || "");
+                oModel.setProperty("/receivingStorageLocationSource", oDetail.ReceivingStorageLocationSource || "");
                 oModel.setProperty("/recSLocValueState", "None");
                 oModel.setProperty("/recSLocValueStateText", "");
                 oModel.setProperty("/costCenter", oDetail.CostCenter || "");
@@ -634,6 +644,12 @@ sap.ui.define([
                     oModel.setProperty("/canSubmit", false);
                     return false;
                 }
+                if (sRecSLoc === (oTR.StorageLocation || "").trim()) {
+                    oModel.setProperty("/recSLocValueState", "Error");
+                    oModel.setProperty("/recSLocValueStateText", "Receiving Storage Location must be different from Issuing Storage Location");
+                    oModel.setProperty("/canSubmit", false);
+                    return false;
+                }
                 oModel.setProperty("/recSLocValueState", "None");
                 oModel.setProperty("/recSLocValueStateText", "");
             }
@@ -840,13 +856,25 @@ sap.ui.define([
             var sAssetNo = (oResult.AssetNo || oModel.getProperty("/assetNo") || "").trim();
             var sSubNo = (oResult.SubNumber || oModel.getProperty("/subNumber") || "").trim();
 
-            if (sMvt === "301" && !sRecPlant) {
-                this._showError(this.getText("scanToErrReceivingPlantRequired"));
-                return Promise.resolve(null);
+            if (sMvt === "301") {
+                if (!sRecPlant) {
+                    this._showError(this.getText("scanToErrReceivingPlantRequired"));
+                    return Promise.resolve(null);
+                }
+                if (sRecPlant === (oResult.Plant || "").trim()) {
+                    this._showError(this.getText("scanToErrReceivingPlantSame"));
+                    return Promise.resolve(null);
+                }
             }
-            if (sMvt === "311" && !sRecSLoc) {
-                this._showError(this.getText("scanToErrReceivingSLocRequired"));
-                return Promise.resolve(null);
+            if (sMvt === "311") {
+                if (!sRecSLoc) {
+                    this._showError(this.getText("scanToErrReceivingSLocRequired"));
+                    return Promise.resolve(null);
+                }
+                if (sRecSLoc === (oResult.StorageLocation || "").trim()) {
+                    this._showError("Receiving Storage Location must be different from Issuing Storage Location");
+                    return Promise.resolve(null);
+                }
             }
             if (sMvt === "201" && !sCostCenter) {
                 this._showError(this.getText("scanToErrCostCenterRequired"));

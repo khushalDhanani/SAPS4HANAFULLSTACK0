@@ -725,5 +725,139 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             expect(detailModel.getProperty('/result/MaterialDocument')).toBe('4900050135');
             expect(detailModel.getProperty('/result/Status')).toBe('05');
         });
+
+        it('direct URL load: auto-fills ReceivingStorageLocation and sets read-only with source [mock only, not browser verification]', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000782',
+                TRItem: '0001',
+                MovementType: '311',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                OpenQuantity: 1,
+                ReceivingStorageLocation: 'CS02',
+                ReceivingStorageLocationSource: 'Reservation',
+                ReceivingPlant: '1120',
+                ReceivingPlantSource: 'Reservation'
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '1000782' } : null))
+            });
+
+            expect(mockWarehouseScanToService.lookupTR).toHaveBeenCalledWith('1000782', '', 'TR', '');
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('CS02');
+            expect(detailModel.getProperty('/receivingStorageLocationSource')).toBe('Reservation');
+            expect(detailModel.getProperty('/receivingPlant')).toBe('1120');
+            expect(detailModel.getProperty('/receivingPlantSource')).toBe('Reservation');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('no source: editable and blocked (canSubmit false) until entered for 311 [mock only, not browser verification]', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000799',
+                TRItem: '0001',
+                MovementType: '311',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                OpenQuantity: 1,
+                ReceivingStorageLocation: '',
+                ReceivingStorageLocationSource: '',
+                ReceivingPlant: '',
+                ReceivingPlantSource: ''
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '1000799' } : null))
+            });
+
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('');
+            expect(detailModel.getProperty('/receivingStorageLocationSource')).toBe('');
+            // blocked until entered
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
+            expect(detailModel.getProperty('/recSLocValueState')).toBe('Error');
+
+            // User types valid receiving SLoc different from HS01
+            detailCtrl.onReceivingSLocLiveChange({
+                getParameter: jest.fn((p) => (p === 'value' ? 'CS01' : null))
+            });
+
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('CS01');
+            expect(detailModel.getProperty('/recSLocValueState')).toBe('None');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('same SLoc rejected: blocks canSubmit and sets error valueState for 311 [mock only, not browser verification]', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000799',
+                TRItem: '0001',
+                MovementType: '311',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                OpenQuantity: 1,
+                ReceivingStorageLocation: '',
+                ReceivingStorageLocationSource: ''
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '1000799' } : null))
+            });
+
+            // User types the same SLoc as issuing (HS01)
+            detailCtrl.onReceivingSLocLiveChange({
+                getParameter: jest.fn((p) => (p === 'value' ? 'HS01' : null))
+            });
+
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('HS01');
+            expect(detailModel.getProperty('/recSLocValueState')).toBe('Error');
+            expect(detailModel.getProperty('/recSLocValueStateText')).toBe('Receiving Storage Location must be different from Issuing Storage Location');
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
+        });
+
+        it('201/241: Cost Center and Asset are shown and required, receiving SLoc/Plant hidden/not applicable [mock only, not browser verification]', async () => {
+            // Test 201 (Cost Center)
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000006',
+                TRItem: '0001',
+                MovementType: '201',
+                Plant: '1600',
+                StorageLocation: 'CS01',
+                OpenQuantity: 1,
+                CostCenter: '1011302401',
+                ReceivingStorageLocation: '',
+                ReceivingStorageLocationSource: ''
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '1000006' } : null))
+            });
+
+            expect(detailModel.getProperty('/tr/MovementType')).toBe('201');
+            expect(detailModel.getProperty('/costCenter')).toBe('1011302401');
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
+
+            // Test 241 (Asset)
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000761',
+                TRItem: '0001',
+                MovementType: '241',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                OpenQuantity: 1,
+                AssetNo: '0000400001',
+                SubNumber: '0000',
+                ReceivingStorageLocation: '',
+                ReceivingStorageLocationSource: ''
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '1000761' } : null))
+            });
+
+            expect(detailModel.getProperty('/tr/MovementType')).toBe('241');
+            expect(detailModel.getProperty('/assetNo')).toBe('0000400001');
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
+        });
     });
 });

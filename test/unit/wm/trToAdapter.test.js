@@ -662,6 +662,234 @@ describe('TrToAdapter (RFC)', () => {
       else delete cds.db.run;
     }
   });
+
+  it('lookupTR: filled from RESB (mock only, not browser verification)', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000782', BWLVS: '311', RSNUM: '0000525295', STATU: '' }],
+            ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000782', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'CS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', RSPOS: '0001' }]
+          };
+        }
+        throw new Error(`unexpected FM ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'RESB') return [{ RSNUM: '0000525295', RSPOS: '0001', UMWRK: '1120', UMLGO: 'CS02' }];
+        if (table === 'MAKT') return [{ MAKTX: 'Test Material' }];
+        return [];
+      })
+    };
+    const adapter = new TrToAdapter({ rfc });
+    const detail = await adapter.lookupTR('1000782', 'W01', 'TR');
+    expect(detail.ReceivingStorageLocation).toBe('CS02');
+    expect(detail.ReceivingStorageLocationSource).toBe('Reservation');
+    expect(detail.ReceivingPlant).toBe('1120');
+    expect(detail.ReceivingPlantSource).toBe('Reservation');
+  });
+
+  it('lookupTR: filled from tracking (ReservationTrack) [mock only, not browser verification]', async () => {
+    const cds = require('@sap/cds');
+    const origRun = cds.db && cds.db.run;
+    cds.db = cds.db || {};
+    cds.db.run = jest.fn().mockImplementation(async () => ({
+      TransferRequirement: '1000888',
+      ReceivingStorageLocation: 'CS01',
+      ReceivingPlant: '1110'
+    }));
+
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000888', BWLVS: '311', RSNUM: '0000000000', STATU: '' }],
+            ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000888', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'CS02', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS' }]
+          };
+        }
+        throw new Error(`unexpected FM ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'MAKT') return [{ MAKTX: 'Test Material' }];
+        return [];
+      })
+    };
+
+    try {
+      const adapter = new TrToAdapter({ rfc });
+      const detail = await adapter.lookupTR('1000888', 'W01', 'TR');
+      expect(detail.ReceivingStorageLocation).toBe('CS01');
+      expect(detail.ReceivingStorageLocationSource).toBe('Tracking');
+      expect(detail.ReceivingPlant).toBe('1110');
+      expect(detail.ReceivingPlantSource).toBe('Tracking');
+    } finally {
+      if (origRun) cds.db.run = origRun;
+      else delete cds.db.run;
+    }
+  });
+
+  it('lookupTR: filled from MATDOC (mock only, not browser verification)', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000791', BWLVS: '301', RSNUM: '0000000000', MBLNR: '4900050146', MJAHR: '2026', STATU: '' }],
+            ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000791', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'CS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS' }]
+          };
+        }
+        throw new Error(`unexpected FM ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'MATDOC') return [{ MBLNR: '4900050146', MJAHR: '2026', BWART: '301', WERKS: '1120', LGORT: 'CS01', UMWRK: '1110', UMLGO: 'CS01' }];
+        if (table === 'MAKT') return [{ MAKTX: 'Test Material' }];
+        return [];
+      })
+    };
+    const adapter = new TrToAdapter({ rfc });
+    const detail = await adapter.lookupTR('1000791', 'W01', 'TR');
+    expect(detail.ReceivingPlant).toBe('1110');
+    expect(detail.ReceivingPlantSource).toBe('Material doc');
+    expect(detail.ReceivingStorageLocation).toBe('CS01');
+    expect(detail.ReceivingStorageLocationSource).toBe('Material doc');
+  });
+
+  it('lookupTR: no source returns empty ReceivingStorageLocation and ReceivingPlant [mock only, not browser verification]', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000799', BWLVS: '311', RSNUM: '0000000000', MBLNR: '', MJAHR: '', STATU: '' }],
+            ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000799', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS' }]
+          };
+        }
+        throw new Error(`unexpected FM ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'MAKT') return [{ MAKTX: 'Test Material' }];
+        return [];
+      })
+    };
+    const adapter = new TrToAdapter({ rfc });
+    const detail = await adapter.lookupTR('1000799', 'W01', 'TR');
+    expect(detail.ReceivingStorageLocation).toBe('');
+    expect(detail.ReceivingStorageLocationSource).toBe('');
+    expect(detail.ReceivingPlant).toBe('');
+    expect(detail.ReceivingPlantSource).toBe('');
+  });
+
+  it('createTOFromTR: rejects same SLoc for 311 (mock only, not browser verification)', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000799', BWLVS: '311', STATU: '', NLTYP: '921', NLPLA: 'TRANSFER' }],
+            ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000799', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS' }]
+          };
+        }
+        throw new Error(`unexpected FM ${fm}`);
+      }),
+      readTable: jest.fn(async () => [])
+    };
+    const adapter = new TrToAdapter({ rfc });
+    await expect(adapter.createTOFromTR({
+      lgnum: 'W01',
+      tbnum: '1000799',
+      tbpos: '0001',
+      qty: 1,
+      unit: 'NOS',
+      receivingStorageLocation: 'HS01'
+    })).rejects.toMatchObject({
+      status: 400,
+      message: 'Receiving Storage Location must be different from Issuing Storage Location'
+    });
+  });
+
+  it('createTOFromTR: rejects unknown SLoc (T001L not found) [mock only, not browser verification]', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000799', BWLVS: '311', STATU: '', NLTYP: '921', NLPLA: 'TRANSFER' }],
+            ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000799', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS' }]
+          };
+        }
+        throw new Error(`unexpected FM ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'T001L') return []; // SLoc not in plant
+        return [];
+      })
+    };
+    const adapter = new TrToAdapter({ rfc });
+    await expect(adapter.createTOFromTR({
+      lgnum: 'W01',
+      tbnum: '1000799',
+      tbpos: '0001',
+      qty: 1,
+      unit: 'NOS',
+      receivingStorageLocation: 'ZZ99'
+    })).rejects.toMatchObject({
+      status: 400,
+      message: 'Receiving Storage Location ZZ99 does not exist in plant 1120 (T001L)'
+    });
+  });
+
+  it('createTOFromTR: rejects SLoc not assigned to warehouse (T320 not found) [mock only, not browser verification]', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000799', BWLVS: '311', STATU: '', NLTYP: '921', NLPLA: 'TRANSFER' }],
+            ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000799', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS' }]
+          };
+        }
+        throw new Error(`unexpected FM ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'T001L') return [{ LGORT: 'AD01' }]; // SLoc exists in plant
+        if (table === 'T320') return []; // but not mapped to warehouse W01
+        return [];
+      })
+    };
+    const adapter = new TrToAdapter({ rfc });
+    await expect(adapter.createTOFromTR({
+      lgnum: 'W01',
+      tbnum: '1000799',
+      tbpos: '0001',
+      qty: 1,
+      unit: 'NOS',
+      receivingStorageLocation: 'AD01'
+    })).rejects.toMatchObject({
+      status: 400,
+      message: 'Receiving Storage Location AD01 in plant 1120 is not assigned to warehouse W01 (T320)'
+    });
+  });
+
+  it('createTOFromTR: rejects same plant for 301 (mock only, not browser verification)', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000791', BWLVS: '301', STATU: '', NLTYP: '921', NLPLA: 'TRANSFER' }],
+            ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000791', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'CS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS' }]
+          };
+        }
+        throw new Error(`unexpected FM ${fm}`);
+      }),
+      readTable: jest.fn(async () => [])
+    };
+    const adapter = new TrToAdapter({ rfc });
+    await expect(adapter.createTOFromTR({
+      lgnum: 'W01',
+      tbnum: '1000791',
+      tbpos: '0001',
+      qty: 1,
+      unit: 'NOS',
+      receivingPlant: '1120'
+    })).rejects.toMatchObject({
+      status: 400,
+      message: 'Receiving Plant must be different from Issuing Plant for Movement Type 301 (Plant to Plant Transfer)'
+    });
+  });
 });
 
 describe('RfcClient', () => {

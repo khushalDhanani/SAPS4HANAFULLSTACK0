@@ -66,11 +66,15 @@ function mapStorageTypeSearchError(rawMsg, wh, mvt) {
 class TrToAdapter {
   constructor(options = {}) {
     this.rfc = options.rfc || new RfcClient();
+    this._checkSlocExistence = Boolean(options.checkSlocExistence);
   }
 
   /** Same adapter bound to another RFC client (used to run a step inside one locked RFC session). */
   withRfc(rfc) {
-    return new this.constructor({ rfc });
+    return new this.constructor({
+      rfc,
+      checkSlocExistence: this._checkSlocExistence
+    });
   }
 
   async _rfc(fn, context) {
@@ -153,6 +157,7 @@ class TrToAdapter {
     return {
       Lgnum: h.LGNUM, Tbnum: h.TBNUM, Bwlvs: h.BWLVS, Betyp: h.BETYP, Benum: h.BENUM, Rsnum: h.RSNUM,
       Bdatu: sapDate(h.BDATU), Statu: h.STATU, Vltyp: h.VLTYP, Vlpla: h.VLPLA, Nltyp: h.NLTYP, Nlpla: h.NLPLA,
+      Mblnr: h.MBLNR || '', Mjahr: h.MJAHR || '',
       Items: items.map((i) => {
         const req = sapNum(i.MENGE);
         const done = sapNum(i.TAMEN);
@@ -162,7 +167,8 @@ class TrToAdapter {
           Plant: i.WERKS, StorageLocation: i.LGORT, Batch: i.CHARG,
           RequiredQty: req, ProcessedQty: done, OpenQty: Math.max(req - done, 0), Unit: i.MEINS,
           DeliveryCompleted: i.ELIKZ === 'X',
-          DestStorageType: h.NLTYP, DestStorageBin: h.NLPLA
+          DestStorageType: h.NLTYP, DestStorageBin: h.NLPLA,
+          Rspos: i.RSPOS || ''
         };
       })
     };
@@ -743,22 +749,36 @@ class TrToAdapter {
 
     let receivingPlant = '';
     let receivingStorageLocation = '';
+    let recPlantSource = '';
+    let recSLocSource = '';
     let costCenter = tr.Betyp === 'K' ? alphaOut(tr.Benum) : '';
     let assetNo = tr.Betyp === 'A' ? alphaOut(tr.Benum) : '';
     let subNumber = tr.Betyp === 'A' ? '0000' : '';
 
+    // 1. RESB (via RSNUM/RSPOS)
     if (tr.Rsnum && String(tr.Rsnum).trim() !== '' && String(tr.Rsnum).trim() !== '0000000000' && this.rfc) {
       try {
         const rsnumPadded = sapKey(tr.Rsnum, 'rsnum').padStart(10, '0');
         const resbRows = await this._rfc(
-          () => this.rfc.readTable('RESB', ['UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${rsnumPadded}'`], 1),
+          () => this.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${rsnumPadded}'`], 10),
           `Read RESB for reservation ${alphaOut(rsnumPadded)}`
         );
-        if (resbRows?.[0]) {
-          receivingPlant = String(resbRows[0].UMWRK || '').trim();
-          receivingStorageLocation = String(resbRows[0].UMLGO || '').trim();
-          if (!sel.Batch && resbRows[0].CHARG?.trim()) {
-            sel.Batch = resbRows[0].CHARG.trim().toUpperCase();
+        let matched = null;
+        if (item?.Rspos && item.Rspos !== '0000') {
+          matched = (resbRows || []).find((r) => r.RSPOS === item.Rspos);
+        }
+        matched = matched || (resbRows || [])[0];
+        if (matched) {
+          if (matched.UMLGO?.trim()) {
+            receivingStorageLocation = String(matched.UMLGO).trim().toUpperCase();
+            recSLocSource = 'Reservation';
+          }
+          if (matched.UMWRK?.trim()) {
+            receivingPlant = String(matched.UMWRK).trim().toUpperCase();
+            recPlantSource = 'Reservation';
+          }
+          if (!sel.Batch && matched.CHARG?.trim()) {
+            sel.Batch = matched.CHARG.trim().toUpperCase();
           }
         }
         if (!costCenter || !assetNo) {
@@ -776,6 +796,113 @@ class TrToAdapter {
         }
       } catch (_rErr) {
         LOG.warn(`Reservation lookup in lookupTR failed: ${_rErr.message}`);
+      }
+    }
+
+    // 2. Tracking table (ReservationTrack by TBNUM)
+    if (!receivingStorageLocation || !receivingPlant) {
+      try {
+        const cds = require('@sap/cds');
+        if (cds && cds.db) {
+          const tbnumRaw = alphaOut(tr.Tbnum);
+          const tbnumPad = tbnumRaw.padStart(10, '0');
+          let track = await cds.db.run(
+            cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
+              .where({ TransferRequirement: tbnumRaw })
+          );
+          if (!track && tbnumPad !== tbnumRaw) {
+            track = await cds.db.run(
+              cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
+                .where({ TransferRequirement: tbnumPad })
+            );
+          }
+          if (track) {
+            if (!receivingStorageLocation && track.ReceivingStorageLocation?.trim()) {
+              receivingStorageLocation = String(track.ReceivingStorageLocation).trim().toUpperCase();
+              recSLocSource = recSLocSource || 'Tracking';
+            }
+            if (!receivingPlant && track.ReceivingPlant?.trim()) {
+              receivingPlant = String(track.ReceivingPlant).trim().toUpperCase();
+              recPlantSource = recPlantSource || 'Tracking';
+            }
+            if (!costCenter && track.CostCenter?.trim()) costCenter = track.CostCenter.trim();
+            if (!assetNo && track.AssetNo?.trim()) {
+              assetNo = track.AssetNo.trim();
+              subNumber = track.SubNumber?.trim() || '0000';
+            }
+          }
+        }
+      } catch (_trackErr) {
+        LOG.warn(`ReservationTrack lookup in lookupTR failed: ${_trackErr.message}`);
+      }
+    }
+
+    // 2b. Open RESB fallback by (MATNR, WERKS, LGORT, BWART) when LTBK-RSNUM is 0
+    if ((!receivingStorageLocation || !receivingPlant) && (tr.Bwlvs === '311' || tr.Bwlvs === '301') && this.rfc && sel.Material && sel.Plant && sel.StorageLocation) {
+      try {
+        const matPadded = alphaIn(sapKey(sel.Material, 'matnr'), 18);
+        const openResb = await this._rfc(
+          () => this.rfc.readTable(
+            'RESB',
+            ['RSNUM', 'RSPOS', 'BWART', 'WERKS', 'LGORT', 'UMWRK', 'UMLGO', 'CHARG'],
+            [
+              `MATNR = '${matPadded}'`,
+              `AND WERKS = '${sel.Plant}'`,
+              `AND LGORT = '${sel.StorageLocation}'`,
+              `AND BWART = '${tr.Bwlvs}'`,
+              "AND KZEAR = ''",
+              "AND XLOEK = ''"
+            ],
+            10
+          ),
+          `Read open RESB fallback for material ${sel.Material} (${sel.Plant}/${sel.StorageLocation})`
+        );
+        const matched = (openResb || []).find((r) => r.UMLGO?.trim() || r.UMWRK?.trim());
+        if (matched) {
+          if (!receivingStorageLocation && matched.UMLGO?.trim()) {
+            receivingStorageLocation = String(matched.UMLGO).trim().toUpperCase();
+            recSLocSource = recSLocSource || 'Reservation';
+          }
+          if (!receivingPlant && matched.UMWRK?.trim()) {
+            receivingPlant = String(matched.UMWRK).trim().toUpperCase();
+            recPlantSource = recPlantSource || 'Reservation';
+          }
+          if (!sel.Batch && matched.CHARG?.trim()) {
+            sel.Batch = matched.CHARG.trim().toUpperCase();
+          }
+        }
+      } catch (_fbErr) {
+        LOG.warn(`Open RESB fallback lookup in lookupTR failed: ${_fbErr.message}`);
+      }
+    }
+
+    // 3. MATDOC (via MBLNR)
+    if ((!receivingStorageLocation || !receivingPlant) && tr.Mblnr && String(tr.Mblnr).trim() !== '' && this.rfc) {
+      try {
+        const mblnr = String(tr.Mblnr).trim();
+        const mjahr = String(tr.Mjahr || '2026').trim();
+        const matdocRows = await this._rfc(
+          () => this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'WERKS', 'LGORT', 'UMWRK', 'UMLGO'], [
+            `MBLNR = '${mblnr}'`,
+            `AND MJAHR = '${mjahr}'`
+          ], 10),
+          `Read MATDOC for material document ${mblnr}`
+        );
+        let matched = (matdocRows || []).find((r) => r.BWART === tr.Bwlvs && r.WERKS === sel.Plant && r.LGORT === sel.StorageLocation);
+        matched = matched || (matdocRows || []).find((r) => r.BWART === tr.Bwlvs && (r.UMLGO?.trim() || r.UMWRK?.trim()));
+        matched = matched || (matdocRows || [])[0];
+        if (matched) {
+          if (!receivingStorageLocation && matched.UMLGO?.trim()) {
+            receivingStorageLocation = String(matched.UMLGO).trim().toUpperCase();
+            recSLocSource = recSLocSource || 'Material doc';
+          }
+          if (!receivingPlant && matched.UMWRK?.trim()) {
+            receivingPlant = String(matched.UMWRK).trim().toUpperCase();
+            recPlantSource = recPlantSource || 'Material doc';
+          }
+        }
+      } catch (_mErr) {
+        LOG.warn(`MATDOC lookup in lookupTR failed: ${_mErr.message}`);
       }
     }
 
@@ -801,7 +928,9 @@ class TrToAdapter {
       SourceStorageType: sourceStorageType,
       SourceStorageBin: sourceStorageBin,
       ReceivingPlant: receivingPlant,
+      ReceivingPlantSource: recPlantSource || '',
       ReceivingStorageLocation: receivingStorageLocation,
+      ReceivingStorageLocationSource: recSLocSource || '',
       CostCenter: costCenter,
       AssetNo: assetNo,
       SubNumber: subNumber,
@@ -1081,6 +1210,48 @@ class TrToAdapter {
 
     if (quantity > item.OpenQty) {
       throw httpError(400, `Requested quantity (${quantity}) exceeds open TR quantity (${item.OpenQty} ${item.Unit})`);
+    }
+
+    // Validation of Receiving Storage Location & Receiving Plant
+    if (finalRecSLoc) {
+      finalRecSLoc = sapKey(finalRecSLoc, 'lgort', 'Receiving Storage Location');
+      if (tr.Bwlvs === '311' && finalRecSLoc === item.StorageLocation) {
+        throw httpError(400, 'Receiving Storage Location must be different from Issuing Storage Location');
+      }
+      if (this.rfc && typeof this.rfc.readTable === 'function') {
+        const plantForSLoc = (tr.Bwlvs === '301' && finalRecPlant) ? finalRecPlant : item.Plant;
+        const t001l = await this._rfc(
+          () => this.rfc.readTable('T001L', ['LGORT'], [
+            `WERKS = '${plantForSLoc}'`,
+            `AND LGORT = '${finalRecSLoc}'`
+          ], 1),
+          `Validate storage location ${finalRecSLoc} in plant ${plantForSLoc}`
+        );
+        if (!t001l || t001l.length === 0) {
+          throw httpError(400, `Receiving Storage Location ${finalRecSLoc} does not exist in plant ${plantForSLoc} (T001L)`);
+        }
+
+        if (tr.Bwlvs === '311') {
+          const t320 = await this._rfc(
+            () => this.rfc.readTable('T320', ['LGNUM'], [
+              `WERKS = '${item.Plant}'`,
+              `AND LGORT = '${finalRecSLoc}'`,
+              `AND LGNUM = '${wh}'`
+            ], 1),
+            `Validate warehouse mapping for storage location ${finalRecSLoc} in warehouse ${wh}`
+          );
+          if (!t320 || t320.length === 0) {
+            throw httpError(400, `Receiving Storage Location ${finalRecSLoc} in plant ${item.Plant} is not assigned to warehouse ${wh} (T320)`);
+          }
+        }
+      }
+    }
+
+    if (finalRecPlant) {
+      finalRecPlant = sapKey(finalRecPlant, 'plant', 'Receiving Plant');
+      if (tr.Bwlvs === '301' && finalRecPlant === item.Plant) {
+        throw httpError(400, 'Receiving Plant must be different from Issuing Plant for Movement Type 301 (Plant to Plant Transfer)');
+      }
     }
 
     // Material Profiles (Batch & Serial check)
