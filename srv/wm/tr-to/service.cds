@@ -311,7 +311,9 @@ service TrToService @(path: '/odata/v4/tr-to') {
         SubNumber                : String(4),
         autoConfirm              : Boolean,
         autoPostMigo             : Boolean,
-        CompleteReservation      : Boolean // sets NO_MORE_GR on the goods movement; never defaulted to true
+        CompleteReservation      : Boolean, // sets NO_MORE_GR on the goods movement; never defaulted to true
+        ReservationMovementType  : String(3),
+        reservationMovementType  : String(3)
     ) returns TOProcessResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
