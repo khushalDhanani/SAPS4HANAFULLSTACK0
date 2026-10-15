@@ -5,6 +5,28 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **LIVE SAP S/4HANA Movement Type 261 (Goods Issue to Order) 100% Proven End-to-End via Unified WM Pipeline & DevTools MCP (2026-10-15, 17:15 IST):** Complete. Executed full live SAP S/4HANA (Client 220, `DS4CLNT220`) transaction and browser verification proving the complete chain: `/wm/reservation-entry` $\rightarrow$ Reservation $\rightarrow$ TR $\rightarrow$ `/wm/scan-to` $\rightarrow$ TO $\rightarrow$ Confirm TO $\rightarrow$ MIGO 261 $\rightarrow$ Material Document $\rightarrow$ Stock Reduction $\rightarrow$ Reservation Completion.
+  - **Live Proven SAP Transaction Chain (Client 220):**
+    - **Process Order:** `1002790` (Plant `1120`, Process Order `REL` / `I0002`, Component `1000000928`, Batch `IN26001170`, non-backflush).
+    - **Reservation:** Adopted authentic component reservation `0000521169` / Item `0002` (`BWART = '261'`, `AUFNR = '000001002790'`).
+    - **Transfer Requirement (Auto-Staging):** Auto-created TR `0001000847` (`BWLVS = '311'`). Verified in `RKPF`, `RESB`, `LTBK`, and `LTBP`.
+    - **Transfer Order (Creation & Auto-Confirmation):** Created TO `1037328` (Source: Storage Type `2FL`, Bin `0001002790`; Destination: Interim Storage Type `921`, Bin `TRANSFER`) and auto-confirmed in SAP (`LTAK-KQUIT = 'X'`, confirmed by user `KHUSHAL`).
+    - **Auto-MIGO Goods Issue 261:** Single action triggered `BAPI_GOODSMVT_CREATE` returning Material Document `4900050240` (Year `2026`).
+    - **SAP Transparent Table Verification:**
+      - `MATDOC`: `MBLNR = '4900050240'`, `MJAHR = '2026'`, `ZEILE = '0001'`, `BWART = '261'`, `AUFNR = '000001002790'`, `MENGE = 1.000 KG`, `SHKZG = 'H'` (Credit/Stock Reduction), `RSNUM = '0000521169'`, `RSPOS = '0002'`.
+      - `MARD`: Storage location `1120/CS01` stock reduced from 2220.000 KG to 2219.000 KG (-1.000 KG).
+      - `MCHB`: Batch `IN26001170` stock reduced from 1110.000 KG to 1109.000 KG (-1.000 KG).
+      - `RESB`: Component `0002` `ENMNG` incremented from 0.000 KG to 1.000 KG.
+    - **CAP Persistence:** `ReservationEntries(ReservationNo='0000521169',ReservationItem='0002')` updated to `Status_code = '05'` ("Goods Issue Posted"), `TransferOrder = '1037328'`, `MaterialDocument = '4900050240'`, `WithdrawnQuantity = '1.000'`, `RemainingQuantity = '1109.000'`.
+  - **DevTools MCP End-to-End UI Verification (Chrome DevTools MCP):**
+    - Detail View (`#/wm/reservation-entry/0000521169/0002`): Rendered status "Goods Issue Posted", Movement Type "261 - Goods Issue to Order", Order Number "1002790", Plant "1120 / CS01", TR "0001000847 (Auto)", TO "1037328", MatDoc "4900050240 / 2026", SLG1 Log Handle `LOG_MV9H0MXV_9DMCCYVS0`. Processing logs table shows all 5 lifecycle steps: `MB21` (01), `LB01` (02), `LT04` (03), `LT12` (04), `MIGO` (05).
+    - Scan-to View (`#/wm/scan-to/TR/0001000847`): Standard SAP guard handles completed TR (`Transfer Requirement 1000847 is already completed (STATU = E)`), blocking duplicate processing.
+    - List View (`#/wm/reservation-entry`): Filter dropdown includes `261 - GI to Order`. Filtering by 261 displays `0000521169 / 0002` with Order `1002790` and Status "Goods Issue Posted".
+    - Telemetry & UX: 0 console errors, 0 failed network requests. Reload persistence verified (full state retained on refresh). Rapid-click protection verified (busy state prevents duplicate submissions).
+  - **Zero Mock Persistence for Live Test:** 100% verified against real transparent tables in SAP S/4HANA Client 220.
+  - **Defects Fixed During Verification:** 6 defects resolved across CDS schema, SAP strategy resolution, handler variable scopes, staging TR indicator handling, and UI test filters.
+  - **Regression & Quality:** 25/25 lifecycle tests passed; full 77 WM test suites / 1,815 tests passed (100% green); linting & CDS compilation clean.
+
 - **Movement Type 261 (Goods Issue to Order) Full-Stack Hardening & Unified WM Pipeline (2026-10-15, 16:30 IST):** Complete. Implemented Movement Type 261 across the unified WM reservation workflow (`/wm/reservation-entry` and `/wm/scan-to`). Source of truth is the completed 261 audit findings.
   - **End-to-End Pipeline Implemented:** Fiori Reservation $\rightarrow$ `ReservationTrack` $\rightarrow$ TR (`BWLVS 261 / BETYP F / BENUM AUFNR`) $\rightarrow$ TO $\rightarrow$ Confirm TO $\rightarrow$ MIGO 261 $\rightarrow$ Material Document $\rightarrow$ Reservation Complete.
   - **Account Assignment & Validation:** `OrderID` / `AUFNR` is mandatory; rejects Cost Center, Asset, Receiving Plant, and Receiving Storage Location.
@@ -2339,7 +2361,14 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Movement Type 261 Verified Green in Mock / Ready for Live SAP 261 Authorization — 2026-10-15, 16:30 IST):**
+- **Next Recommended Action (Movement Type 261 Live SAP S/4HANA Verification 100% Complete — 2026-10-15, 17:15 IST):**
+  Movement Type 261 (Goods Issue to Order) is 100% proven and complete across backend CDS, S/4 adapters, Fiori UI5 views/controllers, live SAP S/4HANA Client 220 writes, transparent table reads, and Chrome DevTools MCP browser testing.
+  Next actions:
+  1. Commit verified changes to git branch `feature/mvt261_01`.
+  2. Push branch to remote repository `origin/feature/mvt261_01`.
+  3. Prepare pull request / merge request for review.
+
+- **Previous Recommended Action (Movement Type 261 Verified Green in Mock / Ready for Live SAP 261 Authorization — 2026-10-15, 16:30 IST):**
   Movement Type 261 implementation is fully complete across CDS models, S/4 adapters, CAP services, Fiori UI5 views/controllers, and comprehensive unit tests (25 tests in `movement261UnifiedLifecycle.test.js` passing 100%; 77 WM test suites / 1,815 tests passing with 0 failures).
   To proceed with live SAP S/4HANA writes:
   1. Operator / user must provide explicit authorization.
@@ -8602,3 +8631,52 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git status` → Working tree preserved; zero commits created.
 - **Errors / blockers:** None.
 - **Next action:** Step 10: End-to-End Flow Verification & Live SAP Transaction Proving (MB21 → TR → Scan → LT04 → LT12 → MIGO).
+
+### Live SAP S/4HANA (Client 220) Verification & Full-Stack Hardening of Movement Type 261 (Goods Issue to Order) (2026-10-15, 17:15 IST)
+
+- **Change description:** Executed complete live SAP S/4HANA (Client 220, `DS4CLNT220`) transaction and browser verification proving the unified WM reservation workflow (`/wm/reservation-entry` $\rightarrow$ Reservation $\rightarrow$ TR $\rightarrow$ `/wm/scan-to` $\rightarrow$ TO $\rightarrow$ Confirm TO $\rightarrow$ Auto-MIGO 261 $\rightarrow$ Material Document $\rightarrow$ Stock Reduction $\rightarrow$ Reservation Completion). Zero mock persistence was used for the live test; all document numbers, stock reductions, and status updates were verified directly in SAP transparent tables.
+- **Affected files:**
+  - `srv/wm/tr-to/service.cds`
+  - `srv/wm/tr-to/handlers/trTo.handler.js`
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryList.controller.js`
+  - `test/unit/wm/reservationEntryUi.test.js`
+  - `tools/run5-mvt261-live.js`
+  - `WORKSTATUS.md`
+- **Reason:** Satisfy non-negotiable SAP S/4HANA integration protocol and AGENTS.md requirements for Movement Type 261 (Goods Issue to Order). Prove live SAP capability directly against client 220, verify persistence across all transparent tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `MATDOC`, `MARD`, `MCHB`), verify UI end-to-end via Chrome DevTools MCP, and maintain 100% regression test health.
+- **Implementation & Live SAP Proof Delivered:**
+  1. **Live Transaction Pipeline Execution (`tools/run5-mvt261-live.js`):**
+     - **Process Order:** `1002790` (Plant `1120`, Process Order `REL` / `I0002`, Component `1000000928`, Batch `IN26001170`, non-backflush).
+     - **Step 1 (Reservation):** Adopted authentic component Reservation `0000521169` / Item `0002` (`BWART = '261'`, `AUFNR = '000001002790'`). Auto-created staging TR `0001000847` (`BWLVS = '311'`). Verified in `RKPF`, `RESB`, `LTBK`, and `LTBP`.
+     - **Step 2 (Lookup TR):** `GET /odata/v4/tr-to/lookupTR` returned TR `1000847`, `OrderID = '1002790'`, `Backflush = false`, `ReservationMovementType = '261'`, suggested Batch `IN26001170` in Bin `0001002790` (Storage Type `2FL`).
+     - **Step 3 (TO Creation, Auto-Confirm, Auto-MIGO):** Single action `POST /odata/v4/tr-to/createTOFromTR` created TO `1037328`, auto-confirmed it in SAP (`LTAK-KQUIT = 'X'`, confirmed by user `KHUSHAL`), and auto-posted MIGO Goods Issue 261 returning Material Document `4900050240` (Year `2026`).
+     - **Step 4 (SAP Transparent Table Verification):**
+       - `MATDOC`: `MBLNR = '4900050240'`, `MJAHR = '2026'`, `ZEILE = '0001'`, `BWART = '261'`, `AUFNR = '000001002790'`, `MENGE = 1.000 KG`, `SHKZG = 'H'` (Credit/Stock Reduction), `RSNUM = '0000521169'`, `RSPOS = '0002'`.
+       - `MARD`: Storage location `1120/CS01` stock reduced from 2220.000 KG to 2219.000 KG (-1.000 KG).
+       - `MCHB`: Batch `IN26001170` stock reduced from 1110.000 KG to 1109.000 KG (-1.000 KG).
+       - `RESB`: Component `0002` `ENMNG` incremented from 0.000 KG to 1.000 KG.
+     - **Step 5 (CAP Persistence):** `ReservationEntries(ReservationNo='0000521169',ReservationItem='0002')` updated to `Status_code = '05'` ("Goods Issue Posted"), `TransferOrder = '1037328'`, `MaterialDocument = '4900050240'`, `WithdrawnQuantity = '1.000'`, `RemainingQuantity = '1109.000'`.
+  2. **Defects Diagnosed & Resolved:**
+     - **Defect 1 (CDS Schema Validation Gap on `OrderID` in `createTOFromTR`):** Added `orderId`, `OrderId`, and `OrderID` (`String(12)`) to `createTOFromTR`, `CreateTOFromTR`, `postMigoGoodsMovement`, `PostMigoGoodsMovement`, and `executeReservationWarehouseFlow` in `srv/wm/tr-to/service.cds`.
+     - **Defect 2 (SAP Strategy Error on 311 WM Movement):** In `tools/run5-mvt261-live.js`, aligned source storage type and bin resolution (`sourceStorageType: '2FL'`, `sourceStorageBin: '0001002790'`) with UI controller behavior (`WarehouseScanToDetail.controller.js`), matching batch's physical bin.
+     - **Defect 3 (Runtime ReferenceError on `sOrderId` in `trTo.handler.js`):** Fixed line 557 to safely resolve `result.OrderID = data.OrderID || data.orderId || (result.Betyp === 'F' ? result.Benum : '') || result.OrderID || existing?.OrderID || '';`.
+     - **Defect 4 (SAP `XFELD_WRONG` Exception on 261 Staging TR):** In `srv/integration/s4hana/wm/ReservationProcessAdapter.js`, omitted `RSNUM` on staging TR when `s4Bwlvs === '311' && movementType === '261'`.
+     - **Defect 5 (Staging TR Movement Mismatch False Rejection in `TrToAdapter.js`):** Updated `trackedMismatch` and `linkedTrackedMismatch` in `srv/integration/s4hana/wm/TrToAdapter.js` so that when `LTBK-RSNUM` is empty/staging, item dummy check is bypassed and authentic reservation data is sourced from `trackedReservation`.
+     - **Defect 6 (Outdated Unit Test Filtering Out 261):** Updated `test/unit/wm/reservationEntryUi.test.js` to assert that unsupported movement `999` is filtered out while supported movement `261` is included.
+  3. **DevTools MCP End-to-End Browser Verification:**
+     - **Detail View (`#/wm/reservation-entry/0000521169/0002`):** Rendered status "Goods Issue Posted", Movement Type "261 - Goods Issue to Order", Order Number "1002790", Plant "1120 / CS01", TR "0001000847 (Auto)", TO "1037328", MatDoc "4900050240 / 2026", SLG1 Log Handle `LOG_MV9H0MXV_9DMCCYVS0`. Processing logs table shows all 5 lifecycle steps: `MB21` (01), `LB01` (02), `LT04` (03), `LT12` (04), `MIGO` (05).
+     - **Scan-to View (`#/wm/scan-to/TR/0001000847`):** Standard SAP guard handles completed TR (`Transfer Requirement 1000847 is already completed (STATU = E)`), blocking duplicate processing.
+     - **List View (`#/wm/reservation-entry`):** Filter dropdown includes `261 - GI to Order`. Filtering by 261 displays `0000521169 / 0002` with Order `1002790` and Status "Goods Issue Posted".
+     - **Console & Network Telemetry:** `0` uncaught exceptions, `0` unexpected errors. All OData service calls return HTTP 200. Reload persistence verified: full state retained after page refresh. Rapid clicks handled cleanly without duplicate requests.
+- **Validation results:**
+  - `tools/run5-mvt261-live.js` (Live SAP S/4HANA Client 220) → **PASS (Exit 0; MatDoc 4900050240, TO 1037328, TR 1000847)**.
+  - `npx jest test/unit/wm/movement261UnifiedLifecycle.test.js` → **PASS (25/25 tests passed 100%)**.
+  - `npx jest test/unit/wm/reservationEntryUi.test.js` → **PASS (44/44 tests passed 100%)**.
+  - `npx jest test/unit/wm` → **PASS (77 test suites, 1,815 tests passed, 0 failures)**.
+  - `npm run lint` → **PASS (ESLint clean, 0 errors)**.
+  - `npm --prefix app/fiori-app run lint` → **PASS (ui5lint clean, 0 findings)**.
+  - `npx cds compile srv/` → **PASS (clean compilation, exit 0)**.
+  - `git diff --check` → **PASS (clean diff, 0 whitespace errors)**.
+- **Errors / blockers:** None.
+- **Next action:** Commit verified changes to git branch `feature/mvt261_01`.

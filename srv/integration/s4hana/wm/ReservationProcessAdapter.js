@@ -238,6 +238,55 @@ class ReservationProcessAdapter {
 
         const errors = (res.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
         if (errors.length) {
+          // If BAPI_RESERVATION_CREATE1 rejects manual reservation for order category (e.g. M7 126 for manufacturing categories 10/40),
+          // adopt the authentic component reservation created by SAP PP/PP-PI in RESB
+          const isOrderCatRestriction = errors.some((e) =>
+            (e.ID === 'M7' && String(e.NUMBER) === '126') ||
+            (e.MESSAGE && e.MESSAGE.includes('Manual reservation for order category'))
+          );
+          if (String(movementType).trim() === '261' && sOrderId && isOrderCatRestriction && this.rfc) {
+            LOG.info(`[createReservation] BAPI_RESERVATION_CREATE1 rejected manual reservation for order category (M7 126); adopting existing component reservation from RESB for Order ${sOrderId}`);
+            const s4Aufnr = pad12(sOrderId);
+            const resbRows = await this.rfc.readTable(
+              'RESB',
+              ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'ENMNG', 'RGEKZ', 'KZEAR', 'XLOEK'],
+              [
+                `AUFNR = '${s4Aufnr}'`,
+                `AND MATNR = '${s4Mat}'`,
+                `AND WERKS = '${sapKey(plant, 'plant')}'`,
+                "AND XLOEK = ''"
+              ],
+              10
+            );
+            if (!resbRows || !resbRows.length) {
+              throw httpError(400, `Material ${alphaOut(s4Mat)} is not a planned component of Order ${alphaOut(s4Aufnr)} in plant ${plant} (RESB)`);
+            }
+            const validComp = resbRows.find((r) => String(r.RGEKZ || '').trim() === '' && String(r.KZEAR || '').trim() === '');
+            if (!validComp) {
+              const isBf = resbRows.some((r) => String(r.RGEKZ || '').trim() !== '');
+              if (isBf) {
+                throw httpError(400, `Component ${alphaOut(s4Mat)} of Order ${alphaOut(s4Aufnr)} is flagged for backflush (RESB-RGEKZ); manual goods issue is not permitted`);
+              }
+              throw httpError(400, `Component ${alphaOut(s4Mat)} of Order ${alphaOut(s4Aufnr)} is already completely processed (RESB-KZEAR = X)`);
+            }
+            const resNo = alphaOut(validComp.RSNUM);
+            const resItem = validComp.RSPOS ? String(validComp.RSPOS).padStart(4, '0') : '0001';
+            return {
+              success: true,
+              reservation: {
+                number: resNo,
+                item: resItem
+              },
+              movementType: '261',
+              orderId: alphaOut(s4Aufnr),
+              reservationNo: resNo,
+              reservationNoRaw: String(validComp.RSNUM).padStart(10, '0'),
+              reservationItem: resItem,
+              status: STATUS.RES_CREATED,
+              messages: []
+            };
+          }
+
           const msg = errors.map((e) => e.MESSAGE).join('; ');
           const err = httpError(400, `BAPI_RESERVATION_CREATE1 failed: ${msg}`);
           err.stage = 'RESERVATION';
@@ -507,12 +556,13 @@ class ReservationProcessAdapter {
         }
       }
 
-      // For transfer postings (301), linking RSNUM directly on the TR header causes standard SAP L_TO_CREATE_TR
+      // For transfer postings (301) and 261 staging TRs (s4Bwlvs === '311'), linking RSNUM directly on the TR header causes standard SAP L_TO_CREATE_TR
       // to execute restrictive reservation checks that throw XFELD_WRONG. Omitting RSNUM on the WM staging TR allows clean TO creation and confirmation.
-      // For SLoc transfer (311), RSNUM is preserved (confirmed by live TRs 0001000757, 0001000760).
+      // For real 261 TRs (s4Bwlvs === '261') and SLoc transfer (311), RSNUM is preserved.
       const isTransferPosting = Boolean(
         reqIsTransferPosting ||
-        movementType === '301'
+        movementType === '301' ||
+        (movementType === '261' && s4Bwlvs === '311')
       );
       const s4TrRsnum = isTransferPosting ? '' : s4Rsnum;
       const s4TrRspos = isTransferPosting ? '' : s4Rspos;
@@ -591,7 +641,32 @@ class ReservationProcessAdapter {
               tbpos = resZ.EV_TBPOS || resZ.E_TBPOS || '0001';
               returnedItem = resZ;
             } else if (resZ && resZ.EV_SUCCESS === 'E' && resZ.EV_MESSAGE) {
-              throw new Error(resZ.EV_MESSAGE);
+              if (s4Bwlvs === '261') {
+                LOG.warn(`[createTransferRequirement] Z_WM_TR_CREATE rejected WM 261 (${resZ.EV_MESSAGE}); staging via WM 311 for reservation ${s4TrRsnum}`);
+                const resFallback = await call('Z_WM_TR_CREATE', {
+                  IV_LGNUM: s4Lgnum,
+                  IV_BWLVS: '311',
+                  IV_MATNR: s4Mat,
+                  IV_WERKS: s4Werks,
+                  IV_LGORT: s4Lgort,
+                  IV_MENGA: s4Menga,
+                  IV_ALTME: s4Altme,
+                  IV_RSNUM: s4TrRsnum,
+                  IV_RSPOS: s4TrRspos,
+                  IV_COMMIT: 'X'
+                });
+                rawTbnum = resFallback && (resFallback.EV_TBNUM || resFallback.E_TBNUM);
+                const cleanFallback = rawTbnum && rawTbnum !== '0000000000' ? alphaOut(rawTbnum) : '';
+                if (cleanFallback) {
+                  tbnum = cleanFallback;
+                  tbpos = resFallback.EV_TBPOS || resFallback.E_TBPOS || '0001';
+                  returnedItem = resFallback;
+                } else {
+                  throw new Error(resFallback?.EV_MESSAGE || resZ.EV_MESSAGE);
+                }
+              } else {
+                throw new Error(resZ.EV_MESSAGE);
+              }
             }
           } catch (_zwmErr) {
             if (_zwmErr.message && !_zwmErr.message.includes('NOT_FOUND') && !_zwmErr.message.includes('RFC_NO_AUTHORITY')) {
@@ -2160,6 +2235,14 @@ class ReservationProcessAdapter {
             if (trRows?.[0]?.BETYP === 'F' && trRows[0].BENUM?.trim()) {
               orderId = trRows[0].BENUM.trim();
             }
+          }
+        } catch (_e) { /* tolerate */ }
+      }
+      if (!orderId && sResNo && this.rfc) {
+        try {
+          const resbRows = await this.rfc.readTable('RESB', ['AUFNR'], [`RSNUM = '${sResNo.padStart(10, '0')}'`], 1);
+          if (resbRows?.[0]?.AUFNR?.trim()) {
+            orderId = resbRows[0].AUFNR.trim();
           }
         } catch (_e) { /* tolerate */ }
       }

@@ -58,7 +58,7 @@ sap.ui.define([
                 ? this._oService.getOpenReservations(oFilters).catch(function () { return []; })
                 : Promise.resolve([]);
 
-            const SUPPORTED_MVTS = ["311", "201", "241", "301"];
+            const SUPPORTED_MVTS = ["311", "201", "241", "301", "261"];
 
             return Promise.all([pTracked, pOpen]).then(function (aResults) {
                 const aTracked = (aResults[0] || []).filter(function (e) {

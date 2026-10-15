@@ -492,17 +492,18 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(entries[1].ReservationNo).toBe('0000527595');
         });
 
-        it('loadData strictly filters out movement type 261 and non-supported movements from both tracked and open lists', async () => {
+        it('loadData strictly filters out non-supported movements like 999 from both tracked and open lists while supporting 261', async () => {
             const serviceMock = {
                 getEntries: jest.fn().mockResolvedValue([
                     { ReservationNo: '0000527594', ReservationItem: '0001', MovementType: '311', Status_code: '02' },
-                    { ReservationNo: '0000527599', ReservationItem: '0001', MovementType: '261', Status_code: '02' }
+                    { ReservationNo: '0000527599', ReservationItem: '0001', MovementType: '999', Status_code: '02' }
                 ]),
                 getOpenReservations: jest.fn().mockResolvedValue([
-                    { ReservationNo: '0000519944', ReservationItem: '0001', MovementType: '261', Status_code: '01' },
+                    { ReservationNo: '0000519944', ReservationItem: '0001', MovementType: '999', Status_code: '01' },
                     { ReservationNo: '0000527595', ReservationItem: '0001', MovementType: '201', Status_code: '01' },
                     { ReservationNo: '0000527596', ReservationItem: '0001', MovementType: '241', Status_code: '01' },
-                    { ReservationNo: '0000527597', ReservationItem: '0001', MovementType: '301', Status_code: '01' }
+                    { ReservationNo: '0000527597', ReservationItem: '0001', MovementType: '301', Status_code: '01' },
+                    { ReservationNo: '0000521169', ReservationItem: '0002', MovementType: '261', Status_code: '01' }
                 ])
             };
 
@@ -521,10 +522,11 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
 
             await listSubject.loadData();
             const entries = viewModel.getProperty('/entries');
-            expect(entries).toHaveLength(4);
+            expect(entries).toHaveLength(5);
             const mvts = entries.map((e) => e.MovementType);
-            expect(mvts).toEqual(['311', '201', '241', '301']);
-            expect(entries.some((e) => e.MovementType === '261')).toBe(false);
+            expect(mvts).toEqual(['311', '201', '241', '301', '261']);
+            expect(entries.some((e) => e.MovementType === '999')).toBe(false);
+            expect(entries.some((e) => e.MovementType === '261')).toBe(true);
         });
 
         it('formats Date ISO string correctly via _formatDateIso', () => {

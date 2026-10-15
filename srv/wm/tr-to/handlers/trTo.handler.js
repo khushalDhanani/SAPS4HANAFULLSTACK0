@@ -105,6 +105,7 @@ class TrToHandler {
       let sCostCenter = data.CostCenter || data.costCenter || existingTrack?.CostCenter;
       let sAssetNo = data.AssetNo || data.assetNo || existingTrack?.AssetNo;
       let sSubNumber = data.SubNumber || data.subNumber || existingTrack?.SubNumber;
+      let sOrderId = data.OrderID || data.orderId || data.OrderNo || data.orderNo || existingTrack?.OrderID || existingTrack?.OrderNo;
       const sTanum = sTanumIn || existingTrack?.TransferOrder || '';
       let sBatch = data.Batch || data.batch || existingTrack?.Batch || '';
       const sSerials = data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : []);
@@ -138,23 +139,28 @@ class TrToHandler {
                 if (!sRecSLoc && resbRows[0].UMLGO?.trim()) sRecSLoc = resbRows[0].UMLGO.trim();
                 if (!sBatch && resbRows[0].CHARG?.trim()) sBatch = resbRows[0].CHARG.trim().toUpperCase();
               }
-              if (!sCostCenter || !sAssetNo) {
-                const rkpfRows = await resProcessAdapter.rfc.readTable('RKPF', ['KOSTL', 'ANLN1', 'ANLN2'], [`RSNUM = '${rsnum}'`], 1);
+              if (!sCostCenter || !sAssetNo || !sOrderId) {
+                const rkpfRows = await resProcessAdapter.rfc.readTable('RKPF', ['KOSTL', 'ANLN1', 'ANLN2', 'AUFNR'], [`RSNUM = '${rsnum}'`], 1);
                 if (rkpfRows?.[0]) {
                   if (!sCostCenter && rkpfRows[0].KOSTL?.trim()) sCostCenter = rkpfRows[0].KOSTL.trim();
                   if (!sAssetNo && rkpfRows[0].ANLN1?.trim()) {
                     sAssetNo = rkpfRows[0].ANLN1.trim();
                     sSubNumber = rkpfRows[0].ANLN2?.trim() || '0000';
                   }
+                  if (!sOrderId && rkpfRows[0].AUFNR?.trim()) {
+                    sOrderId = rkpfRows[0].AUFNR.trim();
+                  }
                 }
               }
-            } else if (tbnum && (!sRecPlant || !sRecSLoc || !sCostCenter || !sAssetNo)) {
+            } else if (tbnum && (!sRecPlant || !sRecSLoc || !sCostCenter || !sAssetNo || !sOrderId)) {
               const ltbkRows = await resProcessAdapter.rfc.readTable('LTBK', ['RSNUM', 'BETYP', 'BENUM', 'MBLNR', 'MJAHR'], [`TBNUM = '${tbnum}'`], 1);
               if (ltbkRows?.[0]?.BETYP === 'K' && !sCostCenter) {
                 sCostCenter = ltbkRows[0].BENUM?.trim();
               } else if (ltbkRows?.[0]?.BETYP === 'A' && !sAssetNo) {
                 sAssetNo = ltbkRows[0].BENUM?.trim();
                 if (!sSubNumber) sSubNumber = '0000';
+              } else if (ltbkRows?.[0]?.BETYP === 'F' && !sOrderId) {
+                sOrderId = ltbkRows[0].BENUM?.trim();
               }
               if ((!sRecPlant || !sRecSLoc) && ltbkRows?.[0]?.MBLNR?.trim()) {
                 try {
@@ -190,6 +196,9 @@ class TrToHandler {
                   if (!sAssetNo && trk.AssetNo?.trim()) {
                     sAssetNo = trk.AssetNo.trim();
                     sSubNumber = trk.SubNumber?.trim() || '0000';
+                  }
+                  if (!sOrderId && trk.OrderID?.trim()) {
+                    sOrderId = trk.OrderID.trim();
                   }
                 }
               } catch (_) {}
@@ -263,6 +272,8 @@ class TrToHandler {
           costCenter: sCostCenter,
           assetNo: sAssetNo,
           subNumber: sSubNumber,
+          orderId: sOrderId,
+          OrderID: sOrderId,
           transferOrder: sTanum,
           batch: sBatch,
           serials: sSerials,
@@ -495,6 +506,8 @@ class TrToHandler {
                 CostCenter: existing?.CostCenter || result.CostCenter || (result.Betyp === 'K' ? result.Benum : '') || data.CostCenter || data.costCenter,
                 AssetNo: existing?.AssetNo || result.AssetNo || (result.Betyp === 'A' ? result.Benum : '') || data.AssetNo || data.assetNo,
                 SubNumber: existing?.SubNumber || result.SubNumber || data.SubNumber || data.subNumber || (result.Betyp === 'A' ? '0000' : ''),
+                OrderID: existing?.OrderID || result.OrderID || (result.Betyp === 'F' ? result.Benum : '') || data.OrderID || data.orderId,
+                orderId: existing?.OrderID || result.OrderID || (result.Betyp === 'F' ? result.Benum : '') || data.OrderID || data.orderId,
                 ReceivingPlant: result.ReceivingPlant || data.ReceivingPlant || data.receivingPlant || existing?.ReceivingPlant || '',
                 receivingPlant: result.ReceivingPlant || data.ReceivingPlant || data.receivingPlant || existing?.ReceivingPlant || '',
                 ReceivingStorageLocation: result.ReceivingStorageLocation || data.ReceivingStorageLocation || data.receivingStorageLocation || existing?.ReceivingStorageLocation || '',
@@ -541,6 +554,7 @@ class TrToHandler {
         result.CostCenter = data.CostCenter || data.costCenter || result.CostCenter || existing?.CostCenter || '';
         result.AssetNo = data.AssetNo || data.assetNo || result.AssetNo || existing?.AssetNo || '';
         result.SubNumber = data.SubNumber || data.subNumber || result.SubNumber || existing?.SubNumber || '';
+        result.OrderID = data.OrderID || data.orderId || (result.Betyp === 'F' ? result.Benum : '') || result.OrderID || existing?.OrderID || '';
 
         if (result.success === false && result.stage === 'TO_CONFIRMATION') {
           result.confirmed = false;

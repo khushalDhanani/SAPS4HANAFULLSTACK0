@@ -991,11 +991,15 @@ class TrToAdapter {
     }
 
     let warning = '';
+    const trRsnumClean = String(tr.Rsnum || '').replace(/^0+/, '');
+    const trRsposClean = String(item?.Rspos || '').replace(/^0+/, '');
+    const trackRsnumClean = String(trackedReservation?.ReservationNo || '').replace(/^0+/, '');
+    const trackRsposClean = String(trackedReservation?.ReservationItem || '').replace(/^0+/, '');
+
     const trackedMismatch = Boolean(
       trackedReservation && reservationMovementType && tr.Bwlvs && reservationMovementType !== tr.Bwlvs &&
       alphaOut(trackedReservation.TransferRequirement) === alphaOut(tr.Tbnum) &&
-      String(trackedReservation.ReservationNo || '').replace(/^0+/, '') === String(tr.Rsnum || '').replace(/^0+/, '') &&
-      String(trackedReservation.ReservationItem || '').padStart(4, '0') === String(item?.Rspos || '').padStart(4, '0') &&
+      (!trRsnumClean || (trRsnumClean === trackRsnumClean && (!trRsposClean || trRsposClean === trackRsposClean))) &&
       String(trackedReservation.MovementType || '').trim() === reservationMovementType
     );
     const allowMismatchedTR = isMismatchOverrideEnabled() || trackedMismatch;
@@ -1011,8 +1015,8 @@ class TrToAdapter {
       MovementType: tr.Bwlvs || '',
       RequirementType: tr.Betyp || '',
       RequirementNumber: alphaOut(tr.Benum) || '',
-      ReservationNo: alphaOut(tr.Rsnum) || '',
-      ReservationItem: item?.Rspos ? alphaOut(item.Rspos) : '',
+      ReservationNo: (tr.Rsnum && tr.Rsnum !== '0000000000') ? alphaOut(tr.Rsnum) : (trackedReservation ? alphaOut(trackedReservation.ReservationNo) : ''),
+      ReservationItem: (tr.Rsnum && tr.Rsnum !== '0000000000' && item?.Rspos && item.Rspos !== '0000') ? alphaOut(item.Rspos) : (trackedReservation ? alphaOut(trackedReservation.ReservationItem) : (item?.Rspos ? alphaOut(item.Rspos) : '')),
       ReservationMovementType: reservationMovementType,
       AllowMismatchedTR: allowMismatchedTR,
       Warning: warning || (stockWarning ? `Stock deficit: ${stockWarning}` : ''),
@@ -1407,11 +1411,15 @@ class TrToAdapter {
       } catch (_) {}
     }
 
+    const trRsnumClean = String(tr.Rsnum || '').replace(/^0+/, '');
+    const trRsposClean = String(item.Rspos || '').replace(/^0+/, '');
+    const trackRsnumClean = String(trackedReservation?.ReservationNo || '').replace(/^0+/, '');
+    const trackRsposClean = String(trackedReservation?.ReservationItem || '').replace(/^0+/, '');
+
     const linkedTrackedMismatch = Boolean(
       effResMvt && tr.Bwlvs && effResMvt !== tr.Bwlvs && trackedReservation &&
       alphaOut(trackedReservation.TransferRequirement) === alphaOut(tr.Tbnum) &&
-      String(trackedReservation.ReservationNo || '').replace(/^0+/, '') === String(tr.Rsnum || '').replace(/^0+/, '') &&
-      String(trackedReservation.ReservationItem || '').padStart(4, '0') === String(item.Rspos || '').padStart(4, '0') &&
+      (!trRsnumClean || (trRsnumClean === trackRsnumClean && (!trRsposClean || trRsposClean === trackRsposClean))) &&
       String(trackedReservation.MovementType || '').trim() === effResMvt
     );
     if (effResMvt && tr.Bwlvs && effResMvt !== tr.Bwlvs && !allowConfiguredMismatch && !linkedTrackedMismatch) {
