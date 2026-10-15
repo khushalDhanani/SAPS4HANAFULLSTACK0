@@ -121,14 +121,14 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(subject._oCreateModel.getProperty('/ReceivingPlant')).toBe('');
         });
 
-        it('switches to Movement 301: sets Receiving Plant default and clears SLoc and Cost Center', () => {
+        it('switches to Movement 301: sets Receiving Plant default, defaults Receiving SLoc, and clears Cost Center', () => {
             const subject = createDetailSubject();
             subject.onMovementTypeChange({
                 getParameter: (p) => p === 'selectedItem' ? { getKey: () => '301' } : null
             });
 
             expect(subject._oCreateModel.getProperty('/ReceivingPlant')).toBe('1130');
-            expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe('');
+            expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe('ST02');
             expect(subject._oCreateModel.getProperty('/CostCenter')).toBe('');
             expect(subject._oCreateModel.getProperty('/AssetNo')).toBe('');
         });
@@ -187,14 +187,17 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(subject.validateForm(dataValid)).toBeNull();
         });
 
-        it('validates 301: requires Receiving Plant and must differ from Issuing Plant', () => {
-            const dataNoPlant = { MovementType: '301', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, ReceivingPlant: '' };
+        it('validates 301: requires Receiving Plant, Receiving SLoc, and Plant must differ from Issuing Plant', () => {
+            const dataNoPlant = { MovementType: '301', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, ReceivingPlant: '', ReceivingStorageLocation: 'CS01' };
             expect(subject.validateForm(dataNoPlant)).toMatch(/Receiving Plant is mandatory for Movement Type 301/);
 
-            const dataSamePlant = { MovementType: '301', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, ReceivingPlant: '1120' };
+            const dataSamePlant = { MovementType: '301', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, ReceivingPlant: '1120', ReceivingStorageLocation: 'CS01' };
             expect(subject.validateForm(dataSamePlant)).toMatch(/Receiving Plant must be different from Issuing Plant/);
 
-            const dataValid = { MovementType: '301', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, ReceivingPlant: '1130' };
+            const dataNoSLoc = { MovementType: '301', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, ReceivingPlant: '1130', ReceivingStorageLocation: '' };
+            expect(subject.validateForm(dataNoSLoc)).toMatch(/Receiving Storage Location is mandatory for Movement Type 301/);
+
+            const dataValid = { MovementType: '301', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, ReceivingPlant: '1130', ReceivingStorageLocation: 'CS01' };
             expect(subject.validateForm(dataValid)).toBeNull();
         });
     });

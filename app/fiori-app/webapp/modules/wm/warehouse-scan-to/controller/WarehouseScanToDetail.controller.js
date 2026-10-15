@@ -946,6 +946,7 @@ sap.ui.define([
 
         onRetryMigo: function () {
             var oModel = this.getModel("scanView");
+            if (oModel.getProperty("/busy")) return Promise.resolve(null);
             var oResult = oModel.getProperty("/result");
             if (!oResult) return Promise.resolve(null);
 
@@ -986,6 +987,7 @@ sap.ui.define([
             }
 
             var that = this;
+            oModel.setProperty("/busy", true);
             oModel.setProperty("/canRetryMigo", false);
 
             var oPayload = {
@@ -1023,7 +1025,29 @@ sap.ui.define([
             }
 
             return WarehouseScanToService.postMigoGoodsMovement(oPayload).then(function (oMigoRes) {
+                // Check if backend returned an error status or missing material document
+                if (!oMigoRes || !oMigoRes.MaterialDocument || oMigoRes.Status === "90" || oMigoRes.Status_code === "90" || oMigoRes.success === false) {
+                    that._playAudio("error");
+                    oModel.setProperty("/busy", false);
+                    oModel.setProperty("/canRetryMigo", true);
+                    var sErrMsg = (oMigoRes && (oMigoRes.ErrorMessage || oMigoRes.error || oMigoRes.Message)) || that.getText("scanToErrMigoFailed");
+                    var oFailedResult = Object.assign({}, oResult, {
+                        ReceivingPlant: sRecPlant,
+                        ReceivingStorageLocation: sRecSLoc,
+                        CostCenter: sCostCenter,
+                        AssetNo: sAssetNo,
+                        SubNumber: sSubNo,
+                        Status: "90",
+                        StatusText: "Goods Issue Error",
+                        ErrorMessage: sErrMsg
+                    });
+                    oModel.setProperty("/result", oFailedResult);
+                    MessageBox.error(sErrMsg);
+                    return oMigoRes;
+                }
+
                 that._playAudio("success");
+                oModel.setProperty("/busy", false);
                 var sText = that.getText("scanToMsgSuccessMigoPosted", [
                     oResult.TransferOrder,
                     oMigoRes.MaterialDocument,
@@ -1058,6 +1082,7 @@ sap.ui.define([
                 return oMigoRes;
             }).catch(function (oErr) {
                 that._playAudio("error");
+                oModel.setProperty("/busy", false);
                 oModel.setProperty("/canRetryMigo", true);
                 var oUpdatedResult = Object.assign({}, oResult, {
                     ReceivingPlant: sRecPlant,

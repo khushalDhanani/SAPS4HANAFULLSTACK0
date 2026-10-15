@@ -205,7 +205,9 @@ sap.ui.define([
                     if (!this._oCreateModel.getProperty("/ReceivingPlant")) {
                         this._oCreateModel.setProperty("/ReceivingPlant", "1130");
                     }
-                    this._oCreateModel.setProperty("/ReceivingStorageLocation", "");
+                    if (!this._oCreateModel.getProperty("/ReceivingStorageLocation")) {
+                        this._oCreateModel.setProperty("/ReceivingStorageLocation", "ST02");
+                    }
                     this._oCreateModel.setProperty("/CostCenter", "");
                     this._oCreateModel.setProperty("/AssetNo", "");
                     this._oCreateModel.setProperty("/SubNumber", "");
@@ -412,6 +414,9 @@ sap.ui.define([
                     }
                     if (oData.ReceivingPlant.trim() === oData.Plant.trim()) {
                         return "Receiving Plant must be different from Issuing Plant";
+                    }
+                    if (!oData.ReceivingStorageLocation || !oData.ReceivingStorageLocation.trim()) {
+                        return "Receiving Storage Location is mandatory for Movement Type 301 (Plant to Plant Transfer)";
                     }
                     break;
                 default:

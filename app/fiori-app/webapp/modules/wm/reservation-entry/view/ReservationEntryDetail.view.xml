@@ -359,11 +359,11 @@
                                         maxLength="4"
                                         visible="{= ${create>/MovementType} === '241' }" />
 
-                                    <!-- Movement 311: Receiving SLoc -->
+                                    <!-- Movement 311 & 301: Receiving SLoc -->
                                     <Label
                                         text="{i18n>resFieldRecSLoc}"
                                         required="true"
-                                        visible="{= ${create>/MovementType} === '311' }" />
+                                        visible="{= ${create>/MovementType} === '311' || ${create>/MovementType} === '301' }" />
                                     <Input
                                         id="inputRecSLoc"
                                         value="{create>/ReceivingStorageLocation}"
@@ -376,10 +376,10 @@
                                         valueHelpRequest=".onValueHelpRequest"
                                         suggestionItemSelected=".onRecSLocSelect"
                                         suggestionItems="{path: '/StorageLocationVH', templateShareable: false}"
-                                        visible="{= ${create>/MovementType} === '311' }"
+                                        visible="{= ${create>/MovementType} === '311' || ${create>/MovementType} === '301' }"
                                         liveChange=".onFieldLiveChange">
                                         <suggestionItems>
-                                            <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{= ${StorageLocationName} + (${Plant} ? ' (' + ${Plant} + ')' : '') }" />
+                                             <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{= ${StorageLocationName} + (${Plant} ? ' (' + ${Plant} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
 

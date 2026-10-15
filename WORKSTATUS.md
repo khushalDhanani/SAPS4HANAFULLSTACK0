@@ -5,6 +5,13 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **FIND BROKEN THINGS: Comprehensive Multi-Movement Audit & Cross-Stack Fixes (201, 241, 311, 301) (2026-10-15, 14:45 IST):** Complete. Executed full failure-mode, edge-case, and UI-to-backend audit across all four movement types. Diagnosed and fixed 4 real defects:
+  - **Defect 1 (Movement 301 UI Form Failure — RED -> GREEN):** On `/wm/reservation-entry/create`, `inputRecSLoc` was hidden for 301 (`visible="{= ${create>/MovementType} === '311' }"`), cleared on movement change, and omitted from client validation. Backend rejected every UI submission with HTTP 400 `"Receiving Storage Location is mandatory for Movement Type 301"`. Fixed by making `inputRecSLoc` visible for `301`, defaulting `ReceivingStorageLocation` to `"ST02"`, and adding client-side validation.
+  - **Defect 2 (Contradictory SLoc Warning in Reservation Creation):** In `srv/wm/reservation-entry/service.js`, `lquaOther` failed to filter out interim storage types (`!startsWith('9')`) and current SLoc, causing self-contradictory warnings like `"Storage location CIS1 has no WM stock ... Available in storage location(s): ... CIS1"`. Fixed by filtering out interim types and excluding the current SLoc.
+  - **Defect 3 (Scan-to MIGO Retry False Success & Swallowed Errors):** In `WarehouseScanToDetail.controller.js`, `onRetryMigo` blindly treated any resolved promise as success without checking `oMigoRes.MaterialDocument` or `oMigoRes.Status === "90"`. When retry failed, it played success audio, displayed an empty Material Document, and disabled `canRetryMigo`. Fixed by validating `oMigoRes.MaterialDocument` and status codes, displaying error dialog, playing error audio, and preserving `canRetryMigo: true`.
+  - **Defect 4 (Missing Busy State & Double-Click Risk on Retry MIGO):** In `WarehouseScanToDetail.view.xml` and controller, `btnRetryMigo` lacked busy guards. Fixed by binding `busy="{scanView>/busy}"` and `enabled="{= !${scanView>/busy} }"`, with controller busy tracking.
+  - **Final Rating:** 201: GREEN | 241: GREEN | 311: GREEN | 301: GREEN.
+
 - **Fix Across: Resolved TR 0001000833 Issues Across Frontend, Backend Handlers, CDS, and S/4 Adapters (2026-10-15, 14:25 IST):** Complete. Diagnosed and resolved all issues affecting `#/wm/scan-to/TR/0001000833`:
   - **Issue 1 (Movement Mismatch HTTP 400):** Resolved. TR `0001000833` was created with WM movement `311` linking to Reservation `0000528488` (`BWART = '201'`). In `TrToAdapter.js`, added fallback lookup `_findTrackedReservationForTR(tr.Tbnum)` to correctly identify tracked linked reservation staging TRs.
   - **Issue 2 (Broken Entity Resolution in CAP 10):** Resolved. In `trTo.handler.js`, `db.entities('saps4hana.wm')` threw a runtime `TypeError: db.entities is not a function`, returning `{}` and dropping `ReservationTrack`. Replaced with robust resolution from `cds.model.definitions['saps4hana.wm.ReservationTrack']`.
@@ -2357,6 +2364,50 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-15 14:45 IST — FIND BROKEN THINGS: Full Audit Across 201 / 241 / 311 / 301 & Four Cross-Stack Fixes
+
+- **User Request:**
+  - FIND BROKEN THINGS — SAP WM 201 / 241 / 311 / 301.
+  - Happy path and Auto-MIGO already proven; audit all four movements through real Fiori UI + backend.
+  - Check duplicate TO/MIGO/MATDOC, rapid click, retry, refresh, two tabs, TO succeeds but MIGO fails, MIGO succeeds but UI retries, SAP/OData 4xx/5xx, invalid/missing quantities, wrong parameters, Cost Center, Asset, SLoc, Plant, race conditions, rollback, stale UI, contract mismatches, error handling.
+  - Final ratings: 201, 241, 311, 301 (GREEN / YELLOW / RED).
+  - Format: `MVT | Problem | Root Cause | File/Function | Reproduction | Fix`.
+- **Root Cause & Issues Diagnosed:**
+  1. **Movement 301 — Receiving Storage Location Hidden & Missing on UI Create Form (RED -> GREEN):**
+     - *Problem:* When a user selected Movement Type 301 on `#/wm/reservation-entry/create`, `inputRecSLoc` was completely hidden, cleared to `""`, and not validated by client `validateForm`. When clicking Create, payload sent `ReceivingStorageLocation: ""`. The backend (`validateReservationInput`) immediately rejected with HTTP 400 `"Receiving Storage Location is mandatory for Movement Type 301 (Plant to Plant Transfer)"`. The user was blocked from creating Movement 301 reservations in the Fiori UI.
+     - *Root Cause:* In `ReservationEntryDetail.view.xml:366`, `inputRecSLoc` had `visible="{= ${create>/MovementType} === '311' }"`. In `ReservationEntryDetail.controller.js`, `onMovementTypeChange` explicitly cleared `ReceivingStorageLocation` to `""`, and `validateForm` omitted it under `case "301"`.
+     - *Reproduction:* In Chrome DevTools on `#/wm/reservation-entry/create`, select Movement 301, fill Plant 1120, Rec Plant 1110, SLoc CS01, Material 1000000045, Qty 10. Clicking Save triggered HTTP 400 `"Receiving Storage Location is mandatory for Movement Type 301 (Plant to Plant Transfer)"`.
+     - *Fix:* Made `inputRecSLoc` visible for `311 || 301`, set default to `ST02` on change, and added mandatory validation in `validateForm`.
+  2. **All Movements (201, 241, 311, 301) — Contradictory Storage Location Pre-Check Warning:**
+     - *Problem:* When creating a reservation for a material having quants in interim storage types (`921`, `911`), the backend returned a warning claiming the SLoc has no stock but lists the same SLoc as an available location: `"Storage location CIS1 has no WM stock for material 8000009754 in warehouse W01. Available in storage location(s): HS01, CIS1, CS02."`.
+     - *Root Cause:* In `srv/wm/reservation-entry/service.js:84`, `lquaOther` failed to filter out interim storage types (`!startsWith('9')`) and current issuing SLoc (`sl !== StorageLocation`).
+     - *Reproduction:* Create reservation for material `8000009754` in SLoc `CIS1`. Message strip warned that CIS1 has no stock but listed CIS1 as available.
+     - *Fix:* Filtered out quants with `LGTYP` starting with `9` and excluded current issuing SLoc from `otherSlocs`.
+  3. **All Movements (201, 241, 311, 301) — False Success & Swallowed Failure in Scan-to MIGO Retry:**
+     - *Problem:* When retrying MIGO on `/wm/scan-to` after a posting failure, if MIGO failed again, the controller's `.then()` handler assumed the resolved Promise was successful. It played the success audio, rendered an empty Material Document (`scanToMsgSuccessMigoPosted`), and disabled the retry button (`canRetryMigo = false`), permanently trapping the user in a false-success state with no way to retry.
+     - *Root Cause:* In `WarehouseScanToDetail.controller.js:1025`, `onRetryMigo` did not check `!oMigoRes.MaterialDocument` or `oMigoRes.Status === "90"`.
+     - *Reproduction:* In `/wm/scan-to`, with a confirmed TO and failed MIGO (Status 90), trigger Retry MIGO against a simulated/real S/4 failure. UI showed success toast, played success sound, and disabled retry.
+     - *Fix:* Added check in `onRetryMigo` for `!oMigoRes.MaterialDocument || oMigoRes.Status === "90" || oMigoRes.success === false`, keeping `canRetryMigo: true`, displaying error dialog, playing error audio, and halting false success toast.
+  4. **All Movements (201, 241, 311, 301) — Missing Busy State & Double-Click Risk on `onRetryMigo`:**
+     - *Problem:* `btnRetryMigo` did not bind `busy="{scanView>/busy}"` or `enabled="{= !${scanView>/busy} }"`, and `onRetryMigo` lacked busy guards, permitting rapid multi-clicks to dispatch duplicate backend requests.
+     - *Root Cause:* Missing busy properties and controller guards in `WarehouseScanToDetail`.
+     - *Reproduction:* Double-click `btnRetryMigo` rapidly; two concurrent OData requests fired.
+     - *Fix:* Added busy check/setting in `onRetryMigo` and bound `busy` and `enabled` to `btnRetryMigo` in `WarehouseScanToDetail.view.xml`.
+- **Files Modified:**
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`: Made `inputRecSLoc` visible for `311 || 301`.
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`: Added default and client validation for `ReceivingStorageLocation` on Movement 301.
+  - `srv/wm/reservation-entry/service.js`: Filtered interim bins and excluded current SLoc in SLoc pre-check.
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`: Added busy guard and false-success validation in `onRetryMigo`.
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml`: Bound `busy` and `enabled` on `btnRetryMigo`.
+  - `test/unit/wm/reservationEntryUi.test.js`: Updated UI test expectations for Movement 301 `ReceivingStorageLocation`.
+- **Verification Commands Executed & Verified Results:**
+  - `npx cds compile srv/`: Exit 0 (Clean CSN).
+  - `npx eslint srv/`: Exit 0 (0 errors, 0 warnings).
+  - `cd app/fiori-app && npm run lint`: Exit 0 (`ui5lint`: Success! No findings).
+  - `npx jest test/unit/wm`: Exit 0 (76 test suites passed, 1 skipped, 1,789 passed tests).
+  - `git diff --check`: Exit 0 (0 whitespace/formatting errors).
+  - Chrome DevTools MCP on pageId 4: Verified Movement 301 form rendering, field visibility, live validation, and console cleanliness (0 errors).
 
 ### 2026-10-15 14:25 IST — Fix Across: Resolved TR 0001000833 Issues Across Frontend, Backend Handlers, CDS, and S/4 Adapters
 

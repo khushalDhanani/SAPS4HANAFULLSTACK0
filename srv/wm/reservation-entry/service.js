@@ -79,11 +79,11 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             ],
             10
           );
-          const currentStock = (lquaCurrent || []).filter((q) => Number(String(q.VERME || 0).replace(/[^\d.-]/g, '')) > 0);
+          const currentStock = (lquaCurrent || []).filter((q) => Number(String(q.VERME || 0).replace(/[^\d.-]/g, '')) > 0 && !String(q.LGTYP || '').trim().startsWith('9'));
           if (!currentStock.length) {
             const lquaOther = await adapter.rfc.readTable(
               'LQUA',
-              ['LGORT', 'VERME'],
+              ['LGTYP', 'LGORT', 'VERME'],
               [
                 `LGNUM = '${wh}'`,
                 `AND MATNR = '${matPadded}'`,
@@ -92,7 +92,10 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
               ],
               100
             );
-            const otherSlocs = [...new Set((lquaOther || []).map((r) => String(r.LGORT || '').trim()).filter(Boolean))];
+            const otherSlocs = [...new Set((lquaOther || [])
+              .filter((r) => Number(String(r.VERME || 0).replace(/[^\d.-]/g, '')) > 0 && !String(r.LGTYP || '').trim().startsWith('9'))
+              .map((r) => String(r.LGORT || '').trim())
+              .filter((sl) => sl && sl !== StorageLocation))];
             if (otherSlocs.length > 0) {
               slocWarning = `Storage location ${StorageLocation} has no WM stock for material ${Material} in warehouse ${wh}. Available in storage location(s): ${otherSlocs.join(', ')}.`;
             } else {
