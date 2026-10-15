@@ -38,7 +38,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
         }
         return {};
       }),
-      readTable: jest.fn(async (table, fields, where) => {
+      readTable: jest.fn(async (table, _fields, _where) => {
         if (table === 'T320') {
           return [
             { LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' },
@@ -391,7 +391,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
     test('Class F: Wrong SU quantity under T331-VOLLE = "X" throws 400 naming complete stock removal without splitting SU [mock only, not SAP verification]', async () => {
       process.env.WM_PICK_SOURCE_FROM_LQUA = 'true';
       try {
-        mockRfc.call.mockImplementation(async (fm, params) => {
+        mockRfc.call.mockImplementation(async (fm, _params) => {
           if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
             return {
               ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000850', BWLVS: '311', NLTYP: '921', NLPLA: 'TRANSFER' }],
@@ -434,7 +434,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
     test('No stock in SLoc throws 400 naming no matching stock [mock only, not SAP verification]', async () => {
       process.env.WM_PICK_SOURCE_FROM_LQUA = 'true';
       try {
-        mockRfc.call.mockImplementation(async (fm, params) => {
+        mockRfc.call.mockImplementation(async (fm, _params) => {
           if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
             return {
               ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000851', BWLVS: '311', NLTYP: '921', NLPLA: 'TRANSFER' }],
@@ -576,7 +576,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
     });
 
     test('Throws 400 when material is not extended in MARD to receiving SLoc [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+      mockRfc.readTable.mockImplementation(async (table, _fields, _where) => {
         if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
         if (table === 'MARD') {
           // Material only in CS01, not in HS01
@@ -602,7 +602,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
 
   describe('4. Anti-Circular TO and Source Selection Guards [mock only, not SAP verification]', () => {
     test('Throws 400 when source bin and destination bin are identical (e.g. 921/TRANSFER to 921/TRANSFER) [mock only, not SAP verification]', async () => {
-      mockRfc.call.mockImplementation(async (fm, params) => {
+      mockRfc.call.mockImplementation(async (fm, _params) => {
         if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
           return {
             ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000818', BWLVS: '311', NLTYP: '921', NLPLA: 'TRANSFER' }],
@@ -633,7 +633,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
     });
 
     test('Throws 400 when an interim storage type (9*) is passed as pick source [mock only, not SAP verification]', async () => {
-      mockRfc.call.mockImplementation(async (fm, params) => {
+      mockRfc.call.mockImplementation(async (fm, _params) => {
         if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
           return {
             ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000818', BWLVS: '311', NLTYP: '921', NLPLA: 'TRANSFER' }],

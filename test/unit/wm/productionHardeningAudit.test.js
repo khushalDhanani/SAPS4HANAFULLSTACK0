@@ -13,7 +13,6 @@
  */
 
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
-const { PROCESS_STATUS } = require('../../../srv/common/wmStatus');
 
 describe('Final SAP WM Production Hardening Audit Suite [mock only, not SAP verification]', () => {
   const MOVEMENTS = ['201', '241', '311', '301'];
@@ -551,7 +550,7 @@ describe('Final SAP WM Production Hardening Audit Suite [mock only, not SAP veri
       const input = env.makeInput('000000000401');
 
       let postCount = 0;
-      env.mockRfc.call.mockImplementation(async (fm, params) => {
+      env.mockRfc.call.mockImplementation(async (fm, _params) => {
         if (fm === 'BAPI_GOODSMVT_CREATE') {
           postCount++;
           // Simulate latency in SAP Gateway

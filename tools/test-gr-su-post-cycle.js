@@ -128,7 +128,7 @@ async function inspectDelivery(delivNo) {
       };
     });
 
-    const sessionResult = await rfc.session(async (call) => {
+    const _sessionResult = await rfc.session(async (call) => {
       const res = await call('BAPI_INB_DELIVERY_CONFIRM_DEC', {
         HEADER_DATA: { DELIV_NUMB: d },
         HEADER_CONTROL: {

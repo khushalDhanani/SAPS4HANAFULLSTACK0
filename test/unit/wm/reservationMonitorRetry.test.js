@@ -9,7 +9,7 @@ const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/Re
 const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
 const { POST, GET } = cds.test(__dirname + '/../../../');
-const { INSERT, UPDATE, DELETE } = cds.ql;
+const { INSERT, DELETE } = cds.ql;
 
 const authClerk = { auth: { username: 'carol', password: '' } };
 

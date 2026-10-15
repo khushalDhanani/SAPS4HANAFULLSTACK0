@@ -250,7 +250,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
     });
 
     test('Class B: Batch-managed material (8900000004, Batch INJW260001) passes batch validation in receiving plant [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+      mockRfc.readTable.mockImplementation(async (table, _fields, _where) => {
         if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
         if (table === 'MARC') return [{ WERKS: '1120', XCHPF: 'X', SERNP: '' }, { WERKS: '1110', XCHPF: 'X', SERNP: '' }];
         if (table === 'MARD') return [{ LGORT: 'CS01', LABST: '1240.000' }];
@@ -737,7 +737,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
     });
 
     test('Receiving-side TR in external warehouse (W10) is detected and returned as warning without auto-touch [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+      mockRfc.readTable.mockImplementation(async (table, _fields, _where) => {
         if (table === 'MARC') return [{ WERKS: '1120', XCHPF: '', SERNP: '' }, { WERKS: '1110', XCHPF: '', SERNP: '' }];
         if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
         if (table === 'LTBK') {

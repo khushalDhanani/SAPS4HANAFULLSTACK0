@@ -1100,7 +1100,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
 
   describe('8. Step 11: Add Final Stock Verification (Expected vs Actual per Movement Type)', () => {
     test('Movement 201: Verifies source stock decreases and consumed quantity equals posted quantity', async () => {
-      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+      mockRfc.readTable.mockImplementation(async (table, _fields, _where) => {
         if (table === 'MATDOC' || table === 'MSEG') {
           return [{
             MBLNR: '5000123456',
@@ -1550,7 +1550,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
 
   describe('9. Step 12: Add Reservation Verification (After MIGO: Read Reservation, Check Issued/Withdrawn, Remaining, and Completion Status)', () => {
     test('Complete issue: Requested = 10, Issued = 10, Remaining = 0 -> completelyProcessed = true, completionStatus = COMPLETED', async () => {
-      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+      mockRfc.readTable.mockImplementation(async (table, _fields, _where) => {
         if (table === 'RESB') {
           return [{
             RSNUM: '0000520235',
@@ -1594,7 +1594,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
     });
 
     test('Partial issue: Requested = 10, Issued = 6, Remaining = 4 -> completelyProcessed = false, completionStatus = PARTIALLY_PROCESSED (application must NOT mark completely processed)', async () => {
-      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+      mockRfc.readTable.mockImplementation(async (table, _fields, _where) => {
         if (table === 'RESB') {
           return [{
             RSNUM: '0000520235',
@@ -1635,7 +1635,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
     });
 
     test('Partial issue with KZEAR = X: Requested = 10, Issued = 6, Remaining = 4 but final issue set -> completelyProcessed = true, completionStatus = COMPLETED', async () => {
-      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+      mockRfc.readTable.mockImplementation(async (table, _fields, _where) => {
         if (table === 'RESB') {
           return [{
             RSNUM: '0000520235',

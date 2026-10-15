@@ -2411,6 +2411,32 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-15 17:35 IST — Code Hygiene & ESLint Zero-Warning Hardening across Test Mocks & Tools
+
+- **Reason for Change:**
+  - Resolved all 29 non-blocking ESLint `no-unused-vars` warnings in test mocks and diagnostic scripts (`✖ 29 problems (0 errors, 29 warnings)`) to achieve a completely silent `0 problems (0 errors, 0 warnings)` lint baseline.
+- **Components & Files Modified:**
+  1. `test/unit/wm/autoMigoPosting.test.js`: Prefixed unused mock parameters `_fields`, `_where` at lines 1103, 1553, 1597, 1638.
+  2. `test/unit/wm/goodsIssue201Page.test.js`: Prefixed unused mock controller setup objects `_mockMessageBox`, `_mockMessageToast` at lines 14, 19.
+  3. `test/unit/wm/goodsIssuePerTypePostingClient.test.js`: Prefixed unused mock parameter `_path` at line 122.
+  4. `test/unit/wm/mvt301Process.test.js`: Prefixed unused mock parameters `_fields`, `_where` at lines 253, 740.
+  5. `test/unit/wm/mvt311Process.test.js`: Prefixed unused mock parameters `_fields`, `_where`, `_params` at lines 41, 394, 437, 579, 605, 636.
+  6. `test/unit/wm/productionHardeningAudit.test.js`: Removed unused import `PROCESS_STATUS` at line 16; prefixed unused mock parameter `_params` at line 554.
+  7. `test/unit/wm/reservationMonitorRetry.test.js`: Removed unused `UPDATE` import from `cds.ql` at line 12.
+  8. `test/unit/wm/trToAdapter.test.js`: Prefixed unused mock parameter `_query` in `cds.db.run` at line 645.
+  9. `test/unit/wm/trToController.test.js`: Prefixed unused test variable `_capturedHardwareScannerHandler` at lines 84, 86, 87.
+  10. `tools/test-gr-su-post-cycle.js`: Prefixed unused variable `_sessionResult` at line 131.
+- **Executed Commands & Results:**
+  - `npm run lint`: **PASS (0 errors, 0 warnings, 0 problems)**.
+  - `npm --prefix app/fiori-app run lint`: **PASS (Success! No findings detected)**.
+  - `npx cds compile srv/`: **PASS (Exit 0, clean CSN compilation)**.
+  - `npx jest test/unit/wm`: **PASS (77 passed, 1,815 tests passed, 0 failures)**.
+  - `git diff --check`: **PASS (0 whitespace errors)**.
+- **Errors / Warnings / Blockers:**
+  - None. Zero errors, zero warnings.
+- **Current Status & Next Recommended Action:**
+  - Complete, hardened, and 100% clean across all linters, compilers, and test suites. Ready to push to remote repository.
+
 ### 2026-10-15 16:20 IST — Movement Type 261 (Goods Issue to Order) Full-Stack Implementation & Lifecycle Verification
 
 - **User Request:**

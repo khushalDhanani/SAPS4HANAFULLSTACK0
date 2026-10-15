@@ -642,7 +642,7 @@ describe('TrToAdapter (RFC)', () => {
     const cds = require('@sap/cds');
     const origRun = cds.db && cds.db.run;
     cds.db = cds.db || {};
-    cds.db.run = jest.fn().mockImplementation(async (query) => {
+    cds.db.run = jest.fn().mockImplementation(async (_query) => {
       return { ReservationNo: '0000527594', TransferRequirement: '1000810' };
     });
 
