@@ -453,7 +453,8 @@ sap.ui.define([
                 ReceivingPlant: (oData.ReceivingPlant || "").trim(),
                 CostCenter: (oData.CostCenter || "").trim(),
                 AssetNo: (oData.AssetNo || "").trim(),
-                SubNumber: (oData.SubNumber || "").trim()
+                SubNumber: (oData.SubNumber || "").trim(),
+                Batch: (oData.Batch || "").trim()
             };
 
             return this._oService.createReservationEntry(oPayload).then(function (oResult) {

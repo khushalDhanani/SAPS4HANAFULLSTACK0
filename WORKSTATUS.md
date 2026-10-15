@@ -2365,6 +2365,59 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Changes Log
 
+### 2026-10-15 15:15 IST — Option A Execution: Movement 301 End-to-End Success in Live S/4HANA (Client 220) & Fiori UI
+
+- **User Request:**
+  - `Option A: Process Movement 301 with Verified In-Stock Material (Recommended)`
+- **Workflow Executed & Verified:**
+  1. **Step 1: Create Reservation + Auto-TR in SAP (MB21 + LB01):**
+     - Movement Type: `301` (Plant to Plant Transfer)
+     - Material: `8900000004` (5-CVC Crude Jobwork Material)
+     - Batch: `INJW260001`
+     - Plant / SLoc: `1120` / `CS01`
+     - Receiving Plant / SLoc: `1110` / `CS01`
+     - Quantity: `1.000 KG`
+     - Result: Created SAP Reservation **`0000528490`** (Item `0001`) and auto-created SAP Transfer Requirement (TR) **`0001000836`** (`Status_code: '02'`, StatusText: `"TR Created"`).
+     - Logged in `ReservationLogs` and mirrored to SAP SLG1 handle `LOG_MV9CNMVI_FCXP1S5U0`.
+  2. **Step 2: Warehouse Execution in `/wm/scan-to/TR/0001000836` (LT04 + LT12 + Auto-MIGO):**
+     - Navigated to `#/wm/scan-to/TR/0001000836` in Chrome DevTools MCP.
+     - TR loaded with Material `8900000004`, Batch `INJW260001`, Open Qty `1.000 KG`.
+     - With `autoConfirm: true` and `autoPostMigo: true`, operator clicked `btnProcessTO` (`Create & Confirm TO`). Zero intermediate clicks.
+     - Single atomic OData action `/odata/v4/tr-to/createTOFromTR` executed:
+       - Created Transfer Order **`1037325`** (`LT04`).
+       - Auto-confirmed Transfer Order (`LT12`, `LTAK-KQUIT = 'X'`).
+       - Automatically triggered MIGO goods movement (`BAPI_GOODSMVT_CREATE`).
+       - Generated SAP Material Document **`4900050239`** (Year `2026`).
+       - Conserved inter-plant balance: Issuing Plant 1120/CS01 decreased (-1.000 KG), Receiving Plant 1110/CS01 increased (+1.000 KG).
+       - Completed Reservation `0000528490` (`Status_code: '05'`, StatusText: `"Goods Issue Posted"`, `CompletelyProcessed = true`).
+  3. **Step 3: Fiori UI Verification:**
+     - Warehouse Scan View (`/wm/scan-to/TR/0001000836`): `panelResult` displayed `"Transfer Order 1037325 confirmed and Material Document 4900050239/2026 posted!"`.
+     - Reservation Detail View (`/wm/reservation-entry/0000528490/0001`): Displays complete status `"Goods Issue Posted"`, TR `0001000836`, TO `1037325`, Material Document `4900050239 / 2026`, and all 6 lifecycle audit logs.
+- **Files Modified:**
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`: Added `Batch: (oData.Batch || "").trim()` to `oPayload` in `onSave`.
+- **Verification Commands Executed:**
+  - `git diff --check`: Exit 0.
+  - `cd app/fiori-app && npm run lint`: Exit 0 (`ui5lint`: Success! No findings).
+  - `npx jest test/unit/wm`: Exit 0 (76 test suites passed, 1,789 passed tests).
+  - Chrome DevTools MCP: Verified live execution on pages `/wm/scan-to/TR/0001000836` and `/wm/reservation-entry/0000528490/0001`.
+
+### 2026-10-15 15:05 IST — Diagnosis of TR 0001000835 Storage Type Search Error (T334T / L3 007)
+
+- **User Request:**
+  - `Data for storage type search is not defined in warehouse W01 for WM movement type 301: missing customizing key in table T334T (Warehouse: W01, Operation: A [Stock Removal], Storage Type Indicator: 'EN1'). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > Stock Removal Strategies > Determine Storage Type Search.`
+  - `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/scan-to/TR/0001000835`
+- **Root Cause & Diagnosis:**
+  1. **Stock Deficit in Issuing Storage Location HS01:** TR `0001000835` was generated for Material `8000009753` (Apple Macbook Pro 14", M5), Plant `1120`, Issuing Storage Location `HS01`. In S/4HANA (warehouse `W01`), Storage Location `HS01` has **0 stock** in `LQUA`. All 12 serial-managed units reside in Storage Location `MT01`.
+  2. **Blank Source Type/Bin Derivation:** Because `HS01` has no physical stock, `lookupTR` returned empty `SourceStorageType` and `SourceStorageBin`, warning: `"Stock deficit: Storage location HS01 has no WM stock for material 8000009753 in warehouse W01. Available in storage location(s): MT01."`.
+  3. **Standard SAP T334T Search Invocation:** When `VLTYP` and `VLPLA` are blank during `createTOFromTR`, standard SAP function module `L_TO_CREATE_TR` executes automatic stock removal determination: `T334T_LESEN(W01, A, MLGN-LTKZA)`.
+  4. **Missing Customizing in T334T:** Material `8000009753` has `MLGN-LTKZA = 'EN1'`. In S/4HANA customizing table `T334T`, stock removal (`KZEAR = 'A'`) only has entries for blank (`***`) and `005`. Key `(LGNUM = 'W01', KZEAR = 'A', LGTKZ = 'EN1')` is missing, raising SAP error `L3 007`.
+  5. **Resolution:**
+     - In SPRO: Maintain table `T334T` for `(W01, A, EN1)` pointing to searchable removal types.
+     - In Inventory: A TR for `HS01` cannot pick quants belonging to `MT01` (SLoc is a quant attribute in `LQUA`). To execute Movement 301, either use Material `8900000004` (Plant 1120/CS01 $\rightarrow$ 1110/CS01) which has stock, create the reservation/TR for SLoc `MT01`, or perform an MM 311 transfer from `MT01` to `HS01`.
+- **Verification Commands Executed:**
+  - Chrome DevTools MCP on page 5 (`/wm/scan-to/TR/0001000835`): Verified live warning banner, network call `reqid=72` returning HTTP 400 with diagnostic message, and modal error dialog.
+  - `git diff --check`: Exit 0.
+
 ### 2026-10-15 14:45 IST — FIND BROKEN THINGS: Full Audit Across 201 / 241 / 311 / 301 & Four Cross-Stack Fixes
 
 - **User Request:**
