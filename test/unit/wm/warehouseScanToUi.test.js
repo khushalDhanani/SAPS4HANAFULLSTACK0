@@ -692,7 +692,9 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
                 sourceStorageType: 'RM1',
                 sourceStorageBin: '0-L0001-00',
                 storageUnit: '',
-                ReservationMovementType: ''
+                ReservationMovementType: '',
+                ReservationNo: '',
+                ReservationItem: ''
             });
 
             expect(detailModel.getProperty('/hasResult')).toBe(true);

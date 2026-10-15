@@ -873,7 +873,9 @@ sap.ui.define([
                 autoPostMigo: bAutoPostMigo,
                 CompleteReservation: oModel.getProperty("/completeReservation") === true,
                 storageUnit: "",
-                ReservationMovementType: oTR.ReservationMovementType || ""
+                ReservationMovementType: oTR.ReservationMovementType || "",
+                ReservationNo: oTR.ReservationNo || "",
+                ReservationItem: oTR.ReservationItem || ""
             };
 
             var that = this;

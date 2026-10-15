@@ -5,6 +5,14 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Fix Across: Resolved TR 0001000833 Issues Across Frontend, Backend Handlers, CDS, and S/4 Adapters (2026-10-15, 14:25 IST):** Complete. Diagnosed and resolved all issues affecting `#/wm/scan-to/TR/0001000833`:
+  - **Issue 1 (Movement Mismatch HTTP 400):** Resolved. TR `0001000833` was created with WM movement `311` linking to Reservation `0000528488` (`BWART = '201'`). In `TrToAdapter.js`, added fallback lookup `_findTrackedReservationForTR(tr.Tbnum)` to correctly identify tracked linked reservation staging TRs.
+  - **Issue 2 (Broken Entity Resolution in CAP 10):** Resolved. In `trTo.handler.js`, `db.entities('saps4hana.wm')` threw a runtime `TypeError: db.entities is not a function`, returning `{}` and dropping `ReservationTrack`. Replaced with robust resolution from `cds.model.definitions['saps4hana.wm.ReservationTrack']`.
+  - **Issue 3 (Missing CDS Action Parameters):** Resolved. Added `ReservationNo`, `reservationNo`, `ReservationItem`, and `reservationItem` to `createTOFromTR` and `CreateTOFromTR` in `srv/wm/tr-to/service.cds`.
+  - **Issue 4 (Missing Controller Payload Fields):** Resolved. Added `ReservationNo` and `ReservationItem` to `oPayload` in `WarehouseScanToDetail.controller.js`.
+  - **Issue 5 (Contradictory Stock Warning):** Resolved. In `TrToAdapter.js` `lookupTR`, filtered out interim bins (`LGTYP` starting with `'9'`) and excluded current SLoc (`sel.StorageLocation`) from `otherSlocs`.
+  - **Live S/4HANA Verification:** Processed TR `0001000833` $\rightarrow$ Created TO `1037324` $\rightarrow$ Auto-Confirmed (`LTAK-KQUIT = 'X'`) $\rightarrow$ Auto-MIGO posted Material Document `4900050238` (2026) $\rightarrow$ Consumed stock to Cost Center `1011201301` $\rightarrow$ Completed Reservation `0000528488` (`Status 05`) verified directly in SAP and Fiori UI.
+
 - **PROVE AUTO-MIGO in /wm/scan-to Across Movements 201, 241, 311, 301 via Chrome DevTools MCP (2026-10-15, 13:45 IST):** Complete. Executed two-screen browser verification proving the complete chain (`/wm/reservation-entry` -> `/wm/scan-to` -> TO Created -> TO Confirmed -> Auto MIGO -> Material Document -> Stock Change) with zero manual MIGO intervention:
   - **Full Two-Screen Flow Proven:**
     - Movement 311: Reservation `0000528487` created on `/wm/reservation-entry/create` -> Auto TR `0001000831` generated -> Scanned in `/wm/scan-to` -> `btnProcessTO` pressed with `autoConfirm: true`, `autoPostMigo: true` -> Chained TO `0001037322` Created -> Confirmed (`LTAK-KQUIT = 'X'`) -> Auto-MIGO Posted -> Material Document `4900050236` (2026) -> Dual-SLoc balance conserved (HS01 -1 NOS, CIS1 +1 NOS) -> Reservation Completed.
@@ -2349,6 +2357,53 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-15 14:25 IST — Fix Across: Resolved TR 0001000833 Issues Across Frontend, Backend Handlers, CDS, and S/4 Adapters
+
+- **User Request:**
+  - `#/wm/scan-to/TR/0001000833`
+  - What is the issues here find first fix accross.
+- **Root Cause & Issues Diagnosed:**
+  1. **Issue 1 (Movement Mismatch HTTP 400):**
+     - Reservation `0000528488` was created with Movement Type `201` (Goods Issue to Cost Center `1011201301`).
+     - Due to standard SAP customizing constraints on 201/241 (T333 requiring BENUM for direct TRs), the reservation created an intermediate staging TR `0001000833` with WM Movement `311` linking `RSNUM = '0000528488'`.
+     - When submitting `createTOFromTR`, backend threw HTTP 400: `"TR movement 311 does not match reservation movement 201"` because `createTOFromTR` in `TrToAdapter.js` did not look up the tracked reservation when `trackedReservation` was omitted by the caller.
+  2. **Issue 2 (Broken Entity Resolution in CAP 10):**
+     - In `srv/wm/tr-to/handlers/trTo.handler.js`, `entities()` called `db.entities('saps4hana.wm')`.
+     - In `@sap/cds` 10, `db.entities` is an object map, not a function taking a namespace string. Calling it as a function threw a runtime `TypeError`, caught by `catch (_) { return {}; }`, leaving `ReservationTrack` undefined.
+     - Consequently, `handleCreateTOFromTR` failed to look up tracking records, passing `trackedReservation = null`.
+  3. **Issue 3 (Missing CDS Action Parameters):**
+     - In `srv/wm/tr-to/service.cds`, `action createTOFromTR` and `action CreateTOFromTR` lacked `ReservationNo`, `reservationNo`, `ReservationItem`, and `reservationItem` parameters.
+  4. **Issue 4 (Missing Controller Payload Fields):**
+     - In `WarehouseScanToDetail.controller.js`, `oPayload` omitted `ReservationNo` and `ReservationItem`, breaking tracking link continuity.
+  5. **Issue 5 (Contradictory Stock Warning):**
+     - In `lookupTR`, `lquaOther` failed to filter out interim storage types (`LGTYP` starting with `'9'`) and failed to exclude the current SLoc (`sel.StorageLocation`).
+     - This produced the contradictory message: `"Storage location CIS1 has no WM stock for material 8000009754 in warehouse W01. Available in storage location(s): HS01, CIS1, CS02."`.
+- **Changes Made:**
+  - **1. CDS Service Model (`srv/wm/tr-to/service.cds`):**
+    - Added `ReservationNo : String(10)`, `reservationNo : String(10)`, `ReservationItem : String(4)`, `reservationItem : String(4)` to both `createTOFromTR` and `CreateTOFromTR` actions.
+  - **2. CAP Handlers (`srv/wm/tr-to/handlers/trTo.handler.js`):**
+    - Rewrote `entities()` to robustly resolve `ReservationTrack` and `ReservationLog` from `cds.model.definitions['saps4hana.wm.ReservationTrack']` when `cds.db` is connected.
+    - Updated `lockTrack` and `log` to safely check for active database connection (`cds.db`).
+    - Added fallback unpadded/padded search in `handleCreateTOFromTR` (`TransferRequirement: tbnum` / `alphaOut(tbnum)` and `ReservationNo: rsnum` / `rsnum.padStart(10, '0')`).
+    - Added `alphaOut` helper definition.
+  - **3. S/4HANA Adapter (`srv/integration/s4hana/wm/TrToAdapter.js`):**
+    - In `createTOFromTR`: Added automatic fallback to `await this._findTrackedReservationForTR(tr.Tbnum)` when `trackedReservation` is not provided.
+    - In `lookupTR`: Filtered `lquaOther` to exclude interim storage types (`!startsWith('9')`) and exclude `sel.StorageLocation`, eliminating contradictory warning messages.
+  - **4. SAPUI5 Frontend Controller (`app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`):**
+    - Enriched `oPayload` in `onProcessTO` with `ReservationNo: oTR.ReservationNo || ""` and `ReservationItem: oTR.ReservationItem || ""`.
+  - **5. Unit Tests (`test/unit/wm/warehouseScanToUi.test.js`):**
+    - Updated `createTOFromTR` payload expectation to include `ReservationNo` and `ReservationItem`.
+- **Verification Commands Executed & Verified Results:**
+  - `npx cds compile srv/`: Exit 0 (Clean CSN compilation).
+  - `npx eslint srv/`: Exit 0 (0 errors, 0 warnings).
+  - `cd app/fiori-app && npm run lint`: Exit 0 (`ui5lint`: Success! No findings detected).
+  - `npx jest test/unit/wm`: Exit 0 (76 test suites passed, 1 skipped, 1,789 passed tests).
+  - `git diff --check`: Exit 0 (0 whitespace/formatting errors).
+  - **Live S/4HANA Client 220 & Fiori UI Verification:**
+    - Fired `createTOFromTR` for `1000833` $\rightarrow$ Created TO `1037324` $\rightarrow$ Confirmed (`LTAK-KQUIT = 'X'`) $\rightarrow$ Auto-MIGO posted Material Document `4900050238` (2026) $\rightarrow$ Consumed stock to Cost Center `1011201301` $\rightarrow$ Completed Reservation `0000528488` (`Status 05`) verified directly in SAP and live Fiori UI.
+    - Browser navigation to `#/wm/scan-to/TR/0001000833`: UI correctly displays `"Transfer Requirement 1000833 is already completed (STATU = E)"`, blocking double-posting.
+    - Browser navigation to `#/wm/reservation-entry/0000528488/0001`: UI displays complete status `"Goods Issue Posted"`, TR `1000833`, TO `1037324`, Material Document `4900050238 / 2026`.
 
 ### 2026-10-15 13:45 IST — PROVE AUTO-MIGO in /wm/scan-to: Two-Screen Verification Across Movements 201, 241, 311, 301 via Chrome DevTools MCP
 

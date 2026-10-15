@@ -313,7 +313,11 @@ service TrToService @(path: '/odata/v4/tr-to') {
         autoPostMigo             : Boolean,
         CompleteReservation      : Boolean, // sets NO_MORE_GR on the goods movement; never defaulted to true
         ReservationMovementType  : String(3),
-        reservationMovementType  : String(3)
+        reservationMovementType  : String(3),
+        ReservationNo            : String(10),
+        reservationNo            : String(10),
+        ReservationItem          : String(4),
+        reservationItem          : String(4)
     ) returns TOProcessResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -342,7 +346,11 @@ service TrToService @(path: '/odata/v4/tr-to') {
         autoPostMigo             : Boolean,
         CompleteReservation      : Boolean, // sets NO_MORE_GR on the goods movement; never defaulted to true
         ReservationMovementType  : String(3),
-        reservationMovementType  : String(3)
+        reservationMovementType  : String(3),
+        ReservationNo            : String(10),
+        reservationNo            : String(10),
+        ReservationItem          : String(4),
+        reservationItem          : String(4)
     ) returns TOProcessResult;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])

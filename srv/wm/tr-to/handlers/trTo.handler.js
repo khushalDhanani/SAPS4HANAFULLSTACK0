@@ -6,6 +6,7 @@ const { sapKey, sapKeyOpt } = require('../../../integration/s4hana/sapKey');
 const { withReservationLock } = require('../../../integration/s4hana/wm/resLock');
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
+const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 
 /** Thin CAP binding; all validation lives in TrToAdapter and ReservationProcessAdapter. */
 class TrToHandler {
@@ -31,17 +32,37 @@ class TrToHandler {
     srv.on('createTO', run(({ lgnum, tbnum, lenum, qty }) => adapter.createTO({ lgnum, tbnum, lenum, qty })));
 
     const entities = () => {
-      const db = cds.db;
-      if (!db) return {};
-      try { return db.entities('saps4hana.wm'); } catch (_) { return {}; }
+      if (!cds.db) return {};
+      let ReservationTrack = cds.model?.definitions?.['saps4hana.wm.ReservationTrack'];
+      let ReservationLog = cds.model?.definitions?.['saps4hana.wm.ReservationLog'];
+      if (!ReservationTrack && typeof cds.entities === 'function') {
+        try {
+          const wm = cds.entities('saps4hana.wm');
+          ReservationTrack = wm?.ReservationTrack;
+          ReservationLog = wm?.ReservationLog;
+        } catch (_) {}
+      }
+      return {
+        ReservationTrack: ReservationTrack || 'saps4hana.wm.ReservationTrack',
+        ReservationLog: ReservationLog || 'saps4hana.wm.ReservationLog'
+      };
     };
     const userOf = (req) => req.user?.id || process.env.S4_USERNAME || '';
     const log = async (ReservationLog, row) => {
-      if (!ReservationLog) return;
-      await INSERT.into(ReservationLog).entries({ ID: cds.utils.uuid(), ...row });
+      if (!ReservationLog || !cds.db) return;
+      try {
+        await INSERT.into(ReservationLog).entries({ ID: cds.utils.uuid(), ...row });
+      } catch (_) {}
     };
     /** Row lock for the duration of the request transaction (HANA; a no-op on SQLite). */
-    const lockTrack = (ReservationTrack, where) => SELECT.one.from(ReservationTrack).where(where).forUpdate();
+    const lockTrack = (ReservationTrack, where) => {
+      if (!ReservationTrack || !cds.db) return null;
+      try {
+        return SELECT.one.from(ReservationTrack).where(where).forUpdate();
+      } catch (_) {
+        return null;
+      }
+    };
 
     // Step 3 Service (MIGO Goods Movement Posting & Retry)
     const handlePostMigoGoodsMovement = async (req) => {
@@ -63,6 +84,9 @@ class TrToHandler {
             sResNoIn
               ? { ReservationNo: data.ReservationNo || data.reservationNumber || data.reservationNo, ReservationItem: data.ReservationItem || data.reservationItem || '0001' }
               : (sTanumIn ? { TransferOrder: data.TransferOrder || data.transferOrder } : { ID: '__dummy__' }));
+          if (!existingTrack && sResNoIn) {
+            existingTrack = await lockTrack(ReservationTrack, { ReservationNo: sResNoIn.padStart(10, '0'), ReservationItem: (data.ReservationItem || data.reservationItem || '0001').padStart(4, '0') });
+          }
         } catch (dbErr) {
           console.warn('[trTo.handler] ReservationTrack lookup warning:', dbErr.message);
         }
@@ -365,9 +389,18 @@ class TrToHandler {
       if (ReservationTrack) {
         try {
           const tbnum = sapKeyOpt(data.tbnum, 'tbnum').padStart(10, '0');
-          const rsnum = sapKeyOpt(data.ReservationNo, 'rsnum');
-          if (tbnum.trim() || rsnum) {
-            existing = await lockTrack(ReservationTrack, tbnum.trim() ? { TransferRequirement: tbnum } : { ReservationNo: rsnum });
+          const rsnum = sapKeyOpt(data.ReservationNo || data.reservationNo, 'rsnum');
+          if (tbnum.trim()) {
+            existing = await lockTrack(ReservationTrack, { TransferRequirement: tbnum });
+            if (!existing) {
+              existing = await lockTrack(ReservationTrack, { TransferRequirement: alphaOut(tbnum) });
+            }
+          }
+          if (!existing && rsnum) {
+            existing = await lockTrack(ReservationTrack, { ReservationNo: rsnum });
+            if (!existing) {
+              existing = await lockTrack(ReservationTrack, { ReservationNo: rsnum.padStart(10, '0') });
+            }
           }
         } catch (_) {}
       }
@@ -448,8 +481,8 @@ class TrToHandler {
             const migoResult = await handlePostMigoGoodsMovement({
               user: req.user,
               data: {
-                ReservationNo: existing?.ReservationNo || result.ReservationNo,
-                ReservationItem: existing?.ReservationItem || result.ReservationItem,
+                ReservationNo: existing?.ReservationNo || result.ReservationNo || data.ReservationNo || data.reservationNo,
+                ReservationItem: existing?.ReservationItem || result.ReservationItem || data.ReservationItem || data.reservationItem,
                 ReservationMovementType: result.ReservationMovementType || data.ReservationMovementType || data.reservationMovementType || '',
                 TransferOrder: result.TransferOrder,
                 Quantity: confirmedQty,

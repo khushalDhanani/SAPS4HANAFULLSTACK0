@@ -834,7 +834,7 @@ class TrToAdapter {
           const lquaOther = await this._rfc(
             () => this.rfc.readTable(
               'LQUA',
-              ['LGORT', 'VERME'],
+              ['LGTYP', 'LGORT', 'VERME'],
               [
                 `LGNUM = '${wh}'`,
                 `AND MATNR = '${matPadded}'`,
@@ -845,7 +845,12 @@ class TrToAdapter {
             ),
             `Read stock for material ${sel.Material} in other SLocs`
           );
-          const otherSlocs = [...new Set((lquaOther || []).map((r) => String(r.LGORT || '').trim()).filter(Boolean))];
+          const otherSlocs = [...new Set(
+            (lquaOther || [])
+              .filter((q) => !String(q.LGTYP || '').trim().startsWith('9'))
+              .map((r) => String(r.LGORT || '').trim())
+              .filter((s) => Boolean(s) && s !== sel.StorageLocation)
+          )];
           if (otherSlocs.length > 0) {
             stockWarning = `Storage location ${sel.StorageLocation} has no WM stock for material ${sel.Material} in warehouse ${wh}. Available in storage location(s): ${otherSlocs.join(', ')}.`;
           } else {
@@ -1364,6 +1369,20 @@ class TrToAdapter {
     const reqSLoc = String(StorageLocation || storageLocation || '').trim().toUpperCase();
     if (reqSLoc && String(item.StorageLocation).trim().toUpperCase() !== reqSLoc) {
       throw httpError(400, `Storage location mismatch: requested ${reqSLoc}, but TR item has ${item.StorageLocation}`);
+    }
+
+    if (!trackedReservation) {
+      try {
+        const track = await this._findTrackedReservationForTR(tr.Tbnum);
+        if (track) {
+          trackedReservation = {
+            TransferRequirement: track.TransferRequirement,
+            ReservationNo: track.ReservationNo,
+            ReservationItem: track.ReservationItem,
+            MovementType: track.MovementType
+          };
+        }
+      } catch (_) {}
     }
 
     const linkedTrackedMismatch = Boolean(
