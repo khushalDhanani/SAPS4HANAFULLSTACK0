@@ -50,6 +50,17 @@ sap.ui.define([
                 receivingPlantSource: "",
                 receivingStorageLocation: "",
                 receivingStorageLocationSource: "",
+                costCenter: "",
+                costCenterValueState: "None",
+                costCenterValueStateText: "",
+                assetNo: "",
+                assetValueState: "None",
+                assetValueStateText: "",
+                subNumber: "",
+                orderId: "",
+                orderIdValueState: "None",
+                orderIdValueStateText: "",
+                isBackflush: false,
                 hasTR: false,
                 effectiveMovementType: "",
                 reservationMovementType: "",
@@ -299,6 +310,10 @@ sap.ui.define([
                 oModel.setProperty("/assetValueState", "None");
                 oModel.setProperty("/assetValueStateText", "");
                 oModel.setProperty("/subNumber", oDetail.SubNumber || "0000");
+                oModel.setProperty("/orderId", oDetail.OrderID || "");
+                oModel.setProperty("/orderIdValueState", "None");
+                oModel.setProperty("/orderIdValueStateText", "");
+                oModel.setProperty("/isBackflush", Boolean(oDetail.Backflush));
 
                 that._updateSerialsStatus();
                 that._validateForm();
@@ -775,6 +790,21 @@ sap.ui.define([
                 oModel.setProperty("/assetValueStateText", "");
             }
 
+            // Movement 261 (Goods Issue to Order) requires Order Number
+            if (sEffectiveMvt === "261") {
+                var sOrderId = (oModel.getProperty("/orderId") || "").trim();
+                if (!sOrderId) {
+                    oModel.setProperty("/orderIdValueState", "Error");
+                    oModel.setProperty("/orderIdValueStateText", this.getText("resErrOrderMandatory"));
+                    oModel.setProperty("/canSubmit", false);
+                    oModel.setProperty("/scanVerificationStatusText", "PENDING DESTINATION");
+                    oModel.setProperty("/scanVerificationStatusState", "Warning");
+                    return false;
+                }
+                oModel.setProperty("/orderIdValueState", "None");
+                oModel.setProperty("/orderIdValueStateText", "");
+            }
+
             oModel.setProperty("/canSubmit", true);
             oModel.setProperty("/scanVerificationStatusText", "READY FOR TO");
             oModel.setProperty("/scanVerificationStatusState", "Success");
@@ -809,6 +839,14 @@ sap.ui.define([
             if (oEvent && typeof oEvent.getParameter === "function") {
                 var sVal = (oEvent.getParameter("value") || "").trim();
                 this.getModel("scanView").setProperty("/assetNo", sVal);
+            }
+            this._validateForm();
+        },
+
+        onOrderIdLiveChange: function (oEvent) {
+            if (oEvent && typeof oEvent.getParameter === "function") {
+                var sVal = (oEvent.getParameter("value") || "").trim();
+                this.getModel("scanView").setProperty("/orderId", sVal);
             }
             this._validateForm();
         },
@@ -869,6 +907,7 @@ sap.ui.define([
                 costCenter: (oModel.getProperty("/costCenter") || "").trim(),
                 assetNo: (oModel.getProperty("/assetNo") || "").trim(),
                 subNumber: (oModel.getProperty("/subNumber") || "").trim(),
+                orderId: (oModel.getProperty("/orderId") || "").trim(),
                 autoConfirm: bAutoConfirm,
                 autoPostMigo: bAutoPostMigo,
                 CompleteReservation: oModel.getProperty("/completeReservation") === true,
@@ -899,6 +938,7 @@ sap.ui.define([
                 oResult.CostCenter = oResult.CostCenter || oModel.getProperty("/costCenter") || "";
                 oResult.AssetNo = oResult.AssetNo || oModel.getProperty("/assetNo") || "";
                 oResult.SubNumber = oResult.SubNumber || oModel.getProperty("/subNumber") || "";
+                oResult.OrderID = oResult.OrderID || oModel.getProperty("/orderId") || "";
                 oResult.TransferRequirement = oResult.TransferRequirement || (oTR ? (oTR.TRNumber || oTR.TransferRequirement) : oPayload.tbnum);
                 oResult.ReservationNo = oResult.ReservationNo || (oTR ? oTR.ReservationNo : "");
                 oResult.ConfirmedBy = oResult.ConfirmedBy || "";
@@ -956,6 +996,7 @@ sap.ui.define([
             var sCostCenter = (oResult.CostCenter || oModel.getProperty("/costCenter") || "").trim().toUpperCase();
             var sAssetNo = (oResult.AssetNo || oModel.getProperty("/assetNo") || "").trim();
             var sSubNo = (oResult.SubNumber || oModel.getProperty("/subNumber") || "").trim();
+            var sOrderId = (oResult.OrderID || oModel.getProperty("/orderId") || "").trim();
 
             if (sMvt === "301") {
                 if (!sRecPlant) {
@@ -985,6 +1026,10 @@ sap.ui.define([
                 this._showError(this.getText("scanToErrAssetNoRequired"));
                 return Promise.resolve(null);
             }
+            if (sMvt === "261" && !sOrderId) {
+                this._showError(this.getText("resErrOrderMandatory"));
+                return Promise.resolve(null);
+            }
 
             var that = this;
             oModel.setProperty("/busy", true);
@@ -1010,6 +1055,8 @@ sap.ui.define([
                 AssetNo: sAssetNo,
                 subNumber: sSubNo,
                 SubNumber: sSubNo,
+                orderId: sOrderId,
+                OrderID: sOrderId,
                 CompleteReservation: oModel.getProperty("/completeReservation") === true,
                 ProcessId: oResult.ProcessId || ""
             };

@@ -5,6 +5,16 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Movement Type 261 (Goods Issue to Order) Full-Stack Hardening & Unified WM Pipeline (2026-10-15, 16:30 IST):** Complete. Implemented Movement Type 261 across the unified WM reservation workflow (`/wm/reservation-entry` and `/wm/scan-to`). Source of truth is the completed 261 audit findings.
+  - **End-to-End Pipeline Implemented:** Fiori Reservation $\rightarrow$ `ReservationTrack` $\rightarrow$ TR (`BWLVS 261 / BETYP F / BENUM AUFNR`) $\rightarrow$ TO $\rightarrow$ Confirm TO $\rightarrow$ MIGO 261 $\rightarrow$ Material Document $\rightarrow$ Reservation Complete.
+  - **Account Assignment & Validation:** `OrderID` / `AUFNR` is mandatory; rejects Cost Center, Asset, Receiving Plant, and Receiving Storage Location.
+  - **Master Data & Status Validation:** Validates Order in `AUFK` (`LOEKZ != 'X'`); requires `JEST` active status `REL` (`I0002`); rejects `CRTD`, `LKD`, `TECO`, `CLSD`, `DLFL`.
+  - **Backflush Exclusion:** Rejects `RESB-RGEKZ != ''` (backflush component consumed at `CO11N`).
+  - **Customizing & Interim Bin:** `BWLVS = 261`, `BETYP = F`, `BENUM = AUFNR.slice(-10)`. Interim storage type `914` with dynamic destination bin derived from `<AUFNR>`.
+  - **MIGO Execution:** `GM_CODE = '03'`, `MOVE_TYPE = '261'`, `ORDERID = AUFNR`.
+  - **Integrity & Concurrency:** TO confirmation gate (`LTAK-KQUIT === 'X'`) enforced for 261; three-tier idempotency, row-level locking, and SLG1 audit trail fully integrated.
+  - **Zero Live SAP Writes:** Zero live SAP writes performed; mocked lifecycle test suite with 25 tests passed 100%. Full WM regression suite (77 suites, 1,815 tests passed, 0 failures). Linting and CDS compilation clean.
+
 - **FIND BROKEN THINGS: Comprehensive Multi-Movement Audit & Cross-Stack Fixes (201, 241, 311, 301) (2026-10-15, 14:45 IST):** Complete. Executed full failure-mode, edge-case, and UI-to-backend audit across all four movement types. Diagnosed and fixed 4 real defects:
   - **Defect 1 (Movement 301 UI Form Failure — RED -> GREEN):** On `/wm/reservation-entry/create`, `inputRecSLoc` was hidden for 301 (`visible="{= ${create>/MovementType} === '311' }"`), cleared on movement change, and omitted from client validation. Backend rejected every UI submission with HTTP 400 `"Receiving Storage Location is mandatory for Movement Type 301"`. Fixed by making `inputRecSLoc` visible for `301`, defaulting `ReceivingStorageLocation` to `"ST02"`, and adding client-side validation.
   - **Defect 2 (Contradictory SLoc Warning in Reservation Creation):** In `srv/wm/reservation-entry/service.js`, `lquaOther` failed to filter out interim storage types (`!startsWith('9')`) and current SLoc, causing self-contradictory warnings like `"Storage location CIS1 has no WM stock ... Available in storage location(s): ... CIS1"`. Fixed by filtering out interim types and excluding the current SLoc.
@@ -2329,7 +2339,14 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Step 19 Movement 311 Proven Green — Ready for Movement 301 — 2026-10-15, 10:55 IST):** Movement Type 311 (Storage Location to Storage Location Transfer) is 100% green across both live SAP S/4HANA read-back and dedicated 16-test suite proving all stages in sequence (MB21 → TR → Scan → TO → Confirm → MIGO 311 → MATDOC → Dual-SLoc Stock Verification [-10 EA Source, +10 EA Dest, Constant Sum 120] → RESB Updated). Dual-SLoc balance conservation (-QTY at Source SLoc, +QTY at Destination SLoc, total plant sum remaining strictly constant at 120) is fully verified across all transparent tables. Ready to proceed to Movement Type 301 (Plant to Plant Transfer).
+- **Next Recommended Action (Movement Type 261 Verified Green in Mock / Ready for Live SAP 261 Authorization — 2026-10-15, 16:30 IST):**
+  Movement Type 261 implementation is fully complete across CDS models, S/4 adapters, CAP services, Fiori UI5 views/controllers, and comprehensive unit tests (25 tests in `movement261UnifiedLifecycle.test.js` passing 100%; 77 WM test suites / 1,815 tests passing with 0 failures).
+  To proceed with live SAP S/4HANA writes:
+  1. Operator / user must provide explicit authorization.
+  2. Provide a valid released Production Order in Plant 1120 (`AUFK` with active `JEST` status `I0002` REL, `LOEKZ != 'X'`) containing a non-backflush reservation component (`RESB-RGEKZ == ''`).
+  3. Ensure sufficient warehouse stock in Plant 1120 / Storage Location CS01 (Warehouse W01) for the component material.
+
+- **Previous Recommended Action (Step 19 Movement 311 Proven Green — Ready for Movement 301 — 2026-10-15, 10:55 IST):** Movement Type 311 (Storage Location to Storage Location Transfer) is 100% green across both live SAP S/4HANA read-back and dedicated 16-test suite proving all stages in sequence (MB21 → TR → Scan → TO → Confirm → MIGO 311 → MATDOC → Dual-SLoc Stock Verification [-10 EA Source, +10 EA Dest, Constant Sum 120] → RESB Updated). Dual-SLoc balance conservation (-QTY at Source SLoc, +QTY at Destination SLoc, total plant sum remaining strictly constant at 120) is fully verified across all transparent tables. Ready to proceed to Movement Type 301 (Plant to Plant Transfer).
 - **Previous Recommended Action (Step 18 Movement 241 Proven Green — Ready for Movement 311 / 301 — 2026-10-15, 10:45 IST):** Movement Type 241 (Goods Issue to Asset) is 100% green across both live SAP S/4HANA read-back and dedicated 16-test suite proving all stages in sequence (MB21 → TR → Scan → TO → Confirm → MIGO 241 → Material document → Asset account assignment verified → Stock reduced → Reservation updated). Account assignment (`ANLA`, `ANLN1: 000000400001`, `ANLN2: 0000`, `BETYP: A`, `BENUM: 0000400001`) is fully verified across all transparent tables. Ready to proceed to next movement type (Movement 311 or 301) or live end-to-end integration when authorized.
 - **Previous Recommended Action (Step 17 Movement 201 Proven Green — Ready for Movement 241 — 2026-10-15, 10:35 IST):** Movement Type 201 (Goods Issue to Cost Center) is 100% green across both live SAP S/4HANA read-back and dedicated 14-test suite proving all 9 stages in sequence (MB21 → TR → Scan → TO → TO confirmation → MIGO 201 → Material document → Stock reduced → Reservation updated). In accordance with the prompt instruction ("Only when this is completely green move to 241"), proceed to test and prove Movement Type 241 (Goods Issue to Asset) following the same strict 9-stage sequence.
 - **Previous Recommended Action (12 Failure Scenarios & Recovery Behaviors Complete — 2026-10-15, 10:15 IST):** All 12 failure scenarios and verified recovery behaviors across all 4 movement types (`201`, `241`, `311`, `301`) are fully debugged, defended, and proven with 100 unit tests. Full workspace test suite (161 suites, 2,974 tests) passes 100% green. System is ready for live end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
@@ -2364,6 +2381,57 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-15 16:20 IST — Movement Type 261 (Goods Issue to Order) Full-Stack Implementation & Lifecycle Verification
+
+- **User Request:**
+  - Implement Movement Type 261 (Goods Issue to Order) in existing unified WM workflow (`/wm/reservation-entry` and `/wm/scan-to`).
+  - Source of truth is completed 261 audit findings.
+  - Strict compliance with AGENTS.md: zero live SAP writes without explicit user authorization, mandatory validation, and reporting contract.
+- **Components & Files Modified:**
+  1. **CDS Data Models & OData Definitions:**
+     - `db/wm/reservation-track.cds`: Added `OrderID : String(12);` to entity `ReservationTrack`.
+     - `srv/wm/reservation-entry/service.cds`: Added `OrderID : String(12);` to actions `createReservation`, `createReservationEntry`, and `postMigoGoodsMovement`.
+     - `srv/wm/tr-to/service.cds`: Added `OrderID : String(12);` and `Backflush : Boolean;` to `type TRDetail`.
+  2. **Movement Configuration & Input Validation:**
+     - `srv/common/movementConfig.js`: Added `'261'` to `SUPPORTED_MOVEMENT_TYPES` and `MOVEMENT_CONFIG` (`configuredWmMovement: '261'`, `stagingWmMovement: '261'`, `requirementType: 'F'`, `interimStorageType: '914'`, `requiresOrder: true`, `preserveReservationOnTr: true`, `gmCode: '03'`). Enforced mandatory `OrderID` and rejected Cost Center, Asset, Receiving Plant, and Receiving Storage Location for 261.
+  3. **S/4HANA Process Adapter (`ReservationProcessAdapter.js`):**
+     - Added GM_CODE mapping `'261': '03'`.
+     - Implemented `validateOrder(orderId, plant)` querying `AUFK` and `JEST` (requires `I0002` REL; rejects `I0001` CRTD, `I0043` LKD, `I0045` TECO, `I0046` CLSD, `I0076` DLFL, and `LOEKZ = 'X'`).
+     - `createReservation`: Preflights `validateOrder`, passes `ORDERID: pad12(sOrderId)` into `RESERVATIONHEADER`, returns `orderId`. Included 261 in `T320` mapping check.
+     - `createTransferRequirement`: Sets `s4Betyp = 'F'`, `s4Benum = AUFNR.slice(-10)` when `s4Bwlvs === '261'`.
+     - `postGoodsMovement`: Enforces TO confirmation gate (`LTAK-KQUIT === 'X'`) for 261, extracts `orderId`, validates order, checks `RESB.RGEKZ` (rejects backflush components), checks `MARD-LABST` stock, passes item `ORDERID: pad12(orderId)`, maintains idempotency protection.
+     - `verifyStock`: Supports 261 stock reduction and orderId verification.
+     - `executeReservationWarehouseFlow`: Reads `AUFNR` from `RESB`/`RKPF` if reservation exists, forwards `orderId` through all stages.
+  4. **S/4HANA TR/TO Adapter (`TrToAdapter.js`):**
+     - `lookupTR`: Reads `AUFNR` and `RGEKZ` from `RESB`/`RKPF`/`ReservationTrack` or `tr.Benum` (when `Betyp='F'`), returns `OrderID` and `Backflush` flag.
+     - `createTOFromTR`: Accepts `orderId`, derives dynamic bin `nlpla = tr.Nlpla || (tr.Betyp === 'F' && (finalOrderId || tr.Benum) ? alphaOut(finalOrderId || tr.Benum) : '')`, returns `OrderID`.
+  5. **CAP Service Layer (`srv/wm/reservation-entry/service.js`):**
+     - `executeReservationAndAutoTR`: Accepts `OrderID`, passes to `createReservation`, stores in `initialTrackRecord`, forwards to `createTransferRequirement`.
+     - `fetchSapReservation`: Reads `AUFNR` from `RKPF`/`RESB`, returns `OrderID`.
+     - `createReservation`: Handles `orderId`, persists `OrderID` in `ReservationEntries`.
+     - `postMigoForTrack`: Forwards `orderId` to `postGoodsMovement`.
+     - `postMigoGoodsMovement`: Adds `AUFNR` read to fallback queries, sets `OrderID`.
+     - `getOpenReservations`: Added `261` to default target movements `'311,201,241,301,261'` and mapped `OrderID`.
+  6. **SAPUI5 / Fiori Presentation Layer:**
+     - `app/fiori-app/webapp/i18n/i18n.properties`: Added i18n keys for 261 (`resMvt261Text`, `resMvt261Long`, `resMvt261Title`, `resFieldOrder`, `resPlaceholderOrder`, `resErrOrderMandatory`, `resWarningBackflush`).
+     - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryList.view.xml`: Added `261` to filter select.
+     - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`: Added `261` to movement select; added `inputOrderId` (visible and required only for 261); added `OrderID` in display section.
+     - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`: Handled `OrderID` default/clearing, validated mandatory for 261, passed `OrderID` on save, formatted description.
+     - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml`: Added `backflushWarning` MessageStrip, added `inputResultOrderId` in retry section, added Order Number display.
+     - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`: Bound `orderId` and `isBackflush`, validated `orderId` for 261, passed in `onSubmitTO` and `onRetryMigo`.
+  7. **Unit Test Suite & Verification:**
+     - Created `test/unit/wm/movement261UnifiedLifecycle.test.js`: 25 comprehensive tests covering all 261 requirements (whitelist, mandatory OrderID, account assignment mutual exclusion, order master/status validation, backflush rejection, TR/TO interim 914 / dynamic bin, TO confirmation gate, MIGO GM_CODE 03 / MOVE_TYPE 261 / ORDERID, idempotency, failure recovery).
+     - Updated `test/unit/wm/movementConfig.test.js`: 31 tests passing.
+     - Updated `test/unit/wm/warehouseScanToUi.test.js`: 50 tests passing.
+     - Updated `test/unit/wm/reservationEntryService.test.js`: 40 tests passing.
+- **Validation Commands Executed & Results:**
+  - `git diff --check`: Exit 0 (clean).
+  - `npx cds compile srv --to json`: Exit 0 (clean compilation).
+  - `npm run lint`: Exit 0 (0 errors, 29 warnings in existing tests/tools).
+  - `npm --prefix app/fiori-app run lint`: Exit 0 (`ui5lint`: Success! No findings).
+  - `npx jest test/unit/wm/movement261UnifiedLifecycle.test.js test/unit/wm/movementConfig.test.js test/unit/wm/warehouseScanToUi.test.js test/unit/wm/reservationEntryService.test.js`: 146 passed, 0 failed.
+  - `npx jest test/unit/wm`: 77 passed, 1 skipped, 1,815 passed, 0 failed.
 
 ### 2026-10-15 15:15 IST — Option A Execution: Movement 301 End-to-End Success in Live S/4HANA (Client 220) & Fiori UI
 

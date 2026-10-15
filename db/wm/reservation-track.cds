@@ -35,6 +35,7 @@ entity ReservationTrack : managed {
     CostCenter              : String(10);    // KOSTL (201)
     AssetNo                 : String(12);    // ANLN1 (241)
     SubNumber               : String(4);     // ANLN2 (241)
+    OrderID                 : String(12);    // AUFNR (261)
     TransferRequirement     : String(10);    // TBNUM (LB01)
     TransferOrder           : String(10);    // TANUM (LT04)
     MaterialDocument        : String(10);    // MBLNR (MIGO)

@@ -55,6 +55,15 @@
                     showCloseButton="false"
                     class="sapUiSmallMarginBottom" />
 
+                <MessageStrip
+                    id="backflushWarning"
+                    visible="{scanView>/isBackflush}"
+                    text="{i18n>resWarningBackflush}"
+                    type="Warning"
+                    showIcon="true"
+                    showCloseButton="false"
+                    class="sapUiSmallMarginBottom" />
+
                 <!-- STATUS MESSAGE BANNER -->
                 <MessageStrip
                     id="detailMessageStrip"
@@ -186,6 +195,16 @@
                                     maxLength="12"
                                     width="12rem"
                                     visible="{= ${scanView>/canRetryMigo} &amp;&amp; ${scanView>/result/MovementType} === '241' }" />
+
+                                <Label text="{i18n>resFieldOrder}" design="Bold" required="true" visible="{= ${scanView>/canRetryMigo} &amp;&amp; ${scanView>/result/MovementType} === '261' }" />
+                                <Input
+                                    id="inputResultOrderId"
+                                    value="{scanView>/result/OrderID}"
+                                    valueLiveUpdate="true"
+                                    placeholder="{i18n>resPlaceholderOrder}"
+                                    maxLength="12"
+                                    width="12rem"
+                                    visible="{= ${scanView>/canRetryMigo} &amp;&amp; ${scanView>/result/MovementType} === '261' }" />
                             </form:content>
                         </form:SimpleForm>
 
@@ -491,6 +510,25 @@
                                 placeholder="{i18n>scanToPlaceholderSubNumber}"
                                 width="8rem"
                                 maxLength="4" />
+                        </VBox>
+
+                        <!-- MOVEMENT 261: ORDER NUMBER -->
+                        <VBox visible="{= (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '261' }" class="sapUiTinyMarginBottom">
+                            <Label
+                                text="{i18n>resFieldOrder}"
+                                design="Bold"
+                                required="true"
+                                class="sapUiTinyMarginBottom" />
+                            <Input
+                                id="inputOrderIdScan"
+                                value="{scanView>/orderId}"
+                                valueLiveUpdate="true"
+                                placeholder="{i18n>resPlaceholderOrder}"
+                                width="12rem"
+                                maxLength="12"
+                                liveChange=".onOrderIdLiveChange"
+                                valueState="{scanView>/orderIdValueState}"
+                                valueStateText="{scanView>/orderIdValueStateText}" />
                         </VBox>
                     </VBox>
                 </Panel>

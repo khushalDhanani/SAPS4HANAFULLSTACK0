@@ -57,9 +57,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         AssetNo,
         SubNumber,
         WarehouseNumber,
-        Batch
+        Batch,
+        OrderID,
+        OrderId,
+        orderId
       } = payload;
       const effResDate = ReservationDate || reservationDate || undefined;
+      const effOrderId = OrderID || OrderId || orderId || '';
 
       // Task 8: SLoc pre-check at reservation creation: read LQUA for item's plant/SLoc.
       let slocWarning = '';
@@ -126,6 +130,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           costCenter: CostCenter,
           assetNo: AssetNo,
           subNumber: SubNumber,
+          orderId: effOrderId,
           batch: Batch
         });
       } catch (err) {
@@ -208,6 +213,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         CostCenter: CostCenter || '',
         AssetNo: AssetNo || '',
         SubNumber: SubNumber || '',
+        OrderID: effOrderId,
         TransferRequirement: '',
         LogHandle: sLogHandle,
         ExternalId: extId,
@@ -256,6 +262,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           costCenter: CostCenter,
           assetNo: AssetNo,
           subNumber: SubNumber,
+          orderId: effOrderId,
           batch: Batch
         });
 
@@ -375,8 +382,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const s4Rspos = String(resItem || '0001').padStart(4, '0');
       try {
         const [rkpf, resb] = await Promise.all([
-          adapter.rfc.readTable('RKPF', ['BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO', 'USNAM'], [`RSNUM = '${s4Rsnum}'`], 1),
-          adapter.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'ENMNG', 'MEINS', 'CHARG', 'KZEAR'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
+          adapter.rfc.readTable('RKPF', ['BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO', 'USNAM', 'AUFNR'], [`RSNUM = '${s4Rsnum}'`], 1),
+          adapter.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'ENMNG', 'MEINS', 'CHARG', 'KZEAR', 'AUFNR'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
         ]);
         const h = rkpf && rkpf[0];
         const i = resb && resb[0];
@@ -471,6 +478,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           CostCenter: String((h && h.KOSTL) || '').trim(),
           AssetNo: strip((h && h.ANLN1) || ''),
           SubNumber: String((h && h.ANLN2) || '').trim(),
+          OrderID: strip((i && i.AUFNR) || (h && h.AUFNR) || ''),
           WarehouseNumber: await warehouseFor(i.WERKS, i.LGORT, '').catch(() => ''),
           Status_code: statusCode,
           StatusText: statusText,
@@ -516,6 +524,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           costCenter: payload.CostCenter,
           assetNo: payload.AssetNo,
           subNumber: payload.SubNumber,
+          orderId: payload.OrderID || payload.OrderId || payload.orderId,
           batch: payload.Batch,
           throwError: false
         });
@@ -558,6 +567,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         CostCenter: payload.CostCenter || '',
         AssetNo: payload.AssetNo || '',
         SubNumber: payload.SubNumber || '',
+        OrderID: payload.OrderID || payload.OrderId || payload.orderId || '',
         TransferRequirement: '',
         LogHandle: '',
         ExternalId: extId,
@@ -1212,6 +1222,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         costCenter: data.costCenter || data.CostCenter || track.CostCenter,
         assetNo: data.assetNo || data.AssetNo || track.AssetNo,
         subNumber: data.subNumber || data.SubNumber || track.SubNumber,
+        orderId: data.orderId || data.OrderId || data.OrderID || track.OrderID || '',
         transferOrder: track.TransferOrder || '',
         batch: data.batch || data.Batch || track.Batch || '',
         serials: data.serials || data.Serials || (data.SerialNo ? [data.SerialNo] : (track.SerialNo ? [track.SerialNo] : [])),
@@ -1281,8 +1292,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           const s4Rsnum = sapKey(sResNo, 'rsnum').padStart(10, '0');
           const s4Rspos = sapKey(sResItem, 'rspos').padStart(4, '0');
           const [rkpfRows, resbRows] = await Promise.all([
-            adapter.rfc.readTable('RKPF', ['RSNUM', 'BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'USNAM'], [`RSNUM = '${s4Rsnum}'`], 1),
-            adapter.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
+            adapter.rfc.readTable('RKPF', ['RSNUM', 'BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'USNAM', 'AUFNR'], [`RSNUM = '${s4Rsnum}'`], 1),
+            adapter.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS', 'AUFNR'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
           ]);
           if (resbRows && resbRows[0]) {
             existing = {
@@ -1292,6 +1303,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
               CostCenter: rkpfRows?.[0]?.KOSTL || data.CostCenter || '',
               AssetNo: rkpfRows?.[0]?.ANLN1 || data.AssetNo || '',
               SubNumber: rkpfRows?.[0]?.ANLN2 || data.SubNumber || '',
+              OrderID: (resbRows[0].AUFNR || rkpfRows?.[0]?.AUFNR || data.OrderID || data.orderId || '').trim(),
               Material: resbRows[0].MATNR,
               Plant: resbRows[0].WERKS,
               StorageLocation: resbRows[0].LGORT,
@@ -1694,7 +1706,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         return [];
       }
 
-      const targetMvt = mvt || '311,201,241,301';
+      const targetMvt = mvt || '311,201,241,301,261';
       try {
         const rows = await GoodsIssueAdapter.getOpenReservations(targetMvt, plant);
         const filteredRows = (rows || []).filter((r) =>
@@ -1712,6 +1724,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           ReceivingPlant: r.ReceivingPlant || '',
           ReceivingStorageLocation: r.ReceivingStorageLocation || '',
           OrderNo: r.OrderNo || '',
+          OrderID: r.OrderNo || '',
           CreatedByUser: r.CreatedByUser || '',
           ItemCount: r.ItemCount || 0,
           DisplayText: r.DisplayText || '',

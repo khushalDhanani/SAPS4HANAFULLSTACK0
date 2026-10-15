@@ -160,6 +160,7 @@
                                             <core:Item key="201" text="{i18n>resMvt201Long}" />
                                             <core:Item key="241" text="{i18n>resMvt241Long}" />
                                             <core:Item key="301" text="{i18n>resMvt301Long}" />
+                                            <core:Item key="261" text="{i18n>resMvt261Long}" />
                                         </Select>
 
                                         <Label text="{i18n>resEntryFieldPlant}" required="true" />
@@ -406,6 +407,19 @@
                                             <core:ListItem key="{Plant}" text="{Plant}" additionalText="{= ${PlantName} + (${PurchasingOrganization} ? ' (' + ${PurchasingOrganization} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
+
+                                    <!-- Movement 261: Order Number -->
+                                    <Label
+                                        text="{i18n>resFieldOrder}"
+                                        required="true"
+                                        visible="{= ${create>/MovementType} === '261' }" />
+                                    <Input
+                                        id="inputOrderId"
+                                        value="{create>/OrderID}"
+                                        placeholder="{i18n>resPlaceholderOrder}"
+                                        maxLength="12"
+                                        visible="{= ${create>/MovementType} === '261' }"
+                                        liveChange=".onFieldLiveChange" />
                                 </f:content>
                             </f:SimpleForm>
 
@@ -455,6 +469,13 @@
                                     <Text
                                         text="{detail>/ReceivingPlant}"
                                         visible="{= !!${detail>/ReceivingPlant} || ${detail>/MovementType} === '301' }" />
+
+                                    <Label
+                                        text="{i18n>resFieldOrder}"
+                                        visible="{= !!${detail>/OrderID} || ${detail>/MovementType} === '261' }" />
+                                    <Text
+                                        text="{detail>/OrderID}"
+                                        visible="{= !!${detail>/OrderID} || ${detail>/MovementType} === '261' }" />
                                 </f:content>
                             </f:SimpleForm>
                         </uxap:blocks>

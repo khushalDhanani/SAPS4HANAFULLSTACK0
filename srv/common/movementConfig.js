@@ -15,6 +15,9 @@
  *        Preserves RSNUM and RSPOS cleanly on the WM staging TR header.
  * - 301: BWLVS 301, BETYP '', NLTYP '920', NLPLA 'TRANSFER' (interim bin fixed).
  *        Staging TR header RSNUM is omitted to prevent standard SAP L_TO_CREATE_TR XFELD_WRONG restrictions.
+ * - 261: BWLVS 261, BETYP 'F', NKDYN 'X', NLTYP '914', NLPLA '' (dynamic bin generated from Order AUFNR BENUM).
+ *        Uses real WM 261 with BETYP 'F' and rightmost 10-char Order BENUM.
+ *        Requires Order Number (AUFNR). Rejects Cost Center, Asset, and Receiving Plant/SLoc.
  */
 const MOVEMENT_CONFIG = Object.freeze({
   '201': Object.freeze({
@@ -30,6 +33,7 @@ const MOVEMENT_CONFIG = Object.freeze({
     description: 'Goods Issue to Cost Center',
     requiresCostCenter: true,
     requiresAsset: false,
+    requiresOrder: false,
     requiresReceivingPlant: false,
     requiresReceivingSloc: false,
     preserveReservationOnTr: true,
@@ -48,6 +52,7 @@ const MOVEMENT_CONFIG = Object.freeze({
     description: 'Goods Issue to Asset',
     requiresCostCenter: false,
     requiresAsset: true,
+    requiresOrder: false,
     requiresReceivingPlant: false,
     requiresReceivingSloc: false,
     preserveReservationOnTr: true,
@@ -65,6 +70,7 @@ const MOVEMENT_CONFIG = Object.freeze({
     description: 'Storage Location to Storage Location Transfer',
     requiresCostCenter: false,
     requiresAsset: false,
+    requiresOrder: false,
     requiresReceivingPlant: false,
     requiresReceivingSloc: true,
     receivingPlantMustMatch: true,
@@ -84,15 +90,35 @@ const MOVEMENT_CONFIG = Object.freeze({
     description: 'Plant to Plant Transfer',
     requiresCostCenter: false,
     requiresAsset: false,
+    requiresOrder: false,
     requiresReceivingPlant: true,
     requiresReceivingSloc: true,
     receivingPlantMustDiffer: true,
     preserveReservationOnTr: false,
     gmCode: '04'
+  }),
+  '261': Object.freeze({
+    movementType: '261',
+    inventoryMovement: '261',
+    configuredWmMovement: '261',
+    stagingWmMovement: '261',
+    get wmMovement() {
+      return '261';
+    },
+    requirementType: 'F',
+    interimStorageType: '914',
+    description: 'Goods Issue to Order',
+    requiresCostCenter: false,
+    requiresAsset: false,
+    requiresOrder: true,
+    requiresReceivingPlant: false,
+    requiresReceivingSloc: false,
+    preserveReservationOnTr: true,
+    gmCode: '03'
   })
 });
 
-const SUPPORTED_MOVEMENT_TYPES = Object.freeze(['201', '241', '311', '301']);
+const SUPPORTED_MOVEMENT_TYPES = Object.freeze(['201', '241', '311', '301', '261']);
 
 /**
  * Returns the normalized movement configuration for a movement type.
@@ -152,12 +178,13 @@ function validateReservationInput(data = {}, options = {}) {
   const recSLoc = String(data.ReceivingStorageLocation || data.receivingStorageLocation || '').trim();
   const costCenter = String(data.CostCenter || data.costCenter || '').trim();
   const assetNo = String(data.AssetNo || data.assetNo || '').trim();
+  const orderId = String(data.OrderID || data.orderId || data.OrderNo || data.orderNo || data.Aufnr || data.aufnr || '').trim();
 
   // 1. Movement Type
   if (!mvt) {
-    addError('MovementType is mandatory (201, 241, 311, 301)');
+    addError('MovementType is mandatory (201, 241, 311, 301, 261)');
   } else if (!MOVEMENT_CONFIG[mvt]) {
-    addError(`Unsupported movement type '${mvt}'. Valid movement types are: 201, 241, 311, 301`);
+    addError(`Unsupported movement type '${mvt}'. Valid movement types are: 201, 241, 311, 301, 261`);
   }
 
   // 2. Plant
@@ -232,6 +259,24 @@ function validateReservationInput(data = {}, options = {}) {
         }
         if (!recSLoc) {
           addError('Receiving Storage Location is mandatory for Movement Type 301 (Plant to Plant Transfer)');
+        }
+        break;
+
+      case '261':
+        if (!orderId) {
+          addError('Order number is mandatory for Movement Type 261 (GI to Order)');
+        }
+        if (costCenter) {
+          addError('Cost Center is not allowed for Movement Type 261 (GI to Order)');
+        }
+        if (assetNo) {
+          addError('Asset number is not allowed for Movement Type 261 (GI to Order)');
+        }
+        if (recPlant) {
+          addError('Receiving Plant is not allowed for Movement Type 261 (GI to Order)');
+        }
+        if (recSLoc) {
+          addError('Receiving Storage Location is not allowed for Movement Type 261 (GI to Order)');
         }
         break;
 

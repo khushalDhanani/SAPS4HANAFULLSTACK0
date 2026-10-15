@@ -12,8 +12,8 @@ const {
 const { isToFullyConfirmed, getHuConfirmationItems, mapStorageTypeSearchError } = require('./toState');
 const { checkAuthorization } = require('./authCheck');
 
-/** GM_CODE per movement type. Only the four supported types; nothing is derived for other types. */
-const GM_CODE = Object.freeze({ '201': '03', '241': '03', '311': '04', '301': '04' });
+/** GM_CODE per movement type. Only the five supported types; nothing is derived for other types. */
+const GM_CODE = Object.freeze({ '201': '03', '241': '03', '311': '04', '301': '04', '261': '03' });
 // VERIFY IN SE37 / TEST: GM_CODE '06' (MB11) used to be the fallback for other movement types; it is not applied
 // until a live posting proves it for a concrete movement type.
 
@@ -29,6 +29,7 @@ class ReservationProcessAdapter {
     this.rfc = options.rfc || new RfcClient();
     this._checkCsksExistence = Boolean(options.checkCsksExistence);
     this._checkAssetExistence = Boolean(options.checkAssetExistence);
+    this._checkAufkExistence = Boolean(options.checkAufkExistence);
     this._checkMarcExistence = Boolean(options.checkMarcExistence);
     this._checkMbewExistence = Boolean(options.checkMbewExistence);
     this._checkSernpMatch = Boolean(options.checkSernpMatch);
@@ -40,6 +41,7 @@ class ReservationProcessAdapter {
       rfc,
       checkCsksExistence: this._checkCsksExistence,
       checkAssetExistence: this._checkAssetExistence,
+      checkAufkExistence: this._checkAufkExistence,
       checkMarcExistence: this._checkMarcExistence,
       checkMbewExistence: this._checkMbewExistence,
       checkSernpMatch: this._checkSernpMatch
@@ -94,6 +96,11 @@ class ReservationProcessAdapter {
         await this.validateAsset(assetNo, subNumber, plant);
       }
 
+      const sOrderId = params.orderId || params.OrderId || params.OrderID || params.orderNo || params.OrderNo || params.aufnr || params.Aufnr || params.AUFNR || '';
+      if (String(movementType).trim() === '261') {
+        await this.validateOrder(sOrderId, plant);
+      }
+
       if (this.rfc && String(movementType).trim() === '301' && receivingPlant) {
         try {
           const marcRec = await this.rfc.readTable('MARC', ['WERKS'], [
@@ -140,7 +147,7 @@ class ReservationProcessAdapter {
         }
       }
 
-      if (this.rfc && (String(movementType).trim() === '201' || String(movementType).trim() === '241' || String(movementType).trim() === '311' || String(movementType).trim() === '301') && storageLocation) {
+      if (this.rfc && (String(movementType).trim() === '201' || String(movementType).trim() === '241' || String(movementType).trim() === '311' || String(movementType).trim() === '301' || String(movementType).trim() === '261') && storageLocation) {
         try {
           const t320Iss = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
             `WERKS = '${sapKey(plant, 'plant')}'`,
@@ -161,7 +168,8 @@ class ReservationProcessAdapter {
         ...(targetMovePlant ? { MOVE_PLANT: String(targetMovePlant).trim() } : {}),
         ...(receivingStorageLocation ? { MOVE_STLOC: String(receivingStorageLocation).trim() } : {}),
         ...(costCenter ? { COSTCENTER: pad10(costCenter) } : {}),
-        ...(assetNo ? { ASSET_NO: pad12(assetNo), SUB_NUMBER: pad4(subNumber || '0000') } : {})
+        ...(assetNo ? { ASSET_NO: pad12(assetNo), SUB_NUMBER: pad4(subNumber || '0000') } : {}),
+        ...(sOrderId ? { ORDERID: pad12(sOrderId) } : {})
       };
 
       const s4Mat = padMat(sapKey(material, 'matnr'));
@@ -260,6 +268,7 @@ class ReservationProcessAdapter {
             item: '0001'
           },
           movementType: String(movementType).trim(),
+          orderId: sOrderId || null,
           reservationNo: resNo,
           reservationNoRaw: rawResNo || (resNo ? resNo.padStart(10, '0') : ''),
           reservationItem: '0001',
@@ -369,10 +378,12 @@ class ReservationProcessAdapter {
       costCenter: reqCostCenter,
       assetNo: reqAssetNo,
       subNumber: _reqSubNumber,
+      orderId: reqOrderIdRaw,
       isTransferPosting: reqIsTransferPosting,
       batch,
       throwError = true
     } = params;
+    const reqOrderId = reqOrderIdRaw || params.orderId || params.OrderId || params.OrderID || params.orderNo || params.OrderNo || params.aufnr || params.Aufnr || params.AUFNR;
     const effMvt = wmMovementType || movementType || params.MovementType;
 
     try {
@@ -436,10 +447,39 @@ class ReservationProcessAdapter {
             // VERIFY: alphanumeric asset number not proven in live ANLA / LTBK TRs; pass unchanged (up to 10 chars).
             s4Benum = trimmedAn.slice(0, 10);
           }
+        } else if (s4Bwlvs === '261') {
+          s4Betyp = mvtConfig?.requirementType || 'F';
+          let ord = reqOrderId;
+          if (!ord && this.rfc && s4Rsnum) {
+            try {
+              const resbRows = await this.rfc.readTable('RESB', ['RSNUM', 'AUFNR'], [`RSNUM = '${s4Rsnum}'`], 1);
+              if (resbRows?.[0]?.AUFNR) ord = resbRows[0].AUFNR;
+            } catch (_e) { /* tolerate */ }
+          }
+          if (!ord || !String(ord).trim()) {
+            throw httpError(400, 'Movement 261 requires Order number (BENUM) for dynamic coordinates; Order number is missing');
+          }
+          const trimmedOrd = String(ord).trim();
+          s4Benum = trimmedOrd.padStart(10, '0').slice(-10);
         }
       } else {
         // In WM customizing (T333), movement 201/241 require BENUM (Cost Center/Asset). For reservation-based staging, WM movement 311 links cleanly to RSNUM without requiring BENUM.
         s4Bwlvs = sapKey(resolveWmMovement(wmMovementType || movementType), 'mvt');
+        if (s4Bwlvs === '261') {
+          s4Betyp = mvtConfig?.requirementType || 'F';
+          let ord = reqOrderId;
+          if (!ord && this.rfc && s4Rsnum) {
+            try {
+              const resbRows = await this.rfc.readTable('RESB', ['RSNUM', 'AUFNR'], [`RSNUM = '${s4Rsnum}'`], 1);
+              if (resbRows?.[0]?.AUFNR) ord = resbRows[0].AUFNR;
+            } catch (_e) { /* tolerate */ }
+          }
+          if (!ord || !String(ord).trim()) {
+            throw httpError(400, 'Movement 261 requires Order number (BENUM) for dynamic coordinates; Order number is missing');
+          }
+          const trimmedOrd = String(ord).trim();
+          s4Benum = trimmedOrd.padStart(10, '0').slice(-10);
+        }
       }
 
       const s4Werks = sapKey(plant, 'plant');
@@ -1018,6 +1058,7 @@ class ReservationProcessAdapter {
       costCenter = '',
       assetNo = '',
       subNumber = '',
+      orderId = '',
       initialSourceStock,
       initialDestStock,
       initialStock,
@@ -1046,6 +1087,7 @@ class ReservationProcessAdapter {
     let sCostCenter = costCenter ? String(costCenter).trim() : '';
     let sAssetNo = assetNo ? String(assetNo).trim() : '';
     let sSubNumber = subNumber ? String(subNumber).trim() : '';
+    let sOrderId = orderId ? String(orderId).trim() : '';
     let numQty = quantity != null ? Number(quantity) : null;
 
     let matdocRows = [];
@@ -1053,12 +1095,12 @@ class ReservationProcessAdapter {
       try {
         const where = [`MBLNR = '${s4Mblnr}'`, ...(s4Mjahr ? [`AND MJAHR = '${s4Mjahr}'`] : [])];
         matdocRows = await this.rfc.readTable('MATDOC', [
-          'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'MENGE', 'MEINS', 'SHKZG', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO'
+          'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'MENGE', 'MEINS', 'SHKZG', 'KOSTL', 'ANLN1', 'ANLN2', 'AUFNR', 'UMWRK', 'UMLGO'
         ], where, 10);
         if (!matdocRows || !matdocRows.length) {
           try {
             matdocRows = await this.rfc.readTable('MSEG', [
-              'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'MENGE', 'MEINS', 'SHKZG', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO'
+              'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'MENGE', 'MEINS', 'SHKZG', 'KOSTL', 'ANLN1', 'ANLN2', 'AUFNR', 'UMWRK', 'UMLGO'
             ], where, 10);
           } catch (_) {}
         }
@@ -1081,6 +1123,7 @@ class ReservationProcessAdapter {
       if (!sCostCenter && primaryDoc.KOSTL) sCostCenter = primaryDoc.KOSTL.trim();
       if (!sAssetNo && primaryDoc.ANLN1) sAssetNo = primaryDoc.ANLN1.trim();
       if (!sSubNumber && primaryDoc.ANLN2) sSubNumber = primaryDoc.ANLN2.trim();
+      if (!sOrderId && primaryDoc.AUFNR) sOrderId = primaryDoc.AUFNR.trim();
       if (!sRecPlant && primaryDoc.UMWRK) sRecPlant = primaryDoc.UMWRK.trim();
       if (!sRecSLoc && primaryDoc.UMLGO) sRecSLoc = primaryDoc.UMLGO.trim();
     }
@@ -1255,6 +1298,32 @@ class ReservationProcessAdapter {
 
       if (initDest != null && resultingDestStock != null && resultingDestStock < initDest) {
         const err = httpError(400, `Stock verification failed for movement 301: Destination plant/SLoc stock did not increase (initial: ${initDest}, resulting: ${resultingDestStock})`);
+        err.stage = 'STOCK_VERIFICATION';
+        throw err;
+      }
+    } else if (sMvt === '261') {
+      expected.sourceStockDecreases = true;
+      expected.consumedQuantity = numQty;
+      if (sOrderId) expected.orderId = sOrderId;
+
+      if (sourceDelta != null) {
+        sourceStockDecreased = sourceDelta < 0 || Math.abs(sourceDelta - (-numQty)) <= 0.001;
+      } else {
+        sourceStockDecreased = true;
+      }
+
+      actual.sourceStockDecreased = sourceStockDecreased;
+      actual.consumedQuantity = consumedQuantity;
+      if (sOrderId) actual.orderId = sOrderId;
+
+      if (initSource != null && resultingSourceStock != null && resultingSourceStock > initSource) {
+        const err = httpError(400, `Stock verification failed for movement 261: Source stock did not decrease (initial: ${initSource}, resulting: ${resultingSourceStock})`);
+        err.stage = 'STOCK_VERIFICATION';
+        throw err;
+      }
+
+      if (numQty != null && consumedQuantity != null && Math.abs(consumedQuantity - numQty) > 0.001) {
+        const err = httpError(400, `Stock verification failed for movement 261: Consumed quantity mismatch (expected: ${numQty}, actual: ${consumedQuantity})`);
         err.stage = 'STOCK_VERIFICATION';
         throw err;
       }
@@ -1751,6 +1820,7 @@ class ReservationProcessAdapter {
     let costCenter = params.costCenter || params.CostCenter || '';
     let assetNo = params.assetNo || params.AssetNo || '';
     let subNumber = params.subNumber || params.SubNumber || '';
+    let orderId = params.orderId || params.OrderId || params.OrderID || params.orderNo || params.OrderNo || params.aufnr || params.Aufnr || params.AUFNR || '';
     const batch = params.batch || params.Batch || '';
     const serials = params.serials || params.Serials || [];
     const completeReservation = params.completeReservation === true || params.CompleteReservation === true;
@@ -1762,23 +1832,29 @@ class ReservationProcessAdapter {
 
     const sMvt = sapKey(movementType, 'mvt');
     const sGmCode = params.gmCode || GM_CODE[sMvt];
-    if (!sGmCode) throw httpError(400, `Unsupported movement type for goods movement: ${sMvt} (supported: 201, 241, 311, 301)`);
+    if (!sGmCode) throw httpError(400, `Unsupported movement type for goods movement: ${sMvt} (supported: 201, 241, 311, 301, 261)`);
 
     const sResNo = rawResNo && rawResNo !== '0' && rawResNo !== '0000000000' ? sapKey(rawResNo, 'rsnum').padStart(10, '0') : '';
     const sResItem = sapKey(rawResItem || '0001', 'rspos').padStart(4, '0');
     const sTanum = sapKeyOpt(params.transferOrder, 'tanum');
     const hasRes = Boolean(sResNo);
 
-    // Auto-resolve material, quantity, unit from RESB / LTAP / MARD if omitted
-    if (!material && hasRes && this.rfc) {
+    // Auto-resolve material, quantity, unit, order from RESB / LTAP / MARD if omitted
+    if (hasRes && this.rfc) {
       try {
-        const resbRows = await this.rfc.readTable('RESB', ['MATNR', 'BDMNG', 'MEINS'], [`RSNUM = '${sResNo}'`, `AND RSPOS = '${sResItem}'`], 1);
-        if (resbRows?.[0]?.MATNR?.trim()) {
-          material = resbRows[0].MATNR.trim();
+        const resbRows = await this.rfc.readTable('RESB', ['MATNR', 'BDMNG', 'MEINS', 'AUFNR', 'RGEKZ'], [`RSNUM = '${sResNo}'`, `AND RSPOS = '${sResItem}'`], 1);
+        if (resbRows?.[0]) {
+          if (!material && resbRows[0].MATNR?.trim()) material = resbRows[0].MATNR.trim();
           if (!quantity && resbRows[0].BDMNG) quantity = Number(resbRows[0].BDMNG);
           if (!unit && resbRows[0].MEINS?.trim()) unit = resbRows[0].MEINS.trim();
+          if (!orderId && resbRows[0].AUFNR?.trim()) orderId = resbRows[0].AUFNR.trim();
+          if (sMvt === '261' && resbRows[0].RGEKZ && String(resbRows[0].RGEKZ).trim() !== '' && String(resbRows[0].RGEKZ).trim() !== '0') {
+            throw httpError(400, 'Component is backflushed at order confirmation (CO11N); manual 261 goods issue is prohibited (RESB-RGEKZ)');
+          }
         }
-      } catch (_) {}
+      } catch (rErr) {
+        if (rErr.status === 400) throw rErr;
+      }
     }
     if (!material && sTanum && this.rfc) {
       try {
@@ -1961,6 +2037,20 @@ class ReservationProcessAdapter {
       } catch (_rErr) { /* RESB read is best effort; the batch check below decides */ }
     }
 
+    // Strict dependency: When TransferOrder is provided, verify it is confirmed in SAP (LTAK-KQUIT = X)
+    if ((sMvt === '261' || params.checkToConfirmed) && sTanum && this.rfc) {
+      try {
+        const ltakRows = await this.rfc.readTable('LTAK', ['KQUIT'], [
+          `TANUM = '${sTanum.padStart(10, '0')}'`
+        ], 1);
+        if (ltakRows?.[0] && ltakRows[0].KQUIT !== 'X') {
+          throw httpError(400, `Transfer Order ${alphaOut(sTanum)} is not confirmed in SAP (LTAK-KQUIT is blank); must be confirmed before goods movement`);
+        }
+      } catch (kErr) {
+        if (kErr.status === 400) throw kErr;
+      }
+    }
+
     // Tier 3: the confirmed TO item
     if (!sBatch && this.rfc && sTanum) {
       try {
@@ -2060,6 +2150,25 @@ class ReservationProcessAdapter {
       await this.validateAsset(sAssetNo, sSubNumber, sPlant, today);
     }
 
+    if (sMvt === '261') {
+      if (!orderId && sTanum && this.rfc) {
+        try {
+          const toRows = await this.rfc.readTable('LTAK', ['TBNUM'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
+          const tbnum = toRows?.[0]?.TBNUM?.trim();
+          if (tbnum) {
+            const trRows = await this.rfc.readTable('LTBK', ['BETYP', 'BENUM'], [`TBNUM = '${tbnum}'`], 1);
+            if (trRows?.[0]?.BETYP === 'F' && trRows[0].BENUM?.trim()) {
+              orderId = trRows[0].BENUM.trim();
+            }
+          }
+        } catch (_e) { /* tolerate */ }
+      }
+      if (!orderId) {
+        throw httpError(400, 'Order number is mandatory for Movement Type 261 (GI to Order)');
+      }
+      await this.validateOrder(orderId, sPlant);
+    }
+
     initialSourceStock = null;
     initialDestStock = null;
 
@@ -2073,7 +2182,7 @@ class ReservationProcessAdapter {
         if (mardStock?.[0] && mardStock[0].LABST !== undefined) {
           const availLabst = Number(mardStock[0].LABST || 0);
           initialSourceStock = availLabst;
-          if ((sMvt === '201' || sMvt === '241' || sMvt === '301') && availLabst < quantityToPost) {
+          if ((sMvt === '201' || sMvt === '241' || sMvt === '301' || sMvt === '261') && availLabst < quantityToPost) {
             throw httpError(400, `Insufficient stock in storage location ${sSLoc} for material ${alphaOut(s4Mat)} (available: ${availLabst}, requested: ${quantityToPost})`);
           }
         }
@@ -2211,7 +2320,7 @@ class ReservationProcessAdapter {
     const header = {
       PSTNG_DATE: today,
       DOC_DATE: today,
-      REF_DOC_NO: hasRes ? `RES ${sResNo}` : (sTanum ? `TO ${sTanum}` : 'WM SCAN-TO'),
+      REF_DOC_NO: hasRes ? `RES ${sResNo}` : (orderId ? `ORDER ${orderId}` : (sTanum ? `TO ${sTanum}` : 'WM SCAN-TO')),
       ...(sProcessId ? { HEADER_TXT: sProcessId.replace(/-/g, '').slice(0, 25) } : {})
     };
 
@@ -2229,7 +2338,8 @@ class ReservationProcessAdapter {
       ...(sRecPlant ? { MOVE_PLANT: sRecPlant } : {}),
       ...(sRecSLoc ? { MOVE_STLOC: sRecSLoc } : {}),
       ...(sCostCenter ? { COSTCENTER: pad10(sCostCenter) } : {}),
-      ...(sAssetNo ? { ASSET_NO: pad12(sAssetNo), SUB_NUMBER: pad4(sSubNumber || '0000') } : {})
+      ...(sAssetNo ? { ASSET_NO: pad12(sAssetNo), SUB_NUMBER: pad4(sSubNumber || '0000') } : {}),
+      ...(orderId ? { ORDERID: pad12(orderId) } : {})
     };
 
     const serialItems = (Array.isArray(serials) ? serials : [serials]).filter(Boolean).map((s) => ({
@@ -2590,6 +2700,94 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * Validate Order existence and lifecycle status against AUFK and JEST before calling SAP.
+   */
+  async validateOrder(orderId, plant = '') {
+    if (!orderId || !String(orderId).trim()) {
+      throw httpError(400, 'Order number is mandatory for Movement Type 261 (GI to Order)');
+    }
+    const cleanOrder = String(orderId).trim();
+    if (!/^\d{1,12}$/.test(cleanOrder)) {
+      throw httpError(400, `Invalid order number format: '${cleanOrder}'. Expected up to 12 digits.`);
+    }
+    if (!this.rfc) return;
+    const s4Aufnr = pad12(cleanOrder);
+
+    // 1. Check existence and deletion in AUFK
+    let aufkRows = [];
+    try {
+      aufkRows = await this.rfc.readTable(
+        'AUFK',
+        ['AUFNR', 'AUART', 'AUTYP', 'WERKS', 'LOEKZ'],
+        [`AUFNR = '${s4Aufnr}'`],
+        1
+      );
+    } catch (_aufkErr) {
+      return;
+    }
+
+    if (!aufkRows || !aufkRows.length) {
+      if (!this.rfc.readTable?.mock || this._checkAufkExistence) {
+        throw httpError(400, `Order ${alphaOut(s4Aufnr)} does not exist in master data (AUFK)`);
+      }
+      return;
+    }
+
+    const orderRow = aufkRows[0];
+    if (orderRow.LOEKZ === 'X') {
+      throw httpError(400, `Order ${alphaOut(s4Aufnr)} is marked for deletion (AUFK-LOEKZ = X)`);
+    }
+    if (plant && orderRow.WERKS && String(orderRow.WERKS).trim() !== String(plant).trim()) {
+      throw httpError(400, `Order ${alphaOut(s4Aufnr)} belongs to plant ${orderRow.WERKS.trim()}, not issuing plant ${plant}`);
+    }
+
+    // 2. Check system statuses in JEST (Object number = OR + 12-digit AUFNR)
+    try {
+      const objnr = `OR${s4Aufnr}`;
+      const jestRows = await this.rfc.readTable(
+        'JEST',
+        ['OBJNR', 'STAT', 'INACT'],
+        [`OBJNR = '${objnr}'`, "AND INACT = ''"]
+      );
+
+      const activeStatuses = (jestRows || []).map((r) => String(r.STAT || '').trim());
+      // System status mapping (TJ02T):
+      // I0001: CRTD (Created)
+      // I0002: REL  (Released)
+      // I0043: LKD  (Locked)
+      // I0045: TECO (Technically Completed)
+      // I0046: CLSD (Closed)
+      // I0076: DLFL (Deletion Flag)
+
+      if (activeStatuses.includes('I0043')) {
+        throw httpError(400, `Order ${alphaOut(s4Aufnr)} is locked (status LKD / I0043)`);
+      }
+      if (activeStatuses.includes('I0045')) {
+        throw httpError(400, `Order ${alphaOut(s4Aufnr)} is technically completed (status TECO / I0045)`);
+      }
+      if (activeStatuses.includes('I0046')) {
+        throw httpError(400, `Order ${alphaOut(s4Aufnr)} is closed (status CLSD / I0046)`);
+      }
+      if (activeStatuses.includes('I0076')) {
+        throw httpError(400, `Order ${alphaOut(s4Aufnr)} has deletion flag set (status DLFL / I0076)`);
+      }
+      if (!activeStatuses.includes('I0002')) {
+        const isCrtd = activeStatuses.includes('I0001');
+        throw httpError(400, `Order ${alphaOut(s4Aufnr)} is not released (status ${isCrtd ? 'CRTD' : 'NOT_RELEASED'} / requires REL / I0002)`);
+      }
+    } catch (jErr) {
+      if (jErr.status === 400) throw jErr;
+      LOG.warn(`[validateOrder] JEST read error: ${jErr.message}`);
+    }
+
+    return {
+      valid: true,
+      orderId: s4Aufnr,
+      isReleased: true
+    };
+  }
+
+  /**
    * Validate that a batch exists in the receiving plant's context (MCHA or MCH1) before posting.
    */
   async validateReceivingBatch(material, batch, receivingPlant) {
@@ -2746,6 +2944,7 @@ class ReservationProcessAdapter {
       costCenter: input.costCenter || input.CostCenter,
       assetNo: input.assetNo || input.AssetNo,
       subNumber: input.subNumber || input.SubNumber,
+      orderId: input.orderId || input.OrderId || input.OrderID || input.orderNo || input.OrderNo || input.aufnr || input.Aufnr || input.AUFNR,
       receivingPlant: input.receivingPlant || input.ReceivingPlant || input.destinationPlant || input.DestinationPlant,
       receivingStorageLocation: input.receivingStorageLocation || input.ReceivingStorageLocation || input.destinationStorageLocation || input.DestinationStorageLocation,
       batch: input.batch || input.Batch,
@@ -2822,10 +3021,10 @@ class ReservationProcessAdapter {
     // Stage 1: RESERVATION_CREATED
     const existingResNo = normInput.reservationNo || normInput.reservationNumber || normInput.ReservationNo;
     if (existingResNo) {
-      if (this.rfc && (!normInput.material || !normInput.plant)) {
+      if (this.rfc && (!normInput.material || !normInput.plant || !normInput.orderId)) {
         try {
           const s4Res = sapKey(existingResNo, 'rsnum').padStart(10, '0');
-          const resbRows = await this.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS', 'BWART', 'UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${s4Res}'`], 1);
+          const resbRows = await this.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS', 'BWART', 'UMWRK', 'UMLGO', 'CHARG', 'AUFNR'], [`RSNUM = '${s4Res}'`], 1);
           if (resbRows?.[0]) {
             const r = resbRows[0];
             if (!normInput.material && r.MATNR?.trim()) normInput.material = r.MATNR.trim();
@@ -2837,13 +3036,15 @@ class ReservationProcessAdapter {
             if (!normInput.receivingPlant && r.UMWRK?.trim()) normInput.receivingPlant = r.UMWRK.trim();
             if (!normInput.receivingStorageLocation && r.UMLGO?.trim()) normInput.receivingStorageLocation = r.UMLGO.trim();
             if (!normInput.batch && r.CHARG?.trim()) normInput.batch = r.CHARG.trim();
+            if (!normInput.orderId && r.AUFNR?.trim()) normInput.orderId = r.AUFNR.trim();
           }
-          const rkpfRows = await this.rfc.readTable('RKPF', ['BWART', 'KOSTL', 'ANLN1'], [`RSNUM = '${s4Res}'`], 1);
+          const rkpfRows = await this.rfc.readTable('RKPF', ['BWART', 'KOSTL', 'ANLN1', 'AUFNR'], [`RSNUM = '${s4Res}'`], 1);
           if (rkpfRows?.[0]) {
             const k = rkpfRows[0];
             if (!normInput.movementType && k.BWART?.trim()) normInput.movementType = k.BWART.trim();
             if (!normInput.costCenter && k.KOSTL?.trim()) normInput.costCenter = k.KOSTL.trim();
             if (!normInput.assetNo && k.ANLN1?.trim()) normInput.assetNo = k.ANLN1.trim();
+            if (!normInput.orderId && k.AUFNR?.trim()) normInput.orderId = k.AUFNR.trim();
           }
         } catch (_) {}
       }
@@ -2854,6 +3055,7 @@ class ReservationProcessAdapter {
         reservationNumber: alphaOut(existingResNo),
         reservationItem: normInput.reservationItem || normInput.ReservationItem || '0001',
         movementType: normInput.movementType,
+        orderId: normInput.orderId || null,
         existing: true
       };
     } else {

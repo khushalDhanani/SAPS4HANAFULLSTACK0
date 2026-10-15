@@ -686,6 +686,7 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
                 costCenter: '',
                 assetNo: '',
                 subNumber: '',
+                orderId: '',
                 autoConfirm: true,
                 autoPostMigo: true,
                 CompleteReservation: false,

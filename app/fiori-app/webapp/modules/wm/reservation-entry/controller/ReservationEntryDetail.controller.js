@@ -56,7 +56,8 @@ sap.ui.define([
                 ReceivingPlant: "",
                 CostCenter: "",
                 AssetNo: "",
-                SubNumber: ""
+                SubNumber: "",
+                OrderID: ""
             };
         },
 
@@ -182,6 +183,7 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/ReceivingPlant", "");
                     this._oCreateModel.setProperty("/AssetNo", "");
                     this._oCreateModel.setProperty("/SubNumber", "");
+                    this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "241":
                     if (!this._oCreateModel.getProperty("/AssetNo")) {
@@ -191,6 +193,7 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/ReceivingStorageLocation", "");
                     this._oCreateModel.setProperty("/ReceivingPlant", "");
                     this._oCreateModel.setProperty("/CostCenter", "");
+                    this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "311":
                     if (!this._oCreateModel.getProperty("/ReceivingStorageLocation") || this._oCreateModel.getProperty("/ReceivingStorageLocation") === this._oCreateModel.getProperty("/StorageLocation")) {
@@ -200,6 +203,7 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/CostCenter", "");
                     this._oCreateModel.setProperty("/AssetNo", "");
                     this._oCreateModel.setProperty("/SubNumber", "");
+                    this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "301":
                     if (!this._oCreateModel.getProperty("/ReceivingPlant")) {
@@ -208,6 +212,14 @@ sap.ui.define([
                     if (!this._oCreateModel.getProperty("/ReceivingStorageLocation")) {
                         this._oCreateModel.setProperty("/ReceivingStorageLocation", "ST02");
                     }
+                    this._oCreateModel.setProperty("/CostCenter", "");
+                    this._oCreateModel.setProperty("/AssetNo", "");
+                    this._oCreateModel.setProperty("/SubNumber", "");
+                    this._oCreateModel.setProperty("/OrderID", "");
+                    break;
+                case "261":
+                    this._oCreateModel.setProperty("/ReceivingStorageLocation", "");
+                    this._oCreateModel.setProperty("/ReceivingPlant", "");
                     this._oCreateModel.setProperty("/CostCenter", "");
                     this._oCreateModel.setProperty("/AssetNo", "");
                     this._oCreateModel.setProperty("/SubNumber", "");
@@ -371,7 +383,7 @@ sap.ui.define([
 
         validateForm: function (oData) {
             if (!oData.MovementType) {
-                return "Movement Type is required (201, 241, 311, 301)";
+                return "Movement Type is required (201, 241, 311, 301, 261)";
             }
             if (!oData.Plant || !oData.Plant.trim()) {
                 return "Plant is required";
@@ -419,6 +431,23 @@ sap.ui.define([
                         return "Receiving Storage Location is mandatory for Movement Type 301 (Plant to Plant Transfer)";
                     }
                     break;
+                case "261":
+                    if (!oData.OrderID || !oData.OrderID.trim()) {
+                        return "Order Number is mandatory for Movement Type 261 (Goods Issue to Order)";
+                    }
+                    if (oData.CostCenter && oData.CostCenter.trim()) {
+                        return "Cost Center must be empty for Movement Type 261";
+                    }
+                    if (oData.AssetNo && oData.AssetNo.trim()) {
+                        return "Asset must be empty for Movement Type 261";
+                    }
+                    if (oData.ReceivingPlant && oData.ReceivingPlant.trim()) {
+                        return "Receiving Plant must be empty for Movement Type 261";
+                    }
+                    if (oData.ReceivingStorageLocation && oData.ReceivingStorageLocation.trim()) {
+                        return "Receiving Storage Location must be empty for Movement Type 261";
+                    }
+                    break;
                 default:
                     return "Unsupported Movement Type: " + oData.MovementType;
             }
@@ -454,6 +483,7 @@ sap.ui.define([
                 CostCenter: (oData.CostCenter || "").trim(),
                 AssetNo: (oData.AssetNo || "").trim(),
                 SubNumber: (oData.SubNumber || "").trim(),
+                OrderID: (oData.OrderID || "").trim(),
                 Batch: (oData.Batch || "").trim()
             };
 
@@ -557,6 +587,7 @@ sap.ui.define([
                 case "201": return "Goods Issue to Cost Center";
                 case "241": return "Goods Issue to Asset";
                 case "301": return "Plant to Plant Transfer";
+                case "261": return "Goods Issue to Order";
                 default: return sMvt || "";
             }
         }

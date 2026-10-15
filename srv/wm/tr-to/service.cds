@@ -209,6 +209,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         CostCenter              : String(10);
         AssetNo                 : String(12);
         SubNumber               : String(4);
+        OrderID                 : String(12);
+        Backflush               : Boolean;
         RequiredQuantity        : Decimal(13, 3);
         ProcessedQuantity       : Decimal(13, 3);
         OpenQuantity            : Decimal(13, 3);

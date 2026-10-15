@@ -1234,7 +1234,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       );
 
       expect(status).toBe(200);
-      expect(openResvSpy).toHaveBeenCalledWith('311,201,241,301', '1120');
+      expect(openResvSpy).toHaveBeenCalledWith('311,201,241,301,261', '1120');
       expect(data.value).toHaveLength(1);
       expect(data.value[0]).toMatchObject({
         ReservationNo: '0000525868',
@@ -1248,12 +1248,12 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       });
     });
 
-    test('strictly restricts open reservations to 311, 201, 241, 301 and filters out 261', async () => {
+    test('strictly restricts open reservations to supported movements and filters out unsupported movements like 999', async () => {
       openResvSpy = jest.spyOn(GoodsIssueAdapter, 'getOpenReservations').mockResolvedValue([
         {
-          ReservationNo: '0000519944', MovementType: '261', MovementTypeName: 'GI for order',
+          ReservationNo: '0000519944', MovementType: '999', MovementTypeName: 'Unsupported',
           SampleMaterial: '8000001000', SampleMaterialDesc: 'Component', Plant: '1130', StorageLocation: 'CS02',
-          ItemCount: 1, DisplayText: 'Reservation 0000519944 (261)'
+          ItemCount: 1, DisplayText: 'Reservation 0000519944 (999)'
         },
         {
           ReservationNo: '0000527594', MovementType: '311', MovementTypeName: 'TF trfr.st.loc.',
@@ -1273,18 +1273,18 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       );
 
       expect(status).toBe(200);
-      expect(openResvSpy).toHaveBeenCalledWith('311,201,241,301', '1120');
-      // Movement 261 must be excluded from the returned rows
+      expect(openResvSpy).toHaveBeenCalledWith('311,201,241,301,261', '1120');
+      // Movement 999 must be excluded from the returned rows
       expect(data.value).toHaveLength(2);
       expect(data.value.map((r) => r.MovementType)).toEqual(['311', '201']);
-      expect(data.value.some((r) => r.MovementType === '261')).toBe(false);
+      expect(data.value.some((r) => r.MovementType === '999')).toBe(false);
     });
 
-    test('returns empty array immediately if caller specifies unsupported movement type like 261', async () => {
+    test('returns empty array immediately if caller specifies unsupported movement type like 999', async () => {
       openResvSpy = jest.spyOn(GoodsIssueAdapter, 'getOpenReservations');
 
       const { status, data } = await GET(
-        "/odata/v4/reservation-entry/getOpenReservations(plant='1120',movementType='261')",
+        "/odata/v4/reservation-entry/getOpenReservations(plant='1120',movementType='999')",
         authClerk
       );
 
@@ -1339,9 +1339,9 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       ).rejects.toMatchObject({ response: { status: 404 } });
     });
 
-    test('returns 404 when reservation has unsupported movement type like 261', async () => {
+    test('returns 404 when reservation has unsupported movement type like 999', async () => {
       rtSpy = jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(async (table) => {
-        if (table === 'RKPF') return [{ BWART: '261', KOSTL: '', ANLN1: '', ANLN2: '', UMWRK: '', UMLGO: '' }];
+        if (table === 'RKPF') return [{ BWART: '999', KOSTL: '', ANLN1: '', ANLN2: '', UMWRK: '', UMLGO: '' }];
         if (table === 'RESB') return [{ MATNR: '000000008000001000', WERKS: '1130', LGORT: 'CS02', BDMNG: '10.000', MEINS: 'KG', CHARG: '', KZEAR: '' }];
         return [];
       });

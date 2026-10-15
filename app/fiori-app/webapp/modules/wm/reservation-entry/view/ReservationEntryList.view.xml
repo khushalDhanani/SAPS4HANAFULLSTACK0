@@ -50,6 +50,7 @@
                                     <core:Item key="201" text="{i18n>resMvt201Text}" />
                                     <core:Item key="241" text="{i18n>resMvt241Text}" />
                                     <core:Item key="301" text="{i18n>resMvt301Text}" />
+                                    <core:Item key="261" text="{i18n>resMvt261Text}" />
                                 </Select>
                             </fb:control>
                         </fb:FilterGroupItem>

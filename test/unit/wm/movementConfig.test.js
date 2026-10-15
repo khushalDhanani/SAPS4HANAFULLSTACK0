@@ -16,8 +16,24 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
   });
 
   describe('1. Movement Configuration Definitions', () => {
-    test('Contains supported movement types: 201, 241, 311, 301', () => {
-      expect(SUPPORTED_MOVEMENT_TYPES).toEqual(['201', '241', '311', '301']);
+    test('Contains supported movement types: 201, 241, 311, 301, 261', () => {
+      expect(SUPPORTED_MOVEMENT_TYPES).toEqual(['201', '241', '311', '301', '261']);
+    });
+
+    test('261: GI to Order configuration has required properties', () => {
+      const cfg = MOVEMENT_CONFIG['261'];
+      expect(cfg.inventoryMovement).toBe('261');
+      expect(cfg.configuredWmMovement).toBe('261');
+      expect(cfg.stagingWmMovement).toBe('261');
+      expect(cfg.requiresCostCenter).toBe(false);
+      expect(cfg.requiresAsset).toBe(false);
+      expect(cfg.requiresReceivingPlant).toBe(false);
+      expect(cfg.requiresReceivingSloc).toBe(false);
+      expect(cfg.requiresOrder).toBe(true);
+      expect(cfg.requirementType).toBe('F');
+      expect(cfg.interimStorageType).toBe('914');
+      expect(cfg.preserveReservationOnTr).toBe(true);
+      expect(cfg.gmCode).toBe('03');
     });
 
     test('201: GI to Cost Center configuration has required properties', () => {
@@ -109,13 +125,13 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
       test('Fails when MovementType is missing', () => {
         const res = validateReservationInput({ Plant: '1120', StorageLocation: 'HS01', Material: 'MAT01', Quantity: 10, Unit: 'KG' });
         expect(res.isValid).toBe(false);
-        expect(res.errors).toContain('MovementType is mandatory (201, 241, 311, 301)');
+        expect(res.errors).toContain('MovementType is mandatory (201, 241, 311, 301, 261)');
       });
 
       test('Fails when MovementType is unsupported', () => {
-        const res = validateReservationInput({ MovementType: '261', Plant: '1120', StorageLocation: 'HS01', Material: 'MAT01', Quantity: 10, Unit: 'KG' });
+        const res = validateReservationInput({ MovementType: '999', Plant: '1120', StorageLocation: 'HS01', Material: 'MAT01', Quantity: 10, Unit: 'KG' });
         expect(res.isValid).toBe(false);
-        expect(res.errors[0]).toMatch(/Unsupported movement type '261'/);
+        expect(res.errors[0]).toMatch(/Unsupported movement type '999'/);
       });
 
       test('Fails when Plant is missing', () => {
@@ -245,7 +261,7 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
       test('Throws when throwError = true', () => {
         expect(() => {
           validateReservationInput({}, { throwError: true });
-        }).toThrow('MovementType is mandatory (201, 241, 311, 301)');
+        }).toThrow('MovementType is mandatory (201, 241, 311, 301, 261)');
       });
 
       test('Populates req.error when req is passed', () => {

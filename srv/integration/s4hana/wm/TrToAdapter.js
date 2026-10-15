@@ -869,6 +869,8 @@ class TrToAdapter {
     let costCenter = tr.Betyp === 'K' ? alphaOut(tr.Benum) : '';
     let assetNo = tr.Betyp === 'A' ? alphaOut(tr.Benum) : '';
     let subNumber = tr.Betyp === 'A' ? '0000' : '';
+    let orderId = tr.Betyp === 'F' ? alphaOut(tr.Benum) : '';
+    let backflush = false;
 
     let reservationMovementType = '';
     let trackedReservation = null;
@@ -878,7 +880,7 @@ class TrToAdapter {
       try {
         const rsnumPadded = sapKey(tr.Rsnum, 'rsnum').padStart(10, '0');
         const resbRows = await this._rfc(
-          () => this.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'BWART', 'UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${rsnumPadded}'`], 10),
+          () => this.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'BWART', 'UMWRK', 'UMLGO', 'CHARG', 'AUFNR', 'RGEKZ'], [`RSNUM = '${rsnumPadded}'`], 10),
           `Read RESB for reservation ${alphaOut(rsnumPadded)}`
         );
         let matched = null;
@@ -901,10 +903,16 @@ class TrToAdapter {
           if (!sel.Batch && matched.CHARG?.trim()) {
             sel.Batch = matched.CHARG.trim().toUpperCase();
           }
+          if (!orderId && matched.AUFNR?.trim()) {
+            orderId = alphaOut(matched.AUFNR.trim());
+          }
+          if (matched.RGEKZ?.trim()) {
+            backflush = true;
+          }
         }
-        if (!costCenter || !assetNo) {
+        if (!costCenter || !assetNo || !orderId) {
           const rkpfRows = await this._rfc(
-            () => this.rfc.readTable('RKPF', ['KOSTL', 'ANLN1', 'ANLN2'], [`RSNUM = '${rsnumPadded}'`], 1),
+            () => this.rfc.readTable('RKPF', ['KOSTL', 'ANLN1', 'ANLN2', 'AUFNR'], [`RSNUM = '${rsnumPadded}'`], 1),
             `Read RKPF for reservation ${alphaOut(rsnumPadded)}`
           );
           if (rkpfRows?.[0]) {
@@ -912,6 +920,9 @@ class TrToAdapter {
             if (!assetNo && rkpfRows[0].ANLN1?.trim()) {
               assetNo = rkpfRows[0].ANLN1.trim();
               subNumber = rkpfRows[0].ANLN2?.trim() || '0000';
+            }
+            if (!orderId && rkpfRows[0].AUFNR?.trim()) {
+              orderId = alphaOut(rkpfRows[0].AUFNR.trim());
             }
           }
         }
@@ -921,7 +932,7 @@ class TrToAdapter {
     }
 
     // 2. Tracking table (ReservationTrack by TBNUM)
-    if (!receivingStorageLocation || !receivingPlant) {
+    if (!receivingStorageLocation || !receivingPlant || !orderId) {
       try {
         const track = await this._findTrackedReservationForTR(tr.Tbnum);
         if (track) {
@@ -942,6 +953,7 @@ class TrToAdapter {
             assetNo = track.AssetNo.trim();
             subNumber = track.SubNumber?.trim() || '0000';
           }
+          if (!orderId && track.OrderID?.trim()) orderId = track.OrderID.trim();
         }
       } catch (_trackErr) {
         LOG.warn(`ReservationTrack lookup in lookupTR failed: ${_trackErr.message}`);
@@ -1022,6 +1034,8 @@ class TrToAdapter {
       CostCenter: costCenter,
       AssetNo: assetNo,
       SubNumber: subNumber,
+      OrderID: orderId,
+      Backflush: backflush,
       RequiredQuantity: sel.RequiredQty || 0,
       TargetQty: sel.RequiredQty || 0,
       ProcessedQuantity: sel.ProcessedQty || 0,
@@ -1281,6 +1295,9 @@ class TrToAdapter {
     AssetNo = '',
     subNumber = '',
     SubNumber = '',
+    orderId = '',
+    OrderId = '',
+    OrderID = '',
     autoConfirm = false,
     autoPostMigo: _autoPostMigo = false,
     existingToNumber = '',
@@ -1328,6 +1345,7 @@ class TrToAdapter {
     let finalCostCenter = (CostCenter || costCenter) ? String(CostCenter || costCenter).trim() : (tr.Betyp === 'K' ? alphaOut(tr.Benum) : '');
     let finalAssetNo = (AssetNo || assetNo) ? String(AssetNo || assetNo).trim() : (tr.Betyp === 'A' ? alphaOut(tr.Benum) : '');
     let finalSubNumber = (SubNumber || subNumber) ? String(SubNumber || subNumber).trim() : (tr.Betyp === 'A' ? '0000' : '');
+    let finalOrderId = (OrderID || OrderId || orderId) ? String(OrderID || OrderId || orderId).trim() : (tr.Betyp === 'F' ? alphaOut(tr.Benum) : '');
 
     const effTbpos = tbpos || trItem || TRItem || '';
     const open = this._openItems(tr);
@@ -1379,8 +1397,12 @@ class TrToAdapter {
             TransferRequirement: track.TransferRequirement,
             ReservationNo: track.ReservationNo,
             ReservationItem: track.ReservationItem,
-            MovementType: track.MovementType
+            MovementType: track.MovementType,
+            OrderID: track.OrderID
           };
+          if (!finalOrderId && track.OrderID?.trim()) {
+            finalOrderId = track.OrderID.trim();
+          }
         }
       } catch (_) {}
     }
@@ -1486,7 +1508,7 @@ class TrToAdapter {
       // Destination: TR header, else the warehouse movement-type customizing T333 (NLTYP/NLPLA, read from the
       // system: docs/abap/system-metadata.md §24). Never a literal default; no T333 row is an error.
       let nltyp = tr.Nltyp || '';
-      let nlpla = tr.Nlpla || '';
+      let nlpla = tr.Nlpla || (tr.Betyp === 'F' && (finalOrderId || tr.Benum) ? alphaOut(finalOrderId || tr.Benum) : '');
       if (!nltyp) {
         const t333 = await this._rfc(
           () => this.rfc.readTable('T333', ['NLTYP', 'NLPLA'], [`LGNUM = '${wh}'`, `AND BWLVS = '${sapKey(tr.Bwlvs, 'mvt')}'`], 1),
@@ -1729,6 +1751,7 @@ class TrToAdapter {
       CostCenter: finalCostCenter,
       AssetNo: finalAssetNo,
       SubNumber: finalSubNumber,
+      OrderID: finalOrderId,
       ReceivingPlant: finalRecPlant,
       ReceivingStorageLocation: finalRecSLoc,
       Betyp: tr.Betyp || '',

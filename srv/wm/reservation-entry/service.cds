@@ -75,6 +75,7 @@ service ReservationEntryService {
         CostCenter              : String(10),
         AssetNo                 : String(12),
         SubNumber               : String(4),
+        OrderID                 : String(12),
         WarehouseNumber         : String(3),
         Batch                   : String(10)
     ) returns ReservationCreatedResponse;
@@ -129,6 +130,7 @@ service ReservationEntryService {
         CostCenter              : String(10),
         AssetNo                 : String(12),
         SubNumber               : String(4),
+        OrderID                 : String(12),
         WarehouseNumber         : String(3),
         Batch                   : String(10),
         SerialNo                : String(18),
@@ -167,6 +169,10 @@ service ReservationEntryService {
         assetNo                    : String(12),
         SubNumber                  : String(4),
         subNumber                  : String(4),
+        OrderID                    : String(12),
+        orderId                    : String(12),
+        OrderNo                    : String(12),
+        orderNo                    : String(12),
         Batch                      : String(10),
         batch                      : String(10),
         SerialNo                   : String(18),
