@@ -5,7 +5,6 @@ const { RfcClient } = require('../RfcClient');
 const { sapKey, sapKeyOpt, httpError } = require('../sapKey');
 const { STATUS, PROCESS_STATUS } = require('../../../common/wmStatus');
 const {
-  MOVEMENT_CONFIG,
   getMovementConfig,
   resolveWmMovement,
   validateReservationInput
@@ -369,7 +368,7 @@ class ReservationProcessAdapter {
       movementType = params.wmMovementType || params.MovementType,
       costCenter: reqCostCenter,
       assetNo: reqAssetNo,
-      subNumber: reqSubNumber,
+      subNumber: _reqSubNumber,
       isTransferPosting: reqIsTransferPosting,
       batch,
       throwError = true
@@ -849,7 +848,7 @@ class ReservationProcessAdapter {
       storageLocation = '',
       reservationNo = '',
       reservationNumber = '',
-      reservationItem = '0001'
+      reservationItem: _reservationItem = '0001'
     } = params;
 
     const docNum = materialDocument || params.MaterialDocument || '';
@@ -2252,7 +2251,7 @@ class ReservationProcessAdapter {
         if (!testrun) {
           try {
             await call('BAPI_TRANSACTION_ROLLBACK', {});
-          } catch (rbErr) {
+          } catch (_rbErr) {
             // suppress rollback call error
           }
         }

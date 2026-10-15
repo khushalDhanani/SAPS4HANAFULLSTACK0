@@ -838,8 +838,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
         }
         if (table === 'T320') return [
           { LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' },
-          { LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' },
-          ...(movementType === '301' ? [{ LGNUM: 'W01', WERKS: '1110', LGORT: 'CS01' }] : [])
+          { LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }
         ];
         if (table === 'MARD') return [{ LGORT: 'CS01', LABST: '100.000' }, { LGORT: 'HS01' }];
         if (table === 'T333') return [{ LGNUM: 'W01', BWLVS: '311', NLTYP: '921', NLPLA: 'TRANSFER' }];

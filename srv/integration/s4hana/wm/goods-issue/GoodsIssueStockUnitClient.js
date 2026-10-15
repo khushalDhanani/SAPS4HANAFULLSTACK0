@@ -619,7 +619,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
           if (Array.isArray(allRes) && allRes.length > 0) {
             resvItem = allRes[0];
           }
-        } catch (checkErr) {
+        } catch (_checkErr) {
           // Ignore status fallback failure; error below handles missing item
         }
       }

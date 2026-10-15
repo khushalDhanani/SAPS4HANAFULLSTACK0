@@ -693,7 +693,7 @@ class TrToAdapter {
    * Queries EQUI for serial numbers created/maintained for the material.
    * Natural sort creates clean sequential series (e.g. CON-40-001, CON-40-002...).
    */
-  async getAvailableSerials(material, plant = '', storageLocation = '', batch = '') {
+  async getAvailableSerials(material, _plant = '', _storageLocation = '', _batch = '') {
     if (!material) throw httpError(400, 'Material is required for serial series lookup');
     const matClean = alphaOut(material);
     const matPadded = alphaIn(sapKey(matClean, 'matnr'), 18);
@@ -1277,7 +1277,7 @@ class TrToAdapter {
     subNumber = '',
     SubNumber = '',
     autoConfirm = false,
-    autoPostMigo = false,
+    autoPostMigo: _autoPostMigo = false,
     existingToNumber = '',
     status = '',
     confMenge,

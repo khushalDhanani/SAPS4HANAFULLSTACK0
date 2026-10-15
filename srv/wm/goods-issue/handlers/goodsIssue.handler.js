@@ -4,7 +4,6 @@ const { validateReversalPayload } = require('../validation/goodsIssue.validation
 const { normalizeReversalPayload } = require('../mapping/goodsIssue.mapper');
 const LOG = require('../../../common/logger')('goods-issue-handler');
 const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
-const { classifyPostingError } = require('./goodsIssuePerType.handler');
 
 const _extractFilterParam = extractFilterParam;
 const GI_MOVEMENT_TYPE = '201';

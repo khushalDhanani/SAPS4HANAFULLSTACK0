@@ -579,6 +579,7 @@ const PerTypeGoodsIssueHandler = {
 };
 
 PerTypeGoodsIssueHandler.classifyPostingError = classifyPostingError;
+PerTypeGoodsIssueHandler.isDefinitiveRejection = isDefinitiveRejection;
 PerTypeGoodsIssueHandler.postDirect = postDirect;
 PerTypeGoodsIssueHandler.attemptResponse = attemptResponse;
 

@@ -4,10 +4,10 @@ const cds = require('@sap/cds');
 const ReservationProcessAdapter = require('../../integration/s4hana/wm/ReservationProcessAdapter');
 const GoodsIssueAdapter = require('../../integration/s4hana/wm/GoodsIssueAdapter');
 const { findUnconfirmedToItems } = require('../../integration/s4hana/wm/toState');
-const { STATUS, STEP_ERROR, ERROR_STATUSES, UNCONFIRMED_TO, PROCESS_STATUS } = require('../../common/wmStatus');
-const { sapKey, sapKeyOpt } = require('../../integration/s4hana/sapKey');
+const { STATUS, STEP_ERROR, UNCONFIRMED_TO, PROCESS_STATUS } = require('../../common/wmStatus');
+const { sapKey } = require('../../integration/s4hana/sapKey');
 const { withReservationLock, isLockConflict } = require('../../integration/s4hana/wm/resLock');
-const { validateReservationInput, MOVEMENT_CONFIG, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
+const { validateReservationInput, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
 const LOG = cds.log('reservation-entry');
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 
@@ -230,7 +230,6 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       // Step 2: Auto-create Transfer Requirement (background/immediate step)
       let trNumber = '';
-      let currentStatus = STATUS.RES_CREATED;
       let trError = null;
       let determinedWh = '';
 
@@ -281,7 +280,6 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         }
 
         trNumber = trResult.trNumberRaw || String(trResult.trNumber).padStart(10, '0');
-        currentStatus = STATUS.TR_CREATED;
 
         if (trResult.warning) {
           req?.warn?.(200, trResult.warning);
@@ -332,7 +330,6 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         });
       } catch (err) {
         // Reservation exists but the backend created no TR: status 11 (TR error), a backend issue to fix in SAP.
-        currentStatus = STATUS.TR_ERROR;
         trError = `TR creation failed in SAP backend: ${err.message}`;
 
         await UPDATE(ReservationEntries).set({
@@ -1013,7 +1010,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
       const wh = WarehouseNumber || track?.WarehouseNumber || '';
       try {
-        const confRes = await adapter.confirmTransferOrder({
+        await adapter.confirmTransferOrder({
           warehouseNumber: wh,
           toNumber: TransferOrder
         });

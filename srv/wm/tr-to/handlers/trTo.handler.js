@@ -1,7 +1,7 @@
 const cds = require('@sap/cds');
 const TrToAdapter = require('../../../integration/s4hana/wm/TrToAdapter');
 const ReservationProcessAdapter = require('../../../integration/s4hana/wm/ReservationProcessAdapter');
-const { STATUS, STATUS_TEXT, UNCONFIRMED_TO, PROCESS_STATUS } = require('../../../common/wmStatus');
+const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
 const { sapKey, sapKeyOpt } = require('../../../integration/s4hana/sapKey');
 const { withReservationLock } = require('../../../integration/s4hana/wm/resLock');
 
@@ -71,9 +71,9 @@ class TrToHandler {
       const sResNo = sResNoIn || existingTrack?.ReservationNo || '';
       const sResItem = sResItemIn || existingTrack?.ReservationItem || '0001';
       if (!sMvt) sMvt = existingTrack?.MovementType;
-      const sMat = data.Material || data.material || existingTrack?.Material;
-      const sPlant = data.Plant || data.plant || data.sourcePlant || data.SourcePlant || existingTrack?.Plant;
-      const sSLoc = data.StorageLocation || data.storageLocation || data.sourceStorageLocation || data.SourceStorageLocation || existingTrack?.StorageLocation;
+      let sMat = data.Material || data.material || existingTrack?.Material;
+      let sPlant = data.Plant || data.plant || data.sourcePlant || data.SourcePlant || existingTrack?.Plant;
+      let sSLoc = data.StorageLocation || data.storageLocation || data.sourceStorageLocation || data.SourceStorageLocation || existingTrack?.StorageLocation;
       const nQty = data.Quantity != null ? data.Quantity : (data.quantity != null ? data.quantity : existingTrack?.Quantity);
       const sUnit = data.Unit || data.unit || existingTrack?.Unit;
       let sRecPlant = data.ReceivingPlant || data.receivingPlant || data.destinationPlant || data.DestinationPlant || existingTrack?.ReceivingPlant;
@@ -82,7 +82,7 @@ class TrToHandler {
       let sAssetNo = data.AssetNo || data.assetNo || existingTrack?.AssetNo;
       let sSubNumber = data.SubNumber || data.subNumber || existingTrack?.SubNumber;
       const sTanum = sTanumIn || existingTrack?.TransferOrder || '';
-      const sBatch = data.Batch || data.batch || existingTrack?.Batch || '';
+      let sBatch = data.Batch || data.batch || existingTrack?.Batch || '';
       const sSerials = data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : []);
       const completeReservation = data.CompleteReservation === true || data.completeReservation === true;
 

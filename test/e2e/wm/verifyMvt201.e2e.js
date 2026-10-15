@@ -1,4 +1,5 @@
 'use strict';
+/* global document */
 
 const path = require('path');
 const { chromium } = require('/Users/khushaldhanani/Library/Caches/ms-playwright-go/1.57.0/package');

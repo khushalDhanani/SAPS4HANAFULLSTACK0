@@ -3,7 +3,6 @@ const s4Config = require('../../s4Config');
 const S4ErrorMapper = require('../../S4ErrorMapper');
 const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
 const { RfcClient } = require('../../RfcClient');
-const sapFacts = require('../../sapFacts');
 const GoodsIssueMapper = require('./GoodsIssueMapper');
 const GoodsIssue201Mapper = require('./GoodsIssue201Mapper');
 const GoodsIssue301Mapper = require('./GoodsIssue301Mapper');
@@ -851,7 +850,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
    * @param {string} [reversalReason] - Optional reason code
    * @returns {Promise<{ OriginalMaterialDocument: string, OriginalMaterialDocYear: string, ReversalMaterialDocument: string, ReversalMaterialDocYear: string, PostingDate: string, Success: boolean, Message: string }>}
    */
-  async reverseGoodsIssue(materialDocument, materialDocYear, postingDate, documentDate, reversalReason) {
+  async reverseGoodsIssue(materialDocument, materialDocYear, postingDate, _documentDate, _reversalReason) {
     const sDoc = String(materialDocument || '').trim();
     let sYear = String(materialDocYear || '').trim();
     if (!sDoc) {
