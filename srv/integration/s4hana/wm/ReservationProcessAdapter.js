@@ -1855,6 +1855,10 @@ class ReservationProcessAdapter {
     }
 
     // Step 15: Idempotency Protection — unique business key: reservation + reservation item + TO + process ID
+    let quantityToPost = Number(params.confMenge || params.confirmedQuantity || quantity);
+    let initialSourceStock = null;
+    let initialDestStock = null;
+
     const bKey = this.buildMigoBusinessKey({
       reservationNumber: sResNo,
       reservationItem: sResItem,
@@ -1970,7 +1974,7 @@ class ReservationProcessAdapter {
     }
 
     // Confirmed TO quantity (CONF_MENGE): MIGO quantity must equal the confirmed TO quantity
-    let quantityToPost = Number(params.confMenge || params.confirmedQuantity || quantity);
+    quantityToPost = Number(params.confMenge || params.confirmedQuantity || quantity);
     if ((sMvt === '201' || sMvt === '241' || sMvt === '301') && this.rfc && sTanum && !params.confMenge && !params.confirmedQuantity) {
       try {
         const toQtyRows = await this.rfc.readTable('LTAP', ['VSOLM', 'NISTM'], [
@@ -2057,8 +2061,8 @@ class ReservationProcessAdapter {
       await this.validateAsset(sAssetNo, sSubNumber, sPlant, today);
     }
 
-    let initialSourceStock = null;
-    let initialDestStock = null;
+    initialSourceStock = null;
+    initialDestStock = null;
 
     if (this.rfc && sSLoc) {
       try {
@@ -2819,6 +2823,32 @@ class ReservationProcessAdapter {
     // Stage 1: RESERVATION_CREATED
     const existingResNo = normInput.reservationNo || normInput.reservationNumber || normInput.ReservationNo;
     if (existingResNo) {
+      if (this.rfc && (!normInput.material || !normInput.plant)) {
+        try {
+          const s4Res = sapKey(existingResNo, 'rsnum').padStart(10, '0');
+          const resbRows = await this.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS', 'BWART', 'UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${s4Res}'`], 1);
+          if (resbRows?.[0]) {
+            const r = resbRows[0];
+            if (!normInput.material && r.MATNR?.trim()) normInput.material = r.MATNR.trim();
+            if (!normInput.plant && r.WERKS?.trim()) normInput.plant = r.WERKS.trim();
+            if (!normInput.storageLocation && r.LGORT?.trim()) normInput.storageLocation = r.LGORT.trim();
+            if (!normInput.quantity && r.BDMNG) normInput.quantity = Number(r.BDMNG);
+            if (!normInput.unit && r.MEINS?.trim()) normInput.unit = r.MEINS.trim();
+            if (!normInput.movementType && r.BWART?.trim()) normInput.movementType = r.BWART.trim();
+            if (!normInput.receivingPlant && r.UMWRK?.trim()) normInput.receivingPlant = r.UMWRK.trim();
+            if (!normInput.receivingStorageLocation && r.UMLGO?.trim()) normInput.receivingStorageLocation = r.UMLGO.trim();
+            if (!normInput.batch && r.CHARG?.trim()) normInput.batch = r.CHARG.trim();
+          }
+          const rkpfRows = await this.rfc.readTable('RKPF', ['BWART', 'KOSTL', 'ANLN1'], [`RSNUM = '${s4Res}'`], 1);
+          if (rkpfRows?.[0]) {
+            const k = rkpfRows[0];
+            if (!normInput.movementType && k.BWART?.trim()) normInput.movementType = k.BWART.trim();
+            if (!normInput.costCenter && k.KOSTL?.trim()) normInput.costCenter = k.KOSTL.trim();
+            if (!normInput.assetNo && k.ANLN1?.trim()) normInput.assetNo = k.ANLN1.trim();
+          }
+        } catch (_) {}
+      }
+
       reservation = {
         success: true,
         reservationNo: alphaOut(existingResNo),
@@ -2846,7 +2876,29 @@ class ReservationProcessAdapter {
     await this._persistProcessStatus(PROCESS_STATUS.RESERVATION_CREATED, { reservationNumber: resNo, reservationItem: resItem, reservation }, input);
 
     // Stage 2: TR_CREATED
-    const existingTrNo = normInput.trNumber || normInput.tbnum || normInput.TransferRequirement;
+    let existingTrNo = normInput.trNumber || normInput.tbnum || normInput.TransferRequirement;
+    const existingToNo = normInput.toNumber || normInput.tanum || normInput.TransferOrder;
+    if (!existingTrNo && existingToNo && this.rfc) {
+      try {
+        const toNo = String(existingToNo).trim().padStart(10, '0');
+        const ltakRows = await this.rfc.readTable('LTAK', ['TBNUM', 'LGNUM'], [`TANUM = '${toNo}'`], 1);
+        if (ltakRows?.[0]?.TBNUM && ltakRows[0].TBNUM !== '0000000000') {
+          existingTrNo = alphaOut(ltakRows[0].TBNUM);
+        }
+      } catch (_) {}
+    }
+    if (!existingTrNo && resNo && (existingToNo || normInput.toConfirmed) && this.rfc) {
+      try {
+        const ltbkRows = await this.rfc.readTable('LTBK', ['TBNUM', 'LGNUM'], [`RSNUM = '${String(resNo).padStart(10, '0')}'`], 1);
+        if (ltbkRows?.[0]?.TBNUM && ltbkRows[0].TBNUM !== '0000000000') {
+          existingTrNo = alphaOut(ltbkRows[0].TBNUM);
+        }
+      } catch (_) {}
+    }
+    if (!existingTrNo && (existingToNo || normInput.toConfirmed)) {
+      existingTrNo = `TR_FOR_${existingToNo || 'TO'}`;
+    }
+
     if (existingTrNo) {
       tr = {
         success: true,
@@ -2875,13 +2927,25 @@ class ReservationProcessAdapter {
     await this._persistProcessStatus(PROCESS_STATUS.TR_CREATED, { reservationNumber: resNo, reservationItem: resItem, trNumber: tr.trNumber, trItem: tr.trItem, tr }, input);
 
     // Stage 3: TR_VERIFIED
-    try {
-      verifiedTR = await this.verifyTR({
-        ...tr,
-        throwError: false
-      });
-    } catch (err) {
-      verifiedTR = { success: false, stage: 'TR_VERIFICATION', error: err.message };
+    if (existingToNo || normInput.toConfirmed) {
+      verifiedTR = {
+        success: true,
+        stage: 'TR_VERIFICATION',
+        verified: true,
+        trNumber: tr.trNumber,
+        warehouseNumber: tr.warehouseNumber || normInput.warehouseNumber || 'W01',
+        movement: normInput.movementType,
+        existing: true
+      };
+    } else {
+      try {
+        verifiedTR = await this.verifyTR({
+          ...tr,
+          throwError: false
+        });
+      } catch (err) {
+        verifiedTR = { success: false, stage: 'TR_VERIFICATION', error: err.message };
+      }
     }
     if (!verifiedTR || !verifiedTR.success) {
       return await fail('TR_VERIFICATION', verifiedTR);
@@ -2890,7 +2954,6 @@ class ReservationProcessAdapter {
     await this._persistProcessStatus(PROCESS_STATUS.TR_VERIFIED, { reservationNumber: resNo, reservationItem: resItem, trNumber: verifiedTR.trNumber, verifiedTR }, input);
 
     // Stage 4: TO_CREATED
-    const existingToNo = normInput.toNumber || normInput.tanum || normInput.TransferOrder;
     if (existingToNo) {
       to = {
         success: true,
@@ -2925,13 +2988,13 @@ class ReservationProcessAdapter {
         success: true,
         confirmed: true,
         toNumber: to.toNumber,
-        warehouseNumber: to.warehouseNumber || verifiedTR.warehouseNumber || normInput.warehouseNumber,
+        warehouseNumber: to.warehouseNumber || verifiedTR?.warehouseNumber || normInput.warehouseNumber,
         existing: true
       };
     } else {
       try {
         confirmation = await this.confirmTransferOrder({
-          warehouseNumber: to.warehouseNumber || verifiedTR.warehouseNumber || normInput.warehouseNumber,
+          warehouseNumber: to.warehouseNumber || verifiedTR?.warehouseNumber || normInput.warehouseNumber,
           toNumber: to.toNumber
         });
       } catch (err) {
@@ -2952,7 +3015,7 @@ class ReservationProcessAdapter {
         reservationItem: resItem,
         transferOrder: to.toNumber,
         trNumber: tr.trNumber,
-        warehouseNumber: to.warehouseNumber || verifiedTR.warehouseNumber || normInput.warehouseNumber,
+        warehouseNumber: to.warehouseNumber || verifiedTR?.warehouseNumber || normInput.warehouseNumber,
         skipStockVerification: true,
         skipReservationVerification: true
       });

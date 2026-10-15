@@ -49,7 +49,7 @@
                 <MessageStrip
                     id="mismatchedTrSandboxWarning"
                     visible="{scanView>/isMovementMismatched}"
-                    text="Linked reservation flow: TO follows the TR movement and destination; MIGO posts the reservation movement. Verify the destination before processing."
+                    text="{i18n>scanToMismatchedTrWarning}"
                     type="Warning"
                     showIcon="true"
                     showCloseButton="false"

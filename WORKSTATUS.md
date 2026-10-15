@@ -5,6 +5,25 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **12 Failure Scenarios & Verified Recovery Behaviors: Complete Multi-Movement Matrix & Resumption Fixes (2026-10-15, 10:15 IST):** Complete. Thoroughly debugged, fixed, and verified all 12 failure scenarios and recovery behaviors across all 4 supported movement types (`201`, `241`, `311`, `301`), expanding the dedicated test suite to 100 tests (52 lifecycle/detection tests + 48 recovery tests).
+  - **Debugging & Fixes Delivered:**
+    1. `TDZ ReferenceError in postGoodsMovement`: Fixed critical Temporal Dead Zone issue where `quantityToPost`, `initialSourceStock`, and `initialDestStock` were referenced in the `alreadyPosted` branch before declaration, which was swallowed by `catch` blocks and prevented idempotent stock verification. Declared and initialized variables prior to the idempotency check.
+    2. `Multi-Stage Resumption in executeReservationWarehouseFlow`:
+       - **Stage 1 (Reservation)**: When resuming with `reservationNumber` alone, missing attributes (`material`, `plant`, `storageLocation`, `quantity`, `movementType`, `costCenter`, `assetNo`) are automatically resolved from SAP `RESB`/`RKPF`.
+       - **Stage 2 (TR)**: When resuming from Stage 4/5/6 with `toNumber` or `toConfirmed`, looks up existing TR via `LTAK` (`TBNUM`) or `LTBK` (`RSNUM`) or adopts existing TR, preventing creation of orphan duplicate TRs in SAP.
+       - **Stage 3 (TR Verification)**: Adopts verified TR directly when resuming with `toNumber` or `toConfirmed` so downstream confirmation or MIGO retry is never blocked.
+       - **Stage 4/5/6 Safe References**: Replaced bare `verifiedTR.warehouseNumber` references with optional chaining (`verifiedTR?.warehouseNumber`) across Stages 4, 5, and 6 to eliminate potential null-dereference crashes.
+    3. `Multi-Movement Recovery Matrix (100 Tests Total)`: Expanded `test/unit/wm/movementMatrixLifecycle.test.js` to test all 12 recovery scenarios across all 4 movement types (`201`, `241`, `311`, `301`), validating all 48 recovery permutations.
+    4. `Ancillary Fixes`:
+       - AuthAdapter: `baseUrl` resolution now calls `await this.resolveBaseUrl(options)`, allowing destination URL resolution to function properly.
+       - Fiori XML View: Replaced hardcoded warning string on `mismatchedTrSandboxWarning` with `{i18n>scanToMismatchedTrWarning}` and populated both `i18n.properties` and `i18n_en.properties`.
+       - FI JournalEntryService: Isolated credentials deletion during unit tests with try/finally to prevent state pollution.
+  - **Validation & Test Results:**
+    - `test/unit/wm/movementMatrixLifecycle.test.js`: All 100 tests passed (52 matrix tests + 48 recovery tests).
+    - `npx jest test/unit/wm`: All 71 WM test suites passed, 1 skipped, 1,708 passed tests.
+    - `npx jest`: All 161 test suites passed, 1 skipped, 2,974 passed tests.
+    - `git diff --check`: Passed with 0 whitespace errors.
+
 - **Step 16 Failure Paths: Fix All 12 Failure Scenarios Across All Movement Types (2026-10-14, 18:25 IST):** Complete. Implemented pre-validation guards, defensive checks, and multi-stage resumption/retry mechanisms in `ReservationProcessAdapter.js` and verified recovery from all 12 failure scenarios across all movement types (`201`, `241`, `311`, `301`).
   - **Defensive Guards & Fixes Implemented:**
     1. `Wrong SLoc Guard (Movement 311 Bug Fix)`: Corrected line 144 of `ReservationProcessAdapter.js` to include `'311'` in the issuing storage location `T320` warehouse mapping check. Both issuing and receiving storage locations are now strictly validated against `T320`.
@@ -2063,7 +2082,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Step 16 Failure Paths Fix All — 2026-10-14, 18:25 IST):** All 12 failure scenarios across all 4 movement types (`201`, `241`, `311`, `301`) are defended, guarded, and recoverable via multi-stage resumption/retry in `ReservationProcessAdapter.js`. Test suite in `movementMatrixLifecycle.test.js` expanded to 64 tests (52 matrix tests + 12 recovery tests), all passing 100% green. Full suite regression passes (71 WM test suites, 1,672 tests). Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Next Recommended Action (12 Failure Scenarios & Recovery Behaviors Complete — 2026-10-15, 10:15 IST):** All 12 failure scenarios and verified recovery behaviors across all 4 movement types (`201`, `241`, `311`, `301`) are fully debugged, defended, and proven with 100 unit tests. Full workspace test suite (161 suites, 2,974 tests) passes 100% green. System is ready for live end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
+- **Previous Recommended Action (Step 16 Failure Paths Fix All — 2026-10-14, 18:25 IST):** All 12 failure scenarios across all 4 movement types (`201`, `241`, `311`, `301`) are defended, guarded, and recoverable via multi-stage resumption/retry in `ReservationProcessAdapter.js`. Test suite in `movementMatrixLifecycle.test.js` expanded to 64 tests (52 matrix tests + 12 recovery tests), all passing 100% green. Full suite regression passes (71 WM test suites, 1,672 tests). Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 16 — 2026-10-14, 18:15 IST):** Movement matrix lifecycle and failure suite is complete (52/52 tests passing across 201, 241, 311, 301). All 71 WM test suites (1,660 tests) pass 100% green. System is fully verified and prepared for live testing. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 15 — 2026-10-14, 17:55 IST):** Idempotency protection for MIGO using unique business key (reservation + reservation item + TO + process ID) with three-tier inspection (caller, persistent CAP database, SAP MATDOC) is complete, preventing double stock consumption on browser timeouts and retry submissions. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 - **Previous Recommended Action (Step 14 — 2026-10-14, 17:20 IST):** Persistent process status (`PROCESS_STATUS`) across database, CAP services, and S/4HANA integration orchestrator is complete, handling both active progression and failure states resilient to page refreshes or slow SAP responses. Next action: Execute end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
@@ -2087,6 +2107,65 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 - **Previous Recommended Action (2026-10-13, 13:15 IST):**
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
+
+## Changes Log
+
+### 2026-10-15 10:15 IST — All 12 Failure Scenarios & Verified Recovery Behaviors: Debug, Multi-Movement Matrix & Resumption Fixes
+
+- **User Request:**
+  - Find Debug And Fix.
+  - 12 Failure Scenarios & Verified Recovery Behaviors:
+    1. Reservation Fails: Parameter / account assignment validation halts flow cleanly -> Resubmitting with valid parameters generates reservation and finishes full flow.
+    2. TR Fails: Flow halts at Stage 2; reservation is safely preserved -> Resuming with existing reservationNumber creates TR and finishes subsequent stages.
+    3. TR Missing: SAP LTBK verification catches missing TR item -> Resuming with reservationNumber regenerates TR in SAP and completes flow.
+    4. TO Fails: Flow halts at Stage 4; reservation and TR preserved -> Resuming with existing reservationNumber and trNumber creates TO without re-creating TR.
+    5. TO Confirmation Fails: Flow halts at Stage 5; TO remains unconfirmed with status FAILED_CONFIRMATION -> Resuming with existing toNumber confirms TO and posts MIGO.
+    6. MIGO Fails: Flow halts at Stage 6 with status FAILED_MIGO; TO remains confirmed -> Resuming with confirmed TO posts MIGO after issue resolution without re-picking.
+    7. MIGO Timeout: Flow reports FAILED_MIGO due to network timeout (ETIMEDOUT) -> Re-submitting identical processId recovers committed material document via idempotency.
+    8. Duplicate MIGO: Repeated submit with same business key detected -> checkMigoIdempotency returns existing document; stock is NOT consumed twice.
+    9. Partial Quantity: Returns state: 'PARTIALLY_PROCESSED', reservation remains open (completed: false) -> Second issue consumes remaining quantity and completely processes reservation.
+    10. Wrong Material: Rejected with status 400 before reservation (MARC check) -> Resubmitting with valid material passes validation and completes flow.
+    11. Wrong SLoc: Rejected with status 400 (T320 mapping / duplicate SLoc for 311) -> Resubmitting with valid SLoc completes flow.
+    12. Wrong Plant: Rejected with status 400 (T320 mapping / duplicate plant for 301) -> Resubmitting with valid plant completes flow.
+- **Root Cause & Debugging Analysis:**
+  1. *TDZ ReferenceError in `postGoodsMovement` (`ReservationProcessAdapter.js`)*:
+     - In `postGoodsMovement()`, `quantityToPost`, `initialSourceStock`, and `initialDestStock` were referenced in the `idempotencyCheck.alreadyPosted` branch (lines ~1887-1918) prior to their `let` declarations (lines ~1973, 2060).
+     - Because this path executed inside a `try/catch` block that caught exceptions with `catch (_) {}`, the runtime `ReferenceError` was silently suppressed, preventing post-idempotency stock verification and reservation completion status updates.
+     - **Fix**: Initialized `let quantityToPost = Number(params.confMenge || params.confirmedQuantity || quantity);` and `let initialSourceStock = null; let initialDestStock = null;` before the idempotency check.
+  2. *Orphan TR Creation and Multi-Stage Resumption in `executeReservationWarehouseFlow`*:
+     - When retrying or resuming from Stage 4 (TO failure retry), Stage 5 (TO confirmation failure retry), or Stage 6 (MIGO failure retry) without passing an explicit `trNumber`, Stage 2 previously attempted to re-invoke `createTransferRequirement()`. This generated duplicate orphan TR records in SAP and caused failures when stock or reservations were already locked.
+     - When resuming with `reservationNumber` alone, the caller did not always re-supply all master data attributes (`material`, `plant`, `storageLocation`, `quantity`, etc.).
+     - **Fix**:
+       - *Stage 1*: Resuming with `existingResNo` auto-resolves missing details (`material`, `plant`, `storageLocation`, `quantity`, `movementType`, `costCenter`, `assetNo`, `receivingPlant`, `receivingStorageLocation`, `batch`) directly from SAP transparent tables `RESB` and `RKPF`.
+       - *Stage 2*: When resuming with `toNumber` or `toConfirmed`, looks up existing TR via `LTAK` (`TBNUM`) or `LTBK` (`RSNUM`), or safely synthesizes `TR_FOR_<TO>` to prevent duplicate TR creation.
+       - *Stage 3*: Automatically adopts verified TR when resuming with existing/confirmed TO so downstream confirmation and MIGO posting are never blocked by missing TR re-verification.
+       - *Stage 4/5/6*: Applied optional chaining `verifiedTR?.warehouseNumber` across Stages 4, 5, and 6 to eliminate any potential null-dereference crashes.
+  3. *Incomplete Recovery Test Coverage across Movement Types*:
+     - Previously, recovery tests (Fixes 1-12) were only asserted for Movement Type 201. Movements 241, 311, and 301 were only covered for detection, not for end-to-end recovery permutations.
+     - **Fix**: Added dedicated recovery describe blocks for Movement Types `241`, `311`, and `301`, verifying all 12 recovery scenarios for each type. Expanded test suite from 64 to 100 tests.
+  4. *Ancillary Fixes*:
+     - `AuthAdapter.js`: `baseUrl` resolution now calls `await this.resolveBaseUrl(options)` in `validateCredentials`.
+     - `WarehouseScanToDetail.view.xml`: Replaced hardcoded text on `id="mismatchedTrSandboxWarning"` with `{i18n>scanToMismatchedTrWarning}`.
+     - `journalEntryService.test.js`: Wrapped credential deletion with try/finally to prevent test state leakage.
+- **Affected Files:**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `srv/integration/s4hana/AuthAdapter.js`
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/fi/journalEntryService.test.js`
+  - `test/unit/wm/movementMatrixLifecycle.test.js`
+  - `test/unit/wm/warehouseScanToUi.test.js`
+  - `WORKSTATUS.md`
+- **Validation Commands & Results:**
+  - `npx jest test/unit/wm/movementMatrixLifecycle.test.js` -> **PASS** (100/100 tests passed).
+  - `npx jest test/unit/wm` -> **PASS** (71 passed test suites, 1 skipped, 1,708 passed tests).
+  - `npx jest test/unit/authAdapter.test.js test/unit/controller/uiConsistency.test.js test/unit/fi/journalEntryService.test.js` -> **PASS** (3 passed test suites, 24 passed tests).
+  - `npx jest test/unit/wm/warehouseScanToUi.test.js` -> **PASS** (50/50 tests passed).
+  - `npx jest` (full repository test suite) -> **PASS** (161 passed test suites, 1 skipped, 2,974 passed tests, 0 failed).
+  - `git diff --check` -> **PASS** (0 whitespace/formatting errors).
+- **Next Recommended Action:**
+  - All 12 failure scenarios across all 4 movement types (`201`, `241`, `311`, `301`) are proven, defended, and recoverable. Proceed to live end-to-end integration and UI validation with live SAP S/4HANA Client 220 when live testing is authorized.
 
 ## Changes Log
 

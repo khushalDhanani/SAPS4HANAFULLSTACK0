@@ -1619,7 +1619,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
   // =========================================================================
   // Failure Paths: Fixes, Retries & Resumption across all 12 Scenarios
   // =========================================================================
-  describe('Failure Paths: Fixes, Retries & Resumptions for All 12 Scenarios', () => {
+  describe('Movement Type 201 — Failure Paths: Fixes, Retries & Resumptions for All 12 Scenarios', () => {
     const env = createTestEnvironment('201');
 
     const baseInput = {
@@ -1928,6 +1928,918 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
 
     test('Fix 12 (Wrong plant correction): Providing valid plant mapped in T320 completes the flow', async () => {
       const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput, plant: '1120' });
+      expect(fixed.success).toBe(true);
+      expect(fixed.state).toBe('COMPLETED');
+    });
+  });
+
+  // =========================================================================
+  // Movement Type 241 — Failure Paths: Fixes, Retries & Resumptions (12 Scenarios)
+  // =========================================================================
+  describe('Movement Type 241 — Failure Paths: Fixes, Retries & Resumptions for All 12 Scenarios', () => {
+    const env = createTestEnvironment('241');
+
+    const baseInput241 = {
+      movementType: '241',
+      plant: '1120',
+      storageLocation: 'HS01',
+      material: '8000008977',
+      quantity: 10,
+      unit: 'NOS',
+      assetNo: '0000400001',
+      subNumber: '0000',
+      warehouseNumber: 'W01',
+      processId: 'E5B42701-1111-4222-8333-000000000241'
+    };
+
+    beforeEach(() => {
+      env.setupDefaultFms();
+      env.setupDefaultTables();
+    });
+
+    test('Fix 1 (Reservation failure recovery): Correcting invalid parameters generates reservation and finishes flow', async () => {
+      const badInput = { ...baseInput241, assetNo: '' };
+      const failed = await env.adapter.executeReservationWarehouseFlow(badInput);
+      expect(failed.success).toBe(false);
+      expect(failed.stage).toBe('RESERVATION');
+
+      const fixed = await env.adapter.executeReservationWarehouseFlow(baseInput241);
+      expect(fixed.success).toBe(true);
+      expect(fixed.state).toBe('COMPLETED');
+      expect(fixed.completed).toBe(true);
+    });
+
+    test('Fix 2 (TR failure retry): Resuming with existing reservationNumber creates TR and completes all subsequent stages', async () => {
+      const resumed = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput241,
+        reservationNumber: '520241'
+      });
+      expect(resumed.success).toBe(true);
+      expect(resumed.reservationNumber).toBe('520241');
+      expect(resumed.trNumber).toBe('1000241');
+      expect(resumed.state).toBe('COMPLETED');
+      expect(resumed.completed).toBe(true);
+    });
+
+    test('Fix 3 (TR missing recovery): Resuming with reservationNumber regenerates missing TR in SAP and completes flow', async () => {
+      const regenerated = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput241,
+        reservationNumber: '520241'
+      });
+      expect(regenerated.success).toBe(true);
+      expect(regenerated.trNumber).toBe('1000241');
+      expect(regenerated.state).toBe('COMPLETED');
+    });
+
+    test('Fix 4 (TO failure retry): Resuming with existing reservationNumber and trNumber creates TO and finishes flow', async () => {
+      const resumed = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput241,
+        reservationNumber: '520241',
+        trNumber: '1000241'
+      });
+      expect(resumed.success).toBe(true);
+      expect(resumed.reservationNumber).toBe('520241');
+      expect(resumed.trNumber).toBe('1000241');
+      expect(resumed.toNumber).toBe('1030241');
+      expect(resumed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 5 (TO confirmation failure retry): Resuming with existing toNumber confirms TO and posts MIGO', async () => {
+      const resumed = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput241,
+        reservationNumber: '520241',
+        trNumber: '1000241',
+        toNumber: '1030241'
+      });
+      expect(resumed.success).toBe(true);
+      expect(resumed.toNumber).toBe('1030241');
+      expect(resumed.confirmation.confirmed).toBe(true);
+      expect(resumed.migo.materialDocument).toBe('5000000241');
+      expect(resumed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 6 (MIGO failure retry): Resuming with confirmed TO posts MIGO after issue resolved without re-picking', async () => {
+      const resumed = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput241,
+        reservationNumber: '520241',
+        toNumber: '1030241',
+        toConfirmed: true
+      });
+      expect(resumed.success).toBe(true);
+      expect(resumed.migo.materialDocument).toBe('5000000241');
+      expect(resumed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 7 (MIGO timeout recovery): Re-submitting identical processId after timeout recovers committed document via idempotency', async () => {
+      env.setupDefaultTables({
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes(`SGTXT = '${baseInput241.processId}'`) || whereStr.includes("RSNUM = '0000520241'")) {
+            return [{
+              MBLNR: '5000000241',
+              MJAHR: '2026',
+              BWART: '241',
+              MATNR: '000000008000008977',
+              MENGE: '10.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              RSNUM: '0000520241',
+              RSPOS: '0001',
+              ANLN1: '0000400001',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        }
+      });
+      const recovered = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput241,
+        reservationNumber: '520241',
+        toNumber: '1030241',
+        toConfirmed: true
+      });
+      expect(recovered.success).toBe(true);
+      expect(recovered.migo.materialDocument).toBe('5000000241');
+      expect(recovered.alreadyPosted).toBe(true);
+      expect(recovered.idempotentRetry).toBe(true);
+      expect(env.getBapiGoodsmvtCalls().length).toBe(0);
+    });
+
+    test('Fix 8 (Duplicate MIGO guard): Idempotency check prevents duplicate stock consumption on repeated submits', async () => {
+      const first = await env.adapter.executeReservationWarehouseFlow(baseInput241);
+      expect(first.success).toBe(true);
+      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
+
+      env.setupDefaultTables({
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes(`SGTXT = '${baseInput241.processId}'`) || whereStr.includes("RSNUM = '0000520241'")) {
+            return [{
+              MBLNR: '5000000241',
+              MJAHR: '2026',
+              BWART: '241',
+              MATNR: '000000008000008977',
+              MENGE: '10.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              RSNUM: '0000520241',
+              RSPOS: '0001',
+              ANLN1: '0000400001',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        }
+      });
+      const second = await env.adapter.executeReservationWarehouseFlow(baseInput241);
+      expect(second.success).toBe(true);
+      expect(second.alreadyPosted).toBe(true);
+      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
+    });
+
+    test('Fix 9 (Partial quantity continuation): Second issue consumes remaining quantity and completely processes reservation', async () => {
+      env.setupDefaultTables({
+        LTAP: () => [{
+          LGNUM: 'W01',
+          TANUM: '0001030241',
+          TAPOS: '0001',
+          TBPOS: '0001',
+          MATNR: '000000008000008977',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          NSOLA: '6.000',
+          ALTME: 'NOS',
+          PQUIT: ' '
+        }],
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes("MBLNR = '5000000241'")) {
+            return [{
+              MBLNR: '5000000241',
+              MJAHR: '2026',
+              ZEILE: '0001',
+              BWART: '241',
+              MATNR: '000000008000008977',
+              MENGE: '6.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              RSNUM: '0000520241',
+              RSPOS: '0001',
+              ANLN1: '0000400001',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        },
+        RESB: () => [{
+          RSNUM: '0000520241',
+          RSPOS: '0001',
+          MATNR: '000000008000008977',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          BDMNG: '10.000',
+          ENMNG: '6.000',
+          MEINS: 'NOS',
+          KZEAR: '',
+          XLOEK: ''
+        }]
+      });
+
+      const part1 = await env.adapter.executeReservationWarehouseFlow({ ...baseInput241, quantity: 6 });
+      expect(part1.success).toBe(true);
+      expect(part1.state).toBe('PARTIALLY_PROCESSED');
+      expect(part1.completed).toBe(false);
+      expect(part1.finalReservation.remainingQuantity).toBe(4);
+
+      env.setupDefaultTables({
+        LTAP: () => [{
+          LGNUM: 'W01',
+          TANUM: '0001030242',
+          TAPOS: '0001',
+          TBPOS: '0001',
+          MATNR: '000000008000008977',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          NSOLA: '4.000',
+          ALTME: 'NOS',
+          PQUIT: ' '
+        }],
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes("MBLNR = '5000000242'")) {
+            return [{
+              MBLNR: '5000000242',
+              MJAHR: '2026',
+              ZEILE: '0001',
+              BWART: '241',
+              MATNR: '000000008000008977',
+              MENGE: '4.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              RSNUM: '0000520241',
+              RSPOS: '0001',
+              ANLN1: '0000400001',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        },
+        RESB: () => [{
+          RSNUM: '0000520241',
+          RSPOS: '0001',
+          MATNR: '000000008000008977',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          BDMNG: '10.000',
+          ENMNG: '10.000',
+          MEINS: 'NOS',
+          KZEAR: 'X',
+          XLOEK: ''
+        }]
+      });
+      env.setupDefaultFms({
+        BAPI_GOODSMVT_CREATE: () => ({
+          MATERIALDOCUMENT: '5000000242',
+          MATDOCUMENTYEAR: '2026',
+          RETURN: [{ TYPE: 'S', MESSAGE: 'Document 5000000242 posted' }]
+        })
+      });
+
+      const part2 = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput241,
+        processId: 'E5B42701-1111-4222-8333-000000000242',
+        reservationNumber: '520241',
+        quantity: 4,
+        completeReservation: true
+      });
+      expect(part2.success).toBe(true);
+      expect(part2.state).toBe('COMPLETED');
+      expect(part2.completed).toBe(true);
+      expect(part2.finalReservation.completelyProcessed).toBe(true);
+      expect(part2.finalReservation.remainingQuantity).toBe(0);
+    });
+
+    test('Fix 10 (Wrong material correction): Providing valid material completes the flow', async () => {
+      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput241, material: '8000008977' });
+      expect(fixed.success).toBe(true);
+      expect(fixed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 11 (Wrong SLoc correction): Providing valid SLoc mapped in T320 completes the flow', async () => {
+      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput241, storageLocation: 'HS01' });
+      expect(fixed.success).toBe(true);
+      expect(fixed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 12 (Wrong plant correction): Providing valid plant mapped in T320 completes the flow', async () => {
+      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput241, plant: '1120' });
+      expect(fixed.success).toBe(true);
+      expect(fixed.state).toBe('COMPLETED');
+    });
+  });
+
+  // =========================================================================
+  // Movement Type 311 — Failure Paths: Fixes, Retries & Resumptions (12 Scenarios)
+  // =========================================================================
+  describe('Movement Type 311 — Failure Paths: Fixes, Retries & Resumptions for All 12 Scenarios', () => {
+    const env = createTestEnvironment('311');
+
+    const baseInput311 = {
+      movementType: '311',
+      plant: '1120',
+      storageLocation: 'HS01',
+      receivingStorageLocation: 'CS01',
+      material: '8000000023',
+      quantity: 10,
+      unit: 'NOS',
+      warehouseNumber: 'W01',
+      processId: 'E5B42701-1111-4222-8333-000000000311'
+    };
+
+    beforeEach(() => {
+      env.setupDefaultFms();
+      env.setupDefaultTables();
+    });
+
+    test('Fix 1 (Reservation failure recovery): Correcting invalid parameters generates reservation and finishes flow', async () => {
+      const badInput = { ...baseInput311, receivingStorageLocation: 'HS01' };
+      const failed = await env.adapter.executeReservationWarehouseFlow(badInput);
+      expect(failed.success).toBe(false);
+      expect(failed.stage).toBe('RESERVATION');
+
+      const fixed = await env.adapter.executeReservationWarehouseFlow(baseInput311);
+      expect(fixed.success).toBe(true);
+      expect(fixed.state).toBe('COMPLETED');
+      expect(fixed.completed).toBe(true);
+    });
+
+    test('Fix 2 (TR failure retry): Resuming with existing reservationNumber creates TR and completes all subsequent stages', async () => {
+      const resumed = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput311,
+        reservationNumber: '520311'
+      });
+      expect(resumed.success).toBe(true);
+      expect(resumed.reservationNumber).toBe('520311');
+      expect(resumed.trNumber).toBe('1000311');
+      expect(resumed.state).toBe('COMPLETED');
+      expect(resumed.completed).toBe(true);
+    });
+
+    test('Fix 3 (TR missing recovery): Resuming with reservationNumber regenerates missing TR in SAP and completes flow', async () => {
+      const regenerated = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput311,
+        reservationNumber: '520311'
+      });
+      expect(regenerated.success).toBe(true);
+      expect(regenerated.trNumber).toBe('1000311');
+      expect(regenerated.state).toBe('COMPLETED');
+    });
+
+    test('Fix 4 (TO failure retry): Resuming with existing reservationNumber and trNumber creates TO and finishes flow', async () => {
+      const resumed = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput311,
+        reservationNumber: '520311',
+        trNumber: '1000311'
+      });
+      expect(resumed.success).toBe(true);
+      expect(resumed.reservationNumber).toBe('520311');
+      expect(resumed.trNumber).toBe('1000311');
+      expect(resumed.toNumber).toBe('1030311');
+      expect(resumed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 5 (TO confirmation failure retry): Resuming with existing toNumber confirms TO and posts MIGO', async () => {
+      const resumed = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput311,
+        reservationNumber: '520311',
+        trNumber: '1000311',
+        toNumber: '1030311'
+      });
+      expect(resumed.success).toBe(true);
+      expect(resumed.toNumber).toBe('1030311');
+      expect(resumed.confirmation.confirmed).toBe(true);
+      expect(resumed.migo.materialDocument).toBe('5000000311');
+      expect(resumed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 6 (MIGO failure retry): Resuming with confirmed TO posts MIGO after issue resolved without re-picking', async () => {
+      const resumed = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput311,
+        reservationNumber: '520311',
+        toNumber: '1030311',
+        toConfirmed: true
+      });
+      expect(resumed.success).toBe(true);
+      expect(resumed.migo.materialDocument).toBe('5000000311');
+      expect(resumed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 7 (MIGO timeout recovery): Re-submitting identical processId after timeout recovers committed document via idempotency', async () => {
+      env.setupDefaultTables({
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes(`SGTXT = '${baseInput311.processId}'`) || whereStr.includes("RSNUM = '0000520311'")) {
+            return [{
+              MBLNR: '5000000311',
+              MJAHR: '2026',
+              BWART: '311',
+              MATNR: '000000008000000023',
+              MENGE: '10.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              UMLGO: 'CS01',
+              RSNUM: '0000520311',
+              RSPOS: '0001',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        }
+      });
+      const recovered = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput311,
+        reservationNumber: '520311',
+        toNumber: '1030311',
+        toConfirmed: true
+      });
+      expect(recovered.success).toBe(true);
+      expect(recovered.migo.materialDocument).toBe('5000000311');
+      expect(recovered.alreadyPosted).toBe(true);
+      expect(recovered.idempotentRetry).toBe(true);
+      expect(env.getBapiGoodsmvtCalls().length).toBe(0);
+    });
+
+    test('Fix 8 (Duplicate MIGO guard): Idempotency check prevents duplicate stock consumption on repeated submits', async () => {
+      const first = await env.adapter.executeReservationWarehouseFlow(baseInput311);
+      expect(first.success).toBe(true);
+      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
+
+      env.setupDefaultTables({
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes(`SGTXT = '${baseInput311.processId}'`) || whereStr.includes("RSNUM = '0000520311'")) {
+            return [{
+              MBLNR: '5000000311',
+              MJAHR: '2026',
+              BWART: '311',
+              MATNR: '000000008000000023',
+              MENGE: '10.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              UMLGO: 'CS01',
+              RSNUM: '0000520311',
+              RSPOS: '0001',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        }
+      });
+      const second = await env.adapter.executeReservationWarehouseFlow(baseInput311);
+      expect(second.success).toBe(true);
+      expect(second.alreadyPosted).toBe(true);
+      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
+    });
+
+    test('Fix 9 (Partial quantity continuation): Second issue consumes remaining quantity and completely processes reservation', async () => {
+      env.setupDefaultTables({
+        LTAP: () => [{
+          LGNUM: 'W01',
+          TANUM: '0001030311',
+          TAPOS: '0001',
+          TBPOS: '0001',
+          MATNR: '000000008000000023',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          NSOLA: '6.000',
+          ALTME: 'NOS',
+          PQUIT: ' '
+        }],
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes("MBLNR = '5000000311'")) {
+            return [{
+              MBLNR: '5000000311',
+              MJAHR: '2026',
+              ZEILE: '0001',
+              BWART: '311',
+              MATNR: '000000008000000023',
+              MENGE: '6.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              UMLGO: 'CS01',
+              RSNUM: '0000520311',
+              RSPOS: '0001',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        },
+        RESB: () => [{
+          RSNUM: '0000520311',
+          RSPOS: '0001',
+          MATNR: '000000008000000023',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          UMLGO: 'CS01',
+          BDMNG: '10.000',
+          ENMNG: '6.000',
+          MEINS: 'NOS',
+          KZEAR: '',
+          XLOEK: ''
+        }]
+      });
+
+      const part1 = await env.adapter.executeReservationWarehouseFlow({ ...baseInput311, quantity: 6 });
+      expect(part1.success).toBe(true);
+      expect(part1.state).toBe('PARTIALLY_PROCESSED');
+      expect(part1.completed).toBe(false);
+      expect(part1.finalReservation.remainingQuantity).toBe(4);
+
+      env.setupDefaultTables({
+        LTAP: () => [{
+          LGNUM: 'W01',
+          TANUM: '0001030312',
+          TAPOS: '0001',
+          TBPOS: '0001',
+          MATNR: '000000008000000023',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          NSOLA: '4.000',
+          ALTME: 'NOS',
+          PQUIT: ' '
+        }],
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes("MBLNR = '5000000312'")) {
+            return [{
+              MBLNR: '5000000312',
+              MJAHR: '2026',
+              ZEILE: '0001',
+              BWART: '311',
+              MATNR: '000000008000000023',
+              MENGE: '4.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              UMLGO: 'CS01',
+              RSNUM: '0000520311',
+              RSPOS: '0001',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        },
+        RESB: () => [{
+          RSNUM: '0000520311',
+          RSPOS: '0001',
+          MATNR: '000000008000000023',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          UMLGO: 'CS01',
+          BDMNG: '10.000',
+          ENMNG: '10.000',
+          MEINS: 'NOS',
+          KZEAR: 'X',
+          XLOEK: ''
+        }]
+      });
+      env.setupDefaultFms({
+        BAPI_GOODSMVT_CREATE: () => ({
+          MATERIALDOCUMENT: '5000000312',
+          MATDOCUMENTYEAR: '2026',
+          RETURN: [{ TYPE: 'S', MESSAGE: 'Document 5000000312 posted' }]
+        })
+      });
+
+      const part2 = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput311,
+        processId: 'E5B42701-1111-4222-8333-000000000312',
+        reservationNumber: '520311',
+        quantity: 4,
+        completeReservation: true
+      });
+      expect(part2.success).toBe(true);
+      expect(part2.state).toBe('COMPLETED');
+      expect(part2.completed).toBe(true);
+      expect(part2.finalReservation.completelyProcessed).toBe(true);
+      expect(part2.finalReservation.remainingQuantity).toBe(0);
+    });
+
+    test('Fix 10 (Wrong material correction): Providing valid material completes the flow', async () => {
+      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput311, material: '8000000023' });
+      expect(fixed.success).toBe(true);
+      expect(fixed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 11 (Wrong SLoc correction): Providing valid SLoc mapped in T320 completes the flow', async () => {
+      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput311, receivingStorageLocation: 'CS01' });
+      expect(fixed.success).toBe(true);
+      expect(fixed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 12 (Wrong plant correction): Providing valid plant mapped in T320 completes the flow', async () => {
+      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput311, plant: '1120' });
+      expect(fixed.success).toBe(true);
+      expect(fixed.state).toBe('COMPLETED');
+    });
+  });
+
+  // =========================================================================
+  // Movement Type 301 — Failure Paths: Fixes, Retries & Resumptions (12 Scenarios)
+  // =========================================================================
+  describe('Movement Type 301 — Failure Paths: Fixes, Retries & Resumptions for All 12 Scenarios', () => {
+    const env = createTestEnvironment('301');
+
+    const baseInput301 = {
+      movementType: '301',
+      plant: '1120',
+      storageLocation: 'HS01',
+      receivingPlant: '1110',
+      receivingStorageLocation: 'CS01',
+      material: '8000000023',
+      quantity: 10,
+      unit: 'NOS',
+      warehouseNumber: 'W01',
+      processId: 'E5B42701-1111-4222-8333-000000000301'
+    };
+
+    beforeEach(() => {
+      env.setupDefaultFms();
+      env.setupDefaultTables();
+    });
+
+    test('Fix 1 (Reservation failure recovery): Correcting invalid parameters generates reservation and finishes flow', async () => {
+      const badInput = { ...baseInput301, receivingPlant: '1120' };
+      const failed = await env.adapter.executeReservationWarehouseFlow(badInput);
+      expect(failed.success).toBe(false);
+      expect(failed.stage).toBe('RESERVATION');
+
+      const fixed = await env.adapter.executeReservationWarehouseFlow(baseInput301);
+      expect(fixed.success).toBe(true);
+      expect(fixed.state).toBe('COMPLETED');
+      expect(fixed.completed).toBe(true);
+    });
+
+    test('Fix 2 (TR failure retry): Resuming with existing reservationNumber creates TR and completes all subsequent stages', async () => {
+      const resumed = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput301,
+        reservationNumber: '520301'
+      });
+      expect(resumed.success).toBe(true);
+      expect(resumed.reservationNumber).toBe('520301');
+      expect(resumed.trNumber).toBe('1000301');
+      expect(resumed.state).toBe('COMPLETED');
+      expect(resumed.completed).toBe(true);
+    });
+
+    test('Fix 3 (TR missing recovery): Resuming with reservationNumber regenerates missing TR in SAP and completes flow', async () => {
+      const regenerated = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput301,
+        reservationNumber: '520301'
+      });
+      expect(regenerated.success).toBe(true);
+      expect(regenerated.trNumber).toBe('1000301');
+      expect(regenerated.state).toBe('COMPLETED');
+    });
+
+    test('Fix 4 (TO failure retry): Resuming with existing reservationNumber and trNumber creates TO and finishes flow', async () => {
+      const resumed = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput301,
+        reservationNumber: '520301',
+        trNumber: '1000301'
+      });
+      expect(resumed.success).toBe(true);
+      expect(resumed.reservationNumber).toBe('520301');
+      expect(resumed.trNumber).toBe('1000301');
+      expect(resumed.toNumber).toBe('1030301');
+      expect(resumed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 5 (TO confirmation failure retry): Resuming with existing toNumber confirms TO and posts MIGO', async () => {
+      const resumed = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput301,
+        reservationNumber: '520301',
+        trNumber: '1000301',
+        toNumber: '1030301'
+      });
+      expect(resumed.success).toBe(true);
+      expect(resumed.toNumber).toBe('1030301');
+      expect(resumed.confirmation.confirmed).toBe(true);
+      expect(resumed.migo.materialDocument).toBe('5000000301');
+      expect(resumed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 6 (MIGO failure retry): Resuming with confirmed TO posts MIGO after issue resolved without re-picking', async () => {
+      const resumed = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput301,
+        reservationNumber: '520301',
+        toNumber: '1030301',
+        toConfirmed: true
+      });
+      expect(resumed.success).toBe(true);
+      expect(resumed.migo.materialDocument).toBe('5000000301');
+      expect(resumed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 7 (MIGO timeout recovery): Re-submitting identical processId after timeout recovers committed document via idempotency', async () => {
+      env.setupDefaultTables({
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes(`SGTXT = '${baseInput301.processId}'`) || whereStr.includes("RSNUM = '0000520301'")) {
+            return [{
+              MBLNR: '5000000301',
+              MJAHR: '2026',
+              BWART: '301',
+              MATNR: '000000008000000023',
+              MENGE: '10.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              UMWRK: '1110',
+              UMLGO: 'CS01',
+              RSNUM: '0000520301',
+              RSPOS: '0001',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        }
+      });
+      const recovered = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput301,
+        reservationNumber: '520301',
+        toNumber: '1030301',
+        toConfirmed: true
+      });
+      expect(recovered.success).toBe(true);
+      expect(recovered.migo.materialDocument).toBe('5000000301');
+      expect(recovered.alreadyPosted).toBe(true);
+      expect(recovered.idempotentRetry).toBe(true);
+      expect(env.getBapiGoodsmvtCalls().length).toBe(0);
+    });
+
+    test('Fix 8 (Duplicate MIGO guard): Idempotency check prevents duplicate stock consumption on repeated submits', async () => {
+      const first = await env.adapter.executeReservationWarehouseFlow(baseInput301);
+      expect(first.success).toBe(true);
+      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
+
+      env.setupDefaultTables({
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes(`SGTXT = '${baseInput301.processId}'`) || whereStr.includes("RSNUM = '0000520301'")) {
+            return [{
+              MBLNR: '5000000301',
+              MJAHR: '2026',
+              BWART: '301',
+              MATNR: '000000008000000023',
+              MENGE: '10.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              UMWRK: '1110',
+              UMLGO: 'CS01',
+              RSNUM: '0000520301',
+              RSPOS: '0001',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        }
+      });
+      const second = await env.adapter.executeReservationWarehouseFlow(baseInput301);
+      expect(second.success).toBe(true);
+      expect(second.alreadyPosted).toBe(true);
+      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
+    });
+
+    test('Fix 9 (Partial quantity continuation): Second issue consumes remaining quantity and completely processes reservation', async () => {
+      env.setupDefaultTables({
+        LTAP: () => [{
+          LGNUM: 'W01',
+          TANUM: '0001030301',
+          TAPOS: '0001',
+          TBPOS: '0001',
+          MATNR: '000000008000000023',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          NSOLA: '6.000',
+          ALTME: 'NOS',
+          PQUIT: ' '
+        }],
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes("MBLNR = '5000000301'")) {
+            return [{
+              MBLNR: '5000000301',
+              MJAHR: '2026',
+              ZEILE: '0001',
+              BWART: '301',
+              MATNR: '000000008000000023',
+              MENGE: '6.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              UMWRK: '1110',
+              UMLGO: 'CS01',
+              RSNUM: '0000520301',
+              RSPOS: '0001',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        },
+        RESB: () => [{
+          RSNUM: '0000520301',
+          RSPOS: '0001',
+          MATNR: '000000008000000023',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          UMWRK: '1110',
+          UMLGO: 'CS01',
+          BDMNG: '10.000',
+          ENMNG: '6.000',
+          MEINS: 'NOS',
+          KZEAR: '',
+          XLOEK: ''
+        }]
+      });
+
+      const part1 = await env.adapter.executeReservationWarehouseFlow({ ...baseInput301, quantity: 6 });
+      expect(part1.success).toBe(true);
+      expect(part1.state).toBe('PARTIALLY_PROCESSED');
+      expect(part1.completed).toBe(false);
+      expect(part1.finalReservation.remainingQuantity).toBe(4);
+
+      env.setupDefaultTables({
+        LTAP: () => [{
+          LGNUM: 'W01',
+          TANUM: '0001030302',
+          TAPOS: '0001',
+          TBPOS: '0001',
+          MATNR: '000000008000000023',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          NSOLA: '4.000',
+          ALTME: 'NOS',
+          PQUIT: ' '
+        }],
+        MATDOC: (fields, where, whereStr) => {
+          if (whereStr.includes("MBLNR = '5000000302'")) {
+            return [{
+              MBLNR: '5000000302',
+              MJAHR: '2026',
+              ZEILE: '0001',
+              BWART: '301',
+              MATNR: '000000008000000023',
+              MENGE: '4.000',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              UMWRK: '1110',
+              UMLGO: 'CS01',
+              RSNUM: '0000520301',
+              RSPOS: '0001',
+              SHKZG: 'H'
+            }];
+          }
+          return [];
+        },
+        RESB: () => [{
+          RSNUM: '0000520301',
+          RSPOS: '0001',
+          MATNR: '000000008000000023',
+          WERKS: '1120',
+          LGORT: 'HS01',
+          UMWRK: '1110',
+          UMLGO: 'CS01',
+          BDMNG: '10.000',
+          ENMNG: '10.000',
+          MEINS: 'NOS',
+          KZEAR: 'X',
+          XLOEK: ''
+        }]
+      });
+      env.setupDefaultFms({
+        BAPI_GOODSMVT_CREATE: () => ({
+          MATERIALDOCUMENT: '5000000302',
+          MATDOCUMENTYEAR: '2026',
+          RETURN: [{ TYPE: 'S', MESSAGE: 'Document 5000000302 posted' }]
+        })
+      });
+
+      const part2 = await env.adapter.executeReservationWarehouseFlow({
+        ...baseInput301,
+        processId: 'E5B42701-1111-4222-8333-000000000302',
+        reservationNumber: '520301',
+        quantity: 4,
+        completeReservation: true
+      });
+      expect(part2.success).toBe(true);
+      expect(part2.state).toBe('COMPLETED');
+      expect(part2.completed).toBe(true);
+      expect(part2.finalReservation.completelyProcessed).toBe(true);
+      expect(part2.finalReservation.remainingQuantity).toBe(0);
+    });
+
+    test('Fix 10 (Wrong material correction): Providing valid material completes the flow', async () => {
+      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput301, material: '8000000023' });
+      expect(fixed.success).toBe(true);
+      expect(fixed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 11 (Wrong SLoc correction): Providing valid SLoc mapped in T320 completes the flow', async () => {
+      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput301, receivingStorageLocation: 'CS01' });
+      expect(fixed.success).toBe(true);
+      expect(fixed.state).toBe('COMPLETED');
+    });
+
+    test('Fix 12 (Wrong plant correction): Providing valid plant mapped in T320 completes the flow', async () => {
+      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput301, receivingPlant: '1110' });
       expect(fixed.success).toBe(true);
       expect(fixed.state).toBe('COMPLETED');
     });

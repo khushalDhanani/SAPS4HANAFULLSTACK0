@@ -1006,7 +1006,7 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
         it('shows the persistent destination warning for mismatched reservation/TR movements [mock only, not browser verification]', () => {
             const viewXml = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml'), 'utf8');
             detailModel.setProperty('/isMovementMismatched', true);
-            expect(viewXml).toMatch(/id="mismatchedTrSandboxWarning"[\s\S]*?visible="\{scanView>\/isMovementMismatched\}"[\s\S]*?text="Linked reservation flow:[\s\S]*?Verify the destination before processing\."[\s\S]*?showCloseButton="false"/);
+            expect(viewXml).toMatch(/id="mismatchedTrSandboxWarning"[\s\S]*?visible="\{scanView>\/isMovementMismatched\}"[\s\S]*?text="(?:\{i18n>scanToMismatchedTrWarning\}|Linked reservation flow:[\s\S]*?Verify the destination before processing\.)"[\s\S]*?showCloseButton="false"/);
             expect(detailModel.getProperty('/isMovementMismatched')).toBe(true);
         });
 
