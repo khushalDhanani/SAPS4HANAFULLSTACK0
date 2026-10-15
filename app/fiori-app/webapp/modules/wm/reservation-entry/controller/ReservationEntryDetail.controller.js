@@ -100,6 +100,24 @@ sap.ui.define([
                 that._oDetailModel.setData(oData || {});
                 that._oViewModel.setProperty("/isTracked", true);
                 that._oViewModel.setProperty("/busy", false);
+                if (oData && (!oData.TransferRequirement || !oData.TransferOrder || !oData.MaterialDocument)) {
+                    return that._oService.getReservationDetail(sResNo, sResItem).then(function (oLive) {
+                        if (oLive) {
+                            var oMerged = Object.assign({}, oLive, oData);
+                            if (!oData.TransferRequirement && oLive.TransferRequirement) {
+                                oMerged.TransferRequirement = oLive.TransferRequirement;
+                            }
+                            if (!oData.TransferOrder && oLive.TransferOrder) {
+                                oMerged.TransferOrder = oLive.TransferOrder;
+                            }
+                            if (!oData.MaterialDocument && oLive.MaterialDocument) {
+                                oMerged.MaterialDocument = oLive.MaterialDocument;
+                                oMerged.MaterialDocYear = oLive.MaterialDocYear;
+                            }
+                            that._oDetailModel.setData(oMerged);
+                        }
+                    }).catch(function () {});
+                }
             }).catch(function () {
                 // Not tracked locally (reservation created outside this app) -> read it live from SAP.
                 return that._oService.getReservationDetail(sResNo, sResItem).then(function (oLive) {

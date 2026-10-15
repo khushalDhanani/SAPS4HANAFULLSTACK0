@@ -398,10 +398,56 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         } catch (_mErr) {}
 
         let existingTr = '';
+        let allTr = '';
         try {
           const ltbk = await adapter.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'STATU'], [`RSNUM = '${s4Rsnum}'`], 1);
-          existingTr = (ltbk || []).find((r) => r.TBNUM && r.STATU !== 'E')?.TBNUM || '';
+          if (ltbk && ltbk.length > 0) {
+            allTr = ltbk[0].TBNUM || '';
+            existingTr = ltbk.find((r) => r.TBNUM && r.STATU !== 'E')?.TBNUM || allTr;
+          }
         } catch (_trErr) {}
+
+        let existingTo = '';
+        if (!allTr) {
+          try {
+            const track = (await SELECT.one.from(ReservationEntries).columns(['TransferRequirement', 'TransferOrder']).where({
+              ReservationNo: s4Rsnum,
+              ReservationItem: s4Rspos
+            })) || (await SELECT.one.from(ReservationEntries).columns(['TransferRequirement', 'TransferOrder']).where({
+              ReservationNo: strip(resNo),
+              ReservationItem: s4Rspos
+            }));
+            if (track) {
+              if (track.TransferRequirement) {
+                allTr = track.TransferRequirement;
+                existingTr = track.TransferRequirement;
+              }
+              if (track.TransferOrder) {
+                existingTo = track.TransferOrder;
+              }
+            }
+          } catch (_dbErr) {}
+        }
+
+        if (allTr && !existingTo) {
+          try {
+            const s4TrPad = String(allTr).padStart(10, '0');
+            const ltak = await adapter.rfc.readTable('LTAK', ['LGNUM', 'TANUM'], [`TBNUM = '${s4TrPad}'`], 1);
+            existingTo = (ltak && ltak[0]?.TANUM) || '';
+          } catch (_toErr) {}
+        }
+
+        let existingMatDoc = '';
+        let existingMatDocYear = '';
+        if (closed) {
+          try {
+            const matdoc = await adapter.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], [`RSNUM = '${s4Rsnum}'`], 1);
+            if (matdoc && matdoc.length > 0) {
+              existingMatDoc = matdoc[0].MBLNR || '';
+              existingMatDocYear = matdoc[0].MJAHR || '';
+            }
+          } catch (_mdErr) {}
+        }
 
         const statusCode = closed ? STATUS.GI_POSTED : (existingTr ? STATUS.TR_CREATED : STATUS.RES_CREATED);
         const statusText = closed ? 'Goods Issue Posted' : (existingTr ? 'TR Created' : 'Reservation Created');
@@ -428,10 +474,10 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           WarehouseNumber: await warehouseFor(i.WERKS, i.LGORT, '').catch(() => ''),
           Status_code: statusCode,
           StatusText: statusText,
-          TransferRequirement: existingTr ? String(existingTr).replace(/^0+/, '') : '',
-          TransferOrder: '',
-          MaterialDocument: '',
-          MaterialDocYear: '',
+          TransferRequirement: allTr ? String(allTr).replace(/^0+/, '') : '',
+          TransferOrder: existingTo ? String(existingTo).replace(/^0+/, '') : '',
+          MaterialDocument: existingMatDoc ? String(existingMatDoc).replace(/^0+/, '') : '',
+          MaterialDocYear: existingMatDocYear || '',
           ErrorMessage: '',
           ExternalId: `${strip(resNo)}/${s4Rspos}`,
           LogHandle: ''
