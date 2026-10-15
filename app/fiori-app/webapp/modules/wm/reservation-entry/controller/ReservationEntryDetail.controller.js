@@ -143,6 +143,7 @@ sap.ui.define([
 
         onRetryStepPress: function () {
             const that = this;
+            if (this._oViewModel.getProperty("/busy")) return;
             if (!this._sCurrentResNo) return;
 
             this._oViewModel.setProperty("/busy", true);
@@ -422,6 +423,7 @@ sap.ui.define([
 
         onSave: function () {
             const that = this;
+            if (this._oViewModel.getProperty("/busy")) return;
             const oData = this._oCreateModel.getData();
             const sValidationError = this.validateForm(oData);
 

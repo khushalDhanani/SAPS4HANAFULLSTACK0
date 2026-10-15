@@ -58,12 +58,15 @@
                         icon="sap-icon://restart"
                         type="Emphasized"
                         press=".onRetryStepPress"
+                        enabled="{= !${view>/busy} }"
+                        busy="{view>/busy}"
                         visible="{= !${view>/isCreate} &amp;&amp; ${view>/isTracked} === true &amp;&amp; ${detail>/Status_code} !== '05' }" />
                     <Button
                         id="btnDetailRefresh"
                         icon="sap-icon://refresh"
                         tooltip="{i18n>commonRefresh}"
                         press=".onRefresh"
+                        enabled="{= !${view>/busy} }"
                         visible="{= !${view>/isCreate} }" />
                     <Button
                         id="btnDetailNew"
@@ -562,6 +565,7 @@
                     icon="sap-icon://save"
                     type="Emphasized"
                     press=".onSave"
+                    enabled="{= !${view>/busy} }"
                     busy="{view>/busy}" />
                 <Button
                     id="btnCancelReservation"
