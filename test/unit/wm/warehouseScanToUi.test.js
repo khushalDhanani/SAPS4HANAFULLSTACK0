@@ -136,6 +136,24 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             }
         };
 
+        const mockSelectDialog = jest.fn(function (opts) {
+            Object.assign(this, opts);
+            this.addItem = jest.fn();
+            this.open = jest.fn();
+            this.destroy = jest.fn();
+            this.attachAfterClose = jest.fn((cb) => { this._afterCloseCb = cb; });
+        });
+        const mockStandardListItem = jest.fn(function (opts) {
+            Object.assign(this, opts);
+            this.data = jest.fn((key, val) => {
+                if (val !== undefined) {
+                    this._data = this._data || {};
+                    this._data[key] = val;
+                }
+                return this._data ? this._data[key] : undefined;
+            });
+        });
+
         global.sap = {
             ui: {
                 define: (deps, factory) => {
@@ -148,7 +166,9 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
                             mockMessageToast,
                             mockHistory,
                             mockBarcodeScanService,
-                            mockWarehouseScanToService
+                            mockWarehouseScanToService,
+                            mockSelectDialog,
+                            mockStandardListItem
                         );
                     } else {
                         // WarehouseScanTo
@@ -361,13 +381,95 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             detailModel = detailCtrl.getModel('scanView');
         });
 
-        it('initializes detail model state and binds route wmWarehouseScanToDetail', () => {
+        it('initializes detail model state and binds routes wmWarehouseScanToDetail and wmWarehouseScanToDetailWithWh', () => {
             expect(mockRouter.getRoute).toHaveBeenCalledWith('wmWarehouseScanToDetail');
+            expect(mockRouter.getRoute).toHaveBeenCalledWith('wmWarehouseScanToDetailWithWh');
             expect(mockRoute.attachPatternMatched).toHaveBeenCalledWith(expect.any(Function), detailCtrl);
             expect(detailModel.getProperty('/hasTR')).toBe(false);
             expect(detailModel.getProperty('/autoConfirm')).toBe(true);
             expect(detailModel.getProperty('/autoPostMigo')).toBe(true);
             expect(detailModel.getProperty('/canSubmit')).toBe(false);
+        });
+
+        it('route parse: extracts lgnum from route and loads TR with warehouse', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                WarehouseNumber: 'W12',
+                TRNumber: '0001001911',
+                TRItem: '0001',
+                Material: '8500000076',
+                MaterialDescription: 'Raw Material 76',
+                OpenQty: 300.0,
+                TargetQty: 300.0,
+                Unit: 'KG',
+                IsBatchManaged: false,
+                IsSerialManaged: false,
+                Batch: ''
+            });
+
+            const mockEvent = {
+                getParameter: jest.fn((param) => {
+                    if (param === 'arguments') return { lgnum: 'W12', docType: 'TR', number: '0001001911' };
+                    return null;
+                })
+            };
+
+            await detailCtrl._onRouteMatched(mockEvent);
+
+            expect(mockWarehouseScanToService.lookupTR).toHaveBeenCalledWith('0001001911', 'W12', 'TR', '');
+            expect(detailModel.getProperty('/lgnum')).toBe('W12');
+            expect(detailModel.getProperty('/hasTR')).toBe(true);
+        });
+
+        it('ambiguous warehouse response (409): opens warehouse picker SelectDialog', async () => {
+            const err409 = Object.assign(new Error('TR exists in multiple warehouses'), {
+                status: 409,
+                code: '409',
+                details: [
+                    { lgnum: 'W12', plant: '1130', movementType: '311', statusCode: '', status: 'Open', createdDate: '2026-10-16' },
+                    { lgnum: 'W13', plant: '1120', movementType: '319', statusCode: 'E', status: 'Completed', createdDate: '2026-01-16' }
+                ]
+            });
+            mockWarehouseScanToService.lookupTR.mockRejectedValueOnce(err409);
+
+            const mockEvent = {
+                getParameter: jest.fn((param) => {
+                    if (param === 'arguments') return { docType: 'TR', number: '0001001911' };
+                    return null;
+                })
+            };
+
+            await detailCtrl._onRouteMatched(mockEvent);
+
+            expect(detailCtrl._oWarehouseDialog).toBeDefined();
+            expect(detailCtrl._oWarehouseDialog.open).toHaveBeenCalled();
+            expect(detailCtrl._oWarehouseDialog.addItem).toHaveBeenCalledTimes(2);
+
+            // Confirming completed item is blocked and shows warning toast
+            const mockCompletedItem = {
+                data: jest.fn((k) => (k === 'statusCode' ? 'E' : 'W13')),
+                getTitle: () => 'W13'
+            };
+            detailCtrl._oWarehouseDialog.confirm({ getParameter: () => mockCompletedItem });
+            expect(mockMessageToast.show).toHaveBeenCalledWith(expect.stringContaining('scanToErrTrCompletedNonSelectable'));
+
+            // User chooses open W12 from dialog
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                WarehouseNumber: 'W12',
+                TRNumber: '0001001911',
+                TRItem: '0001',
+                Material: '8500000076',
+                OpenQty: 300.0,
+                Unit: 'KG'
+            });
+
+            await detailCtrl._onWarehouseChosen('W12', 'TR', '0001001911');
+
+            expect(detailModel.getProperty('/lgnum')).toBe('W12');
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanToDetailWithWh', {
+                lgnum: 'W12',
+                docType: 'TR',
+                number: '0001001911'
+            }, true);
         });
 
         it('route parse: loads TR data from number alone on direct URL / refresh / bookmark [mock only, not browser verification]', async () => {
@@ -1294,7 +1396,7 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             });
 
             await detailCtrl._onRouteMatched({
-                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '123456' } : null))
+                getParameter: jest.fn((p) => (p === 'arguments' ? { lgnum: 'W01', docType: 'TR', number: '123456' } : null))
             });
 
             expect(detailModel.getProperty('/hasTR')).toBe(false);

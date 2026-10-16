@@ -5,7 +5,9 @@ sap.ui.define([
     "sap/m/MessageToast",
     "sap/ui/core/routing/History",
     "saps4hana/fiori/service/BarcodeScanService",
-    "saps4hana/fiori/modules/wm/warehouse-scan-to/service/WarehouseScanToService"
+    "saps4hana/fiori/modules/wm/warehouse-scan-to/service/WarehouseScanToService",
+    "sap/m/SelectDialog",
+    "sap/m/StandardListItem"
 ], function (
     BaseController,
     JSONModel,
@@ -13,7 +15,9 @@ sap.ui.define([
     MessageToast,
     History,
     BarcodeScanService,
-    WarehouseScanToService
+    WarehouseScanToService,
+    SelectDialog,
+    StandardListItem
 ) {
     "use strict";
 
@@ -28,6 +32,10 @@ sap.ui.define([
                 var oRoute = oRouter.getRoute("wmWarehouseScanToDetail");
                 if (oRoute) {
                     oRoute.attachPatternMatched(this._onRouteMatched, this);
+                }
+                var oRouteWithWh = oRouter.getRoute("wmWarehouseScanToDetailWithWh");
+                if (oRouteWithWh) {
+                    oRouteWithWh.attachPatternMatched(this._onRouteMatched, this);
                 }
             }
 
@@ -103,6 +111,7 @@ sap.ui.define([
             }
 
             var oArgs = (oEvent && typeof oEvent.getParameter === "function") ? (oEvent.getParameter("arguments") || {}) : {};
+            var sLgnum = (oArgs.lgnum || "").trim().toUpperCase();
             var sDocType = (oArgs.docType || "").trim().toUpperCase();
             var sNumber = (oArgs.number || "").trim();
 
@@ -123,12 +132,14 @@ sap.ui.define([
             var oModel = this.getModel("scanView");
             oModel.setProperty("/docType", sDocType);
             oModel.setProperty("/scannedTR", sNumber);
+            oModel.setProperty("/lgnum", sLgnum);
 
             return this.loadDetail(sDocType, sNumber);
         },
 
         _resetState: function () {
             var oModel = this.getModel("scanView");
+            oModel.setProperty("/lgnum", "");
             oModel.setProperty("/hasTR", false);
             oModel.setProperty("/tr", null);
             oModel.setProperty("/trItems", []);
@@ -319,13 +330,125 @@ sap.ui.define([
                 that._validateForm();
                 that._playAudio("success");
                 MessageToast.show(that.getText(oDetail.TRItem ? "scanToMsgTRLoaded" : "scanToMsgSelectItem"));
+
+                if (oDetail.WarehouseNumber) {
+                    oModel.setProperty("/lgnum", oDetail.WarehouseNumber);
+                    var oRouter = that.getRouter();
+                    if (oRouter && !sLgnum) {
+                        oRouter.navTo("wmWarehouseScanToDetailWithWh", {
+                            lgnum: oDetail.WarehouseNumber,
+                            docType: sDocType,
+                            number: sNumber
+                        }, true /* bNoHistory */);
+                    }
+                }
+
                 return oDetail;
             }).catch(function (oErr) {
+                var aRaw = oErr.details || (oErr.errorJson && oErr.errorJson.error && oErr.errorJson.error.details) || [];
+                var aCandidates = (Array.isArray(aRaw) ? aRaw : []).map(function (d) {
+                    if (d && d.lgnum) return d;
+                    if (d && d.message) {
+                        try {
+                            var parsed = JSON.parse(d.message);
+                            if (parsed && parsed.lgnum) return parsed;
+                        } catch (e) {
+                            // not JSON string
+                        }
+                    }
+                    if (d && d.innererror && d.innererror.lgnum) return d.innererror;
+                    return d;
+                });
+                if ((oErr.status === 409 || oErr.code === "409" || oErr.status === 300 || oErr.code === "300") && aCandidates && aCandidates.length > 1) {
+                    that._showWarehousePicker(aCandidates, sDocType, sNumber);
+                    return;
+                }
                 that._showError(oErr.message || that.getText("scanToErrLookupFailed"));
             });
         },
 
+        _destroyWarehouseDialog: function () {
+            if (this._oWarehouseDialog) {
+                this._oWarehouseDialog.destroy();
+                this._oWarehouseDialog = null;
+            }
+        },
+
+        _showWarehousePicker: function (aCandidates, sDocType, sNumber) {
+            var that = this;
+            this._destroyWarehouseDialog();
+
+            var oSelectDialog = new SelectDialog({
+                title: this.getText("scanToWarehousePickerTitle"),
+                noDataText: this.getText("scanToNoWarehousesFound"),
+                rememberSelections: false,
+                confirm: function (oEvent) {
+                    var oSelectedItem = oEvent.getParameter("selectedItem");
+                    if (oSelectedItem) {
+                        var sStatusCode = oSelectedItem.data("statusCode");
+                        if (sStatusCode === "E") {
+                            MessageToast.show(that.getText("scanToErrTrCompletedNonSelectable"));
+                            setTimeout(function () {
+                                that._showWarehousePicker(aCandidates, sDocType, sNumber);
+                            }, 300);
+                            return;
+                        }
+                        var sChosenWh = oSelectedItem.data("lgnum") || oSelectedItem.getTitle();
+                        that._destroyWarehouseDialog();
+                        that._onWarehouseChosen(sChosenWh, sDocType, sNumber);
+                    } else {
+                        that._destroyWarehouseDialog();
+                    }
+                },
+                cancel: function () {
+                    that._destroyWarehouseDialog();
+                    that._showError(that.getText("scanToErrWarehouseSelectionCancelled"));
+                }
+            });
+
+            aCandidates.forEach(function (c) {
+                var bCompleted = c.statusCode === "E";
+                var sStatusText = bCompleted ? that.getText("scanToStatusCompleted") : that.getText("scanToStatusOpen");
+                var sDesc = (c.movementType ? "Mvt: " + c.movementType + " | " : "") +
+                            (c.createdDate ? "Date: " + c.createdDate + " | " : "") +
+                            sStatusText;
+                var oItem = new StandardListItem({
+                    title: c.lgnum + (c.plant ? " (Plant " + c.plant + ")" : ""),
+                    description: sDesc,
+                    info: sStatusText,
+                    infoState: bCompleted ? "None" : "Success",
+                    icon: bCompleted ? "sap-icon://status-completed" : "sap-icon://factory",
+                    type: bCompleted ? "Inactive" : "Active"
+                });
+                oItem.data("lgnum", c.lgnum);
+                oItem.data("statusCode", c.statusCode);
+                oSelectDialog.addItem(oItem);
+            });
+
+            this.getView().addDependent(oSelectDialog);
+            this._oWarehouseDialog = oSelectDialog;
+            oSelectDialog.open();
+        },
+
+        _onWarehouseChosen: function (sChosenWh, sDocType, sNumber) {
+            var oModel = this.getModel("scanView");
+            oModel.setProperty("/lgnum", sChosenWh);
+            var oRouter = this.getRouter();
+            if (oRouter) {
+                oRouter.navTo("wmWarehouseScanToDetailWithWh", {
+                    lgnum: sChosenWh,
+                    docType: sDocType,
+                    number: sNumber
+                }, true /* bNoHistory */);
+            }
+            return this.loadDetail(sDocType, sNumber);
+        },
+
         onExit: function () {
+            if (this._oWarehouseDialog) {
+                this._oWarehouseDialog.destroy();
+                this._oWarehouseDialog = null;
+            }
             if (BarcodeScanService && typeof BarcodeScanService.detachHardwareScanner === "function") {
                 BarcodeScanService.detachHardwareScanner(this._scannerHandler);
             }

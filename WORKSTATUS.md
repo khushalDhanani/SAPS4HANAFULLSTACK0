@@ -5,6 +5,84 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **WM Warehouse Scan-To: Multi-Warehouse Route Support & Auto-Resolution (`#/wm/scan-to`) (2026-10-16, 17:00 IST):** Complete.
+  - **User Problem & Requirement:**
+    - On `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/scan-to/TR/0001001911`, scanning TR `0001001911` failed with `"Transfer Requirement 1001911 not found in warehouse W01"` because TR `1001911` exists in Plant `1130` (Warehouse `W12`), but the system hardcoded default warehouse `W01`.
+    - User requested Option A + B:
+      1. Route: support optional warehouse route `#/wm/scan-to/:lgnum/:docType/:number` while preserving the old route without `lgnum` (`#/wm/scan-to/:docType/:number`).
+      2. Backend warehouse resolution order:
+         - a. Use `lgnum` from route/UI if provided.
+         - b. Query `LTBK` across all warehouses for `TBNUM = <scanned>`.
+         - c. Query `T320` filtered strictly by found `LGNUM`s; filter candidates with `plantScope(user)` fail closed (no scope = deny, only explicit Admin = all).
+         - d. Prefer open TRs (`statusCode !== 'E'`).
+         - e. If exactly 1 open match remains, auto-pick it.
+         - f. If >1 open matches remain or all are completed, return HTTP 409 with candidate list (`lgnum`, `plant`, `movementType`, `statusCode`, `status`, `createdDate`). Never guess.
+         - g. If no match remains, return HTTP 404 `"TR not found in any warehouse"` (never 403, never fall back silently to W01).
+      3. Frontend: On HTTP 409, display `SelectDialog` warehouse picker (with completed items greyed out); upon selection, store `lgnum` in model and update URL without history push; destroy dialog on close.
+      4. Clear `/lgnum` on new scans; retain it only for TBPOS re-lookups of the same TR.
+      5. Scope TR first.
+      6. Validate against live Client 220 data: `0001001911`, `0001000856`, non-existent number, and plant-restricted scope users.
+  - **Changes Implemented Across Stack:**
+    1. **Routing (`app/fiori-app/webapp/manifest.json`):**
+       - Added route `wmWarehouseScanToDetailWithWh` with pattern `"wm/scan-to/{lgnum}/{docType}/{number}"` before `wmWarehouseScanToDetail`. Both routes target `TargetWarehouseScanToDetail`.
+    2. **Shell Bar & Navigation (`app/fiori-app/webapp/controller/App.controller.js`):**
+       - Added `wmWarehouseScanToDetailWithWh` to ShellBar title switch and back-navigation handler.
+    3. **CAP Service Handler (`srv/wm/tr-to/handlers/trTo.handler.js`):**
+       - Updated `run` error handler to forward `err.details` within `req.error({ code, status, message, details })`.
+       - Passed `req?.user` to `adapter.lookupTR(tbnum, lgnum, docType, tbpos, req?.user)`.
+    4. **S/4HANA WM Adapter (`srv/integration/s4hana/wm/TrToAdapter.js`):**
+       - In `lookupTR`: Implemented multi-warehouse search via `LTBK` for TR scans when `lgnum` is empty.
+       - Filtered `T320` WHERE clause strictly by the found `LGNUM`s (`LGNUM = 'W12' OR ...`), preventing unindexed table scans.
+       - Enforced `plantScope(user)`: fail closed (`allowedPlants = []` denies all warehouses; `null` permits Admin; array permits authorized plants).
+       - Returns HTTP 404 `"TR not found in any warehouse"` when no authorized match is found.
+       - Auto-picks warehouse when exactly 1 open TR exists (`openCandidates.length === 1`).
+       - Throws HTTP 409 with `details = candidates` when >1 open TRs exist or all are completed.
+    5. **UI Detail Controller (`WarehouseScanToDetail.controller.js`):**
+       - Imported `SelectDialog` and `StandardListItem`.
+       - Attached route pattern matched to both `wmWarehouseScanToDetail` and `wmWarehouseScanToDetailWithWh`.
+       - Reset `/lgnum` to `""` in `_resetState()`; preserved `/lgnum` on TBPOS re-lookups.
+       - On HTTP 409, opens `SelectDialog` with candidates, greying out completed entries.
+       - On selection or auto-pick, stores `lgnum` in model and silently synchronizes URL via `navTo("wmWarehouseScanToDetailWithWh", ..., true)`.
+       - Added `destroy()` call on dialog close and inside `onExit()` lifecycle hook.
+    6. **Localization (`i18n.properties` & `i18n_en.properties`):**
+       - Added `scanToWarehousePickerTitle`, `scanToNoWarehousesFound`, `scanToErrWarehouseSelectionCancelled`, `scanToStatusOpen`, `scanToStatusCompleted`, `scanToErrTrNotFoundAnyWarehouse`, and `scanToErrAmbiguousWarehouse`.
+    7. **Automated Unit Tests (`test/unit/wm/warehouseScanToUi.test.js`):**
+       - Added test cases verifying route parsing with `lgnum`, 409 error handling with warehouse picker dialog, warehouse selection navigation, and wrong-warehouse mismatch guards (56/56 passed).
+  - **Quality & Regression Results:**
+    - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **56/56 tests passed (100% green)**.
+    - `npx jest test/unit/wm`: **78 test suites passed, 1,846 tests passed, 0 failures (100% green)**.
+    - `npm test`: **168 test suites passed, 3,112 tests passed, 0 failures (100% green)**.
+    - `npm run lint`: **ESLint clean, 0 errors, 0 warnings**.
+    - `npm --prefix app/fiori-app run lint`: **ui5lint clean, 0 findings**.
+    - `npx cds compile srv/`: **Clean compilation, exit 0**.
+    - `git diff --check`: **Clean diff, 0 whitespace errors**.
+  - **Live SAP S/4HANA (Client 220) Verification & Acceptance Validation:**
+    - `0001001911 (Admin, no lgnum)`: Auto-picked `W12` (`Open`, Plant `1130`, Mvt `311`), loaded TR directly.
+    - `0001001911 (Route lgnum=W12)`: Loaded `W12` directly.
+    - `0001001911 (Route lgnum=W13)`: Rejected with HTTP 400 `"Transfer Requirement 1001911 is already completed (STATU = E)"`.
+    - `0001001911 (User Plant [1130] / dave)`: Auto-picked `W12` (Plant `1130` in scope, HTTP 200).
+    - `0001001911 (User Plant [1120] / carol)`: Returns clean **HTTP 404** `"TR not found in any warehouse"` (Test 5 fix: prevents info leakage, does not reveal existence of completed W13 in 1120).
+    - `0001001911 (User Plant [9999])`: Returns HTTP 404 `"TR not found in any warehouse"`.
+    - `0001001911 (User with NO scope)`: Returns HTTP 404 `"TR not found in any warehouse"` (fail closed).
+    - `0001000856 (User Plant [1120] / carol, no lgnum)`: Auto-picks `W01` directly (`WarehouseNumber: "W01"`, Plant `1120` in scope, `W12` filtered by plant scope).
+    - `0001000856 (Route lgnum=W01)`: Opens `W01` directly.
+    - `0001000856 (Admin / unrestricted, no lgnum)`: Returns HTTP 409 picker with 4 candidates (`W01`, `W12`, `W10`, `W13`):
+      1. `W01`: Plant `1120`, Mvt `311`, Date `2026-10-16`, Status `Open` -> Active / Selectable
+      2. `W12`: Plant `1130`, Mvt `302`, Date `2026-07-26`, Status `Open` -> Active / Selectable
+      3. `W10`: Plant `1110`, Mvt `319`, Date `2026-07-28`, Status `Completed` -> Inactive / Greyed out
+      4. `W13`: Plant `1120`, Mvt `319`, Date `2025-10-01`, Status `Completed` -> Inactive / Greyed out
+    - `9999999999 (Non-existent)`: Returns clean HTTP 404 `"TR not found in any warehouse"`.
+  - **Browser (Chrome DevTools MCP) Verification:**
+    - **409 Picker**: Navigated to `#/wm/scan-to/TR/0001000856` -> `SelectDialog` rendered titled "Select Warehouse" displaying all 4 candidates with active/inactive statuses matching SAP data.
+    - **Auto-Pick URL Rewrite**: Navigated to `#/wm/scan-to/TR/0001001911` -> auto-picked `W12` and rewrote URL silently to `#/wm/scan-to/W12/TR/0001001911`.
+    - **Back Button**: Navigated back from detail page to `#/wm/scan-to`.
+    - **Sequential Scan (Stale lgnum check)**: Scanned W12 TR `0001001911`, loaded `W12`, clicked "Scan Next TR", then scanned W01 TR `0001000856` -> model `/lgnum` was verified reset to `""`, opening the multi-warehouse picker without stale warehouse carryover.
+  - **Code Confirmation (WarehouseScanToService 409 details pass-through):**
+    - `srv/wm/tr-to/handlers/trTo.handler.js:21-27`: `req.error({ code: String(err.status), status: err.status, message: err.message, details: err.details })`.
+    - `app/fiori-app/webapp/service/ODataClient.js:94-113`: parses `oJson.error.details` into `oErr.details`.
+    - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/service/WarehouseScanToService.js:84-86`: `return ODataClient.get(sUrl);` (returns rejected promise directly to caller).
+    - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js:348`: `var aRaw = oErr.details || ...` consumes `details`.
+
 - **WM Reservation Entry (`wm/reservation-entry`): Consistent Listing Normalization & Reservation Creator Display (`CreatedByUser` / `USNAM`) (2026-10-16, 16:35 IST):** Complete.
   - **User Problem & Requirement:**
     - On `wm/reservation-entry` (`/wm/reservation-entry` list & detail views):

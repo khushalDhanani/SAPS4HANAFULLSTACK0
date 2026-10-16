@@ -412,6 +412,11 @@
           "target": "TargetWarehouseScanTo"
         },
         {
+          "name": "wmWarehouseScanToDetailWithWh",
+          "pattern": "wm/scan-to/{lgnum}/{docType}/{number}",
+          "target": "TargetWarehouseScanToDetail"
+        },
+        {
           "name": "wmWarehouseScanToDetail",
           "pattern": "wm/scan-to/{docType}/{number}",
           "target": "TargetWarehouseScanToDetail"

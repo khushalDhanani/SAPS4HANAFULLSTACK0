@@ -16,15 +16,23 @@ class TrToHandler {
 
     const run = (fn) => async (req) => {
       try {
-        return await fn(req.data || {});
+        return await fn(req.data || {}, req);
       } catch (err) {
+        if (err.details) {
+          return req.error({
+            code: String(err.status || 500),
+            status: err.status || 500,
+            message: err.message || 'SAP S/4HANA request failed',
+            details: err.details
+          });
+        }
         return req.error(err.status || 500, err.message || 'SAP S/4HANA request failed');
       }
     };
 
     srv.on('getOpenTRs', run(({ lgnum, mvt }) => adapter.getOpenTRs(lgnum, mvt)));
     srv.on('getTR', run(({ tbnum, lgnum }) => adapter.getTR(tbnum, lgnum)));
-    srv.on('lookupTR', run(({ tbnum, lgnum, docType, tbpos }) => adapter.lookupTR(tbnum, lgnum, docType, tbpos)));
+    srv.on('lookupTR', run(({ tbnum, lgnum, docType, tbpos }, req) => adapter.lookupTR(tbnum, lgnum, docType, tbpos, req?.user)));
     srv.on('getFifoBatches', run(({ material, plant, storageLocation, warehouseNumber }) => adapter.getFifoBatches(material, plant, storageLocation, warehouseNumber)));
     srv.on('getAvailableSerials', run(({ material, plant, storageLocation, batch }) => adapter.getAvailableSerials(material, plant, storageLocation, batch)));
     srv.on('getAvailableSUs', run(({ tbnum, lgnum, tbpos }) => adapter.getAvailableSUs(tbnum, lgnum, tbpos)));

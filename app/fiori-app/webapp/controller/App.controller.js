@@ -246,6 +246,7 @@ sap.ui.define([
                     break;
                 case "wmWarehouseScanTo":
                 case "wmWarehouseScanToDetail":
+                case "wmWarehouseScanToDetailWithWh":
                     sTitle = oBundle ? oBundle.getText("scanToPageTitle") : "Scan TR to Transfer Order";
                     bShowNav = true;
                     break;
@@ -359,7 +360,7 @@ sap.ui.define([
                 this.onNavBack("wmHandlingUnits");
             } else if (sRoute === "wmPackingInstructionDetail") {
                 this.onNavBack("wmPackingInstructions");
-            } else if (sRoute === "wmWarehouseScanToDetail") {
+            } else if (sRoute === "wmWarehouseScanToDetail" || sRoute === "wmWarehouseScanToDetailWithWh") {
                 this.onNavBack("wmWarehouseScanTo");
             } else if (sRoute === "wmWarehouseScanTo") {
                 this.onNavBack("dashboard");

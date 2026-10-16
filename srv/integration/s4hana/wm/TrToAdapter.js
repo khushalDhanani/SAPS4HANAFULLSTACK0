@@ -971,10 +971,122 @@ class TrToAdapter {
    * number); it is mandatory, the server never guesses. With several open items the caller must pick one
    * (tbpos); the response then carries TRItem '' and all Items so the UI can offer the choice.
    */
-  async lookupTR(tbnum, lgnum = '', docType = '', tbpos = '') {
-    const wh = warehouse(lgnum);
+  async lookupTR(tbnum, lgnum = '', docType = '', tbpos = '', user = null) {
     const type = String(docType || '').trim().toUpperCase();
     if (type !== 'TR' && type !== 'RES') throw httpError(400, 'Select whether the scanned number is a Transfer Requirement (TR) or a Reservation (RES)');
+
+    let wh = lgnum ? sapKey(lgnum, 'lgnum') : '';
+
+    if (!wh && type === 'TR') {
+      const s4Tr = sapKey(tbnum, 'tbnum').padStart(10, '0');
+      const ltbkRows = await this._rfc(
+        () => this.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'STATU', 'BDATU'], [`TBNUM = '${s4Tr}'`]),
+        `Find TR ${alphaOut(s4Tr)} across warehouses`
+      );
+
+      if (!ltbkRows || !ltbkRows.length) {
+        throw httpError(404, 'TR not found in any warehouse');
+      }
+
+      const foundLgnums = Array.from(new Set(ltbkRows.map((r) => r.LGNUM).filter(Boolean)));
+      if (!foundLgnums.length) {
+        throw httpError(404, 'TR not found in any warehouse');
+      }
+
+      // Read T320 filtered by the LGNUM values found in LTBK (requirement 3)
+      const t320Where = foundLgnums.map((lg) => `LGNUM = '${sapKey(lg, 'lgnum')}'`);
+      const t320Options = t320Where.map((clause, idx) => (idx === 0 ? clause : `OR ${clause}`));
+      const t320Rows = await this._rfc(
+        () => this.rfc.readTable('T320', ['LGNUM', 'WERKS'], t320Options),
+        `Read T320 for warehouses ${foundLgnums.join(', ')}`
+      );
+
+      // Read LTBP items to discover plant per warehouse item
+      const ltbpRows = await this._rfc(
+        () => this.rfc.readTable('LTBP', ['LGNUM', 'TBNUM', 'WERKS'], [`TBNUM = '${s4Tr}'`]),
+        `Read LTBP for TR ${alphaOut(s4Tr)}`
+      );
+
+      // Map plants per warehouse from T320 and LTBP
+      const whPlants = new Map();
+      foundLgnums.forEach((lg) => whPlants.set(lg, new Set()));
+      (t320Rows || []).forEach((row) => {
+        if (row.LGNUM && row.WERKS && whPlants.has(row.LGNUM)) {
+          whPlants.get(row.LGNUM).add(row.WERKS);
+        }
+      });
+      (ltbpRows || []).forEach((row) => {
+        if (row.LGNUM && row.WERKS && whPlants.has(row.LGNUM)) {
+          whPlants.get(row.LGNUM).add(row.WERKS);
+        }
+      });
+
+      // Authorization filtering with plantScope (fail closed: requirement 2)
+      // null = Admin (all allowed)
+      // [] = no plants allowed (deny all)
+      // ['1120', ...] = only those plants
+      const plantScope = require('../../../wm/handling-unit/plantScope');
+      const allowedPlants = plantScope(user);
+
+      const isWhAuthorized = (lg) => {
+        if (allowedPlants === null) return true; // explicit Admin
+        if (!Array.isArray(allowedPlants) || allowedPlants.length === 0) return false; // fail closed
+        const plants = whPlants.get(lg);
+        if (!plants || plants.size === 0) return false;
+        for (const p of plants) {
+          if (allowedPlants.includes(p)) return true;
+        }
+        return false;
+      };
+
+      const authRows = ltbkRows.filter((r) => isWhAuthorized(r.LGNUM));
+      if (!authRows.length) {
+        // Requirement 5: Return 404 "TR not found in any warehouse" instead of 403
+        throw httpError(404, 'TR not found in any warehouse');
+      }
+
+      const candidates = authRows.map((r) => {
+        const itemRow = (ltbpRows || []).find((i) => i.LGNUM === r.LGNUM);
+        const t320Row = (t320Rows || []).find((t) => t.LGNUM === r.LGNUM);
+        const plant = (itemRow && itemRow.WERKS) || (t320Row && t320Row.WERKS) || '';
+        const createdDate = r.BDATU ? `${r.BDATU.slice(0, 4)}-${r.BDATU.slice(4, 6)}-${r.BDATU.slice(6, 8)}` : '';
+        const cand = {
+          lgnum: r.LGNUM,
+          plant,
+          movementType: r.BWLVS || '',
+          statusCode: r.STATU || '',
+          status: r.STATU === 'E' ? 'Completed' : 'Open',
+          createdDate
+        };
+        return Object.assign({
+          code: r.LGNUM,
+          target: plant,
+          message: JSON.stringify(cand),
+          innererror: cand
+        }, cand);
+      });
+
+      // Requirement 6 & Point 2:
+      // Only open TRs count for auto-pick. If no open TR is in the user's scope,
+      // return 404 "TR not found in any warehouse" rather than a 400 that reveals completed TR existence.
+      const openCandidates = candidates.filter((c) => c.statusCode !== 'E');
+
+      if (openCandidates.length === 1) {
+        wh = openCandidates[0].lgnum;
+      } else if (openCandidates.length > 1) {
+        const err = httpError(409, 'TR exists in multiple warehouses');
+        err.details = candidates;
+        throw err;
+      } else {
+        // openCandidates.length === 0: no open TR in scope
+        throw httpError(404, 'TR not found in any warehouse');
+      }
+    }
+
+    if (!wh) {
+      wh = warehouse(lgnum);
+    }
+
     let tr = type === 'RES' ? await this.getTRByReservation(tbnum, wh) : await this.getTR(tbnum, wh);
 
     if (wh && tr.Lgnum && tr.Lgnum !== wh) {
