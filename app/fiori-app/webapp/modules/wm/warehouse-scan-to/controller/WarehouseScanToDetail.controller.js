@@ -674,6 +674,14 @@ sap.ui.define([
                 return false;
             }
 
+            // Stock deficit check: if issuing storage location has no physical WM stock and no source bin can be resolved
+            if (oTR.StockWarning && !oModel.getProperty("/sourceStorageBin")) {
+                oModel.setProperty("/canSubmit", false);
+                oModel.setProperty("/scanVerificationStatusText", "STOCK DEFICIT");
+                oModel.setProperty("/scanVerificationStatusState", "Error");
+                return false;
+            }
+
             var nQty = parseFloat(oModel.getProperty("/pickQty") || 0);
             var nOpen = parseFloat(oTR.OpenQty || 0);
 

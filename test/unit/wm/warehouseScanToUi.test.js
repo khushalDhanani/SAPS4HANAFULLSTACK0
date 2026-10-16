@@ -1303,5 +1303,36 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             expect(detailModel.getProperty('/messageText')).toContain('scanToErrWrongWarehouse');
             expect(detailModel.getProperty('/scanVerificationStatusText')).toBe('REJECTED');
         });
+
+        it('Step 6: stock deficit with unresolved source bin blocks submission with STOCK DEFICIT status', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                WarehouseNumber: 'W01',
+                TRNumber: '1000860',
+                TRItem: '0001',
+                Material: '8000009753',
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                MovementType: '311',
+                OpenQty: 1,
+                TargetQty: 1,
+                Unit: 'NOS',
+                Warning: 'Stock deficit: Storage location HS01 has no WM stock for material 8000009753 in warehouse W01. Available in storage location(s): MT01.',
+                StockWarning: 'Storage location HS01 has no WM stock for material 8000009753 in warehouse W01. Available in storage location(s): MT01.',
+                SourceStorageType: '',
+                SourceStorageBin: '',
+                ReceivingStorageLocation: 'CIS1'
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '1000860' } : null))
+            });
+
+            expect(detailModel.getProperty('/hasTR')).toBe(true);
+            expect(detailModel.getProperty('/hasMessage')).toBe(true);
+            expect(detailModel.getProperty('/messageType')).toBe('Warning');
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
+            expect(detailModel.getProperty('/scanVerificationStatusText')).toBe('STOCK DEFICIT');
+            expect(detailModel.getProperty('/scanVerificationStatusState')).toBe('Error');
+        });
     });
 });

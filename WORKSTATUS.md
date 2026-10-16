@@ -5,6 +5,36 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Storage Type Search Customizing Error (T334T / L3 007) on TR 0001000860: Root Cause, SAP SPRO Remediation & UI Stock Deficit Safeguard (2026-10-16, 16:10 IST):** Complete.
+  - **User Problem & Symptom:**
+    - On `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/scan-to/TR/0001000860`, clicking "Create & Confirm TO" fails with:
+      `Data for storage type search is not defined in warehouse W01 for WM movement type 311: missing customizing key in table T334T (Warehouse: W01, Operation: A [Stock Removal], Storage Type Indicator: 'EN1'). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > Stock Removal Strategies > Determine Storage Type Search.`
+  - **Root Cause Confirmed via Live SAP S/4HANA (Client 220) Inspection:**
+    1. **Missing Customizing Key in `T334T`:** Direct table read of `T334T` confirms Warehouse `W01` defines stock placement / putaway (`KZEAR = 'E'`) entries for indicator `EN1` (`W01/E/EN1 -> EN1, 003`), but stock removal (`KZEAR = 'A'`) ONLY contains rows for blank (`***`) and `005`. The key `(LGNUM = 'W01', KZEAR = 'A', LGTKZ = 'EN1')` is missing from S/4HANA customizing table `T334T`.
+    2. **Material Master WM Indicator (`MLGN`):** Material `8000009753` (Apple Macbook Pro 14", M5) in Warehouse `W01` has stock removal indicator `MLGN-LTKZA = 'EN1'`.
+    3. **Physical Inventory Deficit in `HS01` (`LQUA` vs `MARD`):** TR `0001000860` was created for Material `8000009753`, Plant `1120`, Storage Location `HS01`. In `LQUA`, Storage Location `HS01` has **ZERO** physical stock in warehouse `W01` (it only contains 2.000 NOS sitting in interim transfer storage type `921 / TRANSFER`, which cannot be used as a pick source). The actual physical stock for `8000009753` in Warehouse `W01` resides in Storage Location `MT01` (3 NOS in Storage Type `EN1`, Bin `0-L0001-01`).
+    4. **Trigger Chain:** Because `HS01` has no physical stock in `LQUA`, `lookupTR` could not determine a physical source storage type and bin (`SourceStorageType: ""`, `SourceStorageBin: ""`). When "Create & Confirm TO" was clicked, blank source bin parameters were sent to SAP. Standard SAP function module `L_TO_CREATE_TR` then executed automatic stock removal search: `T334T_LESEN(W01, A, EN1)`, failing with `L3 007` because of the missing customizing entry in `T334T`.
+  - **Fixes Delivered:**
+    1. **Frontend Validation Safeguard (`WarehouseScanToDetail.controller.js`):** In `_validateForm()`, added a stock deficit gate: when `oTR.StockWarning` is present and `!sourceStorageBin`, it blocks submission (`canSubmit = false`), updates the status badge to `STOCK DEFICIT` (state: `Error`), and prevents submitting guaranteed-to-fail requests to SAP.
+    2. **UI Test Suite (`test/unit/wm/warehouseScanToUi.test.js`):** Added comprehensive test verifying that stock deficits with unresolved source bins block submission and display `STOCK DEFICIT` error state (54/54 passed).
+  - **Remediation for SAP Administrator / Operator:**
+    - **SPRO Customizing Maintenance (SAP GUI):**
+      - Transaction: `SPRO`
+      - Path: `Logistics Execution > Warehouse Management > Strategies > Stock Removal Strategies > Determine Storage Type Search`
+      - Table: `T334T`
+      - Maintain entry: Warehouse `W01`, Operation `A` (Stock Removal), Storage Type Indicator `EN1`, Search Sequence `EN1`, `001`, `***`.
+    - **Inventory Operational Path:**
+      - Material `8000009753` has 3 NOS of physical stock in Storage Location `MT01` (`EN1 / 0-L0001-01`).
+      - Operators should create reservations specifying issuing storage location `MT01` (where physical stock resides) or perform a stock transfer from `MT01` to `HS01`.
+      - For movement testing with existing customizing, materials with blank removal indicator (`LTKZA = ''`), such as `8900000004` or `8900000007` (in `CS01`), use `T334T` search rule `***` and process immediately.
+  - **Quality & Regression Results:**
+    - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **54/54 tests passed (100% green)**.
+    - `npx jest test/unit/wm`: **78 test suites passed, 1,841 tests passed, 0 failures (100% green)**.
+    - `npm run lint`: **ESLint clean, 0 errors, 0 warnings**.
+    - `npm --prefix app/fiori-app run lint`: **ui5lint clean, 0 findings**.
+    - `npx cds compile srv/`: **Clean compilation, exit 0**.
+    - `git diff --check`: **Clean diff, 0 whitespace errors**.
+
 - **Movement Type 261 — End-to-End Double Check Verification, Playwright E2E Suite, Staging TR Conflict Resolution, and Statistical Order KI 248 Fix (2026-10-16, 13:25 IST):** Complete & Verified.
 
   - **Feature Delivery & Problem Resolution:**
