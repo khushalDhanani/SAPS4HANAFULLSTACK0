@@ -74,11 +74,254 @@ class TrToAdapter {
     const cds = require('@sap/cds');
     if (!cds?.db) return null;
     const raw = alphaOut(tbnum);
-    const read = (value) => cds.db.run(
-      cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
-        .where({ TransferRequirement: value })
-    );
-    return (await read(raw)) || (raw.padStart(10, '0') !== raw ? await read(raw.padStart(10, '0')) : null);
+    try {
+      const read = (value) => cds.db.run(
+        cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
+          .where({ TransferRequirement: value })
+      );
+      return (await read(raw)) || (raw.padStart(10, '0') !== raw ? await read(raw.padStart(10, '0')) : null);
+    } catch (_dbErr) {
+      return null;
+    }
+  }
+
+  /**
+   * Detects whether a TR was corrupted by SAP indicator conflict (e.g. XFELD_WRONG on 261 staging TR):
+   * closed in SAP (STATU = 'E') with 0 Transfer Orders created, while its tracked reservation is still open in SAP.
+   */
+  async _isCorruptedStagingTR(tr, wh) {
+    if (!tr || tr.Statu !== 'E') return null;
+    if (!this.rfc || !this.rfc.readTable) return null;
+
+    // 1. Check if any TO was ever created for this TR in SAP
+    try {
+      const s4Tr = sapKey(tr.Tbnum, 'tbnum').padStart(10, '0');
+      const ltakRows = await this._rfc(
+        () => this.rfc.readTable('LTAK', ['TANUM', 'KQUIT'], [
+          `LGNUM = '${wh}'`,
+          `AND TBNUM = '${s4Tr}'`
+        ], 1),
+        `Check if TO exists in SAP for TR ${alphaOut(s4Tr)}`
+      );
+      if (ltakRows && ltakRows.length > 0) {
+        return null;
+      }
+    } catch (_ltakErr) {
+      return null;
+    }
+
+    // 2. Check if this TR belongs to an open tracked reservation (from CDS DB or directly from SAP RESB/RKPF)
+    try {
+      let track = await this._findTrackedReservationForTR(tr.Tbnum);
+      const rawRs = tr.Rsnum && String(tr.Rsnum).trim() !== '' && String(tr.Rsnum).trim() !== '0000000000'
+        ? alphaOut(tr.Rsnum)
+        : (track?.ReservationNo ? alphaOut(track.ReservationNo) : '');
+
+      if (!track && rawRs) {
+        const cds = require('@sap/cds');
+        if (cds?.db) {
+          try {
+            const sPad = rawRs.padStart(10, '0');
+            track = await cds.db.run(
+              cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
+                .where({ ReservationNo: rawRs })
+            ) || await cds.db.run(
+              cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
+                .where({ ReservationNo: sPad })
+            );
+          } catch (_dbErr) { /* ignore db error */ }
+        }
+      }
+
+      // If still no track, fetch reservation directly from SAP transparent tables RESB & RKPF
+      if (!track && rawRs) {
+        const s4Rsnum = rawRs.padStart(10, '0');
+        const resbRows = await this._rfc(
+          () => this.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'ENMNG', 'KZEAR', 'AUFNR', 'BWART', 'MEINS'], [
+            `RSNUM = '${s4Rsnum}'`
+          ], 5),
+          `Read RESB for untracked reservation ${rawRs}`
+        );
+        let directResb = resbRows?.[0];
+        if (directResb) {
+          let rkpfMvt = '';
+          try {
+            const rkpfRows = await this._rfc(
+              () => this.rfc.readTable('RKPF', ['RSNUM', 'BWART', 'AUFNR', 'KOSTL', 'ANLN1', 'UMWRK', 'UMLGO'], [
+                `RSNUM = '${s4Rsnum}'`
+              ], 1),
+              `Read RKPF for reservation ${rawRs}`
+            );
+            rkpfMvt = rkpfRows?.[0]?.BWART || '';
+          } catch (_rkpfErr) { /* tolerate */ }
+
+          track = {
+            ReservationNo: rawRs,
+            ReservationItem: alphaOut(directResb.RSPOS || '1'),
+            Material: alphaOut(directResb.MATNR),
+            Plant: directResb.WERKS,
+            StorageLocation: directResb.LGORT,
+            Quantity: sapNum(directResb.BDMNG),
+            Unit: directResb.MEINS || 'NOS',
+            MovementType: directResb.BWART || rkpfMvt || '261',
+            OrderID: directResb.AUFNR ? alphaOut(directResb.AUFNR) : '',
+            Status_code: '02'
+          };
+
+          if (String(directResb.KZEAR || '').trim() !== 'X' && (sapNum(directResb.BDMNG) - sapNum(directResb.ENMNG) > 0)) {
+            return track;
+          }
+          return null;
+        }
+      }
+
+      if (!track) return null;
+
+      // If already marked completed in CDS, not a corrupted open TR
+      if (track.Status_code === STATUS.GI_POSTED || track.Status_code === '05' || track.MaterialDocument) {
+        return null;
+      }
+
+      // 3. Verify in SAP transparent table RESB that reservation has unwithdrawn open quantity
+      const s4Rsnum = sapKey(track.ReservationNo, 'rsnum').padStart(10, '0');
+      const s4Rspos = sapKey(track.ReservationItem || '1', 'rspos').padStart(4, '0');
+      const resbRows = await this._rfc(
+        () => this.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'BDMNG', 'ENMNG', 'KZEAR'], [
+          `RSNUM = '${s4Rsnum}'`,
+          `AND RSPOS = '${s4Rspos}'`
+        ], 1),
+        `Check RESB for reservation ${alphaOut(s4Rsnum)}`
+      );
+      const resb = resbRows?.[0];
+      if (resb && String(resb.KZEAR || '').trim() !== 'X' && (sapNum(resb.BDMNG) - sapNum(resb.ENMNG) > 0)) {
+        return track;
+      }
+    } catch (_resErr) {
+      LOG.warn(`_isCorruptedStagingTR check error: ${_resErr.message}`);
+    }
+
+    return null;
+  }
+
+  /**
+   * Recovers a corrupted staging TR by adopting an existing open staging TR or creating a clean one in SAP,
+   * updating ReservationTrack, and returning the refreshed open TR header.
+   */
+  async _recoverCorruptedStagingTR(tr, track, wh) {
+    const cds = require('@sap/cds');
+    const s4Mat = alphaIn(sapKey(track.Material, 'matnr'), 18);
+    const s4Werks = sapKey(track.Plant, 'plant');
+    const s4Lgort = sapKey(track.StorageLocation, 'lgort');
+    const s4Menga = Number(track.Quantity);
+    const s4Altme = String(track.Unit || 'NOS').trim().toUpperCase();
+
+    let freshTbnum = '';
+
+    // First check if a valid open staging TR already exists in SAP LTBK/LTBP
+    try {
+      const ltbkRows = await this._rfc(
+        () => this.rfc.readTable('LTBK', ['TBNUM', 'STATU'], [
+          `LGNUM = '${wh}'`,
+          "AND BWLVS = '311'",
+          "AND STATU = ''"
+        ], 20),
+        `Find open staging TRs in warehouse ${wh}`
+      );
+      for (const r of (ltbkRows || [])) {
+        const trCand = await this.getTR(r.TBNUM, wh);
+        const openItems = this._openItems(trCand);
+        const match = openItems.find((i) =>
+          (!trCand.Rsnum || trCand.Rsnum === '0000000000' || alphaOut(trCand.Rsnum) === alphaOut(track.ReservationNo)) &&
+          alphaOut(i.Material) === alphaOut(track.Material) &&
+          i.Plant === track.Plant &&
+          i.StorageLocation === track.StorageLocation &&
+          Number(i.OpenQty) >= s4Menga
+        );
+        if (match) {
+          freshTbnum = trCand.Tbnum;
+          break;
+        }
+      }
+    } catch (_candErr) {
+      LOG.warn(`Error scanning for existing staging TR: ${_candErr.message}`);
+    }
+
+    // If none found, create a clean staging TR in SAP
+    if (!freshTbnum) {
+      try {
+        const resZ = await this._rfc(
+          () => this.rfc.call('Z_WM_TR_CREATE', {
+            IV_LGNUM: wh,
+            IV_BWLVS: '311',
+            IV_MATNR: s4Mat,
+            IV_WERKS: s4Werks,
+            IV_LGORT: s4Lgort,
+            IV_MENGA: s4Menga,
+            IV_ALTME: s4Altme,
+            IV_RSNUM: '',
+            IV_RSPOS: '',
+            IV_COMMIT: 'X'
+          }),
+          `Create replacement staging TR for reservation ${track.ReservationNo}`
+        );
+        const raw = resZ?.EV_TBNUM || resZ?.E_TBNUM;
+        if (raw && raw !== '0000000000') {
+          freshTbnum = alphaOut(raw);
+        }
+      } catch (_crErr) {
+        LOG.error(`Failed creating replacement staging TR: ${_crErr.message}`);
+      }
+    }
+
+    if (!freshTbnum) return null;
+
+    // Update or insert CDS tracking persistence
+    if (cds?.db && track.ReservationNo) {
+      try {
+        const sClean = alphaOut(track.ReservationNo);
+        const sPad = sClean.padStart(10, '0');
+        const sItem = sapKey(track.ReservationItem || '1', 'rspos').padStart(4, '0');
+        const newTrPadded = freshTbnum.padStart(10, '0');
+        const existing = await cds.db.run(
+          cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
+            .where(`(ReservationNo = '${sClean}' OR ReservationNo = '${sPad}') AND (ReservationItem = '${sItem}' OR ReservationItem = '${alphaOut(sItem)}')`)
+        );
+        if (existing) {
+          await cds.db.run(
+            cds.ql.UPDATE('saps4hana.wm.ReservationTrack')
+              .set({ TransferRequirement: newTrPadded, Status_code: STATUS.TR_CREATED, ProcessStatus: 'TR_CREATED' })
+              .where(`(ReservationNo = '${sClean}' OR ReservationNo = '${sPad}') AND (ReservationItem = '${sItem}' OR ReservationItem = '${alphaOut(sItem)}')`)
+          );
+        } else {
+          await cds.db.run(
+            cds.ql.INSERT.into('saps4hana.wm.ReservationTrack').entries({
+              ReservationNo: sPad,
+              ReservationItem: sItem,
+              MovementType: track.MovementType || '261',
+              WarehouseNumber: wh,
+              Plant: track.Plant,
+              StorageLocation: track.StorageLocation,
+              Material: track.Material,
+              Quantity: track.Quantity,
+              Unit: track.Unit || 'NOS',
+              OrderID: track.OrderID || '',
+              TransferRequirement: newTrPadded,
+              Status_code: STATUS.TR_CREATED,
+              ProcessStatus: 'TR_CREATED'
+            })
+          );
+        }
+      } catch (_updErr) {
+        LOG.warn(`Failed updating ReservationTrack with replacement TR: ${_updErr.message}`);
+      }
+    }
+
+    const newTr = await this.getTR(freshTbnum, wh);
+    if (newTr) {
+      newTr._recoveredFrom = alphaOut(tr.Tbnum);
+      newTr._recoveredTrack = track;
+    }
+    return newTr;
   }
 
   /** Same adapter bound to another RFC client (used to run a step inside one locked RFC session). */
@@ -732,13 +975,24 @@ class TrToAdapter {
     const wh = warehouse(lgnum);
     const type = String(docType || '').trim().toUpperCase();
     if (type !== 'TR' && type !== 'RES') throw httpError(400, 'Select whether the scanned number is a Transfer Requirement (TR) or a Reservation (RES)');
-    const tr = type === 'RES' ? await this.getTRByReservation(tbnum, wh) : await this.getTR(tbnum, wh);
+    let tr = type === 'RES' ? await this.getTRByReservation(tbnum, wh) : await this.getTR(tbnum, wh);
 
     if (wh && tr.Lgnum && tr.Lgnum !== wh) {
       throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} belongs to warehouse ${tr.Lgnum}, not ${wh}`);
     }
     if (tr.Statu === 'E') {
-      throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = E)`);
+      const isCorrupted = await this._isCorruptedStagingTR(tr, wh);
+      if (isCorrupted) {
+        LOG.warn(`[lookupTR] TR ${alphaOut(tr.Tbnum)} has STATU = 'E' with NO Transfer Order in SAP, but Reservation ${alphaOut(isCorrupted.ReservationNo)} is open; auto-recovering to active staging TR...`);
+        const recoveredTr = await this._recoverCorruptedStagingTR(tr, isCorrupted, wh);
+        if (recoveredTr) {
+          tr = recoveredTr;
+        } else {
+          throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = E)`);
+        }
+      } else {
+        throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = E)`);
+      }
     }
 
     const open = this._openItems(tr);
@@ -875,6 +1129,29 @@ class TrToAdapter {
     let reservationMovementType = '';
     let trackedReservation = null;
 
+    if (tr._recoveredTrack) {
+      trackedReservation = tr._recoveredTrack;
+      if (!reservationMovementType && tr._recoveredTrack.MovementType?.trim()) {
+        reservationMovementType = tr._recoveredTrack.MovementType.trim();
+      }
+      if (!orderId && tr._recoveredTrack.OrderID?.trim()) {
+        orderId = tr._recoveredTrack.OrderID.trim();
+      }
+      if (!receivingStorageLocation && tr._recoveredTrack.ReceivingStorageLocation?.trim()) {
+        receivingStorageLocation = String(tr._recoveredTrack.ReceivingStorageLocation).trim().toUpperCase();
+        recSLocSource = 'Tracking';
+      }
+      if (!receivingPlant && tr._recoveredTrack.ReceivingPlant?.trim()) {
+        receivingPlant = String(tr._recoveredTrack.ReceivingPlant).trim().toUpperCase();
+        recPlantSource = 'Tracking';
+      }
+      if (!costCenter && tr._recoveredTrack.CostCenter?.trim()) costCenter = tr._recoveredTrack.CostCenter.trim();
+      if (!assetNo && tr._recoveredTrack.AssetNo?.trim()) {
+        assetNo = tr._recoveredTrack.AssetNo.trim();
+        subNumber = tr._recoveredTrack.SubNumber?.trim() || '0000';
+      }
+    }
+
     // 1. RESB (via RSNUM/RSPOS)
     if (tr.Rsnum && String(tr.Rsnum).trim() !== '' && String(tr.Rsnum).trim() !== '0000000000' && this.rfc) {
       try {
@@ -1005,6 +1282,10 @@ class TrToAdapter {
     const allowMismatchedTR = isMismatchOverrideEnabled() || trackedMismatch;
     if (reservationMovementType && tr.Bwlvs && reservationMovementType !== tr.Bwlvs) {
       warning = `TR movement ${tr.Bwlvs} does not match reservation movement ${reservationMovementType}`;
+    }
+    if (tr._recoveredFrom) {
+      const recMsg = `Corrupted TR ${alphaOut(tr._recoveredFrom)} (closed without TO) auto-recovered to active staging TR ${alphaOut(tr.Tbnum)}`;
+      warning = warning ? `${recMsg}; ${warning}` : recMsg;
     }
 
     return {
@@ -1309,8 +1590,12 @@ class TrToAdapter {
     confMenge,
     reservationMovementType = '',
     ReservationMovementType = '',
+    reservationNo = '',
+    ReservationNo = '',
     _reservationNo = '',
     _ReservationNo = '',
+    reservationItem = '',
+    ReservationItem = '',
     _reservationItem = '',
     _ReservationItem = '',
     trackedReservation = null
@@ -1323,13 +1608,27 @@ class TrToAdapter {
     const wh = warehouse(effWh);
 
     // Step 2: Validate TR in SAP
-    const tr = await this.getTR(effTbnum, wh);
+    let tr = await this.getTR(effTbnum, wh);
 
     if (wh && tr.Lgnum && tr.Lgnum !== wh) {
       throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} belongs to warehouse ${tr.Lgnum}, not ${wh}`);
     }
     if (tr.Statu === 'E') {
-      throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = E)`);
+      const isCorrupted = await this._isCorruptedStagingTR(tr, wh);
+      if (isCorrupted) {
+        LOG.warn(`[createTOFromTR] TR ${alphaOut(tr.Tbnum)} has STATU = 'E' with NO Transfer Order in SAP, but Reservation ${alphaOut(isCorrupted.ReservationNo)} is open; auto-recovering to active staging TR...`);
+        const recoveredTr = await this._recoverCorruptedStagingTR(tr, isCorrupted, wh);
+        if (recoveredTr) {
+          tr = recoveredTr;
+          if (trackedReservation) {
+            trackedReservation.TransferRequirement = tr.Tbnum;
+          }
+        } else {
+          throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = E)`);
+        }
+      } else {
+        throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = E)`);
+      }
     }
 
     let effResMvt = (ReservationMovementType || reservationMovementType || '').trim();
@@ -1397,6 +1696,22 @@ class TrToAdapter {
       throw httpError(400, `Storage location mismatch: requested ${reqSLoc}, but TR item has ${item.StorageLocation}`);
     }
 
+    if (!trackedReservation && tr._recoveredTrack) {
+      trackedReservation = {
+        TransferRequirement: tr.Tbnum,
+        ReservationNo: tr._recoveredTrack.ReservationNo,
+        ReservationItem: tr._recoveredTrack.ReservationItem,
+        MovementType: tr._recoveredTrack.MovementType,
+        OrderID: tr._recoveredTrack.OrderID
+      };
+      if (!effResMvt && tr._recoveredTrack.MovementType) {
+        effResMvt = tr._recoveredTrack.MovementType;
+      }
+      if (!finalOrderId && tr._recoveredTrack.OrderID) {
+        finalOrderId = tr._recoveredTrack.OrderID;
+      }
+    }
+
     if (!trackedReservation) {
       try {
         const track = await this._findTrackedReservationForTR(tr.Tbnum);
@@ -1422,7 +1737,11 @@ class TrToAdapter {
 
     const linkedTrackedMismatch = Boolean(
       effResMvt && tr.Bwlvs && effResMvt !== tr.Bwlvs && trackedReservation &&
-      alphaOut(trackedReservation.TransferRequirement) === alphaOut(tr.Tbnum) &&
+      (
+        alphaOut(trackedReservation.TransferRequirement) === alphaOut(tr.Tbnum) ||
+        (tr._recoveredFrom && alphaOut(trackedReservation.TransferRequirement) === alphaOut(tr._recoveredFrom)) ||
+        (Boolean(ReservationNo || reservationNo || _ReservationNo || _reservationNo) && alphaOut(trackedReservation.ReservationNo) === alphaOut(ReservationNo || reservationNo || _ReservationNo || _reservationNo))
+      ) &&
       (!trRsnumClean || (trRsnumClean === trackRsnumClean && (!trRsposClean || trRsposClean === trackRsposClean))) &&
       String(trackedReservation.MovementType || '').trim() === effResMvt
     );
@@ -1698,6 +2017,21 @@ class TrToAdapter {
       ? String(verifiedTO.Items[0].Tapos).padStart(4, '0')
       : (item?.Tbpos ? String(item.Tbpos).padStart(4, '0') : '0001');
 
+    const effFinalResNo = (tr.Rsnum && String(tr.Rsnum).trim() !== '' && String(tr.Rsnum).trim() !== '0000000000')
+      ? alphaOut(tr.Rsnum)
+      : (trackedReservation?.ReservationNo
+          ? alphaOut(trackedReservation.ReservationNo)
+          : (ReservationNo || reservationNo || _ReservationNo || _reservationNo
+              ? alphaOut(ReservationNo || reservationNo || _ReservationNo || _reservationNo)
+              : ''));
+    const effFinalResItem = item.Rspos && item.Rspos !== '0000'
+      ? alphaOut(item.Rspos)
+      : (trackedReservation?.ReservationItem
+          ? alphaOut(trackedReservation.ReservationItem)
+          : (ReservationItem || reservationItem || _ReservationItem || _reservationItem
+              ? alphaOut(ReservationItem || reservationItem || _ReservationItem || _reservationItem)
+              : '1'));
+
     // Step 6: Return TO (Standardized transactional response)
     if (autoConfirm && !confirmed) {
       const errMsg = confirmErr?.message || `Confirmation failed for Transfer Order ${tanum}`;
@@ -1713,8 +2047,8 @@ class TrToAdapter {
         TransferOrder: tanum,
         TransferRequirement: alphaOut(tr.Tbnum),
         TRItem: item.Tbpos,
-        ReservationNo: alphaOut(tr.Rsnum) || '',
-        ReservationItem: '',
+        ReservationNo: effFinalResNo,
+        ReservationItem: effFinalResItem,
         ReservationMovementType: effResMvt,
         MovementType: tr.Bwlvs || '',
         CostCenter: finalCostCenter,
@@ -1756,8 +2090,8 @@ class TrToAdapter {
       TransferOrder: tanum,
       TransferRequirement: alphaOut(tr.Tbnum),
       TRItem: item.Tbpos,
-      ReservationNo: alphaOut(tr.Rsnum) || '',
-      ReservationItem: '',
+      ReservationNo: effFinalResNo,
+      ReservationItem: effFinalResItem,
       ReservationMovementType: effResMvt,
       MovementType: tr.Bwlvs || '',
       CostCenter: finalCostCenter,

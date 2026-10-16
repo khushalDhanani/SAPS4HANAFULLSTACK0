@@ -174,6 +174,19 @@ class ReservationProcessAdapter {
         ...(sOrderId ? { ORDERID: pad12(sOrderId) } : {})
       };
 
+      if (String(movementType).trim() === '261' && sOrderId && !header.COSTCENTER) {
+        if (orderValidation?.isStatistical && orderValidation?.responsibleCostCenter) {
+          header.COSTCENTER = alphaOut(orderValidation.responsibleCostCenter).padStart(10, '0');
+        } else if (this.rfc) {
+          try {
+            const aufkCheck = await this.rfc.readTable('AUFK', ['ASTKZ', 'KOSTV'], [`AUFNR = '${pad12(sOrderId)}'`], 1);
+            if (aufkCheck?.[0]?.ASTKZ === 'X' && aufkCheck[0].KOSTV?.trim()) {
+              header.COSTCENTER = alphaOut(aufkCheck[0].KOSTV.trim()).padStart(10, '0');
+            }
+          } catch (_) {}
+        }
+      }
+
       const s4Mat = padMat(sapKey(material, 'matnr'));
       let sBatch = sapKeyOpt(batch, 'batch');
       if (this.rfc) {
@@ -566,7 +579,8 @@ class ReservationProcessAdapter {
       const isTransferPosting = Boolean(
         reqIsTransferPosting ||
         movementType === '301' ||
-        (movementType === '261' && s4Bwlvs === '311')
+        (movementType === '261' && s4Bwlvs === '311') ||
+        (effMvt === '261' && s4Bwlvs === '311')
       );
       const s4TrRsnum = isTransferPosting ? '' : s4Rsnum;
       const s4TrRspos = isTransferPosting ? '' : s4Rspos;
@@ -646,7 +660,7 @@ class ReservationProcessAdapter {
               returnedItem = resZ;
             } else if (resZ && resZ.EV_SUCCESS === 'E' && resZ.EV_MESSAGE) {
               if (s4Bwlvs === '261') {
-                LOG.warn(`[createTransferRequirement] Z_WM_TR_CREATE rejected WM 261 (${resZ.EV_MESSAGE}); staging via WM 311 for reservation ${s4TrRsnum}`);
+                LOG.warn(`[createTransferRequirement] Z_WM_TR_CREATE rejected WM 261 (${resZ.EV_MESSAGE}); staging via WM 311 for reservation ${s4Rsnum}`);
                 const resFallback = await call('Z_WM_TR_CREATE', {
                   IV_LGNUM: s4Lgnum,
                   IV_BWLVS: '311',
@@ -655,8 +669,8 @@ class ReservationProcessAdapter {
                   IV_LGORT: s4Lgort,
                   IV_MENGA: s4Menga,
                   IV_ALTME: s4Altme,
-                  IV_RSNUM: s4TrRsnum,
-                  IV_RSPOS: s4TrRspos,
+                  IV_RSNUM: '',
+                  IV_RSPOS: '',
                   IV_COMMIT: 'X'
                 });
                 rawTbnum = resFallback && (resFallback.EV_TBNUM || resFallback.E_TBNUM);
@@ -2443,7 +2457,45 @@ class ReservationProcessAdapter {
         ...(testrun ? { TESTRUN: 'X' } : {})
       });
 
-      const errors = (res.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
+      let errors = (res.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
+      if (errors.length) {
+        // KI 248 handling: statistical orders (e.g. ZEMP) require true cost accounting assignment
+        const isKi248 = errors.some((e) => (e.ID === 'KI' && String(e.NUMBER) === '248') || (e.MESSAGE && e.MESSAGE.includes('requires a true account assignment')));
+        if (isKi248 && sMvt === '261' && orderId) {
+          LOG.warn(`[postGoodsMovement] BAPI_GOODSMVT_CREATE returned KI 248 for Order ${orderId}; resolving responsible cost center and retrying with true account assignment...`);
+          let ccFallback = sCostCenter;
+          if (!ccFallback && this.rfc) {
+            try {
+              const aufkRows = await this.rfc.readTable('AUFK', ['KOSTV', 'ASTKZ'], [`AUFNR = '${pad12(orderId)}'`], 1);
+              if (aufkRows?.[0]?.KOSTV?.trim()) ccFallback = aufkRows[0].KOSTV.trim();
+            } catch (_) {}
+          }
+          ccFallback = ccFallback || '1011201301';
+          const retryItem = {
+            ...item,
+            COSTCENTER: pad10(ccFallback)
+          };
+          delete retryItem.RESERV_NO;
+          delete retryItem.RES_ITEM;
+          delete retryItem.NO_MORE_GR;
+
+          const retryRes = await call('BAPI_GOODSMVT_CREATE', {
+            GOODSMVT_HEADER: header,
+            GOODSMVT_CODE: { GM_CODE: sGmCode },
+            GOODSMVT_ITEM: [retryItem],
+            ...(serialItems.length ? { GOODSMVT_SERIALNUMBER: serialItems } : {}),
+            ...(testrun ? { TESTRUN: 'X' } : {})
+          });
+          const retryErrors = (retryRes.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
+          if (!retryErrors.length) {
+            errors = [];
+            res.MATERIALDOCUMENT = retryRes.MATERIALDOCUMENT;
+            res.MATDOCUMENTYEAR = retryRes.MATDOCUMENTYEAR;
+            res.GOODSMVT_HEADRET = retryRes.GOODSMVT_HEADRET;
+          }
+        }
+      }
+
       if (errors.length) {
         if (!testrun) {
           try {
@@ -2805,7 +2857,7 @@ class ReservationProcessAdapter {
     try {
       aufkRows = await this.rfc.readTable(
         'AUFK',
-        ['AUFNR', 'AUART', 'AUTYP', 'WERKS', 'LOEKZ'],
+        ['AUFNR', 'AUART', 'AUTYP', 'WERKS', 'LOEKZ', 'ASTKZ', 'KOSTV'],
         [`AUFNR = '${s4Aufnr}'`],
         1
       );
@@ -2875,7 +2927,9 @@ class ReservationProcessAdapter {
       valid: true,
       orderId: s4Aufnr,
       orderType: (orderRow?.AUART ? orderRow.AUART.trim() : expectedOrderType) || '',
-      isReleased: true
+      isReleased: true,
+      isStatistical: orderRow?.ASTKZ === 'X',
+      responsibleCostCenter: orderRow?.KOSTV ? orderRow.KOSTV.trim() : ''
     };
   }
 

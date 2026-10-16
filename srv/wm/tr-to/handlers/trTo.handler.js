@@ -493,8 +493,8 @@ class TrToHandler {
             const migoResult = await handlePostMigoGoodsMovement({
               user: req.user,
               data: {
-                ReservationNo: existing?.ReservationNo || result.ReservationNo || data.ReservationNo || data.reservationNo,
-                ReservationItem: existing?.ReservationItem || result.ReservationItem || data.ReservationItem || data.reservationItem,
+                ReservationNo: (result.ReservationNo && result.ReservationNo !== '0' ? result.ReservationNo : '') || (existing?.ReservationNo && existing?.ReservationNo !== '0' ? existing.ReservationNo : '') || (data.ReservationNo && data.ReservationNo !== '0' ? data.ReservationNo : '') || data.reservationNo,
+                ReservationItem: (result.ReservationItem && result.ReservationItem !== '0' ? result.ReservationItem : '') || existing?.ReservationItem || data.ReservationItem || data.reservationItem || '1',
                 ReservationMovementType: result.ReservationMovementType || data.ReservationMovementType || data.reservationMovementType || '',
                 TransferOrder: result.TransferOrder,
                 Quantity: confirmedQty,

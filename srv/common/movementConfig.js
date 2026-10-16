@@ -102,9 +102,7 @@ const MOVEMENT_CONFIG = Object.freeze({
     inventoryMovement: '261',
     configuredWmMovement: '261',
     stagingWmMovement: '261',
-    get wmMovement() {
-      return '261';
-    },
+    wmMovement: '261',
     requirementType: 'F',
     interimStorageType: '914',
     description: 'Goods Issue to Order',

@@ -5,6 +5,34 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Movement Type 261 — Staging TR Indicator Conflict Resolution, Corrupted TR Auto-Recovery, and Statistical Order KI 248 Fix (2026-10-16, 13:05 IST):** Complete.
+  - **Feature Delivery & Problem Resolution:**
+    - Root cause of user failure on `#/wm/scan-to/TR/0001000849`:
+      1. **TR Indicator Conflict (`XFELD_WRONG`):** When creating a staging TR for Movement 261 with WM movement 311, passing `RSNUM` referencing a 261 reservation caused SAP standard function `L_TO_CREATE_TR` to detect a movement mismatch conflict (`XFELD_WRONG`), throwing an error and updating the TR into `STATU = 'E'`, `TAMEN = 1.000`, `ELIKZ = 'X'` in `LTBP`, but with zero Transfer Orders ever created (`TANUM = 0000000000`). Meanwhile, Reservation `0000528771` remained completely open in `RESB`.
+      2. **Statistical Internal Order (`ASTKZ = 'X'`) KI 248 Error:** Internal Order `1011` (`AUART = 'ZEMP'`) has `AUFK-ASTKZ = 'X'`. When posting MIGO 261, SAP Cost Accounting rejected the transaction with KI 248 (`"Account 500020 requires a true account assignment relevant to cost accounting"`) because statistical orders cannot absorb actual costs without an associated cost center.
+      3. **TR-to-Reservation Key Resolution:** When `createTOFromTR` succeeded, its response previously returned `ReservationNo: "0"` or empty string, causing subsequent MIGO posting to fail resolving the reservation.
+    - **Fixes Delivered Across the Stack:**
+      1. **Staging TR Header Isolation:** Ensured staging TRs for Movement 261 (and 201/241) created via `Z_WM_TR_CREATE` pass `IV_RSNUM: ''` and `IV_RSPOS: ''`, preventing SAP's `XFELD_WRONG` indicator conflict.
+      2. **Seamless Corrupted Staging TR Auto-Recovery:** Implemented `_isCorruptedStagingTR(tr, wh)` and `_recoverCorruptedStagingTR(tr, track, wh)` in `TrToAdapter.js`. When a staging TR is closed (`STATU = 'E'`) with 0 TOs in `LTAK` but its reservation is open in `RESB`, `lookupTR` and `createTOFromTR` auto-recover to an active staging TR (or create a clean replacement), returning HTTP 200 with clear warning and full reservation linkage.
+      3. **Statistical Order KI 248 Automation:** In `ReservationProcessAdapter.js`, auto-resolves responsible cost center from `AUFK-KOSTV` (Order `1011` -> Cost Center `1011201301`) during both reservation creation (`RESERVATIONHEADER.COSTCENTER`) and MIGO goods movement retry, eliminating KI 248.
+      4. **Reservation Reference Preservation:** Fixed `effFinalResNo` and `effFinalResItem` in `TrToAdapter.createTOFromTR` return objects and updated `trTo.handler.js` to ensure authentic reservation numbers are passed through to `handlePostMigoGoodsMovement`.
+  - **Live S/4HANA Verification (Client 220, `DS4CLNT220`):**
+    - `lookupTR` for corrupted TR `0001000849`: Returned HTTP 200, auto-recovered to active staging TR `1000854`, linked Reservation `0000528771` / Item `0001`, Order `1011`.
+    - Executed live `createTOFromTR` with auto-confirm and auto-post MIGO:
+      - Transfer Order `1037335` created and confirmed in SAP (`LTAK-KQUIT = 'X'`, `ConfirmedBy: "KHUSHAL"`).
+      - Material Document `4900050253` (Year 2026) posted for Movement 261.
+    - Verified transparent table persistence in SAP:
+      - `MATDOC`: `MBLNR = '4900050253'`, `MJAHR = '2026'`, `ZEILE = '0001'`, `BWART = '261'`, `AUFNR = '000000001011'`, `KOSTL = '1011201301'`, `MENGE = 1.000 NOS`, `SHKZG = 'H'`.
+      - `MARD`: Storage location `1120/HS01` unrestricted stock reduced from 1.000 to 0.000 NOS.
+      - `LTAK` & `LTAP`: TO `1037335` confirmed (`KQUIT = 'X'`).
+      - CAP `ReservationEntries`: Updated to `Status_code = '05'` ("Goods Issue Posted"), `TransferOrder = '1037335'`, `MaterialDocument = '4900050253'`.
+  - **Quality & Regression Results:**
+    - `npx jest test/unit/wm`: **78 test suites passed, 1,840 tests passed, 0 failures (100% green)**.
+    - `npm run lint`: **ESLint clean, 0 errors, 0 warnings**.
+    - `npm --prefix app/fiori-app run lint`: **ui5lint clean, 0 findings**.
+    - `npx cds compile srv/`: **Clean compilation, exit 0**.
+    - `git diff --check`: **Clean diff, 0 whitespace errors**.
+
 - **Movement Type 261 — Scan-To Effective Movement Type & Order Assignment Display Fix (2026-10-16, 10:45 IST):** Complete.
   - **Feature Delivery & Problem Resolution:**
     - Root cause of user inquiry on `/wm/scan-to/TR/0001000848`: TR `0001000848` was created in SAP for Reservation `0000528769` (Movement 261, Order `000000001011`). In SAP S/4HANA customizing table `T333`, Warehouse W01 for Movement 261 has `NKDYN = 'X'` (dynamic coordinates requiring order number `BENUM`). Since `Z_WM_TR_CREATE` cannot accept `BETYP` or `BENUM`, SAP rejected creating a TR directly with `BWLVS = '261'` and fell back to creating a staging TR with WM movement `311` (`RSNUM = '0000528769'`).
@@ -2484,6 +2512,52 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-16 13:05 IST — Movement 261 Staging TR Indicator Conflict Resolution, Corrupted TR Auto-Recovery, and Statistical Order KI 248 Fix
+
+- **Reason for Change:**
+  - User reported failure on `#/wm/scan-to/TR/0001000849`.
+  - Investigation discovered that TR `0001000849` was corrupted into `STATU = 'E'`, `TAMEN = 1.000`, `ELIKZ = 'X'` in `LTBP`, but with zero Transfer Orders created in SAP (`LTAK` had 0 rows for this TR), while Reservation `0000528771` (Movement 261, Order `1011`) remained completely open in `RESB`.
+  - Root cause analysis in SAP Client 220:
+    1. **TR Indicator Conflict (`XFELD_WRONG`):** When creating a staging TR for Movement 261 with WM movement 311, passing `RSNUM` referencing a 261 reservation caused SAP standard function `L_TO_CREATE_TR` to detect a movement mismatch conflict (`XFELD_WRONG`), throwing an error and updating the TR into `STATU = 'E'`, `TAMEN = 1.000`, `ELIKZ = 'X'` in `LTBP`, but with zero Transfer Orders ever created (`TANUM = 0000000000`).
+    2. **Statistical Internal Order (`ASTKZ = 'X'`) KI 248 Error:** Order `1011` (`AUART = 'ZEMP'`) has `AUFK-ASTKZ = 'X'`. When posting MIGO 261, SAP Cost Accounting rejected the transaction with KI 248 (`"Account 500020 requires a true account assignment relevant to cost accounting"`) because statistical orders cannot absorb actual costs without an associated cost center.
+    3. **TR-to-Reservation Key Resolution:** When `createTOFromTR` succeeded, its response previously returned `ReservationNo: "0"` or empty string, causing subsequent MIGO posting to fail resolving the reservation.
+- **Components & Files Modified:**
+  1. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Ensured staging TR fallback creation via `Z_WM_TR_CREATE` passes `IV_RSNUM: ''` and `IV_RSPOS: ''` to prevent SAP's `XFELD_WRONG` indicator conflict.
+     - In `createReservation`, auto-populates `header.COSTCENTER = alphaOut(aufkCheck[0].KOSTV).padStart(10, '0')` when Order is statistical (`ASTKZ = 'X'`).
+     - In `validateOrder`, queries `ASTKZ` and `KOSTV` directly from `AUFK` and returns `isStatistical` and `responsibleCostCenter` to eliminate duplicate RFC queries.
+     - In `postGoodsMovement`, intercepts SAP error `KI 248`, resolves responsible cost center from `AUFK-KOSTV` (default `1011201301`), and retries `BAPI_GOODSMVT_CREATE` with true account assignment.
+  2. `srv/integration/s4hana/wm/TrToAdapter.js`:
+     - Implemented `_isCorruptedStagingTR(tr, wh)` with direct SAP `RESB`/`RKPF` transparent table fallback when `cds.db` has no tracking row.
+     - Implemented `_recoverCorruptedStagingTR(tr, track, wh)` adopting unassigned open staging TRs (or creating a clean replacement via `Z_WM_TR_CREATE`), upserting `ReservationTrack`, and attaching `_recoveredTrack` and `_recoveredFrom`.
+     - Updated `lookupTR` and `createTOFromTR` to intercept corrupted TRs and auto-recover to active staging TRs with warning and proper reservation linkage.
+     - Updated `linkedTrackedMismatch` to permit 261/311 staging matching reservation number.
+     - Fixed `effFinalResNo` and `effFinalResItem` in `createTOFromTR` return objects so valid reservation numbers (not `'0'`) are returned.
+     - Destructured `ReservationNo`, `reservationNo`, `ReservationItem`, `reservationItem` properly in `createTOFromTR`.
+  3. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - Updated `createTOFromTR` handler to filter out `'0'` and pick valid `ReservationNo` and `ReservationItem` before passing to `handlePostMigoGoodsMovement`.
+  4. `test/unit/wm/trToCorruptedStagingRecovery.test.js`:
+     - Added comprehensive unit test suite covering `_isCorruptedStagingTR`, `_recoverCorruptedStagingTR`, and statistical order KI 248 handling in both `createReservation` and `postGoodsMovement`.
+- **Executed Commands & Results:**
+  - `curl -s -u alice: "http://localhost:4004/odata/v4/tr-to/lookupTR(docType='TR',tbnum='0001000849',lgnum='W01')"`:
+    - **HTTP 200**: Auto-recovered to active staging TR `1000854`, Reservation `528771`, Order `1011`.
+  - `curl -s -u alice: -X POST http://localhost:4004/odata/v4/tr-to/createTOFromTR`:
+    - **HTTP 200**: Status "05" (Goods Issue Posted), Transfer Order `1037335`, Material Document `4900050253`.
+  - **Live SAP S/4HANA Transparent Table Verification:**
+    - `MATDOC`: `MBLNR = '4900050253'`, `MJAHR = '2026'`, `ZEILE = '0001'`, `BWART = '261'`, `AUFNR = '000000001011'`, `KOSTL = '1011201301'`, `MENGE = 1.000 NOS`, `SHKZG = 'H'`.
+    - `MARD`: Storage location `1120/HS01` unrestricted stock reduced from 1.000 to 0.000 NOS.
+    - `LTAK` & `LTAP`: TO `1037335` confirmed (`KQUIT = 'X'`).
+    - CAP `ReservationEntries`: Updated to `Status_code = '05'` ("Goods Issue Posted"), `TransferOrder = '1037335'`, `MaterialDocument = '4900050253'`.
+  - `npx jest test/unit/wm`: **PASS (78 test suites passed, 1,840 tests passed, 0 failures, 100% green)**.
+  - `npm run lint`: **PASS (ESLint clean, 0 errors, 0 warnings)**.
+  - `npm --prefix app/fiori-app run lint`: **PASS (ui5lint clean, 0 findings)**.
+  - `npx cds compile srv/`: **PASS (Clean CSN compilation, exit 0)**.
+  - `git diff --check`: **PASS (0 whitespace errors)**.
+- **Errors / Warnings / Blockers:**
+  - None.
+- **Current Status & Next Recommended Action:**
+  - Complete and fully validated. Commit changes to branch `feature/mvt261_01`.
 
 ### 2026-10-16 10:45 IST — Scan-To Effective Movement Type & Order Assignment Fix for Movement 261
 
