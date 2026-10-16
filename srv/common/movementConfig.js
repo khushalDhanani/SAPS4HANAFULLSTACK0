@@ -179,6 +179,7 @@ function validateReservationInput(data = {}, options = {}) {
   const costCenter = String(data.CostCenter || data.costCenter || '').trim();
   const assetNo = String(data.AssetNo || data.assetNo || '').trim();
   const orderId = String(data.OrderID || data.orderId || data.OrderNo || data.orderNo || data.Aufnr || data.aufnr || '').trim();
+  const orderType = String(data.OrderType || data.orderType || data.Auart || data.auart || '').trim();
 
   // 1. Movement Type
   if (!mvt) {
@@ -263,6 +264,9 @@ function validateReservationInput(data = {}, options = {}) {
         break;
 
       case '261':
+        if (!orderType) {
+          addError('Order Type is mandatory for Movement Type 261 (GI to Order)');
+        }
         if (!orderId) {
           addError('Order number is mandatory for Movement Type 261 (GI to Order)');
         }

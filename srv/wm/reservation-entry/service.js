@@ -60,10 +60,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         Batch,
         OrderID,
         OrderId,
-        orderId
+        orderId,
+        OrderType,
+        orderType
       } = payload;
       const effResDate = ReservationDate || reservationDate || undefined;
       const effOrderId = OrderID || OrderId || orderId || '';
+      const effOrderType = OrderType || orderType || '';
 
       // Task 8: SLoc pre-check at reservation creation: read LQUA for item's plant/SLoc.
       let slocWarning = '';
@@ -131,6 +134,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           assetNo: AssetNo,
           subNumber: SubNumber,
           orderId: effOrderId,
+          orderType: effOrderType,
           batch: Batch
         });
       } catch (err) {
@@ -214,6 +218,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         AssetNo: AssetNo || '',
         SubNumber: SubNumber || '',
         OrderID: effOrderId,
+        OrderType: effOrderType || resResult.orderType || '',
         TransferRequirement: '',
         LogHandle: sLogHandle,
         ExternalId: extId,
@@ -525,6 +530,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           assetNo: payload.AssetNo,
           subNumber: payload.SubNumber,
           orderId: payload.OrderID || payload.OrderId || payload.orderId,
+          orderType: payload.OrderType || payload.orderType,
           batch: payload.Batch,
           throwError: false
         });
@@ -1184,6 +1190,85 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
 
       return result;
+    });
+
+    // Value Help for Order Types (T003O & T003P with ZEMP highlighted)
+    this.on('READ', 'OrderTypeVH', async () => {
+      try {
+        if (adapter.rfc) {
+          const t003p = await adapter.rfc.readTable(
+            'T003P',
+            ['AUART', 'TXT'],
+            ["SPRAS = 'E'"],
+            100
+          );
+          const t003o = await adapter.rfc.readTable(
+            'T003O',
+            ['AUART', 'AUTYP'],
+            ["AUTYP = '01'"],
+            50
+          );
+          const internalSet = new Set((t003o || []).map((r) => String(r.AUART || '').trim()));
+          internalSet.add('ZEMP');
+
+          const descMap = {};
+          (t003p || []).forEach((p) => {
+            descMap[String(p.AUART || '').trim()] = String(p.TXT || '').trim();
+          });
+
+          const result = Array.from(internalSet).map((auart) => ({
+            OrderType: auart,
+            OrderTypeName: descMap[auart] || (auart === 'ZEMP' ? 'Internal orders: EMP' : `Order Type ${auart}`),
+            OrderCategory: '01'
+          }));
+
+          result.sort((a, b) => {
+            if (a.OrderType === 'ZEMP') return -1;
+            if (b.OrderType === 'ZEMP') return 1;
+            return a.OrderType.localeCompare(b.OrderType);
+          });
+          return result;
+        }
+      } catch (err) {
+        LOG.warn(`[OrderTypeVH] SAP read error: ${err.message}`);
+      }
+      return [
+        { OrderType: 'ZEMP', OrderTypeName: 'Internal orders: EMP', OrderCategory: '01' },
+        { OrderType: '0100', OrderTypeName: 'Internal orders: Development', OrderCategory: '01' },
+        { OrderType: '0400', OrderTypeName: 'Internal orders: Marketing', OrderCategory: '01' }
+      ];
+    });
+
+    // Value Help for Internal Orders (AUFK for AUART = 'ZEMP')
+    this.on('READ', 'InternalOrderVH', async () => {
+      try {
+        if (adapter.rfc) {
+          const orders = await adapter.rfc.readTable(
+            'AUFK',
+            ['AUFNR', 'AUART', 'AUTYP', 'WERKS', 'KTEXT', 'LOEKZ'],
+            ["AUART = 'ZEMP'"],
+            100
+          );
+          return (orders || [])
+            .filter((o) => o.LOEKZ !== 'X')
+            .map((o) => ({
+              OrderID: alphaOut(o.AUFNR),
+              OrderType: String(o.AUART || '').trim(),
+              OrderDescription: String(o.KTEXT || '').trim() || 'Internal Order',
+              Plant: String(o.WERKS || '').trim(),
+              Status: 'REL'
+            }));
+        }
+      } catch (err) {
+        LOG.warn(`[InternalOrderVH] SAP read error: ${err.message}`);
+      }
+      return [
+        { OrderID: '1007', OrderType: 'ZEMP', OrderDescription: '1006-Birendra Baitha', Plant: '1120', Status: 'REL' },
+        { OrderID: '1011', OrderType: 'ZEMP', OrderDescription: '1059-Naresh Nagar', Plant: '1120', Status: 'REL' },
+        { OrderID: '1012', OrderType: 'ZEMP', OrderDescription: '1066-Suresh Bagada', Plant: '1120', Status: 'REL' },
+        { OrderID: '1016', OrderType: 'ZEMP', OrderDescription: '1151-Purnima Desai', Plant: '1120', Status: 'REL' },
+        { OrderID: '1019', OrderType: 'ZEMP', OrderDescription: '1180-Hemant Badgujar', Plant: '1120', Status: 'REL' }
+      ];
     });
 
     /** Goods movement for a tracked reservation item (step MIGO). Shares one adapter path with tr-to. */

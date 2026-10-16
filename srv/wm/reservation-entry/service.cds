@@ -18,6 +18,22 @@ service ReservationEntryService {
     @readonly
     entity ReservationLogs as projection on wm.ReservationLog;
 
+    @readonly
+    entity OrderTypeVH {
+        key OrderType     : String(4);
+            OrderTypeName : String(40);
+            OrderCategory : String(2);
+    };
+
+    @readonly
+    entity InternalOrderVH {
+        key OrderID          : String(12);
+            OrderType        : String(4);
+            OrderDescription : String(40);
+            Plant            : String(4);
+            Status           : String(10);
+    };
+
     type ReservationCreatedDoc {
         number : String(10);
         item   : String(4);
@@ -76,6 +92,9 @@ service ReservationEntryService {
         AssetNo                 : String(12),
         SubNumber               : String(4),
         OrderID                 : String(12),
+        orderId                 : String(12),
+        OrderType               : String(4),
+        orderType               : String(4),
         WarehouseNumber         : String(3),
         Batch                   : String(10)
     ) returns ReservationCreatedResponse;
@@ -131,6 +150,9 @@ service ReservationEntryService {
         AssetNo                 : String(12),
         SubNumber               : String(4),
         OrderID                 : String(12),
+        orderId                 : String(12),
+        OrderType               : String(4),
+        orderType               : String(4),
         WarehouseNumber         : String(3),
         Batch                   : String(10),
         SerialNo                : String(18),
@@ -173,6 +195,8 @@ service ReservationEntryService {
         orderId                    : String(12),
         OrderNo                    : String(12),
         orderNo                    : String(12),
+        OrderType                  : String(4),
+        orderType                  : String(4),
         Batch                      : String(10),
         batch                      : String(10),
         SerialNo                   : String(18),
@@ -418,6 +442,10 @@ service ReservationEntryService {
         assetNo                    : String(12),
         SubNumber                  : String(4),
         subNumber                  : String(4),
+        OrderID                    : String(12),
+        orderId                    : String(12),
+        OrderType                  : String(4),
+        orderType                  : String(4),
         Batch                      : String(10),
         batch                      : String(10),
         Serials                    : array of String(18),

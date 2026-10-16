@@ -408,18 +408,53 @@
                                         </suggestionItems>
                                     </Input>
 
-                                    <!-- Movement 261: Order Number -->
+                                    <!-- Movement 261: Order Type (Mandatory, with ZEMP Value Help / Dropdown) -->
                                     <Label
-                                        text="{i18n>resFieldOrder}"
+                                        id="lblOrderType"
+                                        text="{i18n>resFieldOrderType}"
+                                        required="true"
+                                        visible="{= ${create>/MovementType} === '261' }" />
+                                    <Input
+                                        id="inputOrderType"
+                                        value="{create>/OrderType}"
+                                        placeholder="{i18n>resPlaceholderOrderType}"
+                                        showValueHelp="true"
+                                        showSuggestion="true"
+                                        suggest=".onSuggest"
+                                        valueHelpRequest=".onOrderTypeValueHelpRequest"
+                                        suggestionItemSelected=".onOrderTypeSelect"
+                                        suggestionItems="{path: 'reservationEntry>/OrderTypeVH', templateShareable: false}"
+                                        maxLength="4"
+                                        visible="{= ${create>/MovementType} === '261' }"
+                                        liveChange=".onFieldLiveChange">
+                                        <suggestionItems>
+                                            <core:ListItem key="{reservationEntry>OrderType}" text="{reservationEntry>OrderType}" additionalText="{reservationEntry>OrderTypeName}" />
+                                        </suggestionItems>
+                                    </Input>
+
+                                    <!-- Movement 261: Internal Order (Mandatory, with Value Help / Suggestions from AUFK) -->
+                                    <Label
+                                        id="lblInternalOrder"
+                                        text="{i18n>resFieldInternalOrder}"
                                         required="true"
                                         visible="{= ${create>/MovementType} === '261' }" />
                                     <Input
                                         id="inputOrderId"
                                         value="{create>/OrderID}"
-                                        placeholder="{i18n>resPlaceholderOrder}"
+                                        placeholder="{i18n>resPlaceholderInternalOrder}"
+                                        showValueHelp="true"
+                                        showSuggestion="true"
+                                        suggest=".onSuggest"
+                                        valueHelpRequest=".onInternalOrderValueHelpRequest"
+                                        suggestionItemSelected=".onInternalOrderSelect"
+                                        suggestionItems="{path: 'reservationEntry>/InternalOrderVH', templateShareable: false}"
                                         maxLength="12"
                                         visible="{= ${create>/MovementType} === '261' }"
-                                        liveChange=".onFieldLiveChange" />
+                                        liveChange=".onFieldLiveChange">
+                                        <suggestionItems>
+                                            <core:ListItem key="{reservationEntry>OrderID}" text="{reservationEntry>OrderID}" additionalText="{reservationEntry>OrderDescription}" />
+                                        </suggestionItems>
+                                    </Input>
                                 </f:content>
                             </f:SimpleForm>
 
@@ -471,7 +506,14 @@
                                         visible="{= !!${detail>/ReceivingPlant} || ${detail>/MovementType} === '301' }" />
 
                                     <Label
-                                        text="{i18n>resFieldOrder}"
+                                        text="{i18n>resFieldOrderType}"
+                                        visible="{= !!${detail>/OrderType} || ${detail>/MovementType} === '261' }" />
+                                    <Text
+                                        text="{detail>/OrderType}"
+                                        visible="{= !!${detail>/OrderType} || ${detail>/MovementType} === '261' }" />
+
+                                    <Label
+                                        text="{i18n>resFieldInternalOrder}"
                                         visible="{= !!${detail>/OrderID} || ${detail>/MovementType} === '261' }" />
                                     <Text
                                         text="{detail>/OrderID}"

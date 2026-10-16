@@ -36,6 +36,7 @@ entity ReservationTrack : managed {
     AssetNo                 : String(12);    // ANLN1 (241)
     SubNumber               : String(4);     // ANLN2 (241)
     OrderID                 : String(12);    // AUFNR (261)
+    OrderType               : String(4);     // AUART (261, e.g. ZEMP)
     TransferRequirement     : String(10);    // TBNUM (LB01)
     TransferOrder           : String(10);    // TANUM (LT04)
     MaterialDocument        : String(10);    // MBLNR (MIGO)

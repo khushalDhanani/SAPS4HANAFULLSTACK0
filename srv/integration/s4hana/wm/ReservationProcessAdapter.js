@@ -97,8 +97,10 @@ class ReservationProcessAdapter {
       }
 
       const sOrderId = params.orderId || params.OrderId || params.OrderID || params.orderNo || params.OrderNo || params.aufnr || params.Aufnr || params.AUFNR || '';
+      const sOrderType = params.orderType || params.OrderType || params.auart || params.Auart || '';
+      let orderValidation = null;
       if (String(movementType).trim() === '261') {
-        await this.validateOrder(sOrderId, plant);
+        orderValidation = await this.validateOrder(sOrderId, plant, sOrderType);
       }
 
       if (this.rfc && String(movementType).trim() === '301' && receivingPlant) {
@@ -279,6 +281,7 @@ class ReservationProcessAdapter {
               },
               movementType: '261',
               orderId: alphaOut(s4Aufnr),
+              orderType: sOrderType || orderValidation?.orderType || null,
               reservationNo: resNo,
               reservationNoRaw: String(validComp.RSNUM).padStart(10, '0'),
               reservationItem: resItem,
@@ -318,6 +321,7 @@ class ReservationProcessAdapter {
           },
           movementType: String(movementType).trim(),
           orderId: sOrderId || null,
+          orderType: sOrderType || orderValidation?.orderType || null,
           reservationNo: resNo,
           reservationNoRaw: rawResNo || (resNo ? resNo.padStart(10, '0') : ''),
           reservationItem: '0001',
@@ -2785,7 +2789,7 @@ class ReservationProcessAdapter {
   /**
    * Validate Order existence and lifecycle status against AUFK and JEST before calling SAP.
    */
-  async validateOrder(orderId, plant = '') {
+  async validateOrder(orderId, plant = '', expectedOrderType = '') {
     if (!orderId || !String(orderId).trim()) {
       throw httpError(400, 'Order number is mandatory for Movement Type 261 (GI to Order)');
     }
@@ -2822,6 +2826,10 @@ class ReservationProcessAdapter {
     }
     if (plant && orderRow.WERKS && String(orderRow.WERKS).trim() !== String(plant).trim()) {
       throw httpError(400, `Order ${alphaOut(s4Aufnr)} belongs to plant ${orderRow.WERKS.trim()}, not issuing plant ${plant}`);
+    }
+
+    if (expectedOrderType && orderRow.AUART && String(orderRow.AUART).trim().toUpperCase() !== String(expectedOrderType).trim().toUpperCase()) {
+      throw httpError(400, `Order ${alphaOut(s4Aufnr)} has Order Type ${orderRow.AUART.trim()}, not selected Order Type ${expectedOrderType}`);
     }
 
     // 2. Check system statuses in JEST (Object number = OR + 12-digit AUFNR)
@@ -2866,6 +2874,7 @@ class ReservationProcessAdapter {
     return {
       valid: true,
       orderId: s4Aufnr,
+      orderType: (orderRow?.AUART ? orderRow.AUART.trim() : expectedOrderType) || '',
       isReleased: true
     };
   }

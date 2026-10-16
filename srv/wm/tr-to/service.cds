@@ -210,6 +210,7 @@ service TrToService @(path: '/odata/v4/tr-to') {
         AssetNo                 : String(12);
         SubNumber               : String(4);
         OrderID                 : String(12);
+        OrderType               : String(4);
         Backflush               : Boolean;
         RequiredQuantity        : Decimal(13, 3);
         ProcessedQuantity       : Decimal(13, 3);
@@ -314,6 +315,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         orderId                  : String(12),
         OrderId                  : String(12),
         OrderID                  : String(12),
+        OrderType                : String(4),
+        orderType                : String(4),
         autoConfirm              : Boolean,
         autoPostMigo             : Boolean,
         CompleteReservation      : Boolean, // sets NO_MORE_GR on the goods movement; never defaulted to true
@@ -350,6 +353,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         orderId                  : String(12),
         OrderId                  : String(12),
         OrderID                  : String(12),
+        OrderType                : String(4),
+        orderType                : String(4),
         autoConfirm              : Boolean,
         autoPostMigo             : Boolean,
         CompleteReservation      : Boolean, // sets NO_MORE_GR on the goods movement; never defaulted to true
@@ -405,6 +410,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         orderId                    : String(12),
         OrderNo                    : String(12),
         orderNo                    : String(12),
+        OrderType                  : String(4),
+        orderType                  : String(4),
         TransferOrder              : String(10),
         transferOrder              : String(10),
         Batch                      : String(10),
@@ -460,6 +467,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         orderId                    : String(12),
         OrderNo                    : String(12),
         orderNo                    : String(12),
+        OrderType                  : String(4),
+        orderType                  : String(4),
         TransferOrder              : String(10),
         transferOrder              : String(10),
         Batch                      : String(10),
@@ -602,6 +611,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         orderId                    : String(12),
         OrderNo                    : String(12),
         orderNo                    : String(12),
+        OrderType                  : String(4),
+        orderType                  : String(4),
         Batch                      : String(10),
         batch                      : String(10),
         Serials                    : array of String(18),

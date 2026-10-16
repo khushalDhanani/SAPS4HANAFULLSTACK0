@@ -57,6 +57,7 @@ sap.ui.define([
                 CostCenter: "",
                 AssetNo: "",
                 SubNumber: "",
+                OrderType: "",
                 OrderID: ""
             };
         },
@@ -183,6 +184,7 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/ReceivingPlant", "");
                     this._oCreateModel.setProperty("/AssetNo", "");
                     this._oCreateModel.setProperty("/SubNumber", "");
+                    this._oCreateModel.setProperty("/OrderType", "");
                     this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "241":
@@ -193,6 +195,7 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/ReceivingStorageLocation", "");
                     this._oCreateModel.setProperty("/ReceivingPlant", "");
                     this._oCreateModel.setProperty("/CostCenter", "");
+                    this._oCreateModel.setProperty("/OrderType", "");
                     this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "311":
@@ -203,6 +206,7 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/CostCenter", "");
                     this._oCreateModel.setProperty("/AssetNo", "");
                     this._oCreateModel.setProperty("/SubNumber", "");
+                    this._oCreateModel.setProperty("/OrderType", "");
                     this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "301":
@@ -215,9 +219,13 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/CostCenter", "");
                     this._oCreateModel.setProperty("/AssetNo", "");
                     this._oCreateModel.setProperty("/SubNumber", "");
+                    this._oCreateModel.setProperty("/OrderType", "");
                     this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "261":
+                    if (!this._oCreateModel.getProperty("/OrderType")) {
+                        this._oCreateModel.setProperty("/OrderType", "ZEMP");
+                    }
                     this._oCreateModel.setProperty("/ReceivingStorageLocation", "");
                     this._oCreateModel.setProperty("/ReceivingPlant", "");
                     this._oCreateModel.setProperty("/CostCenter", "");
@@ -330,6 +338,12 @@ sap.ui.define([
             } else if (sId.indexOf("inputRecPlant") !== -1) {
                 this._oCreateModel.setProperty("/ReceivingPlant", sKey);
                 oInput.setValueState("None");
+            } else if (sId.indexOf("inputOrderType") !== -1) {
+                this._oCreateModel.setProperty("/OrderType", sKey);
+                oInput.setValueState("None");
+            } else if (sId.indexOf("inputOrderId") !== -1) {
+                this._oCreateModel.setProperty("/OrderID", sKey);
+                oInput.setValueState("None");
             }
             this.onFieldLiveChange();
         },
@@ -367,6 +381,28 @@ sap.ui.define([
         },
 
         onRecPlantSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            this._handleValueHelpSelected(oEvent.getSource(), sKey, oItem, null);
+        },
+
+        onOrderTypeValueHelpRequest: function (oEvent) {
+            this.onValueHelpRequest(oEvent);
+        },
+
+        onInternalOrderValueHelpRequest: function (oEvent) {
+            this.onValueHelpRequest(oEvent);
+        },
+
+        onOrderTypeSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            this._handleValueHelpSelected(oEvent.getSource(), sKey, oItem, null);
+        },
+
+        onInternalOrderSelect: function (oEvent) {
             var oItem = oEvent.getParameter("selectedItem");
             if (!oItem) return;
             var sKey = oItem.getKey() || oItem.getText();
@@ -432,8 +468,11 @@ sap.ui.define([
                     }
                     break;
                 case "261":
+                    if (!oData.OrderType || !oData.OrderType.trim()) {
+                        return "Order Type is mandatory for Movement Type 261 (Goods Issue to Order)";
+                    }
                     if (!oData.OrderID || !oData.OrderID.trim()) {
-                        return "Order Number is mandatory for Movement Type 261 (Goods Issue to Order)";
+                        return "Internal Order number is mandatory for Movement Type 261 (Goods Issue to Order)";
                     }
                     if (oData.CostCenter && oData.CostCenter.trim()) {
                         return "Cost Center must be empty for Movement Type 261";
@@ -483,6 +522,7 @@ sap.ui.define([
                 CostCenter: (oData.CostCenter || "").trim(),
                 AssetNo: (oData.AssetNo || "").trim(),
                 SubNumber: (oData.SubNumber || "").trim(),
+                OrderType: (oData.OrderType || "").trim(),
                 OrderID: (oData.OrderID || "").trim(),
                 Batch: (oData.Batch || "").trim()
             };

@@ -47,7 +47,9 @@ sap.ui.define([
         "/DivisionVH": { title: "Select Division", key: "Division", desc: "DivisionName" },
         "/SoldToPartyVH": { title: "Select Sold-to Party", key: "Customer", desc: "CustomerName" },
         "/CustomerVH": { title: "Select Customer", key: "Customer", desc: "CustomerName" },
-        "/ContactPersonVH": { title: "Select Contact Person", key: "ContactPerson", desc: "FullName", descAlt: "LastName", info: "Customer" }
+        "/ContactPersonVH": { title: "Select Contact Person", key: "ContactPerson", desc: "FullName", descAlt: "LastName", info: "Customer" },
+        "/OrderTypeVH": { title: "Select Order Type", key: "OrderType", desc: "OrderTypeName", info: "OrderCategory" },
+        "/InternalOrderVH": { title: "Select Internal Order", key: "OrderID", desc: "OrderDescription", info: "Plant" }
     };
 
 
@@ -59,7 +61,9 @@ sap.ui.define([
          * @returns {{ title: string, key: string, desc: string, descAlt?: string }|undefined}
          */
         getConfig: function (sPath) {
-            return oValueHelpConfig[sPath];
+            if (!sPath) return undefined;
+            var sCleanPath = sPath.indexOf(">") !== -1 ? sPath.substring(sPath.indexOf(">") + 1) : sPath;
+            return oValueHelpConfig[sCleanPath] || oValueHelpConfig[sPath];
         },
 
         /**
@@ -315,34 +319,40 @@ sap.ui.define([
 
             if (oModel) {
                 oSelectDialog.setModel(oModel);
+                oSelectDialog.setModel(oModel, "reservationEntry");
                 oSelectDialog.setModel(oModel, "salesInquiry");
                 oSelectDialog.setModel(oModel, "salesOrder");
             }
 
+            var sCleanPath = sPath.indexOf(">") !== -1 ? sPath.substring(sPath.indexOf(">") + 1) : sPath;
             var oTemplateConfig = {
                 title: "{" + oConf.key + "}",
                 description: oConf.descAlt ? "{= ${" + oConf.desc + "} || ${" + oConf.descAlt + "} || '' }" : "{" + oConf.desc + "}"
             };
             if (oConf.info) {
-                if (sPath === "/MaterialVH") {
+                if (sCleanPath === "/MaterialVH") {
                     oTemplateConfig.info = "{= ${MaterialType} ? (${MaterialType} + (${MaterialBaseUnit} ? ' • ' + ${MaterialBaseUnit} : '')) : (${MaterialBaseUnit} || '') }";
-                } else if (sPath === "/SupplierVH") {
+                } else if (sCleanPath === "/SupplierVH") {
                     oTemplateConfig.info = "{= (${SupplierAccountGroup} === 'ZDOM' ? 'Domestic • ' : (${SupplierAccountGroup} === 'ZINT' ? 'Internal Plant • ' : '')) + (${CompanyCode} ? 'CoCode ' + ${CompanyCode} : '') }";
-                } else if (sPath === "/CompanyCodeVH") {
+                } else if (sCleanPath === "/CompanyCodeVH") {
                     oTemplateConfig.info = "{= ${CompanyCode} === '1000' ? 'Domestic (AIL)' : (${CompanyCode} === '2000' ? 'Domestic (ASCL)' : '') }";
-                } else if (sPath === "/PlantVH") {
+                } else if (sCleanPath === "/PlantVH") {
                     oTemplateConfig.info = "{= ${PurchasingOrganization} ? 'PurchOrg ' + ${PurchasingOrganization} : '' }";
-                } else if (sPath === "/StorageLocationVH") {
+                } else if (sCleanPath === "/StorageLocationVH") {
                     oTemplateConfig.info = "{= ${Plant} ? 'Plant ' + ${Plant} : '' }";
-                } else if (sPath === "/PurchasingGroupVH") {
+                } else if (sCleanPath === "/PurchasingGroupVH") {
                     oTemplateConfig.info = "{= ${FaxNumber} ? ${FaxNumber} : '' }";
+                } else if (sCleanPath === "/OrderTypeVH") {
+                    oTemplateConfig.info = "{= ${OrderCategory} ? 'Cat ' + ${OrderCategory} : '' }";
+                } else if (sCleanPath === "/InternalOrderVH") {
+                    oTemplateConfig.info = "{= ${Plant} ? 'Plant ' + ${Plant} : '' }";
                 } else {
                     oTemplateConfig.info = "{" + oConf.info + "}";
                 }
             }
 
             oSelectDialog.bindAggregation("items", {
-                path: sPath,
+                path: sCleanPath,
                 filters: aActiveContextFilters,
                 template: new StandardListItem(oTemplateConfig)
             });
