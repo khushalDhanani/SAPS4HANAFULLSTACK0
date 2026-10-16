@@ -336,6 +336,7 @@ class TrToHandler {
           materialDocument: migoRes.materialDocument,
           materialDocumentYear: migoRes.materialDocumentYear || migoRes.materialDocYear,
           movementType: migoRes.movementType || sMvt,
+          MovementType: migoRes.movementType || sMvt,
           MaterialDocument: migoRes.materialDocument,
           MaterialDocYear: migoRes.materialDocYear,
           Status: STATUS.GI_POSTED,
@@ -528,7 +529,7 @@ class TrToHandler {
               result.StockEffect = migoResult.StockEffect;
               result.Batch = migoResult.Batch || result.Batch;
               result.ReservationNo = migoResult.ReservationNo || result.ReservationNo;
-              result.MovementType = migoResult.MovementType || result.MovementType || existing?.MovementType || '';
+              result.MovementType = migoResult.MovementType || migoResult.movementType || result.ReservationMovementType || result.MovementType || existing?.MovementType || '';
               result.Warning = migoResult.Warning || migoResult.warning || '';
               result.ReceivingTr = migoResult.ReceivingTr || migoResult.receivingTr || null;
               if (result.Warning && req && typeof req.warn === 'function') {

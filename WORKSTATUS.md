@@ -5,6 +5,23 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Movement Type 261 — Scan-To Effective Movement Type & Order Assignment Display Fix (2026-10-16, 10:45 IST):** Complete.
+  - **Feature Delivery & Problem Resolution:**
+    - Root cause of user inquiry on `/wm/scan-to/TR/0001000848`: TR `0001000848` was created in SAP for Reservation `0000528769` (Movement 261, Order `000000001011`). In SAP S/4HANA customizing table `T333`, Warehouse W01 for Movement 261 has `NKDYN = 'X'` (dynamic coordinates requiring order number `BENUM`). Since `Z_WM_TR_CREATE` cannot accept `BETYP` or `BENUM`, SAP rejected creating a TR directly with `BWLVS = '261'` and fell back to creating a staging TR with WM movement `311` (`RSNUM = '0000528769'`).
+    - When loaded in `/wm/scan-to`, `WarehouseScanToDetail.view.xml` previously bound `text="{scanView>/tr/MovementType}"` directly, displaying `"311"` (Storage Location Transfer) on the screen instead of the effective reservation movement type `"261 - Goods Issue to Order"`.
+    - Furthermore, `panelDestination` visibility check was missing `'261'`, completely hiding the Order Assignment panel from the user.
+    - Fixed `WarehouseScanToDetail.view.xml` by binding `text` using composite binding `{parts: [{path: 'scanView>/effectiveMovementType'}, {path: 'scanView>/tr/MovementType'}], formatter: '.formatMovementDisplay'}`, correctly displaying `"261 - Goods Issue to Order"`.
+    - Added `'261'` to `panelDestination` header text (`scanToPanelAccount261`) and `visible` expression, rendering the Order Assignment panel with `inputOrderIdScan` prefilled and validated.
+    - Updated `WarehouseScanToDetail.controller.js` with `formatMovementDisplay` and prioritized `ReservationMovementType` in result payloads.
+    - Updated `srv/wm/tr-to/handlers/trTo.handler.js` to preserve `MovementType` from MIGO / Reservation results.
+    - Added comprehensive unit tests in `test/unit/wm/warehouseScanToUi.test.js` covering 261 staging TR load, order ID validation, `formatMovementDisplay`, and panel visibility.
+  - **Quality & Regression Results:**
+    - `npx jest test/unit/wm` → **77 test suites passed, 1,833 tests passed, 0 failures (100% green)**.
+    - `npm run lint` → **ESLint clean, 0 errors, 0 warnings**.
+    - `npm --prefix app/fiori-app run lint` → **ui5lint clean, 0 findings**.
+    - `npx cds compile srv/` → **Clean compilation, exit 0**.
+    - `git diff --check` → **Clean diff, 0 whitespace errors**.
+
 - **Movement Type 261 — Order Type ZEMP Default Fix (2026-10-16, 10:20 IST):** Complete.
   - **Feature Delivery & UX Alignment:**
     - Switching to Movement Type 261 in the Reservation Entry create form now defaults `OrderType` to `"ZEMP"` (matching how Movement 201 defaults to Cost Center `1011201301`, 241 defaults to Asset `000000400092`, and 301 defaults to Plant `1130`).
@@ -2467,6 +2484,37 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-16 10:45 IST — Scan-To Effective Movement Type & Order Assignment Fix for Movement 261
+
+- **Reason for Change:**
+  - When loading `/wm/scan-to/TR/0001000848` (and any Movement 261 staging TR), the UI displayed `Movement Type: 311` (Storage Location Transfer) and completely hid the Order Assignment panel.
+  - Root cause: In SAP S/4HANA customizing table `T333`, Warehouse W01 for Movement 261 has `NKDYN = 'X'` (dynamic coordinates requiring order number `BENUM`). Since `Z_WM_TR_CREATE` cannot pass `BETYP` or `BENUM`, SAP rejected creating a TR with `BWLVS = '261'`, falling back to creating a staging TR with WM movement `311` (`RSNUM = '0000528769'`). In `WarehouseScanToDetail.view.xml`, line 324 was bound directly to `text="{scanView>/tr/MovementType}"`, which displayed raw `311` instead of the effective movement type `261`, and `panelDestination` visibility omitted `'261'`, hiding the Order field.
+- **Components & Files Modified:**
+  1. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml`:
+     - Changed Movement Type display from `text="{scanView>/tr/MovementType}"` to composite binding with `.formatMovementDisplay`.
+     - Added `261` to `panelDestination` header text (`scanToPanelAccount261`) and `visible` expression.
+  2. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`:
+     - Added `formatMovementDisplay(sEffMvt, sTrMvt)` method returning `"261 - Goods Issue to Order"`, etc.
+     - Updated `oResult.MovementType` assignment to prefer `ReservationMovementType`.
+  3. `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+     - Added `scanToPanelAccount261=Order Assignment (Movement 261)`.
+  4. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - Added uppercase `MovementType` to `handlePostMigoGoodsMovement` result and preferred `migoResult.MovementType || migoResult.movementType || result.ReservationMovementType` in `handleCreateTOFromTR`.
+  5. `srv/integration/s4hana/wm/TrToAdapter.js`:
+     - Destructured `_reservationNo`, `_ReservationNo`, `_reservationItem`, `_ReservationItem` in `createTOFromTR` to maintain consistent parameter handling without unused variable lint warnings.
+  6. `test/unit/wm/warehouseScanToUi.test.js`:
+     - Added unit tests for 261 staging TR loading, Order ID validation gating, `formatMovementDisplay`, and destination panel XML structure.
+- **Executed Commands & Results:**
+  - `npx jest test/unit/wm`: **PASS (77 passed, 1,833 tests passed, 0 failures, 100% green)**.
+  - `npm run lint`: **PASS (ESLint clean, 0 errors, 0 warnings)**.
+  - `npm --prefix app/fiori-app run lint`: **PASS (ui5lint clean, 0 findings)**.
+  - `npx cds compile srv/`: **PASS (Clean CSN compilation, exit 0)**.
+  - `git diff --check`: **PASS (0 whitespace errors)**.
+- **Errors / Warnings / Blockers:**
+  - None.
+- **Current Status & Next Recommended Action:**
+  - Complete and fully validated. Commit changes to branch `feature/mvt261_01`.
 
 ### 2026-10-16 10:20 IST — Movement Type 261 Order Type ZEMP Defaulting Fix
 

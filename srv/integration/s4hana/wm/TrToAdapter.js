@@ -1309,6 +1309,10 @@ class TrToAdapter {
     confMenge,
     reservationMovementType = '',
     ReservationMovementType = '',
+    _reservationNo = '',
+    _ReservationNo = '',
+    _reservationItem = '',
+    _ReservationItem = '',
     trackedReservation = null
   } = {}) {
     // Step 1: TR reference resolution

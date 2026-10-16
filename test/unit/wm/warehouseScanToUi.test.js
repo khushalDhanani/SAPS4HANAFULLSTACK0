@@ -1104,6 +1104,65 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             expect(detailModel.getProperty('/canSubmit')).toBe(false);
         });
 
+        it('261 staging TR sets effectiveMovementType to 261 and validates OrderId [mock only, not browser verification]', async () => {
+            // Case 1: 261 reservation staging TR with OrderId prefilled
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '0001000848',
+                TRItem: '0001',
+                WarehouseNumber: 'W01',
+                MovementType: '311',
+                ReservationNo: '0000528769',
+                ReservationMovementType: '261',
+                AllowMismatchedTR: true,
+                Material: '8000009754',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                OpenQuantity: 1,
+                OrderID: '000000001011'
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '0001000848' } : null))
+            });
+
+            expect(detailModel.getProperty('/effectiveMovementType')).toBe('261');
+            expect(detailModel.getProperty('/orderId')).toBe('000000001011');
+            expect(detailModel.getProperty('/orderIdValueState')).toBe('None');
+            expect(detailModel.getProperty('/receivingStorageLocation')).toBe('');
+            expect(detailModel.getProperty('/recSLocValueState')).toBe('None'); // receiving SLoc not required for 261
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
+
+            // Case 2: 261 with missing OrderId blocks submit
+            detailCtrl.onOrderIdLiveChange({ getParameter: jest.fn(() => '') });
+            expect(detailModel.getProperty('/orderId')).toBe('');
+            expect(detailModel.getProperty('/orderIdValueState')).toBe('Error');
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
+
+            // Case 3: Re-entering OrderId restores canSubmit
+            detailCtrl.onOrderIdLiveChange({ getParameter: jest.fn(() => '1011') });
+            expect(detailModel.getProperty('/orderId')).toBe('1011');
+            expect(detailModel.getProperty('/orderIdValueState')).toBe('None');
+            expect(detailModel.getProperty('/canSubmit')).toBe(true);
+        });
+
+        it('formatMovementDisplay formats movement codes with human-readable descriptions', () => {
+            expect(detailCtrl.formatMovementDisplay('261', '311')).toBe('261 - Goods Issue to Order');
+            expect(detailCtrl.formatMovementDisplay('', '311')).toBe('311 - Storage Location Transfer');
+            expect(detailCtrl.formatMovementDisplay('201')).toBe('201 - Goods Issue to Cost Center');
+            expect(detailCtrl.formatMovementDisplay('241')).toBe('241 - Goods Issue to Asset');
+            expect(detailCtrl.formatMovementDisplay('301')).toBe('301 - Plant to Plant Transfer');
+            expect(detailCtrl.formatMovementDisplay('999')).toBe('999');
+            expect(detailCtrl.formatMovementDisplay('', '')).toBe('');
+        });
+
+        it('destination panel XML contains 261 headerText and visible condition', () => {
+            const viewXml = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanToDetail.view.xml'), 'utf8');
+            expect(viewXml).toContain('scanToPanelAccount261');
+            expect(viewXml).toMatch(/panelDestination[\s\S]*?headerText=[\s\S]*?=== '261' \? \$\{i18n>scanToPanelAccount261\}/);
+            expect(viewXml).toMatch(/panelDestination[\s\S]*?visible=[\s\S]*?=== '261'/);
+            expect(viewXml).toContain('id="inputOrderIdScan"');
+        });
+
         it('Step 6: scan verification card displays TR, Material, Required, Scanned, and READY FOR TO status', async () => {
             mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
                 WarehouseNumber: 'W01',

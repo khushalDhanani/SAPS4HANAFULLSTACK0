@@ -932,7 +932,7 @@ sap.ui.define([
                 oResult.Quantity = (oResult.Quantity !== undefined && oResult.Quantity !== null) ? oResult.Quantity : nQty;
                 oResult.Unit = oResult.Unit || (oTR ? oTR.Unit : "");
                 oResult.Batch = oResult.Batch || sBatch || (oTR ? oTR.Batch : "");
-                oResult.MovementType = oResult.MovementType || (oTR ? oTR.MovementType : "");
+                oResult.MovementType = oResult.ReservationMovementType || oResult.MovementType || (oTR ? (oTR.ReservationMovementType || oTR.MovementType) : "");
                 oResult.ReceivingPlant = oResult.ReceivingPlant || oModel.getProperty("/receivingPlant") || "";
                 oResult.ReceivingStorageLocation = oResult.ReceivingStorageLocation || oModel.getProperty("/receivingStorageLocation") || "";
                 oResult.CostCenter = oResult.CostCenter || oModel.getProperty("/costCenter") || "";
@@ -1175,6 +1175,21 @@ sap.ui.define([
             } catch (e) {
                 // AudioContext not available or blocked
             }
+        },
+
+        formatMovementDisplay: function (sEffMvt, sTrMvt) {
+            var sMvt = sEffMvt || sTrMvt || "";
+            if (!sMvt) return "";
+            var sDesc = "";
+            switch (sMvt) {
+                case "311": sDesc = "Storage Location Transfer"; break;
+                case "201": sDesc = "Goods Issue to Cost Center"; break;
+                case "241": sDesc = "Goods Issue to Asset"; break;
+                case "301": sDesc = "Plant to Plant Transfer"; break;
+                case "261": sDesc = "Goods Issue to Order"; break;
+                default: sDesc = ""; break;
+            }
+            return sDesc ? (sMvt + " - " + sDesc) : sMvt;
         }
     });
 });

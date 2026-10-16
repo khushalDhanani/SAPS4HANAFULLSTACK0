@@ -321,7 +321,7 @@
 
                             <Label text="{i18n>scanToLabelMovementType}" design="Bold" />
                             <ObjectStatus
-                                text="{scanView>/tr/MovementType}"
+                                text="{parts: [{path: 'scanView>/effectiveMovementType'}, {path: 'scanView>/tr/MovementType'}], formatter: '.formatMovementDisplay'}"
                                 state="Information" />
 
                             <Label text="{i18n>scanToLabelReservation}" design="Bold" />
@@ -387,8 +387,8 @@
                 <!-- SECTION: TRANSFER DESTINATION / ACCOUNT ASSIGNMENT -->
                 <Panel
                     id="panelDestination"
-                    headerText="{= (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '301' ? ${i18n>scanToPanelDestination301} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '311' ? ${i18n>scanToPanelDestination311} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '201' ? ${i18n>scanToPanelAccount201} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '241' ? ${i18n>scanToPanelAccount241} : ${i18n>scanToPanelDestinationTitle}))) }"
-                    visible="{= ${scanView>/hasTR} &amp;&amp; ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '301' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '311' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '201' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '241') }"
+                    headerText="{= (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '301' ? ${i18n>scanToPanelDestination301} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '311' ? ${i18n>scanToPanelDestination311} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '201' ? ${i18n>scanToPanelAccount201} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '241' ? ${i18n>scanToPanelAccount241} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '261' ? ${i18n>scanToPanelAccount261} : ${i18n>scanToPanelDestinationTitle})))) }"
+                    visible="{= ${scanView>/hasTR} &amp;&amp; ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '301' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '311' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '201' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '241' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '261') }"
                     expandable="false"
                     expanded="true"
                     class="sapUiSmallMarginBottom">
