@@ -5,7 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **Movement Type 261 — Staging TR Indicator Conflict Resolution, Corrupted TR Auto-Recovery, and Statistical Order KI 248 Fix (2026-10-16, 13:05 IST):** Complete.
+- **Movement Type 261 — End-to-End Double Check Verification, Playwright E2E Suite, Staging TR Conflict Resolution, and Statistical Order KI 248 Fix (2026-10-16, 13:25 IST):** Complete & Verified.
+
   - **Feature Delivery & Problem Resolution:**
     - Root cause of user failure on `#/wm/scan-to/TR/0001000849`:
       1. **TR Indicator Conflict (`XFELD_WRONG`):** When creating a staging TR for Movement 261 with WM movement 311, passing `RSNUM` referencing a 261 reservation caused SAP standard function `L_TO_CREATE_TR` to detect a movement mismatch conflict (`XFELD_WRONG`), throwing an error and updating the TR into `STATU = 'E'`, `TAMEN = 1.000`, `ELIKZ = 'X'` in `LTBP`, but with zero Transfer Orders ever created (`TANUM = 0000000000`). Meanwhile, Reservation `0000528771` remained completely open in `RESB`.
@@ -8993,6 +8994,77 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
      - Verified CAP `OrderTypeVH` and `InternalOrderVH` endpoints returning live SAP data.
   4. **Quality & Regression Results:**
      - `npx jest test/unit/wm` → **77 test suites passed, 1,830 tests passed, 0 failures (100% green)**.
+     - `npm run lint` → **PASS (ESLint clean, 0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run lint` → **PASS (ui5lint clean, 0 findings)**.
+     - `npx cds compile srv/` → **PASS (Clean compilation, exit 0)**.
+     - `git diff --check` → **PASS (Clean diff, 0 whitespace errors)**.
+- **Errors / blockers:** None.
+- **Next action:** Commit verified changes to git branch `feature/mvt261_01`.
+
+### 2026-10-16 13:05 IST — Movement Type 261 Staging TR Indicator Conflict Resolution, Corrupted TR Auto-Recovery, and Statistical Order KI 248 Fix
+
+- **Author / Agent:** Antigravity Agent
+- **Affected Files:**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `srv/integration/s4hana/wm/TrToAdapter.js`
+  - `srv/wm/tr-to/handlers/trTo.handler.js`
+  - `app/fiori-app/webapp/modules/wm/scan-to/view/WarehouseScanToDetail.view.xml`
+  - `app/fiori-app/webapp/modules/wm/scan-to/controller/WarehouseScanToDetail.controller.js`
+  - `test/unit/wm/movement261UnifiedLifecycle.test.js`
+  - `test/unit/wm/warehouseScanToUi.test.js`
+- **Reason:** Resolve user failure on `#/wm/scan-to/TR/0001000849`:
+  1. Staging TR created for Movement 261 with WM movement 311 threw SAP standard indicator mismatch (`XFELD_WRONG`) when referencing reservation `RSNUM`, resulting in TR `0001000849` stuck in `STATU = 'E'` with 0 TOs created.
+  2. Order `1011` is a statistical internal order (`AUFK-ASTKZ = 'X'`). Posting MIGO 261 failed with SAP error KI 248 because statistical orders require an associated true cost center.
+  3. `createTOFromTR` returned empty reservation references, breaking subsequent MIGO posting.
+- **Implementation & Live SAP Proof Delivered:**
+  1. **Staging TR Header Isolation (`ReservationProcessAdapter.js`):** When creating staging TRs for 261, passed clean `IV_RSNUM: ''` and `IV_RSPOS: ''`, preventing SAP's `XFELD_WRONG` indicator conflict.
+  2. **Corrupted Staging TR Auto-Recovery (`TrToAdapter.js`):** Added `_isCorruptedStagingTR` and `_recoverCorruptedStagingTR`. When `lookupTR` or `createTOFromTR` encounters a TR with `STATU = 'E'`, 0 TOs in `LTAK`, and an open reservation in `RESB`, it auto-recovers to an active replacement TR, ensuring seamless execution.
+  3. **Statistical Order KI 248 Cost Center Auto-Resolution (`ReservationProcessAdapter.js`):** Auto-resolved responsible cost center from `AUFK-KOSTV` (Order `1011` → Cost Center `1011201301`) during reservation creation and MIGO posting, eliminating KI 248.
+  4. **Reservation Reference Preservation (`TrToAdapter.js`, `trTo.handler.js`):** Correctly routed authentic reservation numbers from TO creation results into MIGO goods movement requests.
+  5. **Live SAP S/4HANA Verification (Client 220):**
+     - Auto-recovered corrupted TR `0001000849` to active staging TR `1000854`.
+     - TO `1037335` created and confirmed (`LTAK-KQUIT = 'X'`).
+     - MIGO posted: Material Document `4900050253` (Year 2026, `BWART = '261'`).
+     - Transparent table proof verified in `MATDOC`, `MARD`, `LTAK`, and `RESB`.
+- **Validation results:**
+  - `npx jest test/unit/wm` → **PASS (78 test suites, 1,840 passed, 0 failures)**.
+  - `npm run lint` → **PASS (0 errors, 0 warnings)**.
+  - `npm --prefix app/fiori-app run lint` → **PASS (0 findings)**.
+  - `npx cds compile srv/` → **PASS (exit 0)**.
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+
+### 2026-10-16 13:25 IST — Movement Type 261 End-to-End Double Check Verification & Playwright E2E Suite
+
+- **Author / Agent:** Antigravity Agent
+- **Affected Files:**
+  - `test/e2e/wm/verifyMvt261.e2e.js`
+  - `test/e2e/wm/screenshots/mvt261_reservation_create.png`
+  - `test/e2e/wm/screenshots/mvt261_reservation_detail.png`
+  - `test/e2e/wm/screenshots/mvt261_scan_to_tr.png`
+  - `WORKSTATUS.md`
+- **Reason:** Comprehensive double-check requested by user: "Double Check Make Sure Working properly."
+- **Execution & Proof Delivered:**
+  1. **Second Independent Full Live SAP Lifecycle (Client 220):**
+     - Target: Material `1000000928`, Batch `IN26001170`, Plant `1120`, SLoc `CS01`, Order `1011` (`AUART = 'ZEMP'`).
+     - **Reservation:** Created `0000528780` in SAP `RKPF`/`RESB`.
+     - **Staging TR:** Created `0001000858` in SAP `LTBK`/`LTBP` (`BWLVS = '311'`, isolated header preventing `XFELD_WRONG`).
+     - **Scan-To Lookup:** Loaded TR `1000858` showing `MovementType: "311"`, `ReservationMovementType: "261"`, `ReservationNo: "528780"`, `OrderID: "1011"`, `Status: "02"`.
+     - **Transfer Order:** Created and confirmed TO `1037338` in SAP (`LTAK-KQUIT = 'X'`, `ConfirmedBy: "KHUSHAL"`).
+     - **Auto-MIGO:** Posted Material Document `4900050254` (Year 2026, `BWART = '261'`).
+     - **Direct SAP Transparent Table Verification:**
+       - `MATDOC`: `MBLNR = '4900050254'`, `MJAHR = '2026'`, `ZEILE = '0001'`, `BWART = '261'`, `AUFNR = '000000001011'`, `KOSTL = '1011201301'`, `SHKZG = 'H'`.
+       - `MCHB`: Batch `IN26001170` stock decremented by 1.000 KG.
+       - `LTAK`: `TANUM = '0001037338'`, `KQUIT = 'X'`.
+       - `RESB`: Reservation `0000528780` confirmed completed (`KZEAR = 'X'`).
+  2. **Playwright E2E UI Test Suite (`test/e2e/wm/verifyMvt261.e2e.js`):**
+     - Executed automated browser flow against local CDS server on port 4004.
+     - Step 1: Navigated to Reservation Detail `#/wm/reservation-entry/0000528780/0001`. Verified status badge `"Goods Issue Posted"`, Order `1011`, and Reservation `0000528780`. Captured screenshot `mvt261_reservation_detail.png`.
+     - Step 2: Navigated to Scan-To view `#/wm/scan-to/TR/0001000858`. Verified effective Movement Type 261 and Order Assignment panel rendered properly. Captured screenshot `mvt261_scan_to_tr.png`.
+     - Step 3: Navigated to Reservation Create view `#/wm/reservation-entry/create`. Verified ZEMP defaulting and input gating rules. Captured screenshot `mvt261_reservation_create.png`.
+     - Network & Console Audit: 0 unexpected network errors.
+  3. **Quality & Regression Results:**
+     - `node test/e2e/wm/verifyMvt261.e2e.js` → **PASS (Exit code 0, all E2E assertions green)**.
+     - `npx jest test/unit/wm` → **PASS (78 test suites passed, 1,840 tests passed, 0 failures)**.
      - `npm run lint` → **PASS (ESLint clean, 0 errors, 0 warnings)**.
      - `npm --prefix app/fiori-app run lint` → **PASS (ui5lint clean, 0 findings)**.
      - `npx cds compile srv/` → **PASS (Clean compilation, exit 0)**.
