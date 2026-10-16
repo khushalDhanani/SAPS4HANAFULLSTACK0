@@ -35,6 +35,22 @@ const path = require('path');
 let WarehouseScanToController;
 let WarehouseScanToDetailController;
 
+let mockCurrentUserName = 'KHUSHAL';
+const mockAuthService = {
+    getCurrentUserName: jest.fn(() => mockCurrentUserName)
+};
+
+const origSapDefine = global.sap && global.sap.ui && global.sap.ui.define;
+let recentScanStoreFactory;
+global.sap = global.sap || { ui: {} };
+global.sap.ui = global.sap.ui || {};
+global.sap.ui.define = (deps, factory) => { recentScanStoreFactory = factory; };
+require('../../../app/fiori-app/webapp/modules/wm/warehouse-scan-to/model/RecentScanStore.js');
+const RecentScanStore = recentScanStoreFactory(mockAuthService);
+if (origSapDefine) {
+    global.sap.ui.define = origSapDefine;
+}
+
 const mockMessageBox = {
     error: jest.fn(),
     success: jest.fn()
@@ -168,7 +184,8 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
                             mockBarcodeScanService,
                             mockWarehouseScanToService,
                             mockSelectDialog,
-                            mockStandardListItem
+                            mockStandardListItem,
+                            RecentScanStore
                         );
                     } else {
                         // WarehouseScanTo
@@ -180,7 +197,8 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
                             jest.fn(function (opts) { Object.assign(this, opts); }),
                             { Contains: 'Contains' },
                             mockBarcodeScanService,
-                            mockWarehouseScanToService
+                            mockWarehouseScanToService,
+                            RecentScanStore
                         );
                     }
                 },
@@ -1435,6 +1453,135 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             expect(detailModel.getProperty('/canSubmit')).toBe(false);
             expect(detailModel.getProperty('/scanVerificationStatusText')).toBe('STOCK DEFICIT');
             expect(detailModel.getProperty('/scanVerificationStatusState')).toBe('Error');
+        });
+    });
+
+    afterAll(() => {
+        if (origSapDefine) {
+            global.sap.ui.define = origSapDefine;
+        }
+    });
+
+    describe('C. RecentScanStore & Landing Page Enhancements [mock only]', () => {
+        let localStorageMock = {};
+
+        beforeEach(() => {
+            localStorageMock = {};
+            global.localStorage = {
+                getItem: jest.fn((k) => localStorageMock[k] || null),
+                setItem: jest.fn((k, v) => { localStorageMock[k] = String(v); }),
+                removeItem: jest.fn((k) => { delete localStorageMock[k]; })
+            };
+            mockCurrentUserName = 'KHUSHAL';
+            mockAuthService.getCurrentUserName.mockReturnValue('KHUSHAL');
+        });
+
+        test('1. No save for an unknown user', () => {
+            mockAuthService.getCurrentUserName.mockReturnValue('');
+            RecentScanStore.addRecentScan(null, { number: '1001839', docType: 'TR' });
+            expect(global.localStorage.setItem).not.toHaveBeenCalled();
+            expect(RecentScanStore.getRecentScans(null)).toEqual([]);
+        });
+
+        test('2. Save for authenticated user formats timestamp with date and saves without status chip', () => {
+            RecentScanStore.addRecentScan(null, { number: '1001839', docType: 'TR', lgnum: 'W01' });
+            const aList = RecentScanStore.getRecentScans(null);
+            expect(aList.length).toBe(1);
+            expect(aList[0].number).toBe('1001839');
+            expect(aList[0].docType).toBe('TR');
+            expect(aList[0].lgnum).toBe('W01');
+            expect(aList[0].status).toBeUndefined(); // Status chip dropped
+            expect(aList[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/); // Includes date
+        });
+
+        test('3. Deduplication: same document and docType moves to top without duplicate entry', () => {
+            RecentScanStore.addRecentScan(null, { number: '1001839', docType: 'TR', lgnum: 'W01' });
+            RecentScanStore.addRecentScan(null, { number: '2000001', docType: 'RES', lgnum: 'W12' });
+            RecentScanStore.addRecentScan(null, { number: '1001839', docType: 'TR', lgnum: 'W12' });
+            const aList = RecentScanStore.getRecentScans(null);
+            expect(aList.length).toBe(2);
+            expect(aList[0].number).toBe('1001839');
+            expect(aList[0].lgnum).toBe('W12');
+            expect(aList[1].number).toBe('2000001');
+        });
+
+        test('4. 5-item cap: only 5 most recent scans retained', () => {
+            for (let i = 1; i <= 7; i++) {
+                RecentScanStore.addRecentScan(null, { number: '100000' + i, docType: 'TR' });
+            }
+            const aList = RecentScanStore.getRecentScans(null);
+            expect(aList.length).toBe(5);
+            expect(aList[0].number).toBe('1000007');
+            expect(aList[4].number).toBe('1000003');
+        });
+
+        test('5. Detail Controller saves recent scan on success only using same store instance', async () => {
+            const detailCtrl = new WarehouseScanToDetailController();
+            const oModel = new MockJSONModel(detailCtrl._getInitialState());
+            detailCtrl.getModel = jest.fn(() => oModel);
+            detailCtrl.getOwnerComponent = jest.fn(() => null);
+            detailCtrl.getText = jest.fn((k) => k);
+
+            // Failure case: 404
+            mockWarehouseScanToService.lookupTR.mockRejectedValueOnce(new Error('TR not found in any warehouse'));
+            await detailCtrl.loadDetail('TR', '9999999');
+            expect(RecentScanStore.getRecentScans(null)).toEqual([]);
+
+            // Success case: 200
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                TransferRequirement: '1001911',
+                TRItem: '0001',
+                WarehouseNumber: 'W12',
+                Material: '40',
+                OpenQuantity: 10
+            });
+            await detailCtrl.loadDetail('TR', '1001911');
+            const aRecent = RecentScanStore.getRecentScans(null);
+            expect(aRecent.length).toBe(1);
+            expect(aRecent[0].number).toBe('1001911');
+            expect(aRecent[0].lgnum).toBe('W12');
+        });
+
+        test('6. Warehouse list builds from unfiltered load, merges new keys, never shrinks after selection', () => {
+            const mainCtrl = new WarehouseScanToController();
+            const mainModel = new MockJSONModel({
+                warehouses: [{ key: '', text: 'Auto-detect' }],
+                recentScans: [{ number: '1001911', docType: 'TR', lgnum: 'W13' }]
+            });
+            mainCtrl.getModel = jest.fn(() => mainModel);
+            mainCtrl.getText = jest.fn(() => 'Auto-detect');
+
+            // Merges recent-scan warehouse W13
+            mainCtrl._mergeWarehouses(['W13']);
+            // Merges unfiltered load keys W12, W01
+            mainCtrl._mergeWarehouses(['W12', 'W01']);
+
+            let aWhs = mainModel.getProperty('/warehouses');
+            expect(aWhs).toEqual([
+                { key: '', text: 'Auto-detect' },
+                { key: 'W01', text: 'W01' },
+                { key: 'W12', text: 'W12' },
+                { key: 'W13', text: 'W13' }
+            ]);
+
+            // Selection of W12 does not shrink or discard other warehouses
+            mainCtrl._mergeWarehouses(['W12']);
+            aWhs = mainModel.getProperty('/warehouses');
+            expect(aWhs.length).toBe(4);
+        });
+
+        test('7. Doc-type selectionChange updates docType model property', () => {
+            const mainCtrl = new WarehouseScanToController();
+            const mainModel = new MockJSONModel({ docType: 'TR' });
+            mainCtrl.getModel = jest.fn(() => mainModel);
+
+            const mockListItem = {
+                data: jest.fn((k) => (k === 'key' ? 'RES' : null))
+            };
+            mainCtrl.onDocTypeSelectionChange({
+                getParameter: jest.fn((p) => (p === 'listItem' ? mockListItem : null))
+            });
+            expect(mainModel.getProperty('/docType')).toBe('RES');
         });
     });
 });

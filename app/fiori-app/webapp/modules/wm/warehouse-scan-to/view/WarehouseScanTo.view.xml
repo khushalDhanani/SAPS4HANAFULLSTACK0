@@ -7,7 +7,7 @@
 
     <Page
         id="warehouseScanToPage"
-        class="sapUiSizeCompact">
+        class="sapUiSizeCozy">
 
         <headerContent>
             <HBox alignItems="Center" class="sapUiTinyMarginEnd">
@@ -34,7 +34,50 @@
                     close=".onCloseMessage"
                     class="sapUiSmallMarginBottom" />
 
-                <!-- SECTION 1: TR BARCODE / CAMERA SCAN -->
+                <!-- SECTION 1: DOC-TYPE CARDS (SINGLE-SELECT MASTER) -->
+                <Panel
+                    id="panelDocTypeCards"
+                    headerText="{i18n>scanToDocTypeCardsTitle}"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+                    <List
+                        id="listDocTypes"
+                        mode="SingleSelectMaster"
+                        selectionChange=".onDocTypeSelectionChange"
+                        class="sapUiSmallMarginBottom">
+                        <CustomListItem
+                            id="itemDocTypeTR"
+                            selected="{= ${scanView>/docType} === 'TR' }">
+                            <customData>
+                                <core:CustomData key="key" value="TR" />
+                            </customData>
+                            <HBox alignItems="Center" class="sapUiSmallMargin">
+                                <core:Icon src="sap-icon://document-text" size="2rem" class="sapUiMediumMarginEnd" />
+                                <VBox>
+                                    <Title text="{i18n>scanToDocTypeTR}" level="H3" />
+                                    <Text text="{i18n>scanToDocTypeTRDesc}" class="sapUiTinyMarginTop" />
+                                </VBox>
+                            </HBox>
+                        </CustomListItem>
+                        <CustomListItem
+                            id="itemDocTypeRES"
+                            selected="{= ${scanView>/docType} === 'RES' }">
+                            <customData>
+                                <core:CustomData key="key" value="RES" />
+                            </customData>
+                            <HBox alignItems="Center" class="sapUiSmallMargin">
+                                <core:Icon src="sap-icon://bbyd-active-sales" size="2rem" class="sapUiMediumMarginEnd" />
+                                <VBox>
+                                    <Title text="{i18n>scanToDocTypeRES}" level="H3" />
+                                    <Text text="{i18n>scanToDocTypeRESDesc}" class="sapUiTinyMarginTop" />
+                                </VBox>
+                            </HBox>
+                        </CustomListItem>
+                    </List>
+                </Panel>
+
+                <!-- SECTION 2: PRIMARY ACTION (WAREHOUSE SELECTOR & SCAN / SEARCH INPUT) -->
                 <Panel
                     id="panelScanTR"
                     headerText="{i18n>scanToPanelScanTitle}"
@@ -43,56 +86,88 @@
                     class="sapUiSmallMarginBottom">
                     <VBox class="sapUiSmallMargin">
                         <Label
-                            text="{i18n>scanToLabelScanTR}"
+                            id="lblWarehouseSelect"
+                            text="{i18n>scanToLabelWarehouse}"
+                            labelFor="selectWarehouse"
+                            design="Bold"
+                            class="sapUiTinyMarginBottom" />
+                        <Select
+                            id="selectWarehouse"
+                            selectedKey="{scanView>/lgnum}"
+                            items="{scanView>/warehouses}"
+                            width="100%"
+                            class="scanToTouchTarget sapUiSmallMarginBottom"
+                            change=".onWarehouseChange">
+                            <core:Item key="{scanView>key}" text="{scanView>text}" />
+                        </Select>
+
+                        <Label
+                            id="lblDocumentInput"
+                            text="{i18n>scanToLabelScanDoc}"
+                            labelFor="inputBarcodeTR"
                             design="Bold"
                             required="true"
                             class="sapUiTinyMarginBottom" />
-                        <SegmentedButton
-                            id="segDocType"
-                            selectedKey="{scanView>/docType}"
-                            selectionChange=".onDocTypeChange"
-                            class="sapUiTinyMarginBottom">
-                            <items>
-                                <SegmentedButtonItem key="TR" text="{i18n>scanToDocTypeTR}" />
-                                <SegmentedButtonItem key="RES" text="{i18n>scanToDocTypeRES}" />
-                            </items>
-                        </SegmentedButton>
-                        <HBox width="100%" alignItems="Center">
+                        <FlexBox width="100%" alignItems="Center" wrap="Wrap">
                             <Input
                                 id="inputBarcodeTR"
                                 value="{scanView>/scannedTR}"
-                                placeholder="{i18n>scanToPlaceholderTR}"
+                                placeholder="{i18n>scanToPlaceholderDocNumber}"
                                 submit=".onLookupTR"
                                 liveChange=".onTRLiveChange"
                                 width="100%"
-                                class="sapUiTinyMarginEnd">
+                                class="scanToTouchTarget sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                 <layoutData>
-                                    <FlexItemData growFactor="1" />
+                                    <FlexItemData growFactor="1" minWidth="220px" />
                                 </layoutData>
                             </Input>
-                            <Button
-                                id="btnCameraScanTR"
-                                icon="sap-icon://bar-code"
-                                tooltip="{i18n>scanToBtnCameraTR}"
-                                press=".onCameraScanTR"
-                                class="sapUiTinyMarginEnd" />
-                            <Button
-                                id="btnValueHelpTR"
-                                icon="sap-icon://value-help"
-                                tooltip="{i18n>scanToBtnValueHelp}"
-                                press=".onValueHelpTR"
-                                class="sapUiTinyMarginEnd" />
-                            <Button
-                                id="btnLookupTR"
-                                text="{i18n>scanToBtnLookup}"
-                                icon="sap-icon://search"
-                                type="Emphasized"
-                                press=".onLookupTR" />
-                        </HBox>
+                            <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                                <Button
+                                    id="btnCameraScanTR"
+                                    icon="sap-icon://bar-code"
+                                    tooltip="{i18n>scanToBtnCameraTR}"
+                                    press=".onCameraScanTR"
+                                    class="scanToTouchTarget sapUiTinyMarginEnd" />
+                                <Button
+                                    id="btnValueHelpTR"
+                                    icon="sap-icon://value-help"
+                                    tooltip="{i18n>scanToBtnValueHelp}"
+                                    press=".onValueHelpTR"
+                                    class="scanToTouchTarget sapUiTinyMarginEnd" />
+                                <Button
+                                    id="btnLookupTR"
+                                    text="{i18n>scanToBtnScan}"
+                                    icon="sap-icon://search"
+                                    type="Emphasized"
+                                    press=".onLookupTR"
+                                    class="scanToTouchTarget" />
+                            </HBox>
+                        </FlexBox>
                     </VBox>
                 </Panel>
 
-                <!-- SECTION 1b: OPEN TR LIST (DIRECT SELECTION -> DETAIL PAGE) -->
+                <!-- SECTION 3: RECENT SCANS (ALWAYS VISIBLE, NO STATUS CHIP) -->
+                <Panel
+                    id="panelRecentScans"
+                    headerText="{i18n>scanToRecentScansTitle}"
+                    expandable="false"
+                    expanded="true"
+                    class="sapUiSmallMarginBottom">
+                    <List
+                        id="listRecentScans"
+                        items="{scanView>/recentScans}"
+                        noDataText="{i18n>scanToRecentScansNoData}"
+                        class="sapUiSizeCozy">
+                        <StandardListItem
+                            title="{scanView>number}"
+                            description="{= ${scanView>docType} + (${scanView>lgnum} ? (' | ' + ${scanView>lgnum}) : '') + ' | ' + ${scanView>timestamp} }"
+                            icon="{= ${scanView>docType} === 'RES' ? 'sap-icon://bbyd-active-sales' : 'sap-icon://document-text' }"
+                            type="Active"
+                            press=".onRecentScanPress" />
+                    </List>
+                </Panel>
+
+                <!-- SECTION 4: OPEN TR LIST (DIRECT SELECTION -> DETAIL PAGE) -->
                 <Panel
                     id="panelOpenTRs"
                     headerText="{i18n>scanToSelectDialogTitle}"
@@ -104,7 +179,7 @@
                         items="{scanView>/openTRs}"
                         busy="{scanView>/isLoadingTRs}"
                         noDataText="{i18n>scanToSelectDialogNoData}"
-                        class="sapUiSizeCompact">
+                        class="sapUiSizeCozy">
                         <StandardListItem
                             title="{scanView>Tbnum}"
                             description="{scanView>DisplayText}"

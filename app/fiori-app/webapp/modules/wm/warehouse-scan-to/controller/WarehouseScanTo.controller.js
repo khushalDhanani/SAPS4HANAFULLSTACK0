@@ -6,7 +6,8 @@ sap.ui.define([
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
     "saps4hana/fiori/service/BarcodeScanService",
-    "saps4hana/fiori/modules/wm/warehouse-scan-to/service/WarehouseScanToService"
+    "saps4hana/fiori/modules/wm/warehouse-scan-to/service/WarehouseScanToService",
+    "saps4hana/fiori/modules/wm/warehouse-scan-to/model/RecentScanStore"
 ], function (
     BaseController,
     JSONModel,
@@ -15,7 +16,8 @@ sap.ui.define([
     Filter,
     FilterOperator,
     BarcodeScanService,
-    WarehouseScanToService
+    WarehouseScanToService,
+    RecentScanStore
 ) {
     "use strict";
 
@@ -30,6 +32,8 @@ sap.ui.define([
                 hasMessage: false,
                 messageText: "",
                 messageType: "Information",
+                warehouses: [{ key: "", text: this.getText("scanToWhAutoDetect") }],
+                recentScans: [],
                 openTRs: [],
                 isLoadingTRs: false
             });
@@ -45,6 +49,15 @@ sap.ui.define([
             }
 
             this._scannerHandler = this._onHardwareScan.bind(this);
+
+            var oView = this.getView();
+            if (oView && typeof oView.addEventDelegate === "function") {
+                oView.addEventDelegate({
+                    onAfterRendering: function () {
+                        this._focusTRInput();
+                    }.bind(this)
+                });
+            }
         },
 
         _onRouteMatched: function () {
@@ -53,12 +66,51 @@ sap.ui.define([
             }
             var oModel = this.getModel("scanView");
             if (oModel) {
+                // Clear any stale warehouse selection on entering landing page
+                oModel.setProperty("/lgnum", "");
                 oModel.setProperty("/scannedTR", "");
                 oModel.setProperty("/hasMessage", false);
                 oModel.setProperty("/messageText", "");
+                var oComp = typeof this.getOwnerComponent === "function" ? this.getOwnerComponent() : null;
+                var aRecent = RecentScanStore.getRecentScans(oComp);
+                oModel.setProperty("/recentScans", aRecent);
+                var aRecentWhs = aRecent.map(function (s) { return s && s.lgnum; }).filter(Boolean);
+                this._mergeWarehouses(aRecentWhs);
             }
             this._loadOpenTRs();
             this._focusTRInput();
+        },
+
+        /**
+         * Merges discovered warehouse keys into the list. Never shrinks the list after a selection.
+         */
+        _mergeWarehouses: function (aNewKeys) {
+            var oModel = this.getModel("scanView");
+            var aCurrent = (oModel.getProperty("/warehouses") || []).slice();
+            var mExisting = {};
+            aCurrent.forEach(function (w) {
+                if (w && w.key) {
+                    mExisting[w.key] = true;
+                }
+            });
+            var bChanged = false;
+            (aNewKeys || []).forEach(function (sKey) {
+                if (sKey && typeof sKey === "string") {
+                    var sTrimmed = sKey.trim();
+                    if (sTrimmed && !mExisting[sTrimmed]) {
+                        mExisting[sTrimmed] = true;
+                        aCurrent.push({ key: sTrimmed, text: sTrimmed });
+                        bChanged = true;
+                    }
+                }
+            });
+            if (bChanged) {
+                var oAuto = aCurrent[0] || { key: "", text: this.getText("scanToWhAutoDetect") };
+                var aRest = aCurrent.slice(1).sort(function (a, b) {
+                    return a.key.localeCompare(b.key);
+                });
+                oModel.setProperty("/warehouses", [oAuto].concat(aRest));
+            }
         },
 
         /** Load the open TR list into the view model (shared by the inline list and the value-help dialog). */
@@ -68,14 +120,50 @@ sap.ui.define([
             var that = this;
             oModel.setProperty("/isLoadingTRs", true);
             return WarehouseScanToService.getOpenTRs(sWh).then(function (aTRs) {
-                oModel.setProperty("/openTRs", aTRs || []);
+                var aList = aTRs || [];
+                oModel.setProperty("/openTRs", aList);
                 oModel.setProperty("/isLoadingTRs", false);
-                return aTRs || [];
+                // Build warehouse list only from an unfiltered load, keep it and merge new keys
+                if (!sWh) {
+                    var aKeys = aList.map(function (tr) { return tr && tr.Lgnum; }).filter(Boolean);
+                    that._mergeWarehouses(aKeys);
+                }
+                return aList;
             }).catch(function (oErr) {
                 oModel.setProperty("/isLoadingTRs", false);
                 that._showMessage(oErr.message || that.getText("scanToErrLoadTRs"), "Error");
                 return [];
             });
+        },
+
+        onWarehouseChange: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            var sWh = oItem ? oItem.getKey() : oEvent.getSource().getSelectedKey();
+            this.getModel("scanView").setProperty("/lgnum", sWh);
+            this._loadOpenTRs();
+        },
+
+        onDocTypeSelectionChange: function (oEvent) {
+            var oListItem = oEvent.getParameter("listItem");
+            var sKey = oListItem ? oListItem.data("key") : "";
+            if (sKey) {
+                this.getModel("scanView").setProperty("/docType", sKey);
+            }
+        },
+
+        onRecentScanPress: function (oEvent) {
+            var oItem = oEvent.getParameter("listItem") || oEvent.getSource();
+            var oCtx = oItem && oItem.getBindingContext("scanView");
+            if (!oCtx) return;
+            var sDocType = oCtx.getProperty("docType") || "TR";
+            var sNumber = oCtx.getProperty("number");
+            var sLgnum = oCtx.getProperty("lgnum") || "";
+            if (sNumber) {
+                this.getModel("scanView").setProperty("/docType", sDocType);
+                this.getModel("scanView").setProperty("/scannedTR", sNumber);
+                this.getModel("scanView").setProperty("/lgnum", sLgnum);
+                this._navigateToDetail(sDocType, sNumber, sLgnum);
+            }
         },
 
         /** Direct selection from the inline open-TR list -> navigate to detail page. */
@@ -102,12 +190,14 @@ sap.ui.define([
 
         _focusTRInput: function () {
             var that = this;
-            setTimeout(function () {
+            var fnFocus = function () {
                 var oInput = that.byId("inputBarcodeTR");
                 if (oInput && typeof oInput.focus === "function") {
                     oInput.focus();
                 }
-            }, 300);
+            };
+            setTimeout(fnFocus, 100);
+            setTimeout(fnFocus, 400);
         },
 
         _onHardwareScan: function (sScanned) {
@@ -241,11 +331,6 @@ sap.ui.define([
             return { docType: sSelected, number: sRaw };
         },
 
-        onDocTypeChange: function (oEvent) {
-            var sKey = oEvent.getParameter("item") ? oEvent.getParameter("item").getKey() : oEvent.getSource().getSelectedKey();
-            this.getModel("scanView").setProperty("/docType", sKey);
-        },
-
         onLookupTR: function () {
             var oModel = this.getModel("scanView");
             var sRawScanned = (oModel.getProperty("/scannedTR") || "").trim();
@@ -268,17 +353,26 @@ sap.ui.define([
             oModel.setProperty("/scannedTR", sScanned);
             this.onCloseMessage();
 
-            return this._navigateToDetail(oClass.docType, sScanned);
+            return this._navigateToDetail(oClass.docType, sScanned, oModel.getProperty("/lgnum"));
         },
 
-        _navigateToDetail: function (sDocType, sNumber) {
+        _navigateToDetail: function (sDocType, sNumber, sLgnum) {
             var oRouter = this.getRouter();
+            var sWh = sLgnum || this.getModel("scanView").getProperty("/lgnum") || "";
             if (oRouter) {
-                oRouter.navTo("wmWarehouseScanToDetail", {
-                    docType: sDocType,
-                    number: sNumber
-                });
-                return Promise.resolve({ docType: sDocType, number: sNumber });
+                if (sWh) {
+                    oRouter.navTo("wmWarehouseScanToDetailWithWh", {
+                        lgnum: sWh,
+                        docType: sDocType,
+                        number: sNumber
+                    });
+                } else {
+                    oRouter.navTo("wmWarehouseScanToDetail", {
+                        docType: sDocType,
+                        number: sNumber
+                    });
+                }
+                return Promise.resolve({ docType: sDocType, number: sNumber, lgnum: sWh });
             }
             return Promise.resolve(null);
         },

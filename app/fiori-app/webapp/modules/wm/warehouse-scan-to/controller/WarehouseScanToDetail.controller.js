@@ -7,7 +7,8 @@ sap.ui.define([
     "saps4hana/fiori/service/BarcodeScanService",
     "saps4hana/fiori/modules/wm/warehouse-scan-to/service/WarehouseScanToService",
     "sap/m/SelectDialog",
-    "sap/m/StandardListItem"
+    "sap/m/StandardListItem",
+    "saps4hana/fiori/modules/wm/warehouse-scan-to/model/RecentScanStore"
 ], function (
     BaseController,
     JSONModel,
@@ -17,7 +18,8 @@ sap.ui.define([
     BarcodeScanService,
     WarehouseScanToService,
     SelectDialog,
-    StandardListItem
+    StandardListItem,
+    RecentScanStore
 ) {
     "use strict";
 
@@ -330,6 +332,15 @@ sap.ui.define([
                 that._validateForm();
                 that._playAudio("success");
                 MessageToast.show(that.getText(oDetail.TRItem ? "scanToMsgTRLoaded" : "scanToMsgSelectItem"));
+
+                if (RecentScanStore && typeof RecentScanStore.addRecentScan === "function") {
+                    var oComp = typeof that.getOwnerComponent === "function" ? that.getOwnerComponent() : null;
+                    RecentScanStore.addRecentScan(oComp, {
+                        number: sNumber,
+                        docType: sDocType,
+                        lgnum: oDetail.WarehouseNumber || sLgnum || ""
+                    });
+                }
 
                 if (oDetail.WarehouseNumber) {
                     oModel.setProperty("/lgnum", oDetail.WarehouseNumber);
