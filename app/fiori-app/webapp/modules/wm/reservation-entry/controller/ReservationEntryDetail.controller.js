@@ -224,7 +224,9 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "261":
-                    this._oCreateModel.setProperty("/OrderType", "");
+                    if (!this._oCreateModel.getProperty("/OrderType")) {
+                        this._oCreateModel.setProperty("/OrderType", "ZEMP");
+                    }
                     this._oCreateModel.setProperty("/OrderID", "");
                     this._oCreateModel.setProperty("/ReceivingStorageLocation", "");
                     this._oCreateModel.setProperty("/ReceivingPlant", "");

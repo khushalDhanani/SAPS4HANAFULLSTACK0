@@ -134,13 +134,13 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(subject._oCreateModel.getProperty('/AssetNo')).toBe('');
         });
 
-        it('switches to Movement 261: clears OrderType and OrderID, forcing selection from ZEMP list, and clears non-261 fields', () => {
+        it('switches to Movement 261: defaults OrderType to ZEMP, resets OrderID, and clears non-261 fields', () => {
             const subject = createDetailSubject();
             subject.onMovementTypeChange({
                 getParameter: (p) => p === 'selectedItem' ? { getKey: () => '261' } : null
             });
             expect(subject._oCreateModel.getProperty('/MovementType')).toBe('261');
-            expect(subject._oCreateModel.getProperty('/OrderType')).toBe('');
+            expect(subject._oCreateModel.getProperty('/OrderType')).toBe('ZEMP');
             expect(subject._oCreateModel.getProperty('/OrderID')).toBe('');
             expect(subject._oCreateModel.getProperty('/CostCenter')).toBe('');
             expect(subject._oCreateModel.getProperty('/AssetNo')).toBe('');

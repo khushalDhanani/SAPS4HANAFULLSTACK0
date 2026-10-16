@@ -5,6 +5,19 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Movement Type 261 — Order Type ZEMP Default Fix (2026-10-16, 10:20 IST):** Complete.
+  - **Feature Delivery & UX Alignment:**
+    - Switching to Movement Type 261 in the Reservation Entry create form now defaults `OrderType` to `"ZEMP"` (matching how Movement 201 defaults to Cost Center `1011201301`, 241 defaults to Asset `000000400092`, and 301 defaults to Plant `1130`).
+    - The Order Type input retains live SAP value help (`OrderTypeVH`) and autocomplete suggestions from `T003O`/`T003P`, allowing the user to select any other internal order type if needed.
+    - If the user clears the Order Type, the selection gate (`inputOrderId` disabled, value help blocked with warning) remains active until a valid type is provided.
+    - Updated UI controller logic (`ReservationEntryDetail.controller.js`) and UI test expectations (`test/unit/wm/reservationEntryUi.test.js`).
+  - **Quality & Regression Results:**
+    - `npx jest test/unit/wm` → **77 test suites passed, 1,830 tests passed, 0 failures (100% green)**.
+    - `npm run lint` → **ESLint clean, 0 errors, 0 warnings**.
+    - `npm --prefix app/fiori-app run lint` → **ui5lint clean, 0 findings**.
+    - `npx cds compile srv/` → **Clean compilation, exit 0**.
+    - `git diff --check` → **Clean diff, 0 whitespace errors**.
+
 - **Movement Type 261 — Dynamic ZEMP Order Type Value Help & Selection Gating (2026-10-16, 10:05 IST):** Complete.
   - **Feature Delivery & Governance Compliance:**
     - Show Order Type dropdown / value help when Movement Type = 261.
@@ -2454,6 +2467,24 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-16 10:20 IST — Movement Type 261 Order Type ZEMP Defaulting Fix
+
+- **Reason for Change:**
+  - Standardize Movement Type 261 form defaulting with other movement types (201, 241, 301) by defaulting `OrderType` to `"ZEMP"` on switch to 261, while keeping the full dynamic SAP Order Type list and selection gating available if changed or cleared.
+- **Components & Files Modified:**
+  1. `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`: In `onMovementTypeChange("261")`, default `OrderType` to `"ZEMP"` if empty.
+  2. `test/unit/wm/reservationEntryUi.test.js`: Updated unit test to expect `OrderType: 'ZEMP'` when switching to Movement Type 261.
+- **Executed Commands & Results:**
+  - `npx jest test/unit/wm`: **PASS (77 passed, 1,830 tests passed, 0 failures)**.
+  - `npm run lint`: **PASS (0 errors, 0 warnings)**.
+  - `npm --prefix app/fiori-app run lint`: **PASS (ui5lint clean, 0 findings)**.
+  - `npx cds compile srv/`: **PASS (Exit 0)**.
+  - `git diff --check`: **PASS (0 errors)**.
+- **Errors / Warnings / Blockers:**
+  - None.
+- **Current Status & Next Recommended Action:**
+  - Complete and verified. Ready to commit and push branch `feature/mvt261_01`.
 
 ### 2026-10-15 17:35 IST — Code Hygiene & ESLint Zero-Warning Hardening across Test Mocks & Tools
 
