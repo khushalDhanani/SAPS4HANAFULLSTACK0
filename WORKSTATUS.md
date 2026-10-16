@@ -5,6 +5,29 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Movement Type 261 — Dynamic ZEMP Order Type Value Help & Selection Gating (2026-10-16, 10:05 IST):** Complete.
+  - **Feature Delivery & Governance Compliance:**
+    - Show Order Type dropdown / value help when Movement Type = 261.
+    - Populated dynamically from actual SAP customizing tables `T003O` (`AUTYP = '01'`) and `T003P` (`SPRAS = 'E'`) with 0 hardcoding.
+    - Physical and logical gating: `inputOrderId` is disabled (`enabled="{= ${create>/MovementType} !== '261' || !!${create>/OrderType} }"`) until an Order Type is selected; placeholder indicates "Select Order Type first".
+    - Warning gate: `onInternalOrderValueHelpRequest` shows warning message box and blocks dialog if user triggers value help before selecting Order Type.
+    - Order reset: changing or selecting an Order Type clears any previously entered `OrderID`.
+    - No hardcoded ZEMP values: removed manual `internalSet.add('ZEMP')`, hardcoded description strings, and default prefill `setProperty('/OrderType', 'ZEMP')`.
+    - Contextual filtering: `InternalOrderVH` dynamically queries `AUFK` using `AUART = '<OrderType>'` and `Plant` from OData request `$filter`.
+    - 201/241/311/301 behavior preserved 100% unchanged. Unrelated 261 logic (staging TR, TO, interim bin 914, TO confirmation gate, and MIGO posting) preserved 100% intact.
+  - **End-to-End Live Verification (Client 220):**
+    - Live SAP RFC query confirmed: `T003O` (`AUTYP = '01'`) returns 15 internal order types including `ZEMP`.
+    - Live SAP RFC query confirmed: `T003P` (`SPRAS = 'E'`) returns `AUART = 'ZEMP'` description `"Internal orders: EMP"`.
+    - Live SAP RFC query confirmed: `AUFK` returns 100 active released internal orders for `AUART = 'ZEMP'`.
+    - CAP `OrderTypeVH` confirmed: dynamically serves all 15 order types from SAP.
+    - CAP `InternalOrderVH` confirmed: dynamically serves `AUFK` orders filtered by `OrderType = 'ZEMP'`.
+  - **Quality & Regression Results:**
+    - `npx jest test/unit/wm` → **77 test suites passed, 1,830 tests passed, 0 failures (100% green)**.
+    - `npm run lint` → **ESLint clean, 0 errors, 0 warnings**.
+    - `npm --prefix app/fiori-app run lint` → **ui5lint clean, 0 findings**.
+    - `npx cds compile srv/` → **Clean compilation, exit 0**.
+    - `git diff --check` → **Clean diff, 0 whitespace errors**.
+
 - **Movement Type 261 Internal Order Field & ZEMP Order Type Value Help with Live SAP Verification (2026-10-16, 09:40 IST):** Complete.
   - **Feature Delivery:**
     - Added **Internal Order** (`OrderID`) and **Order Type** (`OrderType`) fields dedicated to Movement Type 261 in the Fiori Reservation Entry UI (`ReservationEntryDetail.view.xml` & `ReservationEntryDetail.controller.js`).
@@ -8774,6 +8797,49 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
      - `npx jest test/unit/wm/reservationEntryService.test.js` → **PASS (40/40 tests passed 100%)**.
      - `npx jest test/unit/wm/reservationEntryUi.test.js` → **PASS (48/48 tests passed 100%)**.
      - `npx jest test/unit/wm` → **PASS (77 test suites passed, 1,825 tests passed, 0 failures)**.
+     - `npm run lint` → **PASS (ESLint clean, 0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run lint` → **PASS (ui5lint clean, 0 findings)**.
+     - `npx cds compile srv/` → **PASS (Clean compilation, exit 0)**.
+     - `git diff --check` → **PASS (Clean diff, 0 whitespace errors)**.
+- **Errors / blockers:** None.
+- **Next action:** Commit verified changes to git branch `feature/mvt261_01`.
+
+### 2026-10-16 10:05 IST — Movement Type 261 Dynamic ZEMP Order Type & Selection Gating
+
+- **Author / Agent:** Antigravity Agent
+- **Affected Files:**
+  - `srv/wm/reservation-entry/service.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`
+  - `test/unit/wm/reservationEntryUi.test.js`
+  - `WORKSTATUS.md`
+- **Reason:** Enforce user requirement:
+  1. Show Order Type dropdown/value help when Movement Type = 261.
+  2. Populate it from the actual SAP ZEMP Order Type list (loaded dynamically from live customizing tables `T003O` and `T003P`).
+  3. User must select an Order Type from the list before entering/selecting the Order (Internal Order field disabled until Order Type is selected; changing Order Type resets Order ID).
+  4. Do not hardcode the ZEMP values (remove all manual fallbacks, `internalSet.add('ZEMP')`, hardcoded description strings, and default prefill `setProperty('/OrderType', 'ZEMP')`).
+  5. Keep 201/241/311/301 behavior completely unchanged.
+  6. Verify SAP $\rightarrow$ CAP $\rightarrow$ UI end-to-end.
+  7. Do not modify unrelated 261 logic (TR staging, TO creation, interim bin 914, TO confirmation gate, and MIGO posting).
+- **Implementation & Live SAP Proof Delivered:**
+  1. **Dynamic SAP Customizing & Querying (srv/wm/reservation-entry/service.js):**
+     - Updated `OrderTypeVH` handler: Queries `T003O` (`AUTYP = '01'`) and `T003P` (`SPRAS = 'E'`) dynamically via RFC. Removed `internalSet.add('ZEMP')` and hardcoded description strings. Automatically places `ZEMP` at top while keeping all active SAP internal order types.
+     - Updated `InternalOrderVH` handler: Dynamically extracts `OrderType` and `Plant` from `$filter` in `req.query`, querying `AUFK` for active released internal orders (`LOEKZ != 'X'`).
+     - Bound handlers directly to `OrderTypeVH` and `InternalOrderVH` entity objects on service.
+  2. **Field Gating & Selection Workflow (ReservationEntryDetail.view.xml & Controller):**
+     - `ReservationEntryDetail.view.xml`: Bound `enabled="{= ${create>/MovementType} !== '261' || !!${create>/OrderType} }"` on `inputOrderId` and dynamic placeholder `placeholder="{= ${create>/OrderType} ? ${i18n>resPlaceholderInternalOrder} : ${i18n>resPlaceholderSelectOrderTypeFirst} }"`.
+     - `ReservationEntryDetail.view.xml`: Configured `startSuggestion="0"` and `change=".onOrderTypeChange"` on `inputOrderType` for instantaneous dropdown interaction.
+     - `ReservationEntryDetail.controller.js`: Removed hardcoded default prefill `setProperty('/OrderType', 'ZEMP')` in `onMovementTypeChange`. When switching to 261, `OrderType` and `OrderID` remain empty.
+     - `ReservationEntryDetail.controller.js`: Added warning gate in `onInternalOrderValueHelpRequest`: shows `MessageBox.warning` and halts value help dialog if user attempts to trigger F4 before selecting Order Type.
+     - `ReservationEntryDetail.controller.js`: In `onOrderTypeSelect` and `onOrderTypeChange`, automatically resets `OrderID` to `""` whenever the Order Type is modified.
+     - `ReservationEntryDetail.controller.js`: Added contextual `OrderType` and `Plant` filters in `onSuggest` and `onValueHelpRequest` for `inputOrderId`.
+  3. **End-to-End Live Verification (Client 220):**
+     - Verified SAP transparent tables `T003O` (`AUTYP = '01'`) and `T003P` (`AUART = 'ZEMP'`) returning 15 order types with English description `"Internal orders: EMP"`.
+     - Verified SAP transparent table `AUFK` returning 100 active released `ZEMP` orders.
+     - Verified CAP `OrderTypeVH` and `InternalOrderVH` endpoints returning live SAP data.
+  4. **Quality & Regression Results:**
+     - `npx jest test/unit/wm` → **77 test suites passed, 1,830 tests passed, 0 failures (100% green)**.
      - `npm run lint` → **PASS (ESLint clean, 0 errors, 0 warnings)**.
      - `npm --prefix app/fiori-app run lint` → **PASS (ui5lint clean, 0 findings)**.
      - `npx cds compile srv/` → **PASS (Clean compilation, exit 0)**.

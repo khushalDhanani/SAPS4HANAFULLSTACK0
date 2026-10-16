@@ -13,7 +13,7 @@ const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 
 module.exports = class ReservationEntryService extends cds.ApplicationService {
   async init() {
-    const { ReservationEntries, ReservationLogs } = this.entities;
+    const { ReservationEntries, ReservationLogs, OrderTypeVH, InternalOrderVH } = this.entities;
     const adapter = new ReservationProcessAdapter();
 
     // Validation per movement type backed by normalized MOVEMENT_CONFIG
@@ -1192,33 +1192,27 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       return result;
     });
 
-    // Value Help for Order Types (T003O & T003P with ZEMP highlighted)
-    this.on('READ', 'OrderTypeVH', async () => {
+    // Value Help for Order Types (loaded dynamically from SAP customizing tables T003O & T003P)
+    this.on('READ', OrderTypeVH, async () => {
       try {
         if (adapter.rfc) {
-          const t003p = await adapter.rfc.readTable(
-            'T003P',
-            ['AUART', 'TXT'],
-            ["SPRAS = 'E'"],
-            100
-          );
-          const t003o = await adapter.rfc.readTable(
-            'T003O',
-            ['AUART', 'AUTYP'],
-            ["AUTYP = '01'"],
-            50
-          );
-          const internalSet = new Set((t003o || []).map((r) => String(r.AUART || '').trim()));
-          internalSet.add('ZEMP');
+          const [t003o, t003p] = await Promise.all([
+            adapter.rfc.readTable('T003O', ['AUART', 'AUTYP'], ["AUTYP = '01'"], 100),
+            adapter.rfc.readTable('T003P', ['AUART', 'TXT'], ["SPRAS = 'E'"], 200)
+          ]);
 
           const descMap = {};
           (t003p || []).forEach((p) => {
-            descMap[String(p.AUART || '').trim()] = String(p.TXT || '').trim();
+            const key = String(p.AUART || '').trim();
+            if (key) descMap[key] = String(p.TXT || '').trim();
           });
 
-          const result = Array.from(internalSet).map((auart) => ({
+          // Build unique order types directly from T003O (category 01 = Internal Orders)
+          const typeSet = new Set((t003o || []).map((r) => String(r.AUART || '').trim()).filter(Boolean));
+
+          const result = Array.from(typeSet).map((auart) => ({
             OrderType: auart,
-            OrderTypeName: descMap[auart] || (auart === 'ZEMP' ? 'Internal orders: EMP' : `Order Type ${auart}`),
+            OrderTypeName: descMap[auart] || `Order Type ${auart}`,
             OrderCategory: '01'
           }));
 
@@ -1239,14 +1233,41 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       ];
     });
 
-    // Value Help for Internal Orders (AUFK for AUART = 'ZEMP')
-    this.on('READ', 'InternalOrderVH', async () => {
+    // Value Help for Internal Orders (AUFK dynamically queried by OrderType / Plant)
+    this.on('READ', InternalOrderVH, async (req) => {
       try {
         if (adapter.rfc) {
+          let orderTypeFilter = '';
+          let plantFilter = '';
+          const whereClause = req.query?.SELECT?.where;
+          if (Array.isArray(whereClause)) {
+            for (let i = 0; i < whereClause.length; i++) {
+              const token = whereClause[i];
+              const col = token?.ref?.[0] || (typeof token === 'string' ? token : '');
+              if (col === 'OrderType') {
+                const val = whereClause[i + 2]?.val ?? whereClause[i + 2];
+                if (typeof val === 'string' && val.trim()) orderTypeFilter = val.trim();
+              } else if (col === 'Plant') {
+                const val = whereClause[i + 2]?.val ?? whereClause[i + 2];
+                if (typeof val === 'string' && val.trim()) plantFilter = val.trim();
+              }
+            }
+          }
+
+          const rfcFilters = [];
+          if (orderTypeFilter) {
+            rfcFilters.push(`AUART = '${orderTypeFilter}'`);
+          } else {
+            rfcFilters.push("AUTYP = '01'");
+          }
+          if (plantFilter) {
+            rfcFilters.push(`AND WERKS = '${plantFilter}'`);
+          }
+
           const orders = await adapter.rfc.readTable(
             'AUFK',
             ['AUFNR', 'AUART', 'AUTYP', 'WERKS', 'KTEXT', 'LOEKZ'],
-            ["AUART = 'ZEMP'"],
+            rfcFilters,
             100
           );
           return (orders || [])

@@ -19,7 +19,8 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
     const MessageToast = { show: jest.fn() };
     const MessageBox = {
         success: jest.fn((msg, opts) => { if (opts && opts.onClose) opts.onClose(); }),
-        error: jest.fn()
+        error: jest.fn(),
+        warning: jest.fn()
     };
     const mockValueHelpService = {
         openValueHelp: jest.fn(),
@@ -133,13 +134,14 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(subject._oCreateModel.getProperty('/AssetNo')).toBe('');
         });
 
-        it('switches to Movement 261: defaults OrderType to ZEMP and clears non-261 fields', () => {
+        it('switches to Movement 261: clears OrderType and OrderID, forcing selection from ZEMP list, and clears non-261 fields', () => {
             const subject = createDetailSubject();
             subject.onMovementTypeChange({
                 getParameter: (p) => p === 'selectedItem' ? { getKey: () => '261' } : null
             });
             expect(subject._oCreateModel.getProperty('/MovementType')).toBe('261');
-            expect(subject._oCreateModel.getProperty('/OrderType')).toBe('ZEMP');
+            expect(subject._oCreateModel.getProperty('/OrderType')).toBe('');
+            expect(subject._oCreateModel.getProperty('/OrderID')).toBe('');
             expect(subject._oCreateModel.getProperty('/CostCenter')).toBe('');
             expect(subject._oCreateModel.getProperty('/AssetNo')).toBe('');
             expect(subject._oCreateModel.getProperty('/ReceivingPlant')).toBe('');
@@ -840,6 +842,86 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(subject._oCreateModel.getProperty('/Material')).toBe('1000000045');
             expect(subject._oCreateModel.getProperty('/MaterialName')).toBe('Raw Material 45');
             expect(subject._oCreateModel.getProperty('/Unit')).toBe('KG');
+        });
+
+        it('onInternalOrderValueHelpRequest blocks with warning when OrderType is not selected', () => {
+            const subject = createDetailSubject();
+            subject._oCreateModel.setProperty('/MovementType', '261');
+            subject._oCreateModel.setProperty('/OrderType', '');
+
+            const mockInput = { getId: () => 'inputOrderId', setValueState: jest.fn() };
+            subject.onInternalOrderValueHelpRequest({ getSource: () => mockInput });
+
+            expect(MessageBox.warning).toHaveBeenCalledWith(expect.stringContaining('Please select an Order Type'));
+            expect(mockValueHelpService.openValueHelp).not.toHaveBeenCalled();
+        });
+
+        it('onInternalOrderValueHelpRequest opens value help with OrderType filter when OrderType is selected', () => {
+            const subject = createDetailSubject();
+            subject._oCreateModel.setProperty('/MovementType', '261');
+            subject._oCreateModel.setProperty('/OrderType', 'ZEMP');
+            subject._oCreateModel.setProperty('/Plant', '1120');
+
+            const mockInput = { getId: () => 'inputOrderId', setValueState: jest.fn() };
+            subject.onInternalOrderValueHelpRequest({ getSource: () => mockInput });
+
+            expect(mockValueHelpService.openValueHelp).toHaveBeenCalled();
+            const initialFilters = mockValueHelpService.openValueHelp.mock.calls[0][3];
+            expect(initialFilters.some((f) => f.path === 'OrderType' && f.val === 'ZEMP')).toBe(true);
+            expect(initialFilters.some((f) => f.path === 'Plant' && f.val === '1120')).toBe(true);
+        });
+
+        it('onOrderTypeSelect sets OrderType and clears existing OrderID', () => {
+            const subject = createDetailSubject();
+            subject._oCreateModel.setProperty('/MovementType', '261');
+            subject._oCreateModel.setProperty('/OrderType', '0100');
+            subject._oCreateModel.setProperty('/OrderID', '1007');
+
+            const mockInput = { getId: () => 'inputOrderType', setValueState: jest.fn() };
+            const mockItem = {
+                getKey: () => 'ZEMP',
+                getText: () => 'ZEMP'
+            };
+
+            subject.onOrderTypeSelect({
+                getSource: () => mockInput,
+                getParameter: (p) => p === 'selectedItem' ? mockItem : null
+            });
+
+            expect(subject._oCreateModel.getProperty('/OrderType')).toBe('ZEMP');
+            expect(subject._oCreateModel.getProperty('/OrderID')).toBe('');
+        });
+
+        it('onOrderTypeChange updates OrderType and clears existing OrderID on change', () => {
+            const subject = createDetailSubject();
+            subject._oCreateModel.setProperty('/MovementType', '261');
+            subject._oCreateModel.setProperty('/OrderType', 'ZEMP');
+            subject._oCreateModel.setProperty('/OrderID', '1007');
+
+            subject.onOrderTypeChange({
+                getParameter: (p) => p === 'value' ? '0100' : null
+            });
+
+            expect(subject._oCreateModel.getProperty('/OrderType')).toBe('0100');
+            expect(subject._oCreateModel.getProperty('/OrderID')).toBe('');
+        });
+
+        it('onSuggest for inputOrderId passes OrderType and Plant context filters', () => {
+            const subject = createDetailSubject();
+            subject._oCreateModel.setProperty('/MovementType', '261');
+            subject._oCreateModel.setProperty('/OrderType', 'ZEMP');
+            subject._oCreateModel.setProperty('/Plant', '1120');
+
+            const mockInput = { getId: () => 'inputOrderId' };
+            subject.onSuggest({
+                getSource: () => mockInput,
+                getParameter: (p) => p === 'suggestValue' ? '10' : null
+            });
+
+            expect(mockValueHelpService.applySuggestionFilter).toHaveBeenCalled();
+            const contextFilters = mockValueHelpService.applySuggestionFilter.mock.calls[0][2];
+            expect(contextFilters.some((f) => f.path === 'OrderType' && f.val === 'ZEMP')).toBe(true);
+            expect(contextFilters.some((f) => f.path === 'Plant' && f.val === '1120')).toBe(true);
         });
     });
 

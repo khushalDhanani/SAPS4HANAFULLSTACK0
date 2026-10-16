@@ -224,9 +224,8 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "261":
-                    if (!this._oCreateModel.getProperty("/OrderType")) {
-                        this._oCreateModel.setProperty("/OrderType", "ZEMP");
-                    }
+                    this._oCreateModel.setProperty("/OrderType", "");
+                    this._oCreateModel.setProperty("/OrderID", "");
                     this._oCreateModel.setProperty("/ReceivingStorageLocation", "");
                     this._oCreateModel.setProperty("/ReceivingPlant", "");
                     this._oCreateModel.setProperty("/CostCenter", "");
@@ -263,6 +262,15 @@ sap.ui.define([
                 if (sMatPlant) {
                     aContextFilters.push(new Filter("Plant", FilterOperator.EQ, sMatPlant));
                 }
+            } else if (sId.indexOf("inputOrderId") !== -1) {
+                var sOrderTypeSug = this._oCreateModel.getProperty("/OrderType");
+                if (sOrderTypeSug) {
+                    aContextFilters.push(new Filter("OrderType", FilterOperator.EQ, sOrderTypeSug));
+                }
+                var sOrdPlantSug = this._oCreateModel.getProperty("/Plant");
+                if (sOrdPlantSug) {
+                    aContextFilters.push(new Filter("Plant", FilterOperator.EQ, sOrdPlantSug));
+                }
             }
 
             if (ValueHelpService && typeof ValueHelpService.applySuggestionFilter === "function") {
@@ -291,6 +299,15 @@ sap.ui.define([
                 var sMatPlant = this._oCreateModel.getProperty("/Plant");
                 if (sMatPlant) {
                     aInitialFilters.push(new Filter("Plant", FilterOperator.EQ, sMatPlant));
+                }
+            } else if (sId.indexOf("inputOrderId") !== -1) {
+                var sOrderTypeVH = this._oCreateModel.getProperty("/OrderType");
+                if (sOrderTypeVH) {
+                    aInitialFilters.push(new Filter("OrderType", FilterOperator.EQ, sOrderTypeVH));
+                }
+                var sOrdPlantVH = this._oCreateModel.getProperty("/Plant");
+                if (sOrdPlantVH) {
+                    aInitialFilters.push(new Filter("Plant", FilterOperator.EQ, sOrdPlantVH));
                 }
             }
 
@@ -340,7 +357,11 @@ sap.ui.define([
                 this._oCreateModel.setProperty("/ReceivingPlant", sKey);
                 oInput.setValueState("None");
             } else if (sId.indexOf("inputOrderType") !== -1) {
+                var sOldTypeVal = this._oCreateModel.getProperty("/OrderType");
                 this._oCreateModel.setProperty("/OrderType", sKey);
+                if (sOldTypeVal !== sKey) {
+                    this._oCreateModel.setProperty("/OrderID", "");
+                }
                 oInput.setValueState("None");
             } else if (sId.indexOf("inputOrderId") !== -1) {
                 this._oCreateModel.setProperty("/OrderID", sKey);
@@ -393,6 +414,13 @@ sap.ui.define([
         },
 
         onInternalOrderValueHelpRequest: function (oEvent) {
+            var sOrderType = this._oCreateModel.getProperty("/OrderType");
+            if (!sOrderType) {
+                var oBundle = this.getView().getModel("i18n") ? this.getView().getModel("i18n").getResourceBundle() : null;
+                var sMsg = oBundle ? oBundle.getText("resErrorSelectOrderTypeFirst") : "Please select an Order Type from the list before entering or selecting the Order.";
+                MessageBox.warning(sMsg);
+                return;
+            }
             this.onValueHelpRequest(oEvent);
         },
 
@@ -400,7 +428,21 @@ sap.ui.define([
             var oItem = oEvent.getParameter("selectedItem");
             if (!oItem) return;
             var sKey = oItem.getKey() || oItem.getText();
+            var sOldKey = this._oCreateModel.getProperty("/OrderType");
             this._handleValueHelpSelected(oEvent.getSource(), sKey, oItem, null);
+            if (sOldKey !== sKey) {
+                this._oCreateModel.setProperty("/OrderID", "");
+            }
+        },
+
+        onOrderTypeChange: function (oEvent) {
+            var sNewType = oEvent.getParameter("value") !== undefined ? oEvent.getParameter("value") : this._oCreateModel.getProperty("/OrderType");
+            var sOldType = this._oCreateModel.getProperty("/OrderType");
+            this._oCreateModel.setProperty("/OrderType", sNewType);
+            if (sOldType !== sNewType) {
+                this._oCreateModel.setProperty("/OrderID", "");
+            }
+            this.onFieldLiveChange();
         },
 
         onInternalOrderSelect: function (oEvent) {
