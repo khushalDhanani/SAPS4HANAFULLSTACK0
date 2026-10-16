@@ -90,12 +90,13 @@
                 </headerToolbar>
 
                 <columns>
-                    <Column width="14rem"><Text text="{i18n>resEntryColResNo}" /></Column>
-                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColMvt}" /></Column>
-                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColMaterial}" /></Column>
-                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColLocation}" /></Column>
-                    <Column width="10rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resEntryColAutoTR}" /></Column>
-                    <Column width="8rem"><Text text="{i18n>resEntryColStatus}" /></Column>
+                    <Column width="13rem"><Text text="{i18n>resEntryColResNo}" /></Column>
+                    <Column width="11rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColMvt}" /></Column>
+                    <Column width="12rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColMaterial}" /></Column>
+                    <Column width="11rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColLocation}" /></Column>
+                    <Column width="10rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resEntryColCreatedBy}" /></Column>
+                    <Column width="9rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resEntryColAutoTR}" /></Column>
+                    <Column width="11rem"><Text text="{i18n>resEntryColStatus}" /></Column>
                 </columns>
 
                 <items>
@@ -119,6 +120,17 @@
                                     text="{= ${view>ReceivingPlant} ? ('-&gt; Plant: ' + ${view>ReceivingPlant}) : (${view>ReceivingStorageLocation} ? ('-&gt; SLoc: ' + ${view>ReceivingStorageLocation}) : '') }"
                                     class="textMuted"
                                     visible="{= !!${view>ReceivingPlant} || !!${view>ReceivingStorageLocation} }" />
+                            </VBox>
+
+                            <VBox>
+                                <HBox alignItems="Center">
+                                    <core:Icon src="sap-icon://person-placeholder" size="0.875rem" class="sapUiTinyMarginEnd" visible="{= !!${view>CreatedByUser} }" />
+                                    <Text text="{= ${view>CreatedByUser} || '-' }" design="Bold" />
+                                </HBox>
+                                <Text
+                                    text="{= ${view>createdAt} ? ${path: 'view>createdAt', formatter: '._formatDateIso'} : (${view>ReservationDate} || '') }"
+                                    class="textMuted"
+                                    visible="{= !!${view>createdAt} || !!${view>ReservationDate} }" />
                             </VBox>
 
                             <ObjectIdentifier

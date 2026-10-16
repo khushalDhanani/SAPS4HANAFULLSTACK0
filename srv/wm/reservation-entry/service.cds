@@ -362,6 +362,7 @@ service ReservationEntryService {
         AssetNo                  : String(12);
         SubNumber                : String(4);
         WarehouseNumber          : String(3);
+        CreatedByUser            : String(12);
         Status_code              : String(2);
         StatusText               : String(40);
         TransferRequirement      : String(10);

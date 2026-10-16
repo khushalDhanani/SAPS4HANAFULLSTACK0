@@ -99,6 +99,14 @@
                     emphasized="true" />
             </FlexBox>
 
+            <FlexBox direction="Column" class="sapUiMediumMarginEnd sapUiTinyMarginBottom" visible="{= !${view>/isCreate} &amp;&amp; !!${detail>/CreatedByUser} }">
+                <Label text="{i18n>resEntryColCreatedBy}" design="Bold" />
+                <HBox alignItems="Center">
+                    <core:Icon src="sap-icon://person-placeholder" size="0.875rem" class="sapUiTinyMarginEnd" />
+                    <Text text="{detail>/CreatedByUser}" />
+                </HBox>
+            </FlexBox>
+
             <FlexBox direction="Column" class="sapUiMediumMarginEnd sapUiTinyMarginBottom" visible="{= !${view>/isCreate} }">
                 <Label text="{i18n>resEntryColAutoTR}" design="Bold" />
                 <ObjectStatus
@@ -285,6 +293,12 @@
 
                                         <Label text="{i18n>resEntryFieldWarehouse}" />
                                         <Text text="{detail>/WarehouseNumber}" />
+
+                                        <Label text="{i18n>resEntryColCreatedBy}" visible="{= !!${detail>/CreatedByUser} }" />
+                                        <HBox alignItems="Center" visible="{= !!${detail>/CreatedByUser} }">
+                                            <core:Icon src="sap-icon://person-placeholder" size="0.875rem" class="sapUiTinyMarginEnd" />
+                                            <Text text="{detail>/CreatedByUser}" />
+                                        </HBox>
 
                                         <core:Title text="{i18n>resGroupMaterialAndQty}" />
 

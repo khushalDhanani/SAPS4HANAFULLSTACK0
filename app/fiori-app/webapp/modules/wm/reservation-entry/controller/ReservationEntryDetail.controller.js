@@ -99,13 +99,19 @@ sap.ui.define([
             }
 
             return this._oService.getEntry(sResNo, sResItem).then(function (oData) {
+                if (oData) {
+                    oData.CreatedByUser = oData.CreatedByUser || oData.createdBy || "";
+                }
                 that._oDetailModel.setData(oData || {});
                 that._oViewModel.setProperty("/isTracked", true);
                 that._oViewModel.setProperty("/busy", false);
-                if (oData && (!oData.TransferRequirement || !oData.TransferOrder || !oData.MaterialDocument)) {
+                if (oData && (!oData.TransferRequirement || !oData.TransferOrder || !oData.MaterialDocument || !oData.CreatedByUser)) {
                     return that._oService.getReservationDetail(sResNo, sResItem).then(function (oLive) {
                         if (oLive) {
                             var oMerged = Object.assign({}, oLive, oData);
+                            if (!oData.CreatedByUser && (oLive.CreatedByUser || oLive.createdBy)) {
+                                oMerged.CreatedByUser = oLive.CreatedByUser || oLive.createdBy;
+                            }
                             if (!oData.TransferRequirement && oLive.TransferRequirement) {
                                 oMerged.TransferRequirement = oLive.TransferRequirement;
                             }
@@ -124,6 +130,7 @@ sap.ui.define([
                 // Not tracked locally (reservation created outside this app) -> read it live from SAP.
                 return that._oService.getReservationDetail(sResNo, sResItem).then(function (oLive) {
                     oLive = oLive || {};
+                    oLive.CreatedByUser = oLive.CreatedByUser || oLive.createdBy || "";
                     if (!oLive.Logs) { oLive.Logs = []; }
                     that._oDetailModel.setData(oLive);
                     that._oViewModel.setProperty("/isTracked", false);

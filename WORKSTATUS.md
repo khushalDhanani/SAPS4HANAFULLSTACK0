@@ -5,6 +5,52 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **WM Reservation Entry (`wm/reservation-entry`): Consistent Listing Normalization & Reservation Creator Display (`CreatedByUser` / `USNAM`) (2026-10-16, 16:35 IST):** Complete.
+  - **User Problem & Requirement:**
+    - On `wm/reservation-entry` (`/wm/reservation-entry` list & detail views):
+      1. "Show Proper Listing with consistency": ensure uniform presentation across locally tracked and live open SAP reservations — remove 18-digit padding from Material (`000000000000000062` -> `62`), provide consistent movement type descriptions (`MVT_NAMES` fallback: `201: GI for Cost Center`, `241: GI for Asset`, `261: GI for Order`, `301: Plant to Plant`, `311: SLoc to SLoc`), harmonize 10-digit reservation numbers, preserve tracked item counts and order assignments, and optimize responsive table column widths.
+      2. "Also Add Who is created Reservation": capture and display creator username (`CreatedByUser` / `USNAM` / `createdBy`) in both list view table and object page detail view.
+  - **Changes Implemented Across Stack:**
+    1. **Persistence Schema (`db/wm/reservation-track.cds`):**
+       - Added `CreatedByUser : String(12); // USNAM (RKPF-USNAM / Creator User)` to entity `ReservationTrack`.
+    2. **CAP Service & Metadata (`srv/wm/reservation-entry/service.cds` & `service.js`):**
+       - Exposed `CreatedByUser` on `ReservationEntries` projection, `OpenReservationRow`, and `ReservationDetailRow`.
+       - Enriched live SAP reader `fetchSapReservation` to return `CreatedByUser: (h && h.USNAM) || ''` and `createdBy: (h && h.USNAM) || ''`.
+       - In `executeReservationAndAutoTR` and `createReservation` handlers, set `CreatedByUser` on `initialTrackRecord` from `payload.CreatedByUser || (resResult && (resResult.createdByUser || resResult.USNAM)) || (req.user && req.user.id) || 'KHUSHAL'`.
+       - In OData `READ` handler on `ReservationEntries`, enriched single-key reads and array queries with `row.CreatedByUser = row.CreatedByUser || row.createdBy || ''` and mapped `imported.CreatedByUser` on auto-import of external/GUI reservations.
+       - In `getReservationDetail`, preserved and fell back to `track.CreatedByUser || track.createdBy` when present.
+    3. **UI List View & Controller (`ReservationEntryList.controller.js` & `ReservationEntryList.view.xml`):**
+       - Added `resEntryColCreatedBy` column (`width="10rem" minScreenWidth="Desktop" demandPopin="true"`) with user placeholder icon (`sap-icon://person-placeholder`) and bold creator username, plus formatted creation date (`_formatDateIso`).
+       - Refined column widths across table: Reservation (`13rem`), Movement (`11rem`), Material (`12rem`), Location (`11rem`), Created By (`10rem`), Auto TR (`9rem`), Status (`11rem`).
+       - In `loadData()`:
+         - Cleaned numeric material display (stripping leading zeros: `fnCleanMaterial`).
+         - Added standard `MVT_NAMES` fallback for movement descriptions.
+         - Normalized and enriched `CreatedByUser`, `OrderNo`, and `ItemCount`.
+         - Intelligently merged open reservation metadata into tracked reservations.
+       - Enhanced `onSearchFieldSearch` to match queries across `CreatedByUser`, `MovementTypeName`, `OrderNo`, `Plant`, and `StorageLocation`.
+       - Added robust ISO date formatting method `_formatDateIso` (`YYYY-MM-DD`).
+    4. **UI Detail View & Controller (`ReservationEntryDetail.controller.js` & `ReservationEntryDetail.view.xml`):**
+       - In `uxap:headerContent`, added glanceable KPI block displaying `Created By` with user icon when `detail>/CreatedByUser` is present.
+       - In `formReservationDisplay`, added `Created By` label and formatted text display.
+       - In `ReservationEntryDetail.controller.js` (`_loadDetail`), ensured `CreatedByUser` is preserved and merged seamlessly across local tracking and live SAP reads.
+    5. **Localization (`i18n.properties` & `i18n_en.properties`):**
+       - Added `resEntryColCreatedBy=Created By` to both properties files.
+       - Added missing Movement 261 keys (`resMvt261Text`, `resMvt261Long`, `resFieldOrderType`, `resPlaceholderOrderType`, `resFieldInternalOrder`, etc.) ensuring strict consistency between both bundles.
+    6. **Automated Testing (`test/unit/wm/reservationEntryUi.test.js` & `test/unit/controller/uiConsistency.test.js`):**
+       - Added comprehensive test suite `Reservation Listing Consistency & Creator Field` verifying:
+         - Material unpadding, movement type name formatting, and `CreatedByUser` normalization across tracked and open lists.
+         - `onSearchFieldSearch` query matching on `CreatedByUser`, `OrderNo`, and `MovementTypeName`.
+         - Detail view preservation of `CreatedByUser` across tracked and live fallback reads.
+  - **Quality & Regression Results:**
+    - `npx jest test/unit/wm/reservationEntryUi.test.js`: **56/56 tests passed (100% green)**.
+    - `npx jest test/unit/wm/reservation`: **5/5 test suites passed, 162/162 tests passed (100% green)**.
+    - `npx jest test/unit/controller/uiConsistency.test.js`: **7/7 tests passed (100% green)**.
+    - `npm test`: **168 test suites passed, 3,110 tests passed, 0 failures (100% green)**.
+    - `npm run lint`: **ESLint clean, 0 errors, 0 warnings**.
+    - `npm --prefix app/fiori-app run lint`: **ui5lint clean, 0 findings**.
+    - `npx cds compile srv/`: **Clean compilation, exit 0**.
+    - `git diff --check`: **Clean diff, 0 whitespace errors**.
+
 - **Storage Type Search Customizing Error (T334T / L3 007) on TR 0001000860: Root Cause, SAP SPRO Remediation & UI Stock Deficit Safeguard (2026-10-16, 16:10 IST):** Complete.
   - **User Problem & Symptom:**
     - On `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/scan-to/TR/0001000860`, clicking "Create & Confirm TO" fails with:
@@ -2543,6 +2589,50 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-16 16:35 IST — WM Reservation Entry (`wm/reservation-entry`): Listing Consistency Normalization & Creator Display (`CreatedByUser` / `USNAM`)
+
+- **Reason for Change:**
+  - User requested on `wm/reservation-entry`: "Show Porper Listing with consistency. Also Add Who is created Reservation."
+  - Analysis identified several inconsistencies and missing fields between locally tracked reservations and open SAP reservations:
+    1. Material numbers on locally tracked entries often carried full 18-character zero-padded strings (`000000000000000062`), whereas open SAP reservations carried clean strings (`62`).
+    2. Movement types on locally tracked rows displayed raw codes without descriptions when untranslated, whereas open reservations displayed descriptions.
+    3. The username of who created the reservation (`USNAM` from `RKPF`) was not persisted in `ReservationTrack` or displayed in the list/detail UI.
+    4. Table columns lacked optimal width allocations, and search was missing queries across creator, movement descriptions, and order assignments.
+- **Components & Files Modified:**
+  1. `db/wm/reservation-track.cds`:
+     - Added `CreatedByUser : String(12); // USNAM (RKPF-USNAM / Creator User)` to entity `ReservationTrack`.
+  2. `srv/wm/reservation-entry/service.cds`:
+     - Exposed `CreatedByUser` on `ReservationEntries`, `OpenReservationRow`, and `ReservationDetailRow`.
+  3. `srv/wm/reservation-entry/service.js`:
+     - Enriched live SAP read `fetchSapReservation` to return `CreatedByUser: (h && h.USNAM) || ''` and `createdBy: (h && h.USNAM) || ''`.
+     - In `executeReservationAndAutoTR` and `createReservation`, set `CreatedByUser` on `initialTrackRecord` with user session / SAP return fallbacks.
+     - In `this.on('READ', ReservationEntries)`, enriched returned rows with `row.CreatedByUser = row.CreatedByUser || row.createdBy || ''` and mapped `imported.CreatedByUser` on GUI reservation auto-import.
+     - In `getReservationDetail`, preserved and merged `track.CreatedByUser || track.createdBy`.
+  4. `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryList.controller.js`:
+     - In `loadData()`: unpadded numeric material codes (`fnCleanMaterial`), added `MVT_NAMES` fallback dictionary for all supported movement types (`201`, `241`, `261`, `301`, `311`), normalized `CreatedByUser`, `OrderNo`, and `ItemCount`, and merged metadata into tracked entries.
+     - In `onSearchFieldSearch`: added query matching for `CreatedByUser`, `MovementTypeName`, `OrderNo`, `Plant`, and `StorageLocation`.
+     - Added `_formatDateIso` method for clean `YYYY-MM-DD` date formatting.
+  5. `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryList.view.xml`:
+     - Added `Created By` column with icon and creation date subtitle.
+     - Refined responsive column widths: Reservation (`13rem`), Movement (`11rem`), Material (`12rem`), Location (`11rem`), Created By (`10rem`), Auto TR (`9rem`), Status (`11rem`).
+  6. `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js` & `ReservationEntryDetail.view.xml`:
+     - In header content, added glanceable KPI block displaying `Created By` with user placeholder icon.
+     - In display form `formReservationDisplay`, added `Created By` label and formatted text display.
+     - In `_loadDetail`, ensured `CreatedByUser` is preserved and merged seamlessly.
+  7. `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`:
+     - Added `resEntryColCreatedBy=Created By`.
+     - Synchronized missing Movement 261 / Order keys across both bundles.
+  8. `test/unit/wm/reservationEntryUi.test.js`:
+     - Added tests for `CreatedByUser`, material unpadding, movement name fallback, search matching, and detail view persistence (56/56 passed).
+- **Validation Results:**
+  - `npx jest test/unit/wm/reservationEntryUi.test.js`: 56/56 passed.
+  - `npx jest test/unit/wm/reservation`: 5/5 suites, 162/162 passed.
+  - `npx jest test/unit/controller/uiConsistency.test.js`: 7/7 passed.
+  - `npm test`: 168 suites passed, 3,110 tests passed (100% green).
+  - `npm run lint` & `npm --prefix app/fiori-app run lint`: 0 findings/errors.
+  - `npx cds compile srv/`: exit 0.
+  - `git diff --check`: clean diff, 0 errors.
 
 ### 2026-10-16 13:05 IST — Movement 261 Staging TR Indicator Conflict Resolution, Corrupted TR Auto-Recovery, and Statistical Order KI 248 Fix
 

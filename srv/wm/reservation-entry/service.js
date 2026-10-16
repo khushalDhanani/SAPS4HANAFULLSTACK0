@@ -200,6 +200,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       });
 
       // Step 1b: Persist tracking row immediately with RSNUM as soon as SAP returns it
+      const sCreatedBy = payload.CreatedByUser || (resResult && (resResult.createdByUser || resResult.USNAM)) || (req.user && req.user.id) || 'KHUSHAL';
       const initialTrackRecord = {
         ReservationNo: resNo,
         ReservationItem: resItem,
@@ -212,6 +213,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         Quantity: Number(Quantity),
         Unit,
         ReservationDate: effResDate || null,
+        CreatedByUser: sCreatedBy,
         ReceivingPlant: ReceivingPlant || '',
         ReceivingStorageLocation: ReceivingStorageLocation || '',
         CostCenter: CostCenter || '',
@@ -493,7 +495,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           MaterialDocYear: existingMatDocYear || '',
           ErrorMessage: '',
           ExternalId: `${strip(resNo)}/${s4Rspos}`,
-          LogHandle: ''
+          LogHandle: '',
+          CreatedByUser: (h && h.USNAM) || '',
+          createdBy: (h && h.USNAM) || ''
         };
       } catch (_e) {
         return null;
@@ -556,6 +560,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const extId = `${resNo}/${resItem}`;
 
       // Persist reservation in tracking table with status RES_CREATED
+      const sCreatedBy = payload.CreatedByUser || (resResult && (resResult.createdByUser || resResult.USNAM)) || (req.user && req.user.id) || 'KHUSHAL';
       const initialTrackRecord = {
         ReservationNo: resNo,
         ReservationItem: resItem,
@@ -568,6 +573,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         Quantity: Number(payload.Quantity),
         Unit: payload.Unit,
         ReservationDate: effResDate || null,
+        CreatedByUser: sCreatedBy,
         ReceivingPlant: payload.ReceivingPlant || '',
         ReceivingStorageLocation: payload.ReceivingStorageLocation || '',
         CostCenter: payload.CostCenter || '',
@@ -1126,7 +1132,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         req.data?.ReservationItem || '0001';
 
       if (isSingleKeyRead && keyResNo) {
-        if (result) return result;
+        if (result) {
+          if (!result.CreatedByUser && result.createdBy) {
+            result.CreatedByUser = result.createdBy;
+          }
+          return result;
+        }
 
         const sClean = String(keyResNo).trim().replace(/^0+/, '');
         const sPadded = sClean.padStart(10, '0');
@@ -1136,7 +1147,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           ReservationNo: altKey,
           ReservationItem: keyResItem
         });
-        if (altEntry) return altEntry;
+        if (altEntry) {
+          if (!altEntry.CreatedByUser && altEntry.createdBy) {
+            altEntry.CreatedByUser = altEntry.createdBy;
+          }
+          return altEntry;
+        }
 
         // Auto-seed from SAP if created outside this app (e.g. SAP GUI)
         const live = await fetchSapReservation(keyResNo, keyResItem);
@@ -1152,6 +1168,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             MaterialName: live.MaterialName || '',
             Quantity: live.Quantity,
             Unit: live.Unit,
+            CreatedByUser: live.CreatedByUser || live.createdBy || '',
             ReceivingPlant: live.ReceivingPlant || '',
             ReceivingStorageLocation: live.ReceivingStorageLocation || '',
             CostCenter: live.CostCenter || '',
@@ -1186,6 +1203,18 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             ReservationNo: sPadded,
             ReservationItem: keyResItem
           });
+        }
+      }
+
+      if (Array.isArray(result)) {
+        result.forEach((row) => {
+          if (!row.CreatedByUser && row.createdBy) {
+            row.CreatedByUser = row.createdBy;
+          }
+        });
+      } else if (result && typeof result === 'object') {
+        if (!result.CreatedByUser && result.createdBy) {
+          result.CreatedByUser = result.createdBy;
         }
       }
 
@@ -1799,6 +1828,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
               : (live.TransferOrder
                   ? PROCESS_STATUS.TO_CREATED
                   : (live.TransferRequirement ? PROCESS_STATUS.TR_CREATED : PROCESS_STATUS.RESERVATION_CREATED)));
+      }
+      if (!live.CreatedByUser && (track?.CreatedByUser || track?.createdBy)) {
+        live.CreatedByUser = track.CreatedByUser || track.createdBy;
       }
       return live;
     });

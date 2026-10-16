@@ -1147,4 +1147,130 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(viewModel.getProperty('/entries')[0].Status_code).toBe('02');
         });
     });
+
+    describe('Reservation Listing Consistency & Creator Field', () => {
+        it('normalizes material, movement type desc, and captures CreatedByUser across tracked and open lists', async () => {
+            const serviceMock = {
+                getEntries: jest.fn().mockResolvedValue([
+                    {
+                        ReservationNo: '0000527594',
+                        ReservationItem: '0001',
+                        MovementType: '261',
+                        Material: '000000000000000062',
+                        MaterialName: 'Motor 62',
+                        createdBy: 'KHUSHAL',
+                        OrderID: '4000123'
+                    }
+                ]),
+                getOpenReservations: jest.fn().mockResolvedValue([
+                    {
+                        ReservationNo: '527594',
+                        ReservationItem: '0001',
+                        MovementType: '261',
+                        MovementTypeName: 'GI for Order',
+                        CreatedByUser: 'KHUSHAL',
+                        OrderNo: '4000123'
+                    },
+                    {
+                        ReservationNo: '0000527595',
+                        ReservationItem: '0001',
+                        MovementType: '311',
+                        Material: '000000000000000045',
+                        MaterialName: 'Raw Material 45',
+                        USNAM: 'RFW12',
+                        ItemCount: 2
+                    }
+                ])
+            };
+
+            const viewModel = new FakeJSONModel({
+                entries: [],
+                allEntries: [],
+                busy: false
+            });
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oService: serviceMock,
+                _oViewModel: viewModel
+            });
+
+            await listSubject.loadData();
+            const entries = viewModel.getProperty('/entries');
+            expect(entries).toHaveLength(2);
+
+            // Tracked entry enriched and material unpadded
+            expect(entries[0].ReservationNo).toBe('0000527594');
+            expect(entries[0].Material).toBe('62');
+            expect(entries[0].MovementTypeName).toBe('GI for Order');
+            expect(entries[0].CreatedByUser).toBe('KHUSHAL');
+            expect(entries[0].OrderNo).toBe('4000123');
+
+            // Open entry normalized
+            expect(entries[1].ReservationNo).toBe('0000527595');
+            expect(entries[1].Material).toBe('45');
+            expect(entries[1].MovementTypeName).toBe('SLoc to SLoc');
+            expect(entries[1].CreatedByUser).toBe('RFW12');
+            expect(entries[1].ItemCount).toBe(2);
+        });
+
+        it('onSearchFieldSearch matches query across CreatedByUser, OrderNo, and MovementTypeName', () => {
+            const viewModel = new FakeJSONModel({
+                allEntries: [
+                    { ReservationNo: '0000527594', CreatedByUser: 'KHUSHAL', MovementType: '261', MovementTypeName: 'GI for Order', OrderNo: '4000123', Plant: '1120', StorageLocation: 'CS01' },
+                    { ReservationNo: '0000527595', CreatedByUser: 'RFW12', MovementType: '311', MovementTypeName: 'SLoc to SLoc', OrderNo: '', Plant: '1120', StorageLocation: '1120' }
+                ],
+                entries: []
+            });
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oViewModel: viewModel
+            });
+
+            // Match CreatedByUser
+            listSubject.onSearchFieldSearch({ getParameter: () => 'khushal' });
+            expect(viewModel.getProperty('/entries')).toHaveLength(1);
+            expect(viewModel.getProperty('/entries')[0].ReservationNo).toBe('0000527594');
+
+            // Match MovementTypeName
+            listSubject.onSearchFieldSearch({ getParameter: () => 'SLoc' });
+            expect(viewModel.getProperty('/entries')).toHaveLength(1);
+            expect(viewModel.getProperty('/entries')[0].ReservationNo).toBe('0000527595');
+
+            // Match OrderNo
+            listSubject.onSearchFieldSearch({ getParameter: () => '4000123' });
+            expect(viewModel.getProperty('/entries')).toHaveLength(1);
+            expect(viewModel.getProperty('/entries')[0].ReservationNo).toBe('0000527594');
+
+            // Empty query resets
+            listSubject.onSearchFieldSearch({ getParameter: () => '' });
+            expect(viewModel.getProperty('/entries')).toHaveLength(2);
+        });
+
+        it('ReservationEntryDetail preserves CreatedByUser on tracked and live detail reads', async () => {
+            const serviceMock = {
+                getEntry: jest.fn().mockResolvedValue({
+                    ReservationNo: '0000527594',
+                    ReservationItem: '0001',
+                    createdBy: 'KHUSHAL',
+                    TransferRequirement: '1000810',
+                    TransferOrder: '1000920',
+                    MaterialDocument: '50000123'
+                }),
+                getReservationDetail: jest.fn().mockResolvedValue({
+                    ReservationNo: '0000527595',
+                    ReservationItem: '0001',
+                    CreatedByUser: 'RFW12'
+                })
+            };
+
+            const detailSubject = createDetailSubject(serviceMock);
+
+            // 1. Tracked entry
+            await detailSubject._loadDetail('0000527594', '0001');
+            expect(detailSubject._oDetailModel.getProperty('/CreatedByUser')).toBe('KHUSHAL');
+
+            // 2. Untracked entry falling back to live SAP
+            serviceMock.getEntry.mockRejectedValueOnce(new Error('Not found'));
+            await detailSubject._loadDetail('0000527595', '0001');
+            expect(detailSubject._oDetailModel.getProperty('/CreatedByUser')).toBe('RFW12');
+        });
+    });
 });
