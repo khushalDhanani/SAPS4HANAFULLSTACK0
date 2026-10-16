@@ -172,6 +172,7 @@ sap.ui.define([
 
         onMovementTypeChange: function (oEvent) {
             const sMvt = oEvent.getParameter("selectedItem") ? oEvent.getParameter("selectedItem").getKey() : this._oCreateModel.getProperty("/MovementType");
+            this._oCreateModel.setProperty("/MovementType", sMvt);
             this._oViewModel.setProperty("/errorMessage", "");
 
             // Adjust default values per movement type to help the user

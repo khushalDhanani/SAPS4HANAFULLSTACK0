@@ -2829,7 +2829,7 @@ class ReservationProcessAdapter {
     }
 
     if (expectedOrderType && orderRow.AUART && String(orderRow.AUART).trim().toUpperCase() !== String(expectedOrderType).trim().toUpperCase()) {
-      throw httpError(400, `Order ${alphaOut(s4Aufnr)} has Order Type ${orderRow.AUART.trim()}, not selected Order Type ${expectedOrderType}`);
+      throw httpError(400, `Order ${alphaOut(s4Aufnr)} has Order Type ${orderRow.AUART.trim()}, which does not match expected Order Type ${expectedOrderType}`);
     }
 
     // 2. Check system statuses in JEST (Object number = OR + 12-digit AUFNR)
@@ -3037,6 +3037,7 @@ class ReservationProcessAdapter {
       assetNo: input.assetNo || input.AssetNo,
       subNumber: input.subNumber || input.SubNumber,
       orderId: input.orderId || input.OrderId || input.OrderID || input.orderNo || input.OrderNo || input.aufnr || input.Aufnr || input.AUFNR,
+      orderType: input.orderType || input.OrderType || input.order_type || input.Order_Type,
       receivingPlant: input.receivingPlant || input.ReceivingPlant || input.destinationPlant || input.DestinationPlant,
       receivingStorageLocation: input.receivingStorageLocation || input.ReceivingStorageLocation || input.destinationStorageLocation || input.DestinationStorageLocation,
       batch: input.batch || input.Batch,

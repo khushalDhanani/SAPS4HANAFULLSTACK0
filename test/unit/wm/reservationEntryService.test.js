@@ -154,6 +154,40 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
         )
       ).rejects.toMatchObject({ response: { status: 400 } });
     });
+
+    test('Rejects Movement 261 without OrderType with 400', async () => {
+      await expect(
+        POST(
+          '/odata/v4/reservation-entry/createReservationEntry',
+          {
+            MovementType: '261',
+            Plant: '1120',
+            StorageLocation: 'CS01',
+            Material: '1000000045',
+            Quantity: 10,
+            OrderID: '1007'
+          },
+          authClerk
+        )
+      ).rejects.toMatchObject({ response: { status: 400 } });
+    });
+
+    test('Rejects Movement 261 without OrderID with 400', async () => {
+      await expect(
+        POST(
+          '/odata/v4/reservation-entry/createReservationEntry',
+          {
+            MovementType: '261',
+            Plant: '1120',
+            StorageLocation: 'CS01',
+            Material: '1000000045',
+            Quantity: 10,
+            OrderType: 'ZEMP'
+          },
+          authClerk
+        )
+      ).rejects.toMatchObject({ response: { status: 400 } });
+    });
   });
 
   describe('2. On Save: Create Reservation + Auto-TR Creation', () => {
@@ -1034,6 +1068,26 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(r311).toBeTruthy();
       expect(r311.MovementType).toBe('311');
       expect(r311.StatusText).toBe('Reservation Created');
+    });
+
+    test('GET /odata/v4/reservation-entry/OrderTypeVH returns order types with ZEMP priority', async () => {
+      const { status, data } = await GET('/odata/v4/reservation-entry/OrderTypeVH', authClerk);
+      expect(status).toBe(200);
+      expect(Array.isArray(data.value)).toBe(true);
+      expect(data.value.length).toBeGreaterThan(0);
+      const zemp = data.value.find((o) => o.OrderType === 'ZEMP');
+      expect(zemp).toBeTruthy();
+      expect(zemp.OrderTypeName).toContain('EMP');
+      expect(zemp.OrderCategory).toBe('01');
+    });
+
+    test('GET /odata/v4/reservation-entry/InternalOrderVH returns internal orders', async () => {
+      const { status, data } = await GET('/odata/v4/reservation-entry/InternalOrderVH', authClerk);
+      expect(status).toBe(200);
+      expect(Array.isArray(data.value)).toBe(true);
+      expect(data.value.length).toBeGreaterThan(0);
+      expect(data.value[0]).toHaveProperty('OrderID');
+      expect(data.value[0]).toHaveProperty('OrderType');
     });
   });
 

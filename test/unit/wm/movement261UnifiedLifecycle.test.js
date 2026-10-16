@@ -94,27 +94,27 @@ describe('Movement Type 261 – Goods Issue to Order Unified Tests [mock only, n
             return []; // non-existent order
           }
           if (optStr.includes("AUFNR = '000000100002'")) {
-            return [{ AUFNR: '000000100002', WERKS: '1120', OBJNR: 'OR000000100002', LOEKZ: 'X', AUTYP: '10' }]; // deleted order
+            return [{ AUFNR: '000000100002', WERKS: '1120', OBJNR: 'OR000000100002', LOEKZ: 'X', AUTYP: '01', AUART: 'ZEMP' }]; // deleted order
           }
           if (optStr.includes("AUFNR = '000000100003'")) {
-            return [{ AUFNR: '000000100003', WERKS: '1130', OBJNR: 'OR000000100003', LOEKZ: '', AUTYP: '10' }]; // plant mismatch (1130 vs 1120)
+            return [{ AUFNR: '000000100003', WERKS: '1130', OBJNR: 'OR000000100003', LOEKZ: '', AUTYP: '01', AUART: 'ZEMP' }]; // plant mismatch (1130 vs 1120)
           }
           if (optStr.includes("AUFNR = '000000100001'")) {
-            return [{ AUFNR: '000000100001', WERKS: '1120', OBJNR: 'OR000000100001', LOEKZ: '', AUTYP: '10' }]; // CRTD
+            return [{ AUFNR: '000000100001', WERKS: '1120', OBJNR: 'OR000000100001', LOEKZ: '', AUTYP: '01', AUART: 'ZEMP' }]; // CRTD
           }
           if (optStr.includes("AUFNR = '000000100043'")) {
-            return [{ AUFNR: '000000100043', WERKS: '1120', OBJNR: 'OR000000100043', LOEKZ: '', AUTYP: '10' }]; // LKD
+            return [{ AUFNR: '000000100043', WERKS: '1120', OBJNR: 'OR000000100043', LOEKZ: '', AUTYP: '01', AUART: 'ZEMP' }]; // LKD
           }
           if (optStr.includes("AUFNR = '000000100045'")) {
-            return [{ AUFNR: '000000100045', WERKS: '1120', OBJNR: 'OR000000100045', LOEKZ: '', AUTYP: '10' }]; // TECO
+            return [{ AUFNR: '000000100045', WERKS: '1120', OBJNR: 'OR000000100045', LOEKZ: '', AUTYP: '01', AUART: 'ZEMP' }]; // TECO
           }
           if (optStr.includes("AUFNR = '000000100046'")) {
-            return [{ AUFNR: '000000100046', WERKS: '1120', OBJNR: 'OR000000100046', LOEKZ: '', AUTYP: '10' }]; // CLSD
+            return [{ AUFNR: '000000100046', WERKS: '1120', OBJNR: 'OR000000100046', LOEKZ: '', AUTYP: '01', AUART: 'ZEMP' }]; // CLSD
           }
           if (optStr.includes("AUFNR = '000000100076'")) {
-            return [{ AUFNR: '000000100076', WERKS: '1120', OBJNR: 'OR000000100076', LOEKZ: '', AUTYP: '10' }]; // DLFL
+            return [{ AUFNR: '000000100076', WERKS: '1120', OBJNR: 'OR000000100076', LOEKZ: '', AUTYP: '01', AUART: 'ZEMP' }]; // DLFL
           }
-          return [{ AUFNR: '000000100000', WERKS: '1120', OBJNR: 'OR000000100000', LOEKZ: '', AUTYP: '10' }];
+          return [{ AUFNR: '000000100000', WERKS: '1120', OBJNR: 'OR000000100000', LOEKZ: '', AUTYP: '01', AUART: 'ZEMP' }];
         }
 
         if (table === 'JEST') {
@@ -247,6 +247,20 @@ describe('Movement Type 261 – Goods Issue to Order Unified Tests [mock only, n
       expect(cfg.gmCode).toBe('03');
     });
 
+    test('validateReservationInput rejects 261 without OrderType', () => {
+      const res = validateReservationInput({
+        MovementType: '261',
+        Plant: '1120',
+        StorageLocation: 'CS01',
+        Material: '1000000045',
+        Quantity: 10,
+        Unit: 'KG',
+        OrderID: '1000000'
+      });
+      expect(res.isValid).toBe(false);
+      expect(res.errors[0]).toMatch(/Order Type is mandatory for Movement Type 261/);
+    });
+
     test('validateReservationInput rejects 261 without OrderID', () => {
       const res = validateReservationInput({
         MovementType: '261',
@@ -254,7 +268,8 @@ describe('Movement Type 261 – Goods Issue to Order Unified Tests [mock only, n
         StorageLocation: 'CS01',
         Material: '1000000045',
         Quantity: 10,
-        Unit: 'KG'
+        Unit: 'KG',
+        OrderType: 'ZEMP'
       });
       expect(res.isValid).toBe(false);
       expect(res.errors[0]).toMatch(/Order number is mandatory for Movement Type 261/);
@@ -268,6 +283,7 @@ describe('Movement Type 261 – Goods Issue to Order Unified Tests [mock only, n
         Material: '1000000045',
         Quantity: 10,
         Unit: 'KG',
+        OrderType: 'ZEMP',
         OrderID: '1000000',
         CostCenter: '1011201301'
       });
@@ -283,6 +299,7 @@ describe('Movement Type 261 – Goods Issue to Order Unified Tests [mock only, n
         Material: '1000000045',
         Quantity: 10,
         Unit: 'KG',
+        OrderType: 'ZEMP',
         OrderID: '1000000',
         AssetNo: '400092'
       });
@@ -298,6 +315,7 @@ describe('Movement Type 261 – Goods Issue to Order Unified Tests [mock only, n
         Material: '1000000045',
         Quantity: 10,
         Unit: 'KG',
+        OrderType: 'ZEMP',
         OrderID: '1000000',
         ReceivingPlant: '1130',
         ReceivingStorageLocation: 'ST02'
@@ -315,6 +333,7 @@ describe('Movement Type 261 – Goods Issue to Order Unified Tests [mock only, n
         Material: '1000000045',
         Quantity: 10,
         Unit: 'KG',
+        OrderType: 'ZEMP',
         OrderID: '1000000'
       });
       expect(res.isValid).toBe(true);
@@ -323,11 +342,19 @@ describe('Movement Type 261 – Goods Issue to Order Unified Tests [mock only, n
   });
 
   describe('2. Master Data & Status Validation (AUFK & JEST)', () => {
-    test('validateOrder accepts released order (REL / I0002)', async () => {
-      const res = await resAdapter.validateOrder('1000000', '1120');
+    test('validateOrder accepts released order (REL / I0002) and verifies ZEMP orderType', async () => {
+      const res = await resAdapter.validateOrder('1000000', '1120', 'ZEMP');
       expect(res.valid).toBe(true);
       expect(res.orderId).toBe('000001000000');
+      expect(res.orderType).toBe('ZEMP');
       expect(res.isReleased).toBe(true);
+    });
+
+    test('validateOrder rejects order when orderType does not match AUFK AUART', async () => {
+      await expect(resAdapter.validateOrder('1000000', '1120', 'PP01')).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringMatching(/does not match expected Order Type PP01/)
+      });
     });
 
     test('validateOrder rejects non-existent order with 400', async () => {
@@ -416,6 +443,7 @@ describe('Movement Type 261 – Goods Issue to Order Unified Tests [mock only, n
         material: '1000000045',
         quantity: 10,
         unit: 'KG',
+        orderType: 'ZEMP',
         orderId: '1000000'
       });
 
@@ -655,6 +683,7 @@ describe('Movement Type 261 – Goods Issue to Order Unified Tests [mock only, n
         material: '1000000045',
         quantity: 10,
         unit: 'KG',
+        orderType: 'ZEMP',
         orderId: '1000000',
         warehouseNumber: 'W01',
         autoConfirm: true

@@ -132,6 +132,19 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(subject._oCreateModel.getProperty('/CostCenter')).toBe('');
             expect(subject._oCreateModel.getProperty('/AssetNo')).toBe('');
         });
+
+        it('switches to Movement 261: defaults OrderType to ZEMP and clears non-261 fields', () => {
+            const subject = createDetailSubject();
+            subject.onMovementTypeChange({
+                getParameter: (p) => p === 'selectedItem' ? { getKey: () => '261' } : null
+            });
+            expect(subject._oCreateModel.getProperty('/MovementType')).toBe('261');
+            expect(subject._oCreateModel.getProperty('/OrderType')).toBe('ZEMP');
+            expect(subject._oCreateModel.getProperty('/CostCenter')).toBe('');
+            expect(subject._oCreateModel.getProperty('/AssetNo')).toBe('');
+            expect(subject._oCreateModel.getProperty('/ReceivingPlant')).toBe('');
+            expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe('');
+        });
     });
 
     describe('ReservationEntryDetail: Validations per Movement Type', () => {
@@ -198,6 +211,29 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(subject.validateForm(dataNoSLoc)).toMatch(/Receiving Storage Location is mandatory for Movement Type 301/);
 
             const dataValid = { MovementType: '301', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, ReceivingPlant: '1130', ReceivingStorageLocation: 'CS01' };
+            expect(subject.validateForm(dataValid)).toBeNull();
+        });
+
+        it('validates 261: requires Order Type, Internal Order number, and rejects non-261 fields', () => {
+            const dataNoOrderType = { MovementType: '261', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, OrderType: '', OrderID: '1007' };
+            expect(subject.validateForm(dataNoOrderType)).toMatch(/Order Type is mandatory for Movement Type 261/);
+
+            const dataNoOrderId = { MovementType: '261', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, OrderType: 'ZEMP', OrderID: '' };
+            expect(subject.validateForm(dataNoOrderId)).toMatch(/Internal Order number is mandatory for Movement Type 261/);
+
+            const dataWithCC = { MovementType: '261', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, OrderType: 'ZEMP', OrderID: '1007', CostCenter: '1011201301' };
+            expect(subject.validateForm(dataWithCC)).toMatch(/Cost Center must be empty for Movement Type 261/);
+
+            const dataWithAsset = { MovementType: '261', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, OrderType: 'ZEMP', OrderID: '1007', AssetNo: '400092' };
+            expect(subject.validateForm(dataWithAsset)).toMatch(/Asset must be empty for Movement Type 261/);
+
+            const dataWithRecPlant = { MovementType: '261', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, OrderType: 'ZEMP', OrderID: '1007', ReceivingPlant: '1130' };
+            expect(subject.validateForm(dataWithRecPlant)).toMatch(/Receiving Plant must be empty for Movement Type 261/);
+
+            const dataWithRecSLoc = { MovementType: '261', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, OrderType: 'ZEMP', OrderID: '1007', ReceivingStorageLocation: 'ST02' };
+            expect(subject.validateForm(dataWithRecSLoc)).toMatch(/Receiving Storage Location must be empty for Movement Type 261/);
+
+            const dataValid = { MovementType: '261', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, OrderType: 'ZEMP', OrderID: '1007' };
             expect(subject.validateForm(dataValid)).toBeNull();
         });
     });
@@ -318,6 +354,63 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(subject._oViewModel.getProperty('/busy')).toBe(false);
             expect(subject._oViewModel.getProperty('/errorMessage')).toMatch(/Material locked/);
             expect(MessageBox.error).toHaveBeenCalledWith(expect.stringContaining('Material locked'));
+        });
+
+        it('saves Movement 261 with mandatory OrderType and OrderID in payload', async () => {
+            const serviceMock = {
+                createReservationEntry: jest.fn().mockResolvedValue({
+                    ReservationNo: '0000529261',
+                    ReservationItem: '0001',
+                    TransferRequirement: '0001000861',
+                    Status_code: '02'
+                })
+            };
+            const routerMock = { navTo: jest.fn() };
+            const subject = createDetailSubject(serviceMock, routerMock);
+
+            subject._oCreateModel.setData({
+                MovementType: '261',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Material: '1000000045',
+                MaterialName: 'Raw Material 45',
+                Quantity: 10,
+                Unit: 'KG',
+                OrderType: 'ZEMP',
+                OrderID: '1007'
+            });
+
+            await subject.onSave();
+
+            expect(serviceMock.createReservationEntry).toHaveBeenCalledWith(expect.objectContaining({
+                MovementType: '261',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Material: '1000000045',
+                Quantity: 10,
+                Unit: 'KG',
+                OrderType: 'ZEMP',
+                OrderID: '1007'
+            }));
+            expect(MessageBox.success).toHaveBeenCalledWith(
+                expect.stringContaining('Reservation 0000529261 created successfully'),
+                expect.any(Object)
+            );
+        });
+
+        it('handles onOrderTypeSelect and onInternalOrderSelect in controller', () => {
+            const subject = createDetailSubject();
+            subject.onOrderTypeSelect({
+                getSource: () => ({ getId: () => 'inputOrderType', setValueState: jest.fn() }),
+                getParameter: () => ({ getKey: () => 'ZEMP' })
+            });
+            expect(subject._oCreateModel.getProperty('/OrderType')).toBe('ZEMP');
+
+            subject.onInternalOrderSelect({
+                getSource: () => ({ getId: () => 'inputOrderId', setValueState: jest.fn() }),
+                getParameter: () => ({ getKey: () => '1007' })
+            });
+            expect(subject._oCreateModel.getProperty('/OrderID')).toBe('1007');
         });
     });
 

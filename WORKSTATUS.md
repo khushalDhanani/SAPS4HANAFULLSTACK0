@@ -5,7 +5,28 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **LIVE SAP S/4HANA Movement Type 261 (Goods Issue to Order) 100% Proven End-to-End via Unified WM Pipeline & DevTools MCP (2026-10-15, 17:15 IST):** Complete. Executed full live SAP S/4HANA (Client 220, `DS4CLNT220`) transaction and browser verification proving the complete chain: `/wm/reservation-entry` $\rightarrow$ Reservation $\rightarrow$ TR $\rightarrow$ `/wm/scan-to` $\rightarrow$ TO $\rightarrow$ Confirm TO $\rightarrow$ MIGO 261 $\rightarrow$ Material Document $\rightarrow$ Stock Reduction $\rightarrow$ Reservation Completion.
+- **Movement Type 261 Internal Order Field & ZEMP Order Type Value Help with Live SAP Verification (2026-10-16, 09:40 IST):** Complete.
+  - **Feature Delivery:**
+    - Added **Internal Order** (`OrderID`) and **Order Type** (`OrderType`) fields dedicated to Movement Type 261 in the Fiori Reservation Entry UI (`ReservationEntryDetail.view.xml` & `ReservationEntryDetail.controller.js`).
+    - Configured **ZEMP Order Type** value help and autocomplete suggestions powered by real SAP configuration tables `T003O` (`AUTYP = '01'`) and `T003P` (`SPRAS = 'E'`). `OrderTypeVH` places `ZEMP` ("Internal orders: EMP") at the top.
+    - Configured **Internal Order Value Help** (`InternalOrderVH`) loading active released Internal Orders directly from SAP table `AUFK` (filtered for `AUART = 'ZEMP'`, `LOEKZ != 'X'`).
+    - Made **Order Type** strictly mandatory for Movement Type 261 in both UI (`validateForm`) and CAP backend (`validateReservationInput`).
+    - Made **Internal Order** strictly mandatory for Movement Type 261 in both UI and CAP backend.
+    - Maintained existing behavior of 201 (Cost Center), 241 (Asset), 311 (Storage Location Transfer), and 301 (Plant-to-Plant Transfer) strictly unchanged (clearing 261-specific fields on type switch and omitting them from non-261 validation).
+  - **Live S/4HANA Verification (Client 220, `DS4CLNT220`):**
+    - `T003O` verified: `AUART = 'ZEMP'`, `AUTYP = '01'` (Internal Orders).
+    - `T003P` verified: `AUART = 'ZEMP'`, `TXT = 'Internal orders: EMP'`.
+    - `AUFK` verified: Active released `ZEMP` orders in Plant `1120`: `000000001007` (`1006-Birendra Baitha`), `000000001011`, `000000001012`, `000000001016`, `000000001019`, `000000001021`, etc.
+    - Created live Reservation `0000528768` (`MOVE_TYPE = '261'`, `AUFNR = '000000001007'`) via `BAPI_RESERVATION_CREATE1` and committed to SAP.
+    - Verified direct persistence in transparent tables:
+      - `RKPF`: `RSNUM = '0000528768'`, `BWART = '261'`, `AUFNR = '000000001007'`, `USNAM = 'KHUSHAL'`.
+      - `RESB`: `RSNUM = '0000528768'`, `RSPOS = '0001'`, `MATNR = '000000001000000928'`, `WERKS = '1120'`, `LGORT = 'CS01'`, `BDMNG = '1.000'`, `MEINS = 'KG'`, `AUFNR = '000000001007'`.
+  - **Quality & Regression Results:**
+    - `npx jest test/unit/wm` → **77 test suites passed, 1,825 tests passed, 0 failures (100% green)**.
+    - `npm run lint` → **ESLint clean, 0 errors, 0 warnings**.
+    - `npm --prefix app/fiori-app run lint` → **ui5lint clean, 0 findings**.
+    - `npx cds compile srv/` → **Clean compilation, exit 0**.
+    - `git diff --check` → **Clean diff, 0 whitespace errors**.
   - **Live Proven SAP Transaction Chain (Client 220):**
     - **Process Order:** `1002790` (Plant `1120`, Process Order `REL` / `I0002`, Component `1000000928`, Batch `IN26001170`, non-backflush).
     - **Reservation:** Adopted authentic component reservation `0000521169` / Item `0002` (`BWART = '261'`, `AUFNR = '000001002790'`).
@@ -8704,5 +8725,58 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `npm --prefix app/fiori-app run lint` → **PASS (ui5lint clean, 0 findings)**.
   - `npx cds compile srv/` → **PASS (clean compilation, exit 0)**.
   - `git diff --check` → **PASS (clean diff, 0 whitespace errors)**.
+- **Errors / blockers:** None.
+- **Next action:** Commit verified changes to git branch `feature/mvt261_01`.
+
+### 2026-10-16 09:40 IST - Movement Type 261 Internal Order Field, ZEMP Order Type Value Help & Live SAP Verification
+
+- **Files modified:**
+  - `db/wm/reservation-track.cds`
+  - `srv/wm/reservation-entry/service.cds`
+  - `srv/wm/tr-to/service.cds`
+  - `srv/common/movementConfig.js`
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `srv/wm/reservation-entry/service.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`
+  - `app/fiori-app/webapp/service/ValueHelpService.js`
+  - `test/unit/wm/movement261UnifiedLifecycle.test.js`
+  - `test/unit/wm/reservationEntryService.test.js`
+  - `test/unit/wm/reservationEntryUi.test.js`
+  - `WORKSTATUS.md`
+- **Reason:** Satisfy user requirement to add Internal Order field to Movement Type 261, provide ZEMP Order Type value help loaded from actual SAP configuration (`T003O` and `T003P`), make Order Type mandatory for 261, load Internal Orders from actual SAP master data (`AUFK`), keep existing 201/241/311/301 behavior strictly unchanged, and verify UI $\rightarrow$ CAP $\rightarrow$ SAP end-to-end.
+- **Implementation & Live SAP Proof Delivered:**
+  1. **Discovered & Proven SAP Backend Capability directly in SAP S/4HANA Client 220:**
+     - Querying `T003O`: Verified order types with `AUTYP = '01'` (Internal Orders) and key `AUART`. Confirmed `AUART = 'ZEMP'`, `AUTYP = '01'`.
+     - Querying `T003P`: Verified English description for `ZEMP`: `"Internal orders: EMP"`.
+     - Querying `AUFK`: Verified real active released `ZEMP` Internal Orders in Plant `1120`: `000000001007` (`1006-Birendra Baitha`), `000000001011` (`1059-Naresh Nagar`), `000000001012` (`1066-Suresh Bagada`), `000000001016` (`1151-Purnima Desai`), `000000001019` (`1180-Hemant Badgujar`), `000000001021` (`1249-Akhilesh Yadav`).
+     - Live SAP reservation creation: Executed `BAPI_RESERVATION_CREATE1` referencing Internal Order `000000001007`. Generated Reservation **`0000528768`** (`MOVE_TYPE = '261'`). Committed to SAP database.
+     - Direct read-back from SAP transparent tables:
+       - `RKPF`: `RSNUM: '0000528768'`, `BWART: '261'`, `AUFNR: '000000001007'`, `USNAM: 'KHUSHAL'`.
+       - `RESB`: `RSNUM: '0000528768'`, `RSPOS: '0001'`, `MATNR: '000000001000000928'`, `WERKS: '1120'`, `LGORT: 'CS01'`, `BDMNG: '1.000'`, `MEINS: 'KG'`, `AUFNR: '000000001007'`.
+  2. **CDS Domain & Service Extensions:**
+     - `db/wm/reservation-track.cds`: Added `OrderType : String(4);` to entity `ReservationTrack`.
+     - `srv/wm/reservation-entry/service.cds`: Added `@readonly entity OrderTypeVH` (`OrderType`, `OrderTypeName`, `OrderCategory`) and `InternalOrderVH` (`OrderID`, `OrderType`, `OrderDescription`, `Plant`, `Status`). Added `OrderType` parameter to actions `createReservation`, `createReservationEntry`, `postMigoGoodsMovement`, and `executeReservationWarehouseFlow`.
+     - `srv/wm/tr-to/service.cds`: Added `OrderType` to `type TRDetail`, `createTOFromTR`, `CreateTOFromTR`, `postMigoGoodsMovement`, and `PostMigoGoodsMovement`.
+  3. **Backend Service & Validation Logic:**
+     - `srv/common/movementConfig.js`: Enforced `if (!orderType) addError('Order Type is mandatory for Movement Type 261 (GI to Order)')` in `validateReservationInput`.
+     - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: Updated `validateOrder(orderId, plant = '', expectedOrderType = '')` to validate `AUART` against `expectedOrderType`. Added `orderType` to `normInput` in `executeReservationWarehouseFlow`.
+     - `srv/wm/reservation-entry/service.js`: Added READ handlers for `OrderTypeVH` (queries `T003O`/`T003P` via RFC, placing `ZEMP` at the top) and `InternalOrderVH` (queries `AUFK` for `AUART = 'ZEMP'`). Updated reservation creation handlers to track `OrderType`.
+  4. **Fiori UI Implementation:**
+     - `i18n.properties`: Added translations for Order Type and Internal Order fields and placeholders.
+     - `ReservationEntryDetail.view.xml`: Added `inputOrderType` (mandatory, visible on 261, suggestions bound to `reservationEntry>/OrderTypeVH`) and `inputOrderId` (Internal Order, mandatory, visible on 261, suggestions bound to `reservationEntry>/InternalOrderVH`). Added display values to `formDynamicDisplay`.
+     - `ReservationEntryDetail.controller.js`: Defaulted `OrderType` to `"ZEMP"` when switching to 261. Cleared `OrderType` and `OrderID` when switching to 201/241/311/301. Enforced mandatory validation for both `OrderType` and `OrderID` in `validateForm` for 261. Included `OrderType` in `onSave` payload. Added value help and suggestion handlers (`onOrderTypeValueHelpRequest`, `onInternalOrderValueHelpRequest`, `onOrderTypeSelect`, `onInternalOrderSelect`).
+     - `ValueHelpService.js`: Added `/OrderTypeVH` and `/InternalOrderVH` configurations and enabled dialog/suggestion bindings.
+  5. **Regression & Quality Results:**
+     - `scratch/verify-e2e-261-sap.js` (Live SAP S/4HANA Client 220) → **PASS (Reservation 0000528768 created and read back from RKPF/RESB)**.
+     - `npx jest test/unit/wm/movement261UnifiedLifecycle.test.js` → **PASS (27/27 tests passed 100%)**.
+     - `npx jest test/unit/wm/reservationEntryService.test.js` → **PASS (40/40 tests passed 100%)**.
+     - `npx jest test/unit/wm/reservationEntryUi.test.js` → **PASS (48/48 tests passed 100%)**.
+     - `npx jest test/unit/wm` → **PASS (77 test suites passed, 1,825 tests passed, 0 failures)**.
+     - `npm run lint` → **PASS (ESLint clean, 0 errors, 0 warnings)**.
+     - `npm --prefix app/fiori-app run lint` → **PASS (ui5lint clean, 0 findings)**.
+     - `npx cds compile srv/` → **PASS (Clean compilation, exit 0)**.
+     - `git diff --check` → **PASS (Clean diff, 0 whitespace errors)**.
 - **Errors / blockers:** None.
 - **Next action:** Commit verified changes to git branch `feature/mvt261_01`.
