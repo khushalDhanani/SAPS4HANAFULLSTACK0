@@ -1,0 +1,80 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.goods-issue.controller.GoodsIssue301Pending"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    displayBlock="true">
+
+    <Page
+        id="pageGi301Pending"
+        showHeader="false">
+        <content>
+            <MessageStrip
+                id="msPending301Result"
+                text="{gi301p>/resultText}"
+                type="{= ${gi301p>/resultState} === 'None' ? 'Information' : ${gi301p>/resultState} }"
+                showIcon="true"
+                showCloseButton="true"
+                close=".onCloseResult"
+                class="sapUiSmallMargin"
+                visible="{= !!${gi301p>/resultText} }" />
+
+            <MessageStrip
+                id="msPending301Error"
+                text="{gi301p>/error}"
+                type="Error"
+                showIcon="true"
+                showCloseButton="true"
+                class="sapUiSmallMargin"
+                visible="{= !!${gi301p>/error} }" />
+
+            <Table
+                id="tblPending301"
+                items="{gi301p>/items}"
+                busy="{gi301p>/busy}"
+                growing="true"
+                growingThreshold="50"
+                noDataText="{i18n>gi301OpenTransfersNoData}"
+                itemPress=".onOpenReservation"
+                class="sapUiResponsiveMargin"
+                width="auto">
+                <headerToolbar>
+                    <OverflowToolbar>
+                        <Title id="ttlPending301" text="{= ${i18n>gi301OpenTransfersListTitle} + ' (' + (${gi301p>/items}.length || 0) + ')' }" level="H2" />
+                        <ToolbarSpacer />
+                        <Button id="btnPending301Refresh" icon="sap-icon://refresh" tooltip="{i18n>gi301OpenTransfersRefresh}" press=".onRefresh" />
+                    </OverflowToolbar>
+                </headerToolbar>
+                <columns>
+                    <Column id="colPendingResv"><Text text="{i18n>gi301OpenTransfersColReservation}" /></Column>
+                    <Column id="colPendingMaterial"><Text text="{i18n>gi301OpenTransfersColMaterial}" /></Column>
+                    <Column id="colPendingPlant" hAlign="Begin"><Text text="{i18n>gi301OpenTransfersColPlant}" /></Column>
+                    <Column id="colPendingReceivingPlant" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>gi301OpenTransfersColReceivingPlant}" /></Column>
+                    <Column id="colPendingIssuingSLoc" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>gi301OpenTransfersColIssuingSLoc}" /></Column>
+                    <Column id="colPendingReceivingSLoc" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>gi301OpenTransfersColReceivingSLoc}" /></Column>
+                    <Column id="colPendingCreatedBy" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>gi301OpenTransfersColCreatedBy}" /></Column>
+                    <Column id="colPendingItems" hAlign="End"><Text text="{i18n>gi301OpenTransfersColItems}" /></Column>
+                </columns>
+                <items>
+                    <ColumnListItem type="Navigation" press=".onOpenReservation">
+                        <cells>
+                            <ObjectIdentifier title="{gi301p>ReservationNo}" text="{= ${gi301p>StatusText} ? (${gi301p>MovementTypeName} + ' • ' + ${gi301p>StatusText}) : ${gi301p>MovementTypeName} }" />
+                            <VBox>
+                                <Text text="{gi301p>SampleMaterial}" />
+                                <Text text="{gi301p>SampleMaterialDesc}" class="sapUiTinyMarginTop" visible="{= !!${gi301p>SampleMaterialDesc} }" />
+                            </VBox>
+                            <Text text="{gi301p>Plant}" />
+                            <Text text="{= ${gi301p>ReceivingPlant} ? ${gi301p>ReceivingPlant} : '-' }" />
+                            <ObjectStatus
+                                text="{= ${gi301p>StorageLocation} ? ${gi301p>StorageLocation} : ${i18n>gi301OpenTransfersSLocSelectAtIssue} }"
+                                state="{= ${gi301p>StorageLocation} ? 'None' : 'Information' }" />
+                            <Text text="{= ${gi301p>ReceivingStorageLocation} ? ${gi301p>ReceivingStorageLocation} : '-' }" />
+                            <Text text="{= ${gi301p>CreatedByUser} ? ${gi301p>CreatedByUser} : '-' }" />
+                            <ObjectNumber number="{gi301p>ItemCount}" unit="{i18n>gi301OpenTransfersItemsUnit}" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+            </Table>
+        </content>
+    </Page>
+</mvc:View>

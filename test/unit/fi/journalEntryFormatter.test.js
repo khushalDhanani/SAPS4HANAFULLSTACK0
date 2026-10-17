@@ -1,11 +1,32 @@
 let formatter;
 
+const mockCurrencyInstance = {
+    format: jest.fn(val => {
+        if (typeof val === "number" && !isNaN(val)) {
+            return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        return "";
+    })
+};
+
+const mockNumberFormat = {
+    getCurrencyInstance: jest.fn(() => mockCurrencyInstance)
+};
+
+const mockDateFormatInstance = {
+    format: jest.fn(() => "21-09-2026")
+};
+
+const mockDateFormat = {
+    getDateInstance: jest.fn(() => mockDateFormatInstance)
+};
+
 // Mock sap.ui.define before requiring the formatter
 global.sap = {
     ui: {
         define: function (deps, factory) {
-            // Capture the factory output
-            formatter = factory();
+            // Capture the factory output with injected mocks
+            formatter = factory(mockNumberFormat, mockDateFormat);
         }
     }
 };
@@ -13,7 +34,6 @@ global.sap = {
 require('../../../app/fiori-app/webapp/modules/fi/journal-entry/model/formatter');
 
 describe('FI Journal Entry Formatter', () => {
-    // We need to inject mock functions for the i18n bundle and UI5 formats
     const mockResourceBundle = {
         getText: jest.fn(key => {
             if (key === 'fiStatusDebit') return 'Debit';
@@ -22,13 +42,10 @@ describe('FI Journal Entry Formatter', () => {
         })
     };
 
-    // We can't easily run the UI5 NumberFormat/DateFormat inside jest without the full framework,
-    // so we'll just test the core logic of Debit/Credit which doesn't require UI5 globals.
-
     let oFormatter;
 
     beforeEach(() => {
-        // Mock getOwnerComponent().getModel("i18n").getResourceBundle()
+        jest.clearAllMocks();
         oFormatter = {
             getOwnerComponent: () => ({
                 getModel: () => ({
@@ -36,7 +53,9 @@ describe('FI Journal Entry Formatter', () => {
                 })
             }),
             formatDebitCredit: formatter.formatDebitCredit,
-            debitCreditState: formatter.debitCreditState
+            debitCreditState: formatter.debitCreditState,
+            formatAmount: formatter.formatAmount,
+            formatDate: formatter.formatDate
         };
     });
 
@@ -67,6 +86,34 @@ describe('FI Journal Entry Formatter', () => {
 
         it('should return None for unknown code', () => {
             expect(oFormatter.debitCreditState("X")).toBe('None');
+        });
+    });
+
+    describe('formatAmount', () => {
+        it('should format clean numeric string', () => {
+            const result = oFormatter.formatAmount("2958.60");
+            expect(result).toBe("2,958.60");
+            expect(mockNumberFormat.getCurrencyInstance).toHaveBeenCalledWith({ currencyCode: false });
+        });
+
+        it('should format pre-formatted string containing commas (e.g. from OData V4 Decimal)', () => {
+            const result = oFormatter.formatAmount("2,958.600");
+            expect(result).toBe("2,958.60");
+        });
+
+        it('should format numeric input', () => {
+            const result = oFormatter.formatAmount(1500.5);
+            expect(result).toBe("1,500.50");
+        });
+
+        it('should return "0.00" for empty, null, or undefined values', () => {
+            expect(oFormatter.formatAmount(null)).toBe("0.00");
+            expect(oFormatter.formatAmount(undefined)).toBe("0.00");
+            expect(oFormatter.formatAmount("")).toBe("0.00");
+        });
+
+        it('should return "0.00" for invalid non-numeric strings', () => {
+            expect(oFormatter.formatAmount("abc")).toBe("0.00");
         });
     });
 });

@@ -43,13 +43,21 @@ sap.ui.define([
          * @returns {string} Formatted amount
          */
         formatAmount: function (vAmount) {
-            if (!vAmount) {
+            if (vAmount === null || vAmount === undefined || vAmount === "") {
+                return "0.00";
+            }
+            if (typeof vAmount === "string") {
+                vAmount = vAmount.replace(/,/g, "");
+            }
+            var nVal = parseFloat(vAmount);
+            if (isNaN(nVal)) {
                 return "0.00";
             }
             var oCurrencyFormat = NumberFormat.getCurrencyInstance({
                 currencyCode: false
             });
-            return oCurrencyFormat.format(vAmount);
+            var sResult = oCurrencyFormat.format(nVal);
+            return sResult || "0.00";
         },
 
         /**

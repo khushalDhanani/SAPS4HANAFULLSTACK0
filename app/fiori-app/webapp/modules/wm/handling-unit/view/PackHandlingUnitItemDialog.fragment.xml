@@ -1,0 +1,35 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form">
+    <Dialog id="huPackDialog" title="{i18n>huPackTitle}" contentWidth="32rem" busy="{huPack>/busy}">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <MessageStrip id="huPackError" visible="{= !!${huPack>/error} }" text="{huPack>/error}" type="Error" showIcon="true" class="sapUiSmallMarginBottom" />
+                <form:SimpleForm id="huPackForm" editable="true" layout="ResponsiveGridLayout" columnsM="1" columnsL="1" labelSpanL="4">
+                    <form:content>
+                        <Label text="{i18n>huItemMaterial}" required="true" />
+                        <Input id="huPackMaterial" value="{huPack>/material}" maxLength="40" />
+                        <Label text="{i18n>huItemQuantity}" required="true" />
+                        <Input id="huPackQty" value="{huPack>/quantity}" type="Number" />
+                        <Label text="{i18n>huPackUnit}" required="true" />
+                        <Input id="huPackUnit" value="{huPack>/unit}" maxLength="3" />
+                        <Label text="{i18n>huItemBatch}" />
+                        <Input id="huPackBatch" value="{huPack>/batch}" maxLength="10" />
+                        <Label text="{i18n>huPlant}" required="true" />
+                        <Input id="huPackPlant" value="{huPack>/plant}" maxLength="4" />
+                        <Label text="{i18n>huStorageLocation}" required="true" />
+                        <Input id="huPackSloc" value="{huPack>/storageLocation}" maxLength="4" />
+                    </form:content>
+                </form:SimpleForm>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button id="huPackSubmit" text="{i18n>huPackSubmit}" type="Emphasized" press=".onSubmitPack"
+                enabled="{= !${huPack>/busy} &amp;&amp; !!${huPack>/material} &amp;&amp; !!${huPack>/quantity} &amp;&amp; !!${huPack>/unit} &amp;&amp; !!${huPack>/plant} &amp;&amp; !!${huPack>/storageLocation} }" />
+        </beginButton>
+        <endButton>
+            <Button id="huPackCancel" text="{i18n>huPackCancel}" press=".onCancelPack" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

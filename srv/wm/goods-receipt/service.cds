@@ -5,7 +5,7 @@ namespace saps4hana.wm;
 service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity OpenInboundDeliveries {
         key StorageUnit          : String(20);
         key DeliveryDocument     : String(12);
@@ -22,11 +22,12 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity MaterialStorageLocations {
-        key Material            : String(40);
         key Plant               : String(4);
         key StorageLocation     : String(4);
+            PlantName           : String(40);
+            Material            : String(40);
             StorageLocationName : String(40);
             WarehouseStorageBin : String(18);
             CurrentStock        : Decimal(13, 3);
@@ -34,7 +35,7 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
     };
 
     @readonly
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     entity MaterialBatches {
         key Material        : String(40);
         key Plant           : String(4);
@@ -71,13 +72,23 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
         BatchStatusState     : String(10);
         BatchStatusText      : String(20);
         Quantity             : Decimal(13, 3);
+        OpenQuantity         : Decimal(13, 3);
+        OrderedQuantity      : Decimal(13, 3);
+        QuantityInEntryUnit  : Decimal(13, 3);
         Unit                 : String(3);
         Supplier             : String(10);
         SupplierName         : String(40);
         SupplierCityName     : String(40);
+        PackagingMaterial    : String(40);
+        StorageUnitType      : String(3);
+        WarehouseNumber      : String(3);
+        DeliveryQuantity     : Decimal(13, 3);
+        DeliveryDate         : Date;
+        GoodsMovementStatus  : String(1);
+        LookupWarnings       : array of String(255);
     };
 
-    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'User', 'Admin'])
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
     function getStorageUnitDetails(StorageUnit : String) returns StorageUnitDetails;
 
     type GRPostResult {
@@ -87,15 +98,54 @@ service GoodsReceiptService @(path: '/odata/v4/goods-receipt') {
         MaterialDocument : String(10);
     };
 
+    type GRStorageUnitPostResult {
+        Success              : Boolean;
+        Message              : String(255);
+        MaterialDocument     : String(10);
+        MaterialDocumentYear : String(4);
+        DeliveryDocument     : String(12);
+        StorageUnit          : String(20);
+        Quantity             : Decimal(13, 3);
+        Unit                 : String(3);
+    };
+
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action postGoodsReceipt(
-        StorageUnit     : String(20),
-        DeliveryDocument: String(12),
-        Material        : String(40),
-        Plant           : String(4),
-        StorageLocation : String(4),
-        Batch           : String(10),
-        Quantity        : Decimal(13, 3),
-        ExpiryDate      : String(10)
+        StorageUnit          : String(20),
+        DeliveryDocument     : String(12),
+        Material             : String(40),
+        Plant                : String(4),
+        StorageLocation      : String(4),
+        Batch                : String(10),
+        Quantity             : Decimal(13, 3),
+        ExpiryDate           : String(10),
+        DeliveryDocumentItem : String(6),
+        PurchaseOrder        : String(10),
+        PurchaseOrderItem    : String(5),
+        Unit                 : String(3),
+        GoodsMovementType    : String(3),
+        DocumentItemText     : String(50)
     ) returns GRPostResult;
+
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action postGoodsReceiptWithStorageUnit(
+        StorageUnit          : String(20),
+        DeliveryDocument     : String(12),
+        DeliveryDocumentItem : String(6),
+        PurchaseOrder        : String(10),
+        PurchaseOrderItem    : String(5),
+        Material             : String(40),
+        Plant                : String(4),
+        StorageLocation      : String(4),
+        Batch                : String(10),
+        Quantity             : Decimal(13, 3),
+        Unit                 : String(3),
+        PackagingMaterial    : String(40),
+        ExpiryDate           : String(10)
+    ) returns GRStorageUnitPostResult;
 }
+
+// These entities are read live from SAP S/4HANA by the custom READ handlers and hold no local data.
+annotate GoodsReceiptService.OpenInboundDeliveries with @cds.persistence.skip;
+annotate GoodsReceiptService.MaterialStorageLocations with @cds.persistence.skip;
+annotate GoodsReceiptService.MaterialBatches with @cds.persistence.skip;

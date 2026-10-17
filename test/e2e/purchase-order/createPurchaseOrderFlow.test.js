@@ -82,7 +82,8 @@ describe('E2E: Create Purchase Order Full User Journey', () => {
                     UnitOfMeasure: 'PC',
                     NetPriceAmount: '',
                     TaxCode: '',
-                    NetAmount: '0.00'
+                    NetAmount: '0.00',
+                    NetAmountIsEstimate: true
                 }
             ]
         };
@@ -156,14 +157,24 @@ describe('E2E: Create Purchase Order Full User Journey', () => {
         const fNetAmount = fQty * fNetPrice;
 
         item.NetAmount = fNetAmount.toFixed(2);
+        item.NetAmountIsEstimate = true;
 
         expect(item.NetAmount).toBe('250.00');
+        expect(item.NetAmountIsEstimate).toBe(true);
     });
 
     it('Step 6: submit - dispatch createPurchaseOrder action to CAP backend and assert success', async () => {
+        // Mirrors CreatePurchaseOrder.controller.js onCreatePress cleaning UI-only fields
+        const cleanItems = uiModel.items.map(item => {
+            const clean = { ...item };
+            delete clean.errors;
+            delete clean.NetAmountIsEstimate;
+            return clean;
+        });
+
         const payload = {
             header: uiModel.header,
-            items: uiModel.items
+            items: cleanItems
         };
 
         const { status, data } = await POST('/odata/v4/purchase-order/createPurchaseOrder', payload);

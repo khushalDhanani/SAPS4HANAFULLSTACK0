@@ -1,33 +1,20 @@
 const cds = require('@sap/cds');
-const fs = require('fs');
-const path = require('path');
+require('./srv/common/logger');
 
-// In local development, load local environment configuration if present
-if (process.env.NODE_ENV !== 'production') {
-    try {
-        const envFile = fs.existsSync(path.resolve(__dirname, '.env'))
-            ? path.resolve(__dirname, '.env')
-            : (fs.existsSync(path.resolve(__dirname, '.env.local')) ? path.resolve(__dirname, '.env.local') : null);
-        if (envFile) {
-            const lines = fs.readFileSync(envFile, 'utf8').split('\n');
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || trimmed.startsWith('#')) continue;
-                const eqIdx = trimmed.indexOf('=');
-                if (eqIdx > 0) {
-                    const key = trimmed.substring(0, eqIdx).trim();
-                    let val = trimmed.substring(eqIdx + 1).trim();
-                    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-                        val = val.slice(1, -1);
-                    }
-                    if (!process.env[key]) {
-                        process.env[key] = val;
-                    }
-                }
-            }
-        }
-    } catch (e) {}
+// In local development, load .env.local / .env once via dotenv (no-op in production)
+if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
+    const fs = require('fs');
+    const path = require('path');
+    const dotenv = require('dotenv');
+
+    const localEnvPath = path.resolve(__dirname, '.env.local');
+    if (fs.existsSync(localEnvPath)) {
+        dotenv.config({ path: localEnvPath });
+    }
+    dotenv.config({ path: path.resolve(__dirname, '.env') });
 }
+
+require('./srv/common/wmMismatchOverrideGuard').assertMismatchOverrideAllowed();
 
 // Register local development S4_USERNAME in mock auth users if running in development
 if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {
@@ -35,7 +22,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_USERNAME) {
     cds.env.requires = cds.env.requires || {};
     cds.env.requires.auth = cds.env.requires.auth || {};
     cds.env.requires.auth.users = cds.env.requires.auth.users || {};
-    const devRoles = ['User', 'Admin', 'Viewer', 'PurchasingManager', 'FinanceViewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager'];
+    const devRoles = ['Admin', 'Viewer', 'PurchasingManager', 'FinanceViewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager'];
     cds.env.requires.auth.users[s4User] = { roles: devRoles };
     cds.env.requires.auth.users[s4User.toLowerCase()] = { roles: devRoles };
     cds.env.requires.auth.users[s4User.toUpperCase()] = { roles: devRoles };
@@ -45,7 +32,8 @@ const { registerDestination } = require('@sap-cloud-sdk/connectivity');
 
 // In local development, configure credentials and register local destination if running outside BTP
 if (process.env.NODE_ENV !== 'production' && process.env.S4_DESTINATION_URL) {
-    const client = process.env.S4_CLIENT || '220';
+    const s4Config = require('./srv/common/s4Config');
+    const client = s4Config.getClient();
     const headers = { 'sap-client': client };
 
     const credsFS = {
@@ -88,12 +76,21 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_DESTINATION_URL) {
         headers: headers
     };
 
+    const credsSDSO = {
+        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/SD_F1873_SO_WL_SRV`,
+        authentication: 'BasicAuthentication',
+        username: process.env.S4_USERNAME,
+        password: process.env.S4_PASSWORD,
+        headers: headers
+    };
+
     cds.env.requires = cds.env.requires || {};
     cds.env.requires.C_PURCHASEORDER_FS_SRV = Object.assign(cds.env.requires.C_PURCHASEORDER_FS_SRV || { kind: 'odata-v2', model: 'srv/external/C_PURCHASEORDER_FS_SRV' }, { credentials: credsFS });
     cds.env.requires.MM_PUR_PO_MAINT_V2_SRV = Object.assign(cds.env.requires.MM_PUR_PO_MAINT_V2_SRV || { kind: 'odata-v2', model: 'srv/external/MM_PUR_PO_MAINT_V2_SRV' }, { credentials: credsMaint });
     cds.env.requires.FAC_GL_JOURNALENTRY_VER_SRV = Object.assign(cds.env.requires.FAC_GL_JOURNALENTRY_VER_SRV || { kind: 'odata-v2', model: 'srv/external/FAC_GL_JOURNALENTRY_VER_SRV' }, { credentials: credsFI });
     cds.env.requires.SD_F2370_INQY_WL_SRV = Object.assign(cds.env.requires.SD_F2370_INQY_WL_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F2370_INQY_WL_SRV' }, { credentials: credsSDWL });
     cds.env.requires.SD_F2369_INQY_FS_SRV = Object.assign(cds.env.requires.SD_F2369_INQY_FS_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F2369_INQY_FS_SRV' }, { credentials: credsSDFS });
+    cds.env.requires.SD_F1873_SO_WL_SRV = Object.assign(cds.env.requires.SD_F1873_SO_WL_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F1873_SO_WL_SRV' }, { credentials: credsSDSO });
 
     if (cds.requires) {
         if (cds.requires.C_PURCHASEORDER_FS_SRV) cds.requires.C_PURCHASEORDER_FS_SRV.credentials = credsFS;
@@ -101,6 +98,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_DESTINATION_URL) {
         if (cds.requires.FAC_GL_JOURNALENTRY_VER_SRV) cds.requires.FAC_GL_JOURNALENTRY_VER_SRV.credentials = credsFI;
         if (cds.requires.SD_F2370_INQY_WL_SRV) cds.requires.SD_F2370_INQY_WL_SRV.credentials = credsSDWL;
         if (cds.requires.SD_F2369_INQY_FS_SRV) cds.requires.SD_F2369_INQY_FS_SRV.credentials = credsSDFS;
+        if (cds.requires.SD_F1873_SO_WL_SRV) cds.requires.SD_F1873_SO_WL_SRV.credentials = credsSDSO;
     }
 
     registerDestination({
@@ -117,6 +115,13 @@ const localTokenUtil = require('./srv/auth/localTokenUtil');
 
 // Local development bootstrap handlers
 cds.on('bootstrap', (app) => {
+    // Readiness endpoint for the Cloud Foundry HTTP health check declared in mta.yaml
+    // (readiness-health-check-http-endpoint: /health). Registered before CAP mounts its
+    // protocol adapters and auth middleware, so it needs no credentials and never touches S/4HANA.
+    app.get('/health', (req, res) => {
+        res.set('Cache-Control', 'no-store').status(200).json({ status: 'UP' });
+    });
+
     // Set Permissions-Policy header to eliminate Chromium 'unload is not allowed' violation warnings
     app.use((req, res, next) => {
         res.setHeader('Permissions-Policy', 'unload=*');
@@ -134,9 +139,9 @@ cds.on('bootstrap', (app) => {
         next();
     });
 
-    // In local development, verify Bearer tokens (JWT with standard XSUAA claims)
-    if (process.env.NODE_ENV !== 'production') {
-        app.use((req, res, next) => {
+    // In local development, verify Bearer tokens (JWT with standard XSUAA claims) when dev issuer is explicitly enabled
+    app.use((req, res, next) => {
+        if (process.env.NODE_ENV !== 'production' && localTokenUtil.isDevTokenIssuerEnabled()) {
             const auth = req.headers.authorization;
             if (auth && auth.match(/^bearer\s+/i)) {
                 const token = auth.replace(/^bearer\s+/i, '').trim();
@@ -145,13 +150,25 @@ cds.on('bootstrap', (app) => {
                     req.user = u;
                 }
             }
-            next();
-        });
-    }
+        }
+        next();
+    });
 
-    // Handle Component-preload.js in local dev to return 404 with JS MIME type, preventing strict MIME checking refusal
+    // AI assistant streaming endpoint (SSE). Runs behind the CAP auth middlewares so cds.context.user is set.
+    const express = require('express');
+    app.post('/ai/chat/stream', express.json({ limit: '4mb' }), ...cds.middlewares.before, require('./srv/ai/service').streamHandler);
+
+    // Serve Component-preload.js from dist in production, or return empty JS comment with HTTP 200 in development
+    // to eliminate 404 net::ERR_ABORTED and module system loading failure warnings
     app.get(/Component-preload\.js$/, (req, res) => {
-        res.status(404).type('application/javascript').send('// Component-preload.js not available in development');
+        const fs = require('fs');
+        const path = require('path');
+        const preloadDist = path.resolve(__dirname, 'app/fiori-app/dist/Component-preload.js');
+        // Development serves webapp/ sources: a stale dist bundle here silently overrode every source change.
+        if (process.env.NODE_ENV === 'production' && fs.existsSync(preloadDist)) {
+            return res.sendFile(preloadDist);
+        }
+        res.type('application/javascript').send('// Component-preload.js not available in development');
     });
 
     // Handle UI5 Layered Repository (LRep / Flexibility) requests in local dev to eliminate 404 console errors
@@ -186,9 +203,9 @@ cds.on('serving', (srv) => {
     }
 });
 
-// Register local development Bearer token verification into CAP OData middleware chain
-if (process.env.NODE_ENV !== 'production') {
-    cds.middlewares.add((req, res, next) => {
+// Register local development Bearer token verification into CAP OData middleware chain when dev issuer is enabled
+cds.middlewares.add((req, res, next) => {
+    if (process.env.NODE_ENV !== 'production' && localTokenUtil.isDevTokenIssuerEnabled()) {
         const auth = req.headers.authorization;
         if (auth && auth.match(/^bearer\s+/i)) {
             const token = auth.replace(/^bearer\s+/i, '').trim();
@@ -200,9 +217,9 @@ if (process.env.NODE_ENV !== 'production') {
                 }
             }
         }
-        next();
-    }, { after: 'auth' });
-}
+    }
+    next();
+}, { before: 'auth' });
 
 // Delegate to default CAP server bootstrap
 module.exports = cds.server;

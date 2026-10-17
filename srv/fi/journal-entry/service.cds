@@ -3,7 +3,7 @@ using { FAC_GL_JOURNALENTRY_VER_SRV as external } from '../../external/FAC_GL_JO
 @(requires: 'authenticated-user')
 service JournalEntryService @(path: '/odata/v4/journal-entry') {
     @readonly
-    @(requires: ['Viewer', 'FinanceViewer', 'Admin'])
+    @(requires: ['FinanceViewer', 'Admin'])
     entity JournalEntryItems as projection on external.C_GLJrnlEntryItemToBeVerified {
         key AccountingDocument,
         key AccountingDocumentItem,

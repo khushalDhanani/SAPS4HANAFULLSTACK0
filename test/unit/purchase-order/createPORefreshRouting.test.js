@@ -86,7 +86,7 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
                             BaseObject,
                             MockJSONModel,
                             { warning: jest.fn() },
-                            { post: jest.fn() }
+                            { post: jest.fn(), get: jest.fn().mockResolvedValue(null) }
                         );
                     } else {
                         PurchaseOrderModel = factory(MockJSONModel);
@@ -113,7 +113,7 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
     });
 
     describe('AuthService.syncModelHeaders', () => {
-        it('should synchronize authorization header to default, fiService, and salesInquiry models', () => {
+        it('should synchronize authorization header to all 6 models (default, fiService, salesInquiry, goodsIssue, goodsReceipt, warehouseMgmt)', () => {
             const defaultModel = {
                 changeHttpHeaders: jest.fn()
             };
@@ -123,10 +123,22 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
             const sdModel = {
                 changeHttpHeaders: jest.fn()
             };
+            const giModel = {
+                changeHttpHeaders: jest.fn()
+            };
+            const grModel = {
+                changeHttpHeaders: jest.fn()
+            };
+            const wmModel = {
+                changeHttpHeaders: jest.fn()
+            };
             const mockComponent = {
                 getModel: jest.fn((name) => {
                     if (name === "fiService") return fiModel;
                     if (name === "salesInquiry") return sdModel;
+                    if (name === "goodsIssue") return giModel;
+                    if (name === "goodsReceipt") return grModel;
+                    if (name === "warehouseMgmt") return wmModel;
                     return defaultModel;
                 }),
                 setModel: jest.fn()
@@ -144,6 +156,15 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
                 Authorization: "Bearer sample-jwt-token"
             });
             expect(sdModel.changeHttpHeaders).toHaveBeenCalledWith({
+                Authorization: "Bearer sample-jwt-token"
+            });
+            expect(giModel.changeHttpHeaders).toHaveBeenCalledWith({
+                Authorization: "Bearer sample-jwt-token"
+            });
+            expect(grModel.changeHttpHeaders).toHaveBeenCalledWith({
+                Authorization: "Bearer sample-jwt-token"
+            });
+            expect(wmModel.changeHttpHeaders).toHaveBeenCalledWith({
                 Authorization: "Bearer sample-jwt-token"
             });
         });
@@ -235,12 +256,12 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
     });
 
     describe('Create PO Initial Model & Status Validation', () => {
-        it('should create initial model with default NB doc type and 1 item', () => {
+        it('should create initial model requiring Document Type and 1 item', () => {
             const oModel = PurchaseOrderModel.createInitialModel("TEST_USER");
             const data = oModel.getData();
 
             expect(data.header).toBeDefined();
-            expect(data.header.PurchaseOrderType).toBe("NB");
+            expect(data.header.PurchaseOrderType).toBe("");
             expect(data.header.StatusText).toBe("Draft");
             expect(data.items).toHaveLength(1);
             expect(data.items[0].PurchaseOrderItem).toBe("10");

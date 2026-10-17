@@ -123,7 +123,7 @@ describe('Unit: Payload Mapping', () => {
         const payloadWithoutUser = mapToS4Payload(validPayload.header, itemWithoutReq);
         expect(payloadWithoutUser.to_PurchaseOrderItemTP[0].RequisitionerName).toBe('SYSTEM');
 
-        // 3. Explicit item RequisitionerName overrides options.user
+        // 3. Authenticated options.user strictly takes precedence over client-supplied RequisitionerName
         const itemWithExplicitReq = [
             {
                 Material: 'TG11',
@@ -134,7 +134,7 @@ describe('Unit: Payload Mapping', () => {
             }
         ];
         const payloadWithExplicit = mapToS4Payload(validPayload.header, itemWithExplicitReq, { user: 'AUTH_TESTER' });
-        expect(payloadWithExplicit.to_PurchaseOrderItemTP[0].RequisitionerName).toBe('CUSTOM_REQ');
+        expect(payloadWithExplicit.to_PurchaseOrderItemTP[0].RequisitionerName).toBe('AUTH_TESTER');
     });
 
 });

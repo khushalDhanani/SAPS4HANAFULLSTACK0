@@ -1,0 +1,26 @@
+@AbapCatalog.sqlViewName: 'IWMTOITM'
+@AbapCatalog.compiler.compareFilter: true
+@ClientHandling.algorithm: #SESSION_VARIABLE
+@AccessControl.authorizationCheck: #CHECK
+@EndUserText.label: 'Warehouse Management Transfer Order Item'
+@VDM.viewType: #BASIC
+@ObjectModel.usageType.sizeCategory: #XL
+@ObjectModel.usageType.serviceQuality: #C
+@ObjectModel.usageType.dataClass: #TRANSACTIONAL
+
+define view I_WrhsMgmtTransferOrderItem as select from ltap as Item
+{
+  key lgnum as WarehouseNumber,
+  key cast(tanum as wm_transfer_order) as WrhsMgmtTransferOrder,
+  key cast(tapos as wm_transfer_order_item) as WrhsMgmtTransferOrderItem,
+
+      pquit as TransferOrderInWrhsMgmtIsConfd,
+
+      case 
+        when pquit = 'X' then case 
+                                when     ( vorga = 'SL' or vorga = 'ST' ) then cast( pquit as wm_transfer_order_is_canceled )
+                                when not ( vorga = 'SL' or vorga = 'ST' ) then cast( '' as wm_transfer_order_is_canceled )
+                              end
+        when not pquit = 'X' then cast( '' as wm_transfer_order_is_canceled )
+      end as TransfOrdInWrhsMgmtIsCanceled
+}

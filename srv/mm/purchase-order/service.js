@@ -7,7 +7,10 @@ const { poValueHelpConfig } = require('./handlers/valueHelp.config');
  * PurchaseOrderService Implementation for SAP MM Purchase Order module.
  * Binds domain business handlers and PO value help configuration.
  */
-module.exports = cds.service.impl(async function() {
-    registerValueHelpHandlers(this, poValueHelpConfig);
-    registerPurchaseOrderHandlers(this);
-});
+module.exports = class PurchaseOrderService extends cds.ApplicationService {
+    async init() {
+        registerValueHelpHandlers(this, poValueHelpConfig);
+        registerPurchaseOrderHandlers(this);
+        return super.init();
+    }
+};

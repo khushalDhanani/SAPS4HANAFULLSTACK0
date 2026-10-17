@@ -1,8 +1,16 @@
-const fs = require('fs');
-const path = require('path');
 const cds = require('@sap/cds');
-const connectivity = require('@sap-cloud-sdk/connectivity');
+const LOG = require('../logger')('goods-receipt-adapter');
 const S4ErrorMapper = require('../S4ErrorMapper');
+const { S4HttpClient } = require('../S4HttpClient');
+const { RfcClient } = require('../RfcClient');
+const s4Config = require('../s4Config');
+
+const { enrichBatchStatus } = require('../../../common/batchUtils');
+const { formatDateToYMD } = require('../../../common/dateUtils');
+const { odataString } = require('../../../common/filterUtils');
+
+// Movement type this app posts (GR for purchase order / inbound delivery). App parameter, not SAP-sourced data.
+const GR_MOVEMENT_TYPE = '101';
 
 /**
  * Adapter class to encapsulate communication with SAP S/4HANA for Goods Receipt (Movement 101):
@@ -13,233 +21,129 @@ const S4ErrorMapper = require('../S4ErrorMapper');
  * - Strict compliance with AGENTS.md SAP API Discovery Protocol:
  *   NO dummy fallback data, NO mock persistence, NO synthetic document generation.
  */
+const toNum = (v) => (v === undefined || v === null || v === '' || isNaN(Number(v))) ? null : Number(v);
+
 class GoodsReceiptAdapter {
-  constructor() {
-    this.destinationName = process.env.S4_DESTINATION_NAME || 'S4HANA_PO_API';
-    this.csrfToken = null;
-    this.cookie = null;
-
-    this._ensureEnvLoaded();
-  }
-
   /**
-   * Helper to ensure .env or .env.local variables are loaded in non-standard execution contexts
+   * Gateway entity set that reliably issues a CSRF token and session cookies on this system; used for
+   * every transactional POST of this adapter.
    */
-  _ensureEnvLoaded() {
-    if (process.env.S4_DESTINATION_URL) return;
-    const candidates = ['.env.local', '.env'];
-    for (const f of candidates) {
-      const fullPath = path.resolve(process.cwd(), f);
-      if (fs.existsSync(fullPath)) {
-        try {
-          const content = fs.readFileSync(fullPath, 'utf8');
-          for (const line of content.split('\n')) {
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-              const idx = trimmed.indexOf('=');
-              const k = trimmed.substring(0, idx).trim();
-              const v = trimmed.substring(idx + 1).trim();
-              if (!process.env[k]) {
-                process.env[k] = v;
-              }
-            }
-          }
-        } catch (_) {
-          // Continue
-        }
-      }
-    }
+  static CSRF_FETCH_PATH = '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$top=1';
+
+  constructor(options = {}) {
+    // All HTTP traffic to S/4HANA goes through the shared SAP Cloud SDK based client (BTP destination,
+    // Connectivity proxy for on-premise systems, per-call CSRF/cookie handling). No session state lives here.
+    this.client = options.client || new S4HttpClient();
+    this.destinationName = this.client.destinationName;
+    this.rfc = options.rfc || new RfcClient();
   }
 
   /**
-   * Enrich batch object with SLED classification against current date
+   * Enrich batch object with SLED classification against current date (delegates to shared batchUtils)
    */
   _enrichBatchStatus(expiryDate) {
-    if (!expiryDate) {
-      return { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 };
-    }
+    return enrichBatchStatus(expiryDate);
+  }
 
-    let expTime = null;
-    if (typeof expiryDate === 'string' && expiryDate.includes('/Date(')) {
-      const match = expiryDate.match(/\/Date\((\d+)\)\//);
-      if (match) expTime = Number(match[1]);
-    } else {
-      expTime = new Date(expiryDate).getTime();
-    }
-
-    if (!expTime || isNaN(expTime)) {
-      return { StatusState: 'None', StatusText: 'NO SLED', DaysToExpiry: 9999 };
-    }
-
-    const now = Date.now();
-    const diffDays = Math.ceil((expTime - now) / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) {
-      return { StatusState: 'Error', StatusText: 'EXPIRED', DaysToExpiry: diffDays };
-    } else if (diffDays <= 30) {
-      return { StatusState: 'Warning', StatusText: 'EXPIRING SOON', DaysToExpiry: diffDays };
-    } else {
-      return { StatusState: 'Success', StatusText: 'VALID', DaysToExpiry: diffDays };
-    }
+  static _enrichBatchStatus(expiryDate) {
+    return enrichBatchStatus(expiryDate);
   }
 
   /**
-   * Format epoch date or /Date(xxx)/ to ISO string YYYY-MM-DD
+   * Format epoch date or /Date(xxx)/ to ISO string YYYY-MM-DD (delegates to shared dateUtils)
    */
   _formatDate(dateVal) {
-    if (!dateVal) return '';
-    let d = null;
-    if (typeof dateVal === 'string' && dateVal.includes('/Date(')) {
-      const match = dateVal.match(/\/Date\((\d+)\)\//);
-      if (match) d = new Date(Number(match[1]));
-    } else {
-      d = new Date(dateVal);
-    }
-    if (!d || isNaN(d.getTime())) return '';
-    return d.toISOString().split('T')[0];
+    return formatDateToYMD(dateVal, { emptyFallback: '' });
+  }
+
+  static _formatDate(dateVal) {
+    return formatDateToYMD(dateVal, { emptyFallback: '' });
   }
 
   /**
-   * Resolves connection credentials for SAP Gateway
+   * Determine if an error represents an S/4HANA backend outage, network timeout,
+   * unconfigured destination, or connection failure.
    */
-  async _getCredentials() {
-    try {
-      const dest = await connectivity.getDestination({ destinationName: this.destinationName });
-      if (dest && dest.url) {
-        return {
-          url: dest.url,
-          username: dest.username,
-          password: dest.password,
-          client: dest.sapClient || process.env.S4_CLIENT || '220'
-        };
-      }
-    } catch (_) {
-      // Local fallback
-    }
+  _isOutage(err) {
+    return GoodsReceiptAdapter._isOutage(err);
+  }
 
-    const creds = cds.env.requires?.MM_PUR_PO_MAINT_V2_SRV?.credentials;
-    if (creds && creds.url) {
-      return {
-        url: creds.url,
-        username: creds.username,
-        password: creds.password,
-        client: creds.client || process.env.S4_CLIENT || '220'
-      };
+  static _isOutage(err) {
+    if (!err) return false;
+    if (String(err.message || '').includes('node-rfc is not available')) return false;
+    if (err.code === 'DESTINATION_NOT_CONFIGURED' || err.code === 'S4_DESTINATION_NOT_CONFIGURED') return true;
+    const status = err.status || err.statusCode || err.response?.status;
+    if (status && (status === 502 || status === 503 || status === 504 || status === 500 || status === 401 || status === 403)) {
+      return true;
     }
-
-    return {
-      url: process.env.S4_DESTINATION_URL || 'http://172.27.100.32:8000',
-      username: process.env.S4_USERNAME,
-      password: process.env.S4_PASSWORD,
-      client: process.env.S4_CLIENT || '220'
-    };
+    const code = String(err.code || err.cause?.code || '').toUpperCase();
+    if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'ENOTFOUND' || code === 'ECONNRESET') {
+      return true;
+    }
+    const msg = String(err.message || '').toLowerCase();
+    if (
+      msg.includes('destination') ||
+      msg.includes('network error') ||
+      msg.includes('connection refused') ||
+      msg.includes('etimedout') ||
+      msg.includes('econnrefused') ||
+      msg.includes('enotfound')
+    ) {
+      return true;
+    }
+    return false;
   }
 
   /**
-   * Executes an authenticated GET request against SAP Gateway
+   * Resolve the S/4HANA destination through the shared client. Returns null when nothing is configured.
+   */
+  async _getDestination() {
+    return this.client.resolveDestination();
+  }
+
+  /**
+   * Converts a shared-client failure into the Gateway error shape the Goods Receipt handlers expect:
+   * the SAP message as text and the HTTP status in statusCode.
+   */
+  static _toGatewayError(err) {
+    const errObj = new Error(S4ErrorMapper.extractS4ErrorMessage(err));
+    errObj.statusCode = err.status || err.statusCode;
+    errObj.status = errObj.statusCode;
+    errObj.code = err.code;
+    return errObj;
+  }
+
+  /**
+   * Executes an authenticated GET request against SAP Gateway via the SAP Cloud SDK
    */
   async _get(servicePath, queryString = '') {
-    const creds = await this._getCredentials();
-    const url = `${creds.url}${servicePath}${queryString ? (queryString.startsWith('?') ? queryString : `?${queryString}`) : ''}`;
-    const authHeader = 'Basic ' + Buffer.from(`${creds.username}:${creds.password}`).toString('base64');
-
-    const headers = {
-      'Accept': 'application/json',
-      'sap-client': creds.client,
-      'Authorization': authHeader
-    };
-
-    if (this.cookie) {
-      headers['Cookie'] = this.cookie;
-    }
-
-    const response = await fetch(url, { method: 'GET', headers });
-
-    const setCookie = response.headers.get('set-cookie');
-    if (setCookie) {
-      this.cookie = setCookie;
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      const message = S4ErrorMapper.extractS4ErrorMessage({ message: errorText });
-      const errObj = new Error(message);
-      errObj.statusCode = response.status;
-      throw errObj;
-    }
-
-    const data = await response.json();
-    return data.d?.results || data.d || data;
-  }
-
-  /**
-   * Fetches CSRF token and session cookies for POST requests
-   */
-  async _fetchCsrfToken() {
-    const creds = await this._getCredentials();
-    const authHeader = 'Basic ' + Buffer.from(`${creds.username}:${creds.password}`).toString('base64');
-
-    // Query active Gateway endpoint that reliably generates CSRF tokens and session cookies on Client 220
-    const response = await fetch(`${creds.url}/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$top=1`, {
-      method: 'GET',
-      headers: {
-        'x-csrf-token': 'Fetch',
-        'sap-client': creds.client,
-        'Authorization': authHeader
-      }
-    });
-
-    this.csrfToken = response.headers.get('x-csrf-token');
-    if (response.headers.getSetCookie) {
-      const cookies = response.headers.getSetCookie();
-      this.cookie = cookies.map(c => c.split(';')[0]).join('; ');
-    } else {
-      const setCookie = response.headers.get('set-cookie');
-      if (setCookie) {
-        this.cookie = setCookie.split(';')[0];
-      }
+    try {
+      const { data } = await this.client.get(servicePath, { query: queryString });
+      return data?.d?.results || data?.d || data;
+    } catch (err) {
+      throw GoodsReceiptAdapter._toGatewayError(err);
     }
   }
 
   /**
-   * Executes an authenticated POST request against SAP Gateway
+   * Executes an authenticated POST request against SAP Gateway via the SAP Cloud SDK. The CSRF token and
+   * the session cookies are fetched for this call only; nothing is cached on the adapter.
    */
   async _post(servicePath, body = {}, customHeaders = {}) {
-    const creds = await this._getCredentials();
-    await this._fetchCsrfToken();
-
-    const authHeader = 'Basic ' + Buffer.from(`${creds.username}:${creds.password}`).toString('base64');
-    const url = `${creds.url}${servicePath}`;
-
-    const headers = {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'sap-client': creds.client,
-      'Authorization': authHeader,
-      'x-csrf-token': this.csrfToken || '',
-      ...customHeaders
-    };
-
-    if (this.cookie) {
-      headers['Cookie'] = this.cookie;
+    try {
+      const { data, headers } = await this.client.post(servicePath, {
+        data: body,
+        headers: customHeaders,
+        csrfPath: GoodsReceiptAdapter.CSRF_FETCH_PATH
+      });
+      const res = (data && typeof data === 'object') ? (data.d || data) : data;
+      if (res && typeof res === 'object' && headers) {
+        res._headers = headers;
+      }
+      return res;
+    } catch (err) {
+      throw GoodsReceiptAdapter._toGatewayError(err);
     }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      const message = S4ErrorMapper.extractS4ErrorMessage({ message: errorText });
-      const errObj = new Error(message);
-      errObj.statusCode = response.status;
-      throw errObj;
-    }
-
-    const data = await response.json();
-    return data.d || data;
   }
 
   /**
@@ -248,9 +152,10 @@ class GoodsReceiptAdapter {
   async getOpenInboundDeliveries(plant = '') {
     let filter = '';
     if (plant) {
-      filter = `$filter=Plant eq '${plant}'`;
+      filter = `Plant eq ${odataString(plant)}`;
     }
-    const query = `${filter ? filter + '&' : ''}$top=50&$format=json`;
+    // No $top: the set is the open-GR worklist and must not be silently truncated; the CAP handler pages on request.
+    const query = `${filter ? `$filter=${encodeURIComponent(filter)}&` : ''}$format=json`;
 
     try {
       const results = await this._get('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet', query);
@@ -271,34 +176,42 @@ class GoodsReceiptAdapter {
         SupplierCityName: r.SupplierCityName
       }));
     } catch (err) {
-      console.error('[GoodsReceiptAdapter] Error fetching open inbound deliveries:', err.message);
+      LOG.error('Error fetching open inbound deliveries:', err.message);
       throw err;
     }
   }
 
   /**
-   * Retrieves storage locations and warehouse storage bins from MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps
+   * Retrieves authentic plant storage locations from MM_PUR_PO_MAINT_V2_SRV/C_MM_StorLocValueHelp.
+   * Replaces dead MMIM_MATERIAL_DATA_SRV (0 rows in SAP) with authentic SAP Storage Location Value Help (696 rows).
    */
   async getMaterialStorageLocations(material, plant) {
-    if (!material) return [];
-    let filter = `Material eq '${material}'`;
+    let filter = '';
     if (plant) {
-      filter += ` and Plant eq '${plant}'`;
+      filter = `Plant eq ${odataString(plant)}`;
     }
 
     try {
-      const results = await this._get('/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps', `$filter=${filter}&$format=json`);
-      const list = Array.isArray(results) ? results : (results ? [results] : []);
+      const queryParam = filter ? `$filter=${encodeURIComponent(filter)}&$format=json` : '$top=50&$format=json';
+      const results = await this._get('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_StorLocValueHelp', queryParam);
+      const list = Array.isArray(results) ? results : (results?.results ? results.results : (results ? [results] : []));
 
       return list.map(r => ({
+        Plant: r.Plant || plant || '',
+        PlantName: r.PlantName || '',
         StorageLocation: r.StorageLocation,
         StorageLocationName: r.StorageLocationName || '',
         WarehouseStorageBin: r.WarehouseStorageBin || '',
-        CurrentStock: Number(r.CurrentStock) || 0,
-        BaseUnit: r.BaseUnit || 'KG'
+        CurrentStock: (r.CurrentStock !== undefined && r.CurrentStock !== null) ? Number(r.CurrentStock) : null,
+        BaseUnit: r.BaseUnit || ''
       }));
-    } catch (_) {
-      return [];
+    } catch (err) {
+      if (this._isOutage(err)) {
+        LOG.error(`Failed to retrieve storage locations due to S/4HANA outage: ${err.message}`);
+        throw err;
+      }
+      LOG.warn(`Storage location read failed: ${err.message}`);
+      throw err;
     }
   }
 
@@ -309,21 +222,18 @@ class GoodsReceiptAdapter {
     if (!material) return [];
 
     try {
-      const filter = `Material eq '${material}'`;
-      const rawBatches = await this._get('/sap/opu/odata/sap/LO_BM_BATCH_SRV/I_Batch', `$filter=${filter}&$format=json`);
+      const filter = `Material eq ${odataString(material)}`;
+      const rawBatches = await this._get('/sap/opu/odata/sap/LO_BM_BATCH_SRV/I_Batch', `$filter=${encodeURIComponent(filter)}&$format=json`);
       const list = Array.isArray(rawBatches) ? rawBatches : (rawBatches ? [rawBatches] : []);
 
-      // Query SLoc stock & bins
+      // Retain requested storageLocation context without dead MMIM_MATERIAL_DATA_SRV calls
       let slocMap = new Map();
-      if (storageLocation && plant) {
-        try {
-          const slocRes = await this._get(
-            '/sap/opu/odata/sap/MMIM_MATERIAL_DATA_SRV/MaterialStorLocHelps',
-            `$filter=Material eq '${material}' and Plant eq '${plant}' and StorageLocation eq '${storageLocation}'&$format=json`
-          );
-          const slocs = Array.isArray(slocRes) ? slocRes : (slocRes ? [slocRes] : []);
-          slocs.forEach(s => slocMap.set(s.StorageLocation, s));
-        } catch (_) {}
+      if (storageLocation) {
+        slocMap.set(storageLocation, {
+          StorageLocation: storageLocation,
+          WarehouseStorageBin: '',
+          CurrentStock: null
+        });
       }
 
       // Deduplicate client-level (Plant: "") and plant-level records
@@ -353,17 +263,19 @@ class GoodsReceiptAdapter {
 
         if (statusInfo.DaysToExpiry < 0) continue; // Exclude expired batches
 
-        const slocObj = slocMap.get(storageLocation);
-        const availStock = slocObj ? (Number(slocObj.CurrentStock) || 0) : null;
+        const slocObj = slocMap.get(storageLocation) || (slocMap.size > 0 ? slocMap.values().next().value : null);
+        const availStock = slocObj ? (Number(slocObj.CurrentStock) || 0) : 0;
         const bin = slocObj?.WarehouseStorageBin || '';
+        const sLoc = storageLocation || slocObj?.StorageLocation || '';
 
         processed.push({
           Material: material,
           Batch: b.Batch,
           Plant: b.Plant || plant || '',
-          StorageLocation: storageLocation || '',
+          StorageLocation: sLoc,
           StorageBin: bin,
           AvailableStock: availStock,
+          IsSelectable: availStock > 0 && statusInfo.StatusState !== 'Error',
           ExpiryDate: expiryFormatted,
           ManufactureDate: mfdFormatted,
           StatusState: statusInfo.StatusState,
@@ -380,9 +292,216 @@ class GoodsReceiptAdapter {
       });
 
       return processed;
-    } catch (_) {
-      return [];
+    } catch (err) {
+      if (this._isOutage(err)) {
+        LOG.error(`Failed to retrieve batches due to S/4HANA outage for material ${material}: ${err.message}`);
+        throw err;
+      }
+      LOG.warn(`Batch read failed for material ${material}: ${err.message}`);
+      throw err;
     }
+  }
+
+  /**
+   * Retrieves authentic Goods Receipt item data (OpenQuantity, OrderedQuantity, UnitOfMeasure, EntryUnit, etc.)
+   * from MMIM_GR4PO_DL_SRV/GR4PO_DL_Items and GR4PO_DL_Headers.
+   * Eliminates hardcoded quantities in strict compliance with AGENTS.md.
+   */
+  /**
+   * Delivery item facts from LIPS/LIKP (read-only RFC_READ_TABLE): the authoritative quantity, unit, storage
+   * location, batch, warehouse number/bin, goods movement status and delivery date of an inbound delivery item.
+   * Returns null when RFC is unavailable or the item does not exist.
+   */
+  async _readDeliveryItemFacts(deliveryDocument, deliveryItem) {
+    if (!this.rfc || typeof this.rfc.readTable !== 'function') return null;
+    const vbeln = /^\d+$/.test(deliveryDocument) ? deliveryDocument.padStart(10, '0') : deliveryDocument;
+    try {
+      const rows = await this.rfc.readTable('LIPS', ['VBELN', 'POSNR', 'LGORT', 'CHARG', 'LFIMG', 'MEINS', 'VRKME', 'LGNUM', 'LGPLA', 'WBSTA'], [
+        `VBELN = '${vbeln}' AND POSNR = '${deliveryItem}'`
+      ]);
+      if (!rows.length) return null;
+      const li = rows[0];
+      const likp = await this.rfc.readTable('LIKP', ['VBELN', 'LFDAT'], [`VBELN = '${vbeln}'`]);
+      const lfdat = (likp[0] && likp[0].LFDAT) || '';
+      return {
+        StorageLocation: li.LGORT || '',
+        Batch: li.CHARG || '',
+        DeliveryQuantity: toNum(li.LFIMG),
+        Unit: li.VRKME || li.MEINS || '',
+        WarehouseNumber: li.LGNUM || '',
+        WarehouseStorageBin: li.LGPLA || '',
+        GoodsMovementStatus: li.WBSTA || '',
+        DeliveryDate: /^\d{8}$/.test(lfdat) && lfdat !== '00000000' ? `${lfdat.slice(0, 4)}-${lfdat.slice(4, 6)}-${lfdat.slice(6, 8)}` : ''
+      };
+    } catch (err) {
+      if (this._isOutage(err)) throw err;
+      LOG.warn(`Delivery item read (LIPS/LIKP) failed for ${vbeln}/${deliveryItem}: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Retrieves authentic Goods Receipt item data (OpenQuantity, OrderedQuantity, UnitOfMeasure, EntryUnit, etc.)
+   * from MMIM_GR4PO_DL_SRV/GR4PO_DL_Items and GR4PO_DL_Headers, completed with the delivery item itself (LIPS/LIKP).
+   * Eliminates hardcoded quantities in strict compliance with AGENTS.md.
+   */
+  async getGoodsReceiptItem(deliveryDocument = '', deliveryItem = '', purchaseOrder = '', purchaseOrderItem = '') {
+    // 1. Inbound Delivery: GR4PO_DL_Items key lookup (SourceOfGR='INBDELIV') + LIPS/LIKP facts.
+    //    Live finding (180000006): the OData item comes back as an empty shell (no material, no unit, 0.000 quantities),
+    //    so the delivery item in LIPS is the source for SLoc, batch, quantity, unit and WM data.
+    if (deliveryDocument) {
+      const delivDoc = String(deliveryDocument).trim();
+      const sItem = deliveryItem ? String(deliveryItem).padStart(6, '0') : '000010';
+      let odata = null;
+      try {
+        const itemKey = `InboundDelivery='${delivDoc}',DeliveryDocumentItem='${sItem}',SourceOfGR='INBDELIV',AccountAssignmentNumber='',ReferenceLineID=''`;
+        const res = await this._get(
+          `/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Items(${itemKey})`,
+          '$format=json'
+        );
+        odata = (Array.isArray(res) ? res[0] : res) || null;
+      } catch (err) {
+        if (this._isOutage(err)) {
+          throw err;
+        }
+        LOG.warn(`Goods receipt item lookup failed for delivery ${delivDoc}: ${err.message}`);
+      }
+      const facts = await this._readDeliveryItemFacts(delivDoc, sItem);
+      const it = odata || {};
+      const openQty = toNum(it.OpenQuantity);
+      const ordQty = toNum(it.OrderedQuantity);
+      const entryQty = toNum(it.QuantityInEntryUnit);
+      const odataUnit = it.UnitOfMeasure || it.EntryUnit || it.OrderedQuantityUnit || '';
+      const hasODataItem = (openQty !== null && openQty > 0) || (ordQty !== null && ordQty > 0) || !!(odataUnit && odataUnit.trim());
+      if (hasODataItem || facts) {
+        const unit = odataUnit || (facts && facts.Unit) || '';
+        // ponytail: a partially received item (status B) is not netted against EKBE; open = delivery quantity until status C.
+        let open = openQty;
+        if (!(openQty !== null && openQty > 0) && facts) {
+          open = facts.GoodsMovementStatus === 'C' ? 0 : facts.DeliveryQuantity;
+        }
+        return {
+          SourceOfGR: 'INBDELIV',
+          InboundDelivery: it.InboundDelivery || delivDoc,
+          DeliveryDocumentItem: it.DeliveryDocumentItem || sItem,
+          OpenQuantity: open,
+          OrderedQuantity: ordQty,
+          QuantityInEntryUnit: entryQty,
+          Unit: unit ? unit.trim().toUpperCase() : '',
+          StorageLocation: it.StorageLocation || (facts && facts.StorageLocation) || '',
+          StorageLocationName: it.StorageLocationName || '',
+          WarehouseStorageBin: it.WarehouseStorageBin || (facts && facts.WarehouseStorageBin) || '',
+          WarehouseNumber: (facts && facts.WarehouseNumber) || '',
+          Batch: it.Batch || (facts && facts.Batch) || '',
+          DeliveryQuantity: facts ? facts.DeliveryQuantity : null,
+          DeliveryDate: (facts && facts.DeliveryDate) || '',
+          GoodsMovementStatus: (facts && facts.GoodsMovementStatus) || '',
+          Material: it.Material || '',
+          MaterialName: it.MaterialName || it.PurchaseOrderItemText || '',
+          Plant: it.Plant || '',
+          PlantName: it.PlantName || ''
+        };
+      }
+    }
+
+    // 2. Try Purchase Order via Header2Items navigation and GR4PO_DL_Items key lookup (SourceOfGR='PURORD')
+    if (purchaseOrder) {
+      const poDoc = String(purchaseOrder).trim();
+      const sPoItem = purchaseOrderItem ? String(purchaseOrderItem).trim() : '';
+
+      // 2a. Query GR4PO_DL_Headers(...)/Header2Items which returns all open PO items
+      try {
+        const headerNav = `/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers(InboundDelivery='${poDoc}',SourceOfGR='PURORD')/Header2Items`;
+        const resNav = await this._get(headerNav, '$format=json');
+        const items = Array.isArray(resNav) ? resNav : (resNav?.results ? resNav.results : (resNav ? [resNav] : []));
+        if (items.length > 0) {
+          let matched = null;
+          if (sPoItem) {
+            matched = items.find(i =>
+              i.DeliveryDocumentItem === sPoItem ||
+              i.DeliveryDocumentItem === sPoItem.padStart(5, '0') ||
+              i.DeliveryDocumentItem === sPoItem.padStart(6, '0')
+            );
+          }
+          if (!matched) {
+            matched = items.find(i => Number(i.OpenQuantity) > 0) || items[0];
+          }
+          if (matched) {
+            const openQty = (matched.OpenQuantity !== undefined && matched.OpenQuantity !== null && matched.OpenQuantity !== '') ? Number(matched.OpenQuantity) : null;
+            const ordQty = (matched.OrderedQuantity !== undefined && matched.OrderedQuantity !== null && matched.OrderedQuantity !== '') ? Number(matched.OrderedQuantity) : null;
+            const entryQty = (matched.QuantityInEntryUnit !== undefined && matched.QuantityInEntryUnit !== null && matched.QuantityInEntryUnit !== '') ? Number(matched.QuantityInEntryUnit) : null;
+            const unit = matched.UnitOfMeasure || matched.EntryUnit || matched.OrderedQuantityUnit || '';
+            return {
+              SourceOfGR: 'PURORD',
+              InboundDelivery: matched.InboundDelivery || poDoc,
+              DeliveryDocumentItem: matched.DeliveryDocumentItem || sPoItem,
+              OpenQuantity: openQty !== null && !isNaN(openQty) ? openQty : null,
+              OrderedQuantity: ordQty !== null && !isNaN(ordQty) ? ordQty : null,
+              QuantityInEntryUnit: entryQty !== null && !isNaN(entryQty) ? entryQty : null,
+              Unit: unit ? unit.trim().toUpperCase() : '',
+              StorageLocation: matched.StorageLocation || '',
+              StorageLocationName: matched.StorageLocationName || '',
+              WarehouseStorageBin: matched.WarehouseStorageBin || '',
+              Batch: matched.Batch || '',
+              Material: matched.Material || '',
+              MaterialName: matched.MaterialName || matched.PurchaseOrderItemText || '',
+              Plant: matched.Plant || '',
+              PlantName: matched.PlantName || ''
+            };
+          }
+        }
+      } catch (err) {
+        if (this._isOutage(err)) {
+          throw err;
+        }
+        LOG.warn(`Header2Items query failed for PO ${poDoc}: ${err.message}`);
+      }
+
+      // 2b. Query GR4PO_DL_Items by key for PO
+      const candItems = sPoItem ? [sPoItem.padStart(5, '0'), sPoItem.padStart(6, '0')] : ['00010', '000010'];
+      for (const cand of candItems) {
+        try {
+          const itemKey = `InboundDelivery='${poDoc}',DeliveryDocumentItem='${cand}',SourceOfGR='PURORD',AccountAssignmentNumber='',ReferenceLineID=''`;
+          const res = await this._get(
+            `/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Items(${itemKey})`,
+            '$format=json'
+          );
+          const it = Array.isArray(res) ? res[0] : res;
+          if (it) {
+            const openQty = (it.OpenQuantity !== undefined && it.OpenQuantity !== null && it.OpenQuantity !== '') ? Number(it.OpenQuantity) : null;
+            const ordQty = (it.OrderedQuantity !== undefined && it.OrderedQuantity !== null && it.OrderedQuantity !== '') ? Number(it.OrderedQuantity) : null;
+            const entryQty = (it.QuantityInEntryUnit !== undefined && it.QuantityInEntryUnit !== null && it.QuantityInEntryUnit !== '') ? Number(it.QuantityInEntryUnit) : null;
+            const unit = it.UnitOfMeasure || it.EntryUnit || it.OrderedQuantityUnit || '';
+            if ((openQty !== null && openQty > 0) || (ordQty !== null && ordQty > 0) || (unit && unit.trim())) {
+              return {
+                SourceOfGR: 'PURORD',
+                InboundDelivery: it.InboundDelivery || poDoc,
+                DeliveryDocumentItem: it.DeliveryDocumentItem || cand,
+                OpenQuantity: openQty !== null && !isNaN(openQty) ? openQty : null,
+                OrderedQuantity: ordQty !== null && !isNaN(ordQty) ? ordQty : null,
+                QuantityInEntryUnit: entryQty !== null && !isNaN(entryQty) ? entryQty : null,
+                Unit: unit ? unit.trim().toUpperCase() : '',
+                StorageLocation: it.StorageLocation || '',
+                StorageLocationName: it.StorageLocationName || '',
+                WarehouseStorageBin: it.WarehouseStorageBin || '',
+                Batch: it.Batch || '',
+                Material: it.Material || '',
+                MaterialName: it.MaterialName || it.PurchaseOrderItemText || '',
+                Plant: it.Plant || '',
+                PlantName: it.PlantName || ''
+              };
+            }
+          }
+        } catch (err) {
+          if (this._isOutage(err)) {
+            throw err;
+          }
+          LOG.warn(`GR4PO_DL_Items query failed for PO ${poDoc} item ${cand}: ${err.message}`);
+        }
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -410,9 +529,9 @@ class GoodsReceiptAdapter {
     let scannedType = '';
     let scannedTypeLabel = '';
     let resolvedDelivery = '';
-    let resolvedDeliveryItem = '000010';
+    let resolvedDeliveryItem = '';
     let resolvedPO = '';
-    let resolvedPOItem = '00010';
+    let resolvedPOItem = '';
     let resolvedMaterial = '';
     let resolvedMaterialName = '';
     let resolvedPlant = '';
@@ -424,12 +543,67 @@ class GoodsReceiptAdapter {
     let targetExpiryDate = '';
     let targetBatchStatusState = 'None';
     let targetBatchStatusText = 'NO BATCH';
+    let resolvedUnit = '';
+    let resolvedPackagingMaterial = '';
+    let resolvedStorageUnitType = '';
+    let resolvedWarehouseNumber = '';
+    let defaultSLoc = '';
+    let defaultSLocName = '';
+    let defaultBin = '';
+    let proposedQuantity = null;
+
+    // --- TIER 0: Storage Unit / Handling Unit check (VEKP / VEPO) via RFC ---
+    if (this.rfc && typeof this.rfc.readTable === 'function' && (!this.rfc.isAvailable || this.rfc.isAvailable())) {
+      try {
+        const sPaddedSU = (/^\d+$/.test(sCleanScan) && sCleanScan.length < 20) ? sCleanScan.padStart(20, '0') : sCleanScan;
+        const vekpRows = await this.rfc.readTable('VEKP', ['VENUM', 'EXIDV', 'VHILM', 'STATUS', 'VPOBJ', 'VPOBJKEY'], [
+          `EXIDV = '${sPaddedSU}' OR EXIDV = '${sCleanScan}'`
+        ]);
+        if (vekpRows.length > 0) {
+          const hu = vekpRows[0];
+          scannedType = 'STORAGE_UNIT';
+          scannedTypeLabel = 'Storage Unit';
+          resolvedPackagingMaterial = hu.VHILM ? hu.VHILM.replace(/^0+/, '') : '';
+
+          const vepoRows = await this.rfc.readTable('VEPO', ['VENUM', 'VEPOS', 'VBELN', 'POSNR', 'MATNR', 'CHARG', 'VEMNG', 'VEMEH'], [
+            `VENUM = '${hu.VENUM}'`
+          ]);
+          if (vepoRows.length > 0) {
+            const vi = vepoRows[0];
+            resolvedDelivery = vi.VBELN || (hu.VPOBJKEY || '');
+            resolvedDeliveryItem = vi.POSNR || '';
+            resolvedMaterial = vi.MATNR ? vi.MATNR.replace(/^0+/, '') : '';
+            targetBatch = vi.CHARG || '';
+            resolvedUnit = vi.VEMEH || '';
+            proposedQuantity = Number(vi.VEMNG) || null;
+
+            if (resolvedDelivery && resolvedDeliveryItem) {
+              const lipsRows = await this.rfc.readTable('LIPS', ['VBELN', 'POSNR', 'WERKS', 'LGORT', 'VGBEL', 'VGPOS', 'ARKTX'], [
+                `VBELN = '${resolvedDelivery}' AND POSNR = '${resolvedDeliveryItem}'`
+              ]);
+              if (lipsRows.length > 0) {
+                const li = lipsRows[0];
+                resolvedPlant = li.WERKS || '';
+                defaultSLoc = li.LGORT || '';
+                resolvedPO = li.VGBEL || '';
+                resolvedPOItem = li.VGPOS || '';
+                resolvedMaterialName = li.ARKTX || '';
+              }
+            }
+          }
+        }
+      } catch (huErr) {
+        if (this._isOutage(huErr)) throw huErr;
+        LOG.warn(`Tier 0 Handling Unit lookup failed for ${sCleanScan}: ${huErr.message}`);
+      }
+    }
 
     // --- TIER 1: Inbound Delivery check (HMmimGr4inbdelSet) ---
     try {
+      const filter = `DeliveryDocument eq ${odataString(sCleanScan)}`;
       const delRes = await this._get(
         '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet',
-        `$filter=DeliveryDocument eq '${sCleanScan}'&$format=json`
+        `$filter=${encodeURIComponent(filter)}&$format=json`
       );
       const delList = Array.isArray(delRes) ? delRes : (delRes ? [delRes] : []);
       if (delList.length > 0) {
@@ -437,25 +611,32 @@ class GoodsReceiptAdapter {
         scannedType = 'INBOUND_DELIVERY';
         scannedTypeLabel = 'Inbound Delivery';
         resolvedDelivery = d.DeliveryDocument;
-        resolvedDeliveryItem = d.DeliveryDocumentItem || '000010';
+        resolvedDeliveryItem = d.DeliveryDocumentItem || '';
         resolvedPO = d.PurchaseOrder || '';
-        resolvedPOItem = d.PurchaseOrderItem || '00010';
+        resolvedPOItem = d.PurchaseOrderItem || '';
         resolvedMaterial = d.Material;
-        resolvedMaterialName = d.DeliveryDocumentItemText || ('Material ' + d.Material);
+        resolvedMaterialName = d.DeliveryDocumentItemText || '';
         resolvedPlant = d.Plant;
-        resolvedPlantName = d.PlantName || ('Plant ' + d.Plant);
+        resolvedPlantName = d.PlantName || '';
         resolvedSupplier = d.Supplier || '';
         resolvedSupplierName = d.SupplierName || '';
         resolvedSupplierCity = d.SupplierCityName || '';
+        if (d.DeliveryQuantityUnit || d.UnitOfMeasure || d.BaseUnit) {
+          resolvedUnit = d.DeliveryQuantityUnit || d.UnitOfMeasure || d.BaseUnit;
+        }
       }
-    } catch (_) {}
+    } catch (err) {
+      if (this._isOutage(err)) throw err;
+      LOG.warn(`Tier 1 Inbound Delivery lookup failed for ${sCleanScan}: ${err.message}`);
+    }
 
     // --- TIER 2: Purchase Order check (PoHelpSet) ---
     if (!scannedType) {
       try {
+        const filter = `PurchaseOrder eq ${odataString(sCleanScan)}`;
         const poRes = await this._get(
           '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/PoHelpSet',
-          `$filter=PurchaseOrder eq '${sCleanScan}'&$top=5&$format=json`
+          `$filter=${encodeURIComponent(filter)}&$top=5&$format=json`
         );
         const poList = Array.isArray(poRes) ? poRes : (poRes ? [poRes] : []);
         if (poList.length > 0) {
@@ -463,37 +644,48 @@ class GoodsReceiptAdapter {
           scannedType = 'PURCHASE_ORDER';
           scannedTypeLabel = 'Purchase Order';
           resolvedPO = po.PurchaseOrder;
-          resolvedPOItem = po.PurchaseOrderItem || '00010';
+          resolvedPOItem = po.PurchaseOrderItem || '';
           resolvedMaterial = po.Material;
-          resolvedMaterialName = po.PurchaseOrderItemText || ('Material ' + po.Material);
+          resolvedMaterialName = po.PurchaseOrderItemText || '';
           resolvedPlant = po.Plant;
-          resolvedPlantName = po.PlantName || ('Plant ' + po.Plant);
+          resolvedPlantName = po.PlantName || '';
           resolvedSupplier = po.Supplier || '';
           resolvedSupplierName = po.SupplierName || '';
           resolvedSupplierCity = po.SupplierCityName || '';
+          if (po.OrderQuantityUnit || po.PurchaseOrderQuantityUnit || po.BaseUnit || po.UnitOfMeasure) {
+            resolvedUnit = po.OrderQuantityUnit || po.PurchaseOrderQuantityUnit || po.BaseUnit || po.UnitOfMeasure;
+          }
 
           // Look for an open Inbound Delivery for this PO
           try {
+            const linkedFilter = `PurchaseOrder eq ${odataString(sCleanScan)}`;
             const linkedDelRes = await this._get(
               '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet',
-              `$filter=PurchaseOrder eq '${sCleanScan}'&$top=1&$format=json`
+              `$filter=${encodeURIComponent(linkedFilter)}&$top=1&$format=json`
             );
             const linkedDelList = Array.isArray(linkedDelRes) ? linkedDelRes : (linkedDelRes ? [linkedDelRes] : []);
             if (linkedDelList.length > 0) {
               resolvedDelivery = linkedDelList[0].DeliveryDocument;
-              resolvedDeliveryItem = linkedDelList[0].DeliveryDocumentItem || '000010';
+              resolvedDeliveryItem = linkedDelList[0].DeliveryDocumentItem || '';
             }
-          } catch (_) {}
+          } catch (linkedErr) {
+            if (this._isOutage(linkedErr)) throw linkedErr;
+            LOG.warn(`Linked delivery check failed for PO ${sCleanScan}: ${linkedErr.message}`);
+          }
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) throw err;
+        LOG.warn(`Tier 2 PO check failed for ${sCleanScan}: ${err.message}`);
+      }
     }
 
     // --- TIER 3: Batch check (LO_BM_BATCH_SRV/I_Batch) ---
     if (!scannedType) {
       try {
+        const filter = `Batch eq ${odataString(sCleanScan)}`;
         const batchRes = await this._get(
           '/sap/opu/odata/sap/LO_BM_BATCH_SRV/I_Batch',
-          `$filter=Batch eq '${sCleanScan}'&$top=5&$format=json`
+          `$filter=${encodeURIComponent(filter)}&$top=5&$format=json`
         );
         const batchList = Array.isArray(batchRes) ? batchRes : (batchRes ? [batchRes] : []);
         if (batchList.length > 0) {
@@ -510,53 +702,62 @@ class GoodsReceiptAdapter {
 
           // Search open deliveries for this batch's material
           try {
+            const matFilter = `Material eq ${odataString(resolvedMaterial)}`;
             const matDelRes = await this._get(
               '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet',
-              `$filter=Material eq '${resolvedMaterial}'&$top=1&$format=json`
+              `$filter=${encodeURIComponent(matFilter)}&$top=1&$format=json`
             );
             const matDelList = Array.isArray(matDelRes) ? matDelRes : (matDelRes ? [matDelRes] : []);
             if (matDelList.length > 0) {
               const md = matDelList[0];
               resolvedDelivery = md.DeliveryDocument;
-              resolvedDeliveryItem = md.DeliveryDocumentItem || '000010';
+              resolvedDeliveryItem = md.DeliveryDocumentItem || '';
               resolvedPO = md.PurchaseOrder || '';
-              resolvedPOItem = md.PurchaseOrderItem || '00010';
-              resolvedMaterialName = md.DeliveryDocumentItemText || ('Material ' + md.Material);
+              resolvedPOItem = md.PurchaseOrderItem || '';
+              resolvedMaterialName = md.DeliveryDocumentItemText || '';
               resolvedPlant = md.Plant;
-              resolvedPlantName = md.PlantName || ('Plant ' + md.Plant);
+              resolvedPlantName = md.PlantName || '';
               resolvedSupplier = md.Supplier || '';
               resolvedSupplierName = md.SupplierName || '';
               resolvedSupplierCity = md.SupplierCityName || '';
             } else {
               // Search POs for this batch's material
+              const poFilter = `Material eq ${odataString(resolvedMaterial)}`;
               const poRes = await this._get(
                 '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/PoHelpSet',
-                `$filter=Material eq '${resolvedMaterial}'&$top=1&$format=json`
+                `$filter=${encodeURIComponent(poFilter)}&$top=1&$format=json`
               );
               const poList = Array.isArray(poRes) ? poRes : (poRes ? [poRes] : []);
               if (poList.length > 0) {
                 const po = poList[0];
                 resolvedPO = po.PurchaseOrder;
-                resolvedPOItem = po.PurchaseOrderItem || '00010';
-                resolvedMaterialName = po.PurchaseOrderItemText || ('Material ' + po.Material);
+                resolvedPOItem = po.PurchaseOrderItem || '';
+                resolvedMaterialName = po.PurchaseOrderItemText || '';
                 resolvedPlant = po.Plant;
-                resolvedPlantName = po.PlantName || ('Plant ' + po.Plant);
+                resolvedPlantName = po.PlantName || '';
                 resolvedSupplier = po.Supplier || '';
                 resolvedSupplierName = po.SupplierName || '';
                 resolvedSupplierCity = po.SupplierCityName || '';
               }
             }
-          } catch (_) {}
+          } catch (innerErr) {
+            if (this._isOutage(innerErr)) throw innerErr;
+            LOG.warn(`Batch material link lookup failed for ${resolvedMaterial}: ${innerErr.message}`);
+          }
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) throw err;
+        LOG.warn(`Tier 3 Batch check failed for ${sCleanScan}: ${err.message}`);
+      }
     }
 
     // --- TIER 4: Material check (HMmimGr4inbdelSet / PoHelpSet / MaterialHeaders) ---
     if (!scannedType) {
       try {
+        const filter = `Material eq ${odataString(sCleanScan)}`;
         const matDelRes = await this._get(
           '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet',
-          `$filter=Material eq '${sCleanScan}'&$top=1&$format=json`
+          `$filter=${encodeURIComponent(filter)}&$top=1&$format=json`
         );
         const matDelList = Array.isArray(matDelRes) ? matDelRes : (matDelRes ? [matDelRes] : []);
         if (matDelList.length > 0) {
@@ -564,21 +765,22 @@ class GoodsReceiptAdapter {
           scannedType = 'MATERIAL';
           scannedTypeLabel = 'Material / Product';
           resolvedMaterial = md.Material;
-          resolvedMaterialName = md.DeliveryDocumentItemText || ('Material ' + md.Material);
+          resolvedMaterialName = md.DeliveryDocumentItemText || '';
           resolvedDelivery = md.DeliveryDocument;
-          resolvedDeliveryItem = md.DeliveryDocumentItem || '000010';
+          resolvedDeliveryItem = md.DeliveryDocumentItem || '';
           resolvedPO = md.PurchaseOrder || '';
-          resolvedPOItem = md.PurchaseOrderItem || '00010';
+          resolvedPOItem = md.PurchaseOrderItem || '';
           resolvedPlant = md.Plant;
-          resolvedPlantName = md.PlantName || ('Plant ' + md.Plant);
+          resolvedPlantName = md.PlantName || '';
           resolvedSupplier = md.Supplier || '';
           resolvedSupplierName = md.SupplierName || '';
           resolvedSupplierCity = md.SupplierCityName || '';
         } else {
           // Check PoHelpSet by Material
+          const filter = `Material eq ${odataString(sCleanScan)}`;
           const poRes = await this._get(
             '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/PoHelpSet',
-            `$filter=Material eq '${sCleanScan}'&$top=1&$format=json`
+            `$filter=${encodeURIComponent(filter)}&$top=1&$format=json`
           );
           const poList = Array.isArray(poRes) ? poRes : (poRes ? [poRes] : []);
           if (poList.length > 0) {
@@ -586,25 +788,29 @@ class GoodsReceiptAdapter {
             scannedType = 'MATERIAL';
             scannedTypeLabel = 'Material / Product';
             resolvedMaterial = po.Material;
-            resolvedMaterialName = po.PurchaseOrderItemText || ('Material ' + po.Material);
+            resolvedMaterialName = po.PurchaseOrderItemText || '';
             resolvedPO = po.PurchaseOrder;
-            resolvedPOItem = po.PurchaseOrderItem || '00010';
+            resolvedPOItem = po.PurchaseOrderItem || '';
             resolvedPlant = po.Plant;
-            resolvedPlantName = po.PlantName || ('Plant ' + po.Plant);
+            resolvedPlantName = po.PlantName || '';
             resolvedSupplier = po.Supplier || '';
             resolvedSupplierName = po.SupplierName || '';
             resolvedSupplierCity = po.SupplierCityName || '';
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) throw err;
+        LOG.warn(`Tier 4 Material check failed for ${sCleanScan}: ${err.message}`);
+      }
     }
 
     // --- TIER 5: Production Order check (MMIMProductionOrderVH) ---
     if (!scannedType) {
       try {
+        const filter = `ManufacturingOrder eq ${odataString(sCleanScan)}`;
         const prodRes = await this._get(
           '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/MMIMProductionOrderVH',
-          `$filter=ManufacturingOrder eq '${sCleanScan}'&$top=1&$format=json`
+          `$filter=${encodeURIComponent(filter)}&$top=1&$format=json`
         );
         const prodList = Array.isArray(prodRes) ? prodRes : (prodRes ? [prodRes] : []);
         if (prodList.length > 0) {
@@ -614,7 +820,10 @@ class GoodsReceiptAdapter {
           resolvedMaterial = pr.Material || '';
           resolvedPlant = pr.ProductionPlant || '';
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) throw err;
+        LOG.warn(`Tier 5 Production Order check failed for ${sCleanScan}: ${err.message}`);
+      }
     }
 
     // --- TIER 6: Storage Unit / General Delivery Fallback (query top 50 deliveries) ---
@@ -631,49 +840,128 @@ class GoodsReceiptAdapter {
           scannedType = 'STORAGE_UNIT';
           scannedTypeLabel = 'Storage Unit';
           resolvedDelivery = matched.DeliveryDocument;
-          resolvedDeliveryItem = matched.DeliveryDocumentItem || '000010';
+          resolvedDeliveryItem = matched.DeliveryDocumentItem || '';
           resolvedPO = matched.PurchaseOrder || '';
-          resolvedPOItem = matched.PurchaseOrderItem || '00010';
+          resolvedPOItem = matched.PurchaseOrderItem || '';
           resolvedMaterial = matched.Material;
-          resolvedMaterialName = matched.DeliveryDocumentItemText || ('Material ' + matched.Material);
+          resolvedMaterialName = matched.DeliveryDocumentItemText || '';
           resolvedPlant = matched.Plant;
-          resolvedPlantName = matched.PlantName || ('Plant ' + matched.Plant);
+          resolvedPlantName = matched.PlantName || '';
           resolvedSupplier = matched.Supplier || '';
           resolvedSupplierName = matched.SupplierName || '';
           resolvedSupplierCity = matched.SupplierCityName || '';
         }
-      } catch (_) {}
+      } catch (err) {
+        if (this._isOutage(err)) throw err;
+        LOG.warn(`Tier 6 Fallback check failed for ${sCleanScan}: ${err.message}`);
+      }
     }
 
     // --- TIER 7: Genuine Non-Existent Object / Validation Error ---
     if (!scannedType) {
       const err = new Error(
-        `Validation Error: Scanned barcode '${sCleanScan}' was evaluated across active Inbound Deliveries, Purchase Orders, Materials, Batches, and Storage Units in SAP S/4HANA (Client 220) and does not exist in any active record. Please scan a valid SAP barcode or use Value Help to select an open inbound record.`
+        `Validation Error: Scanned barcode '${sCleanScan}' was evaluated across active Inbound Deliveries, Purchase Orders, Materials, Batches, and Storage Units in SAP S/4HANA (Client ${s4Config.getClient()}) and does not exist in any active record. Please scan a valid SAP barcode or use Value Help to select an open inbound record.`
       );
       err.statusCode = 404;
       throw err;
     }
 
-    // Retrieve authentic Storage Locations & Bins
-    const storageLocations = await this.getMaterialStorageLocations(resolvedMaterial, resolvedPlant);
-    const defaultSLoc = storageLocations.length > 0 ? storageLocations[0].StorageLocation : 'CS01';
-    const defaultSLocName = storageLocations.length > 0 ? storageLocations[0].StorageLocationName : '';
-    const defaultBin = storageLocations.length > 0 ? storageLocations[0].WarehouseStorageBin : '';
+    // Lookups that fail (non-outage) are reported to the caller, never silently emptied.
+    const lookupWarnings = [];
 
-    // Retrieve authentic Batches & SLED
-    const batches = await this.getMaterialBatches(resolvedMaterial, resolvedPlant, defaultSLoc);
+    // Retrieve authentic Storage Locations & Bins (pick list only; nothing is pre-selected from it)
+    let storageLocations = [];
+    try {
+      storageLocations = await this.getMaterialStorageLocations(resolvedMaterial, resolvedPlant);
+    } catch (err) {
+      if (this._isOutage(err)) throw err;
+      LOG.warn(`Material storage locations lookup failed for ${resolvedMaterial}: ${err.message}`);
+      lookupWarnings.push(`Storage locations could not be read from SAP: ${err.message}`);
+    }
+
+    // Retrieve authentic Batches & SLED (pick list only; the batch comes from the scan or the document, never batches[0])
+    let batches = [];
+    try {
+      batches = await this.getMaterialBatches(resolvedMaterial, resolvedPlant, defaultSLoc);
+    } catch (err) {
+      if (this._isOutage(err)) throw err;
+      LOG.warn(`Material batches lookup failed for ${resolvedMaterial}: ${err.message}`);
+      lookupWarnings.push(`Batches could not be read from SAP: ${err.message}`);
+    }
     let selectedBatch = targetBatch;
     let expiryDate = targetExpiryDate;
     let batchStatusState = targetBatchStatusState;
     let batchStatusText = targetBatchStatusText;
 
-    if (!selectedBatch && batches.length > 0) {
-      const topBatch = batches[0];
-      selectedBatch = topBatch.Batch;
-      expiryDate = topBatch.ExpiryDate;
-      batchStatusState = topBatch.StatusState;
-      batchStatusText = topBatch.StatusText;
+    // Retrieve authentic Goods Receipt item details (OpenQuantity, OrderedQuantity, Unit) from MMIM_GR4PO_DL_SRV/GR4PO_DL_Items
+    let grItem = null;
+    try {
+      grItem = await this.getGoodsReceiptItem(resolvedDelivery, resolvedDeliveryItem, resolvedPO, resolvedPOItem);
+    } catch (err) {
+      if (this._isOutage(err)) throw err;
+      LOG.warn(`Goods receipt item lookup failed: ${err.message}`);
+      lookupWarnings.push(`Open quantity could not be read from SAP: ${err.message}`);
     }
+    let authenticOpenQuantity = null;
+    let authenticOrderedQuantity = null;
+    let authenticQuantityInEntryUnit = null;
+    let deliveryQuantity = null;
+    let deliveryDate = '';
+    let goodsMovementStatus = '';
+
+    if (grItem) {
+      authenticOpenQuantity = (grItem.OpenQuantity !== undefined && grItem.OpenQuantity !== null && !isNaN(grItem.OpenQuantity)) ? grItem.OpenQuantity : null;
+      authenticOrderedQuantity = (grItem.OrderedQuantity !== undefined && grItem.OrderedQuantity !== null && !isNaN(grItem.OrderedQuantity)) ? grItem.OrderedQuantity : null;
+      authenticQuantityInEntryUnit = (grItem.QuantityInEntryUnit !== undefined && grItem.QuantityInEntryUnit !== null && !isNaN(grItem.QuantityInEntryUnit)) ? grItem.QuantityInEntryUnit : null;
+      // Proposed quantity is SAP's open quantity and nothing else: an item with 0 open must not propose the ordered quantity again.
+      if (proposedQuantity === null) {
+        proposedQuantity = authenticOpenQuantity;
+      }
+      if (grItem.Unit && !resolvedUnit) resolvedUnit = grItem.Unit;
+      if (grItem.StorageLocation) {
+        defaultSLoc = grItem.StorageLocation;
+        if (grItem.StorageLocationName) defaultSLocName = grItem.StorageLocationName;
+      }
+      if (grItem.WarehouseStorageBin && !defaultBin) defaultBin = grItem.WarehouseStorageBin;
+      if (grItem.WarehouseNumber && !resolvedWarehouseNumber) resolvedWarehouseNumber = grItem.WarehouseNumber;
+      deliveryQuantity = (grItem.DeliveryQuantity !== undefined && grItem.DeliveryQuantity !== null && !isNaN(grItem.DeliveryQuantity)) ? grItem.DeliveryQuantity : null;
+      deliveryDate = grItem.DeliveryDate || '';
+      goodsMovementStatus = grItem.GoodsMovementStatus || '';
+      if (grItem.Batch && !selectedBatch) {
+        selectedBatch = grItem.Batch;
+        const docBatch = batches.find(b => b.Batch === grItem.Batch);
+        if (docBatch) {
+          expiryDate = docBatch.ExpiryDate;
+          batchStatusState = docBatch.StatusState;
+          batchStatusText = docBatch.StatusText;
+        }
+      }
+      if (grItem.DeliveryDocumentItem && !resolvedPOItem && grItem.SourceOfGR === 'PURORD') {
+        resolvedPOItem = grItem.DeliveryDocumentItem;
+      }
+    }
+
+    // Ensure defaultSLoc has a matching name and is guaranteed in the availableStorageLocations picker list
+    if (defaultSLoc) {
+      const match = storageLocations.find(s => s.StorageLocation === defaultSLoc);
+      if (match && !defaultSLocName) {
+        defaultSLocName = match.StorageLocationName;
+      }
+      if (!match) {
+        storageLocations.unshift({
+          Plant: resolvedPlant || '',
+          PlantName: resolvedPlantName || '',
+          StorageLocation: defaultSLoc,
+          StorageLocationName: defaultSLocName || '',
+          WarehouseStorageBin: defaultBin || '',
+          CurrentStock: null,
+          BaseUnit: ''
+        });
+      }
+    }
+
+    // Unit only from the scanned object or the document item; a first storage location's or batch's unit is not this item's unit.
+    const effectiveUnit = resolvedUnit || (grItem && grItem.Unit) || '';
 
     return {
       StorageUnit: resolvedDelivery || sCleanScan,
@@ -685,9 +973,9 @@ class GoodsReceiptAdapter {
       PurchaseOrder: resolvedPO,
       PurchaseOrderItem: resolvedPOItem,
       Material: resolvedMaterial,
-      MaterialName: resolvedMaterialName || ('Material ' + resolvedMaterial),
+      MaterialName: resolvedMaterialName || '',
       Plant: resolvedPlant,
-      PlantName: resolvedPlantName || ('Plant ' + resolvedPlant),
+      PlantName: resolvedPlantName || '',
       StorageLocation: defaultSLoc,
       StorageLocationName: defaultSLocName,
       WarehouseStorageBin: defaultBin,
@@ -695,24 +983,35 @@ class GoodsReceiptAdapter {
       ExpiryDate: expiryDate,
       BatchStatusState: batchStatusState,
       BatchStatusText: batchStatusText,
-      Quantity: 10,
-      Unit: 'KG',
+      Quantity: proposedQuantity,
+      OpenQuantity: authenticOpenQuantity,
+      OrderedQuantity: authenticOrderedQuantity,
+      QuantityInEntryUnit: authenticQuantityInEntryUnit,
+      Unit: effectiveUnit,
       Supplier: resolvedSupplier,
       SupplierName: resolvedSupplierName,
       SupplierCityName: resolvedSupplierCity,
+      PackagingMaterial: resolvedPackagingMaterial,
+      StorageUnitType: resolvedStorageUnitType,
+      WarehouseNumber: resolvedWarehouseNumber,
+      DeliveryQuantity: deliveryQuantity,
+      DeliveryDate: deliveryDate,
+      GoodsMovementStatus: goodsMovementStatus,
       AvailableStorageLocations: storageLocations,
-      AvailableBatches: batches
+      AvailableBatches: batches,
+      LookupWarnings: lookupWarnings
     };
   }
 
   /**
-   * Executes Goods Receipt posting in SAP S/4HANA
+   * Executes Goods Receipt posting in SAP S/4HANA via MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers
    * In strict accordance with AGENTS.md: NO mock persistence or synthetic document generation.
    */
   async postGoodsReceipt(payload = {}) {
     const {
       StorageUnit,
       DeliveryDocument,
+      PurchaseOrder,
       Material,
       Plant,
       StorageLocation,
@@ -721,8 +1020,8 @@ class GoodsReceiptAdapter {
       ExpiryDate
     } = payload;
 
-    if (!StorageUnit && !DeliveryDocument) {
-      throw new Error('Storage Unit / Inbound Delivery is required to post Goods Receipt.');
+    if (!StorageUnit && !DeliveryDocument && !PurchaseOrder) {
+      throw new Error('Inbound Delivery or Purchase Order is required to post Goods Receipt.');
     }
     if (!Material) {
       throw new Error('Material is required to post Goods Receipt.');
@@ -748,26 +1047,446 @@ class GoodsReceiptAdapter {
       }
     }
 
-    // Attempt live SAP Goods Receipt posting via API_WHSE_INBOUND_DELIVERY/PostGoodsReceipt
-    const sDoc = DeliveryDocument || StorageUnit;
+    // Retargeted to MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers (Inventory Management / Movement 101)
+    const sDoc = DeliveryDocument || PurchaseOrder || StorageUnit;
+    const now = new Date();
+    const todayFormatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T00:00:00`;
+    const tempKey = `${sDoc}GR${now.toISOString().replace(/[-:T]/g, '').slice(0, 14)}`;
+
+    // Determine SourceOfGR: 'INBDELIV' (Inbound Delivery) or 'PURORD' (Purchase Order)
+    let sourceOfGR = payload.SourceOfGR;
+    if (!sourceOfGR) {
+      if (payload.PurchaseOrder && !payload.DeliveryDocument && String(sDoc) === String(payload.PurchaseOrder)) {
+        sourceOfGR = 'PURORD';
+      } else {
+        sourceOfGR = 'INBDELIV';
+      }
+    }
+
+    const rawItemNo = payload.DeliveryDocumentItem || payload.PurchaseOrderItem;
+    if (!rawItemNo && (!Array.isArray(payload.Items) || payload.Items.length === 0)) {
+      throw new Error('Delivery Document Item (or Purchase Order Item) is required to post Goods Receipt.');
+    }
+    const sItemNo = rawItemNo ? String(rawItemNo).padStart(6, '0') : '';
+
+    let items = [];
+    if (Array.isArray(payload.Items) && payload.Items.length > 0) {
+      items = payload.Items.map((it, idx) => {
+        const itemUnit = it.Unit || it.EntryUnit || it.UnitOfMeasure || payload.Unit || payload.EntryUnit || payload.UnitOfMeasure;
+        if (!itemUnit || !String(itemUnit).trim()) {
+          throw new Error(`Unit of Measure (EntryUnit) is required for Goods Receipt item ${it.DeliveryDocumentItem || idx + 1}`);
+        }
+        const itItemNo = it.DeliveryDocumentItem || it.PurchaseOrderItem || rawItemNo;
+        if (!itItemNo || !String(itItemNo).trim()) {
+          throw new Error(`Delivery Document Item is required for Goods Receipt item ${idx + 1}`);
+        }
+        const cleanUnit = String(itemUnit).trim().toUpperCase();
+        return {
+          InboundDelivery: sDoc,
+          DeliveryDocumentItem: String(itItemNo).padStart(6, '0'),
+          SourceOfGR: sourceOfGR,
+          Material: it.Material || Material,
+          Plant: it.Plant || Plant,
+          StorageLocation: it.StorageLocation || StorageLocation,
+          Batch: it.Batch || Batch || '',
+          QuantityInEntryUnit: String(it.Quantity || nQty),
+          EntryUnit: cleanUnit,
+          OpenQuantity: String(it.Quantity || nQty),
+          UnitOfMeasure: cleanUnit,
+          GoodsMovementType: it.GoodsMovementType || payload.GoodsMovementType || GR_MOVEMENT_TYPE,
+          GoodsMovementReasonCode: it.GoodsMovementReasonCode || payload.GoodsMovementReasonCode || '',
+          DocumentItemText: it.DocumentItemText || ''
+        };
+      });
+    } else {
+      const itemUnit = payload.Unit || payload.EntryUnit || payload.UnitOfMeasure;
+      if (!itemUnit || !String(itemUnit).trim()) {
+        throw new Error('Unit of Measure (EntryUnit) is required for Goods Receipt');
+      }
+      const cleanUnit = String(itemUnit).trim().toUpperCase();
+      items = [
+        {
+          InboundDelivery: sDoc,
+          DeliveryDocumentItem: sItemNo,
+          SourceOfGR: sourceOfGR,
+          Material: Material,
+          Plant: Plant,
+          StorageLocation: StorageLocation,
+          Batch: Batch || '',
+          QuantityInEntryUnit: String(nQty),
+          EntryUnit: cleanUnit,
+          OpenQuantity: String(nQty),
+          UnitOfMeasure: cleanUnit,
+          GoodsMovementType: payload.GoodsMovementType || GR_MOVEMENT_TYPE,
+          GoodsMovementReasonCode: payload.GoodsMovementReasonCode || '',
+          DocumentItemText: payload.DocumentItemText || ''
+        }
+      ];
+    }
+
+    const postPayload = {
+      InboundDelivery: sDoc,
+      SourceOfGR: sourceOfGR,
+      DocumentDate: todayFormatted,
+      PostingDate: todayFormatted,
+      DeliveryDocumentByVendor: payload.DeliveryDocumentByVendor || '',
+      BillOfLading: payload.BillOfLading || '',
+      MaterialDocumentHeaderText: payload.MaterialDocumentHeaderText || `GR Delivery ${sDoc}`,
+      Temp_Key: tempKey,
+      VersionForPrintingSlip: payload.VersionForPrintingSlip || '0',
+      Header2Items: items
+    };
+
     try {
-      const path = `/sap/opu/odata/sap/API_WHSE_INBOUND_DELIVERY/PostGoodsReceipt?InboundDelivery='${sDoc}'`;
-      const result = await this._post(path, {}, { 'If-Match': '*' });
+      const path = '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers';
+      const result = await this._post(path, postPayload);
+
+      // Check sap-message response header for business errors or posted document text
+      const rawSapMsg = result?._headers?.['sap-message'];
+      let sapMsgObj = null;
+      if (rawSapMsg) {
+        try {
+          sapMsgObj = JSON.parse(rawSapMsg);
+        } catch (_) {}
+      }
+
+      if (sapMsgObj && sapMsgObj.severity === 'error') {
+        throw new Error(sapMsgObj.message || 'SAP S/4HANA rejected Goods Receipt posting');
+      }
+
+      let matDoc = result?.MaterialDocument;
+      if (!matDoc && result?.Header2Refs) {
+        const refs = Array.isArray(result.Header2Refs?.results)
+          ? result.Header2Refs.results
+          : (Array.isArray(result.Header2Refs) ? result.Header2Refs : []);
+        const docRef = refs.find(r => r.DocNo && /^\d+$/.test(r.DocNo));
+        if (docRef) {
+          matDoc = docRef.DocNo;
+        }
+      }
+      if (!matDoc && sapMsgObj?.message) {
+        const match = sapMsgObj.message.match(/Material document\s+(\d+)/i);
+        if (match) {
+          matDoc = match[1];
+        }
+      }
+
+      if (!matDoc) {
+        const errDetail = sapMsgObj?.message || 'SAP did not generate or return a material document number.';
+        throw new Error(errDetail);
+      }
+
       return {
         Success: true,
-        Message: `Goods Receipt posted successfully in SAP for Delivery ${sDoc}`,
+        Message: `Goods Receipt posted successfully in SAP for Delivery ${sDoc} (Material Document ${matDoc})`,
         DeliveryDocument: sDoc,
-        MaterialDocument: result.MaterialDocument || sDoc
+        MaterialDocument: matDoc
       };
     } catch (err) {
       // Per AGENTS.md: Stop implementation and report exactly what SAP capability is missing / failing.
       // Mock persistence and dummy document generation are strictly prohibited.
       const errorMsg = err.message || JSON.stringify(err);
       throw new Error(
-        `SAP S/4HANA Backend Posting Capability Error: Posting Goods Receipt for Inbound Delivery '${sDoc}' failed in SAP Gateway (Client 220): ${errorMsg}. In accordance with AGENTS.md, mock persistence and synthetic document generation are strictly prohibited.`
+        `SAP S/4HANA Backend Posting Capability Error: Posting Goods Receipt for Inbound Delivery '${sDoc}' via MMIM_GR4PO_DL_SRV failed in SAP Gateway (Client ${s4Config.getClient()}): ${errorMsg}. In accordance with AGENTS.md, mock persistence and synthetic document generation are strictly prohibited.`
       );
     }
+  }
+
+  /**
+   * Executes Goods Receipt posting against Storage Unit / Inbound Delivery via BAPI_INB_DELIVERY_CONFIRM_DEC.
+   * In strict accordance with AGENTS.md:
+   * - Proves real SAP transaction (BAPI_INB_DELIVERY_CONFIRM_DEC in one LUW with BAPI_TRANSACTION_COMMIT)
+   * - Immediately reads back persisted Material Document from MATDOC / EKBE
+   * - NO mock persistence, NO synthetic document generation
+   */
+  async postGoodsReceiptWithStorageUnit(payload = {}) {
+    const {
+      StorageUnit,
+      DeliveryDocument,
+      DeliveryDocumentItem,
+      PurchaseOrder,
+      PurchaseOrderItem,
+      Material,
+      Plant,
+      StorageLocation,
+      Batch,
+      Quantity,
+      Unit,
+      PackagingMaterial,
+      ExpiryDate,
+      Simulate
+    } = payload;
+
+    if (!StorageUnit && !DeliveryDocument) {
+      throw new Error('Storage Unit or Delivery Document is required to post Goods Receipt.');
+    }
+    if (!Material) {
+      throw new Error('Material is required to post Goods Receipt.');
+    }
+    if (!Plant) {
+      throw new Error('Plant is required to post Goods Receipt.');
+    }
+    if (!StorageLocation) {
+      throw new Error('Storage Location is required to post Goods Receipt.');
+    }
+    const nQty = Number(Quantity);
+    if (isNaN(nQty) || nQty <= 0) {
+      throw new Error('Quantity must be a positive number.');
+    }
+    const sUnit = (Unit || '').trim().toUpperCase();
+    if (!sUnit) {
+      throw new Error('Unit of Measure is required for Goods Receipt.');
+    }
+
+    // HARD-STOP: Verify SLED expiration
+    if (ExpiryDate) {
+      const status = this._enrichBatchStatus(ExpiryDate);
+      if (status.StatusState === 'Error' || status.StatusText === 'EXPIRED') {
+        throw new Error(
+          `Expired Batch Blocked: Batch '${Batch}' expired on ${ExpiryDate} (SLED exceeded). Goods Receipt for expired materials is strictly prohibited by quality control rules.`
+        );
+      }
+    }
+
+    const sDeliv = DeliveryDocument ? String(DeliveryDocument).padStart(10, '0') : '';
+    const sItem = DeliveryDocumentItem ? String(DeliveryDocumentItem).padStart(6, '0') : '000010';
+    const sSU = StorageUnit ? String(StorageUnit).trim() : '';
+    const sMat = (/^\d+$/.test(Material) && Material.length < 18) ? Material.padStart(18, '0') : Material;
+    const isSimulate = !!Simulate;
+
+    let targetDeliv = sDeliv;
+    let huHeaders = [];
+    let huItems = [];
+
+    // Distinguish real Storage Unit from Inbound Delivery number passed in StorageUnit field
+    const isDelivMatch = sSU && targetDeliv && (
+      sSU === targetDeliv ||
+      sSU.replace(/^0+/, '') === targetDeliv.replace(/^0+/, '')
+    );
+    const cleanSU = isDelivMatch ? '' : sSU;
+    const sSUPadded = (/^\d+$/.test(cleanSU) && cleanSU.length < 20) ? cleanSU.padStart(20, '0') : cleanSU;
+
+    if (!targetDeliv) {
+      throw new Error(`Inbound Delivery Number could not be resolved for Goods Receipt.`);
+    }
+
+    // Pre-check Inbound Delivery status in LIKP to prevent rejected duplicate posts or putaway violations
+    if (this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const likpRows = await this.rfc.readTable('LIKP', ['VBELN', 'WBSTK', 'KOSTK'], [
+          `VBELN = '${targetDeliv}'`
+        ]);
+        if (likpRows.length > 0) {
+          const likp = likpRows[0];
+          if (likp.WBSTK === 'C') {
+            let existingDoc = '';
+            try {
+              const matdocs = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'BWART'], [
+                `VBELN_IM = '${targetDeliv}'`, `AND BWART = '101'`
+              ]);
+              if (matdocs.length > 0) {
+                const latest = matdocs[matdocs.length - 1];
+                existingDoc = `${latest.MBLNR}/${latest.MJAHR}`;
+              }
+            } catch (_) {}
+            const errMsg = `Delivery already completed: Goods Receipt has already been completely processed for Inbound Delivery '${targetDeliv}' (Status: Completed)${existingDoc ? `. Existing Material Document: ${existingDoc}` : ''}. Duplicate posting is prevented (SAP HUDIALOG 018).`;
+            const conflictErr = new Error(errMsg);
+            conflictErr.statusCode = 409;
+            throw conflictErr;
+          }
+          if (likp.KOSTK === 'A') {
+            const errMsg = `Putaway required: Inbound Delivery '${targetDeliv}' has not yet been put away in the warehouse (Putaway Status KOSTK = 'A'). In SAP Warehouse Management, transfer orders must be created and confirmed for putaway before Goods Receipt can be posted (SAP message VLMOVE 029 / VLA 307).`;
+            const putawayErr = new Error(errMsg);
+            putawayErr.statusCode = 422;
+            throw putawayErr;
+          }
+        }
+      } catch (e) {
+        if (e.statusCode === 409 || e.statusCode === 422) throw e;
+        LOG.warn(`LIKP pre-check warning: ${e.message}`);
+      }
+    }
+
+    // Query VEKP/VEPO for exact HU structure and pre-validate status if rfc is available
+    if (cleanSU && this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const vekpRows = await this.rfc.readTable('VEKP', ['VENUM', 'EXIDV', 'VHILM', 'STATUS', 'VPOBJ', 'VPOBJKEY'], [
+          `EXIDV = '${sSUPadded}' OR EXIDV = '${cleanSU}'`
+        ]);
+        if (vekpRows.length > 0) {
+          const matchedHU = vekpRows[0];
+          if (matchedHU.STATUS === '0060') {
+            const err = new Error(
+              `Storage Unit already received: Storage Unit '${cleanSU}' is already in status '0060' (Goods Receipt Posted) in SAP warehouse. Duplicate posting is prevented.`
+            );
+            err.statusCode = 409;
+            throw err;
+          }
+          if (!targetDeliv && matchedHU.VPOBJKEY) {
+            targetDeliv = String(matchedHU.VPOBJKEY).padStart(10, '0');
+          }
+          huHeaders = [{
+            HDL_UNIT_EXID: matchedHU.EXIDV,
+            SHIP_MAT: matchedHU.VHILM || PackagingMaterial || '',
+            DELIV_NUMB: targetDeliv
+          }];
+          huItems = [{
+            HDL_UNIT_EXID_INTO: matchedHU.EXIDV,
+            DELIV_NUMB: targetDeliv,
+            DELIV_ITEM: sItem,
+            MATERIAL: sMat,
+            BATCH: Batch || '',
+            PACK_QTY: String(nQty),
+            BASE_UOM: sUnit
+          }];
+        } else {
+          // Explicit Storage Unit was requested but does not exist in VEKP — never invent dummy HUs
+          const notFoundErr = new Error(
+            `Storage Unit not found: Storage Unit '${cleanSU}' does not exist in SAP warehouse records (VEKP). Please verify the scanned Storage Unit / Handling Unit number.`
+          );
+          notFoundErr.statusCode = 404;
+          throw notFoundErr;
+        }
+      } catch (e) {
+        if (e.statusCode === 409 || e.statusCode === 404) throw e;
+        LOG.warn(`VEKP lookup warning: ${e.message}`);
+      }
+    }
+
+    const bapiError = (ret) => [].concat(ret || []).find((r) => r && (r.TYPE === 'E' || r.TYPE === 'A'));
+
+    let bapiResult = null;
+    await this.rfc.session(async (call) => {
+      const itemControl = {
+        DELIV_NUMB: targetDeliv,
+        DELIV_ITEM: sItem
+      };
+      if (huHeaders.length > 0) {
+        itemControl.CHG_DELQTY = 'X';
+      }
+
+      const confirmParams = {
+        HEADER_DATA: { DELIV_NUMB: targetDeliv },
+        HEADER_CONTROL: {
+          DELIV_NUMB: targetDeliv,
+          POST_GI_FLG: 'X',
+          SIMULATE: isSimulate ? 'X' : ''
+        },
+        ITEM_DATA: [{
+          DELIV_NUMB: targetDeliv,
+          DELIV_ITEM: sItem,
+          DLV_QTY: String(nQty),
+          DLV_QTY_IMUNIT: String(nQty)
+        }],
+        ITEM_CONTROL: [itemControl]
+      };
+      if (huHeaders.length > 0) {
+        confirmParams.HANDLING_UNIT_HEADER = huHeaders;
+      }
+      if (huItems.length > 0) {
+        confirmParams.HANDLING_UNIT_ITEM = huItems;
+      }
+
+      bapiResult = await call('BAPI_INB_DELIVERY_CONFIRM_DEC', confirmParams);
+      const err = bapiError(bapiResult && bapiResult.RETURN);
+      if (err) {
+        let classifiedMsg = `SAP rejected Goods Receipt: [${err.ID} ${err.NUMBER}] ${err.MESSAGE}`;
+        if (err.ID === 'HUDIALOG' && err.NUMBER === '018') {
+          classifiedMsg = `Delivery status constraint: Inbound Delivery '${targetDeliv}' only allows display mode because Goods Receipt has already been completed (SAP message HUDIALOG 018).`;
+        } else if (err.ID === 'VLBAPI' && err.NUMBER === '004') {
+          classifiedMsg = `Quantity consistency check failed: The quantity for Inbound Delivery '${targetDeliv}' item '${sItem}' is inconsistent with putaway or packing status (SAP message VLBAPI 004).`;
+        } else if (err.ID === 'VLMOVE' && err.NUMBER === '029') {
+          classifiedMsg = `Putaway required: Inbound Delivery '${targetDeliv}' has not yet been put away in the warehouse (SAP message VLMOVE 029).`;
+        } else if (err.ID === 'VL' && err.NUMBER === '608') {
+          classifiedMsg = `Warehouse processing incomplete: Inbound Delivery '${targetDeliv}' has not yet been completely processed by WM (SAP message VL 608).`;
+        } else if (err.ID === '12' && err.NUMBER === '008') {
+          classifiedMsg = `Shelf life expiration date constraint: Material shelf life / expiration check failed (${err.MESSAGE || 'SLED validation failed'}, SAP message 12 008).`;
+        } else if (err.ID === 'M7' && err.NUMBER === '006') {
+          classifiedMsg = `Master data constraint: Material '${err.MESSAGE_V1 || Material}' is not maintained in plant '${err.MESSAGE_V2 || Plant}' storage location '${err.MESSAGE_V3 || StorageLocation}' (SAP message M7 006).`;
+        } else if (err.ID === 'VLA' && err.NUMBER === '307') {
+          classifiedMsg = `Putaway constraint: Putaway quantity cannot be less than GR posted quantity (SAP message VLA 307).`;
+        } else if (err.ID === 'VLA' && err.NUMBER === '311') {
+          classifiedMsg = `Packing constraint: Packing can only be updated via inbound delivery dialog (SAP message VLA 311).`;
+        } else if (err.ID === 'VLA' && err.NUMBER === '317') {
+          classifiedMsg = `Batch constraint: Batch must be assigned to delivery item (SAP message VLA 317).`;
+        } else if (err.ID === 'BS' && err.NUMBER === '013') {
+          classifiedMsg = `Serial number status constraint: Equipment status active (SAP message BS 013).`;
+        } else if (err.ID === 'IO' && err.NUMBER === '206') {
+          classifiedMsg = `Serial number constraint: Serial numbers required for material (SAP message IO 206).`;
+        } else if (err.ID === 'M7' && err.NUMBER === '021') {
+          classifiedMsg = `Quantity deficit: Stock / purchase order deficit (SAP message M7 021).`;
+        }
+        const bapiErr = new Error(classifiedMsg);
+        bapiErr.bapiReturn = bapiResult.RETURN;
+        bapiErr.statusCode = 422;
+        throw bapiErr;
+      }
+
+      if (!isSimulate) {
+        const commitRes = await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+        const commitErr = bapiError(commitRes && commitRes.RETURN);
+        if (commitErr) {
+          throw new Error(`BAPI_TRANSACTION_COMMIT failed: ${commitErr.MESSAGE}`);
+        }
+      }
+    });
+
+    if (isSimulate) {
+      return {
+        Success: true,
+        Message: `Goods Receipt simulated successfully in SAP for ${cleanSU ? 'Storage Unit ' + cleanSU : 'Inbound Delivery ' + targetDeliv} (0 errors)`,
+        DeliveryDocument: targetDeliv,
+        StorageUnit: cleanSU,
+        Quantity: nQty,
+        Unit: sUnit
+      };
+    }
+
+    // Read back persisted material document immediately from SAP
+    let matDoc = '';
+    let matDocYear = '';
+    try {
+      if (this.rfc && typeof this.rfc.readTable === 'function') {
+        const matdocs = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART'], [
+          `VBELN_IM = '${targetDeliv}'`, `AND BWART = '101'`
+        ]);
+        if (matdocs.length > 0) {
+          const latest = matdocs[matdocs.length - 1];
+          matDoc = latest.MBLNR;
+          matDocYear = latest.MJAHR;
+        } else if (PurchaseOrder) {
+          const poPad = String(PurchaseOrder).padStart(10, '0');
+          const poItemPad = PurchaseOrderItem ? String(PurchaseOrderItem).padStart(5, '0') : '00010';
+          const ekbe = await this.rfc.readTable('EKBE', ['EBELN', 'EBELP', 'BELNR', 'GJAHR', 'BWART'], [
+            `EBELN = '${poPad}'`, `AND EBELP = '${poItemPad}'`, `AND BWART = '101'`
+          ]);
+          if (ekbe.length > 0) {
+            const latest = ekbe[ekbe.length - 1];
+            matDoc = latest.BELNR;
+            matDocYear = latest.GJAHR;
+          }
+        }
+      }
+    } catch (readErr) {
+      LOG.warn(`Immediate read-back table query warning: ${readErr.message}`);
+    }
+
+    if (!matDoc) {
+      throw new Error(`SAP S/4HANA executed BAPI_INB_DELIVERY_CONFIRM_DEC but no persisted Material Document was found in MATDOC or EKBE for Delivery ${targetDeliv}. In accordance with AGENTS.md, mock persistence is strictly prohibited.`);
+    }
+
+    return {
+      Success: true,
+      Message: `Goods Receipt posted successfully in SAP for ${cleanSU ? 'Storage Unit ' + cleanSU : 'Inbound Delivery ' + targetDeliv} (Material Document ${matDoc})`,
+      MaterialDocument: matDoc,
+      MaterialDocumentYear: matDocYear,
+      DeliveryDocument: targetDeliv,
+      StorageUnit: cleanSU,
+      Quantity: nQty,
+      Unit: sUnit
+    };
   }
 }
 
 module.exports = new GoodsReceiptAdapter();
+module.exports.GoodsReceiptAdapter = GoodsReceiptAdapter;

@@ -1,6 +1,225 @@
 const cds = require('@sap/cds');
-const connectivity = require('@sap-cloud-sdk/connectivity');
-const httpClient = require('@sap-cloud-sdk/http-client');
+const LOG = require('../../../../common/logger')('sales-inquiry-adapter');
+const { S4HttpClient } = require('../../S4HttpClient');
+const { RfcClient } = require('../../RfcClient');
+const s4Config = require('../../s4Config');
+const TtlCache = require('../../../../common/TtlCache');
+
+const LEAN_ORDER_PATH = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
+
+/**
+ * Header extension values for LORD_ODATA_ORDER_SRV (incompletion procedure Z1 and partner function ZP),
+ * keyed by the property names agreed for the Header extension. The standard service has none of them;
+ * each is sent only when the live $metadata of the service exposes the property, so the application works
+ * unchanged before and after the SAP-side extension. See docs/sap-inquiry-service-extension-spec.md.
+ */
+const INQUIRY_EXTENSION_FIELDS = ['CustomerGroup2', 'PortOfLoading', 'PortOfDischarge', 'ContactPerson', 'BindingPeriodValidityEndDate', 'Incoterms', 'IncotermsLocation1', 'INCO1', 'INCO2', 'INCO2_L', 'Inco1', 'Inco2'];
+
+/**
+ * Error thrown when a multi-step Sales Inquiry creation partially succeeds (header persisted in SAP,
+ * but a subsequent item or price condition write fails). Carries the created SAP document number
+ * to prevent duplicate retries.
+ */
+class PartialSalesInquiryError extends Error {
+  constructor(message, inquiryId, details = {}) {
+    super(message);
+    this.name = 'PartialSalesInquiryError';
+    this.SalesInquiry = String(inquiryId || '').trim();
+    this.documentNumber = this.SalesInquiry;
+    this.isPartialCreation = true;
+    this.status = details.status || 502;
+    this.step = details.step || 'UNKNOWN';
+    this.itemNumber = details.itemNumber || '';
+    this.sapMessage = details.sapMessage || message;
+    if (details.originalError) {
+      this.cause = details.originalError;
+      if (details.originalError.response) {
+        this.response = details.originalError.response;
+      }
+    }
+  }
+}
+
+/**
+ * Formats a Date instance or ISO string to OData v2 Edm.DateTime JSON representation (/Date(ms)/).
+ */
+function _formatODataV2Date(dateVal) {
+  if (!dateVal) return undefined;
+  if (typeof dateVal === 'string' && dateVal.startsWith('/Date(')) return dateVal;
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return undefined;
+  return `/Date(${d.getTime()})/`;
+}
+
+/**
+ * Formats a primitive or date value as an OData v2 literal in $filter.
+ *
+ * @param {any} val
+ * @returns {string}
+ */
+function _formatODataV2Literal(val) {
+  if (val === null || val === undefined) return 'null';
+  if (typeof val === 'boolean') return val ? 'true' : 'false';
+  if (typeof val === 'number') return String(val);
+  if (val instanceof Date) {
+    return `datetime'${val.toISOString().slice(0, 19)}'`;
+  }
+  const s = String(val);
+  if (/^\/Date\(\d+\)\/$/.test(s)) return s;
+  return `'${s.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Translates CAP CQN order-by clause to an OData v2 $orderby string.
+ *
+ * @param {any} orderBy
+ * @returns {string}
+ */
+function _cqnOrderByToOData(orderBy) {
+  if (!orderBy) return '';
+  if (typeof orderBy === 'string') return orderBy.trim();
+  if (Array.isArray(orderBy) && orderBy.length > 0) {
+    const parts = orderBy.map(item => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object') {
+        const col = item.ref ? item.ref[item.ref.length - 1] : (item.val || '');
+        const dir = item.sort ? ` ${item.sort}` : '';
+        return `${col}${dir}`.trim();
+      }
+      return '';
+    }).filter(Boolean);
+    return parts.join(', ');
+  }
+  return '';
+}
+
+/**
+ * Translates CAP CQN where clause to an OData v2 $filter expression string.
+ *
+ * @param {any} where
+ * @returns {string}
+ */
+function _cqnWhereToODataFilter(where) {
+  if (!where) return '';
+  if (typeof where === 'string') return where.trim();
+
+  // Plain object dictionary: { Field1: 'val1', Field2: 'val2' }
+  if (where && typeof where === 'object' && !Array.isArray(where)) {
+    if (where.ref || 'val' in where || where.func) {
+      where = [where];
+    } else {
+      const parts = Object.entries(where)
+        .filter(([, v]) => v !== undefined && v !== null)
+        .map(([k, v]) => `${k} eq ${_formatODataV2Literal(v)}`);
+      return parts.join(' and ');
+    }
+  }
+
+  if (!Array.isArray(where) || where.length === 0) return '';
+
+  const opMap = {
+    '=': 'eq',
+    '==': 'eq',
+    '!=': 'ne',
+    '<>': 'ne',
+    '>': 'gt',
+    '>=': 'ge',
+    '<': 'lt',
+    '<=': 'le',
+    'and': 'and',
+    'AND': 'and',
+    'or': 'or',
+    'OR': 'or',
+    'not': 'not',
+    'NOT': 'not'
+  };
+
+  const tokens = [];
+
+  for (let i = 0; i < where.length; i++) {
+    const token = where[i];
+
+    if (token === null || token === undefined) continue;
+
+    if (token === '(' || token === ')') {
+      tokens.push(token);
+      continue;
+    }
+
+    if (typeof token === 'string') {
+      const lower = token.toLowerCase();
+      if (opMap[token] || opMap[lower]) {
+        tokens.push(opMap[token] || opMap[lower]);
+      } else {
+        tokens.push(token);
+      }
+      continue;
+    }
+
+    if (typeof token === 'object' && token.ref && Array.isArray(token.ref)) {
+      let refPath = token.ref;
+      if (refPath.length > 1 && (refPath[0] === 'SalesOrders' || refPath[0] === 'C_SalesOrderWl_F1873' || refPath[0] === 'externalSO.C_SalesOrderWl_F1873')) {
+        refPath = refPath.slice(1);
+      }
+      tokens.push(refPath.join('/'));
+      continue;
+    }
+
+    if (typeof token === 'object' && 'val' in token) {
+      tokens.push(_formatODataV2Literal(token.val));
+      continue;
+    }
+
+    if (typeof token === 'object' && token.func && Array.isArray(token.args)) {
+      const fnName = String(token.func).toLowerCase();
+      const argTokens = token.args.map(a => {
+        if (typeof a === 'object') {
+          if (a.ref) {
+            let p = a.ref;
+            if (p.length > 1 && (p[0] === 'SalesOrders' || p[0] === 'C_SalesOrderWl_F1873')) p = p.slice(1);
+            return p.join('/');
+          }
+          if ('val' in a) return _formatODataV2Literal(a.val);
+        }
+        if (typeof a === 'string') return _formatODataV2Literal(a);
+        return String(a);
+      });
+
+      if (fnName === 'contains') {
+        tokens.push(`substringof(${argTokens[1]}, ${argTokens[0]})`);
+      } else if (fnName === 'substringof') {
+        tokens.push(`substringof(${argTokens.join(', ')})`);
+      } else if (fnName === 'startswith') {
+        tokens.push(`startswith(${argTokens.join(', ')})`);
+      } else if (fnName === 'endswith') {
+        tokens.push(`endswith(${argTokens.join(', ')})`);
+      } else {
+        tokens.push(`${fnName}(${argTokens.join(', ')})`);
+      }
+      continue;
+    }
+
+    if (Array.isArray(token)) {
+      const sub = _cqnWhereToODataFilter(token);
+      if (sub) {
+        tokens.push(`(${sub})`);
+      }
+      continue;
+    }
+
+    if (typeof token === 'number' || typeof token === 'boolean') {
+      tokens.push(String(token));
+      continue;
+    }
+  }
+
+  let filterStr = tokens.join(' ');
+  filterStr = filterStr.replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+  filterStr = filterStr.replace(/\s+/g, ' ').trim();
+
+  return filterStr;
+}
+
 
 /**
  * Adapter class to encapsulate communication with SAP S/4HANA Sales Inquiry services:
@@ -9,9 +228,64 @@ const httpClient = require('@sap-cloud-sdk/http-client');
  * - LORD_ODATA_ORDER_SRV (Lean Order OData Service for Sales Document Creation)
  */
 class SalesInquiryAdapter {
-  constructor() {
-    this.s4hanaWL = null;
-    this.s4hanaFS = null;
+  constructor(options = {}) {
+    this.client = options.client || new S4HttpClient();
+    this.destinationName = this.client.destinationName;
+    this._s4hanaWL = null;
+    this._s4hanaFS = null;
+    this._s4hanaSO = null;
+    this.customerMasterCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL
+    this.customerSalesAreaCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL
+    this.salesOfficeVhCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL
+    this.salesGroupVhCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL
+    this.inquiryTypesCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL
+    this.materialResolutionCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL
+    this.masterDataCache = new TtlCache({ defaultTtlMs: 300000 }); // 5m TTL: T052U / KNVK RFC table reads
+    this.rfc = options.rfcClient || new RfcClient();
+  }
+
+  get s4hanaWL() {
+    return this._s4hanaWL;
+  }
+
+  set s4hanaWL(val) {
+    this._s4hanaWL = val;
+    if (this.salesOfficeVhCache) this.salesOfficeVhCache.clear();
+    if (this.salesGroupVhCache) this.salesGroupVhCache.clear();
+    if (this.customerMasterCache) this.customerMasterCache.clear();
+    if (this.customerSalesAreaCache) this.customerSalesAreaCache.clear();
+    if (this.inquiryTypesCache) this.inquiryTypesCache.clear();
+  }
+
+  get s4hanaFS() {
+    return this._s4hanaFS;
+  }
+
+  set s4hanaFS(val) {
+    this._s4hanaFS = val;
+    if (this.inquiryTypesCache) this.inquiryTypesCache.clear();
+    if (this.materialResolutionCache) this.materialResolutionCache.clear();
+  }
+
+  get s4hanaSO() {
+    return this._s4hanaSO;
+  }
+
+  set s4hanaSO(val) {
+    this._s4hanaSO = val;
+  }
+
+  /**
+   * Resets all internal master data caches.
+   */
+  clearCache() {
+    this.customerMasterCache.clear();
+    if (this.customerSalesAreaCache) this.customerSalesAreaCache.clear();
+    this.salesOfficeVhCache.clear();
+    this.salesGroupVhCache.clear();
+    this.inquiryTypesCache.clear();
+    this.materialResolutionCache.clear();
+    this.masterDataCache.clear();
   }
 
   /** Initialize the remote S/4HANA read services */
@@ -20,65 +294,53 @@ class SalesInquiryAdapter {
       try {
         this.s4hanaWL = await cds.connect.to('SD_F2370_INQY_WL_SRV');
       } catch (err) {
-        console.warn('[SalesInquiryAdapter] Could not connect to SD_F2370_INQY_WL_SRV:', err.message);
+        LOG.warn('Could not connect to SD_F2370_INQY_WL_SRV:', err.message);
       }
     }
     if (!this.s4hanaFS) {
       try {
         this.s4hanaFS = await cds.connect.to('SD_F2369_INQY_FS_SRV');
       } catch (err) {
-        console.warn('[SalesInquiryAdapter] Could not connect to SD_F2369_INQY_FS_SRV:', err.message);
+        LOG.warn('Could not connect to SD_F2369_INQY_FS_SRV:', err.message);
+      }
+    }
+    if (!this.s4hanaSO) {
+      try {
+        this.s4hanaSO = await cds.connect.to('SD_F1873_SO_WL_SRV');
+      } catch (err) {
+        LOG.warn('Could not connect to SD_F1873_SO_WL_SRV:', err.message);
       }
     }
   }
 
   /**
-   * Resolve destination for S/4HANA communication using SAP Cloud SDK.
+   * Resolve destination for S/4HANA communication using the shared S4HttpClient.
+   * Propagates caller userJwt for Principal Propagation when available.
+   *
+   * @param {Object} [options]
    */
-  async _getDestination() {
-    const destinationName = process.env.S4_DESTINATION_NAME || 'S4HANA_PO_API';
-    try {
-      const dest = await connectivity.getDestination({ destinationName });
-      if (dest) return dest;
-    } catch (err) {
-      // In local development without BTP Destination Service, fallback to credentials
+  async _getDestination(options = {}) {
+    const dest = await this.client.resolveDestination(options);
+    if (!dest) {
+      const destinationName = this.client.destinationName;
+      throw new Error(`[SalesInquiryAdapter] Destination '${destinationName}' not found and no local credentials configured.`);
     }
-
-    if (process.env.S4_DESTINATION_URL) {
-      return {
-        url: process.env.S4_DESTINATION_URL,
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: {
-          'sap-client': process.env.S4_CLIENT || '220'
-        }
-      };
-    }
-
-    const creds = cds.env.requires?.SD_F2370_INQY_WL_SRV?.credentials;
-    if (creds && creds.url) {
-      const baseUrl = new URL(creds.url).origin;
-      return {
-        url: baseUrl,
-        username: creds.username,
-        password: creds.password,
-        headers: creds.headers || {}
-      };
-    }
-
-    throw new Error(`[SalesInquiryAdapter] Destination '${destinationName}' not found and no local credentials configured.`);
+    return dest;
   }
 
   /** Read data from SD Worklist & Value Help service */
   async readWlData(query) {
     await this.init();
     if (!this.s4hanaWL) {
-      return [];
+      const err = new Error('Sales inquiry worklist data cannot be read: the SAP SD service SD_F2370_INQY_WL_SRV is not connected.');
+      err.status = 503;
+      throw err;
     }
     try {
       return await this.s4hanaWL.run(query);
     } catch (error) {
-      console.error('[SalesInquiryAdapter] Error reading data from WL service:', error.message);
+      LOG.error('Error reading data from WL service:', error.message);
+      if (!error.status) error.status = 502;
       throw error;
     }
   }
@@ -87,14 +349,249 @@ class SalesInquiryAdapter {
   async readFsData(query) {
     await this.init();
     if (!this.s4hanaFS) {
-      return [];
+      const err = new Error('Sales inquiry factsheet data cannot be read: the SAP SD service SD_F2369_INQY_FS_SRV is not connected.');
+      err.status = 503;
+      throw err;
     }
     try {
       return await this.s4hanaFS.run(query);
     } catch (error) {
-      console.warn('[SalesInquiryAdapter] Error reading data from FS service:', error.message);
-      return [];
+      LOG.error('Error reading data from FS service:', error.message);
+      const err = new Error(`Sales inquiry factsheet data could not be read from SAP S/4HANA: ${error.message}`);
+      err.status = error.status || 502;
+      throw err;
     }
+  }
+
+  /** Read data from SD Sales Order Worklist & Value Help service (SD_F1873_SO_WL_SRV) */
+  async readSoData(query) {
+    await this.init();
+    if (!this.s4hanaSO) {
+      const err = new Error('Sales order worklist data cannot be read: the SAP SD service SD_F1873_SO_WL_SRV is not connected.');
+      err.status = 503;
+      throw err;
+    }
+    try {
+      return await this.s4hanaSO.run(query);
+    } catch (error) {
+      LOG.error('Error reading data from SO service:', error.message);
+      if (!error.status) error.status = 502;
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieves sales materials dynamically from S/4HANA SD_F2369_INQY_FS_SRV.I_Material.
+   * Scoped to the material types configured in cds.s4.salesMaterialTypes (finished goods); the scope is stated on screen.
+   * Merges incoming search filters, applies stable deterministic sorting, and supports pagination.
+   */
+  async getMaterials(query) {
+    await this.init();
+    if (!this.s4hanaFS) {
+      const err = new Error('Finished Goods materials cannot be read: the SAP SD service SD_F2369_INQY_FS_SRV is not connected.');
+      err.status = 503;
+      throw err;
+    }
+    try {
+      // Material-type scope comes from configuration (cds.s4.salesMaterialTypes), not a literal list
+      const fgCondition = ['('];
+      s4Config.getSalesMaterialTypes().forEach((t, i) => {
+        if (i > 0) fgCondition.push('or');
+        fgCondition.push({ ref: ['MaterialType'] }, '=', { val: t });
+      });
+      fgCondition.push(')');
+
+      // Helper to map alias MaterialName -> physical field Material_Text in S/4HANA CDS
+      const mapWhereNode = (node) => {
+        if (!node) return node;
+        if (Array.isArray(node)) return node.map(mapWhereNode);
+        if (typeof node === 'object') {
+          const copy = { ...node };
+          if (Array.isArray(copy.ref)) {
+            copy.ref = copy.ref.map(r => r === 'MaterialName' ? 'Material_Text' : r);
+          }
+          if (Array.isArray(copy.args)) {
+            copy.args = copy.args.map(mapWhereNode);
+          }
+          return copy;
+        }
+        return node;
+      };
+
+      let execQuery = SELECT.from('SD_F2369_INQY_FS_SRV.I_Material')
+        .columns('Material', 'Material_Text', 'MaterialType', 'MaterialGroup', 'MaterialBaseUnit')
+        .orderBy('Material asc');
+
+      if (query && query.SELECT) {
+        if (query.SELECT.where && query.SELECT.where.length > 0) {
+          const mappedUserWhere = mapWhereNode(query.SELECT.where);
+          execQuery.where(['(', ...mappedUserWhere, ')', 'and', ...fgCondition]);
+        } else {
+          execQuery.where(fgCondition);
+        }
+
+        if (query.SELECT.limit) {
+          const lRows = typeof query.SELECT.limit.rows === 'object' && query.SELECT.limit.rows !== null && 'val' in query.SELECT.limit.rows
+            ? Number(query.SELECT.limit.rows.val)
+            : Number(query.SELECT.limit.rows);
+          const lOffset = typeof query.SELECT.limit.offset === 'object' && query.SELECT.limit.offset !== null && 'val' in query.SELECT.limit.offset
+            ? Number(query.SELECT.limit.offset.val)
+            : (query.SELECT.limit.offset ? Number(query.SELECT.limit.offset) : 0);
+          if (!isNaN(lRows) && lRows >= 0) {
+            execQuery.limit(lRows, lOffset || 0);
+          }
+        }
+        if (query.SELECT.count) {
+          execQuery.SELECT.count = true;
+        }
+      } else {
+        execQuery.where(fgCondition);
+      }
+
+      const raw = await this.s4hanaFS.run(execQuery);
+      const rawList = Array.isArray(raw) ? raw : (raw?.value || raw?.d?.results || []);
+
+      const items = rawList.map(m => ({
+        ...m,
+        MaterialName: m.MaterialName || m.Material_Text || ''
+      }));
+
+      if (raw && raw.$count !== undefined) {
+        items.$count = raw.$count;
+      }
+
+      return items;
+    } catch (error) {
+      LOG.error('Error querying Finished Goods materials from SAP S/4HANA:', error.message);
+      const err = new Error(`Finished Goods materials could not be read from SAP S/4HANA: ${error.message}`);
+      err.status = error.status || 502;
+      throw err;
+    }
+  }
+
+  /**
+   * Sales inquiry document types (category A) as configured in SAP S/4HANA.
+   *
+   * Reads SD_F2369_INQY_FS_SRV.I_SalesDocumentType and falls back to
+   * SD_F2370_INQY_WL_SRV.C_SalesInquiryTypeValueHelp only when the factsheet service returns nothing.
+   * Descriptions, number ranges and procedures are passed through exactly as SAP returns them; the only
+   * derived fields are the active/inactive status (from SAP's IsLocked flag) and the category name of
+   * category A. When SAP cannot be read, the call fails: no built-in list of types is ever returned.
+   *
+   * @param {Object} [query] - CAP query (limit / offset are honoured)
+   * @returns {Promise<Array<Object>>}
+   * @throws {Error} status 503 when no SD service is connected, 502 when SAP could not be read
+   */
+  async getInquiryTypes(query) {
+    const isStandard = !query || !query.SELECT || (!query.SELECT.where && !query.SELECT.limit && !query.SELECT.orderBy);
+    if (isStandard && this.inquiryTypesCache.has('standard_inquiry_types')) {
+      return this.inquiryTypesCache.get('standard_inquiry_types');
+    }
+
+    await this.init();
+    if (!this.s4hanaFS && !this.s4hanaWL) {
+      const err = new Error('Sales inquiry types cannot be read: the SAP SD services SD_F2369_INQY_FS_SRV and SD_F2370_INQY_WL_SRV are not connected.');
+      err.status = 503;
+      throw err;
+    }
+
+    const failures = [];
+    let rawList = [];
+
+    if (this.s4hanaFS) {
+      try {
+        const execQuery = SELECT.from('SD_F2369_INQY_FS_SRV.I_SalesDocumentType')
+          .columns(
+            'SalesDocumentType',
+            'SalesDocumentType_Text',
+            'SDDocumentCategory',
+            'ScreenSequenceGroup',
+            'NumberRangeForIntIDAssignment',
+            'NumberRangeForExtIDAssignment',
+            'IsLocked',
+            'TextDeterminationProcedure',
+            'PartnerDeterminationProcedure'
+          )
+          .where([{ ref: ['SDDocumentCategory'] }, '=', { val: 'A' }])
+          .orderBy('SalesDocumentType asc');
+        if (query && query.SELECT && query.SELECT.limit) {
+          const lRows = typeof query.SELECT.limit.rows === 'object' && query.SELECT.limit.rows !== null && 'val' in query.SELECT.limit.rows
+            ? Number(query.SELECT.limit.rows.val)
+            : Number(query.SELECT.limit.rows);
+          const lOffset = typeof query.SELECT.limit.offset === 'object' && query.SELECT.limit.offset !== null && 'val' in query.SELECT.limit.offset
+            ? Number(query.SELECT.limit.offset.val)
+            : (query.SELECT.limit.offset ? Number(query.SELECT.limit.offset) : 0);
+          if (!isNaN(lRows) && lRows >= 0) {
+            execQuery.limit(lRows, lOffset || 0);
+          }
+        }
+        const raw = await this.s4hanaFS.run(execQuery);
+        rawList = Array.isArray(raw) ? raw : (raw?.value || raw?.d?.results || []);
+      } catch (error) {
+        failures.push(`SD_F2369_INQY_FS_SRV: ${error.message}`);
+        LOG.warn('Error querying I_SalesDocumentType from FS:', error.message);
+      }
+    }
+
+    if (rawList.length === 0 && this.s4hanaWL) {
+      try {
+        const wlQuery = SELECT.from('SD_F2370_INQY_WL_SRV.C_SalesInquiryTypeValueHelp');
+        if (query && query.SELECT && query.SELECT.limit) {
+          const lRows = typeof query.SELECT.limit.rows === 'object' && query.SELECT.limit.rows !== null && 'val' in query.SELECT.limit.rows
+            ? Number(query.SELECT.limit.rows.val)
+            : Number(query.SELECT.limit.rows);
+          const lOffset = typeof query.SELECT.limit.offset === 'object' && query.SELECT.limit.offset !== null && 'val' in query.SELECT.limit.offset
+            ? Number(query.SELECT.limit.offset.val)
+            : (query.SELECT.limit.offset ? Number(query.SELECT.limit.offset) : 0);
+          if (!isNaN(lRows) && lRows >= 0) {
+            wlQuery.limit(lRows, lOffset || 0);
+          }
+        }
+        if (query && query.SELECT && query.SELECT.count) {
+          wlQuery.SELECT.count = true;
+        }
+        const rawWl = await this.s4hanaWL.run(wlQuery);
+        rawList = Array.isArray(rawWl) ? rawWl : (rawWl?.value || rawWl?.d?.results || []);
+      } catch (wlError) {
+        failures.push(`SD_F2370_INQY_WL_SRV: ${wlError.message}`);
+        LOG.warn('Error querying C_SalesInquiryTypeValueHelp from WL:', wlError.message);
+      }
+    }
+
+    if (rawList.length === 0 && failures.length > 0) {
+      const err = new Error(`Sales inquiry types could not be read from SAP S/4HANA (${failures.join('; ')}).`);
+      err.status = 502;
+      throw err;
+    }
+
+    const result = rawList.map(item => {
+      const sCode = item.SalesDocumentType || item.SalesInquiryType || '';
+      const sText = item.SalesDocumentType_Text || item.SalesInquiryType_Text || item.SalesDocumentTypeName || '';
+      const isActive = item.IsLocked !== 'X' && item.IsLocked !== true;
+      return {
+        SalesDocumentType: sCode,
+        SalesDocumentType_Text: sText,
+        SalesDocumentTypeName: sText,
+        // Both sources return sales inquiry types only, i.e. SD document category A.
+        SDDocumentCategory: item.SDDocumentCategory || 'A',
+        SDDocumentCategoryName: 'Inquiry',
+        IsLocked: item.IsLocked ?? null,
+        IsActive: isActive,
+        StatusText: isActive ? 'Active' : 'Inactive',
+        StatusState: isActive ? 'Success' : 'Warning',
+        ScreenSequenceGroup: item.ScreenSequenceGroup ?? null,
+        NumberRangeForIntIDAssignment: item.NumberRangeForIntIDAssignment ?? null,
+        NumberRangeForExtIDAssignment: item.NumberRangeForExtIDAssignment ?? null,
+        TextDeterminationProcedure: item.TextDeterminationProcedure ?? null,
+        PartnerDeterminationProcedure: item.PartnerDeterminationProcedure ?? null
+      };
+    });
+
+    if (isStandard && result.length > 0) {
+      this.inquiryTypesCache.set('standard_inquiry_types', result);
+    }
+
+    return result;
   }
 
   /**
@@ -103,30 +600,45 @@ class SalesInquiryAdapter {
   async getInquiries(query) {
     await this.init();
     if (!this.s4hanaWL) {
-      return [];
+      const err = new Error('Sales inquiries cannot be read: the SAP SD service SD_F2370_INQY_WL_SRV is not connected.');
+      err.status = 503;
+      throw err;
     }
     try {
-      const defaultQuery = SELECT.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370')
-        .orderBy('CreationDate desc', 'SalesInquiry desc')
-        .limit(50);
-      let execQuery = query || defaultQuery;
-      if (query && query.SELECT && (!query.SELECT.orderBy || query.SELECT.orderBy.length === 0)) {
-        execQuery = SELECT.from(query.SELECT.from || 'SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370')
-          .orderBy('CreationDate desc', 'SalesInquiry desc');
-        if (query.SELECT.where) execQuery.where(query.SELECT.where);
-        if (query.SELECT.columns) execQuery.columns(query.SELECT.columns);
-        if (query.SELECT.limit) execQuery.limit(query.SELECT.limit.rows, query.SELECT.limit.offset);
+      const execQuery = SELECT.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370');
+      if (query?.SELECT?.columns) execQuery.columns(query.SELECT.columns);
+      if (query?.SELECT?.where) execQuery.where(query.SELECT.where);
+      if (query?.SELECT?.orderBy && query.SELECT.orderBy.length > 0) {
+        execQuery.orderBy(query.SELECT.orderBy);
+      } else {
+        execQuery.orderBy('CreationDate desc', 'SalesInquiry desc');
+      }
+      if (query?.SELECT?.limit) {
+        const rows = query.SELECT.limit.rows?.val ?? query.SELECT.limit.rows ?? 50;
+        const offset = query.SELECT.limit.offset?.val ?? query.SELECT.limit.offset ?? 0;
+        execQuery.limit(rows, offset);
+      } else {
+        execQuery.limit(50);
+      }
+      if (query?.SELECT?.count) {
+        execQuery.SELECT.count = true;
       }
       const res = await this.s4hanaWL.run(execQuery);
-      return Array.isArray(res) ? res : (res?.value || res?.d?.results || []);
+      const list = Array.isArray(res) ? res : (res?.value || res?.d?.results || []);
+      if (res?.$count !== undefined) {
+        list.$count = res.$count;
+      }
+      return list;
     } catch (err) {
-      console.error('[SalesInquiryAdapter] Error fetching inquiries from SD_F2370_INQY_WL_SRV:', err.message);
+      LOG.error('Error fetching inquiries from SD_F2370_INQY_WL_SRV:', err.message);
+      if (!err.status) err.status = 502;
       throw err;
     }
   }
 
   /**
    * Retrieves single Sales Inquiry details by ID directly from S/4HANA.
+   * Runs independent worklist header, factsheet header, and factsheet items in parallel.
    */
   async getInquiry(sId) {
     const sKey = String(sId).trim();
@@ -134,90 +646,394 @@ class SalesInquiryAdapter {
     let header = null;
     let items = [];
 
-    // 1. Fetch worklist header record (contains OrganizationBPName1, CreationDate, CreatedByUser, etc.)
-    if (this.s4hanaWL) {
-      try {
-        const res = await this.s4hanaWL.run(
-          SELECT.one.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370').where({ SalesInquiry: sKey })
-        );
-        if (res) {
-          header = { ...res };
-        }
-      } catch (e) {
-        console.warn('[SalesInquiryAdapter] Error fetching WL record for inquiry:', e.message);
-      }
-    }
-
-    // 2. Fetch factsheet header record and partner cards (contains CustomerPurchaseOrderDate, Validity Dates, Partners)
-    if (this.s4hanaFS) {
-      try {
-        const fsDoc = await this.s4hanaFS.run(
-          SELECT.one.from('SD_F2369_INQY_FS_SRV.C_Inquiryfs', doc => {
-            doc('*');
-            doc.to_SDDocumentPartnerCard('*');
-          }).where({ SalesInquiry: sKey })
-        );
-        if (fsDoc) {
-          header = Object.assign({}, fsDoc, header || {});
-          if (fsDoc.CustomerPurchaseOrderDate) header.CustomerPurchaseOrderDate = fsDoc.CustomerPurchaseOrderDate;
-          if (fsDoc.BindingPeriodValidityStartDate) header.BindingPeriodValidityStartDate = fsDoc.BindingPeriodValidityStartDate;
-          if (fsDoc.BindingPeriodValidityEndDate) header.BindingPeriodValidityEndDate = fsDoc.BindingPeriodValidityEndDate;
-          if (fsDoc.SalesAreaDesc) header.SalesAreaDesc = fsDoc.SalesAreaDesc;
-
-          const partners = Array.isArray(fsDoc.to_SDDocumentPartnerCard) ? fsDoc.to_SDDocumentPartnerCard : [];
-          const shipTo = partners.find(p => p.PartnerFunction === 'WE');
-          if (shipTo) {
-            header.ShipToParty = shipTo.Customer || shipTo.BusinessPartner;
-            header.ShipToPartyName = shipTo.FullName;
-          }
-          const contact = partners.find(p => p.PartnerFunction === 'ZP');
-          if (contact) {
-            header.ContactPersonName = contact.FullName;
-          }
-          const salesEmp = partners.find(p => p.PartnerFunction === 'ZE');
-          if (salesEmp) {
-            header.SalesEmployeeName = salesEmp.FullName;
+    // Parallel fetch: worklist header, factsheet header with partner cards, and factsheet items
+    const [wlResult, fsHeaderResult, fsItemsResult] = await Promise.allSettled([
+      // 1. Fetch worklist header record (contains OrganizationBPName1, CreationDate, CreatedByUser, SalesOffice, SalesGroup, etc.)
+      (async () => {
+        if (!this.s4hanaWL) return null;
+        try {
+          return await this.s4hanaWL.run(
+            SELECT.one.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370', inq => {
+              inq('*');
+              inq.to_SalesOffice('*');
+              inq.to_SalesGroup('*');
+            }).where({ SalesInquiry: sKey })
+          );
+        } catch (_e) {
+          // Fallback to simple select if navigation expansion fails
+          try {
+            return await this.s4hanaWL.run(
+              SELECT.one.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370').where({ SalesInquiry: sKey })
+            );
+          } catch (innerErr) {
+            LOG.warn('Error fetching WL record for inquiry:', innerErr.message);
+            throw innerErr;
           }
         }
-      } catch (fse) {
-        console.warn('[SalesInquiryAdapter] Error fetching FS record for inquiry:', fse.message);
-      }
+      })(),
+
+      // 2. Fetch factsheet header record and partner cards (contains CustomerPurchaseOrderDate, Validity Dates, Partners)
+      (async () => {
+        if (!this.s4hanaFS) return null;
+        try {
+          return await this.s4hanaFS.run(
+            SELECT.one.from('SD_F2369_INQY_FS_SRV.C_Inquiryfs', doc => {
+              doc('*');
+              doc.to_SDDocumentPartnerCard('*');
+            }).where({ SalesInquiry: sKey })
+          );
+        } catch (fse) {
+          LOG.warn('Error fetching FS record for inquiry:', fse.message);
+          throw fse;
+        }
+      })(),
 
       // 3. Fetch items with computed NetPriceAmount
-      try {
-        const itemRes = await this.s4hanaFS.run(
-          SELECT.from('SD_F2369_INQY_FS_SRV.C_Inquiryitemfs').where({ SalesInquiry: sKey })
-        );
-        const rawItems = Array.isArray(itemRes) ? itemRes : (itemRes?.value || itemRes?.d?.results || []);
-        items = rawItems.map(item => {
-          const qty = Number(item.OrderQuantity) || 0;
-          const net = Number(item.NetAmount) || 0;
-          const price = item.NetPriceAmount || (qty > 0 ? (net / qty).toFixed(2) : '0.00');
-          return {
-            ...item,
-            NetPriceAmount: price
-          };
-        });
-      } catch (ie) {
-        console.warn('[SalesInquiryAdapter] Error fetching items for inquiry:', ie.message);
+      (async () => {
+        if (!this.s4hanaFS) return [];
+        try {
+          return await this.s4hanaFS.run(
+            SELECT.from('SD_F2369_INQY_FS_SRV.C_Inquiryitemfs').where({ SalesInquiry: sKey })
+          );
+        } catch (ie) {
+          LOG.warn('Error fetching items for inquiry:', ie.message);
+          throw ie;
+        }
+      })()
+    ]);
+
+    const res = wlResult.status === 'fulfilled' ? wlResult.value : null;
+    if (res) {
+      header = { ...res };
+      if (res.to_SalesOffice?.SalesOfficeName) {
+        header.SalesOfficeName = res.to_SalesOffice.SalesOfficeName;
+      }
+      if (res.to_SalesGroup?.SalesGroupName) {
+        header.SalesGroupName = res.to_SalesGroup.SalesGroupName;
       }
     }
 
-    if (header) {
-      if (!header.ShipToParty && header.SoldToParty) {
-        header.ShipToParty = header.SoldToParty;
-        header.ShipToPartyName = header.OrganizationBPName1 || '';
+    const fsDoc = fsHeaderResult.status === 'fulfilled' ? fsHeaderResult.value : null;
+    if (fsDoc) {
+      header = Object.assign({}, fsDoc, header || {});
+      if (fsDoc.CustomerPurchaseOrderDate) header.CustomerPurchaseOrderDate = fsDoc.CustomerPurchaseOrderDate;
+      if (fsDoc.BindingPeriodValidityStartDate) header.BindingPeriodValidityStartDate = fsDoc.BindingPeriodValidityStartDate;
+      if (fsDoc.BindingPeriodValidityEndDate) header.BindingPeriodValidityEndDate = fsDoc.BindingPeriodValidityEndDate;
+      if (fsDoc.SalesAreaDesc) header.SalesAreaDesc = fsDoc.SalesAreaDesc;
+
+      const partners = Array.isArray(fsDoc.to_SDDocumentPartnerCard) ? fsDoc.to_SDDocumentPartnerCard : [];
+      const shipTo = partners.find(p => p.PartnerFunction === 'WE');
+      if (shipTo) {
+        header.ShipToParty = shipTo.Customer || shipTo.BusinessPartner;
+        header.ShipToPartyName = shipTo.FullName;
       }
-      return { header, items };
+      const contact = partners.find(p => p.PartnerFunction === 'ZP' || p.PartnerFunction === 'CP');
+      if (contact) {
+        header.ContactPersonName = contact.FullName || '';
+        header.ContactPerson = contact.ContactPerson || contact.Personnel || contact.BusinessPartner || '';
+      }
+      const salesEmp = partners.find(p => p.PartnerFunction === 'ZE');
+      if (salesEmp) {
+        header.SalesEmployeeName = salesEmp.FullName;
+      }
+    }
+
+    // Check for outage when header could not be read
+    const headerFailures = [];
+    if (wlResult.status === 'rejected') {
+      headerFailures.push(`WL: ${wlResult.reason?.message || 'failed'}`);
+    }
+    if (fsHeaderResult.status === 'rejected') {
+      headerFailures.push(`FS: ${fsHeaderResult.reason?.message || 'failed'}`);
+    }
+
+    if (!header && headerFailures.length > 0) {
+      LOG.error(`Failed to read Sales Inquiry ${sKey} from SAP S/4HANA:`, headerFailures.join('; '));
+      const err = new Error(`Sales Inquiry ${sKey} could not be read from SAP S/4HANA (${headerFailures.join('; ')}).`);
+      err.status = 502;
+      throw err;
+    }
+
+    let itemsUnavailable = false;
+    let itemsUnavailableReason = '';
+    if (fsItemsResult.status === 'rejected') {
+      itemsUnavailable = true;
+      itemsUnavailableReason = fsItemsResult.reason?.message || 'Factsheet item service error';
+      LOG.warn(`Line items for inquiry ${sKey} were unavailable:`, itemsUnavailableReason);
+    }
+
+    const itemRes = fsItemsResult.status === 'fulfilled' ? fsItemsResult.value : [];
+    const rawItems = Array.isArray(itemRes) ? itemRes : (itemRes?.value || itemRes?.d?.results || []);
+    items = rawItems.map(item => {
+      const price = (item.NetPriceAmount !== undefined && item.NetPriceAmount !== null && item.NetPriceAmount !== '')
+        ? String(item.NetPriceAmount)
+        : '';
+      return {
+        ...item,
+        NetPriceAmount: price
+      };
+    });
+
+    if (header) {
+      header.ShipToParty = header.ShipToParty || '';
+      header.ShipToPartyName = header.ShipToPartyName || '';
+
+      // 4. Resolve descriptions (names) for authentic SalesOffice and SalesGroup present on the SAP document
+      // Never borrow SalesOffice or SalesGroup from other inquiries or value help defaults. Show what SAP holds, blank if blank.
+      if (this.s4hanaWL) {
+        const sOff = header.SalesOffice ? String(header.SalesOffice).trim() : '';
+        const sGrp = header.SalesGroup ? String(header.SalesGroup).trim() : '';
+
+        const needsOfficeName = sOff && (!header.SalesOfficeName || header.SalesOfficeName.trim() === '');
+        const needsGroupName = sGrp && (!header.SalesGroupName || header.SalesGroupName.trim() === '');
+
+        if (needsOfficeName || needsGroupName) {
+          const [nameRes, groupNameRes] = await Promise.allSettled([
+            needsOfficeName ? this.salesOfficeVhCache.getOrSet(`office:${sOff}`, async () => {
+              const oVH = await this.s4hanaWL.run(
+                SELECT.one.from('SD_F2370_INQY_WL_SRV.C_SalesOfficeValueHelp').where({ SalesOffice: sOff })
+              );
+              return oVH?.SalesOfficeName || '';
+            }) : Promise.resolve(header.SalesOfficeName || ''),
+
+            needsGroupName ? this.salesGroupVhCache.getOrSet(`group_name:${sGrp}`, async () => {
+              const gVH = await this.s4hanaWL.run(
+                SELECT.one.from('SD_F2370_INQY_WL_SRV.C_SalesGroupValueHelp').where({ SalesGroup: sGrp })
+              );
+              return gVH?.SalesGroupName || '';
+            }) : Promise.resolve(header.SalesGroupName || '')
+          ]);
+
+          if (needsOfficeName && nameRes.status === 'fulfilled' && nameRes.value) {
+            header.SalesOfficeName = nameRes.value;
+          }
+          if (needsGroupName && groupNameRes.status === 'fulfilled' && groupNameRes.value) {
+            header.SalesGroupName = groupNameRes.value;
+          }
+        }
+      }
+
+      header.SalesOffice = header.SalesOffice || '';
+      header.SalesOfficeName = header.SalesOfficeName || '';
+      header.SalesGroup = header.SalesGroup || '';
+      header.SalesGroupName = header.SalesGroupName || '';
+
+      return { header, items, itemsUnavailable, itemsUnavailableReason };
     }
 
     return null;
   }
 
   /**
-   * Derives default organizational and commercial values for a customer.
+   * Retrieves Sales Orders list from S/4HANA worklist service (SD_F1873_SO_WL_SRV).
    */
-  async getCustomerDefaults(sCustomer, sOrg, sChannel, sDivision) {
+  async getSalesOrders(query, options = {}) {
+    await this.init();
+    if (this.s4hanaSO) {
+      try {
+        const execQuery = SELECT.from('SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873');
+        if (query?.SELECT?.columns) execQuery.columns(query.SELECT.columns);
+        if (query?.SELECT?.where) execQuery.where(query.SELECT.where);
+        if (query?.SELECT?.orderBy && query.SELECT.orderBy.length > 0) {
+          execQuery.orderBy(query.SELECT.orderBy);
+        } else {
+          execQuery.orderBy('CreationDate desc', 'SalesOrder desc');
+        }
+        if (query?.SELECT?.limit) {
+          const rows = query.SELECT.limit.rows?.val ?? query.SELECT.limit.rows ?? 50;
+          const offset = query.SELECT.limit.offset?.val ?? query.SELECT.limit.offset ?? 0;
+          execQuery.limit(rows, offset);
+        } else {
+          execQuery.limit(50);
+        }
+        if (query?.SELECT?.count) {
+          execQuery.SELECT.count = true;
+        }
+        const res = await this.s4hanaSO.run(execQuery);
+        const list = Array.isArray(res) ? res : (res?.value || res?.d?.results || []);
+        if (res?.$count !== undefined) {
+          list.$count = res.$count;
+        }
+        return list;
+      } catch (err) {
+        LOG.warn('Fetching sales orders from SD_F1873_SO_WL_SRV via CDS failed, falling back to HTTP client:', err.message);
+      }
+    }
+
+    try {
+      const dest = options.destination || await this._getDestination(options);
+      const executeFn = options.executeHttpRequest || this.client._execute;
+      const bCount = !!(query?.SELECT?.count || query?._queryOptions?.$count === 'true');
+
+      // 1. Pagination: honour limit.rows and limit.offset if specified
+      const limitObj = query?.SELECT?.limit;
+      let top = options.top;
+      let skip = options.skip;
+
+      if (limitObj) {
+        if (limitObj.rows !== undefined) {
+          top = limitObj.rows?.val !== undefined ? Number(limitObj.rows.val) : Number(limitObj.rows);
+        }
+        if (limitObj.offset !== undefined) {
+          skip = limitObj.offset?.val !== undefined ? Number(limitObj.offset.val) : Number(limitObj.offset);
+        }
+      }
+      if (top === undefined || top === null || isNaN(top)) {
+        top = query?._queryOptions?.$top ? parseInt(query._queryOptions.$top, 10) : 50;
+      }
+      if (skip === undefined || skip === null || isNaN(skip)) {
+        skip = query?._queryOptions?.$skip ? parseInt(query._queryOptions.$skip, 10) : 0;
+      }
+
+      // 2. Ordering: honour query.SELECT.orderBy if specified
+      let orderByStr = options.orderBy || _cqnOrderByToOData(query?.SELECT?.orderBy);
+      if (!orderByStr) {
+        orderByStr = 'CreationDate desc,SalesOrder desc';
+      }
+
+      // 3. Filtering: honour user's filter and refuse to drop it
+      const rawWhere = query?.SELECT?.where || query?.where;
+      const hasFilterRequirement = !!(options.filter || rawWhere || query?._queryOptions?.$filter);
+      let filterStr = options.filter || (query?._queryOptions?.$filter ? query._queryOptions.$filter.trim() : '');
+      if (!filterStr && rawWhere) {
+        filterStr = _cqnWhereToODataFilter(rawWhere);
+      }
+
+      if (hasFilterRequirement && !filterStr) {
+        const err = new Error('Cannot safely translate sales order query filter to OData HTTP fallback; refusing to return unfiltered results.');
+        err.status = 500;
+        throw err;
+      }
+
+      const queryParts = [];
+      if (top !== undefined && top !== null && !isNaN(top) && top > 0) {
+        queryParts.push(`$top=${top}`);
+      } else {
+        queryParts.push('$top=50');
+      }
+      if (skip !== undefined && skip !== null && !isNaN(skip) && skip > 0) {
+        queryParts.push(`$skip=${skip}`);
+      }
+      if (orderByStr) {
+        queryParts.push(`$orderby=${orderByStr}`);
+      }
+      if (bCount) {
+        queryParts.push('$inlinecount=allpages');
+      }
+      if (filterStr) {
+        queryParts.push(`$filter=${filterStr}`);
+      }
+
+      const queryString = queryParts.join('&');
+      const res = await executeFn(dest, {
+        method: 'get',
+        url: `/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873${queryString ? `?${queryString}` : ''}`,
+        headers: { 'Accept': 'application/json', ...(options.headers || {}) }
+      });
+      const rawResults = res.data?.d?.results || res.data?.value || [];
+      const normalized = rawResults.map(item => {
+        const copy = { ...item };
+        ['CreationDate', 'SalesOrderDate', 'RequestedDeliveryDate', 'LastChangeDate'].forEach(dateField => {
+          if (copy[dateField] && typeof copy[dateField] === 'string') {
+            const match = copy[dateField].match(/\/Date\((\d+)\)\//);
+            if (match) {
+              copy[dateField] = new Date(Number(match[1])).toISOString().split('T')[0];
+            }
+          }
+        });
+        if (copy.LastChangeDateTime && typeof copy.LastChangeDateTime === 'string') {
+          const match = copy.LastChangeDateTime.match(/\/Date\((\d+)([+-]\d+)?\)\//);
+          if (match) {
+            copy.LastChangeDateTime = new Date(Number(match[1])).toISOString();
+          }
+        }
+        return copy;
+      });
+      const rawCount = res.data?.d?.__count ?? res.data?.['@odata.count'];
+      if (rawCount !== undefined) {
+        normalized.$count = Number(rawCount);
+      }
+      return normalized;
+    } catch (httpErr) {
+      LOG.error('Error reading sales orders from SD_F1873_SO_WL_SRV:', httpErr.message);
+      const err = new Error(`Sales orders cannot be read: ${httpErr.message}`);
+      err.status = httpErr.status || 502;
+      throw err;
+    }
+  }
+
+  /**
+   * Retrieves single Sales Order details by ID directly from S/4HANA worklist service.
+   */
+  async getSalesOrder(sId, options = {}) {
+    const sKey = String(sId).trim();
+    await this.init();
+    if (this.s4hanaSO) {
+      try {
+        const order = await this.s4hanaSO.run(
+          SELECT.one.from('SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873', so => {
+            so('*');
+            so.to_SalesDocumentItemWl('*');
+          }).where({ SalesOrder: sKey })
+        );
+        if (order) return order;
+      } catch (_err) {
+        try {
+          const order = await this.s4hanaSO.run(
+            SELECT.one.from('SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873').where({ SalesOrder: sKey })
+          );
+          if (order) return order;
+        } catch (_innerErr) {
+          LOG.warn('Fetching sales order via CDS failed, falling back to HTTP client:', _innerErr.message);
+        }
+      }
+    }
+
+    try {
+      const dest = options.destination || await this._getDestination(options);
+      const executeFn = options.executeHttpRequest || this.client._execute;
+      const res = await executeFn(dest, {
+        method: 'get',
+        url: `/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873(%27${sKey}%27)?$expand=to_SalesDocumentItemWl`,
+        headers: { 'Accept': 'application/json', ...(options.headers || {}) }
+      });
+      return res.data?.d || res.data || null;
+    } catch (httpErr) {
+      if (httpErr.status === 404 || httpErr.statusCode === 404) return null;
+      LOG.error(`Error reading sales order ${sKey} from SD_F1873_SO_WL_SRV:`, httpErr.message);
+      const err = new Error(`Sales order ${sKey} cannot be read: ${httpErr.message}`);
+      err.status = httpErr.status || 502;
+      throw err;
+    }
+  }
+
+  /**
+   * Provides standard Sales Order creation defaults.
+   */
+  async getSalesOrderDefaults() {
+    const today = new Date().toISOString().split('T')[0];
+    return {
+      SalesOrderType: s4Config.getOrderType(),
+      SalesOrganization: s4Config.getSalesOrganization(),
+      DistributionChannel: s4Config.getDistributionChannel(),
+      OrganizationDivision: s4Config.getDivision(),
+      Plant: s4Config.getPlant(),
+      // No proposed delivery date: S/4HANA derives it from customizing when the user leaves it blank.
+      RequestedDeliveryDate: '',
+      SalesOrderDate: today,
+      CreationDate: today,
+      TransactionCurrency: s4Config.getCurrency(),
+      derived: true
+    };
+  }
+
+  /**
+   * Derives default organizational and commercial values for a customer.
+   * Runs customer master lookup and historical inquiries in parallel, with
+   * customer master details and value helps cached with a 5-minute TTL.
+   */
+  // Sales area parameters are accepted for API compatibility; no office/group is guessed from them any more.
+  async getCustomerDefaults(sCustomer, _sOrg, _sChannel, _sDivision) {
     if (!sCustomer || String(sCustomer).trim() === '') {
       return {
         Customer: '',
@@ -227,43 +1043,197 @@ class SalesInquiryAdapter {
         Currency: '',
         ShipToParty: '',
         ShipToPartyName: '',
+        SalesOffice: '',
+        SalesOfficeName: '',
+        SalesGroup: '',
+        SalesGroupName: '',
+        PaymentTerms: '',
+        Incoterms: '',
+        IncotermsLocation1: '',
+        INCO1: '',
+        INCO2: '',
+        validForSalesArea: true,
+        salesAreaError: '',
+        maintainedSalesAreasSummary: '',
         derived: false
       };
     }
 
     const sCust = String(sCustomer).trim();
+    const sOrg = _sOrg ? String(_sOrg).trim() : '';
+    const sChannel = _sChannel ? String(_sChannel).trim() : '';
+    const sDivision = _sDivision ? String(_sDivision).trim() : '';
     let sName = '';
     let sCity = '';
     let sCountry = '';
-    let sCurrency = 'INR';
+    let sCurrency = '';
+    let bDerived = false; // true when a value was taken from the customer's previous documents
+    let sOffice = '';
+    let sOfficeName = '';
+    let sGroup = '';
+    let sGroupName = '';
+    let sPaymentTerms = '';
+    let sInco1 = '';
+    let sInco2 = '';
+    let bValidForSalesArea = true;
+    let sSalesAreaError = '';
+    let sMaintainedSalesAreasSummary = '';
 
     await this.init();
     if (this.s4hanaWL) {
       try {
-        // Query Customer VH
-        const custRows = await this.s4hanaWL.run(
-          SELECT.from('SD_F2370_INQY_WL_SRV.I_Customer_VH').where({ Customer: sCust }).limit(1)
-        );
-        const cust = Array.isArray(custRows) ? custRows[0] : (custRows?.value?.[0] || null);
-        if (cust) {
-          sName = cust.CustomerName || cust.OrganizationBPName1 || cust.BusinessPartnerName1 || '';
-          sCity = cust.CityName || cust.BPAddrCityName || '';
-          sCountry = cust.Country || 'IN';
+        // Parallel fetch: Customer master data (cached) + Customer historical inquiries + Customer sales areas (cached)
+        const [custResult, inqResult, salesAreaResult] = await Promise.allSettled([
+          this.customerMasterCache.getOrSet(sCust, async () => {
+            const custRows = await this.s4hanaWL.run(
+              SELECT.from('SD_F2370_INQY_WL_SRV.I_Customer_VH').where({ Customer: sCust }).limit(1)
+            );
+            const cust = Array.isArray(custRows) ? custRows[0] : (custRows?.value?.[0] || null);
+            if (cust) {
+              return {
+                Name: cust.CustomerName || cust.OrganizationBPName1 || cust.BusinessPartnerName1 || '',
+                City: cust.CityName || cust.BPAddrCityName || '',
+                Country: cust.Country || ''
+              };
+            }
+            return null;
+          }),
+
+          (async () => {
+            return await this.s4hanaWL.run(
+              SELECT.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370')
+                .columns('TransactionCurrency', 'SalesOrganization', 'DistributionChannel', 'OrganizationDivision', 'SalesOffice', 'SalesGroup')
+                .where({ SoldToParty: sCust })
+                .limit(5)
+            );
+          })(),
+
+          (async () => {
+            if (!this.client || typeof this.client.get !== 'function') return null;
+            if (process.env.NODE_ENV === 'test' && !this.client.get._isMockFunction) return null;
+            return await this.customerSalesAreaCache.getOrSet(sCust, async () => {
+              try {
+                const res = await this.client.get(`/sap/opu/odata/sap/FAR_CUSTOMER_LIST_V2/C_CustomerList?$filter=Customer eq '${sCust}'`);
+                const items = Array.isArray(res.data?.d?.results) ? res.data.d.results : (Array.isArray(res.data?.value) ? res.data.value : []);
+                return items;
+              } catch (e) {
+                LOG.warn('FAR_CUSTOMER_LIST_V2 customer sales area lookup warning:', e.message);
+                return null;
+              }
+            });
+          })()
+        ]);
+
+        let bCustMasterFound = false;
+        if (custResult.status === 'fulfilled' && custResult.value) {
+          sName = custResult.value.Name || '';
+          sCity = custResult.value.City || '';
+          sCountry = custResult.value.Country || '';
+          bCustMasterFound = true;
         }
 
-        // Query historical inquiries for this customer to find default currency and org alignment
-        const inqRows = await this.s4hanaWL.run(
-          SELECT.from('SD_F2370_INQY_WL_SRV.C_InquiryWL_F2370')
-            .columns('TransactionCurrency', 'SalesOrganization', 'DistributionChannel', 'OrganizationDivision')
-            .where({ SoldToParty: sCust })
-            .limit(1)
-        );
-        const inq = Array.isArray(inqRows) ? inqRows[0] : (inqRows?.value?.[0] || null);
-        if (inq?.TransactionCurrency) {
-          sCurrency = inq.TransactionCurrency;
+        const rawInqs = inqResult.status === 'fulfilled' ? inqResult.value : [];
+        const aInqs = Array.isArray(rawInqs) ? rawInqs : (rawInqs?.value || []);
+        for (const inq of aInqs) {
+          if (inq?.TransactionCurrency && !sCurrency) { sCurrency = inq.TransactionCurrency; bDerived = true; }
+          if (inq?.SalesOffice && !sOffice) { sOffice = inq.SalesOffice; bDerived = true; }
+          if (inq?.SalesGroup && !sGroup) { sGroup = inq.SalesGroup; bDerived = true; }
+        }
+
+        // Evaluate customer sales area maintenance from FAR_CUSTOMER_LIST_V2
+        if (salesAreaResult.status === 'fulfilled' && Array.isArray(salesAreaResult.value) && salesAreaResult.value.length > 0) {
+          const aRecords = salesAreaResult.value;
+          const firstRec = aRecords[0];
+          if (!bCustMasterFound) {
+            if (!sName && firstRec.CustomerName) sName = firstRec.CustomerName;
+            if (!sCity && firstRec.CityName) sCity = firstRec.CityName;
+            if (!sCountry && firstRec.Country) sCountry = firstRec.Country;
+          }
+
+          if (sOrg || sChannel || sDivision) {
+            const matchingArea = aRecords.find(r =>
+              (!sOrg || r.SalesOrganization === sOrg) &&
+              (!sChannel || r.DistributionChannel === sChannel) &&
+              (!sDivision || r.Division === sDivision)
+            );
+
+            if (matchingArea) {
+              bValidForSalesArea = true;
+              if (matchingArea.SalesOffice && !sOffice) sOffice = matchingArea.SalesOffice;
+              if (matchingArea.SalesGroup && !sGroup) sGroup = matchingArea.SalesGroup;
+              if (matchingArea.CustomerPaymentTerms || matchingArea.PaymentTerms) {
+                sPaymentTerms = matchingArea.CustomerPaymentTerms || matchingArea.PaymentTerms;
+              }
+              if (matchingArea.Incoterms || matchingArea.IncotermsClassification || matchingArea.INCO1) {
+                sInco1 = matchingArea.Incoterms || matchingArea.IncotermsClassification || matchingArea.INCO1;
+              }
+              if (matchingArea.IncotermsLocation1 || matchingArea.IncotermsTransferLocation || matchingArea.INCO2 || matchingArea.INCO2_L) {
+                sInco2 = matchingArea.IncotermsLocation1 || matchingArea.IncotermsTransferLocation || matchingArea.INCO2 || matchingArea.INCO2_L;
+              }
+            } else {
+              bValidForSalesArea = false;
+              const aAreas = aRecords.map(r => `${r.SalesOrganization || ''} ${r.DistributionChannel || ''} ${r.Division || ''}`.trim()).filter(Boolean);
+              sMaintainedSalesAreasSummary = [...new Set(aAreas)].join(', ');
+              sSalesAreaError = `Sold-to party ${sCust} not maintained for sales area ${sOrg} ${sChannel} ${sDivision}`;
+            }
+          }
+        }
+
+        // Sales office name is master data for a known office; no office or group is ever picked from the
+        // first row of a value help (that was a guess, not the customer's data).
+        if (sOffice && !sOfficeName) {
+          try {
+            sOfficeName = await this.salesOfficeVhCache.getOrSet(`office:${sOffice}`, async () => {
+              const oVH = await this.s4hanaWL.run(
+                SELECT.one.from('SD_F2370_INQY_WL_SRV.C_SalesOfficeValueHelp').where({ SalesOffice: sOffice })
+              );
+              return oVH?.SalesOfficeName || '';
+            });
+          } catch (e) {
+            LOG.warn(`Could not resolve sales office name for ${sOffice}:`, e.message);
+          }
+        }
+
+        if (sGroup && !sGroupName) {
+          try {
+            const grpName = await this.salesGroupVhCache.getOrSet(`group_name:${sGroup}`, async () => {
+              const gVH = await this.s4hanaWL.run(
+                SELECT.one.from('SD_F2370_INQY_WL_SRV.C_SalesGroupValueHelp').where({ SalesGroup: sGroup })
+              );
+              return gVH?.SalesGroupName || '';
+            });
+            if (grpName) sGroupName = grpName;
+          } catch (e) {
+            LOG.warn(`Could not resolve customer sales group name for ${sGroup}:`, e.message);
+          }
         }
       } catch (err) {
-        console.warn('[SalesInquiryAdapter] getCustomerDefaults remote query warning:', err.message);
+        LOG.warn('getCustomerDefaults remote query warning:', err.message);
+      }
+    }
+
+    // Direct RFC read on KNVV (Customer Master Sales Data) for INCO1, INCO2, ZTERM, VKBUR, VKGRP
+    if (this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const sCustPadded = sCust.padStart(10, '0');
+        const knvvWhere = [`KUNNR = '${sCustPadded}'`];
+        if (sOrg) knvvWhere.push(`AND VKORG = '${sOrg}'`);
+        if (sChannel) knvvWhere.push(`AND VTWEG = '${sChannel}'`);
+        if (sDivision) knvvWhere.push(`AND SPART = '${sDivision}'`);
+        let knvvRows = await this.rfc.readTable('KNVV', ['INCO1', 'INCO2', 'ZTERM', 'VKBUR', 'VKGRP'], knvvWhere).catch(() => []);
+        if ((!knvvRows || knvvRows.length === 0) && (sOrg || sChannel || sDivision)) {
+          knvvRows = await this.rfc.readTable('KNVV', ['INCO1', 'INCO2', 'ZTERM', 'VKBUR', 'VKGRP'], [`KUNNR = '${sCustPadded}'`]).catch(() => []);
+        }
+        if (knvvRows && knvvRows.length > 0) {
+          const kRow = knvvRows[0];
+          if (kRow.INCO1 && !sInco1) sInco1 = kRow.INCO1.trim();
+          if (kRow.INCO2 && !sInco2) sInco2 = kRow.INCO2.trim();
+          if (kRow.ZTERM && !sPaymentTerms) sPaymentTerms = kRow.ZTERM.trim();
+          if (kRow.VKBUR && !sOffice) sOffice = kRow.VKBUR.trim();
+          if (kRow.VKGRP && !sGroup) sGroup = kRow.VKGRP.trim();
+        }
+      } catch (knvvErr) {
+        LOG.warn('KNVV customer lookup warning:', knvvErr.message);
       }
     }
 
@@ -273,9 +1243,22 @@ class SalesInquiryAdapter {
       City: sCity,
       Country: sCountry,
       Currency: sCurrency,
-      ShipToParty: sCust,
-      ShipToPartyName: sName,
-      derived: Boolean(sName || sCity)
+      // Ship-to is not proposed: S/4HANA partner determination sets it on create when left blank.
+      ShipToParty: '',
+      ShipToPartyName: '',
+      SalesOffice: sOffice,
+      SalesOfficeName: sOfficeName,
+      SalesGroup: sGroup,
+      SalesGroupName: sGroupName,
+      PaymentTerms: sPaymentTerms,
+      Incoterms: sInco1,
+      IncotermsLocation1: sInco2,
+      INCO1: sInco1,
+      INCO2: sInco2,
+      validForSalesArea: bValidForSalesArea,
+      salesAreaError: sSalesAreaError,
+      maintainedSalesAreasSummary: sMaintainedSalesAreasSummary,
+      derived: bDerived
     };
   }
 
@@ -284,25 +1267,23 @@ class SalesInquiryAdapter {
    */
   async getSalesInquiryDefaults() {
     const today = new Date().toISOString().split('T')[0];
-    const validityEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     return {
-      SalesInquiryType: 'ZIN',
-      SalesOrganization: '1000',
-      DistributionChannel: '10',
-      OrganizationDivision: '52',
+      SalesInquiryType: s4Config.getInquiryType(),
+      SalesOrganization: s4Config.getSalesOrganization(),
+      DistributionChannel: s4Config.getDistributionChannel(),
+      OrganizationDivision: s4Config.getDivision(),
       SalesInquiryDate: today,
       BindingPeriodValidityStartDate: today,
-      BindingPeriodValidityEndDate: validityEnd,
-      TransactionCurrency: 'INR',
+      BindingPeriodValidityEndDate: '',
+      TransactionCurrency: s4Config.getCurrency(),
       derived: true
     };
   }
 
   /**
-   * Resolves a material input string to a valid SAP numeric Material ID.
-   * If the input is already a material number, returns it directly.
-   * If it matches Material_Text in I_Material, resolves to the technical ID.
+   * Resolves material description to official S/4HANA material number using factsheet service.
+   * Cached with a 5-minute TTL.
    */
   async resolveMaterial(matInput) {
     if (!matInput || String(matInput).trim() === '') return '';
@@ -310,6 +1291,9 @@ class SalesInquiryAdapter {
     if (/^\d{6,18}$/.test(raw)) {
       return raw;
     }
+    const cached = this.materialResolutionCache.get(raw);
+    if (cached !== undefined) return cached;
+
     await this.init();
     if (this.s4hanaFS) {
       try {
@@ -317,41 +1301,392 @@ class SalesInquiryAdapter {
           SELECT.from('SD_F2369_INQY_FS_SRV.I_Material').where({ Material_Text: raw }).limit(1)
         );
         if (rows && rows[0]?.Material) {
+          this.materialResolutionCache.set(raw, rows[0].Material);
           return rows[0].Material;
         }
       } catch (e) {
-        console.warn('[SalesInquiryAdapter] Could not resolve material description:', raw, e.message);
+        LOG.warn('Could not resolve material description:', raw, e.message);
       }
     }
     return raw;
   }
 
   /**
-   * Creates a Sales Inquiry directly in SAP S/4HANA using LORD_ODATA_ORDER_SRV.
-   * SAP S/4HANA generates the official sequential inquiry number (e.g. 1000521, 1000522).
+   * Creates a Sales Document (Sales Order or Sales Inquiry) in SAP S/4HANA using LORD_ODATA_ORDER_SRV.
    *
-   * @param {Object} header - Normalized inquiry header
+   * Architectural execution mode:
+   * - Sales Inquiries ('ZIN'): Uses sequential 3-step POSTs (HeaderSet -> ItemSet -> PriceCondSet)
+   *   because LORD_ODATA_ORDER_SRV rejects deep insert for Inquiry (SLS_LORD/005).
+   * - Sales Orders ('ZDOM' or other order types): Uses OData Deep Insert (HeaderSet with nested ItemSet and PriceCondSet)
+   *   because sequential POSTs are blocked by SAP approval workflow locking (V2/468).
+   *
+   * @param {string} docType - Document type (e.g. 'ZIN', 'ZDOM')
+   * @param {Object} header - Normalized document header
    * @param {Array<Object>} items - Normalized line items
    * @param {Object} options - User and execution options
-   * @returns {Promise<{ SalesInquiry: string, TotalNetAmount: string, TransactionCurrency: string }>}
+   * @returns {Promise<{ SalesDocument: string, SalesOrderID: string, SalesInquiry: string, SalesOrder: string, TotalNetAmount: string, TransactionCurrency: string, notTransmitted?: string[] }>}
    */
-  async createSalesInquiry(header, items, options = {}) {
-    const destination = options.destination || await this._getDestination();
+  async createSalesDocument(docType, header, items, options = {}) {
+    const destination = options.destination || await this._getDestination(options);
     const servicePath = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
-    const executeFn = options.executeHttpRequest || httpClient.executeHttpRequest;
+    const executeFn = options.executeHttpRequest || this.client._execute;
 
-    const firstItemText = (items && items[0] && (items[0].SalesInquiryItemText || items[0].MaterialName)) || '';
-    const custRef = header.PurchaseOrderByCustomer || firstItemText || 'SALES INQUIRY';
+    const custRef = (header.PurchaseOrderNumber || header.PurchaseOrderByCustomer)
+      ? String(header.PurchaseOrderNumber || header.PurchaseOrderByCustomer).trim()
+      : '';
+    const effectiveDocType = String(docType || header.SalesOrderType || header.SalesInquiryType || '').trim();
+    if (!effectiveDocType) {
+      throw new Error('Document Type is required for Sales Document creation');
+    }
+    const isOrder = effectiveDocType !== 'ZIN';
 
+    // Upfront item unit and quantity validation for all document types
+    if (Array.isArray(items) && items.length > 0) {
+      for (let idx = 0; idx < items.length; idx++) {
+        const itm = items[idx];
+        const lineNum = itm.SalesOrderItem || itm.SalesInquiryItem || String((idx + 1) * 10).padStart(6, '0');
+        const itemUnit = itm.OrderQuantityUnit || itm.SalesUnit || itm.UnitOfMeasure || itm.BaseUnit;
+        if (!itemUnit || !String(itemUnit).trim()) {
+          throw new Error(`Order quantity unit (SalesUnit) is required for item ${lineNum}`);
+        }
+        if (itm.OrderQuantity === undefined || itm.OrderQuantity === null || String(itm.OrderQuantity).trim() === '') {
+          throw new Error(`OrderQuantity is required for item ${lineNum}`);
+        }
+        const qty = parseFloat(itm.OrderQuantity);
+        if (isNaN(qty) || qty <= 0) {
+          throw new Error(`OrderQuantity must be greater than 0 for item ${lineNum}`);
+        }
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Order Branch: OData Deep Insert
+    // -------------------------------------------------------------------------
+    if (isOrder) {
+      const deepItems = [];
+
+      if (Array.isArray(items) && items.length > 0) {
+        for (let idx = 0; idx < items.length; idx++) {
+          const itm = items[idx];
+          const qty = parseFloat(itm.OrderQuantity);
+          const price = parseFloat(itm.NetPriceAmount) || 0;
+          const net = itm.NetAmount !== undefined && itm.NetAmount !== null ? parseFloat(itm.NetAmount) : (qty * price);
+
+          const _lineNum = itm.SalesOrderItem || itm.SalesInquiryItem || String((idx + 1) * 10).padStart(6, '0');
+          const resolvedMaterial = await this.resolveMaterial(itm.Material);
+
+          const itemUnit = itm.OrderQuantityUnit || itm.SalesUnit || itm.UnitOfMeasure || itm.BaseUnit;
+          if (!itemUnit || !String(itemUnit).trim()) {
+            throw new Error(`Order quantity unit (SalesUnit) is required for item ${_lineNum}`);
+          }
+          const cleanItemUnit = String(itemUnit).trim().toUpperCase();
+
+          const itemDesc = itm.SalesOrderItemText || itm.ItemDescr;
+          const itemObj = {
+            MaterialID: resolvedMaterial || itm.Material || '',
+            OrderQty: String(qty.toFixed(3)),
+            SalesUnit: cleanItemUnit
+          };
+          if (itemDesc && String(itemDesc).trim() !== '') {
+            itemObj.ItemDescr = String(itemDesc).trim();
+          }
+          if (itm.Plant && String(itm.Plant).trim() !== '') {
+            itemObj.Plant = String(itm.Plant).trim().toUpperCase();
+          }
+          if (itm.RequestedDeliveryDate) {
+            const formattedDate = _formatODataV2Date(itm.RequestedDeliveryDate);
+            if (formattedDate) itemObj.RequestedDeliveryDate = formattedDate;
+          }
+
+          const effectivePrice = price > 0 ? price : (qty > 0 && net > 0 ? (net / qty) : 0);
+          if (effectivePrice > 0) {
+            itemObj.PriceCondSet = [
+              {
+                CondTypeCode: s4Config.getConditionType(),
+                AmountInternal: String(effectivePrice.toFixed(2)),
+                RateUnitExternal: header.TransactionCurrency ? String(header.TransactionCurrency).trim().toUpperCase() : '',
+                PriceUnit: '1.000',
+                UnitOfMeasure: cleanItemUnit
+              }
+            ];
+          }
+          deepItems.push(itemObj);
+        }
+      }
+
+      if (!header.SalesOrganization || String(header.SalesOrganization).trim() === '') {
+        throw new Error('SalesOrganization is required for Sales Order creation');
+      }
+      if (!header.DistributionChannel || String(header.DistributionChannel).trim() === '') {
+        throw new Error('DistributionChannel is required for Sales Order creation');
+      }
+      const orderDivision = header.OrganizationDivision || header.Division;
+      if (!orderDivision || String(orderDivision).trim() === '') {
+        throw new Error('Division is required for Sales Order creation');
+      }
+
+      const headerPayload = {
+        SalesOrderTypeCode: effectiveDocType,
+        SalesOrganization: String(header.SalesOrganization).trim(),
+        DistributionChannel: String(header.DistributionChannel).trim(),
+        Division: String(orderDivision).trim(),
+        SoldToPartyID: header.SoldToParty || '',
+        PurchaseOrderNumber: custRef,
+        ItemSet: deepItems
+      };
+      const poDate = header.PurchaseOrderDate || header.CustomerPurchaseOrderDate;
+      if (poDate) {
+        const formattedPoDate = _formatODataV2Date(poDate);
+        if (formattedPoDate) headerPayload.PurchaseOrderDate = formattedPoDate;
+      }
+      if (header.RequestedDeliveryDate) {
+        const formattedHdrDate = _formatODataV2Date(header.RequestedDeliveryDate);
+        if (formattedHdrDate) headerPayload.RequestedDeliveryDate = formattedHdrDate;
+      }
+      const payTerms = header.PaymentTerms || header.PaymentTermCode;
+      if (payTerms && String(payTerms).trim() !== '') {
+        headerPayload.PaymentTermCode = String(payTerms).trim();
+      }
+      // Collect Header Partners
+      const headerPartners = [];
+      if (header.ShipToParty && String(header.ShipToParty).trim() !== '') {
+        headerPartners.push({
+          PartnerFunctionCode: 'SH',
+          CustomerID: String(header.ShipToParty).trim()
+        });
+      }
+
+      // Contact Person: send through the path $metadata supports:
+      // 1. Header property if Header has ContactPerson
+      // 2. HeaderPartnerSet entry with PartnerFunctionCode 'ZP' and CustomerID if HeaderPartner has CustomerID
+      // 3. Otherwise fail with a visible error.
+      if (header.ContactPerson && String(header.ContactPerson).trim() !== '') {
+        const sContactPerson = String(header.ContactPerson).trim();
+        const fields = await this._getLeanOrderFields(destination, executeFn);
+        if (fields.header.has('ContactPerson')) {
+          headerPayload.ContactPerson = sContactPerson;
+        } else if (fields.partner && (fields.partner.has('CustomerID') || fields.partner.has('ContactPersonID'))) {
+          const cpEntry = {
+            PartnerFunctionCode: 'ZP',
+            CustomerID: sContactPerson
+          };
+          if (fields.partner.has('ContactPersonID')) {
+            cpEntry.ContactPersonID = sContactPerson;
+          }
+          headerPartners.push(cpEntry);
+        } else {
+          const err = new Error('Contact Person is not supported by the SAP backend service (LORD_ODATA_ORDER_SRV HeaderSet metadata has no ContactPerson property and HeaderPartnerSet has no CustomerID property). Maintain Contact Person directly in SAP.');
+          err.status = 400;
+          throw err;
+        }
+      }
+
+      if (headerPartners.length > 0) {
+        headerPayload.HeaderPartnerSet = headerPartners;
+      }
+
+      // Extension fields: only those the service exposes can be transmitted
+      const notTransmitted = [];
+      const providedExt = INQUIRY_EXTENSION_FIELDS
+        .filter(f => f !== 'ContactPerson')
+        .filter(f => String(header[f] ?? '').trim() !== '');
+      if (providedExt.length > 0) {
+        const fields = await this._getLeanOrderFields(destination, executeFn);
+        for (const f of providedExt) {
+          if (fields.header.has(f)) headerPayload[f] = String(header[f]).trim();
+          else notTransmitted.push(f);
+        }
+        if (notTransmitted.length > 0) {
+          LOG.warn(`LORD_ODATA_ORDER_SRV has no field for ${notTransmitted.join(', ')};`
+            + ' the sales order will stay incomplete until these are maintained directly in SAP or the service is extended.');
+        }
+      }
+
+      let createResp;
+      try {
+        createResp = await executeFn(destination, {
+          method: 'post',
+          url: `${servicePath}/HeaderSet`,
+          data: headerPayload,
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            ...(options.headers || {})
+          }
+        }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : true });
+      } catch (orderErr) {
+        const sapMsg = orderErr.response?.data?.error?.message?.value ||
+          orderErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
+          orderErr.message;
+        LOG.error('Failed to create Sales Order in S/4HANA:', sapMsg);
+        const err = new Error(sapMsg);
+        err.status = orderErr.response?.status || 502;
+        throw err;
+      }
+
+      const sNewOrderId = createResp.data?.d?.SalesOrderID || createResp.data?.SalesOrderID;
+      if (!sNewOrderId) {
+        throw new Error('Sales Order number not returned from SAP S/4HANA');
+      }
+
+      // Read-back verification from SAP
+      let s4Header = createResp.data?.d || createResp.data || {};
+      if (options.readBack !== false) {
+        let readHeader = {};
+        let readPartners = [];
+        try {
+          const readResp = await executeFn(destination, {
+            method: 'get',
+            url: `${servicePath}/HeaderSet(%27${sNewOrderId}%27)?$expand=HeaderPartnerSet`,
+            headers: {
+              'Accept': 'application/json',
+              ...(options.headers || {})
+            }
+          }, { fetchCsrfToken: false });
+          if (readResp?.data?.d || readResp?.data) {
+            readHeader = readResp.data?.d || readResp.data;
+            s4Header = readHeader;
+            readPartners = readHeader.HeaderPartnerSet?.results || (Array.isArray(readHeader.HeaderPartnerSet) ? readHeader.HeaderPartnerSet : []);
+          }
+        } catch (readErr) {
+          LOG.warn(`Could not read back HeaderSet for order ${sNewOrderId}:`, readErr.message);
+        }
+
+        // Confirm the two header values the service can carry; a mismatch is reported as an error.
+        const mismatches = [];
+
+        // 1. Payment Terms
+        const expPayTerms = String(header.PaymentTerms || header.PaymentTermCode || '').trim();
+        if (expPayTerms) {
+          const actualPayTerms = String(readHeader.PaymentTermCode || readHeader.PaymentTerms || '').trim();
+          if (actualPayTerms && actualPayTerms !== expPayTerms) {
+            mismatches.push(`Payment Terms expected '${expPayTerms}' but found '${actualPayTerms}'`);
+          }
+        }
+
+        // 2. Contact Person: Header property when the service has one, otherwise HeaderPartnerSet 'ZP' / 'CP'
+        const expContact = String(header.ContactPerson || '').trim();
+        if (expContact) {
+          const actualContact = String(readHeader.ContactPerson || '').trim();
+          const noZeros = (v) => String(v || '').trim().replace(/^0+/, '');
+          const partnerMatch = readPartners.some(p =>
+            (!p.PartnerFunctionCode || p.PartnerFunctionCode === 'ZP' || p.PartnerFunctionCode === 'CP') &&
+            [p.CustomerID, p.PartnerNumber, p.ContactPersonID].some(v => noZeros(v) !== '' && noZeros(v) === noZeros(expContact)));
+          if (actualContact) {
+            if (actualContact !== expContact) {
+              mismatches.push(`Contact Person expected '${expContact}' but found '${actualContact}'`);
+            }
+          } else if (!partnerMatch && readPartners.length > 0) {
+            mismatches.push(`Contact Person expected '${expContact}' but not found in order partners`);
+          }
+        }
+
+        if (mismatches.length > 0) {
+          const mismatchErr = new Error(`Sales Order ${sNewOrderId} created, but read-back verification failed: ${mismatches.join('; ')}`);
+          mismatchErr.status = 502;
+          mismatchErr.SalesOrder = sNewOrderId;
+          mismatchErr.mismatches = mismatches;
+          throw mismatchErr;
+        }
+      }
+
+      // HeaderSet (LORD_ODATA_ORDER_SRV) carries NetAmount, TotalAmount, TaxAmount, DocumentCurrency — nothing else, nothing computed.
+      const sapNet = s4Header.NetAmount;
+      const sapTotal = s4Header.TotalAmount;
+      const sapTax = s4Header.TaxAmount;
+      const sapCurrency = s4Header.DocumentCurrency || '';
+
+      const finalNet = (sapNet !== undefined && sapNet !== null && String(sapNet).trim() !== '') ? String(sapNet) : '';
+
+      return {
+        SalesDocument: sNewOrderId,
+        SalesOrderID: sNewOrderId,
+        SalesOrder: sNewOrderId,
+        SalesInquiry: sNewOrderId,
+        TotalNetAmount: finalNet,
+        NetAmount: finalNet || undefined,
+        TotalAmount: sapTotal !== undefined && sapTotal !== null ? String(sapTotal) : undefined,
+        TaxAmount: sapTax !== undefined && sapTax !== null ? String(sapTax) : undefined,
+        TransactionCurrency: sapCurrency,
+        notTransmitted: notTransmitted
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // Inquiry Branch: Sequential 3-Step POSTs
+    // -------------------------------------------------------------------------
     // 1. Post Header to LORD_ODATA_ORDER_SRV/HeaderSet
+    if (!header.SalesOrganization || String(header.SalesOrganization).trim() === '') {
+      throw new Error('SalesOrganization is required for Sales Inquiry creation');
+    }
+    if (!header.DistributionChannel || String(header.DistributionChannel).trim() === '') {
+      throw new Error('DistributionChannel is required for Sales Inquiry creation');
+    }
+    const inquiryDivision = header.OrganizationDivision || header.Division;
+    if (!inquiryDivision || String(inquiryDivision).trim() === '') {
+      throw new Error('Division is required for Sales Inquiry creation');
+    }
+
     const headerPayload = {
-      SalesOrderTypeCode: header.SalesInquiryType || 'ZIN',
-      SalesOrganization: header.SalesOrganization || '1000',
-      DistributionChannel: header.DistributionChannel || '10',
-      Division: header.OrganizationDivision || '52',
+      SalesOrderTypeCode: effectiveDocType,
+      SalesOrganization: String(header.SalesOrganization).trim(),
+      DistributionChannel: String(header.DistributionChannel).trim(),
+      Division: String(inquiryDivision).trim(),
       SoldToPartyID: header.SoldToParty || '',
       PurchaseOrderNumber: custRef
     };
+
+    const inquiryPartners = [];
+    if (header.ShipToParty && String(header.ShipToParty).trim() !== '') {
+      inquiryPartners.push({
+        PartnerFunctionCode: 'SH',
+        CustomerID: String(header.ShipToParty).trim()
+      });
+    }
+
+    // Contact Person: send through the path $metadata supports (HeaderSet property or HeaderPartnerSet entry).
+    // If neither path exists in metadata, fail with a visible error.
+    if (header.ContactPerson && String(header.ContactPerson).trim() !== '') {
+      const sContactPerson = String(header.ContactPerson).trim();
+      const fields = await this._getLeanOrderFields(destination, executeFn);
+      if (fields.header.has('ContactPerson')) {
+        headerPayload.ContactPerson = sContactPerson;
+      } else if (fields.partner && (fields.partner.has('CustomerID') || fields.partner.has('ContactPersonID'))) {
+        const cpEntry = {
+          PartnerFunctionCode: 'ZP',
+          CustomerID: sContactPerson
+        };
+        if (fields.partner.has('ContactPersonID')) {
+          cpEntry.ContactPersonID = sContactPerson;
+        }
+        inquiryPartners.push(cpEntry);
+      } else {
+        const err = new Error('Contact Person is not supported by the SAP backend service (LORD_ODATA_ORDER_SRV HeaderSet metadata has no ContactPerson property and HeaderPartnerSet has no CustomerID property). Maintain Contact Person directly in SAP.');
+        err.status = 400;
+        throw err;
+      }
+    }
+
+    if (inquiryPartners.length > 0) {
+      headerPayload.HeaderPartnerSet = inquiryPartners;
+    }
+
+    // Extension fields: only those the service exposes can be transmitted.
+    const notTransmitted = [];
+    const provided = INQUIRY_EXTENSION_FIELDS
+      .filter(f => f !== 'ContactPerson')
+      .filter(f => String(header[f] ?? '').trim() !== '');
+    if (provided.length > 0) {
+      const fields = await this._getLeanOrderFields(destination, executeFn);
+      for (const f of provided) {
+        if (fields.header.has(f)) headerPayload[f] = String(header[f]).trim();
+        else notTransmitted.push(f);
+      }
+      if (notTransmitted.length > 0) {
+        LOG.warn(`LORD_ODATA_ORDER_SRV has no field for ${notTransmitted.join(', ')};`
+          + ' the inquiry will stay incomplete until these are maintained directly in SAP or the service is extended.');
+      }
+    }
 
     let headerResp;
     try {
@@ -367,9 +1702,9 @@ class SalesInquiryAdapter {
       }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : true });
     } catch (headerErr) {
       const sapMsg = headerErr.response?.data?.error?.message?.value ||
-                     headerErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
-                     headerErr.message;
-      console.error('[SalesInquiryAdapter] Failed to create Sales Inquiry header in S/4HANA:', sapMsg);
+        headerErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
+        headerErr.message;
+      LOG.error('Failed to create Sales Inquiry header in S/4HANA:', sapMsg);
       throw new Error(sapMsg);
     }
 
@@ -378,26 +1713,35 @@ class SalesInquiryAdapter {
       throw new Error('Sales Inquiry number not returned from SAP S/4HANA');
     }
 
-    let totalNet = 0;
 
     // 2. Post line items sequentially to LORD_ODATA_ORDER_SRV/HeaderSet('<SalesOrderID>')/ItemSet
     if (Array.isArray(items) && items.length > 0) {
       for (let idx = 0; idx < items.length; idx++) {
         const itm = items[idx];
-        const qty = parseFloat(itm.OrderQuantity) || 1;
+        const qty = parseFloat(itm.OrderQuantity);
         const price = parseFloat(itm.NetPriceAmount) || 0;
         const net = itm.NetAmount !== undefined && itm.NetAmount !== null ? parseFloat(itm.NetAmount) : (qty * price);
-        totalNet += net;
 
         const lineNum = itm.SalesInquiryItem || String((idx + 1) * 10).padStart(6, '0');
         const resolvedMaterial = await this.resolveMaterial(itm.Material);
+
+        const itemUnit = itm.OrderQuantityUnit || itm.SalesUnit || itm.UnitOfMeasure || itm.BaseUnit;
+        if (!itemUnit || !String(itemUnit).trim()) {
+          throw new Error(`Order quantity unit (SalesUnit) is required for item ${lineNum}`);
+        }
+        const cleanItemUnit = String(itemUnit).trim().toUpperCase();
+
         const itemPayload = {
           SalesOrderID: sNewInquiryId,
           ItemID: lineNum,
           MaterialID: resolvedMaterial || itm.Material || '',
           OrderQty: String(qty.toFixed(3)),
-          SalesUnit: itm.OrderQuantityUnit || 'PC'
+          SalesUnit: cleanItemUnit
         };
+        // Plant is on the ZIN item incompletion procedure; the Item entity carries it.
+        if (itm.Plant && String(itm.Plant).trim() !== '') {
+          itemPayload.Plant = String(itm.Plant).trim().toUpperCase();
+        }
 
         try {
           await executeFn(destination, {
@@ -412,10 +1756,20 @@ class SalesInquiryAdapter {
           }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : true });
         } catch (itemErr) {
           const itemSapMsg = itemErr.response?.data?.error?.message?.value ||
-                             itemErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
-                             itemErr.message;
-          console.error(`[SalesInquiryAdapter] Failed to create item ${itemPayload.ItemID} for inquiry ${sNewInquiryId}:`, itemSapMsg);
-          throw new Error(itemSapMsg);
+            itemErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
+            itemErr.message;
+          LOG.error(`Failed to create item ${itemPayload.ItemID} for inquiry ${sNewInquiryId}:`, itemSapMsg);
+          throw new PartialSalesInquiryError(
+            `Sales Inquiry ${sNewInquiryId} was created in SAP S/4HANA, but adding item ${lineNum} failed: ${itemSapMsg}. Do not retry: check or complete inquiry ${sNewInquiryId} in SAP.`,
+            sNewInquiryId,
+            {
+              step: 'ItemSet',
+              itemNumber: lineNum,
+              sapMessage: itemSapMsg,
+              originalError: itemErr,
+              status: itemErr.response?.status || 502
+            }
+          );
         }
 
         // 3. Post price condition (ZPR1) so S/4HANA pricing engine computes and stores Net Amount
@@ -424,11 +1778,11 @@ class SalesInquiryAdapter {
           const condPayload = {
             SalesOrderID: sNewInquiryId,
             ItemID: lineNum,
-            CondTypeCode: 'ZPR1',
+            CondTypeCode: s4Config.getConditionType(),
             AmountInternal: String(effectivePrice.toFixed(2)),
-            RateUnitExternal: header.TransactionCurrency || 'INR',
+            RateUnitExternal: header.TransactionCurrency || s4Config.getCurrency(),
             PriceUnit: '1.000',
-            UnitOfMeasure: itm.OrderQuantityUnit || 'PC'
+            UnitOfMeasure: cleanItemUnit
           };
           try {
             await executeFn(destination, {
@@ -443,24 +1797,368 @@ class SalesInquiryAdapter {
             }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : true });
           } catch (condErr) {
             const condSapMsg = condErr.response?.data?.error?.message?.value ||
-                               condErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
-                               condErr.message;
-            console.error(`[SalesInquiryAdapter] Failed to set price condition for item ${lineNum}:`, condSapMsg);
-            throw new Error(condSapMsg);
+              condErr.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
+              condErr.message;
+            LOG.error(`Failed to set price condition for item ${lineNum}:`, condSapMsg);
+            throw new PartialSalesInquiryError(
+              `Sales Inquiry ${sNewInquiryId} was created in SAP S/4HANA with items, but adding price condition for item ${lineNum} failed: ${condSapMsg}. Do not retry: check or complete inquiry ${sNewInquiryId} in SAP.`,
+              sNewInquiryId,
+              {
+                step: 'PriceCondSet',
+                itemNumber: lineNum,
+                sapMessage: condSapMsg,
+                originalError: condErr,
+                status: condErr.response?.status || 502
+              }
+            );
           }
         }
       }
     }
 
+    let s4Header = headerResp.data?.d || headerResp.data || {};
+    // The header POST answers before items and prices exist, so its amounts are not the document's totals.
+    // Totals are reported only after reading the header back (default), never computed locally.
+    let totalsFromReadBack = false;
+
+    if (options.readBack !== false) {
+      try {
+        const readResp = await executeFn(destination, {
+          method: 'get',
+          url: `${servicePath}/HeaderSet(%27${sNewInquiryId}%27)`,
+          headers: {
+            'Accept': 'application/json',
+            ...(options.headers || {})
+          }
+        }, { fetchCsrfToken: false });
+        if (readResp?.data?.d || readResp?.data) {
+          s4Header = readResp.data?.d || readResp.data;
+          totalsFromReadBack = true;
+        }
+      } catch (readErr) {
+        LOG.warn(`Could not read back header totals for inquiry ${sNewInquiryId}:`, readErr.message);
+      }
+    }
+
+    const sapNet = totalsFromReadBack ? s4Header.NetAmount : undefined;
+    const sapTotal = totalsFromReadBack ? s4Header.TotalAmount : undefined;
+    const sapTax = totalsFromReadBack ? s4Header.TaxAmount : undefined;
+    const sapCurrency = s4Header.DocumentCurrency || '';
+
+    const finalNet = (sapNet !== undefined && sapNet !== null && String(sapNet).trim() !== '') ? String(sapNet) : '';
+
     return {
+      SalesDocument: sNewInquiryId,
+      SalesOrderID: sNewInquiryId,
       SalesInquiry: sNewInquiryId,
-      TotalNetAmount: totalNet > 0 ? String(totalNet.toFixed(2)) : (headerResp.data?.d?.NetValue || '0.00'),
-      TransactionCurrency: header.TransactionCurrency || headerResp.data?.d?.Currency || 'INR'
+      SalesOrder: sNewInquiryId,
+      TotalNetAmount: finalNet,
+      NetAmount: finalNet || undefined,
+      TotalAmount: sapTotal !== undefined && sapTotal !== null ? String(sapTotal) : undefined,
+      TaxAmount: sapTax !== undefined && sapTax !== null ? String(sapTax) : undefined,
+      TransactionCurrency: sapCurrency,
+      notTransmitted
     };
+  }
+
+  /**
+   * Creates a Sales Inquiry directly in SAP S/4HANA using LORD_ODATA_ORDER_SRV.
+   */
+  async createSalesInquiry(header, items, options = {}) {
+    const docType = header.SalesInquiryType;
+    if (!docType || String(docType).trim() === '') {
+      throw new Error('SalesInquiryType is required for Sales Inquiry creation');
+    }
+    return this.createSalesDocument(docType, header, items, options);
+  }
+
+  /**
+   * Creates a Sales Order directly in SAP S/4HANA using LORD_ODATA_ORDER_SRV (Deep Insert).
+   */
+  async createSalesOrder(header, items, options = {}) {
+    const docType = header.SalesOrderType;
+    if (!docType || String(docType).trim() === '') {
+      throw new Error('SalesOrderType is required for Sales Order creation');
+    }
+    return this.createSalesDocument(docType, header, items, options);
+  }
+
+  /**
+   * Property names of the LORD_ODATA_ORDER_SRV Header and Item entities, read once from the live
+   * $metadata and cached for the process. A failed read is not cached and yields empty sets, so
+   * inquiry creation still works with the standard fields.
+   */
+  async _getLeanOrderFields(destination, executeFn = this.client._execute) {
+    if (this._leanOrderFields) return this._leanOrderFields;
+    const empty = { header: new Set(), item: new Set(), partner: new Set() };
+    try {
+      const res = await executeFn(destination, {
+        method: 'get',
+        url: `${LEAN_ORDER_PATH}/$metadata`,
+        headers: { 'Accept': 'application/xml, text/xml' }
+      }, { fetchCsrfToken: false });
+      const xml = typeof res?.data === 'string' ? res.data : '';
+      const props = (name) => {
+        const m = xml.match(new RegExp(`<EntityType Name="${name}"[\\s\\S]*?</EntityType>`));
+        return new Set(m ? [...m[0].matchAll(/<Property Name="([^"]+)"/g)].map(x => x[1]) : []);
+      };
+      const fields = { header: props('Header'), item: props('Item'), partner: props('HeaderPartner') };
+      if (fields.header.size === 0) {
+        LOG.warn('LORD_ODATA_ORDER_SRV $metadata returned no Header properties; capabilities unknown.');
+        return empty;
+      }
+      this._leanOrderFields = fields;
+      return fields;
+    } catch (err) {
+      LOG.warn('Could not read LORD_ODATA_ORDER_SRV $metadata:', err.message);
+      return empty;
+    }
+  }
+
+  /**
+   * Reports which extension fields the SAP inquiry creation service can accept right now.
+   * The UI marks accepted fields as required and tells the user to maintain the others directly in SAP.
+   */
+  async getInquiryCreationCapabilities(options = {}) {
+    const destination = options.destination || await this._getDestination(options);
+    const executeFn = options.executeHttpRequest || this.client._execute;
+    const fields = await this._getLeanOrderFields(destination, executeFn);
+    const caps = { service: 'LORD_ODATA_ORDER_SRV' };
+    for (const f of INQUIRY_EXTENSION_FIELDS) caps[f] = fields.header.has(f);
+    caps.Plant = fields.item.has('Plant');
+    return caps;
+  }
+
+  /**
+   * Sales order counts read live from SAP S/4HANA (SD_F1873_SO_WL_SRV, entity C_SalesOrderWl_F1873):
+   * open orders (OverallSDProcessStatus ne 'C') and all orders.
+   *
+   * Fails when the destination cannot be resolved or SAP does not return both counts; no count is
+   * ever defaulted.
+   *
+   * @param {Object} [options] - destination / executeHttpRequest / headers overrides
+   * @returns {Promise<{ openOrdersCount: number, totalOrdersCount: number }>}
+   * @throws {Error} status 503 without a destination, 502 when SAP could not be read
+   */
+  async getSalesMetrics(options = {}) {
+    const isOrder = options.entity !== 'inquiry';
+    const docLabel = isOrder ? 'Sales order' : 'Sales inquiry';
+    const serviceName = isOrder ? 'SD_F1873_SO_WL_SRV' : 'SD_F2370_INQY_WL_SRV';
+    const servicePath = isOrder ? '/sap/opu/odata/sap/SD_F1873_SO_WL_SRV' : '/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV';
+    const entitySet = isOrder ? 'C_SalesOrderWl_F1873' : 'C_InquiryWL_F2370';
+
+    let dest;
+    try {
+      dest = options.destination || await this._getDestination(options);
+    } catch (e) {
+      const err = new Error(`${docLabel} metrics are not available: ${e.message}`);
+      err.status = 503;
+      throw err;
+    }
+
+    const executeFn = options.executeHttpRequest || this.client._execute;
+    const request = (query) => executeFn(dest, {
+      method: 'get',
+      url: `${servicePath}/${entitySet}?${query}`,
+      headers: { 'Accept': 'application/json', ...(options.headers || {}) }
+    });
+    const countOf = (res) => {
+      const raw = res?.data?.d?.__count ?? res?.data?.['@odata.count'];
+      const n = Number(raw);
+      return raw !== undefined && raw !== null && String(raw).trim() !== '' && Number.isInteger(n) && n >= 0 ? n : null;
+    };
+
+    let resOpen;
+    let resTotal;
+    try {
+      [resOpen, resTotal] = await Promise.all([
+        request("$inlinecount=allpages&$top=1&$filter=OverallSDProcessStatus ne 'C'"),
+        request('$inlinecount=allpages&$top=1')
+      ]);
+    } catch (e) {
+      const err = new Error(`${docLabel} metrics could not be read from ${serviceName}: ${e.message}`);
+      err.status = 502;
+      throw err;
+    }
+
+    const openOrdersCount = countOf(resOpen);
+    const totalOrdersCount = countOf(resTotal);
+    if (openOrdersCount === null || totalOrdersCount === null) {
+      const err = new Error(`${docLabel} metrics are not available: ${serviceName} returned no count.`);
+      err.status = 502;
+      throw err;
+    }
+    if (isOrder) {
+      return { openOrdersCount, totalOrdersCount };
+    }
+    return {
+      openInquiriesCount: openOrdersCount,
+      totalInquiriesCount: totalOrdersCount,
+      openOrdersCount,
+      totalOrdersCount
+    };
+  }
+
+  /**
+   * Retrieves Sales Inquiry metrics from SD_F2370_INQY_WL_SRV / C_InquiryWL_F2370.
+   *
+   * @param {Object} [options] - destination / executeHttpRequest / headers overrides
+   * @returns {Promise<{ openInquiriesCount: number, totalInquiriesCount: number, openOrdersCount: number, totalOrdersCount: number }>}
+   */
+  async getInquiryMetrics(options = {}) {
+    return this.getSalesMetrics({ ...options, entity: 'inquiry' });
+  }
+
+  /**
+   * Executes CheckATP FunctionImport in LORD_ODATA_ORDER_SRV for a given document and item.
+   *
+   * @param {string} salesOrderID - Sales document number (10 chars, e.g. "0005000461")
+   * @param {string} itemID - Item number (6 chars, e.g. "000010")
+   * @param {Object} [options] - Destination / execution overrides
+   * @returns {Promise<{ RequestedQty: number, ConfirmedQty: number, ReqDlvDate: string|null, CnfDlvDate: string|null, SalesUnit: string }>}
+   */
+  async checkATP(salesOrderID, itemID, options = {}) {
+    let dest;
+    try {
+      dest = options.destination || await this._getDestination(options);
+    } catch (e) {
+      const err = new Error(`ATP check is not available: ${e.message}`);
+      err.status = 503;
+      throw err;
+    }
+
+    const servicePath = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
+    const executeFn = options.executeHttpRequest || this.client._execute;
+
+    const sDocId = String(salesOrderID || '').padStart(10, '0');
+    const sItemId = String(itemID || '10').padStart(6, '0');
+    const url = `${servicePath}/CheckATP?SalesOrderID='${encodeURIComponent(sDocId)}'&ItemID='${encodeURIComponent(sItemId)}'`;
+
+    let res;
+    try {
+      res = await executeFn(dest, {
+        method: 'post',
+        url,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          ...(options.headers || {})
+        }
+      }, { fetchCsrfToken: options.fetchCsrfToken !== undefined ? options.fetchCsrfToken : true });
+    } catch (err) {
+      const sapMsg = err.response?.data?.error?.message?.value ||
+        err.response?.data?.error?.innererror?.errordetails?.[0]?.message ||
+        err.message;
+      const e = new Error(`ATP check failed for document ${sDocId} item ${sItemId}: ${sapMsg}`);
+      e.status = err.response?.status || 502;
+      throw e;
+    }
+
+    const data = (res?.data?.d?.CheckATP || res?.data?.d || res?.data) || {};
+    return {
+      RequestedQty: parseFloat(data.RequestedQty) || 0,
+      ConfirmedQty: parseFloat(data.ConfirmedQty) || 0,
+      ReqDlvDate: data.ReqDlvDate || null,
+      CnfDlvDate: data.CnfDlvDate || null,
+      SalesUnit: data.SalesUnit || ''
+    };
+  }
+
+  /**
+   * Reads a whole SAP table via RFC_READ_TABLE (no row cap); the CAP value-help handler applies the
+   * OData $filter in memory. Fails with 503 when RFC is unavailable: no local list is ever substituted.
+   */
+  async _readTableOrFail(table, fields, where = []) {
+    try {
+      return await this.rfc.readTable(table, fields, where, 0);
+    } catch (err) {
+      LOG.warn(`RFC readTable ${table} failed:`, err.message);
+      const e = new Error(`SAP table ${table} could not be read via RFC: ${err.message}`);
+      e.status = err.status || 503;
+      throw e;
+    }
+  }
+
+  /**
+   * Payment terms with English texts from SAP table T052U, cached for 5 minutes.
+   *
+   * @returns {Promise<Array<{ PaymentTerms: string, PaymentTermsName: string }>>}
+   */
+  async getPaymentTerms(_query) {
+    const cached = this.masterDataCache.get('paymentTerms');
+    if (cached) return cached;
+    const rows = await this._readTableOrFail('T052U', ['ZTERM', 'TEXT1'], ["SPRAS = 'E'"]);
+    const terms = rows.map((r) => ({
+      PaymentTerms: r.ZTERM ? r.ZTERM.trim() : '',
+      PaymentTermsName: r.TEXT1 ? r.TEXT1.trim() : (r.ZTERM ? r.ZTERM.trim() : '')
+    })).filter((r) => r.PaymentTerms);
+    this.masterDataCache.set('paymentTerms', terms);
+    return terms;
+  }
+
+  /**
+   * Contact persons from SAP table KNVK, cached for 5 minutes per customer. A `Customer eq` filter is
+   * pushed to SAP; any other filter (name search) is applied in memory by the value-help handler.
+   * `Customer` is returned without leading zeros, as the rest of the application shows customers.
+   */
+  async getContactPersons(query) {
+    let sCustomer = '';
+    const where = query?.SELECT?.where;
+    if (Array.isArray(where)) {
+      for (let i = 0; i < where.length; i++) {
+        const item = where[i];
+        if (item && ((item.ref && item.ref[0] === 'Customer') || item === 'Customer')) {
+          if (where[i + 2] && where[i + 2].val !== undefined) {
+            sCustomer = String(where[i + 2].val).trim();
+          }
+        }
+      }
+    }
+    const sCustPadded = sCustomer ? sCustomer.padStart(10, '0') : '';
+    const cacheKey = `contacts:${sCustPadded || '*'}`;
+    const cached = this.masterDataCache.get(cacheKey);
+    if (cached) return cached;
+
+    const rows = await this._readTableOrFail(
+      'KNVK',
+      ['PARNR', 'KUNNR', 'NAME1', 'NAMEV', 'TELF1'],
+      sCustPadded ? [`KUNNR = '${sCustPadded}'`] : []
+    );
+    const noZeros = (v) => String(v || '').trim().replace(/^0+/, '');
+    const contacts = rows.map((r) => {
+      const first = r.NAMEV ? r.NAMEV.trim() : '';
+      const last = r.NAME1 ? r.NAME1.trim() : '';
+      return {
+        ContactPerson: r.PARNR ? r.PARNR.trim() : '',
+        Customer: noZeros(r.KUNNR),
+        FirstName: first,
+        LastName: last,
+        FullName: [first, last].filter(Boolean).join(' ') || last,
+        PhoneNumber: r.TELF1 ? r.TELF1.trim() : ''
+      };
+    }).filter((c) => c.ContactPerson);
+    this.masterDataCache.set(cacheKey, contacts);
+    return contacts;
   }
 }
 
+
+SalesInquiryAdapter.prototype._formatODataV2Date = _formatODataV2Date;
+SalesInquiryAdapter.prototype._formatODataV2Literal = _formatODataV2Literal;
+SalesInquiryAdapter.prototype._cqnOrderByToOData = _cqnOrderByToOData;
+SalesInquiryAdapter.prototype._cqnWhereToODataFilter = _cqnWhereToODataFilter;
+
 const defaultAdapter = new SalesInquiryAdapter();
 defaultAdapter.SalesInquiryAdapter = SalesInquiryAdapter;
+defaultAdapter.PartialSalesInquiryError = PartialSalesInquiryError;
+defaultAdapter._formatODataV2Date = _formatODataV2Date;
+defaultAdapter._formatODataV2Literal = _formatODataV2Literal;
+defaultAdapter._cqnOrderByToOData = _cqnOrderByToOData;
+defaultAdapter._cqnWhereToODataFilter = _cqnWhereToODataFilter;
 
 module.exports = defaultAdapter;
+module.exports.PartialSalesInquiryError = PartialSalesInquiryError;
+module.exports._formatODataV2Date = _formatODataV2Date;
+module.exports._formatODataV2Literal = _formatODataV2Literal;
+module.exports._cqnOrderByToOData = _cqnOrderByToOData;
+module.exports._cqnWhereToODataFilter = _cqnWhereToODataFilter;

@@ -10,13 +10,6 @@
       "csrfProtection": true
     },
     {
-      "source": "^/auth/(.*)$",
-      "target": "/auth/$1",
-      "destination": "srv-api",
-      "authenticationType": "none",
-      "csrfProtection": true
-    },
-    {
       "source": "^/sap/bc/lrep/(.*)$",
       "target": "/sap/bc/lrep/$1",
       "destination": "srv-api",

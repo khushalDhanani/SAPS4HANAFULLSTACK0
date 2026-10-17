@@ -1,33 +1,11 @@
+const cds = require('@sap/cds');
+const LOG = require('../../../common/logger')('sales-inquiry');
 const salesInquiryAdapter = require('../../../integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter');
 const { validateCreateSalesInquiryPayload } = require('../validation/salesInquiry.validation');
 const { normalizeSalesInquiryData } = require('../mapping/salesInquiry.mapper');
 const { mapToS4InquiryPayload } = require('../../../integration/s4hana/sd/sales-inquiry/SalesInquiryMapper');
-
-/**
- * Derives authenticated user identity from request context.
- *
- * @param {import('@sap/cds').Request} req
- * @returns {string}
- */
-function resolveUserIdentity(req) {
-    if (!req) return process.env.S4_USER || 'SYSTEM';
-
-    if (req.user?.attr?.logon_name) {
-        return String(req.user.attr.logon_name).trim();
-    }
-    if (req.user?.id && req.user.id !== 'anonymous') {
-        return String(req.user.id).trim();
-    }
-    if (req.user?.name && req.user.name !== 'anonymous') {
-        return String(req.user.name).trim();
-    }
-    const headerUser = req.headers?.['x-user-id'] || req._?.req?.headers?.['x-user-id'];
-    if (headerUser && String(headerUser).trim() !== '') {
-        return String(headerUser).trim();
-    }
-
-    return process.env.S4_USER || 'SYSTEM';
-}
+const { resolveUserIdentity } = require('../../../auth/userIdentity');
+const { extractFilterParam } = require('../../../common/filterUtils');
 
 /**
  * Registers Sales Inquiry business handlers on the CAP service.
@@ -37,39 +15,37 @@ function resolveUserIdentity(req) {
 function registerSalesInquiryHandlers(srv) {
     // 1. READ SalesInquiries
     srv.on('READ', 'SalesInquiries', async (req) => {
-        let sKey = req.params?.[0]?.SalesInquiry || req.data?.SalesInquiry;
-        if (!sKey && typeof req.params?.[0] === 'string') {
-            sKey = req.params[0];
-        }
-        if (!sKey && typeof req.params?.[0] === 'number') {
-            sKey = String(req.params[0]);
-        }
-        if (!sKey && req.query?.SELECT?.where) {
-            const where = req.query.SELECT.where;
-            for (let i = 0; i < where.length; i++) {
-                if (where[i]?.ref?.[0] === 'SalesInquiry' && where[i + 2]?.val) {
-                    sKey = String(where[i + 2].val);
-                    break;
-                }
-            }
-        }
+        const sKey = extractFilterParam(req, 'SalesInquiry');
         if (sKey) {
-            const doc = await salesInquiryAdapter.getInquiry(sKey);
-            if (doc) {
-                const header = { ...(doc.header || doc) };
-                header.to_Items = doc.items || [];
-                return header;
+            try {
+                const doc = await salesInquiryAdapter.getInquiry(sKey);
+                if (doc) {
+                    const header = { ...(doc.header || doc) };
+                    header.to_Items = doc.items || [];
+                    return header;
+                }
+                return req.error(404, `Sales Inquiry ${sKey} not found`);
+            } catch (err) {
+                return req.error(err.status || 500, err.message);
             }
         }
-        return await salesInquiryAdapter.getInquiries(req.query);
+        try {
+            return await salesInquiryAdapter.getInquiries(req.query);
+        } catch (err) {
+            return req.error(err.status || 500, err.message);
+        }
     });
 
     // 2. READ SalesInquiryItems
     srv.on('READ', 'SalesInquiryItems', async (req) => {
-        return await salesInquiryAdapter.readFsData(req.query);
+        try {
+            return await salesInquiryAdapter.readFsData(req.query);
+        } catch (err) {
+            return req.error(err.status || 500, err.message);
+        }
     });
 
-    // 3. Action createSalesInquiry
+// 3. Action createSalesInquiry
     srv.on('createSalesInquiry', async (req) => {
         const validation = validateCreateSalesInquiryPayload(req.data);
         if (!validation.isValid) {
@@ -90,9 +66,19 @@ function registerSalesInquiryHandlers(srv) {
 
         try {
             const result = await salesInquiryAdapter.createSalesInquiry(s4Payload.header, s4Payload.items, { user: authenticatedUser });
-            return result.SalesInquiry || 'Inquiry Created';
+            const inquiryId = result && (result.SalesInquiry || result.SalesDocument || result.SalesOrderID);
+            if (!inquiryId || String(inquiryId).trim() === '') {
+                LOG.error('S/4HANA Sales Inquiry creation succeeded but no Sales Inquiry document number was returned by SAP.');
+                req.error(502, 'S/4HANA Sales Inquiry creation succeeded but no Sales Inquiry document number was returned by SAP.');
+                return;
+            }
+            return String(inquiryId).trim();
         } catch (error) {
-            console.error('[SalesInquiryService] Error creating Sales Inquiry:', error.message);
+            LOG.error('Error creating Sales Inquiry:', error.message);
+            if (error.SalesInquiry || error.documentNumber || error.name === 'PartialSalesInquiryError') {
+                req.error(error.status || 502, error.message);
+                return;
+            }
             req.error(500, `Failed to create Sales Inquiry: ${error.message}`);
         }
     });
@@ -100,13 +86,46 @@ function registerSalesInquiryHandlers(srv) {
     // 4. Function getCustomerDefaults
     srv.on('getCustomerDefaults', async (req) => {
         const { Customer, SalesOrganization, DistributionChannel, Division } = req.data || {};
-        return await salesInquiryAdapter.getCustomerDefaults(Customer, SalesOrganization, DistributionChannel, Division);
+        try {
+            return await salesInquiryAdapter.getCustomerDefaults(Customer, SalesOrganization, DistributionChannel, Division);
+        } catch (error) {
+            LOG.error('Error fetching customer defaults:', error.message);
+            return req.error(error.status || 502, error.message);
+        }
+    });
+
+    // 4b. Function getInquiryCreationCapabilities: which incompletion procedure Z1 fields SAP can accept at creation
+    srv.on('getInquiryCreationCapabilities', async (req) => {
+        try {
+            return await salesInquiryAdapter.getInquiryCreationCapabilities();
+        } catch (error) {
+            LOG.error('Error fetching inquiry creation capabilities:', error.message);
+            return req.error(error.status || 502, error.message);
+        }
     });
 
     // 5. Function getSalesInquiryDefaults
     srv.on('getSalesInquiryDefaults', async () => {
         return await salesInquiryAdapter.getSalesInquiryDefaults();
     });
+
+    // 6. Functions getSalesInquiryMetrics and getSalesOrderMetrics
+    const fetchInquiryMetrics = async (req) => {
+        try {
+            if (typeof salesInquiryAdapter.getInquiryMetrics === 'function') {
+                return await salesInquiryAdapter.getInquiryMetrics();
+            }
+            return await salesInquiryAdapter.getSalesMetrics({ entity: 'inquiry' });
+        } catch (error) {
+            LOG.error('Error fetching sales inquiry metrics:', error.message);
+            if (req && typeof req.error === 'function') {
+                return req.error(error.status || 502, error.message);
+            }
+            throw error;
+        }
+    };
+    srv.on('getSalesInquiryMetrics', fetchInquiryMetrics);
+    srv.on('getSalesOrderMetrics', fetchInquiryMetrics);
 }
 
 registerSalesInquiryHandlers.registerSalesInquiryHandlers = registerSalesInquiryHandlers;

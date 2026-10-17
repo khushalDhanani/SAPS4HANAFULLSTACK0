@@ -1,0 +1,66 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form">
+    <Dialog id="piCreateDialog" title="{i18n>piCreateTitle}" contentWidth="40rem" busy="{piCreate>/busy}">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <MessageStrip id="piCreateError" visible="{= !!${piCreate>/error} }" text="{piCreate>/error}" type="Error" showIcon="true" class="sapUiSmallMarginBottom" />
+
+                <form:SimpleForm id="piCreateForm" editable="true" layout="ResponsiveGridLayout" columnsM="1" columnsL="1" labelSpanL="4">
+                    <form:content>
+                        <core:Title text="{i18n>piCreateHeaderSection}" />
+                        <Label text="{i18n>piColExternalName}" required="true" />
+                        <Input id="piCreateName" value="{piCreate>/externalName}" maxLength="20" placeholder="{i18n>piCreateNamePlaceholder}" />
+                        <Label text="{i18n>piCreateWeightUnit}" required="true" />
+                        <Input id="piCreateWeightUnit" value="{piCreate>/weightUnit}" maxLength="3" />
+
+                        <core:Title text="{i18n>piCreatePackagingSection}" />
+                        <Label text="{i18n>piCreatePkgMaterial}" required="true" />
+                        <Input id="piCreatePkgMat" value="{piCreate>/pkgMaterial}" maxLength="40" showSuggestion="true" suggestionItems="{piCreate>/vhPackaging}">
+                            <suggestionItems><core:ListItem text="{piCreate>key}" additionalText="{piCreate>text}" /></suggestionItems>
+                        </Input>
+                        <Label text="{i18n>piCreatePkgQty}" />
+                        <Input id="piCreatePkgQty" value="{piCreate>/pkgQty}" type="Number" />
+                        <Label text="{i18n>piCreatePkgUnit}" />
+                        <Input id="piCreatePkgUnit" value="{piCreate>/pkgUnit}" maxLength="3" />
+                    </form:content>
+                </form:SimpleForm>
+
+                <Panel id="piCreateMaterialsPanel" headerText="{i18n>piCreateMaterialsSection}" class="sapUiSmallMarginTop">
+                    <Table id="piCreateMaterialsTable" items="{piCreate>/materials}" noDataText="{i18n>piCreateNoMaterials}">
+                        <headerToolbar>
+                            <OverflowToolbar>
+                                <ToolbarSpacer />
+                                <Button id="piCreateAddMat" icon="sap-icon://add" text="{i18n>piCreateAddMaterial}" press=".onAddMaterialRow" />
+                            </OverflowToolbar>
+                        </headerToolbar>
+                        <columns>
+                            <Column><Text text="{i18n>huItemMaterial}" /></Column>
+                            <Column hAlign="End"><Text text="{i18n>piTargetQuantity}" /></Column>
+                            <Column><Text text="{i18n>piCreatePkgUnit}" /></Column>
+                            <Column hAlign="End"><Text text="" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <Input value="{piCreate>material}" maxLength="40" />
+                                    <Input value="{piCreate>qty}" type="Number" />
+                                    <Input value="{piCreate>unit}" maxLength="3" />
+                                    <Button icon="sap-icon://decline" type="Transparent" press=".onRemoveMaterialRow" tooltip="{i18n>piCreateRemoveMaterial}" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button id="piCreateSubmit" text="{i18n>piCreateSubmit}" type="Emphasized" press=".onSubmitCreate"
+                enabled="{= !${piCreate>/busy} &amp;&amp; !!${piCreate>/externalName} &amp;&amp; !!${piCreate>/weightUnit} &amp;&amp; !!${piCreate>/pkgMaterial} }" />
+        </beginButton>
+        <endButton>
+            <Button id="piCreateCancel" text="{i18n>piCreateCancel}" press=".onCancelCreate" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

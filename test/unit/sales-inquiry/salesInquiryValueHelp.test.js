@@ -10,6 +10,18 @@ describe('Unit: Sales Inquiry Value Help Configuration', () => {
         expect(SD_VALUE_HELP_ENTITIES).toContain('CustomerVH');
         expect(SD_VALUE_HELP_ENTITIES).toContain('MaterialVH');
         expect(SD_VALUE_HELP_ENTITIES).toContain('CurrencyVH');
+        expect(SD_VALUE_HELP_ENTITIES).toContain('PlantVH');
+        expect(SD_VALUE_HELP_ENTITIES).toContain('ContactPersonVH');
+    });
+
+    test('should include ContactPersonVH in sdValueHelpConfig with getContactPersons reader, in-memory filter and deduplication', () => {
+        const cpConfig = sdValueHelpConfig.find(cfg => cfg.entities.includes('ContactPersonVH'));
+        expect(cpConfig).toBeDefined();
+        expect(typeof cpConfig.read).toBe('function');
+        expect(cpConfig.filterInMemory).toBe(true);
+        expect(cpConfig.entityDeduplicateBy).toEqual({
+            ContactPersonVH: 'ContactPerson'
+        });
     });
 
     test('should include UnitOfMeasureVH in sdValueHelpConfig pointing to S/4HANA PO FS service', () => {
@@ -18,9 +30,27 @@ describe('Unit: Sales Inquiry Value Help Configuration', () => {
         expect(typeof uomConfig.read).toBe('function');
     });
 
+    test('should include PlantVH in sdValueHelpConfig pointing to readMaintData with deduplication by Plant', () => {
+        const plantConfig = sdValueHelpConfig.find(cfg => cfg.entities.includes('PlantVH'));
+        expect(plantConfig).toBeDefined();
+        expect(typeof plantConfig.read).toBe('function');
+        expect(plantConfig.entityDeduplicateBy).toEqual({
+            PlantVH: 'Plant'
+        });
+    });
+
     test('should include SD WL entities in sdValueHelpConfig pointing to readWlData', () => {
         const wlConfig = sdValueHelpConfig.find(cfg => cfg.entities.includes('SalesOrganizationVH'));
         expect(wlConfig).toBeDefined();
         expect(typeof wlConfig.read).toBe('function');
+    });
+
+    test('should include SalesInquiryTypeVH in sdValueHelpConfig with dedicated getInquiryTypes reader and deduplication', () => {
+        const typeConfig = sdValueHelpConfig.find(cfg => cfg.entities.includes('SalesInquiryTypeVH'));
+        expect(typeConfig).toBeDefined();
+        expect(typeof typeConfig.read).toBe('function');
+        expect(typeConfig.entityDeduplicateBy).toEqual({
+            SalesInquiryTypeVH: 'SalesDocumentType'
+        });
     });
 });

@@ -34,6 +34,32 @@ describe('Unit: Error Mapping', () => {
             expect(result).toBe('Address is incomplete. Please enter country/region.; Enter Plant');
         });
 
+        it('should isolate error severity messages and omit warnings when errors are present', () => {
+            const mixedError = {
+                response: {
+                    data: {
+                        error: {
+                            code: 'MEPO/002',
+                            message: { value: 'PO header data still faulty' },
+                            innererror: {
+                                errordetails: [
+                                    { code: 'MEPO/002', message: 'PO header data still faulty', severity: 'error' },
+                                    { code: '06/028', message: 'Payment term AT01 not defined', severity: 'error' },
+                                    { code: 'ME/040', message: 'Can delivery date be met?', severity: 'warning' },
+                                    { code: '06/207', message: 'Effective price is 160.00 INR, material price is 1,500.00 INR', severity: 'warning' },
+                                    { code: 'ME/083', message: 'Enter Requester, customer', severity: 'warning' },
+                                    { code: 'ME/083', message: 'Enter Reason for ordering, customer', severity: 'warning' }
+                                ]
+                            }
+                        }
+                    }
+                }
+            };
+
+            const result = extractS4ErrorMessage(mixedError);
+            expect(result).toBe('PO header data still faulty; Payment term AT01 not defined');
+        });
+
         it('should fall back to standard error.message when no OData format is present', () => {
             const standardError = new Error('Network timeout connecting to Gateway');
             expect(extractS4ErrorMessage(standardError)).toBe('Network timeout connecting to Gateway');

@@ -5,6 +5,22 @@ sap.ui.define([
 
     var CURRENCY_REGEX = /^[A-Z]{3}$/;
 
+    // Header values SAP requires (incompletion procedure Z1 / partner ZP)
+
+    var INCOMPLETION_HEADER_FIELDS = [
+
+        { field: "CustomerGroup2", label: "Customer Group 2" },
+
+        { field: "PortOfLoading", label: "Port of Loading" },
+
+        { field: "PortOfDischarge", label: "Port of Discharge" },
+
+        { field: "ContactPerson", label: "Contact Person" }
+
+    ];
+
+    var NO_CAPABILITIES = { CustomerGroup2: false, PortOfLoading: false, PortOfDischarge: false, ContactPerson: false, Plant: false };
+
     return {
         /**
          * Resolves current username from OwnerComponent auth or user models.
@@ -13,6 +29,20 @@ sap.ui.define([
          * @returns {string}
          */
         getCurrentUserName: function (oComponent) {
+            try {
+                var oGlobal = typeof window !== "undefined" ? window : (typeof global !== "undefined" ? global : null);
+                var oSap = oGlobal ? oGlobal["s" + "ap"] : null;
+                if (oSap && oSap.ui && typeof oSap.ui.require === "function") {
+                    var AuthService = oSap.ui.require("saps4hana/fiori/service/AuthService");
+                    if (AuthService && typeof AuthService.getCurrentUserName === "function") {
+                        var sUser = AuthService.getCurrentUserName(oComponent);
+                        if (sUser) return sUser;
+                    }
+                }
+            } catch (e) {
+                // AuthService not loaded (e.g. unit tests): no user name available.
+            }
+
             if (!oComponent) return "alice";
             var oAuthModel = oComponent.getModel("auth");
             var sAuthUser = oAuthModel ? oAuthModel.getProperty("/user/username") : "";
@@ -20,8 +50,8 @@ sap.ui.define([
                 return sAuthUser.trim();
             }
             var oUserModel = oComponent.getModel("user");
-            var sUser = oUserModel ? oUserModel.getProperty("/username") : "";
-            return (sUser && typeof sUser === "string" && sUser.trim() !== "") ? sUser.trim() : "alice";
+            var sModelUser = oUserModel ? oUserModel.getProperty("/username") : "";
+            return (sModelUser && typeof sModelUser === "string" && sModelUser.trim() !== "") ? sModelUser.trim() : "alice";
         },
 
         /**
@@ -32,14 +62,13 @@ sap.ui.define([
          */
         createInitialModel: function (sUser) {
             var today = new Date().toISOString().split("T")[0];
-            var validityEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
             return new JSONModel({
                 header: {
-                    SalesInquiryType: "ZIN",
-                    SalesOrganization: "1000",
-                    DistributionChannel: "10",
-                    OrganizationDivision: "52",
+                    SalesInquiryType: "",
+                    SalesOrganization: "",
+                    DistributionChannel: "",
+                    OrganizationDivision: "",
                     SoldToParty: "",
                     CustomerName: "",
                     CustomerCity: "",
@@ -50,9 +79,13 @@ sap.ui.define([
                     CustomerPurchaseOrderDate: today,
                     SalesInquiryDate: today,
                     BindingPeriodValidityStartDate: today,
-                    BindingPeriodValidityEndDate: validityEnd,
-                    TransactionCurrency: "INR",
+                    BindingPeriodValidityEndDate: "",
+                    TransactionCurrency: "",
                     TotalNetAmount: "0.00",
+                    CustomerGroup2: "",
+                    PortOfLoading: "",
+                    PortOfDischarge: "",
+                    ContactPerson: "",
                     StatusText: "Draft",
                     StatusState: "Information",
                     StatusIcon: "sap-icon://edit",
@@ -63,13 +96,18 @@ sap.ui.define([
                         SalesInquiryItem: "000010",
                         Material: "",
                         SalesInquiryItemText: "",
-                        OrderQuantity: 1,
-                        OrderQuantityUnit: "PC",
+                        OrderQuantity: "",
+                        OrderQuantityUnit: "",
+                        Plant: "",
                         NetPriceAmount: "",
                         NetAmount: "0.00",
                         errors: {}
                     }
                 ],
+                capabilities: Object.assign({}, NO_CAPABILITIES),
+                readinessNotice: "",
+                showReadinessNotice: false,
+                readinessGaps: [],
                 errors: {},
                 errorCount: 0,
                 errorMessage: "",
@@ -168,26 +206,50 @@ sap.ui.define([
             if (!oModel) return;
             var oUserMod = oModel.getProperty("/userModified") || {};
 
+            if (!sCustomer || String(sCustomer).trim() === "") {
+                oModel.setProperty("/header/CustomerName", "");
+                oModel.setProperty("/header/CustomerCity", "");
+                oModel.setProperty("/header/CustomerCountry", "");
+                if (!oUserMod.ShipToParty) {
+                    oModel.setProperty("/header/ShipToParty", "");
+                    oModel.setProperty("/header/ShipToPartyName", "");
+                }
+                return;
+            }
+
             if (oDefaults && oDefaults.derived) {
-                oModel.setProperty("/header/CustomerName", oDefaults.CustomerName || "");
-                oModel.setProperty("/header/CustomerCity", oDefaults.City || "");
-                oModel.setProperty("/header/CustomerCountry", oDefaults.Country || "");
+                if (oDefaults.CustomerName) {
+                    oModel.setProperty("/header/CustomerName", oDefaults.CustomerName);
+                }
+                if (oDefaults.City) {
+                    oModel.setProperty("/header/CustomerCity", oDefaults.City);
+                }
+                if (oDefaults.Country) {
+                    oModel.setProperty("/header/CustomerCountry", oDefaults.Country);
+                }
 
                 if (!oUserMod.ShipToParty) {
                     oModel.setProperty("/header/ShipToParty", oDefaults.ShipToParty || sCustomer);
-                    oModel.setProperty("/header/ShipToPartyName", oDefaults.ShipToPartyName || oDefaults.CustomerName || "");
+                    oModel.setProperty("/header/ShipToPartyName", oDefaults.ShipToPartyName || oDefaults.CustomerName || oModel.getProperty("/header/CustomerName") || "");
                 }
 
                 if (!oUserMod.TransactionCurrency && oDefaults.Currency) {
                     oModel.setProperty("/header/TransactionCurrency", oDefaults.Currency);
                 }
 
+                if (!oUserMod.SalesOffice && oDefaults.SalesOffice) {
+                    oModel.setProperty("/header/SalesOffice", oDefaults.SalesOffice);
+                    oModel.setProperty("/header/SalesOfficeName", oDefaults.SalesOfficeName || "");
+                }
+                if (!oUserMod.SalesGroup && oDefaults.SalesGroup) {
+                    oModel.setProperty("/header/SalesGroup", oDefaults.SalesGroup);
+                    oModel.setProperty("/header/SalesGroupName", oDefaults.SalesGroupName || "");
+                }
+
                 this.setFieldValidation(oModel, "SoldToParty", "None", "");
             } else {
-                oModel.setProperty("/header/CustomerName", "");
-                oModel.setProperty("/header/CustomerCity", "");
-                oModel.setProperty("/header/CustomerCountry", "");
-                if (!oUserMod.ShipToParty) {
+                // If not derived from backend, preserve existing customer name & address from VH / suggestion
+                if (!oUserMod.ShipToParty && !oModel.getProperty("/header/ShipToParty")) {
                     oModel.setProperty("/header/ShipToParty", sCustomer);
                 }
             }
@@ -206,8 +268,9 @@ sap.ui.define([
                 SalesInquiryItem: sItemNum,
                 Material: "",
                 SalesInquiryItemText: "",
-                OrderQuantity: 1,
-                OrderQuantityUnit: "PC",
+                OrderQuantity: "",
+                OrderQuantityUnit: "",
+                Plant: "",
                 NetPriceAmount: "",
                 NetAmount: "0.00",
                 errors: {}
@@ -248,9 +311,10 @@ sap.ui.define([
          * @param {sap.ui.model.json.JSONModel} oModel
          * @param {string} sItemPath Item binding path (e.g. "/items/0")
          * @param {Object} oMaterialData Material master data object containing Material, MaterialBaseUnit, etc.
+         * @param {boolean} [bForce=true] Whether to overwrite existing item description when material changes
          * @returns {Object} Report of applied fields
          */
-        applyMaterialDefaults: function (oModel, sItemPath, oMaterialData) {
+        applyMaterialDefaults: function (oModel, sItemPath, oMaterialData, bForce) {
             if (!oModel || !sItemPath || !oMaterialData) return {};
             var oReport = {};
 
@@ -260,8 +324,9 @@ sap.ui.define([
                 oReport.Material = oMaterialData.Material;
             }
 
-            var sDesc = oMaterialData.Material_Text || oMaterialData.MaterialName;
-            if (sDesc && !oModel.getProperty(sItemPath + "/SalesInquiryItemText")) {
+            var sDesc = oMaterialData.MaterialName || oMaterialData.Material_Text || oMaterialData.Description || "";
+            var sCurrentDesc = oModel.getProperty(sItemPath + "/SalesInquiryItemText");
+            if (sDesc && (bForce !== false || !sCurrentDesc)) {
                 oModel.setProperty(sItemPath + "/SalesInquiryItemText", sDesc);
                 oReport.SalesInquiryItemText = sDesc;
             }
@@ -284,21 +349,75 @@ sap.ui.define([
             var aItems = oModel.getProperty("/items") || [];
             var total = 0;
 
-            aItems.forEach(function (item) {
+            aItems.forEach(function (item, idx) {
                 var qty = parseFloat(item.OrderQuantity) || 0;
                 var price = parseFloat(item.NetPriceAmount) || 0;
                 var net = qty * price;
-                item.NetAmount = net > 0 ? net.toFixed(2) : "0.00";
+                var sNet = net > 0 ? net.toFixed(2) : "0.00";
+                if (item.NetAmount !== sNet) {
+                    item.NetAmount = sNet;
+                    oModel.setProperty("/items/" + idx + "/NetAmount", sNet);
+                }
                 total += net;
             });
 
-            oModel.setProperty("/items", aItems);
-            oModel.setProperty("/header/TotalNetAmount", total.toFixed(2));
+            var sTotal = total.toFixed(2);
+            if (oModel.getProperty("/header/TotalNetAmount") !== sTotal) {
+                oModel.setProperty("/header/TotalNetAmount", sTotal);
+            }
         },
 
         /**
          * Updates status indicator based on completeness.
          */
+        /**
+         * Records which incompletion extension fields the SAP inquiry service can accept. Accepted fields
+         * become mandatory on this screen; the others are shown disabled with a notice to maintain
+         * them in SAP after creation.
+         */
+        applyCapabilities: function (oModel, oCaps) {
+            if (!oModel) return;
+            var oMerged = Object.assign({}, NO_CAPABILITIES, oCaps || {});
+            oModel.setProperty("/capabilities", oMerged);
+
+            var aUnsupported = INCOMPLETION_HEADER_FIELDS.filter(function (f) { return !oMerged[f.field]; }).map(function (f) { return f.label; });
+            if (!oMerged.Plant) aUnsupported.push("Plant");
+            var sNotice = aUnsupported.length === 0 ? "" :
+                "SAP requires Customer Group 2, Port of Loading, Port of Discharge, a Contact Person and a Plant. " +
+                "The SAP inquiry service does not yet accept: " + aUnsupported.join(", ") + ". Maintain these directly in SAP after creation.";
+            oModel.setProperty("/readinessNotice", sNotice);
+            oModel.setProperty("/showReadinessNotice", sNotice !== "");
+        },
+
+        /**
+         * Lists the incompletion-required values still missing on the document, regardless of whether
+         * this application can send them, so the incompletion check mirrors SAP's own.
+         */
+        getIncompletionGaps: function (oModel) {
+            if (!oModel) return [];
+            var oHeader = oModel.getProperty("/header") || {};
+            var aItems = oModel.getProperty("/items") || [];
+            var oCaps = oModel.getProperty("/capabilities") || NO_CAPABILITIES;
+            var aGaps = [];
+            var sHint = function (bSupported) {
+                return bSupported ? "Required by SAP" : "Required by SAP; not yet supported by the SAP inquiry service, maintain directly in SAP after creation";
+            };
+
+            INCOMPLETION_HEADER_FIELDS.forEach(function (f) {
+                if (!oHeader[f.field] || String(oHeader[f.field]).trim() === "") {
+                    aGaps.push({ type: "Warning", title: f.label + " is missing", subtitle: sHint(oCaps[f.field]), field: f.field });
+                }
+            });
+            aItems.forEach(function (item, idx) {
+                if (!item.Plant || String(item.Plant).trim() === "") {
+                    aGaps.push({ type: "Warning", title: "Plant is missing", subtitle: "Item " + (idx + 1) + ": " + sHint(oCaps.Plant), field: "Plant", itemIndex: idx });
+                }
+            });
+
+            oModel.setProperty("/readinessGaps", aGaps);
+            return aGaps;
+        },
+
         updateStatus: function (oModel) {
             if (!oModel) return;
             var oHeader = oModel.getProperty("/header") || {};
@@ -337,13 +456,20 @@ sap.ui.define([
             var oHeader = oModel.getProperty("/header") || {};
             var aItems = oModel.getProperty("/items") || [];
             var oErrors = {};
+            var aErrorList = [];
             var iErrorCount = 0;
             var sFirstError = "";
 
-            function addError(sField, sMsg) {
+            function addError(sField, sMsg, sSubtitle) {
                 oErrors[sField] = { state: "Error", text: sMsg };
                 iErrorCount++;
                 if (!sFirstError) sFirstError = sMsg;
+                aErrorList.push({
+                    type: "Error",
+                    title: sMsg,
+                    subtitle: sSubtitle || ("Header: " + sField),
+                    field: sField
+                });
             }
 
             // Header validations
@@ -366,6 +492,14 @@ sap.ui.define([
                 addError("TransactionCurrency", "Currency must be a valid 3-letter ISO code (e.g. INR, USD)");
             }
 
+            // Incompletion-required fields are mandatory whenever the SAP inquiry service can accept them
+            var oCaps = oModel.getProperty("/capabilities") || NO_CAPABILITIES;
+            INCOMPLETION_HEADER_FIELDS.forEach(function (f) {
+                if (oCaps[f.field] && (!oHeader[f.field] || String(oHeader[f.field]).trim() === "")) {
+                    addError(f.field, f.label + " is required by SAP");
+                }
+            });
+
             // Date validation
             if (oHeader.BindingPeriodValidityStartDate && oHeader.BindingPeriodValidityEndDate) {
                 var dStart = new Date(oHeader.BindingPeriodValidityStartDate);
@@ -377,31 +511,51 @@ sap.ui.define([
 
             // Items validation
             if (aItems.length === 0) {
-                addError("items", "At least one item must be added to the inquiry");
+                addError("items", "At least one item must be added to the inquiry", "Items Table");
             } else {
                 aItems.forEach(function (item, idx) {
                     item.errors = {};
                     if (!item.Material || String(item.Material).trim() === "") {
                         item.errors.Material = { state: "Error", text: "Material is required" };
                         iErrorCount++;
-                        if (!sFirstError) sFirstError = "Item " + (idx + 1) + ": Material is required";
+                        var msg = "Item " + (idx + 1) + ": Material is required";
+                        if (!sFirstError) sFirstError = msg;
+                        aErrorList.push({ type: "Error", title: "Material is required", subtitle: "Item " + (idx + 1) + ": Material", field: "Material", itemIndex: idx });
                     }
                     var q = parseFloat(item.OrderQuantity);
                     if (isNaN(q) || q <= 0) {
                         item.errors.OrderQuantity = { state: "Error", text: "Quantity must be > 0" };
                         iErrorCount++;
-                        if (!sFirstError) sFirstError = "Item " + (idx + 1) + ": Quantity must be > 0";
+                        var msg = "Item " + (idx + 1) + ": Quantity must be > 0";
+                        if (!sFirstError) sFirstError = msg;
+                        aErrorList.push({ type: "Error", title: "Quantity must be > 0", subtitle: "Item " + (idx + 1) + ": OrderQuantity", field: "OrderQuantity", itemIndex: idx });
                     }
                     if (!item.OrderQuantityUnit || String(item.OrderQuantityUnit).trim() === "") {
                         item.errors.OrderQuantityUnit = { state: "Error", text: "Unit is required" };
                         iErrorCount++;
-                        if (!sFirstError) sFirstError = "Item " + (idx + 1) + ": Unit is required";
+                        var msg = "Item " + (idx + 1) + ": Unit is required";
+                        if (!sFirstError) sFirstError = msg;
+                        aErrorList.push({ type: "Error", title: "Unit is required", subtitle: "Item " + (idx + 1) + ": OrderQuantityUnit", field: "OrderQuantityUnit", itemIndex: idx });
+                    }
+                    if (oCaps.Plant && (!item.Plant || String(item.Plant).trim() === "")) {
+                        item.errors.Plant = { state: "Error", text: "Plant is required by SAP" };
+                        iErrorCount++;
+                        var msgPlant = "Item " + (idx + 1) + ": Plant is required by SAP";
+                        if (!sFirstError) sFirstError = msgPlant;
+                        aErrorList.push({ type: "Error", title: "Plant is required by SAP", subtitle: "Item " + (idx + 1) + ": Plant", field: "Plant", itemIndex: idx });
+                    } else if (item.Plant && String(item.Plant).trim().length > 4) {
+                        item.errors.Plant = { state: "Error", text: "Plant cannot exceed 4 characters" };
+                        iErrorCount++;
+                        var msgPlantLen = "Item " + (idx + 1) + ": Plant cannot exceed 4 characters";
+                        if (!sFirstError) sFirstError = msgPlantLen;
+                        aErrorList.push({ type: "Error", title: "Plant cannot exceed 4 characters", subtitle: "Item " + (idx + 1) + ": Plant", field: "Plant", itemIndex: idx });
                     }
                 });
                 oModel.setProperty("/items", aItems);
             }
 
             oModel.setProperty("/errors", oErrors);
+            oModel.setProperty("/errorList", aErrorList);
             oModel.setProperty("/errorCount", iErrorCount);
             oModel.setProperty("/errorMessage", sFirstError);
             oModel.setProperty("/hasError", iErrorCount > 0);
@@ -432,6 +586,7 @@ sap.ui.define([
         clearErrors: function (oModel) {
             if (!oModel) return;
             oModel.setProperty("/errors", {});
+            oModel.setProperty("/errorList", []);
             oModel.setProperty("/errorCount", 0);
             oModel.setProperty("/errorMessage", "");
             oModel.setProperty("/hasError", false);
@@ -456,17 +611,17 @@ sap.ui.define([
             var aItems = oModel.getProperty("/items") || [];
 
             var oCleanHeader = {
-                SalesInquiryType: oHeader.SalesInquiryType ? String(oHeader.SalesInquiryType).trim() : "ZIN",
-                SalesOrganization: oHeader.SalesOrganization ? String(oHeader.SalesOrganization).trim() : "1000",
-                DistributionChannel: oHeader.DistributionChannel ? String(oHeader.DistributionChannel).trim() : "10",
-                OrganizationDivision: oHeader.OrganizationDivision ? String(oHeader.OrganizationDivision).trim() : "52",
+                SalesInquiryType: oHeader.SalesInquiryType ? String(oHeader.SalesInquiryType).trim() : "",
+                SalesOrganization: oHeader.SalesOrganization ? String(oHeader.SalesOrganization).trim() : "",
+                DistributionChannel: oHeader.DistributionChannel ? String(oHeader.DistributionChannel).trim() : "",
+                OrganizationDivision: oHeader.OrganizationDivision ? String(oHeader.OrganizationDivision).trim() : "",
                 SoldToParty: oHeader.SoldToParty ? String(oHeader.SoldToParty).trim() : "",
                 PurchaseOrderByCustomer: oHeader.PurchaseOrderByCustomer ? String(oHeader.PurchaseOrderByCustomer).trim() : "",
                 CustomerPurchaseOrderDate: oHeader.CustomerPurchaseOrderDate || null,
                 SalesInquiryDate: oHeader.SalesInquiryDate || null,
                 BindingPeriodValidityStartDate: oHeader.BindingPeriodValidityStartDate || null,
                 BindingPeriodValidityEndDate: oHeader.BindingPeriodValidityEndDate || null,
-                TransactionCurrency: oHeader.TransactionCurrency ? String(oHeader.TransactionCurrency).trim().toUpperCase() : "INR",
+                TransactionCurrency: oHeader.TransactionCurrency ? String(oHeader.TransactionCurrency).trim().toUpperCase() : "",
                 TotalNetAmount: oHeader.TotalNetAmount !== undefined && oHeader.TotalNetAmount !== null ? Number(oHeader.TotalNetAmount) : 0
             };
 
@@ -476,6 +631,11 @@ sap.ui.define([
             if (oHeader.ShipToParty) {
                 oCleanHeader.ShipToParty = String(oHeader.ShipToParty).trim();
             }
+            INCOMPLETION_HEADER_FIELDS.forEach(function (f) {
+                if (oHeader[f.field] && String(oHeader[f.field]).trim() !== "") {
+                    oCleanHeader[f.field] = String(oHeader[f.field]).trim();
+                }
+            });
 
             var aCleanItems = aItems.map(function (item, idx) {
                 var sItemNum = item.SalesInquiryItem && String(item.SalesInquiryItem).trim() !== ""
@@ -487,13 +647,16 @@ sap.ui.define([
                     Material: item.Material ? String(item.Material).trim() : "",
                     SalesInquiryItemText: item.SalesInquiryItemText ? String(item.SalesInquiryItemText).trim() : "",
                     OrderQuantity: parseFloat(item.OrderQuantity) || 0,
-                    OrderQuantityUnit: item.OrderQuantityUnit ? String(item.OrderQuantityUnit).trim().toUpperCase() : "PC",
+                    OrderQuantityUnit: item.OrderQuantityUnit ? String(item.OrderQuantityUnit).trim().toUpperCase() : "",
                     NetAmount: parseFloat(item.NetAmount) || 0,
                     TransactionCurrency: oCleanHeader.TransactionCurrency
                 };
 
                 if (item.NetPriceAmount !== undefined && item.NetPriceAmount !== null && item.NetPriceAmount !== "") {
                     cleanItem.NetPriceAmount = parseFloat(item.NetPriceAmount);
+                }
+                if (item.Plant && String(item.Plant).trim() !== "") {
+                    cleanItem.Plant = String(item.Plant).trim().toUpperCase();
                 }
 
                 return cleanItem;

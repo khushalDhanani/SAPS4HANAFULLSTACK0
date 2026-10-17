@@ -17,7 +17,85 @@ describe('Unit: Sales Inquiry Adapter', () => {
     test('should return customer defaults with fallback for empty input', async () => {
         const result = await salesInquiryAdapter.getCustomerDefaults('', '', '', '');
         expect(result.Customer).toBe('');
+        expect(result.SalesOffice).toBe('');
+        expect(result.SalesGroup).toBe('');
         expect(result.derived).toBe(false);
+    });
+
+    test('should return inquiry details with SalesOffice and SalesGroup populated and described', async () => {
+        const mockWL = {
+            run: jest.fn().mockImplementation((_query) => {
+                // Return inquiry with expanded to_SalesOffice and to_SalesGroup
+                return Promise.resolve({
+                    SalesInquiry: '100003',
+                    SalesOrganization: '1000',
+                    DistributionChannel: '10',
+                    OrganizationDivision: '52',
+                    SalesOffice: 'SO10',
+                    SalesGroup: '100',
+                    to_SalesOffice: { SalesOfficeName: 'Surat' },
+                    to_SalesGroup: { SalesGroupName: 'Surat' },
+                    SoldToParty: '10083'
+                });
+            })
+        };
+        const mockFS = {
+            run: jest.fn().mockImplementation((_query) => {
+                return Promise.resolve({
+                    SalesInquiry: '100003',
+                    CustomerPurchaseOrderDate: '2025-12-26',
+                    to_SDDocumentPartnerCard: [
+                        { PartnerFunction: 'WE', Customer: '10083', FullName: 'Bajaj Healthcare' }
+                    ]
+                });
+            })
+        };
+
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        adapter.s4hanaWL = mockWL;
+        adapter.s4hanaFS = mockFS;
+
+        const result = await adapter.getInquiry('100003');
+        expect(result).toBeDefined();
+        expect(result.header.SalesInquiry).toBe('100003');
+        expect(result.header.SalesOffice).toBe('SO10');
+        expect(result.header.SalesOfficeName).toBe('Surat');
+        expect(result.header.SalesGroup).toBe('100');
+        expect(result.header.SalesGroupName).toBe('Surat');
+    });
+
+    test('should return blank SalesOffice and SalesGroup when SAP inquiry header has empty fields (never borrow)', async () => {
+        const mockWL = {
+            run: jest.fn().mockResolvedValue({
+                SalesInquiry: '100000',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                SalesOffice: '',
+                SalesGroup: '',
+                SoldToParty: '10135'
+            })
+        };
+        const mockFS = {
+            run: jest.fn().mockResolvedValue({
+                SalesInquiry: '100000',
+                to_SDDocumentPartnerCard: []
+            })
+        };
+
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        adapter.s4hanaWL = mockWL;
+        adapter.s4hanaFS = mockFS;
+
+        const result = await adapter.getInquiry('100000');
+        expect(result).toBeDefined();
+        expect(result.header.SalesInquiry).toBe('100000');
+        expect(result.header.SalesOffice).toBe('');
+        expect(result.header.SalesOfficeName).toBe('');
+        expect(result.header.SalesGroup).toBe('');
+        expect(result.header.SalesGroupName).toBe('');
+        expect(result.header.ShipToParty).toBe('');
+        expect(result.header.ShipToPartyName).toBe('');
     });
 
     test('should create sales inquiry directly via S/4HANA OData service and return SAP-assigned number', async () => {
@@ -52,8 +130,7 @@ describe('Unit: Sales Inquiry Adapter', () => {
                         SalesOrderID: '1000522',
                         SalesOrderTypeCode: 'ZIN',
                         SalesOrganization: '1000',
-                        NetValue: '250.00',
-                        Currency: 'INR'
+                        DocumentCurrency: 'INR'
                     }
                 }
             })
@@ -79,6 +156,18 @@ describe('Unit: Sales Inquiry Adapter', () => {
                         AmountInternal: '50.00'
                     }
                 }
+            })
+            // 4th call: HeaderSet read-back (default) — the only source of the document totals
+            .mockResolvedValueOnce({
+                status: 200,
+                data: {
+                    d: {
+                        SalesOrderID: '1000522',
+                        NetAmount: '250.00',
+                        TotalAmount: '295.00',
+                        DocumentCurrency: 'INR'
+                    }
+                }
             });
 
         const created = await salesInquiryAdapter.createSalesInquiry(header, items, {
@@ -91,7 +180,8 @@ describe('Unit: Sales Inquiry Adapter', () => {
         expect(created.TransactionCurrency).toBe('INR');
 
         // Check calls
-        expect(mockExecuteHttpRequest).toHaveBeenCalledTimes(3);
+        // 3 POSTs (HeaderSet, ItemSet, PriceCondSet) + 1 GET read-back for the document totals
+        expect(mockExecuteHttpRequest).toHaveBeenCalledTimes(4);
         const headerCall = mockExecuteHttpRequest.mock.calls[0];
         expect(headerCall[1].method).toBe('post');
         expect(headerCall[1].url).toContain('/HeaderSet');
@@ -117,9 +207,68 @@ describe('Unit: Sales Inquiry Adapter', () => {
         expect(condCall[1].data.AmountInternal).toBe('250.00');
     });
 
-    test('should fallback PurchaseOrderByCustomer to first item text if reference is empty', async () => {
+    test('should read authentic NetAmount, TotalAmount, TaxAmount and DocumentCurrency from readBack', async () => {
         const header = {
             SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            SoldToParty: '10135',
+            TransactionCurrency: 'INR'
+        };
+        const items = [
+            {
+                SalesInquiryItem: '000010',
+                Material: '4000000091',
+                OrderQuantity: 1,
+                OrderQuantityUnit: 'KG',
+                NetPriceAmount: 250.00
+            }
+        ];
+
+        const mockExecuteHttpRequest = jest.fn()
+            // 1st: HeaderSet POST
+            .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000599' } } })
+            // 2nd: ItemSet POST
+            .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000599', ItemID: '000010' } } })
+            // 3rd: PriceCondSet POST
+            .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000599', ItemID: '000010' } } })
+            // 4th: HeaderSet GET read-back
+            .mockResolvedValueOnce({
+                status: 200,
+                data: {
+                    d: {
+                        SalesOrderID: '1000599',
+                        NetAmount: '250.00',
+                        TotalAmount: '295.00',
+                        TaxAmount: '45.00',
+                        DocumentCurrency: 'INR'
+                    }
+                }
+            });
+
+        const created = await salesInquiryAdapter.createSalesInquiry(header, items, {
+            destination: { url: 'http://mock-s4hana' },
+            executeHttpRequest: mockExecuteHttpRequest,
+            readBack: true
+        });
+
+        expect(created.SalesInquiry).toBe('1000599');
+        expect(created.TotalNetAmount).toBe('250.00');
+        expect(created.NetAmount).toBe('250.00');
+        expect(created.TotalAmount).toBe('295.00');
+        expect(created.TaxAmount).toBe('45.00');
+        expect(created.TransactionCurrency).toBe('INR');
+        expect(mockExecuteHttpRequest).toHaveBeenCalledTimes(4);
+    });
+
+    test('should leave PurchaseOrderNumber empty if reference is empty instead of inventing customer reference', async () => {
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
             SoldToParty: '10135',
             PurchaseOrderByCustomer: ''
         };
@@ -128,7 +277,8 @@ describe('Unit: Sales Inquiry Adapter', () => {
                 SalesInquiryItem: '000010',
                 Material: '4000000091',
                 SalesInquiryItemText: 'High Grade Chemical Reagent',
-                OrderQuantity: 5
+                OrderQuantity: 5,
+                OrderQuantityUnit: 'PC'
             }
         ];
 
@@ -149,11 +299,18 @@ describe('Unit: Sales Inquiry Adapter', () => {
 
         expect(created.SalesInquiry).toBe('1000523');
         const headerCall = mockExecuteHttpRequest.mock.calls[0];
-        expect(headerCall[1].data.PurchaseOrderNumber).toBe('High Grade Chemical Reagent');
+        expect(headerCall[1].data.PurchaseOrderNumber).toBe('');
     });
 
     test('should propagate SAP S/4HANA backend error message when creation fails', async () => {
-        const header = { SalesInquiryType: 'ZIN', SoldToParty: '99999' };
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '99999'
+        };
         const mockExecuteHttpRequest = jest.fn().mockRejectedValue({
             message: 'Request failed with status code 400',
             response: {
@@ -173,5 +330,616 @@ describe('Unit: Sales Inquiry Adapter', () => {
             destination: { url: 'http://mock-s4hana' },
             executeHttpRequest: mockExecuteHttpRequest
         })).rejects.toThrow('Customer 99999 does not exist in sales area 1000/10/52');
+    });
+
+    test('should throw PartialSalesInquiryError with created document number when item creation fails midway', async () => {
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 5, OrderQuantityUnit: 'PC' }];
+
+        const mockExecuteHttpRequest = jest.fn()
+            .mockResolvedValueOnce({
+                status: 201,
+                data: { d: { SalesOrderID: '1000550' } }
+            })
+            .mockRejectedValueOnce({
+                message: 'Request failed with status code 400',
+                response: {
+                    status: 400,
+                    data: {
+                        error: {
+                            message: { value: 'Material 4000000091 is blocked for sales' }
+                        }
+                    }
+                }
+            });
+
+        let thrownError;
+        try {
+            await salesInquiryAdapter.createSalesInquiry(header, items, {
+                destination: { url: 'http://mock-s4hana' },
+                executeHttpRequest: mockExecuteHttpRequest
+            });
+        } catch (err) {
+            thrownError = err;
+        }
+
+        expect(thrownError).toBeDefined();
+        expect(thrownError.name).toBe('PartialSalesInquiryError');
+        expect(thrownError.SalesInquiry).toBe('1000550');
+        expect(thrownError.documentNumber).toBe('1000550');
+        expect(thrownError.isPartialCreation).toBe(true);
+        expect(thrownError.step).toBe('ItemSet');
+        expect(thrownError.itemNumber).toBe('000010');
+        expect(thrownError.message).toContain('Sales Inquiry 1000550 was created in SAP S/4HANA, but adding item 000010 failed');
+        expect(thrownError.message).toContain('Material 4000000091 is blocked for sales');
+        expect(thrownError.message).toContain('Do not retry: check or complete inquiry 1000550 in SAP');
+    });
+
+    test('should throw PartialSalesInquiryError with created document number when price condition creation fails midway', async () => {
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            SoldToParty: '10135',
+            TransactionCurrency: 'INR'
+        };
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 5, OrderQuantityUnit: 'PC', NetPriceAmount: 250.00 }];
+
+        const mockExecuteHttpRequest = jest.fn()
+            .mockResolvedValueOnce({
+                status: 201,
+                data: { d: { SalesOrderID: '1000551' } }
+            })
+            .mockResolvedValueOnce({
+                status: 201,
+                data: { d: { SalesOrderID: '1000551', ItemID: '000010' } }
+            })
+            .mockRejectedValueOnce({
+                message: 'Request failed with status code 400',
+                response: {
+                    status: 400,
+                    data: {
+                        error: {
+                            message: { value: 'Condition record ZPR1 could not be determined' }
+                        }
+                    }
+                }
+            });
+
+        let thrownError;
+        try {
+            await salesInquiryAdapter.createSalesInquiry(header, items, {
+                destination: { url: 'http://mock-s4hana' },
+                executeHttpRequest: mockExecuteHttpRequest
+            });
+        } catch (err) {
+            thrownError = err;
+        }
+
+        expect(thrownError).toBeDefined();
+        expect(thrownError.name).toBe('PartialSalesInquiryError');
+        expect(thrownError.SalesInquiry).toBe('1000551');
+        expect(thrownError.documentNumber).toBe('1000551');
+        expect(thrownError.isPartialCreation).toBe(true);
+        expect(thrownError.step).toBe('PriceCondSet');
+        expect(thrownError.itemNumber).toBe('000010');
+        expect(thrownError.message).toContain('Sales Inquiry 1000551 was created in SAP S/4HANA with items, but adding price condition for item 000010 failed');
+        expect(thrownError.message).toContain('Condition record ZPR1 could not be determined');
+        expect(thrownError.message).toContain('Do not retry: check or complete inquiry 1000551 in SAP');
+    });
+
+    test('should not set Plant on item payload when item has no Plant', async () => {
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 1, OrderQuantityUnit: 'PC' }];
+
+        const mockExecuteHttpRequest = jest.fn()
+            .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000560' } } })
+            .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000560', ItemID: '000010' } } });
+
+        await salesInquiryAdapter.createSalesInquiry(header, items, {
+            destination: { url: 'http://mock-s4hana' },
+            executeHttpRequest: mockExecuteHttpRequest
+        });
+
+        const itemCall = mockExecuteHttpRequest.mock.calls[1];
+        expect(itemCall[1].data.Plant).toBeUndefined();
+    });
+
+    test('should preserve user-supplied Plant on item payload', async () => {
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 1, OrderQuantityUnit: 'PC', Plant: '1108' }];
+
+        const mockExecuteHttpRequest = jest.fn()
+            .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000561' } } })
+            .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000561', ItemID: '000010' } } });
+
+        await salesInquiryAdapter.createSalesInquiry(header, items, {
+            destination: { url: 'http://mock-s4hana' },
+            executeHttpRequest: mockExecuteHttpRequest
+        });
+
+        const itemCall = mockExecuteHttpRequest.mock.calls[1];
+        expect(itemCall[1].data.Plant).toBe('1108');
+    });
+
+    test('should throw error when item is missing OrderQuantityUnit in createSalesDocument', async () => {
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 1 }];
+        await expect(salesInquiryAdapter.createSalesInquiry(header, items, {
+            destination: { url: 'http://mock-s4hana' }
+        })).rejects.toThrow(/Order quantity unit \(SalesUnit\) is required for item 000010/);
+    });
+
+    test('should throw error when item is missing OrderQuantity in createSalesDocument', async () => {
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantityUnit: 'PC' }];
+        await expect(salesInquiryAdapter.createSalesInquiry(header, items, {
+            destination: { url: 'http://mock-s4hana' }
+        })).rejects.toThrow(/OrderQuantity is required for item 000010/);
+    });
+
+    test('should throw error when item has zero or negative OrderQuantity in createSalesDocument', async () => {
+        const header = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
+        const items = [{ SalesInquiryItem: '000010', Material: '4000000091', OrderQuantity: 0, OrderQuantityUnit: 'PC' }];
+        await expect(salesInquiryAdapter.createSalesInquiry(header, items, {
+            destination: { url: 'http://mock-s4hana' }
+        })).rejects.toThrow(/OrderQuantity must be greater than 0 for item 000010/);
+    });
+
+    test('rejects createSalesInquiry when SalesOrganization, DistributionChannel, or Division is missing or blank', async () => {
+        const baseHeader = {
+            SalesInquiryType: 'ZIN',
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
+
+        const orgFields = ['SalesOrganization', 'DistributionChannel', 'OrganizationDivision'];
+        for (const field of orgFields) {
+            const missing = { ...baseHeader };
+            delete missing[field];
+            await expect(
+                salesInquiryAdapter.createSalesInquiry(missing, [], {
+                    destination: { url: 'http://mock-s4hana' },
+                    executeHttpRequest: jest.fn()
+                })
+            ).rejects.toThrow();
+
+            const blank = { ...baseHeader, [field]: '   ' };
+            await expect(
+                salesInquiryAdapter.createSalesInquiry(blank, [], {
+                    destination: { url: 'http://mock-s4hana' },
+                    executeHttpRequest: jest.fn()
+                })
+            ).rejects.toThrow();
+        }
+    });
+
+    test('rejects createSalesInquiry when SalesInquiryType is missing or blank', async () => {
+        const baseHeader = {
+            SalesOrganization: '1000',
+            DistributionChannel: '10',
+            OrganizationDivision: '52',
+            TransactionCurrency: 'INR',
+            SoldToParty: '10135'
+        };
+
+        await expect(
+            salesInquiryAdapter.createSalesInquiry(baseHeader, [], {
+                destination: { url: 'http://mock-s4hana' },
+                executeHttpRequest: jest.fn()
+            })
+        ).rejects.toThrow(/SalesInquiryType/);
+
+        await expect(
+            salesInquiryAdapter.createSalesInquiry({ ...baseHeader, SalesInquiryType: '   ' }, [], {
+                destination: { url: 'http://mock-s4hana' },
+                executeHttpRequest: jest.fn()
+            })
+        ).rejects.toThrow(/SalesInquiryType/);
+    });
+
+    test('should query Finished Goods materials with ZFRT/FERT condition and map MaterialName', async () => {
+        const mockRun = jest.fn().mockResolvedValue([
+            { Material: '4000000001', Material_Text: 'X-265', MaterialType: 'ZFRT', MaterialGroup: '164', MaterialBaseUnit: 'KG' },
+            { Material: '4000000177', Material_Text: '2-Chloroethanol test', MaterialType: 'FERT', MaterialGroup: '164', MaterialBaseUnit: 'KG' }
+        ]);
+        salesInquiryAdapter.s4hanaFS = { run: mockRun };
+
+        const results = await salesInquiryAdapter.getMaterials();
+        expect(results).toHaveLength(2);
+        expect(results[0].Material).toBe('4000000001');
+        expect(results[0].MaterialName).toBe('X-265');
+        expect(results[0].MaterialType).toBe('ZFRT');
+        expect(results[1].Material).toBe('4000000177');
+        expect(results[1].MaterialName).toBe('2-Chloroethanol test');
+        expect(results[1].MaterialType).toBe('FERT');
+
+        expect(mockRun).toHaveBeenCalled();
+        const queryArg = mockRun.mock.calls[0][0];
+        expect(JSON.stringify(queryArg.SELECT.where)).toContain('ZFRT');
+        expect(JSON.stringify(queryArg.SELECT.where)).toContain('FERT');
+    });
+
+    test('should merge user search filters when querying Finished Goods materials', async () => {
+        const mockRun = jest.fn().mockResolvedValue([
+            { Material: '4000000009', Material_Text: '1-Decene', MaterialType: 'ZFRT', MaterialGroup: '164', MaterialBaseUnit: 'KG' }
+        ]);
+        salesInquiryAdapter.s4hanaFS = { run: mockRun };
+
+        const userQuery = {
+            SELECT: {
+                where: [
+                    { func: 'contains', args: [{ ref: ['Material'] }, { val: 'Decene' }] },
+                    'or',
+                    { func: 'contains', args: [{ ref: ['MaterialName'] }, { val: 'Decene' }] }
+                ],
+                limit: { rows: 25, offset: 0 }
+            }
+        };
+
+        const results = await salesInquiryAdapter.getMaterials(userQuery);
+        expect(results).toHaveLength(1);
+        expect(results[0].Material).toBe('4000000009');
+        expect(results[0].MaterialName).toBe('1-Decene');
+
+        const queryArg = mockRun.mock.calls[0][0];
+        const whereStr = JSON.stringify(queryArg.SELECT.where);
+        expect(whereStr).toContain('Material_Text');
+        expect(whereStr).toContain('ZFRT');
+        expect(whereStr).toContain('FERT');
+    });
+
+    test('should throw 502 when querying Finished Goods materials fails or times out', async () => {
+        salesInquiryAdapter.s4hanaFS = {
+            run: jest.fn().mockRejectedValue(new Error('S/4 Gateway Connection Timeout'))
+        };
+
+        await expect(salesInquiryAdapter.getMaterials()).rejects.toMatchObject({
+            status: 502,
+            message: expect.stringContaining('Finished Goods materials could not be read from SAP S/4HANA: S/4 Gateway Connection Timeout')
+        });
+    });
+
+    test('should throw 502 when readFsData fails with S/4 error', async () => {
+        salesInquiryAdapter.s4hanaFS = {
+            run: jest.fn().mockRejectedValue(new Error('Factsheet 500 error'))
+        };
+
+        await expect(salesInquiryAdapter.readFsData({ SELECT: {} })).rejects.toMatchObject({
+            status: 502,
+            message: expect.stringContaining('Sales inquiry factsheet data could not be read from SAP S/4HANA')
+        });
+    });
+
+    test('should throw 503 when readFsData is called and s4hanaFS is disconnected', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        adapter.s4hanaFS = null;
+        adapter.init = jest.fn().mockResolvedValue();
+
+        await expect(adapter.readFsData({ SELECT: {} })).rejects.toMatchObject({
+            status: 503,
+            message: expect.stringContaining('SD_F2369_INQY_FS_SRV is not connected')
+        });
+    });
+
+    test('should throw 503 when getInquiries is called and s4hanaWL is disconnected', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        adapter.s4hanaWL = null;
+        adapter.init = jest.fn().mockResolvedValue();
+
+        await expect(adapter.getInquiries()).rejects.toMatchObject({
+            status: 503,
+            message: expect.stringContaining('SD_F2370_INQY_WL_SRV is not connected')
+        });
+    });
+
+    test('should throw 502 when getInquiry fails with outages on both WL and FS services', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        adapter.s4hanaWL = {
+            run: jest.fn().mockRejectedValue(new Error('WL Outage 503'))
+        };
+        adapter.s4hanaFS = {
+            run: jest.fn().mockRejectedValue(new Error('FS Outage 503'))
+        };
+        adapter.init = jest.fn().mockResolvedValue();
+
+        await expect(adapter.getInquiry('100001')).rejects.toMatchObject({
+            status: 502,
+            message: expect.stringContaining('Sales Inquiry 100001 could not be read from SAP S/4HANA')
+        });
+    });
+
+    test('should flag itemsUnavailable when factsheet items service fails for an inquiry', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        adapter.s4hanaWL = {
+            run: jest.fn().mockResolvedValue({
+                SalesInquiry: '100001',
+                SoldToParty: '10083'
+            })
+        };
+        adapter.s4hanaFS = {
+            run: jest.fn().mockImplementation((q) => {
+                const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                if (sFrom.includes('C_Inquiryitemfs')) {
+                    return Promise.reject(new Error('Item Service Timeout'));
+                }
+                return Promise.resolve({
+                    SalesInquiry: '100001'
+                });
+            })
+        };
+        adapter.init = jest.fn().mockResolvedValue();
+
+        const res = await adapter.getInquiry('100001');
+        expect(res).toBeDefined();
+        expect(res.header.SalesInquiry).toBe('100001');
+        expect(res.items).toEqual([]);
+        expect(res.itemsUnavailable).toBe(true);
+        expect(res.itemsUnavailableReason).toContain('Item Service Timeout');
+    });
+
+    test('should return inquiry types exactly as SAP describes them, deriving only the active status', async () => {
+        const mockRun = jest.fn().mockResolvedValue([
+            { SalesDocumentType: 'ZIN', SalesDocumentType_Text: 'Inquiry', SDDocumentCategory: 'A', IsLocked: '', NumberRangeForIntIDAssignment: 'Z1', ScreenSequenceGroup: 'AG' },
+            { SalesDocumentType: 'ZBIN', SalesDocumentType_Text: 'Budgetary Inquiry', SDDocumentCategory: 'A', IsLocked: '', NumberRangeForIntIDAssignment: 'Q7', ScreenSequenceGroup: 'AG' },
+            { SalesDocumentType: 'IN', SalesDocumentType_Text: 'Inquiry', SDDocumentCategory: 'A', IsLocked: 'X', NumberRangeForIntIDAssignment: '03' }
+        ]);
+        salesInquiryAdapter.s4hanaFS = { run: mockRun };
+
+        const results = await salesInquiryAdapter.getInquiryTypes();
+        expect(results).toHaveLength(3);
+
+        const zin = results.find(r => r.SalesDocumentType === 'ZIN');
+        expect(zin).toEqual({
+            SalesDocumentType: 'ZIN',
+            SalesDocumentType_Text: 'Inquiry',
+            SalesDocumentTypeName: 'Inquiry',
+            SDDocumentCategory: 'A',
+            SDDocumentCategoryName: 'Inquiry',
+            IsLocked: '',
+            IsActive: true,
+            StatusText: 'Active',
+            StatusState: 'Success',
+            ScreenSequenceGroup: 'AG',
+            NumberRangeForIntIDAssignment: 'Z1',
+            NumberRangeForExtIDAssignment: null,
+            TextDeterminationProcedure: null,
+            PartnerDeterminationProcedure: null
+        });
+
+        const zbin = results.find(r => r.SalesDocumentType === 'ZBIN');
+        expect(zbin.SalesDocumentTypeName).toBe('Budgetary Inquiry');
+
+        const inqy = results.find(r => r.SalesDocumentType === 'IN');
+        expect(inqy.IsActive).toBe(false);
+        expect(inqy.StatusText).toBe('Inactive');
+        expect(inqy.StatusState).toBe('Warning');
+        expect(inqy.ScreenSequenceGroup).toBeNull();
+
+        results.forEach(r => {
+            expect(r).not.toHaveProperty('Classification');
+            expect(r).not.toHaveProperty('Purpose');
+        });
+    });
+
+    test('should read the WL value help only when the factsheet service returns no types', async () => {
+        salesInquiryAdapter.s4hanaFS = { run: jest.fn().mockResolvedValue([]) };
+        salesInquiryAdapter.s4hanaWL = { run: jest.fn().mockResolvedValue([{ SalesDocumentType: 'ZIN', SalesDocumentType_Text: 'Standard Inquiry' }]) };
+
+        const results = await salesInquiryAdapter.getInquiryTypes();
+        expect(results.map(r => [r.SalesDocumentType, r.SalesDocumentTypeName, r.IsActive])).toEqual([['ZIN', 'Standard Inquiry', true]]);
+        expect(salesInquiryAdapter.s4hanaWL.run).toHaveBeenCalledTimes(1);
+    });
+
+    test('should fail with 502, not a built-in list, when both SAP services fail', async () => {
+        jest.spyOn(console, 'warn').mockImplementation(() => {});
+        salesInquiryAdapter.s4hanaFS = { run: jest.fn().mockRejectedValue(new Error('FS Network Error')) };
+        salesInquiryAdapter.s4hanaWL = { run: jest.fn().mockRejectedValue(new Error('WL Network Error')) };
+
+        await expect(salesInquiryAdapter.getInquiryTypes()).rejects.toMatchObject({
+            status: 502,
+            message: expect.stringMatching(/FS Network Error[\s\S]*WL Network Error/)
+        });
+        console.warn.mockRestore();
+    });
+
+    test('should return an empty list when SAP answers successfully with no inquiry types', async () => {
+        salesInquiryAdapter.s4hanaFS = { run: jest.fn().mockResolvedValue([]) };
+        salesInquiryAdapter.s4hanaWL = { run: jest.fn().mockResolvedValue([]) };
+        await expect(salesInquiryAdapter.getInquiryTypes()).resolves.toEqual([]);
+    });
+
+    test('getCustomerDefaults caches customer master data on subsequent queries', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        const mockCustRun = jest.fn().mockResolvedValue([
+            { Customer: '10083', CustomerName: 'Bajaj Healthcare', CityName: 'Surat', Country: 'IN' }
+        ]);
+        const mockInqRun = jest.fn().mockResolvedValue([
+            { TransactionCurrency: 'INR', SalesOffice: 'SO10', SalesGroup: '100' }
+        ]);
+        const mockOfficeRun = jest.fn().mockResolvedValue({ SalesOfficeName: 'Surat' });
+        const mockGroupRun = jest.fn().mockResolvedValue({ SalesGroupName: 'Surat' });
+
+        adapter.s4hanaWL = {
+            run: jest.fn().mockImplementation((q) => {
+                const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                if (sFrom.includes('I_Customer_VH')) return mockCustRun(q);
+                if (sFrom.includes('C_InquiryWL_F2370')) return mockInqRun(q);
+                if (sFrom.includes('C_SalesOfficeValueHelp')) return mockOfficeRun(q);
+                if (sFrom.includes('C_SalesGroupValueHelp')) return mockGroupRun(q);
+                return Promise.resolve(null);
+            })
+        };
+
+        const res1 = await adapter.getCustomerDefaults('10083', '1000', '10', '52');
+        expect(res1.CustomerName).toBe('Bajaj Healthcare');
+        expect(res1.City).toBe('Surat');
+        expect(mockCustRun).toHaveBeenCalledTimes(1);
+
+        // Second call should hit customerMasterCache without calling I_Customer_VH again
+        const res2 = await adapter.getCustomerDefaults('10083', '1000', '10', '52');
+        expect(res2.CustomerName).toBe('Bajaj Healthcare');
+        expect(mockCustRun).toHaveBeenCalledTimes(1); // Still 1!
+
+        // clearCache resets and causes a fresh query
+        adapter.clearCache();
+        await adapter.getCustomerDefaults('10083', '1000', '10', '52');
+        expect(mockCustRun).toHaveBeenCalledTimes(2);
+    });
+
+    test('getCustomerDefaults returns authentic Country without defaulting to IN when country is absent or present', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        // Case 1: Customer without Country in SAP
+        const mockCustNoCountry = jest.fn().mockResolvedValue([
+            { Customer: '10084', CustomerName: 'Global Client', CityName: 'Berlin', Country: null }
+        ]);
+        adapter.s4hanaWL = {
+            run: jest.fn().mockImplementation((q) => {
+                const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                if (sFrom.includes('I_Customer_VH')) return mockCustNoCountry(q);
+                return Promise.resolve([]);
+            })
+        };
+
+        const resNoCountry = await adapter.getCustomerDefaults('10084', '1000', '10', '52');
+        expect(resNoCountry.CustomerName).toBe('Global Client');
+        expect(resNoCountry.City).toBe('Berlin');
+        expect(resNoCountry.Country).toBe(''); // Should NOT default to 'IN'
+
+        // Case 2: Customer with authentic non-IN Country in SAP (e.g. 'DE')
+        adapter.clearCache();
+        const mockCustWithCountry = jest.fn().mockResolvedValue([
+            { Customer: '10085', CustomerName: 'German Pharma', CityName: 'Munich', Country: 'DE' }
+        ]);
+        adapter.s4hanaWL = {
+            run: jest.fn().mockImplementation((q) => {
+                const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                if (sFrom.includes('I_Customer_VH')) return mockCustWithCountry(q);
+                return Promise.resolve([]);
+            })
+        };
+
+        const resWithCountry = await adapter.getCustomerDefaults('10085', '1000', '10', '52');
+        expect(resWithCountry.CustomerName).toBe('German Pharma');
+        expect(resWithCountry.Country).toBe('DE');
+    });
+
+    test('getInquiry fetches WL header, FS header, and FS items concurrently and caches value helps', async () => {
+        const adapter = new salesInquiryAdapter.SalesInquiryAdapter();
+        let wlCalled = false;
+        let fsHeaderCalled = false;
+        let fsItemsCalled = false;
+
+        adapter.s4hanaWL = {
+            run: jest.fn().mockImplementation((q) => {
+                const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                if (sFrom.includes('C_InquiryWL_F2370')) {
+                    wlCalled = true;
+                    return Promise.resolve({
+                        SalesInquiry: '100005',
+                        SalesOrganization: '1000',
+                        DistributionChannel: '10',
+                        OrganizationDivision: '52',
+                        SalesOffice: 'SO10',
+                        SalesGroup: '100',
+                        SoldToParty: '10083'
+                    });
+                }
+                if (sFrom.includes('C_SalesOfficeValueHelp')) {
+                    return Promise.resolve({ SalesOfficeName: 'Surat Office' });
+                }
+                if (sFrom.includes('C_SalesGroupValueHelp')) {
+                    return Promise.resolve({ SalesGroupName: 'Surat Group' });
+                }
+                return Promise.resolve(null);
+            })
+        };
+
+        adapter.s4hanaFS = {
+            run: jest.fn().mockImplementation((q) => {
+                const sFrom = q?.SELECT?.from?.ref?.[0] || '';
+                if (sFrom.includes('C_Inquiryfs')) {
+                    fsHeaderCalled = true;
+                    return Promise.resolve({
+                        SalesInquiry: '100005',
+                        to_SDDocumentPartnerCard: []
+                    });
+                }
+                if (sFrom.includes('C_Inquiryitemfs')) {
+                    fsItemsCalled = true;
+                    return Promise.resolve([
+                        { SalesInquiry: '100005', SalesInquiryItem: '10', OrderQuantity: 2, NetAmount: 100 }
+                    ]);
+                }
+                return Promise.resolve(null);
+            })
+        };
+
+        const result = await adapter.getInquiry('100005');
+        expect(wlCalled).toBe(true);
+        expect(fsHeaderCalled).toBe(true);
+        expect(fsItemsCalled).toBe(true);
+        expect(result.header.SalesOfficeName).toBe('Surat Office');
+        expect(result.header.SalesGroupName).toBe('Surat Group');
+        expect(result.items).toHaveLength(1);
+        expect(result.items[0].NetPriceAmount).toBe('');
+
+        // Reading a second inquiry with the same SalesOffice & SalesGroup should hit the VH caches
+        const vhCallsBefore = adapter.s4hanaWL.run.mock.calls.filter(c =>
+            String(c[0]?.SELECT?.from?.ref?.[0] || '').includes('ValueHelp')
+        ).length;
+
+        await adapter.getInquiry('100005');
+        const vhCallsAfter = adapter.s4hanaWL.run.mock.calls.filter(c =>
+            String(c[0]?.SELECT?.from?.ref?.[0] || '').includes('ValueHelp')
+        ).length;
+
+        expect(vhCallsAfter).toBe(vhCallsBefore); // Value help caches hit!
     });
 });

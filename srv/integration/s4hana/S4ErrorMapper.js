@@ -6,9 +6,19 @@
 
 function _filterErrorDetails(details) {
     if (!Array.isArray(details) || details.length === 0) return [];
-    const messages = details
-        .map(d => d.message)
-        .filter(m => m && typeof m === 'string' && m.trim().length > 0 && !m.startsWith('System error in backend'));
+
+    const validDetails = details.filter(d =>
+        d && d.message && typeof d.message === 'string' &&
+        d.message.trim().length > 0 &&
+        !d.message.startsWith('System error in backend')
+    );
+
+    // If explicit 'error' severity entries exist, focus on errors so benign warnings
+    // (e.g. delivery date, price comparison, customer enhancements) do not obscure the blocking error.
+    const errorDetails = validDetails.filter(d => d.severity === 'error');
+    const targetDetails = errorDetails.length > 0 ? errorDetails : validDetails;
+
+    const messages = targetDetails.map(d => d.message.trim());
     return [...new Set(messages)];
 }
 
@@ -49,7 +59,7 @@ function extractS4ErrorMessage(error) {
                 if (parsed.error?.message?.value) {
                     return parsed.error.message.value;
                 }
-            } catch (e) {
+            } catch (_e) {
                 // Ignore parse errors, proceed to fallback
             }
         }
@@ -80,15 +90,15 @@ function _extractErrorCode(error) {
     const odataError = error.response?.data?.error;
     if (odataError?.code) return odataError.code;
 
-    if (error.code) return error.code;
+    if (error.code !== undefined && error.code !== null) return String(error.code);
 
     if (typeof error.message === 'string') {
         const jsonMatch = error.message.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
             try {
                 const parsed = JSON.parse(jsonMatch[0]);
-                if (parsed.error?.code) return parsed.error.code;
-            } catch (e) {
+                if (parsed.error?.code) return String(parsed.error.code);
+            } catch (_e) {
                 // Ignore
             }
         }
@@ -100,6 +110,13 @@ function _extractErrorCode(error) {
     }
 
     return 'UNKNOWN';
+}
+
+/** SAP rejects a posting whose date lies outside the open periods (materials or FI period). */
+const POSTING_PERIOD_CLOSED_REGEX = /Posting only possible in periods?\s+(.+?)\s+in company code\s+(\w+)/i;
+
+function isPostingPeriodClosed(message) {
+    return POSTING_PERIOD_CLOSED_REGEX.test(String(message || ''));
 }
 
 /**
@@ -128,8 +145,20 @@ function mapS4Error(error) {
 
     const message = extractS4ErrorMessage(error);
     const code = _extractErrorCode(error);
+
+    // Closed posting period: a user-facing 400 with the fix, the SAP text kept in details.
+    // The posting date is never changed automatically.
+    const period = message.match(POSTING_PERIOD_CLOSED_REGEX);
+    if (period) {
+        return {
+            status: 400,
+            message: `The posting period for the posting date is closed in company code ${period[2]} (SAP currently allows periods ${period[1]}). Contact finance to open the period (MMPV). The posting date was not changed and nothing was posted.`,
+            code: 'POSTING_PERIOD_CLOSED',
+            details: [{ code, message: period[0], severity: 'error' }]
+        };
+    }
     const sMessageLower = message.toLowerCase();
-    const sCodeUpper = code.toUpperCase();
+    const sCodeUpper = String(code).toUpperCase();
     const httpStatus = error.response?.status;
     const errorCode = error.code ? String(error.code).toUpperCase() : '';
 
@@ -233,5 +262,6 @@ function mapS4Error(error) {
 
 module.exports = {
     extractS4ErrorMessage,
-    mapS4Error
+    mapS4Error,
+    isPostingPeriodClosed
 };

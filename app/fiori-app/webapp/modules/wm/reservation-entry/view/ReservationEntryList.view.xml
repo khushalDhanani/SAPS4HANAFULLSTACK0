@@ -1,0 +1,150 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.reservation-entry.controller.ReservationEntryList"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.f"
+    xmlns:fb="sap.ui.comp.filterbar"
+    xmlns:core="sap.ui.core">
+
+    <f:DynamicPage id="pageResEntryList" headerExpanded="true" showFooter="false">
+        <f:title>
+            <f:DynamicPageTitle>
+                <f:heading>
+                    <Title id="titleResList" text="{i18n>resEntryListTitle}" level="H2" />
+                </f:heading>
+                <f:expandedContent>
+                    <Label text="{i18n>resEntryListSubhead}" />
+                </f:expandedContent>
+                <f:snappedContent>
+                    <Label text="{i18n>resEntryListSubhead}" />
+                </f:snappedContent>
+                <f:actions>
+                    <Button
+                        id="btnCreateReservation"
+                        text="{i18n>resEntryBtnCreate}"
+                        icon="sap-icon://add"
+                        type="Emphasized"
+                        press=".onCreatePress" />
+                    <Button
+                        id="btnRefreshList"
+                        icon="sap-icon://refresh"
+                        tooltip="{i18n>commonRefresh}"
+                        press=".onRefreshPress" />
+                </f:actions>
+            </f:DynamicPageTitle>
+        </f:title>
+
+        <f:header>
+            <f:DynamicPageHeader pinnable="true">
+                <fb:FilterBar id="filterBarRes" search=".onSearch" showClearOnFB="true" clear=".onClearFilters" useToolbar="false">
+                    <fb:filterGroupItems>
+                        <fb:FilterGroupItem
+                            name="MovementType"
+                            label="{i18n>resEntryFieldMovementType}"
+                            groupName="Group1"
+                            visibleInFilterBar="true">
+                            <fb:control>
+                                <Select id="filterMvtType" change=".onFilterChange" selectedKey="{view>/filterMvtType}">
+                                    <core:Item key="" text="{i18n>commonAll}" />
+                                    <core:Item key="311" text="{i18n>resMvt311Text}" />
+                                    <core:Item key="201" text="{i18n>resMvt201Text}" />
+                                    <core:Item key="241" text="{i18n>resMvt241Text}" />
+                                    <core:Item key="301" text="{i18n>resMvt301Text}" />
+                                    <core:Item key="261" text="{i18n>resMvt261Text}" />
+                                </Select>
+                            </fb:control>
+                        </fb:FilterGroupItem>
+
+                        <fb:FilterGroupItem
+                            name="Plant"
+                            label="{i18n>resEntryFieldPlant}"
+                            groupName="Group1"
+                            visibleInFilterBar="true">
+                            <fb:control>
+                                <Input id="filterPlant" value="{view>/filterPlant}" change=".onFilterChange" placeholder="1120" />
+                            </fb:control>
+                        </fb:FilterGroupItem>
+                    </fb:filterGroupItems>
+                </fb:FilterBar>
+            </f:DynamicPageHeader>
+        </f:header>
+
+        <f:content>
+            <Table
+                id="tblReservationEntries"
+                items="{view>/entries}"
+                growing="true"
+                growingThreshold="25"
+                noDataText="{i18n>resEntryNoData}"
+                itemPress=".onRowPress">
+                <headerToolbar>
+                    <OverflowToolbar id="toolbarResTable">
+                        <Title id="lblResTableTitle" text="{= ${i18n>resEntryTableHeading} + ' (' + (${view>/entries}.length || 0) + ')' }" level="H3" />
+                        <ToolbarSpacer />
+                        <SearchField
+                            id="searchFieldList"
+                            width="16rem"
+                            placeholder="{i18n>commonSearchPlaceholder}"
+                            search=".onSearchFieldSearch" />
+                    </OverflowToolbar>
+                </headerToolbar>
+
+                <columns>
+                    <Column width="13rem"><Text text="{i18n>resEntryColResNo}" /></Column>
+                    <Column width="11rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColMvt}" /></Column>
+                    <Column width="12rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColMaterial}" /></Column>
+                    <Column width="11rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resEntryColLocation}" /></Column>
+                    <Column width="10rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resEntryColCreatedBy}" /></Column>
+                    <Column width="9rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resEntryColAutoTR}" /></Column>
+                    <Column width="11rem"><Text text="{i18n>resEntryColStatus}" /></Column>
+                </columns>
+
+                <items>
+                    <ColumnListItem type="Navigation" press=".onRowPress">
+                        <cells>
+                            <ObjectIdentifier
+                                title="{view>ReservationNo}"
+                                text="{= ${view>ItemCount} ? (${view>ItemCount} + ' item(s)' + (${view>OrderNo} ? ' &#183; Order ' + ${view>OrderNo} : '')) : ('Item ' + (${view>ReservationItem} || '0001')) }" />
+
+                            <ObjectStatus
+                                text="{= ${view>MovementType} + (${view>MovementTypeName} ? ' &#183; ' + ${view>MovementTypeName} : '') }"
+                                state="None" />
+
+                            <ObjectIdentifier
+                                title="{view>Material}"
+                                text="{view>MaterialName}" />
+
+                            <VBox>
+                                <Text text="{= ${view>Plant} + (${view>StorageLocation} ? ' / ' + ${view>StorageLocation} : '') }" />
+                                <Text
+                                    text="{= ${view>ReceivingPlant} ? ('-&gt; Plant: ' + ${view>ReceivingPlant}) : (${view>ReceivingStorageLocation} ? ('-&gt; SLoc: ' + ${view>ReceivingStorageLocation}) : '') }"
+                                    class="textMuted"
+                                    visible="{= !!${view>ReceivingPlant} || !!${view>ReceivingStorageLocation} }" />
+                            </VBox>
+
+                            <VBox>
+                                <HBox alignItems="Center">
+                                    <core:Icon src="sap-icon://person-placeholder" size="0.875rem" class="sapUiTinyMarginEnd" visible="{= !!${view>CreatedByUser} }" />
+                                    <Text text="{= ${view>CreatedByUser} || '-' }" design="Bold" />
+                                </HBox>
+                                <Text
+                                    text="{= ${view>createdAt} ? ${path: 'view>createdAt', formatter: '._formatDateIso'} : (${view>ReservationDate} || '') }"
+                                    class="textMuted"
+                                    visible="{= !!${view>createdAt} || !!${view>ReservationDate} }" />
+                            </VBox>
+
+                            <ObjectIdentifier
+                                title="{= ${view>TransferRequirement} ? ${view>TransferRequirement} : '-' }"
+                                text="{= ${view>TransferRequirement} ? ${i18n>resBadgeAutoCreated} : ${i18n>resBadgePending} }" />
+
+                            <ObjectStatus
+                                text="{= ${view>Status_code} ? ${path: 'view>Status_code', formatter: '.formatStatusText'} : (${view>StatusText} || ${i18n>resEntryStatusOpen}) }"
+                                state="{= ${view>Status_code} ? ${path: 'view>Status_code', formatter: '.formatStatusState'} : (${view>StatusCriticality} || 'Information') }"
+                                icon="{= ${view>Status_code} ? ${path: 'view>Status_code', formatter: '.formatStatusIcon'} : 'sap-icon://pending' }" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+            </Table>
+        </f:content>
+    </f:DynamicPage>
+</mvc:View>

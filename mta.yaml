@@ -32,6 +32,7 @@ modules:
       - name: saps4hana-auth
       - name: saps4hana-connectivity
       - name: saps4hana-destination
+      - name: saps4hana-db
 
   # ------------------ APPLICATION ROUTER ------------------
   - name: saps4hana-approuter
@@ -92,6 +93,15 @@ modules:
           content-target: true
       - name: saps4hana-auth
 
+  # ------------------ HDI CONTAINER DEPLOYER (Goods Issue dispatch queue) ------------------
+  - name: saps4hana-db-deployer
+    type: hdb
+    path: gen/db
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: saps4hana-db
+
 resources:
   # ------------------ XSUAA SERVICE ------------------
   - name: saps4hana-auth
@@ -139,3 +149,10 @@ resources:
     parameters:
       service: html5-apps-repo
       service-plan: app-runtime
+  # ------------------ SAP HANA CLOUD HDI CONTAINER ------------------
+  # Holds only the Goods Issue dispatch queue (ADR-0001 addendum 2026-09-14).
+  - name: saps4hana-db
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared

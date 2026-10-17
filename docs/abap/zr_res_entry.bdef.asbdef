@@ -1,0 +1,103 @@
+unmanaged implementation in class zbp_r_res_entry unique;
+strict ( 2 );
+with draft;
+
+/* REVIEW IN ADT: Verify draft table ZRES_TRACK_D creation in SE11 / ADT */
+define behavior for ZR_RES_ENTRY alias ReservationEntry
+draft table zres_track_d
+early numbering
+lock master
+authorization master ( instance )
+etag master ChangedAt
+{
+  create;
+  update;
+  delete;
+
+  field ( readonly )
+    ProcessId,
+    ReservationNo,
+    ReservationItem,
+    TransferRequirement,
+    TransferOrder,
+    MaterialDocument,
+    MaterialDocYear,
+    Status,
+    RetryCount,
+    ErrorStep,
+    ErrorMessage,
+    CreatedBy,
+    CreatedOn,
+    CreatedAt,
+    ChangedBy,
+    ChangedOn,
+    ChangedAt;
+
+  field ( mandatory )
+    MovementType,
+    Plant,
+    StorageLocation,
+    Material,
+    Quantity,
+    UnitOfMeasure;
+
+  // Single creation path: validation on save triggers background processing
+  validation validateMovementData on save { create; field MovementType, Plant, StorageLocation; }
+
+  // Actions for decoupled step execution
+  action ( features : instance ) createTR result [1] $self;
+  action ( features : instance ) createTOFromTR result [1] $self;
+  action ( features : instance ) confirmTO result [1] $self;
+  action ( features : instance ) postMigo result [1] $self;
+  action ( features : instance ) retryStep result [1] $self;
+  action ( features : instance ) refreshStatus result [1] $self;
+
+  // Draft actions
+  draft action Edit;
+  draft action Activate;
+  draft action Discard;
+  draft determine action Prepare {
+    validation validateMovementData;
+  }
+
+  mapping for zres_track
+  {
+    ProcessId = process_id;
+    ReservationNo = rsnum;
+    ReservationItem = rspos;
+    RefText = ref_text;
+    MovementType = move_type;
+    Plant = werks;
+    StorageLocation = lgort;
+    WarehouseNumber = lgnum;
+    ReceivingStorageLocation = umlgo;
+    ReceivingPlant = umwrk;
+    CostCenter = kostl;
+    AssetNumber = anln1;
+    AssetSubNumber = anln2;
+    GLAccount = saknr;
+    Material = matnr;
+    Batch = charg;
+    SerialNumber = sernr;
+    Quantity = menge;
+    ConfirmedQuantity = conf_menge;
+    UnitOfMeasure = meins;
+    CompleteReservation = complete_res;
+    TransferRequirement = tbnum;
+    TransferOrder = tanum;
+    MaterialDocument = mblnr;
+    MaterialDocYear = mjahr;
+    Status = status;
+    RetryCount = retry_count;
+    ErrorStep = error_step;
+    ErrorMessage = err_msg;
+    LogHandle = balloghndl;
+    ExternalId = balextn;
+    CreatedBy = created_by;
+    CreatedOn = created_on;
+    CreatedAt = created_at;
+    ChangedBy = changed_by;
+    ChangedOn = changed_on;
+    ChangedAt = changed_at;
+  }
+}

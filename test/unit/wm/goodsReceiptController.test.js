@@ -70,23 +70,31 @@ const mockRouter = {
     navTo: jest.fn()
 };
 
+const mockGoodsReceiptModel = {
+    bindList: jest.fn()
+};
+
 const mockBaseController = {
     extend: (name, proto) => {
         function Controller() {
             Object.assign(this, proto);
-            this.models = {};
+            this.models = {
+                goodsReceipt: mockGoodsReceiptModel
+            };
             this.getView = () => ({
                 getId: () => 'mockViewId',
                 getModel: (name) => this.models[name],
                 setModel: (m, name) => { this.models[name] = m; },
                 addDependent: jest.fn()
             });
+            this.getModel = (name) => this.models[name] || (this.getView() && this.getView().getModel(name)) || null;
             this.getRouter = () => mockRouter;
             this.byId = jest.fn();
             this.setBusy = jest.fn();
             this.getText = (k) => k;
             this.getOwnerComponent = () => ({
-                getRouter: () => mockRouter
+                getRouter: () => mockRouter,
+                getModel: (name) => this.models[name]
             });
         }
         return Controller;
@@ -152,6 +160,8 @@ describe('GoodsReceipt Controller Unit Tests', () => {
         jest.clearAllMocks();
         controller = new GoodsReceiptController();
         controller.onInit();
+        // Most tests exercise the detail page (wm/goods-receipt/{delivery}); the list page only navigates.
+        controller.getView().getModel('grView').setProperty('/isDetail', true);
     });
 
     afterEach(() => {
@@ -166,18 +176,38 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(oModel.getProperty('/hasActiveSU')).toBe(false);
             expect(oModel.getProperty('/audioEnabled')).toBe(true);
             expect(mockBarcodeScanService.attachHardwareScanner).toHaveBeenCalled();
+            // the list is loaded by the list route, never by a detail page load
+            expect(mockGoodsReceiptService.fetchOpenInboundDeliveries).not.toHaveBeenCalled();
+            expect(mockRouter.getRoute).toHaveBeenCalledWith('wmGoodsReceipt');
+            expect(mockRouter.getRoute).toHaveBeenCalledWith('wmGoodsReceiptDetail');
+        });
+
+        it('should navigate back to the list route when the workflow is reset on the detail page', () => {
+            controller.onResetWorkflow();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsReceipt');
+        });
+
+        it('should clear state and reload the list when the list route is matched', () => {
+            const oModel = controller.getView().getModel('grView');
+            oModel.setProperty('/hasActiveSU', true);
+            mockGoodsReceiptService.fetchOpenInboundDeliveries.mockClear();
+
+            controller._onListRouteMatched();
+            expect(oModel.getProperty('/isDetail')).toBe(false);
+            expect(oModel.getProperty('/hasActiveSU')).toBe(false);
             expect(mockGoodsReceiptService.fetchOpenInboundDeliveries).toHaveBeenCalled();
+            expect(mockRouter.navTo).not.toHaveBeenCalled();
         });
 
         it('should toggle audio cues', () => {
             controller.onToggleAudio();
             const oModel = controller.getView().getModel('grView');
             expect(oModel.getProperty('/audioEnabled')).toBe(false);
-            expect(mockMessageToast.show).toHaveBeenCalledWith('Audio cues muted');
+            expect(mockMessageToast.show).toHaveBeenCalledWith('grAudioMuted');
 
             controller.onToggleAudio();
             expect(oModel.getProperty('/audioEnabled')).toBe(true);
-            expect(mockMessageToast.show).toHaveBeenCalledWith('Audio cues enabled');
+            expect(mockMessageToast.show).toHaveBeenCalledWith('grAudioEnabled');
         });
 
         it('should reset workflow state on onResetWorkflow', () => {
@@ -188,7 +218,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             controller.onResetWorkflow();
             expect(oModel.getProperty('/storageUnitBarcode')).toBe('');
             expect(oModel.getProperty('/hasActiveSU')).toBe(false);
-            expect(mockMessageToast.show).toHaveBeenCalledWith('Workflow reset');
+            expect(mockMessageToast.show).toHaveBeenCalledWith('grWorkflowReset');
         });
 
         it('should navigate back on onNavBack', () => {
@@ -242,7 +272,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
 
         it('should show error when scanning with empty input', () => {
             controller.onScanStorageUnit();
-            expect(mockMessageBox.error).toHaveBeenCalledWith('Please scan or enter a Storage Unit Number.');
+            expect(mockMessageBox.error).toHaveBeenCalledWith('grScanRequired');
         });
 
         it('should resolve Storage Unit and auto-populate form on successful scan', async () => {
@@ -262,7 +292,28 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(oModel.getProperty('/activeSU/StorageLocation')).toBe('CS01');
             expect(oModel.getProperty('/activeSU/Batch')).toBe('IN25000133');
             expect(oModel.getProperty('/activeSU/BatchStatusState')).toBe('Success');
+            expect(oModel.getProperty('/activeSU/Quantity')).toBe(10);
+            expect(oModel.getProperty('/activeSU/Unit')).toBe('KG');
             expect(mockMessageToast.show).toHaveBeenCalledWith(expect.stringContaining('resolved from SAP'));
+        });
+
+        it('should bind authentic open quantity and unit from SAP on scan', async () => {
+            mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce({
+                ...mockSUData,
+                Quantity: 1000,
+                OpenQuantity: 1000,
+                OrderedQuantity: 1000,
+                Unit: 'KG'
+            });
+
+            const oModel = controller.getView().getModel('grView');
+            oModel.setProperty('/storageUnitBarcode', '180000008');
+
+            await controller.onScanStorageUnit();
+
+            expect(oModel.getProperty('/activeSU/Quantity')).toBe(1000);
+            expect(oModel.getProperty('/activeSU/OpenQuantity')).toBe(1000);
+            expect(oModel.getProperty('/activeSU/Unit')).toBe('KG');
         });
 
         it('should handle hardware laser scanner event and resolve Storage Unit', async () => {
@@ -289,16 +340,44 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(oModel.getProperty('/storageUnitBarcode')).toBe('180000001');
         });
 
-        it('should handle Inbound Delivery dropdown selection and trigger resolve', () => {
-            mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce(mockSUData);
-
+        it('should ignore a list row press while a detail page is open', () => {
             const mockEvent = {
-                getParameter: (p) => (p === 'selectedItem' ? { getKey: () => '180000001' } : null)
+                getSource: () => ({ getBindingContext: () => ({ getProperty: () => '180000021' }) })
+            };
+            controller.onSelectInboundDelivery(mockEvent);
+            expect(mockRouter.navTo).not.toHaveBeenCalled();
+        });
+
+        it('should navigate to the detail route on Inbound Delivery list row press instead of resolving inline', () => {
+            controller.getView().getModel('grView').setProperty('/isDetail', false);
+            const mockEvent = {
+                getSource: () => ({ getBindingContext: () => ({ getProperty: (p) => (p === 'DeliveryDocument' ? '180000001' : null) }) })
             };
 
             controller.onSelectInboundDelivery(mockEvent);
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsReceiptDetail', { delivery: '180000001' });
+            expect(mockGoodsReceiptService.resolveStorageUnit).not.toHaveBeenCalled();
+        });
+
+        it('should navigate to the detail route when a barcode is scanned on the list page', async () => {
             const oModel = controller.getView().getModel('grView');
-            expect(oModel.getProperty('/storageUnitBarcode')).toBe('180000001');
+            oModel.setProperty('/isDetail', false);
+            oModel.setProperty('/storageUnitBarcode', 'SU-42');
+
+            await controller.onScanStorageUnit();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsReceiptDetail', { delivery: 'SU-42' });
+            expect(mockGoodsReceiptService.resolveStorageUnit).not.toHaveBeenCalled();
+        });
+
+        it('should resolve the document from the route argument when the detail route is matched', async () => {
+            mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce(mockSUData);
+            const oModel = controller.getView().getModel('grView');
+            oModel.setProperty('/isDetail', false);
+
+            await controller._onDetailRouteMatched({ getParameter: () => ({ delivery: '180000001' }) });
+            expect(oModel.getProperty('/isDetail')).toBe(true);
+            expect(mockGoodsReceiptService.resolveStorageUnit).toHaveBeenCalledWith('180000001');
+            expect(oModel.getProperty('/hasActiveSU')).toBe(true);
         });
 
         it('should open Storage Unit Value Help dialog and handle item selection', () => {
@@ -331,7 +410,48 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             await controller.onScanStorageUnit();
 
             expect(oModel.getProperty('/hasActiveSU')).toBe(false);
-            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('not found in SAP S/4HANA'), expect.any(Object));
+            expect(mockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining('not found in SAP S/4HANA'), expect.objectContaining({
+                title: 'grDocNotFoundTitle'
+            }));
+        });
+
+        it('should preserve null quantities without defaulting to 0 when SAP item read yields no quantities', async () => {
+            mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce({
+                ...mockSUData,
+                Quantity: null,
+                OpenQuantity: null,
+                OrderedQuantity: null,
+                QuantityInEntryUnit: null
+            });
+
+            const oModel = controller.getView().getModel('grView');
+            oModel.setProperty('/storageUnitBarcode', '180000001');
+
+            await controller.onScanStorageUnit();
+
+            expect(oModel.getProperty('/activeSU/Quantity')).toBe('');
+            expect(oModel.getProperty('/activeSU/OpenQuantity')).toBeNull();
+            expect(oModel.getProperty('/activeSU/OrderedQuantity')).toBeNull();
+            expect(oModel.getProperty('/activeSU/QuantityInEntryUnit')).toBeNull();
+        });
+
+        it('should display outage dialog when resolution fails due to S/4HANA backend outage (502/503)', async () => {
+            const outageErr = new Error('Failed to retrieve storage locations due to S/4HANA outage for material 1000000045: Gateway Timeout');
+            outageErr.statusCode = 502;
+            mockGoodsReceiptService.resolveStorageUnit.mockRejectedValueOnce(outageErr);
+
+            const oModel = controller.getView().getModel('grView');
+            oModel.setProperty('/storageUnitBarcode', '180000001');
+
+            await controller.onScanStorageUnit();
+
+            expect(oModel.getProperty('/hasActiveSU')).toBe(false);
+            expect(mockMessageBox.error).toHaveBeenCalledWith(
+                expect.stringContaining('S/4HANA outage'),
+                expect.objectContaining({
+                    title: 'grOutageTitle'
+                })
+            );
         });
     });
 
@@ -382,8 +502,8 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             controller.onBatchChange(mockEvent);
 
             expect(mockMessageBox.error).toHaveBeenCalledWith(
-                expect.stringContaining('expired on 2020-01-01'),
-                expect.objectContaining({ title: 'Expired Batch Blocked' })
+                'grBatchExpiredSelectMsg',
+                expect.objectContaining({ title: 'grExpiredBatchTitle' })
             );
 
             // Verify active batch remains unchanged
@@ -416,7 +536,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             oModel.setProperty('/activeSU/Quantity', 0);
 
             controller.onPostGoodsReceipt();
-            expect(mockMessageBox.error).toHaveBeenCalledWith('Quantity must be greater than zero.');
+            expect(mockMessageBox.error).toHaveBeenCalledWith('grQtyPositive');
             expect(mockMessageBox.confirm).not.toHaveBeenCalled();
         });
 
@@ -427,8 +547,8 @@ describe('GoodsReceipt Controller Unit Tests', () => {
 
             controller.onPostGoodsReceipt();
             expect(mockMessageBox.error).toHaveBeenCalledWith(
-                expect.stringContaining('Goods Receipt blocked: Batch IN25000133 has expired'),
-                expect.objectContaining({ title: 'Expired Batch Blocked' })
+                'grBatchExpiredPostMsg',
+                expect.objectContaining({ title: 'grExpiredBatchTitle' })
             );
             expect(mockMessageBox.confirm).not.toHaveBeenCalled();
         });
@@ -447,7 +567,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             await controller.onPostGoodsReceipt();
 
             expect(mockMessageBox.confirm).toHaveBeenCalledWith(
-                expect.stringContaining('Post Goods Receipt (101) in SAP for Storage Unit 180000001'),
+                'grPostConfirmPrompt',
                 expect.any(Object)
             );
             expect(mockGoodsReceiptService.postGoodsReceipt).toHaveBeenCalledWith(
@@ -478,9 +598,7 @@ describe('GoodsReceipt Controller Unit Tests', () => {
 
             await controller.onPostGoodsReceipt();
 
-            expect(mockMessageBox.error).toHaveBeenCalledWith(
-                expect.stringContaining('Goods Receipt Failed: SAP S/4HANA Backend Posting Capability Error')
-            );
+            expect(mockMessageBox.error).toHaveBeenCalledWith('grPostFailed');
         });
     });
 });

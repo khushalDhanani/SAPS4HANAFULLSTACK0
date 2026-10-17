@@ -121,6 +121,7 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
                     SalesInquiryItemText: 'BPAO88063',
                     OrderQuantity: 1,
                     OrderQuantityUnit: 'PC',
+                    Plant: '1120',
                     NetPriceAmount: 600,
                     NetAmount: 600,
                     TransactionCurrency: 'INR'
@@ -140,5 +141,20 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
         expect(s4Payload.header.SoldToParty).toBe('10135');
         expect(s4Payload.header.CustomerCity).toBeUndefined();
         expect(s4Payload.items[0].OrderQuantity).toBe('1.000');
+    });
+
+    test('SalesInquiryService.getCustomerDefaults returns blanks for empty input and rejects (never silent blanks) when the lookup fails', async () => {
+        const emptyRes = await SalesInquiryService.getCustomerDefaults('');
+        expect(emptyRes.Currency).toBe('');
+        expect(emptyRes.ShipToParty).toBe('');
+        expect(emptyRes.derived).toBe(false);
+
+        mockODataClient.get.mockRejectedValueOnce(new Error('Network error'));
+        await expect(SalesInquiryService.getCustomerDefaults('10135')).rejects.toThrow('Network error');
+    });
+
+    test('SalesInquiryService.getSalesInquiryDefaults rejects on failure instead of inventing blanks or dates', async () => {
+        mockODataClient.get.mockRejectedValueOnce(new Error('Backend error'));
+        await expect(SalesInquiryService.getSalesInquiryDefaults()).rejects.toThrow('Backend error');
     });
 });

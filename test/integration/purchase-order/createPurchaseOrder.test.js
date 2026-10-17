@@ -28,6 +28,41 @@ describe('Integration: Create Purchase Order Action', () => {
         expect(createPOSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('should successfully accept items containing NetAmountIsEstimate without throwing HTTP 400', async () => {
+        createPOSpy = jest.spyOn(purchaseOrderAdapter, 'createPurchaseOrder').mockResolvedValueOnce({
+            PurchaseOrder: '4500001002',
+            IsActiveEntity: true
+        });
+
+        const payloadWithEstimateFlag = {
+            header: validPayload.header,
+            items: validPayload.items.map(item => ({
+                ...item,
+                NetAmountIsEstimate: true
+            }))
+        };
+
+        const { status, data } = await POST('/odata/v4/purchase-order/createPurchaseOrder', payloadWithEstimateFlag);
+
+        expect(status).toBe(200);
+        expect(data).toHaveProperty('value', '4500001002');
+    });
+
+    it('should reject with 502 Bad Gateway when SAP returns no PurchaseOrder document number', async () => {
+        createPOSpy = jest.spyOn(purchaseOrderAdapter, 'createPurchaseOrder').mockResolvedValueOnce({
+            PurchaseOrder: '',
+            IsActiveEntity: true
+        });
+
+        try {
+            await POST('/odata/v4/purchase-order/createPurchaseOrder', validPayload);
+            expect(true).toBe(false); // Should not reach here
+        } catch (err) {
+            expect(err.response.status).toBe(502);
+            expect(err.response.data.error.message).toContain('no Purchase Order document number was returned');
+        }
+    });
+
     it('should reject with 400 Bad Request when payload is missing required header fields', async () => {
         const invalidPayload = {
             header: {

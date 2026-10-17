@@ -1,0 +1,200 @@
+{
+  "LTBK": {
+    "ET_DATA": [],
+    "DELIMITER": "|",
+    "GET_SORTED": "",
+    "NO_DATA": "",
+    "QUERY_TABLE": "LTBK",
+    "ROWCOUNT": 0,
+    "ROWSKIPS": 0,
+    "USE_ET_DATA_4_RETURN": "",
+    "DATA": [
+      {
+        "WA": "W10|0001001222|302| |4900050149|2026| |          |20261012|103641|KHUSHAL"
+      }
+    ],
+    "FIELDS": [
+      {
+        "FIELDNAME": "LGNUM",
+        "OFFSET": "000000",
+        "LENGTH": "000003",
+        "TYPE": "C",
+        "FIELDTEXT": "Warehouse Number / Warehouse Complex"
+      },
+      {
+        "FIELDNAME": "TBNUM",
+        "OFFSET": "000004",
+        "LENGTH": "000010",
+        "TYPE": "N",
+        "FIELDTEXT": "Transfer Requirement Number"
+      },
+      {
+        "FIELDNAME": "BWLVS",
+        "OFFSET": "000015",
+        "LENGTH": "000003",
+        "TYPE": "N",
+        "FIELDTEXT": "Movement Type for Warehouse Management"
+      },
+      {
+        "FIELDNAME": "STATU",
+        "OFFSET": "000019",
+        "LENGTH": "000001",
+        "TYPE": "C",
+        "FIELDTEXT": "Header Status of Transfer Requirement"
+      },
+      {
+        "FIELDNAME": "MBLNR",
+        "OFFSET": "000021",
+        "LENGTH": "000010",
+        "TYPE": "C",
+        "FIELDTEXT": "Number of Material Document"
+      },
+      {
+        "FIELDNAME": "MJAHR",
+        "OFFSET": "000032",
+        "LENGTH": "000004",
+        "TYPE": "N",
+        "FIELDTEXT": "Material Document Year"
+      },
+      {
+        "FIELDNAME": "BETYP",
+        "OFFSET": "000037",
+        "LENGTH": "000001",
+        "TYPE": "C",
+        "FIELDTEXT": "Requirement Type"
+      },
+      {
+        "FIELDNAME": "BENUM",
+        "OFFSET": "000039",
+        "LENGTH": "000010",
+        "TYPE": "C",
+        "FIELDTEXT": "Requirement Number"
+      },
+      {
+        "FIELDNAME": "BDATU",
+        "OFFSET": "000050",
+        "LENGTH": "000008",
+        "TYPE": "D",
+        "FIELDTEXT": "Creation Date of Transfer Request"
+      },
+      {
+        "FIELDNAME": "BZEIT",
+        "OFFSET": "000059",
+        "LENGTH": "000006",
+        "TYPE": "T",
+        "FIELDTEXT": "Creation time of transfer request"
+      },
+      {
+        "FIELDNAME": "BNAME",
+        "OFFSET": "000066",
+        "LENGTH": "000012",
+        "TYPE": "C",
+        "FIELDTEXT": "User Name"
+      }
+    ],
+    "OPTIONS": [
+      {
+        "TEXT": "LGNUM = 'W10' AND TBNUM = '0001001222'"
+      }
+    ]
+  },
+  "LTBP": {
+    "ET_DATA": [],
+    "DELIMITER": "|",
+    "GET_SORTED": "",
+    "NO_DATA": "",
+    "QUERY_TABLE": "LTBP",
+    "ROWCOUNT": 0,
+    "ROWSKIPS": 0,
+    "USE_ET_DATA_4_RETURN": "",
+    "DATA": [
+      {
+        "WA": "W10|0001001222|0001|000000008900000004                      |1110|CS01|INJW260001|         1.000 |         1.000 |KG |"
+      }
+    ],
+    "FIELDS": [
+      {
+        "FIELDNAME": "LGNUM",
+        "OFFSET": "000000",
+        "LENGTH": "000003",
+        "TYPE": "C",
+        "FIELDTEXT": "Warehouse Number / Warehouse Complex"
+      },
+      {
+        "FIELDNAME": "TBNUM",
+        "OFFSET": "000004",
+        "LENGTH": "000010",
+        "TYPE": "N",
+        "FIELDTEXT": "Transfer Requirement Number"
+      },
+      {
+        "FIELDNAME": "TBPOS",
+        "OFFSET": "000015",
+        "LENGTH": "000004",
+        "TYPE": "N",
+        "FIELDTEXT": "Transfer Requirement Item"
+      },
+      {
+        "FIELDNAME": "MATNR",
+        "OFFSET": "000020",
+        "LENGTH": "000040",
+        "TYPE": "C",
+        "FIELDTEXT": "Material Number"
+      },
+      {
+        "FIELDNAME": "WERKS",
+        "OFFSET": "000061",
+        "LENGTH": "000004",
+        "TYPE": "C",
+        "FIELDTEXT": "Plant"
+      },
+      {
+        "FIELDNAME": "LGORT",
+        "OFFSET": "000066",
+        "LENGTH": "000004",
+        "TYPE": "C",
+        "FIELDTEXT": "Storage Location"
+      },
+      {
+        "FIELDNAME": "CHARG",
+        "OFFSET": "000071",
+        "LENGTH": "000010",
+        "TYPE": "C",
+        "FIELDTEXT": "Batch Number"
+      },
+      {
+        "FIELDNAME": "MENGA",
+        "OFFSET": "000082",
+        "LENGTH": "000015",
+        "TYPE": "P",
+        "FIELDTEXT": "Transfer Requirement Quantity in Alternate Unit"
+      },
+      {
+        "FIELDNAME": "MENGE",
+        "OFFSET": "000098",
+        "LENGTH": "000015",
+        "TYPE": "P",
+        "FIELDTEXT": "Transfer requirement quantity in stockkeeping unit"
+      },
+      {
+        "FIELDNAME": "MEINS",
+        "OFFSET": "000114",
+        "LENGTH": "000003",
+        "TYPE": "C",
+        "FIELDTEXT": "Base Unit of Measure"
+      },
+      {
+        "FIELDNAME": "ELIKZ",
+        "OFFSET": "000118",
+        "LENGTH": "000001",
+        "TYPE": "C",
+        "FIELDTEXT": "Indicator: Processing Complete"
+      }
+    ],
+    "OPTIONS": [
+      {
+        "TEXT": "LGNUM = 'W10' AND TBNUM = '0001001222'"
+      }
+    ]
+  }
+}

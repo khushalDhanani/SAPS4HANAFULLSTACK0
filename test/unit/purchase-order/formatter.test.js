@@ -6,7 +6,7 @@ let mmFormatter;
 let fiFormatter;
 
 const mockDateFormat = {
-    getDateInstance: jest.fn(options => ({
+    getDateInstance: jest.fn(_options => ({
         format: jest.fn(oDate => {
             if (!oDate || !(oDate instanceof Date) || isNaN(oDate.getTime())) return "";
             const sDay = String(oDate.getDate()).padStart(2, "0");
@@ -97,45 +97,86 @@ describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
             expect(mmFormatter.completenessIcon(true)).toBe("sap-icon://accept");
             expect(mmFormatter.completenessIcon(false)).toBe("sap-icon://edit");
 
-            expect(mmFormatter.completenessText.call(oContext, true)).toBe("Approved");
-            expect(mmFormatter.completenessText.call(oContext, false)).toBe("Draft");
+            expect(mmFormatter.completenessText.call(oContext, true)).toBe("Complete");
+            expect(mmFormatter.completenessText.call(oContext, false)).toBe("Incomplete");
         });
 
-        it('should correctly format canonical Display Status, state, and icon across S/4HANA status fields', () => {
-            // 1. Rejected (Status 38, deletion code L, or name Rejected)
+        it('should correctly format authentic Display Status, state, and icon across S/4HANA status fields', () => {
+            // 1. Rejected (Status 38 or name Rejected)
             expect(mmFormatter.displayStatus("38", "Rejected", true, "", false)).toBe("Rejected");
             expect(mmFormatter.displayStatusState("38", "Rejected", true, "", false)).toBe("Error");
             expect(mmFormatter.displayStatusIcon("38", "Rejected", true, "", false)).toBe("sap-icon://decline");
 
-            expect(mmFormatter.displayStatus("", "", false, "L", false)).toBe("Rejected");
+            // Deletion flag L maps to Deleted (Error, decline icon), never Rejected
+            expect(mmFormatter.displayStatus("", "", false, "L", false)).toBe("Deleted");
             expect(mmFormatter.displayStatusState("", "", false, "L", false)).toBe("Error");
+            expect(mmFormatter.displayStatusIcon("", "", false, "L", false)).toBe("sap-icon://decline");
 
-            // 2. In Approval (Status 02, release pending, or name In Approval)
+            // 2. In Approval (Status 02 or name In Approval)
             expect(mmFormatter.displayStatus("02", "In Approval", true, "", false)).toBe("In Approval");
             expect(mmFormatter.displayStatusState("02", "In Approval", true, "", false)).toBe("Warning");
             expect(mmFormatter.displayStatusIcon("02", "In Approval", true, "", false)).toBe("sap-icon://pending");
 
-            expect(mmFormatter.displayStatus("", "", true, "", false)).toBe("In Approval");
-            expect(mmFormatter.displayStatusState("", "", true, "", false)).toBe("Warning");
+            // Code-only 02 resolved from verified SAP table
+            expect(mmFormatter.displayStatus("02", "", false, "", false)).toBe("In Approval");
+            expect(mmFormatter.displayStatusState("02", "", false, "", false)).toBe("Warning");
 
-            // 3. Draft (Status 01, completeness false, or name Draft)
+            // 3. Draft (Status 01 or name Draft)
             expect(mmFormatter.displayStatus("01", "Draft", false, "", true)).toBe("Draft");
             expect(mmFormatter.displayStatusState("01", "Draft", false, "", true)).toBe("Information");
             expect(mmFormatter.displayStatusIcon("01", "Draft", false, "", true)).toBe("sap-icon://edit");
 
-            expect(mmFormatter.displayStatus("", "", false, "", false)).toBe("Draft");
-            expect(mmFormatter.displayStatusState("", "", false, "", false)).toBe("Information");
+            // Code-only 01 resolved from verified SAP table
+            expect(mmFormatter.displayStatus("01", "", false, "", false)).toBe("Draft");
+            expect(mmFormatter.displayStatusState("01", "", false, "", false)).toBe("Information");
 
-            // 4. Approved (Status 04 Sent, Status 05 Follow-On Documents, or Complete)
-            expect(mmFormatter.displayStatus("04", "Sent", false, "", false)).toBe("Approved");
+            // 4. Sent / Follow-On Documents / Released / Completed (Authentic SAP status names displayed)
+            expect(mmFormatter.displayStatus("04", "Sent", false, "", false)).toBe("Sent");
             expect(mmFormatter.displayStatusState("04", "Sent", false, "", false)).toBe("Success");
             expect(mmFormatter.displayStatusIcon("04", "Sent", false, "", false)).toBe("sap-icon://accept");
 
-            expect(mmFormatter.displayStatus("05", "Follow-On Documents", false, "", false)).toBe("Approved");
-            expect(mmFormatter.displayStatusState("05", "Follow-On Documents", false, "", false)).toBe("Success");
+            // Code-only 04 resolved from verified SAP table
+            expect(mmFormatter.displayStatus("04", "", false, "", false)).toBe("Sent");
 
-            expect(mmFormatter.displayStatus("", "", false, "", true)).toBe("Approved");
-            expect(mmFormatter.displayStatusState("", "", false, "", true)).toBe("Success");
+            expect(mmFormatter.displayStatus("05", "Follow-On Documents", false, "", false)).toBe("Follow-On Documents");
+            expect(mmFormatter.displayStatusState("05", "Follow-On Documents", false, "", false)).toBe("Success");
+            expect(mmFormatter.displayStatusIcon("05", "Follow-On Documents", false, "", false)).toBe("sap-icon://accept");
+
+            // Code-only 08 (Released) and 22 (Completed) from verified SAP table
+            expect(mmFormatter.displayStatus("08", "", false, "", false)).toBe("Released");
+            expect(mmFormatter.displayStatusState("08", "", false, "", false)).toBe("Success");
+            expect(mmFormatter.displayStatusIcon("08", "", false, "", false)).toBe("sap-icon://accept");
+
+            expect(mmFormatter.displayStatus("22", "", false, "", false)).toBe("Completed");
+            expect(mmFormatter.displayStatusState("22", "", false, "", false)).toBe("Success");
+
+            // Authentic SAP status name preserved when provided
+            expect(mmFormatter.displayStatus("", "Approved", false, "", true)).toBe("Approved");
+            expect(mmFormatter.displayStatusState("", "Approved", false, "", true)).toBe("Success");
+            expect(mmFormatter.displayStatusIcon("", "Approved", false, "", true)).toBe("sap-icon://accept");
+
+            // 5. Never synthesize status from boolean completeness or release flags (no fake Approved/Draft/In Approval)
+            expect(mmFormatter.displayStatus("", "", false, "", true)).toBe("");
+            expect(mmFormatter.displayStatusState("", "", false, "", true)).toBe("None");
+            expect(mmFormatter.displayStatus("", "", true, "", false)).toBe("");
+            expect(mmFormatter.displayStatusState("", "", true, "", false)).toBe("None");
+            expect(mmFormatter.displayStatus("", "", false, "", false)).toBe("");
+            expect(mmFormatter.displayStatusState("", "", false, "", false)).toBe("None");
+
+            // 6. Unrecognized / Unknown status code shows raw code, never defaults to Approved
+            expect(mmFormatter.displayStatus("99", "", false, "", false)).toBe("99");
+            expect(mmFormatter.displayStatusState("99", "", false, "", false)).toBe("None");
+            expect(mmFormatter.displayStatusIcon("99", "", false, "", false)).toBe("");
+
+            expect(mmFormatter.displayStatus("Z1", "", false, "", false)).toBe("Z1");
+            expect(mmFormatter.displayStatusState("Z1", "", false, "", false)).toBe("None");
+            expect(mmFormatter.displayStatusIcon("Z1", "", false, "", false)).toBe("");
+
+            // 7. Completely empty values return empty string
+            expect(mmFormatter.displayStatus(null, null, null, null, null)).toBe("");
+            expect(mmFormatter.displayStatus("", "", null, "", null)).toBe("");
+            expect(mmFormatter.displayStatusState(null, null, null, null, null)).toBe("None");
+            expect(mmFormatter.displayStatusIcon(null, null, null, null, null)).toBe("");
         });
 
         it('should format supplier, company, purchasing org, and created by display helpers', () => {
@@ -175,5 +216,9 @@ describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
             const oDate = new Date(2026, 8, 5);
             expect(fiFormatter.formatDate(oDate)).toBe("05-09-2026");
         });
+    });
+
+    afterAll(() => {
+        global.sap = originalSap;
     });
 });
