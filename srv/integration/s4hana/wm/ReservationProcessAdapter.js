@@ -135,20 +135,7 @@ class ReservationProcessAdapter {
         }
       }
 
-      if (this.rfc && String(movementType).trim() === '311' && receivingStorageLocation) {
-        try {
-          const t320Rec = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
-            `WERKS = '${sapKey(plant, 'plant')}'`,
-            `AND LGORT = '${sapKey(receivingStorageLocation, 'lgort')}'`
-          ], 1);
-          if (!t320Rec || !t320Rec.length) {
-            throw httpError(400, `Receiving storage location ${receivingStorageLocation} is not assigned to warehouse in plant ${plant} (T320)`);
-          }
-        } catch (tErr) {
-          if (tErr.status === 400) throw tErr;
-        }
-      }
-
+      let issuingWh = '';
       if (this.rfc && (String(movementType).trim() === '201' || String(movementType).trim() === '241' || String(movementType).trim() === '311' || String(movementType).trim() === '301' || String(movementType).trim() === '261') && storageLocation) {
         try {
           const t320Iss = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
@@ -157,6 +144,24 @@ class ReservationProcessAdapter {
           ], 1);
           if (!t320Iss || !t320Iss.length) {
             throw httpError(400, `Issuing storage location ${storageLocation} is not assigned to warehouse in plant ${plant} (T320)`);
+          }
+          issuingWh = String(t320Iss[0]?.LGNUM || '').trim();
+        } catch (tErr) {
+          if (tErr.status === 400) throw tErr;
+        }
+      }
+
+      if (this.rfc && String(movementType).trim() === '311' && receivingStorageLocation) {
+        try {
+          const t320Rec = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
+            `WERKS = '${sapKey(plant, 'plant')}'`,
+            `AND LGORT = '${sapKey(receivingStorageLocation, 'lgort')}'`
+          ], 1);
+          if (t320Rec && t320Rec.length > 0) {
+            const recWh = String(t320Rec[0]?.LGNUM || '').trim();
+            if (issuingWh && recWh && recWh !== issuingWh) {
+              throw httpError(400, `Receiving storage location ${receivingStorageLocation} belongs to warehouse ${recWh}, but issuing storage location belongs to warehouse ${issuingWh} (cross-warehouse transfer not supported in 311)`);
+            }
           }
         } catch (tErr) {
           if (tErr.status === 400) throw tErr;
@@ -2308,8 +2313,16 @@ class ReservationProcessAdapter {
             `WERKS = '${sPlant}'`,
             `AND LGORT = '${sRecSLoc}'`
           ], 1);
-          if (!t320Rec || !t320Rec.length) {
-            throw httpError(400, `Receiving storage location ${sRecSLoc} is not assigned to warehouse in plant ${sPlant} (T320)`);
+          if (t320Rec && t320Rec.length > 0) {
+            const recWh = String(t320Rec[0]?.LGNUM || '').trim();
+            const t320Iss = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
+              `WERKS = '${sPlant}'`,
+              `AND LGORT = '${sSLoc}'`
+            ], 1);
+            const issWh = String(t320Iss?.[0]?.LGNUM || '').trim();
+            if (issWh && recWh && recWh !== issWh) {
+              throw httpError(400, `Receiving storage location ${sRecSLoc} belongs to warehouse ${recWh}, but issuing storage location belongs to warehouse ${issWh}`);
+            }
           }
         } catch (tErr) {
           if (tErr.status === 400) throw tErr;

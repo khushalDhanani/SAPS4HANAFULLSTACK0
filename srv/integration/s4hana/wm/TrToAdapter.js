@@ -1888,13 +1888,15 @@ class TrToAdapter {
           const t320 = await this._rfc(
             () => this.rfc.readTable('T320', ['LGNUM'], [
               `WERKS = '${item.Plant}'`,
-              `AND LGORT = '${finalRecSLoc}'`,
-              `AND LGNUM = '${wh}'`
+              `AND LGORT = '${finalRecSLoc}'`
             ], 1),
-            `Validate warehouse mapping for storage location ${finalRecSLoc} in warehouse ${wh}`
+            `Validate warehouse mapping for storage location ${finalRecSLoc}`
           );
-          if (!t320 || t320.length === 0) {
-            throw httpError(400, `Receiving Storage Location ${finalRecSLoc} in plant ${item.Plant} is not assigned to warehouse ${wh} (T320)`);
+          if (t320 && t320.length > 0) {
+            const recWh = String(t320[0]?.LGNUM || '').trim();
+            if (recWh && wh && recWh !== wh) {
+              throw httpError(400, `Receiving Storage Location ${finalRecSLoc} in plant ${item.Plant} belongs to warehouse ${recWh}, not ${wh} (cross-warehouse transfer not supported in 311)`);
+            }
           }
         }
       }

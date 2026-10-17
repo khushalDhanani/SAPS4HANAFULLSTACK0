@@ -7,7 +7,7 @@
 
     <Page
         id="warehouseScanToPage"
-        class="sapUiSizeCozy">
+        class="sapUiSizeCompact">
 
         <headerContent>
             <HBox alignItems="Center" class="sapUiTinyMarginEnd">
@@ -96,7 +96,7 @@
                             selectedKey="{scanView>/lgnum}"
                             items="{scanView>/warehouses}"
                             width="100%"
-                            class="scanToTouchTarget sapUiSmallMarginBottom"
+                            class="sapUiSmallMarginBottom"
                             change=".onWarehouseChange">
                             <core:Item key="{scanView>key}" text="{scanView>text}" />
                         </Select>
@@ -116,7 +116,7 @@
                                 submit=".onLookupTR"
                                 liveChange=".onTRLiveChange"
                                 width="100%"
-                                class="scanToTouchTarget sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                 <layoutData>
                                     <FlexItemData growFactor="1" minWidth="220px" />
                                 </layoutData>
@@ -127,20 +127,19 @@
                                     icon="sap-icon://bar-code"
                                     tooltip="{i18n>scanToBtnCameraTR}"
                                     press=".onCameraScanTR"
-                                    class="scanToTouchTarget sapUiTinyMarginEnd" />
+                                    class="sapUiTinyMarginEnd" />
                                 <Button
                                     id="btnValueHelpTR"
                                     icon="sap-icon://value-help"
                                     tooltip="{i18n>scanToBtnValueHelp}"
                                     press=".onValueHelpTR"
-                                    class="scanToTouchTarget sapUiTinyMarginEnd" />
+                                    class="sapUiTinyMarginEnd" />
                                 <Button
                                     id="btnLookupTR"
                                     text="{i18n>scanToBtnScan}"
                                     icon="sap-icon://search"
                                     type="Emphasized"
-                                    press=".onLookupTR"
-                                    class="scanToTouchTarget" />
+                                    press=".onLookupTR" />
                             </HBox>
                         </FlexBox>
                     </VBox>
@@ -157,7 +156,7 @@
                         id="listRecentScans"
                         items="{scanView>/recentScans}"
                         noDataText="{i18n>scanToRecentScansNoData}"
-                        class="sapUiSizeCozy">
+                        class="sapUiSizeCompact">
                         <StandardListItem
                             title="{scanView>number}"
                             description="{= ${scanView>docType} + (${scanView>lgnum} ? (' | ' + ${scanView>lgnum}) : '') + ' | ' + ${scanView>timestamp} }"
@@ -171,7 +170,7 @@
                 <Panel
                     id="panelOpenTRs"
                     headerText="{i18n>scanToSelectDialogTitle}"
-                    expandable="false"
+                    expandable="true"
                     expanded="true"
                     class="sapUiSmallMarginBottom">
                     <List
@@ -179,7 +178,9 @@
                         items="{scanView>/openTRs}"
                         busy="{scanView>/isLoadingTRs}"
                         noDataText="{i18n>scanToSelectDialogNoData}"
-                        class="sapUiSizeCozy">
+                        growing="true"
+                        growingThreshold="15"
+                        class="sapUiSizeCompact">
                         <StandardListItem
                             title="{scanView>Tbnum}"
                             description="{scanView>DisplayText}"

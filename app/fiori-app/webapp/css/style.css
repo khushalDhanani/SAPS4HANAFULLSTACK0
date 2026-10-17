@@ -530,28 +530,3 @@
 .sapUiTinyText {
     font-size: 0.75rem;
 }
-
-/* Warehouse Scan-To Scoped Touch Target (Min 48px touch target for handheld scan controls) */
-.scanToTouchTarget.sapMBtn,
-.scanToTouchTarget.sapMBtn .sapMBtnInner {
-    min-height: 48px;
-    height: 48px;
-    min-width: 48px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.scanToTouchTarget.sapMInputBase,
-.scanToTouchTarget.sapMInputBase .sapMInputBaseInner {
-    min-height: 48px;
-    height: 48px;
-    font-size: 1.05rem;
-}
-
-.scanToTouchTarget.sapMSlt,
-.scanToTouchTarget.sapMSlt .sapMSltLabel {
-    min-height: 48px;
-    height: 48px;
-    line-height: 48px;
-}

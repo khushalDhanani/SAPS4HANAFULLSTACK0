@@ -844,7 +844,7 @@ describe('TrToAdapter (RFC)', () => {
     });
   });
 
-  it('createTOFromTR: rejects SLoc not assigned to warehouse (T320 not found) [mock only, not browser verification]', async () => {
+  it('createTOFromTR: rejects SLoc assigned to different warehouse in T320 [mock only, not browser verification]', async () => {
     const rfc = {
       call: jest.fn(async (fm) => {
         if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
@@ -857,7 +857,7 @@ describe('TrToAdapter (RFC)', () => {
       }),
       readTable: jest.fn(async (table) => {
         if (table === 'T001L') return [{ LGORT: 'AD01' }]; // SLoc exists in plant
-        if (table === 'T320') return []; // but not mapped to warehouse W01
+        if (table === 'T320') return [{ LGNUM: 'W10' }]; // belongs to different warehouse W10
         return [];
       })
     };
@@ -871,8 +871,48 @@ describe('TrToAdapter (RFC)', () => {
       receivingStorageLocation: 'AD01'
     })).rejects.toMatchObject({
       status: 400,
-      message: 'Receiving Storage Location AD01 in plant 1120 is not assigned to warehouse W01 (T320)'
+      message: 'Receiving Storage Location AD01 in plant 1120 belongs to warehouse W10, not W01 (cross-warehouse transfer not supported in 311)'
     });
+  });
+
+  it('createTOFromTR: accepts non-WM receiving SLoc when T320 has no mapping [mock only, not browser verification]', async () => {
+    const rfc = {
+      call: jest.fn(async (fm) => {
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
+          return {
+            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000799', BWLVS: '311', STATU: '', NLTYP: '921', NLPLA: 'TRANSFER' }],
+            ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000799', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS' }]
+          };
+        }
+        if (fm === 'AUTHORITY_CHECK') return { RETURN_CODE: 0 };
+        if (fm === 'Z_WM_TO_CREATE_FROM_TR') {
+          return {
+            EV_SUCCESS: 'S',
+            EV_TANUM: '0001013099',
+            ET_MESSAGES: []
+          };
+        }
+        throw new Error(`unexpected FM ${fm}`);
+      }),
+      readTable: jest.fn(async (table) => {
+        if (table === 'T001L') return [{ LGORT: 'MT01' }]; // SLoc exists in plant
+        if (table === 'T320') return []; // non-WM SLoc: no entry in T320
+        if (table === 'LTAK') return [{ LGNUM: 'W01', TANUM: '0001013099', TBNUM: '0001000799', BWLVS: '311', KQUIT: '', BDATU: '20261017' }];
+        return [];
+      })
+    };
+    const adapter = new TrToAdapter({ rfc });
+    const result = await adapter.createTOFromTR({
+      lgnum: 'W01',
+      tbnum: '1000799',
+      tbpos: '0001',
+      qty: 1,
+      unit: 'NOS',
+      receivingStorageLocation: 'MT01'
+    });
+    expect(result.success).toBe(true);
+    expect(result.toNumber).toBe('1013099');
+    expect(result.ReceivingStorageLocation).toBe('MT01');
   });
 
   it('createTOFromTR: rejects same plant for 301 (mock only, not browser verification)', async () => {

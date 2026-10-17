@@ -663,10 +663,10 @@ describe('Step 19: Movement Type 311 (SLoc to SLoc Transfer) Proof Suite [mock o
       expect(env.getBapiReservationCalls().length).toBe(0);
     });
 
-    test('Strict Precondition: Rejects receiving storage location not assigned to warehouse in T320', async () => {
+    test('Strict Precondition: Rejects receiving storage location assigned to different warehouse in T320', async () => {
       env.setupDefaultTables({
         T320: (fields, where, whereStr) => {
-          if (whereStr.includes("LGORT = '0002'")) return [];
+          if (whereStr.includes("LGORT = '0002'")) return [{ LGNUM: 'W10', WERKS: '1120', LGORT: '0002' }];
           return [{ LGNUM: 'W01', WERKS: '1120', LGORT: '0001' }];
         }
       });
@@ -677,8 +677,23 @@ describe('Step 19: Movement Type 311 (SLoc to SLoc Transfer) Proof Suite [mock o
       expect(flowResult.success).toBe(false);
       expect(flowResult.stage).toBe('RESERVATION');
       expect(flowResult.processStatus).toBe(PROCESS_STATUS.FAILED_RESERVATION);
-      expect(flowResult.error).toContain('Receiving storage location 0002 is not assigned to warehouse');
+      expect(flowResult.error).toContain('belongs to warehouse W10, but issuing storage location belongs to warehouse W01');
       expect(env.getBapiReservationCalls().length).toBe(0);
+    });
+
+    test('Supports Non-WM receiving storage location when not mapped in T320', async () => {
+      env.setupDefaultTables({
+        T320: (fields, where, whereStr) => {
+          if (whereStr.includes("LGORT = '0002'")) return []; // non-WM SLoc
+          return [{ LGNUM: 'W01', WERKS: '1120', LGORT: '0001' }];
+        }
+      });
+
+      const input = makeInput311('000000000208');
+      const flowResult = await env.adapter.executeReservationWarehouseFlow(input);
+
+      expect(flowResult.success).toBe(true);
+      expect(flowResult.materialDocument).toBe('5000000311');
     });
 
     test('Idempotency: Re-submitting identical processId returns committed material document without duplicate stock transfer', async () => {

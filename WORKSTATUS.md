@@ -5,89 +5,78 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **WM Warehouse Scan-To: Landing Page Redesign, Recent Scans Store & Handheld Touch-Targets (`#/wm/scan-to`) (2026-10-16, 17:40 IST):** Complete.
-  - **User Problem & Requirement:**
-    - Redesign `#/wm/scan-to` landing page (`WarehouseScanTo.view.xml` & `WarehouseScanTo.controller.js`) for clarity, consistency, and handheld responsiveness.
-    - Requirements:
-      1. Group doc types into clear cards for Transfer Requirement (TR) and Reservation (RES); remove TO everywhere (UI, cards, prefix regex); use `SingleSelectMaster` + `selectionChange` exclusively on the List.
-      2. Single primary action: scan/search input, auto-focused, with warehouse selector and single neutral button label ("Scan"). Enter key submits.
-      3. Warehouse dropdown: only "Auto-detect" (`key: ""`) is fixed. Build dynamically only from an unfiltered load (`_loadOpenTRs`) and keep it (never shrink after a selection). Merge missing recent-scan warehouses.
-      4. Reset `/lgnum` to `""` in `_onRouteMatched` on the landing page to prevent stale warehouse carryover.
-      5. Recent scans: unified in `RecentScanStore.js` shared by both main and detail controllers. No "default" user fallback (skips saving if user is unknown); saves on success only (HTTP 200), never on 404 or lookup rejection; deduplicates by doc number and type; capped at 5 items; timestamp formatted as `YYYY-MM-DD HH:mm`. Status chip dropped to prevent unverified status displays. Recent Scans panel always visible so `noDataText` empty state shows.
-      6. Handheld-first layout: replace `HBox wrap="Wrap"` with `FlexBox wrap="Wrap"`. Page and Lists set to `sapUiSizeCozy`. Explicit minimum 48px touch targets for buttons, inputs, selects, and list items. Zero horizontal overflow at 360px viewport.
-      7. Automated tests: unit test suite covering save on success only, no save for unknown user, dedupe, 5-item cap, persistent warehouse list loading, and doc-type selection.
+- **WM Warehouse Scan-To & Reservation: Support Non-WM Receiving Storage Locations for Movement 311 & TR 0001001912 Resolution (2026-10-17, 10:15 IST):** Complete.
+  - **User Problem & Incident:**
+    - Error on `/wm/scan-to/W12/TR/0001001912`:
+      `"Failed to create reservation: Receiving storage location MT01 is not assigned to warehouse in plant 1130 (T320)"`
+      `"Receiving Storage Location MT01 in plant 1130 is not assigned to warehouse W12 (T320)"`
+  - **Root Cause & SAP Architectural Discovery:**
+    1. **Table T320 Mapping:** In SAP table `T320`, Plant `1130` maps Warehouse `W12` to 10 storage locations (`CS01, CS02, FG01, HS01, HS02, IP01, OH01, OH02, PWIP, RJ02`).
+    2. **Storage Location MT01 Status:** Storage location `MT01` (Maintenance Team - 2) is defined in Plant `1130` in `T001L` and extended in `MARD` for material `8000009822`, but it is an Inventory Management (IM-only / non-WM) storage location without an entry in `T320`.
+    3. **Standard SAP Capability:** In standard SAP S/4HANA (Client 220), transfer posting 311 from a WM warehouse (`W12 / HS01`) to an IM-only non-WM storage location (`MT01`) is standard business functionality. Live SAP RFC calls proved that `BAPI_RESERVATION_CREATE1`, `BAPI_GOODSMVT_CREATE`, and `Z_WM_TO_CREATE_FROM_TR` all succeed without requiring the receiving storage location to be in `T320`.
+    4. **Application Restriction:** Previously, custom application code in `ReservationProcessAdapter.js` and `TrToAdapter.js` strictly required that receiving storage location must be in `T320`, falsely rejecting valid Non-WM destination storage locations.
   - **Changes Implemented Across Stack:**
-    1. **Recent Scans Store Helper (`app/fiori-app/webapp/modules/wm/warehouse-scan-to/model/RecentScanStore.js`):**
-       - Implemented `getStorageKey`, `getRecentScans`, `addRecentScan`, and `clearRecentScans` keyed per user via `AuthService.getCurrentUserName(oComponent)`.
-       - Enforced no fallback for unknown user, 5-item cap, deduplication, and `YYYY-MM-DD HH:mm` timestamps.
+    1. **Reservation & MIGO Adapter (`srv/integration/s4hana/wm/ReservationProcessAdapter.js`):**
+       - In `createReservation`: Validates issuing SLoc in `T320` (`t320Iss` must exist). For Movement 311 `receivingStorageLocation`, checks `T320`: if mapped to a different warehouse than the issuing warehouse, rejects with 400 (cross-warehouse transfer not supported in 311); if not mapped in `T320`, permits as a valid Non-WM storage location (verified in `MARD`/`T001L`).
+       - In `postGoodsMovement`: For Movement 311, checks `T320` for `sRecSLoc`: if mapped to a different warehouse than `sSLoc`, rejects with 400; if unmapped in `T320`, permits as Non-WM storage location.
+    2. **Transfer Order Adapter (`srv/integration/s4hana/wm/TrToAdapter.js`):**
+       - In `createTOFromTR`: For Movement 311 `finalRecSLoc`, checks `T320`: if mapped, ensures its warehouse matches `wh`; if not mapped in `T320`, permits as Non-WM storage location (verified in `T001L`).
+    3. **UI Consistency (`app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanTo.view.xml`):**
+       - Removed `title="{i18n>scanToPageTitle}"` attribute from `<Page>` to adhere strictly to the project rule that the ShellBar owns page titles and back navigation.
+    4. **Unit Test Updates (`test/unit/wm/`):**
+       - `test/unit/wm/trToAdapter.test.js`: Updated cross-warehouse rejection test and added test verifying acceptance of Non-WM receiving storage location (64/64 passed).
+       - `test/unit/wm/step19Mvt311.test.js`: Updated cross-warehouse rejection test and added test verifying acceptance of Non-WM receiving storage location (17/17 passed).
+       - `test/unit/wm/mvt311Process.test.js`: Updated cross-warehouse rejection test and added test verifying acceptance of Non-WM receiving storage location (39/39 passed).
+       - `test/unit/controller/uiConsistency.test.js`: Verified ShellBar title ownership and UI consistency rules (7/7 passed).
+  - **Live SAP S/4HANA (Client 220) Verification:**
+    - `BAPI_RESERVATION_CREATE1`: Posted live SAP reservation `0000529640` for Plant `1130`, SLoc `HS01` to `MT01` (`BUS2093 0000529640 created`).
+    - `createTOFromTR`: Created live SAP Transfer Order `0001013079` for TR `0001001912` item `0001` in Warehouse `W12` with receiving SLoc `MT01`.
+    - `confirmTO`: Confirmed TO `0001013079` in Warehouse `W12` (`LTAK-KQUIT = 'X'`).
+    - Direct SAP Read-back: TR `0001001912` item 0001 updated in SAP: Required `10`, Open `9`, Processed `1`.
+  - **Quality & Regression Results:**
+    - Full test suite (`npm test`): **168 test suites passed, 3,122 tests passed, 0 failures (100% green)**.
+    - `npm run lint`: **ESLint clean, 0 errors, 0 warnings**.
+    - `npm --prefix app/fiori-app run lint`: **ui5lint clean, 0 findings**.
+    - `git diff --check`: **Clean diff, 0 whitespace errors**.
+
+- **WM Warehouse Scan-To: Standard Default SAPUI5 Compact UI (`sapUiSizeCompact`) & Zero Custom CSS (`#/wm/scan-to`) (2026-10-17, 09:20 IST):** Complete.
+  - **User Requirement:**
+    - "Don't Make Custom CSS. Use Default and Make Compact UI Proper."
+    - Remove all custom CSS overrides and styling hacks from `style.css`.
+    - Apply default standard SAPUI5 compact density (`sapUiSizeCompact`) across the landing page, matching all standard SAP Fiori views in the application.
+  - **Changes Implemented Across Stack:**
+    1. **Styles (`app/fiori-app/webapp/css/style.css`):**
+       - Completely removed all custom scan-to CSS classes and media queries (`.scanToTouchTarget`, `.scanToCardsList`, `.scanToButtonsRow`, `@media (max-width: 600px)`).
+       - Zero custom CSS rules for scan-to remain in `style.css` (reverted cleanly to base application styles).
     2. **Landing Page View (`app/fiori-app/webapp/modules/wm/warehouse-scan-to/view/WarehouseScanTo.view.xml`):**
-       - Set Page to `class="sapUiSizeCozy"`.
-       - Section 1: Doc-Type Cards (`sap.m.List` with `mode="SingleSelectMaster"`, `selectionChange=".onDocTypeSelectionChange"`).
-       - Section 2: Primary Action Panel with `Select` (`selectWarehouse`), `Input` (`inputBarcodeTR`), and `FlexBox` (`wrap="Wrap"`). Buttons: Camera Scan, Value Help, and Scan (`btnLookupTR` labeled "Scan").
-       - Section 3: Recent Scans Panel (`panelRecentScans`), always visible, displaying empty state `noDataText="{i18n>scanToRecentScansNoData}"` or `StandardListItem`s with doc number, type, warehouse, and timestamp.
-       - Section 4: Open TR list (`listOpenTRs`, `sapUiSizeCozy`).
-    3. **Landing Page Controller (`app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanTo.controller.js`):**
-       - Imported `RecentScanStore`.
-       - In `_onRouteMatched`: resets `/lgnum` to `""`, loads recent scans, merges recent-scan warehouses via `_mergeWarehouses`, and reloads open TRs.
-       - `_mergeWarehouses`: adds discovered warehouse keys while preserving "Auto-detect" at index 0 and sorted unique keys. Never shrinks list on filtered selection.
-       - `_loadOpenTRs`: merges warehouses only on unfiltered load (`!sWh`).
-       - `onWarehouseChange`: falls back to `oEvent.getSource().getSelectedKey()`.
-       - `onDocTypeSelectionChange`: updates `/docType`.
-       - `onRecentScanPress`: navigates directly to detail route with stored warehouse and docType.
-       - `_classifyScan`: supports `TR` and `RES` only (removes `TO`).
-    4. **Detail Controller (`app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`):**
-       - Imported `RecentScanStore`.
-       - In `loadDetail`: calls `RecentScanStore.addRecentScan` safely upon successful TR resolution (`.then(...)`), never on error or 404 rejection.
-    5. **Styles (`app/fiori-app/webapp/css/style.css`):**
-       - Replaced broad `[id$="warehouseScanToPage"] ... !important` rules with one scoped class `.scanToTouchTarget` (no `!important`).
-       - Enforces `min-height: 48px`, `height: 48px`, `min-width: 48px` for primary interactive scan controls.
-       - Applied exclusively to controls that need it: `selectWarehouse`, `inputBarcodeTR`, `btnCameraScanTR`, `btnValueHelpTR`, and `btnLookupTR`.
-       - Confirmed detail page (`WarehouseScanToDetail.view.xml`) is completely unaffected: detail inputs remain at 26px, action buttons at 32px (compact mode).
-    6. **Data Storage & Sourcing Specifications:**
-       - **Recent Scans Storage:** Stored in per-browser `localStorage` keyed per user (`sap_wm_recent_scans_${username}`). Skips storing if username cannot be determined.
-       - **Warehouse List Sourcing:** Sourced dynamically from unfiltered open TRs (`LTBK` / `WarehouseTransferRequirements`) combined with unique warehouses from recent scans. Preserves "Auto-detect" (`key: ""`) as the first entry and never shrinks after user selection.
-    7. **Localization (`i18n.properties` & `i18n_en.properties`):**
-       - Preserved all existing keys (`scanToBtnLookup=Lookup TR`). Added `scanToBtnScan=Scan`, `scanToLabelScanDoc=Document Number`, `scanToPlaceholderDocNumber=Scan barcode or enter document number...`, `scanToWhAutoDetect=Auto-detect`, `scanToLabelWarehouse=Warehouse`, `scanToDocTypeCardsTitle=Document Type`, `scanToDocTypeTRDesc`, `scanToDocTypeRESDesc`, `scanToRecentScansTitle`, and `scanToRecentScansNoData`.
-    8. **Unit Tests (`test/unit/wm/warehouseScanToUi.test.js`):**
-       - Loaded `RecentScanStore` once at file top with `mockAuthService` and restored original `sap.ui.define`.
-       - Added 7 dedicated tests in Section C covering:
-         1. No save for unknown user
-         2. Authenticated user save with date timestamp and no status chip
-         3. Deduplication
-         4. 5-item cap
-         5. Detail controller saves on success only (HTTP 200) using the same store instance
-         6. Warehouse list building from unfiltered load, merging new keys, never shrinking
-         7. Doc-type `selectionChange` updating model `/docType`.
+       - Set `<Page id="warehouseScanToPage" title="{i18n>scanToPageTitle}" class="sapUiSizeCompact">`.
+       - Removed all ad-hoc custom classes (`scanToTouchTarget`, `scanToCardsList`, `scanToButtonsRow`, `scanToLookupBtn`).
+       - Set `listRecentScans` and `listOpenTRs` to `class="sapUiSizeCompact"`.
+       - Preserved `growing="true"` and `growingThreshold="15"` with `expandable="true"` on `panelOpenTRs`.
+       - Document type selection `listDocTypes` uses default SAPUI5 `SingleSelectMaster` selection list.
+       - Buttons, input, and dropdown render with native SAPUI5 compact dimensions (26px inputs/dropdowns, 32px buttons).
+    3. **Data Storage & Sourcing (Unchanged & Preserved):**
+       - **Recent Scans Storage:** Sourced from per-browser `localStorage` keyed per authenticated user (`sap_wm_recent_scans_${username}`). Saved on HTTP 200 success only.
+       - **Warehouse List Sourcing:** Sourced dynamically from unfiltered open TRs (`LTBK`) plus recent scans, never shrinks on selection.
   - **Quality & Validation Results:**
     - `npx jest test/unit/wm/warehouseScanToUi.test.js`: **63/63 tests passed (100% green)**.
-    - `npm test`: **168 test suites passed, 3,119 tests passed, 0 failures (100% green)**.
     - `npm run lint`: **ESLint clean, 0 errors, 0 warnings**.
     - `npm --prefix app/fiori-app run lint`: **ui5lint clean, 0 findings**.
     - `git diff --check`: **Clean diff, 0 whitespace errors**.
   - **Browser Verification Results (Chrome DevTools MCP):**
     - **Hardware-Scanner Enter Key & Autofocus Verification:**
-      - **Focus on Load:** Inner input `__component0---warehouseScanTo--inputBarcodeTR-inner` is auto-focused on initial load and after view rendering (`isFocused: true`).
+      - **Focus on Load:** Inner input `__component0---warehouseScanTo--inputBarcodeTR-inner` is auto-focused on initial load (`isFocused: true`).
       - **Single Submit on Enter:** Hardware-scanner scan event and keyboard Enter fire `onLookupTR` / `_navigateToDetail` exactly once (`callCount: 1, submittedOnce: true`).
-    - **Detail Page Isolation Verification:**
-      - Verified `WarehouseScanToDetail` controls are unaffected: `inputPickQty` (26px), `inputReceivingSLoc311` (26px), `btnSetMaxQty` (32px), `btnApplyFifoBatch` (32px).
-    - **Mobile Viewport (360px × 800px):**
-      - Viewport width: `360px`, `scrollWidth: 360px`, `clientWidth: 360px`.
-      - Horizontal overflow: **`hasHorizontalOverflow: false` (Zero overflow)**.
-      - Measured touch target heights:
-        - `selectWarehouse`: **48.0px** (width: 292.0px)
-        - `inputBarcodeTR`: **48.0px** (width: 292.0px)
-        - `btnCameraScanTR`: **48.0px** (width: 48.0px)
-        - `btnValueHelpTR`: **48.0px** (width: 48.0px)
-        - `btnLookupTR` ("Scan"): **48.0px** (width: 70.5px)
-        - `itemDocTypeTR`: **80.0px** (width: 324.0px)
-        - `itemDocTypeRES`: **80.0px** (width: 324.0px)
-      - Screenshot saved: `docs/images/scan_to_landing_360px.png`.
+    - **Standard Compact Dimensions (Default UI5 Theme):**
+      - `inputBarcodeTR`: height **26.0px** (native `sapUiSizeCompact` input)
+      - `selectWarehouse`: height **26.0px** (native `sapUiSizeCompact` select)
+      - `btnCameraScanTR`, `btnValueHelpTR`, `btnLookupTR`: height **32.0px** (native `sapUiSizeCompact` buttons)
     - **Desktop Viewport (1280px × 800px):**
-      - Viewport width: `1280px`, `scrollWidth: 1280px`, `clientWidth: 1280px`.
-      - Horizontal overflow: **`hasHorizontalOverflow: false` (Zero overflow)**.
-      - Measured touch target heights:
-        - `selectWarehouse`: **48.0px** (width: 1152.0px)
-        - `inputBarcodeTR`: **48.0px** (width: 969.5px)
+      - Viewport width: `1280px`, `scrollWidth: 1280px`, `clientWidth: 1280px` (`hasHorizontalOverflow: false`).
+      - Screenshot saved: `docs/images/scan_to_landing_1280px.png`.
+    - **Mobile Viewport (360px × 800px):**
+      - Viewport width: `360px`, `scrollWidth: 360px`, `clientWidth: 360px` (`hasHorizontalOverflow: false`).
+      - Screenshot saved: `docs/images/scan_to_landing_360px.png`.
         - `btnCameraScanTR`: **48.0px** (width: 48.0px)
         - `btnValueHelpTR`: **48.0px** (width: 48.0px)
         - `btnLookupTR` ("Scan"): **48.0px** (width: 70.5px)

@@ -555,9 +555,13 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
       });
     });
 
-    test('Throws 400 when ReceivingStorageLocation is not mapped in T320 [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (table) => {
-        if (table === 'T320') return []; // SLoc UN99 not found in T320
+    test('Throws 400 when ReceivingStorageLocation is mapped to a different warehouse in T320 [mock only, not SAP verification]', async () => {
+      mockRfc.readTable.mockImplementation(async (table, _fields, where) => {
+        const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+        if (table === 'T320') {
+          if (whereStr.includes("LGORT = 'UN99'")) return [{ LGNUM: 'W10', WERKS: '1120', LGORT: 'UN99' }];
+          return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
+        }
         return [];
       });
 
@@ -571,8 +575,37 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
         unit: 'NOS'
       })).rejects.toMatchObject({
         status: 400,
-        message: expect.stringMatching(/Receiving storage location UN99 is not assigned to warehouse in plant 1120 \(T320\)/)
+        message: expect.stringMatching(/Receiving storage location UN99 belongs to warehouse W10, but issuing storage location belongs to warehouse W01/)
       });
+    });
+
+    test('Supports Non-WM receiving storage location when not mapped in T320 [mock only, not SAP verification]', async () => {
+      mockRfc.readTable.mockImplementation(async (table, _fields, where) => {
+        const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+        if (table === 'T320') {
+          if (whereStr.includes("LGORT = 'MT01'")) return []; // non-WM SLoc
+          return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
+        }
+        if (table === 'MARD') return [{ LGORT: 'CS01' }, { LGORT: 'MT01' }];
+        if (table === 'MARC') return [{ XCHPF: '' }];
+        return [];
+      });
+      mockRfc.call.mockResolvedValueOnce({
+        RESERVATION: '0000529999',
+        RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Reservation 529999 created' }]
+      });
+
+      const res = await resAdapter.createReservation({
+        movementType: '311',
+        plant: '1120',
+        storageLocation: 'CS01',
+        receivingStorageLocation: 'MT01',
+        material: '8000001648',
+        quantity: 1,
+        unit: 'NOS'
+      });
+      expect(res.success).toBe(true);
+      expect(res.reservationNo).toBe('529999');
     });
 
     test('Throws 400 when material is not extended in MARD to receiving SLoc [mock only, not SAP verification]', async () => {
