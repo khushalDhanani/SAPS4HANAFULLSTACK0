@@ -613,6 +613,33 @@ class GoodsIssueAdapter {
     return Object.assign(status, ref);
   }
 
+  /**
+   * Status of one serial number in SAP stock (ESTO / unrestricted) or reason if not available.
+   */
+  async getSerialStatus(material, plant, storageLocation, serialNumber) {
+    return this.stockUnits.getSerialStatus(material, plant, storageLocation, serialNumber);
+  }
+
+  /**
+   * Available unrestricted serial numbers for a reservation item or material/plant/sloc.
+   */
+  async getAvailableSerialNumbers(options = {}) {
+    let { reservationNo, reservationItem, material, plant, storageLocation } = options;
+    if (reservationNo && reservationItem && (!material || !plant)) {
+      try {
+        const item = await this.getReservationItemAuthoritative(reservationNo, reservationItem);
+        if (item) {
+          material = material || item.Material;
+          plant = plant || item.Plant;
+          storageLocation = storageLocation || item.StorageLocation;
+        }
+      } catch (err) {
+        LOG.warn(`Reservation ${reservationNo}/${reservationItem} could not be read for serial value help: ${err.message}`);
+      }
+    }
+    return this.stockUnits.getAvailableSerialNumbers(material, plant, storageLocation);
+  }
+
   /** Whether the material has a serial number profile in the plant (MARC-SERNP). */
   async isSerialManaged(material, plant) {
     return this.stockUnits.isSerialManaged(material, plant);

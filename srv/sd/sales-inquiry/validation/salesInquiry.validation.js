@@ -100,6 +100,14 @@ function validateCreateSalesDocumentPayload(payload) {
     if (header.ContactPerson && !/^\d{1,10}$/.test(String(header.ContactPerson).trim())) {
         errors.push({ field: 'ContactPerson', message: 'Contact Person must be a numeric SAP contact number (up to 10 digits)' });
     }
+    const inco = header.INCO1 || header.Incoterms || header.IncotermsClassification;
+    if (inco && String(inco).trim().length > 3) {
+        errors.push({ field: 'Incoterms', message: 'Incoterms cannot exceed 3 characters' });
+    }
+    const incoLoc = header.INCO2_L || header.INCO2 || header.IncotermsLocation1;
+    if (incoLoc && String(incoLoc).trim().length > 70) {
+        errors.push({ field: 'IncotermsLocation1', message: 'Incoterms Location cannot exceed 70 characters' });
+    }
 
     // Validity date checks (inquiries)
     if (header.BindingPeriodValidityStartDate && header.BindingPeriodValidityEndDate) {

@@ -1,0 +1,278 @@
+{
+  "timestamp": "2026-10-13T06:58:08.696Z",
+  "LTAK": {
+    "ET_DATA": [],
+    "DELIMITER": "|",
+    "GET_SORTED": "",
+    "NO_DATA": "",
+    "QUERY_TABLE": "LTAK",
+    "ROWCOUNT": 0,
+    "ROWSKIPS": 0,
+    "USE_ET_DATA_4_RETURN": "",
+    "DATA": [
+      {
+        "WA": "W01|0001037296|301|301|20261012|153141|KHUSHAL     |0001000795|X|A| |"
+      }
+    ],
+    "FIELDS": [
+      {
+        "FIELDNAME": "LGNUM",
+        "OFFSET": "000000",
+        "LENGTH": "000003",
+        "TYPE": "C",
+        "FIELDTEXT": "Warehouse Number / Warehouse Complex"
+      },
+      {
+        "FIELDNAME": "TANUM",
+        "OFFSET": "000004",
+        "LENGTH": "000010",
+        "TYPE": "N",
+        "FIELDTEXT": "Transfer Order Number"
+      },
+      {
+        "FIELDNAME": "BWLVS",
+        "OFFSET": "000015",
+        "LENGTH": "000003",
+        "TYPE": "N",
+        "FIELDTEXT": "Movement Type for Warehouse Management"
+      },
+      {
+        "FIELDNAME": "BWART",
+        "OFFSET": "000019",
+        "LENGTH": "000003",
+        "TYPE": "C",
+        "FIELDTEXT": "Movement Type (Inventory Management)"
+      },
+      {
+        "FIELDNAME": "BDATU",
+        "OFFSET": "000023",
+        "LENGTH": "000008",
+        "TYPE": "D",
+        "FIELDTEXT": "Creation Date of Transfer Order"
+      },
+      {
+        "FIELDNAME": "BZEIT",
+        "OFFSET": "000032",
+        "LENGTH": "000006",
+        "TYPE": "T",
+        "FIELDTEXT": "Creation time of transfer order"
+      },
+      {
+        "FIELDNAME": "BNAME",
+        "OFFSET": "000039",
+        "LENGTH": "000012",
+        "TYPE": "C",
+        "FIELDTEXT": "User Name"
+      },
+      {
+        "FIELDNAME": "TBNUM",
+        "OFFSET": "000052",
+        "LENGTH": "000010",
+        "TYPE": "N",
+        "FIELDTEXT": "Transfer Requirement Number"
+      },
+      {
+        "FIELDNAME": "KQUIT",
+        "OFFSET": "000063",
+        "LENGTH": "000001",
+        "TYPE": "C",
+        "FIELDTEXT": "Indicator: Confirmation"
+      },
+      {
+        "FIELDNAME": "TRART",
+        "OFFSET": "000065",
+        "LENGTH": "000001",
+        "TYPE": "C",
+        "FIELDTEXT": "Shipment Type"
+      },
+      {
+        "FIELDNAME": "BETYP",
+        "OFFSET": "000067",
+        "LENGTH": "000001",
+        "TYPE": "C",
+        "FIELDTEXT": "Requirement Type"
+      },
+      {
+        "FIELDNAME": "BENUM",
+        "OFFSET": "000069",
+        "LENGTH": "000010",
+        "TYPE": "C",
+        "FIELDTEXT": "Requirement Number"
+      }
+    ],
+    "OPTIONS": [
+      {
+        "TEXT": "LGNUM = 'W01' AND TANUM = '0001037296'"
+      }
+    ]
+  },
+  "LTAP": {
+    "ET_DATA": [],
+    "DELIMITER": "|",
+    "GET_SORTED": "",
+    "NO_DATA": "",
+    "QUERY_TABLE": "LTAP",
+    "ROWCOUNT": 0,
+    "ROWSKIPS": 0,
+    "USE_ET_DATA_4_RETURN": "",
+    "DATA": [
+      {
+        "WA": "W01|0001037296|0001|000000008900000004                      |1120|CS01|INJW260001|         1.000 |KG |920|001|TRANSFER  |920|001|TRANSFER  |0001045079|0001045079|  |  |X|0001"
+      }
+    ],
+    "FIELDS": [
+      {
+        "FIELDNAME": "LGNUM",
+        "OFFSET": "000000",
+        "LENGTH": "000003",
+        "TYPE": "C",
+        "FIELDTEXT": "Warehouse Number / Warehouse Complex"
+      },
+      {
+        "FIELDNAME": "TANUM",
+        "OFFSET": "000004",
+        "LENGTH": "000010",
+        "TYPE": "N",
+        "FIELDTEXT": "Transfer Order Number"
+      },
+      {
+        "FIELDNAME": "TAPOS",
+        "OFFSET": "000015",
+        "LENGTH": "000004",
+        "TYPE": "N",
+        "FIELDTEXT": "Transfer order item"
+      },
+      {
+        "FIELDNAME": "MATNR",
+        "OFFSET": "000020",
+        "LENGTH": "000040",
+        "TYPE": "C",
+        "FIELDTEXT": "Material Number"
+      },
+      {
+        "FIELDNAME": "WERKS",
+        "OFFSET": "000061",
+        "LENGTH": "000004",
+        "TYPE": "C",
+        "FIELDTEXT": "Plant"
+      },
+      {
+        "FIELDNAME": "LGORT",
+        "OFFSET": "000066",
+        "LENGTH": "000004",
+        "TYPE": "C",
+        "FIELDTEXT": "Storage Location"
+      },
+      {
+        "FIELDNAME": "CHARG",
+        "OFFSET": "000071",
+        "LENGTH": "000010",
+        "TYPE": "C",
+        "FIELDTEXT": "Batch Number"
+      },
+      {
+        "FIELDNAME": "VSOLA",
+        "OFFSET": "000082",
+        "LENGTH": "000015",
+        "TYPE": "P",
+        "FIELDTEXT": "Source target quantity in alternate unit"
+      },
+      {
+        "FIELDNAME": "MEINS",
+        "OFFSET": "000098",
+        "LENGTH": "000003",
+        "TYPE": "C",
+        "FIELDTEXT": "Base Unit of Measure"
+      },
+      {
+        "FIELDNAME": "VLTYP",
+        "OFFSET": "000102",
+        "LENGTH": "000003",
+        "TYPE": "C",
+        "FIELDTEXT": "Source Storage Type"
+      },
+      {
+        "FIELDNAME": "VLBER",
+        "OFFSET": "000106",
+        "LENGTH": "000003",
+        "TYPE": "C",
+        "FIELDTEXT": "Source storage section"
+      },
+      {
+        "FIELDNAME": "VLPLA",
+        "OFFSET": "000110",
+        "LENGTH": "000010",
+        "TYPE": "C",
+        "FIELDTEXT": "Source Storage Bin"
+      },
+      {
+        "FIELDNAME": "NLTYP",
+        "OFFSET": "000121",
+        "LENGTH": "000003",
+        "TYPE": "C",
+        "FIELDTEXT": "Destination Storage Type"
+      },
+      {
+        "FIELDNAME": "NLBER",
+        "OFFSET": "000125",
+        "LENGTH": "000003",
+        "TYPE": "C",
+        "FIELDTEXT": "Destination storage section"
+      },
+      {
+        "FIELDNAME": "NLPLA",
+        "OFFSET": "000129",
+        "LENGTH": "000010",
+        "TYPE": "C",
+        "FIELDTEXT": "Destination Storage Bin"
+      },
+      {
+        "FIELDNAME": "VLQNR",
+        "OFFSET": "000140",
+        "LENGTH": "000010",
+        "TYPE": "N",
+        "FIELDTEXT": "Quant"
+      },
+      {
+        "FIELDNAME": "NLQNR",
+        "OFFSET": "000151",
+        "LENGTH": "000010",
+        "TYPE": "N",
+        "FIELDTEXT": "Quant"
+      },
+      {
+        "FIELDNAME": "VPPOS",
+        "OFFSET": "000162",
+        "LENGTH": "000002",
+        "TYPE": "C",
+        "FIELDTEXT": "Position in source storage bin"
+      },
+      {
+        "FIELDNAME": "NPPOS",
+        "OFFSET": "000165",
+        "LENGTH": "000002",
+        "TYPE": "C",
+        "FIELDTEXT": "Position in destination storage bin"
+      },
+      {
+        "FIELDNAME": "PQUIT",
+        "OFFSET": "000168",
+        "LENGTH": "000001",
+        "TYPE": "C",
+        "FIELDTEXT": "Indicator: confirmation complete"
+      },
+      {
+        "FIELDNAME": "TBPOS",
+        "OFFSET": "000170",
+        "LENGTH": "000004",
+        "TYPE": "N",
+        "FIELDTEXT": "Transfer Requirement Item"
+      }
+    ],
+    "OPTIONS": [
+      {
+        "TEXT": "LGNUM = 'W01' AND TANUM = '0001037296'"
+      }
+    ]
+  }
+}

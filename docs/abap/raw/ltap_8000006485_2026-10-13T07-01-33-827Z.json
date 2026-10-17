@@ -1,0 +1,184 @@
+{
+  "ET_DATA": [],
+  "DELIMITER": "|",
+  "GET_SORTED": "",
+  "NO_DATA": "",
+  "QUERY_TABLE": "LTAP",
+  "ROWCOUNT": 0,
+  "ROWSKIPS": 0,
+  "USE_ET_DATA_4_RETURN": "",
+  "DATA": [
+    {
+      "WA": "W01|0001037256|0001|000000008000006485                      |1120|CS02|         1.000 |NOS|OH1|ONHOLD    |913|0080000095|0001044905|0001045040|X"
+    },
+    {
+      "WA": "W01|0001037298|0001|000000008000006485                      |1120|CS02|         1.000 |NOS|OH1|ONHOLD    |921|TRANSFER  |0001044907|0001045087|X"
+    },
+    {
+      "WA": "W01|0001037298|0002|000000008000006485                      |1120|CS02|         1.000 |NOS|OH1|ONHOLD    |921|TRANSFER  |0001044909|0001045088|X"
+    },
+    {
+      "WA": "W01|0001037299|0001|000000008000006485                      |1120|HS01|         1.000 |NOS|OH1|ONHOLD    |921|TRANSFER  |0001044957|0001045089|X"
+    },
+    {
+      "WA": "W01|0001037300|0001|000000008000006485                      |1120|HS01|         1.000 |NOS|OH1|ONHOLD    |921|TRANSFER  |0001044958|0001045089|X"
+    },
+    {
+      "WA": "W01|0001037301|0001|000000008000006485                      |1120|HS01|         1.000 |NOS|OH1|ONHOLD    |921|TRANSFER  |0001044959|0001045089|X"
+    },
+    {
+      "WA": "W01|0001037302|0001|000000008000006485                      |1120|HS01|         1.000 |NOS|OH1|ONHOLD    |921|TRANSFER  |0001044960|0001045089|X"
+    },
+    {
+      "WA": "W01|0001037303|0001|000000008000006485                      |1120|HS01|         1.000 |NOS|OH1|ONHOLD    |921|TRANSFER  |0001044961|0001045089|X"
+    },
+    {
+      "WA": "W01|0001037304|0001|000000008000006485                      |1120|HS01|         1.000 |NOS|921|TRANSFER  |921|TRANSFER  |0001045089|0001045089|X"
+    },
+    {
+      "WA": "W01|0001037195|0001|000000008000006485                      |1120|CS02|         1.000 |NOS|902|0180000117|OH1|ONHOLD    |0001044904|0001044905|X"
+    },
+    {
+      "WA": "W01|0001037196|0001|000000008000006485                      |1120|CS02|         1.000 |NOS|902|0180000117|OH1|ONHOLD    |0001044906|0001044907|X"
+    },
+    {
+      "WA": "W01|0001037197|0001|000000008000006485                      |1120|CS02|         1.000 |NOS|902|0180000117|OH1|ONHOLD    |0001044908|0001044909|X"
+    },
+    {
+      "WA": "W01|0001037198|0001|000000008000006485                      |1120|CS02|         1.000 |NOS|902|0180000117|OH1|ONHOLD    |0001044910|0001044911|X"
+    },
+    {
+      "WA": "W01|0001037199|0001|000000008000006485                      |1120|CS02|         1.000 |NOS|902|0180000117|OH1|ONHOLD    |0001044912|0001044913|X"
+    },
+    {
+      "WA": "W01|0001037223|0001|000000008000006485                      |1120|HS01|         1.000 |NOS|902|0180000113|OH1|ONHOLD    |0001044956|0001044957|X"
+    },
+    {
+      "WA": "W01|0001037223|0002|000000008000006485                      |1120|HS01|         1.000 |NOS|902|0180000113|OH1|ONHOLD    |0001044956|0001044958|X"
+    },
+    {
+      "WA": "W01|0001037223|0003|000000008000006485                      |1120|HS01|         1.000 |NOS|902|0180000113|OH1|ONHOLD    |0001044956|0001044959|X"
+    },
+    {
+      "WA": "W01|0001037223|0004|000000008000006485                      |1120|HS01|         1.000 |NOS|902|0180000113|OH1|ONHOLD    |0001044956|0001044960|X"
+    },
+    {
+      "WA": "W01|0001037223|0005|000000008000006485                      |1120|HS01|         1.000 |NOS|902|0180000113|OH1|ONHOLD    |0001044956|0001044961|X"
+    }
+  ],
+  "FIELDS": [
+    {
+      "FIELDNAME": "LGNUM",
+      "OFFSET": "000000",
+      "LENGTH": "000003",
+      "TYPE": "C",
+      "FIELDTEXT": "Warehouse Number / Warehouse Complex"
+    },
+    {
+      "FIELDNAME": "TANUM",
+      "OFFSET": "000004",
+      "LENGTH": "000010",
+      "TYPE": "N",
+      "FIELDTEXT": "Transfer Order Number"
+    },
+    {
+      "FIELDNAME": "TAPOS",
+      "OFFSET": "000015",
+      "LENGTH": "000004",
+      "TYPE": "N",
+      "FIELDTEXT": "Transfer order item"
+    },
+    {
+      "FIELDNAME": "MATNR",
+      "OFFSET": "000020",
+      "LENGTH": "000040",
+      "TYPE": "C",
+      "FIELDTEXT": "Material Number"
+    },
+    {
+      "FIELDNAME": "WERKS",
+      "OFFSET": "000061",
+      "LENGTH": "000004",
+      "TYPE": "C",
+      "FIELDTEXT": "Plant"
+    },
+    {
+      "FIELDNAME": "LGORT",
+      "OFFSET": "000066",
+      "LENGTH": "000004",
+      "TYPE": "C",
+      "FIELDTEXT": "Storage Location"
+    },
+    {
+      "FIELDNAME": "VSOLA",
+      "OFFSET": "000071",
+      "LENGTH": "000015",
+      "TYPE": "P",
+      "FIELDTEXT": "Source target quantity in alternate unit"
+    },
+    {
+      "FIELDNAME": "MEINS",
+      "OFFSET": "000087",
+      "LENGTH": "000003",
+      "TYPE": "C",
+      "FIELDTEXT": "Base Unit of Measure"
+    },
+    {
+      "FIELDNAME": "VLTYP",
+      "OFFSET": "000091",
+      "LENGTH": "000003",
+      "TYPE": "C",
+      "FIELDTEXT": "Source Storage Type"
+    },
+    {
+      "FIELDNAME": "VLPLA",
+      "OFFSET": "000095",
+      "LENGTH": "000010",
+      "TYPE": "C",
+      "FIELDTEXT": "Source Storage Bin"
+    },
+    {
+      "FIELDNAME": "NLTYP",
+      "OFFSET": "000106",
+      "LENGTH": "000003",
+      "TYPE": "C",
+      "FIELDTEXT": "Destination Storage Type"
+    },
+    {
+      "FIELDNAME": "NLPLA",
+      "OFFSET": "000110",
+      "LENGTH": "000010",
+      "TYPE": "C",
+      "FIELDTEXT": "Destination Storage Bin"
+    },
+    {
+      "FIELDNAME": "VLQNR",
+      "OFFSET": "000121",
+      "LENGTH": "000010",
+      "TYPE": "N",
+      "FIELDTEXT": "Quant"
+    },
+    {
+      "FIELDNAME": "NLQNR",
+      "OFFSET": "000132",
+      "LENGTH": "000010",
+      "TYPE": "N",
+      "FIELDTEXT": "Quant"
+    },
+    {
+      "FIELDNAME": "PQUIT",
+      "OFFSET": "000143",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Indicator: confirmation complete"
+    }
+  ],
+  "OPTIONS": [
+    {
+      "TEXT": "LGNUM = 'W01'"
+    },
+    {
+      "TEXT": "AND MATNR = '000000008000006485'"
+    }
+  ]
+}

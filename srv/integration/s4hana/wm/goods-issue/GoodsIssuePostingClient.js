@@ -3,7 +3,6 @@ const s4Config = require('../../s4Config');
 const S4ErrorMapper = require('../../S4ErrorMapper');
 const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
 const { RfcClient } = require('../../RfcClient');
-const sapFacts = require('../../sapFacts');
 const GoodsIssueMapper = require('./GoodsIssueMapper');
 const GoodsIssue201Mapper = require('./GoodsIssue201Mapper');
 const GoodsIssue301Mapper = require('./GoodsIssue301Mapper');
@@ -607,6 +606,11 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   /** Movement 201 (Goods Issue to Cost Center) - standard API only. */
   async post201(data) {
     this._assertPostable(data);
+    if (!String(data.CostCenter || '').trim()) {
+      const err = new Error('Property CostCenter is mandatory for GoodsMovementType 201');
+      err.status = 400;
+      throw err;
+    }
     await this._preflightPosting(data);
     const payload = GoodsIssue201Mapper.mapToMaterialDocumentPayload(data);
     try {
@@ -846,7 +850,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
    * @param {string} [reversalReason] - Optional reason code
    * @returns {Promise<{ OriginalMaterialDocument: string, OriginalMaterialDocYear: string, ReversalMaterialDocument: string, ReversalMaterialDocYear: string, PostingDate: string, Success: boolean, Message: string }>}
    */
-  async reverseGoodsIssue(materialDocument, materialDocYear, postingDate, documentDate, reversalReason) {
+  async reverseGoodsIssue(materialDocument, materialDocYear, postingDate, _documentDate, _reversalReason) {
     const sDoc = String(materialDocument || '').trim();
     let sYear = String(materialDocYear || '').trim();
     if (!sDoc) {

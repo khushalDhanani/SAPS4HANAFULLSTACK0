@@ -17,9 +17,17 @@ describe('JournalEntryService Configuration & Fail Loudly Validation', () => {
 
     it('fails loudly when credentials are unset and connection is attempted', async () => {
         // Without credentials configured, cds.connect.to throws immediately during service init
-        await expect(cds.connect.to('FAC_GL_JOURNALENTRY_VER_SRV')).rejects.toThrow(
-            /No credentials configured for "FAC_GL_JOURNALENTRY_VER_SRV"/
-        );
+        const savedCreds = cds.env.requires['FAC_GL_JOURNALENTRY_VER_SRV']?.credentials;
+        delete cds.env.requires['FAC_GL_JOURNALENTRY_VER_SRV'].credentials;
+        try {
+            await expect(cds.connect.to('FAC_GL_JOURNALENTRY_VER_SRV')).rejects.toThrow(
+                /No credentials configured for "FAC_GL_JOURNALENTRY_VER_SRV"/
+            );
+        } finally {
+            if (savedCreds) {
+                cds.env.requires['FAC_GL_JOURNALENTRY_VER_SRV'].credentials = savedCreds;
+            }
+        }
     });
 
     it('JournalEntryService.READ handler forwards error and fails loudly', async () => {

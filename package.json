@@ -45,6 +45,15 @@
   },
   "cds": {
     "requires": {
+      "db": {
+        "[development]": {
+          "kind": "sqlite",
+          "credentials": { "url": "db.sqlite" }
+        },
+        "[test]": {
+          "credentials": { "url": ":memory:" }
+        }
+      },
       "auth": {
         "[development]": {
           "kind": "mocked",
@@ -64,7 +73,32 @@
             "bob": {
               "roles": [
                 "Viewer"
+              ],
+              "attr": {
+                "Plant": ["1120"]
+              }
+            },
+            "dave": {
+              "roles": [
+                "Viewer"
+              ],
+              "attr": {
+                "Plant": ["1130"]
+              }
+            },
+            "eve": {
+              "roles": [
+                "Viewer"
               ]
+            },
+            "carol": {
+              "roles": [
+                "Viewer",
+                "WarehouseClerk"
+              ],
+              "attr": {
+                "Plant": ["1120"]
+              }
             },
             "khushal": {
               "roles": [
@@ -98,7 +132,32 @@
             "bob": {
               "roles": [
                 "Viewer"
+              ],
+              "attr": {
+                "Plant": ["1120"]
+              }
+            },
+            "dave": {
+              "roles": [
+                "Viewer"
+              ],
+              "attr": {
+                "Plant": ["1130"]
+              }
+            },
+            "eve": {
+              "roles": [
+                "Viewer"
               ]
+            },
+            "carol": {
+              "roles": [
+                "Viewer",
+                "WarehouseClerk"
+              ],
+              "attr": {
+                "Plant": ["1120"]
+              }
             },
             "khushal": {
               "roles": [
@@ -124,6 +183,14 @@
       "C_PURCHASEORDER_FS_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/C_PURCHASEORDER_FS_SRV",
+        "[test]": {
+          "credentials": {
+            "url": "http://127.0.0.1:1",
+            "authentication": "BasicAuthentication",
+            "username": "JEST_ONLY",
+            "password": "JEST_ONLY"
+          }
+        },
         "[production]": {
           "credentials": {
             "destination": "S4HANA_PO_API",
@@ -134,6 +201,14 @@
       "MM_PUR_PO_MAINT_V2_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/MM_PUR_PO_MAINT_V2_SRV",
+        "[test]": {
+          "credentials": {
+            "url": "http://127.0.0.1:1",
+            "authentication": "BasicAuthentication",
+            "username": "JEST_ONLY",
+            "password": "JEST_ONLY"
+          }
+        },
         "[production]": {
           "credentials": {
             "destination": "S4HANA_PO_API",
@@ -144,6 +219,14 @@
       "FAC_GL_JOURNALENTRY_VER_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/FAC_GL_JOURNALENTRY_VER_SRV",
+        "[test]": {
+          "credentials": {
+            "url": "http://127.0.0.1:1",
+            "authentication": "BasicAuthentication",
+            "username": "JEST_ONLY",
+            "password": "JEST_ONLY"
+          }
+        },
         "[production]": {
           "credentials": {
             "destination": "S4HANA_PO_API",
@@ -154,6 +237,14 @@
       "SD_F2370_INQY_WL_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/SD_F2370_INQY_WL_SRV",
+        "[test]": {
+          "credentials": {
+            "url": "http://127.0.0.1:1",
+            "authentication": "BasicAuthentication",
+            "username": "JEST_ONLY",
+            "password": "JEST_ONLY"
+          }
+        },
         "[production]": {
           "credentials": {
             "destination": "S4HANA_PO_API",
@@ -164,6 +255,14 @@
       "SD_F2369_INQY_FS_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/SD_F2369_INQY_FS_SRV",
+        "[test]": {
+          "credentials": {
+            "url": "http://127.0.0.1:1",
+            "authentication": "BasicAuthentication",
+            "username": "JEST_ONLY",
+            "password": "JEST_ONLY"
+          }
+        },
         "[production]": {
           "credentials": {
             "destination": "S4HANA_PO_API",
@@ -174,6 +273,14 @@
       "SD_F1873_SO_WL_SRV": {
         "kind": "odata-v2",
         "model": "srv/external/SD_F1873_SO_WL_SRV",
+        "[test]": {
+          "credentials": {
+            "url": "http://127.0.0.1:1",
+            "authentication": "BasicAuthentication",
+            "username": "JEST_ONLY",
+            "password": "JEST_ONLY"
+          }
+        },
         "[production]": {
           "credentials": {
             "destination": "S4HANA_PO_API",
@@ -201,6 +308,7 @@
       "client": "220",
       "plant": "1120",
       "storageLocation": "CS01",
+      "warehouseNumber": "W01",
       "salesOrganization": "1000",
       "distributionChannel": "10",
       "division": "52",
@@ -217,6 +325,18 @@
       "salesMaterialTypes": [
         "ZFRT",
         "FERT"
+      ],
+      "mvt261NotReadyBins": [
+        {
+          "storageType": "OH1",
+          "bin": "ONHOLD",
+          "reason": "onHold"
+        },
+        {
+          "storageType": "901",
+          "bin": "WE-ZONE",
+          "reason": "goodsReceiptZone"
+        }
       ]
     }
   },

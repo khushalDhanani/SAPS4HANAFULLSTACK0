@@ -64,7 +64,8 @@ docs/*.png
 # Claude & AI Assistant Outputs
 Claude outputs/
 claude output/
-.claude/
+.claude/*
+!.claude/skills/
 
 # Analysis & Reality CSVs & Workbooks
 *.csv
@@ -110,3 +111,6 @@ ehthumbs.db
 *.swp
 *.swo
 *~
+
+# Agent skill eval / scratch workspaces (see skills/README.md)
+*-workspace/

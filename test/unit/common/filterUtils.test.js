@@ -1,4 +1,4 @@
-const { extractFilterParam, extractFilterParams, odataString } = require('../../../srv/common/filterUtils');
+const { extractFilterParam, extractFilterParams, odataString, applyWhere } = require('../../../srv/common/filterUtils');
 
 describe('Unit: filterUtils', () => {
   describe('extractFilterParam', () => {
@@ -183,6 +183,45 @@ describe('Unit: filterUtils', () => {
       expect(odataString(123)).toBe("'123'");
       expect(odataString(0)).toBe("'0'");
       expect(odataString(false)).toBe("'false'");
+    });
+  });
+
+  describe('applyWhere (in-memory $filter for RFC-backed value helps)', () => {
+    const rows = [
+      { PaymentTerms: '0001', PaymentTermsName: 'Payable immediately' },
+      { PaymentTerms: 'AD30', PaymentTermsName: '120 Days from Invoice Date' },
+      { PaymentTerms: 'NT30', PaymentTermsName: 'Net 30 days' }
+    ];
+    const contains = (field, val) => ({ func: 'contains', args: [{ ref: [field] }, { val }] });
+
+    it('returns the rows unchanged when there is nothing to filter', () => {
+      expect(applyWhere(rows, undefined)).toBe(rows);
+      expect(applyWhere(rows, [])).toBe(rows);
+      expect(applyWhere('not-an-array', [])).toBe('not-an-array');
+    });
+
+    it('applies contains case-insensitively across an or-group, as the UI5 suggestion filter sends it', () => {
+      const where = ['(', contains('PaymentTerms', 'ad3'), 'or', contains('PaymentTermsName', 'ad3'), ')'];
+      expect(applyWhere(rows, where).map((r) => r.PaymentTerms)).toEqual(['AD30']);
+      const byText = [{ xpr: [contains('PaymentTerms', 'days'), 'or', contains('PaymentTermsName', 'days')] }];
+      expect(applyWhere(rows, byText).map((r) => r.PaymentTerms)).toEqual(['AD30', 'NT30']);
+    });
+
+    it('combines an or-group with an and-ed equality (contact search within one customer)', () => {
+      const contacts = [
+        { ContactPerson: '25158', Customer: '10135', FullName: 'Babu Rao' },
+        { ContactPerson: '25160', Customer: '10135', FullName: 'MN Rao' },
+        { ContactPerson: '25799', Customer: '10514', FullName: 'Pradip Rao' }
+      ];
+      const where = [{ xpr: [contains('ContactPerson', 'rao'), 'or', contains('FullName', 'rao')] }, 'and', { ref: ['Customer'] }, '=', { val: '10135' }];
+      expect(applyWhere(contacts, where).map((r) => r.ContactPerson)).toEqual(['25158', '25160']);
+      expect(applyWhere(contacts, [{ ref: ['Customer'] }, '=', { val: '10514' }])).toHaveLength(1);
+      expect(applyWhere(contacts, [{ ref: ['Customer'] }, '!=', { val: '10514' }])).toHaveLength(2);
+    });
+
+    it('never hides rows for constructs it does not understand', () => {
+      expect(applyWhere(rows, [{ func: 'geo.distance', args: [] }])).toHaveLength(3);
+      expect(applyWhere(rows, [{ ref: ['PaymentTerms'] }, 'is', 'not', 'null'])).toHaveLength(3);
     });
   });
 });

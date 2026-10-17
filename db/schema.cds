@@ -18,4 +18,6 @@
 
 namespace saps4hana.fullstack;
 
-// Intentionally empty — business persistence delegated completely to SAP S/4HANA.
+// Warehouse Management Persistence (Tracking & Logging)
+using from './wm/goods-issue-attempt';
+using from './wm/reservation-track';

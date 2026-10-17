@@ -110,14 +110,7 @@ const mockSalesOrderService = {
     getSalesOrderDefaults: jest.fn().mockResolvedValue(null),
     getMaterialDetails: jest.fn().mockResolvedValue(null),
     getMaterialUnit: jest.fn().mockResolvedValue(null),
-    createSalesOrder: jest.fn().mockResolvedValue("5000465"),
-    checkATP: jest.fn().mockResolvedValue({
-        RequestedQty: 10,
-        ConfirmedQty: 10,
-        ReqDlvDate: "2026-10-01",
-        CnfDlvDate: "2026-10-01",
-        SalesUnit: "KG"
-    })
+    createSalesOrder: jest.fn().mockResolvedValue("5000465")
 };
 
 const MockBaseController = {
@@ -243,28 +236,6 @@ describe("CreateSalesOrder Controller", () => {
         expect(oModel.getProperty("/items")).toHaveLength(1);
     });
 
-    test("onCheckAvailability with draft notice when no document number exists", () => {
-        controller.onInit();
-        const oModel = mockView.getModel("newOrder");
-        oModel.setProperty("/items/0/Material", "4000000001");
-
-        controller.onCheckAvailability();
-        expect(mockMessageBox.information).toHaveBeenCalledWith(
-            expect.stringContaining("ATP Availability Check"),
-            expect.objectContaining({ title: "Check Availability" })
-        );
-    });
-
-    test("onCheckAvailability calls SalesOrderService.checkATP when numeric document ID is provided", async () => {
-        controller.onInit();
-        const oModel = mockView.getModel("newOrder");
-        oModel.setProperty("/items/0/Material", "4000000001");
-        oModel.setProperty("/header/PurchaseOrderNumber", "1000529");
-
-        controller.onCheckAvailability();
-        expect(mockSalesOrderService.checkATP).toHaveBeenCalledWith("1000529", "10");
-    });
-
     test("onSave submits valid order and displays success dialog", async () => {
         controller.onInit();
         const oModel = mockView.getModel("newOrder");
@@ -276,8 +247,6 @@ describe("CreateSalesOrder Controller", () => {
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/PurchaseOrderNumber", "PO-AUTO-01");
         oModel.setProperty("/header/PaymentTerms", "0001");
-        oModel.setProperty("/header/IncotermsClassification", "FOB");
-        oModel.setProperty("/header/IncotermsLocation1", "Mumbai");
         oModel.setProperty("/header/ContactPerson", "25116");
         oModel.setProperty("/items/0/Material", "4000000001");
         oModel.setProperty("/items/0/Plant", "1120");
@@ -295,6 +264,43 @@ describe("CreateSalesOrder Controller", () => {
             expect.stringContaining("5000465"),
             expect.objectContaining({ title: "Sales Order Created" })
         );
+    });
+
+    test("onSave treats a read-back mismatch as created: warns with the order number and resets the form", async () => {
+        controller.onInit();
+        const oModel = mockView.getModel("newOrder");
+        oModel.setProperty("/header/SalesOrderType", "ZDOM");
+        oModel.setProperty("/header/SalesOrganization", "1000");
+        oModel.setProperty("/header/DistributionChannel", "10");
+        oModel.setProperty("/header/OrganizationDivision", "52");
+        oModel.setProperty("/header/TransactionCurrency", "INR");
+        oModel.setProperty("/header/SoldToParty", "10135");
+        oModel.setProperty("/header/PaymentTerms", "PT11");
+        oModel.setProperty("/header/ContactPerson", "25116");
+        oModel.setProperty("/items/0/Material", "4000000001");
+        oModel.setProperty("/items/0/Plant", "1120");
+        oModel.setProperty("/items/0/OrderQuantity", "5.000");
+        oModel.setProperty("/items/0/OrderQuantityUnit", "KG");
+
+        const oErr = new Error("Sales Order 5000999 created, but read-back verification failed: Payment Terms expected 'PT11' but found 'PT01'");
+        oErr.code = "SALES_ORDER_CREATED_VERIFICATION_FAILED";
+        oErr.status = 502;
+        mockSalesOrderService.createSalesOrder.mockRejectedValueOnce(oErr);
+
+        controller.onSave();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(mockMessageBox.error).not.toHaveBeenCalled();
+        expect(mockMessageBox.warning).toHaveBeenCalledWith(
+            expect.stringContaining("5000999"),
+            expect.objectContaining({ title: "Sales Order Created with Warnings" })
+        );
+
+        // Closing the dialog resets the form, so the same order cannot be submitted again.
+        const oOptions = mockMessageBox.warning.mock.calls[0][1];
+        oOptions.onClose("Close");
+        expect(mockView.getModel("newOrder").getProperty("/header/SoldToParty")).toBe("");
+        expect(mockRouter.navTo).not.toHaveBeenCalled();
     });
 
     test("_loadConfigurationAndDefaults loads server defaults and applies to empty fields", async () => {

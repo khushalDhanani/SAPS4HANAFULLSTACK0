@@ -1,0 +1,217 @@
+{
+  "ET_DATA": [],
+  "DELIMITER": "|",
+  "GET_SORTED": "",
+  "NO_DATA": "",
+  "QUERY_TABLE": "T321",
+  "ROWCOUNT": 0,
+  "ROWSKIPS": 0,
+  "USE_ET_DATA_4_RETURN": "",
+  "DATA": [
+    {
+      "WA": " | |    | |X| | | | | |311|220|          |***| |          |DOG |311|  |  |"
+    },
+    {
+      "WA": " | |    | |X| | | | | |311|220|          |***|B|          |DOG |311|  |  |"
+    },
+    {
+      "WA": " | |    | |X| | | | | |311|220|          |***|E|          |DOG |311|  |  |"
+    },
+    {
+      "WA": " | |    | |X| | | | | |311|220|          |***|K|          |DOG |311|  |  |"
+    },
+    {
+      "WA": " | |    | |X| | | | | |311|220|          |***|M|          |DOG |311|  |  |"
+    },
+    {
+      "WA": " | |    | |X| | | | | |311|220|          |***|Q|          |DOG |311|  |  |"
+    },
+    {
+      "WA": " | |    | |X| | | | | |311|220|          |***|T|          |DOG |311|  |  |"
+    },
+    {
+      "WA": "K| |    | |X| | | | | |311|220|          |***| |          |DOG |317|  |  |"
+    },
+    {
+      "WA": "K| |    | |X| | | | | |311|220|          |***|B|          |DOG |317|  |  |"
+    },
+    {
+      "WA": "K| |    | |X| | | | | |311|220|          |***|E|          |DOG |317|  |  |"
+    },
+    {
+      "WA": "K| |    | |X| | | | | |311|220|          |***|K|          |DOG |317|  |  |"
+    },
+    {
+      "WA": "K| |    | |X| | | | | |311|220|          |***|M|          |DOG |317|  |  |"
+    },
+    {
+      "WA": "K| |    | |X| | | | | |311|220|          |***|Q|          |DOG |317|  |  |"
+    },
+    {
+      "WA": "L| |    | |X| | | | | |311|220|          |***| |          |DOG |311|  |  |"
+    },
+    {
+      "WA": " | |    | | | |X|A|X| |311|220|          |W01|E|          |DTR |311|  |  |"
+    },
+    {
+      "WA": " | |    |Q| | |X|A|X| |311|220|          |W01|E|          |DTR |311|  |  |"
+    }
+  ],
+  "FIELDS": [
+    {
+      "FIELDNAME": "KZBEW",
+      "OFFSET": "000000",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Movement indicator"
+    },
+    {
+      "FIELDNAME": "BESTQ",
+      "OFFSET": "000002",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Stock Category in the Warehouse Management System"
+    },
+    {
+      "FIELDNAME": "SPE_FOLAR",
+      "OFFSET": "000004",
+      "LENGTH": "000004",
+      "TYPE": "C",
+      "FIELDTEXT": "Subsequent Delivery Type"
+    },
+    {
+      "FIELDNAME": "BSLVS",
+      "OFFSET": "000009",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Special Stock Indicators for Whse Mgmt"
+    },
+    {
+      "FIELDNAME": "TBFKZ",
+      "OFFSET": "000011",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Indicator: Creation/Cancellation of a Transfer Requirement"
+    },
+    {
+      "FIELDNAME": "WEDKZ",
+      "OFFSET": "000013",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Indicator: generate goods receipt date"
+    },
+    {
+      "FIELDNAME": "UBFKZ",
+      "OFFSET": "000015",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Indicator: Creation of a Posting Change Notice"
+    },
+    {
+      "FIELDNAME": "TAFKZ",
+      "OFFSET": "000017",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Indicator: Create transfer order immediately"
+    },
+    {
+      "FIELDNAME": "WENUM",
+      "OFFSET": "000019",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Window for entry of additional data"
+    },
+    {
+      "FIELDNAME": "BSTQE",
+      "OFFSET": "000021",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Stock category for stock placement posting"
+    },
+    {
+      "FIELDNAME": "RBLVS",
+      "OFFSET": "000023",
+      "LENGTH": "000003",
+      "TYPE": "N",
+      "FIELDTEXT": "Reference movement type for WM from material movements"
+    },
+    {
+      "FIELDNAME": "MANDT",
+      "OFFSET": "000027",
+      "LENGTH": "000003",
+      "TYPE": "C",
+      "FIELDTEXT": "Client"
+    },
+    {
+      "FIELDNAME": "LIFNR",
+      "OFFSET": "000031",
+      "LENGTH": "000010",
+      "TYPE": "C",
+      "FIELDTEXT": "Supplier account number for inbound delivery WMS"
+    },
+    {
+      "FIELDNAME": "LGNUM",
+      "OFFSET": "000042",
+      "LENGTH": "000003",
+      "TYPE": "C",
+      "FIELDTEXT": "Warehouse Number / Warehouse Complex"
+    },
+    {
+      "FIELDNAME": "SOBKZ",
+      "OFFSET": "000046",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Special Stock Indicator"
+    },
+    {
+      "FIELDNAME": "KUNWE",
+      "OFFSET": "000048",
+      "LENGTH": "000010",
+      "TYPE": "C",
+      "FIELDTEXT": "Ship-to-party for delivery for WMS"
+    },
+    {
+      "FIELDNAME": "LFART",
+      "OFFSET": "000059",
+      "LENGTH": "000004",
+      "TYPE": "C",
+      "FIELDTEXT": "Delivery Type"
+    },
+    {
+      "FIELDNAME": "BWLVS",
+      "OFFSET": "000064",
+      "LENGTH": "000003",
+      "TYPE": "N",
+      "FIELDTEXT": "Movement Type for Warehouse Management"
+    },
+    {
+      "FIELDNAME": "LGREF",
+      "OFFSET": "000068",
+      "LENGTH": "000002",
+      "TYPE": "C",
+      "FIELDTEXT": "Storage loc. ref."
+    },
+    {
+      "FIELDNAME": "MAILK",
+      "OFFSET": "000071",
+      "LENGTH": "000002",
+      "TYPE": "C",
+      "FIELDTEXT": "Mail control for background processing"
+    },
+    {
+      "FIELDNAME": "BSSKZ",
+      "OFFSET": "000074",
+      "LENGTH": "000001",
+      "TYPE": "C",
+      "FIELDTEXT": "Special movement indicator for warehouse management"
+    }
+  ],
+  "OPTIONS": [
+    {
+      "TEXT": "( LGNUM = 'W01' OR LGNUM = '***' )"
+    },
+    {
+      "TEXT": "AND RBLVS = '311'"
+    }
+  ]
+}

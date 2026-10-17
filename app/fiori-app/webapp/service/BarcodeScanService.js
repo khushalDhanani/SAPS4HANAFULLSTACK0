@@ -30,6 +30,13 @@ sap.ui.define([
     var _oActiveCameraDialog = null;
     var _nAnimationId = null;
 
+    function _addClass(oControl, sClass) {
+        if (oControl && typeof oControl.addStyleClass === "function") {
+            oControl.addStyleClass(sClass);
+        }
+        return oControl;
+    }
+
     /**
      * Internal keydown listener to capture Zebra hardware laser scans in keystroke wedge mode
      */
@@ -49,10 +56,12 @@ sap.ui.define([
             if (_sKeyBuffer.length >= 3) {
                 var sScanned = _sKeyBuffer.trim();
                 _sKeyBuffer = "";
-                // If focus is not inside an active input, prevent standard enter navigation
+                // If focus is not inside an active input, the scan suffix Enter must not also act on the focused
+                // control (e.g. press a focused list row): consume it completely.
                 var oActive = document.activeElement;
                 if (!oActive || oActive.tagName !== "INPUT") {
                     oEvent.preventDefault();
+                    oEvent.stopPropagation();
                 }
                 try {
                     _fnHardwareCallback(sScanned, "ZEBRA_KEYSTROKE_WEDGE");
@@ -198,14 +207,13 @@ sap.ui.define([
                         title: sTitle + " (Camera Simulation)",
                         contentWidth: "360px",
                         content: [
-                            new VBox({
-                                class: "sapUiSmallMargin",
+                            _addClass(new VBox({
                                 items: [
                                     new Text({ text: "Camera stream is unavailable in this browser session. You can enter or simulate a barcode scan below:" }),
-                                    new Label({ text: "Barcode Value:", class: "sapUiTinyMarginTop" }),
+                                    _addClass(new Label({ text: "Barcode Value:" }), "sapUiTinyMarginTop"),
                                     oSimInput
                                 ]
-                            })
+                            }), "sapUiSmallMargin")
                         ],
                         beginButton: new Button({
                             text: "Submit Scan",
@@ -278,19 +286,17 @@ sap.ui.define([
                     title: sTitle,
                     contentWidth: "380px",
                     content: [
-                        new VBox({
-                            class: "sapUiSmallMargin",
+                        _addClass(new VBox({
                             items: [
                                 oVideoHtml,
-                                new HBox({
+                                _addClass(new HBox({
                                     justifyContent: "SpaceBetween",
                                     alignItems: "Center",
-                                    class: "sapUiTinyMarginTop sapUiTinyMarginBottom",
                                     items: [
-                                        new Text({ text: "Align barcode inside the reticle", class: "textMuted" }),
+                                        _addClass(new Text({ text: "Align barcode inside the reticle" }), "textMuted"),
                                         oBtnTorch
                                     ]
-                                }),
+                                }), "sapUiTinyMarginTop sapUiTinyMarginBottom"),
                                 new Label({ text: "Manual Entry (Fallback):" }),
                                 new HBox({
                                     width: "100%",
@@ -309,7 +315,7 @@ sap.ui.define([
                                     ]
                                 })
                             ]
-                        })
+                        }), "sapUiSmallMargin")
                     ],
                     endButton: new Button({
                         text: "Cancel",
@@ -384,6 +390,25 @@ sap.ui.define([
                     MessageToast.show("Camera access unavailable. Please use manual entry.");
                 });
             });
+        },
+
+        /**
+         * Convenience callback wrapper for camera scanning
+         * @param {string} sTitle
+         * @param {Function} fnCallback
+         * @returns {Promise<string>}
+         */
+        openCameraScanner: function (sTitle, fnCallback) {
+            return this.scanWithCamera({ title: sTitle })
+                .then(function (sResult) {
+                    if (typeof fnCallback === "function") {
+                        fnCallback(sResult);
+                    }
+                    return sResult;
+                })
+                .catch(function () {
+                    // Cancelled or unavailable
+                });
         }
     };
 

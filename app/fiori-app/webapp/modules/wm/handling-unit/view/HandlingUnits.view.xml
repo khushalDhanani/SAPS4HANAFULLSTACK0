@@ -1,0 +1,127 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.handling-unit.controller.HandlingUnits"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page id="huListPage" class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto">
+
+                <HBox id="huKpiRow"
+                      wrap="Wrap"
+                      alignItems="Baseline"
+                      class="huKpiStrip sapUiTinyMarginBottom"
+                      visible="{= ${huView>/kpiBusy} || ${huView>/kpiTotal} > 0 }"
+                      busy="{huView>/kpiBusy}"
+                      busyIndicatorDelay="0">
+                    <HBox id="huKpiTotal" alignItems="Baseline" class="huKpiItem" tooltip="{i18n>huKpiTotalTooltip}">
+                        <Label text="{i18n>huKpiTotal}" class="sapUiTinyText sapUiTinyMarginEnd textMuted" />
+                        <Text text="{path: 'huView>/kpiTotal', formatter: '.formatCount'}" class="fontBold" />
+                    </HBox>
+                    <HBox items="{huView>/kpis}" wrap="Wrap" alignItems="Baseline" class="huKpiGroup">
+                        <HBox alignItems="Baseline" class="huKpiItem" tooltip="{huView>name}">
+                            <Label text="{huView>name}" class="sapUiTinyText sapUiTinyMarginEnd textMuted" />
+                            <Text text="{path: 'huView>count', formatter: '.formatCount'}" class="fontBold" />
+                        </HBox>
+                    </HBox>
+                </HBox>
+
+                <form:SimpleForm id="huFilterForm" editable="true" layout="ResponsiveGridLayout" columnsM="2" columnsL="2" columnsXL="2">
+                    <form:content>
+                        <core:Title text="{i18n>huFilters}" />
+                        <Label text="{i18n>huPlant}" labelFor="huPlant" />
+                        <Input id="huPlant" value="{huView>/plant}" maxLength="4" submit=".onGo" showSuggestion="true" suggestionItems="{huView>/vhPlant}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
+                        <Label text="{i18n>huStorageLocation}" labelFor="huSloc" />
+                        <Input id="huSloc" value="{huView>/storageLocation}" maxLength="4" submit=".onGo" showSuggestion="true" suggestionItems="{huView>/vhStorageLocation}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
+                        <Label text="{i18n>huStatus}" labelFor="huStatus" />
+                        <Input id="huStatus" value="{huView>/status}" maxLength="1" submit=".onGo" showSuggestion="true" suggestionItems="{huView>/vhStatus}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
+
+                        <core:Title text="{i18n>huOptions}" />
+                        <Label text="{i18n>huPackagingMaterial}" labelFor="huPkgMat" />
+                        <Input id="huPkgMat" value="{huView>/packagingMaterial}" maxLength="40" submit=".onGo" showSuggestion="true" suggestionItems="{huView>/vhPackaging}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
+                        <Label text="{i18n>huShippingPoint}" labelFor="huShipPoint" />
+                        <Input id="huShipPoint" value="{huView>/shippingPoint}" maxLength="4" submit=".onGo" showSuggestion="true" suggestionItems="{huView>/vhShippingPoint}">
+                            <suggestionItems><core:ListItem text="{huView>key}" additionalText="{huView>text}" /></suggestionItems>
+                        </Input>
+                        <Label text="{i18n>huExternalId}" labelFor="huExtId" />
+                        <Input id="huExtId" value="{huView>/handlingUnitExternalID}" maxLength="20" submit=".onGo" />
+                        <Label />
+                        <Button id="huGo" text="{i18n>huGo}" type="Emphasized" icon="sap-icon://search" press=".onGo" enabled="{= !${huView>/busy} }" />
+                    </form:content>
+                </form:SimpleForm>
+
+                <MessageStrip id="huMessage" visible="{= !!${huView>/message} }" text="{huView>/message}" type="{huView>/messageType}" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <Table
+                    id="huTable"
+                    items="{huView>/items}"
+                    mode="MultiSelect"
+                    selectionChange=".onSelectionChange"
+                    busy="{huView>/busy}"
+                    growing="true"
+                    growingThreshold="50"
+                    noDataText="{i18n>huNoData}"
+                    class="sapUiSmallMarginTop">
+                    <headerToolbar>
+                        <OverflowToolbar>
+                            <Title id="huCount" text="{= ${i18n>huListTitle} + ' (' + ${huView>/items}.length + ')' }" level="H2" />
+                            <ToolbarSpacer />
+                            <Button id="huCreateBtn" icon="sap-icon://add" text="{i18n>huCreate}" type="Emphasized" press=".onOpenCreate" enabled="{= !${huView>/busy} }" />
+                            <Button id="huExport" icon="sap-icon://excel-attachment" text="{i18n>huExport}" press=".onExport" enabled="{= ${huView>/items}.length > 0 }" />
+                            <Button id="huPrintAll" icon="sap-icon://print" text="{i18n>huPrintAll}" tooltip="{i18n>huPrintAllTip}" type="Emphasized" press=".onPrintAll" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/items}.length > 0 }">
+                                <layoutData><OverflowToolbarLayoutData priority="High" /></layoutData>
+                            </Button>
+                            <Button id="huPrintSelected" icon="sap-icon://print" text="{= ${i18n>huPrintSelectedOnly} + (${huView>/selectedCount} > 0 ? ' (' + ${huView>/selectedCount} + ')' : '') }" tooltip="{i18n>huPrintSelectedTip}" press=".onPrintSelected" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/selectedCount} > 0 }">
+                                <layoutData><OverflowToolbarLayoutData priority="High" /></layoutData>
+                            </Button>
+                            <Button id="huPrintCurrentPage" icon="sap-icon://print" text="{i18n>huPrintCurrentPage}" tooltip="{i18n>huPrintCurrentPageTip}" press=".onPrintCurrentPage" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/items}.length > 0 }">
+                                <layoutData><OverflowToolbarLayoutData priority="Low" /></layoutData>
+                            </Button>
+                            <Button id="huDownloadSelected" icon="sap-icon://download" text="{= ${i18n>huDownloadSelected} + (${huView>/selectedCount} > 0 ? ' (' + ${huView>/selectedCount} + ')' : '') }" tooltip="{i18n>huDownloadSelectedTip}" press=".onDownloadSelected" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/selectedCount} > 0 }">
+                                <layoutData><OverflowToolbarLayoutData priority="Low" /></layoutData>
+                            </Button>
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column><Text text="{i18n>huColHandlingUnit}" /></Column>
+                        <Column><Text text="{i18n>huColPackaging}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huColPlantSloc}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>huColGrossWeight}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huColStatus}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huColReference}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huColCreated}" /></Column>
+                        <Column width="6rem" hAlign="Center"><Text text="{i18n>huColActions}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem type="Navigation" press=".onOpenDetail">
+                            <cells>
+                                <ObjectIdentifier title="{huView>HandlingUnitExternalID}" text="{huView>ParentHandlingUnit}" />
+                                <ObjectIdentifier title="{huView>PackagingMaterial}" text="{huView>PackagingMaterialName}" />
+                                <Text text="{= (${huView>Plant} || '-') + ' / ' + (${huView>StorageLocation} || '-') }" />
+                                <ObjectNumber number="{huView>GrossWeight}" unit="{huView>WeightUnit}" emphasized="false" />
+                                <Text text="{huView>StatusText}" />
+                                <Text text="{huView>ReferenceDocument}" />
+                                <Text text="{= ${huView>CreatedByUser} + ' · ' + ${huView>CreationDateTime} }" />
+                                <HBox justifyContent="Center" renderType="Bare">
+                                    <Button icon="sap-icon://print" type="Transparent" tooltip="{i18n>huRowPrintTip}" press=".onRowPrint" enabled="{= !${huView>/printing} }" class="sapUiTinyMarginEnd" />
+                                    <Button icon="sap-icon://download" type="Transparent" tooltip="{i18n>huRowDownloadTip}" press=".onRowDownload" enabled="{= !${huView>/printing} }" />
+                                </HBox>
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

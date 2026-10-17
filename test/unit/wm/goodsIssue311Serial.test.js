@@ -211,6 +211,57 @@ describe('live SAP serial status (getSerialStatus / verifySerialForReservation)'
     await expect(status(client(forMaterial([])))).resolves.toMatchObject({ Status: 'NOT_FOUND', Available: false });
   });
 
+  test('scanned number found in LQUA -> IS_STORAGE_UNIT with storage unit details', async () => {
+    const rfcLqua = {
+      readTable: jest.fn((t) => {
+        if (t === 'EQUI') return Promise.resolve([]);
+        if (t === 'LQUA') {
+          return Promise.resolve([{
+            LGNUM: 'W01',
+            LGTYP: 'OH1',
+            LGPLA: 'ONHOLD',
+            LENUM: '00000000002000020148',
+            MATNR: '000000008000006485',
+            WERKS: '1120',
+            LGORT: 'CS02',
+            VERME: '1.000'
+          }]);
+        }
+        return Promise.resolve([]);
+      })
+    };
+    const c = client(forMaterial([]), rfcLqua);
+    const res = await c.getSerialStatus('8000006485', '1120', 'CS02', '2000020148');
+    expect(res).toMatchObject({
+      Status: 'IS_STORAGE_UNIT',
+      Available: false,
+      IsStorageUnit: true,
+      StorageUnit: '2000020148',
+      StorageType: 'OH1',
+      StorageBin: 'ONHOLD',
+      Warehouse: 'W01',
+      Material: '8000006485'
+    });
+    expect(res.Message).toContain('Storage Unit (SU)');
+  });
+
+  test('getAvailableSerialNumbers returns list of unrestricted serials from SAP', async () => {
+    const odata = jest.fn().mockResolvedValue([
+      { SerialNumber: 'CON-40-002', Material: '8000006485', Plant: '1120', StorageLocation: 'CS02', InventoryStockType: '01', InventorySpecialStockType: '' },
+      { SerialNumber: 'CON-40-003', Material: '8000006485', Plant: '1120', StorageLocation: 'CS02', InventoryStockType: '01', InventorySpecialStockType: 'K' }
+    ]);
+    const c = new GoodsIssueStockUnitClient({ adapter: { _get: odata } });
+    const list = await c.getAvailableSerialNumbers('8000006485', '1120', 'CS02');
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({
+      SerialNumber: 'CON-40-002',
+      Material: '8000006485',
+      Plant: '1120',
+      StorageLocation: 'CS02',
+      StockType: '01'
+    });
+  });
+
   test.each([
     ['the SAP stock read fails', () => Promise.reject(new Error('HTTP 503')), undefined],
     ['the serial master read fails', forMaterial([]), { readTable: jest.fn().mockRejectedValue(new Error('RFC down')) }],

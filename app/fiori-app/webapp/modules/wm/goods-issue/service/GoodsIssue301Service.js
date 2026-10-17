@@ -84,6 +84,25 @@ sap.ui.define([
         },
 
         /**
+         * Fetch available unrestricted serial numbers from SAP for a reservation line or material.
+         * @param {string} sReservationNo
+         * @param {string} sReservationItem
+         * @param {string} [sMaterial]
+         * @param {string} [sPlant]
+         * @param {string} [sStorageLocation]
+         * @returns {Promise<Array<Object>>}
+         */
+        getAvailableSerialNumbers: function (sReservationNo, sReservationItem, sMaterial, sPlant, sStorageLocation) {
+            var enc = function (v) { return encodeURIComponent(String(v || "").trim().replace(/'/g, "''")); };
+            return ODataClient.get(BASE_PATH_GI + "/getAvailableSerialNumbers(reservationNo='" + enc(sReservationNo) +
+                "',reservationItem='" + enc(sReservationItem) + "',material='" + enc(sMaterial) +
+                "',plant='" + enc(sPlant) + "',storageLocation='" + enc(sStorageLocation) + "')")
+                .then(function (oData) {
+                    return (oData && (oData.value || (oData.d && oData.d.results))) || [];
+                });
+        },
+
+        /**
          * Reverse a posted Material Document via CancelHeader
          * @param {string} sMaterialDocument
          * @param {string} sMaterialDocYear

@@ -98,6 +98,14 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity CurrencyVH as projection on externalWL.I_CurrencyStdVH;
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity UnitOfMeasureVH as projection on externalPO.I_UnitOfMeasure;
     @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity PlantVH as projection on maint.C_MM_PlantValueHelp;
+    @readonly @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin']) entity ContactPersonVH {
+        key ContactPerson : String(10);
+        Customer : String(10);
+        FirstName : String(35);
+        LastName : String(35);
+        FullName : String(80);
+        PhoneNumber : String(30);
+    };
 
     type InquiryItem {
         SalesInquiryItem: String;
@@ -135,6 +143,11 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         PortOfLoading: String;
         PortOfDischarge: String;
         ContactPerson: String;
+        Incoterms: String;
+        IncotermsLocation1: String;
+        INCO1: String;
+        INCO2: String;
+        INCO2_L: String;
     }
 
     @(requires: ['SalesRepresentative', 'SalesManager', 'Admin'])
@@ -154,6 +167,10 @@ service SalesInquiryService @(path: '/odata/v4/sales-inquiry') {
         SalesGroup: String;
         SalesGroupName: String;
         PaymentTerms: String;
+        Incoterms: String;
+        IncotermsLocation1: String;
+        INCO1: String;
+        INCO2: String;
         validForSalesArea: Boolean;
         salesAreaError: String;
         maintainedSalesAreasSummary: String;

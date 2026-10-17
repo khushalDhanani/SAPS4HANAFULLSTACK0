@@ -119,7 +119,7 @@ describe('readBackDocument & commit-lag handling', () => {
         return [];
       })
     };
-    client._get = jest.fn(async (path) => {
+    client._get = jest.fn(async (_path) => {
       callOrder.push('ODATA:A_MaterialDocumentHeader');
       return { MaterialDocument: '4900077777', MaterialDocumentYear: '2026' };
     });

@@ -160,6 +160,8 @@ describe('GoodsReceipt Controller Unit Tests', () => {
         jest.clearAllMocks();
         controller = new GoodsReceiptController();
         controller.onInit();
+        // Most tests exercise the detail page (wm/goods-receipt/{delivery}); the list page only navigates.
+        controller.getView().getModel('grView').setProperty('/isDetail', true);
     });
 
     afterEach(() => {
@@ -174,7 +176,27 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(oModel.getProperty('/hasActiveSU')).toBe(false);
             expect(oModel.getProperty('/audioEnabled')).toBe(true);
             expect(mockBarcodeScanService.attachHardwareScanner).toHaveBeenCalled();
+            // the list is loaded by the list route, never by a detail page load
+            expect(mockGoodsReceiptService.fetchOpenInboundDeliveries).not.toHaveBeenCalled();
+            expect(mockRouter.getRoute).toHaveBeenCalledWith('wmGoodsReceipt');
+            expect(mockRouter.getRoute).toHaveBeenCalledWith('wmGoodsReceiptDetail');
+        });
+
+        it('should navigate back to the list route when the workflow is reset on the detail page', () => {
+            controller.onResetWorkflow();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsReceipt');
+        });
+
+        it('should clear state and reload the list when the list route is matched', () => {
+            const oModel = controller.getView().getModel('grView');
+            oModel.setProperty('/hasActiveSU', true);
+            mockGoodsReceiptService.fetchOpenInboundDeliveries.mockClear();
+
+            controller._onListRouteMatched();
+            expect(oModel.getProperty('/isDetail')).toBe(false);
+            expect(oModel.getProperty('/hasActiveSU')).toBe(false);
             expect(mockGoodsReceiptService.fetchOpenInboundDeliveries).toHaveBeenCalled();
+            expect(mockRouter.navTo).not.toHaveBeenCalled();
         });
 
         it('should toggle audio cues', () => {
@@ -318,16 +340,44 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(oModel.getProperty('/storageUnitBarcode')).toBe('180000001');
         });
 
-        it('should handle Inbound Delivery dropdown selection and trigger resolve', () => {
-            mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce(mockSUData);
-
+        it('should ignore a list row press while a detail page is open', () => {
             const mockEvent = {
-                getParameter: (p) => (p === 'selectedItem' ? { getKey: () => '180000001' } : null)
+                getSource: () => ({ getBindingContext: () => ({ getProperty: () => '180000021' }) })
+            };
+            controller.onSelectInboundDelivery(mockEvent);
+            expect(mockRouter.navTo).not.toHaveBeenCalled();
+        });
+
+        it('should navigate to the detail route on Inbound Delivery list row press instead of resolving inline', () => {
+            controller.getView().getModel('grView').setProperty('/isDetail', false);
+            const mockEvent = {
+                getSource: () => ({ getBindingContext: () => ({ getProperty: (p) => (p === 'DeliveryDocument' ? '180000001' : null) }) })
             };
 
             controller.onSelectInboundDelivery(mockEvent);
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsReceiptDetail', { delivery: '180000001' });
+            expect(mockGoodsReceiptService.resolveStorageUnit).not.toHaveBeenCalled();
+        });
+
+        it('should navigate to the detail route when a barcode is scanned on the list page', async () => {
             const oModel = controller.getView().getModel('grView');
-            expect(oModel.getProperty('/storageUnitBarcode')).toBe('180000001');
+            oModel.setProperty('/isDetail', false);
+            oModel.setProperty('/storageUnitBarcode', 'SU-42');
+
+            await controller.onScanStorageUnit();
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsReceiptDetail', { delivery: 'SU-42' });
+            expect(mockGoodsReceiptService.resolveStorageUnit).not.toHaveBeenCalled();
+        });
+
+        it('should resolve the document from the route argument when the detail route is matched', async () => {
+            mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce(mockSUData);
+            const oModel = controller.getView().getModel('grView');
+            oModel.setProperty('/isDetail', false);
+
+            await controller._onDetailRouteMatched({ getParameter: () => ({ delivery: '180000001' }) });
+            expect(oModel.getProperty('/isDetail')).toBe(true);
+            expect(mockGoodsReceiptService.resolveStorageUnit).toHaveBeenCalledWith('180000001');
+            expect(oModel.getProperty('/hasActiveSU')).toBe(true);
         });
 
         it('should open Storage Unit Value Help dialog and handle item selection', () => {

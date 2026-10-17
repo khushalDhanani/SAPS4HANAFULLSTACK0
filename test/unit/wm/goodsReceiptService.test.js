@@ -1,4 +1,6 @@
 const GoodsReceiptAdapter = require('../../../srv/integration/s4hana/wm/GoodsReceiptAdapter');
+const { shouldRunLiveSapTests } = require('../../liveSapGate');
+const liveDescribe = shouldRunLiveSapTests() ? describe : describe.skip;
 
 describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', () => {
 
@@ -102,6 +104,80 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                 Unit: 'KG'
             })).rejects.toThrow(/Expired Batch Blocked/);
         });
+
+        it('should reject postGoodsReceiptWithStorageUnit when StorageUnit and DeliveryDocument are missing', async () => {
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                Material: '1000000045',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Quantity: 10,
+                Unit: 'KG'
+            })).rejects.toThrow('Storage Unit or Delivery Document is required to post Goods Receipt.');
+        });
+
+        it('should reject postGoodsReceiptWithStorageUnit when Material is missing', async () => {
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Quantity: 10,
+                Unit: 'KG'
+            })).rejects.toThrow('Material is required to post Goods Receipt.');
+        });
+
+        it('should reject postGoodsReceiptWithStorageUnit when Plant or StorageLocation is missing', async () => {
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                Material: '1000000045',
+                StorageLocation: 'CS01',
+                Quantity: 10,
+                Unit: 'KG'
+            })).rejects.toThrow('Plant is required to post Goods Receipt.');
+
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                Material: '1000000045',
+                Plant: '1120',
+                Quantity: 10,
+                Unit: 'KG'
+            })).rejects.toThrow('Storage Location is required to post Goods Receipt.');
+        });
+
+        it('should reject postGoodsReceiptWithStorageUnit when Quantity is zero or negative', async () => {
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                Material: '1000000045',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Quantity: 0,
+                Unit: 'KG'
+            })).rejects.toThrow('Quantity must be a positive number.');
+        });
+
+        it('should reject postGoodsReceiptWithStorageUnit when Unit is missing', async () => {
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                Material: '1000000045',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Quantity: 10,
+                Unit: ''
+            })).rejects.toThrow('Unit of Measure is required for Goods Receipt.');
+        });
+
+        it('should block postGoodsReceiptWithStorageUnit when batch is expired', async () => {
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                Material: '1000000045',
+                Plant: '1120',
+                StorageLocation: 'CS01',
+                Batch: 'EXPIRED_B1',
+                ExpiryDate: '2020-01-01',
+                Quantity: 10,
+                Unit: 'KG'
+            })).rejects.toThrow(/Expired Batch Blocked/);
+        });
     });
 
     describe('Domain Logic & Helper Methods', () => {
@@ -142,7 +218,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
         });
     });
 
-    describe('Verified Real SAP S/4HANA Integration Tests (Client 220)', () => {
+  liveDescribe('Verified Real SAP S/4HANA Integration Tests (Client 220)', () => {
         let origGet;
         beforeAll(() => {
             origGet = GoodsReceiptAdapter._get.bind(GoodsReceiptAdapter);
@@ -685,6 +761,7 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             const registeredEvents = srv.handlers.on.map(h => h.on);
             expect(registeredEvents).toContain('getStorageUnitDetails');
             expect(registeredEvents).toContain('postGoodsReceipt');
+            expect(registeredEvents).toContain('postGoodsReceiptWithStorageUnit');
         });
 
         it('should rethrow S/4HANA outage immediately during resolveStorageUnit and NOT return 404 barcode not found', async () => {
@@ -704,6 +781,64 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             }
 
             getSpy.mockRestore();
+        });
+
+        it('should complete an empty GR4PO_DL_Items shell with the delivery item facts from LIPS/LIKP (live case 180000006)', async () => {
+            const getSpy = jest.spyOn(GoodsReceiptAdapter, '_get').mockResolvedValueOnce({
+                InboundDelivery: '180000006', DeliveryDocumentItem: '000010', Material: '', Plant: '', StorageLocation: '', Batch: '',
+                OpenQuantity: '0.000', OrderedQuantity: '0.000', QuantityInEntryUnit: '0.000', UnitOfMeasure: '', EntryUnit: '', OrderedQuantityUnit: ''
+            });
+            const origRfc = GoodsReceiptAdapter.rfc;
+            GoodsReceiptAdapter.rfc = {
+                readTable: jest.fn().mockImplementation(async (table, fields, where) => {
+                    if (table === 'LIPS') {
+                        expect(where).toEqual(["VBELN = '0180000006' AND POSNR = '000010'"]);
+                        return [{ VBELN: '0180000006', POSNR: '000010', LGORT: 'CS01', CHARG: '', LFIMG: '10000.000', MEINS: 'KG', VRKME: 'KG', LGNUM: 'W13', LGPLA: '', WBSTA: 'A' }];
+                    }
+                    if (table === 'LIKP') {
+                        return [{ VBELN: '0180000006', LFDAT: '20251103' }];
+                    }
+                    return [];
+                })
+            };
+
+            const item = await GoodsReceiptAdapter.getGoodsReceiptItem('180000006', '000010', '300001405', '00010');
+            expect(item).toEqual(expect.objectContaining({
+                SourceOfGR: 'INBDELIV',
+                StorageLocation: 'CS01',
+                Batch: '',
+                Unit: 'KG',
+                DeliveryQuantity: 10000,
+                OpenQuantity: 10000,
+                OrderedQuantity: 0,
+                WarehouseNumber: 'W13',
+                DeliveryDate: '2025-11-03',
+                GoodsMovementStatus: 'A'
+            }));
+
+            getSpy.mockRestore();
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should keep the GR4PO_DL_Items values when present and report 0 open for a fully received delivery item', async () => {
+            const getSpy = jest.spyOn(GoodsReceiptAdapter, '_get').mockResolvedValueOnce({
+                InboundDelivery: '180000001', DeliveryDocumentItem: '000010', Material: '1000000045', Plant: '1120', StorageLocation: 'ST02', Batch: 'B1',
+                OpenQuantity: '0.000', OrderedQuantity: '0.000', QuantityInEntryUnit: '0.000', UnitOfMeasure: 'KG', EntryUnit: 'KG', OrderedQuantityUnit: 'KG'
+            });
+            const origRfc = GoodsReceiptAdapter.rfc;
+            GoodsReceiptAdapter.rfc = {
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIPS') return [{ VBELN: '0180000001', POSNR: '000010', LGORT: 'CS01', CHARG: 'B9', LFIMG: '500.000', MEINS: 'KG', VRKME: 'KG', LGNUM: '', LGPLA: '', WBSTA: 'C' }];
+                    if (table === 'LIKP') return [{ VBELN: '0180000001', LFDAT: '00000000' }];
+                    return [];
+                })
+            };
+
+            const item = await GoodsReceiptAdapter.getGoodsReceiptItem('180000001', '000010');
+            expect(item).toEqual(expect.objectContaining({ StorageLocation: 'ST02', Batch: 'B1', Unit: 'KG', OpenQuantity: 0, DeliveryQuantity: 500, DeliveryDate: '', GoodsMovementStatus: 'C' }));
+
+            getSpy.mockRestore();
+            GoodsReceiptAdapter.rfc = origRfc;
         });
 
         it('should return null quantities when item read fails or returns no item', async () => {
@@ -778,6 +913,389 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             expect(mockReq.reject).toHaveBeenCalledWith(502, expect.stringContaining('Destination host unreachable'));
 
             resolveSpy.mockRestore();
+        });
+
+        it('should execute BAPI_INB_DELIVERY_CONFIRM_DEC, commit LUW, and read back persisted MATDOC in postGoodsReceiptWithStorageUnit', async () => {
+            const mockCall = jest.fn()
+                .mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'S', ID: 'VLA', NUMBER: '300', MESSAGE: 'Delivery confirmed successfully' }]
+                })
+                .mockResolvedValueOnce({
+                    RETURN: []
+                });
+
+            const origRfc = GoodsReceiptAdapter.rfc;
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(mockCall)),
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'VEKP') {
+                        return [{ VENUM: '0000019318', EXIDV: '00000000002000018143', VHILM: '000000002000000130', VPOBJ: '03', VPOBJKEY: '0180000035' }];
+                    }
+                    if (table === 'MATDOC') {
+                        return [{ MBLNR: '5000005501', MJAHR: '2026', ZEILE: '0001', BWART: '101' }];
+                    }
+                    return [];
+                })
+            };
+
+            const result = await GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                DeliveryDocumentItem: '000010',
+                Material: '1000000129',
+                Plant: '1130',
+                StorageLocation: 'CS01',
+                Batch: 'INHU100004',
+                Quantity: 200,
+                Unit: 'KG',
+                PackagingMaterial: '2000000130'
+            });
+
+            expect(result.Success).toBe(true);
+            expect(result.MaterialDocument).toBe('5000005501');
+            expect(result.MaterialDocumentYear).toBe('2026');
+            expect(result.StorageUnit).toBe('2000018143');
+            expect(result.Quantity).toBe(200);
+
+            // Verify RFC session call
+            expect(GoodsReceiptAdapter.rfc.session).toHaveBeenCalled();
+            expect(mockCall).toHaveBeenCalledWith('BAPI_INB_DELIVERY_CONFIRM_DEC', expect.objectContaining({
+                HEADER_DATA: { DELIV_NUMB: '0180000035' },
+                HEADER_CONTROL: expect.objectContaining({ DELIV_NUMB: '0180000035', POST_GI_FLG: 'X' }),
+                ITEM_DATA: expect.arrayContaining([
+                    expect.objectContaining({ DELIV_NUMB: '0180000035', DELIV_ITEM: '000010', DLV_QTY: '200' })
+                ]),
+                ITEM_CONTROL: expect.arrayContaining([
+                    expect.objectContaining({ DELIV_NUMB: '0180000035', DELIV_ITEM: '000010', CHG_DELQTY: 'X' })
+                ]),
+                HANDLING_UNIT_HEADER: expect.arrayContaining([
+                    expect.objectContaining({ HDL_UNIT_EXID: '00000000002000018143', DELIV_NUMB: '0180000035' })
+                ]),
+                HANDLING_UNIT_ITEM: expect.arrayContaining([
+                    expect.objectContaining({ HDL_UNIT_EXID_INTO: '00000000002000018143', DELIV_NUMB: '0180000035', PACK_QTY: '200' })
+                ])
+            }));
+            expect(mockCall).toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should simulate BAPI_INB_DELIVERY_CONFIRM_DEC without calling BAPI_TRANSACTION_COMMIT', async () => {
+            const mockCall = jest.fn().mockResolvedValueOnce({
+                RETURN: [{ TYPE: 'S', ID: 'VLA', NUMBER: '300', MESSAGE: 'Simulation successful' }]
+            });
+
+            const origRfc = GoodsReceiptAdapter.rfc;
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(mockCall)),
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'VEKP') {
+                        return [{ VENUM: '0000019318', EXIDV: '00000000002000018143', VHILM: '000000002000000130', STATUS: '0010', VPOBJ: '03', VPOBJKEY: '0180000035' }];
+                    }
+                    return [];
+                })
+            };
+
+            const result = await GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                Material: '1000000129',
+                Plant: '1130',
+                StorageLocation: 'CS01',
+                Quantity: 200,
+                Unit: 'KG',
+                Simulate: true
+            });
+
+            expect(result.Success).toBe(true);
+            expect(result.Message).toContain('simulated successfully');
+            expect(mockCall).not.toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', expect.anything());
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should map specific SAP error codes VLA 307, VLA 311, VLA 317 into structured messages', async () => {
+            const origRfc = GoodsReceiptAdapter.rfc;
+            const mockVEKP = async (table) => {
+                if (table === 'VEKP') {
+                    return [{ VENUM: '0000019318', EXIDV: '00000000002000018143', VHILM: '000000002000000130', STATUS: '0010', VPOBJ: '03', VPOBJKEY: '0180000035' }];
+                }
+                return [];
+            };
+
+            // VLA 307
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'E', ID: 'VLA', NUMBER: '307', MESSAGE: 'Putaway qty cannot be less' }]
+                }))),
+                readTable: jest.fn().mockImplementation(mockVEKP)
+            };
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                Material: '1000000129',
+                Plant: '1130',
+                StorageLocation: 'CS01',
+                Quantity: 200,
+                Unit: 'KG'
+            })).rejects.toThrow(/Putaway constraint/);
+
+            // VLA 317
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'E', ID: 'VLA', NUMBER: '317', MESSAGE: 'Batch required' }]
+                }))),
+                readTable: jest.fn().mockImplementation(mockVEKP)
+            };
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                Material: '1000000129',
+                Plant: '1130',
+                StorageLocation: 'CS01',
+                Quantity: 200,
+                Unit: 'KG'
+            })).rejects.toThrow(/Batch constraint/);
+
+            // HUDIALOG 018
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'E', ID: 'HUDIALOG', NUMBER: '018', MESSAGE: 'Delivery status only allows display mode' }]
+                }))),
+                readTable: jest.fn().mockImplementation(mockVEKP)
+            };
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                Material: '1000000129',
+                Plant: '1130',
+                StorageLocation: 'CS01',
+                Quantity: 200,
+                Unit: 'KG'
+            })).rejects.toThrow(/Delivery status constraint.*HUDIALOG 018/);
+
+            // M7 006
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'E', ID: 'M7', NUMBER: '006', MESSAGE: 'Material does not exist', MESSAGE_V1: '1000000421', MESSAGE_V2: '1130', MESSAGE_V3: 'HU01' }]
+                }))),
+                readTable: jest.fn().mockImplementation(mockVEKP)
+            };
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                Material: '1000000421',
+                Plant: '1130',
+                StorageLocation: 'HU01',
+                Quantity: 200,
+                Unit: 'KG'
+            })).rejects.toThrow(/Master data constraint.*M7 006/);
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should fast-fail and reject if Putaway is required (KOSTK = A)', async () => {
+            const origRfc = GoodsReceiptAdapter.rfc;
+            const mockSession = jest.fn();
+            GoodsReceiptAdapter.rfc = {
+                session: mockSession,
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIKP') {
+                        return [{ VBELN: '0180000077', WBSTK: 'A', KOSTK: 'A' }];
+                    }
+                    return [];
+                })
+            };
+
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                DeliveryDocument: '0180000077',
+                Material: '1000000045',
+                Plant: '1130',
+                StorageLocation: 'CS02',
+                Quantity: 40,
+                Unit: 'KG'
+            })).rejects.toThrow(/Putaway required.*KOSTK = 'A'/);
+
+            expect(mockSession).not.toHaveBeenCalled();
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should reject with 404 if Storage Unit is not found in VEKP', async () => {
+            const origRfc = GoodsReceiptAdapter.rfc;
+            GoodsReceiptAdapter.rfc = {
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIKP') {
+                        return [{ VBELN: '0180000035', WBSTK: 'A', KOSTK: 'C' }];
+                    }
+                    return [];
+                })
+            };
+
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '9999999999',
+                DeliveryDocument: '0180000035',
+                Material: '1000000129',
+                Plant: '1130',
+                StorageLocation: 'CS01',
+                Quantity: 200,
+                Unit: 'KG'
+            })).rejects.toThrow(/Storage Unit not found.*VEKP/);
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should map VLBAPI 004, VLMOVE 029, VL 608 to structured business messages', async () => {
+            const origRfc = GoodsReceiptAdapter.rfc;
+
+            // VLBAPI 004
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'E', ID: 'VLBAPI', NUMBER: '004', MESSAGE_V1: '0180000077', MESSAGE_V2: '000010' }]
+                }))),
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIKP') return [{ VBELN: '0180000077', WBSTK: 'A', KOSTK: 'C' }];
+                    return [];
+                })
+            };
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                DeliveryDocument: '0180000077',
+                Material: '1000000045',
+                Plant: '1130',
+                StorageLocation: 'CS02',
+                Quantity: 40,
+                Unit: 'KG'
+            })).rejects.toThrow(/Quantity consistency check failed.*VLBAPI 004/);
+
+            // VLMOVE 029
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'E', ID: 'VLMOVE', NUMBER: '029', MESSAGE: 'Delivery has not yet been put away' }]
+                }))),
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIKP') return [{ VBELN: '0180000077', WBSTK: 'A', KOSTK: 'C' }];
+                    return [];
+                })
+            };
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                DeliveryDocument: '0180000077',
+                Material: '1000000045',
+                Plant: '1130',
+                StorageLocation: 'CS02',
+                Quantity: 40,
+                Unit: 'KG'
+            })).rejects.toThrow(/Putaway required.*VLMOVE 029/);
+
+            // VL 608
+            GoodsReceiptAdapter.rfc = {
+                session: jest.fn(async (cb) => cb(jest.fn().mockResolvedValueOnce({
+                    RETURN: [{ TYPE: 'E', ID: 'VL', NUMBER: '608', MESSAGE: 'WM processing incomplete' }]
+                }))),
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIKP') return [{ VBELN: '0180000077', WBSTK: 'A', KOSTK: 'C' }];
+                    return [];
+                })
+            };
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                DeliveryDocument: '0180000077',
+                Material: '1000000045',
+                Plant: '1130',
+                StorageLocation: 'CS02',
+                Quantity: 40,
+                Unit: 'KG'
+            })).rejects.toThrow(/Warehouse processing incomplete.*VL 608/);
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should pre-validate and reject immediately if Delivery is already completely goods-receipted (WBSTK = C)', async () => {
+            const origRfc = GoodsReceiptAdapter.rfc;
+            const mockSession = jest.fn();
+            GoodsReceiptAdapter.rfc = {
+                session: mockSession,
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'LIKP') {
+                        return [{ VBELN: '0180000035', WBSTK: 'C', KOSTK: 'C' }];
+                    }
+                    if (table === 'MATDOC') {
+                        return [{ MBLNR: '5000005654', MJAHR: '2026', BWART: '101' }];
+                    }
+                    return [];
+                })
+            };
+
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                Material: '1000000129',
+                Plant: '1130',
+                StorageLocation: 'CS01',
+                Quantity: 200,
+                Unit: 'KG'
+            })).rejects.toThrow(/Delivery already completed.*5000005654\/2026/);
+
+            // Ensure BAPI session was never called due to fast-fail pre-check
+            expect(mockSession).not.toHaveBeenCalled();
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should pre-validate and reject immediately if Storage Unit is already in status 0060 (GR Posted)', async () => {
+            const origRfc = GoodsReceiptAdapter.rfc;
+            const mockSession = jest.fn();
+            GoodsReceiptAdapter.rfc = {
+                session: mockSession,
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'VEKP') {
+                        return [{ VENUM: '0000019318', EXIDV: '00000000002000018143', STATUS: '0060', VPOBJ: '03', VPOBJKEY: '0180000035' }];
+                    }
+                    return [];
+                })
+            };
+
+            await expect(GoodsReceiptAdapter.postGoodsReceiptWithStorageUnit({
+                StorageUnit: '2000018143',
+                DeliveryDocument: '0180000035',
+                Material: '1000000129',
+                Plant: '1130',
+                StorageLocation: 'CS01',
+                Quantity: 200,
+                Unit: 'KG'
+            })).rejects.toThrow(/Storage Unit already received.*status '0060'/);
+
+            expect(mockSession).not.toHaveBeenCalled();
+
+            GoodsReceiptAdapter.rfc = origRfc;
+        });
+
+        it('should resolve Storage Unit via VEKP/VEPO in resolveStorageUnit Tier 0', async () => {
+            const origRfc = GoodsReceiptAdapter.rfc;
+            GoodsReceiptAdapter.rfc = {
+                readTable: jest.fn().mockImplementation(async (table) => {
+                    if (table === 'VEKP') {
+                        return [{ VENUM: '0000019318', EXIDV: '00000000002000018143', VHILM: '000000002000000130', VPOBJ: '03', VPOBJKEY: '0180000035' }];
+                    }
+                    if (table === 'VEPO') {
+                        return [{ VENUM: '0000019318', VEPOS: '000001', VBELN: '0180000035', POSNR: '000010', MATNR: '000000001000000129', CHARG: 'INHU100004', VEMNG: '200.000', VEMEH: 'KG' }];
+                    }
+                    if (table === 'LIPS') {
+                        return [{ VBELN: '0180000035', POSNR: '000010', WERKS: '1130', LGORT: 'CS01', VGBEL: '0400000330', VGPOS: '000010', ARKTX: 'SU MATERIAL DESC' }];
+                    }
+                    return [];
+                })
+            };
+
+            const details = await GoodsReceiptAdapter.resolveStorageUnit('2000018143');
+            expect(details.ScannedType).toBe('STORAGE_UNIT');
+            expect(details.Material).toBe('1000000129');
+            expect(details.DeliveryDocument).toBe('0180000035');
+            expect(details.Plant).toBe('1130');
+            expect(details.StorageLocation).toBe('CS01');
+            expect(details.PackagingMaterial).toBe('2000000130');
+            expect(details.Batch).toBe('INHU100004');
+            expect(details.Quantity).toBe(200);
+
+            GoodsReceiptAdapter.rfc = origRfc;
         });
     });
 
@@ -868,6 +1386,14 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             const res = await FrontendGoodsReceiptService.fetchOpenInboundDeliveries();
             expect(mockODataClient.get).toHaveBeenCalledWith('/odata/v4/goods-receipt/OpenInboundDeliveries');
             expect(res).toEqual([{ DeliveryDocument: '99999' }]);
+        });
+
+        it('invokes postGoodsReceiptWithStorageUnit via ODataClient.post', async () => {
+            mockODataClient.post.mockResolvedValueOnce({ Success: true, MaterialDocument: '5000005499' });
+            const payload = { StorageUnit: '2000018143', Quantity: 200, Unit: 'KG' };
+            const res = await FrontendGoodsReceiptService.postGoodsReceiptWithStorageUnit(payload);
+            expect(mockODataClient.post).toHaveBeenCalledWith('/odata/v4/goods-receipt/postGoodsReceiptWithStorageUnit', payload);
+            expect(res).toEqual({ Success: true, MaterialDocument: '5000005499' });
         });
     });
 });

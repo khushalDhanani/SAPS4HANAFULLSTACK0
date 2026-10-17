@@ -86,12 +86,22 @@ function registerSalesInquiryHandlers(srv) {
     // 4. Function getCustomerDefaults
     srv.on('getCustomerDefaults', async (req) => {
         const { Customer, SalesOrganization, DistributionChannel, Division } = req.data || {};
-        return await salesInquiryAdapter.getCustomerDefaults(Customer, SalesOrganization, DistributionChannel, Division);
+        try {
+            return await salesInquiryAdapter.getCustomerDefaults(Customer, SalesOrganization, DistributionChannel, Division);
+        } catch (error) {
+            LOG.error('Error fetching customer defaults:', error.message);
+            return req.error(error.status || 502, error.message);
+        }
     });
 
     // 4b. Function getInquiryCreationCapabilities: which incompletion procedure Z1 fields SAP can accept at creation
-    srv.on('getInquiryCreationCapabilities', async () => {
-        return await salesInquiryAdapter.getInquiryCreationCapabilities();
+    srv.on('getInquiryCreationCapabilities', async (req) => {
+        try {
+            return await salesInquiryAdapter.getInquiryCreationCapabilities();
+        } catch (error) {
+            LOG.error('Error fetching inquiry creation capabilities:', error.message);
+            return req.error(error.status || 502, error.message);
+        }
     });
 
     // 5. Function getSalesInquiryDefaults

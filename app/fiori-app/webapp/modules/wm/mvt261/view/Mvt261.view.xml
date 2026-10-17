@@ -1,0 +1,102 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.mvt261.controller.Mvt261"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page id="mvt261Page" class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto">
+
+                <MessageStrip id="mvt261ArchiveStrip" text="{i18n>mvt261ArchiveWarning}" type="Warning" showIcon="true" class="sapUiSmallMarginBottom" />
+
+                <form:SimpleForm id="mvt261FilterForm" editable="true" layout="ResponsiveGridLayout" columnsM="2" columnsL="2" columnsXL="2">
+                    <form:content>
+                        <core:Title text="{i18n>mvt261Filters}" />
+                        <Label text="{i18n>mvt261Plant}" required="true" labelFor="mvt261Plant" />
+                        <Input id="mvt261Plant" value="{mvt261View>/plant}" maxLength="4" submit=".onFind" />
+                        <Label text="{i18n>mvt261Material}" labelFor="mvt261Material" />
+                        <Input id="mvt261Material" value="{mvt261View>/material}" maxLength="40" submit=".onFind" />
+                        <Label text="{i18n>mvt261Order}" labelFor="mvt261Order" />
+                        <Input id="mvt261Order" value="{mvt261View>/productionOrder}" maxLength="12" submit=".onFind" />
+                        <Label text="{i18n>mvt261PostingDate}" labelFor="mvt261Dates" />
+                        <DateRangeSelection id="mvt261Dates" dateValue="{mvt261View>/dateFrom}" secondDateValue="{mvt261View>/dateTo}" />
+
+                        <core:Title text="{i18n>mvt261Options}" />
+                        <Label text="{i18n>mvt261Definition}" labelFor="mvt261Definition" />
+                        <Select id="mvt261Definition" selectedKey="{mvt261View>/definition}">
+                            <core:Item key="A" text="{i18n>mvt261DefinitionA}" />
+                            <core:Item key="B" text="{i18n>mvt261DefinitionB}" />
+                            <core:Item key="C" text="{i18n>mvt261DefinitionC}" />
+                        </Select>
+                        <Label text="{i18n>mvt261ExcludeReversed}" labelFor="mvt261ExcludeReversed" />
+                        <Switch id="mvt261ExcludeReversed" state="{mvt261View>/excludeReversed}" />
+                        <Label text="{i18n>mvt261ManualOnly}" labelFor="mvt261ManualOnly" />
+                        <Switch id="mvt261ManualOnly" state="{mvt261View>/manualOnly}" />
+                        <Label />
+                        <Button id="mvt261Find" text="{i18n>mvt261Find}" type="Emphasized" icon="sap-icon://search" press=".onFind" enabled="{= !${mvt261View>/busy} }" />
+                    </form:content>
+                </form:SimpleForm>
+
+                <MessageStrip id="mvt261Message" visible="{= !!${mvt261View>/message} }" text="{mvt261View>/message}" type="{mvt261View>/messageType}" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <Panel id="mvt261Result" visible="{= !!${mvt261View>/result} }" headerText="{i18n>mvt261ResultTitle}" class="sapUiSmallMarginTop">
+                    <ObjectHeader
+                        id="mvt261First"
+                        visible="{= !!${mvt261View>/result/Top/0} }"
+                        title="{mvt261View>/result/Top/0/MaterialDocument} / {mvt261View>/result/Top/0/MaterialDocumentYear} / {mvt261View>/result/Top/0/MaterialDocumentItem}"
+                        number="{mvt261View>/result/Top/0/Quantity}"
+                        numberUnit="{mvt261View>/result/Top/0/Unit}"
+                        backgroundDesign="Transparent">
+                        <attributes>
+                            <ObjectAttribute title="{i18n>mvt261PostingDate}" text="{mvt261View>/result/Top/0/PostingDate}" />
+                            <ObjectAttribute title="{i18n>mvt261Entered}" text="{path: 'mvt261View>/result/Top/0/EntryTimestamp', formatter: '.formatTimestamp'}" />
+                            <ObjectAttribute title="{i18n>mvt261Material}" text="{mvt261View>/result/Top/0/Material} {mvt261View>/result/Top/0/MaterialName}" />
+                            <ObjectAttribute title="{i18n>mvt261Order}" text="{mvt261View>/result/Top/0/ProductionOrder}" />
+                        </attributes>
+                        <statuses>
+                            <ObjectStatus title="{i18n>mvt261DefinitionUsed}" text="{mvt261View>/result/Definition}" state="Information" />
+                            <ObjectStatus title="{i18n>mvt261SortKey}" text="{mvt261View>/result/SortKey}" />
+                            <ObjectStatus title="{i18n>mvt261TotalCount}" text="{mvt261View>/result/TotalCount}" />
+                        </statuses>
+                    </ObjectHeader>
+
+                    <Table id="mvt261Top" items="{mvt261View>/result/Top}" noDataText="{i18n>mvt261NoData}" headerText="{i18n>mvt261TopTitle}">
+                        <columns>
+                            <Column><Text text="{i18n>mvt261Rank}" /></Column>
+                            <Column><Text text="{i18n>mvt261Document}" /></Column>
+                            <Column><Text text="{i18n>mvt261PostingDate}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mvt261Entered}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mvt261Material}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mvt261PlantSloc}" /></Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>mvt261Order}" /></Column>
+                            <Column hAlign="End"><Text text="{i18n>mvt261Quantity}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>mvt261Auto}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>mvt261Reversed}" /></Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>mvt261User}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem highlight="{= ${mvt261View>Rank} === 1 ? 'Success' : 'None' }">
+                                <cells>
+                                    <Text text="{mvt261View>Rank}" />
+                                    <ObjectIdentifier title="{mvt261View>MaterialDocument}" text="{mvt261View>MaterialDocumentYear} / {mvt261View>MaterialDocumentItem}" />
+                                    <Text text="{mvt261View>PostingDate}" />
+                                    <Text text="{path: 'mvt261View>EntryTimestamp', formatter: '.formatTimestamp'}" />
+                                    <Text text="{mvt261View>Material}" />
+                                    <Text text="{mvt261View>Plant} / {mvt261View>StorageLocation}" />
+                                    <Text text="{mvt261View>ProductionOrder}" />
+                                    <ObjectNumber number="{mvt261View>Quantity}" unit="{mvt261View>Unit}" />
+                                    <Text text="{= ${mvt261View>IsAutomaticallyCreated} ? ${i18n>mvt261Yes} : ${i18n>mvt261No} }" />
+                                    <ObjectStatus text="{= ${mvt261View>IsReversed} ? ${mvt261View>ReversedBy} || ${i18n>mvt261Yes} : ${i18n>mvt261No} }" state="{= ${mvt261View>IsReversed} ? 'Warning' : 'None' }" />
+                                    <Text text="{mvt261View>CreatedByUser}" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

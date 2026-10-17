@@ -77,6 +77,8 @@ describe("SalesOrderModel - Initial State and User Resolution", () => {
         expect(header.DistributionChannel).toBe("");
         expect(header.OrganizationDivision).toBe("");
         expect(header.TransactionCurrency).toBe("");
+        // No customer PO date is assumed: it is sent to SAP only when the user enters one.
+        expect(header.CustomerPurchaseOrderDate).toBe("");
         expect(header.CreatedByUser).toBe("john");
 
         expect(items).toHaveLength(1);
@@ -200,8 +202,6 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         });
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/PaymentTerms", "0001");
-        oModel.setProperty("/header/IncotermsClassification", "FOB");
-        oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port");
         oModel.setProperty("/header/ContactPerson", "25116");
         oModel.setProperty("/items/0/Material", "4000000001");
         oModel.setProperty("/items/0/Plant", "1120");
@@ -228,8 +228,6 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
             });
             oModel.setProperty("/header/SoldToParty", "10135");
             oModel.setProperty("/header/PaymentTerms", "0001");
-            oModel.setProperty("/header/IncotermsClassification", "FOB");
-            oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port");
             oModel.setProperty("/header/ContactPerson", "25116");
             oModel.setProperty("/items/0/Material", "4000000001");
             oModel.setProperty("/items/0/Plant", "1120");
@@ -240,8 +238,6 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
 
         const requiredFields = [
             { field: "PaymentTerms", expectedError: "Payment Terms are required" },
-            { field: "IncotermsClassification", expectedError: "Incoterms are required" },
-            { field: "IncotermsLocation1", expectedError: "Incoterms Location is required" },
             { field: "ContactPerson", expectedError: "Contact Person is required" }
         ];
 
@@ -270,8 +266,6 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         });
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/PaymentTerms", "0001");
-        oModel.setProperty("/header/IncotermsClassification", "FOB");
-        oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port");
         oModel.setProperty("/header/ContactPerson", "25116");
 
         // Explicitly leave all hidden fields empty
@@ -297,20 +291,16 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         const oModel = SalesOrderModel.createInitialModel();
         const gaps = SalesOrderModel.getIncompletionGaps(oModel);
         expect(gaps).toContain("Payment Terms");
-        expect(gaps).toContain("Incoterms");
-        expect(gaps).toContain("Incoterms Location");
         expect(gaps).toContain("Contact Person");
 
         oModel.setProperty("/header/PaymentTerms", "0001");
-        oModel.setProperty("/header/IncotermsClassification", "CIF");
-        oModel.setProperty("/header/IncotermsLocation1", "London");
         oModel.setProperty("/header/ContactPerson", "12345");
 
         const noGaps = SalesOrderModel.getIncompletionGaps(oModel);
         expect(noGaps).toHaveLength(0);
     });
 
-    test("buildPayload constructs clean API-compliant payload with four commercial fields", () => {
+    test("buildPayload constructs clean API-compliant payload with the two commercial fields", () => {
         const oModel = SalesOrderModel.createInitialModel("sales_rep");
         SalesOrderModel.applyServerDefaults(oModel, {
             SalesOrderType: "ZDOM",
@@ -322,9 +312,9 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/PurchaseOrderNumber", "PO-99988");
         oModel.setProperty("/header/PaymentTerms", "PT11");
-        oModel.setProperty("/header/IncotermsClassification", "fob");
-        oModel.setProperty("/header/IncotermsLocation1", "Nhava Sheva");
         oModel.setProperty("/header/ContactPerson", "25116");
+        oModel.setProperty("/header/Incoterms", "CIF");
+        oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port");
         oModel.setProperty("/items/0/Material", "4000000001");
         oModel.setProperty("/items/0/OrderQuantity", "10.000");
         oModel.setProperty("/items/0/OrderQuantityUnit", "KG");
@@ -339,9 +329,13 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         expect(payload.header.PurchaseOrderNumber).toBe("PO-99988");
         expect(payload.header.PaymentTerms).toBe("PT11");
         expect(payload.header.PaymentTermCode).toBe("PT11");
-        expect(payload.header.IncotermsClassification).toBe("FOB");
-        expect(payload.header.IncotermsLocation1).toBe("Nhava Sheva");
         expect(payload.header.ContactPerson).toBe("25116");
+        expect(payload.header.Incoterms).toBe("CIF");
+        expect(payload.header.INCO1).toBe("CIF");
+        expect(payload.header.IncotermsLocation1).toBe("Mumbai Port");
+        expect(payload.header.INCO2).toBe("Mumbai Port");
+        expect(payload.header.INCO2_L).toBe("Mumbai Port");
+        expect(payload.header.IncotermsClassification).toBeUndefined();
         expect(payload.header.TotalNetAmount).toBe(500);
 
         expect(payload.items).toHaveLength(1);
@@ -351,6 +345,20 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         expect(payload.items[0].NetPriceAmount).toBe(50);
         expect(payload.items[0].NetAmount).toBe(500);
         expect(payload.items[0].Plant).toBe("1120");
+    });
+
+    test("applyCustomerDefaults proposes INCO1 and INCO2 from customer defaults", () => {
+        const oModel = SalesOrderModel.createInitialModel();
+        SalesOrderModel.applyCustomerDefaults(oModel, {
+            CustomerName: "Customer XYZ",
+            INCO1: "EXW",
+            INCO2: "Sachin"
+        });
+
+        expect(oModel.getProperty("/header/Incoterms")).toBe("EXW");
+        expect(oModel.getProperty("/header/INCO1")).toBe("EXW");
+        expect(oModel.getProperty("/header/IncotermsLocation1")).toBe("Sachin");
+        expect(oModel.getProperty("/header/INCO2")).toBe("Sachin");
     });
 
     test("applyCustomerDefaults does not overwrite user-entered values", () => {
@@ -382,5 +390,27 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         expect(payload.items[0].OrderQuantity).toBe(0);
         expect(payload.items[0].OrderQuantityUnit).toBe("");
         expect(payload.items[0].Plant).toBe("");
+    });
+
+    test("validateSingleField validates Incoterms and IncotermsLocation1 length", () => {
+        const oModel = SalesOrderModel.createInitialModel();
+
+        oModel.setProperty("/header/Incoterms", "CIF");
+        expect(SalesOrderModel.validateSingleField(oModel, "Incoterms")).toBe(true);
+        expect(oModel.getProperty("/errors/Incoterms/state")).toBe("None");
+
+        oModel.setProperty("/header/Incoterms", "TOOLONG");
+        expect(SalesOrderModel.validateSingleField(oModel, "Incoterms")).toBe(false);
+        expect(oModel.getProperty("/errors/Incoterms/state")).toBe("Error");
+        expect(oModel.getProperty("/errors/Incoterms/text")).toBe("Incoterms cannot exceed 3 characters");
+
+        oModel.setProperty("/header/IncotermsLocation1", "Mumbai Port Terminal 1");
+        expect(SalesOrderModel.validateSingleField(oModel, "IncotermsLocation1")).toBe(true);
+        expect(oModel.getProperty("/errors/IncotermsLocation1/state")).toBe("None");
+
+        oModel.setProperty("/header/IncotermsLocation1", "A".repeat(71));
+        expect(SalesOrderModel.validateSingleField(oModel, "IncotermsLocation1")).toBe(false);
+        expect(oModel.getProperty("/errors/IncotermsLocation1/state")).toBe("Error");
+        expect(oModel.getProperty("/errors/IncotermsLocation1/text")).toBe("Incoterms Location cannot exceed 70 characters");
     });
 });

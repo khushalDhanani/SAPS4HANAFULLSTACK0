@@ -54,8 +54,33 @@ sap.ui.define([
                 this._updateShell("salesInquiryDetail", { SalesInquiry: sInqId });
             } else if (sHash.indexOf("sd/sales-inquiries") === 0) {
                 this._updateShell("salesInquiries");
+            } else if (sHash.indexOf("wm/scan-to/") === 0) {
+                this._updateShell("wmWarehouseScanToDetail");
+            } else if (sHash.indexOf("wm/scan-to") === 0) {
+                this._updateShell("wmWarehouseScanTo");
             } else if (sHash.indexOf("wm/tr-to") === 0) {
                 this._updateShell("wmTrTo");
+            } else if (sHash.indexOf("wm/mvt261/open/") === 0) {
+                this._updateShell(/\/cycle$/.test(sHash) ? "wmCycle261" : "wmScan261");
+            } else if (sHash.indexOf("wm/mvt261/open") === 0) {
+                this._updateShell("wmOpen261");
+            } else if (sHash.indexOf("wm/mvt261") === 0) {
+                this._updateShell("wmMvt261");
+            } else if (sHash.indexOf("wm/handling-unit/") === 0) {
+                this._updateShell("wmHandlingUnitDetail");
+            } else if (sHash.indexOf("wm/handling-unit") === 0) {
+                this._updateShell("wmHandlingUnits");
+            } else if (sHash.indexOf("wm/packing-instruction/") === 0) {
+                this._updateShell("wmPackingInstructionDetail");
+            } else if (sHash.indexOf("wm/packing-instruction") === 0) {
+                this._updateShell("wmPackingInstructions");
+            } else if (sHash.indexOf("wm/reservation-entry/create") === 0) {
+                this._updateShell("wmReservationEntryCreate");
+            } else if (sHash.indexOf("wm/reservation-entry/") === 0) {
+                var aResParts = sHash.replace("wm/reservation-entry/", "").split("/");
+                this._updateShell("wmReservationEntryDetail", { ReservationNo: aResParts[0], ReservationItem: aResParts[1] || "" });
+            } else if (sHash.indexOf("wm/reservation-entry") === 0) {
+                this._updateShell("wmReservationEntryList");
             } else if (sHash.indexOf("le/orders-due") === 0) {
                 this._updateShell("ordersDueForDelivery");
             } else if (sHash.indexOf("sd/invoices") === 0) {
@@ -211,11 +236,68 @@ sap.ui.define([
                     bShowNav = true;
                     break;
                 case "wmGoodsReceipt":
+                case "wmGoodsReceiptDetail":
                     sTitle = oBundle ? oBundle.getText("grPageTitle") : "Goods Receipt against Storage Unit (101)";
                     bShowNav = true;
                     break;
                 case "wmTrTo":
                     sTitle = oBundle ? oBundle.getText("trToTitle") : "TO Creation (ZTO)";
+                    bShowNav = true;
+                    break;
+                case "wmWarehouseScanTo":
+                case "wmWarehouseScanToDetail":
+                case "wmWarehouseScanToDetailWithWh":
+                    sTitle = oBundle ? oBundle.getText("scanToPageTitle") : "Scan TR to Transfer Order";
+                    bShowNav = true;
+                    break;
+                case "wmScan261":
+                    sTitle = oBundle ? oBundle.getText("scan261Title") : "Scan for Goods Issue 261";
+                    bShowNav = true;
+                    break;
+                case "wmCycle261":
+                    sTitle = oBundle ? oBundle.getText("cycle261Title") : "261 Cycle";
+                    bShowNav = true;
+                    break;
+                case "wmOpen261":
+                    sTitle = oBundle ? oBundle.getText("open261Title") : "Open 261 Items";
+                    bShowNav = true;
+                    break;
+                case "wmMvt261":
+                    sTitle = oBundle ? oBundle.getText("mvt261Title") : "First Goods Issue 261";
+                    bShowNav = true;
+                    break;
+                case "wmHandlingUnits":
+                    sTitle = oBundle ? oBundle.getText("huTitle") : "Handling Unit Cockpit";
+                    bShowNav = true;
+                    break;
+                case "wmHandlingUnitDetail":
+                    sTitle = oBundle ? oBundle.getText("huDetailTitle") : "Handling Unit";
+                    bShowNav = true;
+                    break;
+                case "wmPackingInstructions":
+                    sTitle = oBundle ? oBundle.getText("piTitle") : "Packing Instructions";
+                    bShowNav = true;
+                    break;
+                case "wmPackingInstructionDetail":
+                    sTitle = oBundle ? oBundle.getText("piDetailTitle") : "Packing Instruction";
+                    bShowNav = true;
+                    break;
+                case "wmReservationEntryList":
+                    sTitle = oBundle ? oBundle.getText("resEntryListTitle") : "Reservation Entries";
+                    bShowNav = true;
+                    break;
+                case "wmReservationEntryCreate":
+                    sTitle = oBundle ? oBundle.getText("resEntryCreateTitle") : "Create Reservation Entry";
+                    bShowNav = true;
+                    break;
+                case "wmReservationEntryDetail":
+                    var resArgs = oArgs || {};
+                    if (resArgs.ReservationNo) {
+                        var sResPrefix = oBundle ? oBundle.getText("resEntryTitlePrefix") : "Reservation";
+                        sTitle = sResPrefix + " " + resArgs.ReservationNo;
+                    } else {
+                        sTitle = oBundle ? oBundle.getText("resEntryListTitle") : "Reservation Details";
+                    }
                     bShowNav = true;
                     break;
                 case "ordersDueForDelivery":
@@ -272,6 +354,20 @@ sap.ui.define([
                 this.onNavBack("customerReturns");
             } else if (/^wmGoodsIssue\d{3}$/.test(sRoute)) {
                 this.onNavBack(sRoute + "Pending");
+            } else if (sRoute === "wmGoodsReceiptDetail") {
+                this.onNavBack("wmGoodsReceipt");
+            } else if (sRoute === "wmHandlingUnitDetail") {
+                this.onNavBack("wmHandlingUnits");
+            } else if (sRoute === "wmPackingInstructionDetail") {
+                this.onNavBack("wmPackingInstructions");
+            } else if (sRoute === "wmWarehouseScanToDetail" || sRoute === "wmWarehouseScanToDetailWithWh") {
+                this.onNavBack("wmWarehouseScanTo");
+            } else if (sRoute === "wmWarehouseScanTo") {
+                this.onNavBack("dashboard");
+            } else if (sRoute === "wmReservationEntryDetail" || sRoute === "wmReservationEntryCreate") {
+                this.onNavBack("wmReservationEntryList");
+            } else if (sRoute === "wmReservationEntryList") {
+                this.onNavBack("dashboard");
             } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
                 this.onNavBack("dashboard");
             } else {

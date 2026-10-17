@@ -194,7 +194,12 @@
                                     enabled="{newInquiry>/capabilities/ContactPerson}"
                                     tooltip="{i18n>salesInquiryTooltipContactPerson}"
                                     valueState="{newInquiry>/errors/ContactPerson/state}" valueStateText="{newInquiry>/errors/ContactPerson/text}"
-                                    change=".onHeaderFieldChange" />
+                                    change=".onHeaderFieldChange" suggestionItemSelected=".onContactPersonSelect"
+                                    showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: 'salesInquiry>/ContactPersonVH', templateShareable: false}">
+                                    <suggestionItems>
+                                        <core:ListItem key="{salesInquiry>ContactPerson}" text="{salesInquiry>ContactPerson}" additionalText="{salesInquiry>FullName}" />
+                                    </suggestionItems>
+                                </Input>
 
                                 <Label text="{i18n>salesInquiryDescRef}" />
                                 <Input id="inCustRef" value="{newInquiry>/header/PurchaseOrderByCustomer}" placeholder="{i18n>salesInquiryPlaceholderDesc}" maxLength="35" change=".onHeaderFieldChange" />

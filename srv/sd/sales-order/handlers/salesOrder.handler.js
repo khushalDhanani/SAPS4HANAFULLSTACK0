@@ -73,7 +73,12 @@ function registerSalesOrderHandlers(srv) {
         } catch (error) {
             LOG.error('Error creating Sales Order:', error.message);
             if (error.SalesOrder || error.SalesDocument || error.documentNumber) {
-                req.error(error.status || 502, error.message);
+                // The order exists in SAP: this code tells the UI to treat it as created and never re-submit it.
+                req.error({
+                    status: error.status || 502,
+                    code: 'SALES_ORDER_CREATED_VERIFICATION_FAILED',
+                    message: error.message
+                });
                 return;
             }
             req.error(error.status || 500, `Failed to create Sales Order: ${error.message}`);
@@ -83,7 +88,12 @@ function registerSalesOrderHandlers(srv) {
     // 4. Function getCustomerDefaults
     srv.on('getCustomerDefaults', async (req) => {
         const { Customer, SalesOrganization, DistributionChannel, Division } = req.data || {};
-        return await salesInquiryAdapter.getCustomerDefaults(Customer, SalesOrganization, DistributionChannel, Division);
+        try {
+            return await salesInquiryAdapter.getCustomerDefaults(Customer, SalesOrganization, DistributionChannel, Division);
+        } catch (error) {
+            LOG.error('Error fetching customer defaults:', error.message);
+            return req.error(error.status || 502, error.message);
+        }
     });
 
     // 5. Function getSalesOrderDefaults

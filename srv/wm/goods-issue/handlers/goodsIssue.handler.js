@@ -4,7 +4,6 @@ const { validateReversalPayload } = require('../validation/goodsIssue.validation
 const { normalizeReversalPayload } = require('../mapping/goodsIssue.mapper');
 const LOG = require('../../../common/logger')('goods-issue-handler');
 const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
-const { classifyPostingError } = require('./goodsIssuePerType.handler');
 
 const _extractFilterParam = extractFilterParam;
 const GI_MOVEMENT_TYPE = '201';
@@ -159,6 +158,18 @@ class GoodsIssueHandler {
         return req.error(400, 'serialNumber, reservationNo and reservationItem parameters are required');
       }
       return GoodsIssueAdapter.verifySerialForReservation(serialNumber, reservationNo, reservationItem, storageLocation || '');
+    });
+
+    // FUNCTION: getAvailableSerialNumbers — live SAP unrestricted serials for reservation item or material
+    srv.on('getAvailableSerialNumbers', async (req) => {
+      const { reservationNo, reservationItem, material, plant, storageLocation } = req.data || {};
+      return GoodsIssueAdapter.getAvailableSerialNumbers({
+        reservationNo,
+        reservationItem,
+        material,
+        plant,
+        storageLocation
+      });
     });
 
     // ──────────────────────────────────────────────────────────

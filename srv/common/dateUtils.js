@@ -32,6 +32,12 @@ function formatDateToYMD(dateVal, options = {}) {
       d = new Date(parseInt(match[1], 10));
     } else if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
       return trimmed.split('T')[0];
+    } else if (/^\d{8}(\d{6})?$/.test(trimmed)) {
+      // SAP compact YYYYMMDD or YYYYMMDDhhmmss (e.g. 20261003075128)
+      const year = trimmed.substring(0, 4);
+      const month = trimmed.substring(4, 6);
+      const day = trimmed.substring(6, 8);
+      return `${year}-${month}-${day}`;
     } else {
       d = new Date(trimmed);
     }

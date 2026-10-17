@@ -1,0 +1,69 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.packing-instruction.controller.PackingInstructionDetail"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page id="piDetailPage" class="sapUiSizeCompact" showHeader="false">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto" busy="{piDetail>/busy}">
+
+                <MessageStrip id="piDetailMessage" visible="{= !!${piDetail>/message} }" text="{piDetail>/message}" type="{piDetail>/messageType}" showIcon="true" class="sapUiSmallMarginBottom" />
+
+                <ObjectHeader
+                    id="piDetailHeader"
+                    title="{= ${i18n>piDetailTitle} + ' ' + ${piDetail>/header/PackingInstructionNumber} }"
+                    responsive="true"
+                    numberState="None">
+                    <attributes>
+                        <ObjectAttribute title="{i18n>piColExternalName}" text="{= ${piDetail>/header/PackingInstructionExternalName} || '-' }" />
+                        <ObjectAttribute title="{i18n>piColHuType}" text="{= ${piDetail>/header/HandlingUnitType} || '-' }" />
+                        <ObjectAttribute title="{i18n>huCreatedBy}" text="{= ${piDetail>/header/CreatedByUser} + ' · ' + ${piDetail>/header/CreationDate} }" />
+                    </attributes>
+                    <statuses>
+                        <ObjectStatus title="{i18n>piColDimensions}" text="{= ${piDetail>/header/Length} + ' × ' + ${piDetail>/header/Width} + ' × ' + ${piDetail>/header/Height} + ' ' + (${piDetail>/header/DimensionUnit} || '') }" />
+                        <ObjectStatus title="{i18n>piColGrossWeight}" text="{= ${piDetail>/header/GrossWeight} + ' ' + (${piDetail>/header/WeightUnit} || '') }" />
+                        <ObjectStatus title="{i18n>huGrossVolume}" text="{= ${piDetail>/header/GrossVolume} + ' ' + (${piDetail>/header/VolumeUnit} || '') }" />
+                    </statuses>
+                </ObjectHeader>
+
+                <Panel id="piComponentsPanel" headerText="{= ${i18n>piComponentsTitle} + ' (' + ${piDetail>/components}.length + ')' }" expandable="true" expanded="true" class="sapUiSmallMarginTop">
+                    <Table id="piComponentsTable" items="{piDetail>/components}" noDataText="{i18n>piNoComponents}">
+                        <columns>
+                            <Column><Text text="{i18n>huItemCol}" /></Column>
+                            <Column><Text text="{i18n>huItemMaterial}" /></Column>
+                            <Column hAlign="End"><Text text="{i18n>piTargetQuantity}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <Text text="{piDetail>Item}" />
+                                    <Text text="{piDetail>Material}" />
+                                    <ObjectNumber number="{piDetail>TargetQuantity}" unit="{piDetail>Unit}" emphasized="false" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+
+                <Panel id="piTextsPanel" headerText="{= ${i18n>piTextsTitle} + ' (' + ${piDetail>/texts}.length + ')' }" expandable="true" expanded="true" class="sapUiSmallMarginTop">
+                    <Table id="piTextsTable" items="{piDetail>/texts}" noDataText="{i18n>piNoTexts}">
+                        <columns>
+                            <Column><Text text="{i18n>piTextLanguage}" /></Column>
+                            <Column><Text text="{i18n>piTextValue}" /></Column>
+                        </columns>
+                        <items>
+                            <ColumnListItem>
+                                <cells>
+                                    <Text text="{piDetail>Language}" />
+                                    <Text text="{piDetail>Text}" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+                    </Table>
+                </Panel>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

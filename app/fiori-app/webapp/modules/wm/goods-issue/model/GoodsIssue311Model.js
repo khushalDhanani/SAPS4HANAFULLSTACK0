@@ -111,6 +111,16 @@
                 serialScanState: "None",     // result of the last scan: Success | Error | Warning
                 serialScanText: "",
 
+                // Storage Unit (SU) Management
+                suggestedStorageUnit: "",
+                hasSuggestedSU: false,
+                storageUnits: [],
+                selectedStorageUnit: "",
+                suLoading: false,
+                suScanInput: "",
+                suScanState: "None",
+                suScanText: "",
+
                 // Reservation Item lookup state
                 itemLoading: false,
 
@@ -370,6 +380,15 @@
             oData.serialStatus = {};
             oData.serialScanState = "None";
             oData.serialScanText = "";
+
+            // Storage units are fetched per reservation item: reset when item changes
+            oData.suggestedStorageUnit = "";
+            oData.hasSuggestedSU = false;
+            oData.storageUnits = [];
+            oData.selectedStorageUnit = "";
+            oData.suScanInput = "";
+            oData.suScanState = "None";
+            oData.suScanText = "";
             oData.isBatchManaged = !!(oItem.IsBatchManaged || oItem.Batch || (oItem.BatchStatusText && oItem.BatchStatusText !== "NO BATCH"));
             oData.batch = oItem.Batch || "";
             oData.openQty = (oItem.OpenQty !== undefined && oItem.OpenQty !== null) ? oItem.OpenQty : null;
@@ -380,6 +399,19 @@
                 oData.receivingStorageLocation = oItem.ReceivingStorageLocation;
             }
             oData.fromReservation = true;
+        },
+
+        /**
+         * Apply resolved stock units onto the model data
+         * @param {Object} oData - Target model data
+         * @param {Array} aUnits - Stock units array
+         * @param {string} [sSuggested] - Suggested SU
+         */
+        applyStockUnits: function (oData, aUnits, sSuggested) {
+            oData.storageUnits = Array.isArray(aUnits) ? aUnits : [];
+            var sFound = sSuggested || (oData.storageUnits.length > 0 ? oData.storageUnits[0].StorageUnit : "");
+            oData.suggestedStorageUnit = sFound || "";
+            oData.hasSuggestedSU = !!sFound;
         },
 
         /**
@@ -459,6 +491,7 @@
                 DocumentDate: oData.documentDate,
                 HeaderText: oData.headerText ? String(oData.headerText).trim() : ("GI Resv " + sResv),
                 SerialNumbers: aSerials,
+                StorageUnit: String(oData.selectedStorageUnit || "").trim(),
                 ReceivingPlant: String(oData.receivingPlant || "").trim().toUpperCase(),
                 ReceivingStorageLocation: String(oData.receivingStorageLocation || "").trim().toUpperCase()
                 // GLAccount / CostCenter intentionally never sent: this movement type has no

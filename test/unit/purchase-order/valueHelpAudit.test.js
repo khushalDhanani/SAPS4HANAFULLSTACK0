@@ -41,6 +41,8 @@ afterAll(() => {
 });
 
 describe('Unit: Value Help Deduplication and Context Scoping', () => {
+    // MockFilter keeps a filter group's { filters, and } config in sPath
+    const innerFilters = (oGroup) => oGroup.aFilters || (oGroup.sPath && oGroup.sPath.filters) || [];
 
     describe('1. Backend Entity-Specific Deduplication (valueHelp.handler.js)', () => {
         it('should deduplicate results by entity-specific key when entityDeduplicateBy is configured', async () => {
@@ -143,6 +145,31 @@ describe('Unit: Value Help Deduplication and Context Scoping', () => {
         });
     });
 
+    describe('2b. Suggestion filter never searches the material unit column', () => {
+        it('applySuggestionFilter searches key / description for MaterialVH but not MaterialBaseUnit (SAP rejects contains() on a unit)', () => {
+            const oBinding = { getPath: () => '/MaterialVH', filter: jest.fn() };
+            const oInput = { getBinding: (sName) => (sName === 'suggestionRows' ? oBinding : null) };
+
+            ValueHelpService.applySuggestionFilter(oInput, '4000000001', []);
+
+            expect(oBinding.filter).toHaveBeenCalledTimes(1);
+            const aFilters = oBinding.filter.mock.calls[0][0];
+            expect(aFilters).toHaveLength(1);
+            const aPaths = innerFilters(aFilters[0]).map((f) => f.sPath);
+            expect(aPaths).toEqual(['Material', 'MaterialName', 'Material_Text']);
+        });
+
+        it('applySuggestionFilter still searches the info column for value helps that allow it', () => {
+            const oBinding = { getPath: () => '/PlantVH', filter: jest.fn() };
+            const oInput = { getBinding: (sName) => (sName === 'suggestionItems' ? oBinding : null) };
+
+            ValueHelpService.applySuggestionFilter(oInput, '11', []);
+
+            const aPaths = innerFilters(oBinding.filter.mock.calls[0][0][0]).map((f) => f.sPath);
+            expect(aPaths).toEqual(['Plant', 'PlantName', 'PurchasingOrganization']);
+        });
+    });
+
     describe('3. ValueHelpService Configuration Audit', () => {
         it('should configure info columns for composite key value helps', () => {
             const supplierConf = ValueHelpService.getConfig('/SupplierVH');
@@ -156,6 +183,38 @@ describe('Unit: Value Help Deduplication and Context Scoping', () => {
             const storLocConf = ValueHelpService.getConfig('/StorageLocationVH');
             expect(storLocConf).toBeDefined();
             expect(storLocConf.info).toBe('Plant');
+
+            const inquiryTypeConf = ValueHelpService.getConfig('/SalesInquiryTypeVH');
+            expect(inquiryTypeConf).toBeDefined();
+            expect(inquiryTypeConf.info).toBeUndefined();
+
+            const orderTypeConf = ValueHelpService.getConfig('/SalesOrderTypeVH');
+            expect(orderTypeConf).toBeDefined();
+            expect(orderTypeConf.info).toBeUndefined();
+        });
+
+        it('applySuggestionFilter searches key and description for SalesInquiryTypeVH without non-existent Classification filter', () => {
+            const oBinding = { getPath: () => '/SalesInquiryTypeVH', filter: jest.fn() };
+            const oInput = { getBinding: (sName) => (sName === 'suggestionItems' ? oBinding : null) };
+
+            ValueHelpService.applySuggestionFilter(oInput, 'IN', []);
+
+            expect(oBinding.filter).toHaveBeenCalledTimes(1);
+            const aPaths = innerFilters(oBinding.filter.mock.calls[0][0][0]).map((f) => f.sPath);
+            expect(aPaths).toEqual(['SalesDocumentType', 'SalesDocumentTypeName', 'SalesDocumentType_Text']);
+            expect(aPaths).not.toContain('Classification');
+        });
+
+        it('applySuggestionFilter searches key and description for SalesOrderTypeVH without non-existent Language key filter', () => {
+            const oBinding = { getPath: () => '/SalesOrderTypeVH', filter: jest.fn() };
+            const oInput = { getBinding: (sName) => (sName === 'suggestionItems' ? oBinding : null) };
+
+            ValueHelpService.applySuggestionFilter(oInput, 'OR', []);
+
+            expect(oBinding.filter).toHaveBeenCalledTimes(1);
+            const aPaths = innerFilters(oBinding.filter.mock.calls[0][0][0]).map((f) => f.sPath);
+            expect(aPaths).toEqual(['SalesOrderType', 'SalesOrderTypeName']);
+            expect(aPaths).not.toContain('Language key');
         });
     });
 });

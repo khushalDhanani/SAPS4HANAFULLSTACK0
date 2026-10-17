@@ -269,6 +269,8 @@
                                 value="{gi301>/serialInput}"
                                 placeholder="{i18n>gi301SerialScanPlaceholder}"
                                 submit=".onSerialInputSubmit"
+                                showValueHelp="true"
+                                valueHelpRequest=".onSerialValueHelp"
                                 width="18rem"
                                 maxLength="18"
                                 class="sapUiTinyMarginEnd" />
@@ -279,6 +281,12 @@
                                 text="{i18n>gi301BtnAddSerial}"
                                 icon="sap-icon://bar-code"
                                 press=".onAddSerialPress"
+                                class="sapUiTinyMarginEnd" />
+                            <Button
+                                id="btnSerialHelp301"
+                                icon="sap-icon://value-help"
+                                tooltip="{i18n>gi301BtnAvailableSerials}"
+                                press=".onSerialValueHelp"
                                 class="sapUiTinyMarginEnd" />
                             <ObjectStatus
                                 id="statSerialCount301"

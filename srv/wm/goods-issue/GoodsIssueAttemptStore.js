@@ -112,11 +112,38 @@ class GoodsIssueAttemptStore {
   }
 
   /**
+   * All attempts sharing a RequestHash (one identity, across re-claim generations), oldest first.
+   * The 261 re-claim path groups generations by this stable identity hash (ReferenceDocument carries
+   * a generation suffix; RequestHash does not).
+   */
+  async _attemptsByRequestHash(requestHash) {
+    const hash = String(requestHash || '').trim();
+    if (!hash) return [];
+    let rows = [];
+    if (this.db) {
+      rows = await this._run(SELECT.from(ATTEMPT_ENTITY).where({ RequestHash: hash }));
+    } else {
+      rows = Array.from(this._memoryStore.values()).filter((r) => String(r.RequestHash || '') === hash);
+    }
+    return (Array.isArray(rows) ? rows : []).slice().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+  }
+
+  /**
    * Atomically claims a posting reference, returning the prior row when another request already
    * claimed the same idempotency key.
+   *
+   * @param {Object} data - carries ReferenceDocument (the base key) and RequestHash (the identity)
+   * @param {{reclaimableStatuses: string[]}} [reclaim] - OPT-IN re-claim policy (261 post/reverse only;
+   *   the 201 flow passes nothing and keeps the plain idempotent-replay behaviour below). When set, a
+   *   new claim is allowed only if the latest attempt for this identity is in a status that proves
+   *   nothing is posted (e.g. 'rejected', or 'not_posted' for posts); any other status (sending /
+   *   unconfirmed / posted / delivery_created / needs-attention) still returns {created:false} (409).
+   *   Re-claim preserves the audit trail: the old row is kept and a NEW row is created with the next
+   *   generation suffixed to the base ReferenceDocument. Atomicity is the unique constraint on
+   *   ReferenceDocument (two concurrent re-claims compute the same next reference; one wins).
    * @returns {Promise<{ created: boolean, row: Object }>}
    */
-  async createOrGet(data) {
+  async createOrGet(data, reclaim = null) {
     const ref = String(data.ReferenceDocument || '').trim();
     if (!ref) throw new Error('ReferenceDocument is required to claim a posting attempt');
 
@@ -128,6 +155,28 @@ class GoodsIssueAttemptStore {
       }
       return { created: false, row };
     };
+
+    if (reclaim && Array.isArray(reclaim.reclaimableStatuses)) {
+      const priors = await this._attemptsByRequestHash(data.RequestHash);
+      if (priors.length) {
+        const latest = priors[priors.length - 1];
+        // Latest attempt is live or proves something happened -> block a blind re-claim.
+        if (!reclaim.reclaimableStatuses.includes(String(latest.Status || ''))) {
+          return { created: false, row: latest };
+        }
+      }
+      // First attempt (generation 0) or a re-claim of a dead attempt: new row, next generation suffix.
+      const generation = priors.length;
+      const newRef = `${ref}${generation}`;
+      try {
+        const row = await this.create({ ...data, ReferenceDocument: newRef });
+        return { created: true, row };
+      } catch (insertErr) {
+        const raced = await this.getByReference(newRef); // concurrent re-claim took this generation
+        if (raced) return assertSameRequest(raced);
+        throw insertErr;
+      }
+    }
 
     if (!this.db) {
       const existing = this._memoryStore.get(ref);

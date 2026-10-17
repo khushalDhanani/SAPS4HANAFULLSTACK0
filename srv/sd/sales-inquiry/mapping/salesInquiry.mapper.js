@@ -74,7 +74,8 @@ function normalizeSalesDocumentData(data, options = {}) {
         SalesGroupName: rawHeader.SalesGroupName ? String(rawHeader.SalesGroupName).trim() : '',
         SoldToParty: rawHeader.SoldToParty ? String(rawHeader.SoldToParty).trim() : '',
         CustomerName: rawHeader.CustomerName ? String(rawHeader.CustomerName).trim() : '',
-        ShipToParty: rawHeader.ShipToParty ? String(rawHeader.ShipToParty).trim() : (rawHeader.SoldToParty ? String(rawHeader.SoldToParty).trim() : ''),
+        // Never defaulted to the sold-to: SAP partner determination sets the ship-to when it is left blank.
+        ShipToParty: rawHeader.ShipToParty ? String(rawHeader.ShipToParty).trim() : '',
         ShipToPartyName: rawHeader.ShipToPartyName ? String(rawHeader.ShipToPartyName).trim() : '',
         PurchaseOrderByCustomer: description,
         PurchaseOrderNumber: description,
@@ -95,8 +96,11 @@ function normalizeSalesDocumentData(data, options = {}) {
         ContactPerson: rawHeader.ContactPerson ? String(rawHeader.ContactPerson).trim() : '',
         PaymentTerms: rawHeader.PaymentTerms ? String(rawHeader.PaymentTerms).trim() : (rawHeader.PaymentTermCode ? String(rawHeader.PaymentTermCode).trim() : ''),
         PaymentTermCode: rawHeader.PaymentTermCode ? String(rawHeader.PaymentTermCode).trim() : (rawHeader.PaymentTerms ? String(rawHeader.PaymentTerms).trim() : ''),
-        IncotermsClassification: rawHeader.IncotermsClassification ? String(rawHeader.IncotermsClassification).trim().toUpperCase() : '',
-        IncotermsLocation1: rawHeader.IncotermsLocation1 ? String(rawHeader.IncotermsLocation1).trim() : ''
+        Incoterms: rawHeader.Incoterms ? String(rawHeader.Incoterms).trim() : (rawHeader.INCO1 ? String(rawHeader.INCO1).trim() : (rawHeader.IncotermsClassification ? String(rawHeader.IncotermsClassification).trim() : '')),
+        INCO1: rawHeader.INCO1 ? String(rawHeader.INCO1).trim() : (rawHeader.Incoterms ? String(rawHeader.Incoterms).trim() : (rawHeader.IncotermsClassification ? String(rawHeader.IncotermsClassification).trim() : '')),
+        IncotermsLocation1: rawHeader.IncotermsLocation1 ? String(rawHeader.IncotermsLocation1).trim() : (rawHeader.INCO2_L ? String(rawHeader.INCO2_L).trim() : (rawHeader.INCO2 ? String(rawHeader.INCO2).trim() : '')),
+        INCO2: rawHeader.INCO2 ? String(rawHeader.INCO2).trim() : (rawHeader.INCO2_L ? String(rawHeader.INCO2_L).trim() : (rawHeader.IncotermsLocation1 ? String(rawHeader.IncotermsLocation1).trim() : '')),
+        INCO2_L: rawHeader.INCO2_L ? String(rawHeader.INCO2_L).trim() : (rawHeader.INCO2 ? String(rawHeader.INCO2).trim() : (rawHeader.IncotermsLocation1 ? String(rawHeader.IncotermsLocation1).trim() : ''))
     };
 
     return {

@@ -81,10 +81,10 @@ class MockFilter {
 }
 const MockFilterOperator = { Contains: 'Contains' };
 
-let capturedHardwareScannerHandler = null;
+let _capturedHardwareScannerHandler = null;
 const mockBarcodeScanService = {
-    attachHardwareScanner: jest.fn((fn) => { capturedHardwareScannerHandler = fn; }),
-    detachHardwareScanner: jest.fn(() => { capturedHardwareScannerHandler = null; }),
+    attachHardwareScanner: jest.fn((fn) => { _capturedHardwareScannerHandler = fn; }),
+    detachHardwareScanner: jest.fn(() => { _capturedHardwareScannerHandler = null; }),
     openCameraScanner: jest.fn((title, cb) => cb && cb('1000043935'))
 };
 

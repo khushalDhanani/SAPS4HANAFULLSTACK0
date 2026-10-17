@@ -1,0 +1,682 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.reservation-entry.controller.ReservationEntryDetail"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:uxap="sap.uxap"
+    xmlns:f="sap.ui.layout.form"
+    xmlns:core="sap.ui.core"
+    displayBlock="true">
+
+    <uxap:ObjectPageLayout
+        id="resEntryObjectPage"
+        enableLazyLoading="false"
+        showTitleInHeaderContent="false"
+        showEditHeaderButton="false"
+        headerContentPinnable="true"
+        useIconTabBar="false"
+        showFooter="{view>/isCreate}"
+        class="sapUiSizeCompact">
+
+        <!-- Dynamic Header Title -->
+        <uxap:headerTitle>
+            <uxap:ObjectPageDynamicHeaderTitle id="resHeaderTitle">
+                <uxap:breadcrumbs>
+                    <Breadcrumbs id="resBreadcrumbs" currentLocationText="{= ${view>/isCreate} ? ${i18n>resEntryCreateTitle} : (${i18n>resEntryDetailBreadcrumb} + ' ' + ${detail>/ReservationNo}) }">
+                        <Link text="{i18n>resEntryBreadcrumbList}" press=".onNavBack" />
+                    </Breadcrumbs>
+                </uxap:breadcrumbs>
+
+                <uxap:heading>
+                    <HBox alignItems="Center" wrap="NoWrap">
+                        <Title
+                            id="headerTitleRes"
+                            text="{= ${view>/isCreate} ? ${i18n>resEntryCreateTitle} : (${i18n>resEntryTitlePrefix} + ' ' + ${detail>/ReservationNo} + ' / ' + ${detail>/ReservationItem}) }"
+                            class="sapUiTinyMarginEnd" />
+                        <ObjectStatus
+                            id="headerStatusRes"
+                            text="{= ${view>/isCreate} ? ${i18n>resStatusDraft} : (${detail>/StatusText} || ${path: 'detail>/Status_code', formatter: '.formatStatusText'}) }"
+                            state="{= ${view>/isCreate} ? 'Information' : (${path: 'detail>/Status_code', formatter: '.formatStatusState'}) }"
+                            icon="{= ${view>/isCreate} ? 'sap-icon://create' : (${path: 'detail>/Status_code', formatter: '.formatStatusIcon'}) }" />
+                    </HBox>
+                </uxap:heading>
+
+                <uxap:expandedContent>
+                    <Text text="{= ${view>/isCreate} ? ${i18n>resEntryCreateSubtitle} : (${detail>/MaterialName} ? (${detail>/Material} + ' - ' + ${detail>/MaterialName}) : (${detail>/Material} || '')) }" />
+                </uxap:expandedContent>
+
+                <uxap:snappedContent>
+                    <HBox alignItems="Center">
+                        <Label text="{i18n>resEntryFieldMovementType}:" class="sapUiTinyMarginEnd" />
+                        <ObjectStatus text="{= ${view>/isCreate} ? ${create>/MovementType} : ${detail>/MovementType} }" state="None" />
+                    </HBox>
+                </uxap:snappedContent>
+
+                <uxap:actions>
+                    <Button
+                        id="btnRetryDetail"
+                        text="{i18n>resEntryBtnRetryStep}"
+                        icon="sap-icon://restart"
+                        type="Emphasized"
+                        press=".onRetryStepPress"
+                        enabled="{= !${view>/busy} }"
+                        busy="{view>/busy}"
+                        visible="{= !${view>/isCreate} &amp;&amp; ${view>/isTracked} === true &amp;&amp; ${detail>/Status_code} !== '05' }" />
+                    <Button
+                        id="btnDetailRefresh"
+                        icon="sap-icon://refresh"
+                        tooltip="{i18n>commonRefresh}"
+                        press=".onRefresh"
+                        enabled="{= !${view>/busy} }"
+                        visible="{= !${view>/isCreate} }" />
+                    <Button
+                        id="btnDetailNew"
+                        text="{i18n>resEntryBtnCreateNew}"
+                        icon="sap-icon://add"
+                        type="Transparent"
+                        press=".onNavToCreate"
+                        visible="{= !${view>/isCreate} }" />
+                </uxap:actions>
+            </uxap:ObjectPageDynamicHeaderTitle>
+        </uxap:headerTitle>
+
+        <!-- KPI Header Content (Glanceable stats) -->
+        <uxap:headerContent>
+            <FlexBox direction="Column" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+                <Label text="{i18n>resEntryFieldMovementType}" design="Bold" />
+                <Text text="{= ${view>/isCreate} ? (${create>/MovementType} + ' - ' + ${path: 'create>/MovementType', formatter: '.formatMovementTypeDesc'}) : (${detail>/MovementType} + ' - ' + ${path: 'detail>/MovementType', formatter: '.formatMovementTypeDesc'}) }" />
+            </FlexBox>
+
+            <FlexBox direction="Column" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+                <Label text="{i18n>resEntryFieldPlantSloc}" design="Bold" />
+                <Text text="{= ${view>/isCreate} ? (${create>/Plant} + ' / ' + ${create>/StorageLocation}) : (${detail>/Plant} + ' / ' + ${detail>/StorageLocation}) }" />
+            </FlexBox>
+
+            <FlexBox direction="Column" class="sapUiMediumMarginEnd sapUiTinyMarginBottom">
+                <Label text="{i18n>resEntryColQuantity}" design="Bold" />
+                <ObjectNumber
+                    number="{= ${view>/isCreate} ? ${create>/Quantity} : ${detail>/Quantity} }"
+                    unit="{= ${view>/isCreate} ? ${create>/Unit} : ${detail>/Unit} }"
+                    emphasized="true" />
+            </FlexBox>
+
+            <FlexBox direction="Column" class="sapUiMediumMarginEnd sapUiTinyMarginBottom" visible="{= !${view>/isCreate} &amp;&amp; !!${detail>/CreatedByUser} }">
+                <Label text="{i18n>resEntryColCreatedBy}" design="Bold" />
+                <HBox alignItems="Center">
+                    <core:Icon src="sap-icon://person-placeholder" size="0.875rem" class="sapUiTinyMarginEnd" />
+                    <Text text="{detail>/CreatedByUser}" />
+                </HBox>
+            </FlexBox>
+
+            <FlexBox direction="Column" class="sapUiMediumMarginEnd sapUiTinyMarginBottom" visible="{= !${view>/isCreate} }">
+                <Label text="{i18n>resEntryColAutoTR}" design="Bold" />
+                <ObjectStatus
+                    text="{= ${detail>/TransferRequirement} ? (${detail>/TransferRequirement} + ' (Auto)') : '-' }"
+                    state="{= ${detail>/TransferRequirement} ? 'Success' : 'None' }"
+                    icon="{= ${detail>/TransferRequirement} ? 'sap-icon://sys-enter-2' : '' }" />
+            </FlexBox>
+        </uxap:headerContent>
+
+        <!-- Sections -->
+        <uxap:sections>
+
+            <!-- Section 1: General & Reservation Details -->
+            <uxap:ObjectPageSection id="secReservationData" title="{i18n>resSectionGeneral}">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection id="subsecGeneralData">
+                        <uxap:blocks>
+                            <!-- MessageStrip for form-level errors -->
+                            <VBox class="sapUiNoMargin">
+                                <MessageStrip
+                                    id="msgStripError"
+                                    visible="{= !!${view>/errorMessage} }"
+                                    text="{view>/errorMessage}"
+                                    type="Error"
+                                    showIcon="true"
+                                    showCloseButton="true"
+                                    close=".onCloseErrorMessage"
+                                    class="sapUiSmallMarginBottom" />
+
+                                <MessageStrip
+                                    id="msgStripSuccess"
+                                    visible="{= !!${view>/successMessage} }"
+                                    text="{view>/successMessage}"
+                                    type="Success"
+                                    showIcon="true"
+                                    showCloseButton="true"
+                                    close=".onCloseSuccessMessage"
+                                    class="sapUiSmallMarginBottom" />
+
+                                <!-- CREATE FORM -->
+                                <f:SimpleForm
+                                    id="formReservationCreate"
+                                    visible="{view>/isCreate}"
+                                    editable="true"
+                                    layout="ResponsiveGridLayout"
+                                    columnsM="2"
+                                    columnsL="2"
+                                    columnsXL="2">
+                                    <f:content>
+                                        <core:Title text="{i18n>resGroupMovementAndPlant}" />
+
+                                        <Label text="{i18n>resEntryFieldMovementType}" required="true" />
+                                        <Select
+                                            id="selectMovementType"
+                                            selectedKey="{create>/MovementType}"
+                                            change=".onMovementTypeChange"
+                                            width="100%">
+                                            <core:Item key="311" text="{i18n>resMvt311Long}" />
+                                            <core:Item key="201" text="{i18n>resMvt201Long}" />
+                                            <core:Item key="241" text="{i18n>resMvt241Long}" />
+                                            <core:Item key="301" text="{i18n>resMvt301Long}" />
+                                            <core:Item key="261" text="{i18n>resMvt261Long}" />
+                                        </Select>
+
+                                        <Label text="{i18n>resEntryFieldPlant}" required="true" />
+                                        <Input
+                                            id="inputPlant"
+                                            value="{create>/Plant}"
+                                            placeholder="{i18n>resPlaceholderSelectPlant}"
+                                            maxLength="4"
+                                            showValueHelp="true"
+                                            showSuggestion="true"
+                                            filterSuggests="false"
+                                            suggest=".onSuggest"
+                                            valueHelpRequest=".onValueHelpRequest"
+                                            suggestionItemSelected=".onPlantSelect"
+                                            suggestionItems="{path: '/PlantVH', templateShareable: false}"
+                                            liveChange=".onFieldLiveChange">
+                                            <suggestionItems>
+                                                <core:ListItem key="{Plant}" text="{Plant}" additionalText="{= ${PlantName} + (${PurchasingOrganization} ? ' (' + ${PurchasingOrganization} + ')' : '') }" />
+                                            </suggestionItems>
+                                        </Input>
+
+                                        <Label text="{i18n>resEntryFieldSLoc}" required="true" />
+                                        <Input
+                                            id="inputStorageLocation"
+                                            value="{create>/StorageLocation}"
+                                            placeholder="{i18n>resPlaceholderSelectSLoc}"
+                                            maxLength="4"
+                                            showValueHelp="true"
+                                            showSuggestion="true"
+                                            filterSuggests="false"
+                                            suggest=".onSuggest"
+                                            valueHelpRequest=".onValueHelpRequest"
+                                            suggestionItemSelected=".onStorageLocationSelect"
+                                            suggestionItems="{path: '/StorageLocationVH', templateShareable: false}"
+                                            liveChange=".onFieldLiveChange">
+                                            <suggestionItems>
+                                                <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{= ${StorageLocationName} + (${Plant} ? ' (' + ${Plant} + ')' : '') }" />
+                                            </suggestionItems>
+                                        </Input>
+
+                                        <Label text="{i18n>resEntryFieldWarehouse}" />
+                                        <Input
+                                            id="inputWarehouseNumber"
+                                            value="{create>/WarehouseNumber}"
+                                            placeholder="{i18n>resPlaceholderWh}"
+                                            maxLength="3" />
+
+                                        <core:Title text="{i18n>resGroupMaterialAndQty}" />
+
+                                        <Label text="{i18n>resEntryColMaterial}" required="true" />
+                                        <Input
+                                            id="inputMaterial"
+                                            value="{create>/Material}"
+                                            placeholder="{i18n>resPlaceholderSelectMaterial}"
+                                            maxLength="40"
+                                            showValueHelp="true"
+                                            showSuggestion="true"
+                                            filterSuggests="false"
+                                            suggest=".onSuggest"
+                                            valueHelpRequest=".onValueHelpRequest"
+                                            suggestionItemSelected=".onMaterialSelect"
+                                            suggestionItems="{path: '/MaterialVH', templateShareable: false}"
+                                            liveChange=".onFieldLiveChange">
+                                            <suggestionItems>
+                                                <core:ListItem key="{Material}" text="{Material}" additionalText="{= (${MaterialName} || ${Material_Text} || '') + (${MaterialBaseUnit} ? ' (' + ${MaterialBaseUnit} + ')' : '') }" />
+                                            </suggestionItems>
+                                        </Input>
+
+                                        <Label text="{i18n>resEntryFieldMaterialName}" />
+                                        <Input
+                                            id="inputMaterialName"
+                                            value="{create>/MaterialName}"
+                                            placeholder="{i18n>resEntryFieldMaterialName}"
+                                            maxLength="40" />
+
+                                        <Label text="{i18n>resEntryColQuantity}" required="true" />
+                                        <HBox alignItems="Center">
+                                            <Input
+                                                id="inputQuantity"
+                                                value="{create>/Quantity}"
+                                                type="Number"
+                                                placeholder="10"
+                                                width="65%"
+                                                class="sapUiTinyMarginEnd"
+                                                liveChange=".onFieldLiveChange" />
+                                            <Input
+                                                id="inputUnit"
+                                                value="{create>/Unit}"
+                                                placeholder="{i18n>resPlaceholderUnit}"
+                                                maxLength="3"
+                                                width="35%" />
+                                        </HBox>
+
+                                        <Label text="{i18n>resFieldBatch}" />
+                                        <Input
+                                            id="inputBatch"
+                                            value="{create>/Batch}"
+                                            placeholder="{i18n>resPlaceholderBatch}"
+                                            maxLength="10"
+                                            liveChange=".onFieldLiveChange" />
+                                    </f:content>
+                                </f:SimpleForm>
+
+                                <!-- DISPLAY FORM -->
+                                <f:SimpleForm
+                                    id="formReservationDisplay"
+                                    visible="{= !${view>/isCreate} }"
+                                    editable="false"
+                                    layout="ResponsiveGridLayout"
+                                    columnsM="2"
+                                    columnsL="2"
+                                    columnsXL="2">
+                                    <f:content>
+                                        <core:Title text="{i18n>resGroupMovementAndPlant}" />
+
+                                        <Label text="{i18n>resEntryColResNo}" />
+                                        <Text text="{detail>/ReservationNo}" />
+
+                                        <Label text="{i18n>resEntryColResItem}" />
+                                        <Text text="{detail>/ReservationItem}" />
+
+                                        <Label text="{i18n>resEntryFieldMovementType}" />
+                                        <Text text="{= ${detail>/MovementType} + ' - ' + ${path: 'detail>/MovementType', formatter: '.formatMovementTypeDesc'} }" />
+
+                                        <Label text="{i18n>resEntryFieldPlant}" />
+                                        <Text text="{detail>/Plant}" />
+
+                                        <Label text="{i18n>resEntryFieldSLoc}" />
+                                        <Text text="{detail>/StorageLocation}" />
+
+                                        <Label text="{i18n>resEntryFieldWarehouse}" />
+                                        <Text text="{detail>/WarehouseNumber}" />
+
+                                        <Label text="{i18n>resEntryColCreatedBy}" visible="{= !!${detail>/CreatedByUser} }" />
+                                        <HBox alignItems="Center" visible="{= !!${detail>/CreatedByUser} }">
+                                            <core:Icon src="sap-icon://person-placeholder" size="0.875rem" class="sapUiTinyMarginEnd" />
+                                            <Text text="{detail>/CreatedByUser}" />
+                                        </HBox>
+
+                                        <core:Title text="{i18n>resGroupMaterialAndQty}" />
+
+                                        <Label text="{i18n>resEntryColMaterial}" />
+                                        <ObjectIdentifier title="{detail>/Material}" text="{detail>/MaterialName}" />
+
+                                        <Label text="{i18n>resEntryColQuantity}" />
+                                        <ObjectNumber number="{detail>/Quantity}" unit="{detail>/Unit}" />
+
+                                        <Label text="{i18n>resFieldBatch}" visible="{= !!${detail>/Batch} }" />
+                                        <Text text="{detail>/Batch}" visible="{= !!${detail>/Batch} }" />
+
+                                        <Label text="{i18n>resEntryColStatus}" />
+                                        <ObjectStatus
+                                            text="{= ${detail>/StatusText} || ${path: 'detail>/Status_code', formatter: '.formatStatusText'} }"
+                                            state="{path: 'detail>/Status_code', formatter: '.formatStatusState'}"
+                                            icon="{path: 'detail>/Status_code', formatter: '.formatStatusIcon'}" />
+                                    </f:content>
+                                </f:SimpleForm>
+                            </VBox>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+            <!-- Section 2: Movement Type Validations & Account Assignments (Dynamic per Movement Type) -->
+            <uxap:ObjectPageSection id="secMovementSpecific" title="{i18n>resSectionAccountAssignment}">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection id="subsecMovementSpecific">
+                        <uxap:blocks>
+                            <!-- CREATE Dynamic Fields -->
+                            <f:SimpleForm
+                                id="formDynamicCreate"
+                                visible="{view>/isCreate}"
+                                editable="true"
+                                layout="ResponsiveGridLayout"
+                                columnsM="1"
+                                columnsL="2"
+                                columnsXL="2">
+                                <f:content>
+                                    <core:Title text="{i18n>resSectionAccountAssignment}" />
+
+                                    <!-- Movement 201: Cost Center -->
+                                    <Label
+                                        text="{i18n>resFieldCostCenter}"
+                                        required="true"
+                                        visible="{= ${create>/MovementType} === '201' }" />
+                                    <Input
+                                        id="inputCostCenter"
+                                        value="{create>/CostCenter}"
+                                        placeholder="1011201301"
+                                        maxLength="10"
+                                        showValueHelp="true"
+                                        showSuggestion="true"
+                                        filterSuggests="false"
+                                        suggest=".onSuggest"
+                                        valueHelpRequest=".onValueHelpRequest"
+                                        suggestionItemSelected=".onCostCenterSelect"
+                                        suggestionItems="{path: 'reservationEntry>/CostCenterVH', templateShareable: false}"
+                                        visible="{= ${create>/MovementType} === '201' }"
+                                        liveChange=".onFieldLiveChange">
+                                        <suggestionItems>
+                                            <core:ListItem key="{reservationEntry>CostCenter}" text="{reservationEntry>CostCenter}" additionalText="{reservationEntry>CostCenterName}" />
+                                        </suggestionItems>
+                                    </Input>
+
+                                    <!-- Movement 241: Asset & SubNumber -->
+                                    <Label
+                                        text="{i18n>resFieldAssetNo}"
+                                        required="true"
+                                        visible="{= ${create>/MovementType} === '241' }" />
+                                    <Input
+                                        id="inputAssetNo"
+                                        value="{create>/AssetNo}"
+                                        placeholder="000000400092"
+                                        maxLength="12"
+                                        visible="{= ${create>/MovementType} === '241' }"
+                                        liveChange=".onFieldLiveChange" />
+
+                                    <Label
+                                        text="{i18n>resFieldSubNumber}"
+                                        visible="{= ${create>/MovementType} === '241' }" />
+                                    <Input
+                                        id="inputSubNumber"
+                                        value="{create>/SubNumber}"
+                                        placeholder="0000"
+                                        maxLength="4"
+                                        visible="{= ${create>/MovementType} === '241' }" />
+
+                                    <!-- Movement 301: Receiving Plant (Hierarchy: Plant before Storage Location) -->
+                                    <Label
+                                        text="{i18n>resFieldRecPlant}"
+                                        required="true"
+                                        visible="{= ${create>/MovementType} === '301' }" />
+                                    <Input
+                                        id="inputRecPlant"
+                                        value="{create>/ReceivingPlant}"
+                                        placeholder="{i18n>resPlaceholderRecPlant}"
+                                        maxLength="4"
+                                        showValueHelp="true"
+                                        showSuggestion="true"
+                                        filterSuggests="false"
+                                        suggest=".onSuggest"
+                                        valueHelpRequest=".onValueHelpRequest"
+                                        suggestionItemSelected=".onRecPlantSelect"
+                                        suggestionItems="{path: '/PlantVH', templateShareable: false}"
+                                        visible="{= ${create>/MovementType} === '301' }"
+                                        liveChange=".onFieldLiveChange">
+                                        <suggestionItems>
+                                            <core:ListItem key="{Plant}" text="{Plant}" additionalText="{= ${PlantName} + (${PurchasingOrganization} ? ' (' + ${PurchasingOrganization} + ')' : '') }" />
+                                        </suggestionItems>
+                                    </Input>
+
+                                    <!-- Movement 311 & 301: Receiving SLoc -->
+                                    <Label
+                                        text="{i18n>resFieldRecSLoc}"
+                                        required="true"
+                                        visible="{= ${create>/MovementType} === '311' || ${create>/MovementType} === '301' }" />
+                                    <Input
+                                        id="inputRecSLoc"
+                                        value="{create>/ReceivingStorageLocation}"
+                                        placeholder="{i18n>resPlaceholderRecSLoc}"
+                                        maxLength="4"
+                                        showValueHelp="true"
+                                        showSuggestion="true"
+                                        filterSuggests="false"
+                                        suggest=".onSuggest"
+                                        valueHelpRequest=".onValueHelpRequest"
+                                        suggestionItemSelected=".onRecSLocSelect"
+                                        suggestionItems="{path: '/StorageLocationVH', templateShareable: false}"
+                                        visible="{= ${create>/MovementType} === '311' || ${create>/MovementType} === '301' }"
+                                        liveChange=".onFieldLiveChange">
+                                        <suggestionItems>
+                                             <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{= ${StorageLocationName} + (${Plant} ? ' (' + ${Plant} + ')' : '') }" />
+                                        </suggestionItems>
+                                    </Input>
+
+                                    <!-- Movement 261: Order Type (Mandatory, with ZEMP Value Help / Dropdown) -->
+                                    <Label
+                                        id="lblOrderType"
+                                        text="{i18n>resFieldOrderType}"
+                                        required="true"
+                                        visible="{= ${create>/MovementType} === '261' }" />
+                                    <Input
+                                        id="inputOrderType"
+                                        value="{create>/OrderType}"
+                                        placeholder="{i18n>resPlaceholderOrderType}"
+                                        showValueHelp="true"
+                                        showSuggestion="true"
+                                        startSuggestion="0"
+                                        suggest=".onSuggest"
+                                        valueHelpRequest=".onOrderTypeValueHelpRequest"
+                                        suggestionItemSelected=".onOrderTypeSelect"
+                                        change=".onOrderTypeChange"
+                                        suggestionItems="{path: 'reservationEntry>/OrderTypeVH', templateShareable: false}"
+                                        maxLength="4"
+                                        visible="{= ${create>/MovementType} === '261' }"
+                                        liveChange=".onFieldLiveChange">
+                                        <suggestionItems>
+                                            <core:ListItem key="{reservationEntry>OrderType}" text="{reservationEntry>OrderType}" additionalText="{reservationEntry>OrderTypeName}" />
+                                        </suggestionItems>
+                                    </Input>
+
+                                    <!-- Movement 261: Order Number (Mandatory, with Value Help / Suggestions from AUFK) -->
+                                    <Label
+                                        id="lblInternalOrder"
+                                        text="{i18n>resFieldOrder}"
+                                        required="true"
+                                        visible="{= ${create>/MovementType} === '261' }" />
+                                    <Input
+                                        id="inputOrderId"
+                                        value="{create>/OrderID}"
+                                        placeholder="{= ${create>/OrderType} ? ${i18n>resPlaceholderInternalOrder} : ${i18n>resPlaceholderSelectOrderTypeFirst} }"
+                                        enabled="{= ${create>/MovementType} !== '261' || !!${create>/OrderType} }"
+                                        showValueHelp="true"
+                                        showSuggestion="true"
+                                        startSuggestion="0"
+                                        suggest=".onSuggest"
+                                        valueHelpRequest=".onInternalOrderValueHelpRequest"
+                                        suggestionItemSelected=".onInternalOrderSelect"
+                                        suggestionItems="{path: 'reservationEntry>/InternalOrderVH', templateShareable: false}"
+                                        maxLength="12"
+                                        visible="{= ${create>/MovementType} === '261' }"
+                                        liveChange=".onFieldLiveChange">
+                                        <suggestionItems>
+                                            <core:ListItem key="{reservationEntry>OrderID}" text="{reservationEntry>OrderID}" additionalText="{reservationEntry>OrderDescription}" />
+                                        </suggestionItems>
+                                    </Input>
+                                </f:content>
+                            </f:SimpleForm>
+
+                            <!-- DISPLAY Dynamic Fields -->
+                            <f:SimpleForm
+                                id="formDynamicDisplay"
+                                visible="{= !${view>/isCreate} }"
+                                editable="false"
+                                layout="ResponsiveGridLayout"
+                                columnsM="1"
+                                columnsL="2"
+                                columnsXL="2">
+                                <f:content>
+                                    <core:Title text="{i18n>resSectionAccountAssignment}" />
+
+                                    <Label
+                                        text="{i18n>resFieldCostCenter}"
+                                        visible="{= !!${detail>/CostCenter} || ${detail>/MovementType} === '201' }" />
+                                    <Text
+                                        text="{detail>/CostCenter}"
+                                        visible="{= !!${detail>/CostCenter} || ${detail>/MovementType} === '201' }" />
+
+                                    <Label
+                                        text="{i18n>resFieldAssetNo}"
+                                        visible="{= !!${detail>/AssetNo} || ${detail>/MovementType} === '241' }" />
+                                    <Text
+                                        text="{detail>/AssetNo}"
+                                        visible="{= !!${detail>/AssetNo} || ${detail>/MovementType} === '241' }" />
+
+                                    <Label
+                                        text="{i18n>resFieldSubNumber}"
+                                        visible="{= !!${detail>/SubNumber} || ${detail>/MovementType} === '241' }" />
+                                    <Text
+                                        text="{detail>/SubNumber}"
+                                        visible="{= !!${detail>/SubNumber} || ${detail>/MovementType} === '241' }" />
+
+                                    <Label
+                                        text="{i18n>resFieldRecSLoc}"
+                                        visible="{= !!${detail>/ReceivingStorageLocation} || ${detail>/MovementType} === '311' || ${detail>/MovementType} === '301' }" />
+                                    <Text
+                                        text="{detail>/ReceivingStorageLocation}"
+                                        visible="{= !!${detail>/ReceivingStorageLocation} || ${detail>/MovementType} === '311' || ${detail>/MovementType} === '301' }" />
+
+                                    <Label
+                                        text="{i18n>resFieldRecPlant}"
+                                        visible="{= !!${detail>/ReceivingPlant} || ${detail>/MovementType} === '301' }" />
+                                    <Text
+                                        text="{detail>/ReceivingPlant}"
+                                        visible="{= !!${detail>/ReceivingPlant} || ${detail>/MovementType} === '301' }" />
+
+                                    <Label
+                                        text="{i18n>resFieldOrderType}"
+                                        visible="{= !!${detail>/OrderType} || ${detail>/MovementType} === '261' }" />
+                                    <Text
+                                        text="{detail>/OrderType}"
+                                        visible="{= !!${detail>/OrderType} || ${detail>/MovementType} === '261' }" />
+
+                                    <Label
+                                        text="{i18n>resFieldInternalOrder}"
+                                        visible="{= !!${detail>/OrderID} || ${detail>/MovementType} === '261' }" />
+                                    <Text
+                                        text="{detail>/OrderID}"
+                                        visible="{= !!${detail>/OrderID} || ${detail>/MovementType} === '261' }" />
+                                </f:content>
+                            </f:SimpleForm>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+            <!-- Section 3: Warehouse Management Integration & Auto-TR Tracking -->
+            <uxap:ObjectPageSection
+                id="secWMTracking"
+                title="{i18n>resSectionWMTracking}"
+                visible="{= !${view>/isCreate} }">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection id="subsecWMTracking">
+                        <uxap:blocks>
+                            <f:SimpleForm
+                                id="formWMTracking"
+                                editable="false"
+                                layout="ResponsiveGridLayout"
+                                columnsM="2"
+                                columnsL="2"
+                                columnsXL="2">
+                                <f:content>
+                                    <core:Title text="{i18n>resGroupWMDocs}" />
+
+                                    <Label text="{i18n>resFieldTR}" />
+                                    <ObjectIdentifier
+                                        title="{= ${detail>/TransferRequirement} ? ${detail>/TransferRequirement} : '-' }"
+                                        text="{= ${detail>/TransferRequirement} ? ${i18n>resBadgeAutoCreated} : ${i18n>resBadgePending} }" />
+
+                                    <Label text="{i18n>resFieldTO}" />
+                                    <Text text="{= ${detail>/TransferOrder} ? ${detail>/TransferOrder} : '-' }" />
+
+                                    <core:Title text="{i18n>resGroupMaterialDoc}" />
+
+                                    <Label text="{i18n>resFieldMatDoc}" />
+                                    <Text text="{= ${detail>/MaterialDocument} ? (${detail>/MaterialDocument} + (${detail>/MaterialDocYear} ? (' / ' + ${detail>/MaterialDocYear}) : '')) : '-' }" />
+
+                                    <Label text="{i18n>resFieldLogHandle}" visible="{= !!${detail>/LogHandle} }" />
+                                    <Text text="{detail>/LogHandle}" visible="{= !!${detail>/LogHandle} }" />
+
+                                    <Label text="{i18n>resFieldExternalId}" visible="{= !!${detail>/ExternalId} }" />
+                                    <Text text="{detail>/ExternalId}" visible="{= !!${detail>/ExternalId} }" />
+
+                                    <Label text="{i18n>resFieldErrorMsg}" visible="{= !!${detail>/ErrorMessage} }" />
+                                    <Text
+                                        text="{detail>/ErrorMessage}"
+                                        visible="{= !!${detail>/ErrorMessage} }"
+                                        class="sapUiNegativeText" />
+                                </f:content>
+                            </f:SimpleForm>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+            <!-- Section 4: Step-wise Processing Logs (SLG1 Audit Trail) -->
+            <uxap:ObjectPageSection
+                id="secLogs"
+                title="{= ${i18n>resSectionLogs} + ' (' + (${detail>/Logs} ? ${detail>/Logs}.length : 0) + ')' }"
+                visible="{= !${view>/isCreate} }">
+                <uxap:subSections>
+                    <uxap:ObjectPageSubSection id="subsecLogs">
+                        <uxap:blocks>
+                            <Table
+                                id="tblResLogs"
+                                items="{detail>/Logs}"
+                                noDataText="{i18n>resNoLogsData}">
+                                <columns>
+                                    <Column width="6rem"><Text text="{i18n>resColStep}" /></Column>
+                                    <Column width="6rem"><Text text="{i18n>resColMsgType}" /></Column>
+                                    <Column width="6rem"><Text text="{i18n>resColStatus}" /></Column>
+                                    <Column width="8rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resColMsgClassNo}" /></Column>
+                                    <Column width="12rem" minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>resColLogHandle}" /></Column>
+                                    <Column><Text text="{i18n>resColMsgText}" /></Column>
+                                    <Column width="11rem" minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>resColCreatedAt}" /></Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem>
+                                        <cells>
+                                             <ObjectIdentifier title="{detail>Step}" />
+                                             <ObjectStatus
+                                                 text="{detail>MessageType}"
+                                                 state="{= ${detail>MessageType} === 'S' ? 'Success' : (${detail>MessageType} === 'E' ? 'Error' : (${detail>MessageType} === 'W' ? 'Warning' : 'Information')) }" />
+                                             <Text text="{detail>Status}" />
+                                             <Text text="{= ${detail>MessageId} ? (${detail>MessageId} + ' ' + ${detail>MessageNo}) : '-' }" />
+                                             <Text text="{= ${detail>LogHandle} ? ${detail>LogHandle} : '-' }" />
+                                             <Text text="{detail>MessageText}" />
+                                             <Text text="{detail>createdAt}" />
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+                        </uxap:blocks>
+                    </uxap:ObjectPageSubSection>
+                </uxap:subSections>
+            </uxap:ObjectPageSection>
+
+        </uxap:sections>
+
+        <!-- Footer for Create / Edit Mode -->
+        <uxap:footer>
+            <OverflowToolbar id="footerResCreate">
+                <ToolbarSpacer />
+                <Button
+                    id="btnSaveReservation"
+                    text="{i18n>resBtnCreateAndAutoTR}"
+                    icon="sap-icon://save"
+                    type="Emphasized"
+                    press=".onSave"
+                    enabled="{= !${view>/busy} }"
+                    busy="{view>/busy}" />
+                <Button
+                    id="btnCancelReservation"
+                    text="{i18n>commonCancel}"
+                    press=".onCancel"
+                    enabled="{= !${view>/busy} }" />
+            </OverflowToolbar>
+        </uxap:footer>
+
+    </uxap:ObjectPageLayout>
+</mvc:View>

@@ -312,6 +312,30 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("wmTrTo");
         },
 
+        onNavigateToOpen261: function () {
+            this.getOwnerComponent().getRouter().navTo("wmOpen261");
+        },
+
+        onNavigateToMvt261: function () {
+            this.getOwnerComponent().getRouter().navTo("wmMvt261");
+        },
+
+        onNavigateToHandlingUnits: function () {
+            this.getOwnerComponent().getRouter().navTo("wmHandlingUnits");
+        },
+
+        onNavigateToPackingInstructions: function () {
+            this.getOwnerComponent().getRouter().navTo("wmPackingInstructions");
+        },
+
+        onNavigateToReservationEntry: function () {
+            this.getOwnerComponent().getRouter().navTo("wmReservationEntryList");
+        },
+
+        onNavigateToWarehouseScanTo: function () {
+            this.getOwnerComponent().getRouter().navTo("wmWarehouseScanTo");
+        },
+
         onNavigateToOrdersDueForDelivery: function () {
             this.getOwnerComponent().getRouter().navTo("ordersDueForDelivery");
         },

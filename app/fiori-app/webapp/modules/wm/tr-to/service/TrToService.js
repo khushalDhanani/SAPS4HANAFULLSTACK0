@@ -36,7 +36,7 @@ sap.ui.define([
          * @returns {Promise<Array>}
          */
         getOpenTRs: function (sLgnum, sMvt) {
-            var sWh = sLgnum || "W01";
+            var sWh = sLgnum || "";
             var sMvtParam = sMvt ? sMvt.trim() : "";
             var sUrl = BASE_PATH + "/getOpenTRs(lgnum='" + encodeURIComponent(sWh.trim()) + "',mvt='" + encodeURIComponent(sMvtParam) + "')";
             return ODataClient.get(sUrl).then(function (oData) {
@@ -55,7 +55,7 @@ sap.ui.define([
             if (!sTbnum) {
                 return Promise.reject(new Error("Transfer Requirement number is required"));
             }
-            var sWh = sLgnum || "W01";
+            var sWh = sLgnum || "";
             var sUrl = BASE_PATH + "/getTR(tbnum='" + encodeURIComponent(sTbnum.trim()) + "',lgnum='" + encodeURIComponent(sWh.trim()) + "')";
 
             return ODataClient.get(sUrl).then(function (oData) {
@@ -74,7 +74,7 @@ sap.ui.define([
             if (!sTbnum) {
                 return Promise.reject(new Error("Transfer Requirement number is required"));
             }
-            var sWh = sLgnum || "W01";
+            var sWh = sLgnum || "";
             var sPos = sTbpos ? sTbpos.trim() : "";
             var sUrl = BASE_PATH + "/getAvailableSUs(tbnum='" + encodeURIComponent(sTbnum.trim()) + "',lgnum='" + encodeURIComponent(sWh.trim()) + "',tbpos='" + encodeURIComponent(sPos) + "')";
 
@@ -95,7 +95,7 @@ sap.ui.define([
             if (!sLenum) {
                 return Promise.reject(new Error("Storage Unit number is required"));
             }
-            var sWh = sLgnum || "W01";
+            var sWh = sLgnum || "";
             var sUrl = BASE_PATH + "/checkSU(lenum='" + encodeURIComponent(sLenum.trim()) + "',tbnum='" + encodeURIComponent(sTbnum ? sTbnum.trim() : "") + "',lgnum='" + encodeURIComponent(sWh.trim()) + "')";
 
             return ODataClient.get(sUrl).then(function (oData) {
@@ -131,6 +131,51 @@ sap.ui.define([
             }
 
             var sUrl = BASE_PATH + "/createTO";
+            return ODataClient.post(sUrl, oPayload).then(function (oData) {
+                return (oData && oData.value) ? oData.value : oData;
+            });
+        },
+
+        /**
+         * Look up Transfer Requirement with open quantity and material requirement profiles
+         * (MARA batch/serial management detection)
+         * @param {string} sTbnum - TR Number
+         * @param {string} [sLgnum='W01'] - Warehouse Number
+         * @returns {Promise<Object>}
+         */
+        lookupTR: function (sTbnum, sLgnum) {
+            if (!sTbnum) {
+                return Promise.reject(new Error("Transfer Requirement number is required"));
+            }
+            var sWh = sLgnum || "";
+            var sUrl = BASE_PATH + "/lookupTR(tbnum='" + encodeURIComponent(sTbnum.trim()) + "',lgnum='" + encodeURIComponent(sWh.trim()) + "',docType='TR',tbpos='')";
+            return ODataClient.get(sUrl).then(function (oData) {
+                return (oData && oData.value) ? oData.value : oData;
+            });
+        },
+
+        /**
+         * Create Transfer Order from TR with batch/serials and auto-confirm (Step 2)
+         * @param {Object} oPayload
+         * @param {string} oPayload.lgnum
+         * @param {string} oPayload.tbnum
+         * @param {string} [oPayload.tbpos='0001']
+         * @param {number} oPayload.qty
+         * @param {string} [oPayload.unit='KG']
+         * @param {string} [oPayload.batch]
+         * @param {Array<string>} [oPayload.serials]
+         * @param {boolean} [oPayload.autoConfirm=true]
+         * @param {string} [oPayload.storageUnit]
+         * @returns {Promise<Object>}
+         */
+        createTOFromTR: function (oPayload) {
+            if (!oPayload || !oPayload.tbnum) {
+                return Promise.reject(new Error("Transfer Requirement number is required"));
+            }
+            if (!oPayload.qty || parseFloat(oPayload.qty) <= 0) {
+                return Promise.reject(new Error("Quantity must be greater than zero"));
+            }
+            var sUrl = BASE_PATH + "/createTOFromTR";
             return ODataClient.post(sUrl, oPayload).then(function (oData) {
                 return (oData && oData.value) ? oData.value : oData;
             });

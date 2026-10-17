@@ -360,7 +360,25 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         StorageLocation         : String(4);
         StockType               : String(2);
         StockTypeText           : String(60);
+        IsStorageUnit           : Boolean;
+        StorageUnit             : String(20);
+        StorageType             : String(3);
+        StorageBin              : String(10);
+        Warehouse               : String(3);
         VerifiedAt              : Timestamp;
+    };
+
+    type AvailableSerialItem {
+        SerialNumber        : String(18);
+        Material            : String(40);
+        MaterialText        : String(40);
+        Plant               : String(4);
+        PlantName           : String(40);
+        StorageLocation     : String(4);
+        StorageLocationName : String(40);
+        StockType           : String(2);
+        StockTypeText       : String(60);
+        Batch               : String(10);
     };
 
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -370,6 +388,15 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         reservationItem : String(4),
         storageLocation : String(4)
     ) returns SerialVerification;
+
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getAvailableSerialNumbers(
+        reservationNo   : String(10),
+        reservationItem : String(4),
+        material        : String(40),
+        plant           : String(4),
+        storageLocation : String(4)
+    ) returns array of AvailableSerialItem;
 
     type StockUnitListItem {
         StorageUnit     : String(20);
@@ -389,6 +416,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         AvailableStock  : Decimal(13, 3);
         Unit            : String(3);
         QuantCount      : Integer;
+        Suggested       : Boolean;
     };
 
     type StockUnitList {
@@ -399,6 +427,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
         StorageLocation : String(4);
         Batch           : String(10);
         Warehouse               : String(20);
+        SuggestedStorageUnit    : String(20);
         StockUnits              : array of StockUnitListItem;
         ExcludedCount           : Integer;
         Message                 : String(500);

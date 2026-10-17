@@ -31,6 +31,24 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
     'coverage'
   ]);
 
+  // Gitignored, regenerable raw dumps of SAP data (tools/refresh-catalog.sh). They echo SAP's own
+  // Gateway technical service names (this system prefixes registered standard APIs with Z), which is
+  // SAP state, not a repo artifact. Only repo-authored files are guarded.
+  const IGNORED_FILES = new Set([
+    'srv/external/all_catalog_services.json'
+  ]);
+
+  // A repo-relative path (forward-slash) is ignored when it is a known raw SAP dump, or when it is the
+  // regenerated copy of such a dump that `cds build` writes under gen/**/external/** - that copy echoes
+  // SAP's own Z-prefixed Gateway service names (SAP state), not a repo-authored artifact. Other gen/
+  // files are still guarded.
+  const isIgnoredRelPath = (relPath) => {
+    const norm = relPath.split(path.sep).join('/');
+    if (IGNORED_FILES.has(norm)) return true;
+    if (/^gen\/(.*\/)?external\//.test(norm)) return true;
+    return false;
+  };
+
   const TEXT_FILE_EXTENSIONS = new Set([
     '.js', '.mjs', '.cjs', '.ts',
     '.cds', '.json', '.xml', '.properties',
@@ -95,6 +113,9 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
         }
 
         const relPath = path.relative(ROOT_DIR, filePath);
+        if (isIgnoredRelPath(relPath)) {
+          continue;
+        }
         scannedRelativePaths.add(relPath);
         totalFilesScanned++;
         const content = fs.readFileSync(filePath, 'utf8');
@@ -130,5 +151,17 @@ describe('Repository Guard: No forbidden queue prefix or legacy artifacts', () =
     }
 
     expect(findings).toEqual([]);
+  });
+
+  it('ignores the regenerated SAP catalog dump under gen/**/external/** but still guards other files', () => {
+    // excluded: the source dump and its gen/ copies (any depth) under an external/ folder
+    expect(isIgnoredRelPath('srv/external/all_catalog_services.json')).toBe(true);
+    expect(isIgnoredRelPath('gen/srv/srv/external/all_catalog_services.json')).toBe(true);
+    expect(isIgnoredRelPath('gen/external/all_catalog_services.json')).toBe(true);
+    expect(isIgnoredRelPath('gen/a/b/external/x.json')).toBe(true);
+    // still guarded: other gen/ files and all real source
+    expect(isIgnoredRelPath('gen/srv/srv/service.js')).toBe(false);
+    expect(isIgnoredRelPath('srv/wm/mvt261/service.js')).toBe(false);
+    expect(isIgnoredRelPath('srv/external/other.json')).toBe(false);
   });
 });

@@ -11,12 +11,12 @@ const mockODataClient = {
 };
 
 // Mock UI5 BaseController and dependencies for testing controller
-const mockMessageBox = {
+const _mockMessageBox = {
     error: jest.fn(),
     success: jest.fn(),
     confirm: jest.fn()
 };
-const mockMessageToast = {
+const _mockMessageToast = {
     show: jest.fn()
 };
 

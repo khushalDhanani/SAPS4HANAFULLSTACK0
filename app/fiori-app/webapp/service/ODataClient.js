@@ -165,7 +165,8 @@ sap.ui.define(["sap/base/Log"], function (Log) {
                         method: sMethod,
                         headers: mHeaders,
                         body: bodyData,
-                        credentials: "same-origin"
+                        credentials: "same-origin",
+                        signal: options.signal // optional AbortSignal for cancellable requests
                     });
                 })
                     .then(function (response) {
@@ -252,12 +253,12 @@ sap.ui.define(["sap/base/Log"], function (Log) {
          * @param {Object} [mHeaders]
          * @returns {Promise<any>}
          */
-        post: function (sUrl, oBody, mHeaders) {
-            return this.request(sUrl, {
+        post: function (sUrl, oBody, mHeaders, mOptions) {
+            return this.request(sUrl, Object.assign({
                 method: "POST",
                 headers: mHeaders,
                 body: oBody
-            });
+            }, mOptions || {}));
         }
     };
 

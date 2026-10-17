@@ -17,6 +17,11 @@ describe('Unit: dateUtils (formatDateToYMD)', () => {
     expect(formatDateToYMD('2026-09-08T10:00:00.000Z')).toBe('2026-09-08');
   });
 
+  it('should format SAP compact YYYYMMDD and YYYYMMDDhhmmss strings to YYYY-MM-DD', () => {
+    expect(formatDateToYMD('20261003075128')).toBe('2026-10-03');
+    expect(formatDateToYMD('20261003')).toBe('2026-10-03');
+  });
+
   it('should format Date instance to YYYY-MM-DD', () => {
     const d = new Date('2026-11-15T00:00:00.000Z');
     expect(formatDateToYMD(d)).toBe('2026-11-15');

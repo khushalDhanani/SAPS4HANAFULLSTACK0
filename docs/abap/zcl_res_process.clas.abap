@@ -1,0 +1,914 @@
+CLASS zcl_res_process DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    TYPES:
+      tt_bapiret2 TYPE STANDARD TABLE OF bapiret2 WITH DEFAULT KEY .
+
+    CONSTANTS:
+      gc_mvt_201   TYPE bwart VALUE '201',
+      gc_mvt_241   TYPE bwart VALUE '241',
+      gc_mvt_311   TYPE bwart VALUE '311',
+      gc_mvt_301   TYPE bwart VALUE '301',
+
+      gc_step_mb21 TYPE char10 VALUE 'MB21',
+      gc_step_lb01 TYPE char10 VALUE 'LB01',
+      gc_step_lt04 TYPE char10 VALUE 'LT04',
+      gc_step_lt12 TYPE char10 VALUE 'LT12',
+      gc_step_migo TYPE char10 VALUE 'MIGO',
+
+      " Status codes: identical to srv/common/wmStatus.js (JS layer owns the process) and domain ZRES_STATUS (zres_track.ddl)
+      gc_status_01 TYPE zres_status VALUE '01', " Reservation Created
+      gc_status_11 TYPE zres_status VALUE '11', " TR Creation Error
+      gc_status_02 TYPE zres_status VALUE '02', " TR Created
+      gc_status_12 TYPE zres_status VALUE '12', " TO Creation Error
+      gc_status_03 TYPE zres_status VALUE '03', " TO Created
+      gc_status_13 TYPE zres_status VALUE '13', " TO Confirmation Error
+      gc_status_04 TYPE zres_status VALUE '04', " TO Confirmed
+      gc_status_90 TYPE zres_status VALUE '90', " Goods Issue Error
+      gc_status_05 TYPE zres_status VALUE '05', " Goods Issue Posted
+      gc_status_99 TYPE zres_status VALUE '99'. " Cancelled / Reversed (never used for a failed step; MIGO failure = 90)
+
+    "! Step 0: Derive Warehouse Number from Plant + Storage Location (Table T320)
+    METHODS derive_warehouse
+      IMPORTING
+        !iv_werks TYPE werks_d
+        !iv_lgort TYPE lgort_d
+      EXPORTING
+        !ev_lgnum TYPE lgnum
+        !ev_subrc TYPE sysubrc
+      RAISING
+        zcx_res_process_error .
+
+    "! Step 1: Create Reservation via BAPI_RESERVATION_CREATE1 (MB21)
+    METHODS create_reservation
+      IMPORTING
+        !iv_bwart    TYPE bwart
+        !iv_werks    TYPE werks_d
+        !iv_lgort    TYPE lgort_d
+        !iv_matnr    TYPE matnr
+        !iv_menge    TYPE erfmg
+        !iv_meins    TYPE erfme
+        !iv_res_date TYPE d DEFAULT sy-datum
+        !iv_umwrk    TYPE umwrk OPTIONAL
+        !iv_umlgo    TYPE umlgo OPTIONAL
+        !iv_kostl    TYPE kostl OPTIONAL
+        !iv_anln1    TYPE anln1 OPTIONAL
+        !iv_anln2    TYPE anln2 OPTIONAL
+        !iv_testrun  TYPE bapi2093_test OPTIONAL
+      EXPORTING
+        !ev_rsnum    TYPE rsnum
+        !ev_rspos    TYPE rspos
+        !et_return   TYPE tt_bapiret2
+        !ev_subrc    TYPE sysubrc .
+
+    "! Step 2: Create Transfer Requirement via L_TR_CREATE (LB01)
+    METHODS create_tr
+      IMPORTING
+        !iv_lgnum    TYPE lgnum
+        !iv_bwlvs    TYPE bwlvs
+        !iv_matnr    TYPE matnr
+        !iv_werks    TYPE werks_d
+        !iv_lgort    TYPE lgort_d
+        !iv_menga    TYPE ltbp_menga
+        !iv_altme    TYPE lrmei
+        !iv_rsnum    TYPE rsnum
+        !iv_rspos    TYPE rspos DEFAULT '0001'
+      EXPORTING
+        !ev_tbnum    TYPE tbnum
+        !ev_tbpos    TYPE tbpos
+        !et_return   TYPE tt_bapiret2
+        !ev_subrc    TYPE sysubrc .
+
+    "! Step 3: Create Transfer Order from TR via L_TO_CREATE_TR (LT04)
+    METHODS create_to_from_tr
+      IMPORTING
+        !iv_lgnum   TYPE lgnum
+        !iv_tbnum   TYPE tbnum
+        !iv_commit  TYPE rl03b DEFAULT 'X'
+      EXPORTING
+        !ev_tanum   TYPE tanum
+        !et_return  TYPE tt_bapiret2
+        !ev_subrc   TYPE sysubrc .
+
+    "! Step 4: Confirm Transfer Order via L_TO_CONFIRM (LT12)
+    METHODS confirm_to
+      IMPORTING
+        !iv_lgnum      TYPE lgnum
+        !iv_tanum      TYPE tanum
+        !iv_squit      TYPE rl03t DEFAULT 'X'
+        !iv_conf_menge TYPE erfmg OPTIONAL
+        !iv_commit     TYPE rl03b DEFAULT 'X'
+      EXPORTING
+        !ev_subrc      TYPE sysubrc
+        !et_return     TYPE tt_bapiret2 .
+
+    "! Chained Step: Create TO then Confirm TO as a real second call
+    METHODS create_and_confirm_to
+      IMPORTING
+        !iv_lgnum      TYPE lgnum
+        !iv_tbnum      TYPE tbnum
+        !iv_tanum      TYPE tanum OPTIONAL
+        !iv_conf_menge TYPE erfmg OPTIONAL
+        !iv_commit     TYPE rl03b DEFAULT 'X'
+      EXPORTING
+        !ev_tanum      TYPE tanum
+        !ev_status     TYPE zres_status
+        !et_return     TYPE tt_bapiret2
+        !ev_subrc      TYPE sysubrc .
+
+    "! Step 5: Post Goods Issue via BAPI_GOODSMVT_CREATE (MIGO)
+    METHODS post_migo
+      IMPORTING
+        !iv_rsnum   TYPE rsnum
+        !iv_rspos   TYPE rspos DEFAULT '0001'
+        !iv_bwart   TYPE bwart
+        !iv_matnr   TYPE matnr
+        !iv_werks   TYPE werks_d
+        !iv_lgort   TYPE lgort_d
+        !iv_menge   TYPE erfmg
+        !iv_meins   TYPE erfme
+        !iv_umwrk   TYPE umwrk OPTIONAL
+        !iv_umlgo   TYPE umlgo OPTIONAL
+        !iv_kostl        TYPE kostl OPTIONAL
+        !iv_anln1        TYPE anln1 OPTIONAL
+        !iv_anln2        TYPE anln2 OPTIONAL
+        !iv_ref_text     TYPE bktxt OPTIONAL
+        !iv_complete_res TYPE xfeld DEFAULT space  " NO_MORE_GR only when the operator ticks "Complete reservation"
+        !iv_testrun      TYPE bapi2017_gm_gen OPTIONAL
+      EXPORTING
+        !ev_mblnr        TYPE mblnr
+        !ev_mjahr        TYPE mjahr
+        !et_return       TYPE tt_bapiret2
+        !ev_subrc        TYPE sysubrc .
+
+    "! Step 6: Update Tracking and Log in ZRES_TRACK & ZRES_LOG
+    METHODS update_status
+      IMPORTING
+        !iv_rsnum        TYPE rsnum
+        !iv_rspos        TYPE rspos DEFAULT '0001'
+        !iv_process_id   TYPE sysuuid_x16 OPTIONAL
+        !iv_ref_text     TYPE bktxt OPTIONAL
+        !iv_move_type    TYPE bwart OPTIONAL
+        !iv_werks        TYPE werks_d OPTIONAL
+        !iv_lgort        TYPE lgort_d OPTIONAL
+        !iv_lgnum        TYPE lgnum OPTIONAL
+        !iv_umlgo        TYPE umlgo OPTIONAL
+        !iv_umwrk        TYPE umwrk OPTIONAL
+        !iv_kostl        TYPE kostl OPTIONAL
+        !iv_anln1        TYPE anln1 OPTIONAL
+        !iv_anln2        TYPE anln2 OPTIONAL
+        !iv_saknr        TYPE saknr OPTIONAL
+        !iv_matnr        TYPE matnr OPTIONAL
+        !iv_charg        TYPE charg_d OPTIONAL
+        !iv_sernr        TYPE gernr OPTIONAL
+        !iv_menge        TYPE erfmg OPTIONAL
+        !iv_conf_menge   TYPE erfmg OPTIONAL
+        !iv_meins        TYPE erfme OPTIONAL
+        !iv_complete_res TYPE xfeld OPTIONAL
+        !iv_tbnum        TYPE tbnum OPTIONAL
+        !iv_tanum        TYPE tanum OPTIONAL
+        !iv_mblnr        TYPE mblnr OPTIONAL
+        !iv_mjahr        TYPE mjahr OPTIONAL
+        !iv_status       TYPE zres_status OPTIONAL
+        !iv_retry_count  TYPE int4 OPTIONAL
+        !iv_error_step   TYPE char10 OPTIONAL
+        !iv_err_msg      TYPE bapi_msg OPTIONAL
+        !iv_step         TYPE char10 OPTIONAL
+        !iv_msgty        TYPE bapi_mtype OPTIONAL
+        !iv_msgid        TYPE symsgid OPTIONAL
+        !iv_msgno        TYPE symsgno OPTIONAL
+        !iv_message      TYPE bapi_msg OPTIONAL
+      EXPORTING
+        !es_track        TYPE zres_track
+        !ev_subrc        TYPE sysubrc .
+
+    "! Step 7: Application Log Integration via BAL_LOG_CREATE, BAL_LOG_MSG_ADD, BAL_DB_SAVE (SLG1)
+    METHODS write_slg1
+      IMPORTING
+        !iv_object     TYPE balobj_d DEFAULT 'ZWM_RES'
+        !iv_subobject  TYPE balsubobj DEFAULT 'TRACK'
+        !iv_extnumber  TYPE balnrext OPTIONAL
+        !iv_msgty      TYPE symsgty DEFAULT 'I'
+        !iv_msgid      TYPE symsgid DEFAULT 'ZWM'
+        !iv_msgno      TYPE symsgno DEFAULT '001'
+        !iv_msgv1      TYPE symsgv OPTIONAL
+        !iv_msgv2      TYPE symsgv OPTIONAL
+        !iv_msgv3      TYPE symsgv OPTIONAL
+        !iv_msgv4      TYPE symsgv OPTIONAL
+      EXPORTING
+        !ev_log_handle TYPE balloghndl
+        !ev_subrc      TYPE sysubrc .
+
+  PROTECTED SECTION.
+  PRIVATE SECTION.
+
+    METHODS add_bapiret2
+      IMPORTING
+        !iv_type    TYPE bapi_mtype
+        !iv_id      TYPE symsgid
+        !iv_number  TYPE symsgno
+        !iv_message TYPE bapi_msg OPTIONAL
+        !iv_v1      TYPE symsgv OPTIONAL
+        !iv_v2      TYPE symsgv OPTIONAL
+      CHANGING
+        !ct_return  TYPE tt_bapiret2 .
+
+ENDCLASS.
+
+
+
+CLASS zcl_res_process IMPLEMENTATION.
+
+  METHOD derive_warehouse.
+    CLEAR: ev_lgnum, ev_subrc.
+
+    SELECT SINGLE lgnum FROM t320
+      WHERE werks = @iv_werks AND lgort = @iv_lgort
+      INTO @ev_lgnum.
+
+    IF sy-subrc <> 0 OR ev_lgnum IS INITIAL.
+      ev_subrc = 4.
+      RAISE EXCEPTION TYPE zcx_res_process_error
+        EXPORTING
+          textid   = zcx_res_process_error=>not_wm_managed
+          mv_werks = iv_werks
+          mv_lgort = iv_lgort
+          mv_msg   = |Plant { iv_werks } SLoc { iv_lgort } is not WM-managed in table T320|.
+    ENDIF.
+
+    ev_subrc = 0.
+  ENDMETHOD.
+
+  METHOD create_reservation.
+    DATA: ls_head  TYPE bapi2093_res_head,
+          lt_items TYPE STANDARD TABLE OF bapi2093_res_item,
+          ls_item  TYPE bapi2093_res_item,
+          lt_ret   TYPE STANDARD TABLE OF bapiret2,
+          lv_res   TYPE bapi2093_res_key.
+
+    CLEAR: ev_rsnum, ev_rspos, et_return, ev_subrc.
+
+    " 1. Build Header
+    ls_head-res_date   = iv_res_date.
+    ls_head-move_type  = iv_bwart.
+    ls_head-move_plant = iv_umwrk.
+    ls_head-move_stloc = iv_umlgo.
+    ls_head-costcenter = iv_kostl.
+    ls_head-asset_no   = iv_anln1.
+    ls_head-sub_number = iv_anln2.
+
+    " 2. Build Item
+    CLEAR ls_item.
+    ls_item-material  = iv_matnr.
+    ls_item-plant     = iv_werks.
+    ls_item-stge_loc  = iv_lgort.
+    ls_item-entry_qnt = iv_menge.
+    ls_item-entry_uom = iv_meins.
+    ls_item-movement  = 'X'.
+    APPEND ls_item TO lt_items.
+
+    " 3. Call BAPI
+    CALL FUNCTION 'BAPI_RESERVATION_CREATE1'
+      EXPORTING
+        reservationheader = ls_head
+        testrun           = iv_testrun
+      IMPORTING
+        reservation       = lv_res
+      TABLES
+        reservationitems  = lt_items
+        return            = lt_ret.
+
+    et_return = lt_ret.
+
+    LOOP AT lt_ret TRANSPORTING NO FIELDS WHERE type CA 'EA'.
+      ev_subrc = 4.
+      EXIT.
+    ENDLOOP.
+
+    IF ev_subrc = 0 AND lv_res IS NOT INITIAL.
+      ev_rsnum = lv_res.
+      ev_rspos = '0001'.
+      IF iv_testrun IS INITIAL.
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = 'X'.
+      ENDIF.
+    ELSEIF ev_subrc <> 0 AND iv_testrun IS INITIAL.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD create_tr.
+    DATA: lt_ltba TYPE STANDARD TABLE OF ltba,
+          ls_ltba TYPE ltba.
+
+    CLEAR: ev_tbnum, ev_tbpos, et_return, ev_subrc.
+
+    ls_ltba-lgnum = iv_lgnum.
+    ls_ltba-bwlvs = iv_bwlvs.
+    ls_ltba-matnr = iv_matnr.
+    ls_ltba-werks = iv_werks.
+    ls_ltba-lgort = iv_lgort.
+    ls_ltba-menga = iv_menga.
+    ls_ltba-altme = iv_altme.
+    ls_ltba-rsnum = iv_rsnum.
+    ls_ltba-rspos = iv_rspos.
+    APPEND ls_ltba TO lt_ltba.
+
+    CALL FUNCTION 'L_TR_CREATE'
+      EXPORTING
+        i_commit_work          = 'X'
+        i_save_only_all        = 'X'
+        i_single_item          = 'X'
+      TABLES
+        t_ltba                 = lt_ltba
+      EXCEPTIONS
+        item_error             = 1
+        item_without_number    = 2
+        no_entry_in_int_table  = 3
+        no_update_item_error   = 4
+        OTHERS                 = 5.
+
+    IF sy-subrc <> 0.
+      ev_subrc = sy-subrc.
+      add_bapiret2(
+        EXPORTING
+          iv_type    = 'E'
+          iv_id      = 'L3'
+          iv_number  = '100'
+          iv_message = |Error creating Transfer Requirement: exception { sy-subrc }|
+        CHANGING
+          ct_return  = et_return ).
+      RETURN.
+    ENDIF.
+
+    READ TABLE lt_ltba INTO ls_ltba INDEX 1.
+    IF sy-subrc = 0 AND ls_ltba-tbnum IS NOT INITIAL.
+      ev_tbnum = ls_ltba-tbnum.
+      ev_tbpos = ls_ltba-tbpos.
+      ev_subrc = 0.
+      add_bapiret2(
+        EXPORTING
+          iv_type    = 'S'
+          iv_id      = 'L3'
+          iv_number  = '101'
+          iv_message = |Transfer Requirement { ev_tbnum } item { ev_tbpos } created|
+        CHANGING
+          ct_return  = et_return ).
+    ELSE.
+      ev_subrc = 4.
+      add_bapiret2(
+        EXPORTING
+          iv_type    = 'E'
+          iv_id      = 'L3'
+          iv_number  = '102'
+          iv_message = 'L_TR_CREATE executed but no TBNUM returned'
+        CHANGING
+          ct_return  = et_return ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD create_to_from_tr.
+    DATA: lt_ltap_vb TYPE STANDARD TABLE OF ltap_vb,
+          lt_msg     TYPE STANDARD TABLE OF wmgrp_msg,
+          lv_tanum   TYPE tanum.
+
+    CLEAR: ev_tanum, et_return, ev_subrc.
+
+    CALL FUNCTION 'L_TO_CREATE_TR'
+      EXPORTING
+        i_lgnum                        = iv_lgnum
+        i_tbnum                        = iv_tbnum
+        i_commit_work                  = iv_commit
+        i_bname                        = sy-uname
+      IMPORTING
+        e_tanum                        = lv_tanum
+      TABLES
+        t_ltap_vb                      = lt_ltap_vb
+        t_wmgrp_msg                    = lt_msg
+      EXCEPTIONS
+        foreign_lock                   = 1
+        qm_relevant                    = 2
+        tr_completed                   = 3
+        xfeld_wrong                    = 4
+        ldest_wrong                    = 5
+        drukz_wrong                    = 6
+        tr_wrong                       = 7
+        squit_forbidden                = 8
+        no_to_created                  = 9
+        update_without_commit          = 10
+        no_authority                   = 11
+        preallocated_stock             = 12
+        partial_transfer_req_forbidden = 13
+        input_error                    = 14
+        OTHERS                         = 15.
+
+    IF sy-subrc <> 0.
+      ev_subrc = sy-subrc.
+      add_bapiret2(
+        EXPORTING
+          iv_type    = 'E'
+          iv_id      = 'L3'
+          iv_number  = '110'
+          iv_message = |Error creating Transfer Order from TR { iv_tbnum }: exception { sy-subrc }|
+        CHANGING
+          ct_return  = et_return ).
+      RETURN.
+    ENDIF.
+
+    ev_tanum = lv_tanum.
+    ev_subrc = 0.
+    add_bapiret2(
+      EXPORTING
+        iv_type    = 'S'
+        iv_id      = 'L3'
+        iv_number  = '111'
+        iv_message = |Transfer Order { ev_tanum } created from TR { iv_tbnum }|
+      CHANGING
+        ct_return  = et_return ).
+
+  ENDMETHOD.
+
+
+  METHOD confirm_to.
+    DATA: lt_conf  TYPE STANDARD TABLE OF ltap_conf,
+          lv_squit TYPE rl03t.
+
+    CLEAR: ev_subrc, et_return.
+    lv_squit = iv_squit.
+
+    " If specific confirmed quantity is provided, specify in T_LTAP_CONF
+    IF iv_conf_menge IS NOT INITIAL.
+      APPEND VALUE ltap_conf(
+        tanum = iv_tanum
+        tapos = '0001'
+        nista = iv_conf_menge
+        squit = 'X'
+      ) TO lt_conf.
+      lv_squit = space. " Per L_TO_CONFIRM exception SQUIT_OR_QUANTITIES: pass item table or I_SQUIT, not both
+    ENDIF.
+
+    " Authorization object verified in TOBJ (docs/abap/system-metadata.md §15); verify in SU21 before transport
+    AUTHORITY-CHECK OBJECT 'L_LGNUM'
+      ID 'LGNUM' FIELD iv_lgnum
+      ID 'LGTYP' DUMMY.
+    IF sy-subrc <> 0.
+      ev_subrc = 30.
+      add_bapiret2( EXPORTING iv_type = 'E' iv_id = 'L3' iv_number = '000'
+                              iv_message = |No authorization for warehouse { iv_lgnum } (L_LGNUM)|
+                    CHANGING  ct_return = et_return ).
+      RETURN.
+    ENDIF.
+
+    CALL FUNCTION 'L_TO_CONFIRM'
+      EXPORTING
+        i_lgnum                        = iv_lgnum
+        i_tanum                        = iv_tanum
+        i_squit                        = lv_squit
+        i_commit_work                  = iv_commit
+      TABLES
+        t_ltap_conf                    = lt_conf
+      EXCEPTIONS
+        to_confirmed                   = 1
+        to_doesnt_exist                = 2
+        item_confirmed                 = 3
+        item_subsystem                 = 4
+        item_doesnt_exist              = 5
+        item_without_zero_stock_check  = 6
+        item_with_zero_stock_check     = 7
+        one_item_with_zero_stock_check = 8
+        item_su_bulk_storage           = 9
+        item_no_su_bulk_storage        = 10
+        one_item_su_bulk_storage       = 11
+        foreign_lock                   = 12
+        squit_or_quantities            = 13
+        vquit_or_quantities            = 14
+        bquit_or_quantities            = 15
+        quantity_wrong                 = 16
+        double_lines                   = 17
+        kzdif_wrong                    = 18
+        no_difference                  = 19
+        no_negative_quantities         = 20
+        wrong_zero_stock_check         = 21
+        su_not_found                   = 22
+        no_stock_on_su                 = 23
+        su_wrong                       = 24
+        too_many_su                    = 25
+        nothing_to_do                  = 26
+        no_unit_of_measure             = 27
+        xfeld_wrong                    = 28
+        update_without_commit          = 29
+        no_authority                   = 30
+        lqnum_missing                  = 31
+        charg_missing                  = 32
+        no_sobkz                       = 33
+        no_charg                       = 34
+        nlpla_wrong                    = 35
+        two_step_confirmation_required = 36
+        two_step_conf_not_allowed      = 37
+        pick_confirmation_missing      = 38
+        quknz_wrong                    = 39
+        hu_data_wrong                  = 40
+        hu_data_missing                = 41
+        hu_not_found                   = 42
+        no_hu_data_required            = 43
+        not_enough_stock_in_hu         = 44
+        serial_number_data_wrong       = 45
+        serial_numbers_not_required    = 46
+        serial_number_not_available    = 47
+        serial_number_data_missing     = 48
+        to_item_split_not_allowed      = 49
+        input_wrong                    = 50
+        picking_of_hu_not_possible     = 51
+        OTHERS                         = 52.
+
+    IF sy-subrc <> 0.
+      ev_subrc = sy-subrc.
+      add_bapiret2(
+        EXPORTING
+          iv_type    = 'E'
+          iv_id      = 'L3'
+          iv_number  = '120'
+          iv_message = |Error confirming Transfer Order { iv_tanum }: exception { sy-subrc }|
+        CHANGING
+          ct_return  = et_return ).
+      RETURN.
+    ENDIF.
+
+    ev_subrc = 0.
+    add_bapiret2(
+      EXPORTING
+        iv_type    = 'S'
+        iv_id      = 'L3'
+        iv_number  = '121'
+        iv_message = |Transfer Order { iv_tanum } confirmed successfully|
+      CHANGING
+        ct_return  = et_return ).
+
+  ENDMETHOD.
+
+
+  METHOD create_and_confirm_to.
+    CLEAR: ev_tanum, ev_status, et_return, ev_subrc.
+    " TODO: Z_WM_TO_CREATE_FROM_TR supports IV_SQUIT = 'X' for immediate confirmation in one call, but chained 2-call architecture is enforced here.
+
+    " Step 1: Create Transfer Order via L_TO_CREATE_TR (skip if TANUM already set)
+    IF iv_tanum IS NOT INITIAL.
+      ev_tanum  = iv_tanum.
+      ev_status = gc_status_03.
+    ELSE.
+      create_to_from_tr(
+        EXPORTING
+          iv_lgnum  = iv_lgnum
+          iv_tbnum  = iv_tbnum
+          iv_commit = iv_commit
+        IMPORTING
+          ev_tanum  = ev_tanum
+          et_return = et_return
+          ev_subrc  = ev_subrc ).
+
+      IF ev_subrc <> 0 OR ev_tanum IS INITIAL.
+        ev_status = gc_status_12. " TO Creation Error
+        RETURN.
+      ENDIF.
+
+      ev_status = gc_status_03. " TO Created
+    ENDIF.
+
+    " Step 2: Confirm Transfer Order via L_TO_CONFIRM as a real second call
+    DATA: lt_conf_ret TYPE tt_bapiret2,
+          lv_conf_rc  TYPE sysubrc.
+
+    confirm_to(
+      EXPORTING
+        iv_lgnum      = iv_lgnum
+        iv_tanum      = ev_tanum
+        iv_conf_menge = iv_conf_menge
+        iv_commit     = iv_commit
+      IMPORTING
+        ev_subrc      = lv_conf_rc
+        et_return     = lt_conf_ret ).
+
+    IF lv_conf_rc = 0.
+      ev_status = gc_status_04. " TO Confirmed
+      ev_subrc  = 0.
+    ELSE.
+      ev_status = gc_status_13. " TO Confirmation Error (keep TANUM)
+      ev_subrc  = lv_conf_rc.
+      APPEND LINES OF lt_conf_ret TO et_return.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD post_migo.
+    DATA: ls_head    TYPE bapi2017_gm_head_01,
+          ls_code    TYPE bapi2017_gm_code,
+          lt_items   TYPE STANDARD TABLE OF bapi2017_gm_item_create,
+          ls_item    TYPE bapi2017_gm_item_create,
+          ls_headret TYPE bapi2017_gm_head_ret,
+          lt_ret     TYPE STANDARD TABLE OF bapiret2.
+
+    CLEAR: ev_mblnr, ev_mjahr, et_return, ev_subrc.
+
+    " Issue 5 & 7: GI Retry Guard - Match strictly on process step reference in MATDOC-SGTXT
+    IF iv_ref_text IS NOT INITIAL.
+      SELECT SINGLE mblnr, mjahr
+        FROM matdoc
+        WHERE sgtxt = @iv_ref_text
+        INTO (@ev_mblnr, @ev_mjahr).
+
+      IF sy-subrc = 0 AND ev_mblnr IS NOT INITIAL.
+        ev_subrc = 0.
+        add_bapiret2(
+          EXPORTING
+            iv_type    = 'W'
+            iv_id      = 'M7'
+            iv_number  = '060'
+            iv_message = |Material document { ev_mblnr }/{ ev_mjahr } already exists for process reference { iv_ref_text }. Re-posting skipped.|
+          CHANGING
+            ct_return  = et_return ).
+        RETURN.
+      ENDIF.
+    ENDIF.
+
+    " Map GM_CODE: 03 for GI 201/241, 04 for Transfer 311/301, 06 for universal reservation fallback
+    CASE iv_bwart.
+      WHEN '201' OR '241'.
+        ls_code-gm_code = '03'.
+      WHEN '311' OR '301'.
+        ls_code-gm_code = '04'.
+      WHEN OTHERS.
+        ls_code-gm_code = '06'.
+    ENDCASE.
+
+    ls_head-pstng_date = sy-datum.
+    ls_head-doc_date   = sy-datum.
+    ls_head-ref_doc_no = |RES { iv_rsnum }|.
+    IF iv_ref_text IS NOT INITIAL.
+      ls_head-bktxt    = iv_ref_text(25). " Truncate safely to 25 chars for header display only
+    ELSE.
+      ls_head-bktxt    = |RES { iv_rsnum }|.
+    ENDIF.
+
+    CLEAR ls_item.
+    ls_item-material   = iv_matnr.
+    ls_item-plant      = iv_werks.
+    ls_item-stge_loc   = iv_lgort.
+    ls_item-move_type  = iv_bwart.
+    ls_item-entry_qnt  = iv_menge.
+    ls_item-entry_uom  = iv_meins.
+    ls_item-reserv_no  = iv_rsnum.
+    ls_item-res_item   = iv_rspos.
+    ls_item-no_more_gr = iv_complete_res. " Close reservation item if complete flag is set
+    ls_item-item_text  = iv_ref_text.     " Holds full PROCESS_ID (CHAR 50), maps directly to MATDOC-SGTXT
+
+    IF iv_umwrk IS NOT INITIAL.
+      ls_item-move_plant = iv_umwrk.
+    ENDIF.
+    IF iv_umlgo IS NOT INITIAL.
+      ls_item-move_stloc = iv_umlgo.
+    ENDIF.
+    IF iv_kostl IS NOT INITIAL.
+      ls_item-costcenter = iv_kostl.
+    ENDIF.
+    IF iv_anln1 IS NOT INITIAL.
+      ls_item-asset_no   = iv_anln1.
+      ls_item-sub_number = iv_anln2.
+    ENDIF.
+
+    APPEND ls_item TO lt_items.
+
+    " Authorization objects verified in TOBJ (docs/abap/system-metadata.md §15); verify in SU21 before transport
+    AUTHORITY-CHECK OBJECT 'M_MSEG_BWA'
+      ID 'ACTVT' FIELD '01'
+      ID 'BWART' FIELD iv_bwart.
+    IF sy-subrc <> 0.
+      ev_subrc = 4.
+      add_bapiret2( EXPORTING iv_type = 'E' iv_id = 'M7' iv_number = '000'
+                              iv_message = |No authorization for goods movement type { iv_bwart } (M_MSEG_BWA)|
+                    CHANGING  ct_return = et_return ).
+      RETURN.
+    ENDIF.
+    AUTHORITY-CHECK OBJECT 'M_MSEG_WWA'
+      ID 'ACTVT' FIELD '01'
+      ID 'WERKS' FIELD iv_werks.
+    IF sy-subrc <> 0.
+      ev_subrc = 4.
+      add_bapiret2( EXPORTING iv_type = 'E' iv_id = 'M7' iv_number = '000'
+                              iv_message = |No authorization for goods movements in plant { iv_werks } (M_MSEG_WWA)|
+                    CHANGING  ct_return = et_return ).
+      RETURN.
+    ENDIF.
+
+    CALL FUNCTION 'BAPI_GOODSMVT_CREATE'
+      EXPORTING
+        goodsmvt_header  = ls_head
+        goodsmvt_code    = ls_code
+        testrun          = iv_testrun
+      IMPORTING
+        goodsmvt_headret = ls_headret
+      TABLES
+        goodsmvt_item    = lt_items
+        return           = lt_ret.
+
+    et_return = lt_ret.
+
+    LOOP AT lt_ret TRANSPORTING NO FIELDS WHERE type CA 'EA'.
+      ev_subrc = 4.
+      EXIT.
+    ENDLOOP.
+
+    IF ev_subrc = 0 AND ls_headret-mat_doc IS NOT INITIAL.
+      ev_mblnr = ls_headret-mat_doc.
+      ev_mjahr = ls_headret-doc_year.
+      IF iv_testrun IS INITIAL.
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING
+            wait = 'X'.
+      ENDIF.
+    ELSEIF ev_subrc <> 0 AND iv_testrun IS INITIAL.
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD update_status.
+    DATA: ls_track TYPE zres_track,
+          ls_log   TYPE zres_log.
+
+    CLEAR: es_track, ev_subrc.
+
+    IF iv_rsnum IS INITIAL.
+      ev_subrc = 4.
+      RETURN.
+    ENDIF.
+
+    " 1. Read existing record or initialize
+    SELECT SINGLE * FROM zres_track
+      WHERE rsnum = @iv_rsnum
+        AND rspos = @iv_rspos
+      INTO @ls_track.
+
+    IF sy-subrc <> 0.
+      ls_track-mandt      = sy-mandt.
+      ls_track-rsnum      = iv_rsnum.
+      ls_track-rspos      = iv_rspos.
+      ls_track-created_by = sy-uname.
+      ls_track-created_on = sy-datum.
+      ls_track-created_at = sy-uzeit.
+    ENDIF.
+
+    " 2. Apply optional updates
+    IF iv_process_id   IS NOT INITIAL. ls_track-process_id   = iv_process_id.   ENDIF.
+    IF iv_ref_text     IS NOT INITIAL. ls_track-ref_text     = iv_ref_text.     ENDIF.
+    IF iv_move_type    IS NOT INITIAL. ls_track-move_type    = iv_move_type.    ENDIF.
+    IF iv_werks        IS NOT INITIAL. ls_track-werks        = iv_werks.        ENDIF.
+    IF iv_lgort        IS NOT INITIAL. ls_track-lgort        = iv_lgort.        ENDIF.
+    IF iv_lgnum        IS NOT INITIAL. ls_track-lgnum        = iv_lgnum.        ENDIF.
+    IF iv_umlgo        IS NOT INITIAL. ls_track-umlgo        = iv_umlgo.        ENDIF.
+    IF iv_umwrk        IS NOT INITIAL. ls_track-umwrk        = iv_umwrk.        ENDIF.
+    IF iv_kostl        IS NOT INITIAL. ls_track-kostl        = iv_kostl.        ENDIF.
+    IF iv_anln1        IS NOT INITIAL. ls_track-anln1        = iv_anln1.        ENDIF.
+    IF iv_anln2        IS NOT INITIAL. ls_track-anln2        = iv_anln2.        ENDIF.
+    IF iv_saknr        IS NOT INITIAL. ls_track-saknr        = iv_saknr.        ENDIF.
+    IF iv_matnr        IS NOT INITIAL. ls_track-matnr        = iv_matnr.        ENDIF.
+    IF iv_charg        IS NOT INITIAL. ls_track-charg        = iv_charg.        ENDIF.
+    IF iv_sernr        IS NOT INITIAL. ls_track-sernr        = iv_sernr.        ENDIF.
+    IF iv_menge        IS NOT INITIAL. ls_track-menge        = iv_menge.        ENDIF.
+    IF iv_conf_menge   IS NOT INITIAL. ls_track-conf_menge   = iv_conf_menge.   ENDIF.
+    IF iv_meins        IS NOT INITIAL. ls_track-meins        = iv_meins.        ENDIF.
+    IF iv_complete_res IS NOT INITIAL. ls_track-complete_res = iv_complete_res. ENDIF.
+    IF iv_tbnum        IS NOT INITIAL. ls_track-tbnum        = iv_tbnum.        ENDIF.
+    IF iv_tanum        IS NOT INITIAL. ls_track-tanum        = iv_tanum.        ENDIF.
+    IF iv_mblnr        IS NOT INITIAL. ls_track-mblnr        = iv_mblnr.        ENDIF.
+    IF iv_mjahr        IS NOT INITIAL. ls_track-mjahr        = iv_mjahr.        ENDIF.
+    IF iv_status       IS NOT INITIAL. ls_track-status       = iv_status.       ENDIF.
+    IF iv_retry_count  IS NOT INITIAL. ls_track-retry_count  = iv_retry_count.  ENDIF.
+    IF iv_error_step   IS NOT INITIAL. ls_track-error_step   = iv_error_step.   ENDIF.
+    IF iv_err_msg      IS NOT INITIAL. ls_track-err_msg      = iv_err_msg.      ENDIF.
+
+    ls_track-changed_by = sy-uname.
+    ls_track-changed_on = sy-datum.
+    ls_track-changed_at = sy-uzeit.
+
+    MODIFY zres_track FROM ls_track.
+    IF sy-subrc = 0.
+      es_track = ls_track.
+      ev_subrc = 0.
+    ELSE.
+      ev_subrc = sy-subrc.
+      RETURN.
+    ENDIF.
+
+    " 3. Record step-wise log in ZRES_LOG if step is provided
+    IF iv_step IS NOT INITIAL.
+      CLEAR ls_log.
+      ls_log-mandt   = sy-mandt.
+      TRY.
+          ls_log-log_id = cl_system_uuid=>create_uuid_c32_static( ).
+        CATCH cx_uuid_error.
+          ls_log-log_id = |{ sy-datum }{ sy-uzeit }{ sy-tabix }|.
+      ENDTRY.
+      ls_log-rsnum      = iv_rsnum.
+      ls_log-rspos      = iv_rspos.
+      ls_log-step       = iv_step.
+      ls_log-status     = COND #( WHEN iv_status IS NOT INITIAL THEN iv_status ELSE ls_track-status ).
+      ls_log-msgty      = COND #( WHEN iv_msgty IS NOT INITIAL THEN iv_msgty ELSE 'I' ).
+      ls_log-msgid      = iv_msgid.
+      ls_log-msgno      = iv_msgno.
+      ls_log-message    = iv_message.
+      ls_log-created_by = sy-uname.
+      ls_log-created_on = sy-datum.
+      ls_log-created_at = sy-uzeit.
+
+      MODIFY zres_log FROM ls_log.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD add_bapiret2.
+    DATA: ls_ret TYPE bapiret2.
+
+    ls_ret-type       = iv_type.
+    ls_ret-id         = iv_id.
+    ls_ret-number     = iv_number.
+    ls_ret-message    = iv_message.
+    ls_ret-message_v1 = iv_v1.
+    ls_ret-message_v2 = iv_v2.
+    APPEND ls_ret TO ct_return.
+  ENDMETHOD.
+
+
+  METHOD write_slg1.
+    DATA: ls_log     TYPE bal_s_log,
+          ls_msg     TYPE bal_s_msg,
+          lt_handles TYPE bal_t_logh.
+
+    CLEAR: ev_log_handle, ev_subrc.
+
+    ls_log-object    = iv_object.
+    ls_log-subobject = iv_subobject.
+    ls_log-extnumber = iv_extnumber.
+    ls_log-aldate    = sy-datum.
+    ls_log-altime    = sy-uzeit.
+    ls_log-aluser    = sy-uname.
+    ls_log-alprog    = sy-repid.
+
+    CALL FUNCTION 'BAL_LOG_CREATE'
+      EXPORTING
+        i_s_log      = ls_log
+      IMPORTING
+        e_log_handle = ev_log_handle
+      EXCEPTIONS
+        OTHERS       = 1.
+
+    IF sy-subrc <> 0 OR ev_log_handle IS INITIAL.
+      ev_subrc = 4.
+      RETURN.
+    ENDIF.
+
+    ls_msg-msgty = iv_msgty.
+    ls_msg-msgid = iv_msgid.
+    ls_msg-msgno = iv_msgno.
+    ls_msg-msgv1 = iv_msgv1.
+    ls_msg-msgv2 = iv_msgv2.
+    ls_msg-msgv3 = iv_msgv3.
+    ls_msg-msgv4 = iv_msgv4.
+
+    CALL FUNCTION 'BAL_LOG_MSG_ADD'
+      EXPORTING
+        i_log_handle = ev_log_handle
+        i_s_msg      = ls_msg
+      EXCEPTIONS
+        OTHERS       = 2.
+
+    IF sy-subrc <> 0.
+      ev_subrc = 4.
+      RETURN.
+    ENDIF.
+
+    APPEND ev_log_handle TO lt_handles.
+    CALL FUNCTION 'BAL_DB_SAVE'
+      EXPORTING
+        i_t_log_handle = lt_handles
+      EXCEPTIONS
+        OTHERS         = 3.
+
+    IF sy-subrc = 0.
+      ev_subrc = 0.
+    ELSE.
+      ev_subrc = 4.
+    ENDIF.
+  ENDMETHOD.
+
+ENDCLASS.

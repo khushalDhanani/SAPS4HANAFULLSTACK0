@@ -99,7 +99,7 @@ class AuthAdapter {
     const sClient = options.client || (process.env.S4_CLIENT && process.env.S4_CLIENT.trim()) || s4Config.getClient();
 
     const baseDest = options.destination || (await this._getDestination(options));
-    const baseUrl = options.baseUrl || (baseDest && baseDest.url);
+    const baseUrl = options.baseUrl || (await this.resolveBaseUrl(options));
 
     if (!baseUrl) {
       LOG.error('S/4HANA destination URL is not configured.');

@@ -31,7 +31,8 @@ sap.ui.define([
         "/CurrencyVH": { title: "Select Currency", key: "Currency", desc: "Currency_Text" },
         "/IncotermsClassificationVH": { title: "Select Incoterms", key: "IncotermsClassification", desc: "IncotermsClassificationName" },
         "/PaymentTermsVH": { title: "Select Payment Terms", key: "PaymentTerms", desc: "PaymentTermsName" },
-        "/MaterialVH": { title: "Select Material", key: "Material", desc: "MaterialName", descAlt: "Material_Text", info: "MaterialBaseUnit" },
+        // searchInfo false: the unit of measure is shown but never searched (SAP rejects contains() on a 3-char unit field)
+        "/MaterialVH": { title: "Select Material", key: "Material", desc: "MaterialName", descAlt: "Material_Text", info: "MaterialBaseUnit", searchInfo: false },
         "/MaterialGroupVH": { title: "Select Material Group", key: "MaterialGroup", desc: "MaterialGroupName" },
         "/PlantVH": { title: "Select Plant", key: "Plant", desc: "PlantName", info: "PurchasingOrganization" },
         "/StorageLocationVH": { title: "Select Storage Location", key: "StorageLocation", desc: "StorageLocationName", info: "Plant" },
@@ -39,14 +40,17 @@ sap.ui.define([
         "/TaxCodeVH": { title: "Select Tax Code", key: "TaxCode", desc: "TaxCode_Text" },
         "/ItemCategoryVH": { title: "Select Item Category", key: "PurchasingDocumentItemCategory", desc: "PurchasingDocumentItemCat_Text" },
         "/AcctAssignmentCategoryVH": { title: "Select Account Assignment Category", key: "AccountAssignmentCategory", desc: "AccountAssignmentCategory_Text" },
-        "/SalesInquiryTypeVH": { title: "Select Inquiry Type", key: "SalesDocumentType", desc: "SalesDocumentTypeName", descAlt: "SalesDocumentType_Text", info: "Classification" },
-        "/SalesOrderTypeVH": { title: "Select Order Type", key: "SalesOrderType", desc: "SalesOrderTypeName", descAlt: "SalesOrderTypeName", info: "Language key" },
+        "/SalesInquiryTypeVH": { title: "Select Inquiry Type", key: "SalesDocumentType", desc: "SalesDocumentTypeName", descAlt: "SalesDocumentType_Text" },
+        "/SalesOrderTypeVH": { title: "Select Order Type", key: "SalesOrderType", desc: "SalesOrderTypeName" },
         "/SalesOrganizationVH": { title: "Select Sales Organization", key: "SalesOrganization", desc: "SalesOrganization_Text" },
         "/DistributionChannelVH": { title: "Select Distribution Channel", key: "DistributionChannel", desc: "DistributionChannelName" },
         "/DivisionVH": { title: "Select Division", key: "Division", desc: "DivisionName" },
         "/SoldToPartyVH": { title: "Select Sold-to Party", key: "Customer", desc: "CustomerName" },
         "/CustomerVH": { title: "Select Customer", key: "Customer", desc: "CustomerName" },
-        "/ContactPersonVH": { title: "Select Contact Person", key: "ContactPerson", desc: "FullName", descAlt: "LastName", info: "Customer" }
+        "/ContactPersonVH": { title: "Select Contact Person", key: "ContactPerson", desc: "FullName", descAlt: "LastName", info: "Customer" },
+        "/OrderTypeVH": { title: "Select Order Type", key: "OrderType", desc: "OrderTypeName", info: "OrderCategory" },
+        "/InternalOrderVH": { title: "Select Internal Order", key: "OrderID", desc: "OrderDescription", info: "Plant" },
+        "/CostCenterVH": { title: "Select Cost Center", key: "CostCenter", desc: "CostCenterName", info: "CompanyCode" }
     };
 
 
@@ -58,7 +62,9 @@ sap.ui.define([
          * @returns {{ title: string, key: string, desc: string, descAlt?: string }|undefined}
          */
         getConfig: function (sPath) {
-            return oValueHelpConfig[sPath];
+            if (!sPath) return undefined;
+            var sCleanPath = sPath.indexOf(">") !== -1 ? sPath.substring(sPath.indexOf(">") + 1) : sPath;
+            return oValueHelpConfig[sCleanPath] || oValueHelpConfig[sPath];
         },
 
         /**
@@ -314,34 +320,40 @@ sap.ui.define([
 
             if (oModel) {
                 oSelectDialog.setModel(oModel);
+                oSelectDialog.setModel(oModel, "reservationEntry");
                 oSelectDialog.setModel(oModel, "salesInquiry");
                 oSelectDialog.setModel(oModel, "salesOrder");
             }
 
+            var sCleanPath = sPath.indexOf(">") !== -1 ? sPath.substring(sPath.indexOf(">") + 1) : sPath;
             var oTemplateConfig = {
                 title: "{" + oConf.key + "}",
                 description: oConf.descAlt ? "{= ${" + oConf.desc + "} || ${" + oConf.descAlt + "} || '' }" : "{" + oConf.desc + "}"
             };
             if (oConf.info) {
-                if (sPath === "/MaterialVH") {
+                if (sCleanPath === "/MaterialVH") {
                     oTemplateConfig.info = "{= ${MaterialType} ? (${MaterialType} + (${MaterialBaseUnit} ? ' • ' + ${MaterialBaseUnit} : '')) : (${MaterialBaseUnit} || '') }";
-                } else if (sPath === "/SupplierVH") {
+                } else if (sCleanPath === "/SupplierVH") {
                     oTemplateConfig.info = "{= (${SupplierAccountGroup} === 'ZDOM' ? 'Domestic • ' : (${SupplierAccountGroup} === 'ZINT' ? 'Internal Plant • ' : '')) + (${CompanyCode} ? 'CoCode ' + ${CompanyCode} : '') }";
-                } else if (sPath === "/CompanyCodeVH") {
+                } else if (sCleanPath === "/CompanyCodeVH") {
                     oTemplateConfig.info = "{= ${CompanyCode} === '1000' ? 'Domestic (AIL)' : (${CompanyCode} === '2000' ? 'Domestic (ASCL)' : '') }";
-                } else if (sPath === "/PlantVH") {
+                } else if (sCleanPath === "/PlantVH") {
                     oTemplateConfig.info = "{= ${PurchasingOrganization} ? 'PurchOrg ' + ${PurchasingOrganization} : '' }";
-                } else if (sPath === "/StorageLocationVH") {
+                } else if (sCleanPath === "/StorageLocationVH") {
                     oTemplateConfig.info = "{= ${Plant} ? 'Plant ' + ${Plant} : '' }";
-                } else if (sPath === "/PurchasingGroupVH") {
+                } else if (sCleanPath === "/PurchasingGroupVH") {
                     oTemplateConfig.info = "{= ${FaxNumber} ? ${FaxNumber} : '' }";
+                } else if (sCleanPath === "/OrderTypeVH") {
+                    oTemplateConfig.info = "{= ${OrderCategory} ? 'Cat ' + ${OrderCategory} : '' }";
+                } else if (sCleanPath === "/InternalOrderVH") {
+                    oTemplateConfig.info = "{= ${Plant} ? 'Plant ' + ${Plant} : '' }";
                 } else {
                     oTemplateConfig.info = "{" + oConf.info + "}";
                 }
             }
 
             oSelectDialog.bindAggregation("items", {
-                path: sPath,
+                path: sCleanPath,
                 filters: aActiveContextFilters,
                 template: new StandardListItem(oTemplateConfig)
             });
@@ -643,7 +655,7 @@ sap.ui.define([
                 if (oConf.descAlt) {
                     aOrFilters.push(new Filter(oConf.descAlt, FilterOperator.Contains, sValue));
                 }
-                if (oConf.info) {
+                if (oConf.info && oConf.searchInfo !== false) {
                     aOrFilters.push(new Filter(oConf.info, FilterOperator.Contains, sValue));
                 }
                 aFilters.push(new Filter({

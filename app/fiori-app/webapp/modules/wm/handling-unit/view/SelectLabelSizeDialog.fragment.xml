@@ -1,0 +1,31 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog id="huSizeDialog" title="{i18n>huSelectSizeTitle}" contentWidth="30rem">
+        <content>
+            <MessageStrip id="huSizeLimitWarning" visible="{huSize>/showLimitWarning}" text="{huSize>/warningText}"
+                type="Warning" showIcon="true" class="sapUiSmallMargin" />
+            <List id="huSizeList" mode="SingleSelectMaster" selectionChange=".onSelectLabelSize"
+                items="{huSize>/sizes}" showSeparators="Inner">
+                <CustomListItem type="Active" selected="{= ${huSize>key} === ${huSize>/selectedKey} }">
+                    <HBox alignItems="Center" class="sapUiSmallMargin">
+                        <VBox width="4.5rem" alignItems="Center" justifyContent="Center">
+                            <HBox class="huSizePreview" width="{huSize>previewW}px" height="{huSize>previewH}px" />
+                        </VBox>
+                        <VBox class="sapUiSmallMarginBegin">
+                            <Title text="{huSize>name}" level="H5" />
+                            <Text text="{huSize>dims}" />
+                            <Text text="{huSize>desc}" class="sapUiTinyMarginTop" />
+                        </VBox>
+                    </HBox>
+                </CustomListItem>
+            </List>
+        </content>
+        <beginButton>
+            <Button id="huSizeConfirm" text="{huSize>/confirmText}" type="Emphasized" press=".onConfirmLabelSize" />
+        </beginButton>
+        <endButton>
+            <Button id="huSizeCancel" text="{i18n>huSizeCancel}" press=".onCancelLabelSize" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>

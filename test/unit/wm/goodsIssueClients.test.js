@@ -827,12 +827,36 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
   });
 
   describe('GoodsIssuePostingClient', () => {
-    it('should reject posting with missing or invalid parameters', async () => {
-      const postingClient = new GoodsIssuePostingClient();
+    it.each(['', '   '])('rejects a 201 with missing or whitespace-only CostCenter before HTTP submit [MOCK]', async (costCenter) => {
+      const mockAdapter = {
+        _getDestination: jest.fn().mockResolvedValue({ name: 'MOCK_S4' }),
+        _post: jest.fn(() => { throw new Error('unexpected HTTP POST reached from invalid input'); })
+      };
+      const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
+      let caught;
+      try {
+        await postingClient.postGoodsIssue('', '1', 'MAT01', 10, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter });
+      } catch (err) {
+        caught = err;
+      }
 
-      await expect(postingClient.postGoodsIssue('', '1', 'MAT01', 10, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter: '' })).rejects.toThrow('Property CostCenter is mandatory for GoodsMovementType 201');
-      await expect(postingClient.postGoodsIssue('10001', '1', 'MAT01', 0, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' })).rejects.toThrow('IssueQty must be a positive decimal number');
-      await expect(postingClient.postGoodsIssue('10001', '1', 'MAT01', -5, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' })).rejects.toThrow('IssueQty must be a positive decimal number');
+      expect(mockAdapter._post).not.toHaveBeenCalled();
+      expect(caught?.status).toBe(400);
+      expect(caught?.message).toContain('Property CostCenter is mandatory for GoodsMovementType 201');
+    });
+
+    it('rejects zero and negative quantities before HTTP submit [MOCK]', async () => {
+      const mockAdapter = {
+        _getDestination: jest.fn().mockResolvedValue({ name: 'MOCK_S4' }),
+        _post: jest.fn(() => { throw new Error('unexpected HTTP POST'); })
+      };
+      const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
+
+      await expect(postingClient.postGoodsIssue('10001', '1', 'MAT01', 0, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' }))
+        .rejects.toThrow('IssueQty must be a positive decimal number');
+      await expect(postingClient.postGoodsIssue('10001', '1', 'MAT01', -5, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' }))
+        .rejects.toThrow('IssueQty must be a positive decimal number');
+      expect(mockAdapter._post).not.toHaveBeenCalled();
     });
 
     it('should block posting if batch is expired', async () => {

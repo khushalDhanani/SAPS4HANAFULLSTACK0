@@ -86,6 +86,14 @@ describe('Goods Issue 201 posting attempts', () => {
   });
 
   describe('re-check job', () => {
+    let delivSpy;
+    beforeEach(() => {
+      delivSpy = jest.spyOn(GoodsIssueAdapter, 'findDeliveryByReference').mockResolvedValue(null);
+    });
+    afterEach(() => {
+      if (delivSpy) delivSpy.mockRestore();
+    });
+
     const lookup = () => jest.spyOn(GoodsIssueAdapter, 'findPostedGoodsIssueByReference');
     const statusOf = async (ref) => (await attempts.getByReference(ref)).Status;
 
@@ -138,6 +146,7 @@ describe('unconfirmed documents and re-confirm job', () => {
     await cds.db.run(DELETE.from(ATTEMPT_ENTITY));
     attempts.clearMemoryStore();
     jest.spyOn(GoodsIssueAdapter, 'isBatchManaged').mockResolvedValue(false);
+    jest.spyOn(GoodsIssueAdapter, 'revalidateStockBeforePosting').mockResolvedValue({ StockReadSuccess: true, StockSufficient: true });
   });
 
   test('unconfirmed documents are stored on attempt as unconfirmed', async () => {
@@ -148,7 +157,9 @@ describe('unconfirmed documents and re-confirm job', () => {
       Confirmed: false,
       ConfirmationStatus: 'POSTED_CONFIRMATION_PENDING'
     });
-    const res201 = await handlers.postGoodsIssue201(req(payload));
+    const request201 = req(payload);
+    const res201 = await handlers.postGoodsIssue201(request201);
+    expect(request201.error).not.toHaveBeenCalled();
     expect(res201).toBeDefined();
     expect(res201.Confirmed).toBe(false);
 

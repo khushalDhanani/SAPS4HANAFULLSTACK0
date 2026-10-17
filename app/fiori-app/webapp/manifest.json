@@ -89,6 +89,14 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
+      },
+      "reservationEntryService": {
+        "uri": "/odata/v4/reservation-entry/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       }
     }
   },
@@ -188,6 +196,13 @@
       },
       "trTo": {
         "dataSource": "trToService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "reservationEntry": {
+        "dataSource": "reservationEntryService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -307,6 +322,11 @@
           "target": "TargetGoodsReceipt"
         },
         {
+          "name": "wmGoodsReceiptDetail",
+          "pattern": "wm/goods-receipt/{delivery}",
+          "target": "TargetGoodsReceipt"
+        },
+        {
           "name": "ordersDueForDelivery",
           "pattern": "le/orders-due",
           "target": "TargetOrdersDueForDelivery"
@@ -330,6 +350,76 @@
           "name": "wmTrTo",
           "pattern": "wm/tr-to",
           "target": "TargetTrTo"
+        },
+        {
+          "name": "wmCycle261",
+          "pattern": "wm/mvt261/open/{reservation}/{item}/cycle",
+          "target": "TargetCycle261"
+        },
+        {
+          "name": "wmScan261",
+          "pattern": "wm/mvt261/open/{reservation}/{item}",
+          "target": "TargetScan261"
+        },
+        {
+          "name": "wmOpen261",
+          "pattern": "wm/mvt261/open",
+          "target": "TargetOpen261"
+        },
+        {
+          "name": "wmMvt261",
+          "pattern": "wm/mvt261",
+          "target": "TargetMvt261"
+        },
+        {
+          "name": "wmHandlingUnitDetail",
+          "pattern": "wm/handling-unit/{hu}:?query:",
+          "target": "TargetHandlingUnitDetail"
+        },
+        {
+          "name": "wmHandlingUnits",
+          "pattern": "wm/handling-unit",
+          "target": "TargetHandlingUnits"
+        },
+        {
+          "name": "wmPackingInstructionDetail",
+          "pattern": "wm/packing-instruction/{systemUUID}",
+          "target": "TargetPackingInstructionDetail"
+        },
+        {
+          "name": "wmPackingInstructions",
+          "pattern": "wm/packing-instruction",
+          "target": "TargetPackingInstructions"
+        },
+        {
+          "name": "wmReservationEntryList",
+          "pattern": "wm/reservation-entry",
+          "target": "TargetReservationEntryList"
+        },
+        {
+          "name": "wmReservationEntryCreate",
+          "pattern": "wm/reservation-entry/create",
+          "target": "TargetReservationEntryDetail"
+        },
+        {
+          "name": "wmReservationEntryDetail",
+          "pattern": "wm/reservation-entry/{ReservationNo}/{ReservationItem}",
+          "target": "TargetReservationEntryDetail"
+        },
+        {
+          "name": "wmWarehouseScanTo",
+          "pattern": "wm/scan-to",
+          "target": "TargetWarehouseScanTo"
+        },
+        {
+          "name": "wmWarehouseScanToDetailWithWh",
+          "pattern": "wm/scan-to/{lgnum}/{docType}/{number}",
+          "target": "TargetWarehouseScanToDetail"
+        },
+        {
+          "name": "wmWarehouseScanToDetail",
+          "pattern": "wm/scan-to/{docType}/{number}",
+          "target": "TargetWarehouseScanToDetail"
         }
       ],
       "targets": {
@@ -445,6 +535,66 @@
           "id": "trTo",
           "name": "TrTo",
           "path": "saps4hana.fiori.modules.wm.tr-to.view"
+        },
+        "TargetScan261": {
+          "id": "scan261",
+          "name": "Scan261",
+          "path": "saps4hana.fiori.modules.wm.mvt261.view"
+        },
+        "TargetCycle261": {
+          "id": "cycle261",
+          "name": "Cycle261",
+          "path": "saps4hana.fiori.modules.wm.mvt261.view"
+        },
+        "TargetOpen261": {
+          "id": "open261",
+          "name": "Open261",
+          "path": "saps4hana.fiori.modules.wm.mvt261.view"
+        },
+        "TargetMvt261": {
+          "id": "mvt261",
+          "name": "Mvt261",
+          "path": "saps4hana.fiori.modules.wm.mvt261.view"
+        },
+        "TargetHandlingUnits": {
+          "id": "handlingUnits",
+          "name": "HandlingUnits",
+          "path": "saps4hana.fiori.modules.wm.handling-unit.view"
+        },
+        "TargetHandlingUnitDetail": {
+          "id": "handlingUnitDetail",
+          "name": "HandlingUnitDetail",
+          "path": "saps4hana.fiori.modules.wm.handling-unit.view"
+        },
+        "TargetPackingInstructions": {
+          "id": "packingInstructions",
+          "name": "PackingInstructions",
+          "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
+        },
+        "TargetPackingInstructionDetail": {
+          "id": "packingInstructionDetail",
+          "name": "PackingInstructionDetail",
+          "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
+        },
+        "TargetReservationEntryList": {
+          "id": "reservationEntryList",
+          "name": "ReservationEntryList",
+          "path": "saps4hana.fiori.modules.wm.reservation-entry.view"
+        },
+        "TargetReservationEntryDetail": {
+          "id": "reservationEntryDetail",
+          "name": "ReservationEntryDetail",
+          "path": "saps4hana.fiori.modules.wm.reservation-entry.view"
+        },
+        "TargetWarehouseScanTo": {
+          "id": "warehouseScanTo",
+          "name": "WarehouseScanTo",
+          "path": "saps4hana.fiori.modules.wm.warehouse-scan-to.view"
+        },
+        "TargetWarehouseScanToDetail": {
+          "id": "warehouseScanToDetail",
+          "name": "WarehouseScanToDetail",
+          "path": "saps4hana.fiori.modules.wm.warehouse-scan-to.view"
         }
       }
     }
