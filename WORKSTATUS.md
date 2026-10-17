@@ -5,7 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **Agent skills workspace (2026-10-17, 11:20 IST):** In Progress / **Blocked on skill-discovery and MCP verification decisions** — six project skills are authored in `skills/` and six local discovery symlinks exist in `.claude/skills/`. The three new skills are `sap-s4hana-api-discovery`, `sap-s4hana-integration`, and `sap-test-validation`. The pre-existing `.claude/` ignore rule still means these discovery symlinks are not tracked; MCP startup and skill discovery remain unverified. See Changes Log 11:14–11:20 and 11:30.
+- **README optimization (2026-10-17, 11:26 IST):** Complete — README reduced from 488 lines / 3,192 words to 139 lines / 851 words. Local links, commands, module paths, stale claims, EOF, and `git diff --check` validated; see Changes Log 11:26–11:27.
+- **Agent skills workspace (2026-10-17, 11:23 IST):** In Progress / **Blocked on skill-discovery and MCP verification decisions** — seven project skills are authored in `skills/`, including `sap-ai-integration-privacy`; seven local discovery symlinks exist in `.claude/skills/`. The pre-existing `.claude/` ignore rule still means these discovery symlinks are not tracked; MCP startup and skill discovery remain unverified. See Changes Log 11:14–11:23 and 11:30.
 - **AGENTS.md: Zero-Assumption Protocol section added (2026-10-17, 11:06 IST):** Complete. Documentation-only change; see Changes Log entry of the same timestamp.
 - **WM Movement 261: Unified Stock Availability Calculation Across Scan, Open-Item List, and Posting Gate (Issue #1 in Critical / High Issues) (2026-10-17, 10:50 IST):** Complete.
   - **User Problem & Incident:**
@@ -2734,7 +2735,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Exact Next Recommended Action (Additional project skills — 2026-10-17, 11:20 IST):** Review the three new skill playbooks, then resolve the existing `.claude/skills/` tracking and MCP smoke-test/session discovery decisions recorded in the 11:30 entry. No MCP server smoke test was run during this skill-authoring task.
+- **Exact Next Recommended Action (Additional project skills — 2026-10-17, 11:23 IST):** Review the new project-authored playbooks, then resolve the existing `.claude/skills/` tracking and MCP smoke-test/session discovery decisions recorded in the 11:30 entry. No MCP server smoke test was run during this skill-authoring task.
 
 - **Exact Next Recommended Action (Agent skills workspace — 2026-10-17, 11:30 IST):**
   1. Decide: un-ignore `.claude/skills/` (`.claude/*` + `!.claude/skills/`), keep MCP versions pinned, Claude Code only vs. `.agents/`/`.opencode/`.
@@ -9325,6 +9326,31 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Errors / blockers:** None.
 - **Next action:** Commit verified changes to git branch `feature/mvt261_01`.
 
+### 2026-10-17 11:26 IST — README.md streamlined and aligned with current repository
+
+- **Affected files:** `README.md`, `WORKSTATUS.md`.
+- **Reason:** Replace the 488-line README's stale test counts, static passing badges, obsolete EWM/endpoint descriptions, and unverified SAP activation list with a shorter current project guide.
+- **Changes:** Reorganized around actual modules, architecture boundaries, local setup, configured test/lint/build commands, CI, deployment, security, and repository map. Removed fixed test totals and passing claims; linked transaction behavior to `AGENTS.md` SAP API discovery rules.
+- **Validation:** PASS — targeted Python check confirmed all local Markdown links resolve; every listed npm command exists in the relevant package scripts; referenced directories and files exist; obsolete EWM and fixed test-count/passing claims are absent; file has one final newline. `git diff --check` passed after EOF cleanup. No application tests were run because only documentation changed.
+- **Errors / blockers:** CAP MCP tools were not exposed in this session although `.mcp.json` registers `cds-mcp`; used the permitted local CDS source fallback to verify service areas. No application tests or builds have been run for this documentation change.
+- **Next action:** Review and commit the README change with the user's other pending repository changes when requested.
+
+### 2026-10-17 11:26 IST — Remove extra README EOF blank line
+
+- **Affected file:** `README.md`.
+- **Reason:** Address the whitespace error reported by the first `git diff --check` after the rewrite.
+- **Validation:** PASS — reran the README link/command/path/stale-claim/EOF check; `git diff --check` passed.
+- **Errors / blockers:** The initial check failure is recorded in the README rewrite entry above.
+- **Next action:** Review and commit the README change with the user's other pending repository changes when requested.
+
+### 2026-10-17 11:27 IST — Clarify CI results guidance in README
+
+- **Affected file:** `README.md`.
+- **Reason:** Replace self-referential wording with a direct pointer to the latest workflow result.
+- **Validation:** PASS — final README link/command/path/stale-claim/EOF checks passed; `git diff --check` passed.
+- **Errors / blockers:** None known.
+- **Next action:** Review and commit the README change with the user's other pending repository changes when requested.
+
 ### 2026-10-17 11:20 IST — Add `sap-s4hana-api-discovery` skill
 
 - **Affected files:** `skills/sap-s4hana-api-discovery/SKILL.md`, `.claude/skills/sap-s4hana-api-discovery` (local symlink).
@@ -9356,6 +9382,38 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Validation:** PASS — targeted Python check verified all three catalog rows against their skill frontmatter and local symlink targets; final newline/whitespace checks passed; `git diff --check` passed.
 - **Errors / blockers:** Discovery symlink tracking and runtime skill discovery are still unresolved as recorded above.
 - **Next action:** Resolve the existing skill-link tracking/discovery decisions before relying on these catalog entries in teammates’ sessions.
+
+### 2026-10-17 11:23 IST — Author `sap-ai-integration-privacy` skill
+
+- **Affected file:** `skills/sap-ai-integration-privacy/SKILL.md`.
+- **Reason:** Document the project's two-provider AI request flow, prompt/history trust boundaries, privacy verification, authenticated route handling, safe errors/logging, and provider-specific tests.
+- **Validation:** PASS — targeted Python check verified skill frontmatter and file whitespace/newline; `git diff --check` passed.
+- **Errors / blockers:** Provider privacy/retention behavior was not live-verified in this documentation task. The skill instructs future work to confirm those provider-specific facts.
+- **Next action:** Register the skill in the project catalog and local discovery path.
+
+### 2026-10-17 11:23 IST — Add AI skill catalog entry
+
+- **Affected file:** `skills/README.md`.
+- **Reason:** Make the AI integration/privacy playbook discoverable from the project skill catalog.
+- **Validation:** PASS — targeted Python check verified the exact catalog row; README newline/whitespace and `git diff --check` passed.
+- **Errors / blockers:** None for the catalog edit.
+- **Next action:** Resolve the existing Git ignore limitation for `.claude/skills/` before team-wide discovery.
+
+### 2026-10-17 11:23 IST — Add local AI skill discovery link
+
+- **Affected file:** `.claude/skills/sap-ai-integration-privacy` (symlink to `../../skills/sap-ai-integration-privacy`).
+- **Reason:** Follow the project's skill discovery convention.
+- **Validation:** PASS — targeted Python check verified the symlink resolves to the skill folder; `git check-ignore` confirmed the link is ignored by the existing `.claude/` rule; `git diff --check` passed.
+- **Errors / blockers:** The link exists locally but is not tracked by Git, so it will not provide team-wide discovery until the existing ignore rule is addressed. Runtime discovery was not verified.
+- **Next action:** Resolve the existing `.claude/skills/` tracking and runtime discovery decisions.
+
+### 2026-10-17 11:24 IST — Narrow AI skill UI trigger path
+
+- **Affected file:** `skills/sap-ai-integration-privacy/SKILL.md`.
+- **Reason:** Limit the UI trigger to the purchase-order controller that calls the AI stream, avoiding activation for unrelated purchase-order UI work.
+- **Validation:** PASS — reran targeted Python check verifying frontmatter, scoped purchase-order UI trigger, catalog entry, local symlink target, file newline/whitespace; `git diff --check` passed.
+- **Errors / blockers:** None known; rerun the skill structure check after the trigger-path edit.
+- **Next action:** Resolve the existing `.claude/skills/` tracking and runtime discovery decisions.
 
 ### 2026-10-16 09:40 IST - Movement Type 261 Internal Order Field, ZEMP Order Type Value Help & Live SAP Verification
 

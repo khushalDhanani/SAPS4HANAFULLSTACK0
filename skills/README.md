@@ -29,6 +29,7 @@ blog post (community.sap.com, June 2026).
 | `sap-s4hana-api-discovery` | Verify SAP OData/RFC contracts and backend capability before integration changes | project-authored |
 | `sap-s4hana-integration` | Implement adapters and safe S/4 calls after the contract is verified | project-authored |
 | `sap-test-validation` | Select project checks and record verified results in `WORKSTATUS.md` | project-authored |
+| `sap-ai-integration-privacy` | Review AI provider integration, prompt boundaries, and data privacy in the CAP AI flow | project-authored |
 
 ## Adding a skill
 
