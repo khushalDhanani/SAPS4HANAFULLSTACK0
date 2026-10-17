@@ -26,6 +26,9 @@ blog post (community.sap.com, June 2026).
 | `sap-cap` | CDS models, CAP services and handlers in `db/`, `srv/` | adapted from SAP-samples/cap-agentic-engineered (Apache-2.0) |
 | `sap-ui5` | Freestyle SAPUI5 views, fragments, controllers in `app/fiori-app` | adapted from SAP-samples/cap-agentic-engineered (Apache-2.0) |
 | `sap-fiori-guidelines` | Fiori design decisions: floorplans, controls, messages, a11y | copied verbatim from SAP/ai-skills-library (Apache-2.0) |
+| `sap-s4hana-api-discovery` | Verify SAP OData/RFC contracts and backend capability before integration changes | project-authored |
+| `sap-s4hana-integration` | Implement adapters and safe S/4 calls after the contract is verified | project-authored |
+| `sap-test-validation` | Select project checks and record verified results in `WORKSTATUS.md` | project-authored |
 
 ## Adding a skill
 

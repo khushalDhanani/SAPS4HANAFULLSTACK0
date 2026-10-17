@@ -5,7 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **Agent skills workspace (2026-10-17, 11:30 IST):** In Progress / **Blocked on user decisions** — `skills/` (sap-cap, sap-ui5, sap-fiori-guidelines), `.mcp.json`, AGENTS.md section and `.gitignore` done; `.claude/skills` symlinks exist but are gitignored by the pre-existing `.claude/` rule; MCP server smoke test and skill discovery not yet verified. See Changes Log 11:14–11:30.
+- **Agent skills workspace (2026-10-17, 11:20 IST):** In Progress / **Blocked on skill-discovery and MCP verification decisions** — six project skills are authored in `skills/` and six local discovery symlinks exist in `.claude/skills/`. The three new skills are `sap-s4hana-api-discovery`, `sap-s4hana-integration`, and `sap-test-validation`. The pre-existing `.claude/` ignore rule still means these discovery symlinks are not tracked; MCP startup and skill discovery remain unverified. See Changes Log 11:14–11:20 and 11:30.
 - **AGENTS.md: Zero-Assumption Protocol section added (2026-10-17, 11:06 IST):** Complete. Documentation-only change; see Changes Log entry of the same timestamp.
 - **WM Movement 261: Unified Stock Availability Calculation Across Scan, Open-Item List, and Posting Gate (Issue #1 in Critical / High Issues) (2026-10-17, 10:50 IST):** Complete.
   - **User Problem & Incident:**
@@ -2733,6 +2733,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 - **13-fix remediation, open points (2026-10-12):** (a) all fixes are mock-tested only; the sandbox matrix (201/241/311/301 × full / partial + second TO / batch / serial / forced GI failure + retry) has not been run. (b) Storage types/bins are now sent blank when the TR header has none; whether `Z_WM_TO_CREATE_FROM_TR` then applies the SAP search strategy is UNSURE until a live TO is created. (c) `AUTHORITY_CHECK` negative path (`USER_NOT_AUTHORIZED`) is unobserved: the RFC user holds SAP_ALL. (d) `forUpdate()` is a no-op on SQLite; the row lock only acts on HANA. (e) Old `99` rows need the migration statement in `docs/abap/status-codes.md`. (f) `ReservationTrackAdapter.js` still requests `ERNAM/ERDAT/AENAM/AEDAT`, which `ZRES_TRACK` does not have (unused adapter, unchanged).
 
 ## Next Steps
+
+- **Exact Next Recommended Action (Additional project skills — 2026-10-17, 11:20 IST):** Review the three new skill playbooks, then resolve the existing `.claude/skills/` tracking and MCP smoke-test/session discovery decisions recorded in the 11:30 entry. No MCP server smoke test was run during this skill-authoring task.
 
 - **Exact Next Recommended Action (Agent skills workspace — 2026-10-17, 11:30 IST):**
   1. Decide: un-ignore `.claude/skills/` (`.claude/*` + `!.claude/skills/`), keep MCP versions pinned, Claude Code only vs. `.agents/`/`.opencode/`.
@@ -9322,6 +9324,38 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git diff --check` → **PASS (clean diff, 0 whitespace errors)**.
 - **Errors / blockers:** None.
 - **Next action:** Commit verified changes to git branch `feature/mvt261_01`.
+
+### 2026-10-17 11:20 IST — Add `sap-s4hana-api-discovery` skill
+
+- **Affected files:** `skills/sap-s4hana-api-discovery/SKILL.md`, `.claude/skills/sap-s4hana-api-discovery` (local symlink).
+- **Reason:** Provide an on-demand workflow for proving real SAP OData/RFC contracts and transactional capability before integration changes, following `AGENTS.md`.
+- **Validation:** PASS — targeted Python check verified required frontmatter, catalog row, local symlink target, newline, and whitespace; `git diff --check` passed.
+- **Errors / blockers:** The first checker attempt raised an assertion because it compared the linked skill directory with the `SKILL.md` file path; corrected the checker to compare directory targets and reran successfully. The `.claude/` discovery link is subject to the pre-existing ignore rule and will not be tracked unless that separate decision is resolved. No SAP service/live capability was checked in this documentation task.
+- **Next action:** Resolve the existing skill-link tracking/discovery decisions before relying on this skill in teammates’ sessions.
+
+### 2026-10-17 11:20 IST — Add `sap-s4hana-integration` skill
+
+- **Affected files:** `skills/sap-s4hana-integration/SKILL.md`, `.claude/skills/sap-s4hana-integration` (local symlink).
+- **Reason:** Document adapter mapping, error handling, retry/idempotency, and BTP security patterns within the established integration boundary, conditional on verified SAP contracts.
+- **Validation:** PASS — targeted Python check verified required frontmatter, catalog row, local symlink target, newline, and whitespace; `git diff --check` passed.
+- **Errors / blockers:** SAP contracts and live service behavior were not re-verified as part of this documentation task.
+- **Next action:** Resolve the existing skill-link tracking/discovery decisions before relying on this skill in teammates’ sessions.
+
+### 2026-10-17 11:20 IST — Add `sap-test-validation` skill
+
+- **Affected files:** `skills/sap-test-validation/SKILL.md`, `.claude/skills/sap-test-validation` (local symlink).
+- **Reason:** Make validation selection and truthful work-status reporting repeatable using commands defined in project scripts and CI.
+- **Validation:** PASS — targeted Python check verified required frontmatter, catalog row, local symlink target, newline, and whitespace; `git diff --check` passed.
+- **Errors / blockers:** No application tests, builds, deployment checks, or live SAP checks were run for this documentation-only task.
+- **Next action:** Apply the validation workflow during a future code change and refine based on actual use.
+
+### 2026-10-17 11:20 IST — Register additional skills in catalog
+
+- **Affected files:** `skills/README.md`.
+- **Reason:** Add the three selected skills to the project skill catalog with project-authored provenance.
+- **Validation:** PASS — targeted Python check verified all three catalog rows against their skill frontmatter and local symlink targets; final newline/whitespace checks passed; `git diff --check` passed.
+- **Errors / blockers:** Discovery symlink tracking and runtime skill discovery are still unresolved as recorded above.
+- **Next action:** Resolve the existing skill-link tracking/discovery decisions before relying on these catalog entries in teammates’ sessions.
 
 ### 2026-10-16 09:40 IST - Movement Type 261 Internal Order Field, ZEMP Order Type Value Help & Live SAP Verification
 
