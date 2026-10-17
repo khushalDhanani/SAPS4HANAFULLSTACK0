@@ -5,6 +5,10 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **AGENTS.md Stop Rule Updated: Mandatory Agent Investigation Before Stopping (2026-10-17, 15:20 IST):** Complete.
+  - Updated the Stop Rule in `AGENTS.md` under `## Evidence, uncertainty, and approval`: when an unknown arises, agents must **first try to find the information using any agent** (inspect repository files, configuration, code, tests, SAP metadata, safe read-only queries, tools/MCP servers, subagents, or documentation). Only after trying to find and not getting the information ("after not get") may the agent stop before the action and ask the user (with Context, Doubt, Options, Recommendation).
+  - Validation: `git diff --check` passed (0 whitespace errors).
+
 - **Write-Gate Protocol Check: Placeholder Input Rejected per Core Rule 10 (2026-10-17, 13:13 IST):**
   - Second authorization prompt contained placeholder tokens in angle brackets: `material <real>`, `batch <real>`, `Approved by <your real name>`, `because <real person/team> confirmed <what they confirmed>`.
   - In strict compliance with `AGENTS.md` Rule 10 ("Reject placeholder input... treat it as NOT PROVIDED, stop, and ask") and Rule 11 (Strict Write-Gate Protocol), rejected placeholder input as NOT PROVIDED.
@@ -2890,6 +2894,17 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-17 15:20 IST — AGENTS.md Stop Rule Update: Mandatory Agent Search Before Stop
+
+- **Reason for Change:** User requested: "UPDATE THE STOP RULE FIST TRY TO FIND BY ANY AGENT AFTER NOT GET THAN STOP." Clarified and updated the stop rule so agents do not prematurely halt or ask the user before thoroughly attempting to find and verify the needed information through all available agent capabilities, tools, repository code, tests, metadata, and safe read-only queries.
+- **Files Changed:**
+  - `AGENTS.md`: Updated Stop Rule under `## Evidence, uncertainty, and approval`: "When an unknown could change business behavior, security/privacy, an SAP contract or payload, production configuration, or cause a destructive/external side effect, **first try to find the information using any agent** (inspect repository files, configuration, code, tests, SAP metadata, safe read-only queries, tools/MCP servers, subagents, or documentation). **Only after trying to find and not getting the information ("after not get"), then stop** before taking the action and ask a concise question with **Context, Doubt, Options and consequences, Recommendation** (maximum five questions)."
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - `git diff AGENTS.md` → verified targeted line modification with intact adjacent bullets.
+- **Errors / blockers:** None.
+- **Next action:** Proceed with project tasks following the updated stop rule.
 
 ### 2026-10-17 13:10 IST — READ-ONLY: Material 1000000928 Batch & Cost Center 1011201301 Deep Inspection
 
