@@ -52,6 +52,7 @@ sap.ui.define([
                 MaterialName: "Raw Material 45",
                 Quantity: 10,
                 Unit: "KG",
+                Batch: "",
                 ReceivingStorageLocation: "ST02",
                 ReceivingPlant: "",
                 CostCenter: "",
@@ -207,8 +208,10 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "311":
-                    if (!this._oCreateModel.getProperty("/ReceivingStorageLocation") || this._oCreateModel.getProperty("/ReceivingStorageLocation") === this._oCreateModel.getProperty("/StorageLocation")) {
-                        this._oCreateModel.setProperty("/ReceivingStorageLocation", "ST02");
+                    var sCurrentSLoc = this._oCreateModel.getProperty("/StorageLocation") || "CS01";
+                    var sCurrentRecSLoc = this._oCreateModel.getProperty("/ReceivingStorageLocation");
+                    if (!sCurrentRecSLoc || sCurrentRecSLoc === sCurrentSLoc) {
+                        this._oCreateModel.setProperty("/ReceivingStorageLocation", sCurrentSLoc === "ST02" ? "CS01" : "ST02");
                     }
                     this._oCreateModel.setProperty("/ReceivingPlant", "");
                     this._oCreateModel.setProperty("/CostCenter", "");
@@ -358,12 +361,21 @@ sap.ui.define([
                 if (oData && oData.Plant && !this._oCreateModel.getProperty("/Plant")) {
                     this._oCreateModel.setProperty("/Plant", oData.Plant);
                 }
+                if (this._oCreateModel.getProperty("/MovementType") === "311" && this._oCreateModel.getProperty("/ReceivingStorageLocation") === sKey) {
+                    this._oCreateModel.setProperty("/ReceivingStorageLocation", sKey === "ST02" ? "CS01" : "ST02");
+                }
                 oInput.setValueState("None");
             } else if (sId.indexOf("inputRecSLoc") !== -1) {
                 this._oCreateModel.setProperty("/ReceivingStorageLocation", sKey);
                 oInput.setValueState("None");
             } else if (sId.indexOf("inputRecPlant") !== -1) {
                 this._oCreateModel.setProperty("/ReceivingPlant", sKey);
+                oInput.setValueState("None");
+            } else if (sId.indexOf("inputCostCenter") !== -1) {
+                this._oCreateModel.setProperty("/CostCenter", sKey);
+                oInput.setValueState("None");
+            } else if (sId.indexOf("inputBatch") !== -1) {
+                this._oCreateModel.setProperty("/Batch", sKey);
                 oInput.setValueState("None");
             } else if (sId.indexOf("inputOrderType") !== -1) {
                 var sOldTypeVal = this._oCreateModel.getProperty("/OrderType");
@@ -374,9 +386,21 @@ sap.ui.define([
                 oInput.setValueState("None");
             } else if (sId.indexOf("inputOrderId") !== -1) {
                 this._oCreateModel.setProperty("/OrderID", sKey);
+                if (oData && oData.OrderType) {
+                    this._oCreateModel.setProperty("/OrderType", oData.OrderType);
+                }
                 oInput.setValueState("None");
             }
             this.onFieldLiveChange();
+        },
+
+        onCostCenterSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            var oContext = oItem.getBindingContext();
+            var oData = oContext ? oContext.getObject() : null;
+            this._handleValueHelpSelected(oEvent.getSource(), sKey, oItem, oData);
         },
 
         onMaterialSelect: function (oEvent) {

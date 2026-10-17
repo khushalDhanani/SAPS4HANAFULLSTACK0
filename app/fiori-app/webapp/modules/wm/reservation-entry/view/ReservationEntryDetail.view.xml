@@ -261,6 +261,14 @@
                                                 maxLength="3"
                                                 width="35%" />
                                         </HBox>
+
+                                        <Label text="{i18n>resFieldBatch}" />
+                                        <Input
+                                            id="inputBatch"
+                                            value="{create>/Batch}"
+                                            placeholder="{i18n>resPlaceholderBatch}"
+                                            maxLength="10"
+                                            liveChange=".onFieldLiveChange" />
                                     </f:content>
                                 </f:SimpleForm>
 
@@ -308,6 +316,9 @@
                                         <Label text="{i18n>resEntryColQuantity}" />
                                         <ObjectNumber number="{detail>/Quantity}" unit="{detail>/Unit}" />
 
+                                        <Label text="{i18n>resFieldBatch}" visible="{= !!${detail>/Batch} }" />
+                                        <Text text="{detail>/Batch}" visible="{= !!${detail>/Batch} }" />
+
                                         <Label text="{i18n>resEntryColStatus}" />
                                         <ObjectStatus
                                             text="{= ${detail>/StatusText} || ${path: 'detail>/Status_code', formatter: '.formatStatusText'} }"
@@ -348,8 +359,19 @@
                                         value="{create>/CostCenter}"
                                         placeholder="1011201301"
                                         maxLength="10"
+                                        showValueHelp="true"
+                                        showSuggestion="true"
+                                        filterSuggests="false"
+                                        suggest=".onSuggest"
+                                        valueHelpRequest=".onValueHelpRequest"
+                                        suggestionItemSelected=".onCostCenterSelect"
+                                        suggestionItems="{path: 'reservationEntry>/CostCenterVH', templateShareable: false}"
                                         visible="{= ${create>/MovementType} === '201' }"
-                                        liveChange=".onFieldLiveChange" />
+                                        liveChange=".onFieldLiveChange">
+                                        <suggestionItems>
+                                            <core:ListItem key="{reservationEntry>CostCenter}" text="{reservationEntry>CostCenter}" additionalText="{reservationEntry>CostCenterName}" />
+                                        </suggestionItems>
+                                    </Input>
 
                                     <!-- Movement 241: Asset & SubNumber -->
                                     <Label
@@ -374,6 +396,30 @@
                                         maxLength="4"
                                         visible="{= ${create>/MovementType} === '241' }" />
 
+                                    <!-- Movement 301: Receiving Plant (Hierarchy: Plant before Storage Location) -->
+                                    <Label
+                                        text="{i18n>resFieldRecPlant}"
+                                        required="true"
+                                        visible="{= ${create>/MovementType} === '301' }" />
+                                    <Input
+                                        id="inputRecPlant"
+                                        value="{create>/ReceivingPlant}"
+                                        placeholder="{i18n>resPlaceholderRecPlant}"
+                                        maxLength="4"
+                                        showValueHelp="true"
+                                        showSuggestion="true"
+                                        filterSuggests="false"
+                                        suggest=".onSuggest"
+                                        valueHelpRequest=".onValueHelpRequest"
+                                        suggestionItemSelected=".onRecPlantSelect"
+                                        suggestionItems="{path: '/PlantVH', templateShareable: false}"
+                                        visible="{= ${create>/MovementType} === '301' }"
+                                        liveChange=".onFieldLiveChange">
+                                        <suggestionItems>
+                                            <core:ListItem key="{Plant}" text="{Plant}" additionalText="{= ${PlantName} + (${PurchasingOrganization} ? ' (' + ${PurchasingOrganization} + ')' : '') }" />
+                                        </suggestionItems>
+                                    </Input>
+
                                     <!-- Movement 311 & 301: Receiving SLoc -->
                                     <Label
                                         text="{i18n>resFieldRecSLoc}"
@@ -395,30 +441,6 @@
                                         liveChange=".onFieldLiveChange">
                                         <suggestionItems>
                                              <core:ListItem key="{StorageLocation}" text="{StorageLocation}" additionalText="{= ${StorageLocationName} + (${Plant} ? ' (' + ${Plant} + ')' : '') }" />
-                                        </suggestionItems>
-                                    </Input>
-
-                                    <!-- Movement 301: Receiving Plant -->
-                                    <Label
-                                        text="{i18n>resFieldRecPlant}"
-                                        required="true"
-                                        visible="{= ${create>/MovementType} === '301' }" />
-                                    <Input
-                                        id="inputRecPlant"
-                                        value="{create>/ReceivingPlant}"
-                                        placeholder="{i18n>resPlaceholderRecPlant}"
-                                        maxLength="4"
-                                        showValueHelp="true"
-                                        showSuggestion="true"
-                                        filterSuggests="false"
-                                        suggest=".onSuggest"
-                                        valueHelpRequest=".onValueHelpRequest"
-                                        suggestionItemSelected=".onRecPlantSelect"
-                                        suggestionItems="{path: '/PlantVH', templateShareable: false}"
-                                        visible="{= ${create>/MovementType} === '301' }"
-                                        liveChange=".onFieldLiveChange">
-                                        <suggestionItems>
-                                            <core:ListItem key="{Plant}" text="{Plant}" additionalText="{= ${PlantName} + (${PurchasingOrganization} ? ' (' + ${PurchasingOrganization} + ')' : '') }" />
                                         </suggestionItems>
                                     </Input>
 
@@ -448,10 +470,10 @@
                                         </suggestionItems>
                                     </Input>
 
-                                    <!-- Movement 261: Internal Order (Mandatory, with Value Help / Suggestions from AUFK) -->
+                                    <!-- Movement 261: Order Number (Mandatory, with Value Help / Suggestions from AUFK) -->
                                     <Label
                                         id="lblInternalOrder"
-                                        text="{i18n>resFieldInternalOrder}"
+                                        text="{i18n>resFieldOrder}"
                                         required="true"
                                         visible="{= ${create>/MovementType} === '261' }" />
                                     <Input
@@ -511,10 +533,10 @@
 
                                     <Label
                                         text="{i18n>resFieldRecSLoc}"
-                                        visible="{= !!${detail>/ReceivingStorageLocation} || ${detail>/MovementType} === '311' }" />
+                                        visible="{= !!${detail>/ReceivingStorageLocation} || ${detail>/MovementType} === '311' || ${detail>/MovementType} === '301' }" />
                                     <Text
                                         text="{detail>/ReceivingStorageLocation}"
-                                        visible="{= !!${detail>/ReceivingStorageLocation} || ${detail>/MovementType} === '311' }" />
+                                        visible="{= !!${detail>/ReceivingStorageLocation} || ${detail>/MovementType} === '311' || ${detail>/MovementType} === '301' }" />
 
                                     <Label
                                         text="{i18n>resFieldRecPlant}"

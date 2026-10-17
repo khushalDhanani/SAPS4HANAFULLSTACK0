@@ -374,6 +374,48 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(logs[1].Status).toBe('11');
     });
 
+    test('Movement 311 with Batch: passes batch to adapter createReservation', async () => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValueOnce({
+        success: true,
+        reservationNo: '777001',
+        reservationNoRaw: testResNo,
+        reservationItem: '0001',
+        status: '01'
+      });
+
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement').mockResolvedValueOnce({
+        success: true,
+        warehouseNumber: 'W01',
+        trNumber: '1007780',
+        trNumberRaw: '0001007780',
+        trItem: '0001',
+        status: '02'
+      });
+
+      const { status } = await POST(
+        '/odata/v4/reservation-entry/createReservationEntry',
+        {
+          MovementType: '311',
+          Plant: '1120',
+          StorageLocation: 'HS01',
+          ReceivingStorageLocation: 'CS01',
+          Material: '000000008000000023',
+          Quantity: 1,
+          Unit: 'NOS',
+          Batch: 'IN26001170',
+          WarehouseNumber: 'W01'
+        },
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(createResSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          batch: 'IN26001170'
+        })
+      );
+    });
+
     test('When reservation creation fails, TR creation is NEVER called and error is returned with stage RESERVATION', async () => {
       createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockRejectedValueOnce(
         Object.assign(new Error('Cost Center 1011201301 locked for postings'), {
@@ -1070,7 +1112,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(r311.StatusText).toBe('Reservation Created');
     });
 
-    test('GET /odata/v4/reservation-entry/OrderTypeVH returns order types with ZEMP priority', async () => {
+    test('GET /odata/v4/reservation-entry/OrderTypeVH returns order types with ZEMP priority and production/process types', async () => {
       const { status, data } = await GET('/odata/v4/reservation-entry/OrderTypeVH', authClerk);
       expect(status).toBe(200);
       expect(Array.isArray(data.value)).toBe(true);
@@ -1079,15 +1121,36 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(zemp).toBeTruthy();
       expect(zemp.OrderTypeName).toContain('EMP');
       expect(zemp.OrderCategory).toBe('01');
+
+      // Verify non-internal order categories like ZP01 or PP01 are supported
+      const zp01 = data.value.find((o) => o.OrderType === 'ZP01');
+      if (zp01) {
+        expect(zp01.OrderCategory).toBe('40');
+      }
     });
 
-    test('GET /odata/v4/reservation-entry/InternalOrderVH returns internal orders', async () => {
+    test('GET /odata/v4/reservation-entry/InternalOrderVH returns internal orders and process/production orders', async () => {
       const { status, data } = await GET('/odata/v4/reservation-entry/InternalOrderVH', authClerk);
       expect(status).toBe(200);
       expect(Array.isArray(data.value)).toBe(true);
       expect(data.value.length).toBeGreaterThan(0);
       expect(data.value[0]).toHaveProperty('OrderID');
       expect(data.value[0]).toHaveProperty('OrderType');
+
+      const processOrder = data.value.find((o) => o.OrderID === '1002790');
+      if (processOrder) {
+        expect(processOrder.OrderType).toBe('ZP01');
+        expect(processOrder.Plant).toBe('1120');
+      }
+    });
+
+    test('GET /odata/v4/reservation-entry/CostCenterVH returns cost centers for movement 201', async () => {
+      const { status, data } = await GET('/odata/v4/reservation-entry/CostCenterVH', authClerk);
+      expect(status).toBe(200);
+      expect(Array.isArray(data.value)).toBe(true);
+      expect(data.value.length).toBeGreaterThan(0);
+      expect(data.value[0]).toHaveProperty('CostCenter');
+      expect(data.value[0]).toHaveProperty('CostCenterName');
     });
   });
 

@@ -5,6 +5,38 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **WM Reservation Entry (`#/wm/reservation-entry/create`): Comprehensive Audit & Remediation Across All Movement Types (311, 201, 241, 301, 261) (2026-10-17, 11:58 IST):** Complete.
+  - **User Problem & Request:**
+    - "Check All type Movement Type Find Issues and fix." on `#/wm/reservation-entry/create`.
+  - **Issues Identified & Fixed Across All 5 Supported Movement Types:**
+    1. **Missing Batch Support Across All Movements (311, 201, 241, 301, 261):**
+       - Batch-managed materials (e.g. `1000000928`) failed backend preflight with `"Batch is mandatory for batch-managed material..."` because `ReservationEntryDetail.view.xml` lacked a Batch input field.
+       - Added `Batch` input field with value help and auto-suggestions (`/BatchVH`) bound in `formReservationCreate`, and added `Batch` display in `formReservationDisplay`. Updated i18n bundle with `resFieldBatch` and `resPlaceholderBatch`. Added `Batch: ""` to defaults in `ReservationEntryDetail.controller.js` and wired `_handleValueHelpSelected` for `inputBatch`.
+    2. **Movement 261 (Goods Issue to Order) Restriction to Internal Orders Only:**
+       - `OrderTypeVH` in CAP previously restricted orders strictly to `AUTYP = '01'` (Internal Orders only), which blocked Process Orders (`ZP01`, e.g. order `1002790`) and Production Orders (`PP01`). Selecting order `1002790` triggered an Order Type mismatch error against default `ZEMP`.
+       - Expanded `OrderTypeVH` on `T003O` to query all goods-issue relevant categories (`01` Internal, `10` Production, `40` Process, `30` Maintenance). Added fallback types `ZP01`, `PP01`, `PM01`.
+       - Updated `InternalOrderVH` to support plant filtering and querying without restricting strictly to `AUTYP = '01'`, and added `1002790` (`ZP01`) to fallback list.
+       - In `ReservationEntryDetail.controller.js`, selecting an order now automatically syncs and updates `OrderType` if present on the selected order object. Updated field label `lblInternalOrder` to `{i18n>resFieldOrder}`.
+    3. **Movement 301 (Plant-to-Plant Transfer) Inverted Field Hierarchy & Missing Display:**
+       - In `ReservationEntryDetail.view.xml`, Receiving Storage Location was rendered before Receiving Plant, inverting the standard SAP hierarchy (Plant determines available SLocs).
+       - Reordered XML view layout so Receiving Plant (`inputRecPlant`) appears before Receiving Storage Location (`inputRecSLoc`).
+       - Extended display visibility of `ReceivingStorageLocation` in `formReservationDisplay` to include Movement 301 (`detail>/MovementType === '301'`).
+    4. **Movement 311 (SLoc-to-SLoc Transfer) Default Destination SLoc Collision:**
+       - When the issuing storage location was set to `ST02`, switching to or triggering Movement 311 previously assigned `ReceivingStorageLocation` to `ST02`, causing identical SLocs and immediate client/server validation failure.
+       - Implemented collision avoidance in `onMovementTypeChange` and `_handleValueHelpSelected`: if issuing SLoc is `ST02`, default receiving SLoc to `CS01`; otherwise default to `ST02`.
+    5. **Movement 201 (Goods Issue to Cost Center) Missing Value Help:**
+       - Cost Center input field was plain text with no value help or suggestions, requiring manual entry of the 10-digit number.
+       - Added `@readonly entity CostCenterVH` to `srv/wm/reservation-entry/service.cds` with `CostCenter`, `CostCenterName`, and `CompanyCode`.
+       - Implemented RFC handler reading `CSKS` and `CSKT` via `RFC_READ_TABLE` with verified fallback list.
+       - Configured `/CostCenterVH` in `ValueHelpService.js` and wired `valueHelpRequest="onCostCenterValueHelpRequest"` and `suggest="onSuggest"` on `inputCostCenter`.
+  - **Quality & Regression Results:**
+    - `npx jest test/unit/wm/reservationEntryUi.test.js test/unit/wm/reservationEntryService.test.js`: **107/107 tests passed (100% green)**.
+    - Full WM test suite (`npx jest test/unit/wm`): **78 test suites passed, 1866 tests passed, 0 failures (100% green)**.
+    - `npm run lint`: **ESLint clean, 0 errors, 0 warnings**.
+    - `npm --prefix app/fiori-app run lint`: **ui5lint clean, 0 findings**.
+    - `npx cds compile srv/wm/reservation-entry/service.cds`: **Passed**.
+    - `git diff --check`: **Clean diff, 0 whitespace errors**.
+
 - **Antigravity support (2026-10-17, 11:36 IST):** Complete — added Antigravity IDE/CLI to the shared setup matrix using canonical `AGENTS.md` and `.agents/skills/`. Structural validation passed; runtime discovery remains unverified.
 - **IDE/agent entry-point coverage (2026-10-17, 11:35 IST):** Complete for repository configuration — added shared canonical policy/skill pointers for Cursor, GitHub Copilot, and Gemini CLI; linked canonical skills for Claude Code, Codex, and OpenCode. All 21 links and six IDE/agent entry points passed local structural checks; `git diff --check` passed. Runtime discovery remains unverified because those IDEs are not running in this session.
 - **AGENTS.md guidance optimization (2026-10-17, 11:31 IST):** Complete — uncertainty/approval rules, MCP fallbacks, SAP write authorization, architecture references, and dead-code review guidance updated. Focused documentation assertions passed and `git diff --check` passed. The first assertion run detected a missing final newline in `AGENTS.md`; the newline was added and the full assertion set passed on rerun. See Changes Log 11:31.
@@ -2804,6 +2836,28 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-17 11:58 IST — WM Reservation Entry (`#/wm/reservation-entry/create`): All Movement Types Audit & Fixes (311, 201, 241, 301, 261)
+
+- **Reason for Change:** User requested "Check All type Movement Type Find Issues and fix" on `#/wm/reservation-entry/create`. Conducted thorough audit of all 5 movement types across UI XML views, UI controllers, ValueHelpService, CAP service definitions/handlers, and integration adapters.
+- **Components & Files Modified:**
+  - `app/fiori-app/webapp/i18n/i18n.properties`: Added `resFieldBatch` and `resPlaceholderBatch`.
+  - `srv/wm/reservation-entry/service.cds`: Added `@readonly entity CostCenterVH`.
+  - `srv/wm/reservation-entry/service.js`: Added `CostCenterVH` handler reading `CSKS`/`CSKT`, expanded `OrderTypeVH` on `T003O` to include production/process categories (`01`, `10`, `30`, `40`), and expanded `InternalOrderVH` with plant filter and non-01 order support.
+  - `app/fiori-app/webapp/service/ValueHelpService.js`: Configured `/CostCenterVH` dialog title, keys, and columns.
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`: Added Batch input field to `formReservationCreate`, Batch text to `formReservationDisplay`, Value Help & suggestions to `inputCostCenter`, reordered `inputRecPlant` before `inputRecSLoc` for Movement 301, and extended display visibility of `ReceivingStorageLocation` to Movement 301.
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`: Added `Batch: ""` to defaults, collision avoidance for Movement 311 SLocs, `onCostCenterSelect`, and updated `_handleValueHelpSelected` for CostCenter, Batch, OrderType auto-sync, and SLoc collision prevention.
+  - `test/unit/wm/reservationEntryUi.test.js`: Added UI unit tests for default Batch, 311 SLoc collision avoidance, CostCenter/Batch/OrderType value help selection (107/107 passed across UI & service).
+  - `test/unit/wm/reservationEntryService.test.js`: Added CAP service tests for `CostCenterVH`, expanded `OrderTypeVH`, and Batch parameter forwarding to `createReservation` (107/107 passed).
+- **Verification Commands Executed & Results:**
+  - `npx jest test/unit/wm/reservationEntryUi.test.js test/unit/wm/reservationEntryService.test.js` → **107/107 PASS**.
+  - `npx jest test/unit/wm` → **78 passed suites, 1866 tests PASS**.
+  - `npm --prefix app/fiori-app run lint` (ui5lint) → **PASS (0 findings)**.
+  - `npm run lint` (eslint) → **PASS (0 errors, 0 warnings)**.
+  - `npx cds compile srv/wm/reservation-entry/service.cds` → **PASS**.
+  - `git diff --check` → **PASS**.
+- **Errors / blockers:** None. Zero live SAP write POST mutations performed without explicit user authorization per `AGENTS.md`.
+- **Next action:** User review and interactive testing in browser on `#/wm/reservation-entry/create`.
 
 ### 2026-10-17 11:30 IST — Agent skills workspace (part 5/5): AGENTS.md "Agent skills and MCP servers" section; open points
 
