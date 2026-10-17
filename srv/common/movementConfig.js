@@ -250,16 +250,11 @@ function validateReservationInput(data = {}, options = {}) {
         }
         break;
 
-      case '301':
-        if (!recPlant) {
-          addError('Receiving Plant is mandatory for Movement Type 301 (Plant Transfer)');
-        } else if (recPlant === plant) {
-          addError('Receiving Plant must be different from Issuing Plant');
-        }
-        if (!recSLoc) {
-          addError('Receiving Storage Location is mandatory for Movement Type 301 (Plant to Plant Transfer)');
-        }
+      case '301': {
+        const destVal = validateMovement301Destination(plant, recPlant, recSLoc);
+        destVal.errors.forEach((e) => addError(e.message));
         break;
+      }
 
       case '261':
         if (!orderType) {
@@ -302,10 +297,218 @@ function validateReservationInput(data = {}, options = {}) {
   };
 }
 
+/**
+ * Canonical destination validation for Movement 301 (Plant-to-Plant Transfer).
+ * Authoritative single policy for Movement 301 destination requirements.
+ *
+ * Rules:
+ * - ReceivingPlant: REQUIRED. Rejects missing, empty, whitespace, invalid plant format (!= 4 alphanumeric chars),
+ *   and same as issuing plant.
+ * - ReceivingStorageLocation: REQUIRED. Rejects missing, empty, whitespace, and invalid sloc format (!= 4 alphanumeric chars).
+ *
+ * @param {string} plant - Issuing Plant
+ * @param {string} receivingPlant - Receiving Plant (REQUIRED)
+ * @param {string} receivingStorageLocation - Receiving Storage Location (REQUIRED)
+ * @param {object} [options]
+ * @param {boolean} [options.requireSLoc=true] - When explicitly false, SLoc is validated for format only if supplied.
+ * @returns {{ isValid: boolean, errors: Array<{ field: string, message: string }> }}
+ */
+function validateMovement301Destination(plant, receivingPlant, receivingStorageLocation, options = {}) {
+  const errors = [];
+  const sPlant = String(plant || '').trim().toUpperCase();
+  const requireSLoc = options.requireSLoc !== false;
+
+  // 1. Receiving Plant: REQUIRED
+  if (receivingPlant === undefined || receivingPlant === null || String(receivingPlant).trim() === '') {
+    errors.push({
+      field: 'ReceivingPlant',
+      message: 'Receiving Plant is mandatory for Movement Type 301 (Plant Transfer)'
+    });
+  } else {
+    const sRecPlant = String(receivingPlant).trim().toUpperCase();
+    if (!/^[A-Za-z0-9]{4}$/.test(sRecPlant)) {
+      errors.push({
+        field: 'ReceivingPlant',
+        message: `Receiving Plant '${receivingPlant}' must be exactly 4 alphanumeric characters`
+      });
+    } else if (sPlant && sRecPlant === sPlant) {
+      errors.push({
+        field: 'ReceivingPlant',
+        message: 'Receiving Plant must be different from Issuing Plant'
+      });
+    }
+  }
+
+  // 2. Receiving Storage Location: REQUIRED
+  if (receivingStorageLocation === undefined || receivingStorageLocation === null || String(receivingStorageLocation).trim() === '') {
+    if (requireSLoc) {
+      errors.push({
+        field: 'ReceivingStorageLocation',
+        message: 'Receiving Storage Location is mandatory for Movement Type 301 (Plant to Plant Transfer)'
+      });
+    }
+  } else {
+    const sRecSLoc = String(receivingStorageLocation).trim().toUpperCase();
+    if (!/^[A-Za-z0-9]{4}$/.test(sRecSLoc)) {
+      errors.push({
+        field: 'ReceivingStorageLocation',
+        message: `Receiving Storage Location '${receivingStorageLocation}' must be exactly 4 alphanumeric characters`
+      });
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Authoritative SAP backend verification for Movement 301 Receiving Location.
+ * Verifies that ReceivingPlant + ReceivingStorageLocation are valid in SAP:
+ * 1. T001L: Receiving Storage Location exists in Receiving Plant.
+ * 2. If material is provided:
+ *    - MARC: Material is extended to Receiving Plant.
+ *    - MARD: Material is extended to Receiving Storage Location in Receiving Plant.
+ *
+ * @param {object} rfc - SAP RFC client (must have readTable method)
+ * @param {object} params
+ * @param {string} params.receivingPlant
+ * @param {string} params.receivingStorageLocation
+ * @param {string} [params.plant]
+ * @param {string} [params.material]
+ * @param {boolean} [params.checkT001L=true]
+ * @param {boolean} [params.checkMarc=true]
+ * @param {boolean} [params.checkMard=true]
+ * @returns {Promise<{ valid: boolean, error?: string, initialDestStock?: number }>}
+ */
+async function verifyReceivingLocationInSap(rfc, {
+  receivingPlant,
+  receivingStorageLocation,
+  _plant,
+  material,
+  requireSLoc = true,
+  checkT001L = true,
+  checkMarc = true,
+  checkMard = true
+} = {}) {
+  if (!rfc || typeof rfc.readTable !== 'function') {
+    return { valid: true };
+  }
+
+  const sRecPlant = String(receivingPlant || '').trim().toUpperCase();
+  const sRecSLoc = String(receivingStorageLocation || '').trim().toUpperCase();
+
+  if (!sRecPlant) {
+    return {
+      valid: false,
+      error: 'Receiving Plant is mandatory for Movement Type 301 (Plant Transfer)'
+    };
+  }
+
+  let initialDestStock = undefined;
+
+  // 1. If material is provided, verify MARC extension to Receiving Plant
+  if (material && checkMarc) {
+    const sMat = String(material).trim();
+    const padMat = (m) => (/^\d+$/.test(m) ? m.padStart(18, '0') : m);
+    const s4Mat = padMat(sMat);
+    const alphaOut = (m) => String(m).replace(/^0+/, '');
+
+    try {
+      const marcRec = await rfc.readTable('MARC', ['WERKS'], [
+        `MATNR = '${s4Mat}'`,
+        `AND WERKS = '${sRecPlant}'`
+      ], 1);
+      if (!marcRec || !marcRec.length) {
+        return {
+          valid: false,
+          error: `Material ${alphaOut(s4Mat)} is not extended to receiving plant ${sRecPlant} (MARC)`
+        };
+      }
+    } catch (mErr) {
+      if (mErr.status === 400 || mErr.statusCode === 400) {
+        return { valid: false, error: mErr.message };
+      }
+      if (mErr.status === 503 || /not configured/i.test(mErr.message)) {
+        return { valid: true, initialDestStock };
+      }
+      throw mErr;
+    }
+
+    // 2. If storage location is provided, verify MARD extension
+    if (checkMard && sRecSLoc) {
+      try {
+        const mardRec = await rfc.readTable('MARD', ['LGORT', 'LABST'], [
+          `MATNR = '${s4Mat}'`,
+          `AND WERKS = '${sRecPlant}'`,
+          `AND LGORT = '${sRecSLoc}'`
+        ], 1);
+        if (!mardRec || !mardRec.length) {
+          return {
+            valid: false,
+            error: `Material ${alphaOut(s4Mat)} is not extended to receiving storage location ${sRecSLoc} in plant ${sRecPlant} (MARD)`
+          };
+        }
+        if (mardRec[0].LABST !== undefined) {
+          initialDestStock = Number(mardRec[0].LABST);
+        }
+      } catch (mErr) {
+        if (mErr.status === 400 || mErr.statusCode === 400) {
+          return { valid: false, error: mErr.message };
+        }
+        if (mErr.status === 503 || /not configured/i.test(mErr.message)) {
+          return { valid: true, initialDestStock };
+        }
+        throw mErr;
+      }
+    }
+  }
+
+  // 3. Receiving Storage Location requirement check
+  if (!sRecSLoc) {
+    if (requireSLoc) {
+      return {
+        valid: false,
+        error: 'Receiving Storage Location is mandatory for Movement Type 301 (Plant to Plant Transfer)'
+      };
+    }
+    return { valid: true, initialDestStock };
+  }
+
+  // 4. T001L: Verify Receiving Storage Location exists in Receiving Plant
+  if (checkT001L) {
+    try {
+      const t001l = await rfc.readTable('T001L', ['LGORT'], [
+        `WERKS = '${sRecPlant}'`,
+        `AND LGORT = '${sRecSLoc}'`
+      ], 1);
+      if (!t001l || !t001l.length) {
+        return {
+          valid: false,
+          error: `Receiving Storage Location ${sRecSLoc} does not exist in plant ${sRecPlant} (T001L)`
+        };
+      }
+    } catch (err) {
+      if (err.status === 400 || err.statusCode === 400) {
+        return { valid: false, error: err.message };
+      }
+      if (err.status === 503 || /not configured/i.test(err.message)) {
+        return { valid: true, initialDestStock };
+      }
+      throw err;
+    }
+  }
+
+  return { valid: true, initialDestStock };
+}
+
 module.exports = {
   MOVEMENT_CONFIG,
   SUPPORTED_MOVEMENT_TYPES,
   getMovementConfig,
   resolveWmMovement,
-  validateReservationInput
+  validateReservationInput,
+  validateMovement301Destination,
+  verifyReceivingLocationInSap
 };

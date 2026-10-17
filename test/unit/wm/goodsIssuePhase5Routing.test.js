@@ -48,7 +48,8 @@ describe('Phase 5 #3 - handler routing (no cross-type fall-through)', () => {
     const body = { ReservationNo: '519144', ReservationItem: '0001', Material: 'M1', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS' };
     let post;
     beforeEach(() => {
-      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: 'M1', Plant: '1120', StorageLocation: '', ReceivingPlant: '', OpenQty: 1 });
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: 'M1', Plant: '1120', StorageLocation: '', ReceivingPlant: '', ReceivingStorageLocation: '', OpenQty: 1 });
+      jest.spyOn(GoodsIssueAdapter, 'verifyReceivingLocation').mockResolvedValue({ valid: true });
       post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue301').mockResolvedValue({ MaterialDocument: '4900000001', MaterialDocYear: '2026' });
     });
     afterEach(() => jest.restoreAllMocks());
@@ -56,12 +57,12 @@ describe('Phase 5 #3 - handler routing (no cross-type fall-through)', () => {
     test('blocks the post when neither the request nor the reservation has a receiving plant', async () => {
       const r = req(body);
       await handlers['postGoodsIssue301'](r);
-      expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('ReceivingPlant is required'));
+      expect(r.error).toHaveBeenCalledWith(400, expect.stringMatching(/Receiving Plant is mandatory|ReceivingPlant is required/i));
       expect(post).not.toHaveBeenCalled();
     });
 
     test('accepts a user-chosen storage location and receiving plant', async () => {
-      const r = req(Object.assign({ ReceivingPlant: '1130' }, body));
+      const r = req(Object.assign({ ReceivingPlant: '1130', ReceivingStorageLocation: 'CS01' }, body));
       const res = await handlers['postGoodsIssue301'](r);
       expect(r.error).not.toHaveBeenCalled();
       expect(res.MaterialDocument).toBe('4900000001');

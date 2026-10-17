@@ -7,7 +7,9 @@ const { STATUS, PROCESS_STATUS } = require('../../../common/wmStatus');
 const {
   getMovementConfig,
   resolveWmMovement,
-  validateReservationInput
+  validateReservationInput,
+  validateMovement301Destination,
+  verifyReceivingLocationInSap
 } = require('../../../common/movementConfig');
 const { isToFullyConfirmed, getHuConfirmationItems, mapStorageTypeSearchError } = require('./toState');
 const { checkAuthorization } = require('./authCheck');
@@ -104,33 +106,16 @@ class ReservationProcessAdapter {
       }
 
       if (this.rfc && String(movementType).trim() === '301' && receivingPlant) {
-        try {
-          const marcRec = await this.rfc.readTable('MARC', ['WERKS'], [
-            `MATNR = '${padMat(sapKey(material, 'matnr'))}'`,
-            `AND WERKS = '${sapKey(receivingPlant, 'plant')}'`
-          ], 1);
-          if (!marcRec || !marcRec.length) {
-            if (!this.rfc.readTable?.mock || this._checkMarcExistence) {
-              throw httpError(400, `Material ${alphaOut(padMat(sapKey(material, 'matnr')))} is not extended to receiving plant ${receivingPlant} (MARC)`);
-            }
-          }
-        } catch (mErr) {
-          if (mErr.status === 400) throw mErr;
-        }
-        if (receivingStorageLocation) {
-          try {
-            const mardRec = await this.rfc.readTable('MARD', ['LGORT'], [
-              `MATNR = '${padMat(sapKey(material, 'matnr'))}'`,
-              `AND WERKS = '${sapKey(receivingPlant, 'plant')}'`,
-              `AND LGORT = '${sapKey(receivingStorageLocation, 'lgort')}'`
-            ], 1);
-            if (!mardRec || !mardRec.length) {
-              if (!this.rfc.readTable?.mock || this._checkMarcExistence) {
-                throw httpError(400, `Material ${alphaOut(padMat(sapKey(material, 'matnr')))} is not extended to receiving storage location ${receivingStorageLocation} in plant ${receivingPlant} (MARD)`);
-              }
-            }
-          } catch (mErr) {
-            if (mErr.status === 400) throw mErr;
+        if (!this.rfc.readTable?.mock || this._checkMarcExistence) {
+          const sapCheck = await verifyReceivingLocationInSap(this.rfc, {
+            plant,
+            receivingPlant,
+            receivingStorageLocation,
+            material: padMat(sapKey(material, 'matnr')),
+            checkT001L: false
+          });
+          if (!sapCheck.valid) {
+            throw httpError(400, sapCheck.error);
           }
         }
       }
@@ -2346,20 +2331,27 @@ class ReservationProcessAdapter {
     }
 
     if (sMvt === '301') {
-      if (!sRecPlant) {
-        throw httpError(400, 'Receiving Plant is mandatory for Movement Type 301 (Plant to Plant Transfer)');
-      }
-      if (sRecPlant === sPlant) {
-        throw httpError(400, 'Receiving Plant must be different from Issuing Plant for Movement Type 301 (Plant to Plant Transfer)');
+      const destVal = validateMovement301Destination(sPlant, sRecPlant, sRecSLoc, {
+        requireSLoc: Boolean(sRecSLoc)
+      });
+      if (!destVal.isValid) {
+        throw httpError(400, destVal.errors[0].message);
       }
       if (this.rfc && (!this.rfc.readTable?.mock || this._checkMarcExistence)) {
         try {
-          const marcRec = await this.rfc.readTable('MARC', ['WERKS'], [
-            `MATNR = '${s4Mat}'`,
-            `AND WERKS = '${sRecPlant}'`
-          ], 1);
-          if (!marcRec || !marcRec.length) {
-            throw httpError(400, `Material ${alphaOut(s4Mat)} is not extended to receiving plant ${sRecPlant} (MARC)`);
+          const sapCheck = await verifyReceivingLocationInSap(this.rfc, {
+            plant: sPlant,
+            receivingPlant: sRecPlant,
+            receivingStorageLocation: sRecSLoc,
+            material: s4Mat,
+            requireSLoc: Boolean(sRecSLoc),
+            checkT001L: false
+          });
+          if (!sapCheck.valid) {
+            throw httpError(400, sapCheck.error);
+          }
+          if (sapCheck.initialDestStock !== undefined) {
+            initialDestStock = sapCheck.initialDestStock;
           }
           if (!this.rfc.readTable?.mock || this._checkMbewExistence) {
             try {
@@ -2376,23 +2368,6 @@ class ReservationProcessAdapter {
           }
         } catch (mErr) {
           if (mErr.status === 400) throw mErr;
-        }
-        if (sRecSLoc) {
-          try {
-            const mardRec = await this.rfc.readTable('MARD', ['LGORT', 'LABST'], [
-              `MATNR = '${s4Mat}'`,
-              `AND WERKS = '${sRecPlant}'`,
-              `AND LGORT = '${sRecSLoc}'`
-            ], 1);
-            if (!mardRec || !mardRec.length) {
-              throw httpError(400, `Material ${alphaOut(s4Mat)} is not extended to receiving storage location ${sRecSLoc} in plant ${sRecPlant} (MARD)`);
-            }
-            if (mardRec[0].LABST !== undefined) {
-              initialDestStock = Number(mardRec[0].LABST);
-            }
-          } catch (mErr) {
-            if (mErr.status === 400) throw mErr;
-          }
         }
         if (sBatch) {
           await this.validateReceivingBatch(s4Mat, sBatch, sRecPlant);

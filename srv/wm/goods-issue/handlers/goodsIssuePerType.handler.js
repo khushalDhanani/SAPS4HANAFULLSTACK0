@@ -558,6 +558,20 @@ const PerTypeGoodsIssueHandler = {
       if (!normalized.ReceivingPlant && !resvItem.ReceivingPlant) {
         return req.error(400, `ReceivingPlant is required for Movement 301: reservation ${normalized.ReservationNo} item ${normalized.ReservationItem} carries no receiving plant. Goods Issue was NOT posted.`);
       }
+      if (!normalized.ReceivingStorageLocation && !resvItem.ReceivingStorageLocation) {
+        return req.error(400, `ReceivingStorageLocation is required for Movement 301: reservation ${normalized.ReservationNo} item ${normalized.ReservationItem} carries no receiving storage location. Goods Issue was NOT posted.`);
+      }
+      if (typeof GoodsIssueAdapter.verifyReceivingLocation === 'function') {
+        const sapCheck = await GoodsIssueAdapter.verifyReceivingLocation({
+          receivingPlant: normalized.ReceivingPlant,
+          receivingStorageLocation: normalized.ReceivingStorageLocation,
+          plant: normalized.Plant,
+          material: normalized.Material
+        });
+        if (sapCheck && !sapCheck.valid) {
+          return req.error(400, `${sapCheck.error}. Goods Issue was NOT posted.`);
+        }
+      }
       if (!(await serialCountCheck(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
 

@@ -5,6 +5,32 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **MVT 301 — Canonical Movement Rule, Mandatory Destination & SAP Verification (2026-10-17, 16:15 IST):** Complete.
+  - **Item 2 (Receiving Plant = REQUIRED):**
+    - Updated `srv/wm/goods-issue/validation/goodsIssue301.validation.js` to enforce `ReceivingPlant = REQUIRED`.
+    - Rejects missing, empty string, whitespace, invalid plant format (!= 4 alphanumeric characters), and receiving plant identical to issuing plant.
+  - **Item 3 (Receiving Storage Location = REQUIRED & SAP verification):**
+    - Updated `srv/wm/goods-issue/validation/goodsIssue301.validation.js` to enforce `ReceivingStorageLocation = REQUIRED`.
+    - Rejects missing, empty string, whitespace, and invalid storage location format (!= 4 alphanumeric characters).
+    - Implemented `verifyReceivingLocationInSap` and `verifyGoodsIssue301InSap` verifying `ReceivingPlant + ReceivingStorageLocation` in SAP backend: checks `T001L` for SLoc existence in receiving plant, and if material is provided checks `MARC` (material extended to receiving plant) and `MARD` (material extended to receiving storage location).
+  - **Item 4 (One Canonical Movement Rule from `movementConfig.js`):**
+    - Unified all 301 policy and destination validation into `srv/common/movementConfig.js` as the single authoritative source:
+      - `MOVEMENT_CONFIG['301']`: `requiresReceivingPlant: true`, `requiresReceivingSloc: true`, `receivingPlantMustDiffer: true`, `gmCode: '04'`.
+      - Exported `validateMovement301Destination(plant, receivingPlant, receivingStorageLocation, options)`.
+      - Exported `verifyReceivingLocationInSap(rfc, options)`.
+      - Replaced ad-hoc checks across all layers:
+        - `srv/wm/goods-issue/validation/goodsIssue301.validation.js`: uses `validateMovement301Destination` and delegates SAP verification to `verifyReceivingLocationInSap`.
+        - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: `createReservation` and `postGoodsMovement` delegate to `validateMovement301Destination` and `verifyReceivingLocationInSap`.
+        - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`: added `verifyReceivingLocation` delegating to `verifyReceivingLocationInSap`.
+        - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`: in `postGoodsIssue301`, validates destination, reconciles reservation, checks required receiving plant & storage location, and calls `GoodsIssueAdapter.verifyReceivingLocation`.
+        - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue301Model.js`: enforces `receivingStorageLocation = REQUIRED` in `validate()`.
+        - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue301.view.xml`: set `required="true"` on `lblReceivingStorageLocation301`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/*301* test/unit/wm/movementConfig.test.js test/unit/wm/goodsIssuePerTypeValidation.test.js`: 9 test suites passed, 219/219 tests passed (100% green).
+    - `npx jest test/unit/wm`: 78/78 test suites passed, 1,884/1,884 tests passed (100% green).
+    - `npm run lint`: 0 errors, 0 warnings.
+    - `git diff --check`: 0 whitespace errors.
+
 - **MVT 261 — Fix Silent Posting-Status Failures in Mvt261Service (2026-10-17, 15:45 IST):** Complete.
   - Replaced silent `.catch(() => {})` handlers around `GoodsIssueAttemptStore.setStatus(...)` with critical reconciliation error logging (`LOG.error`) with full context (reference, status, fields, error) in `srv/wm/mvt261/service.js`.
   - Enforced posting status lifecycle:
@@ -9957,5 +9983,62 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git diff --check`: 0 whitespace errors.
 - **Errors / Warnings / Blockers:**
   - Zero errors in Mvt261 changes. Pre-existing unrelated failure in `test/unit/controller/uiConsistency.test.js` (`resFieldBatch` and `resPlaceholderBatch` missing from `i18n_en.properties`) noted and preserved.
+- **Next Recommended Action:**
+  - Ready for user review / commit on branch `feature01`.
+
+### 2026-10-17 16:15 IST - Movement 301: Canonical Movement Rule, Mandatory Destination & SAP Verification
+
+- **User Request (P1 Movement 301):**
+  - Item 2: Make Receiving Plant mandatory in `srv/wm/goods-issue/validation/goodsIssue301.validation.js` (currently treated as optional). Change to `ReceivingPlant = REQUIRED`, then reject: missing, empty, whitespace, invalid plant, same as issuing plant.
+  - Item 3: Make Receiving Storage Location mandatory in `srv/wm/goods-issue/validation/goodsIssue301.validation.js`. Enforce `ReceivingStorageLocation = REQUIRED`. Also verify `ReceivingPlant + ReceivingStorageLocation` is valid in SAP.
+  - Item 4: Make 301 use one canonical movement rule. Do not independently redefine 301 requirements in `movementConfig.js`, `goodsIssue301.validation.js`, `ReservationProcessAdapter.js`, `UI/controller`. Use `movementConfig.js` as the authoritative policy.
+- **Affected Files:**
+  - `srv/common/movementConfig.js`
+  - `srv/wm/goods-issue/validation/goodsIssue301.validation.js`
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue301Model.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue301.view.xml`
+  - `test/unit/wm/goodsIssuePerTypeValidation.test.js`
+  - `test/unit/wm/goodsIssue301Page.test.js`
+  - `test/unit/wm/goodsIssuePendingConfirmationPerType.test.js`
+  - `test/unit/wm/goodsIssuePhase5Routing.test.js`
+  - `test/unit/wm/goodsIssueResvPrefill.test.js`
+  - `WORKSTATUS.md`
+- **Changes Implemented:**
+  - `srv/common/movementConfig.js` (Authoritative single policy):
+    - Added `validateMovement301Destination(plant, receivingPlant, receivingStorageLocation, options)`:
+      - Enforces `ReceivingPlant = REQUIRED`: rejects missing, empty string, whitespace, invalid plant format (!= 4 alphanumeric chars), and receiving plant equal to issuing plant.
+      - Enforces `ReceivingStorageLocation = REQUIRED`: rejects missing, empty string, whitespace, and invalid storage location format (!= 4 alphanumeric chars).
+    - Added `verifyReceivingLocationInSap(rfc, options)`:
+      - Validates that `ReceivingPlant + ReceivingStorageLocation` is valid in SAP: verifies `T001L` for SLoc in plant, and if material is provided verifies `MARC` (material extended to receiving plant) and `MARD` (material extended to receiving storage location). Gracefully tolerates unconfigured RFC environment in offline unit tests.
+    - Updated `validateReservationInput`: delegates `case '301':` to `validateMovement301Destination`.
+    - Exported `validateMovement301Destination` and `verifyReceivingLocationInSap`.
+  - `srv/wm/goods-issue/validation/goodsIssue301.validation.js`:
+    - Replaced optional checks with canonical `validateMovement301Destination(data.Plant, data.ReceivingPlant, data.ReceivingStorageLocation)`.
+    - Implemented `verifyGoodsIssue301InSap(rfc, data)` delegating to canonical `verifyReceivingLocationInSap`.
+    - Exported `validateGoodsIssue301Payload`, `verifyGoodsIssue301InSap`, and `verifyReceivingLocationInSap`.
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`:
+    - Added `verifyReceivingLocation(options)` delegating to canonical `verifyReceivingLocationInSap(this.rfc, options)`.
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`:
+    - In `postGoodsIssue301`: validates destination, reconciles reservation, checks required receiving plant & storage location, and calls `GoodsIssueAdapter.verifyReceivingLocation`.
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+    - Updated `createReservation` and `postGoodsMovement` to use canonical `validateMovement301Destination` and `verifyReceivingLocationInSap`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue301Model.js`:
+    - Enforced `receivingStorageLocation = REQUIRED` in `validate()`.
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue301.view.xml`:
+    - Set `required="true"` on `lblReceivingStorageLocation301`.
+  - Unit Tests:
+    - Updated `goodsIssuePerTypeValidation.test.js`: added 12 tests covering 301 mandatory receiving plant, whitespace, format, same plant, mandatory receiving storage location, and SAP verification (T001L, MARC, MARD).
+    - Updated `goodsIssue301Page.test.js`: updated test asserting both Receiving Plant and Receiving Storage Location are mandatory.
+    - Updated `goodsIssuePendingConfirmationPerType.test.js`, `goodsIssuePhase5Routing.test.js`, and `goodsIssueResvPrefill.test.js` to supply valid ReceivingStorageLocation on 301 payloads.
+- **Validation Results:**
+  - `npx jest test/unit/wm/*301* test/unit/wm/movementConfig.test.js test/unit/wm/goodsIssuePerTypeValidation.test.js`: 9 test suites passed, 219/219 tests passed (100% green).
+  - `npx jest test/unit/wm`: 78/78 test suites passed, 1,884/1,884 tests passed (100% green).
+  - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+  - `git diff --check`: 0 whitespace errors.
+- **Errors / Warnings / Blockers:**
+  - Zero errors in Movement 301 changes.
 - **Next Recommended Action:**
   - Ready for user review / commit on branch `feature01`.

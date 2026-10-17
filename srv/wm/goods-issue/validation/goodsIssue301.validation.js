@@ -3,11 +3,16 @@
  * ISOLATED business rules for Movement Type 301 ONLY (Plant-to-Plant Transfer).
  * Serves no other movement type; contains no MovementType branching.
  *
- * 301 rules: Reservation No + Item mandatory, receiving Plant / Storage Location optional,
- * no Cost Center, no G/L account.
+ * 301 rules: Reservation No + Item mandatory, Receiving Plant REQUIRED,
+ * Receiving Storage Location REQUIRED, no Cost Center, no G/L account.
+ * Uses movementConfig.js as the authoritative policy for destination requirements.
  */
 
 const C = require('./common');
+const {
+  validateMovement301Destination,
+  verifyReceivingLocationInSap
+} = require('../../../common/movementConfig');
 
 /**
  * @param {Object} data
@@ -29,18 +34,12 @@ function validateGoodsIssue301Payload(data) {
   push(C.checkStorageLocation(data.StorageLocation, !hasReservation));
   push(C.checkUnit(data.Unit));
 
-  // Receiving plant / storage location are OPTIONAL for transfers; validate format if supplied.
-  push(C.checkOptionalFourChar(data.ReceivingPlant, 'ReceivingPlant'));
-  push(C.checkOptionalFourChar(data.ReceivingStorageLocation, 'ReceivingStorageLocation'));
-
-  // 301 is a plant-to-plant transfer. When a receiving plant is supplied it must differ from the
-  // issuing plant (a 301 into the same plant is contradictory). Conditional invariant only — it never
-  // makes the field required, so reservation-derived postings are unaffected.
-  const sPlant301 = String(data.Plant || '').trim().toUpperCase();
-  const sRecvPlant301 = String(data.ReceivingPlant || '').trim().toUpperCase();
-  if (sRecvPlant301 && sPlant301 && sRecvPlant301 === sPlant301) {
-    push({ field: 'ReceivingPlant', message: `Movement 301 is a plant-to-plant transfer: receiving plant '${sRecvPlant301}' must differ from issuing plant '${sPlant301}'` });
-  }
+  // Canonical destination validation from movementConfig.js (Authoritative policy)
+  // Enforces:
+  // - ReceivingPlant = REQUIRED: rejects missing, empty, whitespace, invalid plant format, same as issuing plant
+  // - ReceivingStorageLocation = REQUIRED: rejects missing, empty, whitespace, invalid storage location format
+  const destVal = validateMovement301Destination(data.Plant, data.ReceivingPlant, data.ReceivingStorageLocation);
+  destVal.errors.forEach(push);
 
   C.checkDates(data).forEach(push);
   C.checkSerialNumbers(data).forEach(push);
@@ -49,4 +48,26 @@ function validateGoodsIssue301Payload(data) {
   return C.buildResult(errors);
 }
 
-module.exports = { validateGoodsIssue301Payload };
+/**
+ * Verifies ReceivingPlant + ReceivingStorageLocation in SAP backend.
+ * Checks T001L (SLoc in Plant), and MARC/MARD if material is provided.
+ * Authoritative policy delegates to verifyReceivingLocationInSap in movementConfig.js.
+ *
+ * @param {object} rfc - SAP RFC client
+ * @param {object} data - Goods issue payload with ReceivingPlant, ReceivingStorageLocation, Plant, Material
+ * @returns {Promise<{ valid: boolean, error?: string, initialDestStock?: number }>}
+ */
+async function verifyGoodsIssue301InSap(rfc, data = {}) {
+  return verifyReceivingLocationInSap(rfc, {
+    receivingPlant: data.ReceivingPlant || data.receivingPlant,
+    receivingStorageLocation: data.ReceivingStorageLocation || data.receivingStorageLocation,
+    plant: data.Plant || data.plant,
+    material: data.Material || data.material
+  });
+}
+
+module.exports = {
+  validateGoodsIssue301Payload,
+  verifyGoodsIssue301InSap,
+  verifyReceivingLocationInSap
+};

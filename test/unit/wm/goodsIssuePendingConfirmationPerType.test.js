@@ -134,6 +134,7 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
       Plant: '1110',
       StorageLocation: 'CS01',
       ReceivingPlant: '1120',
+      ReceivingStorageLocation: 'CS02',
       IssueQty: 25,
       Unit: 'KG',
       PostingDate: '2026-10-02'
@@ -147,8 +148,10 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
         Plant: '1110',
         StorageLocation: 'CS01',
         ReceivingPlant: '1120',
+        ReceivingStorageLocation: 'CS02',
         OpenQty: 50
       });
+      jest.spyOn(GoodsIssueAdapter, 'verifyReceivingLocation').mockResolvedValue({ valid: true });
 
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue301').mockRejectedValue(
         Object.assign(new Error('Gateway timeout from SAP S/4HANA'), { status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' })

@@ -165,7 +165,7 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
             expect(res.errors.serials).toBe('');
         });
 
-        it('requires Receiving Plant; Receiving Storage Location stays optional', () => {
+        it('requires Receiving Plant and Receiving Storage Location for Movement 301', () => {
             const data = GoodsIssue301Model.getInitialData();
             data.reservationNo = 'RES001';
             data.reservationItem = '0010';
@@ -180,12 +180,19 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
             let res = GoodsIssue301Model.validate(data);
             expect(res.isValid).toBe(false);
             expect(res.errors.receivingPlant).toContain('Receiving Plant is required');
-            expect(res.errors.receivingStorageLocation).toBe('');
+            expect(res.errors.receivingStorageLocation).toContain('Receiving Storage Location is required');
 
             data.receivingPlant = '1150';
             res = GoodsIssue301Model.validate(data);
+            expect(res.isValid).toBe(false);
+            expect(res.errors.receivingPlant).toBe('');
+            expect(res.errors.receivingStorageLocation).toContain('Receiving Storage Location is required');
+
+            data.receivingStorageLocation = 'CS01';
+            res = GoodsIssue301Model.validate(data);
             expect(res.isValid).toBe(true);
             expect(res.errors.receivingPlant).toBe('');
+            expect(res.errors.receivingStorageLocation).toBe('');
         });
 
         it('makes the issuing Storage Location editable only when the reservation item has none', () => {
@@ -228,6 +235,8 @@ describe('Movement 301 Dedicated Page: Model & Service Tests', () => {
             data.storageLocation = 'HS01';
             data.quantity = 1;
             data.unit = 'EA';
+
+            data.receivingStorageLocation = 'HS01';
 
             // 1. Receiving Plant matching issuing plant must REJECT (inverse of 311's rule)
             data.receivingPlant = '1120';

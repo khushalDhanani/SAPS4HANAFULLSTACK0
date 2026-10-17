@@ -13,6 +13,7 @@ const {
   GoodsIssuePostingClient,
   GoodsIssueDashboardClient
 } = require('./goods-issue');
+const { verifyReceivingLocationInSap } = require('../../../common/movementConfig');
 
 /**
  * Orchestrator and Facade for SAP S/4HANA Goods Issue.
@@ -562,6 +563,14 @@ class GoodsIssueAdapter {
   async postGoodsIssue201(data) { return this.posting.post201(data); }
   async postGoodsIssue301(data) { return this.posting.post301(data); }
   async postGoodsIssue311(data) { return this.posting.post311(data); }
+
+  /**
+   * Verifies ReceivingPlant + ReceivingStorageLocation in SAP backend (T001L, MARC, MARD).
+   * Authoritative canonical policy from movementConfig.js.
+   */
+  async verifyReceivingLocation(options) {
+    return verifyReceivingLocationInSap(this.rfc, options);
+  }
 
   /** Material document already posted under an idempotency reference (read-only), or null. */
   async findPostedGoodsIssueByReference(referenceDocument, movementType, postingDate) {

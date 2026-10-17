@@ -165,7 +165,7 @@
                                 valueStateText="{gi301>/errors/receivingPlant}"
                                 maxLength="4" />
 
-                            <Label id="lblReceivingStorageLocation301" text="{i18n>gi301ReceivingStorageLocation}" />
+                            <Label id="lblReceivingStorageLocation301" text="{i18n>gi301ReceivingStorageLocation}" required="true" />
                             <Input
                                 id="inReceivingStorageLocation301"
                                 value="{gi301>/receivingStorageLocation}"

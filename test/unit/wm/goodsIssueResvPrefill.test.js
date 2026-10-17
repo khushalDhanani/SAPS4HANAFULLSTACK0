@@ -170,7 +170,7 @@ describe('server posts the reservation values, not the client values', () => {
   });
 
   test.each([
-    ['postGoodsIssue301', { ReceivingPlant: '1130' }],
+    ['postGoodsIssue301', { ReceivingPlant: '1130', ReceivingStorageLocation: 'CS01' }],
     ['postGoodsIssue201', { CostCenter: '1011101301' }]
   ])('%s: tampered material against its reservation -> 400 before anything is posted', async (action, extra) => {
     const posts = ['postGoodsIssue201', 'postGoodsIssue301'].map((m) => jest.spyOn(GoodsIssueAdapter, m).mockResolvedValue({}));
@@ -183,7 +183,7 @@ describe('server posts the reservation values, not the client values', () => {
   test('301: serial-managed material with too few serials -> 400 before SAP', async () => {
     GoodsIssueAdapter.isSerialManaged.mockResolvedValue(true);
     const post301 = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue301').mockResolvedValue({});
-    const r = req({ ...body, ReceivingPlant: '1130', ReceivingStorageLocation: '', SerialNumbers: ['110'] });
+    const r = req({ ...body, ReceivingPlant: '1130', ReceivingStorageLocation: 'CS01', SerialNumbers: ['110'] });
     await handlers.postGoodsIssue301(r);
     expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('serial-managed'));
     expect(post301).not.toHaveBeenCalled();

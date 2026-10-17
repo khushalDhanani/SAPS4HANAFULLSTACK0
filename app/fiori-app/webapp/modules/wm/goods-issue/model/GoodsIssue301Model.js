@@ -291,7 +291,10 @@
                 bValid = false;
             }
             var sRecvSLoc = (oData.receivingStorageLocation != null) ? String(oData.receivingStorageLocation).trim().toUpperCase() : "";
-            if (sRecvSLoc && sRecvSLoc.length !== 4) {
+            if (!sRecvSLoc) {
+                errors.receivingStorageLocation = "Receiving Storage Location is required for Movement 301";
+                bValid = false;
+            } else if (sRecvSLoc.length !== 4) {
                 errors.receivingStorageLocation = "Receiving Storage Location must be 4 characters";
                 bValid = false;
             }
