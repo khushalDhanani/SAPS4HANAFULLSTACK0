@@ -768,3 +768,152 @@ describe('Mvt261Adapter plant scope (F10)', () => {
     await expect(cycleForPlant('2100')).rejects.toMatchObject({ status: 403 });
   });
 });
+
+describe('Mvt261 unified stock availability calculation across Scan, List, and Post', () => {
+  const su = (LENUM, LGORT, CHARG, VERME) => ({
+    LENUM: LENUM.padStart(20, '0'), MATNR: '000000001000000100', WERKS: '1120', LGORT, LGNUM: 'W01', LGTYP: 'RM1', LGPLA: 'B1',
+    CHARG, BESTQ: '', VERME, EINME: '0.000', AUSME: '0.000', MEINS: 'KG', WDATU: '20260101',
+    SKZUA: '', SKZUE: '', SKZSA: '', SKZSE: '', SKZSI: '', SPGRU: ''
+  });
+
+  const makeFixture = ({ resbLgort = 'CS01', resbBatch = '', lquaRows = [] }) => {
+    const resbItem = {
+      RSNUM: '0000555001', RSPOS: '0001', AUFNR: '000001002800', MATNR: '000000001000000100', WERKS: '1120',
+      LGORT: resbLgort, LGNUM: 'W01', LGTYP: '', LGPLA: '', CHARG: resbBatch, PRVBE: '',
+      BDTER: '20260101', BDMNG: '200.000', ENMNG: '0.000', MEINS: 'KG', XLOEK: '', KZEAR: '', XWAOK: 'X'
+    };
+    const t = {
+      RESB: [resbItem],
+      AUFK: [{ AUFNR: '000001002800', AUART: 'ZP01', LOEKZ: '' }],
+      JEST: [{ OBJNR: 'OR000001002800', STAT: 'I0002' }],
+      T320: [{ LGORT: 'CS01', LGNUM: 'W01' }, { LGORT: 'CS02', LGNUM: 'W01' }, { LGORT: 'ZZ99', LGNUM: 'W01' }],
+      MARD: [{ LGORT: resbLgort, LABST: '200.000' }],
+      MCHB: [], LTBK: [], LTBP: [], LTAK: [], LTAP: [], MATDOC: [], PVBE: [],
+      MAKT: [{ MAKTX: 'Unified Stock Test Material' }], MARC: [{ XCHPF: resbBatch ? 'X' : '' }],
+      LQUA: lquaRows
+    };
+    return new Mvt261Adapter({
+      rfc: { readTable: async (table) => t[table] || [] },
+      client: {
+        get: async () => ({
+          data: {
+            d: {
+              __count: '1',
+              results: [{
+                Reservation: '555001', ReservationItem: '1', OrderID: '1002800', Product: '1000000100',
+                Plant: '1120', StorageLocation: resbLgort, MatlCompRequirementDate: '/Date(1790000000000)/',
+                ResvnItmRequiredQtyInBaseUnit: '200.000', ResvnItmWithdrawnQtyInBaseUnit: '0.000', BaseUnit: 'KG',
+                GoodsMovementIsAllowed: true
+              }]
+            }
+          }
+        }),
+        post: async () => ({ data: { d: { MaterialDocument: '4900055001', MaterialDocumentYear: '2026' } }, headers: {} })
+      }
+    });
+  };
+
+  it('unrelated warehouse location (ZZ99) is NOT issuable: openItems, scanContext, and postGoodsIssue all agree on Blocked', async () => {
+    // Material has stock in warehouse W01, but ONLY in unrelated storage location ZZ99 (not in CS01).
+    const adapter = makeFixture({
+      resbLgort: 'CS01',
+      lquaRows: [su('90001', 'ZZ99', '', '500.000')]
+    });
+
+    // 1. openItems
+    const openRes = await adapter.openItems({ plant: '1120' });
+    expect(openRes.Items[0]).toMatchObject({
+      ScanPossible: false,
+      Blocked: true,
+      BlockReason: 'no unrestricted stock in CS01',
+      ReadyStorageUnits: 0,
+      ReadyQuantity: 0
+    });
+
+    // 2. scanContext
+    const scanCtx = await adapter.scanContext({ reservation: '555001', item: '1' });
+    expect(scanCtx).toMatchObject({
+      Blocked: true,
+      BlockReason: 'no unrestricted stock in CS01',
+      IssuableQuantity: 0,
+      Units: []
+    });
+
+    // 3. postGoodsIssue
+    await expect(adapter.postGoodsIssue({ reservation: '555001', item: '1', quantity: 100 })).rejects.toMatchObject({
+      status: 422,
+      message: expect.stringContaining('no unrestricted stock in CS01')
+    });
+  });
+
+  it('matching warehouse location (CS01) is issuable: openItems, scanContext, and postGoodsIssue all agree on Ready', async () => {
+    // Material has two 100 KG drums in required location CS01.
+    const adapter = makeFixture({
+      resbLgort: 'CS01',
+      lquaRows: [su('90001', 'CS01', '', '100.000'), su('90002', 'CS01', '', '100.000')]
+    });
+
+    // 1. openItems
+    const openRes = await adapter.openItems({ plant: '1120' });
+    expect(openRes.Items[0]).toMatchObject({
+      ScanPossible: true,
+      Blocked: false,
+      BlockReason: '',
+      ReadyStorageUnits: 2,
+      ReadyQuantity: 200
+    });
+
+    // 2. scanContext
+    const scanCtx = await adapter.scanContext({ reservation: '555001', item: '1' });
+    expect(scanCtx).toMatchObject({
+      Blocked: false,
+      BlockReason: '',
+      IssuableQuantity: 200
+    });
+    expect(scanCtx.Units).toHaveLength(2);
+    expect(scanCtx.Units.every((u) => u.Status === 'Available')).toBe(true);
+    expect(scanCtx.Units.map((u) => u.StorageUnit).sort()).toEqual(['90001', '90002']);
+
+    // 3. ReadyStorageUnits in openItems matches available units in scanContext
+    expect(openRes.Items[0].ReadyStorageUnits).toBe(scanCtx.Units.filter((u) => u.Status === 'Available').length);
+    expect(openRes.Items[0].ReadyQuantity).toBe(scanCtx.IssuableQuantity);
+
+    // 4. postGoodsIssue passes stock gate
+    const postRes = await adapter.postGoodsIssue({ reservation: '555001', item: '1', quantity: 200 });
+    expect(postRes).toMatchObject({ MaterialDocument: '4900055001' });
+  });
+
+  it('pinned batch with stock only in another batch: openItems, scanContext, and postGoodsIssue all agree on Blocked for batch', async () => {
+    // Reservation pins batch BREQ, but warehouse stock only exists for batch BOTHER.
+    const adapter = makeFixture({
+      resbLgort: 'CS01',
+      resbBatch: 'BREQ',
+      lquaRows: [su('90001', 'CS01', 'BOTHER', '200.000')]
+    });
+
+    // 1. openItems
+    const openRes = await adapter.openItems({ plant: '1120' });
+    expect(openRes.Items[0]).toMatchObject({
+      ScanPossible: false,
+      Blocked: true,
+      BlockReason: 'no unrestricted stock in CS01 for batch BREQ',
+      ReadyStorageUnits: 0,
+      ReadyQuantity: 0
+    });
+
+    // 2. scanContext
+    const scanCtx = await adapter.scanContext({ reservation: '555001', item: '1' });
+    expect(scanCtx).toMatchObject({
+      Blocked: true,
+      BlockReason: 'no unrestricted stock in CS01 for batch BREQ',
+      IssuableQuantity: 0,
+      Units: []
+    });
+
+    // 3. postGoodsIssue
+    await expect(adapter.postGoodsIssue({ reservation: '555001', item: '1', quantity: 100, batch: 'BREQ' })).rejects.toMatchObject({
+      status: 422,
+      message: expect.stringContaining('no unrestricted stock in CS01 for batch BREQ')
+    });
+  });
+});

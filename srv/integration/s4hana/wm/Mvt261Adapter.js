@@ -518,10 +518,11 @@ class Mvt261Adapter {
   /**
    * The single definition of "issuable stock" for a reservation item, shared by the cycle, the scan
    * page, the open list and the posting gate. Pure (reads nothing from SAP).
-   *  - WM reservation (warehouse set): issuable = ready stock across the whole warehouse (every quant
-   *    of the material in that warehouse that passes _quantNotReady), batch-matched. issuableUnits is
-   *    the storage-unit (LENUM) subset, for the scan FIFO/suggest list; bulk quants still count toward
-   *    the quantity. Supply-area stock is in the warehouse, so it is already issuable (no stranded flag).
+   *  - WM reservation (warehouse set): issuable = ready stock at the reservation's issue storage location
+   *    or production supply area location within the warehouse (every quant of the material matching
+   *    the required locations that passes _quantNotReady), batch-matched. issuableUnits is the
+   *    storage-unit (LENUM) subset, for the scan FIFO/suggest list; bulk quants still count toward
+   *    the quantity. Quants in unrelated storage locations of the warehouse are excluded.
    *  - Non-WM reservation: issuable = unrestricted stock in exactly the reservation's storage location
    *    (MARD, or MCHB for the pinned batch). Stock in the production-supply-area location is reported as
    *    supplyAreaStock and never counted - it needs a transfer first.
@@ -531,11 +532,16 @@ class Mvt261Adapter {
    */
   _issuable(ctx, quants = [], locationStock = []) {
     const batchOk = (v) => !ctx.batch || v === ctx.batch;
+    const locations = [...new Set([ctx.storageLocation, ctx.supplyAreaStorageLocation].filter(Boolean))];
     let issuableQty = 0;
     let issuableUnits = [];
     let supplyAreaStock = 0;
     if (ctx.warehouse) {
-      const ready = quants.filter((q) => q.LGNUM === ctx.warehouse && batchOk(q.CHARG) && !this._quantNotReady(q));
+      const ready = quants.filter((q) =>
+        q.LGNUM === ctx.warehouse &&
+        (!q.LGORT || !locations.length || locations.includes(q.LGORT)) &&
+        batchOk(q.CHARG) &&
+        !this._quantNotReady(q));
       issuableQty = ready.reduce((s, q) => s + parseSapNumber(q.VERME), 0);
       issuableUnits = ready.filter((q) => q.LENUM);
     } else {
@@ -543,7 +549,7 @@ class Mvt261Adapter {
       issuableQty = rows.reduce((s, st) => s + (Number(st.Quantity) || 0), 0);
       if (ctx.supplyAreaStorageLocation && ctx.supplyAreaStorageLocation !== ctx.storageLocation) {
         supplyAreaStock = quants
-          .filter((q) => q.LGORT === ctx.supplyAreaStorageLocation && batchOk(q.CHARG))
+          .filter((q) => q.LGORT === ctx.supplyAreaStorageLocation && batchOk(q.CHARG) && !this._quantNotReady(q))
           .reduce((s, q) => s + parseSapNumber(q.VERME), 0);
       }
     }
@@ -554,7 +560,7 @@ class Mvt261Adapter {
     const reason = !blocked ? ''
       : supplyAreaStock > 0
         ? `${supplyAreaStock} ${ctx.unit} in supply area ${ctx.supplyAreaStorageLocation}; issue location ${ctx.storageLocation} is empty - transfer required`
-        : `no unrestricted stock in ${ctx.storageLocation || 'the issue location'}`;
+        : `no unrestricted stock in ${ctx.storageLocation || 'the issue location'}${ctx.batch ? ` for batch ${ctx.batch}` : ''}`;
     return { issuableQty, issuableUnits, supplyAreaStock, blocked, partial, reason };
   }
 
@@ -607,9 +613,13 @@ class Mvt261Adapter {
     const out = {};
     for (const p of plants) {
       const rows = await this._table('RESB',
-        ['RSNUM', 'RSPOS', 'AUFNR', 'MATNR', 'LGORT', 'LGNUM', 'LGTYP', 'LGPLA', 'PRVBE', 'CHARG', 'RGEKZ', 'XWAOK'],
-        [`WERKS = '${p}'`, "AND BWART = '261'", "AND XLOEK = ''", "AND KZEAR = ''"], 'Read reservation facts');
-      for (const r of rows) out[`${strip(r.RSNUM)}|${strip(r.RSPOS)}`] = r;
+        ['RSNUM', 'RSPOS', 'AUFNR', 'MATNR', 'LGORT', 'LGNUM', 'LGTYP', 'LGPLA', 'PRVBE', 'CHARG', 'RGEKZ', 'XWAOK', 'XLOEK', 'KZEAR'],
+        [`WERKS = '${p}'`, "AND BWART = '261'"], 'Read reservation facts');
+      for (const r of rows) {
+        if (r.XLOEK !== 'X' && r.KZEAR !== 'X') {
+          out[`${strip(r.RSNUM)}|${strip(r.RSPOS)}`] = r;
+        }
+      }
     }
     return out;
   }
@@ -635,7 +645,7 @@ class Mvt261Adapter {
    */
   async _nonWmStock(items, facts, warehouses) {
     const nonWm = items.filter((i) => !(warehouses[`${i.Plant}|${i.StorageLocation}`] || ''));
-    const mats = [...new Set(nonWm.map((i) => `${i.Material.padStart(18, '0')}|${i.Plant}`))];
+    const mats = [...new Set(nonWm.map((i) => `${/^\d+$/.test(i.Material) ? i.Material.padStart(18, '0') : i.Material}|${i.Plant}`))];
     const out = {};
     for (const key of mats) {
       const [m, p] = key.split('|');
@@ -687,7 +697,7 @@ class Mvt261Adapter {
     const released = String(c.OrderStatus || '').split(/\s+/).includes('REL');
     const locations = [...new Set([c.StorageLocation, c.SupplyAreaStorageLocation].filter(Boolean))];
     const here = quants.filter((q) =>
-      (!locations.length || locations.includes(q.LGORT)) &&
+      (!q.LGORT || !locations.length || locations.includes(q.LGORT)) &&
       (!c.Warehouse || q.LGNUM === c.Warehouse) &&
       (!c.Batch || q.CHARG === c.Batch));
     const key = (q) => `${sapDate(q.WDATU) || '9999-99-99'}|${q.CHARG}|${q.LENUM}`;

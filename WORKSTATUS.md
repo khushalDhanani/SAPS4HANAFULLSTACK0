@@ -5,6 +5,41 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **WM Movement 261: Unified Stock Availability Calculation Across Scan, Open-Item List, and Posting Gate (Issue #1 in Critical / High Issues) (2026-10-17, 10:50 IST):** Complete.
+  - **User Problem & Incident:**
+    - Movement 261: "Scan/List/Post calculate available stock differently. The open-item list can say an item is ready while the scan context says there is no issuable stock at the required location." (Severity: High).
+  - **Root Cause & Architectural Discovery:**
+    1. In `srv/integration/s4hana/wm/Mvt261Adapter.js`, `_issuable(ctx, quants, locationStock)` evaluated stock warehouse-wide for WM reservations (`q.LGNUM === ctx.warehouse`) without checking whether quants were located in the reservation's issue storage location (`RESB-LGORT`) or production supply area (`PVBE-LGORT`). Quants located in unrelated storage locations of the warehouse (e.g. `ZZ99`) were incorrectly included in `issuableQty` and `issuableUnits`.
+    2. In contrast, `scanContext()` strictly filtered storage units by `locations = [c.StorageLocation, c.SupplyAreaStorageLocation]`, excluding any storage units in other storage locations of the warehouse.
+    3. As a result, `openItems` reported an item as ready (`ScanPossible: true, ReadyStorageUnits: >0, ReadyQuantity: >0`), but opening the scan page showed `Blocked: true` with 0 available storage units, and attempting to post failed with 422.
+    4. In `_reservationFacts()`, SQL filtering `AND XLOEK = '' AND KZEAR = ''` risked dropping valid un-deleted reservation rows when SAP stored space characters (`' '`), and in `_nonWmStock()`, alphanumeric material IDs were incorrectly padded with leading zeroes.
+  - **Changes Implemented Across Stack:**
+    1. **Unified Issuable Stock Definition (`srv/integration/s4hana/wm/Mvt261Adapter.js`):**
+       - Updated `_issuable(ctx, quants, locationStock)`:
+         - Defines `locations = [...new Set([ctx.storageLocation, ctx.supplyAreaStorageLocation].filter(Boolean))]`.
+         - Ready quants filter enforces: `q.LGNUM === ctx.warehouse && (!q.LGORT || !locations.length || locations.includes(q.LGORT)) && batchOk(q.CHARG) && !this._quantNotReady(q)`.
+         - Permitted interim quants without explicit `LGORT` while strictly excluding unrelated storage locations within the warehouse.
+         - Enforces `!this._quantNotReady(q)` on supply-area stock.
+         - Updated reason message to report batch name when reservation specifies a pinned batch: `no unrestricted stock in ${ctx.storageLocation || 'the issue location'}${ctx.batch ? ' for batch ' + ctx.batch : ''}`.
+    2. **Scan Context Alignment (`srv/integration/s4hana/wm/Mvt261Adapter.js`):**
+       - Updated `here` filter in `scanContext()` to match `_issuable()`: `(!q.LGORT || !locations.length || locations.includes(q.LGORT))`.
+    3. **Robust Data Extraction (`srv/integration/s4hana/wm/Mvt261Adapter.js`):**
+       - In `_reservationFacts()`: Replaced SQL deletion check with in-memory check `if (r.XLOEK !== 'X' && r.KZEAR !== 'X')`.
+       - In `_nonWmStock()`: Zero-pads only numeric material numbers (`/^\d+$/.test(i.Material) ? i.Material.padStart(18, '0') : i.Material`).
+    4. **Comprehensive Unit Tests (`test/unit/wm/mvt261Adapter.test.js` & `test/unit/wm/mvt261Scan.test.js`):**
+       - Added test suite `Mvt261 unified stock availability calculation across Scan, List, and Post` in `mvt261Adapter.test.js`:
+         - Unrelated warehouse storage location (`ZZ99`): `openItems`, `scanContext`, and `postGoodsIssue` all agree on `Blocked: true` (0 ready storage units, 0 ready qty, 422 rejection on post).
+         - Matching warehouse storage location (`CS01`): `openItems`, `scanContext`, and `postGoodsIssue` all agree on `ScanPossible: true` (2 ready storage units, 200 KG, successful posting).
+         - Pinned batch with stock only in another batch: `openItems`, `scanContext`, and `postGoodsIssue` all agree on `Blocked: true` citing the pinned batch.
+       - Updated `test/unit/wm/mvt261Scan.test.js` test mocks and fixtures to accurately simulate warehouse storage location mapping (`T320`) and RESB queries by plant.
+  - **Quality & Regression Results:**
+    - Full 261 test suite (`npx jest test/unit/wm/*261*`): **7 test suites passed, 158 tests passed, 0 failures (100% green)**.
+    - Full WM test suite (`npx jest test/unit/wm`): **78 test suites passed, 1859 tests passed, 0 failures (100% green)**.
+    - Full repo test suite (`npm test`): **168 test suites passed, 3125 tests passed, 0 failures (100% green)**.
+    - `npm run lint`: **ESLint clean, 0 errors, 0 warnings**.
+    - `npm --prefix app/fiori-app run lint`: **ui5lint clean, 0 findings**.
+    - `git diff --check`: **Clean diff, 0 whitespace errors**.
+
 - **WM Warehouse Scan-To & Reservation: Support Non-WM Receiving Storage Locations for Movement 311 & TR 0001001912 Resolution (2026-10-17, 10:15 IST):** Complete.
   - **User Problem & Incident:**
     - Error on `/wm/scan-to/W12/TR/0001001912`:
@@ -2697,7 +2732,11 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
-- **Next Recommended Action (Movement Type 261 Live SAP S/4HANA Verification 100% Complete — 2026-10-15, 17:15 IST):**
+- **Exact Next Recommended Action (Movement Type 261 Unified Stock Calculation Complete — 2026-10-17, 10:55 IST):**
+  1. Review verified changes across `srv/integration/s4hana/wm/Mvt261Adapter.js`, `test/unit/wm/mvt261Adapter.test.js`, and `test/unit/wm/mvt261Scan.test.js`.
+  2. Continue addressing the remaining issues in the user's priority issue list or commit and push `feature/mvt261_01`.
+
+- **Previous Recommended Action (Movement Type 261 Live SAP S/4HANA Verification 100% Complete — 2026-10-15, 17:15 IST):**
   Movement Type 261 (Goods Issue to Order) is 100% proven and complete across backend CDS, S/4 adapters, Fiori UI5 views/controllers, live SAP S/4HANA Client 220 writes, transparent table reads, and Chrome DevTools MCP browser testing.
   Next actions:
   1. Commit verified changes to git branch `feature/mvt261_01`.
@@ -2746,6 +2785,31 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-17 10:50 IST — WM Movement 261: Unified Stock Availability Calculation Across Scan, Open-Item List, and Posting Gate
+
+- **Reason for Change:**
+  - Resolved Critical/High Issue #1 for Movement 261: "Scan/List/Post calculate available stock differently. The open-item list can say an item is ready while the scan context says there is no issuable stock at the required location."
+  - Eliminated the discrepancy where `openItems` evaluated warehouse stock broadly while `scanContext` and `postGoodsIssue` enforced the reservation's issue storage location.
+- **Components & Files Modified:**
+  1. `srv/integration/s4hana/wm/Mvt261Adapter.js`:
+     - Updated `_issuable(ctx, quants, locationStock)` to strictly filter ready quants by reservation issue storage location and supply area: `(!q.LGORT || !locations.length || locations.includes(q.LGORT))`.
+     - Filtered supply-area stock with `!this._quantNotReady(q)`.
+     - Enriched block reason message when a batch is pinned on the reservation.
+     - Aligned `scanContext` quant filter with `_issuable`.
+     - Replaced SQL deletion check in `_reservationFacts` with in-memory check `if (r.XLOEK !== 'X' && r.KZEAR !== 'X')`.
+     - Fixed `_nonWmStock` zero-padding to only pad numeric material numbers (`/^\d+$/`).
+  2. `test/unit/wm/mvt261Adapter.test.js`:
+     - Added unit test suite `Mvt261 unified stock availability calculation across Scan, List, and Post` verifying parity across `openItems`, `scanContext`, and `postGoodsIssue` for unrelated location, matching location, and pinned batch.
+  3. `test/unit/wm/mvt261Scan.test.js`:
+     - Updated test doubles to support querying `RESB` by plant (`WERKS`) and configured warehouse locations (`T320`) to accurately reflect unified storage location checks.
+- **Verification Commands Executed & Results:**
+  - `npx jest test/unit/wm/*261*`: 7 suites passed, 158 tests passed (100% green).
+  - `npx jest test/unit/wm`: 78 suites passed, 1859 tests passed (100% green).
+  - `npm test`: 168 suites passed, 3125 tests passed (100% green).
+  - `npm run lint`: 0 errors.
+  - `npm --prefix app/fiori-app run lint`: 0 findings.
+  - `git diff --check`: 0 whitespace errors.
 
 ### 2026-10-16 16:35 IST — WM Reservation Entry (`wm/reservation-entry`): Listing Consistency Normalization & Creator Display (`CreatedByUser` / `USNAM`)
 

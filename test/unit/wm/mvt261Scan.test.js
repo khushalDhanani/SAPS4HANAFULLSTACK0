@@ -46,7 +46,7 @@ function sap(extraQuants = []) {
   const readTable = async (table, _fields, where) => {
     reads.push(table);
     const w = where.join(' ');
-    if (table === 'RESB') return RESB.filter((r) => r.RSNUM === val(where, 'RSNUM') && r.RSPOS === val(where, 'RSPOS'));
+    if (table === 'RESB') return val(where, 'RSNUM') ? RESB.filter((r) => r.RSNUM === val(where, 'RSNUM') && r.RSPOS === val(where, 'RSPOS')) : RESB.filter((r) => !val(where, 'WERKS') || r.WERKS === val(where, 'WERKS'));
     if (table === 'AUFK') return [{ AUFNR: val(where, 'AUFNR'), AUART: 'ZP01', LOEKZ: '' }];
     if (table === 'JEST') return RESB.filter((r) => w.includes(`OR${r.AUFNR}`)).flatMap((r) => [{ OBJNR: `OR${r.AUFNR}`, STAT: 'I0002' }, ...(r.AUFNR === LOCKED ? [{ OBJNR: `OR${r.AUFNR}`, STAT: 'I0043' }] : [])]);
     if (table === 'LQUA') {
@@ -211,20 +211,20 @@ describe('261 scan screen, stage 1', () => {
 });
 
 describe('open 261 list: only where scanning is possible', () => {
-  const item = (Reservation, ReservationItem, OrderID, Product, Plant, required, withdrawn) => ({
-    Reservation, ReservationItem, OrderID, Product, Plant, StorageLocation: 'CS02', MatlCompRequirementDate: '/Date(1791158400000)/',
+  const item = (Reservation, ReservationItem, OrderID, Product, Plant, required, withdrawn, StorageLocation = 'CS02') => ({
+    Reservation, ReservationItem, OrderID, Product, Plant, StorageLocation, MatlCompRequirementDate: '/Date(1791158400000)/',
     ResvnItmRequiredQtyInBaseUnit: required, ResvnItmWithdrawnQtyInBaseUnit: withdrawn, BaseUnit: 'KG', GoodsMovementIsAllowed: true
   });
   const list = (input) => {
     const s = sap();
-    // The list rows all sit in CS02; make it warehouse-managed so readiness is counted per warehouse
-    // (the scan-screen rule), exactly as the open list now does.
+    // The list rows sit in CS02 and CS01; make both warehouse-managed so readiness is counted per warehouse
+    // and storage location (the unified scan-screen rule), exactly as the open list now does.
     const orig = s.adapter.rfc.readTable;
-    s.adapter.rfc.readTable = async (table, fields, where) => (table === 'T320' ? [{ LGORT: 'CS02', LGNUM: 'W12' }] : orig(table, fields, where));
+    s.adapter.rfc.readTable = async (table, fields, where) => (table === 'T320' ? [{ LGORT: 'CS01', LGNUM: 'W12' }, { LGORT: 'CS02', LGNUM: 'W12' }] : orig(table, fields, where));
     s.adapter.client.get = async () => ({ data: { d: { __count: '4', results: [
       item('512851', '3', '1002707', '1000001001', '1130', '800.000', '0.000'), // released, 5 ready drums
       item('519944', '1', '1002760', '1000001003', '1130', '600.000', '0.000'), // released, drums only on hold
-      item('24685', '2', '1000109', '8300000159', '1130', '510.000', '509.000'), // order locked, 1 ready drum
+      item('24685', '2', '1000109', '8300000159', '1130', '510.000', '509.000', 'CS01'), // order locked, 1 ready drum
       item('900000', '1', '1002707', '7777777777', '1130', '10.000', '0.000') // released, no storage-unit stock
     ] } } });
     return s.adapter.openItems(input);
