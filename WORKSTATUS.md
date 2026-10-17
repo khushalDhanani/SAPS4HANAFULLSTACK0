@@ -5,6 +5,26 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **AGENTS.md: Core Rule 11 Added (Strict Write-Gate Protocol) (2026-10-17, 12:45 IST):** Complete.
+  - Added Rule 11 under `## Evidence, uncertainty, and approval` and `## SAP API Discovery — Non-Negotiable Protocol`: "Never run any live write (BAPI, RFC, POST, DB write) without explicit written \"go\" from the user for that specific call. A choice between options is not a \"go\". Default is read-only. State \"READ-ONLY\" or \"WRITE\" before every SAP call."
+  - Validation: `git diff --check` passed (0 whitespace errors).
+
+- **Movement 201 Live S/4HANA Client 220 Test Run & Diagnostic Findings (2026-10-17, 12:42 IST):**
+  - Executed controlled live test run in S/4HANA Client 220 under explicit user authorization (Material `8900000004`, Plant `1120`, SLoc `CS01`, Batch `INJW260001`, Cost Center `1011201301`, Qty `1 KG`, Warehouse `W01`).
+  - Stage 1 (Reservation): Succeeded (`RSNUM = '0000529668'`).
+  - Stage 2 (TR): Succeeded (`TBNUM = '0001000871'` with WM Movement `311`).
+  - Stage 3 (RF scan lookup): Succeeded with Warning (`"TR movement 311 does not match reservation movement 201"`).
+  - Stage 4 (TO create & confirm): FAILED with HTTP 400 (`"TR movement 311 does not match reservation movement 201"` at `TrToAdapter.js:L1860-L1862`).
+  - Stage 5 (Posting): Not reached.
+
+- **AGENTS.md: Core Rule 10 Added (Reject placeholder input & sample data protocol) (2026-10-17, 12:38 IST):** Complete.
+  - Added Rule 10 under `## Evidence, uncertainty, and approval` and `## SAP API Discovery — Non-Negotiable Protocol`: "Reject placeholder input. If a value looks like a sample (`___`, `xxxxx`, `\"exact message\"`, `\"text\"`), treat it as **NOT PROVIDED**, stop, and ask. Never analyze a template or example as if it were a live result."
+  - Validation: `git diff --check` passed (0 whitespace errors).
+
+- **AGENTS.md: Core Rule 9 Added (Blocker enforcement, citation requirement, Not verified labeling, proven assumption standard) (2026-10-17, 12:08 IST):** Complete.
+  - Added Rule 9 under `## Evidence, uncertainty, and approval`: "Never proceed past an unanswered BLOCKER. Never put a message number, field name, table, or storage type in a table unless it appears in this repo (cite file:line) or user answers. Otherwise write **Not verified**. 'Assumptions made: None' is only allowed if every row is proven."
+  - Validation: `git diff --check` passed (0 whitespace errors).
+
 - **WM Reservation Entry (`#/wm/reservation-entry/create`): Comprehensive Audit & Remediation Across All Movement Types (311, 201, 241, 301, 261) (2026-10-17, 11:58 IST):** Complete.
   - **User Problem & Request:**
     - "Check All type Movement Type Find Issues and fix." on `#/wm/reservation-entry/create`.
@@ -2836,6 +2856,66 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-17 12:45 IST — AGENTS.md: Core Rule 11 Added (Strict Write-Gate Protocol)
+
+- **Reason for Change:** User requested adding Rule 11 to the agent's core instructions: "Never run any live write (BAPI, RFC, POST, DB write) without my explicit written 'go' for that specific call. A choice between options is not a 'go'. Default is read-only. State 'READ-ONLY' or 'WRITE' before every SAP call."
+- **Components & Files Modified:**
+  - `AGENTS.md`: Added rule under `## Evidence, uncertainty, and approval` and as Item 11 under `## SAP API Discovery — Non-Negotiable Protocol`.
+  - `WORKSTATUS.md`: Logged change and updated Current Status.
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - `git status` → modified `AGENTS.md` and `WORKSTATUS.md`.
+- **Errors / blockers:** None. Documentation/rules-only change.
+- **Next action:** Enforce Rule 11 on all subsequent SAP operations: default to read-only, label every call READ-ONLY or WRITE, and require explicit written "go" before any write.
+
+### 2026-10-17 12:42 IST — Movement 201 Live S/4HANA Client 220 Execution Run (Empirical Stage-by-Stage Diagnosis)
+
+- **Reason for Change:** Explicit user authorization received to execute a controlled live test run in S/4HANA Client 220 for Movement 201 (Material `8900000004`, Plant `1120`, SLoc `CS01`, Batch `INJW260001`, Cost Center `1011201301`, Qty `1 KG`, Warehouse `W01`).
+- **Executed Actions & Live System Results:**
+  1. **Stage 1 (Reservation Create):** Succeeded.
+     - Live Document: `RSNUM = '0000529668'`, Item `'0001'` posted in SAP S/4HANA (`M7 060`, `BUS2093 0000529668 has been created`).
+     - Persistent SAP tables: `RKPF` (`RSNUM = '0000529668'`, `BWART = '201'`, `KOSTL = '1011201301'`), `RESB` (`RSNUM = '0000529668'`, `RSPOS = '0001'`).
+  2. **Stage 2 (Transfer Requirement Create):** Succeeded.
+     - Live Document: `TBNUM = '0001000871'`, Item `'0001'` created in Warehouse `W01` with WM Movement `311` (`L3 001`).
+     - Persistent SAP tables: `LTBK` (`TBNUM = '0001000871'`, `LGNUM = 'W01'`, `BWLVS = '311'`), `LTBP` (`TBNUM = '0001000871'`, `TBPOS = '0001'`).
+  3. **Stage 3 (RF Scan Lookup):** Succeeded with Warning.
+     - Looked up TR `0001000871`: OpenQty `1 KG`, Cost Center `1011201301`.
+     - Warning: `"TR movement 311 does not match reservation movement 201"`.
+     - In UI (`WarehouseScanToDetail.controller.js:L804-L809`), this mismatch sets `canSubmit: false` unless `allowMismatchedTR` is enabled.
+  4. **Stage 4 (TO Create & Confirm):** FAILED.
+     - `createTOFromTR` rejected with HTTP 400: `"TR movement 311 does not match reservation movement 201"`.
+     - Rejection site: `TrToAdapter.js:L1860-L1862`.
+  5. **Stage 5 (Posting):** Not reached due to Stage 4 failure.
+- **Verification Commands Executed & Results:**
+  - Live SAP S/4HANA Client 220 RFC calls via `RfcClient`.
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+- **Errors / blockers:** Stage 4 TO creation fails because staging TR uses WM movement `311` while reservation specifies movement `201`, triggering strict movement equality check in `TrToAdapter.js:L1860`.
+- **Next action:** Present exact findings to user in the requested format without claiming root cause or proposing fixes until confirmed.
+
+### 2026-10-17 12:38 IST — AGENTS.md: Core Rule 10 Added (Reject Placeholder Input Protocol)
+
+- **Reason for Change:** User requested adding Rule 10 to the agent's core instructions: "Reject placeholder input. If a value looks like a sample (___, xxxxx, 'exact message', 'text'), treat it as NOT PROVIDED, stop, and ask. Never analyze a template or example as if it were my live result."
+- **Components & Files Modified:**
+  - `AGENTS.md`: Added rule under `## Evidence, uncertainty, and approval` and as Item 10 under `## SAP API Discovery — Non-Negotiable Protocol`.
+  - `WORKSTATUS.md`: Logged change and updated Current Status.
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - `git status` → modified `AGENTS.md` and `WORKSTATUS.md`.
+- **Errors / blockers:** None. Documentation/rules-only change.
+- **Next action:** Enforce Rule 10 immediately: halt analysis and request actual live system values whenever placeholder values appear.
+
+### 2026-10-17 12:08 IST — AGENTS.md: Core Rule 9 Added (Blocker Enforcement & Table Citation Protocol)
+
+- **Reason for Change:** User requested adding Rule 9 to the agent's core instructions: "Never proceed past an unanswered BLOCKER. Never put a message number, field name, table, or storage type in a table unless it appears in my repo (cite file:line) or my answers. Otherwise write 'Not verified'. 'Assumptions made: None' is only allowed if every row is proven."
+- **Components & Files Modified:**
+  - `AGENTS.md`: Added rule under `## Evidence, uncertainty, and approval`.
+  - `WORKSTATUS.md`: Logged change and updated current status.
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - `git status` → modified `AGENTS.md` and `WORKSTATUS.md`.
+- **Errors / blockers:** None. Documentation/rules-only change.
+- **Next action:** Adhere strictly to Rule 9 in all subsequent agent evaluations and table generation.
 
 ### 2026-10-17 11:58 IST — WM Reservation Entry (`#/wm/reservation-entry/create`): All Movement Types Audit & Fixes (311, 201, 241, 301, 261)
 

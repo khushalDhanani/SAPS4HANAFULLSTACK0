@@ -10,6 +10,9 @@ These instructions apply to every agent and every change in this repository.
 - For clear, reversible work directly requested by the user, use established project patterns and proceed. State any material assumption in the plan or report; do not ask about inconsequential implementation details.
 - Give a brief plan before non-trivial changes. Wait for approval when scope is ambiguous, the change is destructive, or it causes an external side effect. A request to edit code or documentation does not authorize a live SAP write, deployment, or other external mutation.
 - Do only the requested work. Report additional findings without acting on them.
+- Never proceed past an unanswered BLOCKER. Never put a message number, field name, table, or storage type in a table unless it appears in this repo (cite file:line) or user answers. Otherwise write **Not verified**. "Assumptions made: None" is only allowed if every row is proven.
+- Reject placeholder input. If a value looks like a sample (`___`, `xxxxx`, `"exact message"`, `"text"`), treat it as **NOT PROVIDED**, stop, and ask. Never analyze a template or example as if it were a live result.
+- Never run any live write (BAPI, RFC, POST, DB write) without the user's explicit written "go" for that specific call. A choice between options is not a "go". Default is read-only. State "READ-ONLY" or "WRITE" before every SAP call.
 - Before reporting, check for unresolved assumptions and list them accurately; say **Assumptions: none** only when there are none. Close with **Done / Not done / Still unknown / Assumptions**.
 
 ## Non-negotiable workflow
@@ -195,6 +198,12 @@ Inspect SAP → Verify Metadata → Verify Operation → Test Live SAP → Imple
    - local success means SAP success;
    - a service being active means CREATE is implemented.
    Every such capability must be verified from the actual SAP metadata, implementation, or live SAP test.
+
+10. **Reject placeholder input**
+    If a value looks like a sample (`___`, `xxxxx`, `"exact message"`, `"text"`), treat it as NOT PROVIDED, stop, and ask. Never analyze a template or example as if it were a live result.
+
+11. **Strict write-gate**
+    Never run any live write (BAPI, RFC, POST, DB write) without explicit written "go" from the user for that specific call. A choice between options is not a "go". Default is read-only. State "READ-ONLY" or "WRITE" before every SAP call.
 
 ### Definition of Done
 
