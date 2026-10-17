@@ -194,6 +194,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
           StorageLocation: 'HS01',
           IssueQty: 10.0,
           Unit: 'KG',
+          ReceivingStorageLocation: 'CS02',
           Batch: 'B240101' // Expired batch
         },
         error: jest.fn((code, msg) => ({ code, message: msg }))
@@ -462,6 +463,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
           StorageLocation: 'CS01',
           IssueQty: 50.0,
           Unit: 'KG',
+          ReceivingStorageLocation: 'CS02',
           Batch: 'ABCD1234' // Real expired batch in S/4HANA Client 220
         },
         error: jest.fn((code, msg) => ({ code, message: msg }))
@@ -475,7 +477,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', OpenQty: 500 });
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue311');
       const req = {
-        data: { ReservationNo: '18025', ReservationItem: '0001', Material: '9999999999', Plant: '1120', StorageLocation: 'CS01', IssueQty: 10, Unit: 'KG' },
+        data: { ReservationNo: '18025', ReservationItem: '0001', Material: '9999999999', Plant: '1120', StorageLocation: 'CS01', ReceivingStorageLocation: 'CS02', IssueQty: 10, Unit: 'KG' },
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
       await handlers['postGoodsIssue311'](req);
@@ -487,7 +489,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', OpenQty: 5 });
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue311');
       const req = {
-        data: { ReservationNo: '18025', ReservationItem: '0001', Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', IssueQty: 50, Unit: 'KG' },
+        data: { ReservationNo: '18025', ReservationItem: '0001', Material: '1000000204', Plant: '1120', StorageLocation: 'CS01', ReceivingStorageLocation: 'CS02', IssueQty: 50, Unit: 'KG' },
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
       await handlers['postGoodsIssue311'](req);
@@ -590,6 +592,7 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
           StorageLocation: 'CS01',
           IssueQty: 50.0,
           Unit: 'KG',
+          ReceivingStorageLocation: 'CS02',
           Batch: 'IN25072562'
         },
         error: jest.fn((code, msg) => ({ code, message: msg }))

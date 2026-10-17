@@ -69,6 +69,50 @@ describe('Phase 5 #3 - handler routing (no cross-type fall-through)', () => {
     });
   });
 
+  describe('postGoodsIssue311 destination validation against WM configuration (T320/T001L)', () => {
+    const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
+    const body311 = { ReservationNo: '519145', ReservationItem: '0001', Material: 'M1', Plant: '1120', StorageLocation: 'HS01', ReceivingStorageLocation: 'CS02', IssueQty: 1, Unit: 'NOS' };
+    let post;
+    beforeEach(() => {
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: 'M1', Plant: '1120', StorageLocation: 'HS01', ReceivingStorageLocation: 'CS02', OpenQty: 1 });
+      post = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue311').mockResolvedValue({ MaterialDocument: '4900000002', MaterialDocYear: '2026' });
+    });
+    afterEach(() => jest.restoreAllMocks());
+
+    test('rejects (400) and blocks posting when receiving SLoc fails WM configuration in T320', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'verifyReceivingLocation').mockResolvedValue({
+        valid: false,
+        error: 'Receiving storage location CS02 belongs to warehouse W10, but issuing storage location belongs to warehouse W01 (cross-warehouse transfer not supported in 311)'
+      });
+      const r = req(body311);
+      await handlers['postGoodsIssue311'](r);
+      expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('cross-warehouse transfer not supported in 311'));
+      expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('Goods Issue was NOT posted'));
+      expect(post).not.toHaveBeenCalled();
+    });
+
+    test('rejects (400) and blocks posting when receiving SLoc does not exist in plant (T001L)', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'verifyReceivingLocation').mockResolvedValue({
+        valid: false,
+        error: 'Receiving Storage Location CS02 does not exist in plant 1120 (T001L)'
+      });
+      const r = req(body311);
+      await handlers['postGoodsIssue311'](r);
+      expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('does not exist in plant 1120 (T001L)'));
+      expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('Goods Issue was NOT posted'));
+      expect(post).not.toHaveBeenCalled();
+    });
+
+    test('posts successfully when destination SLoc and WM configuration are valid', async () => {
+      jest.spyOn(GoodsIssueAdapter, 'verifyReceivingLocation').mockResolvedValue({ valid: true });
+      const r = req(body311);
+      const res = await handlers['postGoodsIssue311'](r);
+      expect(r.error).not.toHaveBeenCalled();
+      expect(res.MaterialDocument).toBe('4900000002');
+      expect(post).toHaveBeenCalled();
+    });
+  });
+
   test('all per-type actions are registered (and no shared postGoodsIssue action)', () => {
     expect(typeof handlers['postGoodsIssue201']).toBe('function');
     expect(typeof handlers['postGoodsIssue301']).toBe('function');

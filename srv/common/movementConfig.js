@@ -239,16 +239,11 @@ function validateReservationInput(data = {}, options = {}) {
         }
         break;
 
-      case '311':
-        if (!recSLoc) {
-          addError('Receiving Storage Location is mandatory for Movement Type 311 (SLoc Transfer)');
-        } else if (recSLoc === sloc) {
-          addError('Receiving Storage Location must be different from Issuing Storage Location');
-        }
-        if (recPlant && recPlant !== plant) {
-          addError('Receiving Plant must match Issuing Plant for Movement Type 311 (SLoc Transfer)');
-        }
+      case '311': {
+        const destVal = validateMovement311Destination(plant, sloc, recPlant, recSLoc);
+        destVal.errors.forEach((e) => addError(e.message));
         break;
+      }
 
       case '301': {
         const destVal = validateMovement301Destination(plant, recPlant, recSLoc);
@@ -364,31 +359,112 @@ function validateMovement301Destination(plant, receivingPlant, receivingStorageL
 }
 
 /**
- * Authoritative SAP backend verification for Movement 301 Receiving Location.
+ * Canonical destination validation for Movement 311 (Storage Location Transfer within Plant).
+ * Authoritative single policy for Movement 311 destination requirements.
+ *
+ * Rules:
+ * - ReceivingStorageLocation: REQUIRED.
+ *   - Rejects missing, empty, whitespace, and format != 4 alphanumeric characters.
+ *   - Must always enforce: Receiving SLoc != Issuing SLoc.
+ * - ReceivingPlant:
+ *   - Must always enforce: Receiving Plant == Issuing Plant (intra-plant transfer).
+ *   - If supplied, validates 4 alphanumeric characters format.
+ *   - If supplied and differs from issuing plant, rejects.
+ *
+ * @param {string} plant - Issuing Plant
+ * @param {string} storageLocation - Issuing Storage Location
+ * @param {string} receivingPlant - Receiving Plant (optional in input; if supplied must equal issuing plant)
+ * @param {string} receivingStorageLocation - Receiving Storage Location (REQUIRED)
+ * @param {object} [options]
+ * @returns {{ isValid: boolean, errors: Array<{ field: string, message: string }> }}
+ */
+function validateMovement311Destination(plant, storageLocation, receivingPlant, receivingStorageLocation, _options = {}) {
+  const errors = [];
+  const sPlant = String(plant || '').trim().toUpperCase();
+  const sSLoc = String(storageLocation || '').trim().toUpperCase();
+
+  // 1. Receiving Storage Location: REQUIRED
+  if (receivingStorageLocation === undefined || receivingStorageLocation === null || String(receivingStorageLocation).trim() === '') {
+    errors.push({
+      field: 'ReceivingStorageLocation',
+      message: 'Receiving Storage Location is mandatory for Movement Type 311 (SLoc Transfer)'
+    });
+  } else {
+    const sRecSLoc = String(receivingStorageLocation).trim().toUpperCase();
+    if (!/^[A-Za-z0-9]{4}$/.test(sRecSLoc)) {
+      errors.push({
+        field: 'ReceivingStorageLocation',
+        message: `Receiving Storage Location '${receivingStorageLocation}' must be exactly 4 alphanumeric characters`
+      });
+    } else if (sSLoc && sRecSLoc === sSLoc) {
+      errors.push({
+        field: 'ReceivingStorageLocation',
+        message: 'Receiving Storage Location must be different from Issuing Storage Location'
+      });
+    }
+  }
+
+  // 2. Receiving Plant: Must match Issuing Plant (intra-plant transfer)
+  if (receivingPlant !== undefined && receivingPlant !== null && String(receivingPlant).trim() !== '') {
+    const sRecPlant = String(receivingPlant).trim().toUpperCase();
+    if (!/^[A-Za-z0-9]{4}$/.test(sRecPlant)) {
+      errors.push({
+        field: 'ReceivingPlant',
+        message: `Receiving Plant '${receivingPlant}' must be exactly 4 alphanumeric characters`
+      });
+    } else if (sPlant && sRecPlant !== sPlant) {
+      errors.push({
+        field: 'ReceivingPlant',
+        message: 'Receiving Plant must match Issuing Plant for Movement Type 311 (SLoc Transfer)'
+      });
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+/**
+ * Authoritative SAP backend verification for Transfer Movement (301 and 311) Receiving Location.
  * Verifies that ReceivingPlant + ReceivingStorageLocation are valid in SAP:
- * 1. T001L: Receiving Storage Location exists in Receiving Plant.
- * 2. If material is provided:
+ * 1. Destination format & mandatory requirements.
+ * 2. T320: WM configuration check.
+ *    - For Movement 311: verifies receiving and issuing storage locations belong to compatible
+ *      warehouse configurations in T320 (rejects cross-warehouse transfers where both are mapped
+ *      to different warehouses). Supports non-WM receiving SLoc when not mapped in T320.
+ * 3. T001L: Receiving Storage Location exists in Receiving Plant.
+ * 4. Material checks (if material is provided):
  *    - MARC: Material is extended to Receiving Plant.
  *    - MARD: Material is extended to Receiving Storage Location in Receiving Plant.
  *
  * @param {object} rfc - SAP RFC client (must have readTable method)
  * @param {object} params
- * @param {string} params.receivingPlant
- * @param {string} params.receivingStorageLocation
- * @param {string} [params.plant]
+ * @param {string} [params.movementType='301'] - '301' or '311'
+ * @param {string} [params.plant] - Issuing Plant (required for 311; used as receivingPlant for 311 if receivingPlant omitted)
+ * @param {string} [params.storageLocation] - Issuing Storage Location (used for 311 T320 comparison and intra-plant check)
+ * @param {string} [params.receivingPlant] - Receiving Plant (mandatory for 301; for 311 must match plant if supplied)
+ * @param {string} params.receivingStorageLocation - Receiving Storage Location (REQUIRED)
  * @param {string} [params.material]
+ * @param {boolean} [params.requireSLoc=true]
  * @param {boolean} [params.checkT001L=true]
+ * @param {boolean} [params.checkT320=true]
  * @param {boolean} [params.checkMarc=true]
  * @param {boolean} [params.checkMard=true]
  * @returns {Promise<{ valid: boolean, error?: string, initialDestStock?: number }>}
  */
 async function verifyReceivingLocationInSap(rfc, {
+  movementType = '301',
   receivingPlant,
   receivingStorageLocation,
-  _plant,
+  plant,
+  storageLocation,
   material,
   requireSLoc = true,
   checkT001L = true,
+  checkT320 = true,
   checkMarc = true,
   checkMard = true
 } = {}) {
@@ -396,20 +472,25 @@ async function verifyReceivingLocationInSap(rfc, {
     return { valid: true };
   }
 
-  const sRecPlant = String(receivingPlant || '').trim().toUpperCase();
+  const sMvt = String(movementType || '').trim();
+  const sPlant = String(plant || '').trim().toUpperCase();
+  const sRecPlant = String(receivingPlant || (sMvt === '311' ? plant : '') || '').trim().toUpperCase();
+  const sSLoc = String(storageLocation || '').trim().toUpperCase();
   const sRecSLoc = String(receivingStorageLocation || '').trim().toUpperCase();
+
+  let initialDestStock = undefined;
 
   if (!sRecPlant) {
     return {
       valid: false,
-      error: 'Receiving Plant is mandatory for Movement Type 301 (Plant Transfer)'
+      error: sMvt === '311'
+        ? 'Plant is mandatory for Movement Type 311 (SLoc Transfer)'
+        : 'Receiving Plant is mandatory for Movement Type 301 (Plant Transfer)'
     };
   }
 
-  let initialDestStock = undefined;
-
-  // 1. If material is provided, verify MARC extension to Receiving Plant
-  if (material && checkMarc) {
+  // 1. MARC check: Verify material extended to Receiving Plant (for 301)
+  if (material && checkMarc && sMvt !== '311') {
     const sMat = String(material).trim();
     const padMat = (m) => (/^\d+$/.test(m) ? m.padStart(18, '0') : m);
     const s4Mat = padMat(sMat);
@@ -430,53 +511,111 @@ async function verifyReceivingLocationInSap(rfc, {
       if (mErr.status === 400 || mErr.statusCode === 400) {
         return { valid: false, error: mErr.message };
       }
-      if (mErr.status === 503 || /not configured/i.test(mErr.message)) {
+      if (mErr.status === 503 || /not configured|not available/i.test(mErr.message)) {
         return { valid: true, initialDestStock };
       }
       throw mErr;
     }
-
-    // 2. If storage location is provided, verify MARD extension
-    if (checkMard && sRecSLoc) {
-      try {
-        const mardRec = await rfc.readTable('MARD', ['LGORT', 'LABST'], [
-          `MATNR = '${s4Mat}'`,
-          `AND WERKS = '${sRecPlant}'`,
-          `AND LGORT = '${sRecSLoc}'`
-        ], 1);
-        if (!mardRec || !mardRec.length) {
-          return {
-            valid: false,
-            error: `Material ${alphaOut(s4Mat)} is not extended to receiving storage location ${sRecSLoc} in plant ${sRecPlant} (MARD)`
-          };
-        }
-        if (mardRec[0].LABST !== undefined) {
-          initialDestStock = Number(mardRec[0].LABST);
-        }
-      } catch (mErr) {
-        if (mErr.status === 400 || mErr.statusCode === 400) {
-          return { valid: false, error: mErr.message };
-        }
-        if (mErr.status === 503 || /not configured/i.test(mErr.message)) {
-          return { valid: true, initialDestStock };
-        }
-        throw mErr;
-      }
-    }
   }
 
-  // 3. Receiving Storage Location requirement check
+  // 2. Receiving Storage Location requirement check
   if (!sRecSLoc) {
     if (requireSLoc) {
       return {
         valid: false,
-        error: 'Receiving Storage Location is mandatory for Movement Type 301 (Plant to Plant Transfer)'
+        error: sMvt === '311'
+          ? 'Receiving Storage Location is mandatory for Movement Type 311 (SLoc Transfer)'
+          : 'Receiving Storage Location is mandatory for Movement Type 301 (Plant to Plant Transfer)'
       };
     }
-    return { valid: true, initialDestStock };
+    return { valid: true };
   }
 
-  // 4. T001L: Verify Receiving Storage Location exists in Receiving Plant
+  // 3. Intra-plant check for 311
+  if (sMvt === '311') {
+    if (sSLoc && sRecSLoc === sSLoc) {
+      return {
+        valid: false,
+        error: 'Receiving Storage Location must be different from Issuing Storage Location'
+      };
+    }
+    if (receivingPlant && sPlant && String(receivingPlant).trim().toUpperCase() !== sPlant) {
+      return {
+        valid: false,
+        error: 'Receiving Plant must match Issuing Plant for Movement Type 311 (SLoc Transfer)'
+      };
+    }
+  }
+
+  // 4. T320: WM configuration check (no cross-warehouse transfer on 311)
+  if (checkT320 && (sMvt === '311' || sSLoc)) {
+    try {
+      const t320Rec = await rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
+        `WERKS = '${sRecPlant}'`,
+        `AND LGORT = '${sRecSLoc}'`
+      ], 1);
+      if (t320Rec && t320Rec.length > 0) {
+        const recWh = String(t320Rec[0]?.LGNUM || '').trim();
+        const issSLoc = sSLoc;
+        if (issSLoc) {
+          const t320Iss = await rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
+            `WERKS = '${sPlant || sRecPlant}'`,
+            `AND LGORT = '${issSLoc}'`
+          ], 1);
+          const issWh = String(t320Iss?.[0]?.LGNUM || '').trim();
+          if (issWh && recWh && recWh !== issWh) {
+            return {
+              valid: false,
+              error: `Receiving storage location ${sRecSLoc} belongs to warehouse ${recWh}, but issuing storage location belongs to warehouse ${issWh} (cross-warehouse transfer not supported in 311)`
+            };
+          }
+        }
+      }
+    } catch (tErr) {
+      if (tErr.status === 400 || tErr.statusCode === 400) {
+        return { valid: false, error: tErr.message };
+      }
+      if (tErr.status === 503 || /not configured|not available/i.test(tErr.message)) {
+        return { valid: true, initialDestStock };
+      }
+      throw tErr;
+    }
+  }
+
+  // 5. MARD check: Material extended to Receiving Storage Location in Plant
+  if (material && checkMard && sRecSLoc) {
+    const sMat = String(material).trim();
+    const padMat = (m) => (/^\d+$/.test(m) ? m.padStart(18, '0') : m);
+    const s4Mat = padMat(sMat);
+    const alphaOut = (m) => String(m).replace(/^0+/, '');
+
+    try {
+      const mardRec = await rfc.readTable('MARD', ['LGORT', 'LABST'], [
+        `MATNR = '${s4Mat}'`,
+        `AND WERKS = '${sRecPlant}'`,
+        `AND LGORT = '${sRecSLoc}'`
+      ], 1);
+      if (!mardRec || !mardRec.length) {
+        return {
+          valid: false,
+          error: `Material ${alphaOut(s4Mat)} is not extended to receiving storage location ${sRecSLoc} in plant ${sRecPlant} (MARD)`
+        };
+      }
+      if (mardRec[0].LABST !== undefined) {
+        initialDestStock = Number(mardRec[0].LABST);
+      }
+    } catch (mErr) {
+      if (mErr.status === 400 || mErr.statusCode === 400) {
+        return { valid: false, error: mErr.message };
+      }
+      if (mErr.status === 503 || /not configured|not available/i.test(mErr.message)) {
+        return { valid: true, initialDestStock };
+      }
+      throw mErr;
+    }
+  }
+
+  // 6. T001L: Verify Receiving Storage Location exists in Receiving Plant
   if (checkT001L) {
     try {
       const t001l = await rfc.readTable('T001L', ['LGORT'], [
@@ -493,7 +632,7 @@ async function verifyReceivingLocationInSap(rfc, {
       if (err.status === 400 || err.statusCode === 400) {
         return { valid: false, error: err.message };
       }
-      if (err.status === 503 || /not configured/i.test(err.message)) {
+      if (err.status === 503 || /not configured|not available/i.test(err.message)) {
         return { valid: true, initialDestStock };
       }
       throw err;
@@ -503,6 +642,17 @@ async function verifyReceivingLocationInSap(rfc, {
   return { valid: true, initialDestStock };
 }
 
+/**
+ * Dedicated destination verification helper for Movement 311.
+ * Delegates to verifyReceivingLocationInSap with movementType: '311'.
+ */
+async function verifyMovement311DestinationInSap(rfc, options = {}) {
+  return verifyReceivingLocationInSap(rfc, {
+    ...options,
+    movementType: '311'
+  });
+}
+
 module.exports = {
   MOVEMENT_CONFIG,
   SUPPORTED_MOVEMENT_TYPES,
@@ -510,5 +660,7 @@ module.exports = {
   resolveWmMovement,
   validateReservationInput,
   validateMovement301Destination,
-  verifyReceivingLocationInSap
+  validateMovement311Destination,
+  verifyReceivingLocationInSap,
+  verifyMovement311DestinationInSap
 };

@@ -5,7 +5,11 @@ const {
   SUPPORTED_MOVEMENT_TYPES,
   getMovementConfig,
   resolveWmMovement,
-  validateReservationInput
+  validateReservationInput,
+  validateMovement301Destination,
+  validateMovement311Destination,
+  verifyReceivingLocationInSap,
+  verifyMovement311DestinationInSap
 } = require('../../../srv/common/movementConfig');
 
 describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP verification]', () => {
@@ -269,6 +273,153 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
         const res = validateReservationInput({}, { req: mockReq });
         expect(res.isValid).toBe(false);
         expect(mockReq.error).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('4. Destination Validation & SAP Backend Verification', () => {
+    describe('validateMovement311Destination', () => {
+      test('rejects missing receiving storage location', () => {
+        const res = validateMovement311Destination('1120', 'CS01', '', '');
+        expect(res.isValid).toBe(false);
+        expect(res.errors[0].message).toContain('Receiving Storage Location is mandatory for Movement Type 311');
+      });
+
+      test('rejects receiving storage location equal to issuing storage location', () => {
+        const res = validateMovement311Destination('1120', 'CS01', '1120', 'CS01');
+        expect(res.isValid).toBe(false);
+        expect(res.errors[0].message).toContain('Receiving Storage Location must be different from Issuing Storage Location');
+      });
+
+      test('rejects receiving plant mismatch for 311', () => {
+        const res = validateMovement311Destination('1120', 'CS01', '1130', 'CS02');
+        expect(res.isValid).toBe(false);
+        expect(res.errors[0].message).toContain('Receiving Plant must match Issuing Plant for Movement Type 311');
+      });
+
+      test('accepts valid intra-plant transfer', () => {
+        const res = validateMovement311Destination('1120', 'CS01', '1120', 'CS02');
+        expect(res.isValid).toBe(true);
+        expect(res.errors).toHaveLength(0);
+      });
+    });
+
+    describe('verifyReceivingLocationInSap (Movement 311 WM & SAP checks)', () => {
+      test('rejects when receiving SLoc is mapped to different warehouse in T320', async () => {
+        const mockRfc = {
+          readTable: jest.fn().mockImplementation(async (table, fields, where = []) => {
+            const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+            if (table === 'T320') {
+              if (whereStr.includes("LGORT = 'CS02'")) return [{ LGNUM: 'W10', WERKS: '1120', LGORT: 'CS02' }];
+              return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
+            }
+            return [];
+          })
+        };
+        const res = await verifyMovement311DestinationInSap(mockRfc, {
+          plant: '1120',
+          storageLocation: 'CS01',
+          receivingStorageLocation: 'CS02'
+        });
+        expect(res.valid).toBe(false);
+        expect(res.error).toContain('belongs to warehouse W10, but issuing storage location belongs to warehouse W01');
+        expect(res.error).toContain('cross-warehouse transfer not supported in 311');
+      });
+
+      test('passes when receiving SLoc is mapped to same warehouse in T320', async () => {
+        const mockRfc = {
+          readTable: jest.fn().mockImplementation(async (table, fields, where = []) => {
+            const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+            if (table === 'T320') {
+              if (whereStr.includes("LGORT = 'CS02'")) return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS02' }];
+              return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
+            }
+            if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'CS02' }];
+            return [];
+          })
+        };
+        const res = await verifyMovement311DestinationInSap(mockRfc, {
+          plant: '1120',
+          storageLocation: 'CS01',
+          receivingStorageLocation: 'CS02'
+        });
+        expect(res.valid).toBe(true);
+      });
+
+      test('supports non-WM receiving SLoc when not mapped in T320', async () => {
+        const mockRfc = {
+          readTable: jest.fn().mockImplementation(async (table, fields, where = []) => {
+            const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+            if (table === 'T320') {
+              if (whereStr.includes("LGORT = 'CS02'")) return [];
+              return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
+            }
+            if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'CS02' }];
+            return [];
+          })
+        };
+        const res = await verifyMovement311DestinationInSap(mockRfc, {
+          plant: '1120',
+          storageLocation: 'CS01',
+          receivingStorageLocation: 'CS02'
+        });
+        expect(res.valid).toBe(true);
+      });
+
+      test('rejects when receiving SLoc does not exist in plant (T001L)', async () => {
+        const mockRfc = {
+          readTable: jest.fn().mockImplementation(async (table) => {
+            if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS02' }];
+            if (table === 'T001L') return [];
+            return [];
+          })
+        };
+        const res = await verifyMovement311DestinationInSap(mockRfc, {
+          plant: '1120',
+          storageLocation: 'CS01',
+          receivingStorageLocation: 'CS02'
+        });
+        expect(res.valid).toBe(false);
+        expect(res.error).toContain('Receiving Storage Location CS02 does not exist in plant 1120 (T001L)');
+      });
+
+      test('rejects when material is not extended to receiving SLoc (MARD)', async () => {
+        const mockRfc = {
+          readTable: jest.fn().mockImplementation(async (table) => {
+            if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS02' }];
+            if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'CS02' }];
+            if (table === 'MARD') return [];
+            return [];
+          })
+        };
+        const res = await verifyMovement311DestinationInSap(mockRfc, {
+          plant: '1120',
+          storageLocation: 'CS01',
+          receivingStorageLocation: 'CS02',
+          material: 'MAT100'
+        });
+        expect(res.valid).toBe(false);
+        expect(res.error).toContain('Material MAT100 is not extended to receiving storage location CS02 in plant 1120 (MARD)');
+      });
+
+      test('verifyReceivingLocationInSap supports both 301 and 311 movements directly', async () => {
+        const mockRfc = {
+          readTable: jest.fn().mockImplementation(async (table) => {
+            if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS02' }];
+            if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'CS02' }];
+            return [];
+          })
+        };
+        const res311 = await verifyReceivingLocationInSap(mockRfc, {
+          movementType: '311',
+          plant: '1120',
+          storageLocation: 'CS01',
+          receivingStorageLocation: 'CS02'
+        });
+        expect(res311.valid).toBe(true);
+
+        const res301Val = validateMovement301Destination('1120', '1130', 'CS01');
+        expect(res301Val.isValid).toBe(true);
       });
     });
   });

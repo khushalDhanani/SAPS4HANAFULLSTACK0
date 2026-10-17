@@ -5,6 +5,40 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **MVT 311 — Destination SLoc Validation against WM Configuration (Item 7) (2026-10-17, 17:15 IST):** Complete.
+  - **Item 7 (Validate destination SLoc against WM configuration):**
+    - Enhanced `verifyReceivingLocationInSap` and added `verifyMovement311DestinationInSap` in `srv/common/movementConfig.js`:
+      - Evaluates Receiving Storage Location against SAP WM configuration (`T320`): queries `T320` for both issuing and receiving storage locations and rejects cross-warehouse transfers (`recWh && issWh && recWh !== issWh`) with HTTP 400 naming both warehouses.
+      - Supports non-WM receiving storage location when unmapped in `T320`.
+      - Verifies receiving storage location existence in plant via `T001L`.
+      - If material is provided, verifies material is extended to receiving storage location via `MARD`.
+    - Exported `verifyGoodsIssue311InSap` from `srv/wm/goods-issue/validation/goodsIssue311.validation.js`.
+    - Wired destination WM verification into `postGoodsIssue311` CAP handler in `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`: calls `GoodsIssueAdapter.verifyReceivingLocation` before posting and rejects with HTTP 400 naming the error (`Goods Issue was NOT posted`).
+    - Unified 311 SAP destination verification in `srv/integration/s4hana/wm/ReservationProcessAdapter.js` to delegate to `verifyReceivingLocationInSap`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/*311* test/unit/wm/movementConfig.test.js test/unit/wm/goodsIssuePerTypeValidation.test.js test/unit/wm/goodsIssuePhase5Routing.test.js`: 100% green.
+    - `npx jest test/unit/wm`: 78 active test suites passed, 1,908 passed, 0 failed (100% green).
+    - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+    - `git diff --check`: 0 whitespace errors.
+
+- **MVT 311 — Mandatory Receiving Storage Location & Central Source/Destination Rules (Items 5 & 6) (2026-10-17, 16:45 IST):** Complete.
+  - **Item 5 (ReceivingStorageLocation = REQUIRED):**
+    - Updated `srv/wm/goods-issue/validation/goodsIssue311.validation.js` to enforce `ReceivingStorageLocation = REQUIRED`.
+    - Rejects missing, empty string, whitespace, and format != 4 alphanumeric characters.
+    - Updated `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue311Model.js` `validate()` to enforce `receivingStorageLocation = REQUIRED`.
+    - Updated `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue311.view.xml` with `required="true"` on `lblReceivingStorageLocation311`.
+  - **Item 6 (Enforce 311 Source/Destination Rules Centrally):**
+    - Added and exported `validateMovement311Destination(plant, storageLocation, receivingPlant, receivingStorageLocation, _options)` in `srv/common/movementConfig.js` as the central authoritative validator.
+    - Enforced invariants centrally:
+      - `Receiving SLoc != Issuing SLoc`: rejects identical issuing and receiving storage locations.
+      - `Receiving Plant == Issuing Plant`: rejects receiving plant mismatch against issuing plant.
+      - `ReceivingStorageLocation = REQUIRED`: rejects missing/blank/invalid format.
+    - Delegated to `validateMovement311Destination` across all backend layers without relying on UI:
+      - `srv/common/movementConfig.js`: `validateReservationInput` case `'311'` delegates to `validateMovement311Destination`.
+      - `srv/wm/goods-issue/validation/goodsIssue311.validation.js`: `validateGoodsIssue311Payload` delegates destination checks to `validateMovement311Destination`.
+      - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: `postGoodsMovement` delegates to `validateMovement311Destination`.
+      - `srv/wm/goods-issue/mapping/goodsIssue311.normalize.js`: defaults `ReceivingPlant` to issuing `Plant` when not explicitly supplied, ensuring `Receiving Plant == Issuing Plant` is guaranteed on postings.
+
 - **MVT 301 — Canonical Movement Rule, Mandatory Destination & SAP Verification (2026-10-17, 16:15 IST):** Complete.
   - **Item 2 (Receiving Plant = REQUIRED):**
     - Updated `srv/wm/goods-issue/validation/goodsIssue301.validation.js` to enforce `ReceivingPlant = REQUIRED`.
@@ -10040,5 +10074,76 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git diff --check`: 0 whitespace errors.
 - **Errors / Warnings / Blockers:**
   - Zero errors in Movement 301 changes.
+- **Next Recommended Action:**
+  - Ready for user review / commit on branch `feature01`.
+
+### 2026-10-17 16:45 IST — MVT 311: Mandatory Receiving Storage Location & Central Source/Destination Rules (Items 5 & 6)
+- **Work Session / Reason:** Implement P1 items 5 and 6 for Movement Type 311 (Storage Location Transfer within Plant).
+- **Behavior Delivered:**
+  - Item 5: Made `ReceivingStorageLocation = REQUIRED` in `srv/wm/goods-issue/validation/goodsIssue311.validation.js`, rejecting missing, null, empty string, whitespace string, and format != 4 alphanumeric characters.
+  - Item 6: Enforced 311 source/destination rules centrally in `srv/common/movementConfig.js` (`validateMovement311Destination`):
+    - `Receiving SLoc != Issuing SLoc`: rejects identical issuing and receiving storage locations.
+    - `Receiving Plant == Issuing Plant`: rejects receiving plant mismatch against issuing plant.
+    - Does not rely on UI: backend handlers, validators, adapters centrally enforce these invariants.
+    - `srv/wm/goods-issue/mapping/goodsIssue311.normalize.js` defaults `ReceivingPlant` to issuing `Plant` when not explicitly supplied, ensuring `Receiving Plant == Issuing Plant` is guaranteed on postings.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue311Model.js`: enforces `receivingStorageLocation = REQUIRED` in `validate()`.
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue311.view.xml`: set `required="true"` on `lblReceivingStorageLocation311`.
+- **Files Modified:**
+  - `srv/common/movementConfig.js`
+  - `srv/wm/goods-issue/validation/goodsIssue311.validation.js`
+  - `srv/wm/goods-issue/mapping/goodsIssue311.normalize.js`
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue311Model.js`
+  - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue311.view.xml`
+  - `test/unit/wm/goodsIssuePerTypeValidation.test.js`
+  - `test/unit/wm/goodsIssue311Page.test.js`
+  - `test/unit/wm/goodsIssue311Serial.test.js`
+  - `test/unit/wm/goodsIssueResvPrefill.test.js`
+  - `test/unit/wm/goodsIssueService.test.js`
+- **Validation Results:**
+  - `npx jest test/unit/wm/*311* test/unit/wm/movementConfig.test.js test/unit/wm/goodsIssuePerTypeValidation.test.js test/unit/wm/goodsIssueResvPrefill.test.js`: 11 test suites passed, 297/297 tests passed (100% green).
+  - `npx jest test/unit/wm`: 78/78 active test suites passed, 1,890/1,890 tests passed (100% green).
+  - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+  - `npx cds compile srv/`: Clean compilation, exit 0.
+  - `git diff --check`: 0 whitespace errors.
+- **Errors / Warnings / Blockers:**
+  - Zero errors in Movement 311 changes.
+- **Next Recommended Action:**
+  - Ready for user review / commit on branch `feature01`.
+
+### 2026-10-17 17:15 IST — MVT 311: Validate Destination SLoc Against WM Configuration (Item 7)
+
+- **Work Session / Reason:** Implement P1 item 7 for Movement Type 311: Validate destination SLoc against WM configuration before SAP posting (`Receiving SLoc -> T320 / WM configuration -> Valid warehouse/storage location? Reject before SAP posting when invalid`).
+- **Behavior Delivered:**
+  - Item 7: Validated destination SLoc against WM configuration before SAP posting:
+    - In `srv/common/movementConfig.js` (`verifyReceivingLocationInSap` / `verifyMovement311DestinationInSap`):
+      1. T320 WM configuration check: Compares issuing SLoc warehouse vs receiving SLoc warehouse; rejects cross-warehouse transfers (`recWh && issWh && recWh !== issWh`) with HTTP 400: `Receiving storage location ${sRecSLoc} belongs to warehouse ${recWh}, but issuing storage location belongs to warehouse ${issWh} (cross-warehouse transfer not supported in 311)`.
+      2. Supports non-WM receiving storage location when unmapped in `T320`.
+      3. MARD check: Verifies material is extended to receiving storage location in plant (`Material ${material} is not extended to receiving storage location ${sRecSLoc} in plant ${sRecPlant} (MARD)`) and captures destination stock.
+      4. T001L check: Verifies receiving storage location exists in plant (`Receiving Storage Location ${sRecSLoc} does not exist in plant ${sRecPlant} (T001L)`).
+      5. Correctly hoists `initialDestStock` to avoid TDZ reference errors on RFC catch paths.
+    - In `srv/wm/goods-issue/validation/goodsIssue311.validation.js`:
+      - Added and exported `verifyGoodsIssue311InSap(rfc, data)` delegating to canonical `verifyReceivingLocationInSap`.
+      - Exported `verifyReceivingLocationInSap`.
+    - In `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`:
+      - Wired `GoodsIssueAdapter.verifyReceivingLocation` before posting in `postGoodsIssue311`. On validation failure, returns HTTP 400: `${sapCheck.error}. Goods Issue was NOT posted.`.
+    - In `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+      - Refactored `createReservation` and `executeReservationWarehouseFlow` to delegate 311 destination checks to `verifyReceivingLocationInSap`, eliminating duplicate inline table queries and unused variables.
+- **Files Modified:**
+  - `WORKSTATUS.md`
+  - `srv/common/movementConfig.js`
+  - `srv/wm/goods-issue/validation/goodsIssue311.validation.js`
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `test/unit/wm/goodsIssuePerTypeValidation.test.js`
+  - `test/unit/wm/goodsIssuePhase5Routing.test.js`
+  - `test/unit/wm/movementConfig.test.js`
+- **Validation Results:**
+  - `npx jest test/unit/wm/*311* test/unit/wm/movementConfig.test.js test/unit/wm/goodsIssuePerTypeValidation.test.js test/unit/wm/goodsIssuePhase5Routing.test.js`: 11 test suites passed, 307/307 tests passed (100% green).
+  - `npx jest test/unit/wm`: 78 active test suites passed, 1,909 passed, 56 skipped (live-only), 0 failed (100% green).
+  - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+  - `git diff --check`: 0 whitespace errors.
+- **Errors / Warnings / Blockers:**
+  - Zero errors in Movement 311 Item 7 changes.
 - **Next Recommended Action:**
   - Ready for user review / commit on branch `feature01`.

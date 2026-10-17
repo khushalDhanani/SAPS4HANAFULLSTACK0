@@ -9,6 +9,7 @@ const {
   resolveWmMovement,
   validateReservationInput,
   validateMovement301Destination,
+  validateMovement311Destination,
   verifyReceivingLocationInSap
 } = require('../../../common/movementConfig');
 const { isToFullyConfirmed, getHuConfirmationItems, mapStorageTypeSearchError } = require('./toState');
@@ -120,7 +121,7 @@ class ReservationProcessAdapter {
         }
       }
 
-      let issuingWh = '';
+      let _issuingWh = '';
       if (this.rfc && (String(movementType).trim() === '201' || String(movementType).trim() === '241' || String(movementType).trim() === '311' || String(movementType).trim() === '301' || String(movementType).trim() === '261') && storageLocation) {
         try {
           const t320Iss = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
@@ -130,7 +131,7 @@ class ReservationProcessAdapter {
           if (!t320Iss || !t320Iss.length) {
             throw httpError(400, `Issuing storage location ${storageLocation} is not assigned to warehouse in plant ${plant} (T320)`);
           }
-          issuingWh = String(t320Iss[0]?.LGNUM || '').trim();
+          _issuingWh = String(t320Iss[0]?.LGNUM || '').trim();
         } catch (tErr) {
           if (tErr.status === 400) throw tErr;
         }
@@ -138,15 +139,18 @@ class ReservationProcessAdapter {
 
       if (this.rfc && String(movementType).trim() === '311' && receivingStorageLocation) {
         try {
-          const t320Rec = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
-            `WERKS = '${sapKey(plant, 'plant')}'`,
-            `AND LGORT = '${sapKey(receivingStorageLocation, 'lgort')}'`
-          ], 1);
-          if (t320Rec && t320Rec.length > 0) {
-            const recWh = String(t320Rec[0]?.LGNUM || '').trim();
-            if (issuingWh && recWh && recWh !== issuingWh) {
-              throw httpError(400, `Receiving storage location ${receivingStorageLocation} belongs to warehouse ${recWh}, but issuing storage location belongs to warehouse ${issuingWh} (cross-warehouse transfer not supported in 311)`);
-            }
+          const sapCheck = await verifyReceivingLocationInSap(this.rfc, {
+            movementType: '311',
+            plant,
+            storageLocation,
+            receivingPlant: receivingPlant || plant,
+            receivingStorageLocation,
+            checkT320: true,
+            checkT001L: false,
+            checkMard: false
+          });
+          if (!sapCheck.valid) {
+            throw httpError(400, sapCheck.error);
           }
         } catch (tErr) {
           if (tErr.status === 400) throw tErr;
@@ -2283,49 +2287,31 @@ class ReservationProcessAdapter {
     }
 
     if (sMvt === '311') {
-      if (!sRecSLoc) {
-        throw httpError(400, 'Receiving Storage Location is mandatory for Movement Type 311 (SLoc Transfer)');
-      }
-      if (sRecSLoc === sSLoc) {
-        throw httpError(400, 'Receiving Storage Location must be different from Issuing Storage Location');
-      }
-      if (sRecPlant && sRecPlant !== sPlant) {
-        throw httpError(400, 'Receiving Plant must match Issuing Plant for Movement Type 311 (SLoc Transfer)');
+      const destVal = validateMovement311Destination(sPlant, sSLoc, sRecPlant, sRecSLoc);
+      if (!destVal.isValid) {
+        throw httpError(400, destVal.errors[0].message);
       }
       if (this.rfc) {
         try {
-          const t320Rec = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
-            `WERKS = '${sPlant}'`,
-            `AND LGORT = '${sRecSLoc}'`
-          ], 1);
-          if (t320Rec && t320Rec.length > 0) {
-            const recWh = String(t320Rec[0]?.LGNUM || '').trim();
-            const t320Iss = await this.rfc.readTable('T320', ['LGNUM', 'WERKS', 'LGORT'], [
-              `WERKS = '${sPlant}'`,
-              `AND LGORT = '${sSLoc}'`
-            ], 1);
-            const issWh = String(t320Iss?.[0]?.LGNUM || '').trim();
-            if (issWh && recWh && recWh !== issWh) {
-              throw httpError(400, `Receiving storage location ${sRecSLoc} belongs to warehouse ${recWh}, but issuing storage location belongs to warehouse ${issWh}`);
-            }
+          const sapCheck = await verifyReceivingLocationInSap(this.rfc, {
+            movementType: '311',
+            plant: sPlant,
+            storageLocation: sSLoc,
+            receivingPlant: sRecPlant || sPlant,
+            receivingStorageLocation: sRecSLoc,
+            material: s4Mat,
+            checkT320: true,
+            checkT001L: false,
+            checkMard: true
+          });
+          if (!sapCheck.valid) {
+            throw httpError(400, sapCheck.error);
+          }
+          if (sapCheck.initialDestStock !== undefined) {
+            initialDestStock = sapCheck.initialDestStock;
           }
         } catch (tErr) {
           if (tErr.status === 400) throw tErr;
-        }
-        try {
-          const mardRec = await this.rfc.readTable('MARD', ['LGORT', 'LABST'], [
-            `MATNR = '${s4Mat}'`,
-            `AND WERKS = '${sPlant}'`,
-            `AND LGORT = '${sRecSLoc}'`
-          ], 1);
-          if (!mardRec || !mardRec.length) {
-            throw httpError(400, `Material ${alphaOut(s4Mat)} is not extended to receiving storage location ${sRecSLoc} in plant ${sPlant} (MARD)`);
-          }
-          if (mardRec[0].LABST !== undefined) {
-            initialDestStock = Number(mardRec[0].LABST);
-          }
-        } catch (mErr) {
-          if (mErr.status === 400) throw mErr;
         }
       }
     }

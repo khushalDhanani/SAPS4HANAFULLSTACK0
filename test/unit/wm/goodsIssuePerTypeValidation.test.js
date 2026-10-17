@@ -10,7 +10,10 @@ const {
   verifyReceivingLocationInSap
 } = require('../../../srv/wm/goods-issue/validation/goodsIssue301.validation');
 const { validateGoodsIssue201Payload } = require('../../../srv/wm/goods-issue/validation/goodsIssue201.validation');
-const { validateGoodsIssue311Payload } = require('../../../srv/wm/goods-issue/validation/goodsIssue311.validation');
+const {
+  validateGoodsIssue311Payload,
+  verifyGoodsIssue311InSap
+} = require('../../../srv/wm/goods-issue/validation/goodsIssue311.validation');
 
 const base = { IssueQty: 1, Unit: 'EA', PostingDate: '2026-09-29', DocumentDate: '2026-09-29' };
 const valid301Destination = { ReceivingPlant: '1110', ReceivingStorageLocation: 'CS01' };
@@ -207,28 +210,52 @@ describe('301 SAP verification (ReceivingPlant + ReceivingStorageLocation in SAP
 });
 
 describe('311 validation (Transfer)', () => {
-  test('valid 311 payload with reservation passes', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001' });
+  test('valid 311 payload with reservation and receiving storage location passes', () => {
+    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02' });
     expect(r.isValid).toBe(true);
   });
   test('311 requires a reservation', () => {
-    const r = validateGoodsIssue311Payload({ ...base });
+    const r = validateGoodsIssue311Payload({ ...base, ReceivingStorageLocation: 'CS02' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReservationNo')).toBe(true);
   });
-  test('311 receiving plant/sloc are optional (absent is valid)', () => {
+  test('311 rejects missing ReceivingStorageLocation', () => {
     const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001' });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
+  });
+  test('311 rejects empty ReceivingStorageLocation', () => {
+    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: '' });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
+  });
+  test('311 rejects whitespace ReceivingStorageLocation', () => {
+    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: '   ' });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
+  });
+  test('311 rejects invalid ReceivingStorageLocation format (< 4 chars)', () => {
+    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'C1' });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
+  });
+  test('311 rejects invalid ReceivingStorageLocation format (> 4 chars or symbols)', () => {
+    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS-01' });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
+  });
+  test('311 receiving plant is optional (absent is valid)', () => {
+    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02' });
     expect(r.isValid).toBe(true);
     expect(r.errors.some(e => e.field === 'ReceivingPlant')).toBe(false);
-    expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(false);
   });
   test('311 malformed receiving plant is rejected', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingPlant: 'XX' });
+    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02', ReceivingPlant: 'XX' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingPlant')).toBe(true);
   });
   test('311 does NOT enforce a Cost Center rule (isolation)', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001' });
+    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02' });
     expect(r.errors.some(e => e.field === 'CostCenter')).toBe(false);
   });
 });
@@ -236,9 +263,9 @@ describe('311 validation (Transfer)', () => {
 describe('311 destination invariant (intra-plant storage-location transfer)', () => {
   const resv = { ReservationNo: '519944', ReservationItem: '0001', Plant: '1120', StorageLocation: 'CS01' };
   test('rejects a receiving plant different from the issuing plant', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ...resv, ReceivingPlant: '1130' });
+    const r = validateGoodsIssue311Payload({ ...base, ...resv, ReceivingPlant: '1130', ReceivingStorageLocation: 'CS02' });
     expect(r.isValid).toBe(false);
-    expect(r.errors.some(e => e.field === 'ReceivingPlant' && /must equal/.test(e.message))).toBe(true);
+    expect(r.errors.some(e => e.field === 'ReceivingPlant' && /must match|must equal/i.test(e.message))).toBe(true);
   });
   test('rejects a receiving storage location equal to the issuing one', () => {
     const r = validateGoodsIssue311Payload({ ...base, ...resv, ReceivingStorageLocation: 'CS01' });
@@ -248,5 +275,98 @@ describe('311 destination invariant (intra-plant storage-location transfer)', ()
   test('accepts same-plant, different storage location', () => {
     const r = validateGoodsIssue311Payload({ ...base, ...resv, ReceivingPlant: '1120', ReceivingStorageLocation: 'CS02' });
     expect(r.isValid).toBe(true);
+  });
+});
+
+describe('311 SAP destination verification (T320, T001L, MARD)', () => {
+  const payload311 = {
+    Plant: '1120',
+    StorageLocation: 'CS01',
+    ReceivingStorageLocation: 'CS02',
+    Material: 'MAT100'
+  };
+
+  test('passes when receiving SLoc is assigned to same warehouse in T320', async () => {
+    const mockRfc = {
+      readTable: jest.fn().mockImplementation(async (table, fields, where = []) => {
+        const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+        if (table === 'T320') {
+          if (whereStr.includes("LGORT = 'CS02'")) return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS02' }];
+          return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
+        }
+        if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'CS02' }];
+        if (table === 'MARD') return [{ WERKS: '1120', LGORT: 'CS02', LABST: '25.000' }];
+        return [];
+      })
+    };
+    const res = await verifyGoodsIssue311InSap(mockRfc, payload311);
+    expect(res.valid).toBe(true);
+    expect(res.initialDestStock).toBe(25);
+  });
+
+  test('rejects when receiving SLoc belongs to different warehouse in T320', async () => {
+    const mockRfc = {
+      readTable: jest.fn().mockImplementation(async (table, fields, where = []) => {
+        const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+        if (table === 'T320') {
+          if (whereStr.includes("LGORT = 'CS02'")) return [{ LGNUM: 'W10', WERKS: '1120', LGORT: 'CS02' }];
+          return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
+        }
+        return [];
+      })
+    };
+    const res = await verifyGoodsIssue311InSap(mockRfc, payload311);
+    expect(res.valid).toBe(false);
+    expect(res.error).toContain('belongs to warehouse W10, but issuing storage location belongs to warehouse W01');
+  });
+
+  test('supports non-WM receiving SLoc when not mapped in T320', async () => {
+    const mockRfc = {
+      readTable: jest.fn().mockImplementation(async (table, fields, where = []) => {
+        const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+        if (table === 'T320') {
+          if (whereStr.includes("LGORT = 'CS02'")) return []; // non-WM
+          return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
+        }
+        if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'CS02' }];
+        if (table === 'MARD') return [{ WERKS: '1120', LGORT: 'CS02', LABST: '0.000' }];
+        return [];
+      })
+    };
+    const res = await verifyGoodsIssue311InSap(mockRfc, payload311);
+    expect(res.valid).toBe(true);
+  });
+
+  test('rejects when receiving SLoc does not exist in plant (T001L)', async () => {
+    const mockRfc = {
+      readTable: jest.fn().mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS02' }];
+        if (table === 'MARD') return [{ WERKS: '1120', LGORT: 'CS02', LABST: '10.000' }];
+        if (table === 'T001L') return []; // SLoc not found in plant
+        return [];
+      })
+    };
+    const res = await verifyGoodsIssue311InSap(mockRfc, payload311);
+    expect(res.valid).toBe(false);
+    expect(res.error).toContain('Receiving Storage Location CS02 does not exist in plant 1120 (T001L)');
+  });
+
+  test('rejects when material is not extended to receiving SLoc in plant (MARD)', async () => {
+    const mockRfc = {
+      readTable: jest.fn().mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS02' }];
+        if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'CS02' }];
+        if (table === 'MARD') return []; // Material not extended
+        return [];
+      })
+    };
+    const res = await verifyGoodsIssue311InSap(mockRfc, payload311);
+    expect(res.valid).toBe(false);
+    expect(res.error).toContain('Material MAT100 is not extended to receiving storage location CS02 in plant 1120 (MARD)');
+  });
+
+  test('gracefully returns valid when RFC client is null (offline unit test)', async () => {
+    const res = await verifyGoodsIssue311InSap(null, payload311);
+    expect(res.valid).toBe(true);
   });
 });

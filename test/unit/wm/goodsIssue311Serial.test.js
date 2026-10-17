@@ -74,7 +74,7 @@ describe('311 screen model - Complete stays disabled until serials == quantity',
   const open = (IsSerialManaged) => {
     const d = GoodsIssue311Model.getInitialData();
     d.reservationNo = '519367';
-    GoodsIssue311Model.applyReservationItem(d, { ReservationItem: '1', Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', Unit: 'NOS', OpenQty: 2, IsSerialManaged });
+    GoodsIssue311Model.applyReservationItem(d, { ReservationItem: '1', Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'RD01', Unit: 'NOS', OpenQty: 2, IsSerialManaged });
     d.quantity = 2;
     return d;
   };

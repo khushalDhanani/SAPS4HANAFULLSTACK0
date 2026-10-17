@@ -15,7 +15,8 @@ const { baseNormalized } = require('./goodsIssue.mapper');
 function normalizeGoodsIssue311Payload(data, context = {}) {
   if (!data || typeof data !== 'object') return data;
   const n = baseNormalized(data, context, '311');
-  n.ReceivingPlant = data.ReceivingPlant ? String(data.ReceivingPlant).trim().toUpperCase() : '';
+  const sPlant = data.Plant ? String(data.Plant).trim().toUpperCase() : '';
+  n.ReceivingPlant = data.ReceivingPlant ? String(data.ReceivingPlant).trim().toUpperCase() : sPlant;
   n.ReceivingStorageLocation = data.ReceivingStorageLocation ? String(data.ReceivingStorageLocation).trim().toUpperCase() : '';
   return n;
 }

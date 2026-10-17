@@ -3,11 +3,16 @@
  * ISOLATED business rules for Movement Type 311 ONLY (Storage Location Transfer).
  * Serves no other movement type; contains no MovementType branching.
  *
- * 311 rules: Reservation No + Item mandatory, receiving Plant / Storage Location optional,
- * no Cost Center, no G/L account.
+ * 311 rules: Reservation No + Item mandatory, ReceivingStorageLocation mandatory,
+ * ReceivingPlant (if supplied) must match issuing Plant, no Cost Center, no G/L account.
+ * Uses movementConfig.js as the canonical authoritative policy.
  */
 
 const C = require('./common');
+const {
+  validateMovement311Destination,
+  verifyReceivingLocationInSap
+} = require('../../../common/movementConfig');
 
 /**
  * @param {Object} data
@@ -29,24 +34,14 @@ function validateGoodsIssue311Payload(data) {
   push(C.checkStorageLocation(data.StorageLocation, !hasReservation));
   push(C.checkUnit(data.Unit));
 
-  // Receiving plant / storage location are OPTIONAL for transfers; validate format if supplied.
-  push(C.checkOptionalFourChar(data.ReceivingPlant, 'ReceivingPlant'));
-  push(C.checkOptionalFourChar(data.ReceivingStorageLocation, 'ReceivingStorageLocation'));
-
-  // 311 is a storage-location-to-storage-location transfer WITHIN one plant. When a receiving plant
-  // is supplied it must equal the issuing plant; when a receiving storage location is supplied it
-  // must differ from the issuing one (a transfer to the same bin is a no-op). These are conditional
-  // invariants (they never make the fields required) so reservation-derived postings are unaffected.
-  const sPlant311 = String(data.Plant || '').trim().toUpperCase();
-  const sRecvPlant311 = String(data.ReceivingPlant || '').trim().toUpperCase();
-  if (sRecvPlant311 && sPlant311 && sRecvPlant311 !== sPlant311) {
-    push({ field: 'ReceivingPlant', message: `Movement 311 is a storage-location transfer within one plant: receiving plant '${sRecvPlant311}' must equal issuing plant '${sPlant311}'` });
-  }
-  const sSLoc311 = String(data.StorageLocation || '').trim().toUpperCase();
-  const sRecvSLoc311 = String(data.ReceivingStorageLocation || '').trim().toUpperCase();
-  if (sRecvSLoc311 && sSLoc311 && sRecvSLoc311 === sSLoc311) {
-    push({ field: 'ReceivingStorageLocation', message: `Receiving storage location '${sRecvSLoc311}' must differ from the issuing storage location for a 311 transfer` });
-  }
+  // Canonical central Movement 311 destination validation (ReceivingStorageLocation = REQUIRED):
+  const destVal = validateMovement311Destination(
+    data.Plant,
+    data.StorageLocation,
+    data.ReceivingPlant,
+    data.ReceivingStorageLocation
+  );
+  destVal.errors.forEach(push);
 
   C.checkDates(data).forEach(push);
   C.checkSerialNumbers(data).forEach(push);
@@ -55,4 +50,31 @@ function validateGoodsIssue311Payload(data) {
   return C.buildResult(errors);
 }
 
-module.exports = { validateGoodsIssue311Payload };
+/**
+ * Verifies Receiving Storage Location against SAP WM configuration (T320), T001L, and MARD.
+ * Authoritative policy delegates to verifyReceivingLocationInSap in movementConfig.js.
+ *
+ * @param {object} rfc - SAP RFC client
+ * @param {object} data - Goods issue payload with Plant, StorageLocation, ReceivingStorageLocation, Material
+ * @returns {Promise<{ valid: boolean, error?: string, initialDestStock?: number }>}
+ */
+async function verifyGoodsIssue311InSap(rfc, data = {}) {
+  return verifyReceivingLocationInSap(rfc, {
+    movementType: '311',
+    plant: data.Plant || data.plant,
+    storageLocation: data.StorageLocation || data.storageLocation,
+    receivingPlant: data.ReceivingPlant || data.receivingPlant || data.Plant || data.plant,
+    receivingStorageLocation: data.ReceivingStorageLocation || data.receivingStorageLocation,
+    material: data.Material || data.material,
+    checkT320: true,
+    checkT001L: true,
+    checkMard: true
+  });
+}
+
+module.exports = {
+  validateGoodsIssue311Payload,
+  validateMovement311Destination,
+  verifyGoodsIssue311InSap,
+  verifyReceivingLocationInSap
+};

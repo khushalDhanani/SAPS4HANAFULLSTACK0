@@ -285,12 +285,10 @@
                 }
             }
 
-            // 10. Receiving Plant / Storage Location are OPTIONAL for this movement type (the
-            // backend mapper never requires them - GoodsIssueMapper.js only forwards them if
-            // present). Format-only validation, never a "required" error.
+            // 10. Receiving Storage Location is MANDATORY for Movement Type 311.
             // When supplied, intra-plant invariants apply:
-            // - ReceivingPlant must equal issuing Plant
-            // - ReceivingStorageLocation must differ from issuing StorageLocation
+            // - ReceivingPlant must equal issuing Plant if supplied
+            // - ReceivingStorageLocation = REQUIRED, 4 characters, != issuing StorageLocation
             var sRecvPlant = (oData.receivingPlant != null) ? String(oData.receivingPlant).trim().toUpperCase() : "";
             if (sRecvPlant && sRecvPlant.length !== 4) {
                 errors.receivingPlant = "Receiving Plant must be 4 characters";
@@ -301,10 +299,13 @@
             }
 
             var sRecvSLoc = (oData.receivingStorageLocation != null) ? String(oData.receivingStorageLocation).trim().toUpperCase() : "";
-            if (sRecvSLoc && sRecvSLoc.length !== 4) {
+            if (!sRecvSLoc) {
+                errors.receivingStorageLocation = "Receiving Storage Location is required for Movement 311";
+                bValid = false;
+            } else if (sRecvSLoc.length !== 4) {
                 errors.receivingStorageLocation = "Receiving Storage Location must be 4 characters";
                 bValid = false;
-            } else if (sRecvSLoc && sSLoc && sRecvSLoc === sSLoc) {
+            } else if (sSLoc && sRecvSLoc === sSLoc) {
                 errors.receivingStorageLocation = "Receiving storage location '" + sRecvSLoc + "' must differ from the issuing storage location for a 311 transfer";
                 bValid = false;
             }

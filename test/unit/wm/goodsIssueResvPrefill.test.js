@@ -156,7 +156,7 @@ describe('server posts the reservation values, not the client values', () => {
   });
 
   test('311: values the client left out are taken from the reservation', async () => {
-    const r = req({ ...body, ReceivingPlant: '', ReceivingStorageLocation: '' });
+    const r = req({ ...body, ReceivingPlant: '' });
     await handlers.postGoodsIssue311(r);
     expect(r.error).not.toHaveBeenCalled();
     expect(post.mock.calls[0][0]).toMatchObject({ Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1' });

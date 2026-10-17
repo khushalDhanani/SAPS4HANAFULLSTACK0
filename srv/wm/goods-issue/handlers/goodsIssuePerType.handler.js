@@ -584,6 +584,22 @@ const PerTypeGoodsIssueHandler = {
       const normalized = normalizeGoodsIssue311Payload(req.data, { user: req.user?.id });
       if (!(await reservationReconcileCheck(req, normalized, { receiving: true }))) return;
       if (!(await checkPendingConfirmation(req, normalized))) return;
+      if (typeof GoodsIssueAdapter.verifyReceivingLocation === 'function') {
+        const sapCheck = await GoodsIssueAdapter.verifyReceivingLocation({
+          movementType: '311',
+          plant: normalized.Plant,
+          storageLocation: normalized.StorageLocation,
+          receivingPlant: normalized.ReceivingPlant || normalized.Plant,
+          receivingStorageLocation: normalized.ReceivingStorageLocation,
+          material: normalized.Material,
+          checkT320: true,
+          checkT001L: true,
+          checkMard: true
+        });
+        if (sapCheck && !sapCheck.valid) {
+          return req.error(400, `${sapCheck.error}. Goods Issue was NOT posted.`);
+        }
+      }
       if (!(await serialCountCheck(req, normalized))) return;
       if (!(await serialPreCheck(req, normalized))) return;
 

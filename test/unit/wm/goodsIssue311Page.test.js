@@ -64,6 +64,7 @@ describe('Movement 311 Dedicated Page: Model & Service Tests', () => {
             data.storageLocation = 'HS01';
             data.quantity = 1;
             data.unit = 'EA';
+            data.receivingStorageLocation = 'HS02';
 
             const res = GoodsIssue311Model.validate(data);
             expect(res.isValid).toBe(true);
@@ -82,6 +83,7 @@ describe('Movement 311 Dedicated Page: Model & Service Tests', () => {
                 OpenQty: 5
             });
             data.reservationNo = 'RES001';
+            data.receivingStorageLocation = 'HS02';
 
             expect(data.orderNo).toBe('ORD123456');
 
@@ -162,7 +164,7 @@ describe('Movement 311 Dedicated Page: Model & Service Tests', () => {
             expect(res.errors.serials).toBe('');
         });
 
-        it('does NOT fail validation when Receiving Plant / Storage Location are blank (optional fields)', () => {
+        it('enforces Receiving Storage Location as required for Movement 311', () => {
             const data = GoodsIssue311Model.getInitialData();
             data.reservationNo = 'RES001';
             data.reservationItem = '0010';
@@ -175,12 +177,12 @@ describe('Movement 311 Dedicated Page: Model & Service Tests', () => {
             data.receivingStorageLocation = '';
 
             const res = GoodsIssue311Model.validate(data);
-            expect(res.isValid).toBe(true);
+            expect(res.isValid).toBe(false);
             expect(res.errors.receivingPlant).toBe('');
-            expect(res.errors.receivingStorageLocation).toBe('');
+            expect(res.errors.receivingStorageLocation).toContain('Receiving Storage Location is required');
         });
 
-        it('flags Receiving Plant / Storage Location only on bad format, never as required', () => {
+        it('flags Receiving Plant on bad format, and Receiving Storage Location on bad format', () => {
             const data = GoodsIssue311Model.getInitialData();
             data.reservationNo = 'RES001';
             data.reservationItem = '0010';
@@ -190,6 +192,7 @@ describe('Movement 311 Dedicated Page: Model & Service Tests', () => {
             data.quantity = 1;
             data.unit = 'EA';
             data.receivingPlant = 'AB'; // wrong length
+            data.receivingStorageLocation = 'HS02';
 
             let res = GoodsIssue311Model.validate(data);
             expect(res.isValid).toBe(false);
