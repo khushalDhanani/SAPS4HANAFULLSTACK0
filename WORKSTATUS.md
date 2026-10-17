@@ -5,6 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Agent skills workspace (2026-10-17, 11:30 IST):** In Progress / **Blocked on user decisions** — `skills/` (sap-cap, sap-ui5, sap-fiori-guidelines), `.mcp.json`, AGENTS.md section and `.gitignore` done; `.claude/skills` symlinks exist but are gitignored by the pre-existing `.claude/` rule; MCP server smoke test and skill discovery not yet verified. See Changes Log 11:14–11:30.
 - **AGENTS.md: Zero-Assumption Protocol section added (2026-10-17, 11:06 IST):** Complete. Documentation-only change; see Changes Log entry of the same timestamp.
 - **WM Movement 261: Unified Stock Availability Calculation Across Scan, Open-Item List, and Posting Gate (Issue #1 in Critical / High Issues) (2026-10-17, 10:50 IST):** Complete.
   - **User Problem & Incident:**
@@ -2733,6 +2734,11 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Exact Next Recommended Action (Agent skills workspace — 2026-10-17, 11:30 IST):**
+  1. Decide: un-ignore `.claude/skills/` (`.claude/*` + `!.claude/skills/`), keep MCP versions pinned, Claude Code only vs. `.agents/`/`.opencode/`.
+  2. Allow the npx MCP smoke test; restart the Claude Code session and confirm the three skills are listed.
+  3. Then commit on `feature/mvt261_01` together with the pending Mvt261 work, or separately.
+
 - **Exact Next Recommended Action (Movement Type 261 Unified Stock Calculation Complete — 2026-10-17, 10:55 IST):**
   1. Review verified changes across `srv/integration/s4hana/wm/Mvt261Adapter.js`, `test/unit/wm/mvt261Adapter.test.js`, and `test/unit/wm/mvt261Scan.test.js`.
   2. Continue addressing the remaining issues in the user's priority issue list or commit and push `feature/mvt261_01`.
@@ -2786,6 +2792,64 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-17 11:30 IST — Agent skills workspace (part 5/5): AGENTS.md "Agent skills and MCP servers" section; open points
+
+- **Reason for Change:** User request "add necessary skill set" per SAP blog *Teaching AI Agents Best Practices: A Skills Workspace for CAP Development* (option 1 chosen). SAP's own `cap-skills` library is **not released** (stated in the post, no update), so the workspace pattern was built from Apache-2.0 sources: SAP-samples/cap-agentic-engineered, SAP/ai-skills-library, cap-js/mcp-server README.
+- **Components & Files Modified:** `AGENTS.md` — new section `## Agent skills and MCP servers` before "Security and environment rules": skills location/convention, `.mcp.json` servers, the two cds-mcp rules from the cap-js README verbatim, and a guard that S/4 contracts never come from MCP docs.
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS**.
+  - `git status` → as listed above.
+  - MCP servers **not launched** (would download `@cap-js/mcp-server@0.0.8` and `@ui5/mcp-server@0.3.2` via npx; user permission not yet given). Claude Code discovery of the new skills **not verified** (needs a session restart).
+- **Errors / blockers:**
+  (a) **Blocked — user decision:** `.gitignore:67` ignores `.claude/` entirely (pre-existing rule, commit 090ccfc), so the discovery symlinks in `.claude/skills/` are local only and will not reach teammates. Fix would be to replace `.claude/` with `.claude/*` + `!.claude/skills/`; not applied without approval.
+  (b) `.mcp.json` versions pinned (user's question 3 unanswered; one-line change to float).
+  (c) Symlinks created for Claude Code only; `.agents/`, `.opencode/` not created (question 2 unanswered).
+- **Next action:** User to decide (a)–(c) and allow the npx-based MCP server smoke test; then restart the Claude Code session and confirm `sap-cap`, `sap-ui5`, `sap-fiori-guidelines` appear as project skills.
+
+### 2026-10-17 11:26 IST — Agent skills workspace (part 4/5): `.gitignore` adds `*-workspace/`
+
+- **Reason for Change:** Blog convention: eval/scratch workspaces are ephemeral and gitignored.
+- **Components & Files Modified:** `.gitignore` — appended comment + `*-workspace/`.
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS**.
+  - `git status` → modified `.gitignore`, `AGENTS.md`, `WORKSTATUS.md`; untracked `.mcp.json`, `skills/`; `.claude/` ignored (see Blocked item).
+- **Errors / blockers:** see entry 11:30 (a).
+- **Next action:** see 11:30 entry.
+
+### 2026-10-17 11:24 IST — Agent skills workspace (part 3/5): `.mcp.json` registers `cds-mcp` and `ui5-mcp`
+
+- **Reason for Change:** Skills instruct agents to query the CAP and UI5 MCP servers; the `claude` CLI is not installed, so the project-scope file was written by hand in the `mcpServers` shape shown in the cap-js README. Versions pinned (`@cap-js/mcp-server@0.0.8`, `@ui5/mcp-server@0.3.2`, both verified on npm 2026-10-17) for reproducibility.
+- **Components & Files Modified:** `.mcp.json` (new).
+- **Verification Commands Executed & Results:**
+  - `python3 -c "json.load(open('.mcp.json'))"` → **PASS** (keys `cds-mcp`, `ui5-mcp`).
+  - Server start-up **not run** (see 11:30 entry).
+- **Errors / blockers:** none in the file itself.
+- **Next action:** see 11:30 entry.
+
+### 2026-10-17 11:20 IST — Agent skills workspace (part 2/5): discovery symlinks `.claude/skills/<name>`
+
+- **Reason for Change:** Blog convention: symlinks, never copies, from agent discovery folders to `skills/`.
+- **Components & Files Modified:** `.claude/skills/sap-cap`, `.claude/skills/sap-ui5`, `.claude/skills/sap-fiori-guidelines` → `../../skills/<name>` (relative symlinks).
+- **Verification Commands Executed & Results:**
+  - `test -r .claude/skills/*/SKILL.md` → **PASS** (all three resolve: 45 / 51 / 189 lines).
+  - `git check-ignore -v .claude/skills/sap-cap` → ignored by `.gitignore:67` (`.claude/`) — **Blocked**, see 11:30 (a).
+- **Errors / blockers:** symlinks are not trackable until the ignore rule is changed.
+- **Next action:** see 11:30 entry.
+
+### 2026-10-17 11:14 IST — Agent skills workspace (part 1/5): `skills/` source of truth with three skills and README
+
+- **Reason for Change:** Establish the single-source-of-truth skills folder from the blog pattern with the skills that fit this project (CAP Node.js backend, freestyle SAPUI5 app). Fiori-Elements-only skill `sap-fiori` from the SAP sample was deliberately not taken (app has no `sap.fe`); Anthropic `skill-creator` not copied (already available in this environment); third-party logalitech/cap-skills (MIT, 0 stars, Spanish) rejected.
+- **Components & Files Modified (all new):**
+  1. `skills/sap-cap/SKILL.md` — adapted from SAP-samples/cap-agentic-engineered (Apache-2.0): tool names `mcp__cds-mcp__*`, paths `db/`, `srv/`, project validation commands, explicit exclusion of `srv/integration/s4hana/` (AGENTS.md discovery protocol governs).
+  2. `skills/sap-ui5/SKILL.md` — adapted from the same source: tool names `mcp__ui5-mcp__*`, freestyle paths (`webapp/view|fragment|controller|modules/**`), ui5lint via `npm --prefix app/fiori-app run lint`, Fiori Elements ExtensionAPI rule removed.
+  3. `skills/sap-fiori-guidelines/SKILL.md` — copied verbatim from SAP/ai-skills-library (Apache-2.0).
+  4. `skills/README.md` — conventions, catalog with source/licence attribution, how to add a skill.
+- **Verification Commands Executed & Results:**
+  - Frontmatter check (`name`, `description` present) on all three `SKILL.md` → **PASS**.
+  - `git diff --check` → **PASS**.
+- **Errors / blockers:** None.
+- **Next action:** see 11:30 entry.
 
 ### 2026-10-17 11:06 IST — AGENTS.md: Added Zero-Assumption Protocol section
 

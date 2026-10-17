@@ -110,3 +110,6 @@ ehthumbs.db
 *.swp
 *.swo
 *~
+
+# Agent skill eval / scratch workspaces (see skills/README.md)
+*-workspace/

@@ -96,6 +96,14 @@ Keep responsibilities separated according to this repository structure:
 - Use adapters to translate between CAP domain models and S/4 OData payloads.
 - Keep modules independently testable through explicit interfaces and dependency injection where appropriate.
 
+## Agent skills and MCP servers
+
+- Project skills live in `skills/<name>/SKILL.md` and are discovered through symlinks in `.claude/skills/`. Read `skills/README.md` for the conventions before adding or editing a skill. Never author a skill inside `.claude/`.
+- MCP servers `cds-mcp` (`@cap-js/mcp-server`) and `ui5-mcp` (`@ui5/mcp-server`) are registered in `.mcp.json`.
+- You MUST search for CDS definitions, like entities, fields and services (which include HTTP endpoints) with cds-mcp, only if it fails you MAY read `*.cds` files in the project.
+- You MUST search for CAP docs with cds-mcp EVERY TIME you create, modify CDS models or when using APIs or the `cds` CLI from CAP. Do NOT propose, suggest or make any changes without first checking it.
+- These servers cover CAP and UI5 framework knowledge only. S/4HANA service contracts are never taken from them; follow the SAP API Discovery protocol below.
+
 ## Security and environment rules
 
 - Never hardcode or commit usernames, passwords, client secrets, OAuth tokens, API keys, certificates, private keys, URLs, SAP clients, or environment-specific values.
