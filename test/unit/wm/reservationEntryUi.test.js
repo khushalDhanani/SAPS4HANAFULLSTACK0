@@ -95,6 +95,19 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(defaults.Quantity).toBe(10);
             expect(defaults.Unit).toBe('KG');
             expect(defaults.WarehouseNumber).toBe('');
+            expect(defaults.Batch).toBe('');
+        });
+
+        it('switches to Movement 311: avoids SLoc collision when issuing SLoc is ST02', () => {
+            const subject = createDetailSubject();
+            subject._oCreateModel.setProperty('/StorageLocation', 'ST02');
+            subject.onMovementTypeChange({
+                getParameter: (p) => p === 'selectedItem' ? { getKey: () => '311' } : null
+            });
+
+            expect(subject._oCreateModel.getProperty('/MovementType')).toBe('311');
+            expect(subject._oCreateModel.getProperty('/StorageLocation')).toBe('ST02');
+            expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe('CS01');
         });
 
         it('switches to Movement 201: sets Cost Center default and clears destination locations', () => {
@@ -821,6 +834,42 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(subject._oCreateModel.getProperty('/StorageLocation')).toBe('HS01');
             expect(subject._oCreateModel.getProperty('/Plant')).toBe('1120');
             expect(mockInput.setValueState).toHaveBeenCalledWith('None');
+        });
+
+        it('_handleValueHelpSelected populates CostCenter', () => {
+            const mockInput = { getId: () => 'inputCostCenter', setValueState: jest.fn() };
+            subject._handleValueHelpSelected(mockInput, '1011201301', null, { CostCenter: '1011201301' });
+
+            expect(subject._oCreateModel.getProperty('/CostCenter')).toBe('1011201301');
+            expect(mockInput.setValueState).toHaveBeenCalledWith('None');
+        });
+
+        it('_handleValueHelpSelected populates Batch', () => {
+            const mockInput = { getId: () => 'inputBatch', setValueState: jest.fn() };
+            subject._handleValueHelpSelected(mockInput, 'IN26001170', null, { Batch: 'IN26001170' });
+
+            expect(subject._oCreateModel.getProperty('/Batch')).toBe('IN26001170');
+            expect(mockInput.setValueState).toHaveBeenCalledWith('None');
+        });
+
+        it('_handleValueHelpSelected populates OrderID and auto-syncs OrderType when present', () => {
+            subject._oCreateModel.setProperty('/OrderType', 'ZEMP');
+            const mockInput = { getId: () => 'inputOrderId', setValueState: jest.fn() };
+            subject._handleValueHelpSelected(mockInput, '1002790', null, { OrderID: '1002790', OrderType: 'ZP01' });
+
+            expect(subject._oCreateModel.getProperty('/OrderID')).toBe('1002790');
+            expect(subject._oCreateModel.getProperty('/OrderType')).toBe('ZP01');
+            expect(mockInput.setValueState).toHaveBeenCalledWith('None');
+        });
+
+        it('_handleValueHelpSelected adjusts ReceivingStorageLocation on Movement 311 when issuing matches receiving', () => {
+            subject._oCreateModel.setProperty('/MovementType', '311');
+            subject._oCreateModel.setProperty('/ReceivingStorageLocation', 'ST02');
+            const mockInput = { getId: () => 'inputStorageLocation', setValueState: jest.fn() };
+            subject._handleValueHelpSelected(mockInput, 'ST02', null, { StorageLocation: 'ST02' });
+
+            expect(subject._oCreateModel.getProperty('/StorageLocation')).toBe('ST02');
+            expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe('CS01');
         });
 
         it('item selection event handlers trigger _handleValueHelpSelected', () => {

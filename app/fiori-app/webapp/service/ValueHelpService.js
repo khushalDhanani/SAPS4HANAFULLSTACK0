@@ -49,7 +49,8 @@ sap.ui.define([
         "/CustomerVH": { title: "Select Customer", key: "Customer", desc: "CustomerName" },
         "/ContactPersonVH": { title: "Select Contact Person", key: "ContactPerson", desc: "FullName", descAlt: "LastName", info: "Customer" },
         "/OrderTypeVH": { title: "Select Order Type", key: "OrderType", desc: "OrderTypeName", info: "OrderCategory" },
-        "/InternalOrderVH": { title: "Select Internal Order", key: "OrderID", desc: "OrderDescription", info: "Plant" }
+        "/InternalOrderVH": { title: "Select Internal Order", key: "OrderID", desc: "OrderDescription", info: "Plant" },
+        "/CostCenterVH": { title: "Select Cost Center", key: "CostCenter", desc: "CostCenterName", info: "CompanyCode" }
     };
 
 

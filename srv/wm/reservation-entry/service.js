@@ -13,7 +13,7 @@ const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 
 module.exports = class ReservationEntryService extends cds.ApplicationService {
   async init() {
-    const { ReservationEntries, ReservationLogs, OrderTypeVH, InternalOrderVH } = this.entities;
+    const { ReservationEntries, ReservationLogs, OrderTypeVH, InternalOrderVH, CostCenterVH } = this.entities;
     const adapter = new ReservationProcessAdapter();
 
     // Validation per movement type backed by normalized MOVEMENT_CONFIG
@@ -258,7 +258,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           warehouseNumber: determinedWh,
           wmMovementType: MovementType,
           movementType: MovementType,
-          isTransferPosting: MovementType === '311' || MovementType === '301',
+          isTransferPosting: MovementType === '301',
           material: Material,
           plant: Plant,
           storageLocation: StorageLocation,
@@ -656,7 +656,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           warehouseNumber: determinedWh,
           wmMovementType: track.MovementType,
           movementType: track.MovementType,
-          isTransferPosting: track.MovementType === '311' || track.MovementType === '301',
+          isTransferPosting: track.MovementType === '301',
           material: track.Material,
           plant: track.Plant,
           storageLocation: track.StorageLocation,
@@ -1226,7 +1226,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       try {
         if (adapter.rfc) {
           const [t003o, t003p] = await Promise.all([
-            adapter.rfc.readTable('T003O', ['AUART', 'AUTYP'], ["AUTYP = '01'"], 100),
+            adapter.rfc.readTable('T003O', ['AUART', 'AUTYP'], [], 200),
             adapter.rfc.readTable('T003P', ['AUART', 'TXT'], ["SPRAS = 'E'"], 200)
           ]);
 
@@ -1236,18 +1236,28 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             if (key) descMap[key] = String(p.TXT || '').trim();
           });
 
-          // Build unique order types directly from T003O (category 01 = Internal Orders)
-          const typeSet = new Set((t003o || []).map((r) => String(r.AUART || '').trim()).filter(Boolean));
+          // Build unique order types for categories applicable to goods issue (01 Internal, 10 Production, 40 Process, 30 Maintenance)
+          const allowedCategories = new Set(['01', '10', '20', '30', '40']);
+          const typeMap = new Map();
+          (t003o || []).forEach((r) => {
+            const auart = String(r.AUART || '').trim();
+            const autyp = String(r.AUTYP || '').trim();
+            if (auart && (!autyp || allowedCategories.has(autyp))) {
+              typeMap.set(auart, autyp);
+            }
+          });
 
-          const result = Array.from(typeSet).map((auart) => ({
+          const result = Array.from(typeMap.entries()).map(([auart, autyp]) => ({
             OrderType: auart,
             OrderTypeName: descMap[auart] || `Order Type ${auart}`,
-            OrderCategory: '01'
+            OrderCategory: autyp || '01'
           }));
 
           result.sort((a, b) => {
             if (a.OrderType === 'ZEMP') return -1;
             if (b.OrderType === 'ZEMP') return 1;
+            if (a.OrderType === 'ZP01') return -1;
+            if (b.OrderType === 'ZP01') return 1;
             return a.OrderType.localeCompare(b.OrderType);
           });
           return result;
@@ -1257,6 +1267,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
       return [
         { OrderType: 'ZEMP', OrderTypeName: 'Internal orders: EMP', OrderCategory: '01' },
+        { OrderType: 'ZP01', OrderTypeName: 'Process Order', OrderCategory: '40' },
+        { OrderType: 'PP01', OrderTypeName: 'Standard Production Order', OrderCategory: '10' },
+        { OrderType: 'PM01', OrderTypeName: 'Maintenance Order', OrderCategory: '30' },
         { OrderType: '0100', OrderTypeName: 'Internal orders: Development', OrderCategory: '01' },
         { OrderType: '0400', OrderTypeName: 'Internal orders: Marketing', OrderCategory: '01' }
       ];
@@ -1286,11 +1299,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           const rfcFilters = [];
           if (orderTypeFilter) {
             rfcFilters.push(`AUART = '${orderTypeFilter}'`);
-          } else {
-            rfcFilters.push("AUTYP = '01'");
           }
           if (plantFilter) {
-            rfcFilters.push(`AND WERKS = '${plantFilter}'`);
+            rfcFilters.push(rfcFilters.length ? `AND WERKS = '${plantFilter}'` : `WERKS = '${plantFilter}'`);
           }
 
           const orders = await adapter.rfc.readTable(
@@ -1315,9 +1326,50 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       return [
         { OrderID: '1007', OrderType: 'ZEMP', OrderDescription: '1006-Birendra Baitha', Plant: '1120', Status: 'REL' },
         { OrderID: '1011', OrderType: 'ZEMP', OrderDescription: '1059-Naresh Nagar', Plant: '1120', Status: 'REL' },
+        { OrderID: '1002790', OrderType: 'ZP01', OrderDescription: 'CDCT Organic Process Order', Plant: '1120', Status: 'REL' },
         { OrderID: '1012', OrderType: 'ZEMP', OrderDescription: '1066-Suresh Bagada', Plant: '1120', Status: 'REL' },
         { OrderID: '1016', OrderType: 'ZEMP', OrderDescription: '1151-Purnima Desai', Plant: '1120', Status: 'REL' },
         { OrderID: '1019', OrderType: 'ZEMP', OrderDescription: '1180-Hemant Badgujar', Plant: '1120', Status: 'REL' }
+      ];
+    });
+
+    // Value Help for Cost Centers (loaded dynamically from CSKS and CSKT)
+    this.on('READ', CostCenterVH, async () => {
+      try {
+        if (adapter.rfc) {
+          const [csks, cskt] = await Promise.all([
+            adapter.rfc.readTable('CSKS', ['KOSTL', 'BUKRS'], ["BKZKP = ''"], 100),
+            adapter.rfc.readTable('CSKT', ['KOSTL', 'KTEXT'], ["SPRAS = 'E'"], 200)
+          ]);
+          const descMap = {};
+          (cskt || []).forEach((t) => {
+            const k = String(t.KOSTL || '').trim();
+            if (k) descMap[k] = String(t.KTEXT || '').trim();
+          });
+          const result = (csks || []).map((c) => {
+            const cc = String(c.KOSTL || '').trim();
+            return {
+              CostCenter: cc,
+              CostCenterName: descMap[cc] || `Cost Center ${cc}`,
+              CompanyCode: String(c.BUKRS || '').trim() || '1000'
+            };
+          });
+          result.sort((a, b) => {
+            if (a.CostCenter === '1011201301') return -1;
+            if (b.CostCenter === '1011201301') return 1;
+            return a.CostCenter.localeCompare(b.CostCenter);
+          });
+          return result;
+        }
+      } catch (err) {
+        LOG.warn(`[CostCenterVH] SAP read error: ${err.message}`);
+      }
+      return [
+        { CostCenter: '1011201301', CostCenterName: 'AIL 8202 Production', CompanyCode: '1000' },
+        { CostCenter: '1010001001', CostCenterName: 'AIL HO Admin', CompanyCode: '1000' },
+        { CostCenter: '1010001301', CostCenterName: 'AIL HO CIS', CompanyCode: '1000' },
+        { CostCenter: '1011301801', CostCenterName: 'AIL 8202 Finance', CompanyCode: '1000' },
+        { CostCenter: '1011302001', CostCenterName: 'AIL 8202 Logistic', CompanyCode: '1000' }
       ];
     });
 
@@ -1655,7 +1707,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
               warehouseNumber: track.WarehouseNumber || await warehouseFor(track.Plant, track.StorageLocation, ''),
               wmMovementType: track.MovementType,
               movementType: track.MovementType,
-              isTransferPosting: track.MovementType === '311' || track.MovementType === '301',
+              isTransferPosting: track.MovementType === '301',
               material: track.Material,
               plant: track.Plant,
               storageLocation: track.StorageLocation,

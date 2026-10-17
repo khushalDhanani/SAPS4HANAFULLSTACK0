@@ -34,6 +34,13 @@ service ReservationEntryService {
             Status           : String(10);
     };
 
+    @readonly
+    entity CostCenterVH {
+        key CostCenter     : String(10);
+            CostCenterName : String(40);
+            CompanyCode    : String(4);
+    };
+
     type ReservationCreatedDoc {
         number : String(10);
         item   : String(4);

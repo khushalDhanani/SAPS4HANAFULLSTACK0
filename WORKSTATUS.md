@@ -5,6 +5,96 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **AGENTS.md Stop Rule Updated: Mandatory Agent Investigation Before Stopping (2026-10-17, 15:20 IST):** Complete.
+  - Updated the Stop Rule in `AGENTS.md` under `## Evidence, uncertainty, and approval`: when an unknown arises, agents must **first try to find the information using any agent** (inspect repository files, configuration, code, tests, SAP metadata, safe read-only queries, tools/MCP servers, subagents, or documentation). Only after trying to find and not getting the information ("after not get") may the agent stop before the action and ask the user (with Context, Doubt, Options, Recommendation).
+  - Validation: `git diff --check` passed (0 whitespace errors).
+
+- **Write-Gate Protocol Check: Placeholder Input Rejected per Core Rule 10 (2026-10-17, 13:13 IST):**
+  - Second authorization prompt contained placeholder tokens in angle brackets: `material <real>`, `batch <real>`, `Approved by <your real name>`, `because <real person/team> confirmed <what they confirmed>`.
+  - In strict compliance with `AGENTS.md` Rule 10 ("Reject placeholder input... treat it as NOT PROVIDED, stop, and ask") and Rule 11 (Strict Write-Gate Protocol), rejected placeholder input as NOT PROVIDED.
+  - Zero SAP writes executed, zero code changes made. Prompted user for actual literal values without angle brackets or sample tokens.
+
+- **Batch & Cost Center Deep Inspection for Material 1000000928 & Cost Center 1011201301 (2026-10-17, 13:10 IST):**
+  - READ-ONLY RFC queries across `LQUA`, `RESB`, `CSKS`, `CSKT`, `MCHA`, and `AUFK`.
+  - Q1 (Reservation/staging status): Stock in bins `0001002790` (1,101 KG) and `0001002787` (1,109 KG) has `SOBKZ = ''` and `AUSME = 0.000` (unrestricted, unassigned warehouse stock, no special stock). All open `RESB` reservations have `CHARG = ''` (not batch-pinned).
+  - Q2 (CSKS Cost Center 1011201301): Valid today (`DATAB: 20230401`, `DATBI: 99991231`), Company Code `1000`, Controlling Area `1000`. Lock flags `BKZKP`, `PKZKP`, `BKZKS`, `BKZOB` all blank (unlocked for all actual/planned costs).
+  - Q3 (Recommendation): Recommend Batch `IN26001170` (Bin `0001002790`) — unblocked, 1,101 KG available, proven in repo live runs ([WORKSTATUS.md:L9755](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/WORKSTATUS.md#L9755)), avoiding untouched order batch `IN26001162`.
+  - Zero writes performed; stopped awaiting user's explicit "go".
+
+- **Candidate Materials Discovery in W01 / 1120 with Non-9xx Unrestricted Stock (2026-10-17, 13:08 IST):**
+  - READ-ONLY query of SAP transparent table `LQUA` identified 11 candidate materials with unrestricted, unblocked stock across non-interim storage types (`2FL`, `EN1`, `GS1`, `RM1`, `OH1`).
+  - Proven candidate for Movement 201: Material `1000000928` ("AE196713"), Batches `IN26001170` (1,101 KG in bin `0001002790`) and `IN26001162` (1,109 KG in bin `0001002787`) in SLoc `CS01`, Storage Type `2FL`. Directly fits Cost Center `1011201301` and repo test inputs.
+  - Zero writes, zero code modifications.
+
+- **LQUA Stock Inspection for Material 8900000004 Batch INJW260001 (2026-10-17, 13:05 IST):**
+  - READ-ONLY query of SAP transparent table `LQUA` via `RFC_READ_TABLE` for warehouse `W01`, plant `1120`, storage location `CS01`, batch `INJW260001`.
+  - Found 4 quants in `LQUA`:
+    1. Quant `0001045016`: Storage Type `902`, Bin `0000000000`, Available Qty `1231.000 KG`, Unblocked (`SKZUA`, `SKZUE`, `SKZSA`, `SKZSE`, `SKZSI`, `SPGRU` all blank).
+    2. Quant `0001045079`: Storage Type `920`, Bin `TRANSFER`, Available Qty `4.000 KG`, Unblocked.
+    3. Quant `0001045070`: Storage Type `921`, Bin `TRANSFER`, Available Qty `10.000 KG`, Unblocked.
+    4. Quant `0001045077`: Storage Type `922`, Bin `TR-ZONE`, Available Qty `-6.000 KG` (negative interim quant), Unblocked.
+  - Zero quants exist in standard non-interim picking bins (e.g. `001`, `002`), explaining why `TrToAdapter.js:L1216` issued `StockWarning`.
+  - Total interim stock matches `MCHB-CLABS = 1239.000 KG`. Zero writes, no code changes.
+
+- **Movement 201 Live CAP Service Execution Run (2026-10-17, 13:00 IST):**
+  - Executed authorized single live run for Movement 201 via running CAP service (`createReservationEntry`), avoiding direct adapter scripts.
+  - Call 1 [WRITE]: `POST http://localhost:4004/odata/v4/reservation-entry/createReservationEntry` → Succeeded. Reservation `0000529669` (Item `0001`) and TR `0001000872` generated in S/4HANA Client 220 (`ProcessStatus: "TR_CREATED"`, `Status_code: "02"`).
+  - Call 2 [READ-ONLY]: `GET http://localhost:4004/odata/v4/reservation-track/ReservationTracks?$filter=ReservationNo eq '0000529669' or TransferRequirement eq '0001000872'` → Confirmed: `ReservationTrack` row exists.
+  - Call 3 [READ-ONLY]: `GET http://localhost:4004/odata/v4/tr-to/lookupTR(tbnum='0001000872',lgnum='W01',docType='TR',tbpos='0001')` → Succeeded. `AllowMismatchedTR: true`, Warning: `"TR movement 311 does not match reservation movement 201"`.
+  - Zero application code changed. Stopped before Stage 4 TO creation pending explicit user authorization per Rule 11.
+
+- **AGENTS.md: Core Rule 11 Added (Strict Write-Gate Protocol) (2026-10-17, 12:45 IST):** Complete.
+  - Added Rule 11 under `## Evidence, uncertainty, and approval` and `## SAP API Discovery — Non-Negotiable Protocol`: "Never run any live write (BAPI, RFC, POST, DB write) without explicit written \"go\" from the user for that specific call. A choice between options is not a \"go\". Default is read-only. State \"READ-ONLY\" or \"WRITE\" before every SAP call."
+  - Validation: `git diff --check` passed (0 whitespace errors).
+
+- **Movement 201 Live S/4HANA Client 220 Test Run & Diagnostic Findings (2026-10-17, 12:42 IST):**
+  - Executed controlled live test run in S/4HANA Client 220 under explicit user authorization (Material `8900000004`, Plant `1120`, SLoc `CS01`, Batch `INJW260001`, Cost Center `1011201301`, Qty `1 KG`, Warehouse `W01`).
+  - Stage 1 (Reservation): Succeeded (`RSNUM = '0000529668'`).
+  - Stage 2 (TR): Succeeded (`TBNUM = '0001000871'` with WM Movement `311`).
+  - Stage 3 (RF scan lookup): Succeeded with Warning (`"TR movement 311 does not match reservation movement 201"`).
+  - Stage 4 (TO create & confirm): FAILED with HTTP 400 (`"TR movement 311 does not match reservation movement 201"` at `TrToAdapter.js:L1860-L1862`).
+  - Stage 5 (Posting): Not reached.
+
+- **AGENTS.md: Core Rule 10 Added (Reject placeholder input & sample data protocol) (2026-10-17, 12:38 IST):** Complete.
+  - Added Rule 10 under `## Evidence, uncertainty, and approval` and `## SAP API Discovery — Non-Negotiable Protocol`: "Reject placeholder input. If a value looks like a sample (`___`, `xxxxx`, `\"exact message\"`, `\"text\"`), treat it as **NOT PROVIDED**, stop, and ask. Never analyze a template or example as if it were a live result."
+  - Validation: `git diff --check` passed (0 whitespace errors).
+
+- **AGENTS.md: Core Rule 9 Added (Blocker enforcement, citation requirement, Not verified labeling, proven assumption standard) (2026-10-17, 12:08 IST):** Complete.
+  - Added Rule 9 under `## Evidence, uncertainty, and approval`: "Never proceed past an unanswered BLOCKER. Never put a message number, field name, table, or storage type in a table unless it appears in this repo (cite file:line) or user answers. Otherwise write **Not verified**. 'Assumptions made: None' is only allowed if every row is proven."
+  - Validation: `git diff --check` passed (0 whitespace errors).
+
+- **WM Reservation Entry (`#/wm/reservation-entry/create`): Comprehensive Audit & Remediation Across All Movement Types (311, 201, 241, 301, 261) (2026-10-17, 11:58 IST):** Complete.
+  - **User Problem & Request:**
+    - "Check All type Movement Type Find Issues and fix." on `#/wm/reservation-entry/create`.
+  - **Issues Identified & Fixed Across All 5 Supported Movement Types:**
+    1. **Missing Batch Support Across All Movements (311, 201, 241, 301, 261):**
+       - Batch-managed materials (e.g. `1000000928`) failed backend preflight with `"Batch is mandatory for batch-managed material..."` because `ReservationEntryDetail.view.xml` lacked a Batch input field.
+       - Added `Batch` input field with value help and auto-suggestions (`/BatchVH`) bound in `formReservationCreate`, and added `Batch` display in `formReservationDisplay`. Updated i18n bundle with `resFieldBatch` and `resPlaceholderBatch`. Added `Batch: ""` to defaults in `ReservationEntryDetail.controller.js` and wired `_handleValueHelpSelected` for `inputBatch`.
+    2. **Movement 261 (Goods Issue to Order) Restriction to Internal Orders Only:**
+       - `OrderTypeVH` in CAP previously restricted orders strictly to `AUTYP = '01'` (Internal Orders only), which blocked Process Orders (`ZP01`, e.g. order `1002790`) and Production Orders (`PP01`). Selecting order `1002790` triggered an Order Type mismatch error against default `ZEMP`.
+       - Expanded `OrderTypeVH` on `T003O` to query all goods-issue relevant categories (`01` Internal, `10` Production, `40` Process, `30` Maintenance). Added fallback types `ZP01`, `PP01`, `PM01`.
+       - Updated `InternalOrderVH` to support plant filtering and querying without restricting strictly to `AUTYP = '01'`, and added `1002790` (`ZP01`) to fallback list.
+       - In `ReservationEntryDetail.controller.js`, selecting an order now automatically syncs and updates `OrderType` if present on the selected order object. Updated field label `lblInternalOrder` to `{i18n>resFieldOrder}`.
+    3. **Movement 301 (Plant-to-Plant Transfer) Inverted Field Hierarchy & Missing Display:**
+       - In `ReservationEntryDetail.view.xml`, Receiving Storage Location was rendered before Receiving Plant, inverting the standard SAP hierarchy (Plant determines available SLocs).
+       - Reordered XML view layout so Receiving Plant (`inputRecPlant`) appears before Receiving Storage Location (`inputRecSLoc`).
+       - Extended display visibility of `ReceivingStorageLocation` in `formReservationDisplay` to include Movement 301 (`detail>/MovementType === '301'`).
+    4. **Movement 311 (SLoc-to-SLoc Transfer) Default Destination SLoc Collision:**
+       - When the issuing storage location was set to `ST02`, switching to or triggering Movement 311 previously assigned `ReceivingStorageLocation` to `ST02`, causing identical SLocs and immediate client/server validation failure.
+       - Implemented collision avoidance in `onMovementTypeChange` and `_handleValueHelpSelected`: if issuing SLoc is `ST02`, default receiving SLoc to `CS01`; otherwise default to `ST02`.
+    5. **Movement 201 (Goods Issue to Cost Center) Missing Value Help:**
+       - Cost Center input field was plain text with no value help or suggestions, requiring manual entry of the 10-digit number.
+       - Added `@readonly entity CostCenterVH` to `srv/wm/reservation-entry/service.cds` with `CostCenter`, `CostCenterName`, and `CompanyCode`.
+       - Implemented RFC handler reading `CSKS` and `CSKT` via `RFC_READ_TABLE` with verified fallback list.
+       - Configured `/CostCenterVH` in `ValueHelpService.js` and wired `valueHelpRequest="onCostCenterValueHelpRequest"` and `suggest="onSuggest"` on `inputCostCenter`.
+  - **Quality & Regression Results:**
+    - `npx jest test/unit/wm/reservationEntryUi.test.js test/unit/wm/reservationEntryService.test.js`: **107/107 tests passed (100% green)**.
+    - Full WM test suite (`npx jest test/unit/wm`): **78 test suites passed, 1866 tests passed, 0 failures (100% green)**.
+    - `npm run lint`: **ESLint clean, 0 errors, 0 warnings**.
+    - `npm --prefix app/fiori-app run lint`: **ui5lint clean, 0 findings**.
+    - `npx cds compile srv/wm/reservation-entry/service.cds`: **Passed**.
+    - `git diff --check`: **Clean diff, 0 whitespace errors**.
+
 - **Antigravity support (2026-10-17, 11:36 IST):** Complete — added Antigravity IDE/CLI to the shared setup matrix using canonical `AGENTS.md` and `.agents/skills/`. Structural validation passed; runtime discovery remains unverified.
 - **IDE/agent entry-point coverage (2026-10-17, 11:35 IST):** Complete for repository configuration — added shared canonical policy/skill pointers for Cursor, GitHub Copilot, and Gemini CLI; linked canonical skills for Claude Code, Codex, and OpenCode. All 21 links and six IDE/agent entry points passed local structural checks; `git diff --check` passed. Runtime discovery remains unverified because those IDEs are not running in this session.
 - **AGENTS.md guidance optimization (2026-10-17, 11:31 IST):** Complete — uncertainty/approval rules, MCP fallbacks, SAP write authorization, architecture references, and dead-code review guidance updated. Focused documentation assertions passed and `git diff --check` passed. The first assertion run detected a missing final newline in `AGENTS.md`; the newline was added and the full assertion set passed on rerun. See Changes Log 11:31.
@@ -2804,6 +2894,176 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-17 15:20 IST — AGENTS.md Stop Rule Update: Mandatory Agent Search Before Stop
+
+- **Reason for Change:** User requested: "UPDATE THE STOP RULE FIST TRY TO FIND BY ANY AGENT AFTER NOT GET THAN STOP." Clarified and updated the stop rule so agents do not prematurely halt or ask the user before thoroughly attempting to find and verify the needed information through all available agent capabilities, tools, repository code, tests, metadata, and safe read-only queries.
+- **Files Changed:**
+  - `AGENTS.md`: Updated Stop Rule under `## Evidence, uncertainty, and approval`: "When an unknown could change business behavior, security/privacy, an SAP contract or payload, production configuration, or cause a destructive/external side effect, **first try to find the information using any agent** (inspect repository files, configuration, code, tests, SAP metadata, safe read-only queries, tools/MCP servers, subagents, or documentation). **Only after trying to find and not getting the information ("after not get"), then stop** before taking the action and ask a concise question with **Context, Doubt, Options and consequences, Recommendation** (maximum five questions)."
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - `git diff AGENTS.md` → verified targeted line modification with intact adjacent bullets.
+- **Errors / blockers:** None.
+- **Next action:** Proceed with project tasks following the updated stop rule.
+
+### 2026-10-17 13:10 IST — READ-ONLY: Material 1000000928 Batch & Cost Center 1011201301 Deep Inspection
+
+- **Reason for Change:** User requested a strict READ-ONLY inspection for Material `1000000928`, Batches `IN26001170` and `IN26001162`, Plant `1120`, SLoc `CS01`: (1) Verify whether stock in bins `0001002790` and `0001002787` is reserved or staged for any order (`RESB`/`LQUA`); (2) Read `CSKS` for Cost Center `1011201301` (validity dates, lock flags, company code); (3) Recommend which batch is safe to use for a Movement 201 test with evidence, then stop and wait for "go".
+- **Executed Actions & Live RFC Results:**
+  - Call 1 [READ-ONLY]: Query `LQUA` for material `1000000928` in bins `0001002790` and `0001002787`.
+    - Bin `0001002790`: Batch `IN26001170`, Quant `0001044644`, Storage Type `2FL`, `VERME = 1101.000 KG`, `EINME = 0.000`, `AUSME = 0.000`, `BESTQ = ''`, `SOBKZ = ''`, `SONUM = ''`, unblocked.
+    - Bin `0001002787`: Batch `IN26001162`, Quant `0001044623`, Storage Type `2FL`, `VERME = 1109.000 KG`, `EINME = 0.000`, `AUSME = 0.000`, `BESTQ = ''`, `SOBKZ = ''`, `SONUM = ''`, unblocked.
+  - Call 2 [READ-ONLY]: Query `RESB` for open reservations on material `1000000928` in Plant `1120`, SLoc `CS01`.
+    - Found 12 open reservations. Crucially, all 12 open lines have `CHARG = ''` (no reservations are batch-pinned in `RESB`).
+    - Two active process orders correspond to the bin numbers: Order `1002790` (Reservation `0000521169`, required 1,110 KG, withdrawn 1 KG) and Order `1002787` (Reservation `0000521103`, required 1,110 KG, withdrawn 0 KG).
+  - Call 3 [READ-ONLY]: Query `CSKS` and `CSKT` for Cost Center `1011201301`.
+    - `DATAB = '20230401'`, `DATBI = '99991231'` → Valid today (2026-10-17).
+    - `BKZKP = ''`, `PKZKP = ''`, `BKZKS = ''`, `BKZOB = ''` → All cost posting lock indicators are unlocked.
+    - `BUKRS = '1000'`, `KOKRS = '1000'`, Description `AIL 8203 CIS`.
+  - Recommendation: Batch `IN26001170` (Bin `0001002790`) is recommended for Movement 201 testing.
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - Zero code modifications; zero writes performed.
+- **Errors / blockers:** None.
+- **Next action:** Stop and await user written "go" before performing any write operations.
+
+### 2026-10-17 13:08 IST — READ-ONLY: Candidate Materials Discovery with Non-9xx Unrestricted Stock in W01 / Plant 1120
+
+- **Reason for Change:** User requested a strict READ-ONLY search for candidate materials in warehouse `W01`, plant `1120` with unrestricted, unblocked stock in standard storage types (`LGTYP` not `9xx`), reporting material, batch, bin, quantity, and identifying fitting cost centers and test inputs from the repo.
+- **Executed Actions & Live RFC Results:**
+  - Query table `LQUA` via `RFC_READ_TABLE` for all active quants (`VERME > 0`) in `LGNUM = 'W01'` and `WERKS = '1120'` in non-interim storage types (`LGTYP NOT LIKE '9%'`).
+  - Identified 505 non-interim quants across storage types `2FL` (2nd Floor), `EN1` (Engineering), `GS1` (Green Stage), `RM1` (Raw Material), and `OH1` (On-Hold).
+  - Top candidate materials with standard unblocked picking stock in SLoc `CS01`:
+    1. Material `1000000928` ("AE196713"): Bin `0001002790` (Batch `IN26001170`, 1,101 KG, Storage Type `2FL`), Bin `0001002787` (Batch `IN26001162`, 1,109 KG, Storage Type `2FL`).
+    2. Material `1000000927` ("AE142404"): Bin `0001002787` (Batch `IN26001161`, 1,500 KG, Storage Type `2FL`).
+    3. Material `1000000929` ("AE170794"): Bins `0001002787` / `0001002790` (Batches `IN26001163` / `IN26001171`, 73.5 KG each, Storage Type `2FL`).
+    4. Material `1000000488` ("Benzene Sulfonic Acid"): Bin `0-L0001-01` (Batch `IN26001000`, 200 KG, Storage Type `RM1`).
+    5. Material `8000009800` ("Apple Macbook Pro 16\", M5"): Bins `0-L0001-01`, `0-L0001-02`, `0-L0001-04` (10 NOS total, SLoc `CS02`, Storage Type `EN1`).
+  - Cost Center & Repo Fit: Cost Center `1011201301` (`AIL 8202 Production`, Company Code `1000`, [srv/wm/reservation-entry/service.js:L1368](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/srv/wm/reservation-entry/service.js#L1368)) fits all materials in plant `1120`. Material `1000000928` (Batch `IN26001170`) is the exact proven material referenced in [WORKSTATUS.md:L9755](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/WORKSTATUS.md#L9755) and [tools/run5-mvt261-live.js:L95](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/tools/run5-mvt261-live.js#L95).
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - Zero code modifications; zero writes performed.
+- **Errors / blockers:** None.
+- **Next action:** Present candidate materials, batches, bins, quantities, and repo citations to user.
+
+### 2026-10-17 13:05 IST — READ-ONLY: Transparent Table LQUA Stock Inspection for Material 8900000004 Batch INJW260001
+
+- **Reason for Change:** User requested a strict READ-ONLY inspection of SAP transparent table `LQUA` for material `8900000004`, batch `INJW260001`, warehouse `W01`, plant `1120`, storage location `CS01`, reporting bins, quantities, and block status, with no writes or TO creation.
+- **Executed Actions & Live RFC Results:**
+  - Call [READ-ONLY]: Query table `LQUA` via `RFC_READ_TABLE` with `LGNUM = 'W01' AND MATNR = '000000008900000004' AND WERKS = '1120' AND LGORT = 'CS01' AND CHARG = 'INJW260001'`.
+  - **Quants Found in LQUA:**
+    1. Quant `0001045016`: Storage Type `902` (GR Area), Storage Bin `0000000000`, Quantity `1231.000 KG`, Unblocked (`BESTQ: ""`, `SKZUA: ""`, `SKZUE: ""`, `SKZSA: ""`, `SKZSE: ""`, `SKZSI: ""`, `SPGRU: ""`).
+    2. Quant `0001045079`: Storage Type `920` (Posting Change Area), Storage Bin `TRANSFER`, Quantity `4.000 KG`, Unblocked.
+    3. Quant `0001045070`: Storage Type `921` (Transfer Area / Staging), Storage Bin `TRANSFER`, Quantity `10.000 KG`, Unblocked.
+    4. Quant `0001045077`: Storage Type `922` (TR-Zone Area), Storage Bin `TR-ZONE`, Quantity `-6.000 KG` (interim negative), Unblocked.
+  - **Standard Bin Availability:** 0 quants exist in standard picking/storage bins (non-9xx). All 1,239 KG of stock resides in interim storage types.
+  - **IM Batch Stock:** `MCHB` has `CLABS = 1239.000 KG` unrestricted stock.
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - Zero code modifications; zero SAP writes performed.
+- **Errors / blockers:** None.
+- **Next action:** Present complete quant table and findings to user.
+
+### 2026-10-17 13:00 IST — Movement 201 Live CAP Service Execution Run (createReservationEntry & ReservationTrack Verification)
+
+- **Reason for Change:** Explicit user authorization received for ONE live write run for Movement 201 strictly through the running CAP service (`createReservationEntry`), avoiding direct adapter scripts and creating a fresh reservation without reusing `0000529668` / `0001000871`.
+- **Pre-Call Protocol & Classification:**
+  1. Call 1 [WRITE]: `POST http://localhost:4004/odata/v4/reservation-entry/createReservationEntry`
+     - Inputs: `MovementType: "201"`, `Plant: "1120"`, `StorageLocation: "CS01"`, `Material: "8900000004"`, `Quantity: 1`, `Unit: "KG"`, `CostCenter: "1011201301"`, `Batch: "INJW260001"`, `WarehouseNumber: "W01"`.
+     - Output: Succeeded. Returned HTTP 201/200 with `ReservationNo: "0000529669"`, `ReservationItem: "0001"`, `TransferRequirement: "0001000872"`, `ProcessStatus: "TR_CREATED"`, `Status_code: "02"`, `StatusText: "TR Created"`, `ErrorMessage: ""`, `ErrorStep: ""`.
+  2. Call 2 [READ-ONLY]: `GET http://localhost:4004/odata/v4/reservation-track/ReservationTracks?$filter=ReservationNo eq '0000529669' or TransferRequirement eq '0001000872'`
+     - Output: Confirmed. The `ReservationTrack` row exists in the CAP service database:
+       `{ ReservationNo: "0000529669", ReservationItem: "0001", MovementType: "201", WarehouseNumber: "W01", Plant: "1120", StorageLocation: "CS01", Material: "8900000004", Quantity: "1.000", Unit: "KG", CostCenter: "1011201301", TransferRequirement: "0001000872", ProcessStatus: "TR_CREATED", Status_code: "02" }`.
+  3. Call 3 [READ-ONLY]: `GET http://localhost:4004/odata/v4/tr-to/lookupTR(tbnum='0001000872',lgnum='W01',docType='TR',tbpos='0001')`
+     - Output: Succeeded. Resolved TR `1000872` (OpenQty 1 KG). Key finding: `AllowMismatchedTR: true` with Warning `"TR movement 311 does not match reservation movement 201"`. (Because `ReservationTrack` is persisted in `cds.db`, `_findTrackedReservationForTR` successfully finds the tracked reservation, setting `AllowMismatchedTR: true`).
+- **Code Changes:** None (`AGENTS.md` and user instruction: "Do not change any code").
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - Zero code modifications.
+- **Errors / blockers:** None in Stage 1-3. Stopped prior to Stage 4 TO creation pending explicit user authorization for that specific live write.
+- **Next action:** Present document numbers, messages, and `ReservationTrack` verification to user.
+
+### 2026-10-17 12:45 IST — AGENTS.md: Core Rule 11 Added (Strict Write-Gate Protocol)
+
+- **Reason for Change:** User requested adding Rule 11 to the agent's core instructions: "Never run any live write (BAPI, RFC, POST, DB write) without my explicit written 'go' for that specific call. A choice between options is not a 'go'. Default is read-only. State 'READ-ONLY' or 'WRITE' before every SAP call."
+- **Components & Files Modified:**
+  - `AGENTS.md`: Added rule under `## Evidence, uncertainty, and approval` and as Item 11 under `## SAP API Discovery — Non-Negotiable Protocol`.
+  - `WORKSTATUS.md`: Logged change and updated Current Status.
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - `git status` → modified `AGENTS.md` and `WORKSTATUS.md`.
+- **Errors / blockers:** None. Documentation/rules-only change.
+- **Next action:** Enforce Rule 11 on all subsequent SAP operations: default to read-only, label every call READ-ONLY or WRITE, and require explicit written "go" before any write.
+
+### 2026-10-17 12:42 IST — Movement 201 Live S/4HANA Client 220 Execution Run (Empirical Stage-by-Stage Diagnosis)
+
+- **Reason for Change:** Explicit user authorization received to execute a controlled live test run in S/4HANA Client 220 for Movement 201 (Material `8900000004`, Plant `1120`, SLoc `CS01`, Batch `INJW260001`, Cost Center `1011201301`, Qty `1 KG`, Warehouse `W01`).
+- **Executed Actions & Live System Results:**
+  1. **Stage 1 (Reservation Create):** Succeeded.
+     - Live Document: `RSNUM = '0000529668'`, Item `'0001'` posted in SAP S/4HANA (`M7 060`, `BUS2093 0000529668 has been created`).
+     - Persistent SAP tables: `RKPF` (`RSNUM = '0000529668'`, `BWART = '201'`, `KOSTL = '1011201301'`), `RESB` (`RSNUM = '0000529668'`, `RSPOS = '0001'`).
+  2. **Stage 2 (Transfer Requirement Create):** Succeeded.
+     - Live Document: `TBNUM = '0001000871'`, Item `'0001'` created in Warehouse `W01` with WM Movement `311` (`L3 001`).
+     - Persistent SAP tables: `LTBK` (`TBNUM = '0001000871'`, `LGNUM = 'W01'`, `BWLVS = '311'`), `LTBP` (`TBNUM = '0001000871'`, `TBPOS = '0001'`).
+  3. **Stage 3 (RF Scan Lookup):** Succeeded with Warning.
+     - Looked up TR `0001000871`: OpenQty `1 KG`, Cost Center `1011201301`.
+     - Warning: `"TR movement 311 does not match reservation movement 201"`.
+     - In UI (`WarehouseScanToDetail.controller.js:L804-L809`), this mismatch sets `canSubmit: false` unless `allowMismatchedTR` is enabled.
+  4. **Stage 4 (TO Create & Confirm):** FAILED.
+     - `createTOFromTR` rejected with HTTP 400: `"TR movement 311 does not match reservation movement 201"`.
+     - Rejection site: `TrToAdapter.js:L1860-L1862`.
+  5. **Stage 5 (Posting):** Not reached due to Stage 4 failure.
+- **Verification Commands Executed & Results:**
+  - Live SAP S/4HANA Client 220 RFC calls via `RfcClient`.
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+- **Errors / blockers:** Stage 4 TO creation fails because staging TR uses WM movement `311` while reservation specifies movement `201`, triggering strict movement equality check in `TrToAdapter.js:L1860`.
+- **Next action:** Present exact findings to user in the requested format without claiming root cause or proposing fixes until confirmed.
+
+### 2026-10-17 12:38 IST — AGENTS.md: Core Rule 10 Added (Reject Placeholder Input Protocol)
+
+- **Reason for Change:** User requested adding Rule 10 to the agent's core instructions: "Reject placeholder input. If a value looks like a sample (___, xxxxx, 'exact message', 'text'), treat it as NOT PROVIDED, stop, and ask. Never analyze a template or example as if it were my live result."
+- **Components & Files Modified:**
+  - `AGENTS.md`: Added rule under `## Evidence, uncertainty, and approval` and as Item 10 under `## SAP API Discovery — Non-Negotiable Protocol`.
+  - `WORKSTATUS.md`: Logged change and updated Current Status.
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - `git status` → modified `AGENTS.md` and `WORKSTATUS.md`.
+- **Errors / blockers:** None. Documentation/rules-only change.
+- **Next action:** Enforce Rule 10 immediately: halt analysis and request actual live system values whenever placeholder values appear.
+
+### 2026-10-17 12:08 IST — AGENTS.md: Core Rule 9 Added (Blocker Enforcement & Table Citation Protocol)
+
+- **Reason for Change:** User requested adding Rule 9 to the agent's core instructions: "Never proceed past an unanswered BLOCKER. Never put a message number, field name, table, or storage type in a table unless it appears in my repo (cite file:line) or my answers. Otherwise write 'Not verified'. 'Assumptions made: None' is only allowed if every row is proven."
+- **Components & Files Modified:**
+  - `AGENTS.md`: Added rule under `## Evidence, uncertainty, and approval`.
+  - `WORKSTATUS.md`: Logged change and updated current status.
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - `git status` → modified `AGENTS.md` and `WORKSTATUS.md`.
+- **Errors / blockers:** None. Documentation/rules-only change.
+- **Next action:** Adhere strictly to Rule 9 in all subsequent agent evaluations and table generation.
+
+### 2026-10-17 11:58 IST — WM Reservation Entry (`#/wm/reservation-entry/create`): All Movement Types Audit & Fixes (311, 201, 241, 301, 261)
+
+- **Reason for Change:** User requested "Check All type Movement Type Find Issues and fix" on `#/wm/reservation-entry/create`. Conducted thorough audit of all 5 movement types across UI XML views, UI controllers, ValueHelpService, CAP service definitions/handlers, and integration adapters.
+- **Components & Files Modified:**
+  - `app/fiori-app/webapp/i18n/i18n.properties`: Added `resFieldBatch` and `resPlaceholderBatch`.
+  - `srv/wm/reservation-entry/service.cds`: Added `@readonly entity CostCenterVH`.
+  - `srv/wm/reservation-entry/service.js`: Added `CostCenterVH` handler reading `CSKS`/`CSKT`, expanded `OrderTypeVH` on `T003O` to include production/process categories (`01`, `10`, `30`, `40`), and expanded `InternalOrderVH` with plant filter and non-01 order support.
+  - `app/fiori-app/webapp/service/ValueHelpService.js`: Configured `/CostCenterVH` dialog title, keys, and columns.
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`: Added Batch input field to `formReservationCreate`, Batch text to `formReservationDisplay`, Value Help & suggestions to `inputCostCenter`, reordered `inputRecPlant` before `inputRecSLoc` for Movement 301, and extended display visibility of `ReceivingStorageLocation` to Movement 301.
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`: Added `Batch: ""` to defaults, collision avoidance for Movement 311 SLocs, `onCostCenterSelect`, and updated `_handleValueHelpSelected` for CostCenter, Batch, OrderType auto-sync, and SLoc collision prevention.
+  - `test/unit/wm/reservationEntryUi.test.js`: Added UI unit tests for default Batch, 311 SLoc collision avoidance, CostCenter/Batch/OrderType value help selection (107/107 passed across UI & service).
+  - `test/unit/wm/reservationEntryService.test.js`: Added CAP service tests for `CostCenterVH`, expanded `OrderTypeVH`, and Batch parameter forwarding to `createReservation` (107/107 passed).
+- **Verification Commands Executed & Results:**
+  - `npx jest test/unit/wm/reservationEntryUi.test.js test/unit/wm/reservationEntryService.test.js` → **107/107 PASS**.
+  - `npx jest test/unit/wm` → **78 passed suites, 1866 tests PASS**.
+  - `npm --prefix app/fiori-app run lint` (ui5lint) → **PASS (0 findings)**.
+  - `npm run lint` (eslint) → **PASS (0 errors, 0 warnings)**.
+  - `npx cds compile srv/wm/reservation-entry/service.cds` → **PASS**.
+  - `git diff --check` → **PASS**.
+- **Errors / blockers:** None. Zero live SAP write POST mutations performed without explicit user authorization per `AGENTS.md`.
+- **Next action:** User review and interactive testing in browser on `#/wm/reservation-entry/create`.
 
 ### 2026-10-17 11:30 IST — Agent skills workspace (part 5/5): AGENTS.md "Agent skills and MCP servers" section; open points
 

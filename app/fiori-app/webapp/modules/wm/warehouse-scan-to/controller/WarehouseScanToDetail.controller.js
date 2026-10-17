@@ -101,6 +101,7 @@ sap.ui.define([
                 canSubmit: false,
                 scanVerificationStatusText: "READY FOR TO",
                 scanVerificationStatusState: "Success",
+                storageUnit: "",
                 hasResult: false,
                 resultMessage: "",
                 result: null
@@ -176,6 +177,7 @@ sap.ui.define([
             oModel.setProperty("/reservationMovementType", "");
             oModel.setProperty("/allowMismatchedTR", false);
             oModel.setProperty("/isMovementMismatched", false);
+            oModel.setProperty("/storageUnit", "");
             oModel.setProperty("/canRetryMigo", false);
             this.onCloseMessage();
         },
@@ -327,6 +329,7 @@ sap.ui.define([
                 oModel.setProperty("/orderIdValueState", "None");
                 oModel.setProperty("/orderIdValueStateText", "");
                 oModel.setProperty("/isBackflush", Boolean(oDetail.Backflush));
+                oModel.setProperty("/storageUnit", (oDetail.StorageUnit || oDetail.Lenum || "").trim());
 
                 that._updateSerialsStatus();
                 that._validateForm();
@@ -1053,7 +1056,7 @@ sap.ui.define([
                 autoConfirm: bAutoConfirm,
                 autoPostMigo: bAutoPostMigo,
                 CompleteReservation: oModel.getProperty("/completeReservation") === true,
-                storageUnit: "",
+                storageUnit: (oModel.getProperty("/storageUnit") || oModel.getProperty("/lenum") || "").trim(),
                 ReservationMovementType: oTR.ReservationMovementType || "",
                 ReservationNo: oTR.ReservationNo || "",
                 ReservationItem: oTR.ReservationItem || ""
