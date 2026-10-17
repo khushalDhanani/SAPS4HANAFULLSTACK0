@@ -564,6 +564,74 @@ describe('Mvt261Service postGoodsIssue action', () => {
     release();
     await p2;
   });
+
+  it('SAP POST succeeds -> status becomes posted, and status persistence failure logs critical reconciliation error without swallowing', async () => {
+    await svc.init();
+    const LOG = require('../../../srv/common/logger')('mvt261-service');
+    const logSpy = jest.spyOn(LOG, 'error').mockImplementation(() => {});
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
+    jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockResolvedValue({ MaterialDocument: '4900050046', MaterialDocumentYear: '2026', Pending: false });
+    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus').mockRejectedValueOnce(new Error('DB failure while updating status'));
+
+    const r = req({ reservation: '512851', item: '3', quantity: 200 });
+    const res = await handlers.postGoodsIssue(r);
+
+    expect(statusSpy).toHaveBeenCalledWith(expect.stringMatching(/^GI/), 'posted', expect.objectContaining({
+      MaterialDocument: '4900050046',
+      MaterialDocYear: '2026'
+    }));
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Critical reconciliation error: failed to persist attempt status 'posted'"),
+      expect.stringContaining('DB failure while updating status'),
+      expect.anything()
+    );
+    expect(res).toMatchObject({ MaterialDocument: '4900050046' });
+    expect(r.error).not.toHaveBeenCalled();
+  });
+
+  it('SAP POST fails -> status becomes rejected, and status persistence failure logs critical reconciliation error', async () => {
+    await svc.init();
+    const LOG = require('../../../srv/common/logger')('mvt261-service');
+    const logSpy = jest.spyOn(LOG, 'error').mockImplementation(() => {});
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
+    jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockRejectedValueOnce(Object.assign(new Error('Staging deficit'), { status: 422 }));
+    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus').mockRejectedValueOnce(new Error('DB disk full'));
+
+    const r = req({ reservation: '512851', item: '3', quantity: 200 });
+    await handlers.postGoodsIssue(r);
+
+    expect(statusSpy).toHaveBeenCalledWith(expect.stringMatching(/^GI/), 'rejected', expect.objectContaining({
+      LastError: 'Staging deficit'
+    }));
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Critical reconciliation error: failed to persist attempt status 'rejected'"),
+      expect.stringContaining('DB disk full'),
+      expect.anything()
+    );
+    expect(r.error).toHaveBeenCalledWith(422, 'Staging deficit');
+  });
+
+  it('SAP POST outcome unknown (502/504) -> status becomes unconfirmed, and status persistence failure logs critical reconciliation error', async () => {
+    await svc.init();
+    const LOG = require('../../../srv/common/logger')('mvt261-service');
+    const logSpy = jest.spyOn(LOG, 'error').mockImplementation(() => {});
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
+    jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockRejectedValueOnce(Object.assign(new Error('Gateway timeout'), { status: 504 }));
+    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus').mockRejectedValueOnce(new Error('DB deadlock'));
+
+    const r = req({ reservation: '512851', item: '3', quantity: 200 });
+    await handlers.postGoodsIssue(r);
+
+    expect(statusSpy).toHaveBeenCalledWith(expect.stringMatching(/^GI/), 'unconfirmed', expect.objectContaining({
+      LastError: 'Gateway timeout'
+    }));
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Critical reconciliation error: failed to persist attempt status 'unconfirmed'"),
+      expect.stringContaining('DB deadlock'),
+      expect.anything()
+    );
+    expect(r.error).toHaveBeenCalledWith(504, 'Gateway timeout');
+  });
 });
 
 describe('Mvt261Service reverse action (F6)', () => {
@@ -688,5 +756,26 @@ describe('Mvt261Service reverse action (F6)', () => {
     await handlers.reverse(r2);                          // reverse policy excludes not_posted -> 409
     expect(r2.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
     expect(revSpy).toHaveBeenCalledTimes(1);             // no second adapter call
+  });
+
+  it('reverse status persistence failure logs critical reconciliation error without swallowing', async () => {
+    await svc.init();
+    const LOG = require('../../../srv/common/logger')('mvt261-service');
+    const logSpy = jest.spyOn(LOG, 'error').mockImplementation(() => {});
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith());
+    jest.spyOn(Mvt261Adapter.prototype, 'reverse').mockResolvedValue({ MaterialDocument: '4900050099', MaterialDocumentYear: '2026' });
+    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus').mockRejectedValueOnce(new Error('DB failure during reverse status'));
+
+    const r = req(input);
+    const res = await handlers.reverse(r);
+
+    expect(statusSpy).toHaveBeenCalledWith(expect.stringMatching(/^RV/), 'posted', expect.anything());
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Critical reconciliation error: failed to persist attempt status 'posted'"),
+      expect.stringContaining('DB failure during reverse status'),
+      expect.anything()
+    );
+    expect(res).toMatchObject({ MaterialDocument: '4900050099' });
+    expect(r.error).not.toHaveBeenCalled();
   });
 });

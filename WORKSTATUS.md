@@ -5,6 +5,22 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **MVT 261 — Fix Silent Posting-Status Failures in Mvt261Service (2026-10-17, 15:45 IST):** Complete.
+  - Replaced silent `.catch(() => {})` handlers around `GoodsIssueAttemptStore.setStatus(...)` with critical reconciliation error logging (`LOG.error`) with full context (reference, status, fields, error) in `srv/wm/mvt261/service.js`.
+  - Enforced posting status lifecycle:
+    - SAP POST succeeds → status becomes `posted` (or `delivery_created` if pending outbound delivery).
+    - SAP POST fails with definite error → status becomes `rejected`.
+    - SAP outcome unknown (e.g. timeout 502/504) → status becomes `unconfirmed`.
+    - If status persistence fails, logged as `Critical reconciliation error: failed to persist attempt status '<status>' for reference <refDoc>` without silently swallowing.
+    - Reverse action updated with matching critical reconciliation error logging for status persistence failures.
+  - Added 4 unit tests in `test/unit/wm/mvt261Scan.test.js` validating that status persistence errors are logged with `Critical reconciliation error` and not swallowed across success, failure, and unknown outcomes for postGoodsIssue and reverse.
+  - Validation:
+    - `npx jest test/unit/wm/*261*`: 7/7 test suites passed, 162/162 tests passed (100% green).
+    - `npx jest test/unit/wm`: 78/78 test suites passed, 1873/1873 tests passed (100% green).
+    - `npm run lint`: 0 errors, 0 warnings.
+    - `npx cds compile srv/`: Clean compilation, exit 0.
+    - `git diff --check`: Clean diff, 0 whitespace errors.
+
 - **AGENTS.md Stop Rule Updated: Mandatory Agent Investigation Before Stopping (2026-10-17, 15:20 IST):** Complete.
   - Updated the Stop Rule in `AGENTS.md` under `## Evidence, uncertainty, and approval`: when an unknown arises, agents must **first try to find the information using any agent** (inspect repository files, configuration, code, tests, SAP metadata, safe read-only queries, tools/MCP servers, subagents, or documentation). Only after trying to find and not getting the information ("after not get") may the agent stop before the action and ask the user (with Context, Doubt, Options, Recommendation).
   - Validation: `git diff --check` passed (0 whitespace errors).
@@ -9876,3 +9892,70 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Changes:** Added Antigravity IDE/CLI as using the canonical root `AGENTS.md` rules and `.agents/skills/<name>` discovery directory. No duplicate configuration or skill copies were added because the project already provides these paths.
 - **Validation:** Official Antigravity documentation confirms workspace `AGENTS.md` rules and `.agents/skills/` skill discovery. Python assertions confirmed the matrix row and all seven `.agents/skills/` links resolve to canonical skill directories. `git diff --check` → **PASS**. The first WORKSTATUS assertion used an incorrect expected string (it omitted Markdown bold delimiters); corrected assertion → **PASS**. Runtime discovery in Antigravity was not tested.
 - **Errors / Warnings / Blockers:** No remaining validation issues; IDE runtime discovery remains unverified.
+
+### 2026-10-17 15:45 IST — Dead-code / unused-dependency cleanup: analysis only (In Progress)
+
+- **User Request:** Clean the repository of dead code, unused files and unused dependencies safely (report before deleting; approval required for LIKELY SAFE / UNSURE items).
+- **Affected Files:** `WORKSTATUS.md` only. No source, config or dependency changes made. Branch `chore/cleanup-unused` not yet created (still on `feature01`).
+- **Baseline recorded (before any change):**
+  - `npm run lint` → PASS (0 errors, 0 warnings).
+  - `npm --prefix app/fiori-app run lint` → PASS (no findings).
+  - `npm --prefix app/fiori-app run build` → PASS (one pre-existing warning: missing jspdf source map).
+  - `npm run validate:mta` → PASS (exit 0).
+  - `npx jest --runInBand` → **FAIL: 1 failed, 56 skipped, 3134 passed (168/169 suites)**. Pre-existing failure in `test/unit/controller/uiConsistency.test.js`: `ReservationEntryDetail.view.xml` references `resFieldBatch` and `resPlaceholderBatch`, present in `i18n.properties` but missing from `i18n_en.properties` (also `btnAddItem`, `btnDeleteItem` missing from `i18n_en`). Not caused by cleanup work; out of cleanup scope.
+- **Findings (candidates, not removed):**
+  - SAFE: `@sap-cloud-sdk/resilience` (dependencies) — referenced only in `package.json`; depcheck + grep confirm no require. Transitively still provided by `@sap-cloud-sdk/http-client`.
+  - KEEP (depcheck false positives): `@cap-js/cds-test` (used via `cds.test` in 5+ tests), `@cap-js/hana`, `@cap-js/sqlite`, `cds-plugin-ui5`, `@ui5/cli`, `mbt` (CLI/plugin deps).
+  - Require graph from `server.js` + all `srv/**/*.cds` reaches 99/99 `srv/**/*.js` files — no orphan CAP modules.
+  - 24 CAP exports referenced nowhere (e.g. `sapFacts.js` MESSAGES/RFBSK/rfcMessageId, `S4HttpClient.js` DEFAULT_DESTINATION_NAME, `valueHelp.config.js` FS_/MAINT_/SO_VALUE_HELP_ENTITIES, `goods-issue/validation/common.js` regexes, `SalesInquiryMapper.mapToS4DocumentPayload`, `ai/service.js prepareChat`) — LIKELY SAFE, need approval.
+  - 10 UI5 controller/service methods referenced nowhere (e.g. `Dashboard.onSelectTabFI/MM`, `PurchaseOrderService.getPurchaseOrder(s)`, `RecentScanStore.clearRecentScans`) — LIKELY SAFE, need approval.
+  - 60+ unused i18n keys; several belong to dynamic prefixes (`cycle261Status_`, `cycle261Step_`, `scan261Warn_`, `scan261Unit_`, `scan261Reject_`) — UNSURE; exact count not finalized.
+  - `test/screenshots/*.png` (7 files, step1–step7 311 flow) referenced by no script — LIKELY SAFE.
+  - `test/unit/wm/fixtures/goodsIssueFixtures.js`, `suResolution.fixture.js` — referenced by 0 tests — LIKELY SAFE.
+  - `migo_idempotency_design.md` (root) referenced nowhere; `AUDIT_261.md` referenced from `Mvt261Adapter.js` (keep).
+  - `tools/` — 49 of 59 scripts referenced by no code/CI (one-off live discovery/test scripts) — UNSURE, user's call.
+  - Root gitignored local artefacts not in git: ~100 `rfc*.trc`, `dev_rfc.log`, `_noderfc.log`, `db.sqlite` — not repo cleanup; left untouched.
+  - No `*.bak/*.old` tracked files, no foreign lockfiles, no commented-out code blocks, no `eslint-disable`, CSS has no unused custom classes (only SAP framework-class overrides).
+- **Errors / Blockers:** Session stopped by usage limit after analysis. No deletions performed.
+- **Next Recommended Action:** User approves/rejects LIKELY SAFE and UNSURE items; then create `chore/cleanup-unused`, remove `@sap-cloud-sdk/resilience` via `npm uninstall`, apply approved removals in per-category commits, re-run the baseline commands above.
+
+### 2026-10-17 15:45 IST — MVT 261: Fix Silent Posting-Status Failures
+
+- **User Request:**
+  - 🔴 P0 — Must Fix: MVT 261 — Fix silent posting-status failures.
+  - File: `srv/wm/mvt261/service.js`.
+  - Replace silent `.catch(() => {})` around `GoodsIssueAttemptStore.setStatus(...)`.
+  - Required behavior:
+    - SAP POST succeeds → attempt status must become posted.
+    - SAP POST fails → attempt status must become rejected.
+    - SAP outcome unknown → attempt status must become unconfirmed.
+    - If status persistence fails, log it as a critical reconciliation error.
+    - Never silently swallow the error.
+    - Goal: SAP material document and application attempt state can never silently diverge.
+- **Affected Files:**
+  - `srv/wm/mvt261/service.js`
+  - `test/unit/wm/mvt261Scan.test.js`
+  - `WORKSTATUS.md`
+- **Changes Implemented:**
+  - In `srv/wm/mvt261/service.js`:
+    - Imported `LOG = require('../../common/logger')('mvt261-service')`.
+    - Replaced all 4 instances of silent `.catch(() => {})` on `GoodsIssueAttemptStore.setStatus(...)`:
+      1. `postGoodsIssue` on SAP success: updates status to `'delivery_created'` (if `result.Pending`) or `'posted'`, and on failure logs `Critical reconciliation error: failed to persist attempt status '<postStatus>' for reference <refDoc>:`.
+      2. `postGoodsIssue` on SAP failure/unknown: updates status to `'unconfirmed'` (if network/timeout `!err.status || err.status === 502 || err.status === 504`) or `'rejected'`, and on failure logs `Critical reconciliation error: failed to persist attempt status '<failStatus>' for reference <refDoc>:`.
+      3. `reverse` on SAP success: updates status to `'posted'`, and on failure logs `Critical reconciliation error: failed to persist attempt status 'posted' for reference <refDoc>:`.
+      4. `reverse` on SAP failure/unknown: updates status to `'unconfirmed'` (if network/timeout 502/504) or `'rejected'`, and on failure logs `Critical reconciliation error: failed to persist attempt status '<failStatus>' for reference <refDoc>:`.
+  - In `test/unit/wm/mvt261Scan.test.js`:
+    - Added unit test: `SAP POST succeeds -> status becomes posted, and status persistence failure logs critical reconciliation error without swallowing`.
+    - Added unit test: `SAP POST fails -> status becomes rejected, and status persistence failure logs critical reconciliation error`.
+    - Added unit test: `SAP POST outcome unknown (502/504) -> status becomes unconfirmed, and status persistence failure logs critical reconciliation error`.
+    - Added unit test: `reverse status persistence failure logs critical reconciliation error without swallowing`.
+- **Validation Results:**
+  - `npx jest test/unit/wm/*261*`: 7/7 suites passed, 162/162 tests passed (100% green).
+  - `npx jest test/unit/wm`: 78/78 suites passed, 1,873/1,873 tests passed (100% green).
+  - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+  - `npx cds compile srv/`: Clean compilation, exit 0.
+  - `git diff --check`: 0 whitespace errors.
+- **Errors / Warnings / Blockers:**
+  - Zero errors in Mvt261 changes. Pre-existing unrelated failure in `test/unit/controller/uiConsistency.test.js` (`resFieldBatch` and `resPlaceholderBatch` missing from `i18n_en.properties`) noted and preserved.
+- **Next Recommended Action:**
+  - Ready for user review / commit on branch `feature01`.

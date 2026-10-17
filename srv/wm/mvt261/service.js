@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const Mvt261Adapter = require('../../integration/s4hana/wm/Mvt261Adapter');
 const GoodsIssueAttemptStore = require('../goods-issue/GoodsIssueAttemptStore');
 const plantScope = require('../handling-unit/plantScope');
+const LOG = require('../../common/logger')('mvt261-service');
 
 const strip = (v) => String(v || '').replace(/^0+(?=.)/, '');
 
@@ -116,12 +117,20 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
         // WM-managed outcome: SAP created an outbound delivery, not a material document. The goods
         // issue is not yet posted, so the attempt is 'delivery_created' (carrying the delivery), not
         // 'posted' - the same final status GoodsIssueAttemptStore.recheck uses for this outcome.
-        await GoodsIssueAttemptStore.setStatus(refDoc, result.Pending ? 'delivery_created' : 'posted', {
+        const postStatus = result.Pending ? 'delivery_created' : 'posted';
+        const postFields = {
           MaterialDocument: result.MaterialDocument,
           MaterialDocYear: result.MaterialDocumentYear,
           DeliveryNumber: result.DeliveryNumber || '',
           LastError: result.Pending ? (result.Message || '') : ''
-        }).catch(() => {});
+        };
+        await GoodsIssueAttemptStore.setStatus(refDoc, postStatus, postFields).catch((err) => {
+          LOG.error(
+            `Critical reconciliation error: failed to persist attempt status '${postStatus}' for reference ${refDoc}:`,
+            err.message || err,
+            postFields
+          );
+        });
 
         return result;
       } catch (err) {
@@ -130,9 +139,17 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
         // resolve it, instead of dead-ending it as 'rejected'. A definite SAP rejection (e.g. 403/422)
         // stays 'rejected'. Either way the deterministic key still blocks a blind retry (409).
         const unknown = !err.status || err.status === 502 || err.status === 504;
-        await GoodsIssueAttemptStore.setStatus(refDoc, unknown ? 'unconfirmed' : 'rejected', {
+        const failStatus = unknown ? 'unconfirmed' : 'rejected';
+        const failFields = {
           LastError: err.message || 'Posting failed'
-        }).catch(() => {});
+        };
+        await GoodsIssueAttemptStore.setStatus(refDoc, failStatus, failFields).catch((statusErr) => {
+          LOG.error(
+            `Critical reconciliation error: failed to persist attempt status '${failStatus}' for reference ${refDoc}:`,
+            statusErr.message || statusErr,
+            failFields
+          );
+        });
 
         return req.error(err.status || 500, err.message || 'Goods issue posting failed');
       }
@@ -198,9 +215,17 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
 
       try {
         const result = await adapter.reverse({ materialDocument: doc, materialDocumentYear: year, materialDocumentItem: docItem });
-        await GoodsIssueAttemptStore.setStatus(refDoc, 'posted', {
+        const revStatus = 'posted';
+        const revFields = {
           MaterialDocument: result.MaterialDocument, MaterialDocYear: result.MaterialDocumentYear, LastError: ''
-        }).catch(() => {});
+        };
+        await GoodsIssueAttemptStore.setStatus(refDoc, revStatus, revFields).catch((err) => {
+          LOG.error(
+            `Critical reconciliation error: failed to persist attempt status '${revStatus}' for reference ${refDoc}:`,
+            err.message || err,
+            revFields
+          );
+        });
         return result;
       } catch (err) {
         const msg = String(err.message || '');
@@ -208,7 +233,15 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
         // Definite "already reversed" stays 'rejected'; an unknown outcome (timeout → 502, or no status)
         // is kept OPEN ('unconfirmed') for the recheck job rather than dead-ended.
         const unknown = !alreadyReversed && (!err.status || err.status === 502 || err.status === 504);
-        await GoodsIssueAttemptStore.setStatus(refDoc, unknown ? 'unconfirmed' : 'rejected', { LastError: msg || 'Reversal failed' }).catch(() => {});
+        const failStatus = unknown ? 'unconfirmed' : 'rejected';
+        const failFields = { LastError: msg || 'Reversal failed' };
+        await GoodsIssueAttemptStore.setStatus(refDoc, failStatus, failFields).catch((statusErr) => {
+          LOG.error(
+            `Critical reconciliation error: failed to persist attempt status '${failStatus}' for reference ${refDoc}:`,
+            statusErr.message || statusErr,
+            failFields
+          );
+        });
         if (alreadyReversed) {
           return req.error(422, `Material document ${doc}/${year} item ${docItem} is already reversed`);
         }
