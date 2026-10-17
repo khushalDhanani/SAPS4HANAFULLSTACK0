@@ -824,6 +824,71 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             expect(detailModel.getProperty('/hasTR')).toBe(false);
         });
 
+        it('forwards scanned storage unit / HU in createTOFromTR payload and preserves empty string when empty [mock only, not browser verification]', async () => {
+            detailModel.setProperty('/hasTR', true);
+            detailModel.setProperty('/tr', {
+                TRNumber: '1000801',
+                TRItem: '0001',
+                Material: '1000000204',
+                MaterialDescription: 'Chemical Solvent',
+                OpenQty: 5,
+                Unit: 'KG',
+                IsBatchManaged: false,
+                IsSerialManaged: false
+            });
+            detailModel.setProperty('/pickQty', 5);
+            detailModel.setProperty('/sourceStorageType', 'RM1');
+            detailModel.setProperty('/sourceStorageBin', '0-L0001-00');
+            detailModel.setProperty('/storageUnit', '100000987654');
+            detailCtrl._validateForm();
+
+            mockWarehouseScanToService.createTOFromTR.mockResolvedValueOnce({
+                TransferOrder: '1037294',
+                ConfirmationNumber: '1037294',
+                Status: '04',
+                IsConfirmed: true,
+                StorageUnit: '100000987654'
+            });
+
+            await detailCtrl.onProcessTO();
+
+            expect(mockWarehouseScanToService.createTOFromTR).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    tbnum: '1000801',
+                    storageUnit: '100000987654'
+                })
+            );
+
+            // Verify empty scan keeps empty string behavior
+            detailModel.setProperty('/hasTR', true);
+            detailModel.setProperty('/tr', {
+                TRNumber: '1000802',
+                TRItem: '0001',
+                Material: '1000000204',
+                OpenQty: 5,
+                Unit: 'KG'
+            });
+            detailModel.setProperty('/pickQty', 5);
+            detailModel.setProperty('/storageUnit', '');
+            detailCtrl._validateForm();
+
+            mockWarehouseScanToService.createTOFromTR.mockResolvedValueOnce({
+                TransferOrder: '1037295',
+                ConfirmationNumber: '1037295',
+                Status: '04',
+                IsConfirmed: true
+            });
+
+            await detailCtrl.onProcessTO();
+
+            expect(mockWarehouseScanToService.createTOFromTR).toHaveBeenLastCalledWith(
+                expect.objectContaining({
+                    tbnum: '1000802',
+                    storageUnit: ''
+                })
+            );
+        });
+
         it('fixed button: btnRetryMigo recovers failed goods movement to status 05 [mock only, not browser verification]', async () => {
             detailModel.setProperty('/result', {
                 TransferOrder: '1037290',
