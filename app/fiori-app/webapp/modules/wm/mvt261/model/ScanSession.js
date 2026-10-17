@@ -24,7 +24,9 @@ sap.ui.define([], function () {
 
         /** Loaded | Scanning | Covered | Blocked */
         state: function (oContext, aRows) {
-            if (!oContext || oContext.Blocked) { return "Blocked"; }
+            var bEligible = oContext && oContext.StockEligibility ? (oContext.StockEligibility.eligible !== undefined ? oContext.StockEligibility.eligible : oContext.StockEligibility.Eligible) : null;
+            var bBlocked = bEligible !== null ? !bEligible : (oContext ? oContext.Blocked : true);
+            if (!oContext || bBlocked) { return "Blocked"; }
             if (ScanSession.total(aRows) === round(oContext.OpenQuantity)) { return "Covered"; }
             return aRows.length ? "Scanning" : "Loaded";
         },
@@ -35,7 +37,10 @@ sap.ui.define([], function () {
          */
         precheck: function (oContext, aRows, sValue) {
             var sUnit = String(sValue || "").trim().replace(/^0+(?=\d)/, "");
-            if (!oContext || oContext.Blocked) { return { Reason: "itemBlocked", Value1: oContext ? oContext.BlockReason : "", Value2: "" }; }
+            var bEligible = oContext && oContext.StockEligibility ? (oContext.StockEligibility.eligible !== undefined ? oContext.StockEligibility.eligible : oContext.StockEligibility.Eligible) : null;
+            var bBlocked = bEligible !== null ? !bEligible : (oContext ? oContext.Blocked : true);
+            var sBlockReason = oContext ? ((oContext.StockEligibility && (oContext.StockEligibility.reason || oContext.StockEligibility.Reason)) || oContext.BlockReason || "") : "";
+            if (!oContext || bBlocked) { return { Reason: "itemBlocked", Value1: sBlockReason, Value2: "" }; }
             if (!/^\d{1,20}$/.test(sUnit)) { return { Reason: "invalidNumber", Value1: String(sValue || "").trim(), Value2: "" }; }
             if (aRows.some(function (r) { return r.Accepted && r.StorageUnit === sUnit; })) { return { Reason: "alreadyScanned", Value1: sUnit, Value2: "" }; }
             if (round(oContext.OpenQuantity) - ScanSession.total(aRows) <= 0) { return { Reason: "openCovered", Value1: sUnit, Value2: "" }; }

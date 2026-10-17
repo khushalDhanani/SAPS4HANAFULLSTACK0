@@ -653,6 +653,183 @@ async function verifyMovement311DestinationInSap(rfc, options = {}) {
   });
 }
 
+/**
+ * Authoritative single canonical Movement 261 stock-eligibility calculation.
+ * Unifies:
+ * - Open Quantity
+ * - Issuable Quantity
+ * - Supply Area Stock
+ * - Staged Quantity
+ * - Storage Unit Quantity
+ * - No-Unit Quantity
+ *
+ * Into one authoritative posting-eligibility result.
+ *
+ * @param {object} params
+ * @param {number} [params.openQuantity]
+ * @param {number} [params.issuableQuantity]
+ * @param {number} [params.supplyAreaStock]
+ * @param {number} [params.stagedQuantity]
+ * @param {boolean} [params.stagingRequired]
+ * @param {number} [params.stagingShortfall]
+ * @param {string} [params.stagingStorageType]
+ * @param {string} [params.stagingBin]
+ * @param {number} [params.storageUnitQuantity]
+ * @param {number} [params.noUnitQuantity]
+ * @param {string} [params.unit]
+ * @param {string} [params.storageLocation]
+ * @param {string} [params.supplyAreaStorageLocation]
+ * @param {string} [params.batch]
+ * @param {number} [params.requestQuantity]
+ * @param {Array<string>|string} [params.blockers]
+ * @param {string} [params.source] Default 'SAP'
+ * @returns {{
+ *   eligible: boolean,
+ *   issuableQuantity: number,
+ *   reason: string | null,
+ *   source: string,
+ *   openQuantity: number,
+ *   supplyAreaStock: number,
+ *   stagedQuantity: number,
+ *   storageUnitQuantity: number,
+ *   noUnitQuantity: number,
+ *   stagingRequired: boolean,
+ *   stagingShortfall: number,
+ *   partialCoverage: boolean,
+ *   unit: string
+ * }}
+ */
+function calculateMovement261StockEligibility(params = {}) {
+  const round = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
+
+  const rawOpen = params.openQuantity !== undefined ? params.openQuantity : params.OpenQuantity;
+  const rawIss = params.issuableQuantity !== undefined ? params.issuableQuantity : params.IssuableQuantity;
+  const rawSA = params.supplyAreaStock !== undefined ? params.supplyAreaStock : params.SupplyAreaStock;
+  const rawStaged = params.stagedQuantity !== undefined ? params.stagedQuantity : params.StagedQuantity;
+  const rawStagingReq = params.stagingRequired !== undefined ? params.stagingRequired : params.StagingRequired;
+  const rawStagingShort = params.stagingShortfall !== undefined ? params.stagingShortfall : params.StagingShortfall;
+  const rawType = params.stagingStorageType !== undefined ? params.stagingStorageType : params.StagingStorageType;
+  const rawBin = params.stagingBin !== undefined ? params.stagingBin : params.StagingBin;
+  const rawSU = params.storageUnitQuantity !== undefined ? params.storageUnitQuantity : params.StorageUnitQuantity;
+  const rawNoUnit = params.noUnitQuantity !== undefined ? params.noUnitQuantity : params.NoUnitQuantity;
+  const rawUnit = params.unit !== undefined ? params.unit : params.Unit;
+  const rawSLoc = params.storageLocation !== undefined ? params.storageLocation : params.StorageLocation;
+  const rawSASLoc = params.supplyAreaStorageLocation !== undefined ? params.supplyAreaStorageLocation : params.SupplyAreaStorageLocation;
+  const rawBatch = params.batch !== undefined ? params.batch : params.Batch;
+  const rawSource = params.source !== undefined ? params.source : params.Source;
+  const rawReqQty = params.requestQuantity !== undefined ? params.requestQuantity : params.RequestQuantity;
+  const rawBlk = params.blockers !== undefined ? params.blockers : params.Blockers;
+
+  const openQty = Math.max(0, round(rawOpen));
+  const rawIssuable = Math.max(0, round(rawIss));
+  const supplyAreaStock = Math.max(0, round(rawSA));
+  const stagedQuantity = Math.max(0, round(rawStaged));
+  const stagingRequired = Boolean(rawStagingReq);
+  const stagingStorageType = String(rawType || '').trim();
+  const stagingBin = String(rawBin || '').trim();
+  const storageUnitQuantity = Math.max(0, round(rawSU));
+  const noUnitQuantity = Math.max(0, round(rawNoUnit));
+  const unit = String(rawUnit || '').trim();
+  const storageLocation = String(rawSLoc || '').trim();
+  const supplyAreaStorageLocation = String(rawSASLoc || '').trim();
+  const batch = String(rawBatch || '').trim();
+  const source = String(rawSource || 'SAP');
+  const requestQuantity = rawReqQty !== undefined && rawReqQty !== null
+    ? round(rawReqQty)
+    : null;
+
+  // External / upstream blockers take precedence (e.g. order locked, item deleted, warehouse mismatch)
+  const rawBlockers = Array.isArray(rawBlk)
+    ? rawBlk
+    : rawBlk
+      ? [rawBlk]
+      : [];
+  const blockers = rawBlockers
+    .map((b) => (b ? String(b).trim() : ''))
+    .filter(Boolean);
+
+  // Determine effective postable quantity upper bound from the stock dimensions:
+  // 1. Cannot exceed open quantity
+  // 2. Cannot exceed ready/unrestricted stock in issue location/warehouse (rawIssuable)
+  // 3. When staging is required, cannot exceed staged stock in the interim bin
+  let effectiveIssuable = Math.min(openQty, rawIssuable);
+  if (stagingRequired) {
+    effectiveIssuable = Math.min(stagedQuantity, effectiveIssuable);
+  }
+  effectiveIssuable = round(effectiveIssuable);
+
+  // Staging shortfall calculation
+  const targetQty = requestQuantity !== null ? requestQuantity : openQty;
+  const hasStagingShortfall = stagingRequired && (
+    (rawStagingShort !== undefined && Number(rawStagingShort) > 0) ||
+    (targetQty > 0 && stagedQuantity < targetQty)
+  );
+  const stagingShortfall = hasStagingShortfall
+    ? round(Math.max(0, targetQty - stagedQuantity))
+    : 0;
+
+  let eligible = true;
+  let reason = null;
+
+  if (blockers.length > 0) {
+    eligible = false;
+    reason = blockers.join('; ');
+  } else if (openQty <= 0) {
+    eligible = false;
+    reason = 'No open quantity remaining';
+  } else if (requestQuantity !== null && requestQuantity <= 0) {
+    eligible = false;
+    reason = 'Quantity must be greater than zero';
+  } else if (requestQuantity !== null && requestQuantity > openQty) {
+    eligible = false;
+    reason = `Quantity ${requestQuantity} exceeds the open quantity ${openQty}${unit ? ' ' + unit : ''}`;
+  } else if (hasStagingShortfall) {
+    eligible = false;
+    reason = `available stock shortfall of ${stagingShortfall} ${unit} in interim storage bin ${stagingStorageType || 'interim'}/${stagingBin || 'bin'}`;
+  } else if (rawIssuable <= 0) {
+    eligible = false;
+    if (supplyAreaStock > 0) {
+      reason = `${supplyAreaStock} ${unit} in supply area ${supplyAreaStorageLocation}; issue location ${storageLocation || 'issue location'} is empty - transfer required`;
+    } else {
+      reason = `no unrestricted stock in ${storageLocation || 'the issue location'}${batch ? ` for batch ${batch}` : ''}`;
+    }
+  } else if (requestQuantity !== null && rawIssuable < requestQuantity) {
+    eligible = false;
+    reason = `issuable stock ${rawIssuable} ${unit} is less than ${requestQuantity} ${unit}`;
+  }
+
+  const partialCoverage = eligible && effectiveIssuable > 0 && effectiveIssuable < openQty;
+
+  return {
+    eligible,
+    Eligible: eligible,
+    issuableQuantity: effectiveIssuable,
+    IssuableQuantity: effectiveIssuable,
+    reason: eligible ? null : reason,
+    Reason: eligible ? null : reason,
+    source,
+    Source: source,
+    openQuantity: openQty,
+    OpenQuantity: openQty,
+    supplyAreaStock,
+    SupplyAreaStock: supplyAreaStock,
+    stagedQuantity,
+    StagedQuantity: stagedQuantity,
+    storageUnitQuantity,
+    StorageUnitQuantity: storageUnitQuantity,
+    noUnitQuantity,
+    NoUnitQuantity: noUnitQuantity,
+    stagingRequired,
+    StagingRequired: stagingRequired,
+    stagingShortfall,
+    StagingShortfall: stagingShortfall,
+    partialCoverage,
+    PartialCoverage: partialCoverage,
+    unit,
+    Unit: unit
+  };
+}
+
 module.exports = {
   MOVEMENT_CONFIG,
   SUPPORTED_MOVEMENT_TYPES,
@@ -662,5 +839,6 @@ module.exports = {
   validateMovement301Destination,
   validateMovement311Destination,
   verifyReceivingLocationInSap,
-  verifyMovement311DestinationInSap
+  verifyMovement311DestinationInSap,
+  calculateMovement261StockEligibility
 };

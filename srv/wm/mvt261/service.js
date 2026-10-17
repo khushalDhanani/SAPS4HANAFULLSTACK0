@@ -26,6 +26,7 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
     this.on('cycle', run((data, req) => adapter.cycle({ ...data, allowedPlants: scope(req) })));
     this.on('scanContext', run((data, req) => adapter.scanContext({ ...data, allowedPlants: scope(req) })));
     this.on('checkStorageUnit', run((data, req) => adapter.checkStorageUnit({ ...data, allowedPlants: scope(req) })));
+    this.on('revalidateStock', run((data, req) => adapter.revalidateStock({ ...data, allowedPlants: scope(req) })));
 
     this.on('postGoodsIssue', async (req) => {
       const data = req.data || {};
@@ -41,14 +42,29 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
         return req.error(400, 'Quantity must be greater than zero');
       }
 
-      // Read the current cycle once: the open quantity makes the idempotency key (so consecutive
-      // partial posts get distinct keys while a concurrent duplicate collides), and it carries the
-      // reservation's pinned batch for F9. The adapter re-reads it immediately before posting.
+      // Revalidate 261 stock immediately before SAP POST (fresh SAP stock/reservation validation).
+      // The open quantity makes the idempotency key, and it carries the reservation's pinned batch for F9.
+      // The adapter re-reads it immediately before posting.
       // allowedPlants enforces plant authorization (F10): an out-of-scope reservation is a 403 here.
       const allowedPlants = scope(req);
+      // Storage Unit Posting Semantics: Option A (SU is Physical & Inventory Validation)
+      // Scanned SUs validate drum existence, batch, and quant availability in revalidateStock.
+      // The SAP material document issues the validated reservation quantity and verified batch.
       let c;
       try {
-        c = await adapter.cycle({ reservation, item, allowedPlants });
+        if (typeof adapter.revalidateStock === 'function') {
+          const reval = await adapter.revalidateStock({
+            reservation,
+            item,
+            quantity,
+            batch,
+            storageUnits: data.storageUnits || data.units,
+            allowedPlants
+          });
+          c = reval.freshCycle || reval;
+        } else {
+          c = await adapter.cycle({ reservation, item, allowedPlants });
+        }
       } catch (err) {
         return req.error(err.status || 500, err.message || 'SAP S/4HANA request failed');
       }
@@ -110,6 +126,7 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
           item,
           quantity,
           batch: effBatch || undefined,
+          storageUnits: data.storageUnits || data.units,
           referenceDocument: refDoc,
           allowedPlants
         });

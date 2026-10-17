@@ -9,7 +9,8 @@ const {
   validateMovement301Destination,
   validateMovement311Destination,
   verifyReceivingLocationInSap,
-  verifyMovement311DestinationInSap
+  verifyMovement311DestinationInSap,
+  calculateMovement261StockEligibility
 } = require('../../../srv/common/movementConfig');
 
 describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP verification]', () => {
@@ -421,6 +422,177 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
         const res301Val = validateMovement301Destination('1120', '1130', 'CS01');
         expect(res301Val.isValid).toBe(true);
       });
+    });
+  });
+
+  describe('5. Canonical Movement 261 Stock-Eligibility Calculation', () => {
+    test('unifies open, issuable, supply area, staged, storage unit, and no-unit stock into authoritative result', () => {
+      const result = calculateMovement261StockEligibility({
+        openQuantity: 10,
+        issuableQuantity: 10,
+        supplyAreaStock: 0,
+        stagedQuantity: 10,
+        storageUnitQuantity: 10,
+        noUnitQuantity: 0,
+        unit: 'KG',
+        source: 'SAP'
+      });
+
+      expect(result).toMatchObject({
+        eligible: true,
+        Eligible: true,
+        issuableQuantity: 10,
+        IssuableQuantity: 10,
+        reason: null,
+        Reason: null,
+        source: 'SAP',
+        Source: 'SAP',
+        openQuantity: 10,
+        OpenQuantity: 10,
+        supplyAreaStock: 0,
+        SupplyAreaStock: 0,
+        stagedQuantity: 10,
+        StagedQuantity: 10,
+        storageUnitQuantity: 10,
+        StorageUnitQuantity: 10,
+        noUnitQuantity: 0,
+        NoUnitQuantity: 0,
+        partialCoverage: false,
+        PartialCoverage: false
+      });
+    });
+
+    test('correctly calculates partial coverage when issuable stock is less than open quantity', () => {
+      const result = calculateMovement261StockEligibility({
+        openQuantity: 20,
+        issuableQuantity: 8,
+        supplyAreaStock: 0,
+        stagedQuantity: 8,
+        storageUnitQuantity: 5,
+        noUnitQuantity: 3,
+        unit: 'KG'
+      });
+
+      expect(result.eligible).toBe(true);
+      expect(result.issuableQuantity).toBe(8);
+      expect(result.partialCoverage).toBe(true);
+      expect(result.storageUnitQuantity).toBe(5);
+      expect(result.noUnitQuantity).toBe(3);
+      expect(result.reason).toBeNull();
+    });
+
+    test('marks zero open quantity as ineligible with explicit reason', () => {
+      const result = calculateMovement261StockEligibility({
+        openQuantity: 0,
+        issuableQuantity: 10,
+        unit: 'KG'
+      });
+
+      expect(result.eligible).toBe(false);
+      expect(result.Eligible).toBe(false);
+      expect(result.reason).toBe('No open quantity remaining');
+      expect(result.issuableQuantity).toBe(0);
+    });
+
+    test('rejects when upstream/external blockers are present', () => {
+      const result = calculateMovement261StockEligibility({
+        openQuantity: 10,
+        issuableQuantity: 10,
+        blockers: ['Order status locked (REL DLV)', 'Item flagged for deletion']
+      });
+
+      expect(result.eligible).toBe(false);
+      expect(result.reason).toContain('Order status locked');
+      expect(result.reason).toContain('Item flagged for deletion');
+    });
+
+    test('rejects when requested quantity exceeds open quantity', () => {
+      const result = calculateMovement261StockEligibility({
+        openQuantity: 10,
+        issuableQuantity: 20,
+        requestQuantity: 15,
+        unit: 'KG'
+      });
+
+      expect(result.eligible).toBe(false);
+      expect(result.reason).toBe('Quantity 15 exceeds the open quantity 10 KG');
+    });
+
+    test('rejects when requested quantity is non-positive', () => {
+      const result = calculateMovement261StockEligibility({
+        openQuantity: 10,
+        issuableQuantity: 10,
+        requestQuantity: 0
+      });
+
+      expect(result.eligible).toBe(false);
+      expect(result.reason).toBe('Quantity must be greater than zero');
+    });
+
+    test('detects staging shortfall when staging is required and staged stock is insufficient', () => {
+      const result = calculateMovement261StockEligibility({
+        openQuantity: 10,
+        issuableQuantity: 10,
+        stagedQuantity: 4,
+        stagingRequired: true,
+        stagingStorageType: '100',
+        stagingBin: 'STAGE-01',
+        unit: 'KG'
+      });
+
+      expect(result.eligible).toBe(false);
+      expect(result.stagingShortfall).toBe(6);
+      expect(result.reason).toContain('shortfall of 6 KG in interim storage bin 100/STAGE-01');
+      expect(result.issuableQuantity).toBe(4);
+    });
+
+    test('identifies when issue location has no stock but supply area has stock, advising transfer', () => {
+      const result = calculateMovement261StockEligibility({
+        openQuantity: 10,
+        issuableQuantity: 0,
+        supplyAreaStock: 12,
+        unit: 'KG',
+        storageLocation: '101A',
+        supplyAreaStorageLocation: '101B'
+      });
+
+      expect(result.eligible).toBe(false);
+      expect(result.reason).toContain('12 KG in supply area 101B; issue location 101A is empty - transfer required');
+    });
+
+    test('identifies when no unrestricted stock exists at all', () => {
+      const result = calculateMovement261StockEligibility({
+        openQuantity: 10,
+        issuableQuantity: 0,
+        supplyAreaStock: 0,
+        unit: 'KG',
+        storageLocation: '101A',
+        batch: 'BATCH01'
+      });
+
+      expect(result.eligible).toBe(false);
+      expect(result.reason).toBe('no unrestricted stock in 101A for batch BATCH01');
+    });
+
+    test('accepts PascalCase inputs and produces dual-cased results', () => {
+      const result = calculateMovement261StockEligibility({
+        OpenQuantity: 15,
+        IssuableQuantity: 15,
+        SupplyAreaStock: 0,
+        StagedQuantity: 15,
+        StorageUnitQuantity: 10,
+        NoUnitQuantity: 5,
+        Unit: 'L',
+        Source: 'SAP'
+      });
+
+      expect(result.Eligible).toBe(true);
+      expect(result.eligible).toBe(true);
+      expect(result.IssuableQuantity).toBe(15);
+      expect(result.issuableQuantity).toBe(15);
+      expect(result.StorageUnitQuantity).toBe(10);
+      expect(result.NoUnitQuantity).toBe(5);
+      expect(result.Source).toBe('SAP');
     });
   });
 });

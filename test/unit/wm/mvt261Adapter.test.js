@@ -412,6 +412,45 @@ describe('Mvt261Adapter.postGoodsIssue / reverse', () => {
     expect(posts).toHaveLength(0);
   });
 
+  it('revalidates stock immediately before SAP POST and succeeds with fresh stock and reservation', async () => {
+    const a = adapter();
+    const reval = await a.revalidateStock(input);
+    expect(reval.eligible).toBe(true);
+    expect(reval.issuableQuantity).toBe(1);
+    expect(reval.source).toBe('SAP');
+    expect(reval.freshCycle).toBeDefined();
+  });
+
+  it('revalidates stock and rejects when stock in MARD was consumed between scan and POST', async () => {
+    const a = adapter({ MARD: [{ LGORT: 'HS01', LABST: '0.000' }] });
+    await expect(a.revalidateStock(input)).rejects.toMatchObject({
+      status: 422,
+      message: expect.stringContaining('no unrestricted stock in HS01')
+    });
+  });
+
+  it('revalidates stock and rejects when a scanned storage unit is no longer available in SAP LQUA', async () => {
+    const a = adapter({
+      T320: [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }],
+      LQUA: [{ LGNUM: 'W01', LGTYP: 'RM1', LGPLA: 'BIN-1', LGORT: 'HS01', MATNR: '000000008000001948', WERKS: '1120', CHARG: '', BESTQ: '', VERME: '1.000', MEINS: 'NOS', LENUM: '100001', SKZST: '', SKZUA: '', SPERR: '' }]
+    });
+    await expect(a.revalidateStock({ ...input, storageUnits: ['100002'] })).rejects.toMatchObject({
+      status: 422,
+      message: expect.stringContaining('scanned storage unit 100002 has no stock in warehouse W01 (stock changed since scanning)')
+    });
+  });
+
+  it('revalidates stock and rejects when a scanned storage unit became blocked in SAP LQUA', async () => {
+    const a = adapter({
+      T320: [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }],
+      LQUA: [{ LGNUM: 'W01', LGTYP: 'RM1', LGPLA: 'BIN-1', LGORT: 'HS01', MATNR: '000000008000001948', WERKS: '1120', CHARG: '', BESTQ: '', VERME: '1.000', MEINS: 'NOS', LENUM: '100001', SKZST: 'X', SKZUA: '', SPERR: '' }]
+    });
+    await expect(a.revalidateStock({ ...input, storageUnits: ['100001'] })).rejects.toMatchObject({
+      status: 422,
+      message: expect.stringContaining('scanned storage unit 100001 is blocked in SAP')
+    });
+  });
+
   it('reverses the exact document item with the API CancelItem function import', async () => {
     const a = adapter(undefined, { status: 200, headers: {}, data: { d: { CancelItem: { MaterialDocument: '4900050047', MaterialDocumentYear: '2026' } } } });
     await expect(a.reverse({ materialDocument: '4900050046', materialDocumentYear: '2026', materialDocumentItem: '1' })).resolves.toMatchObject({ MaterialDocument: '4900050047' });
@@ -914,6 +953,70 @@ describe('Mvt261 unified stock availability calculation across Scan, List, and P
     await expect(adapter.postGoodsIssue({ reservation: '555001', item: '1', quantity: 100, batch: 'BREQ' })).rejects.toMatchObject({
       status: 422,
       message: expect.stringContaining('no unrestricted stock in CS01 for batch BREQ')
+    });
+  });
+
+  describe('Option A Storage Unit posting semantics', () => {
+    it('Option A: scanned storage units validate batch/quant status; SAP POST receives reservation quantity and omits LENUM', async () => {
+      let postedPayload = null;
+      const t = {
+        RESB: [{ RSNUM: '0000555002', RSPOS: '0001', AUFNR: '004000033120', MATNR: '000000008000001948', WERKS: '1120', LGORT: 'CS01', CHARG: 'B1', BDTER: '20261005', BDMNG: '200.000', ENMNG: '0.000', MEINS: 'KG', XLOEK: '', KZEAR: '', XWAOK: 'X' }],
+        AUFK: [{ AUFNR: '004000033120', AUART: 'ZBDN', LOEKZ: '' }],
+        JEST: [{ OBJNR: 'OR004000033120', STAT: 'I0002' }],
+        T320: [{ WERKS: '1120', LGORT: 'CS01', LGNUM: 'W01' }],
+        LQUA: [{
+          LGNUM: 'W01', LGTYP: 'ST1', LGPLA: 'BIN-1', MATNR: '000000008000001948', WERKS: '1120', LGORT: 'CS01', CHARG: 'B1',
+          BESTQ: '', VERME: '200.000', EINME: '0.000', AUSME: '0.000', MEINS: 'KG', LENUM: '00000000001000000001',
+          SKZST: '', SKZUA: '', SPERR: ''
+        }]
+      };
+      const adapter = new Mvt261Adapter({
+        rfc: { readTable: async (table) => t[table] || [] },
+        client: {
+          get: async () => ({ data: { d: { results: [{ BaseUnit: 'KG' }] } } }),
+          post: async (path, options) => {
+            postedPayload = options.data;
+            return {
+              status: 201,
+              headers: {},
+              data: { d: { MaterialDocument: '4900050047', MaterialDocumentYear: '2026' } }
+            };
+          }
+        }
+      });
+
+      const res = await adapter.postGoodsIssue({
+        reservation: '555002',
+        item: '1',
+        quantity: 200,
+        batch: 'B1',
+        storageUnits: ['1000000001']
+      });
+
+      expect(res).toMatchObject({
+        MaterialDocument: '4900050047',
+        MaterialDocumentYear: '2026',
+        StorageUnitPostingSemantics: 'OPTION_A_VALIDATION'
+      });
+
+      // Verify the posted SAP payload
+      expect(postedPayload).toBeDefined();
+      expect(postedPayload.GoodsMovementCode).toBe('03');
+      const itemPayload = postedPayload.to_MaterialDocumentItem.results[0];
+      expect(itemPayload).toMatchObject({
+        Material: '8000001948',
+        GoodsMovementType: '261',
+        EntryUnit: 'KG',
+        QuantityInEntryUnit: '200',
+        Plant: '1120',
+        StorageLocation: 'CS01',
+        Batch: 'B1',
+        Reservation: '555002',
+        ReservationItem: '0001'
+      });
+      // Option A assertion: LENUM / StorageUnit must NOT be present on the MM-IM item payload
+      expect(itemPayload.LENUM).toBeUndefined();
+      expect(itemPayload.StorageUnit).toBeUndefined();
     });
   });
 });

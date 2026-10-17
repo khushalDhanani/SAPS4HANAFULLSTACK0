@@ -142,4 +142,67 @@ describe('Scan261.controller post flow', () => {
     expect(MessageBox.error).not.toHaveBeenCalled();
     expect(ODataClient.get).not.toHaveBeenCalled();
   });
+
+  it('includes storageUnits in postGoodsIssue payload when accepted storage units are scanned', async () => {
+    model.setProperty('/rows', [{ Accepted: true, StorageUnit: '1000000001', Batch: 'B1', Quantity: 200 }]);
+    ODataClient.post.mockResolvedValue({ MaterialDocument: '4900050046', MaterialDocumentYear: '2026' });
+    ctrl.onPost();
+    confirmOk();
+    expect(ODataClient.post).toHaveBeenCalledWith(BASE + '/postGoodsIssue', {
+      reservation: '512851',
+      item: '3',
+      quantity: 200,
+      batch: 'B1',
+      storageUnits: ['1000000001']
+    });
+  });
+
+  it('revalidateStock returns valid: true when fresh SAP context is open and units are available', async () => {
+    model.setProperty('/rows', [{ Accepted: true, StorageUnit: '1000000001', Quantity: 200 }]);
+    ODataClient.get.mockResolvedValue({
+      Blocked: false,
+      OpenQuantity: 200,
+      Units: [{ StorageUnit: '1000000001', Status: 'Available' }]
+    });
+    const result = await ctrl.revalidateStock();
+    expect(result.valid).toBe(true);
+    expect(result.ctx).toBeDefined();
+  });
+
+  it('revalidateStock returns valid: false when scanned unit is no longer available in SAP', async () => {
+    model.setProperty('/rows', [{ Accepted: true, StorageUnit: '1000000001', Quantity: 200 }]);
+    ODataClient.get.mockResolvedValue({
+      Blocked: false,
+      OpenQuantity: 200,
+      Units: [{ StorageUnit: '1000000001', Status: 'Blocked' }]
+    });
+    const result = await ctrl.revalidateStock();
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('Storage unit 1000000001 is no longer available in SAP');
+  });
+
+  it('Option A semantics: operator confirms posting verified reservation quantity with scanned drum validation', async () => {
+    model.setProperty('/rows', [
+      { Accepted: true, StorageUnit: '1000000001', Batch: 'B1', Quantity: 100 },
+      { Accepted: true, StorageUnit: '1000000002', Batch: 'B1', Quantity: 100 }
+    ]);
+    ODataClient.post.mockResolvedValue({
+      MaterialDocument: '4900050046',
+      MaterialDocumentYear: '2026',
+      StorageUnitPostingSemantics: 'OPTION_A_VALIDATION'
+    });
+    ctrl.onPost();
+    expect(MessageBox.confirm).toHaveBeenCalledWith(
+      'scan261PostConfirm',
+      expect.objectContaining({ title: 'scan261PostTitle' })
+    );
+    confirmOk();
+    expect(ODataClient.post).toHaveBeenCalledWith(BASE + '/postGoodsIssue', {
+      reservation: '512851',
+      item: '3',
+      quantity: 200,
+      batch: 'B1',
+      storageUnits: ['1000000001', '1000000002']
+    });
+  });
 });

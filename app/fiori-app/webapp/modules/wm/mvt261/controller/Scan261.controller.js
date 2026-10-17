@@ -184,7 +184,9 @@ sap.ui.define([
             var oCtx = oModel.getProperty("/ctx");
             var aRows = oModel.getProperty("/rows") || [];
             var nTotal = ScanSession.total(aRows);
-            if (!oCtx || oCtx.Blocked || nTotal <= 0 || oModel.getProperty("/busy")) {
+            var bEligible = oCtx && oCtx.StockEligibility ? (oCtx.StockEligibility.eligible !== undefined ? oCtx.StockEligibility.eligible : oCtx.StockEligibility.Eligible) : null;
+            var bBlocked = bEligible !== null ? !bEligible : (oCtx ? oCtx.Blocked : true);
+            if (!oCtx || bBlocked || nTotal <= 0 || oModel.getProperty("/busy")) {
                 return;
             }
 
@@ -219,13 +221,24 @@ sap.ui.define([
         _doPost: function (nTotal, sBatch) {
             var oModel = this.getModel("scan261View");
             var oCtx = oModel.getProperty("/ctx");
+            var aRows = oModel.getProperty("/rows") || [];
+            var aStorageUnits = [];
+            for (var i = 0; i < aRows.length; i++) {
+                if (aRows[i].Accepted && aRows[i].StorageUnit) {
+                    aStorageUnits.push(aRows[i].StorageUnit);
+                }
+            }
             oModel.setProperty("/busy", true);
-            ODataClient.post(BASE_PATH + "/postGoodsIssue", {
+            var oPayload = {
                 reservation: String(oCtx.Reservation),
                 item: String(oCtx.ReservationItem),
                 quantity: nTotal,
                 batch: sBatch || undefined
-            }).then(function (oRes) {
+            };
+            if (aStorageUnits.length > 0) {
+                oPayload.storageUnits = aStorageUnits;
+            }
+            ODataClient.post(BASE_PATH + "/postGoodsIssue", oPayload).then(function (oRes) {
                 if (oRes && (oRes.Pending || (!oRes.MaterialDocument && oRes.DeliveryNumber))) {
                     // WM-managed location: SAP created an outbound delivery; PGI still has to be posted.
                     MessageBox.warning(oRes.Message || this.getText("scan261PostDelivery", [oRes.DeliveryNumber]), { onClose: function () { this._load(); }.bind(this) });
@@ -238,6 +251,46 @@ sap.ui.define([
                 this._handlePostError(oError);
             }.bind(this)).then(function () {
                 oModel.setProperty("/busy", false);
+            });
+        },
+
+        /**
+         * Revalidates 261 stock and reservation against SAP before posting.
+         * Returns a Promise resolving to { valid: boolean, reason: string, ctx: object }.
+         */
+        revalidateStock: function () {
+            var oModel = this.getModel("scan261View");
+            var oCtx = oModel.getProperty("/ctx");
+            var aRows = oModel.getProperty("/rows") || [];
+            var nTotal = ScanSession.total(aRows);
+            if (!oCtx || !this._args) {
+                return Promise.resolve({ valid: false, reason: this.getText("mvt261LoadError") });
+            }
+            var sUrl = BASE_PATH + "/scanContext(reservation=" + q(this._args.reservation) + ",item=" + q(this._args.item) + ")";
+            return ODataClient.get(sUrl).then(function (oFreshCtx) {
+                oModel.setProperty("/ctx", oFreshCtx);
+                var bEligible = oFreshCtx.StockEligibility ? (oFreshCtx.StockEligibility.eligible !== undefined ? oFreshCtx.StockEligibility.eligible : oFreshCtx.StockEligibility.Eligible) : null;
+                var bBlocked = bEligible !== null ? !bEligible : oFreshCtx.Blocked;
+                if (bBlocked) {
+                    var sReason = (oFreshCtx.StockEligibility && (oFreshCtx.StockEligibility.reason || oFreshCtx.StockEligibility.Reason)) || oFreshCtx.BlockReason || "Item is blocked in SAP";
+                    return { valid: false, reason: sReason, ctx: oFreshCtx };
+                }
+                if (nTotal > oFreshCtx.OpenQuantity) {
+                    return { valid: false, reason: "Quantity exceeds open quantity in SAP", ctx: oFreshCtx };
+                }
+                var aFreshUnits = (oFreshCtx && oFreshCtx.Units) || [];
+                for (var i = 0; i < aRows.length; i++) {
+                    if (aRows[i].Accepted && aRows[i].StorageUnit) {
+                        var sSu = aRows[i].StorageUnit;
+                        var oMatched = aFreshUnits.find(function (u) { return u.StorageUnit === sSu; });
+                        if (!oMatched || oMatched.Status !== "Available") {
+                            return { valid: false, reason: "Storage unit " + sSu + " is no longer available in SAP", ctx: oFreshCtx };
+                        }
+                    }
+                }
+                return { valid: true, ctx: oFreshCtx };
+            }).catch(function (err) {
+                return { valid: false, reason: (err && err.message) || "Failed to revalidate SAP stock", error: err };
             });
         },
 

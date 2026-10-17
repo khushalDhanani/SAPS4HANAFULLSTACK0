@@ -56,6 +56,20 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         PartialCoverage   : Boolean;
         ReadyStorageUnits : Integer;
         ReadyQuantity     : Decimal(15, 3);
+        StockEligibility  : StockEligibility;
+    };
+
+    type StockEligibility {
+        Eligible            : Boolean;
+        IssuableQuantity    : Decimal(13, 3);
+        Reason              : String(255);
+        Source              : String(10);
+        OpenQuantity        : Decimal(13, 3);
+        SupplyAreaStock     : Decimal(13, 3);
+        StagedQuantity      : Decimal(13, 3);
+        StorageUnitQuantity : Decimal(13, 3);
+        NoUnitQuantity      : Decimal(15, 3);
+        PartialCoverage     : Boolean;
     };
 
     // SapOpenCount = items SAP holds as open (not deleted, not final-issued); TotalCount = items returned.
@@ -131,6 +145,9 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         StagingBin           : String(10);
         StagedQuantity       : Decimal(13, 3);
         StagingShortfall     : Decimal(13, 3);
+        StorageUnitQuantity  : Decimal(13, 3);
+        NoUnitQuantity       : Decimal(15, 3);
+        StockEligibility     : StockEligibility;
         Steps                : array of CycleStep;
         Stock                : array of CycleStock;
         Quants               : array of CycleQuant;
@@ -157,7 +174,8 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         IssuableQuantity : Decimal(13, 3); PartialCoverage : Boolean; Backflush : Boolean;
         RequiredQuantity : Decimal(13, 3); WithdrawnQuantity : Decimal(13, 3); OpenQuantity : Decimal(13, 3); Unit : String(3);
         Blocked : Boolean; BlockReason : String(255); QuantCount : Integer; StorageUnitQuantCount : Integer;
-        NoUnitQuantCount : Integer; NoUnitQuantity : Decimal(15, 3); Units : array of ScanUnit;
+        NoUnitQuantCount : Integer; NoUnitQuantity : Decimal(15, 3); StorageUnitQuantity : Decimal(13, 3);
+        StagedQuantity : Decimal(13, 3); StockEligibility : StockEligibility; Units : array of ScanUnit;
     };
     // Warnings: storageLocationDiffers | notInOrderBin
     type ScanRow {
@@ -191,22 +209,37 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
     ) returns Mvt261Result;
 
     type MaterialDocumentResult {
-        MaterialDocument     : String(10);
-        MaterialDocumentYear : String(4);
-        DeliveryNumber       : String(10);
-        Pending              : Boolean;
-        Message              : String;
-        SapMessage           : String;
+        MaterialDocument            : String(10);
+        MaterialDocumentYear        : String(4);
+        DeliveryNumber              : String(10);
+        Pending                     : Boolean;
+        Message                     : String;
+        SapMessage                  : String;
+        StorageUnitPostingSemantics : String(30);
     };
+
+    // Revalidate 261 stock immediately before SAP POST (fresh SAP stock/reservation validation).
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function revalidateStock(
+        reservation  : String(10),
+        item         : String(4),
+        quantity     : Decimal(13, 3),
+        batch        : String(10),
+        storageUnits : array of String(20)
+    ) returns StockEligibility;
 
     // Stage 2: post goods issue 261 against reservation item with idempotency guard.
     // Write action: the read-only Viewer role must not post goods issues (F4).
+    // Storage Unit Posting Semantics: Option A (SU is physical & inventory validation).
+    // Scanned SUs validate drum existence, batch, and quant availability; the SAP
+    // material document envelope issues the validated reservation quantity and batch.
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action postGoodsIssue(
-        reservation : String(10),
-        item        : String(4),
-        quantity    : Decimal(13, 3),
-        batch       : String(10)
+        reservation  : String(10),
+        item         : String(4),
+        quantity     : Decimal(13, 3),
+        batch        : String(10),
+        storageUnits : array of String(20)
     ) returns MaterialDocumentResult;
 
     type ReversalResult {

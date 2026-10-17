@@ -8,6 +8,7 @@ const s4Config = require('../s4Config');
 const { parseSapNumber } = require('../sapFacts');
 const { buildBaseItem, buildHeaderEnvelope } = require('./goods-issue/s4common');
 const GoodsIssuePostingClient = require('./goods-issue/GoodsIssuePostingClient');
+const { calculateMovement261StockEligibility } = require('../../../common/movementConfig');
 
 /**
  * Read-only finder for the FIRST goods movement of movement type 261 (GET only, no ABAP change).
@@ -282,47 +283,79 @@ class Mvt261Adapter {
         const issuable = this._issuable(
           { warehouse, storageLocation: i.StorageLocation, supplyAreaStorageLocation: supplySloc, batch: f ? f.CHARG : '', openQty: i.OpenQuantity, unit: i.Unit },
           quants, locationStock);
+        const suQuants = quants.filter((q) => q.LENUM);
+        const noUnitQuants = quants.filter((q) => !q.LENUM);
+        const storageUnitQuantity = round(suQuants.reduce((s, q) => s + parseSapNumber(q.VERME), 0));
+        const noUnitQuantity = round(noUnitQuants.reduce((s, q) => s + parseSapNumber(q.VERME), 0));
+
         // Interim staging (WM-PP), suppressed on a warehouse mismatch exactly as the cycle does.
-        let stagingShort = '';
-        if (f && f.LGTYP) {
-          const bin = f.LGPLA || (f.AUFNR ? strip(f.AUFNR).padStart(10, '0') : '');
-          const whMismatch = Boolean(f.LGNUM) && (warehouse ? f.LGNUM !== warehouse : true);
+        let stagingStock = 0;
+        let stagingShortfall = 0;
+        const stagingRequired = Boolean(f && f.LGTYP);
+        const bin = f && f.LGTYP ? (f.LGPLA || (f.AUFNR ? strip(f.AUFNR).padStart(10, '0') : '')) : '';
+        if (stagingRequired) {
           const s = this._stagingCore({ storageType: f.LGTYP, bin, warehouse: warehouse || f.LGNUM || '', batch: f.CHARG, openQty: i.OpenQuantity, unit: i.Unit }, quants);
-          if (s.shortfall > 0 && !whMismatch) stagingShort = s.reason;
+          stagingStock = s.stagedStock;
+          stagingShortfall = s.shortfall;
         }
         // Reuse blockers() for the order / reservation reasons (released, locked, movement, warehouse mismatch).
         const resbLike = { XLOEK: '', KZEAR: '', XWAOK: i.MovementAllowed ? 'X' : '', LGNUM: f ? f.LGNUM : '', RGEKZ: f ? f.RGEKZ : '' };
         const { resvBlockers, orderBlockers } = blockers(resbLike, i.ProductionOrder ? {} : undefined, st, warehouse);
         const allBlockers = [...resvBlockers, ...orderBlockers];
-        let blockReason = '';
-        if (i.OpenQuantity <= 0) blockReason = 'No open quantity remaining';
-        else if (allBlockers.length) blockReason = allBlockers.join('; ');
-        else if (stagingShort) blockReason = stagingShort;
-        else if (issuable.blocked) blockReason = issuable.reason;
+
+        const eligibility = calculateMovement261StockEligibility({
+          openQuantity: i.OpenQuantity,
+          issuableQuantity: issuable.issuableQty,
+          supplyAreaStock: issuable.supplyAreaStock,
+          stagedQuantity: stagingStock,
+          stagingRequired,
+          stagingShortfall,
+          stagingStorageType: f ? f.LGTYP : '',
+          stagingBin: bin,
+          storageUnitQuantity,
+          noUnitQuantity,
+          unit: i.Unit,
+          storageLocation: i.StorageLocation,
+          supplyAreaStorageLocation: supplySloc,
+          batch: f ? f.CHARG : '',
+          blockers: allBlockers,
+          source: 'SAP'
+        });
+
         i.OrderStatus = st.join(' ');
         i.Warehouse = warehouse;
         i.Backflush = isBackflush(f ? f.RGEKZ : '');
         i.ReadyStorageUnits = issuable.issuableUnits.length;
         i.ReadyQuantity = round(issuable.issuableQty);
-        i.ScanPossible = !blockReason;
-        i.Blocked = !i.ScanPossible;
-        i.BlockReason = blockReason;
-        i.PartialCoverage = !blockReason && issuable.partial;
+        i.StockEligibility = eligibility;
+        i.ScanPossible = eligibility.eligible;
+        i.Blocked = !eligibility.eligible;
+        i.BlockReason = eligibility.eligible ? '' : (eligibility.reason || '');
+        i.PartialCoverage = eligibility.partialCoverage;
       });
     } catch (e) {
       if (input.scanPossibleOnly) throw e;
       LOG.warn(`Order statuses / stock not read: ${e.message}`);
-      Items.forEach((i) => Object.assign(i, {
-        OrderStatus: '',
-        Warehouse: '',
-        Backflush: false,
-        ReadyStorageUnits: 0,
-        ReadyQuantity: 0,
-        ScanPossible: false,
-        Blocked: true,
-        BlockReason: 'Status/stock check failed',
-        PartialCoverage: false
-      }));
+      Items.forEach((i) => {
+        const fallbackElig = calculateMovement261StockEligibility({
+          openQuantity: i.OpenQuantity,
+          issuableQuantity: 0,
+          blockers: ['Status/stock check failed'],
+          source: 'SAP'
+        });
+        Object.assign(i, {
+          OrderStatus: '',
+          Warehouse: '',
+          Backflush: false,
+          ReadyStorageUnits: 0,
+          ReadyQuantity: 0,
+          ScanPossible: false,
+          Blocked: true,
+          BlockReason: 'Status/stock check failed',
+          PartialCoverage: false,
+          StockEligibility: fallbackElig
+        });
+      });
     }
     if (input.scanPossibleOnly) {
       const scannable = Items.filter((i) => i.ScanPossible);
@@ -438,6 +471,31 @@ class Mvt261Adapter {
     const openTr = TransferRequirements.filter((t) => !t.Completed);
     const openTo = TransferOrders.filter((t) => !t.Confirmed);
 
+    const suQuants = lqua.filter((q) => q.LENUM);
+    const noUnitQuants = lqua.filter((q) => !q.LENUM);
+    const storageUnitQuantity = round(suQuants.reduce((s, q) => s + parseSapNumber(q.VERME), 0));
+    const noUnitQuantity = round(noUnitQuants.reduce((s, q) => s + parseSapNumber(q.VERME), 0));
+
+    // Authoritative unified stock eligibility calculation
+    const stockEligibility = calculateMovement261StockEligibility({
+      openQuantity: open,
+      issuableQuantity: issuable.issuableQty,
+      supplyAreaStock: issuable.supplyAreaStock,
+      stagedQuantity: stagedStock,
+      stagingRequired,
+      stagingShortfall: stagingShortfall ? staging.shortfall : 0,
+      stagingStorageType: resb.LGTYP || '',
+      stagingBin,
+      storageUnitQuantity,
+      noUnitQuantity,
+      unit: resb.MEINS,
+      storageLocation: resb.LGORT,
+      supplyAreaStorageLocation,
+      batch: resb.CHARG,
+      blockers: blockedBefore,
+      source: 'SAP'
+    });
+
     let wmStagingStatus = 'done';
     let wmStagingReason = '';
     if (stagingRequired) {
@@ -484,13 +542,16 @@ class Mvt261Adapter {
       Warehouse: configuredWarehouse,
       ReservationWarehouse: resb.LGNUM || '',
       IssuableQuantity: issuable.issuableQty,
-      SupplyAreaStock: issuable.supplyAreaStock,
-      PartialCoverage: issuable.partial && giBlockers.length === 0,
+      SupplyAreaStock: stockEligibility.supplyAreaStock,
+      PartialCoverage: stockEligibility.partialCoverage && giBlockers.length === 0,
       StagingRequired: stagingRequired,
       StagingStorageType: resb.LGTYP || '',
       StagingBin: stagingBin || '',
-      StagedQuantity: round(stagedStock),
+      StagedQuantity: stockEligibility.stagedQuantity,
       StagingShortfall: stagingShortfall ? staging.shortfall : 0,
+      StorageUnitQuantity: stockEligibility.storageUnitQuantity,
+      NoUnitQuantity: stockEligibility.noUnitQuantity,
+      StockEligibility: stockEligibility,
       Steps,
       Stock: stock,
       Quants: lqua.map((q) => ({ Warehouse: q.LGNUM, StorageType: q.LGTYP, StorageBin: q.LGPLA, StorageLocation: q.LGORT, Batch: q.CHARG, AvailableQuantity: parseSapNumber(q.VERME), StorageUnit: strip(q.LENUM) })),
@@ -725,6 +786,8 @@ class Mvt261Adapter {
       };
     });
     const noUnit = here.filter((q) => !q.LENUM);
+    const noUnitQuantity = Math.round(noUnit.reduce((t, q) => t + parseSapNumber(q.VERME), 0) * 1000) / 1000;
+    const storageUnitQuantity = c.StockEligibility ? c.StockEligibility.storageUnitQuantity : round(quants.filter((q) => q.LENUM).reduce((s, q) => s + parseSapNumber(q.VERME), 0));
     // SupplyAreaStock (stock stranded in the supply area, non-WM) and the Blocked decision both come from
     // cycle()/_issuable, so the scan page, the open list and the posting gate agree. Nothing recomputed here.
     return {
@@ -736,7 +799,10 @@ class Mvt261Adapter {
       SupplyArea: c.SupplyArea || '', SupplyAreaStorageLocation: c.SupplyAreaStorageLocation || '', SupplyAreaStock: c.SupplyAreaStock, OrderReleased: released,
       Blocked: gi.Status !== 'open', BlockReason: gi.Status === 'open' ? '' : (gi.Reason || 'nothing left to issue'),
       QuantCount: quants.length, StorageUnitQuantCount: quants.filter((q) => q.LENUM).length,
-      NoUnitQuantCount: noUnit.length, NoUnitQuantity: Math.round(noUnit.reduce((t, q) => t + parseSapNumber(q.VERME), 0) * 1000) / 1000,
+      NoUnitQuantCount: noUnit.length, NoUnitQuantity: noUnitQuantity,
+      StorageUnitQuantity: storageUnitQuantity,
+      StagedQuantity: c.StagedQuantity,
+      StockEligibility: c.StockEligibility,
       Units
     };
   }
@@ -817,14 +883,24 @@ class Mvt261Adapter {
    * ponytail: no idempotency key and no retry here - one call is one posting. Add an attempt store
    * (as GoodsIssueAttemptStore does for 201) before this is wired to a button.
    */
-  async postGoodsIssue(input = {}) {
+  /**
+   * Revalidates 261 stock and reservation immediately before SAP POST.
+   * Protects against stock or reservation changes occurring between scan and posting.
+   * Performs fresh live SAP cycle reading RESB, AUFK/JEST, LQUA, MARD, MCHB.
+   * Re-checks goods issue readiness, open quantity, batch, staging shortfall,
+   * issuable stock, canonical stock eligibility, and scanned storage units if supplied.
+   *
+   * @param {Object} input { reservation, item, quantity, batch, storageUnits, allowedPlants }
+   * @returns {Promise<Object>} { eligible, issuableQuantity, reason, source, ... freshCycle }
+   */
+  async revalidateStock(input = {}) {
     const quantity = Number(input.quantity);
     const batch = clean(input.batch, 'Batch', /^[A-Z0-9]{1,10}$/);
     if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
 
     const c = await this.cycle(input);
-    const gi = c.Steps.find((st) => st.Step === 'GoodsIssue');
-    if (gi.Status !== 'open') throw httpError(422, `Goods issue not possible: ${gi.Reason || 'nothing left to issue'}`);
+    const gi = c.Steps && c.Steps.find((st) => st.Step === 'GoodsIssue');
+    if (gi && gi.Status !== 'open') throw httpError(422, `Goods issue not possible: ${gi.Reason || 'nothing left to issue'}`);
     if (quantity > c.OpenQuantity) throw httpError(422, `Quantity ${quantity} exceeds the open quantity ${c.OpenQuantity} ${c.Unit}`);
     if (!c.StorageLocation) throw httpError(422, 'Goods issue not possible: the reservation item has no storage location');
     if (c.ReservationWarehouse && c.Warehouse && c.ReservationWarehouse !== c.Warehouse) {
@@ -834,21 +910,122 @@ class Mvt261Adapter {
       throw httpError(422, `Goods issue not possible: transmitted warehouse number is ${c.ReservationWarehouse}; storage location is not warehouse-managed`);
     }
     const effBatch = batch || c.Batch || '';
-    if (c.StagingRequired) {
+    let stagingShortfall = 0;
+    let stagingReason = null;
+    if (c.StagingRequired && c._raw) {
       const s = this._stagingCore(
         { storageType: c.StagingStorageType, bin: c.StagingBin, warehouse: c.Warehouse || c.ReservationWarehouse || '', batch: effBatch, openQty: quantity, unit: c.Unit },
-        c._raw.quants);
-      if (s.shortfall > 0) throw httpError(422, `Goods issue not possible: ${s.reason}${effBatch ? ` for batch ${effBatch}` : ''}`);
+        c._raw.quants || []);
+      if (s.shortfall > 0) {
+        stagingShortfall = s.shortfall;
+        stagingReason = `${s.reason}${effBatch ? ` for batch ${effBatch}` : ''}`;
+        throw httpError(422, `Goods issue not possible: ${stagingReason}`);
+      }
     }
-    const batchStock = c.Stock.filter((st) => st.Batch);
-    if (batchStock.length && !effBatch) throw httpError(422, 'Goods issue not possible: the material has batch stock, a batch is required');
+    const batchStock = c.Stock && c.Stock.filter((st) => st.Batch);
+    if (batchStock && batchStock.length && !effBatch) throw httpError(422, 'Goods issue not possible: the material has batch stock, a batch is required');
     // Same issuable-stock rule as the scan page and the open list (warehouse-wide for WM, issue location for non-WM).
-    const gate = this._issuable(
-      { warehouse: c.Warehouse, storageLocation: c.StorageLocation, supplyAreaStorageLocation: c.SupplyAreaStorageLocation, batch: effBatch, openQty: c.OpenQuantity, unit: c.Unit },
-      c._raw.quants, c._raw.stock);
-    if (gate.issuableQty < quantity) {
-      throw httpError(422, `Goods issue not possible: ${gate.reason || `issuable stock ${gate.issuableQty} ${c.Unit} is less than ${quantity} ${c.Unit}`}`);
+    const hasRaw = Boolean(c._raw);
+    const gate = hasRaw
+      ? this._issuable(
+          { warehouse: c.Warehouse, storageLocation: c.StorageLocation, supplyAreaStorageLocation: c.SupplyAreaStorageLocation, batch: effBatch, openQty: c.OpenQuantity, unit: c.Unit },
+          c._raw.quants || [], c._raw.stock || [])
+      : { issuableQty: c.IssuableQuantity !== undefined ? c.IssuableQuantity : (Number(c.OpenQuantity) || 0), supplyAreaStock: c.SupplyAreaStock || 0 };
+
+    // Canonical single stock-eligibility check
+    const postEligibility = c.StockEligibility || calculateMovement261StockEligibility({
+      openQuantity: c.OpenQuantity,
+      issuableQuantity: gate.issuableQty,
+      supplyAreaStock: gate.supplyAreaStock,
+      stagedQuantity: c.StagedQuantity !== undefined ? c.StagedQuantity : c.OpenQuantity,
+      stagingRequired: Boolean(c.StagingRequired),
+      stagingShortfall,
+      stagingStorageType: c.StagingStorageType,
+      stagingBin: c.StagingBin,
+      storageUnitQuantity: c.StorageUnitQuantity || 0,
+      noUnitQuantity: c.NoUnitQuantity || 0,
+      unit: c.Unit,
+      storageLocation: c.StorageLocation,
+      supplyAreaStorageLocation: c.SupplyAreaStorageLocation,
+      batch: effBatch,
+      requestQuantity: quantity,
+      source: 'SAP'
+    });
+    const isEligible = postEligibility.eligible !== undefined ? postEligibility.eligible : postEligibility.Eligible;
+    if (!isEligible) {
+      throw httpError(422, `Goods issue not possible: ${postEligibility.reason || postEligibility.Reason || gate.reason || `issuable stock ${gate.issuableQty} ${c.Unit} is less than ${quantity} ${c.Unit}`}`);
     }
+
+    // Verify scanned storage units against fresh quants if supplied
+    const suList = Array.isArray(input.storageUnits)
+      ? input.storageUnits.map(String).map((s) => s.trim().replace(/^0+(?=\d)/, '')).filter(Boolean)
+      : [];
+    if (suList.length > 0 && c.Warehouse) {
+      const liveQuants = c._raw && Array.isArray(c._raw.quants) ? c._raw.quants : [];
+      for (const su of suList) {
+        const matching = liveQuants.filter((q) => q.LENUM && String(q.LENUM).trim().replace(/^0+(?=\d)/, '') === su);
+        if (!matching.length) {
+          throw httpError(422, `Goods issue not possible: scanned storage unit ${su} has no stock in warehouse ${c.Warehouse} (stock changed since scanning)`);
+        }
+        for (const q of matching) {
+          if (q.SKZST === 'X' || q.SKZUA === 'X' || q.SPERR === 'X') {
+            throw httpError(422, `Goods issue not possible: scanned storage unit ${su} is blocked in SAP`);
+          }
+          const blocker = this._quantNotReady(q);
+          if (blocker) {
+            throw httpError(422, `Goods issue not possible: scanned storage unit ${su} is not available (${blocker[0]})`);
+          }
+        }
+      }
+    }
+
+    return {
+      ...postEligibility,
+      freshCycle: c
+    };
+  }
+
+  /**
+   * Post one goods issue 261 against a reservation item (API_MATERIAL_DOCUMENT_SRV deep insert,
+   * goods movement code 03, referencing reservation, item and order).
+   *
+   * STORAGE UNIT POSTING SEMANTICS: OPTION A (SU is Physical & Inventory Validation)
+   * --------------------------------------------------------------------------------
+   * Flow:
+   *   Scan SU
+   *     ↓
+   *   Validate batch / quantity / quant availability in SAP LQUA
+   *     ↓
+   *   Display availability & physical coverage
+   *     ↓
+   *   User presses POST
+   *     ↓
+   *   Fresh SAP stock / reservation / quant revalidation (revalidateStock)
+   *     ↓
+   *   SAP POST (issues validated reservation quantity & batch)
+   *
+   * Architectural Decision & Preclusion of Option B:
+   * S/4HANA OData API_MATERIAL_DOCUMENT_SRV (A_MaterialDocumentItemType) does NOT contain an
+   * LE-WM Storage Unit (LENUM) or source bin property (only EWM/HU properties which do not apply
+   * to Classic LE-WM). In SAP LE-WM, MM-IM Goods Movement 261 posts inventory at the plant/storage-location
+   * level with the reservation and batch; physical storage unit picking is handled by Warehouse
+   * Management Transfer Orders / Outbound Deliveries (sap-message L9/514). Attempting to pass LENUM to
+   * A_MaterialDocumentItem is rejected by SAP OData Gateway.
+   *
+   * Therefore, Option A is the authoritative implementation:
+   * - Scanned storage units provide strict physical & inventory validation (confirming drum existence,
+   *   batch match against RESB-CHARG, non-blocked quants in LQUA, and required quantity coverage).
+   * - The SAP POST sends the validated reservation quantity, reservation reference, plant,
+   *   storage location, and batch to A_MaterialDocumentHeader.
+   */
+  async postGoodsIssue(input = {}) {
+    const quantity = Number(input.quantity);
+    if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
+
+    // Fresh live SAP revalidation immediately before SAP POST (protects against stock changes between scan and posting)
+    const reval = await this.revalidateStock(input);
+    const c = reval.freshCycle;
+    const batch = clean(input.batch, 'Batch', /^[A-Z0-9]{1,10}$/);
 
     // Entry unit in external format, from the same service the list reads.
     const d = await this._results(RESV_PATH, {
@@ -859,6 +1036,8 @@ class Mvt261Adapter {
     const unit = d.results?.[0]?.BaseUnit;
     if (!unit) throw httpError(422, 'Goods issue not possible: unit of the reservation item could not be read');
 
+    // Option A: payload posts validated reservation quantity, batch, plant, and storage location.
+    // LENUM / storage units are physical validation inputs and are NOT sent in MM-IM item payload.
     const payload = buildHeaderEnvelope({
       gmCode: '03',
       headerText: `GI Resv ${c.Reservation}`,
@@ -878,12 +1057,20 @@ class Mvt261Adapter {
         LOG.warn(`Goods issue 261 for reservation ${c.Reservation}/${c.ReservationItem}: SAP created outbound delivery ${deliveryNo} (L9/514) instead of a material document; PGI still required.`);
         return {
           MaterialDocument: '', MaterialDocumentYear: '', DeliveryNumber: deliveryNo, Pending: true, SapMessage: sapMessage,
-          Message: `WM-managed location: SAP created outbound delivery ${deliveryNo}. No material document yet - the goods issue completes only when PGI is posted for that delivery. Do not post again.`
+          Message: `WM-managed location: SAP created outbound delivery ${deliveryNo}. No material document yet - the goods issue completes only when PGI is posted for that delivery. Do not post again.`,
+          StorageUnitPostingSemantics: 'OPTION_A_VALIDATION'
         };
       }
       throw httpError(502, `SAP did not return a material document for the goods issue. sap-message: ${sapMessage || '(none)'}`);
     }
-    return { MaterialDocument: body.MaterialDocument, MaterialDocumentYear: body.MaterialDocumentYear, DeliveryNumber: '', Pending: false, SapMessage: sapMessage };
+    return {
+      MaterialDocument: body.MaterialDocument,
+      MaterialDocumentYear: body.MaterialDocumentYear,
+      DeliveryNumber: '',
+      Pending: false,
+      SapMessage: sapMessage,
+      StorageUnitPostingSemantics: 'OPTION_A_VALIDATION'
+    };
   }
 
   /**
@@ -955,6 +1142,27 @@ class Mvt261Adapter {
 
     return { Definition: definition, SortKey: sortKey, TotalCount: Number(d.__count || 0), Top };
   }
+
+  /**
+   * Authoritative Movement 261 stock-eligibility calculation.
+   * Delegates to canonical calculateMovement261StockEligibility.
+   */
+  calculateStockEligibility(params) {
+    return calculateMovement261StockEligibility(params);
+  }
+
+  static calculateStockEligibility(params) {
+    return calculateMovement261StockEligibility(params);
+  }
+
+  static revalidateStock(adapterInstance, params) {
+    return adapterInstance.revalidateStock(params);
+  }
 }
+
+Mvt261Adapter.calculateMovement261StockEligibility = calculateMovement261StockEligibility;
+Mvt261Adapter.revalidateStock = function (adapterInstance, params) {
+  return adapterInstance.revalidateStock(params);
+};
 
 module.exports = Mvt261Adapter;

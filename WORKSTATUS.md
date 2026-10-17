@@ -5,6 +5,130 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **MVT 261 — Concurrency & Edge Case Regression Suite (Item 11) (2026-10-17, 18:00 IST):** Complete.
+  - **Item 11 (Add 261 concurrency regression tests):**
+    - Implemented dedicated, exhaustive regression test suite in `test/unit/wm/mvt261Concurrency.test.js` covering all concurrency, network failure, and idempotency edge cases:
+      1. **Simultaneous POST (User A vs User B):**
+         - Tested: Open quantity = 5. User A and User B concurrently submit POST 5 on the same reservation/item.
+         - Result: Exactly one valid posting reaches SAP; exactly one request is rejected with HTTP 409 (`in progress`). Zero duplicate Goods Issue. Winning attempt recorded as `posted` with Material Document. Subsequent post rejected with 422 ("Quantity 5 exceeds the open quantity 0").
+      2. **Network Timeout Handling:**
+         - Tested: Network timeout (`ETIMEDOUT` without HTTP status).
+         - Result: Attempt status transitions to `unconfirmed` (preserving reference and `LastError`); subsequent retry blocked with HTTP 409.
+      3. **HTTP 502 Bad Gateway:**
+         - Tested: Cloud Connector / upstream gateway returns 502.
+         - Result: Attempt status marked `unconfirmed`; prevents blind duplicate retry (409).
+      4. **HTTP 504 Gateway Timeout:**
+         - Tested: SAP backend times out with 504.
+         - Result: Attempt status marked `unconfirmed`; prevents blind duplicate retry (409).
+      5. **SAP Success + DB Status Failure:**
+         - Tested: SAP POST succeeds, returning Material Document `4900050046`, but `GoodsIssueAttemptStore.setStatus(...)` fails.
+         - Result: Critical reconciliation error logged with reference and status without swallowing; client receives the SAP material document.
+      6. **Client Retry Dynamics:**
+         - Definite SAP rejection (422) allows re-claim and retry under new generation suffix (`_GEN1`).
+         - Timeout/502/504 (`unconfirmed`) blocks blind retry (409).
+         - Administrative recheck confirmation (`not_posted`) allows re-claim and retry.
+      7. **Double-Click & UI Busy Protection:**
+         - Controller sets `busy: true` immediately upon POST initiation and ignores rapid second click.
+         - Backend atomic claim guard prevents duplicate execution.
+      8. **Browser Refresh Dynamics:**
+         - Browser refresh reloads `scanContext`: when open quantity is 0, status is `Blocked` ("no open quantity remaining"), and post button is disabled.
+         - 409 dialog provides `Refresh` action that reloads live SAP context.
+  - **Validation & Test Results:**
+    - `test/unit/wm/mvt261Concurrency.test.js`: 10/10 tests passed (100% green).
+    - `npx jest test/unit/wm/*261* test/unit/wm/open261Controller.test.js`: 8 suites passed, 181/181 tests passed (100% green).
+    - `npx jest test/unit/wm`: 79 active test suites passed, 1,938 passed, 56 skipped (live-only), 0 failed (100% green).
+    - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+    - `npx cds compile srv/`: Clean compilation, exit 0.
+    - `git diff --check`: 0 whitespace errors.
+
+- **MVT 261 — Storage Unit Posting Semantics Defined as Option A (Item 10) (2026-10-17, 17:50 IST):** Complete.
+  - **Item 10 (Define exact Storage Unit posting semantics):**
+    - Evaluated both options against verified SAP metadata and architectural boundaries:
+      - **Option A (Chosen & Implemented):**
+        `Scan SU → Validate batch/quantity & quant status → User presses POST → Fresh SAP stock/reservation revalidation → Post reservation quantity & batch to SAP GI`.
+      - **Option B (Precluded by SAP OData API):** Passing `StorageUnit` / `LENUM` into `API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentItem` is invalid because the S/4HANA OData entity has no `LENUM` property. In Classic LE-WM, 261 inventory is issued at the plant/storage-location level, and physical storage unit picking is handled downstream by Warehouse Management Transfer Orders or Outbound Deliveries (`L9/514`).
+    - Codified and communicated Option A across all layers:
+      - In `srv/integration/s4hana/wm/Mvt261Adapter.js`:
+        - Added comprehensive architecture docstring explaining Option A semantics and the technical preclusion of Option B on `A_MaterialDocumentItem`.
+        - Returned `StorageUnitPostingSemantics: 'OPTION_A_VALIDATION'` in both material document posting and outbound delivery (`L9/514`) responses.
+        - Verified that the MM-IM payload (`to_MaterialDocumentItem`) posts the validated reservation quantity, batch, plant, storage location, and reservation number/item, while omitting `LENUM`.
+      - In `srv/wm/mvt261/service.cds`:
+        - Added `StorageUnitPostingSemantics : String(30)` to `MaterialDocumentResult`.
+        - Documented Option A semantics on action `postGoodsIssue`.
+      - In `srv/wm/mvt261/service.js`:
+        - Added explicit Option A semantics documentation in `postGoodsIssue` handler.
+      - In `AUDIT_261.md`:
+        - Marked finding F8 as RESOLVED with Option A semantics documented and divergence between physical scan validation and MM-IM payload asserted.
+      - In `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+        - Updated `scan261Advisory` to explain Option A semantics clearly to operators:
+          `Posting Semantics (Option A): Drum scanning validates physical existence, batch match, quant availability, and quantity. The SAP Goods Issue posts the verified reservation quantity.`
+      - In unit tests:
+        - Added test in `test/unit/wm/mvt261Adapter.test.js` asserting Option A semantics, verifying return of `StorageUnitPostingSemantics`, and asserting `LENUM` is omitted from `to_MaterialDocumentItem`.
+        - Added test in `test/unit/wm/mvt261ScanController.test.js` asserting UI controller confirms and posts verified reservation quantity with scanned drum validation.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/*261* test/unit/wm/open261Controller.test.js`: 7 suites passed, 171/171 tests passed (100% green).
+    - `npx jest test/unit/wm`: 78 active test suites passed, 1,928 passed, 56 skipped (live-only), 0 failed (100% green).
+    - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+    - `npx cds compile srv/`: Clean compilation, exit 0.
+    - `git diff --check`: 0 whitespace errors.
+
+- **MVT 261 — Revalidate Stock Immediately Before SAP POST (Item 9) (2026-10-17, 17:40 IST):** Complete.
+  - **Item 9 (Revalidate 261 stock immediately before SAP POST):**
+    - Enforced the required non-negotiable flow:
+      `Scan → Display availability → User presses POST → Fresh SAP stock/reservation validation → SAP POST`.
+    - Protected against stock and reservation mutations occurring between scan and posting:
+      - In `srv/integration/s4hana/wm/Mvt261Adapter.js`:
+        - Implemented `revalidateStock(input)`: Executes fresh live SAP cycle reading `RESB`, `AUFK`/`JEST`, `LQUA`, `MARD`, `MCHB`.
+        - Evaluates order status (released, not locked), open quantity, storage location, warehouse number alignment, batch requirements, interim staging shortfall, and canonical `calculateMovement261StockEligibility`.
+        - If `storageUnits` are provided (scanned drums), verifies that each scanned unit exists in fresh SAP `LQUA` quants and is not blocked (`SKZST`, `SKZUA`, `SPERR`) or on hold/quality status.
+        - In `postGoodsIssue(input)`: Delegates to `revalidateStock(input)` immediately before SAP material document envelope creation. Rejects with HTTP 422 before any SAP write attempt if stock or reservation is ineligible.
+      - In `srv/wm/mvt261/service.js`:
+        - Added `revalidateStock` service handler.
+        - In `postGoodsIssue` handler: Calls `adapter.revalidateStock(...)` before claiming the key in `GoodsIssueAttemptStore`. Any stock shortfall or reservation blocker rejects immediately without claiming or locking the attempt store.
+      - In `srv/wm/mvt261/service.cds`:
+        - Declared `function revalidateStock(reservation, item, quantity, batch, storageUnits) returns StockEligibility`.
+        - Updated `action postGoodsIssue` with `storageUnits : array of String(20)`.
+      - In `app/fiori-app/webapp/modules/wm/mvt261/controller/Scan261.controller.js`:
+        - Added `revalidateStock()` controller method to refresh live SAP scan context on demand.
+        - Updated `_doPost` to pass scanned storage units in payload (`storageUnits`).
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/*261* test/unit/wm/open261Controller.test.js`: 7 suites passed, 169/169 tests passed (100% green).
+    - `npx jest test/unit/wm`: 78 active test suites passed, 1,926 passed, 56 skipped (live-only), 0 failed (100% green).
+    - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+    - `npx cds compile srv/`: Clean compilation, exit 0.
+    - `git diff --check`: 0 whitespace errors.
+
+- **MVT 261 — Canonical Stock-Eligibility Calculation (Item 8) (2026-10-17, 17:30 IST):** Complete.
+  - **Item 8 (Create one canonical 261 stock-eligibility calculation):**
+    - Implemented `calculateMovement261StockEligibility(params)` in `srv/common/movementConfig.js`:
+      - Unifies: Open Quantity, Issuable Quantity, Supply Area Stock, Staged Quantity, Storage Unit Quantity, and No-Unit Quantity into one authoritative posting-eligibility result.
+      - Returns authoritative format `{ eligible: true/false, issuableQuantity: number, reason: string|null, source: 'SAP', ... }` providing dual camelCase and PascalCase fields for seamless JS, CDS, and UI5 interoperability.
+      - Enforces core invariants:
+        - Rejects zero open quantity with `'No open quantity remaining'`.
+        - Enforces `effectiveIssuable <= min(openQuantity, rawIssuable, stagedQuantity)` when staging required.
+        - Evaluates interim staging shortfall (`shortfall of X in interim storage bin TYPE/BIN`).
+        - Evaluates issue location exhaustion with supply area stock (`X in supply area Y; issue location Z is empty - transfer required`).
+        - Evaluates upstream/external blockers (order lock, deletion indicator).
+        - Validates requested quantity > 0 and <= open quantity.
+    - Updated CDS Service contract in `srv/wm/mvt261/service.cds`:
+      - Defined `type StockEligibility { Eligible: Boolean; IssuableQuantity: Decimal(13, 3); Reason: String(255); Source: String(10); OpenQuantity: Decimal(13, 3); SupplyAreaStock: Decimal(13, 3); StagedQuantity: Decimal(13, 3); StorageUnitQuantity: Decimal(13, 3); NoUnitQuantity: Decimal(15, 3); PartialCoverage: Boolean; }`.
+      - Added `StockEligibility` to `Open261Item`, `Cycle261`, and `ScanContext`.
+      - Added `StorageUnitQuantity` and `NoUnitQuantity` to `Cycle261` and `ScanContext`.
+    - Integrated across all Mvt 261 workflows:
+      - Posting flow (`srv/integration/s4hana/wm/Mvt261Adapter.js` `postGoodsIssue`): Replaced ad-hoc checks with `calculateMovement261StockEligibility`, enforcing identical gate checks before any SAP write attempt (HTTP 422 if `!postEligibility.eligible`).
+      - Cycle calculation (`Mvt261Adapter.js` `cycle`): Computes canonical `StockEligibility` and synchronizes `IssuableQuantity`, `SupplyAreaStock`, `StagedQuantity`, `StorageUnitQuantity`, `NoUnitQuantity`, `PartialCoverage`.
+      - Open reservations list (`Mvt261Adapter.js` `openItems`): Computes canonical `StockEligibility`, synchronizes `ScanPossible`, `Blocked`, `BlockReason`, `ReadyQuantity`, `PartialCoverage`.
+      - Scan context (`Mvt261Adapter.js` `scanContext`): Returns canonical `StockEligibility`, `StorageUnitQuantity`, `StagedQuantity`, and `NoUnitQuantity`.
+      - Scan session logic (`app/fiori-app/webapp/modules/wm/mvt261/model/ScanSession.js`): Updated `state` and `precheck` to evaluate `StockEligibility.eligible` / `StockEligibility.Eligible` and reason.
+      - Scan controller (`app/fiori-app/webapp/modules/wm/mvt261/controller/Scan261.controller.js`): Updated `onPost` to check `StockEligibility.eligible` / `StockEligibility.Eligible`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/*261* test/unit/wm/open261Controller.test.js`: 7 test suites passed, 162/162 tests passed (100% green).
+    - `npx jest test/unit/wm/movementConfig.test.js`: 51/51 tests passed including dedicated canonical 261 stock-eligibility test suite.
+    - `npx jest test/unit/wm`: 78 active test suites passed, 1,919 passed, 56 skipped (live-only), 0 failed (100% green).
+    - `npm run lint`: Clean, 0 errors, 0 warnings.
+    - `npx cds compile srv/`: Clean compilation, exit 0.
+    - `git diff --check`: 0 whitespace errors.
+
 - **MVT 311 — Destination SLoc Validation against WM Configuration (Item 7) (2026-10-17, 17:15 IST):** Complete.
   - **Item 7 (Validate destination SLoc against WM configuration):**
     - Enhanced `verifyReceivingLocationInSap` and added `verifyMovement311DestinationInSap` in `srv/common/movementConfig.js`:
@@ -10145,5 +10269,215 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git diff --check`: 0 whitespace errors.
 - **Errors / Warnings / Blockers:**
   - Zero errors in Movement 311 Item 7 changes.
+- **Next Recommended Action:**
+  - Ready for user review / commit on branch `feature01`.
+
+### 2026-10-17 17:30 IST — MVT 261: Canonical Stock-Eligibility Calculation (Item 8)
+
+- **Work Session / Reason:** Implement P1 item 8 for Movement Type 261: Create one canonical 261 stock-eligibility calculation unifying Open Quantity, Issuable Quantity, Supply Area Stock, Staged Quantity, Storage Unit Quantity, and No-Unit Quantity into one authoritative posting-eligibility result `{ eligible, issuableQuantity, reason, source }`. The UI, scan flow, and posting flow must consume the same semantics.
+- **Behavior Delivered:**
+  - Item 8: Created canonical 261 stock-eligibility calculation and unified across all layers:
+    - In `srv/common/movementConfig.js`:
+      - Implemented and exported `calculateMovement261StockEligibility(params)`:
+        - Unifies 6 stock dimensions: `openQuantity`, `issuableQuantity`, `supplyAreaStock`, `stagedQuantity`, `storageUnitQuantity`, `noUnitQuantity`.
+        - Returns canonical shape `{ eligible, issuableQuantity, reason, source }` plus full breakdown: `openQuantity`, `supplyAreaStock`, `stagedQuantity`, `storageUnitQuantity`, `noUnitQuantity`, `stagingRequired`, `stagingShortfall`, `partialCoverage`, `unit`.
+        - Exposes dual camelCase and PascalCase properties (`eligible` & `Eligible`, `issuableQuantity` & `IssuableQuantity`, `reason` & `Reason`, etc.) for seamless compatibility across JavaScript and CDS/OData runtimes.
+        - Accepts both camelCase and PascalCase input parameters.
+        - Caps `effectiveIssuable` at `Math.min(openQuantity, rawIssuable)` and further by `stagedQuantity` when staging is required.
+        - Rejects zero open quantity with explicit reason (`No open quantity remaining`).
+        - Rejects invalid request quantities (non-positive or exceeding open quantity).
+        - Detects interim staging shortfall (`shortfall of X in interim storage bin TYPE/BIN`).
+        - Detects issue location exhaustion with supply area stock (`X in supply area Y; issue location Z is empty - transfer required`).
+        - Detects complete stock exhaustion (`no unrestricted stock in LOC for batch B`).
+        - Evaluates upstream/external blockers.
+    - In `srv/wm/mvt261/service.cds`:
+      - Defined `type StockEligibility`:
+        - `Eligible: Boolean; IssuableQuantity: Decimal(13, 3); Reason: String(255); Source: String(10); OpenQuantity: Decimal(13, 3); SupplyAreaStock: Decimal(13, 3); StagedQuantity: Decimal(13, 3); StorageUnitQuantity: Decimal(13, 3); NoUnitQuantity: Decimal(15, 3); PartialCoverage: Boolean;`
+      - Added `StockEligibility : StockEligibility;` to `Open261Item`, `Cycle261`, and `ScanContext`.
+      - Added `StorageUnitQuantity` and `NoUnitQuantity` to `Cycle261` and `ScanContext`.
+    - In `srv/integration/s4hana/wm/Mvt261Adapter.js`:
+      - Integrated `calculateMovement261StockEligibility` in `openItems()`: attaches `StockEligibility` to each item, computes `storageUnitQuantity` and `noUnitQuantity`, synchronizes `ScanPossible`, `Blocked`, `BlockReason`, `ReadyQuantity`, `PartialCoverage`.
+      - Integrated in `cycle()`: computes `storageUnitQuantity` and `noUnitQuantity`, attaches `StockEligibility`, synchronizes `IssuableQuantity`, `SupplyAreaStock`, `StagedQuantity`, `StorageUnitQuantity`, `NoUnitQuantity`, `PartialCoverage`.
+      - Integrated in `scanContext()`: derives `StorageUnitQuantity`, `StagedQuantity`, and attaches `StockEligibility`.
+      - Integrated in `postGoodsIssue()`: replaces ad-hoc posting checks with `calculateMovement261StockEligibility`, rejecting with HTTP 422 if `!postEligibility.eligible`.
+      - Exposed `calculateStockEligibility` instance and static methods on `Mvt261Adapter`, plus `Mvt261Adapter.calculateMovement261StockEligibility`.
+    - In `app/fiori-app/webapp/modules/wm/mvt261/model/ScanSession.js`:
+      - Updated `state` and `precheck` to evaluate `StockEligibility.eligible` / `StockEligibility.Eligible` and reason.
+    - In `app/fiori-app/webapp/modules/wm/mvt261/controller/Scan261.controller.js`:
+      - Updated `onPost` to verify `StockEligibility.eligible` / `StockEligibility.Eligible`.
+- **Files Modified:**
+  - `WORKSTATUS.md`
+  - `srv/common/movementConfig.js`
+  - `srv/wm/mvt261/service.cds`
+  - `srv/integration/s4hana/wm/Mvt261Adapter.js`
+  - `app/fiori-app/webapp/modules/wm/mvt261/model/ScanSession.js`
+  - `app/fiori-app/webapp/modules/wm/mvt261/controller/Scan261.controller.js`
+  - `test/unit/wm/movementConfig.test.js`
+- **Validation Results:**
+  - `npx jest test/unit/wm/*261* test/unit/wm/open261Controller.test.js`: 7 test suites passed, 162/162 tests passed (100% green).
+  - `npx jest test/unit/wm/movementConfig.test.js`: 51/51 tests passed including dedicated canonical 261 stock-eligibility test suite.
+  - `npx jest test/unit/wm`: 78 active test suites passed, 1,919 passed, 56 skipped (live-only), 0 failed (100% green).
+  - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+  - `npx cds compile srv/`: Clean compilation, exit 0.
+  - `git diff --check`: 0 whitespace errors.
+- **Errors / Warnings / Blockers:**
+  - Zero errors in Movement 261 Item 8 changes.
+- **Next Recommended Action:**
+  - Ready for user review / commit on branch `feature01`.
+
+### 2026-10-17 17:40 IST — MVT 261: Revalidate Stock Immediately Before SAP POST (Item 9)
+
+- **Work Session / Reason:** Implement P1 item 9 for Movement Type 261: Revalidate 261 stock immediately before SAP POST without relying only on earlier scan/cycle results (`Scan → Display availability → User presses POST → Fresh SAP stock/reservation validation → SAP POST`). Protects against stock or reservation changes occurring between scan and posting.
+- **Behavior Delivered:**
+  - Item 9: Fresh SAP stock and reservation revalidation immediately before SAP POST:
+    - In `srv/integration/s4hana/wm/Mvt261Adapter.js`:
+      - Added and exported `revalidateStock(input)`:
+        - Executes live SAP query (`cycle()`) reading `RESB`, `AUFK`/`JEST`, `LQUA`, `MARD`, `MCHB`.
+        - Re-evaluates order status, open quantity, storage location, warehouse number consistency, batch requirements, interim staging shortfall, and canonical `calculateMovement261StockEligibility`.
+        - Revalidates scanned storage units against live SAP quants: verifies quants exist, verifies quants are not blocked (`SKZST`, `SKZUA`, `SPERR`), and checks against bin blockers.
+      - In `postGoodsIssue(input)`: Invokes `await this.revalidateStock(input)` immediately before building payload and sending POST to `A_MaterialDocumentHeader`.
+    - In `srv/wm/mvt261/service.js`:
+      - Added `this.on('revalidateStock', ...)` handler.
+      - In `this.on('postGoodsIssue', ...)`: Invokes `await adapter.revalidateStock(...)` before claiming the key in `GoodsIssueAttemptStore`. If stock or reservation is ineligible, returns HTTP 422 immediately without writing to the attempt store or calling SAP.
+      - Passes `storageUnits: data.storageUnits || data.units` to `adapter.postGoodsIssue`.
+    - In `srv/wm/mvt261/service.cds`:
+      - Declared `function revalidateStock(reservation, item, quantity, batch, storageUnits) returns StockEligibility`.
+      - Updated `action postGoodsIssue` with `storageUnits : array of String(20)`.
+    - In `app/fiori-app/webapp/modules/wm/mvt261/controller/Scan261.controller.js`:
+      - Updated `_doPost` to pass scanned storage units in `storageUnits`.
+      - Added `revalidateStock()` controller method to refresh live SAP scan context on demand.
+    - In unit tests:
+      - Added tests in `test/unit/wm/mvt261Adapter.test.js`:
+        - Verifies `revalidateStock` passes when live stock and reservation are valid.
+        - Verifies `revalidateStock` rejects with 422 when `MARD` stock is consumed between scan and POST.
+        - Verifies `revalidateStock` rejects with 422 when scanned storage unit is no longer in warehouse quants (`LQUA`).
+        - Verifies `revalidateStock` rejects with 422 when scanned storage unit became blocked in SAP (`SKZST = 'X'`).
+      - Added tests in `test/unit/wm/mvt261ScanController.test.js`:
+        - Verifies `_doPost` sends `storageUnits` in payload when scanned rows are present.
+        - Verifies `revalidateStock` returns `valid: true` with fresh context.
+        - Verifies `revalidateStock` returns `valid: false` when scanned storage unit is no longer available.
+- **Files Modified:**
+  - `WORKSTATUS.md`
+  - `srv/integration/s4hana/wm/Mvt261Adapter.js`
+  - `srv/wm/mvt261/service.cds`
+  - `srv/wm/mvt261/service.js`
+  - `app/fiori-app/webapp/modules/wm/mvt261/controller/Scan261.controller.js`
+  - `test/unit/wm/mvt261Adapter.test.js`
+  - `test/unit/wm/mvt261ScanController.test.js`
+- **Validation Results:**
+  - `npx jest test/unit/wm/*261* test/unit/wm/open261Controller.test.js`: 7 suites passed, 169/169 tests passed (100% green).
+  - `npx jest test/unit/wm`: 78 active test suites passed, 1,926 passed, 56 skipped (live-only), 0 failed (100% green).
+  - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+  - `npx cds compile srv/`: Clean compilation, exit 0.
+  - `git diff --check`: 0 whitespace errors.
+- **Errors / Warnings / Blockers:**
+  - Zero errors in Movement 261 Item 9 changes.
+- **Next Recommended Action:**
+  - Ready for user review / commit on branch `feature01`.
+
+### 2026-10-17 17:50 IST — MVT 261: Define Exact Storage Unit Posting Semantics (Item 10)
+
+- **Work Session / Reason:** Implement P1 item 10 for Movement Type 261: Define exact Storage Unit posting semantics explicitly between Option A (SU is physical & inventory validation) vs Option B (SU is actual source selection into SAP POST). Remove all ambiguity regarding SU role and payload mechanics.
+- **Decision & Architecture Evaluation:**
+  - **Option A (Chosen & Implemented):**
+    ```text
+    Scan SU
+     ↓
+    Validate batch/quantity & quant availability (LQUA / MARD / MCHB)
+     ↓
+    Display availability & physical coverage
+     ↓
+    User presses POST
+     ↓
+    Fresh SAP stock/reservation revalidation (revalidateStock)
+     ↓
+    Post reservation quantity & verified batch to SAP GI
+    ```
+  - **Option B (Precluded by SAP OData API Contract):**
+    - S/4HANA OData service `API_MATERIAL_DOCUMENT_SRV` (`A_MaterialDocumentItemType`) has NO property for LE-WM Storage Unit (`LENUM`) or source storage bin (`LGTYP`/`LGPLA`).
+    - In Classic LE-WM, MM-IM Goods Movement 261 posts inventory at the plant/storage-location level with the reservation and batch. Storage unit removal/picking is handled downstream by Warehouse Management Transfer Orders or Outbound Deliveries (sap-message `L9/514`).
+    - Attempting to send `StorageUnit` or `LENUM` to `A_MaterialDocumentItem` is rejected with HTTP 400 Bad Request.
+    - Therefore, Option A is the real, verified SAP architecture.
+- **Behavior Delivered:**
+  - In `srv/integration/s4hana/wm/Mvt261Adapter.js`:
+    - Added architecture docstring defining Option A semantics and the technical preclusion of Option B.
+    - Updated `postGoodsIssue(input)`:
+      - Validates batch, quant status, and scanned storage units against SAP `LQUA` via `revalidateStock(input)`.
+      - Posts the validated reservation quantity, batch, plant, and storage location to `A_MaterialDocumentHeader`.
+      - Returns `StorageUnitPostingSemantics: 'OPTION_A_VALIDATION'` in both material document posting and outbound delivery (`L9/514`) responses.
+  - In `srv/wm/mvt261/service.cds`:
+    - Extended `type MaterialDocumentResult` with `StorageUnitPostingSemantics : String(30);`.
+    - Documented Option A semantics on `action postGoodsIssue`.
+  - In `srv/wm/mvt261/service.js`:
+    - Documented Option A posting semantics inline in `postGoodsIssue` handler.
+  - In `AUDIT_261.md`:
+    - Updated finding F8 from Open to RESOLVED: Option A implemented, documented in adapter/UI, and tested.
+  - In `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+    - Updated `scan261Advisory` to clearly articulate Option A semantics to operators:
+      `Posting Semantics (Option A): Drum scanning validates physical existence, batch match, quant availability, and quantity. The SAP Goods Issue posts the verified reservation quantity.`
+  - In `test/unit/wm/mvt261Adapter.test.js`:
+    - Added dedicated test asserting Option A semantics: asserts `StorageUnitPostingSemantics: 'OPTION_A_VALIDATION'`, validates that `to_MaterialDocumentItem` receives verified quantity and batch, and asserts that `LENUM`/`StorageUnit` are not present on the MM-IM item payload.
+  - In `test/unit/wm/mvt261ScanController.test.js`:
+    - Added test asserting that the UI controller operates under Option A semantics.
+- **Files Modified:**
+  - `WORKSTATUS.md`
+  - `AUDIT_261.md`
+  - `srv/integration/s4hana/wm/Mvt261Adapter.js`
+  - `srv/wm/mvt261/service.cds`
+  - `srv/wm/mvt261/service.js`
+  - `app/fiori-app/webapp/i18n/i18n.properties`
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - `test/unit/wm/mvt261Adapter.test.js`
+  - `test/unit/wm/mvt261ScanController.test.js`
+- **Validation Results:**
+  - `npx jest test/unit/wm/*261* test/unit/wm/open261Controller.test.js`: 7 suites passed, 171/171 tests passed (100% green).
+  - `npx jest test/unit/wm`: 78 active test suites passed, 1,928 passed, 56 skipped (live-only), 0 failed (100% green).
+  - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+  - `npx cds compile srv/`: Clean compilation, exit 0.
+  - `git diff --check`: 0 whitespace errors.
+- **Errors / Warnings / Blockers:**
+  - Zero errors in Movement 261 Item 10 changes.
+- **Next Recommended Action:**
+  - Ready for user review / commit on branch `feature01`.
+
+### 2026-10-17 18:00 IST — MVT 261: Comprehensive Concurrency Regression Suite (Item 11)
+
+- **Work Session / Reason:** Implement P1 item 11 for Movement Type 261: Add comprehensive concurrency regression tests covering simultaneous posts (User A vs User B, open quantity 5, exactly one valid posting, zero duplicate GI, correct attempt state), timeouts, 502 Bad Gateway, 504 Gateway Timeout, SAP success + DB status failure, client retry dynamics, double-click prevention, and browser refresh dynamics.
+- **Behavior Delivered & Tested:**
+  - In `test/unit/wm/mvt261Concurrency.test.js`:
+    1. **Simultaneous POST (User A vs User B):**
+       - Verified that when reservation open quantity is 5 and User A and User B concurrently submit POST 5, only User A's claim succeeds and posts to SAP; User B's concurrent request is rejected with HTTP 409 (`already in progress`).
+       - Asserted `postGoodsIssue` is invoked exactly 1 time across the concurrent requests (no duplicate Goods Issue).
+       - Verified attempt state in `GoodsIssueAttemptStore`: winning attempt is recorded with status `posted` and Material Document `4900050046`.
+       - Verified that once reservation quantity is updated to 0 in SAP, a subsequent POST is rejected with HTTP 422 (`Quantity 5 exceeds the open quantity 0 KG`).
+    2. **Network Timeout Handling:**
+       - Verified that a network timeout (`ETIMEDOUT` without HTTP status) sets attempt status to `unconfirmed` with `LastError` captured, preventing duplicate posting on blind retry with HTTP 409.
+    3. **HTTP 502 Bad Gateway:**
+       - Verified that upstream proxy / Cloud Connector 502 errors set attempt status to `unconfirmed` and reject blind retry with HTTP 409.
+    4. **HTTP 504 Gateway Timeout:**
+       - Verified that SAP backend 504 timeouts set attempt status to `unconfirmed` and reject blind retry with HTTP 409.
+    5. **SAP Success + DB Status Failure:**
+       - Verified that when SAP POST succeeds returning Material Document `4900050046`, but `GoodsIssueAttemptStore.setStatus(...)` fails, a critical reconciliation error is logged via `LOG.error` without swallowing, and the SAP document is returned to the client.
+    6. **Client Retry Dynamics:**
+       - Verified that a definite SAP rejection (422) allows re-claim and retry under new generation suffix (`_GEN1`).
+       - Verified that an administrative recheck confirming `not_posted` allows re-claim and successful posting on retry.
+       - Verified that unconfirmed or posted states block blind retries with HTTP 409.
+    7. **Double-Click & UI Busy Protection:**
+       - Verified that the UI controller sets `busy: true` immediately upon POST initiation and ignores any rapid second click, preventing duplicate confirmation dialogs or requests.
+    8. **Browser Refresh Dynamics:**
+       - Verified that reloading the page after a successful post reloads `scanContext` with `OpenQuantity: 0`, `Blocked: true`, and disables posting.
+       - Verified that the 409 information dialog offers a `Refresh` action that triggers `_load()`, re-reading live SAP state.
+- **Files Modified / Added:**
+  - `WORKSTATUS.md`
+  - `test/unit/wm/mvt261Concurrency.test.js` (NEW)
+- **Validation Results:**
+  - `test/unit/wm/mvt261Concurrency.test.js`: 10/10 tests passed (100% green).
+  - `npx jest test/unit/wm/*261* test/unit/wm/open261Controller.test.js`: 8 suites passed, 181/181 tests passed (100% green).
+  - `npx jest test/unit/wm`: 79 active test suites passed, 1,938 passed, 56 skipped (live-only), 0 failed (100% green).
+  - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+  - `npx cds compile srv/`: Clean compilation, exit 0.
+  - `git diff --check`: 0 whitespace errors.
+- **Errors / Warnings / Blockers:**
+  - Zero errors in Movement 261 Item 11 changes.
 - **Next Recommended Action:**
   - Ready for user review / commit on branch `feature01`.
