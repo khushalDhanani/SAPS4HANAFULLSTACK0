@@ -64,7 +64,8 @@ docs/*.png
 # Claude & AI Assistant Outputs
 Claude outputs/
 claude output/
-.claude/
+.claude/*
+!.claude/skills/
 
 # Analysis & Reality CSVs & Workbooks
 *.csv

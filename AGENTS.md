@@ -2,24 +2,15 @@
 
 These instructions apply to every agent and every change in this repository.
 
-## Zero-Assumption Protocol (highest priority)
+## Evidence, uncertainty, and approval
 
-1. Never assume. A fact is KNOWN only if it comes from this file, the user,
-   or something you actually read or verified. Everything else is UNKNOWN.
-2. If UNKNOWN affects the result, STOP and ask before continuing.
-3. Ask when: multiple interpretations exist, a name/T-code/config/field is
-   unconfirmed, instructions conflict, the action is destructive, or scope
-   is unclear.
-4. Never invent SAP config, T-codes, tables, BAPI parameters, or messages.
-   If unverified, write "Not verified".
-5. Label facts: CONFIRMED / INFERRED / UNKNOWN. Never act on INFERRED
-   without approval.
-6. Ask in this format: Context, Doubt, Options (with consequences),
-   Recommendation. Maximum 5 questions per turn.
-7. Show a plan and wait for the user's "go" before changing anything.
-8. Do only what was asked. Report extra findings; do not act on them.
-9. End every task with: Done / Not done / Still unknown / Assumptions (none).
-10. Before replying, self-check: "Did I assume anything?" If yes, ask.
+- Treat a fact as **CONFIRMED** only when it comes from the user, this file, or evidence you inspected or verified. Mark conclusions based on incomplete evidence **INFERRED**; mark missing information **UNKNOWN**. Never present either as confirmed.
+- Never invent SAP configuration, T-codes, tables, BAPI parameters, service contracts, or messages. Label unverified SAP details **Not verified**.
+- Stop before an action when an unknown could change business behavior, security/privacy, an SAP contract or payload, production configuration, or a destructive/external side effect. Ask a concise question with **Context, Doubt, Options and consequences, Recommendation** (maximum five questions).
+- For clear, reversible work directly requested by the user, use established project patterns and proceed. State any material assumption in the plan or report; do not ask about inconsequential implementation details.
+- Give a brief plan before non-trivial changes. Wait for approval when scope is ambiguous, the change is destructive, or it causes an external side effect. A request to edit code or documentation does not authorize a live SAP write, deployment, or other external mutation.
+- Do only the requested work. Report additional findings without acting on them.
+- Before reporting, check for unresolved assumptions and list them accurately; say **Assumptions: none** only when there are none. Close with **Done / Not done / Still unknown / Assumptions**.
 
 ## Non-negotiable workflow
 
@@ -44,8 +35,8 @@ Before making a change, every agent must:
 
 After every change, update `WORKSTATUS.md` in the same work session. Record the change, affected files, reason, executed commands/tests and results, errors/warnings/blockers, and the exact next recommended action. Keep **Current Status** and **Next Steps** current.
 
-- **Every individual change requires its own log entry.** If multiple agents make six changes in total, `WORKSTATUS.md` must contain all six changes. Grouping, replacing, or omitting changes is prohibited.
-- Apply this order to every change: **Every change → Log it → Test it → Record the result.** A change is incomplete until its entry contains the verified validation result.
+- **Every independently reviewable change requires a log entry.** Related edits that deliver one coherent outcome may share an entry; unrelated work must not be bundled.
+- Record the change first, then append the executed validation result to that entry. Never claim validation before running it.
 - Append to **Changes Log**; never overwrite historical entries or remove an issue without recording its resolution.
 - Use a timestamp for every work-session/change entry.
 - Never hide a failed test, error, warning, blocker, or skipped validation.
@@ -64,7 +55,7 @@ Before modifying anything:
 
 - Read the request completely and inspect all relevant files, configuration, tests, documentation, and call sites.
 - Check `git status` and preserve unrelated user changes. Never overwrite, revert, or reformat unrelated work.
-- Trace the affected flow end to end: Fiori/UI5 → CAP service → domain/persistence → Publish capability → S/4HANA integration → BTP services.
+- Trace the affected flow end to end through the layers that exist and are relevant: Fiori/UI5 → CAP service → persistence/domain logic → S/4HANA integration → BTP services.
 - Verify what is already implemented. Reuse established project patterns and installed dependencies where they fit.
 - Do not guess about APIs, package versions, configuration, service contracts, authentication, or runtime behavior. Obtain evidence from source, metadata, documentation, commands, or controlled tests.
 
@@ -85,23 +76,24 @@ Keep responsibilities separated according to this repository structure:
 | `app/fiori-app/` | SAPUI5/Fiori presentation, view models, presentation logic | Credentials, persistence, direct database access, S/4 technical calls, business workflows |
 | `db/` | CAP CDS persistence model and controlled seed data | UI logic, HTTP calls, environment-specific configuration |
 | `srv/` | CAP APIs, authorization, validation, orchestration | UI implementation or duplicate integration clients |
-| `srv/integration/s4hana/` | S/4 clients, API services, adapters, technical mappings | UI behavior or Publish business rules |
-| `publish/` | Publication domain logic, workflow, status, retries, jobs | A second S/4 integration stack |
+| `srv/integration/s4hana/` | S/4 clients, API services, adapters, technical mappings | UI behavior or CAP business workflows |
 | `config/` | Version-safe service configuration templates | Secrets or production-only values |
 | `mta/` and `mta.yaml` | Deployment topology and environment extensions | Credentials or duplicate modules/resources |
 
 - UI5 communicates only through defined HTTP/OData APIs.
-- CAP business logic must not be duplicated in UI controllers, publish handlers, or integration adapters.
+- CAP business logic must not be duplicated in UI controllers or integration adapters.
 - S/4 technical communication belongs exclusively in `srv/integration/s4hana/`.
 - Use adapters to translate between CAP domain models and S/4 OData payloads.
 - Keep modules independently testable through explicit interfaces and dependency injection where appropriate.
 
 ## Agent skills and MCP servers
 
-- Project skills live in `skills/<name>/SKILL.md` and are discovered through symlinks in `.claude/skills/`. Read `skills/README.md` for the conventions before adding or editing a skill. Never author a skill inside `.claude/`.
+- `AGENTS.md` is the repository-wide source of project rules. IDE-specific instruction entry points must stay as short pointers to this file rather than copied rule sets.
+- Project skills have one source of truth at `skills/<name>/SKILL.md`. Discovery links for supported agents live under `.agents/skills/`, `.claude/skills/`, and `.opencode/skills/`; do not copy skill content into IDE-specific directories.
+- Read `skills/README.md` for the supported IDE/agent setup matrix and conventions before adding or editing skills or adapters. Validate every discovery link resolves to its canonical skill.
 - MCP servers `cds-mcp` (`@cap-js/mcp-server`) and `ui5-mcp` (`@ui5/mcp-server`) are registered in `.mcp.json`.
-- You MUST search for CDS definitions, like entities, fields and services (which include HTTP endpoints) with cds-mcp, only if it fails you MAY read `*.cds` files in the project.
-- You MUST search for CAP docs with cds-mcp EVERY TIME you create, modify CDS models or when using APIs or the `cds` CLI from CAP. Do NOT propose, suggest or make any changes without first checking it.
+- When available, search CDS definitions (entities, fields, services, and HTTP endpoints) with cds-mcp first. If the server/tool is unavailable or the search fails, state that limitation and inspect project `*.cds` files as the fallback; do not imply the MCP search succeeded.
+- Before creating/modifying CDS models or relying on CAP APIs/CLI behavior, check CAP guidance with cds-mcp when available. If unavailable, use version-matched local documentation or official CAP documentation where accessible; if material behavior remains unverified, stop that dependent change and report what is missing.
 - These servers cover CAP and UI5 framework knowledge only. S/4HANA service contracts are never taken from them; follow the SAP API Discovery protocol below.
 
 ## Security and environment rules
@@ -122,7 +114,7 @@ Before changing S/4 integration code or its configuration, verify and document:
 4. Destination name and properties, Connectivity requirements, and XSUAA scopes/roles for the target environment.
 5. The relevant CAP service contract, adapter mapping, timeout/error behavior, and retry/idempotency requirements.
 
-Do not implement integration code from assumed entity names or payloads. Do not expose destination credentials to the browser. Do not introduce a second S/4 client outside `srv/integration/s4hana/`.
+Do not implement integration code from assumed entity names or payloads. Do not expose destination credentials to the browser. Do not introduce a second S/4 client outside `srv/integration/s4hana/`. A real SAP write (including a proof/test POST) requires explicit user authorization for the target environment and data scope; without it, stop before sending the write and report that live proof remains pending. Read-only metadata and connectivity checks do not authorize writes.
 
 ## SAP API Discovery — Non-Negotiable Protocol
 
@@ -155,7 +147,7 @@ Inspect SAP → Verify Metadata → Verify Operation → Test Live SAP → Imple
    - Do NOT randomly enable services until the correct API is identified.
 
 4. **Prove CREATE directly against SAP**
-   Before implementing the UI Create flow, perform a minimal real SAP POST:
+   Before implementing the UI Create flow, and only after explicit authorization for the target environment and test data, perform a minimal real SAP POST:
    ```text
    POST Header → Verify HTTP success → Verify SAP-generated document number → Read document back from SAP
    ```
@@ -210,17 +202,16 @@ A SAP Create feature is NOT complete until:
 1. Actual SAP API/service identified.
 2. `$metadata` inspected.
 3. EntitySet verified.
-4. Navigation properties verified.
+4. Relevant navigation properties verified.
 5. CREATE capability verified.
-6. Real SAP POST tested.
-7. SAP-generated document number confirmed.
-8. Required items persisted in SAP.
-9. Required pricing persisted in SAP.
-10. Document read back directly from SAP.
-11. Frontend displays the SAP-persisted result.
-12. No mock/local-only persistence is used.
-13. Existing READ/list/detail functionality remains working.
-14. Tests and validation pass.
+6. Real SAP POST tested with explicit authorization for the target environment and data scope.
+7. SAP-generated document number confirmed, when the API generates one.
+8. Every component actually required by the verified business object/API contract (such as items or pricing) is persisted and confirmed.
+9. Document read back directly from SAP.
+10. Frontend displays the SAP-persisted result.
+11. No mock/local-only persistence is used.
+12. Existing READ/list/detail functionality remains working.
+13. Tests and validation pass.
 
 If the agent cannot prove the SAP backend capability, STOP implementation and report exactly what SAP capability is missing. Do not invent an API, payload, endpoint, navigation property, or local workaround.
 
@@ -233,6 +224,12 @@ If the agent cannot prove the SAP backend capability, STOP implementation and re
 - E2E tests cover the applicable Fiori → CAP → backend flow.
 - Read errors, warnings, and stack traces completely. Investigate the failing boundary and root cause before changing implementation.
 - If a prerequisite tool, service, credential, or environment is unavailable, do not claim success. Report the exact unavailable validation and its reason.
+
+## Dead-code and unused-code review
+
+Treat dead-code findings as **candidates** until reachability and runtime use are checked. Before removing code, trace static references and relevant dynamic entry points, including CAP service/handler registration, CDS definitions, UI5 routes and manifests, fragments, configuration/environment keys, scripts/jobs, dependency injection or reflection, generated files, extension points, and tests. Check whether the code is intentionally dormant behind a feature flag or used by an external SAP/platform integration.
+
+Lint warnings or a text search alone do not prove code is safe to remove. Use existing project tooling; do not add a dead-code package unless the user asks. Remove code only when evidence shows it is unreachable, removal is within the requested scope, and focused tests plus relevant lint/build validation pass. If dynamic or external use cannot be ruled out, leave the candidate in place and report the evidence and uncertainty.
 
 ## Required validation
 

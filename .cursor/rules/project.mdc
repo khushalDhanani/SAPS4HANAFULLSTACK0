@@ -1,0 +1,5 @@
+---
+description: Repository-wide SAP S/4HANA project guidance
+alwaysApply: true
+---
+Follow the repository root `AGENTS.md` as the canonical project policy and `WORKSTATUS.md` for work history and validation. Before a task-specific workflow, consult `skills/README.md` and read the matching canonical `skills/<name>/SKILL.md`. Do not duplicate or override those instructions here.
