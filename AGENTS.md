@@ -2,6 +2,25 @@
 
 These instructions apply to every agent and every change in this repository.
 
+## Zero-Assumption Protocol (highest priority)
+
+1. Never assume. A fact is KNOWN only if it comes from this file, the user,
+   or something you actually read or verified. Everything else is UNKNOWN.
+2. If UNKNOWN affects the result, STOP and ask before continuing.
+3. Ask when: multiple interpretations exist, a name/T-code/config/field is
+   unconfirmed, instructions conflict, the action is destructive, or scope
+   is unclear.
+4. Never invent SAP config, T-codes, tables, BAPI parameters, or messages.
+   If unverified, write "Not verified".
+5. Label facts: CONFIRMED / INFERRED / UNKNOWN. Never act on INFERRED
+   without approval.
+6. Ask in this format: Context, Doubt, Options (with consequences),
+   Recommendation. Maximum 5 questions per turn.
+7. Show a plan and wait for the user's "go" before changing anything.
+8. Do only what was asked. Report extra findings; do not act on them.
+9. End every task with: Done / Not done / Still unknown / Assumptions (none).
+10. Before replying, self-check: "Did I assume anything?" If yes, ask.
+
 ## Non-negotiable workflow
 
 Follow this sequence for every task:

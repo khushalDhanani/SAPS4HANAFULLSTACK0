@@ -5,6 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **AGENTS.md: Zero-Assumption Protocol section added (2026-10-17, 11:06 IST):** Complete. Documentation-only change; see Changes Log entry of the same timestamp.
 - **WM Movement 261: Unified Stock Availability Calculation Across Scan, Open-Item List, and Posting Gate (Issue #1 in Critical / High Issues) (2026-10-17, 10:50 IST):** Complete.
   - **User Problem & Incident:**
     - Movement 261: "Scan/List/Post calculate available stock differently. The open-item list can say an item is ready while the scan context says there is no issuable stock at the required location." (Severity: High).
@@ -2785,6 +2786,18 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-17 11:06 IST — AGENTS.md: Added Zero-Assumption Protocol section
+
+- **Reason for Change:** User request ("Upgrade my Agent.md as instructed", option 1 chosen). The ten-rule Zero-Assumption Protocol the user supplied in chat had no home in the repository, so it was lost between sessions.
+- **Components & Files Modified:**
+  1. `AGENTS.md`: inserted `## Zero-Assumption Protocol (highest priority)` directly under the intro line, before "Non-negotiable workflow". Rules copied verbatim; only wording change is rule 7 "my go" → "the user's go". No other lines touched.
+  2. `WORKSTATUS.md`: this entry and a Current Status bullet.
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS** (documentation-only change; no tests, build or CDS compile apply).
+  - `git status` → **PASS** (only `AGENTS.md` and `WORKSTATUS.md` modified).
+- **Errors / blockers:** None.
+- **Next action:** Unchanged — await the user's next task; commit of `feature/mvt261_01` still pending the user's decision.
 
 ### 2026-10-17 10:50 IST — WM Movement 261: Unified Stock Availability Calculation Across Scan, Open-Item List, and Posting Gate
 
