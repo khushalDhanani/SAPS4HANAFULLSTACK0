@@ -416,6 +416,49 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       );
     });
 
+    test("Movement 311: passes isTransferPosting=false and batch to adapter createTransferRequirement so RSNUM and CHARG stay on the TR [mock only, not SAP verification]", async () => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, "createReservation").mockResolvedValueOnce({
+        success: true, reservationNo: "777001", reservationNoRaw: testResNo, reservationItem: "0001", status: "01"
+      });
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, "createTransferRequirement").mockResolvedValueOnce({
+        success: true, warehouseNumber: "W01", trNumber: "1007781", trNumberRaw: "0001007781", trItem: "0001", status: "02"
+      });
+
+      const { status } = await POST(
+        "/odata/v4/reservation-entry/createReservationEntry",
+        { MovementType: "311", Plant: "1120", StorageLocation: "HS01", ReceivingStorageLocation: "CS01",
+          Material: "000000008000000023", Quantity: 1, Unit: "NOS", Batch: "IN26001170", WarehouseNumber: "W01" },
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(createTrSpy).toHaveBeenCalledWith(expect.objectContaining({
+        movementType: "311",
+        isTransferPosting: false,
+        batch: "IN26001170",
+        reservationNo: testResNo
+      }));
+    });
+
+    test("Movement 301: passes isTransferPosting=true to adapter createTransferRequirement (RSNUM omitted on staging TR) [mock only, not SAP verification]", async () => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, "createReservation").mockResolvedValueOnce({
+        success: true, reservationNo: "777002", reservationNoRaw: "0000777002", reservationItem: "0001", status: "01"
+      });
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, "createTransferRequirement").mockResolvedValueOnce({
+        success: true, warehouseNumber: "W01", trNumber: "1007782", trNumberRaw: "0001007782", trItem: "0001", status: "02"
+      });
+
+      const { status } = await POST(
+        "/odata/v4/reservation-entry/createReservationEntry",
+        { MovementType: "301", Plant: "1120", StorageLocation: "HS01", ReceivingPlant: "1600", ReceivingStorageLocation: "CS01",
+          Material: "000000008000000023", Quantity: 1, Unit: "NOS", WarehouseNumber: "W01" },
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(createTrSpy).toHaveBeenCalledWith(expect.objectContaining({ movementType: "301", isTransferPosting: true }));
+    });
+
     test('When reservation creation fails, TR creation is NEVER called and error is returned with stage RESERVATION', async () => {
       createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockRejectedValueOnce(
         Object.assign(new Error('Cost Center 1011201301 locked for postings'), {
