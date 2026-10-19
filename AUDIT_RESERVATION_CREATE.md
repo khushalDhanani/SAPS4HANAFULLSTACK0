@@ -205,3 +205,11 @@ No FAIL. Therefore no new defect/file/function/test entries.
 
 **LIVE 201 RESULT: PASS (reservation + auto-TR); TO/confirm/final status UNVERIFIED (Step 2 not authorized yet).**
 Reservation `0000530229/0001`, TR `W01/0001000882`; full evidence in the WORKSTATUS entry of the same timestamp. Live-found defects: cross-warehouse TO lookup in `fetchSapReservation` (fixed), fabricated SLG1 `LOG_` handle in `writeApplicationLog` (fixed), replay shown as "created" (open, P3).
+
+# LIVE 241 — Steps 1–2 (2026-10-19)
+
+**LIVE 241 RESULT: Step 1 PASS (reservation 0000530231/0001 + TR W01/0001000885); Step 2 FAIL (TO creation rejected by SAP with `XFELD_WRONG`, no TO created, TR closed by SAP); final status / MIGO UNVERIFIED (not authorized).**
+
+- Same create/TO code path as 201; no code change was needed for Step 1, none made for Step 2.
+- New defects: **D18** (P1) no in-app recovery when SAP closes a TR without a TO (LT04 would hit a completed TR, LB01 is refused while a TR is tracked); **D19** (P2) the TO wrapper's `ET_MESSAGES`/`EV_MESSAGE` are not logged, so only the exception name survives.
+- Evidence and SAP reads: WORKSTATUS.md entries 2026-10-19 21:45 IST and 22:10 IST.
