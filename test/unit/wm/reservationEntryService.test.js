@@ -51,6 +51,8 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
     createTrSpy?.mockRestore();
     authSpy?.mockRestore();
     t320Spy?.mockRestore();
+    // Step 7.7: attempts are keyed by payload hash; tests re-post identical payloads, so clear the log.
+    await cds.db.run(DELETE.from('saps4hana.wm.ReservationCreateAttempt'));
   });
 
   describe('1e. Stock pre-check wiring (Step 7.6)', () => {

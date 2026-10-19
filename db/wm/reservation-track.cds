@@ -82,3 +82,31 @@ entity ReservationLog : cuid, managed {
                           on Track.ReservationNo = ReservationNo
                          and Track.ReservationItem = ReservationItem;
 }
+
+/**
+ * Step 7.7: one row per reservation-create attempt, written in its own transaction BEFORE
+ * BAPI_RESERVATION_CREATE1 so that a timeout, crash or local failure after the SAP commit leaves a
+ * record with the SAP document number and the exact stage. Never a business document (ADR-0001).
+ * Stage: RESERVATION_PENDING | RESERVATION_CREATED | RESERVATION_REJECTED | RESERVATION_UNKNOWN |
+ *        RESERVATION_CREATED_MISMATCH | RESERVATION_ALREADY_TRACKED | LOCAL_PERSIST_FAILED |
+ *        TR_CREATED | TR_FAILED (the TR phase runs under RESERVATION_CREATED and is written when the request ends)
+ */
+@assert.unique: { attemptKey: [AttemptKey] }
+entity ReservationCreateAttempt : cuid, managed {
+    AttemptKey          : String(80);    // ClientAttemptId or RequestHash, suffixed with the generation
+    ClientAttemptId     : String(36);
+    RequestHash         : String(64);    // SHA-256 of the canonical payload + user
+    RequestUser         : String(255);
+    MovementType        : String(3);
+    Plant               : String(4);
+    StorageLocation     : String(4);
+    Material            : String(40);
+    Quantity            : Decimal(13,3);
+    Unit                : String(3);
+    Stage               : String(30);
+    ReservationNo       : String(10);    // RSNUM as soon as SAP returns it
+    ReservationItem     : String(4);
+    TransferRequirement : String(10);
+    LastError           : String(500);
+    ResolvedAt          : Timestamp;
+}

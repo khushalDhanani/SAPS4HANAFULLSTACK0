@@ -105,7 +105,8 @@ service ReservationEntryService {
         OrderID                 : String(12),
         OrderType               : String(4),
         WarehouseNumber         : String(3),
-        Batch                   : String(10)
+        Batch                   : String(10),
+        ClientAttemptId         : String(36)
     ) returns ReservationCreatedResponse;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -162,7 +163,8 @@ service ReservationEntryService {
         WarehouseNumber         : String(3),
         Batch                   : String(10),
         SerialNo                : String(18),
-        Serials                 : array of String(18)
+        Serials                 : array of String(18),
+        ClientAttemptId         : String(36)
     ) returns ReservationEntries;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])

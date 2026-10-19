@@ -7,6 +7,8 @@ const { findUnconfirmedToItems } = require('../../integration/s4hana/wm/toState'
 const { STATUS, STEP_ERROR, UNCONFIRMED_TO, PROCESS_STATUS } = require('../../common/wmStatus');
 const { sapKey } = require('../../integration/s4hana/sapKey');
 const { withReservationLock, isLockConflict } = require('../../integration/s4hana/wm/resLock');
+const attemptStore = require('./ReservationAttemptStore');
+const { classifyCreateFailure } = require('./ReservationAttemptStore');
 const { validateReservationInput, getMovementConfig, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
 const LOG = cds.log('reservation-entry');
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
@@ -110,6 +112,37 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
       for (const w of stockWarnings) req?.warn?.(200, w);
 
+      // Step 7.7: attempt record (own transaction) BEFORE the SAP write: RESERVATION_PENDING.
+      const reqUser = (req.user && req.user.id) || '';
+      const claim = await attemptStore.claim({
+        clientAttemptId: payload.ClientAttemptId,
+        requestHash: attemptStore.constructor.hash(payload, reqUser),
+        user: reqUser,
+        fields: { MovementType, Plant, StorageLocation, Material, Quantity, Unit }
+      });
+      if (!claim.created) {
+        const prior = claim.row;
+        if (claim.reason === 'replay') {
+          const tracked = await SELECT.one.from(ReservationEntries).where({ ReservationNo: prior.ReservationNo, ReservationItem: prior.ReservationItem || '0001' });
+          if (tracked) {
+            req?.warn?.(200, `Identical request already created reservation ${alphaOut(prior.ReservationNo)}; no new reservation was created`);
+            return tracked;
+          }
+        }
+        const docHint = prior.ReservationNo ? ` SAP reservation ${alphaOut(prior.ReservationNo)} belongs to that attempt.` : '';
+        req.error(409, claim.reason === 'in_progress'
+          ? `An identical reservation request is still in progress (attempt ${prior.AttemptKey}); wait for it to finish.${docHint}`
+          : `A previous identical request is at stage ${prior.Stage} (${prior.LastError || 'no error text'}).${docHint} Resolve it (open the reservation in the app to import it) before creating a new one.`);
+        return;
+      }
+      const attemptId = claim.row.ID;
+      // Stage writes after the first local INSERT must wait until the request transaction has ended
+      // (own-transaction write while this transaction holds the lock deadlocks on SQLite); 'done' fires
+      // after commit or rollback, so the record survives a req.error.
+      const stageLater = (stage, fields) => (typeof req.on === 'function'
+        ? req.on('done', () => attemptStore.setStage(attemptId, stage, fields))
+        : attemptStore.setStage(attemptId, stage, fields));
+
       let resResult;
       try {
         // Step 1: Create Reservation via BAPI_RESERVATION_CREATE1
@@ -132,7 +165,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         });
       } catch (err) {
         const errorMsg = err.error || err.message;
-        req.error(err.status || 500, `Failed to create reservation: ${errorMsg}`);
+        const stage = classifyCreateFailure(err);
+        await attemptStore.setStage(attemptId, stage, { LastError: errorMsg, ...(err.reservationNo ? { ReservationNo: String(err.reservationNo).padStart(10, '0'), ReservationItem: '0001' } : {}) });
+        const hint = stage === 'RESERVATION_UNKNOWN'
+          ? ' The outcome in SAP is unknown: check the reservation list before submitting again (the app blocks an identical re-submit until this attempt is resolved).'
+          : (stage === 'RESERVATION_CREATED_MISMATCH' ? ` Reservation ${alphaOut(err.reservationNo)} exists in SAP; open it in the app to import it.` : '');
+        req.error(err.status || 500, `Failed to create reservation: ${errorMsg}${hint}`);
         return {
           success: false,
           stage: 'RESERVATION',
@@ -142,6 +180,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       if (!resResult || !resResult.success || (!resResult.reservation?.number && !resResult.reservationNo)) {
         const errorMsg = resResult?.error || 'Failed to create reservation: No reservation number returned from SAP';
+        await attemptStore.setStage(attemptId, resResult?.success === false ? 'RESERVATION_REJECTED' : 'RESERVATION_UNKNOWN', { LastError: errorMsg });
         req.error(500, errorMsg);
         return {
           success: false,
@@ -154,7 +193,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const resItem = resResult.reservation?.item || resResult.reservationItem || '0001';
       const resNo = resResult.reservationNoRaw || String(resNumber).padStart(10, '0');
       const extId = `${resNo}/${resItem}`;
+      await attemptStore.setStage(attemptId, 'RESERVATION_CREATED', { ReservationNo: resNo, ReservationItem: resItem, LastError: resResult.sapVerified ? '' : 'RKPF/RESB read-back unavailable' });
 
+      // Step 7.7: nothing below may silently lose the SAP document number. A local failure is recorded on
+      // the attempt (own transaction) and reported with the RSNUM; the request transaction rolls back.
+      let sLogHandle = '';
+      try {
       // Initialize SLG1 Application Log header
       let slg1Log;
       try {
@@ -172,9 +216,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           messageText: `Reservation ${resNo} created via BAPI_RESERVATION_CREATE1`
         });
       } catch (_logErr) {
-        slg1Log = { logHandle: `LOG_${Date.now().toString(36).toUpperCase()}` };
+        slg1Log = { logHandle: '' }; // no synthetic handle: '' means "no SLG1 log exists" (audit D10)
       }
-      const sLogHandle = slg1Log?.logHandle || '';
+      sLogHandle = slg1Log?.logHandle || '';
 
       // Log Step 1 (MB21)
       await INSERT.into(ReservationLogs).entries({
@@ -233,12 +277,26 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       });
 
       if (existing) {
+        // Audit D5: a tracked row with progress (TR/TO/MIGO or a status beyond 01/11) is never reset.
+        const hasProgress = existing.TransferRequirement || existing.TransferOrder || existing.MaterialDocument ||
+          ![STATUS.RES_CREATED, STATUS.TR_ERROR].includes(existing.Status_code);
+        if (hasProgress) {
+          stageLater('RESERVATION_ALREADY_TRACKED', { ReservationNo: resNo, ReservationItem: resItem, LastError: `already tracked with status ${existing.Status_code}` });
+          req.error(409, `Reservation ${alphaOut(resNo)}/${resItem} is already tracked with status ${existing.Status_code}; its tracking record was not changed`);
+          return;
+        }
         await UPDATE(ReservationEntries).set(initialTrackRecord).where({
           ReservationNo: resNo,
           ReservationItem: resItem
         });
       } else {
         await INSERT.into(ReservationEntries).entries(initialTrackRecord);
+      }
+      } catch (persistErr) {
+        if (req.errors?.length) return; // the 409 above
+        stageLater('LOCAL_PERSIST_FAILED', { ReservationNo: resNo, ReservationItem: resItem, LastError: persistErr.message });
+        req.error(500, `Reservation ${alphaOut(resNo)}/${resItem} was created in SAP but could not be recorded locally (${persistErr.message}). Open reservation ${alphaOut(resNo)} in the app to import it; do not create it again.`);
+        return;
       }
 
       // Step 2: Auto-create Transfer Requirement (background/immediate step)
@@ -337,9 +395,11 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           MessageNo: '001',
           MessageText: `Transfer Requirement ${trNumber} auto-created via L_TR_CREATE`
         });
+        stageLater('TR_CREATED', { TransferRequirement: trNumber });
       } catch (err) {
         // Reservation exists but the backend created no TR: status 11 (TR error), a backend issue to fix in SAP.
         trError = `TR creation failed in SAP backend: ${err.message}`;
+        stageLater('TR_FAILED', { LastError: trError });
 
         await UPDATE(ReservationEntries).set({
           WarehouseNumber: determinedWh,
@@ -525,6 +585,17 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         LOG.warn(`Stock pre-check failed for material ${payload.Material}: ${stockErr.message}`);
       }
 
+      const reqUser = (req.user && req.user.id) || '';
+      const claim = await attemptStore.claim({ clientAttemptId: payload.ClientAttemptId, requestHash: attemptStore.constructor.hash(payload, reqUser), user: reqUser, fields: payload });
+      if (!claim.created) {
+        const prior = claim.row;
+        if (claim.reason === 'replay') {
+          return { success: true, stage: 'REPLAY', reservation: { number: alphaOut(prior.ReservationNo), item: prior.ReservationItem || '0001' }, movementType: String(payload.MovementType).trim() };
+        }
+        return { success: false, stage: claim.reason === 'in_progress' ? 'IN_PROGRESS' : 'UNRESOLVED', error: `Attempt ${prior.AttemptKey} is in stage ${prior.Stage}${prior.ReservationNo ? ` (reservation ${alphaOut(prior.ReservationNo)})` : ''}: ${prior.LastError || 'no error text'}` };
+      }
+      const attemptId = claim.row.ID;
+
       let resResult;
       try {
         resResult = await adapter.createReservation({
@@ -546,6 +617,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           throwError: false
         });
       } catch (err) {
+        await attemptStore.setStage(attemptId, classifyCreateFailure(err), { LastError: err.error || err.message, ...(err.reservationNo ? { ReservationNo: String(err.reservationNo).padStart(10, '0'), ReservationItem: '0001' } : {}) });
         return {
           success: false,
           stage: 'RESERVATION',
@@ -554,10 +626,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
 
       if (!resResult || !resResult.success || (!resResult.reservation?.number && !resResult.reservationNo)) {
+        const errorMsg = resResult?.error || 'Failed to create reservation: No reservation number returned from SAP';
+        // throwError:false turns every adapter failure into {success:false,status}; classify by that status.
+        await attemptStore.setStage(attemptId, classifyCreateFailure({ status: resResult?.status }), { LastError: errorMsg });
         return {
           success: false,
           stage: 'RESERVATION',
-          error: resResult?.error || 'Failed to create reservation: No reservation number returned from SAP'
+          error: errorMsg
         };
       }
 
@@ -565,6 +640,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const resItem = resResult.reservation?.item || resResult.reservationItem || '0001';
       const resNo = resResult.reservationNoRaw || String(resNumber).padStart(10, '0');
       const extId = `${resNo}/${resItem}`;
+      await attemptStore.setStage(attemptId, 'RESERVATION_CREATED', { ReservationNo: resNo, ReservationItem: resItem });
 
       // Persist reservation in tracking table with status RES_CREATED
       const sCreatedBy = payload.CreatedByUser || (resResult && (resResult.createdByUser || resResult.USNAM)) || (req.user && req.user.id) || 'KHUSHAL';
@@ -1673,6 +1749,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
       if (!STEP_ERROR[requestedStep]) {
         return req.error(400, `Unsupported retry step: '${requestedStep}'. Supported: LB01, LT04, LT12, MIGO`);
+      }
+      if (requestedStep === 'LB01' && track.TransferRequirement) {
+        return req.error(400, `Transfer Requirement ${alphaOut(track.TransferRequirement)} already exists for reservation ${sResNo}/${sResItem}; retry LT04 (TO creation) instead`);
       }
       if (requestedStep === 'MIGO' && track.MaterialDocument && track.Status_code === STATUS.GI_POSTED) {
         return req.error(400, `Material Document ${track.MaterialDocument} is already posted for reservation ${sResNo}/${sResItem}`);

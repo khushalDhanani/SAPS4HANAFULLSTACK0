@@ -67,7 +67,7 @@ Fix: `@restrict` the entity (`CREATE/UPDATE/DELETE` to the three warehouse roles
 Repro: mock BAPI returning a number ⇒ row persisted with Status 01 without any `RFC_READ_TABLE RKPF/RESB` call (visible in `reservationEntryService.test.js:201-256`, no readTable assertion).
 Fix: after COMMIT, read `RKPF (RSNUM, BWART, KOSTL, ANLN1, ANLN2, UMWRK, UMLGO, AUFNR, USNAM, RSDAT)` and `RESB (RSPOS, MATNR, WERKS, LGORT, BDMNG, MEINS, CHARG, XLOEK)`, assert they match the request, persist SAP values (incl. real RSPOS, USNAM, ReservationDate), fail with a clear error if the row is missing.
 
-**D3 — P1 — No idempotency / duplicate guard on reservation creation.**
+**D3 — P1 — FIXED 2026-10-19 15:30 IST (Step 7.7, `ReservationAttemptStore` + `ClientAttemptId`) — No idempotency / duplicate guard on reservation creation.**
 `service.js:40-382` (`executeReservationAndAutoTR`) has no client attempt id, request hash, or in-flight lock (compare `GoodsIssueAttemptStore` used by goods issue). UI protection is only `view>/busy` (`controller.js:575`). `ODataClient` does not retry POSTs, but a 504/connection drop after `BAPI_TRANSACTION_COMMIT` leaves the user with an error and a committed reservation; resubmitting creates a second one. Same for a failed `BAPI_TRANSACTION_COMMIT` call (`adapter.js:325-327`): outcome unknown, reported as failure.
 Repro: mock `createReservation` to resolve after the client aborts, then resubmit ⇒ two track rows / two BAPI calls.
 Fix: accept a `ClientAttemptId`, persist an attempt row keyed by it (plus a SHA-256 of the normalized payload) before calling SAP, return the existing result on replay, and on commit-timeout reconcile by reading RKPF/RESB (`USNAM`, `RSDAT`, material/qty) before allowing a retry.
@@ -77,7 +77,7 @@ Fix: accept a `ClientAttemptId`, persist an attempt row keyed by it (plus a SHA-
 Repro: `POST createReservationEntry` 311 body with `CostCenter: "1011201301"` ⇒ passes validation, header `{MOVE_TYPE:'311', MOVE_PLANT, MOVE_STLOC, COSTCENTER:'1011201301'}` is sent. What SAP does with it is **Not verified**.
 Fix: in `validateReservationInput`, reject any non-empty field listed in `cfg.forbiddenFields`; build the header only from the fields the type allows.
 
-**D5 — P1 — 261 "adoption" path reports a reservation as created, ignores SLoc/quantity, and overwrites existing tracking.**
+**D5 — P1 — PARTLY FIXED 2026-10-19 15:30 IST (Step 7.7: a tracked row with progress is no longer overwritten, 409; the adoption SLoc/quantity match and the "created" wording remain open) — 261 "adoption" path reports a reservation as created, ignores SLoc/quantity, and overwrites existing tracking.**
 `ReservationProcessAdapter.js:244-299`: on M7 126 the code selects the first open `RESB` row for `AUFNR+MATNR+WERKS` (no `LGORT`, no quantity comparison) and returns `success:true`; `service.js:186-203` then `SELECT existing` → `UPDATE … set(initialTrackRecord)` which resets `TransferRequirement`, `Status_code` 01, `ErrorMessage` etc. The UI shows "Reservation N created successfully" and the auto-TR is created with the user's quantity against SAP's component line.
 Repro: mock BAPI RETURN `{TYPE:'E', ID:'M7', NUMBER:'126'}` and a RESB row with `LGORT` ≠ request SLoc and `BDMNG` ≠ request Qty; a pre-existing track row with Status 05 for that RSNUM/RSPOS is reset to 01.
 Fix: never upsert over a tracked row with progress (reject or merge); on adoption require `LGORT` match, cap quantity to `BDMNG−ENMNG`, return a distinct `stage: 'ADOPTED'` so the UI can say "linked to existing component reservation"; cover with tests.
@@ -98,7 +98,7 @@ Fix: always resolve T320 and, if a `WarehouseNumber` was supplied, require it to
 `adapter.js:105, 185, 2741, 2787, 2840, 2938` use `!this.rfc.readTable?.mock || this._check*Existence`. `reservationEntryService.test.js` and `reservationProcess.test.js` never set the flags, so CSKS/ANLA/AUFK/MARC/MCHA "not found" rejections and the 301 receiving-location SAP check are skipped under test.
 Fix: remove the mock sniffing; make the checks unconditional and drive the tests with explicit readTable fixtures.
 
-**D10 — P2 — Partial-failure ordering and synthetic data after SAP commit.**
+**D10 — P2 — FIXED 2026-10-19 15:30 IST (Step 7.7: RSNUM kept on the attempt, 500 names it, no synthetic LogHandle) — Partial-failure ordering and synthetic data after SAP commit.**
 `service.js:157-183`: SLG1 failure stores a fabricated `LogHandle` (`LOG_<ts>`); the log row is inserted before the track row; if the track INSERT/UPDATE throws (e.g. HANA length violation on `MaterialName` > 40, or DB outage) CAP rolls back the local tx and returns 500 while the SAP reservation is already committed, with no record and no retry handle.
 Fix: insert the track row first inside the same tx, store `''` when SLG1 fails, and on local failure after SAP success return the reservation number in the error so the user/ops can import it (the READ auto-import at `service.js:1125-1210` already exists for that).
 

@@ -63,7 +63,15 @@ sap.ui.define([
             };
         },
 
+        // One id per create form instance: a re-submit of the same form (double click, retry after a
+        // timeout) carries the same id, so the backend can answer with the reservation it already created.
+        _newClientAttemptId: function () {
+            this._sClientAttemptId = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 12);
+            return this._sClientAttemptId;
+        },
+
         _onRouteCreateMatched: function () {
+            this._newClientAttemptId();
             this._oViewModel.setProperty("/isCreate", true);
             this._oViewModel.setProperty("/isTracked", false);
             this._oViewModel.setProperty("/busy", false);
@@ -603,11 +611,13 @@ sap.ui.define([
                 SubNumber: (oData.SubNumber || "").trim(),
                 OrderType: (oData.OrderType || "").trim(),
                 OrderID: (oData.OrderID || "").trim(),
-                Batch: (oData.Batch || "").trim()
+                Batch: (oData.Batch || "").trim(),
+                ClientAttemptId: this._sClientAttemptId || this._newClientAttemptId()
             };
 
             return this._oService.createReservationEntry(oPayload).then(function (oResult) {
                 that._oViewModel.setProperty("/busy", false);
+                that._newClientAttemptId(); // the form's next submit is a new attempt
 
                 const sResNo = oResult.ReservationNo;
                 const sItem = oResult.ReservationItem || "0001";
