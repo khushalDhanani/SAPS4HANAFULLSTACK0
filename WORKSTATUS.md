@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 7.6 stock pre-check (2026-10-19, 14:35 IST):** `ReservationProcessAdapter.checkStockForReservation` (MARA/MARD/MCHB/LQUA, quantity vs base unit, batch-aware) runs before the BAPI; non-existent batch blocks (400), shortages are warnings persisted as MB21 `W` log rows. 12 suites / 422 tests PASS. Not committed.
+
 - **Step 7.5 warehouse determination (2026-10-19, 14:05 IST):** warehouse always derived from T320 and a supplied value validated against it (mismatch / no assignment / 311 cross-warehouse → 400 before any SAP write) in both create handlers and the TR action. 11 suites / 394 tests PASS. Not committed. Audit D8 closed.
 
 - **Step 7.4 BAPI mapping (2026-10-19, 13:40 IST):** `RESERVATIONHEADER` built from `MOVEMENT_CONFIG` only (forbidden fields can never be sent), numeric-only ALPHA padding, `sapKey` on all location keys, and a post-commit RKPF/RESB read-back (`sapVerified`, real `RSPOS`/`USNAM`/`RSDAT`). Exact-payload tests for all five movements; 21 suites / 709 tests PASS. Not committed. Audit D2, D6, D11 closed.
@@ -11165,4 +11167,22 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Behaviour change:** a UI/tool call with a wrong `WarehouseNumber` now fails with 400 before SAP; an unreachable SAP (503 on T320) fails the create before the BAPI instead of after it.
 - **Status:** Done, not committed. Audit D8 closed.
 - **Next recommended action:** D3 (attempt store / idempotency on reservation creation), then D5.
+- **Assumptions:** none.
+
+### 2026-10-19 14:35 IST — Step 7.6: Pre-creation stock check moved to the adapter, quantity/batch/UoM aware
+
+- **Work Session / Reason:** Step 7.6 brief. Audit of the pre-BAPI checks on HEAD: the service read `LQUA` inline (WM quants only, no quantity comparison, no batch filter, no MARD/MCHB) and swallowed everything as a `req.warn`; the adapter checked MARC existence, `XCHPF` batch-mandatory, MARD extension and (301 only) receiving-batch existence. No project rule (`movementConfig`, posting validators, WORKSTATUS) requires stock at reservation creation: MB21 creates a requirement (RESB); stock is enforced at goods issue (`revalidateStock*`) and at TO creation. Therefore shortages stay non-blocking; what makes a reservation unusable is blocked. No SAP call made.
+- **Changes:**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: new `checkStockForReservation({ plant, storageLocation, material, batch, quantity, unit, warehouseNumber })` (S/4 reads now live in the integration layer, not in the CAP service):
+    - **Blocking (400):** a batch that does not exist for the material in the issuing plant (`validateReceivingBatch` reused for the issuing plant; keeps its existing mock gate / `checkMarcExistence` flag).
+    - **Warnings:** `MARD-LABST` unrestricted < requested; `MCHB-CLABS` batch unrestricted < requested; no WM quant in the SLoc (`LQUA-VERME > 0`, batch-filtered when given, interim `9xx` storage types excluded) with the SLocs that do have quants; WM quant sum < requested; requested unit ≠ `MARA-MEINS` base unit → quantities not compared (MARM conversion not applied, said explicitly); any read failure → "unverified" warning, never an error.
+  - `srv/wm/reservation-entry/service.js`: `executeReservationAndAutoTR` calls the adapter check after warehouse resolution and before `BAPI_RESERVATION_CREATE1`; a 400 stops the request before SAP; warnings go to the OData response messages and are persisted as `ReservationLog` rows (`MessageType 'W'`, Step `MB21`, text `Stock pre-check: …`) so they show in the detail Logs table. `createReservation` action: same check, blocking returns `{ success:false, stage:'STOCK' }`.
+  - Tests: new `test/unit/wm/reservationStockPrecheck.test.js` (sufficient; insufficient unrestricted + WM; batch-specific insufficient; batch does not exist → 400; no WM quant with other SLocs and interim types ignored; valid despite non-WM stock; unit ≠ base unit; read failure; exact tables/where read). `reservationEntryService.test.js` block `1e`: shortage → reservation created, Status 02, warning log row; batch missing → 400, nothing persisted, action stage `STOCK`; non-400 failure → creation proceeds. Two older assertions now ignore `W` rows when counting step logs.
+- **Validation (executed):**
+  - `npx jest test/unit/wm/reservationStockPrecheck.test.js test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationBapiPayload.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/reservationEntryUi.test.js test/unit/wm/reservationMonitorRetry.test.js test/unit/wm/movement261UnifiedLifecycle.test.js test/unit/wm/mvt241Process.test.js test/unit/wm/step17Mvt201.test.js test/unit/wm/productionHardeningAudit.test.js test/unit/wm/processFixes.test.js test/unit/wm/reservationValidationMatrix.test.js` → **PASS (12 suites, 422 tests)**.
+  - `npx eslint` on the 4 changed files → clean. `git diff --check` → clean. `db.sqlite-wal` (tracked binary) was touched by the run and restored with `git checkout`.
+  - Not run: full `npm test`, e2e, live SAP.
+- **Not verified / open:** UoM conversion via `MARM` is not implemented (comparison skipped with a warning when the unit differs from `MARA-MEINS`); the batch-existence block still carries the pre-existing mock gate (audit D9). The UI does not yet render OData warning messages; the persisted log rows are the visible channel.
+- **Status:** Done, not committed.
+- **Next recommended action:** D3 (attempt store / idempotency on reservation creation), then D5, then D9 (remove mock gating).
 - **Assumptions:** none.

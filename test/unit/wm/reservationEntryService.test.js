@@ -53,6 +53,47 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
     t320Spy?.mockRestore();
   });
 
+  describe('1e. Stock pre-check wiring (Step 7.6)', () => {
+    const resNo = '0000777076';
+    const body = { MovementType: '201', Plant: '1120', StorageLocation: 'CS01', Material: '1000000045', Quantity: 10, Unit: 'KG', CostCenter: '1011201301', Batch: 'B1' };
+    let stockSpy;
+    beforeEach(() => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValue({ success: true, reservationNo: '777076', reservationNoRaw: resNo, reservationItem: '0001', status: '01' });
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement').mockResolvedValue({ success: true, warehouseNumber: 'W01', trNumber: '1007076', trNumberRaw: '0001007076', trItem: '0001', status: '02' });
+    });
+    afterEach(async () => {
+      stockSpy?.mockRestore();
+      await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: resNo }));
+      await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: resNo }));
+    });
+
+    test('insufficient stock: reservation is still created, shortage logged as a warning row on MB21', async () => {
+      stockSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'checkStockForReservation').mockResolvedValue({ warnings: ['Unrestricted stock of batch B1 2 KG is below the requested 10 KG (MCHB)'] });
+      const { status, data } = await POST('/odata/v4/reservation-entry/createReservationEntry', body, authClerk);
+      expect(status).toBe(200);
+      expect(data.Status_code).toBe('02');
+      expect(stockSpy.mock.calls[0][0]).toEqual({ plant: '1120', storageLocation: 'CS01', material: '1000000045', batch: 'B1', quantity: 10, unit: 'KG', warehouseNumber: 'W01' });
+      const logs = await cds.db.run(SELECT.from(LOG_ENTITY).where({ ReservationNo: resNo, MessageType: 'W' }));
+      expect(logs).toEqual([expect.objectContaining({ Step: 'MB21', MessageText: 'Stock pre-check: Unrestricted stock of batch B1 2 KG is below the requested 10 KG (MCHB)' })]);
+    });
+
+    test('unusable reservation (batch does not exist): 400 before BAPI, nothing created or persisted', async () => {
+      stockSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'checkStockForReservation').mockRejectedValue(Object.assign(new Error('Batch B1 does not exist in receiving plant 1120 master data (MCHA/MCH1)'), { status: 400 }));
+      await expect(POST('/odata/v4/reservation-entry/createReservationEntry', body, authClerk)).rejects.toMatchObject({ response: { status: 400, data: { error: { message: expect.stringMatching(/Batch B1 does not exist/) } } } });
+      expect(createResSpy).not.toHaveBeenCalled();
+      expect(await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: resNo }))).toBeFalsy();
+      const { data } = await POST('/odata/v4/reservation-entry/createReservation', body, authClerk);
+      expect(data).toMatchObject({ success: false, stage: 'STOCK' });
+    });
+
+    test('pre-check read failure (non-400): creation proceeds', async () => {
+      stockSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'checkStockForReservation').mockRejectedValue(new Error('RFC down'));
+      const { status } = await POST('/odata/v4/reservation-entry/createReservationEntry', body, authClerk);
+      expect(status).toBe(200);
+      expect(createResSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('1d. Warehouse determination (Step 7.5, audit D8)', () => {
     const resNo = '0000777075';
     const okRes = { success: true, reservationNo: '777075', reservationNoRaw: resNo, reservationItem: '0001', status: '01' };
@@ -408,8 +449,8 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(track.TransferRequirement).toBe('0001007777');
       expect(track.ReceivingStorageLocation).toBe('CS01');
 
-      // Verify 2 step-wise logs were created (MB21 and LB01)
-      const logs = await cds.db.run(SELECT.from(LOG_ENTITY).where({ ReservationNo: testResNo }));
+      // Verify 2 step-wise logs were created (MB21 and LB01); stock pre-check warnings (Step 7.6) are extra 'W' rows
+      const logs = (await cds.db.run(SELECT.from(LOG_ENTITY).where({ ReservationNo: testResNo }))).filter((l) => l.MessageType !== 'W');
       expect(logs).toHaveLength(2);
       expect(logs.map((l) => l.Step)).toEqual(['MB21', 'LB01']);
       expect(logs[0].Status).toBe('01');
@@ -530,7 +571,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(data.Status_code).toBe('11'); // TR error: backend created no TR
       expect(data.ErrorMessage).toContain('TR creation failed in SAP backend: Warehouse movement not active');
 
-      const logs = await cds.db.run(SELECT.from(LOG_ENTITY).where({ ReservationNo: testResNo }));
+      const logs = (await cds.db.run(SELECT.from(LOG_ENTITY).where({ ReservationNo: testResNo }))).filter((l) => l.MessageType !== 'W');
       expect(logs).toHaveLength(2);
       expect(logs[1].MessageType).toBe('E');
       expect(logs[1].Status).toBe('11');

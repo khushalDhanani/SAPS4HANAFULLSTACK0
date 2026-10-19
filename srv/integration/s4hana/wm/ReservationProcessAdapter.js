@@ -2988,6 +2988,79 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * Step 7.6: stock picture for a reservation BEFORE BAPI_RESERVATION_CREATE1.
+   * MB21 itself needs no stock (RESB is a requirement; stock is checked at goods issue / TO creation), so
+   * shortages are returned as warnings, never as errors. The only blocking case is a reservation that
+   * could never be executed: a batch that does not exist for the material in the issuing plant (MCHA/MCH1).
+   * Reads: MARA-MEINS (base unit), MARD-LABST (unrestricted), MCHB-CLABS (batch unrestricted), LQUA-VERME
+   * (WM quants, interim 9xx storage types excluded). Quantities are compared only when the requested unit
+   * equals the base unit (MARM conversion is not applied; the warning says so). Read failures never throw.
+   */
+  async checkStockForReservation({ plant, storageLocation, material, batch, quantity, unit, warehouseNumber } = {}) {
+    const s4Mat = padMat(sapKey(material, 'matnr'));
+    const s4Werks = sapKey(plant, 'plant');
+    const s4Lgort = sapKey(storageLocation, 'lgort');
+    const sBatch = sapKeyOpt(batch, 'batch');
+    const sUnit = String(unit || '').trim().toUpperCase();
+    const qty = Number(quantity);
+    const num = (v) => Number(String(v == null ? 0 : v).replace(/[^\d.-]/g, '')) || 0;
+    const result = { requested: { quantity: qty, unit: sUnit }, baseUnit: '', comparable: true, unrestricted: null, batchStock: null, wmStock: null, otherSlocs: [], warnings: [], reads: 'ok' };
+    if (!this.rfc || typeof this.rfc.readTable !== 'function') return { ...result, reads: 'skipped' };
+
+    // Blocking: the batch must exist for this material/plant, otherwise the reservation is unusable.
+    if (sBatch) await this.validateReceivingBatch(s4Mat, sBatch, s4Werks);
+
+    try {
+      const mara = await this.rfc.readTable('MARA', ['MEINS'], [`MATNR = '${s4Mat}'`], 1);
+      result.baseUnit = String(mara?.[0]?.MEINS || '').trim().toUpperCase();
+      result.comparable = !result.baseUnit || result.baseUnit === sUnit;
+      if (!result.comparable) {
+        result.warnings.push(`Requested unit ${sUnit} differs from base unit ${result.baseUnit} of material ${alphaOut(s4Mat)}; stock quantities were not compared (MARM conversion not applied)`);
+      }
+      const cmp = (label, avail, table) => {
+        if (result.comparable && avail < qty) result.warnings.push(`${label} ${avail} ${result.baseUnit || sUnit} is below the requested ${qty} ${sUnit} (${table})`);
+      };
+
+      const mard = await this.rfc.readTable('MARD', ['LABST'], [`MATNR = '${s4Mat}'`, `AND WERKS = '${s4Werks}'`, `AND LGORT = '${s4Lgort}'`], 1);
+      if (mard?.[0]) {
+        result.unrestricted = num(mard[0].LABST);
+        cmp(`Unrestricted stock of material ${alphaOut(s4Mat)} in plant ${s4Werks} / storage location ${s4Lgort}`, result.unrestricted, 'MARD');
+      }
+      if (sBatch) {
+        const mchb = await this.rfc.readTable('MCHB', ['CLABS'], [`MATNR = '${s4Mat}'`, `AND WERKS = '${s4Werks}'`, `AND LGORT = '${s4Lgort}'`, `AND CHARG = '${sBatch}'`], 1);
+        result.batchStock = mchb?.[0] ? num(mchb[0].CLABS) : 0;
+        cmp(`Unrestricted stock of batch ${sBatch} in plant ${s4Werks} / storage location ${s4Lgort}`, result.batchStock, 'MCHB');
+      }
+
+      const s4Lgnum = warehouseNumber ? sapKey(warehouseNumber, 'lgnum') : '';
+      if (s4Lgnum) {
+        const notInterim = (r) => num(r.VERME) > 0 && !String(r.LGTYP || '').trim().startsWith('9');
+        const lqua = await this.rfc.readTable('LQUA', ['LGTYP', 'LGPLA', 'LGORT', 'CHARG', 'VERME'], [
+          `LGNUM = '${s4Lgnum}'`, `AND MATNR = '${s4Mat}'`, `AND WERKS = '${s4Werks}'`, `AND LGORT = '${s4Lgort}'`,
+          ...(sBatch ? [`AND CHARG = '${sBatch}'`] : []), "AND VERME > 0"
+        ], 100);
+        const quants = (lqua || []).filter(notInterim);
+        result.wmStock = quants.reduce((sum, r) => sum + num(r.VERME), 0);
+        if (!quants.length) {
+          const lquaOther = await this.rfc.readTable('LQUA', ['LGTYP', 'LGORT', 'VERME'], [`LGNUM = '${s4Lgnum}'`, `AND MATNR = '${s4Mat}'`, `AND WERKS = '${s4Werks}'`, "AND VERME > 0"], 100);
+          result.otherSlocs = [...new Set((lquaOther || []).filter(notInterim).map((r) => String(r.LGORT || '').trim()).filter((sl) => sl && sl !== s4Lgort))];
+          const what = sBatch ? `batch ${sBatch} of material ${alphaOut(s4Mat)}` : `material ${alphaOut(s4Mat)}`;
+          result.warnings.push(result.otherSlocs.length
+            ? `Storage location ${s4Lgort} has no WM stock for ${what} in warehouse ${s4Lgnum}. Available in storage location(s): ${result.otherSlocs.join(', ')}.`
+            : `${what[0].toUpperCase()}${what.slice(1)} has no WM stock in warehouse ${s4Lgnum} (plant ${s4Werks}).`);
+        } else {
+          cmp(`WM stock of ${sBatch ? `batch ${sBatch}` : `material ${alphaOut(s4Mat)}`} in warehouse ${s4Lgnum} / storage location ${s4Lgort}`, result.wmStock, 'LQUA');
+        }
+      }
+    } catch (e) {
+      LOG.warn(`[checkStockForReservation] stock reads failed for material ${alphaOut(s4Mat)}: ${e.message}`);
+      result.reads = 'failed';
+      result.warnings.push(`Stock pre-check could not be completed (${e.message}); stock availability for material ${alphaOut(s4Mat)} is unverified`);
+    }
+    return result;
+  }
+
+  /**
    * Validate that a batch exists in the receiving plant's context (MCHA or MCH1) before posting.
    */
   async validateReceivingBatch(material, batch, receivingPlant) {

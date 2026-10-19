@@ -95,54 +95,20 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         return;
       }
 
-      // Task 8: SLoc pre-check at reservation creation: read LQUA for item's plant/SLoc.
-      let slocWarning = '';
-      if (Material && Plant && StorageLocation) {
-        try {
-          const wh = determinedWh;
-          const matPadded = String(Material || '').trim().padStart(18, '0');
-          const lquaCurrent = await adapter.rfc.readTable(
-            'LQUA',
-            ['LGTYP', 'LGPLA', 'VERME'],
-            [
-              `LGNUM = '${wh}'`,
-              `AND MATNR = '${matPadded}'`,
-              `AND WERKS = '${Plant}'`,
-              `AND LGORT = '${StorageLocation}'`,
-              "AND VERME > 0"
-            ],
-            10
-          );
-          const currentStock = (lquaCurrent || []).filter((q) => Number(String(q.VERME || 0).replace(/[^\d.-]/g, '')) > 0 && !String(q.LGTYP || '').trim().startsWith('9'));
-          if (!currentStock.length) {
-            const lquaOther = await adapter.rfc.readTable(
-              'LQUA',
-              ['LGTYP', 'LGORT', 'VERME'],
-              [
-                `LGNUM = '${wh}'`,
-                `AND MATNR = '${matPadded}'`,
-                `AND WERKS = '${Plant}'`,
-                "AND VERME > 0"
-              ],
-              100
-            );
-            const otherSlocs = [...new Set((lquaOther || [])
-              .filter((r) => Number(String(r.VERME || 0).replace(/[^\d.-]/g, '')) > 0 && !String(r.LGTYP || '').trim().startsWith('9'))
-              .map((r) => String(r.LGORT || '').trim())
-              .filter((sl) => sl && sl !== StorageLocation))];
-            if (otherSlocs.length > 0) {
-              slocWarning = `Storage location ${StorageLocation} has no WM stock for material ${Material} in warehouse ${wh}. Available in storage location(s): ${otherSlocs.join(', ')}.`;
-            } else {
-              slocWarning = `Material ${Material} has no WM stock in warehouse ${wh} (plant ${Plant}).`;
-            }
-            if (req && typeof req.warn === 'function') {
-              req.warn(slocWarning);
-            }
-          }
-        } catch (preErr) {
-          LOG.warn(`SLoc pre-check failed for material ${Material}: ${preErr.message}`);
+      // Step 7.6: stock picture before the BAPI. MB21 needs no stock; only an unusable reservation (batch that
+      // does not exist) is blocked. Shortages are warnings (response messages + ReservationLog rows below).
+      let stockWarnings = [];
+      try {
+        const stock = await adapter.checkStockForReservation({ plant: Plant, storageLocation: StorageLocation, material: Material, batch: Batch, quantity: Quantity, unit: Unit, warehouseNumber: determinedWh });
+        stockWarnings = stock?.warnings || [];
+      } catch (stockErr) {
+        if (stockErr.status === 400) {
+          req.error(400, stockErr.message);
+          return;
         }
+        LOG.warn(`Stock pre-check failed for material ${Material}: ${stockErr.message}`);
       }
+      for (const w of stockWarnings) req?.warn?.(200, w);
 
       let resResult;
       try {
@@ -225,6 +191,10 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         MessageNo: '060',
         MessageText: `Reservation ${resNo} created via BAPI_RESERVATION_CREATE1${resResult.sapVerified ? ' and verified in RKPF/RESB' : ' (RKPF/RESB read-back unavailable)'}`
       });
+
+      for (const w of stockWarnings) {
+        await logRow({ ReservationNo: resNo, ReservationItem: resItem, LogHandle: sLogHandle, ExternalId: extId, SubObject: 'TRACK', Step: 'MB21', Status: STATUS.RES_CREATED, MessageType: 'W', MessageId: 'ZRES', MessageNo: '001', MessageText: `Stock pre-check: ${w}`.substring(0, 255) });
+      }
 
       // Step 1b: Persist tracking row immediately with RSNUM as soon as SAP returns it
       const sCreatedBy = payload.CreatedByUser || (resResult && (resResult.createdByUser || resResult.USNAM)) || (req.user && req.user.id) || 'KHUSHAL';
@@ -546,6 +516,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         determinedWh = await resolveWarehouses(payload.MovementType, payload.Plant, payload.StorageLocation, payload.ReceivingStorageLocation, payload.WarehouseNumber);
       } catch (whErr) {
         return { success: false, stage: 'WAREHOUSE', error: whErr.message };
+      }
+      try {
+        const stock = await adapter.checkStockForReservation({ plant: payload.Plant, storageLocation: payload.StorageLocation, material: payload.Material, batch: payload.Batch, quantity: payload.Quantity, unit: payload.Unit, warehouseNumber: determinedWh });
+        for (const w of stock?.warnings || []) req?.warn?.(200, w);
+      } catch (stockErr) {
+        if (stockErr.status === 400) return { success: false, stage: 'STOCK', error: stockErr.message };
+        LOG.warn(`Stock pre-check failed for material ${payload.Material}: ${stockErr.message}`);
       }
 
       let resResult;
