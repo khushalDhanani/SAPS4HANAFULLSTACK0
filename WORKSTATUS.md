@@ -11631,3 +11631,4 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **16:55 IST — re-check #6:** unchanged (15 parameters, no IV_BETYP/IV_BENUM; include `LZ_VENDOR_REMOTESU06` still stamped 2026-10-10 14:16:00, version 5). No code change, no SAP write.
 - **16:56 IST — re-check #7:** unchanged (15 parameters, no IV_BETYP/IV_BENUM, no BETYP/BENUM in source). No code change, no SAP write.
 - **16:56 IST — re-check #8:** unchanged (15 parameters, no IV_BETYP/IV_BENUM, no BETYP/BENUM in source). No code change, no SAP write.
+- **16:57 IST — re-check #9:** unchanged (15 parameters, no IV_BETYP/IV_BENUM, no BETYP/BENUM in source). No code change, no SAP write.
