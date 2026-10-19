@@ -35,8 +35,11 @@ const MOVEMENT_CONFIG = Object.freeze({
     inventoryMovement: '201',
     configuredWmMovement: '201',
     stagingWmMovement: '311',
+    // Live 241 audit 2026-10-19 (D21): goods issues use the WM movement SAP is configured for (T333 W01/201: BETYP K,
+    // dynamic bin in 911); staging through 311/921 pooled stock across reservations and dropped the account assignment.
+    useRealWmMovement: true,
     get wmMovement() {
-      return (process.env.WM_TR_REAL_MOVEMENT === 'true' || process.env.WM_REAL_MOVEMENT === 'true') ? '201' : '311';
+      return this.useRealWmMovement ? this.configuredWmMovement : this.stagingWmMovement;
     },
     requirementType: 'K',
     interimStorageType: '911',
@@ -102,8 +105,11 @@ const MOVEMENT_CONFIG = Object.freeze({
     inventoryMovement: '241',
     configuredWmMovement: '241',
     stagingWmMovement: '311',
+    // Live 241 audit 2026-10-19 (D21): goods issues use the WM movement SAP is configured for (T333 W01/241: BETYP A,
+    // dynamic bin in 913); staging through 311/921 pooled stock across reservations and dropped the account assignment.
+    useRealWmMovement: true,
     get wmMovement() {
-      return (process.env.WM_TR_REAL_MOVEMENT === 'true' || process.env.WM_REAL_MOVEMENT === 'true') ? '241' : '311';
+      return this.useRealWmMovement ? this.configuredWmMovement : this.stagingWmMovement;
     },
     requirementType: 'A',
     interimStorageType: '913',

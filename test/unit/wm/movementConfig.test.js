@@ -108,20 +108,27 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
   });
 
   describe('2. WM Movement Resolution (Real vs Staging)', () => {
-    test('Default (WM_TR_REAL_MOVEMENT != true): 201 and 241 resolve to staging movement 311', () => {
+    test('D21: 201 and 241 resolve to their real WM movements by config (useRealWmMovement), independent of the env flag', () => {
       delete process.env.WM_TR_REAL_MOVEMENT;
-      expect(resolveWmMovement('201')).toBe('311');
-      expect(resolveWmMovement('241')).toBe('311');
-      expect(resolveWmMovement('311')).toBe('311');
-      expect(resolveWmMovement('301')).toBe('301');
-    });
-
-    test('Real Movement active (WM_TR_REAL_MOVEMENT = true): 201 and 241 resolve to configured 201/241', () => {
-      process.env.WM_TR_REAL_MOVEMENT = 'true';
+      delete process.env.WM_REAL_MOVEMENT;
+      expect(getMovementConfig('201').useRealWmMovement).toBe(true);
+      expect(getMovementConfig('241').useRealWmMovement).toBe(true);
       expect(resolveWmMovement('201')).toBe('201');
       expect(resolveWmMovement('241')).toBe('241');
       expect(resolveWmMovement('311')).toBe('311');
       expect(resolveWmMovement('301')).toBe('301');
+      expect(resolveWmMovement('261')).toBe('261');
+      process.env.WM_TR_REAL_MOVEMENT = 'false';
+      expect(resolveWmMovement('201')).toBe('201'); // the process-wide flag no longer downgrades a goods issue to staging
+      expect(resolveWmMovement('241')).toBe('241');
+      delete process.env.WM_TR_REAL_MOVEMENT;
+    });
+
+    test('staging movement stays recorded for reference (stagingWmMovement 311) but is not what 201/241 send', () => {
+      expect(getMovementConfig('201').stagingWmMovement).toBe('311');
+      expect(getMovementConfig('241').stagingWmMovement).toBe('311');
+      expect(getMovementConfig('201').wmMovement).toBe('201');
+      expect(getMovementConfig('241').wmMovement).toBe('241');
     });
 
     test('getMovementConfig handles whitespace trimming and unsupported keys', () => {

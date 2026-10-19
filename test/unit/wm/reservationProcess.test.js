@@ -318,7 +318,8 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       ).rejects.toThrow('Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE');
     });
 
-    test('when WM_TR_REAL_MOVEMENT is false (default), keeps BWLVS 311 substitution for 201 and 241 [mock only, not SAP verification]', async () => {
+    test('D21: 201 sends its real WM movement by default (BWLVS 201, BETYP K, cost centre BENUM, RSNUM kept); no 311 substitution [mock only, not SAP verification]', async () => {
+      delete process.env.WM_TR_REAL_MOVEMENT;
       mockRfc.call.mockResolvedValueOnce({
         T_LTBA: [{ TBNUM: '0001001839', TBPOS: '0001' }]
       });
@@ -333,6 +334,54 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         unit: 'NOS',
         reservationNo: '524979',
         costCenter: '1011201301'
+      });
+
+      const ltba = mockRfc.call.mock.calls[0][1].T_LTBA[0];
+      expect(mockRfc.call.mock.calls[0][0]).toBe('L_TR_CREATE');
+      expect(ltba).toMatchObject({ BWLVS: '201', BETYP: 'K', BENUM: '1011201301', RSNUM: '0000524979' });
+    });
+
+    test('D21: 241 sends its real WM movement by default (BWLVS 241, BETYP A, 10-char asset BENUM, RSNUM kept) [mock only, not SAP verification]', async () => {
+      delete process.env.WM_TR_REAL_MOVEMENT;
+      mockRfc.call.mockResolvedValueOnce({
+        T_LTBA: [{ TBNUM: '0001001839', TBPOS: '0001' }]
+      });
+
+      await adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        wmMovementType: '241',
+        movementType: '241',
+        material: '8000009754',
+        plant: '1120',
+        storageLocation: 'CS02',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '530231',
+        reservationItem: '0001',
+        assetNo: '400001',
+        subNumber: '0000'
+      });
+
+      const ltba = mockRfc.call.mock.calls[0][1].T_LTBA[0];
+      expect(ltba).toMatchObject({ BWLVS: '241', BETYP: 'A', BENUM: '0000400001', RSNUM: '0000530231', RSPOS: '0001', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'CS02' });
+    });
+
+    test('311 (SLoc transfer) is unchanged: BWLVS 311, no BETYP/BENUM, reservation kept [mock only, not SAP verification]', async () => {
+      mockRfc.call.mockResolvedValueOnce({
+        T_LTBA: [{ TBNUM: '0001001839', TBPOS: '0001' }]
+      });
+
+      await adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        wmMovementType: '311',
+        movementType: '311',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        receivingStorageLocation: 'CS01',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '524979'
       });
 
       expect(mockRfc.call).toHaveBeenCalledWith(

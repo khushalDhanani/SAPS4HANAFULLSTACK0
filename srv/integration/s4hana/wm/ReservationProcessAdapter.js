@@ -540,7 +540,7 @@ class ReservationProcessAdapter {
       const s4Lgnum = sapKey(warehouseNumber, 'lgnum');
 
       const mvtConfig = getMovementConfig(wmMovementType || movementType);
-      const useRealMvt = process.env.WM_TR_REAL_MOVEMENT === 'true' || process.env.WM_REAL_MOVEMENT === 'true';
+      const useRealMvt = mvtConfig?.useRealWmMovement === true; // per-movement config (D21), no process-wide flag
       let s4Bwlvs;
       let s4Betyp = '';
       let s4Benum = '';

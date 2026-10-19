@@ -49,39 +49,26 @@ describe('Item 16: Movement Type 201 WM Routing Verification [mock only, not SAP
   });
 
   describe('2. Application Routing Resolution (WM_REAL_MOVEMENT / WM_TR_REAL_MOVEMENT)', () => {
-    test('Default mode (flags unset): resolves to staging WM movement 311', () => {
+    test('D21: default (flags unset) resolves to the real WM movement 201 from config', () => {
       delete process.env.WM_REAL_MOVEMENT;
       delete process.env.WM_TR_REAL_MOVEMENT;
 
-      expect(resolveWmMovement('201')).toBe('311');
+      expect(resolveWmMovement('201')).toBe('201');
       const cfg = getMovementConfig('201');
-      expect(cfg.wmMovement).toBe('311');
+      expect(cfg.useRealWmMovement).toBe(true);
+      expect(cfg.wmMovement).toBe('201');
       expect(cfg.stagingWmMovement).toBe('311');
     });
 
-    test('WM_REAL_MOVEMENT = true: resolves to real WM movement 201', () => {
-      delete process.env.WM_TR_REAL_MOVEMENT;
+    test('env flags no longer change the routing (true or false): still 201', () => {
       process.env.WM_REAL_MOVEMENT = 'true';
-
-      expect(resolveWmMovement('201')).toBe('201');
-      const cfg = getMovementConfig('201');
-      expect(cfg.wmMovement).toBe('201');
-    });
-
-    test('WM_TR_REAL_MOVEMENT = true: resolves to real WM movement 201', () => {
-      delete process.env.WM_REAL_MOVEMENT;
       process.env.WM_TR_REAL_MOVEMENT = 'true';
-
       expect(resolveWmMovement('201')).toBe('201');
-      const cfg = getMovementConfig('201');
-      expect(cfg.wmMovement).toBe('201');
-    });
-
-    test('Flags set to false: safely falls back to staging 311', () => {
       process.env.WM_REAL_MOVEMENT = 'false';
       process.env.WM_TR_REAL_MOVEMENT = 'false';
-
-      expect(resolveWmMovement('201')).toBe('311');
+      expect(resolveWmMovement('201')).toBe('201');
+      delete process.env.WM_REAL_MOVEMENT;
+      delete process.env.WM_TR_REAL_MOVEMENT;
     });
   });
 
@@ -178,7 +165,7 @@ describe('Item 16: Movement Type 201 WM Routing Verification [mock only, not SAP
     });
   });
 
-  describe('4. Transfer Requirement (TR) Generation Under Staging Fallback (311)', () => {
+  describe('4. Transfer Requirement (TR) Generation for 201 with flags unset (D21: no staging fallback)', () => {
     let mockRfc;
     let adapter;
 
@@ -191,7 +178,7 @@ describe('Item 16: Movement Type 201 WM Routing Verification [mock only, not SAP
       adapter = new ReservationProcessAdapter({ rfc: mockRfc });
     });
 
-    test('Staging 311 fallback passes BWLVS 311, omits BETYP and BENUM, preserves RSNUM', async () => {
+    test('Flags unset: passes BWLVS 201, BETYP K, 10-char cost centre BENUM, preserves RSNUM (never 311)', async () => {
       delete process.env.WM_REAL_MOVEMENT;
       delete process.env.WM_TR_REAL_MOVEMENT;
 
@@ -219,10 +206,10 @@ describe('Item 16: Movement Type 201 WM Routing Verification [mock only, not SAP
       const trCall = mockRfc.call.mock.calls.find((c) => c[0] === 'L_TR_CREATE');
       expect(trCall).toBeDefined();
       const ltbaItem = trCall[1].T_LTBA[0];
-      expect(ltbaItem.BWLVS).toBe('311'); // Substituted to 311 staging
-      expect(ltbaItem.BETYP).toBeUndefined(); // No requirement tracking
-      expect(ltbaItem.BENUM).toBeUndefined();
-      expect(ltbaItem.RSNUM).toBe('0000525280'); // Preserves reservation reference
+      expect(ltbaItem.BWLVS).toBe('201');
+      expect(ltbaItem.BETYP).toBe('K');
+      expect(ltbaItem.BENUM).toBe('1011201301');
+      expect(ltbaItem.RSNUM).toBe('0000525280');
     });
   });
 
