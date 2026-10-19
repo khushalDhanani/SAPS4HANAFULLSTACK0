@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 7.8 idempotency (2026-10-19, 15:55 IST):** the reservation intent hash (canonical fields + user, numeric keys unpadded) is the sole business key for attempts; identical intent → same reservation (replay), concurrent identical → one BAPI call + 409, different quantity/batch/movement → separate reservations. New `reservationIdempotency.test.js`; 32 tests in the two idempotency/recovery suites PASS. Not committed.
+
 - **Step 7.7 recovery (2026-10-19, 15:30 IST):** reservation-create attempt log (`ReservationCreateAttempt`, own transaction) written before the BAPI and moved through PENDING → CREATED → TR_CREATED/TR_FAILED or REJECTED/UNKNOWN/MISMATCH/LOCAL_PERSIST_FAILED with the SAP number and exact error; identical re-submits replay or get 409 (no duplicate reservation); tracked rows with progress are never reset; `retryStep LB01` refused when a TR exists. 14 failure-injection tests; 9 suites / 312 tests PASS. Not committed. Audit D3, D5, D10 closed.
 
 - **Step 7.6 stock pre-check (2026-10-19, 14:35 IST):** `ReservationProcessAdapter.checkStockForReservation` (MARA/MARD/MCHB/LQUA, quantity vs base unit, batch-aware) runs before the BAPI; non-existent batch blocks (400), shortages are warnings persisted as MB21 `W` log rows. 12 suites / 422 tests PASS. Not committed.
@@ -11208,4 +11210,21 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Not verified / open:** that `req.on('done')` completes before the HTTP response is sent (tests poll up to 2 s for the deferred stage); no automatic SAP reconciliation of `RESERVATION_UNKNOWN` attempts (a human resolves by opening the reservation in the app, which imports it via the READ auto-import, or by submitting a changed request); `createTOFromTR`/`confirmTransferOrder` keep their existing status persistence (unchanged). The UI does not yet show the 409 replay/unresolved texts differently from other errors (they arrive via `MessageBox.error`).
 - **Status:** Done, not committed. Audit D3, D5, D10 closed.
 - **Next recommended action:** D9 (remove `readTable?.mock` gating so not-found branches are tested), then a background re-check job for `RESERVATION_UNKNOWN` attempts (RKPF by USNAM/RSDAT) if the business wants automatic resolution.
+- **Assumptions:** none.
+
+### 2026-10-19 15:55 IST — Step 7.8: Reservation-creation idempotency (intent hash as the business key)
+
+- **Work Session / Reason:** Verify and tighten the Step 7.7 duplicate guard against the Step 7.8 brief. Audit on HEAD `f378ed9`: (1) `ReservationAttemptStore.claim` grouped attempts by `ClientAttemptId` when the UI sent one, so the same intent from a reopened form (new id) created a second SAP reservation; (2) the hash treated a zero-padded material (`000000001000000045`) as a different intent from `1000000045`. Concurrency, failed/retry resume and the 409 paths were already in place. No SAP call made.
+- **Business key (CONFIRMED by `reservationIdempotency.test.js`):** SHA-256 over MovementType, Plant, StorageLocation, Material, Unit, Batch, ReceivingPlant, ReceivingStorageLocation, CostCenter, AssetNo, SubNumber, OrderID, OrderType, ReservationDate, Quantity (as number) and the requesting user; values upper-cased, numeric values compared without leading zeros. Different quantity, batch, movement, material, plant, SLoc, receiving SLoc, account assignment, unit or user → different intent.
+- **Changes:**
+  - `srv/wm/reservation-entry/ReservationAttemptStore.js`: attempts are grouped by `RequestHash` only; `AttemptKey = <hash>:<generation>` (unique → concurrent identical submits serialize: one creates, the other gets 409); `ClientAttemptId` is stored for audit only; numeric keys normalized in `hash()`.
+  - `db/wm/reservation-track.cds`: comments updated accordingly (no structural change).
+  - Tests: new `test/unit/wm/reservationIdempotency.test.js` — hash determinism (case, padding, key order, non-business fields) and one negative per intent field; identical request from another form instance → same reservation, one BAPI call; Request A ∥ Request B → one SAP reservation + one 409; three concurrent → one BAPI, two 409, replay returns the same number; concurrent different quantities → two reservations; different batch → two; TR failed then identical re-submit → no new reservation and `retryStep` resumes at LB01; replay window elapsed → new reservation. `reservationCreateRecovery.test.js` assertions adjusted to the hash-based key.
+- **Validation (executed):**
+  - `npx jest test/unit/wm/reservationIdempotency.test.js test/unit/wm/reservationCreateRecovery.test.js test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationEntryUi.test.js test/unit/wm/reservationMonitorRetry.test.js --testTimeout=20000 --forceExit` → 5 suites, 180 tests: 179 passed, 1 failed (a test-side stub mix-up in the new suite, fixed); rerun `npx jest test/unit/wm/reservationIdempotency.test.js test/unit/wm/reservationCreateRecovery.test.js` → **PASS (2 suites, 32 tests)**.
+  - `npx eslint` on the store and the two test files → clean. `npx cds compile db --to json` → OK. `git diff --check` → clean. `db.sqlite-wal` restored from HEAD.
+  - Not run: full `npm test`, e2e, live SAP.
+- **Design note (stated, not an assumption about SAP):** the requesting user is part of the intent, so two users submitting the same data create two reservations; an identical intent by the same user within `RES_ATTEMPT_REPLAY_WINDOW_MS` (default 10 min) returns the existing reservation instead of creating another. A legitimately repeated identical reservation inside that window must change a business field or wait for the window.
+- **Status:** Done, not committed.
+- **Next recommended action:** D9 (remove `readTable?.mock` gating), then D5 remainder (261 adoption SLoc/quantity match and wording).
 - **Assumptions:** none.

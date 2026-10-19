@@ -35,9 +35,16 @@ class ReservationAttemptStore {
     return Number.isFinite(n) && n >= 0 && process.env.RES_ATTEMPT_REPLAY_WINDOW_MS ? n : 600000;
   }
 
-  /** SHA-256 over the canonical business fields and the requesting user. */
+  /**
+   * Business key of a reservation intent (Step 7.8): SHA-256 over the canonical fields and the requesting
+   * user. Two requests with the same key are the same intent; a different quantity, batch, movement type,
+   * location, account assignment or user is a different intent. Numeric keys compare without leading zeros.
+   */
   static hash(payload = {}, user = '') {
-    const pick = (k) => (payload[k] === undefined || payload[k] === null ? '' : String(payload[k]).trim().toUpperCase());
+    const pick = (k) => {
+      const v = payload[k] === undefined || payload[k] === null ? '' : String(payload[k]).trim().toUpperCase();
+      return /^\d+$/.test(v) ? v.replace(/^0+(?=\d)/, '') : v;
+    };
     const parts = ['MovementType', 'Plant', 'StorageLocation', 'Material', 'Unit', 'Batch', 'ReceivingPlant', 'ReceivingStorageLocation', 'CostCenter', 'AssetNo', 'SubNumber', 'OrderID', 'OrderType', 'ReservationDate']
       .map((k) => `${k}=${pick(k)}`);
     parts.push(`Quantity=${Number(payload.Quantity)}`, `User=${String(user || '')}`);
@@ -54,10 +61,9 @@ class ReservationAttemptStore {
     return db.tx({ user: cds.User.privileged }, (tx) => tx.run(query));
   }
 
-  /** All attempts of one identity (ClientAttemptId when given, else RequestHash), oldest first. */
-  async _group(clientAttemptId, requestHash) {
-    const where = clientAttemptId ? { ClientAttemptId: clientAttemptId } : { RequestHash: requestHash };
-    const rows = await this._run(SELECT.from(ATTEMPT_ENTITY).where(where));
+  /** All attempts of one intent (RequestHash), oldest first. ClientAttemptId is kept for audit only. */
+  async _group(requestHash) {
+    const rows = await this._run(SELECT.from(ATTEMPT_ENTITY).where({ RequestHash: requestHash }));
     return (Array.isArray(rows) ? rows : []).slice().sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
   }
 
@@ -69,20 +75,20 @@ class ReservationAttemptStore {
     const cid = String(clientAttemptId || '').trim();
     const hash = String(requestHash || '').trim();
     if (!hash) throw new Error('RequestHash is required to claim a reservation attempt');
-    const priors = await this._group(cid, hash);
+    const priors = await this._group(hash);
     const latest = priors[priors.length - 1];
     if (latest) {
       const stage = String(latest.Stage || '');
       if (PENDING_STAGES.includes(stage)) return { created: false, reason: 'in_progress', row: latest };
       if (UNRESOLVED_STAGES.includes(stage)) return { created: false, reason: 'unresolved', row: latest };
       const age = Date.now() - new Date(latest.createdAt || 0).getTime();
-      if (REPLAYABLE_STAGES.includes(stage) && latest.ReservationNo && String(latest.RequestHash) === hash && age < ReservationAttemptStore.replayWindowMs()) {
+      if (REPLAYABLE_STAGES.includes(stage) && latest.ReservationNo && age < ReservationAttemptStore.replayWindowMs()) {
         return { created: false, reason: 'replay', row: latest };
       }
     }
     const row = {
       ID: cds.utils.uuid(),
-      AttemptKey: `${cid || hash}:${priors.length}`,
+      AttemptKey: `${hash}:${priors.length}`,
       ClientAttemptId: cid,
       RequestHash: hash,
       RequestUser: String(user || '').slice(0, 255),

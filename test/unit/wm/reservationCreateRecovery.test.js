@@ -72,7 +72,7 @@ describe('Step 7.7: reservation-create partial failure and recovery', () => {
     const { data } = await create();
     expect(data).toMatchObject({ ReservationNo: RES, TransferRequirement: '0001007077', Status_code: '02' });
     const a = await waitForStage('TR_CREATED');
-    expect(a).toMatchObject({ Stage: 'TR_CREATED', ClientAttemptId: 'form-7-7', AttemptKey: 'form-7-7:0', ReservationNo: RES, ReservationItem: '0001', TransferRequirement: '0001007077', LastError: '' });
+    expect(a).toMatchObject({ Stage: 'TR_CREATED', ClientAttemptId: 'form-7-7', AttemptKey: expect.stringMatching(/^[0-9a-f]{64}:0$/), ReservationNo: RES, ReservationItem: '0001', TransferRequirement: '0001007077', LastError: '' });
     expect(a.ResolvedAt).toBeTruthy();
   });
 
@@ -89,7 +89,7 @@ describe('Step 7.7: reservation-create partial failure and recovery', () => {
     expect(data.ReservationNo).toBe(RES);
     await waitForStage('TR_CREATED', 1);
     rows = await attempts();
-    expect(rows.map((r) => [r.AttemptKey, r.Stage])).toEqual([['form-7-7:0', 'RESERVATION_REJECTED'], ['form-7-7:1', 'TR_CREATED']]);
+    expect(rows.map((r) => [r.AttemptKey.slice(-2), r.Stage])).toEqual([[':0', 'RESERVATION_REJECTED'], [':1', 'TR_CREATED']]);
     expect(resSpy).toHaveBeenCalledTimes(2);
   });
 

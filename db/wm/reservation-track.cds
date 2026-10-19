@@ -93,9 +93,9 @@ entity ReservationLog : cuid, managed {
  */
 @assert.unique: { attemptKey: [AttemptKey] }
 entity ReservationCreateAttempt : cuid, managed {
-    AttemptKey          : String(80);    // ClientAttemptId or RequestHash, suffixed with the generation
-    ClientAttemptId     : String(36);
-    RequestHash         : String(64);    // SHA-256 of the canonical payload + user
+    AttemptKey          : String(80);    // RequestHash (business key of the intent) + ':' + generation
+    ClientAttemptId     : String(36);    // audit only: which UI form instance submitted
+    RequestHash         : String(64);    // SHA-256 of the canonical payload + user = the reservation intent
     RequestUser         : String(255);
     MovementType        : String(3);
     Plant               : String(4);
