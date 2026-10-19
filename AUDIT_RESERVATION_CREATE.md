@@ -62,7 +62,7 @@ Items 2, 3, 11, 13, 14, 17 are identical across types and covered in the "Common
 Repro: as mocked user `bob` (role Viewer only, `package.json`), `POST /odata/v4/reservation-entry/ReservationEntries` with a valid 311 body ⇒ handler runs `BAPI_RESERVATION_CREATE1` + `L_TR_CREATE`. (CONFIRMED statically; not executed.)
 Fix: `@restrict` the entity (`CREATE/UPDATE/DELETE` to the three warehouse roles, or drop the CREATE-entity binding and make the entity `@readonly` for non-key updates) so the only write path is the role-gated action.
 
-**D2 — P1 — No RKPF/RESB read-back after create; item number assumed.**
+**D2 — P1 — FIXED 2026-10-19 13:40 IST (Step 7.4, `_readBackReservation`; no-row case stays `sapVerified:false`) — No RKPF/RESB read-back after create; item number assumed.**
 `ReservationProcessAdapter.js:290-313` returns `item: '0001'` and the BAPI `RESERVATION` export; nothing reads RKPF/RESB. Violates AGENTS.md Definition of Done #9. `ReservationTrack` stores the user's Plant/SLoc/Qty/Unit/MaterialName, not SAP's.
 Repro: mock BAPI returning a number ⇒ row persisted with Status 01 without any `RFC_READ_TABLE RKPF/RESB` call (visible in `reservationEntryService.test.js:201-256`, no readTable assertion).
 Fix: after COMMIT, read `RKPF (RSNUM, BWART, KOSTL, ANLN1, ANLN2, UMWRK, UMLGO, AUFNR, USNAM, RSDAT)` and `RESB (RSPOS, MATNR, WERKS, LGORT, BDMNG, MEINS, CHARG, XLOEK)`, assert they match the request, persist SAP values (incl. real RSPOS, USNAM, ReservationDate), fail with a clear error if the row is missing.
@@ -82,7 +82,7 @@ Fix: in `validateReservationInput`, reject any non-empty field listed in `cfg.fo
 Repro: mock BAPI RETURN `{TYPE:'E', ID:'M7', NUMBER:'126'}` and a RESB row with `LGORT` ≠ request SLoc and `BDMNG` ≠ request Qty; a pre-existing track row with Status 05 for that RSNUM/RSPOS is reset to 01.
 Fix: never upsert over a tracked row with progress (reject or merge); on adoption require `LGORT` match, cap quantity to `BDMNG−ENMNG`, return a distinct `stage: 'ADOPTED'` so the UI can say "linked to existing component reservation"; cover with tests.
 
-**D6 — P2 — Padding differs between validation and BAPI header for alphanumeric cost centers/assets.**
+**D6 — P2 — FIXED 2026-10-19 13:40 IST (Step 7.4, `padIfNumeric`) — Padding differs between validation and BAPI header for alphanumeric cost centers/assets.**
 `validateCostCenter` pads only numeric values (`adapter.js:2727`) but the header uses `pad10` unconditionally (`adapter.js:159`); same for `pad12` on `ASSET_NO` (160). Example `SAP-DUMMY` validates against CSKS as `SAP-DUMMY` but is sent as `0SAP-DUMMY`. The TR path already handles this case correctly (`adapter.js:483-485`).
 Fix: one shared `padIfNumeric` helper used by validation, header and TR mapping.
 
@@ -102,7 +102,7 @@ Fix: remove the mock sniffing; make the checks unconditional and drive the tests
 `service.js:157-183`: SLG1 failure stores a fabricated `LogHandle` (`LOG_<ts>`); the log row is inserted before the track row; if the track INSERT/UPDATE throws (e.g. HANA length violation on `MaterialName` > 40, or DB outage) CAP rolls back the local tx and returns 500 while the SAP reservation is already committed, with no record and no retry handle.
 Fix: insert the track row first inside the same tx, store `''` when SLG1 fails, and on local failure after SAP success return the reservation number in the error so the user/ops can import it (the READ auto-import at `service.js:1125-1210` already exists for that).
 
-**D11 — P2 — Storage-location/plant strings reach the BAPI un-normalized.**
+**D11 — P2 — FIXED 2026-10-19 13:40 IST (Step 7.4, `sapKey` on MOVE_PLANT/MOVE_STLOC/STGE_LOC) — Storage-location/plant strings reach the BAPI un-normalized.**
 `adapter.js:155-157, 203` send `MOVE_PLANT`, `MOVE_STLOC`, `STGE_LOC` as `String(x).trim()` while every preflight uses `sapKey` (upper-cased). Lower-case input `cs01` passes MARD/T320 checks and is sent as `cs01`; SAP behaviour **Not verified**.
 Fix: use `sapKey(...,'lgort'/'plant')` for those header/item fields.
 

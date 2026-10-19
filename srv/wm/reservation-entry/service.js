@@ -193,7 +193,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         MessageType: 'S',
         MessageId: 'M7',
         MessageNo: '060',
-        MessageText: `Reservation ${resNo} created via BAPI_RESERVATION_CREATE1`
+        MessageText: `Reservation ${resNo} created via BAPI_RESERVATION_CREATE1${resResult.sapVerified ? ' and verified in RKPF/RESB' : ' (RKPF/RESB read-back unavailable)'}`
       });
 
       // Step 1b: Persist tracking row immediately with RSNUM as soon as SAP returns it
@@ -209,7 +209,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         MaterialName: MaterialName || '',
         Quantity: Number(Quantity),
         Unit,
-        ReservationDate: effResDate || null,
+        ReservationDate: resResult.reservationDate || effResDate || null,
         CreatedByUser: sCreatedBy,
         ReceivingPlant: ReceivingPlant || '',
         ReceivingStorageLocation: ReceivingStorageLocation || '',
@@ -569,7 +569,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         MaterialName: payload.MaterialName || '',
         Quantity: Number(payload.Quantity),
         Unit: payload.Unit,
-        ReservationDate: effResDate || null,
+        ReservationDate: resResult.reservationDate || effResDate || null,
         CreatedByUser: sCreatedBy,
         ReceivingPlant: payload.ReceivingPlant || '',
         ReceivingStorageLocation: payload.ReceivingStorageLocation || '',
@@ -613,7 +613,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         MessageType: 'S',
         MessageId: 'M7',
         MessageNo: '060',
-        MessageText: `Reservation ${resNo} created via BAPI_RESERVATION_CREATE1`
+        MessageText: `Reservation ${resNo} created via BAPI_RESERVATION_CREATE1${resResult.sapVerified ? ' and verified in RKPF/RESB' : ' (RKPF/RESB read-back unavailable)'}`
       });
 
       return {

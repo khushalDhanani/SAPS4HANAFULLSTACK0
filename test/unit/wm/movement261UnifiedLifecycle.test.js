@@ -171,7 +171,8 @@ describe('Movement Type 261 – Goods Issue to Order Unified Tests [mock only, n
         }
 
         if (table === 'RKPF') {
-          return [{ RSNUM: '0000529261', BWART: '261', AUFNR: '000000100000' }];
+          // Fixture fix (Step 7.4): header order must be the order the tests create reservations for (orderId '1000000').
+          return [{ RSNUM: '0000529261', BWART: '261', AUFNR: '000001000000' }];
         }
 
         if (table === 'MATDOC' || table === 'MSEG') {

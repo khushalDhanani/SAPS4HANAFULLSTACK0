@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 7.4 BAPI mapping (2026-10-19, 13:40 IST):** `RESERVATIONHEADER` built from `MOVEMENT_CONFIG` only (forbidden fields can never be sent), numeric-only ALPHA padding, `sapKey` on all location keys, and a post-commit RKPF/RESB read-back (`sapVerified`, real `RSPOS`/`USNAM`/`RSDAT`). Exact-payload tests for all five movements; 21 suites / 709 tests PASS. Not committed. Audit D2, D6, D11 closed.
+
 - **Step 7.3 validation (2026-10-19, 13:10 IST):** `validateReservationInput` now iterates `MOVEMENT_CONFIG.requiredFields`/`forbiddenFields` (no per-type switch), adds plant/SLoc/quantity/unit/batch/serial base rules, and 241 requires `SubNumber`. New `reservationValidationMatrix.test.js`; 19 suites / 680 tests PASS. Not committed. Audit D4, D12 closed.
 
 - **Step 7.2 contract normalization (2026-10-19, 12:45 IST):** `createReservation`/`createReservationEntry` now accept only `ReservationDate`, `OrderID`, `OrderType` (lowercase duplicates removed from CDS, handler, adapter); CAP returns 400 for any obsolete variant. 15 suites / 438 tests PASS. Not committed. Audit D14 closed.
@@ -11120,4 +11122,25 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Still open:** D15 only partly: batch is now validated at creation from `batchRules.regex` (alphanumeric), while `sapKey('batch')` in the adapter still accepts `_ - . /` for posting paths.
 - **Status:** Done, not committed. Audit D4 and D12 closed.
 - **Next recommended action:** D2 + D3 (post-commit RKPF/RESB read-back and an attempt store on reservation creation).
+- **Assumptions:** none.
+
+### 2026-10-19 13:40 IST — Step 7.4: BAPI_RESERVATION_CREATE1 mapping fixed and RKPF/RESB read-back added
+
+- **Work Session / Reason:** Audit D2 (no read-back after create), D6 (alphanumeric cost center / asset zero-padded), D11 (STGE_LOC / MOVE_PLANT / MOVE_STLOC sent un-normalized) and the Step 7.4 brief: header/item must be derived from `movementConfig` only. No SAP call made; mock RFC only.
+- **Field-name evidence (CONFIRMED from repo, no live metadata call):** the header fields the adapter sends are `RES_DATE`, `MOVE_TYPE`, `MOVE_PLANT`, `MOVE_STLOC`, `COSTCENTER`, `ASSET_NO`, `SUB_NUMBER`, `ORDERID`; item fields `MATERIAL`, `PLANT`, `STGE_LOC`, `ENTRY_QNT`, `ENTRY_UOM`, `MOVEMENT`, `BATCH`. Live proofs in this file show them persisted to `RKPF-KOSTL/ANLN1/ANLN2/UMWRK/UMLGO/AUFNR` and `RESB` (201 reservation `0000525278`, 241 `ASSET_NO 000000400001`, 301 `0000525868`, 311 `0000525877`). The name `COST_CTR` from the brief does not occur in `BAPI_RESERVATION_CREATE1` usage anywhere in this repo (only in the purchase-order OData metadata); **Not verified** against SAP's `BAPI2093_RES_HEAD` structure itself, but `COSTCENTER` is proven by the live RKPF read-backs.
+- **Changes:**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js#createReservation`:
+    - `RESERVATIONHEADER` is built from `MOVEMENT_CONFIG[mvt].accountAssignment.type` (`CostCenter` → `COSTCENTER`, `Asset` → `ASSET_NO`+`SUB_NUMBER`, `Order` → `ORDERID`, `None` → nothing) and `destinationRules.allowsReceivingPlant/allowsReceivingSloc` (`MOVE_PLANT`/`MOVE_STLOC`; 311 keeps `MOVE_PLANT = plant`). A field the policy forbids can no longer reach the BAPI even if validation were bypassed. The 261 statistical-order `COSTCENTER` from `AUFK-KOSTV` is gated by `accountAssignment.allowsStatisticalCostCenter`.
+    - New `padIfNumeric`: `COSTCENTER`/`ASSET_NO`/`SUB_NUMBER` are ALPHA-padded only when numeric; alphanumeric values are sent as entered (consistent with `validateCostCenter` and the TR `BENUM` mapping). `pad10` remains in `postGoodsMovement` (MIGO path, out of scope).
+    - `MOVE_PLANT`, `MOVE_STLOC`, `STGE_LOC` now go through `sapKey` (upper-cased, format-checked) like `PLANT`.
+    - New `_readBackReservation(rsnum, header, item)`: after `BAPI_TRANSACTION_COMMIT`, reads `RKPF` (`BWART, KOSTL, ANLN1, ANLN2, UMWRK, UMLGO, AUFNR, USNAM, RSDAT`) and `RESB` (`RSPOS, MATNR, WERKS, LGORT, BDMNG, MEINS, CHARG, XLOEK`) for that `RSNUM`. Rows for this RSNUM that differ from the request → HTTP 500 naming the reservation and the differing fields (ALPHA zero-padding ignored). No row / read failure → the create still succeeds with `sapVerified: false` and a logged warning (shortcut: SAP committed; failing the request would risk a duplicate, see D3). Quantity is compared only when `MEINS` equals `ENTRY_UOM` (no unit conversion). The real `RSPOS`, `USNAM` and `RSDAT` are returned (`reservationItem`, `createdByUser`, `reservationDate`).
+  - `srv/wm/reservation-entry/service.js` (both create handlers): persist `ReservationDate` from the read-back (falls back to the request date), `CreatedByUser` already consumed `createdByUser`; the MB21 log row states whether the reservation was verified in RKPF/RESB.
+  - Tests: new `test/unit/wm/reservationBapiPayload.test.js` — exact `RESERVATIONHEADER`/`RESERVATIONITEMS` (`toEqual`) for 201/241/261/301/311, commit call, forbidden-field exclusion per policy, alphanumeric vs numeric cost center, lower-case key normalization, 261 statistical cost center, and the read-back cases (verified with `RSPOS 0002`, no row, RFC failure, mismatch → 500, unit conversion, testrun). `movement261UnifiedLifecycle.test.js`: RKPF fixture `AUFNR` corrected to the order the tests create (`000001000000`); the read-back exposed this fixture inconsistency.
+- **Validation (executed):**
+  - `npx jest` over 21 suites (`reservationBapiPayload`, `reservationProcess`, `reservationEntryService`, `movement261UnifiedLifecycle`, `trToCorruptedStagingRecovery`, `mvt201/241/301/311Process`, `step17/18/19/20`, `movementMatrixLifecycle`, `productionHardeningAudit`, `processFixes`, `trToHandler`, `reservationValidationMatrix`, `movementConfig`, `reservationTrack`, `reservationEntryUi`) → **PASS (21 suites, 709 tests)**.
+  - `npx eslint` on the 4 changed JS files → clean. `npx cds compile srv/wm/reservation-entry/service.cds --to json` → OK. `git diff --check` → clean.
+  - Not run: full `npm test`, e2e, live SAP (no RFC executed).
+- **Status:** Done, not committed. Audit D2, D6, D11 closed; D13 (ReservationDate) now populated from `RKPF-RSDAT` when the read-back succeeds.
+- **Still open / Not verified:** live confirmation that `RFC_READ_TABLE RKPF/RESB` immediately after `BAPI_TRANSACTION_COMMIT WAIT='X'` returns the row (expected, not proven here); D3 idempotency; D5 261 adoption path has no read-back (returns before the BAPI commit branch).
+- **Next recommended action:** D3 (attempt store / idempotency on reservation creation), then D5.
 - **Assumptions:** none.

@@ -19,6 +19,8 @@ const { checkAuthorization } = require('./authCheck');
 const pad10 = (v) => String(v || '').trim().padStart(10, '0');
 const pad12 = (v) => String(v || '').trim().padStart(12, '0');
 const pad4 = (v) => String(v || '').trim().padStart(4, '0');
+/** ALPHA-exit padding for numeric keys only; alphanumeric cost centers / assets are sent as entered (audit D6). */
+const padIfNumeric = (v, n) => (/^\d+$/.test(String(v || '').trim()) ? String(v).trim().padStart(n, '0') : String(v || '').trim());
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 const padMat = (m) => (/^\d+$/.test(m) ? m.padStart(18, '0') : m);
 const sapNum = (v) => (v == null || v === '' ? 0 : Number(String(v).trim()));
@@ -156,18 +158,25 @@ class ReservationProcessAdapter {
         }
       }
 
-      const targetMovePlant = receivingPlant || (String(movementType).trim() === '311' ? plant : '');
+      // Step 7.4: RESERVATIONHEADER is built from MOVEMENT_CONFIG only - a field the policy forbids is never sent.
+      // Field names COSTCENTER / ASSET_NO / SUB_NUMBER / ORDERID / MOVE_PLANT / MOVE_STLOC are proven live
+      // (RKPF KOSTL / ANLN1 / ANLN2 / AUFNR / UMWRK / UMLGO read back, see WORKSTATUS 201/241/301/311 proofs).
+      const mvtKey = String(movementType).trim();
+      const mvtCfg = getMovementConfig(mvtKey) || {};
+      const acct = mvtCfg.accountAssignment || {};
+      const dest = mvtCfg.destinationRules || {};
+      const targetMovePlant = dest.allowsReceivingPlant ? (receivingPlant || (mvtKey === '311' ? plant : '')) : '';
       const header = {
         RES_DATE: this._sapDate(reservationDate),
-        MOVE_TYPE: String(movementType).trim(),
-        ...(targetMovePlant ? { MOVE_PLANT: String(targetMovePlant).trim() } : {}),
-        ...(receivingStorageLocation ? { MOVE_STLOC: String(receivingStorageLocation).trim() } : {}),
-        ...(costCenter ? { COSTCENTER: pad10(costCenter) } : {}),
-        ...(assetNo ? { ASSET_NO: pad12(assetNo), SUB_NUMBER: pad4(subNumber || '0000') } : {}),
-        ...(sOrderId ? { ORDERID: pad12(sOrderId) } : {})
+        MOVE_TYPE: mvtKey,
+        ...(targetMovePlant ? { MOVE_PLANT: sapKey(targetMovePlant, 'plant') } : {}),
+        ...(dest.allowsReceivingSloc && receivingStorageLocation ? { MOVE_STLOC: sapKey(receivingStorageLocation, 'lgort') } : {}),
+        ...(acct.type === 'CostCenter' && costCenter ? { COSTCENTER: padIfNumeric(costCenter, 10) } : {}),
+        ...(acct.type === 'Asset' && assetNo ? { ASSET_NO: padIfNumeric(assetNo, 12), SUB_NUMBER: padIfNumeric(subNumber || '0000', 4) } : {}),
+        ...(acct.type === 'Order' && sOrderId ? { ORDERID: pad12(sOrderId) } : {})
       };
 
-      if (String(movementType).trim() === '261' && sOrderId && !header.COSTCENTER) {
+      if (acct.allowsStatisticalCostCenter && sOrderId && !header.COSTCENTER) {
         if (orderValidation?.isStatistical && orderValidation?.responsibleCostCenter) {
           header.COSTCENTER = alphaOut(orderValidation.responsibleCostCenter).padStart(10, '0');
         } else if (this.rfc) {
@@ -207,7 +216,7 @@ class ReservationProcessAdapter {
       const item = {
         MATERIAL: s4Mat,
         PLANT: sapKey(plant, 'plant'),
-        ...(storageLocation ? { STGE_LOC: String(storageLocation).trim() } : {}),
+        ...(storageLocation ? { STGE_LOC: sapKey(storageLocation, 'lgort') } : {}),
         ENTRY_QNT: Number(quantity),
         ENTRY_UOM: String(unit).trim().toUpperCase(),
         MOVEMENT: 'X',
@@ -319,18 +328,26 @@ class ReservationProcessAdapter {
           throw err;
         }
 
+        // Step 7.4 / audit D2: read the committed document back from RKPF/RESB (outside the create session).
+        const sap = testrun ? null : await this._readBackReservation(rawResNo || resNo.padStart(10, '0'), header, item);
+        const resItem = sap?.reservationItem || '0001';
+
         return {
           success: true,
           reservation: {
             number: resNo,
-            item: '0001'
+            item: resItem
           },
-          movementType: String(movementType).trim(),
+          movementType: mvtKey,
           orderId: sOrderId || null,
           orderType: sOrderType || orderValidation?.orderType || null,
           reservationNo: resNo,
           reservationNoRaw: rawResNo || (resNo ? resNo.padStart(10, '0') : ''),
-          reservationItem: '0001',
+          reservationItem: resItem,
+          sapVerified: Boolean(sap?.verified),
+          sapReadBack: sap,
+          createdByUser: sap?.createdByUser || null,
+          reservationDate: sap?.reservationDate || null,
           status: STATUS.RES_CREATED,
           messages: res.RETURN || []
         };
@@ -349,6 +366,70 @@ class ReservationProcessAdapter {
       }
       throw err;
     }
+  }
+
+  /**
+   * Reads RKPF/RESB for a freshly committed reservation and compares them with the BAPI header/item.
+   * Returns { verified:false, reason } when the read fails or returns no row for this RSNUM (the create is
+   * still a success - SAP committed it); throws 500 when the row exists but differs from what was requested.
+   */
+  async _readBackReservation(rsnum, header, item) {
+    if (!this.rfc || typeof this.rfc.readTable !== 'function') return { verified: false, reason: 'no RFC client' };
+    const s4Rsnum = String(rsnum).padStart(10, '0');
+    let rkpf;
+    let resb;
+    try {
+      [rkpf, resb] = await Promise.all([
+        this.rfc.readTable('RKPF', ['RSNUM', 'BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO', 'AUFNR', 'USNAM', 'RSDAT'], [`RSNUM = '${s4Rsnum}'`], 1),
+        this.rfc.readTable('RESB', ['RSNUM', 'RSPOS', 'MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS', 'CHARG', 'XLOEK'], [`RSNUM = '${s4Rsnum}'`], 1)
+      ]);
+    } catch (e) {
+      LOG.warn(`[createReservation] RKPF/RESB read-back of ${s4Rsnum} failed: ${e.message}`);
+      return { verified: false, reason: e.message };
+    }
+    const h = rkpf?.[0];
+    const i = resb?.[0];
+    if (!h || !i || String(h.RSNUM || '').trim() !== s4Rsnum || String(i.RSNUM || '').trim() !== s4Rsnum) {
+      LOG.warn(`[createReservation] RKPF/RESB read-back of ${s4Rsnum} returned no matching row`);
+      return { verified: false, reason: 'no RKPF/RESB row for this reservation' };
+    }
+    const t = (v) => String(v || '').trim();
+    // ALPHA-converted keys compare without leading zeros (RKPF/RESB store them padded).
+    const norm = (v) => (/^\d+$/.test(t(v)) ? alphaOut(t(v)) : t(v));
+    const mismatches = [];
+    const cmp = (label, got, exp) => { if (norm(got) !== norm(exp)) mismatches.push(`${label}: SAP '${t(got)}' vs request '${t(exp)}'`); };
+    cmp('BWART', h.BWART, header.MOVE_TYPE);
+    cmp('KOSTL', h.KOSTL, header.COSTCENTER);
+    cmp('ANLN1', h.ANLN1, header.ASSET_NO);
+    cmp('ANLN2', h.ANLN2, header.SUB_NUMBER);
+    cmp('UMWRK', h.UMWRK, header.MOVE_PLANT);
+    cmp('UMLGO', h.UMLGO, header.MOVE_STLOC);
+    cmp('AUFNR', h.AUFNR, header.ORDERID);
+    cmp('MATNR', i.MATNR, item.MATERIAL);
+    cmp('WERKS', i.WERKS, item.PLANT);
+    cmp('LGORT', i.LGORT, item.STGE_LOC);
+    cmp('CHARG', i.CHARG, item.BATCH);
+    cmp('XLOEK', i.XLOEK, '');
+    // BDMNG/MEINS are in the base unit; compare only when SAP kept the entry unit (no conversion happened).
+    const unitConverted = t(i.MEINS) !== t(item.ENTRY_UOM);
+    if (!unitConverted && Number(i.BDMNG) !== Number(item.ENTRY_QNT)) {
+      mismatches.push(`BDMNG: SAP ${Number(i.BDMNG)} vs request ${Number(item.ENTRY_QNT)}`);
+    }
+    if (mismatches.length) {
+      const err = httpError(500, `Reservation ${alphaOut(s4Rsnum)} was created in SAP but RKPF/RESB differ from the request: ${mismatches.join('; ')}`);
+      err.reservationNo = alphaOut(s4Rsnum);
+      throw err;
+    }
+    const rsdat = t(h.RSDAT);
+    return {
+      verified: true,
+      reservationItem: i.RSPOS ? String(i.RSPOS).trim().padStart(4, '0') : '0001',
+      createdByUser: t(h.USNAM) || null,
+      reservationDate: /^\d{8}$/.test(rsdat) ? `${rsdat.slice(0, 4)}-${rsdat.slice(4, 6)}-${rsdat.slice(6, 8)}` : null,
+      unitConverted,
+      rkpf: h,
+      resb: i
+    };
   }
 
   /**
