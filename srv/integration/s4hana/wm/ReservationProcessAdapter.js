@@ -700,38 +700,37 @@ class ReservationProcessAdapter {
           // created through them (L2 438) - falling back only hides the real error. Keep the ABAP details and fail fast.
           const { key, abapMsgClass, abapMsgType, abapMsgNumber, abapMsgV1, abapMsgV2, abapMsgV3, abapMsgV4 } = err;
           LOG.error(`[createTransferRequirement] L_TR_CREATE rejected for ${s4Lgnum}/${s4Bwlvs} (BETYP ${s4Betyp || '-'}, BENUM ${s4Benum || '-'}): ${err.message}`, { key, abapMsgClass, abapMsgType, abapMsgNumber, abapMsgV1, abapMsgV2, abapMsgV3, abapMsgV4 });
-          if (s4Betyp || s4Benum) {
+          // A requirement item can only go through a wrapper that exposes IV_BETYP/IV_BENUM (read-only interface check, cached).
+          const needsReq = Boolean(s4Betyp || s4Benum);
+          const support = needsReq ? await this._trWrapperRequirementSupport(call) : { ZWM_TR_CREATE: true, Z_WM_TR_CREATE: true };
+          if (needsReq && !support.ZWM_TR_CREATE && !support.Z_WM_TR_CREATE) {
             throw Object.assign(new Error(`Transfer Requirement for WM movement ${s4Bwlvs} in ${s4Lgnum} needs requirement type ${s4Betyp} and requirement number ${s4Benum}: the direct L_TR_CREATE call was rejected (${err.message}) and the RFC wrappers ZWM_TR_CREATE / Z_WM_TR_CREATE have no IV_BETYP / IV_BENUM parameters, so the TR cannot be created from the application. Extend Z_WM_TR_CREATE with IV_BETYP and IV_BENUM in SAP, then retry step LB01.`), { wrapperMissingParams: ['IV_BETYP', 'IV_BENUM'], directError: err.message });
           }
+          const wrapperParams = {
+            IV_LGNUM: s4Lgnum,
+            IV_BWLVS: s4Bwlvs,
+            IV_MATNR: s4Mat,
+            IV_WERKS: s4Werks,
+            IV_LGORT: s4Lgort,
+            IV_MENGA: s4Menga,
+            IV_ALTME: s4Altme,
+            IV_RSNUM: s4TrRsnum,
+            IV_RSPOS: s4TrRspos,
+            IV_COMMIT: 'X',
+            ...(needsReq ? { IV_BETYP: s4Betyp, IV_BENUM: s4Benum } : {})
+          };
           // Fallback to the custom RFC wrappers (ZWM_TR_CREATE / Z_WM_TR_CREATE) when L_TR_CREATE is rejected
           try {
             let resZ;
-            try {
-              resZ = await call('ZWM_TR_CREATE', {
-                IV_LGNUM: s4Lgnum,
-                IV_BWLVS: s4Bwlvs,
-                IV_MATNR: s4Mat,
-                IV_WERKS: s4Werks,
-                IV_LGORT: s4Lgort,
-                IV_MENGA: s4Menga,
-                IV_ALTME: s4Altme,
-                IV_RSNUM: s4TrRsnum,
-                IV_RSPOS: s4TrRspos,
-                IV_COMMIT: 'X'
-              });
-            } catch (_z1Err) {
-              resZ = await call('Z_WM_TR_CREATE', {
-                IV_LGNUM: s4Lgnum,
-                IV_BWLVS: s4Bwlvs,
-                IV_MATNR: s4Mat,
-                IV_WERKS: s4Werks,
-                IV_LGORT: s4Lgort,
-                IV_MENGA: s4Menga,
-                IV_ALTME: s4Altme,
-                IV_RSNUM: s4TrRsnum,
-                IV_RSPOS: s4TrRspos,
-                IV_COMMIT: 'X'
-              });
+            if (support.ZWM_TR_CREATE) {
+              try {
+                resZ = await call('ZWM_TR_CREATE', wrapperParams);
+              } catch (_z1Err) {
+                resZ = undefined;
+              }
+            }
+            if (resZ === undefined) {
+              resZ = await call('Z_WM_TR_CREATE', wrapperParams);
             }
 
             rawTbnum = resZ && (resZ.EV_TBNUM || resZ.E_TBNUM);
@@ -1668,6 +1667,27 @@ class ReservationProcessAdapter {
       },
       verified: true
     };
+  }
+
+  /**
+   * READ-ONLY: which TR wrappers expose IV_BETYP / IV_BENUM (RFC_GET_FUNCTION_INTERFACE), cached per adapter instance.
+   * shortcut: cached for the process lifetime; restart the service after the wrapper is extended in SAP.
+   */
+  async _trWrapperRequirementSupport(call) {
+    if (this._trWrapperReqSupport) return this._trWrapperReqSupport;
+    const support = {};
+    for (const fm of ['ZWM_TR_CREATE', 'Z_WM_TR_CREATE']) {
+      try {
+        const r = await call('RFC_GET_FUNCTION_INTERFACE', { FUNCNAME: fm, LANGUAGE: 'E' });
+        const names = new Set((r.PARAMS || []).map((p) => String(p.PARAMETER || '').trim()));
+        support[fm] = names.has('IV_BETYP') && names.has('IV_BENUM');
+      } catch (_e) {
+        support[fm] = false;
+      }
+    }
+    LOG.info(`[createTransferRequirement] TR wrapper IV_BETYP/IV_BENUM support: ${JSON.stringify(support)}`);
+    this._trWrapperReqSupport = support;
+    return support;
   }
 
   /**

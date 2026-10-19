@@ -369,12 +369,47 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
     test('D22 (live 241): direct L_TR_CREATE rejected as incompatible RFC call for a BETYP/BENUM item -> no wrapper fallback, ABAP details logged, message names IV_BETYP/IV_BENUM', async () => {
       const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE'), { key: '', abapMsgClass: '00', abapMsgNumber: '001', abapMsgV1: 'Incompatible Call Rejected, see note 2295840', abapMsgV3: 'L_TR_CREATE' }));
+      mockRfc.call.mockResolvedValue({ PARAMS: [{ PARAMETER: 'IV_LGNUM' }, { PARAMETER: 'IV_BWLVS' }, { PARAMETER: 'IV_RSNUM' }] }); // RFC_GET_FUNCTION_INTERFACE: wrappers without IV_BETYP/IV_BENUM (DS4 state 2026-10-19)
       const p = adapter.createTransferRequirement({ warehouseNumber: 'W01', wmMovementType: '241', movementType: '241', material: '8000009754', plant: '1120', storageLocation: 'CS02', quantity: 1, unit: 'NOS', reservationNo: '530233', reservationItem: '0001', assetNo: '400001', subNumber: '0000' });
       await expect(p).rejects.toThrow('Transfer Requirement for WM movement 241 in W01 needs requirement type A and requirement number 0000400001: the direct L_TR_CREATE call was rejected (Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE) and the RFC wrappers ZWM_TR_CREATE / Z_WM_TR_CREATE have no IV_BETYP / IV_BENUM parameters');
       await expect(p).rejects.toMatchObject({ wrapperMissingParams: ['IV_BETYP', 'IV_BENUM'] });
-      expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TR_CREATE']); // no ZWM_TR_CREATE / Z_WM_TR_CREATE call
+      expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TR_CREATE', 'RFC_GET_FUNCTION_INTERFACE', 'RFC_GET_FUNCTION_INTERFACE']); // read-only interface check, no wrapper call
       expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('L_TR_CREATE rejected for W01/241 (BETYP A, BENUM 0000400001)'), expect.objectContaining({ abapMsgClass: '00', abapMsgNumber: '001', abapMsgV1: 'Incompatible Call Rejected, see note 2295840' }));
       errSpy.mockRestore();
+    });
+
+    const withWrapperInterfaces = (zwmHas, zwmUnderscoreHas, wrapperResult) => {
+      const iface = (has) => ({ PARAMS: [{ PARAMETER: 'IV_LGNUM' }, { PARAMETER: 'IV_RSNUM' }, ...(has ? [{ PARAMETER: 'IV_BETYP' }, { PARAMETER: 'IV_BENUM' }] : [])] });
+      mockRfc.call.mockImplementation(async (fm, params) => {
+        if (fm === 'L_TR_CREATE') throw new Error('Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE');
+        if (fm === 'RFC_GET_FUNCTION_INTERFACE') return iface(params.FUNCNAME === 'ZWM_TR_CREATE' ? zwmHas : zwmUnderscoreHas);
+        if (fm === 'ZWM_TR_CREATE' || fm === 'Z_WM_TR_CREATE') return wrapperResult;
+        return {};
+      });
+    };
+    const real241 = { warehouseNumber: 'W01', wmMovementType: '241', movementType: '241', material: '8000009754', plant: '1120', storageLocation: 'CS02', quantity: 1, unit: 'NOS', reservationNo: '530233', reservationItem: '0001', assetNo: '400001', subNumber: '0000' };
+
+    test('D22 pass-through: once the wrappers expose IV_BETYP/IV_BENUM, a real 241 item goes through ZWM_TR_CREATE with BETYP A and BENUM 0000400001', async () => {
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      withWrapperInterfaces(true, true, { EV_TBNUM: '0001000890', EV_TBPOS: '0001', EV_SUCCESS: 'S', MATNR: '000000008000009754', MENGA: 1, WERKS: '1120', LGORT: 'CS02', LGNUM: 'W01', BWLVS: '241' });
+      const res = await adapter.createTransferRequirement(real241);
+      expect(res.trNumber).toBe('1000890');
+      const names = mockRfc.call.mock.calls.map((c) => c[0]);
+      expect(names).toEqual(['L_TR_CREATE', 'RFC_GET_FUNCTION_INTERFACE', 'RFC_GET_FUNCTION_INTERFACE', 'ZWM_TR_CREATE']);
+      expect(mockRfc.call.mock.calls[3][1]).toMatchObject({ IV_LGNUM: 'W01', IV_BWLVS: '241', IV_MATNR: '000000008000009754', IV_WERKS: '1120', IV_LGORT: 'CS02', IV_MENGA: 1, IV_ALTME: 'NOS', IV_RSNUM: '0000530233', IV_RSPOS: '0001', IV_COMMIT: 'X', IV_BETYP: 'A', IV_BENUM: '0000400001' });
+      console.error.mockRestore();
+    });
+
+    test('D22 pass-through: when only Z_WM_TR_CREATE has the parameters, ZWM_TR_CREATE is skipped and Z_WM_TR_CREATE gets them; the check is cached per adapter', async () => {
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      withWrapperInterfaces(false, true, { EV_TBNUM: '0001000891', EV_TBPOS: '0001', EV_SUCCESS: 'S', MATNR: '000000008000009754', MENGA: 1, WERKS: '1120', LGORT: 'CS02', LGNUM: 'W01', BWLVS: '241' });
+      await adapter.createTransferRequirement(real241);
+      expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TR_CREATE', 'RFC_GET_FUNCTION_INTERFACE', 'RFC_GET_FUNCTION_INTERFACE', 'Z_WM_TR_CREATE']);
+      expect(mockRfc.call.mock.calls[3][1]).toMatchObject({ IV_BETYP: 'A', IV_BENUM: '0000400001' });
+      mockRfc.call.mockClear();
+      await adapter.createTransferRequirement(real241);
+      expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TR_CREATE', 'Z_WM_TR_CREATE']); // cached: no second interface read
+      console.error.mockRestore();
     });
 
     test('D22: an item without BETYP/BENUM (311 staging) still falls back to the Z TR wrappers when L_TR_CREATE is rejected', async () => {
