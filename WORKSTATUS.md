@@ -11648,3 +11648,4 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 
 - READ-ONLY at 17:03:14 IST: `Z_WM_TR_CREATE` / `ZWM_TR_CREATE` still 15 parameters, no `IV_BETYP` / `IV_BENUM`, no BETYP/BENUM in include `LZ_VENDOR_REMOTESU06`. The user's statement "extended and active in DS4" is not reflected in DS4. Per the condition in the GO, the Retry was **not** run; no SAP write; server not started.
 - **Next action (user/ABAP):** activate the extension in DS4 and verify in SE37 (Import tab of both FMs) before asking again. **Assumptions:** none.
+- **17:04 IST — conditional GO re-check #2:** interface unchanged (15 parameters, no IV_BETYP/IV_BENUM); Retry LB01 not run; no SAP write.
