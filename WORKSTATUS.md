@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **LIVE 241 (2026-10-19 17:32 IST): TR CREATION PASS under explicit GO; TO CREATION UNVERIFIED.** Reservation 0000530233/0001 (241, Asset 000000400001 / sub 0000, 1120/CS02, 8000009754, 1 NOS). Fresh port-4010 server process started; `ZWM_TR_CREATE` detected with `IV_BETYP`/`IV_BENUM`. Single authorized write executed via `retryStep` LB01: TR **W01/0001000889** created in SAP and verified in LTBK (`BWLVS 241, BETYP A, BENUM 0000400001, RSNUM 0000530233, STATU ''`, dynamic destination `913/0000400001`) and LTBP (`TBPOS 0001, MATNR 8000009754, WERKS 1120, LGORT CS02, MENGA 1.000, ALTME NOS, RSPOS 0001`). Stopped immediately after TR creation. Zero TOs in LTAK. Zero MATDOC records (no MIGO). Zero stock movements. Server stopped.
+
 - **LIVE 241 (2026-10-19): Step 1 PASS; TO CREATION UNVERIFIED (16:09 IST).** Root cause closed: no app mapping defect; SAP's PP-WM quantity reduction completed the first TR without a TO because the 201 storage unit 2000019368 sits in destination bin 921/TRANSFER for CS02 (wrapper misreported it as XFELD_WRONG). Fixes committed: D18 (new TR via Retry), D19 (wrapper messages logged), D20 (completed-without-TO diagnosed), and the pre-TO guard that refuses with 409 before SAP can consume the TR. TR `W01/0001000886` open, no TO. The guard was proven live at 16:11 IST (refused with 409, TR intact, no SAP write). A real 241 TO still needs the staged CS02 stock consumed/moved (or T331 MRAUS decided in SAP) and a new explicit GO. MIGO not performed.
 
 - **LIVE 201 (2026-10-19, 21:05 IST): Step 1 PASS, Step 2 PASS (user-triggered Retry Step confirmed), MIGO UNVERIFIED.** Reservation 0000530229/0001, TR W01/0001000882 (completed), TO W01/0001037367 (confirmed, SU 2000019368 in 921/TRANSFER). Live-found defects fixed: cross-warehouse TO lookup, fabricated SLG1 handle, legacy TO wrapper, ProcessStatus on retry. Open: replay shown as "created" (P3).
@@ -11686,4 +11688,25 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `ZWM_TR_CREATE ACTIVE INTERFACE params: 17 BETYP/BENUM: ["IV_BENUM:LTBK-BENUM:X","IV_BETYP:LTBK-BETYP:X"]`
 - **Activation evidence:** include `LZ_VENDOR_REMOTESU06` now `UDAT/SDATE 20261019, STIME 172447, VERN 000006`; active source (`RPY_PROGRAM_READ`) of `Z_WM_TR_CREATE` (135 lines) contains `ls_ltba-betyp = iv_betyp.`, `ls_ltba-benum = iv_benum.`, `DATA(lv_subrc) = sy-subrc.` and the exception-naming error text; `ZWM_TR_CREATE` (`LZ_VENDOR_REMOTESU07`, 47 lines) forwards `iv_betyp` / `iv_benum`. Both FMs activated successfully (the active interface reflects the new parameters); the SE37 activation itself was performed by the user, not observable here beyond its result.
 - **Confirmation:** no SAP business transaction executed — no TR, TO, MIGO, stock movement or customizing change; no application code modified. Reservation 0000530233/0001 still at status 11 (Retry LB01 available). The adapter (commit `bca283b`) will detect the parameters at runtime on a fresh server process.
+- **Assumptions:** none.
+
+### 2026-10-19 17:33 IST — LIVE real-241 TR creation PASS (authorized single write): TR W01/0001000889 created and verified in LTBK/LTBP; no TO, no MIGO
+
+- **Authorization:** user "GO FOR ONE SINGLE AUTHORIZED LIVE RETRY... This is the ONE authorized SAP business write. Create the real WM 241 TR only. STOP immediately after TR creation. Do NOT create a TO. Do NOT confirm a TO. Do NOT run MIGO. Do NOT move stock. Do NOT retry if the first call fails. Do NOT change T331/T333/customizing. Do NOT modify application code."
+- **Pre-execution interface check (READ-ONLY):** `RFC_GET_FUNCTION_INTERFACE` live check on DS4 confirmed both `Z_WM_TR_CREATE` and `ZWM_TR_CREATE` now carry 17 active parameters including `IV_BETYP` and `IV_BENUM` (`PARAMCLASS I`, `OPTIONAL X`).
+- **Server restart:** fresh port-4010 process launched (`PORT=4010 npx cds serve --port 4010`), ensuring clean adapter memory and reloading the newly activated wrapper interface (`_trWrapperRequirementSupport` resolved `{"ZWM_TR_CREATE":true,"Z_WM_TR_CREATE":true}`).
+- **Execution (WRITE):** single authorized `POST http://localhost:4010/odata/v4/reservation-entry/retryStep` for `ReservationNo: 0000530233`, `ReservationItem: 0001`, `Step: LB01` (mock user `alice`).
+  - Direct `L_TR_CREATE` call was rejected by kernel as incompatible RFC call (SAP Note 2295840) as expected.
+  - Adapter detected wrapper capability and invoked `ZWM_TR_CREATE` passing `IV_LGNUM: 'W01'`, `IV_BWLVS: '241'`, `IV_MATNR: '8000009754'`, `IV_WERKS: '1120'`, `IV_LGORT: 'CS02'`, `IV_MENGA: 1`, `IV_ALTME: 'NOS'`, `IV_RSNUM: '0000530233'`, `IV_RSPOS: '0001'`, `IV_COMMIT: 'X'`, `IV_BETYP: 'A'`, `IV_BENUM: '0000400001'`.
+  - SAP wrapper returned `EV_TBNUM: '0001000889'`, `EV_TBPOS: '0001'`, `EV_SUCCESS: ''`, `EV_MESSAGE: ''`.
+  - Process status moved to `TR_CREATED` (`Status_code: '02'`, `ErrorMessage: ''`, `ErrorStep: ''`). Local `ReservationLog` recorded `L3 001` ("Retry successful: Transfer Requirement 0001000889 created via L_TR_CREATE").
+- **Stopped immediately:** no subsequent call executed; port-4010 server terminated.
+- **READ-ONLY SAP verification (system DS4, client 220):**
+  - `LTBK`: `LGNUM = 'W01'`, `TBNUM = '0001000889'`, `BWLVS = '241'`, `BETYP = 'A'`, `BENUM = '0000400001'`, `RSNUM = '0000530233'`, `STATU = ''` (open requirement).
+  - Destination derived by SAP from `T333 W01/241 (NKDYN X)`: `NLTYP = '913'`, `NLPLA = '0000400001'` (dynamic bin = asset number).
+  - `LTBP`: `TBNUM = '0001000889'`, `TBPOS = '0001'`, `MATNR = '000000008000009754'`, `WERKS = '1120'`, `LGORT = 'CS02'`, `MENGA = 1.000`, `ALTME = 'NOS'`, `RSPOS = '0001'`, `ELIKZ = ''`.
+  - `LTAK`: 0 rows (`TBNUM = '0001000889'` has NO Transfer Order).
+  - `MATDOC`: 0 rows (`RSNUM = '0000530233'` has NO material document).
+  - Stock: NO stock moved; NO TO confirmed; NO MIGO posted.
+- **Code & customizing integrity:** NO application code modified; NO customizing changed (`git diff --check` clean, working tree clean).
 - **Assumptions:** none.
