@@ -260,7 +260,8 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
         quantity: 2,
         unit: 'KG',
         batch: 'INJW260001',
-        assetNo: '400001'
+        assetNo: '400001',
+        subNumber: '0000'
       });
       expect(res.success).toBe(true);
 
@@ -414,7 +415,8 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
           material: '8900000004',
           quantity: 1,
           unit: 'KG',
-          assetNo: '400001'
+          assetNo: '400001',
+          subNumber: '0000'
         })
       ).rejects.toThrow(/Batch is mandatory for batch-managed material 8900000004/);
     });
@@ -553,7 +555,8 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
           material: '8000008977',
           quantity: 1,
           unit: 'KG',
-          assetNo: '999999'
+          assetNo: '999999',
+          subNumber: '0000'
         })
       ).rejects.toThrow(/Asset 999999\/0000 does not exist in master data \(ANLA\)/);
     });
@@ -573,7 +576,8 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
           material: '8000008977',
           quantity: 1,
           unit: 'KG',
-          assetNo: '400000'
+          assetNo: '400000',
+          subNumber: '0000'
         })
       ).rejects.toThrow(/Asset 400000\/0000 is deactivated on 20250521 \(ANLA-DEAKT\)/);
     });
@@ -593,7 +597,8 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
           material: '8000008977',
           quantity: 1,
           unit: 'KG',
-          assetNo: '400002'
+          assetNo: '400002',
+          subNumber: '0000'
         })
       ).rejects.toThrow(/Asset 400002\/0000 is not capitalized \/ active \(ANLA-AKTIV\)/);
     });
@@ -613,7 +618,8 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
           material: '8000008977',
           quantity: 1,
           unit: 'KG',
-          assetNo: '400003'
+          assetNo: '400003',
+          subNumber: '0000'
         })
       ).rejects.toThrow(/Asset 400003\/0000 is marked for deletion \(ANLA-XLOEV = X\)/);
     });
@@ -633,7 +639,8 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
           material: '8000008977',
           quantity: 1,
           unit: 'KG',
-          assetNo: '400004'
+          assetNo: '400004',
+          subNumber: '0000'
         })
       ).rejects.toThrow(/Asset 400004\/0000 is locked for postings \(ANLA-XSPEB = X\)/);
     });

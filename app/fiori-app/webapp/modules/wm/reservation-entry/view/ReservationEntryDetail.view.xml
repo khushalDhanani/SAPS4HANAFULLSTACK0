@@ -388,6 +388,7 @@
 
                                     <Label
                                         text="{i18n>resFieldSubNumber}"
+                                        required="true"
                                         visible="{= ${create>/MovementType} === '241' }" />
                                     <Input
                                         id="inputSubNumber"

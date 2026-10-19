@@ -72,7 +72,7 @@ Fix: after COMMIT, read `RKPF (RSNUM, BWART, KOSTL, ANLN1, ANLN2, UMWRK, UMLGO, 
 Repro: mock `createReservation` to resolve after the client aborts, then resubmit ⇒ two track rows / two BAPI calls.
 Fix: accept a `ClientAttemptId`, persist an attempt row keyed by it (plus a SHA-256 of the normalized payload) before calling SAP, return the existing result on replay, and on commit-timeout reconcile by reading RKPF/RESB (`USNAM`, `RSDAT`, material/qty) before allowing a retry.
 
-**D4 — P1 — `forbiddenFields` not enforced at creation for 201/241/301/311; cross-type values reach the BAPI header.**
+**D4 — P1 — FIXED 2026-10-19 13:10 IST (Step 7.3, config-driven `validateReservationInput`) — `forbiddenFields` not enforced at creation for 201/241/301/311; cross-type values reach the BAPI header.**
 `movementConfig.js:validateReservationInput` 411-544 only rejects extras for 261. `ReservationProcessAdapter.js:153-162` adds `MOVE_STLOC`, `COSTCENTER`, `ASSET_NO`, `ORDERID` whenever the value is truthy, regardless of movement type.
 Repro: `POST createReservationEntry` 311 body with `CostCenter: "1011201301"` ⇒ passes validation, header `{MOVE_TYPE:'311', MOVE_PLANT, MOVE_STLOC, COSTCENTER:'1011201301'}` is sent. What SAP does with it is **Not verified**.
 Fix: in `validateReservationInput`, reject any non-empty field listed in `cfg.forbiddenFields`; build the header only from the fields the type allows.
@@ -106,7 +106,7 @@ Fix: insert the track row first inside the same tx, store `''` when SLG1 fails, 
 `adapter.js:155-157, 203` send `MOVE_PLANT`, `MOVE_STLOC`, `STGE_LOC` as `String(x).trim()` while every preflight uses `sapKey` (upper-cased). Lower-case input `cs01` passes MARD/T320 checks and is sent as `cs01`; SAP behaviour **Not verified**.
 Fix: use `sapKey(...,'lgort'/'plant')` for those header/item fields.
 
-**D12 — P2 — Action accepts `SerialNo`/`Serials` and silently drops them.**
+**D12 — P2 — FIXED 2026-10-19 13:10 IST (Step 7.3: non-empty serials rejected with 400) — Action accepts `SerialNo`/`Serials` and silently drops them.**
 `service.cds:159-160` declares them; `service.js:44-66` never reads them; nothing is sent or persisted. Callers get a false contract.
 Fix: remove the parameters from `createReservationEntry` (reservations carry no serials) or reject non-empty values.
 

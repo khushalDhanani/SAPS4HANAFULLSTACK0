@@ -523,6 +523,9 @@ sap.ui.define([
                     if (!oData.AssetNo || !oData.AssetNo.trim()) {
                         return "Asset Number is mandatory for Movement Type 241 (Goods Issue to Asset)";
                     }
+                    if (!oData.SubNumber || !String(oData.SubNumber).trim()) {
+                        return "Asset Sub-number is mandatory for Movement Type 241 (Goods Issue to Asset)";
+                    }
                     break;
                 case "311":
                     if (!oData.ReceivingStorageLocation || !oData.ReceivingStorageLocation.trim()) {

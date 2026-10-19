@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 7.3 validation (2026-10-19, 13:10 IST):** `validateReservationInput` now iterates `MOVEMENT_CONFIG.requiredFields`/`forbiddenFields` (no per-type switch), adds plant/SLoc/quantity/unit/batch/serial base rules, and 241 requires `SubNumber`. New `reservationValidationMatrix.test.js`; 19 suites / 680 tests PASS. Not committed. Audit D4, D12 closed.
+
 - **Step 7.2 contract normalization (2026-10-19, 12:45 IST):** `createReservation`/`createReservationEntry` now accept only `ReservationDate`, `OrderID`, `OrderType` (lowercase duplicates removed from CDS, handler, adapter); CAP returns 400 for any obsolete variant. 15 suites / 438 tests PASS. Not committed. Audit D14 closed.
 
 - **D1 fix (2026-10-19, 12:20 IST):** `ReservationEntries` entity writes now `@restrict`ed to `WarehouseClerk`/`WarehouseManager`/`Admin` (`srv/wm/reservation-entry/service.cds`); Viewer 403 tests added; 4 suites / 146 tests PASS. Not committed. D2–D17 from `AUDIT_RESERVATION_CREATE.md` still open.
@@ -11096,5 +11098,26 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `npx cds compile srv/wm/reservation-entry/service.cds --to json` → OK. `npx eslint` on the 5 changed files → clean. `git diff --check` → clean.
   - Not run: full `npm test`, e2e, lint of the whole repo, live SAP.
 - **Status:** Done, not committed. Audit D14 closed; D2–D13, D15–D17 remain open.
+- **Next recommended action:** D2 + D3 (post-commit RKPF/RESB read-back and an attempt store on reservation creation).
+- **Assumptions:** none.
+
+### 2026-10-19 13:10 IST — Step 7.3: Movement-specific reservation validation driven by movementConfig.js
+
+- **Work Session / Reason:** Audit D4 (forbidden fields not enforced at creation for 201/241/301/311), D12 (serials silently dropped) and the Step 7.3 brief: make `MOVEMENT_CONFIG` the single source of truth for reservation-create validation without duplicating rules per movement type. No SAP behaviour changed, no SAP call made.
+- **Changes:**
+  - `srv/common/movementConfig.js`:
+    - `validateReservationInput` rewritten: base rules for every type (Plant/StorageLocation 4 alphanumeric via `common.js` regexes, Material <= 40, Quantity > 0 with <= 3 decimals, Unit <= 3 chars, Batch against `batchRules.regex`/`maxLength`, serial numbers rejected: `Serials`/`SerialNo` are never part of a reservation), then a generic loop over `cfg.requiredFields` and `cfg.forbiddenFields`, with `destinationRules.type` selecting `validateMovement301Destination` (inter_plant) or `validateMovement311Destination` (intra_plant). The per-type `switch` is gone; messages keep the existing wording (`<Field> is mandatory for Movement Type <mvt> (<label>)`, `<Field> is not allowed for Movement Type <mvt> (<label>)`).
+    - 241 policy: `requiredFields` now includes `SubNumber` (asset sub-number mandatory; `0000` is the main-asset value).
+    - 311 policy unchanged: `ReceivingPlant` allowed only when equal to the issuing plant (`receivingPlantMustMatch`), `ReceivingStorageLocation` required and must differ.
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`: SubNumber label `required="true"` for 241.
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js#validateForm`: 241 requires SubNumber (UI pre-check; backend remains authoritative).
+  - Tests: new `test/unit/wm/reservationValidationMatrix.test.js` (per movement: canonical + camelCase positive, each missing required field, each forbidden field alone and all together, plant/SLoc format, quantity precision, unit length, batch, serials; plus 311/301/241/261 policy specifics, unsupported type, throwError). `mvt241Process.test.js` (7 adapter calls) and `movementConfig.test.js` (1 case) now send `subNumber '0000'`; `reservationEntryUi.test.js` asserts the 241 SubNumber UI check.
+- **Validation (executed):**
+  - `npx jest test/unit/wm/reservationValidationMatrix.test.js test/unit/wm/movementConfig.test.js test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationEntryUi.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/movement261UnifiedLifecycle.test.js test/unit/wm/trToCorruptedStagingRecovery.test.js test/unit/wm/mvt201Process.test.js test/unit/wm/mvt241Process.test.js test/unit/wm/mvt301Process.test.js test/unit/wm/mvt311Process.test.js test/unit/wm/step17Mvt201.test.js test/unit/wm/step18Mvt241.test.js test/unit/wm/step19Mvt311.test.js test/unit/wm/step20Mvt301.test.js test/unit/wm/movementMatrixLifecycle.test.js test/unit/wm/productionHardeningAudit.test.js test/unit/wm/processFixes.test.js test/unit/wm/trToHandler.test.js` → **PASS (19 suites, 680 tests)**.
+  - `npx eslint` on the 6 changed JS files → clean. `npx cds compile srv/wm/reservation-entry/service.cds --to json` → OK. `git diff --check` → clean. `npx ui5lint` (app/fiori-app) on `ReservationEntryDetail.view.xml` + controller → Success, no findings. Note: eslint ignores `app/` by config, so the controller is covered by ui5lint only.
+  - Not run: full `npm test`, e2e, live SAP.
+- **Behaviour change to note (CONFIRMED by tests):** payloads that previously passed with cross-type values (e.g. 311 + `CostCenter`, 201 + `ReceivingStorageLocation`) are now rejected with HTTP 400 before any SAP call; 241 without `SubNumber` is rejected (UI defaults it to `0000`; `tools/run2-mvt241-live.js` and `tools/sandbox-matrix.js` already send it).
+- **Still open:** D15 only partly: batch is now validated at creation from `batchRules.regex` (alphanumeric), while `sapKey('batch')` in the adapter still accepts `_ - . /` for posting paths.
+- **Status:** Done, not committed. Audit D4 and D12 closed.
 - **Next recommended action:** D2 + D3 (post-commit RKPF/RESB read-back and an attempt store on reservation creation).
 - **Assumptions:** none.

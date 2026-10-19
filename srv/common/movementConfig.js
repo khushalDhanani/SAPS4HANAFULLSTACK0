@@ -118,7 +118,7 @@ const MOVEMENT_CONFIG = Object.freeze({
     receivingSlocMustDiffer: false,
     receivingPlantMustDiffer: false,
     preserveReservationOnTr: true,
-    requiredFields: Object.freeze(['Plant', 'StorageLocation', 'Material', 'Quantity', 'Unit', 'AssetNo']),
+    requiredFields: Object.freeze(['Plant', 'StorageLocation', 'Material', 'Quantity', 'Unit', 'AssetNo', 'SubNumber']),
     requiredPostingFields: Object.freeze(['IssueQty', 'Unit', 'AssetNo']),
     forbiddenFields: Object.freeze(['CostCenter', 'ReceivingPlant', 'ReceivingStorageLocation', 'GLAccount', 'OrderID', 'OrderNo', 'OrderType']),
     destinationRules: Object.freeze({
@@ -408,6 +408,63 @@ function resolveWmMovement(movementType) {
  * @param {object} [options.req=null] CAP request object; calls req.error(400, msg) for errors
  * @returns {{ isValid: boolean, errors: string[], config: object|null }}
  */
+/** Reservation-create field names (PascalCase canonical, camelCase as used inside the adapter). */
+const RES_FIELD_KEYS = Object.freeze({
+  Plant: ['Plant', 'plant'],
+  StorageLocation: ['StorageLocation', 'storageLocation'],
+  Material: ['Material', 'material'],
+  Quantity: ['Quantity', 'quantity'],
+  Unit: ['Unit', 'unit'],
+  CostCenter: ['CostCenter', 'costCenter'],
+  AssetNo: ['AssetNo', 'assetNo'],
+  SubNumber: ['SubNumber', 'subNumber'],
+  OrderID: ['OrderID', 'orderId'],
+  OrderNo: ['OrderNo', 'orderNo'],
+  OrderType: ['OrderType', 'orderType'],
+  GLAccount: ['GLAccount', 'glAccount'],
+  ReceivingPlant: ['ReceivingPlant', 'receivingPlant'],
+  ReceivingStorageLocation: ['ReceivingStorageLocation', 'receivingStorageLocation']
+});
+const RES_FIELD_LABELS = Object.freeze({
+  CostCenter: 'Cost Center',
+  AssetNo: 'Asset number',
+  SubNumber: 'Asset sub-number',
+  OrderID: 'Order number',
+  OrderNo: 'Order number',
+  OrderType: 'Order Type',
+  GLAccount: 'G/L Account',
+  ReceivingPlant: 'Receiving Plant',
+  ReceivingStorageLocation: 'Receiving Storage Location'
+});
+const RES_TYPE_LABELS = Object.freeze({
+  '201': 'GI to Cost Center',
+  '241': 'GI to Asset',
+  '261': 'GI to Order',
+  '301': 'Plant to Plant Transfer',
+  '311': 'SLoc Transfer'
+});
+// Checked once for every type by the base rules or the destination validator, never by the generic loops.
+const RES_BASE_FIELDS = Object.freeze(['Plant', 'StorageLocation', 'Material', 'Quantity', 'Unit', 'ReceivingPlant', 'ReceivingStorageLocation']);
+
+function pickResField(data, field) {
+  for (const k of RES_FIELD_KEYS[field] || [field]) {
+    if (data[k] !== undefined && data[k] !== null && String(data[k]).trim() !== '') return String(data[k]).trim();
+  }
+  return '';
+}
+
+/**
+ * Validates a reservation creation payload before calling SAP backend.
+ * Single source of truth: MOVEMENT_CONFIG[mvt].requiredFields / forbiddenFields / destinationRules / batchRules.
+ * Base rules for every type: Plant and StorageLocation (4 alphanumeric), Material (<= 40), Quantity (> 0, <= 3
+ * decimals), Unit (<= 3), Batch (batchRules.regex), no serial numbers (captured at goods issue, not on RESB).
+ *
+ * @param {object} data Payload with PascalCase (service) or camelCase (adapter) properties
+ * @param {object} [options]
+ * @param {boolean} [options.throwError=false] If true, throws Error with status 400 on first error
+ * @param {object} [options.req=null] CAP request object; calls req.error(400, msg) for errors
+ * @returns {{ isValid: boolean, errors: string[], config: object|null }}
+ */
 function validateReservationInput(data = {}, options = {}) {
   const errors = [];
   const addError = (msg) => {
@@ -418,115 +475,78 @@ function validateReservationInput(data = {}, options = {}) {
   };
 
   const mvt = String(data.MovementType || data.movementType || '').trim();
-  const plant = String(data.Plant || data.plant || '').trim();
-  const sloc = String(data.StorageLocation || data.storageLocation || '').trim();
-  const material = String(data.Material || data.material || '').trim();
+  const plant = pickResField(data, 'Plant');
+  const sloc = pickResField(data, 'StorageLocation');
+  const material = pickResField(data, 'Material');
   const qtyRaw = data.Quantity !== undefined ? data.Quantity : data.quantity;
   const qty = Number(qtyRaw);
   const unit = String(data.Unit || data.unit || data.Uom || data.uom || '').trim();
   const resDate = data.ReservationDate !== undefined ? data.ReservationDate : data.reservationDate;
-  const recPlant = String(data.ReceivingPlant || data.receivingPlant || '').trim();
-  const recSLoc = String(data.ReceivingStorageLocation || data.receivingStorageLocation || '').trim();
-  const costCenter = String(data.CostCenter || data.costCenter || '').trim();
-  const assetNo = String(data.AssetNo || data.assetNo || '').trim();
-  const orderId = String(data.OrderID || data.orderId || data.OrderNo || data.orderNo || data.Aufnr || data.aufnr || '').trim();
-  const orderType = String(data.OrderType || data.orderType || data.Auart || data.auart || '').trim();
+  const batch = String(data.Batch || data.batch || '').trim();
+  const serials = data.Serials || data.serials;
+  const serialNo = String(data.SerialNo || data.serialNo || '').trim();
+  const cfg = MOVEMENT_CONFIG[mvt] || null;
+  const typeLabel = RES_TYPE_LABELS[mvt] || '';
 
   // 1. Movement Type
   if (!mvt) {
     addError('MovementType is mandatory (201, 241, 311, 301, 261)');
-  } else if (!MOVEMENT_CONFIG[mvt]) {
+  } else if (!cfg) {
     addError(`Unsupported movement type '${mvt}'. Valid movement types are: 201, 241, 311, 301, 261`);
   }
 
-  // 2. Plant
-  if (!plant) {
-    addError('Plant is mandatory');
-  }
-
-  // 3. Storage Location
-  if (!sloc) {
-    addError('StorageLocation is mandatory');
-  }
-
-  // 4. Material
-  if (!material) {
-    addError('Material is mandatory');
-  }
+  // 2.-4. Plant, Storage Location, Material
+  if (!plant) addError('Plant is mandatory');
+  else if (!C.PLANT_REGEX.test(plant)) addError(`Plant '${plant}' must be exactly 4 alphanumeric characters`);
+  if (!sloc) addError('StorageLocation is mandatory');
+  else if (!C.SLOC_REGEX.test(sloc)) addError(`Storage Location '${sloc}' must be exactly 4 alphanumeric characters`);
+  if (!material) addError('Material is mandatory');
+  else if (material.length > 40) addError('Material number exceeds maximum length of 40 characters');
 
   // 5. Quantity
   if (qtyRaw === undefined || qtyRaw === null || qtyRaw === '' || isNaN(qty) || qty <= 0) {
     addError('Quantity must be greater than 0');
+  } else if (!C.QTY_DECIMAL_REGEX.test(String(qtyRaw).trim())) {
+    addError('Quantity exceeds maximum precision of 3 decimal places');
   }
 
   // 6. Unit of Measure
-  if (!unit) {
-    addError('Unit is mandatory');
-  }
+  if (!unit) addError('Unit is mandatory');
+  else if (unit.length > 3) addError(`Unit '${unit}' exceeds maximum length of 3 characters`);
 
   // 7. Reservation Date (optional, but if provided must be valid)
   if (resDate !== undefined && resDate !== null && resDate !== '') {
-    if (typeof resDate === 'string' && /^\d{8}$/.test(resDate)) {
-      // Valid SAP YYYYMMDD string format
-    } else {
-      const d = new Date(resDate);
-      if (isNaN(d.getTime())) {
-        addError('Invalid ReservationDate');
-      }
+    if (!(typeof resDate === 'string' && /^\d{8}$/.test(resDate)) && isNaN(new Date(resDate).getTime())) {
+      addError('Invalid ReservationDate');
     }
   }
 
-  // 8. Movement-specific account assignment & routing validations
-  const cfg = MOVEMENT_CONFIG[mvt];
+  // 8. Batch (optional) and serial numbers (never part of a reservation)
+  if (batch && cfg && cfg.batchRules && !cfg.batchRules.regex.test(batch)) {
+    addError(`Batch '${batch}' must be 1-${cfg.batchRules.maxLength} alphanumeric characters`);
+  }
+  if ((Array.isArray(serials) && serials.some((v) => String(v || '').trim() !== '')) || serialNo) {
+    addError('Serial numbers are not accepted at reservation creation; they are captured at goods issue posting');
+  }
+
+  // 9. Movement-specific policy from MOVEMENT_CONFIG
   if (cfg) {
-    switch (mvt) {
-      case '201':
-        if (!costCenter) {
-          addError('Cost Center is mandatory for Movement Type 201 (GI to Cost Center)');
-        }
-        break;
-
-      case '241':
-        if (!assetNo) {
-          addError('Asset number is mandatory for Movement Type 241 (GI to Asset)');
-        }
-        break;
-
-      case '311': {
-        const destVal = validateMovement311Destination(plant, sloc, recPlant, recSLoc);
-        destVal.errors.forEach((e) => addError(e.message));
-        break;
+    const recPlant = pickResField(data, 'ReceivingPlant');
+    const recSLoc = pickResField(data, 'ReceivingStorageLocation');
+    if (cfg.destinationRules.type === 'inter_plant') {
+      validateMovement301Destination(plant, recPlant, recSLoc).errors.forEach((e) => addError(e.message));
+    } else if (cfg.destinationRules.type === 'intra_plant') {
+      validateMovement311Destination(plant, sloc, recPlant, recSLoc).errors.forEach((e) => addError(e.message));
+    }
+    for (const f of cfg.requiredFields) {
+      if (!RES_BASE_FIELDS.includes(f) && !pickResField(data, f)) {
+        addError(`${RES_FIELD_LABELS[f] || f} is mandatory for Movement Type ${mvt} (${typeLabel})`);
       }
-
-      case '301': {
-        const destVal = validateMovement301Destination(plant, recPlant, recSLoc);
-        destVal.errors.forEach((e) => addError(e.message));
-        break;
+    }
+    for (const f of cfg.forbiddenFields) {
+      if (pickResField(data, f)) {
+        addError(`${RES_FIELD_LABELS[f] || f} is not allowed for Movement Type ${mvt} (${typeLabel})`);
       }
-
-      case '261':
-        if (!orderType) {
-          addError('Order Type is mandatory for Movement Type 261 (GI to Order)');
-        }
-        if (!orderId) {
-          addError('Order number is mandatory for Movement Type 261 (GI to Order)');
-        }
-        if (costCenter) {
-          addError('Cost Center is not allowed for Movement Type 261 (GI to Order)');
-        }
-        if (assetNo) {
-          addError('Asset number is not allowed for Movement Type 261 (GI to Order)');
-        }
-        if (recPlant) {
-          addError('Receiving Plant is not allowed for Movement Type 261 (GI to Order)');
-        }
-        if (recSLoc) {
-          addError('Receiving Storage Location is not allowed for Movement Type 261 (GI to Order)');
-        }
-        break;
-
-      default:
-        break;
     }
   }
 
@@ -541,7 +561,7 @@ function validateReservationInput(data = {}, options = {}) {
   return {
     isValid,
     errors,
-    config: cfg || null
+    config: cfg
   };
 }
 

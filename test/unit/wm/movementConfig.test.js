@@ -211,7 +211,7 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
       });
 
       test('Passes with valid AssetNo and required fields', () => {
-        const res = validateReservationInput({ MovementType: '241', Plant: '1120', StorageLocation: 'HS01', Material: 'MAT01', Quantity: 10, Unit: 'KG', AssetNo: '000000400001' });
+        const res = validateReservationInput({ MovementType: '241', Plant: '1120', StorageLocation: 'HS01', Material: 'MAT01', Quantity: 10, Unit: 'KG', AssetNo: '000000400001', SubNumber: '0000' });
         expect(res.isValid).toBe(true);
         expect(res.errors).toHaveLength(0);
       });

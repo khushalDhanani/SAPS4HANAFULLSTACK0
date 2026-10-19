@@ -200,8 +200,9 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             const dataWithoutAsset = { MovementType: '241', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, AssetNo: '' };
             expect(subject.validateForm(dataWithoutAsset)).toMatch(/Asset Number is mandatory for Movement Type 241/);
 
-            const dataWithAsset = { MovementType: '241', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, AssetNo: '000000400092' };
+            const dataWithAsset = { MovementType: '241', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, AssetNo: '000000400092', SubNumber: '0000' };
             expect(subject.validateForm(dataWithAsset)).toBeNull();
+            expect(subject.validateForm(Object.assign({}, dataWithAsset, { SubNumber: '' }))).toMatch(/Sub-number is mandatory for Movement Type 241/);
         });
 
         it('validates 311: requires Receiving Storage Location and must differ from Issuing SLoc', () => {
