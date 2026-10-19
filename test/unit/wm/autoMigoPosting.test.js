@@ -49,7 +49,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         return [{
           LGNUM: 'W01',
           TBNUM: '0001000850',
-          BWLVS: '311',
+          BWLVS: '201', // D21: real WM movement for the 201 flow
           BETYP: 'K',
           BENUM: '001011201301',
           RSNUM: '0000520235',
@@ -62,7 +62,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           LGNUM: 'W01',
           TANUM: '0001037299',
           TBNUM: '0001000850',
-          BWLVS: '311',
+          BWLVS: '201',
           KQUIT: ' ',
           BDATU: '20261014'
         }];
@@ -130,7 +130,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
             WERKS: '1120',
             LGORT: 'HS01',
             LGNUM: 'W01',
-            BWLVS: '311'
+            BWLVS: params?.T_LTBA?.[0]?.BWLVS || '311' // echo the movement sent (D21: 201 sends 201)
           }]
         };
       }
@@ -143,7 +143,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           WERKS: '1120',
           LGORT: 'HS01',
           LGNUM: 'W01',
-          BWLVS: '311'
+          BWLVS: params?.IV_BWLVS || '311'
         };
       }
       if (fm === 'L_TO_CREATE_TR' || fm === 'ZWM_TO_CREATE_FROM_TR') return { E_TANUM: '0001037299' };
@@ -1915,7 +1915,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
             WERKS: '1120',
             LGORT: 'HS01',
             LGNUM: 'W01',
-            BWLVS: '311'
+            BWLVS: '201'
           }]
         })
       });
@@ -2290,7 +2290,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
             WERKS: '1120',
             LGORT: 'HS01',
             LGNUM: 'W01',
-            BWLVS: '311'
+            BWLVS: '201'
           }]
         })
       });
