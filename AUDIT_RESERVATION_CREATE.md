@@ -213,4 +213,5 @@ Reservation `0000530229/0001`, TR `W01/0001000882`; full evidence in the WORKSTA
 - Same create/TO code path as 201; no code change was needed for Step 1, none made for Step 2.
 - New defects: **D18** (P1) no in-app recovery when SAP closes a TR without a TO (LT04 would hit a completed TR, LB01 is refused while a TR is tracked); **D19** (P2) the TO wrapper's `ET_MESSAGES`/`EV_MESSAGE` are not logged, so only the exception name survives.
 - D18 and D19 fixed 2026-10-19 22:40 IST; D18 proven live 23:05 IST (Retry Step created replacement TR W01/0001000886, no TO, no new reservation).
-- Evidence and SAP reads: WORKSTATUS.md entries 2026-10-19 21:45 IST, 22:10 IST, 22:40 IST and 23:05 IST.
+- **Root cause of the Step 2 failure (23:55 IST, READ-ONLY):** `Z_WM_TO_CREATE_FROM_TR` misreports "no TO created" as `XFELD_WRONG` (sy-subrc of its own READ TABLE); SAP completed the TR without a TO via PP-WM quantity reduction because the 201 storage unit (2000019368) already sat in destination bin 921/TRANSFER for CS02. Movement type, asset and RSNUM are not involved; blanking RSNUM is not required. New diagnostics defect **D20** (adapter cannot distinguish "TR completed without TO"). Details: WORKSTATUS 23:55 IST.
+- Evidence and SAP reads: WORKSTATUS.md entries 2026-10-19 21:45 IST, 22:10 IST, 22:40 IST, 23:05 IST and 23:55 IST.
