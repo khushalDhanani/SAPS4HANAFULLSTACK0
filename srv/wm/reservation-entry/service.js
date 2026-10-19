@@ -1884,6 +1884,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
               await UPDATE(ReservationEntries).set({
                 TransferOrder: toNo,
                 Status_code: STATUS.TO_CREATED,
+                ProcessStatus: PROCESS_STATUS.TO_CREATED,
                 ErrorMessage: '',
                 ErrorStep: '',
                 ProcessId: processId,
@@ -1907,6 +1908,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             await UPDATE(ReservationEntries).set({
               TransferOrder: toNo,
               Status_code: STATUS.TO_CONFIRMED,
+              ProcessStatus: PROCESS_STATUS.TO_CONFIRMED,
               ErrorMessage: '',
               ErrorStep: '',
               ProcessId: processId,

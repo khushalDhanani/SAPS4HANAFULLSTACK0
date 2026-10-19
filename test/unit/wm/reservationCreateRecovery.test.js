@@ -200,7 +200,7 @@ describe('Step 7.7: reservation-create partial failure and recovery', () => {
       expect(data.success).toBe(false);
       expect(await track()).toMatchObject({ Status_code: '12', TransferRequirement: '0001007077', ErrorMessage: expect.stringMatching(/L3 007/) });
       const { data: retried } = await POST(`${URL}/retryStep`, { ReservationNo: RES, ReservationItem: '0001', Step: 'AUTO' }, auth);
-      expect(retried).toMatchObject({ Status_code: '04', TransferOrder: '0001012977', TransferRequirement: '0001007077' });
+      expect(retried).toMatchObject({ Status_code: '04', ProcessStatus: 'TO_CONFIRMED', TransferOrder: '0001012977', TransferRequirement: '0001007077' }); // live 201: ProcessStatus used to stay TR_CREATED
       expect(toSpy).toHaveBeenCalledTimes(2);
       expect(trSpy).not.toHaveBeenCalled();
       expect(resSpy).not.toHaveBeenCalled();

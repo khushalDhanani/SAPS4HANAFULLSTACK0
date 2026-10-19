@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **LIVE 201 (2026-10-19, 21:05 IST): Step 1 PASS, Step 2 PASS (user-triggered Retry Step confirmed), MIGO UNVERIFIED.** Reservation 0000530229/0001, TR W01/0001000882 (completed), TO W01/0001037367 (confirmed, SU 2000019368 in 921/TRANSFER). Live-found defects fixed: cross-warehouse TO lookup, fabricated SLG1 handle, legacy TO wrapper, ProcessStatus on retry. Open: replay shown as "created" (P3).
+
 - **LIVE 201 Step 2 re-run (2026-10-19, 20:50 IST): STOPPED, no write by this session.** TO W01/0001037367 (from TR 0001000882, confirmed, SU 2000019368 CS02 EN1 → 921/TRANSFER) already existed, created via `retryStep` at 09:05:34Z by another app instance (user's cds watch on 4004 or the visible pane) with the fixed adapter on disk. SAP data matches the intended Step 2 exactly; attribution unverified. Local defect: `ProcessStatus` stays TR_CREATED after a successful LT04/LT12 retry. MIGO not done.
 
 - **LIVE 201 Step 2 (2026-10-19, 20:20 IST): TO creation rejected by SAP (L3 045, legacy wrapper forces immediate confirmation), nothing created, status 12 persisted correctly.** Root cause fixed in the retry/TO path (Z_WM_TO_CREATE_FROM_TR with IV_SQUIT blank first, as the proven TrTo path); 15 suites / 465 tests PASS. Re-run of Step 2 awaits a new go. TR W01/0001000882 and reservation 0000530229 remain open in SAP.
@@ -11349,4 +11351,11 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Consequence:** the fixed TO path (`Z_WM_TO_CREATE_FROM_TR` with `IV_SQUIT ' '`, then `L_TO_CONFIRM`) produced a correct TO and confirmation in SAP, but **not under this session's control**, so the Step 2 proof is attributed with that caveat. Local defect noted: after a successful LT04/LT12 retry, `ProcessStatus` stays `TR_CREATED` while `Status_code` is `04` (the retry path updates `Status_code` but not `ProcessStatus`), see `ReservationTrack 0000530229`.
 - **State now:** reservation 0000530229/0001 open (not issued), TR completed, TO 0001037367 confirmed, 1 NOS of material 8000009754 (serial-managed, SU 2000019368) sits in W01 921/TRANSFER. MIGO not performed. Server stopped, mock password removed.
 - **LIVE 201 RESULT:** Step 1 (reservation + TR) **PASS**; Step 2 (TO + confirm) **PASS in SAP data, attribution UNVERIFIED** (executed outside this session's action); final status/MIGO **UNVERIFIED** (not authorized).
+- **Assumptions:** none.
+
+### 2026-10-19 21:05 IST — LIVE 201 Step 2 attribution confirmed by the user; ProcessStatus defect fixed
+
+- **User statement (2026-10-19):** "Yes, I triggered Retry Step on reservation 0000530229 myself at about 14:35 IST. Treat the TO 0001037367 as the authorized Step 2 result." → Step 2 attribution resolved: the TO was created and confirmed by the user's authorized Retry Step on the app running the fixed TO path (`Z_WM_TO_CREATE_FROM_TR` with `IV_SQUIT ' '`, then `L_TO_CONFIRM`).
+- **Fix:** `srv/wm/reservation-entry/service.js#retryStep` now sets `ProcessStatus` to `TO_CREATED` / `TO_CONFIRMED` together with `Status_code` 03 / 04 (previously stayed `TR_CREATED`, as seen on `ReservationTrack 0000530229`). Test: `reservationCreateRecovery.test.js` (TO failure → retry) asserts `ProcessStatus TO_CONFIRMED`. Suites `reservationCreateRecovery`, `reservationMonitorRetry`, `reservationEntryService` → PASS (3 suites, 107 tests); eslint clean. The existing row 0000530229 keeps `ProcessStatus TR_CREATED` (historic data, not rewritten).
+- **LIVE 201 RESULT (final for the authorized scope):** Step 1 reservation + auto-TR **PASS**; Step 2 TO creation + confirmation **PASS** (user-triggered, SAP evidence LTAK/LTAP/LTBK/LTBP/LQUA recorded 20:50 IST); MIGO / final goods-issue status **UNVERIFIED** (not authorized, not performed).
 - **Assumptions:** none.
