@@ -97,11 +97,20 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   if (labst(mid) !== labst(before) - quantity) stop(`stock ${labst(mid)} is not ${labst(before)} - ${quantity}`);
 
   console.log('\n[4] Reverse with the API Cancel action');
-  const rev = await adapter.reverse({ materialDocument: gi.MaterialDocument, materialDocumentYear: gi.MaterialDocumentYear });
+  const rev = await adapter.reverse({
+    materialDocument: gi.MaterialDocument,
+    materialDocumentYear: gi.MaterialDocumentYear,
+    materialDocumentItem: it[0]?.MaterialDocumentItem || '1'
+  });
   raw('app result', rev);
 
   console.log('\n[5] Read back after reversal');
-  const after = await snapshot('reversed');
+  let after = await snapshot('reversed');
+  for (let attempt = 1; (enmng(after) !== enmng(before) || labst(after) !== labst(before)) && attempt <= 5; attempt++) {
+    console.log(`  reversal update task pending in SAP, waiting 2 s (${attempt}/5)`);
+    await new Promise((r) => setTimeout(r, 2000));
+    after = await snapshot('reversed');
+  }
   if (enmng(after) !== enmng(before)) stop(`ENMNG ${enmng(after)} is not back to ${enmng(before)}`);
   if (labst(after) !== labst(before)) stop(`stock ${labst(after)} is not back to ${labst(before)}`);
   if (!same(before.resb, after.resb)) stop('RESB row differs from the start');

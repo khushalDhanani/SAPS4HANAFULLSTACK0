@@ -3260,7 +3260,17 @@ The previous log was removed in commit `b741337`; this file restarts it.
 - **Previous Recommended Action (Step 5 — 2026-10-14, 13:05 IST):** Separate TR creation from TO creation (Reservation → TR → TR validation → TO).
 - **Previous Recommended Action (Step 4 — 2026-10-14, 12:50 IST):** Make Background TR creation independently reliable and deterministic with critical 8-field verification rule.
 - **Previous Recommended Action (Step 3 — 2026-10-14, 12:35 IST):** Make MB21 creation independently reliable and decouple TR creation until reservation creation is confirmed.
-- **Next Recommended Action (2026-10-19, 10:05 IST):**
+- **Next Recommended Action (2026-10-19, 10:55 IST):**
+  1. Movement Type 261 Goods Issue POST (`4900050274/2026`) and Movement Type 262 CancelItem reversal (`4900050275/2026`) are 100% verified live in SAP S/4HANA Client 220 against Process Order `1002790` / Reservation `521169/4`.
+  2. Stock, RESB ENMNG, and MATDOC status restoration fully confirmed with 0 corruption and 0 leaks.
+  3. Proceed with next functional live verification item or await user instruction.
+  4. Maintain 100% green status across all test suites, ESLint, and diff checks.
+- **Previous Recommended Action (2026-10-19, 10:45 IST):**
+  1. Present SAP S/4HANA `L9/042` root cause analysis to user for Reservation `529651/1` (SU management active on `GS1`).
+  2. Recommend candidate open 261 reservation on released Process Order `1002790` in non-WM location `PT01` (Reservation `521169/4` or `521169/6`) for clean live 261 POST + 262 reversal test.
+  3. Await explicit user authorization before performing any live write.
+  4. Maintain 100% green status across all test suites, ESLint, and diff checks.
+- **Previous Recommended Action (2026-10-19, 10:05 IST):**
   1. Continue Movement 201 verification or proceed to subsequent planned P2 items as requested by user.
   2. Maintain 100% green status across all WM suites, ESLint, and diff checks.
 - **Previous Recommended Action (2026-10-19, 09:55 IST):**
@@ -3282,6 +3292,74 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-19 10:55 IST — Live SAP S/4HANA (Client 220): MVT 261 POST + 262 Reversal End-to-End Execution (PASS)
+
+- **Reason for Change:**
+  - User issued explicit authorization: `GO — approve live MVT 261 POST + 262 reversal for Reservation 521169/4, Process Order 1002790, Material 1000000520, Quantity 1 KG, Plant 1120, SLoc PT01, Client 220`.
+- **Pre-Execution Snapshot (READ-ONLY):**
+  - `RESB`: `RSNUM = '0000521169'`, `RSPOS = '0004'`, `AUFNR = '000001002790'`, `MATNR = '000000001000000520'`, `WERKS = '1120'`, `LGORT = 'PT01'`, `BDMNG = '2600.000'`, `ENMNG = '0.000'`, `XLOEK = ''`, `KZEAR = ''`, `XWAOK = 'X'`.
+  - `MARD`: `MATNR = '000000001000000520'`, `WERKS = '1120'`, `LGORT = 'PT01'`, `LABST = '34649.000 KG'`.
+  - `MCHB`: `CHARG = 'IN26000611'`, `CLABS = '34649.000 KG'`.
+  - `MATDOC`: `[]` (0 prior documents for this item).
+- **Execution Step 2: Post Goods Issue 261 (WRITE):**
+  - Dispatched `POST /sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`:
+    `GoodsMovementCode: "03"`, `GoodsMovementType: "261"`, `Plant: "1120"`, `StorageLocation: "PT01"`, `Material: "1000000520"`, `Quantity: "1.000"`, `Unit: "KG"`, `Batch: "IN26000611"`, `Reservation: "521169"`, `ReservationItem: "0004"`, `ManufacturingOrder: "000001002790"`.
+  - **Result: HTTP 201 Created**.
+  - **Material Document Created:** **`4900050274 / 2026`** (`CreatedByUser = 'KHUSHAL'`).
+- **Post-261 Verification (READ-ONLY):**
+  - `MATDOC`: Row `MBLNR = '4900050274'`, `MJAHR = '2026'`, `ZEILE = '0001'`, `BWART = '261'`, `MENGE = 1.000 KG'`, `CHARG = 'IN26000611'`, `CANCELLED = ''`.
+  - `RESB`: `ENMNG = 1.000 KG` (withdrawn quantity incremented from 0 to 1 KG).
+  - `MARD`: `LABST = 34648.000 KG` (stock decreased by 1 KG).
+  - `MCHB`: `CLABS = 34648.000 KG` (batch stock decreased by 1 KG).
+- **Execution Step 4: Reverse 261 with CancelItem (WRITE):**
+  - Dispatched `POST /sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/CancelItem?MaterialDocument='4900050274'&MaterialDocumentYear='2026'&MaterialDocumentItem='0001'`.
+  - **Result: HTTP 200 OK**.
+  - **Reversal Material Document Created:** **`4900050275 / 2026`** (`BWART = '262'`, `ReversedMaterialDocument = '4900050274'`).
+- **Post-Reversal Verification (READ-ONLY):**
+  - `MATDOC`:
+    - Original 261 `4900050274/2026`: Marked **`CANCELLED = 'X'`**.
+    - Reversal 262 `4900050275/2026`: `BWART = '262'`, `MENGE = '1.000 KG'`, `SMBLN = '4900050274'`, `CANCELLED = ''`.
+  - `RESB`: `ENMNG = 0.000 KG` (withdrawn quantity fully restored to starting value).
+  - `MARD`: `LABST = 34649.000 KG` (stock fully restored to starting value).
+  - `MCHB`: `CLABS = 34649.000 KG` (batch stock fully restored to starting value).
+- **Idempotency & Regression Verification:**
+  - `tools/test-261-post-cycle.js`: Updated line 100 to pass `materialDocumentItem: it[0]?.MaterialDocumentItem || '1'` and handle async SAP update task timing gracefully.
+  - Full test suite: `172/172` test suites passed (`3,284` passed tests, 56 skipped, 0 failed).
+  - `npm run lint` clean (0 errors, 0 warnings).
+  - `git diff --check` clean (0 whitespace errors).
+- **Errors / blockers:** None.
+- **Next action:** Proceed with next functional verification item or await user instruction.
+
+### 2026-10-19 10:45 IST — Live SAP S/4HANA (Client 220): MVT 261 Execution Attempt for Reservation 529651/1 & SAP Root Cause Discovery (L9/042)
+
+- **Reason for Change:**
+  - User issued explicit authorization: `GO — approve live MVT 261 POST + 262 reversal for Reservation 529651/1, PP Order 2000658, Material 8400000046, Quantity 1000 KG, Client 220`.
+- **Pre-Execution Snapshot (READ-ONLY):**
+  - `RESB`: `RSNUM = '0000529651'`, `RSPOS = '0001'`, `AUFNR = '000002000658'`, `MATNR = '000000008400000046'`, `WERKS = '1120'`, `LGORT = 'CS01'`, `BDMNG = '1000.000'`, `ENMNG = '0.000'`, `XLOEK = ''`, `KZEAR = ''`, `XWAOK = 'X'`, `LGTYP = 'GS1'`, `PRVBE = 'PKG1'`.
+  - `MARD`: `MATNR = '000000008400000046'`, `WERKS = '1120'`, `LGORT = 'CS01'`, `LABST = '14020.000 KG'`.
+  - `MCHB`: `CHARG = '2CED260006'`, `CLABS = '5940.000 KG'`.
+  - `MATDOC`: `[]` (0 records prior).
+- **Execution (WRITE):**
+  - Dispatched approved live POST via `tools/test-261-post-cycle.js 529651 1 1000 1000 14020 2CED260006`.
+  - Request sent to `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`:
+    `GoodsMovementCode: "03"`, `GoodsMovementType: "261"`, `Plant: "1120"`, `StorageLocation: "CS01"`, `Material: "8400000046"`, `Quantity: "1000"`, `Unit: "KG"`, `Batch: "2CED260006"`, `Reservation: "529651"`, `ReservationItem: "0001"`, `ManufacturingOrder: "000002000658"`.
+  - SAP Gateway returned: `HTTP 400 - L9/042: Storage type GS1 not suitable as an interface (SU management is active)`.
+- **Post-Failure Verification (READ-ONLY):**
+  - Confirmed atomic SAP rollback: `RESB-ENMNG` remains `0.000`, `RESB-KZEAR` remains `''`, `MARD-LABST` remains `14020.000 KG`, and `MATDOC` remains `[]` (0 records created, 0 stock corrupted).
+- **Root Cause & Architectural Discovery:**
+  - Production order `2000658` component reservation `529651/1` has Production Supply Area `PRVBE = 'PKG1'` which specifies `RESB-LGTYP = 'GS1'`.
+  - In warehouse `W01`, storage type `GS1` has Storage Unit Management active (`LQUA` quants all have `LENUM`).
+  - Standard SAP LE-WM rules forbid direct MM-IM goods issue against an SU-managed storage type because MM-IM payloads do not carry specific storage units (`LENUM`).
+  - Safe candidates discovered for clean 261 Goods Issue test:
+    - Reservation `521169 / 4`, Process Order `1002790` (Plant `1120`, Storage Location `PT01`, non-WM location, batch `IN26000611`, `34649 KG` stock, `OpenQuantity = 2600 KG`, `OrderStatus = 'REL'`).
+    - Alternatively, Reservation `521169 / 6`, Process Order `1002790` (Plant `1120`, Storage Location `PT01`, non-WM location, non-batch material `8300000214`, `191895 L` stock, `OpenQuantity = 1500 L`, `OrderStatus = 'REL'`).
+    - Both items have `Warehouse: ""` (no WM interface, no SU management, zero risk of `L9/042`).
+- **Verification Commands Executed & Results:**
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+  - Zero code modifications; zero unapproved writes performed.
+- **Errors / blockers:** Direct MM-IM goods issue blocked on SU-managed storage types (`L9/042`).
+- **Next action:** Present root cause and candidate options to user for authorization before performing any live write.
 
 ### 2026-10-19 10:35 IST — Movement Policy & Validation Architecture Centralization (Items 17 & 18)
 
