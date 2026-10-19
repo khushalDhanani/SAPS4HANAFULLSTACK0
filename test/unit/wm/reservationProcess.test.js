@@ -803,9 +803,9 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       );
     });
 
-    test('Falls back to ZWM_TO_CREATE_FROM_TR wrapper when L_TO_CREATE_TR throws', async () => {
+    test('When L_TO_CREATE_TR is not RFC-callable, uses Z_WM_TO_CREATE_FROM_TR with IV_SQUIT blank (create only), never the legacy wrapper first', async () => {
       mockRfc.call
-        .mockRejectedValueOnce(new Error('UCON blocked'))
+        .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
         .mockResolvedValueOnce({
           EV_TANUM: '0001012966',
           EV_SUCCESS: 'S'
@@ -818,13 +818,27 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
 
       expect(result.success).toBe(true);
       expect(result.toNumber).toBe('1012966');
-      expect(mockRfc.call).toHaveBeenCalledWith(
-        'ZWM_TO_CREATE_FROM_TR',
-        expect.objectContaining({
-          IV_LGNUM: 'W01',
-          IV_TBNUM: '0001001839'
-        })
-      );
+      expect(mockRfc.call.mock.calls[1]).toEqual(['Z_WM_TO_CREATE_FROM_TR', { IV_LGNUM: 'W01', IV_TBNUM: '0001001839', IV_COMMIT: 'X', IV_SQUIT: ' ' }]);
+      expect(mockRfc.call.mock.calls.map((c) => c[0])).not.toContain('ZWM_TO_CREATE_FROM_TR');
+    });
+
+    test('Live 201 defect: a SAP business error from Z_WM_TO_CREATE_FROM_TR is surfaced as is; no legacy-wrapper retry', async () => {
+      mockRfc.call
+        .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
+        .mockRejectedValueOnce(new Error('No quants available for removal'));
+      await expect(adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' }))
+        .rejects.toThrow('No quants available for removal');
+      expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TO_CREATE_TR', 'Z_WM_TO_CREATE_FROM_TR']);
+    });
+
+    test('Falls back to ZWM_TO_CREATE_FROM_TR only when Z_WM_TO_CREATE_FROM_TR does not exist on the system', async () => {
+      mockRfc.call
+        .mockRejectedValueOnce(new Error('UCON blocked'))
+        .mockRejectedValueOnce(new Error('FU_NOT_FOUND: Z_WM_TO_CREATE_FROM_TR'))
+        .mockResolvedValueOnce({ EV_TANUM: '0001012966', EV_SUCCESS: 'S' });
+      const result = await adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' });
+      expect(result.toNumber).toBe('1012966');
+      expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TO_CREATE_TR', 'Z_WM_TO_CREATE_FROM_TR', 'ZWM_TO_CREATE_FROM_TR']);
     });
 
     test('Maps SAP L3 007 storage type search error into actionable message with SPRO path', async () => {

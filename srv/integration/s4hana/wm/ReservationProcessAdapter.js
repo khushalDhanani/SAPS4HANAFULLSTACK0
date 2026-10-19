@@ -1698,18 +1698,26 @@ class ReservationProcessAdapter {
         if (err.message && err.message.includes('Data for storage type search is not defined')) {
           throw new Error(mapStorageTypeSearchError(err.message, wh, movementType));
         }
-        // Fallback to ZWM_TO_CREATE_FROM_TR / Z_WM_TO_CREATE_FROM_TR wrapper if L_TO_CREATE_TR UCON blocked externally
+        // L_TO_CREATE_TR is not RFC-enabled on the target system: use the project wrapper Z_WM_TO_CREATE_FROM_TR with
+        // IV_SQUIT ' ' (create only; confirmation is a separate L_TO_CONFIRM call), exactly like the proven TrTo path.
+        // The legacy wrapper ZWM_TO_CREATE_FROM_TR hard-codes immediate confirmation and SAP rejects it with
+        // L3 045 "Movement type 000 does not allow immediate confirmation" (live 201 run 2026-10-19, TR W01/0001000882),
+        // so it is used only when Z_WM_TO_CREATE_FROM_TR does not exist on the system.
         try {
-          res = await call('ZWM_TO_CREATE_FROM_TR', {
+          res = await call('Z_WM_TO_CREATE_FROM_TR', {
             IV_LGNUM: wh,
             IV_TBNUM: s4Tr,
-            IV_COMMIT: commitWork ? 'X' : ' '
+            IV_COMMIT: commitWork ? 'X' : ' ',
+            IV_SQUIT: ' '
           });
-        } catch (z1Err) {
-          if (z1Err.message && z1Err.message.includes('Data for storage type search is not defined')) {
-            throw new Error(mapStorageTypeSearchError(z1Err.message, wh, movementType));
+        } catch (zErr) {
+          if (zErr.message && zErr.message.includes('Data for storage type search is not defined')) {
+            throw new Error(mapStorageTypeSearchError(zErr.message, wh, movementType));
           }
-          res = await call('Z_WM_TO_CREATE_FROM_TR', {
+          const missingFm = /FU_NOT_FOUND|NOT_FOUND|does not exist/.test(zErr.message || '');
+          if (!missingFm) throw zErr; // business / customizing / authorization error: surface SAP's own message
+          LOG.warn(`Z_WM_TO_CREATE_FROM_TR not found on system (${zErr.message}), trying ZWM_TO_CREATE_FROM_TR`);
+          res = await call('ZWM_TO_CREATE_FROM_TR', {
             IV_LGNUM: wh,
             IV_TBNUM: s4Tr,
             IV_COMMIT: commitWork ? 'X' : ' '
