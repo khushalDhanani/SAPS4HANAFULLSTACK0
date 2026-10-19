@@ -11527,3 +11527,13 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **SAP after (READ-ONLY):** identical to the pre-check — `LTBK 0001000886 STATU ''` (open, **not consumed**, unlike 0001000885 on the first attempt), no TO, SU unchanged, only W01 TO today still 0001037367.
 - **Result:** the fix behaves as designed live: the TR is protected and the exact blocking stock is named. **241 TO creation remains UNVERIFIED** (no TO exists; validation of a real 241 TO still needs the CS02 staged stock consumed/moved, or `T331 W01/921 MRAUS = X` decided and set in SAP, then a new GO). MIGO not performed. Server stopped, mock password removed.
 - **Assumptions:** none.
+
+### 2026-10-19 16:15 IST — 241 PREREQUISITE RE-CHECK (READ-ONLY): NOT READY
+
+- **Connection:** the same `RfcClient` the application uses (`srv/integration/s4hana/RfcClient.js#connectionParams`, environment from `.env.local`; values not shown). RFC_READ_TABLE only; no write, no TO, no confirmation, no customizing change, no code change.
+- **1. LQUA:** SU `2000019368` still at `W01 / 921 / TRANSFER`, `LGORT CS02`, `GESME 1.000, VERME 1.000, AUSME 0, EINME 0`, last TO `BTANR 0001037367`, `BDATU/BZEIT 20261019 143533`. CS02 quantity of material 8000009754 remaining in the bin: **1.000 NOS (this SU)**.
+- **2. Moving document:** **none exists.** `LTAK W01` dated ≥ 2026-10-19: only 0001037367 (the placement into the bin); `LTAK` all warehouses after 14:35:33: none; unconfirmed TO items on the SU: none; `MATDOC` for the material since 2026-10-19: only 4900050277/2026 (311, CS02 → FG01, 13:28:27, user DRATHOD, not this SU); `MATDOC` for reservations 0000530229 / 0000530231: none.
+- **3. TR W01/0001000886:** `STATU ''` (open), `RSNUM 0000530231`, `NLTYP 921 / NLPLA TRANSFER`; `LTBP ELIKZ ''`, `TANUM 0`, `MENGA 1.000`; `LTAK` by TBNUM and by RSNUM: **no TO**. `RESB 0000530231 BDMNG 1.000 / ENMNG 0`.
+- **4. Same system/client:** yes — same client module and environment file as the running application (the port-4010 server used for every live step).
+- **RESULT: `241 PREREQUISITE: NOT READY`** — the CS02 stock is not cleared from W01/921/TRANSFER (TR unchanged, which is fine). No retry requested, no write performed.
+- **Assumptions:** none.
