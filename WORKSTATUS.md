@@ -5,7 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **LIVE 241 (2026-10-19): Step 1 PASS, Step 2 FAIL, recovered (23:05 IST).** Reservation `0000530231/0001` proven in SAP; the first TO attempt was rejected by SAP with `XFELD_WRONG` and SAP closed TR 0001000885 without a TO; D18 (Retry → new TR when SAP shows the TR completed without a TO) and D19 (wrapper messages logged) were implemented (`930bc48`) and D18 proven live: replacement TR `W01/0001000886` is open (LTBK STATU '', no TO). TO creation for 241 still UNVERIFIED. Root cause found 23:55 IST (READ-ONLY): the wrapper misreports as XFELD_WRONG; SAP completed the TR without a TO because the 201 storage unit already sits in destination bin 921/TRANSFER (PP-WM quantity reduction, L3 361/362). Not a 241/asset/RSNUM issue. MIGO not performed.
+- **LIVE 241 (2026-10-19): Step 1 PASS; TO CREATION BLOCKED / UNVERIFIED (16:05 IST).** Reservation `0000530231/0001` and replacement TR `W01/0001000886` are open in SAP with no TO. The first TO attempt was completed by SAP without a TO (PP-WM quantity reduction: the 201 storage unit 2000019368 sits in destination bin 921/TRANSFER for CS02; wrapper misreported it as XFELD_WRONG). D18/D19/D20 committed. Prerequisite: clear that CS02 stock from W01/921/TRANSFER externally, then read-only re-verify, then explicit GO for the single TO retry. No SAP write pending. MIGO not performed.
 
 - **LIVE 201 (2026-10-19, 21:05 IST): Step 1 PASS, Step 2 PASS (user-triggered Retry Step confirmed), MIGO UNVERIFIED.** Reservation 0000530229/0001, TR W01/0001000882 (completed), TO W01/0001037367 (confirmed, SU 2000019368 in 921/TRANSFER). Live-found defects fixed: cross-warehouse TO lookup, fabricated SLG1 handle, legacy TO wrapper, ProcessStatus on retry. Open: replay shown as "created" (P3).
 
@@ -11490,3 +11490,20 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **SU 2000019368 now:** `LQUA W01 921/TRANSFER, LGORT CS02, GESME 1.000, VERME 1.000, AUSME 0, EINME 0, BTANR 0001037367, BDATU/BZEIT 20261019 143533` — **still in 921/TRANSFER**.
 - **TR W01/0001000886:** `STATU ''` (open), `LTBP ELIKZ ''`, `TANUM 0`, 1.000 NOS; `LTAK` by TBNUM / RSNUM 0000530231: **no TO**.
 - **Report:** (1) actual document: **none found**; (2) type: n/a; (3) SU still in 921/TRANSFER: **yes**; (4) TR 0001000886 open: **yes**; (5) TO for it: **no**; (6) clearing the bin remains the proven prerequisite (free quantity for CS02 at 921/TRANSFER is still 1.000 ≥ 1.000). **UNVERIFIED**; no SAP write performed. **Assumptions:** none.
+
+### 2026-10-19 16:05 IST — 241 TO CREATION: BLOCKED / UNVERIFIED (final READ-ONLY verification of the blocked state)
+
+- **Timestamp correction:** the machine clock reads 2026-10-19 16:03 IST at this entry. The headings of this session's entries labelled "21:45 IST" through "2026-10-20 02:25 IST" above are sequence labels, not clock times; the SAP evidence inside them is correct and carries SAP's own times (241 Step 1 TR 0001000885 at 15:11:43, failed TO attempt ≈15:17, replacement TR 0001000886 at 15:34:48, 201 TO 0001037367 at 14:35:33 IST). Earlier entries are not changed.
+- **Read-only checks performed (RFC_READ_TABLE only, application connection):**
+  1. `LQUA` SU `00000000002000019368`: `W01 / 921 / TRANSFER, LGORT CS02, GESME 1.000, VERME 1.000, AUSME 0, EINME 0, BTANR 0001037367, BDATU/BZEIT 20261019 143533` → **still in 921/TRANSFER**.
+  2. CS02 quantity of material 000000008000009754 in that bin: **1.000 NOS (this SU)** — still there.
+  3. `LTBK W01/0001000886`: `STATU ''`, `RSNUM 0000530231`, `NLTYP 921 / NLPLA TRANSFER`; `LTBP 0001: ELIKZ '', TANUM 0, MENGA 1.000` → **TR open**.
+  4. `LTAK` by `TBNUM 0001000886` or `RSNUM 0000530231`: **none** → **no TO**.
+  5. Later movement: `LTAK` W01 since 2026-10-19 = only 0001037367; `LTAK` any warehouse after 14:35:33 = none; unconfirmed TO items on the SU = none; `MATDOC` for the material since 2026-10-19 = only 4900050277 (311 CS02→FG01 13:28:27, not this SU); `MATDOC` for reservations 0000530229/0000530231 = none → **no later document removed the SU**.
+  6–10. `T331` not modified, no stock moved, `Z_WM_TO_CREATE_FROM_TR` not called, `L_TO_CONFIRM` not called, no COMMIT / write of any kind. **NO SAP WRITES PERFORMED.**
+- **Why the retry cannot safely proceed:** with the CS02 storage unit in the TR's destination bin 921/TRANSFER and `T331 W01/921 MRAUS ''`, SAP's PP-WM quantity reduction (`SAPML03T d0131_tb_bearbeiten` → `L_WMPP_MAT_BIN_SITUATION`) computes free quantity 1.000 ≥ open 1.000 and completes the TR without a TO (as it did to TR 0001000885: L3 361/362, reported by the wrapper as "XFELD_WRONG"). A retry now would consume TR 0001000886 the same way and create no TO.
+- **Exact prerequisite:** the CS02 stock / storage unit 2000019368 of material 8000009754 must be cleared from `W01 / 921 / TRANSFER` (external action in the same system/client the app connects to; a removal TO suffices once created, since `VERME` drops to 0).
+- **What is and is not proven:** the mechanism above is read from SAP source and data (not assumed); what is **not** proven is a successful 241 TO after clearing — no 241 TO has ever been created in this audit. No SAP-side defect beyond the wrapper's misreport is assumed.
+- **Code:** no code change is justified at this stage (D18/D19/D20 already committed; nothing further the app can do about stock in the destination bin).
+- **Next step:** external stock-clearing action → another READ-ONLY verification (items 1–5 above) → only then request an explicit GO for the single TO retry (Retry Step on 0000530231/0001: `Z_WM_TO_CREATE_FROM_TR` IV_SQUIT ' ' on TR 0001000886, then `L_TO_CONFIRM`, no MIGO).
+- **241 status: Step 1 PASS; TO creation BLOCKED / UNVERIFIED; confirmation and MIGO UNVERIFIED.** **Assumptions:** none.
