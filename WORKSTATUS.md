@@ -11549,3 +11549,9 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - Same reads (application `RfcClient`, `.env.local`, RFC_READ_TABLE only) at 16:14:59 IST: SU `2000019368` still `W01 / 921 / TRANSFER, LGORT CS02, VERME 1.000, AUSME 0`, last TO `0001037367`; no later TO in any warehouse, no unconfirmed TO item on the SU, no material document for the material after 13:28:27, none for reservations 0000530229 / 0000530231. TR `W01/0001000886` open, no TO.
 - **RESULT: `241 PREREQUISITE: NOT READY`.** Sixth consecutive identical read. No write performed, no retry requested.
 - **Assumptions:** none.
+
+### 2026-10-19 16:18 IST — 241 PREREQUISITE RE-CHECK #4 (READ-ONLY): NOT READY, SAP unchanged
+
+- Same reads (application `RfcClient`, `.env.local`, RFC_READ_TABLE only) at 16:15:36 IST: SU `2000019368` still `W01 / 921 / TRANSFER, LGORT CS02, VERME 1.000, AUSME 0`, last TO `0001037367`; no later TO in any warehouse, no unconfirmed TO item on the SU, no material document for the material after 13:28:27, none for reservations 0000530229 / 0000530231. TR `W01/0001000886` open, no TO.
+- **RESULT: `241 PREREQUISITE: NOT READY`.** Seventh consecutive identical read (16:03–16:15 IST). No write performed, no retry requested. Further re-checks without a new posting will return the same result; the open question is where the reported move was posted.
+- **Assumptions:** none.
