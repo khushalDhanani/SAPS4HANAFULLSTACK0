@@ -8,7 +8,7 @@ const s4Config = require('../s4Config');
 const { parseSapNumber } = require('../sapFacts');
 const { buildBaseItem, buildHeaderEnvelope } = require('./goods-issue/s4common');
 const GoodsIssuePostingClient = require('./goods-issue/GoodsIssuePostingClient');
-const { calculateMovement261StockEligibility } = require('../../../common/movementConfig');
+const { calculateMovement261StockEligibility, getGmCode } = require('../../../common/movementConfig');
 
 /**
  * Read-only finder for the FIRST goods movement of movement type 261 (GET only, no ABAP change).
@@ -1039,7 +1039,7 @@ class Mvt261Adapter {
     // Option A: payload posts validated reservation quantity, batch, plant, and storage location.
     // LENUM / storage units are physical validation inputs and are NOT sent in MM-IM item payload.
     const payload = buildHeaderEnvelope({
-      gmCode: '03',
+      gmCode: getGmCode('261') || '03',
       headerText: `GI Resv ${c.Reservation}`,
       referenceDocument: input.referenceDocument,
       item: buildBaseItem({

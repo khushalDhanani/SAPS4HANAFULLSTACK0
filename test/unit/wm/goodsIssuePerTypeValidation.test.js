@@ -14,6 +14,7 @@ const {
   validateGoodsIssue311Payload,
   verifyGoodsIssue311InSap
 } = require('../../../srv/wm/goods-issue/validation/goodsIssue311.validation');
+const { validateGoodsIssue261Payload } = require('../../../srv/wm/goods-issue/validation/goodsIssue261.validation');
 
 const base = { IssueQty: 1, Unit: 'EA', PostingDate: '2026-09-29', DocumentDate: '2026-09-29' };
 const valid301Destination = { ReceivingPlant: '1110', ReceivingStorageLocation: 'CS01' };
@@ -368,5 +369,36 @@ describe('311 SAP destination verification (T320, T001L, MARD)', () => {
   test('gracefully returns valid when RFC client is null (offline unit test)', async () => {
     const res = await verifyGoodsIssue311InSap(null, payload311);
     expect(res.valid).toBe(true);
+  });
+});
+
+describe('261 validation (Goods Issue to Order)', () => {
+  test('valid 261 payload passes', () => {
+    const r = validateGoodsIssue261Payload({ reservation: '512851', item: '1', quantity: 50 });
+    expect(r.isValid).toBe(true);
+  });
+
+  test('valid 261 PascalCase payload passes', () => {
+    const r = validateGoodsIssue261Payload({ ReservationNo: '512851', ReservationItem: '0001', IssueQty: 50 });
+    expect(r.isValid).toBe(true);
+  });
+
+  test('missing reservation or item fails', () => {
+    const r = validateGoodsIssue261Payload({ reservation: '', item: '1', quantity: 50 });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some(e => e.field === 'reservation')).toBe(true);
+  });
+
+  test('quantity <= 0 fails', () => {
+    const r = validateGoodsIssue261Payload({ reservation: '512851', item: '1', quantity: 0 });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some(e => e.field === 'quantity')).toBe(true);
+  });
+
+  test('supplied CostCenter or ReceivingPlant is rejected', () => {
+    const r = validateGoodsIssue261Payload({ reservation: '512851', item: '1', quantity: 50, CostCenter: 'CC1', ReceivingPlant: '1110' });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some(e => e.field === 'CostCenter')).toBe(true);
+    expect(r.errors.some(e => e.field === 'ReceivingPlant')).toBe(true);
   });
 });

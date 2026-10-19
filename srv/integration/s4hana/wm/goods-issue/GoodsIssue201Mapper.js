@@ -8,6 +8,7 @@
  */
 
 const { buildBaseItem, buildHeaderEnvelope } = require('./s4common');
+const { getGmCode } = require('../../../../common/movementConfig');
 
 /**
  * @param {Object} data - normalized CAP domain data for a 201 posting
@@ -30,7 +31,7 @@ function mapToMaterialDocumentPayload(data) {
     : `GI CC ${data.CostCenter || ''}`;
 
   return buildHeaderEnvelope({
-    gmCode: '03',
+    gmCode: getGmCode('201') || '03',
     headerText,
     postingDate: data.PostingDate,
     documentDate: data.DocumentDate,

@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const Mvt261Adapter = require('../../integration/s4hana/wm/Mvt261Adapter');
 const GoodsIssueAttemptStore = require('../goods-issue/GoodsIssueAttemptStore');
 const plantScope = require('../handling-unit/plantScope');
+const { validateMovement261Payload } = require('../../common/movementConfig');
 const LOG = require('../../common/logger')('mvt261-service');
 
 const strip = (v) => String(v || '').replace(/^0+(?=.)/, '');
@@ -30,17 +31,14 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
 
     this.on('postGoodsIssue', async (req) => {
       const data = req.data || {};
-      const reservation = String(data.reservation || '').trim();
-      const item = String(data.item || '').trim();
-      const quantity = Number(data.quantity);
+      const validation = validateMovement261Payload(data);
+      if (!validation.isValid) {
+        return req.error(400, validation.errors[0]?.message || validation.message);
+      }
+      const reservation = String(data.reservation || data.ReservationNo || '').trim();
+      const item = String(data.item || data.ReservationItem || '').trim();
+      const quantity = Number(data.quantity !== undefined ? data.quantity : data.IssueQty);
       const batch = data.batch ? String(data.batch).trim().toUpperCase() : '';
-
-      if (!reservation || !item) {
-        return req.error(400, 'Reservation and item are required');
-      }
-      if (!(quantity > 0)) {
-        return req.error(400, 'Quantity must be greater than zero');
-      }
 
       // Revalidate 261 stock immediately before SAP POST (fresh SAP stock/reservation validation).
       // The open quantity makes the idempotency key, and it carries the reservation's pinned batch for F9.

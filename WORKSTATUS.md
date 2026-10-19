@@ -5,6 +5,41 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Movement Policy & Validation Architecture Centralization (Items 17 & 18) (2026-10-19, 10:35 IST):** Complete.
+  - **Item 17 (Make `movementConfig.js` the single source of truth):**
+    - Centralized `GM_CODE` object: `Object.freeze({ '201': '03', '241': '03', '311': '04', '301': '04', '261': '03' })` and exported helper `getGmCode(movementType)`.
+    - Enriched `MOVEMENT_CONFIG` across all 5 movement types (`201`, `241`, `311`, `301`, `261`) with complete, canonical policy definitions:
+      - `requiredFields`, `requiredPostingFields`, `forbiddenFields`
+      - `destinationRules` (`type`: `none` / `intra_plant` / `inter_plant`, `requiresReceivingPlant`, `requiresReceivingSloc`, `receivingPlantMustMatch`, `receivingPlantMustDiffer`, `receivingSlocMustDiffer`, `crossWarehouseForbidden`)
+      - `batchRules` (`supported`, `maxLength: 10`, `regex: /^[A-Za-z0-9]{1,10}$/`, `reconcileWithReservation`, `interimStockForbidden`, `validateReceivingBatch`)
+      - `serialRules` (`supported`, `maxLength: 18`, `unique: true`, `onePerUnitForSerialManaged: true`, `sapPreCheckRequired: true`)
+      - `reservationRules` (`requiredForPosting`, `allowsReservation`, `reconcileMasterData`, `checkDeletion`, `checkFinalIssue`, `enforceOpenQuantityCeiling`, `preserveReservationOnTr`)
+      - `accountAssignment` (`type`: `CostCenter` / `Asset` / `Order` / `None`, `mandatory`, `forbidden`, `regex`)
+  - **Item 18 (Remove duplicated movement-specific validation):**
+    - Created canonical validators in `srv/common/movementConfig.js`:
+      - `validateMovementPostingPayload(movementType, data, options)`
+      - `validateMovementDestination(movementType, plant, sloc, recPlant, recSLoc, options)`
+      - `validateMovementAccountAssignment(movementType, data, options)`
+      - `validateMovement261Payload(data)`
+    - Refactored validators, services, and mappers across the codebase to consume the central policy:
+      - `srv/wm/goods-issue/validation/goodsIssue201.validation.js`: Delegates directly to `validateMovementPostingPayload('201', data)`.
+      - `srv/wm/goods-issue/validation/goodsIssue301.validation.js`: Delegates directly to `validateMovementPostingPayload('301', data)` and `verifyReceivingLocationInSap`.
+      - `srv/wm/goods-issue/validation/goodsIssue311.validation.js`: Delegates directly to `validateMovementPostingPayload('311', data)`, `validateMovement311Destination`, and `verifyReceivingLocationInSap`.
+      - `srv/wm/goods-issue/validation/goodsIssue261.validation.js`: Created dedicated isolated module delegating to `validateMovement261Payload(data)`.
+      - `srv/wm/mvt261/service.js`: Replaced inline ad-hoc checks in `postGoodsIssue` with canonical `validateMovement261Payload(data)`.
+      - `srv/integration/s4hana/wm/goods-issue/GoodsIssue201Mapper.js`: Consumes `getGmCode('201')`.
+      - `srv/integration/s4hana/wm/goods-issue/GoodsIssue301Mapper.js`: Consumes `getGmCode('301')`.
+      - `srv/integration/s4hana/wm/goods-issue/GoodsIssue311Mapper.js`: Consumes `getGmCode('311')`.
+      - `srv/integration/s4hana/wm/Mvt261Adapter.js`: Consumes `getGmCode('261')`.
+      - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: Consumes centralized `GM_CODE` from `movementConfig.js` (removed duplicate local `const GM_CODE`).
+    - Maintained complete structural isolation (`goodsIssueIsolation.test.js` 100% green).
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/movementConfig.test.js`: **PASS (78/78 tests passed, 100% green)**.
+    - `npx jest test/unit/wm/goodsIssuePerTypeValidation.test.js test/unit/wm/goodsIssueIsolation.test.js`: **PASS (66/66 tests passed, 100% green)**.
+    - Full test suite (`npm test`): **PASS (172/172 test suites passed, 3,284 passed tests, 56 skipped (live-only), 0 failed)**.
+    - `npm run lint`: **PASS (0 errors, 0 warnings)**.
+    - `git diff --check`: **PASS (0 whitespace errors)**.
+
 - **MVT 201 — Live WM Routing Verification: Real Movement vs Staging/311 Fallback (Item 16) (2026-10-19, 10:05 IST):** Complete.
   - **Item 16 (Verify 201 WM routing: Confirm live configuration for 201 → real WM movement, 201 → staging/311 fallback matches application's WM_REAL_MOVEMENT behavior):**
     - Executed live READ-ONLY RFC queries on SAP S/4HANA (Client 220):
@@ -3170,6 +3205,11 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Exact Next Recommended Action (Movement Policy Centralization Complete — Items 17 & 18 — 2026-10-19, 10:35 IST):**
+  1. Review verified changes across `srv/common/movementConfig.js`, `srv/wm/goods-issue/validation/`, `srv/wm/mvt261/service.js`, and `srv/integration/s4hana/wm/` mappers/adapters.
+  2. Confirm 100% green test results (172/172 test suites, 3,284 tests passing).
+  3. Proceed to the next scheduled task or commit and push the feature branch `feature01`.
+
 - **Exact Next Recommended Action (Antigravity support — 2026-10-17, 11:36 IST):** Verify rule and skill discovery in an Antigravity session; runtime discovery was not available during this update.
 
 - **Exact Next Recommended Action (IDE/agent entry-point coverage — 2026-10-17, 11:35 IST):** Open the repository in each target IDE and verify its instruction context and skill discovery; runtime discovery was not available in this session.
@@ -3242,6 +3282,38 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-19 10:35 IST — Movement Policy & Validation Architecture Centralization (Items 17 & 18)
+
+- **Reason for Change:**
+  - Item 17: Make `movementConfig.js` the single source of truth. Centralize: Movement Type, GM_CODE, required fields, forbidden fields, destination rules, WM movement, staging movement, batch rules, serial rules, reservation rules, account assignment.
+  - Item 18: Remove duplicated movement-specific validation. Avoid having different definitions of 301 requirements, 311 requirements, 261 requirements in multiple files. Validators should consume the central policy rather than recreate it.
+- **Files Changed:**
+  - `srv/common/movementConfig.js`: Added frozen `GM_CODE` lookup and `getGmCode(mvt)`. Enriched `MOVEMENT_CONFIG` across all 5 movement types (`201`, `241`, `311`, `301`, `261`) with complete, canonical policy definitions: `requiredFields`, `requiredPostingFields`, `forbiddenFields`, `destinationRules`, `batchRules`, `serialRules`, `reservationRules`, and `accountAssignment`. Implemented and exported canonical validators: `validateMovementPostingPayload`, `validateMovementDestination`, `validateMovementAccountAssignment`, and `validateMovement261Payload`.
+  - `srv/wm/goods-issue/validation/goodsIssue201.validation.js`: Refactored to delegate directly to canonical `validateMovementPostingPayload('201', data)`.
+  - `srv/wm/goods-issue/validation/goodsIssue301.validation.js`: Refactored to delegate directly to canonical `validateMovementPostingPayload('301', data)` and `verifyReceivingLocationInSap`.
+  - `srv/wm/goods-issue/validation/goodsIssue311.validation.js`: Refactored to delegate directly to canonical `validateMovementPostingPayload('311', data)`, `validateMovement311Destination`, and `verifyReceivingLocationInSap`.
+  - `srv/wm/goods-issue/validation/goodsIssue261.validation.js`: Created dedicated isolated module delegating to `validateMovement261Payload(data)`.
+  - `srv/wm/mvt261/service.js`: Replaced inline ad-hoc payload checks in `postGoodsIssue` handler with canonical `validateMovement261Payload(data)`.
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssue201Mapper.js`: Updated to consume `getGmCode('201')` from `movementConfig.js`.
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssue301Mapper.js`: Updated to consume `getGmCode('301')` from `movementConfig.js`.
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssue311Mapper.js`: Updated to consume `getGmCode('311')` from `movementConfig.js`.
+  - `srv/integration/s4hana/wm/Mvt261Adapter.js`: Updated to consume `getGmCode('261')` from `movementConfig.js`.
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: Removed duplicate local `const GM_CODE = { '201': '03', ... }` and imported centralized `GM_CODE` from `movementConfig.js`.
+  - `test/unit/wm/movementConfig.test.js`: Added 4 comprehensive test suites (suites 6-9, 27 new tests) covering `GM_CODE`, `getGmCode`, `MOVEMENT_CONFIG` policy rules, `validateMovementPostingPayload`, `validateMovementDestination`, `validateMovement261Payload`, and `validateMovementAccountAssignment`.
+  - `test/unit/wm/goodsIssuePerTypeValidation.test.js`: Added dedicated test suite for `goodsIssue261.validation.js`.
+  - `WORKSTATUS.md`: Logged task completion, verification results, and updated current status and next steps.
+- **Verification Commands Executed & Results:**
+  - `npx jest test/unit/wm/movementConfig.test.js` → **PASS (78/78 tests passed, 100% green)**.
+  - `npx jest test/unit/wm/goodsIssueIsolation.test.js` → **PASS (19/19 tests passed, 100% green)**.
+  - `npx jest test/unit/wm/goodsIssueValidation.test.js` → **PASS (6/6 tests passed, 100% green)**.
+  - `npx jest test/unit/wm/goodsIssuePerTypeValidation.test.js` → **PASS (47/47 tests passed, 100% green)**.
+  - `npx jest test/unit/wm/mvt261Scan.test.js test/unit/wm/mvt261Concurrency.test.js test/unit/wm/mvt261Reconciliation.test.js` → **PASS (67/67 tests passed, 100% green)**.
+  - `npm test` → **PASS (172/172 test suites passed, 3,284 passed tests, 56 skipped (live-only), 0 failed)**.
+  - `npm run lint` → **PASS (0 errors, 0 warnings)**.
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+- **Errors / blockers:** None.
+- **Next action:** Proceed with next item or await user instruction.
 
 ### 2026-10-19 10:05 IST — MVT 201: Live WM Routing Verification: Real Movement vs Staging/311 Fallback (Item 16)
 

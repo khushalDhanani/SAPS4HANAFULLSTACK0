@@ -3,13 +3,11 @@
  * ISOLATED business rules for Movement Type 311 ONLY (Storage Location Transfer).
  * Serves no other movement type; contains no MovementType branching.
  *
- * 311 rules: Reservation No + Item mandatory, ReceivingStorageLocation mandatory,
- * ReceivingPlant (if supplied) must match issuing Plant, no Cost Center, no G/L account.
- * Uses movementConfig.js as the canonical authoritative policy.
+ * Consumes the central canonical movementConfig.js policy for destination and posting validation.
  */
 
-const C = require('./common');
 const {
+  validateMovementPostingPayload,
   validateMovement311Destination,
   verifyReceivingLocationInSap
 } = require('../../../common/movementConfig');
@@ -19,35 +17,7 @@ const {
  * @returns {{isValid:boolean,errors:Array<{field:string,message:string}>,message:string}}
  */
 function validateGoodsIssue311Payload(data) {
-  if (!data || typeof data !== 'object') {
-    return C.buildResult([{ field: 'body', message: 'Request body must be a valid JSON object' }]);
-  }
-
-  const errors = [];
-  const push = (e) => { if (e) errors.push(e); };
-
-  const hasReservation = C.checkReservationRequired(data, errors);
-
-  push(C.checkQuantity(data.IssueQty));
-  push(C.checkMaterial(data.Material, !hasReservation));
-  push(C.checkPlant(data.Plant, !hasReservation));
-  push(C.checkStorageLocation(data.StorageLocation, !hasReservation));
-  push(C.checkUnit(data.Unit));
-
-  // Canonical central Movement 311 destination validation (ReceivingStorageLocation = REQUIRED):
-  const destVal = validateMovement311Destination(
-    data.Plant,
-    data.StorageLocation,
-    data.ReceivingPlant,
-    data.ReceivingStorageLocation
-  );
-  destVal.errors.forEach(push);
-
-  C.checkDates(data).forEach(push);
-  C.checkSerialNumbers(data).forEach(push);
-  push(C.checkBatch(data.Batch));
-
-  return C.buildResult(errors);
+  return validateMovementPostingPayload('311', data);
 }
 
 /**

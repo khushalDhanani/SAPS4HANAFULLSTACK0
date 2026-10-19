@@ -19,6 +19,16 @@
  *        Uses real WM 261 with BETYP 'F' and rightmost 10-char Order BENUM.
  *        Requires Order Number (AUFNR). Rejects Cost Center, Asset, and Receiving Plant/SLoc.
  */
+const C = require('../wm/goods-issue/validation/common');
+
+const GM_CODE = Object.freeze({
+  '201': '03',
+  '241': '03',
+  '311': '04',
+  '301': '04',
+  '261': '03'
+});
+
 const MOVEMENT_CONFIG = Object.freeze({
   '201': Object.freeze({
     movementType: '201',
@@ -31,13 +41,61 @@ const MOVEMENT_CONFIG = Object.freeze({
     requirementType: 'K',
     interimStorageType: '911',
     description: 'Goods Issue to Cost Center',
+    gmCode: '03',
     requiresCostCenter: true,
     requiresAsset: false,
     requiresOrder: false,
     requiresReceivingPlant: false,
     requiresReceivingSloc: false,
+    receivingPlantMustMatch: false,
+    receivingSlocMustDiffer: false,
+    receivingPlantMustDiffer: false,
     preserveReservationOnTr: true,
-    gmCode: '03'
+    requiredFields: Object.freeze(['Plant', 'StorageLocation', 'Material', 'Quantity', 'Unit', 'CostCenter']),
+    requiredPostingFields: Object.freeze(['IssueQty', 'Unit', 'CostCenter']),
+    forbiddenFields: Object.freeze(['ReceivingPlant', 'ReceivingStorageLocation', 'GLAccount', 'AssetNo', 'SubNumber', 'OrderID', 'OrderNo', 'OrderType']),
+    destinationRules: Object.freeze({
+      type: 'none',
+      requiresReceivingPlant: false,
+      requiresReceivingSloc: false,
+      allowsReceivingPlant: false,
+      allowsReceivingSloc: false,
+      receivingPlantMustMatch: false,
+      receivingSlocMustDiffer: false,
+      receivingPlantMustDiffer: false
+    }),
+    batchRules: Object.freeze({
+      supported: true,
+      maxLength: 10,
+      regex: /^[A-Za-z0-9]{1,10}$/,
+      reconcileWithReservation: true,
+      interimStockForbidden: true
+    }),
+    serialRules: Object.freeze({
+      supported: true,
+      maxLength: 18,
+      unique: true,
+      onePerUnitForSerialManaged: true,
+      sapPreCheckRequired: true
+    }),
+    reservationRules: Object.freeze({
+      requiredForPosting: false,
+      allowsReservation: true,
+      reconcileMasterData: true,
+      checkDeletion: true,
+      checkFinalIssue: true,
+      enforceOpenQuantityCeiling: true,
+      preserveReservationOnTr: true
+    }),
+    accountAssignment: Object.freeze({
+      type: 'CostCenter',
+      field: 'CostCenter',
+      mandatory: true,
+      regex: /^[A-Za-z0-9_-]{1,10}$/,
+      length: 10,
+      padDigits: true,
+      glAccountForbidden: true
+    })
   }),
   '241': Object.freeze({
     movementType: '241',
@@ -50,13 +108,62 @@ const MOVEMENT_CONFIG = Object.freeze({
     requirementType: 'A',
     interimStorageType: '913',
     description: 'Goods Issue to Asset',
+    gmCode: '03',
     requiresCostCenter: false,
     requiresAsset: true,
     requiresOrder: false,
     requiresReceivingPlant: false,
     requiresReceivingSloc: false,
+    receivingPlantMustMatch: false,
+    receivingSlocMustDiffer: false,
+    receivingPlantMustDiffer: false,
     preserveReservationOnTr: true,
-    gmCode: '03'
+    requiredFields: Object.freeze(['Plant', 'StorageLocation', 'Material', 'Quantity', 'Unit', 'AssetNo']),
+    requiredPostingFields: Object.freeze(['IssueQty', 'Unit', 'AssetNo']),
+    forbiddenFields: Object.freeze(['CostCenter', 'ReceivingPlant', 'ReceivingStorageLocation', 'GLAccount', 'OrderID', 'OrderNo', 'OrderType']),
+    destinationRules: Object.freeze({
+      type: 'none',
+      requiresReceivingPlant: false,
+      requiresReceivingSloc: false,
+      allowsReceivingPlant: false,
+      allowsReceivingSloc: false,
+      receivingPlantMustMatch: false,
+      receivingSlocMustDiffer: false,
+      receivingPlantMustDiffer: false
+    }),
+    batchRules: Object.freeze({
+      supported: true,
+      maxLength: 10,
+      regex: /^[A-Za-z0-9]{1,10}$/,
+      reconcileWithReservation: true,
+      interimStockForbidden: true
+    }),
+    serialRules: Object.freeze({
+      supported: true,
+      maxLength: 18,
+      unique: true,
+      onePerUnitForSerialManaged: true,
+      sapPreCheckRequired: true
+    }),
+    reservationRules: Object.freeze({
+      requiredForPosting: false,
+      allowsReservation: true,
+      reconcileMasterData: true,
+      checkDeletion: true,
+      checkFinalIssue: true,
+      enforceOpenQuantityCeiling: true,
+      preserveReservationOnTr: true
+    }),
+    accountAssignment: Object.freeze({
+      type: 'Asset',
+      field: 'AssetNo',
+      subField: 'SubNumber',
+      mandatory: true,
+      length: 12,
+      subLength: 4,
+      padDigits: true,
+      glAccountForbidden: true
+    })
   }),
   '311': Object.freeze({
     movementType: '311',
@@ -68,6 +175,7 @@ const MOVEMENT_CONFIG = Object.freeze({
     interimStorageType: '921',
     interimStorageBin: 'TRANSFER',
     description: 'Storage Location to Storage Location Transfer',
+    gmCode: '04',
     requiresCostCenter: false,
     requiresAsset: false,
     requiresOrder: false,
@@ -75,8 +183,49 @@ const MOVEMENT_CONFIG = Object.freeze({
     requiresReceivingSloc: true,
     receivingPlantMustMatch: true,
     receivingSlocMustDiffer: true,
+    receivingPlantMustDiffer: false,
     preserveReservationOnTr: true,
-    gmCode: '04'
+    requiredFields: Object.freeze(['Plant', 'StorageLocation', 'Material', 'Quantity', 'Unit', 'ReceivingStorageLocation']),
+    requiredPostingFields: Object.freeze(['ReservationNo', 'ReservationItem', 'IssueQty', 'Unit', 'ReceivingStorageLocation']),
+    forbiddenFields: Object.freeze(['CostCenter', 'AssetNo', 'SubNumber', 'GLAccount', 'OrderID', 'OrderNo', 'OrderType']),
+    destinationRules: Object.freeze({
+      type: 'intra_plant',
+      requiresReceivingPlant: false,
+      requiresReceivingSloc: true,
+      receivingPlantMustMatch: true,
+      receivingSlocMustDiffer: true,
+      allowsReceivingPlant: true,
+      allowsReceivingSloc: true,
+      crossWarehouseForbidden: true
+    }),
+    batchRules: Object.freeze({
+      supported: true,
+      maxLength: 10,
+      regex: /^[A-Za-z0-9]{1,10}$/,
+      reconcileWithReservation: true,
+      interimStockForbidden: true
+    }),
+    serialRules: Object.freeze({
+      supported: true,
+      maxLength: 18,
+      unique: true,
+      onePerUnitForSerialManaged: true,
+      sapPreCheckRequired: true
+    }),
+    reservationRules: Object.freeze({
+      requiredForPosting: true,
+      allowsReservation: true,
+      reconcileMasterData: true,
+      checkDeletion: true,
+      checkFinalIssue: true,
+      enforceOpenQuantityCeiling: true,
+      preserveReservationOnTr: true
+    }),
+    accountAssignment: Object.freeze({
+      type: 'None',
+      mandatory: false,
+      forbidden: true
+    })
   }),
   '301': Object.freeze({
     movementType: '301',
@@ -88,14 +237,56 @@ const MOVEMENT_CONFIG = Object.freeze({
     interimStorageType: '920',
     interimStorageBin: 'TRANSFER',
     description: 'Plant to Plant Transfer',
+    gmCode: '04',
     requiresCostCenter: false,
     requiresAsset: false,
     requiresOrder: false,
     requiresReceivingPlant: true,
     requiresReceivingSloc: true,
+    receivingPlantMustMatch: false,
+    receivingSlocMustDiffer: false,
     receivingPlantMustDiffer: true,
     preserveReservationOnTr: false,
-    gmCode: '04'
+    requiredFields: Object.freeze(['Plant', 'StorageLocation', 'Material', 'Quantity', 'Unit', 'ReceivingPlant', 'ReceivingStorageLocation']),
+    requiredPostingFields: Object.freeze(['ReservationNo', 'ReservationItem', 'IssueQty', 'Unit', 'ReceivingPlant', 'ReceivingStorageLocation']),
+    forbiddenFields: Object.freeze(['CostCenter', 'AssetNo', 'SubNumber', 'GLAccount', 'OrderID', 'OrderNo', 'OrderType']),
+    destinationRules: Object.freeze({
+      type: 'inter_plant',
+      requiresReceivingPlant: true,
+      requiresReceivingSloc: true,
+      receivingPlantMustDiffer: true,
+      allowsReceivingPlant: true,
+      allowsReceivingSloc: true
+    }),
+    batchRules: Object.freeze({
+      supported: true,
+      maxLength: 10,
+      regex: /^[A-Za-z0-9]{1,10}$/,
+      reconcileWithReservation: true,
+      interimStockForbidden: true,
+      validateReceivingBatch: true
+    }),
+    serialRules: Object.freeze({
+      supported: true,
+      maxLength: 18,
+      unique: true,
+      onePerUnitForSerialManaged: true,
+      sapPreCheckRequired: true
+    }),
+    reservationRules: Object.freeze({
+      requiredForPosting: true,
+      allowsReservation: true,
+      reconcileMasterData: true,
+      checkDeletion: true,
+      checkFinalIssue: true,
+      enforceOpenQuantityCeiling: true,
+      preserveReservationOnTr: false
+    }),
+    accountAssignment: Object.freeze({
+      type: 'None',
+      mandatory: false,
+      forbidden: true
+    })
   }),
   '261': Object.freeze({
     movementType: '261',
@@ -106,17 +297,79 @@ const MOVEMENT_CONFIG = Object.freeze({
     requirementType: 'F',
     interimStorageType: '914',
     description: 'Goods Issue to Order',
+    gmCode: '03',
     requiresCostCenter: false,
     requiresAsset: false,
     requiresOrder: true,
     requiresReceivingPlant: false,
     requiresReceivingSloc: false,
+    receivingPlantMustMatch: false,
+    receivingSlocMustDiffer: false,
+    receivingPlantMustDiffer: false,
     preserveReservationOnTr: true,
-    gmCode: '03'
+    requiredFields: Object.freeze(['Plant', 'StorageLocation', 'Material', 'Quantity', 'Unit', 'OrderType', 'OrderID']),
+    requiredPostingFields: Object.freeze(['ReservationNo', 'ReservationItem', 'IssueQty']),
+    forbiddenFields: Object.freeze(['CostCenter', 'AssetNo', 'SubNumber', 'ReceivingPlant', 'ReceivingStorageLocation', 'GLAccount']),
+    destinationRules: Object.freeze({
+      type: 'none',
+      requiresReceivingPlant: false,
+      requiresReceivingSloc: false,
+      allowsReceivingPlant: false,
+      allowsReceivingSloc: false,
+      receivingPlantMustMatch: false,
+      receivingSlocMustDiffer: false,
+      receivingPlantMustDiffer: false
+    }),
+    batchRules: Object.freeze({
+      supported: true,
+      maxLength: 10,
+      regex: /^[A-Za-z0-9]{1,10}$/,
+      reconcileWithReservation: true,
+      interimStockForbidden: true,
+      pinnedBatchEnforced: true
+    }),
+    serialRules: Object.freeze({
+      supported: true,
+      maxLength: 18,
+      unique: true,
+      onePerUnitForSerialManaged: true,
+      sapPreCheckRequired: true
+    }),
+    reservationRules: Object.freeze({
+      requiredForPosting: true,
+      allowsReservation: true,
+      reconcileMasterData: true,
+      checkDeletion: true,
+      checkFinalIssue: true,
+      enforceOpenQuantityCeiling: true,
+      preserveReservationOnTr: true
+    }),
+    accountAssignment: Object.freeze({
+      type: 'Order',
+      field: 'OrderID',
+      orderNoField: 'OrderNo',
+      secondaryField: 'OrderType',
+      mandatory: true,
+      padDigits: true,
+      allowsStatisticalCostCenter: true
+    })
   })
 });
 
 const SUPPORTED_MOVEMENT_TYPES = Object.freeze(['201', '241', '311', '301', '261']);
+const POSTABLE_MOVEMENT_TYPES = Object.freeze(['201', '301', '311', '261']);
+
+/**
+ * Returns the configured Goods Movement Code (GM_CODE) for a movement type.
+ * @param {string} movementType
+ * @returns {string|null}
+ */
+function getGmCode(movementType) {
+  if (!movementType) return null;
+  const key = String(movementType).trim();
+  const cfg = MOVEMENT_CONFIG[key];
+  return cfg ? cfg.gmCode : (GM_CODE[key] || null);
+}
 
 /**
  * Returns the normalized movement configuration for a movement type.
@@ -830,12 +1083,345 @@ function calculateMovement261StockEligibility(params = {}) {
   };
 }
 
+/**
+ * Canonical centralized Goods Issue posting validator.
+ * Validates a Goods Issue posting payload against the single source of truth in MOVEMENT_CONFIG.
+ *
+ * @param {string} movementType
+ * @param {object} data
+ * @param {object} [options]
+ * @returns {{ isValid: boolean, errors: Array<{ field: string, message: string }>, message: string }}
+ */
+function validateMovementPostingPayload(movementType, data, options = {}) {
+  if (!data || typeof data !== 'object') {
+    return C.buildResult([{ field: 'body', message: 'Request body must be a valid JSON object' }]);
+  }
+
+  const mvt = String(movementType || '').trim();
+  const cfg = getMovementConfig(mvt);
+
+  if (!cfg) {
+    return C.buildResult([{
+      field: 'MovementType',
+      message: `Unsupported movement type '${mvt}'. Valid movement types are: ${SUPPORTED_MOVEMENT_TYPES.join(', ')}`
+    }]);
+  }
+
+  if (!POSTABLE_MOVEMENT_TYPES.includes(mvt)) {
+    return C.buildResult([{
+      field: 'MovementType',
+      message: `Movement Type '${mvt}' is not a supported Goods Issue posting type. Postable movement types are: ${POSTABLE_MOVEMENT_TYPES.join(', ')}`
+    }]);
+  }
+
+  const errors = [];
+  const push = (e) => { if (e) errors.push(e); };
+
+  // 1. Reservation check
+  const resRules = cfg.reservationRules || {};
+  let hasReservation = false;
+  if (resRules.requiredForPosting) {
+    hasReservation = C.checkReservationRequired(data, errors);
+  } else {
+    // Optional reservation: if partially supplied, validate lengths
+    const sResv = String(data.ReservationNo || data.reservation || '').trim();
+    const sItem = data.ReservationItem != null ? String(data.ReservationItem).trim() : (data.item != null ? String(data.item).trim() : '');
+    hasReservation = Boolean(sResv && sItem);
+    if (sResv && sResv.length > 10) {
+      push({ field: 'ReservationNo', message: 'ReservationNo exceeds maximum length of 10 characters' });
+    }
+    if (sItem && sItem.length > 4) {
+      push({ field: 'ReservationItem', message: 'ReservationItem exceeds maximum length of 4 characters' });
+    }
+  }
+
+  // 2. Quantity
+  const qtyVal = data.IssueQty !== undefined ? data.IssueQty : data.quantity;
+  push(C.checkQuantity(qtyVal));
+
+  // 3. Master data (Material, Plant, StorageLocation, Unit)
+  const matVal = data.Material !== undefined ? data.Material : data.material;
+  const plantVal = data.Plant !== undefined ? data.Plant : data.plant;
+  const slocVal = data.StorageLocation !== undefined ? data.StorageLocation : data.storageLocation;
+  const unitVal = data.Unit !== undefined ? data.Unit : data.unit;
+
+  push(C.checkMaterial(matVal, !hasReservation));
+  push(C.checkPlant(plantVal, !hasReservation));
+  push(C.checkStorageLocation(slocVal, !hasReservation));
+
+  if (unitVal !== undefined || !hasReservation || mvt !== '261') {
+    if (unitVal !== undefined || mvt !== '261') {
+      push(C.checkUnit(unitVal));
+    }
+  }
+
+  // 4. Destination rules
+  const destRules = cfg.destinationRules || {};
+  const recPlant = data.ReceivingPlant !== undefined ? data.ReceivingPlant : data.receivingPlant;
+  const recSLoc = data.ReceivingStorageLocation !== undefined ? data.ReceivingStorageLocation : data.receivingStorageLocation;
+
+  if (destRules.type === 'inter_plant') {
+    const destVal = validateMovement301Destination(plantVal, recPlant, recSLoc, options);
+    destVal.errors.forEach(push);
+  } else if (destRules.type === 'intra_plant') {
+    const destVal = validateMovement311Destination(plantVal, slocVal, recPlant, recSLoc, options);
+    destVal.errors.forEach(push);
+  } else {
+    if (recPlant !== undefined && recPlant !== null && String(recPlant).trim() !== '') {
+      push({ field: 'ReceivingPlant', message: `Receiving Plant is not allowed for Movement Type ${mvt}` });
+    }
+    if (recSLoc !== undefined && recSLoc !== null && String(recSLoc).trim() !== '') {
+      push({ field: 'ReceivingStorageLocation', message: `Receiving Storage Location is not allowed for Movement Type ${mvt}` });
+    }
+  }
+
+  // 5. Account assignment
+  const accRules = cfg.accountAssignment || {};
+  const sCostCenter = String(data.CostCenter || data.costCenter || '').trim();
+  const sAssetNo = String(data.AssetNo || data.assetNo || '').trim();
+  const sOrderId = String(data.OrderID || data.orderId || data.OrderNo || data.orderNo || '').trim();
+
+  if (accRules.type === 'CostCenter') {
+    if (!sCostCenter) {
+      push({ field: 'CostCenter', message: 'Cost Center is mandatory for Movement Type 201 (Goods Issue to Cost Center)' });
+    } else if (accRules.regex && !accRules.regex.test(sCostCenter)) {
+      push({ field: 'CostCenter', message: `Cost Center '${sCostCenter}' must be 1 to 10 alphanumeric characters` });
+    }
+    if (data.GLAccount !== undefined && data.GLAccount !== null && String(data.GLAccount).trim() !== '') {
+      push({ field: 'GLAccount', message: 'GLAccount cannot be supplied for Movement Type 201: the G/L account is system-determined from Cost Center via OBYC/GBB-VBR and is read-only' });
+    }
+  } else if (accRules.type === 'Asset') {
+    if (!sAssetNo) {
+      push({ field: 'AssetNo', message: 'Asset number is mandatory for Movement Type 241 (GI to Asset)' });
+    }
+  } else if (accRules.type === 'Order') {
+    if (!hasReservation && !sOrderId) {
+      push({ field: 'OrderID', message: 'Order number is mandatory for Movement Type 261 (GI to Order)' });
+    }
+    if (sCostCenter) {
+      push({ field: 'CostCenter', message: 'Cost Center is not allowed for Movement Type 261 (GI to Order)' });
+    }
+    if (sAssetNo) {
+      push({ field: 'AssetNo', message: 'Asset number is not allowed for Movement Type 261 (GI to Order)' });
+    }
+  } else {
+    // None (301, 311)
+    if (sCostCenter && cfg.forbiddenFields.includes('CostCenter')) {
+      push({ field: 'CostCenter', message: `Cost Center is not allowed for Movement Type ${mvt}` });
+    }
+    if (sAssetNo && cfg.forbiddenFields.includes('AssetNo')) {
+      push({ field: 'AssetNo', message: `Asset number is not allowed for Movement Type ${mvt}` });
+    }
+    if (data.GLAccount && cfg.forbiddenFields.includes('GLAccount')) {
+      push({ field: 'GLAccount', message: `GLAccount is not allowed for Movement Type ${mvt}` });
+    }
+  }
+
+  // 6. Centralized forbidden fields enforcement
+  if (Array.isArray(cfg.forbiddenFields)) {
+    for (const f of cfg.forbiddenFields) {
+      const lowerF = f.charAt(0).toLowerCase() + f.slice(1);
+      const val = data[f] !== undefined ? data[f] : data[lowerF];
+      if (val !== undefined && val !== null && String(val).trim() !== '') {
+        if (!errors.some((e) => e.field === f)) {
+          push({ field: f, message: `${f} is not allowed for Movement Type ${mvt}` });
+        }
+      }
+    }
+  }
+
+  // 7. Dates, Serials, Batch
+  C.checkDates(data).forEach(push);
+  C.checkSerialNumbers(data).forEach(push);
+  push(C.checkBatch(data.Batch !== undefined ? data.Batch : data.batch));
+
+  return C.buildResult(errors);
+}
+
+/**
+ * Canonical destination validation across all movement types.
+ *
+ * @param {string} movementType
+ * @param {string} plant
+ * @param {string} storageLocation
+ * @param {string} receivingPlant
+ * @param {string} receivingStorageLocation
+ * @param {object} [options]
+ * @returns {{ isValid: boolean, errors: Array<{ field: string, message: string }> }}
+ */
+function validateMovementDestination(movementType, plant, storageLocation, receivingPlant, receivingStorageLocation, options = {}) {
+  const cfg = getMovementConfig(movementType);
+  if (!cfg) {
+    return {
+      isValid: false,
+      errors: [{ field: 'MovementType', message: `Unsupported movement type '${movementType}'` }]
+    };
+  }
+
+  const destRules = cfg.destinationRules || {};
+  if (destRules.type === 'inter_plant') {
+    return validateMovement301Destination(plant, receivingPlant, receivingStorageLocation, options);
+  } else if (destRules.type === 'intra_plant') {
+    return validateMovement311Destination(plant, storageLocation, receivingPlant, receivingStorageLocation, options);
+  }
+
+  // type === 'none' (201, 241, 261)
+  const errors = [];
+  if (receivingPlant !== undefined && receivingPlant !== null && String(receivingPlant).trim() !== '') {
+    errors.push({ field: 'ReceivingPlant', message: `Receiving Plant is not allowed for Movement Type ${cfg.movementType}` });
+  }
+  if (receivingStorageLocation !== undefined && receivingStorageLocation !== null && String(receivingStorageLocation).trim() !== '') {
+    errors.push({ field: 'ReceivingStorageLocation', message: `Receiving Storage Location is not allowed for Movement Type ${cfg.movementType}` });
+  }
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Canonical account assignment validator across all movement types.
+ *
+ * @param {string} movementType
+ * @param {object} data
+ * @returns {{ isValid: boolean, errors: Array<{ field: string, message: string }> }}
+ */
+function validateMovementAccountAssignment(movementType, data = {}) {
+  const cfg = getMovementConfig(movementType);
+  if (!cfg) {
+    return {
+      isValid: false,
+      errors: [{ field: 'MovementType', message: `Unsupported movement type '${movementType}'` }]
+    };
+  }
+
+  const errors = [];
+  const acc = cfg.accountAssignment || {};
+  const costCenter = String(data.CostCenter || data.costCenter || '').trim();
+  const assetNo = String(data.AssetNo || data.assetNo || '').trim();
+  const orderId = String(data.OrderID || data.orderId || data.OrderNo || data.orderNo || '').trim();
+  const orderType = String(data.OrderType || data.orderType || '').trim();
+
+  if (acc.type === 'CostCenter') {
+    if (!costCenter) {
+      errors.push({ field: 'CostCenter', message: `Cost Center is mandatory for Movement Type ${cfg.movementType} (GI to Cost Center)` });
+    } else if (acc.regex && !acc.regex.test(costCenter)) {
+      errors.push({ field: 'CostCenter', message: `Cost Center '${costCenter}' must be 1 to 10 alphanumeric characters` });
+    }
+    if (data.GLAccount !== undefined && data.GLAccount !== null && String(data.GLAccount).trim() !== '') {
+      errors.push({ field: 'GLAccount', message: `GLAccount cannot be supplied for Movement Type ${cfg.movementType}: the G/L account is system-determined from Cost Center via OBYC/GBB-VBR and is read-only` });
+    }
+  } else if (acc.type === 'Asset') {
+    if (!assetNo) {
+      errors.push({ field: 'AssetNo', message: `Asset number is mandatory for Movement Type ${cfg.movementType} (GI to Asset)` });
+    }
+  } else if (acc.type === 'Order') {
+    if (acc.secondaryField === 'OrderType' && !orderType && data.isReservationCreation) {
+      errors.push({ field: 'OrderType', message: `Order Type is mandatory for Movement Type ${cfg.movementType} (GI to Order)` });
+    }
+    if (!orderId) {
+      errors.push({ field: 'OrderID', message: `Order number is mandatory for Movement Type ${cfg.movementType} (GI to Order)` });
+    }
+    if (costCenter) {
+      errors.push({ field: 'CostCenter', message: `Cost Center is not allowed for Movement Type ${cfg.movementType} (GI to Order)` });
+    }
+    if (assetNo) {
+      errors.push({ field: 'AssetNo', message: `Asset number is not allowed for Movement Type ${cfg.movementType} (GI to Order)` });
+    }
+  } else {
+    // None
+    if (costCenter) {
+      errors.push({ field: 'CostCenter', message: `Cost Center is not allowed for Movement Type ${cfg.movementType}` });
+    }
+    if (assetNo) {
+      errors.push({ field: 'AssetNo', message: `Asset number is not allowed for Movement Type ${cfg.movementType}` });
+    }
+    if (data.GLAccount) {
+      errors.push({ field: 'GLAccount', message: `GLAccount is not allowed for Movement Type ${cfg.movementType}` });
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Canonical validator for Movement Type 261 (Goods Issue to Order).
+ * Consumed by Mvt261Service and GoodsIssue handlers.
+ * Supports both { reservation, item, quantity } and { ReservationNo, ReservationItem, IssueQty }.
+ *
+ * @param {object} data
+ * @returns {{ isValid: boolean, errors: Array<{ field: string, message: string }>, message: string }}
+ */
+function validateMovement261Payload(data) {
+  if (!data || typeof data !== 'object') {
+    return {
+      isValid: false,
+      errors: [{ field: 'body', message: 'Request body must be a valid JSON object' }],
+      message: 'Request body must be a valid JSON object'
+    };
+  }
+
+  const reservation = String(data.reservation || data.ReservationNo || '').trim();
+  const item = String(data.item || data.ReservationItem || '').trim();
+  const rawQty = data.quantity !== undefined ? data.quantity : data.IssueQty;
+  const quantity = Number(rawQty);
+
+  const errors = [];
+  if (!reservation || !item) {
+    errors.push({ field: 'reservation', message: 'Reservation and item are required' });
+  }
+  if (rawQty === undefined || rawQty === null || rawQty === '' || isNaN(quantity) || quantity <= 0) {
+    errors.push({ field: 'quantity', message: 'Quantity must be greater than zero' });
+  }
+
+  // Forbidden fields for 261
+  const cfg = MOVEMENT_CONFIG['261'];
+  const costCenter = data.CostCenter || data.costCenter;
+  const assetNo = data.AssetNo || data.assetNo;
+  const recPlant = data.ReceivingPlant || data.receivingPlant;
+  const recSLoc = data.ReceivingStorageLocation || data.receivingStorageLocation;
+  const glAccount = data.GLAccount || data.glAccount;
+
+  if (costCenter && cfg.forbiddenFields.includes('CostCenter')) {
+    errors.push({ field: 'CostCenter', message: 'Cost Center is not allowed for Movement Type 261 (GI to Order)' });
+  }
+  if (assetNo && cfg.forbiddenFields.includes('AssetNo')) {
+    errors.push({ field: 'AssetNo', message: 'Asset number is not allowed for Movement Type 261 (GI to Order)' });
+  }
+  if (recPlant && cfg.forbiddenFields.includes('ReceivingPlant')) {
+    errors.push({ field: 'ReceivingPlant', message: 'Receiving Plant is not allowed for Movement Type 261 (GI to Order)' });
+  }
+  if (recSLoc && cfg.forbiddenFields.includes('ReceivingStorageLocation')) {
+    errors.push({ field: 'ReceivingStorageLocation', message: 'Receiving Storage Location is not allowed for Movement Type 261 (GI to Order)' });
+  }
+  if (glAccount && cfg.forbiddenFields.includes('GLAccount')) {
+    errors.push({ field: 'GLAccount', message: 'GLAccount is not allowed for Movement Type 261 (GI to Order)' });
+  }
+
+  const isValid = errors.length === 0;
+  return {
+    isValid,
+    errors,
+    message: isValid ? 'Validation succeeded' : errors.map((e) => e.message).join('; ')
+  };
+}
+
 module.exports = {
   MOVEMENT_CONFIG,
   SUPPORTED_MOVEMENT_TYPES,
+  POSTABLE_MOVEMENT_TYPES,
+  GM_CODE,
+  getGmCode,
   getMovementConfig,
   resolveWmMovement,
   validateReservationInput,
+  validateMovementPostingPayload,
+  validateMovementDestination,
+  validateMovementAccountAssignment,
+  validateMovement261Payload,
   validateMovement301Destination,
   validateMovement311Destination,
   verifyReceivingLocationInSap,

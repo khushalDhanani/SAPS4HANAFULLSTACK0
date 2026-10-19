@@ -8,6 +8,7 @@
  */
 
 const { buildBaseItem, buildHeaderEnvelope } = require('./s4common');
+const { getGmCode } = require('../../../../common/movementConfig');
 
 /**
  * @param {Object} data - normalized CAP domain data for a 301 posting
@@ -29,7 +30,7 @@ function mapToMaterialDocumentPayload(data) {
   const headerText = `TP 301 Resv ${data.ReservationNo || ''}`;
 
   return buildHeaderEnvelope({
-    gmCode: '04',
+    gmCode: getGmCode('301') || '04',
     headerText,
     postingDate: data.PostingDate,
     documentDate: data.DocumentDate,

@@ -5,6 +5,7 @@ const { RfcClient } = require('../RfcClient');
 const { sapKey, sapKeyOpt, httpError } = require('../sapKey');
 const { STATUS, PROCESS_STATUS } = require('../../../common/wmStatus');
 const {
+  GM_CODE,
   getMovementConfig,
   resolveWmMovement,
   validateReservationInput,
@@ -14,11 +15,6 @@ const {
 } = require('../../../common/movementConfig');
 const { isToFullyConfirmed, getHuConfirmationItems, mapStorageTypeSearchError } = require('./toState');
 const { checkAuthorization } = require('./authCheck');
-
-/** GM_CODE per movement type. Only the five supported types; nothing is derived for other types. */
-const GM_CODE = Object.freeze({ '201': '03', '241': '03', '311': '04', '301': '04', '261': '03' });
-// VERIFY IN SE37 / TEST: GM_CODE '06' (MB11) used to be the fallback for other movement types; it is not applied
-// until a live posting proves it for a concrete movement type.
 
 const pad10 = (v) => String(v || '').trim().padStart(10, '0');
 const pad12 = (v) => String(v || '').trim().padStart(12, '0');
