@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 7.5 warehouse determination (2026-10-19, 14:05 IST):** warehouse always derived from T320 and a supplied value validated against it (mismatch / no assignment / 311 cross-warehouse → 400 before any SAP write) in both create handlers and the TR action. 11 suites / 394 tests PASS. Not committed. Audit D8 closed.
+
 - **Step 7.4 BAPI mapping (2026-10-19, 13:40 IST):** `RESERVATIONHEADER` built from `MOVEMENT_CONFIG` only (forbidden fields can never be sent), numeric-only ALPHA padding, `sapKey` on all location keys, and a post-commit RKPF/RESB read-back (`sapVerified`, real `RSPOS`/`USNAM`/`RSDAT`). Exact-payload tests for all five movements; 21 suites / 709 tests PASS. Not committed. Audit D2, D6, D11 closed.
 
 - **Step 7.3 validation (2026-10-19, 13:10 IST):** `validateReservationInput` now iterates `MOVEMENT_CONFIG.requiredFields`/`forbiddenFields` (no per-type switch), adds plant/SLoc/quantity/unit/batch/serial base rules, and 241 requires `SubNumber`. New `reservationValidationMatrix.test.js`; 19 suites / 680 tests PASS. Not committed. Audit D4, D12 closed.
@@ -11142,5 +11144,25 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - Not run: full `npm test`, e2e, live SAP (no RFC executed).
 - **Status:** Done, not committed. Audit D2, D6, D11 closed; D13 (ReservationDate) now populated from `RKPF-RSDAT` when the read-back succeeds.
 - **Still open / Not verified:** live confirmation that `RFC_READ_TABLE RKPF/RESB` immediately after `BAPI_TRANSACTION_COMMIT WAIT='X'` returns the row (expected, not proven here); D3 idempotency; D5 261 adoption path has no read-back (returns before the BAPI commit branch).
+- **Next recommended action:** D3 (attempt store / idempotency on reservation creation), then D5.
+- **Assumptions:** none.
+
+### 2026-10-19 14:05 IST — Step 7.5: Warehouse determination validated against T320 before any SAP write
+
+- **Work Session / Reason:** Audit D8: a supplied `WarehouseNumber` was used as-is (`warehouseFor` returned `sapKey(given)` without a T320 lookup) and, for 311, the receiving-SLoc warehouse check was skipped whenever a warehouse was supplied. No SAP call made; mock RFC only.
+- **Changes (`srv/wm/reservation-entry/service.js`):**
+  - `warehouseFor(plant, sloc, given)` now always reads `T320 (WERKS, LGORT) → LGNUM`; no row → 400 `No warehouse number assigned to plant … / storage location … (T320)`; a supplied value that differs → 400 `Warehouse X does not match the warehouse assigned to plant … / storage location … in SAP (T320: Y)`; malformed key → 400 via `sapKey('lgnum')`. The T320 value is what gets used and persisted.
+  - New `resolveWarehouses(mvt, plant, sloc, recSloc, given)`: issuing warehouse plus, when `MOVEMENT_CONFIG[mvt].destinationRules.crossWarehouseForbidden` (311), the receiving-SLoc warehouse must be the same (400 otherwise). Policy-driven, no per-type branch.
+  - `executeReservationAndAutoTR` (UI route `createReservationEntry` and OData CREATE): warehouse resolved right after payload validation and **before** the LQUA pre-check, `BAPI_RESERVATION_CREATE1` and `L_TR_CREATE`; errors are `req.error`ed so nothing is created or persisted. The tracking row and the TR use the resolved value (`WarehouseNumber: determinedWh`).
+  - `createReservation` action: same resolution before the BAPI; failure returns `{ success:false, stage:'WAREHOUSE', error }`.
+  - `createTransferRequirement` action: the supplied or tracked warehouse is validated against T320 (400 on mismatch) instead of being trusted / silently falling back.
+  - `retryStep` LB01 keeps using the tracked warehouse (it was derived from T320 at creation or import); `createTOFromTR` / `confirmTransferOrder` still take `WarehouseNumber || track.WarehouseNumber` because the TR/TO lookups verify the document in that warehouse (reported, unchanged).
+- **Tests (`test/unit/wm/reservationEntryService.test.js`):** file-level `RfcClient.prototype.readTable` stub (`T320` → W01 by SLoc, every other table → 503 like the real client without node-rfc); new block `1d. Warehouse determination`: valid supplied, missing (derived), mismatched (400, no SAP call, nothing persisted), malformed key, no T320 row, 311 source/destination in different warehouses, 201 ignores the receiving SLoc, `createReservation` action stage `WAREHOUSE`, `createTransferRequirement` mismatch 400.
+- **Validation (executed):**
+  - `npx jest test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationEntryUi.test.js test/unit/wm/reservationTrack.test.js test/unit/wm/reservationMonitorRetry.test.js test/unit/wm/goodsIssueResvPrefill.test.js test/unit/wm/trToHandler.test.js test/unit/wm/createTOFromTR.test.js test/unit/wm/processFixes.test.js test/unit/wm/productionHardeningAudit.test.js test/unit/wm/reservationBapiPayload.test.js test/unit/wm/reservationValidationMatrix.test.js` → **PASS (11 suites, 394 tests)**.
+  - `npx eslint` on the 2 changed files → clean. `git diff --check` → clean.
+  - Not run: full `npm test`, e2e, live SAP.
+- **Behaviour change:** a UI/tool call with a wrong `WarehouseNumber` now fails with 400 before SAP; an unreachable SAP (503 on T320) fails the create before the BAPI instead of after it.
+- **Status:** Done, not committed. Audit D8 closed.
 - **Next recommended action:** D3 (attempt store / idempotency on reservation creation), then D5.
 - **Assumptions:** none.

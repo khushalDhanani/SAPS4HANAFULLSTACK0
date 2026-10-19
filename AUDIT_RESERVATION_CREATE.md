@@ -90,7 +90,7 @@ Fix: one shared `padIfNumeric` helper used by validation, header and TR mapping.
 `service.js:168` and `service.js:567` fallback `CreatedByUser … || 'KHUSHAL'`; `adapter.js:2756` `plant = '1120'` default and `2765` `bukrs = '1000'` fallback; `controller.js:45-64, 187-246` default master data (1120, CS01, 1000000045, 1011201301, 000000400092, 1130, ST02, ZEMP). AGENTS.md forbids environment-specific values in code; a wrong `CreatedByUser` corrupts the audit trail.
 Fix: drop the `'KHUSHAL'` fallback (fail or store `''`), require BUKRS from T001K (error if missing), move UI defaults to configuration or leave empty.
 
-**D8 — P2 — User-supplied `WarehouseNumber` bypasses T320 validation; 311 receiving-warehouse check skipped when given.**
+**D8 — P2 — FIXED 2026-10-19 14:05 IST (Step 7.5, `warehouseFor` validates against T320, `resolveWarehouses` cross-warehouse check) — User-supplied `WarehouseNumber` bypasses T320 validation; 311 receiving-warehouse check skipped when given.**
 `service.js:25-37` `warehouseFor` returns `sapKey(given)` without a T320 lookup; `service.js:246-249` uses it for both issuing and receiving checks. A wrong warehouse reaches `L_TR_CREATE` (SAP then rejects or, worse, creates a TR in the wrong warehouse — **Not verified**).
 Fix: always resolve T320 and, if a `WarehouseNumber` was supplied, require it to equal the T320 value.
 

@@ -31,14 +31,99 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
   let createTrSpy;
   let authSpy;
 
+  let t320Spy;
+  // Step 7.5: the service derives the warehouse from T320 before any SAP write; default stub = W01 for every plant/SLoc.
+  const t320Stub = (byLgort = {}) => async (table, _fields, where) => {
+    // Other tables behave as before the stub existed: RFC unavailable (503), so fallbacks stay exercised.
+    if (table !== 'T320') throw Object.assign(new Error('node-rfc is not available (test stub)'), { status: 503 });
+    const lgort = (String(where?.[0] || '').match(/LGORT = '([A-Z0-9]+)'/) || [])[1];
+    const wh = Object.prototype.hasOwnProperty.call(byLgort, lgort) ? byLgort[lgort] : 'W01';
+    return wh ? [{ LGNUM: wh }] : [];
+  };
+
   beforeEach(() => {
     authSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'checkAuthorization').mockResolvedValue(true);
+    t320Spy = jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(t320Stub());
   });
 
   afterEach(async () => {
     createResSpy?.mockRestore();
     createTrSpy?.mockRestore();
     authSpy?.mockRestore();
+    t320Spy?.mockRestore();
+  });
+
+  describe('1d. Warehouse determination (Step 7.5, audit D8)', () => {
+    const resNo = '0000777075';
+    const okRes = { success: true, reservationNo: '777075', reservationNoRaw: resNo, reservationItem: '0001', status: '01' };
+    const okTr = { success: true, warehouseNumber: 'W01', trNumber: '1007075', trNumberRaw: '0001007075', trItem: '0001', status: '02' };
+    const body311 = { MovementType: '311', Plant: '1120', StorageLocation: 'CS01', ReceivingStorageLocation: 'ST02', Material: '1000000045', Quantity: 1, Unit: 'KG' };
+    const post = (extra) => POST('/odata/v4/reservation-entry/createReservationEntry', { ...body311, ...extra }, authClerk);
+
+    beforeEach(() => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValue(okRes);
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement').mockResolvedValue(okTr);
+    });
+    afterEach(async () => {
+      await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: resNo }));
+      await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: resNo }));
+    });
+
+    test('valid: supplied warehouse equals the T320 assignment -> accepted and persisted', async () => {
+      const { data } = await post({ WarehouseNumber: 'W01' });
+      expect(data.WarehouseNumber).toBe('W01');
+      expect(createResSpy).toHaveBeenCalledTimes(1);
+      expect(createTrSpy.mock.calls[0][0].warehouseNumber).toBe('W01');
+    });
+
+    test('missing: warehouse derived from T320 and persisted before the TR step', async () => {
+      const { data } = await post({});
+      expect(data.WarehouseNumber).toBe('W01');
+      expect(createTrSpy.mock.calls[0][0].warehouseNumber).toBe('W01');
+    });
+
+    test('mismatched: supplied warehouse differs from T320 -> 400 before any SAP call', async () => {
+      await expect(post({ WarehouseNumber: 'W02' })).rejects.toMatchObject({ response: { status: 400, data: { error: { message: expect.stringMatching(/Warehouse W02 does not match .* \(T320: W01\)/) } } } });
+      expect(createResSpy).not.toHaveBeenCalled();
+      expect(createTrSpy).not.toHaveBeenCalled();
+    });
+
+    test('invalid: malformed warehouse key -> 400 before any SAP call', async () => {
+      await expect(post({ WarehouseNumber: 'W-1' })).rejects.toMatchObject({ response: { status: 400, data: { error: { message: expect.stringMatching(/Warehouse is missing or invalid/) } } } });
+      expect(createResSpy).not.toHaveBeenCalled();
+    });
+
+    test('no T320 assignment for plant/SLoc -> 400, nothing created, nothing persisted', async () => {
+      t320Spy.mockImplementation(t320Stub({ CS01: '' }));
+      await expect(post({})).rejects.toMatchObject({ response: { status: 400, data: { error: { message: expect.stringMatching(/No warehouse number assigned to plant 1120 \/ storage location CS01 \(T320\)/) } } } });
+      expect(createResSpy).not.toHaveBeenCalled();
+      expect(await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: resNo }))).toBeFalsy();
+    });
+
+    test('311 source/destination in different warehouses -> 400 before any SAP call', async () => {
+      t320Spy.mockImplementation(t320Stub({ ST02: 'W02' }));
+      await expect(post({})).rejects.toMatchObject({ response: { status: 400, data: { error: { message: expect.stringMatching(/ST02 belongs to warehouse W02, but issuing storage location CS01 belongs to warehouse W01/) } } } });
+      expect(createResSpy).not.toHaveBeenCalled();
+    });
+
+    test('201: receiving SLoc not involved, warehouse resolved from the issuing SLoc only', async () => {
+      t320Spy.mockImplementation(t320Stub({ ST02: 'W02' }));
+      const { data } = await POST('/odata/v4/reservation-entry/createReservationEntry', { MovementType: '201', Plant: '1120', StorageLocation: 'CS01', Material: '1000000045', Quantity: 1, Unit: 'KG', CostCenter: '1011201301' }, authClerk);
+      expect(data.WarehouseNumber).toBe('W01');
+    });
+
+    test('createReservation action: mismatched warehouse returns stage WAREHOUSE without calling SAP', async () => {
+      const { data } = await POST('/odata/v4/reservation-entry/createReservation', { ...body311, WarehouseNumber: 'W02' }, authClerk);
+      expect(data).toMatchObject({ success: false, stage: 'WAREHOUSE', error: expect.stringMatching(/does not match/) });
+      expect(createResSpy).not.toHaveBeenCalled();
+    });
+
+    test('createTransferRequirement action: supplied warehouse validated against T320 -> 400 on mismatch', async () => {
+      await post({});
+      await expect(POST('/odata/v4/reservation-entry/createTransferRequirement', { ReservationNo: resNo, ReservationItem: '0001', WarehouseNumber: 'W02' }, authClerk))
+        .rejects.toMatchObject({ response: { status: 400 } });
+      expect(createTrSpy).toHaveBeenCalledTimes(1); // only the auto-TR from the create, not a second one
+    });
   });
 
   describe('1. Movement Type Validations', () => {

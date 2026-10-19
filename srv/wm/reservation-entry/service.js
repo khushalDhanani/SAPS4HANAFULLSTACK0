@@ -7,7 +7,7 @@ const { findUnconfirmedToItems } = require('../../integration/s4hana/wm/toState'
 const { STATUS, STEP_ERROR, UNCONFIRMED_TO, PROCESS_STATUS } = require('../../common/wmStatus');
 const { sapKey } = require('../../integration/s4hana/sapKey');
 const { withReservationLock, isLockConflict } = require('../../integration/s4hana/wm/resLock');
-const { validateReservationInput, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
+const { validateReservationInput, getMovementConfig, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
 const LOG = cds.log('reservation-entry');
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 
@@ -21,15 +21,36 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       validateReservationInput(data, { req });
     }
 
-    /** Warehouse from the request, else from plant/storage location assignment (T320); never a literal. */
+    /**
+     * Step 7.5: the warehouse is always derived from the SAP plant/storage-location assignment (T320).
+     * A supplied value is validated against it and rejected on mismatch; it is never used unverified.
+     */
     async function warehouseFor(plant, sloc, given) {
-      if (given) return sapKey(given, 'lgnum');
+      const sGiven = given ? sapKey(given, 'lgnum') : '';
       const rows = await adapter.rfc.readTable('T320', ['LGNUM'], [`( WERKS = '${sapKey(plant, 'plant')}' AND LGORT = '${sapKey(sloc, 'lgort')}' )`], 1);
       const wh = rows?.[0]?.LGNUM?.trim();
       if (!wh) {
         const e = new Error(`No warehouse number assigned to plant ${plant} / storage location ${sloc} (T320)`);
         e.status = 400;
         throw e;
+      }
+      if (sGiven && sGiven !== wh) {
+        const e = new Error(`Warehouse ${sGiven} does not match the warehouse assigned to plant ${plant} / storage location ${sloc} in SAP (T320: ${wh})`);
+        e.status = 400;
+        throw e;
+      }
+      return wh;
+    }
+    /** Issuing warehouse (+ same-warehouse check for the receiving SLoc when the policy forbids cross-warehouse). */
+    async function resolveWarehouses(mvt, plant, sloc, recSloc, given) {
+      const wh = await warehouseFor(plant, sloc, given);
+      if (getMovementConfig(mvt)?.destinationRules?.crossWarehouseForbidden && recSloc) {
+        const recWh = await warehouseFor(plant, recSloc, '');
+        if (recWh !== wh) {
+          const e = new Error(`Receiving storage location ${recSloc} belongs to warehouse ${recWh}, but issuing storage location ${sloc} belongs to warehouse ${wh} (cross-warehouse transfer not supported in ${mvt})`);
+          e.status = 400;
+          throw e;
+        }
       }
       return wh;
     }
@@ -65,11 +86,20 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const effOrderId = OrderID || '';
       const effOrderType = OrderType || '';
 
+      // Step 7.5: warehouse resolved from T320 and validated against a supplied value BEFORE any SAP write.
+      let determinedWh = '';
+      try {
+        determinedWh = await resolveWarehouses(MovementType, Plant, StorageLocation, ReceivingStorageLocation, WarehouseNumber);
+      } catch (whErr) {
+        req.error(whErr.status || 502, whErr.message);
+        return;
+      }
+
       // Task 8: SLoc pre-check at reservation creation: read LQUA for item's plant/SLoc.
       let slocWarning = '';
       if (Material && Plant && StorageLocation) {
         try {
-          const wh = await warehouseFor(Plant, StorageLocation, WarehouseNumber);
+          const wh = determinedWh;
           const matPadded = String(Material || '').trim().padStart(18, '0');
           const lquaCurrent = await adapter.rfc.readTable(
             'LQUA',
@@ -202,7 +232,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         ReservationNo: resNo,
         ReservationItem: resItem,
         MovementType,
-        WarehouseNumber: WarehouseNumber || '',
+        WarehouseNumber: determinedWh,
         Plant,
         StorageLocation,
         Material,
@@ -244,13 +274,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       // Step 2: Auto-create Transfer Requirement (background/immediate step)
       let trNumber = '';
       let trError = null;
-      let determinedWh = '';
 
       try {
-        determinedWh = await warehouseFor(Plant, StorageLocation, WarehouseNumber);
-        if (MovementType === '311' && ReceivingStorageLocation) {
-          await warehouseFor(Plant, ReceivingStorageLocation, WarehouseNumber);
-        }
         const trResult = await adapter.createTransferRequirement({
           warehouseNumber: determinedWh,
           wmMovementType: MovementType,
@@ -315,7 +340,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
         // Persist TBNUM immediately as soon as SAP returns it
         await UPDATE(ReservationEntries).set({
-          WarehouseNumber: determinedWh || WarehouseNumber || '',
+          WarehouseNumber: determinedWh,
           TransferRequirement: trNumber,
           Status_code: STATUS.TR_CREATED,
           ProcessStatus: PROCESS_STATUS.TR_CREATED,
@@ -347,7 +372,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         trError = `TR creation failed in SAP backend: ${err.message}`;
 
         await UPDATE(ReservationEntries).set({
-          WarehouseNumber: determinedWh || WarehouseNumber || '',
+          WarehouseNumber: determinedWh,
           Status_code: STATUS.TR_ERROR,
           ProcessStatus: PROCESS_STATUS.FAILED_TR,
           ErrorStep: 'LB01',
@@ -515,6 +540,14 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const payload = req.data;
       const effResDate = payload.ReservationDate || undefined;
 
+      // Step 7.5: fail before the SAP write when the warehouse cannot be resolved or a supplied one mismatches.
+      let determinedWh = '';
+      try {
+        determinedWh = await resolveWarehouses(payload.MovementType, payload.Plant, payload.StorageLocation, payload.ReceivingStorageLocation, payload.WarehouseNumber);
+      } catch (whErr) {
+        return { success: false, stage: 'WAREHOUSE', error: whErr.message };
+      }
+
       let resResult;
       try {
         resResult = await adapter.createReservation({
@@ -562,7 +595,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         ReservationNo: resNo,
         ReservationItem: resItem,
         MovementType: payload.MovementType,
-        WarehouseNumber: payload.WarehouseNumber || '',
+        WarehouseNumber: determinedWh,
         Plant: payload.Plant,
         StorageLocation: payload.StorageLocation,
         Material: payload.Material,
@@ -643,9 +676,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       let determinedWh = '';
       try {
-        determinedWh = WarehouseNumber || track.WarehouseNumber || await warehouseFor(track.Plant, track.StorageLocation, '');
-      } catch (_whErr) {
-        determinedWh = WarehouseNumber || track.WarehouseNumber || '';
+        determinedWh = await warehouseFor(track.Plant, track.StorageLocation, WarehouseNumber || track.WarehouseNumber);
+      } catch (whErr) {
+        return req.error(whErr.status || 502, whErr.message);
       }
 
       let trResult;
