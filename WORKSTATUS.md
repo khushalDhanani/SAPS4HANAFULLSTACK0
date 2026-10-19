@@ -5,6 +5,89 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Movement 201 Deep Audit (Step 6) (2026-10-19, 11:40 IST):** Complete (Final Verdict: PASS).
+  - **Audit Scope & Boundaries:**
+    - Performed comprehensive 15-dimension audit of Movement Type 201 (Goods Issue to Cost Center) on branch `feature01` (zero code changes, zero live SAP writes).
+    - Executed 19 read-only test suites (484 tests passed, 100% green).
+  - **Findings & Certified Status:**
+    - **Forward E2E Lifecycle (PASS):** Both Direct Goods Issue (`GoodsIssueService.postGoodsIssue201` via `API_MATERIAL_DOCUMENT_SRV`) and Multi-Stage RFC Warehouse Pipeline (`ReservationEntryService` / `TrToService` via `MB21` → `TR` → `TO` → `MIGO`) are complete, validated, and verified.
+    - **Account Assignment & Cost Center Policy (PASS):**
+      - Cost Center is mandatory (`requiresCostCenter: true`, padded to 10 digits via ALPHA exit).
+      - Pre-validated against SAP master table `CSKS` via RFC (`KOSTL`, validity dates `DATAB`-`DATBI`, primary posting lock `BKZKP !== 'X'`).
+      - G/L Account is strictly **FORBIDDEN** to be supplied by client; auto-derived by SAP via `OBYC`/`GBB-VBR`. Displayed in Fiori UI as non-editable (`editable="false"`).
+    - **Stock Pre-check (PASS):** Live stock revalidated via `GoodsIssueAdapter.revalidateStockBeforePosting` before posting; returns HTTP 422 immediately if stock insufficient.
+    - **Live SAP S/4HANA (Client 220) Proof (CONFIRMED):** Transparent table readbacks prove full lifecycle execution for Reservation `0000525278` / Material Document `4900050142` (Year 2026):
+      - `RKPF`: `RSNUM: '0000525278'`, `BWART: '201'`, `KOSTL: '1011201301'`.
+      - `RESB`: `RSPOS: '0001'`, `MATNR: '000000008000009754'`, `WERKS: '1120'`, `LGORT: 'HS01'`, `ENMNG = 1.000`, `KZEAR = 'X'`.
+      - `MATDOC`: `MBLNR: '4900050142'`, `MJAHR: '2026'`, `ZEILE: '0001'`, `BWART: '201'`, `WERKS: '1120'`, `LGORT: 'HS01'`, `MENGE: 1.000 NOS`, `KOSTL: '1011201301'`.
+      - Live WM TR/TO: `LTBK` `0001000757` (App staging TR, `BWLVS: '311'`, destination `921/TRANSFER`) / `LTAK` TO `0001037270` (`KQUIT: 'X'`); second MIGO auto-TR `0001000759` (`BWLVS: '201'`, `NLTYP: '911'`, `NLPLA: '1011201301'`) / TO `0001037277` (`KQUIT: 'X'`).
+    - **Reversal Status (CONFIRMED):**
+      - Direct `GoodsIssueService` 201 → 202 reversal: **PASS** (via OData FunctionImport `Cancel` on `API_MATERIAL_DOCUMENT_SRV` and UI action `onReverseGoodsIssue`).
+      - RFC Reservation/TO 201 → in-app reversal: **NOT IMPLEMENTED**; SAP GUI `MIGO` / `MBST` required.
+    - **Idempotency & Duplicate Guard (PASS):** Enforced via `ClientAttemptId` / SHA-256 `RequestHash` in `PostingAttempts` store, `checkPendingConfirmation` (blocks in-flight duplicate submissions with HTTP 409), and 504 timeout recovery with `findPostedByReference`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/*201* test/unit/wm/step17Mvt201.test.js`: **PASS (10 suites, 198 tests passed)**.
+    - `npx jest test/unit/wm/goodsIssuePhase5Routing.test.js test/unit/wm/goodsIssuePerTypeNormalize.test.js test/unit/wm/goodsIssuePerTypeMapper.test.js test/unit/wm/goodsIssuePerTypeValidation.test.js test/unit/wm/goodsIssuePendingConfirmationPerType.test.js test/unit/wm/goodsIssueOutcomesPerType.test.js test/unit/wm/goodsIssueIsolation.test.js test/unit/wm/movementConfig.test.js test/unit/wm/movementMatrixLifecycle.test.js`: **PASS (9 suites, 286 tests passed)**.
+    - `npm run lint`: Clean (0 errors, 0 warnings).
+    - `git diff --check`: Clean (0 whitespace/formatting errors).
+
+- **Movement 261 Deep Audit (Step 5) (2026-10-19, 11:32 IST):** Complete (Final Verdict: PASS).
+  - **Audit Scope & Boundaries:**
+    - Performed comprehensive 15-dimension audit of Movement Type 261 (Goods Issue to Order) on branch `feature01` (zero code changes, zero live SAP writes).
+    - Executed 12 read-only test suites (418 tests passed, 100% green).
+  - **Findings & Certified Status:**
+    - **Forward E2E Lifecycle (PASS):** Both Dedicated Action Service (`Mvt261Service.postGoodsIssue` via `API_MATERIAL_DOCUMENT_SRV`) and Multi-Stage RFC Warehouse Pipeline (`ReservationEntryService` / `TrToService` via `MB21` → `TR` → `TO` → `MIGO`) are complete, validated, and verified.
+    - **Live SAP S/4HANA (Client 220) Proof (CONFIRMED):** Transparent table readbacks prove full order consumption for Material Document `4900050240` (Year 2026), Order `1002790`, batch `IN26001170`:
+      - `MATDOC`: debited `-1.000 KG` (`SHKZG = 'H'`), `AUFNR = '000001002790'`, `CHARG = 'IN26001170'`.
+      - `RESB`: open requirement reduced (`ENMNG` incremented).
+      - Inventory conservation verified in `MARD` (CS01 stock reduced by 1.000 KG) and `MCHB` (batch stock reduced by 1.000 KG).
+    - **Reversal Status (CONFIRMED):**
+      - Direct `Mvt261Service` 261 → 262 reversal: **PASS** (via OData FunctionImport `CancelItem` on `API_MATERIAL_DOCUMENT_SRV`, gated to `WarehouseManager` / `Admin` roles).
+      - RFC Reservation/TO 261 → in-app reversal: **NOT IMPLEMENTED**; SAP GUI `MIGO` / `MBST` required.
+    - **Idempotency & Duplicate Guard (PASS):** Enforced via deterministic `Mvt261Item` hash, atomic submission lock, and background attempt reconciliation.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/movement261UnifiedLifecycle.test.js test/unit/wm/mvt261Adapter.test.js test/unit/wm/mvt261Auth.test.js test/unit/wm/mvt261Concurrency.test.js test/unit/wm/mvt261Idempotency.test.js test/unit/wm/mvt261Reconciliation.test.js test/unit/wm/mvt261Reversal.test.js test/unit/wm/mvt261Validation.test.js test/unit/wm/open261Controller.test.js test/unit/wm/goodsIssueIsolation.test.js test/unit/wm/movementConfig.test.js test/unit/wm/movementMatrixLifecycle.test.js`: **PASS (12 suites, 418 tests passed, 100% green)**.
+    - `git diff --check`: Clean (0 whitespace/formatting errors).
+
+- **Movement 301 Deep Audit (Step 4) (2026-10-19, 11:28 IST):** Complete (Final Verdict: PASS).
+  - **Audit Scope & Boundaries:**
+    - Performed comprehensive 15-dimension audit of Movement Type 301 on branch `feature01` (zero code changes, zero live SAP writes).
+    - Executed 11 read-only test suites (276 tests passed, 100% green).
+  - **Findings & Certified Status:**
+    - **Forward E2E Lifecycle (PASS):** Both Direct Goods Issue (`GoodsIssueService.postGoodsIssue301` via `API_MATERIAL_DOCUMENT_SRV`) and Multi-Stage RFC Warehouse Pipeline (`ReservationEntryService` / `TrToService` via `MB21` → `TR` → `TO` → `MIGO`) are complete, validated, and verified.
+    - **Live SAP S/4HANA (Client 220) Proof (CONFIRMED):** Transparent table readbacks prove full inter-plant stock conservation for Reservation `0000525868` / Material Document `4900050149` (Year 2026):
+      - Line 0001 (Issuing Plant `1120 / CS01`): Debited `-1.000 KG` (`SHKZG = 'H'`).
+      - Line 0002 (Receiving Plant `1110 / CS01`): Credited `+1.000 KG` (`SHKZG = 'S'`).
+      - Inter-plant stock sum conserved ($\Delta = 0$). Reservation closed with `KZEAR = 'X'`.
+      - Automatic SAP standard receiving TR created in receiving Warehouse W10 (`TR W10/0001001222`, `BWLVS = '302'`).
+    - **Reversal Status (CONFIRMED):**
+      - Direct `GoodsIssueService` 301 → 302 reversal: **PASS** (via OData FunctionImport `Cancel` on `API_MATERIAL_DOCUMENT_SRV` and UI action `onReverseGoodsIssue`).
+      - RFC Reservation/TO 301 → in-app reversal: **NOT IMPLEMENTED**; SAP GUI `MIGO` / `MBST` required.
+    - **Idempotency & Duplicate Guard (PASS):** Enforced via `ClientAttemptId` / SHA-256 `RequestHash` in `PostingAttempts` store, `checkPendingConfirmation` (blocks in-flight duplicate submissions with HTTP 409), and `ReservationProcessAdapter` RFC lookup guard.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/*301* test/unit/wm/step20Mvt301.test.js test/unit/wm/mvt301Process.test.js test/unit/wm/goodsIssuePhase5Routing.test.js test/unit/wm/goodsIssuePendingConfirmationPerType.test.js test/unit/wm/goodsIssueIsolation.test.js test/unit/wm/movementConfig.test.js`: **PASS (11 suites, 276 tests passed, 100% green)**.
+    - `git diff --check`: Clean (0 whitespace/formatting errors).
+
+- **Movement 311 Deep Audit (Step 3) (2026-10-19, 11:23 IST):** Complete (Final Verdict: PASS).
+  - **Audit Scope & Boundaries:**
+    - Performed comprehensive 15-dimension audit of Movement Type 311 on branch `feature01` (zero code changes, zero live SAP writes).
+    - Executed 19 read-only test suites (567 tests passed, 100% green).
+  - **Findings & Certified Status:**
+    - **Forward E2E Lifecycle (PASS):** Both Direct Goods Issue (`GoodsIssueService.postGoodsIssue311` via `API_MATERIAL_DOCUMENT_SRV`) and Multi-Stage RFC Warehouse Pipeline (`ReservationEntryService` / `TrToService` via `MB21` → `TR` → `TO` → `MIGO`) are complete, validated, and verified.
+    - **Live SAP S/4HANA (Client 220) Proof (CONFIRMED):** Transparent table readbacks prove full dual-SLoc stock conservation for Reservation `0000525877` / Material Document `4900050153` (Year 2026):
+      - Line 0001 (Source SLoc `CS01`): Debited `-1.000 KG` (`SHKZG = 'H'`).
+      - Line 0002 (Dest SLoc `HS01`): Credited `+1.000 KG` (`SHKZG = 'S'`).
+      - Plant stock sum conserved ($\Delta = 0$). Reservation closed with `KZEAR = 'X'`.
+    - **Reversal Status (CONFIRMED):**
+      - Direct `GoodsIssueService` 311 → 312 reversal: **PASS** (via OData FunctionImport `Cancel` on `API_MATERIAL_DOCUMENT_SRV` and UI action `onReverseGoodsIssue`).
+      - RFC Reservation/TO 311 → in-app reversal: **NOT IMPLEMENTED**; SAP GUI `MIGO` / `MBST` required.
+    - **Idempotency & Duplicate Guard (PASS):** Enforced via `ClientAttemptId` / SHA-256 `RequestHash` in `PostingAttempts` store, `checkPendingConfirmation` (blocks in-flight duplicate submissions with HTTP 409), and background reconciliation `recheckPostingAttempts`.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/*311* test/unit/wm/step19Mvt311.test.js test/unit/wm/mvt311Process.test.js test/unit/wm/movementMatrixLifecycle.test.js`: **PASS (9 suites, 306 tests passed)**.
+    - `npx jest test/unit/wm/goodsIssuePhase5Routing.test.js test/unit/wm/goodsIssuePerTypeNormalize.test.js test/unit/wm/goodsIssuePerTypeMapper.test.js test/unit/wm/goodsIssuePerTypeValidation.test.js test/unit/wm/goodsIssuePendingConfirmationPerType.test.js test/unit/wm/goodsIssueOutcomesPerType.test.js`: **PASS (6 suites, 89 tests passed)**.
+    - `npx jest test/unit/wm/goodsIssueIsolation.test.js test/unit/wm/goodsIssueClients.test.js test/unit/wm/goodsIssuePerTypePostingClient.test.js test/unit/wm/movementConfig.test.js`: **PASS (4 suites, 172 tests passed)**.
+    - `git diff --check`: Clean (0 whitespace/formatting errors).
+
 - **Movement Policy & Validation Architecture Centralization (Items 17 & 18) (2026-10-19, 10:35 IST):** Complete.
   - **Item 17 (Make `movementConfig.js` the single source of truth):**
     - Centralized `GM_CODE` object: `Object.freeze({ '201': '03', '241': '03', '311': '04', '301': '04', '261': '03' })` and exported helper `getGmCode(movementType)`.
@@ -10903,3 +10986,51 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - Zero failures across all unit and integration test suites in the repository.
 - **Next Recommended Action:**
   - Branch `feature01` is 100% test-clean and ready for the next prioritized user instruction.
+
+### 2026-10-19 11:32 IST — MVT 261 Deep Audit: Lifecycle, SAP Evidence & Reversal Verification (Step 5)
+
+- **Work Session / Reason:** Execute Step 5 — Deep Audit Movement 261 (Goods Issue to Order) with zero code modifications and zero SAP writes.
+- **Audit Findings & Certified Status:**
+  - **Forward E2E Lifecycle (PASS):** Dedicated Action Service (`Mvt261Service.postGoodsIssue` via `API_MATERIAL_DOCUMENT_SRV`) and Multi-Stage RFC Warehouse Pipeline (`ReservationEntryService` / `TrToService` via `MB21` → `TR` → `TO` → `MIGO`) both complete and verified.
+  - **Order & Batch Binding (PASS):** Order number and type mandatory (`requiresOrder: true`); CostCenter and Asset forbidden; Pinned batch rule (F9) strictly forces `RESB-CHARG` batch; rejects user mismatch with HTTP 422.
+  - **Live SAP S/4HANA (Client 220) Proof (CONFIRMED):** Transparent table readbacks prove full order consumption for Material Document `4900050240` (Year 2026), Order `1002790`, batch `IN26001170`:
+    - `MATDOC`: debited `-1.000 KG` (`SHKZG = 'H'`), `AUFNR = '000001002790'`, `CHARG = 'IN26001170'`.
+    - `RESB`: open requirement reduced (`ENMNG` incremented).
+    - Inventory conservation verified in `MARD` (CS01 stock reduced by 1.000 KG) and `MCHB` (batch stock reduced by 1.000 KG).
+  - **Reversal Status (CONFIRMED):** Direct `Mvt261Service` 261 → 262 reversal: **PASS** (via OData FunctionImport `CancelItem` on `API_MATERIAL_DOCUMENT_SRV`, gated to `WarehouseManager` / `Admin` roles); RFC pipeline reversal requires SAP GUI `MIGO` / `MBST`.
+- **Validation Results:**
+  - `npx jest test/unit/wm/movement261UnifiedLifecycle.test.js test/unit/wm/mvt261Adapter.test.js test/unit/wm/mvt261Auth.test.js test/unit/wm/mvt261Concurrency.test.js test/unit/wm/mvt261Idempotency.test.js test/unit/wm/mvt261Reconciliation.test.js test/unit/wm/mvt261Reversal.test.js test/unit/wm/mvt261Validation.test.js test/unit/wm/open261Controller.test.js test/unit/wm/goodsIssueIsolation.test.js test/unit/wm/movementConfig.test.js test/unit/wm/movementMatrixLifecycle.test.js`: **PASS (12 suites, 418 tests passed, 100% green)**.
+  - `git diff --check`: 0 whitespace errors.
+- **Errors / Warnings / Blockers:**
+  - Zero errors in Movement 261 architecture.
+- **Next Recommended Action:**
+  - Proceed to Step 6 — Deep Audit Movement 201.
+
+### 2026-10-19 11:40 IST — MVT 201 Deep Audit: Cost Center Assignment, Stock Precheck & Reversal Verification (Step 6)
+
+- **Work Session / Reason:** Execute Step 6 — Deep Audit Movement 201 (Goods Issue to Cost Center) with zero code modifications and zero SAP writes.
+- **Audit Findings & Certified Status:**
+  - **Forward E2E Lifecycle (PASS):** Both Direct Goods Issue (`GoodsIssueService.postGoodsIssue201` via `API_MATERIAL_DOCUMENT_SRV`) and Multi-Stage RFC Warehouse Pipeline (`ReservationEntryService` / `TrToService` via `MB21` → `TR` → `TO` → `MIGO`) are complete, validated, and verified.
+  - **Account Assignment & Cost Center Policy (PASS):**
+    - Cost Center is mandatory (`requiresCostCenter: true`, padded to 10 digits via ALPHA exit).
+    - Pre-validated against SAP master table `CSKS` via RFC (`KOSTL`, validity dates `DATAB`-`DATBI`, primary posting lock `BKZKP !== 'X'`).
+    - G/L Account is strictly **FORBIDDEN** to be supplied by client; auto-derived by SAP via `OBYC`/`GBB-VBR`. Displayed in Fiori UI as non-editable (`editable="false"`).
+  - **Stock Pre-check (PASS):** Live stock revalidated via `GoodsIssueAdapter.revalidateStockBeforePosting` before posting; returns HTTP 422 immediately if stock insufficient.
+  - **Live SAP S/4HANA (Client 220) Proof (CONFIRMED):** Transparent table readbacks prove full lifecycle execution for Reservation `0000525278` / Material Document `4900050142` (Year 2026):
+    - `RKPF`: `RSNUM: '0000525278'`, `BWART: '201'`, `KOSTL: '1011201301'`.
+    - `RESB`: `RSPOS: '0001'`, `MATNR: '000000008000009754'`, `WERKS: '1120'`, `LGORT: 'HS01'`, `ENMNG = 1.000`, `KZEAR = 'X'`.
+    - `MATDOC`: `MBLNR: '4900050142'`, `MJAHR: '2026'`, `ZEILE: '0001'`, `BWART: '201'`, `WERKS: '1120'`, `LGORT: 'HS01'`, `MENGE: 1.000 NOS`, `KOSTL: '1011201301'`.
+    - Live WM TR/TO: `LTBK` `0001000757` (App staging TR, `BWLVS: '311'`, destination `921/TRANSFER`) / `LTAK` TO `0001037270` (`KQUIT: 'X'`); second MIGO auto-TR `0001000759` (`BWLVS: '201'`, `NLTYP: '911'`, `NLPLA: '1011201301'`) / TO `0001037277` (`KQUIT: 'X'`).
+  - **Reversal Status (CONFIRMED):**
+    - Direct `GoodsIssueService` 201 → 202 reversal: **PASS** (via OData FunctionImport `Cancel` on `API_MATERIAL_DOCUMENT_SRV` and UI action `onReverseGoodsIssue`).
+    - RFC Reservation/TO 201 → in-app reversal: **NOT IMPLEMENTED**; SAP GUI `MIGO` / `MBST` required.
+  - **Idempotency & Duplicate Guard (PASS):** Enforced via `ClientAttemptId` / SHA-256 `RequestHash` in `PostingAttempts` store, `checkPendingConfirmation` (blocks in-flight duplicate submissions with HTTP 409), and 504 timeout recovery with `findPostedByReference`.
+- **Validation Results:**
+  - `npx jest test/unit/wm/*201* test/unit/wm/step17Mvt201.test.js`: **PASS (10 suites, 198 tests passed)**.
+  - `npx jest test/unit/wm/goodsIssuePhase5Routing.test.js test/unit/wm/goodsIssuePerTypeNormalize.test.js test/unit/wm/goodsIssuePerTypeMapper.test.js test/unit/wm/goodsIssuePerTypeValidation.test.js test/unit/wm/goodsIssuePendingConfirmationPerType.test.js test/unit/wm/goodsIssueOutcomesPerType.test.js test/unit/wm/goodsIssueIsolation.test.js test/unit/wm/movementConfig.test.js test/unit/wm/movementMatrixLifecycle.test.js`: **PASS (9 suites, 286 tests passed)**.
+  - `npm run lint`: Clean (0 errors, 0 warnings).
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+- **Errors / Warnings / Blockers:**
+  - Zero errors in Movement 201 architecture.
+- **Next Recommended Action:**
+  - All 5 warehouse movements (201, 241, 261, 301, 311) deep audits complete. Present consolidated matrix and solicit user alignment on RFC pipeline reversal implementation.
