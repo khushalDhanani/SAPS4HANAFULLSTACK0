@@ -5,6 +5,19 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **LIVE 241 Scan-to Audit (2026-10-19 17:45 IST): TO CONFIRMED, MIGO FAILED.** Reservation 0000530233/0001, TR W01/0001000889. User executed `/wm/scan-to/W01/TR/0001000889` in UI; reported `Transfer Order 1037368 confirmed, but MIGO Goods Movement failed: Material document number exists: missing or empty.`
+  - **Live SAP Read-Only Verification (CONFIRMED):**
+    - TO `0001037368` created and confirmed in SAP (`LTAK-KQUIT = 'X'`).
+    - Quant of 1 NOS moved from high-rack `EN1 / 1-L0001-04` to interim dynamic bin `W01 913 / 0000400001` (`LTAP`, `LQUA`).
+    - TR `0001000889` completed in SAP (`LTBK-STATU = 'E'`).
+    - Zero `MATDOC` / `MSEG` records posted; Reservation `0000530233 / 0001` remains open (`RESB-BDMNG = 1.000`, `RESB-ENMNG = 0.000`, `RESB-KZEAR = ''`).
+  - **Root Cause Diagnosed:**
+    - TO confirmation succeeded after reactive HU retry. Auto-MIGO was triggered.
+    - `BAPI_GOODSMVT_CREATE` returned empty `MATERIALDOCUMENT` with `errors.length === 0` (no `E`/`A` messages in `res.RETURN`).
+    - `ReservationProcessAdapter.postGoodsMovement` committed without checking `if (!matDoc)`, then called `verifyMaterialDocument({ materialDocument: '' })` which threw `Material document number exists: missing or empty` (L1072), completely masking whatever `res.RETURN` contained.
+    - In addition, `GOODSMVT_ITEM` sent `MOVE_TYPE: 241`, `ASSET_NO`, `PLANT`, and `MATERIAL` alongside `RESERV_NO`/`RES_ITEM`, which SAP BAPI documentation explicitly states cannot be populated when referencing a reservation.
+  - **Current State:** UI is on the result screen with `canRetryMigo = true`. No live write executed in this turn.
+
 - **LIVE 241 (2026-10-19 17:32 IST): TR CREATION PASS under explicit GO; TO CREATION UNVERIFIED.** Reservation 0000530233/0001 (241, Asset 000000400001 / sub 0000, 1120/CS02, 8000009754, 1 NOS). Fresh port-4010 server process started; `ZWM_TR_CREATE` detected with `IV_BETYP`/`IV_BENUM`. Single authorized write executed via `retryStep` LB01: TR **W01/0001000889** created in SAP and verified in LTBK (`BWLVS 241, BETYP A, BENUM 0000400001, RSNUM 0000530233, STATU ''`, dynamic destination `913/0000400001`) and LTBP (`TBPOS 0001, MATNR 8000009754, WERKS 1120, LGORT CS02, MENGA 1.000, ALTME NOS, RSPOS 0001`). Stopped immediately after TR creation. Zero TOs in LTAK. Zero MATDOC records (no MIGO). Zero stock movements. Server stopped.
 
 - **LIVE 241 (2026-10-19): Step 1 PASS; TO CREATION UNVERIFIED (16:09 IST).** Root cause closed: no app mapping defect; SAP's PP-WM quantity reduction completed the first TR without a TO because the 201 storage unit 2000019368 sits in destination bin 921/TRANSFER for CS02 (wrapper misreported it as XFELD_WRONG). Fixes committed: D18 (new TR via Retry), D19 (wrapper messages logged), D20 (completed-without-TO diagnosed), and the pre-TO guard that refuses with 409 before SAP can consume the TR. TR `W01/0001000886` open, no TO. The guard was proven live at 16:11 IST (refused with 409, TR intact, no SAP write). A real 241 TO still needs the staged CS02 stock consumed/moved (or T331 MRAUS decided in SAP) and a new explicit GO. MIGO not performed.
@@ -3413,6 +3426,32 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-19 17:55 IST — Live S/4HANA Read-Only Investigation: Movement 241 Scan-to (TO 1037368 Confirmed, MIGO Failed)
+
+- **Context & Trigger:**
+  - User reported error from `/wm/scan-to/W01/TR/0001000889`:
+    `Transfer Order 1037368 confirmed, but MIGO Goods Movement failed: Material document number exists: missing or empty.`
+- **Executed Actions & Validations (100% READ-ONLY):**
+  - Read SAP `LTAK`: `TANUM = '0001037368'`, `LGNUM = 'W01'`, `BWLVS = '241'`, `TBNUM = '0001000889'`, `KQUIT = 'X'` (TO confirmed by user action).
+  - Read SAP `LTAP`: `VLTYP = 'EN1'`, `VLPLA = '1-L0001-04'` $\rightarrow$ `NLTYP = '913'`, `NLPLA = '0000400001'`, `VSOLM = '1.000 NOS'`, `PQUIT = 'X'`.
+  - Read SAP `LTBK`: `TBNUM = '0001000889'`, `LGNUM = 'W01'`, `BWLVS = '241'`, `RSNUM = '0000530233'`, `STATU = 'E'`, `BETYP = 'A'`, `BENUM = '0000400001'`.
+  - Read SAP `LQUA`: 1 NOS sitting in interim dynamic bin `W01 / 913 / 0000400001`.
+  - Read SAP `RESB`: `RSNUM = '0000530233'`, `RSPOS = '0001'`, `BWART = '241'`, `BDMNG = '1.000'`, `ENMNG = '0.000'`, `KZEAR = ''` (open, unposted).
+  - Read SAP `RKPF`: `RSNUM = '0000530233'`, `BWART = '241'`, `ANLN1 = '000000400001'`, `ANLN2 = '0000'`.
+  - Read SAP `MARC`: Material `8000009754` in Plant `1120` has `SERNP = 'ZSN2'` (serial-managed).
+  - Read SAP `EQUI`: Serials `MACBOOK-1120-01`, `03`, `04`, `05` exist with status `I0184` (`ESTO` - In the warehouse).
+  - Safe Simulation (`BAPI_GOODSMVT_CREATE` with `TESTRUN: 'X'`): Validated that simulation returns `RETURN: []` and empty document number.
+  - Unit tests: `test/unit/wm/autoMigoPosting.test.js` (70 tests pass), `test/unit/wm/step18Mvt241.test.js` (16 tests pass).
+- **Root Cause & Technical Findings:**
+  1. The TO step (`createTOFromTR` + `confirmTO` via `L_TO_CONFIRM` with reactive HU retry) was completely successful and confirmed in SAP.
+  2. Auto-MIGO was triggered. `BAPI_GOODSMVT_CREATE` returned `res.MATERIALDOCUMENT = ''` with `errors.length === 0` (`res.RETURN` had no `E`/`A` errors).
+  3. In `ReservationProcessAdapter.js:L2628-2646`, when `errors.length === 0`, the adapter does not check `if (!matDoc)`. It called `BAPI_TRANSACTION_COMMIT` on nothing and then called `verifyMaterialDocument({ materialDocument: '' })`.
+  4. `verifyMaterialDocument:L1072` threw `Material document number exists: missing or empty`, obscuring any actual messages or reasons from `res.RETURN`.
+  5. In `ReservationProcessAdapter.js:L2545-2561`, `postGoodsMovement` passes redundant/conflicting fields (`MOVE_TYPE: 241`, `ASSET_NO`, `PLANT`, `MATERIAL`) alongside `RESERV_NO`/`RES_ITEM`, which SAP BAPI documentation explicitly prohibits when posting with reference to a reservation.
+- **Next Steps:**
+  - Update `ReservationProcessAdapter.postGoodsMovement` to properly validate `if (!matDoc)` before commit, capture all messages from `res.RETURN` (warnings, info, return codes), and clean up redundant reservation item fields.
+  - Perform live MIGO retry for Reservation `0000530233 / 0001` only upon explicit written authorization.
 
 ### 2026-10-19 10:55 IST — Live SAP S/4HANA (Client 220): MVT 261 POST + 262 Reversal End-to-End Execution (PASS)
 
