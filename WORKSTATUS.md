@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 7.10 regression (2026-10-19, 16:50 IST):** final create path audited for 201/241/261/301/311 → all PASS at mock level (`npm test`: 177 suites passed, 1 skipped, 3466 tests passed, 0 failed; lint, cds compile, ui5lint clean). Remaining: D5 remainder, D7, D9, D13, D15–D17; live SAP re-proof of Steps 7.2–7.9 pending. Docs only, not committed.
+
 - **Step 7.9 create UI (2026-10-19, 16:20 IST):** `onSave` dialog now follows the backend stage (02 success, 11 warning with LB01 retry path, 01 information, later statuses described by status, never "Success" for a bare BAPI success); backend errors that name a reservation offer "Open reservation N"; retryable statuses flagged in the detail header. UI suites 73/73 PASS, ui5lint clean. Not committed.
 
 - **Step 7.8 idempotency (2026-10-19, 15:55 IST):** the reservation intent hash (canonical fields + user, numeric keys unpadded) is the sole business key for attempts; identical intent → same reservation (replay), concurrent identical → one BAPI call + 409, different quantity/batch/movement → separate reservations. New `reservationIdempotency.test.js`; 32 tests in the two idempotency/recovery suites PASS. Not committed.
@@ -11250,4 +11252,16 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Open:** OData warning messages (`req.warn`, e.g. replay notice, stock pre-check) are still not rendered by the UI; the persisted log rows on the detail page are the visible channel. The `createReservation` action (no UI caller) returns `stage: 'REPLAY' | 'IN_PROGRESS' | 'UNRESOLVED' | 'STOCK' | 'WAREHOUSE'` structurally and is unchanged.
 - **Status:** Done, not committed.
 - **Next recommended action:** D9 (remove `readTable?.mock` gating), then D5 remainder; optionally render OData `sap-messages` warnings in the create view.
+- **Assumptions:** none.
+
+### 2026-10-19 16:50 IST — Step 7.10: Full reservation-creation regression (documentation only)
+
+- **Work Session / Reason:** Regression pass over the final `/wm/reservation-entry/create` implementation (HEAD `eb02ccf`) for 201/241/261/301/311. No code changed. No SAP call made.
+- **Result:** 201 PASS, 241 PASS, 261 PASS (D5 remainder open), 301 PASS, 311 PASS — see the Step 7.10 section of `AUDIT_RESERVATION_CREATE.md` for evidence per type, remaining defects and unknowns.
+- **Validation (executed):**
+  - `npm test` → **Test Suites: 177 passed, 1 skipped, 178 total; Tests: 3466 passed, 56 skipped, 0 failed** (39 s; e2e `*.e2e.js` files are not matched by `jest.config.js`).
+  - `npm run lint` → clean. `npx cds compile db srv --to json` → OK. `npx ui5lint` (whole app) → no findings. `git diff --check` → clean. `db.sqlite-shm` / `db.sqlite-wal` restored from HEAD after the run.
+  - Not run: e2e suites, live SAP.
+- **Status:** Done, not committed (this entry and the audit section only).
+- **Next recommended action:** D5 remainder (261 adoption SLoc/quantity match), D7, D9; then a live read-only check of the new RKPF/RESB read-back and a human-authorized live create to re-prove the post-7.2 path.
 - **Assumptions:** none.

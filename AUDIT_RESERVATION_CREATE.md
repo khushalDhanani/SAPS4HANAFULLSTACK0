@@ -144,3 +144,56 @@ Coverage gaps the defects expose (all CONFIRMED by grep of the suites):
 - **Not done:** no live SAP call (no metadata, table, or BAPI check executed); e2e suites not run; no code changed.
 - **Still unknown (Not verified):** how `BAPI_RESERVATION_CREATE1` treats cross-type header fields (D4) and lower-case SLoc/plant (D11); whether CAP sanitizes the 5xx texts in this deployment (D17); what `L_TR_CREATE` does with a wrong `WarehouseNumber` (D8).
 - **Assumptions:** none beyond the tags above.
+
+---
+
+# STEP 7.10 — Full reservation-creation regression (2026-10-19 16:50 IST, HEAD `eb02ccf`, branch `feature01`)
+
+No code changed in this step. No SAP call made (jest maps `node-rfc` to a blocking mock, `test/setupEnv.js` strips SAP credentials). Live SAP behaviour is therefore **not re-proven here**; it is covered only by the mock-level contracts plus the earlier live proofs recorded in WORKSTATUS (201 `0000525278`, 301 `0000525868`, 311 `0000525877`, 241 `ASSET_NO 000000400001`, 261 `0000528768`/`0000528780`) which pre-date Steps 7.2–7.9.
+
+## Final create path (identical for all five types, CONFIRMED in `srv/wm/reservation-entry/service.js#executeReservationAndAutoTR`)
+
+UI `onSave` (PascalCase + `ClientAttemptId`) → `POST createReservationEntry` (CAP rejects unknown parameters) → `validateReservationInput` (MOVEMENT_CONFIG required/forbidden/destination/base rules) → `resolveWarehouses` (T320, supplied value validated, 311 same-warehouse) → `checkStockForReservation` (MARA/MARD/MCHB/LQUA; batch must exist; shortages = warnings) → `attemptStore.claim` (intent hash; replay / 409) → `ReservationProcessAdapter.createReservation` (CSKS/ANLA/AUFK+JEST/MARC/MARD/T320 pre-checks, config-driven `RESERVATIONHEADER`/`RESERVATIONITEMS`, `BAPI_RESERVATION_CREATE1`, `BAPI_TRANSACTION_COMMIT`, RKPF/RESB read-back) → attempt `RESERVATION_CREATED` → SLG1 + MB21 log + stock-warning rows + `ReservationTrack` (status 01, no overwrite of progressed rows) → `L_TR_CREATE` (status 02 / 11, attempt `TR_CREATED` / `TR_FAILED` on request end) → row returned → UI dialog by status → detail page (Retry for 11/12/13/90; TO via `createTOFromTR` → 03/12, confirm → 04/13, MIGO via `postMigoGoodsMovement` → 05/90).
+
+## Per movement type
+
+| Type | Result | Evidence (suites, all green in this run) |
+|---|---|---|
+| 201 | **PASS** | `reservationValidationMatrix` (CostCenter required; Asset/Order/Receiving forbidden), `reservationBapiPayload` (header `RES_DATE, MOVE_TYPE, COSTCENTER`; alnum CC unpadded), `reservationEntryService` 1c/1d/1e, `mvt201Process`, `step17Mvt201` (MB21 → TR → TO → confirm → MIGO → RESB, mock), `movementMatrixLifecycle`, `reservationCreateRecovery` (TR/TO/MIGO failure + retry). UI: `reservationEntryUi` validate 201 + error dialog case |
+| 241 | **PASS** | matrix (AssetNo + SubNumber required; CostCenter/Order/Receiving forbidden), payload (`ASSET_NO` pad12, `SUB_NUMBER` pad4), service 1c, `mvt241Process` (21 adapter cases incl. batch-managed), `step18Mvt241`, UI validate 241 incl. SubNumber |
+| 261 | **PASS** (with the open D5 remainder below) | matrix (OrderType + OrderID required; CostCenter/Asset/Receiving forbidden), payload (`ORDERID` pad12, statistical `COSTCENTER` from AUFK-KOSTV), `reservationProcess` alias test, `movement261UnifiedLifecycle` (orchestrator stages 1–7, AUFK/JEST rejections), `trToCorruptedStagingRecovery`, UI 261 save test |
+| 301 | **PASS** | matrix (ReceivingPlant ≠ Plant, ReceivingSLoc required; CostCenter/Asset/Order forbidden), payload (`MOVE_PLANT` = receiving plant, `MOVE_STLOC`), `mvt301Process` (receiving MARC/MARD/batch), `step20Mvt301`, UI validate 301 |
+| 311 | **PASS** | matrix (ReceivingSLoc ≠ SLoc, ReceivingPlant must equal Plant), payload (`MOVE_PLANT` = plant, lower-case keys normalized), service 1d (cross-warehouse 400), `mvt311Process`, `step19Mvt311`, `reservationCreateRecovery` + `reservationIdempotency` (all built on a 311 payload), UI 311 save + status-11 + error cases |
+
+No FAIL. Therefore no new defect/file/function/test entries.
+
+## TEST RESULTS (executed, read-only)
+
+- `npm test` (= `jest --runInBand`, unit + integration; e2e files are `*.e2e.js` and not matched by `jest.config.js`): **Test Suites: 177 passed, 1 skipped, 178 total; Tests: 3466 passed, 56 skipped, 0 failed** (39 s). The skipped suite is a live-SAP-gated one (name not captured by the filtered log).
+- `npm run lint` (eslint .): clean. `npx cds compile db srv --to json`: OK. `npx ui5lint` (app/fiori-app, whole app): no findings. `git diff --check`: clean.
+- Reservation unit suites (`reservationEntryService`, `reservationEntryUi`, `reservationProcess`, `reservationTrack`, `reservationBapiPayload`, `reservationValidationMatrix`, `reservationStockPrecheck`, `reservationCreateRecovery`, `reservationIdempotency`, `reservationMonitorRetry`), movement-specific suites (`mvt201/241/301/311Process`, `step17–20`, `movement261UnifiedLifecycle`, `movementMatrixLifecycle`, `movementConfig`), integration (`test/integration/wm/goodsIssue201PostReversal.test.js`, adapter-mocked) and concurrency/idempotency suites all ran inside `npm test` and passed.
+- Not run: e2e (`test/e2e/wm/verifyMvt*.e2e.js`, `verifyHardeningUI.e2e.js`; need a running server and browser), any live SAP read or write.
+
+## CODE CHANGES (Step 7 series, all committed on `feature01`)
+
+`c61b726` D1 role restriction · `335cce2` canonical contract (7.2) · `e2307b7` config-driven validation (7.3) · `01b5750` BAPI mapping + RKPF/RESB read-back (7.4) · `c13187a` T320 warehouse determination (7.5) · `d625cf1` stock pre-check (7.6) · `f378ed9` attempt log / recovery (7.7) · `fd0fa40` intent-hash idempotency (7.8) · `eb02ccf` stage-aware UI (7.9). Step 7.10: documentation only.
+
+## REMAINING DEFECTS (from the 7.1 list, still present on HEAD)
+
+- **D5 remainder (P1):** 261 M7 126 adoption (`ReservationProcessAdapter.js#createReservation`, `isOrderCatRestriction` branch) still selects the first open RESB component row by AUFNR+MATNR+WERKS without matching the requested SLoc or capping the quantity, and reports it as created; the tracking overwrite part is fixed.
+- **D7 (P2):** `'KHUSHAL'` fallback for `CreatedByUser` (`service.js` lines 244 and 646), `bukrs = '1000'` / `plant = '1120'` defaults in `validateAsset`, hard-coded master-data defaults in the create controller.
+- **D9 (P2):** `readTable?.mock` gating in the adapter (lines 111, 201, 1152, 1159, 1275, 1591, 1600, 2406, 2422, 2444) still hides not-found branches from tests.
+- **D13 (P3):** `ReservationDate` is populated only when the read-back succeeds; the UI never sends it.
+- **D15 (P3):** batch regex at creation (alphanumeric) is stricter than `sapKey('batch')` used on posting paths.
+- **D16, D17 (P3):** duplicate MARD read for 301; redundant `@assert.unique`; 5xx message sanitization in production **Not verified**.
+- UI: OData warning messages (replay notice, stock pre-check) are not rendered; only the persisted log rows show them.
+- Out of scope but noted: `executeReservationWarehouseFlow` / `postMigoGoodsMovement` still declare camelCase parameter variants; `createTOFromTR` / `confirmTransferOrder` accept a supplied warehouse without a T320 check (TR/TO lookup fails instead).
+
+## REMAINING UNKNOWNs (Not verified against SAP)
+
+- `RFC_READ_TABLE RKPF/RESB` visibility immediately after `BAPI_TRANSACTION_COMMIT WAIT='X'` (the create succeeds with `sapVerified:false` if not).
+- `BAPI_RESERVATION_CREATE1` acceptance of `COSTCENTER` with alphanumeric values and of lower-case keys is now prevented by normalization, but the BAPI structure `BAPI2093_RES_HEAD` itself was never read from SAP metadata in this series; field names rest on the earlier live RKPF proofs.
+- `req.on('done')` completing before the HTTP response is sent (tests poll up to 2 s).
+- MARM unit conversion is not implemented; stock comparison is skipped when the entry unit differs from `MARA-MEINS`.
+- Whether `L_TR_CREATE` rejects or accepts a wrong warehouse on the TO/confirm actions.
+- Live behaviour of the whole post-7.2 create path (every change in Steps 7.2–7.9 is mock-verified only).
