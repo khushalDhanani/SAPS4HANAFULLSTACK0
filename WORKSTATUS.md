@@ -5,6 +5,55 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **MVT 241 — Live SAP Customizing & Staging/Real Movement Behavior Verification (Item 14) (2026-10-17, 18:10 IST):** Complete.
+  - **Item 14 (Verify 241 WM customizing: BETYP = A, NLTYP = 913, and configured WM staging/real movement behavior):**
+    - Executed live READ-ONLY RFC queries on SAP S/4HANA (Client 220):
+      1. **Table T333 (Warehouse Movement Types):**
+         - Verified live in warehouse `W01` (and all warehouses: `001`, `MLO`, `W01`..`W26`):
+           `BWLVS = '241'`, `BETYP = 'A'`, `NLTYP = '913'`, `NLPLA = ''`, `NKDYN = 'X'`, `TRART = 'A'`, `TBMAN = 'X'`, `DRUKZ = '02'`.
+         - Result: CONFIRMED. Application assumption matches SAP customizing 100%.
+      2. **Table T301T (Storage Type Text):**
+         - Verified `LGNUM = 'W01'`, `LGTYP = '913'` -> German: `"WA-Zone Anlage"`, English: `"GI Area - Fixed Assets"`.
+      3. **Table T321 & T156S (IM-WM Interface):**
+         - Verified `T321`: `LGNUM = '***'`, `BWLVS = '241'`, `RBLVS = '241'`, `BSLVS = ''`, `SOBKZ = ''` and `'K'`.
+         - Verified `T156S`: `BWART = '241'` maps to `RBLVS = '241'`.
+      4. **Asset BENUM Dynamic Bin Mapping Rule:**
+         - Asset number `ANLN1` (`CHAR 12`) maps to `BENUM` (`CHAR 10`) by taking the rightmost 10 digits (`padStart(10, '0').slice(-10)`).
+         - Verified live from `LTBK` TR `0001000761` (`BWLVS = '241'`, `BETYP = 'A'`, `BENUM = '0000400001'`, `NLTYP = '913'`, `NLPLA = '0000400001'`) and `LTAP` TO `0001037272` (`NLTYP = '913'`, `NLPLA = '0000400001'`). Dynamic destination bin is created directly from asset `ANLN1` `000000400001`.
+      5. **Configured WM Staging vs Real Movement Behavior:**
+         - Mode 1 (`WM_TR_REAL_MOVEMENT = true`): Uses real WM movement `241` with `BETYP = 'A'` and Asset `BENUM`. Stock stages directly to `913/<Asset>`. When MIGO 241 posts, IM negative quant in `913/<Asset>` clears the staged quant, leaving 0 stranded stock and 0 double-pick discrepancy.
+         - Mode 2 (`WM_TR_REAL_MOVEMENT = false`, default): Uses staging WM movement `311` with `BETYP = ''` and `NLTYP = '921'` (`TRANSFER`). Decouples requirement validation when asset number is not provided, but leaves an interim quant in `921` requiring separate clearing.
+         - Conclusion: Real Movement (`WM_TR_REAL_MOVEMENT = true`) is the exact, proven alignment with SAP standard customizing.
+  - **Validation & Test Results:**
+    - Live RFC Table Queries: `T333`, `T301T`, `T321`, `T156S`, `LTBK`, `LTAP`, `LQUA` → **CONFIRMED MATCH (READ-ONLY)**.
+    - `npx jest test/unit/wm/step18Mvt241.test.js test/unit/wm/mvt241Process.test.js`: **PASS (36/36 tests passed, 100% green)**.
+    - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+    - `git diff --check`: 0 whitespace errors.
+
+- **MVT 261 — Reconciliation Test Suite (Item 12) (2026-10-17, 18:05 IST):** Complete.
+  - **Item 12 (Add 261 reconciliation tests):**
+    - Implemented dedicated, comprehensive reconciliation test suite in `test/unit/wm/mvt261Reconciliation.test.js`:
+      1. **SAP posted → DB = posted:**
+         - Proved: when S/4HANA successfully returns material document `4900050046`, the attempt record transitions from `sending` to `posted` with `MaterialDocument: '4900050046'`, `MaterialDocYear: '2026'`, `ResolvedAt` populated, and `hasOpenAttemptForReservation` resolves to `false`.
+      2. **SAP rejected → DB = rejected:**
+         - Proved: when S/4HANA rejects with 422 (staging shortfall, locked order, etc.), attempt record transitions to `rejected` with `LastError` populated and `ResolvedAt` set. `hasOpenAttemptForReservation` is `false`. Subsequent post reclaims the idempotency slot with next generation suffix.
+      3. **SAP outcome unknown → DB = unconfirmed:**
+         - Proved: when S/4HANA call fails with network socket drop / timeout (`ETIMEDOUT`), HTTP 502 Bad Gateway, or HTTP 504 Gateway Timeout, attempt record transitions to `unconfirmed` (NOT `rejected`). `ResolvedAt` remains `null`. `hasOpenAttemptForReservation` returns `true`, and immediate client retries are blocked with HTTP 409 (`already in progress`).
+      4. **SAP posted + status persistence failure → reconciliation detects it:**
+         - Proved: when S/4HANA creates document `4900050046`, but immediate DB status update fails, a critical reconciliation alert is logged, the caller receives the document, and the DB attempt remains in `sending`. When background reconciliation (`recheck(adapter, now)`) runs past `recheckAgeMs` (3 min), `adapter.findPostedGoodsIssueByReference` discovers document `4900050046` in SAP, reconciles the database attempt record to `Status: 'posted'`, clears `LastError`, sets `ResolvedAt`, and resolves open reservation attempts.
+      5. **Advanced Reconciliation Scenarios:**
+         - `reconfirmUnconfirmed`: readBackDocument verifies SAP MATDOC persistence and promotes unconfirmed attempts to `posted`.
+         - `not_posted` transition: after 15 min (`notPostedAgeMs`), unconfirmed attempts without an SAP document or delivery transition to `not_posted`.
+         - Outbound delivery (`L9/514`) reconciliation: transitions stranded attempts to `delivery_created`.
+         - Added `findPostedGoodsIssueByReference`, `readBackDocument`, and `findDeliveryByReference` to `srv/integration/s4hana/wm/Mvt261Adapter.js`.
+  - **Validation & Test Results:**
+    - `test/unit/wm/mvt261Reconciliation.test.js`: 12/12 tests passed (100% green).
+    - `npx jest test/unit/wm/*261* test/unit/wm/open261Controller.test.js`: 9 suites passed, 193/193 tests passed (100% green).
+    - `npx jest test/unit/wm`: 80 active test suites passed, 1,950 passed, 56 skipped (live-only), 0 failed (100% green).
+    - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+    - `npx cds compile srv/`: Clean compilation, exit 0.
+    - `git diff --check`: 0 whitespace errors.
+
 - **MVT 261 — Concurrency & Edge Case Regression Suite (Item 11) (2026-10-17, 18:00 IST):** Complete.
   - **Item 11 (Add 261 concurrency regression tests):**
     - Implemented dedicated, exhaustive regression test suite in `test/unit/wm/mvt261Concurrency.test.js` covering all concurrency, network failure, and idempotency edge cases:
@@ -10479,5 +10528,80 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `git diff --check`: 0 whitespace errors.
 - **Errors / Warnings / Blockers:**
   - Zero errors in Movement 261 Item 11 changes.
+- **Next Recommended Action:**
+  - Ready for user review / commit on branch `feature01`.
+
+### 2026-10-17 18:05 IST — MVT 261: Reconciliation Test Suite & Native 261 Reconciliation Adapter Methods (Item 12)
+
+- **Work Session / Reason:** Implement P1 item 12 for Movement Type 261: Add 261 reconciliation tests verifying:
+  1. SAP posted → DB = posted
+  2. SAP rejected → DB = rejected
+  3. SAP outcome unknown → DB = unconfirmed
+  4. SAP posted + status persistence failure → reconciliation detects it
+- **Behavior Delivered & Tested:**
+  - In `srv/integration/s4hana/wm/Mvt261Adapter.js`:
+    - Added `findPostedGoodsIssueByReference(referenceDocument, movementType = '261', postingDate)`: queries `API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader?$filter=ReferenceDocument eq '<ref>'` expanding `to_MaterialDocumentItem`, matching movement type 261.
+    - Added `readBackDocument(materialDocument, materialDocYear)`: queries SAP `MATDOC` via RFC `readTable`, falling back to OData `A_MaterialDocumentHeader` to confirm persistence.
+    - Added `findDeliveryByReference(referenceDocument)`: checks `LIKP` where `LIFEX = '<ref>'` to detect deliveries created under `L9/514`.
+  - In `test/unit/wm/mvt261Reconciliation.test.js`:
+    - 1. **SAP posted → DB = posted:**
+       - Verified that when SAP creates a material document, the attempt record transitions from `sending` to `posted` with `MaterialDocument: '4900050046'`, `MaterialDocYear: '2026'`, `ResolvedAt` populated, and open attempt cleared.
+    - 2. **SAP rejected → DB = rejected:**
+       - Verified that when SAP rejects with 422 business error, the attempt transitions to `rejected` with `LastError` captured and `ResolvedAt` set. Verified that the idempotency slot can be reclaimed once the root cause is resolved.
+    - 3. **SAP outcome unknown → DB = unconfirmed:**
+       - Verified that socket hangup / timeout, 502 Bad Gateway, and 504 Gateway Timeout transition attempt to `unconfirmed` (NOT `rejected`), keep `ResolvedAt` null, and block duplicate retries with HTTP 409 (`already in progress`).
+    - 4. **SAP posted + status persistence failure → reconciliation detects it:**
+       - Verified that when SAP POST succeeds but immediate DB status update fails, a critical reconciliation error is logged (`Critical reconciliation error: failed to persist attempt status 'posted'`), and the attempt stays in `sending`.
+       - Verified that when background reconciliation (`GoodsIssueAttemptStore.recheck(adapter, now)`) executes, it invokes `adapter.findPostedGoodsIssueByReference`, discovers the posted SAP document, reconciles the database status to `posted` with `MaterialDocument: '4900050046'`, and increments `summary.Posted`.
+    - 5. **Additional Reconciliation Paths:**
+       - Tested `reconfirmUnconfirmed` promoting unconfirmed documents to `posted` upon verified read-back.
+       - Tested `not_posted` transition after 15 minutes (`notPostedAgeMs`) when no document exists in SAP.
+       - Tested outbound delivery (`L9/514`) reconciliation moving status to `delivery_created`.
+       - Tested `Mvt261Adapter` unit methods for OData header querying and RFC read-back.
+- **Files Modified / Added:**
+  - `WORKSTATUS.md`
+  - `srv/integration/s4hana/wm/Mvt261Adapter.js`
+  - `test/unit/wm/mvt261Reconciliation.test.js` (NEW)
+- **Validation Results:**
+  - `test/unit/wm/mvt261Reconciliation.test.js`: 12/12 tests passed (100% green).
+  - `npx jest test/unit/wm/*261* test/unit/wm/open261Controller.test.js`: 9 suites passed, 193/193 tests passed (100% green).
+  - `npx jest test/unit/wm`: 80 active test suites passed, 1,950 passed, 56 skipped (live-only), 0 failed (100% green).
+  - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+  - `npx cds compile srv/`: Clean compilation, exit 0.
+  - `git diff --check`: 0 whitespace errors.
+- **Errors / Warnings / Blockers:**
+  - Zero errors in Movement 261 Item 12 changes.
+- **Next Recommended Action:**
+  - Ready for user review / commit on branch `feature01`.
+
+### 2026-10-17 18:10 IST — MVT 241: Live SAP Customizing & Staging/Real Movement Behavior Verification (Item 14)
+
+- **Work Session / Reason:** Implement item 14: Confirm actual SAP customizing matches application assumptions:
+  - Movement 241
+  - BETYP = A
+  - NLTYP = 913
+  - and the configured WM staging / real movement behavior.
+- **Evidence Gathered & Live SAP Proof (READ-ONLY):**
+  - Queried live SAP S/4HANA (Client 220) via `RfcClient.readTable`:
+    1. `T333` for `BWLVS = '241'`: Across all warehouses (`W01`, `001`, `MLO`, `W02`..`W26`), `BWLVS = '241'`, `BETYP = 'A'`, `NLTYP = '913'`, `NLPLA = ''`, `NKDYN = 'X'`, `TRART = 'A'`, `TBMAN = 'X'`, `DRUKZ = '02'`. Matches application assumptions 100%.
+    2. `T301T` for `LGTYP = '913'`: Storage type 913 is `"GI Area - Fixed Assets"` (`"WA-Zone Anlage"`).
+    3. `T321` & `T156S`: `T156S-BWART = '241'` links to `RBLVS = '241'`; `T321` links `RBLVS = '241'` to `BWLVS = '241'` (`LGNUM = '***'`).
+    4. Asset `BENUM` Dynamic Coordinate: Live `LTBK` row `0001000761` proves `BENUM = '0000400001'` maps to `NLPLA = '0000400001'`, confirming the rightmost 10 digits derivation from `ANLN1` `000000400001`.
+    5. Confirmed WM Staging vs Real Movement Behavior:
+       - Real Movement (`WM_TR_REAL_MOVEMENT = true`): TR creates `BWLVS 241`, `BETYP A`, `BENUM <Asset>`, moving stock to `913/<Asset>`, which MIGO 241 directly offsets and clears.
+       - Staging Movement (`WM_TR_REAL_MOVEMENT = false`): TR creates `BWLVS 311`, moving stock to `921/TRANSFER`, which bypasses dynamic requirement validation if `BENUM` is missing, but leaves quant in `921` unconsumed by standard MIGO.
+- **Files Modified / Referenced:**
+  - `WORKSTATUS.md`
+  - `srv/common/movementConfig.js`
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`
+  - `docs/abap/system-metadata.md`
+  - `docs/abap/flow-decision.md`
+- **Validation Results:**
+  - Live RFC Table Queries: `T333`, `T301T`, `T321`, `T156S`, `LTBK`, `LTAP`, `LQUA` → **CONFIRMED MATCH (READ-ONLY)**.
+  - `npx jest test/unit/wm/step18Mvt241.test.js test/unit/wm/mvt241Process.test.js`: 36/36 tests passed (100% green).
+  - `npm run lint`: ESLint clean, 0 errors, 0 warnings.
+  - `git diff --check`: 0 whitespace errors.
+- **Errors / Warnings / Blockers:**
+  - Zero errors or customizing mismatches. All live SAP findings match application assumptions.
 - **Next Recommended Action:**
   - Ready for user review / commit on branch `feature01`.

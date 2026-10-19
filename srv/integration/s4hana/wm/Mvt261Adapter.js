@@ -1144,6 +1144,134 @@ class Mvt261Adapter {
   }
 
   /**
+   * Find a posted 261 material document by ReferenceDocument in S/4HANA (read-only).
+   * Queries API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader with $filter=ReferenceDocument eq '...'
+   * and expands to_MaterialDocumentItem to confirm GoodsMovementType matches.
+   *
+   * @param {string} referenceDocument
+   * @param {string} [movementType='261']
+   * @param {string|Date} [postingDate]
+   * @returns {Promise<{ MaterialDocument: string, MaterialDocumentYear: string, ReferenceDocument: string }|null>}
+   */
+  async findPostedGoodsIssueByReference(referenceDocument, movementType = '261', postingDate) {
+    const ref = String(referenceDocument || '').trim().replace(/'/g, '');
+    if (!ref) return null;
+    let filter = `ReferenceDocument eq '${ref}'`;
+    if (postingDate) {
+      const day = formatDateToYMD(postingDate);
+      if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
+        filter += ` and PostingDate eq datetime'${day}T00:00:00'`;
+      }
+    }
+    try {
+      const query = `$format=json&$expand=to_MaterialDocumentItem&$filter=${encodeURIComponent(filter)}`;
+      const { data } = await this.client.get(`${MATDOC_API}/A_MaterialDocumentHeader`, { query });
+      const hits = data?.d?.results || (Array.isArray(data?.d) ? data.d : (Array.isArray(data) ? data : []));
+      const originals = hits.filter((h) =>
+        (h.to_MaterialDocumentItem?.results || []).some((i) => i.GoodsMovementType === movementType)
+      ).sort((a, b) => String(a.MaterialDocument).localeCompare(String(b.MaterialDocument)));
+      if (!originals.length) return null;
+      return {
+        MaterialDocument: originals[0].MaterialDocument,
+        MaterialDocumentYear: originals[0].MaterialDocumentYear,
+        ReferenceDocument: ref
+      };
+    } catch (e) {
+      LOG.warn(`findPostedGoodsIssueByReference failed for ${ref}: ${e.message}`);
+      throw httpError(e.status || 502, `findPostedGoodsIssueByReference failed: ${e.message}`);
+    }
+  }
+
+  /**
+   * Read a material document back from SAP to confirm persistence.
+   *
+   * @param {string} materialDocument
+   * @param {string} [materialDocYear]
+   * @returns {Promise<{ MaterialDocument: string, MaterialDocYear: string, Confirmed: boolean, Status: string }>}
+   */
+  async readBackDocument(materialDocument, materialDocYear) {
+    const doc = String(materialDocument || '').trim();
+    const year = String(materialDocYear || '').trim();
+    if (!doc) return null;
+
+    // 1. Primary: RFC readTable on MATDOC if RFC client is available
+    if (this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const where = [`MBLNR = '${doc}'`];
+        if (year) where.push(`AND MJAHR = '${year}'`);
+        const rows = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'BUDAT'], where, 1);
+        if (Array.isArray(rows) && rows.length > 0) {
+          const row = rows[0];
+          let confirmedYear = String(row.MJAHR || '').trim();
+          if (!confirmedYear && row.BUDAT) {
+            confirmedYear = String(row.BUDAT).trim().slice(0, 4);
+          }
+          return {
+            MaterialDocument: String(row.MBLNR).trim(),
+            MaterialDocYear: confirmedYear || year,
+            Confirmed: true,
+            Status: 'confirmed'
+          };
+        }
+      } catch (err) {
+        LOG.warn(`RFC readTable MATDOC readback for ${doc}/${year} failed: ${err.message}`);
+      }
+    }
+
+    // 2. Fallback: OData A_MaterialDocumentHeader GET
+    try {
+      const docPath = year
+        ? `${MATDOC_API}/A_MaterialDocumentHeader(MaterialDocumentYear='${year}',MaterialDocument='${doc}')`
+        : `${MATDOC_API}/A_MaterialDocumentHeader?$filter=MaterialDocument eq '${doc}'&$top=1&$format=json`;
+      const { data } = await this.client.get(docPath, { query: '$format=json' });
+      const header = data?.d?.results?.[0] || data?.d || data;
+      if (header && (header.MaterialDocument || header.MaterialDocumentYear)) {
+        let confirmedYear = String(header.MaterialDocumentYear || '').trim();
+        if (!confirmedYear && header.PostingDate) {
+          const m = String(header.PostingDate).match(/\d{4}/);
+          if (m) confirmedYear = m[0];
+        }
+        return {
+          MaterialDocument: String(header.MaterialDocument || doc).trim(),
+          MaterialDocYear: confirmedYear || year,
+          Confirmed: true,
+          Status: 'confirmed'
+        };
+      }
+    } catch (odataErr) {
+      LOG.warn(`OData readback for ${doc}/${year} failed: ${odataErr.message}`);
+    }
+
+    return {
+      MaterialDocument: doc,
+      MaterialDocYear: year,
+      Confirmed: false,
+      Status: 'unconfirmed'
+    };
+  }
+
+  /**
+   * Outbound delivery carrying a posting reference in LIKP-LIFEX (read-only), or null.
+   *
+   * @param {string} referenceDocument
+   * @returns {Promise<{ DeliveryNumber: string, ExternalId: string }|null>}
+   */
+  async findDeliveryByReference(referenceDocument) {
+    if (!this.rfc || typeof this.rfc.readTable !== 'function') return null;
+    const ref = String(referenceDocument || '').trim();
+    if (!ref) return null;
+    try {
+      const rows = await this.rfc.readTable('LIKP', ['VBELN', 'LIFEX'], [`LIFEX = '${ref}'`], 1);
+      if (Array.isArray(rows) && rows.length > 0) {
+        return { DeliveryNumber: rows[0].VBELN, ExternalId: rows[0].LIFEX };
+      }
+    } catch (e) {
+      LOG.warn(`findDeliveryByReference for ${ref} failed: ${e.message}`);
+    }
+    return null;
+  }
+
+  /**
    * Authoritative Movement 261 stock-eligibility calculation.
    * Delegates to canonical calculateMovement261StockEligibility.
    */
