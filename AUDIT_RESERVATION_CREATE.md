@@ -197,3 +197,11 @@ No FAIL. Therefore no new defect/file/function/test entries.
 - MARM unit conversion is not implemented; stock comparison is skipped when the entry unit differs from `MARA-MEINS`.
 - Whether `L_TR_CREATE` rejects or accepts a wrong warehouse on the TO/confirm actions.
 - Live behaviour of the whole post-7.2 create path (every change in Steps 7.2–7.9 is mock-verified only).
+
+
+---
+
+# LIVE 201 — Step 1 (2026-10-19 19:40 IST)
+
+**LIVE 201 RESULT: PASS (reservation + auto-TR); TO/confirm/final status UNVERIFIED (Step 2 not authorized yet).**
+Reservation `0000530229/0001`, TR `W01/0001000882`; full evidence in the WORKSTATUS entry of the same timestamp. Live-found defects: cross-warehouse TO lookup in `fetchSapReservation` (fixed), fabricated SLG1 `LOG_` handle in `writeApplicationLog` (fixed), replay shown as "created" (open, P3).

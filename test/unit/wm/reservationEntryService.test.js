@@ -96,6 +96,27 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
     });
   });
 
+  describe('1g. Live 201 proof follow-ups (2026-10-19): TO lookup scoped to the TR warehouse', () => {
+    test('getReservationDetail: a TO with the same TR number in another warehouse is NOT reported', async () => {
+      // SAP facts from the live run: TR 0001000882 exists in W01 (ours, no TO yet) and in W13 (TO 0001011029).
+      t320Spy.mockImplementation(async (table, _fields, where) => {
+        const w = (where || []).join(' ');
+        if (table === 'RKPF') return [{ BWART: '201', KOSTL: '1011201301', ANLN1: '', ANLN2: '', UMWRK: '', UMLGO: '', USNAM: 'KHUSHAL', AUFNR: '' }];
+        if (table === 'RESB') return [{ MATNR: '000000008000009754', WERKS: '1120', LGORT: 'CS02', BDMNG: '1.000', ENMNG: '0.000', MEINS: 'NOS', CHARG: '', KZEAR: '', AUFNR: '' }];
+        if (table === 'MAKT') return [{ MAKTX: 'Apple Macbook Pro 16", M5' }];
+        if (table === 'LTBK') return [{ LGNUM: 'W01', TBNUM: '0001000882', STATU: '' }];
+        if (table === 'LTAK') return w.includes("LGNUM = 'W01'") ? [] : [{ LGNUM: 'W13', TANUM: '0001011029' }];
+        if (table === 'T320') return [{ LGNUM: 'W01' }];
+        return [];
+      });
+      const { data } = await GET("/odata/v4/reservation-entry/getReservationDetail(ReservationNo='530229',ReservationItem='0001')", authClerk);
+      expect(data).toMatchObject({ ReservationNo: '530229', TransferRequirement: '1000882', TransferOrder: '', Status_code: '02', WarehouseNumber: 'W01' });
+      const ltakCalls = t320Spy.mock.calls.filter((c) => c[0] === 'LTAK');
+      expect(ltakCalls).toHaveLength(1);
+      expect(ltakCalls[0][2]).toEqual(["LGNUM = 'W01'", "AND TBNUM = '0001000882'"]);
+    });
+  });
+
   describe('1f. SAP infrastructure errors are shown user-safe (browser audit follow-up)', () => {
     const body = { MovementType: '311', Plant: '1120', StorageLocation: 'CS01', ReceivingStorageLocation: 'ST02', Material: '1000000045', Quantity: 1, Unit: 'KG' };
     const infra = (msg) => Object.assign(new Error(msg), { status: 503 });

@@ -108,6 +108,14 @@ describe('Step 7.4: exact BAPI_RESERVATION_CREATE1 payload per movement (MOVEMEN
     expect(bapiArgs(rfc).RESERVATIONHEADER).toEqual({ RES_DATE: '20261019', MOVE_TYPE: '261', ORDERID: '000000001011', COSTCENTER: '1011201301' });
   });
 
+  test('writeApplicationLog: when BAL_LOG_CREATE cannot be called remotely the handle is empty, never fabricated (live 201 proof)', async () => {
+    const rfc = makeRfc();
+    rfc.call.mockReset().mockRejectedValue(new Error('Function module "BAL_LOG_CREATE" cannot be called \'remotely\'.'));
+    const res = await new ReservationProcessAdapter({ rfc }).writeApplicationLog({ object: 'ZWM_RES', subObject: 'TRACK', reservationNo: '0000530229', reservationItem: '0001', step: 'MB21', messageText: 'x' });
+    expect(res.logHandle).toBe('');
+    expect(res.logHandle).not.toMatch(/^LOG_/);
+  });
+
   describe('RKPF/RESB read-back after commit (audit D2)', () => {
     test('no row for this RSNUM: create still succeeds, sapVerified=false, item defaults to 0001', async () => {
       const rfc = makeRfc({ RKPF: [{ RSNUM: '0000999999', BWART: '201' }], RESB: [] });

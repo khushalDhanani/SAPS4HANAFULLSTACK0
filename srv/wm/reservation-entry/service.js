@@ -466,21 +466,24 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
         let existingTr = '';
         let allTr = '';
+        let trWarehouse = ''; // TR numbers are unique per warehouse only: every LTAK/LTAP lookup needs LGNUM too
         try {
           const ltbk = await adapter.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'STATU'], [`RSNUM = '${s4Rsnum}'`], 1);
           if (ltbk && ltbk.length > 0) {
+            const liveTr = ltbk.find((r) => r.TBNUM && r.STATU !== 'E') || ltbk[0];
             allTr = ltbk[0].TBNUM || '';
-            existingTr = ltbk.find((r) => r.TBNUM && r.STATU !== 'E')?.TBNUM || allTr;
+            existingTr = liveTr.TBNUM || allTr;
+            trWarehouse = String(liveTr.LGNUM || ltbk[0].LGNUM || '').trim();
           }
         } catch (_trErr) {}
 
         let existingTo = '';
         if (!allTr) {
           try {
-            const track = (await SELECT.one.from(ReservationEntries).columns(['TransferRequirement', 'TransferOrder']).where({
+            const track = (await SELECT.one.from(ReservationEntries).columns(['TransferRequirement', 'TransferOrder', 'WarehouseNumber']).where({
               ReservationNo: s4Rsnum,
               ReservationItem: s4Rspos
-            })) || (await SELECT.one.from(ReservationEntries).columns(['TransferRequirement', 'TransferOrder']).where({
+            })) || (await SELECT.one.from(ReservationEntries).columns(['TransferRequirement', 'TransferOrder', 'WarehouseNumber']).where({
               ReservationNo: strip(resNo),
               ReservationItem: s4Rspos
             }));
@@ -488,6 +491,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
               if (track.TransferRequirement) {
                 allTr = track.TransferRequirement;
                 existingTr = track.TransferRequirement;
+                trWarehouse = String(track.WarehouseNumber || '').trim();
               }
               if (track.TransferOrder) {
                 existingTo = track.TransferOrder;
@@ -496,10 +500,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           } catch (_dbErr) {}
         }
 
-        if (allTr && !existingTo) {
+        // Live 201 proof 2026-10-19: TR 0001000882 exists in W01 (ours) and in W12/W13 (other warehouses); a lookup by
+        // TBNUM alone returned W13's TO 0001011029 for our reservation. Only look up the TO inside the TR's warehouse.
+        if (allTr && !existingTo && trWarehouse) {
           try {
             const s4TrPad = String(allTr).padStart(10, '0');
-            const ltak = await adapter.rfc.readTable('LTAK', ['LGNUM', 'TANUM'], [`TBNUM = '${s4TrPad}'`], 1);
+            const ltak = await adapter.rfc.readTable('LTAK', ['LGNUM', 'TANUM'], [`LGNUM = '${sapKey(trWarehouse, 'lgnum')}'`, `AND TBNUM = '${s4TrPad}'`], 1);
             existingTo = (ltak && ltak[0]?.TANUM) || '';
           } catch (_toErr) {}
         }

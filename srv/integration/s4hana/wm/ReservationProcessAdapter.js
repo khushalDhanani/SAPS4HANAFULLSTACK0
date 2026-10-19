@@ -2751,12 +2751,8 @@ class ReservationProcessAdapter {
         LOG.warn('BAL_LOG execution note:', err.message);
       }
 
-      // Generate fallback standard 22-char handle if not assigned by SAP
-      if (!logHandle) {
-        const ts = Date.now().toString(36).toUpperCase();
-        const rand = Math.random().toString(36).substring(2, 10).toUpperCase();
-        logHandle = `LOG_${ts}_${rand}`.padEnd(22, '0').substring(0, 22);
-      }
+      // No SLG1 log could be written (e.g. BAL_LOG_CREATE is not remote-enabled): the handle stays '' so that the
+      // tracking row never carries a handle that does not exist in SAP (live 201 proof 2026-10-19, audit D10).
 
       return {
         success: true,
