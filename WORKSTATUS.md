@@ -11467,3 +11467,11 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Conclusion:** in the system/client the app connects to, no posting that removes SU 2000019368 from 921/TRANSFER exists (no TO, no AUSME, no material document). `FVMNG` is still 1.000 ≥ 1.000. **Prerequisite A still NOT met → UNVERIFIED; no Retry, no SAP write.**
 - **EXACT next action (user):** provide the document number of the move (TO number for an LT01/LT09/LT10 move, or material document for a goods issue/transfer) so it can be looked up READ-ONLY; if it was posted elsewhere, post it in the system/client whose connection parameters are in `.env.local` (`S4_RFC_ASHOST` / `S4_RFC_SYSNR` / `S4_RFC_CLIENT`, values not shown here).
 - **Assumptions:** none.
+
+### 2026-10-20 01:50 IST — Storage unit 2000019368: direct READ-ONLY row read (user asked for the document SAP exposes)
+
+- **`LQUA` (quant 0001045219):** `LGNUM W01, LGTYP 921, LGPLA TRANSFER, MATNR 000000008000009754, WERKS 1120, LGORT CS02, LETYP E10, GESME 1.000, VERME 1.000, MEINS NOS, KZHUQ X`; movement references on the row: **`BTANR 0001037367 / BTAPS 0001`** (last TO = the 201 TO), `BDATU/BZEIT 20261019 143533`, `EDATU/EZEIT 20261019 143533`, `WENUM 0001036662 / WEPOS 0001` (goods-receipt TO of 2026-09-28), `WDATU 20260928`. `LEIN` (SU header): `LGTYP 921, LGPLA TRANSFER, ANZQU 1, BTANR 0001037367`.
+- **TO history of the SU (`LTAP` by VLENR and by NLENR, identical):** 0001036662 (902 → OH1/ONHOLD, 2026-09-28), 0001037357 (OH1 → EN1/1-L0001-04, 2026-10-18), 0001037367 (EN1 → 921/TRANSFER, confirmed 2026-10-19 14:35:35). Nothing after it. **`LTAK W01` with `TANUM > 0001037360`:** 0001037361–0001037366 (BWLVS 999, NARESH, 2026-10-18) and 0001037367 — the highest TO number in W01 is still the 201 TO.
+- **Conclusion:** the only document SAP exposes for the SU is TO 0001037367, the placement into 921/TRANSFER. **No move out of 921/TRANSFER exists in this client** (no later TO, no open removal — `AUSME` 0, no material document). Prerequisite A still unmet → **UNVERIFIED**, no Retry, no SAP write.
+- **Next action (user):** post the move (LT09/LT10 for SU 2000019368 out of 921/TRANSFER, or the 201 goods issue) in the client the app connects to, then ask for the READ-ONLY re-check.
+- **Assumptions:** none.
