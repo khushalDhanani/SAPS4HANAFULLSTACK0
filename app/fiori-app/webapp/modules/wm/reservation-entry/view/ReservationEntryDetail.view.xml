@@ -37,6 +37,13 @@
                             text="{= ${view>/isCreate} ? ${i18n>resStatusDraft} : (${detail>/StatusText} || ${path: 'detail>/Status_code', formatter: '.formatStatusText'}) }"
                             state="{= ${view>/isCreate} ? 'Information' : (${path: 'detail>/Status_code', formatter: '.formatStatusState'}) }"
                             icon="{= ${view>/isCreate} ? 'sap-icon://create' : (${path: 'detail>/Status_code', formatter: '.formatStatusIcon'}) }" />
+                        <ObjectStatus
+                            id="headerRetryHint"
+                            text="{i18n>resStatusRetryable}"
+                            state="Warning"
+                            icon="sap-icon://refresh"
+                            class="sapUiTinyMarginBegin"
+                            visible="{= !${view>/isCreate} &amp;&amp; ${path: 'detail>/Status_code', formatter: '.formatStatusRetryable'} }" />
                     </HBox>
                 </uxap:heading>
 

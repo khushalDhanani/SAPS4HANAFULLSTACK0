@@ -19,8 +19,10 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
     const MessageToast = { show: jest.fn() };
     const MessageBox = {
         success: jest.fn((msg, opts) => { if (opts && opts.onClose) opts.onClose(); }),
+        information: jest.fn((msg, opts) => { if (opts && opts.onClose) opts.onClose(); }),
         error: jest.fn(),
-        warning: jest.fn()
+        warning: jest.fn((msg, opts) => { if (opts && opts.onClose) opts.onClose(); }),
+        Action: { CLOSE: 'CLOSE' }
     };
     const mockValueHelpService = {
         openValueHelp: jest.fn(),
@@ -303,7 +305,7 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             }));
 
             expect(MessageBox.success).toHaveBeenCalledWith(
-                expect.stringContaining('Auto-created Transfer Requirement (TR): 0000001842'),
+                'Reservation 4921 created in SAP. Transfer Requirement 1842 created.',
                 expect.any(Object)
             );
 
@@ -313,7 +315,7 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             });
         });
 
-        it('calls createReservationEntry with deferred TR (status 01), shows informative success message with note, and navigates', async () => {
+        it('calls createReservationEntry with deferred TR (status 01), shows an information (not success) dialog with the note, and navigates', async () => {
             const serviceMock = {
                 createReservationEntry: jest.fn().mockResolvedValue({
                     ReservationNo: '0000004922',
@@ -340,14 +342,73 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             await subject.onSave();
 
             expect(serviceMock.createReservationEntry).toHaveBeenCalled();
-            expect(MessageBox.success).toHaveBeenCalledWith(
-                expect.stringContaining('Note: TR deferred: restricted under SAP Note 2295840'),
+            expect(MessageBox.success).not.toHaveBeenCalled();
+            expect(MessageBox.information).toHaveBeenCalledWith(
+                'Reservation 4922 created in SAP. No Transfer Requirement yet: TR deferred: restricted under SAP Note 2295840 (use LB01 or deploy ZWM_TR_CREATE)',
                 expect.any(Object)
             );
             expect(routerMock.navTo).toHaveBeenCalledWith('wmReservationEntryDetail', {
                 ReservationNo: '0000004922',
                 ReservationItem: '0001'
             });
+        });
+
+        it('Step 7.9: status 11 (reservation created, TR failed) is a warning with the retry path, never "Success"', async () => {
+            const serviceMock = { createReservationEntry: jest.fn().mockResolvedValue({ ReservationNo: '0000004923', ReservationItem: '0001', TransferRequirement: '', Status_code: '11', ErrorStep: 'LB01', ErrorMessage: 'TR creation failed in SAP backend: no quant' }) };
+            const routerMock = { navTo: jest.fn() };
+            const subject = createDetailSubject(serviceMock, routerMock);
+            subject._oCreateModel.setData({ MovementType: '311', Plant: '1120', StorageLocation: 'CS01', Material: '1000000045', Quantity: 1, Unit: 'KG', ReceivingStorageLocation: 'ST02' });
+            await subject.onSave();
+            expect(MessageBox.success).not.toHaveBeenCalled();
+            expect(MessageBox.warning).toHaveBeenCalledWith(
+                'Reservation 4923 was created in SAP, but the Transfer Requirement was NOT created: TR creation failed in SAP backend: no quant Use Retry on the reservation page (step LB01).',
+                expect.any(Object)
+            );
+            expect(routerMock.navTo).toHaveBeenCalledWith('wmReservationEntryDetail', { ReservationNo: '0000004923', ReservationItem: '0001' });
+        });
+
+        it('Step 7.9: a replayed request that is already further along is described by its status, not as created', () => {
+            const subject = createDetailSubject();
+            expect(subject.describeCreateResult({ ReservationNo: '0000004924', Status_code: '05', TransferRequirement: '0000001843' }))
+                .toEqual({ kind: 'information', text: "Reservation 4924 is already at status 'Goods Issue Posted'." });
+            expect(subject.describeCreateResult({ ReservationNo: '0000004925', Status_code: '12', ErrorMessage: 'L3 007' }))
+                .toEqual({ kind: 'warning', text: "Reservation 4925 is already at status 'TO Creation Error' (retryable from the reservation page): L3 007" });
+        });
+
+        it('Step 7.9: a backend error that names a reservation keeps the number and offers to open it', async () => {
+            const serviceMock = { createReservationEntry: jest.fn().mockRejectedValue(Object.assign(new Error('Reservation 777077/0001 was created in SAP but could not be recorded locally (DB down). Open reservation 777077 in the app to import it; do not create it again.'), { status: 500 })) };
+            const routerMock = { navTo: jest.fn() };
+            const subject = createDetailSubject(serviceMock, routerMock);
+            subject._oCreateModel.setData({ MovementType: '311', Plant: '1120', StorageLocation: 'CS01', Material: '1000000045', Quantity: 1, Unit: 'KG', ReceivingStorageLocation: 'ST02' });
+            await subject.onSave();
+            expect(subject._oViewModel.getProperty('/errorMessage')).toMatch(/could not be recorded locally/);
+            expect(MessageBox.error).toHaveBeenCalledWith(expect.stringContaining('777077'), expect.objectContaining({ actions: ['Open reservation 777077', 'CLOSE'], emphasizedAction: 'Open reservation 777077' }));
+            MessageBox.error.mock.calls[0][1].onClose('Open reservation 777077');
+            expect(routerMock.navTo).toHaveBeenCalledWith('wmReservationEntryDetail', { ReservationNo: '777077', ReservationItem: '0001' });
+            expect(subject.reservationNumberFromError('BAPI_RESERVATION_CREATE1 failed: Deficit of stock')).toBe('');
+            expect(subject.reservationNumberFromError('An identical reservation request is still in progress (attempt x). SAP reservation 777078 belongs to that attempt.')).toBe('777078');
+        });
+
+        it('Step 7.9: a second click while the first save is in flight does not submit again', async () => {
+            let resolveFirst;
+            const serviceMock = { createReservationEntry: jest.fn(() => new Promise((r) => { resolveFirst = r; })) };
+            const subject = createDetailSubject(serviceMock, { navTo: jest.fn() });
+            subject._oCreateModel.setData({ MovementType: '311', Plant: '1120', StorageLocation: 'CS01', Material: '1000000045', Quantity: 1, Unit: 'KG', ReceivingStorageLocation: 'ST02' });
+            const first = subject.onSave();
+            expect(subject._oViewModel.getProperty('/busy')).toBe(true);
+            subject.onSave();
+            expect(serviceMock.createReservationEntry).toHaveBeenCalledTimes(1);
+            const sAttempt = serviceMock.createReservationEntry.mock.calls[0][0].ClientAttemptId;
+            expect(sAttempt).toBeTruthy();
+            resolveFirst({ ReservationNo: '0000004926', ReservationItem: '0001', TransferRequirement: '0000001844', Status_code: '02' });
+            await first;
+            expect(subject._sClientAttemptId).not.toBe(sAttempt); // next submit is a new attempt
+        });
+
+        it('Step 7.9: formatStatusRetryable marks exactly the retryable error statuses', () => {
+            const subject = createDetailSubject();
+            expect(['01', '02', '03', '04', '05', '99'].map(subject.formatStatusRetryable)).toEqual([false, false, false, false, false, false]);
+            expect(['11', '12', '13', '90'].map(subject.formatStatusRetryable)).toEqual([true, true, true, true]);
         });
 
         it('handles backend creation error cleanly with MessageBox.error', async () => {
@@ -409,7 +470,7 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
                 OrderID: '1007'
             }));
             expect(MessageBox.success).toHaveBeenCalledWith(
-                expect.stringContaining('Reservation 0000529261 created successfully'),
+                'Reservation 529261 created in SAP. Transfer Requirement 1000861 created.',
                 expect.any(Object)
             );
         });

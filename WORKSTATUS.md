@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 7.9 create UI (2026-10-19, 16:20 IST):** `onSave` dialog now follows the backend stage (02 success, 11 warning with LB01 retry path, 01 information, later statuses described by status, never "Success" for a bare BAPI success); backend errors that name a reservation offer "Open reservation N"; retryable statuses flagged in the detail header. UI suites 73/73 PASS, ui5lint clean. Not committed.
+
 - **Step 7.8 idempotency (2026-10-19, 15:55 IST):** the reservation intent hash (canonical fields + user, numeric keys unpadded) is the sole business key for attempts; identical intent → same reservation (replay), concurrent identical → one BAPI call + 409, different quantity/batch/movement → separate reservations. New `reservationIdempotency.test.js`; 32 tests in the two idempotency/recovery suites PASS. Not committed.
 
 - **Step 7.7 recovery (2026-10-19, 15:30 IST):** reservation-create attempt log (`ReservationCreateAttempt`, own transaction) written before the BAPI and moved through PENDING → CREATED → TR_CREATED/TR_FAILED or REJECTED/UNKNOWN/MISMATCH/LOCAL_PERSIST_FAILED with the SAP number and exact error; identical re-submits replay or get 409 (no duplicate reservation); tracked rows with progress are never reset; `retryStep LB01` refused when a TR exists. 14 failure-injection tests; 9 suites / 312 tests PASS. Not committed. Audit D3, D5, D10 closed.
@@ -11227,4 +11229,25 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Design note (stated, not an assumption about SAP):** the requesting user is part of the intent, so two users submitting the same data create two reservations; an identical intent by the same user within `RES_ATTEMPT_REPLAY_WINDOW_MS` (default 10 min) returns the existing reservation instead of creating another. A legitimately repeated identical reservation inside that window must change a business field or wait for the window.
 - **Status:** Done, not committed.
 - **Next recommended action:** D9 (remove `readTable?.mock` gating), then D5 remainder (261 adoption SLoc/quantity match and wording).
+- **Assumptions:** none.
+
+### 2026-10-19 16:20 IST — Step 7.9: Reservation create UI reflects the backend stage
+
+- **Work Session / Reason:** Audit of `/wm/reservation-entry/create` result handling on HEAD `fd0fa40`: `onSave` showed `MessageBox.success("Reservation N created successfully …")` for every 200 response, including status `11` (TR failed) and replayed rows at later stages; backend errors that name a SAP reservation (local-persistence failure, unknown outcome, mismatch, 409 in-progress/unresolved) were shown as plain text with no path to that reservation. Duplicate-submit protection (`view>/busy`, Save button disabled, `ClientAttemptId` replay) was already in place. No SAP call made.
+- **Changes:**
+  - `ReservationEntryDetail.controller.js`:
+    - `describeCreateResult(oResult)`: `02` → success "Reservation N created in SAP. Transfer Requirement T created."; `11` → warning "… was created in SAP, but the Transfer Requirement was NOT created: <error> Use Retry on the reservation page (step LB01)."; `01` → information "… created in SAP. No Transfer Requirement yet"; any other status (a replayed request already at 03/04/05 or 12/13/90) → "Reservation N is already at status '<status text>'" (warning + "retryable from the reservation page" for 12/13/90), never "created". `onSave` uses `MessageBox[kind]` and navigates to the detail page in every case (where Retry and the step logs live).
+    - Error path: `reservationNumberFromError(sError)` extracts the reservation the backend names; the error dialog then offers "Open reservation N" (emphasized) next to Close and navigates to that reservation's page, which imports it from SAP if it is not tracked (READ auto-import) and shows Retry. Errors without a number stay as before.
+    - `formatStatusRetryable(sCode)`: `11/12/13/90`.
+  - `ReservationEntryDetail.view.xml`: header `ObjectStatus` `headerRetryHint` ("Retryable - use Retry", warning, refresh icon) next to the status, visible for retryable statuses on the detail page.
+  - `i18n.properties` / `i18n_en.properties`: `resStatusRetryable`.
+  - Tests (`reservationEntryUi.test.js`): success text for `02`; `01` now an information dialog (not success); new: status `11` → warning with the LB01 retry path, no success; replayed rows at `05`/`12` described by status; backend error naming a reservation → `MessageBox.error` with "Open reservation 777077" action that navigates; `reservationNumberFromError` positive/negative; second click while a save is in flight does not submit again and the next submit gets a new `ClientAttemptId`; `formatStatusRetryable` matrix. Existing 261 save expectation updated to the new text.
+- **Validation (executed):**
+  - `npx jest test/unit/wm/reservationEntryUi.test.js test/unit/controller/uiConsistency.test.js` → **PASS (2 suites, 73 tests)** (one pre-existing expectation updated to the new success text).
+  - `npx ui5lint` (app/fiori-app) on the view and controller → Success, no findings. `git diff --check` → clean. `db.sqlite-wal` restored from HEAD.
+  - Not run: e2e (`verifyMvt*.e2e.js`, `verifyHardeningUI.e2e.js`), full `npm test`, live SAP; not checked in a browser.
+- **Status mapping shown to the user (CONFIRMED in `formatStatusText` / `ReservationStatus` seed):** 01 Reservation Created, 02 TR Auto-Created, 03 TO Created, 04 TO Confirmed, 05 Goods Issue Posted (= completed in this flow), 11/12/13/90 failed and retryable, 99 Cancelled / Reversed.
+- **Open:** OData warning messages (`req.warn`, e.g. replay notice, stock pre-check) are still not rendered by the UI; the persisted log rows on the detail page are the visible channel. The `createReservation` action (no UI caller) returns `stage: 'REPLAY' | 'IN_PROGRESS' | 'UNRESOLVED' | 'STOCK' | 'WAREHOUSE'` structurally and is unchanged.
+- **Status:** Done, not committed.
+- **Next recommended action:** D9 (remove `readTable?.mock` gating), then D5 remainder; optionally render OData `sap-messages` warnings in the create view.
 - **Assumptions:** none.

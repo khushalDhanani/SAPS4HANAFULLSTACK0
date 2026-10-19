@@ -621,30 +621,67 @@ sap.ui.define([
 
                 const sResNo = oResult.ReservationNo;
                 const sItem = oResult.ReservationItem || "0001";
-                const sTR = oResult.TransferRequirement;
-
-                let sMsg = "Reservation " + sResNo + " created successfully.";
-                if (sTR) {
-                    sMsg += " Auto-created Transfer Requirement (TR): " + sTR + ".";
-                } else if (oResult.ErrorMessage) {
-                    sMsg += " Note: " + oResult.ErrorMessage;
-                }
-
-                MessageBox.success(sMsg, {
-                    onClose: function () {
-                        const oRouter = that.getRouter();
-                        oRouter.navTo("wmReservationEntryDetail", {
-                            ReservationNo: sResNo,
-                            ReservationItem: sItem
-                        });
-                    }
-                });
+                const oDesc = that.describeCreateResult(oResult);
+                const fnOpen = function () {
+                    that.getRouter().navTo("wmReservationEntryDetail", { ReservationNo: sResNo, ReservationItem: sItem });
+                };
+                // The dialog kind follows the backend stage: "success" only when the whole create step (reservation + TR) succeeded.
+                (MessageBox[oDesc.kind] || MessageBox.information)(oDesc.text, { onClose: fnOpen });
             }).catch(function (err) {
                 that._oViewModel.setProperty("/busy", false);
                 const sError = err.message || "Failed to create reservation and auto TR";
                 that._oViewModel.setProperty("/errorMessage", sError);
-                MessageBox.error(sError);
+                const sResNo = that.reservationNumberFromError(sError);
+                if (!sResNo) {
+                    MessageBox.error(sError);
+                    return;
+                }
+                // SAP holds a reservation for this request (created before a later failure, or an earlier attempt):
+                // keep the number in front of the user and offer the page where it can be imported / retried.
+                const sOpen = "Open reservation " + sResNo;
+                const sClose = (MessageBox.Action && MessageBox.Action.CLOSE) || "Close";
+                MessageBox.error(sError, {
+                    actions: [sOpen, sClose],
+                    emphasizedAction: sOpen,
+                    onClose: function (sAction) {
+                        if (sAction === sOpen) {
+                            that.getRouter().navTo("wmReservationEntryDetail", { ReservationNo: sResNo, ReservationItem: "0001" });
+                        }
+                    }
+                });
             });
+        },
+
+        /**
+         * Maps the tracking row returned by createReservationEntry to a dialog kind and text.
+         * Status 02 = reservation + TR created (the only "success" of the create step); 11 = reservation created
+         * but TR failed (retryable, step LB01); 01 = reservation only; anything else (a replayed request can
+         * return a row further along: 03/04/05 or 12/13/90) is described by its status, never as "created".
+         */
+        describeCreateResult: function (oResult) {
+            const strip = function (v) { return String(v || "").replace(/^0+(?=\d)/, ""); };
+            const sResNo = strip(oResult.ReservationNo);
+            const sStatus = oResult.Status_code;
+            const sTR = strip(oResult.TransferRequirement);
+            const sErr = oResult.ErrorMessage || "";
+            if (sStatus === "02") {
+                return { kind: "success", text: "Reservation " + sResNo + " created in SAP. Transfer Requirement " + sTR + " created." };
+            }
+            if (sStatus === "11") {
+                return { kind: "warning", text: "Reservation " + sResNo + " was created in SAP, but the Transfer Requirement was NOT created: " + sErr + " Use Retry on the reservation page (step LB01)." };
+            }
+            if (sStatus === "01") {
+                return { kind: "information", text: "Reservation " + sResNo + " created in SAP. No Transfer Requirement yet" + (sErr ? ": " + sErr : ".") };
+            }
+            const sText = "Reservation " + sResNo + " is already at status '" + this.formatStatusText(sStatus) + "'" +
+                (this.formatStatusRetryable(sStatus) ? " (retryable from the reservation page)" : "") + (sErr ? ": " + sErr : ".");
+            return { kind: this.formatStatusRetryable(sStatus) ? "warning" : "information", text: sText };
+        },
+
+        /** Reservation number a backend error names (e.g. "Reservation 777077/0001 was created in SAP but ..."), else "". */
+        reservationNumberFromError: function (sError) {
+            const m = /[Rr]eservation (\d{1,10})(?:\/\d{1,4})?\b/.exec(String(sError || ""));
+            return m ? m[1] : "";
         },
 
         onCancel: function () {
@@ -708,6 +745,11 @@ sap.ui.define([
                 case "99": return "sap-icon://cancel";
                 default: return "";
             }
+        },
+
+        /** Error statuses the Retry action can resume from (TR, TO, TO confirmation, goods issue). */
+        formatStatusRetryable: function (sCode) {
+            return ["11", "12", "13", "90"].indexOf(sCode) >= 0;
         },
 
         formatMovementTypeDesc: function (sMvt) {
