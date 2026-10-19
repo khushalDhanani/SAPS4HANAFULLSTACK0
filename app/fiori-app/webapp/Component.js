@@ -55,8 +55,11 @@ sap.ui.define([
             // call the base component's init function
             UIComponent.prototype.init.apply(this, arguments);
 
-            // initialize auth service and bind auth model
-            AuthService.init(this);
+            // initialize auth service and bind auth model; resolves once the auth state is known
+            var pAuthKnown = AuthService.init(this);
+            if (!pAuthKnown || typeof pAuthKnown.then !== "function") {
+                pAuthKnown = Promise.resolve(AuthService.isAuthenticated());
+            }
 
             // set the device model
             this.setModel(models.createDeviceModel(), "device");
@@ -122,7 +125,32 @@ sap.ui.define([
                 }
             }
 
-            oRouter.initialize();
+            // Routing starts only once the auth state is known: a deep link opened while signed out used to
+            // instantiate its target view first, whose OData V4 bindings then requested $metadata and value
+            // helps unauthenticated (401 errors, cached for the model's lifetime). Signed out: land on login.
+            var that = this;
+            pAuthKnown.then(function (bAuth) {
+                that._redirectToLoginIfNeeded(bAuth, oRouter);
+                oRouter.initialize();
+            });
+        },
+
+        /** Replaces a signed-out deep link by the login route before the router creates any target view. */
+        _redirectToLoginIfNeeded: function (bAuth, oRouter) {
+            if (bAuth) {
+                return false;
+            }
+            // The router's own hash changer only knows the hash after initialize(); read the browser hash.
+            var sHash = (typeof window !== "undefined" && window.location && window.location.hash) ? window.location.hash.replace(/^#\/?/, "") : "";
+            if (sHash === "" || sHash === "login") {
+                return false;
+            }
+            if (typeof window !== "undefined" && window.location && typeof window.location.replace === "function") {
+                window.location.replace("#/login"); // replace, so Back does not return to the signed-out deep link
+            } else {
+                window.location.hash = "login";
+            }
+            return true;
         },
 
         /**

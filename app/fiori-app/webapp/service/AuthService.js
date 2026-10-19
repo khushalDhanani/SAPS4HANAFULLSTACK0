@@ -21,14 +21,22 @@ sap.ui.define([
             });
         },
 
+        /**
+         * Restores a stored session or probes the server for an SSO session.
+         * Resolves with the authentication state once it is known, so routing can wait for it.
+         * @returns {Promise<boolean>}
+         */
         init: function (oComponent) {
             this._oComponent = oComponent;
             this._oComponent.setModel(this._oModel, "auth");
             var bRestored = this._restoreSession();
             this.syncModelHeaders(oComponent);
-            if (!bRestored) {
-                this.fetchCurrentUserInfo();
+            if (bRestored) {
+                return Promise.resolve(true);
             }
+            return this.fetchCurrentUserInfo().then(function (oUser) {
+                return Boolean(oUser && oUser.username);
+            });
         },
 
         /**

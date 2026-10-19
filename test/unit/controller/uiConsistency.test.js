@@ -63,3 +63,12 @@ test('UI texts come from i18n, and every referenced key exists in both bundles',
     expect(`${name}: ${missing.join(',')}`).toBe(`${name}: `);
   });
 });
+
+test('i18n bundles declare supportedLocales/fallbackLocale (browser audit: 6x 404 for i18n_en_GB.properties per page load)', () => {
+  const expected = { supportedLocales: ['', 'en'], fallbackLocale: 'en' };
+  expect(manifest['sap.app'].i18n).toMatchObject({ bundleUrl: 'i18n/i18n.properties', ...expected });
+  expect(manifest['sap.ui5'].models.i18n.settings).toMatchObject({ bundleName: 'saps4hana.fiori.i18n.i18n', ...expected });
+  for (const l of expected.supportedLocales) {
+    expect(fs.existsSync(path.join(WEBAPP, 'i18n', `i18n${l ? '_' + l : ''}.properties`))).toBe(true);
+  }
+});
