@@ -9,6 +9,11 @@ service ReservationEntryService {
     @readonly
     entity ReservationStatuses as projection on wm.ReservationStatus;
 
+    // CREATE on this entity runs the same SAP write as createReservationEntry: gate writes to the warehouse roles.
+    @restrict: [
+        { grant: 'READ', to: 'authenticated-user' },
+        { grant: ['CREATE', 'UPDATE', 'DELETE'], to: ['WarehouseClerk', 'WarehouseManager', 'Admin'] }
+    ]
     entity ReservationEntries as projection on wm.ReservationTrack {
         *,
         Status.name as StatusText,

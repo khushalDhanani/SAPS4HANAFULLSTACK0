@@ -5,6 +5,10 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **D1 fix (2026-10-19, 12:20 IST):** `ReservationEntries` entity writes now `@restrict`ed to `WarehouseClerk`/`WarehouseManager`/`Admin` (`srv/wm/reservation-entry/service.cds`); Viewer 403 tests added; 4 suites / 146 tests PASS. Not committed. D2–D17 from `AUDIT_RESERVATION_CREATE.md` still open.
+
+- **Reservation Creation Baseline Audit (Step 7.1) (2026-10-19, 12:01 IST):** Complete (Verdict: **FAIL — 1×P0, 4×P1, 7×P2, 5×P3**; see `AUDIT_RESERVATION_CREATE.md` and the 12:01 IST Changes Log entry). Zero code changes, zero SAP calls. P0: OData `CREATE ReservationEntries` reaches `BAPI_RESERVATION_CREATE1` with only `authenticated-user`. P1: no RKPF/RESB read-back, no idempotency guard, forbidden fields not enforced at creation (201/241/301/311), 261 M7 126 adoption overwrites tracking. Read-only tests: 6 suites / 249 tests PASS.
+
 - **Movement 201 Deep Audit (Step 6) (2026-10-19, 11:40 IST):** Complete (Final Verdict: PASS).
   - **Audit Scope & Boundaries:**
     - Performed comprehensive 15-dimension audit of Movement Type 201 (Goods Issue to Cost Center) on branch `feature01` (zero code changes, zero live SAP writes).
@@ -11034,3 +11038,39 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - Zero errors in Movement 201 architecture.
 - **Next Recommended Action:**
   - All 5 warehouse movements (201, 241, 261, 301, 311) deep audits complete. Present consolidated matrix and solicit user alignment on RFC pipeline reversal implementation.
+
+### 2026-10-19 12:01 IST — Reservation Creation Baseline Audit (`/wm/reservation-entry/create`) (Step 7.1)
+
+- **Work Session / Reason:** Execute Step 7.1 — audit the reservation-create request path on HEAD `23f6ff1` (branch `feature01`) for movement types 201, 241, 261, 301, 311. Zero code changes, zero SAP calls.
+- **Deliverable:** `AUDIT_RESERVATION_CREATE.md` (complete flow, movement matrix, 17 defects with file/function/severity/repro/fix, required tests).
+- **Flow traced (CONFIRMED from source):** route `wmReservationEntryCreate` → `ReservationEntryDetail.view.xml` → `ReservationEntryDetail.controller.js#onSave` → `POST /odata/v4/reservation-entry/createReservationEntry` → `service.js#executeReservationAndAutoTR` → `movementConfig.validateReservationInput` → `ReservationProcessAdapter.createReservation` (CSKS/ANLA/AUFK+JEST/MARC/MARD/T320 pre-checks → `BAPI_RESERVATION_CREATE1` → `BAPI_TRANSACTION_COMMIT`) → `ReservationTrack`/`ReservationLog` upsert → auto `L_TR_CREATE` → row returned → `MessageBox.success` + navigate to detail.
+- **Key findings:**
+  - **P0 D1:** OData `CREATE ReservationEntries` is bound to the same handler (`service.js:1120`) but the entity has no role restriction (`service.cds:12`) — any `authenticated-user` can trigger `BAPI_RESERVATION_CREATE1` + `L_TR_CREATE`; UPDATE/DELETE of tracking rows also open.
+  - **P1 D2:** no RKPF/RESB read-back after create; item `0001` assumed; persisted values are the user's input, not SAP's (AGENTS.md DoD #9 not met).
+  - **P1 D3:** no idempotency/attempt store/in-flight lock on reservation creation; commit-then-timeout leads to duplicates on resubmit.
+  - **P1 D4:** `forbiddenFields` not enforced by `validateReservationInput` for 201/241/301/311; `COSTCENTER`/`MOVE_STLOC`/`ASSET_NO`/`ORDERID` are added to the BAPI header whenever present.
+  - **P1 D5:** 261 M7 126 "adoption" returns success without SLoc/quantity match and overwrites an existing tracked row (Status reset to 01).
+  - **P2 D6–D12:** `pad10`/`pad12` pad alphanumeric cost centers/assets; hard-coded `'KHUSHAL'`, `'1000'`, `'1120'` and UI master-data defaults; user `WarehouseNumber` bypasses T320; mock-sniffing (`readTable?.mock`) hides not-found branches from tests; partial-failure ordering + synthetic `LogHandle`; un-normalized `STGE_LOC`/`MOVE_STLOC`/`MOVE_PLANT`; `Serials` accepted and dropped.
+  - **P3 D13–D17:** ReservationDate not persisted; `createReservation` action omits `OrderType`; batch regex mismatch; duplicate MARD read / redundant `@assert.unique`; 5xx message sanitization (Not verified).
+- **Validation (read-only):**
+  - `npx jest test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationEntryUi.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/reservationTrack.test.js test/unit/wm/movementConfig.test.js test/unit/controller/uiConsistency.test.js` → **PASS (6 suites, 249 tests)**.
+  - `git diff --check` → clean. `git status` → only `AUDIT_RESERVATION_CREATE.md` and this file added/changed.
+  - Not run: e2e suites, lint, any live SAP check.
+- **Still unknown (Not verified):** SAP behaviour for cross-type header fields (D4) and lower-case SLoc/plant (D11); CAP 5xx sanitization in this deployment (D17); `L_TR_CREATE` with a wrong warehouse (D8).
+- **Next recommended action:** fix D1 first (restrict `ReservationEntries` writes to the warehouse roles), then D2/D3 together (post-commit RKPF/RESB read-back + attempt store), then D4/D5; add the tests listed in section H before each fix.
+- **Assumptions:** none.
+
+### 2026-10-19 12:20 IST — Fix D1: Restrict `ReservationEntries` writes to warehouse roles (Step 7.1 follow-up)
+
+- **Work Session / Reason:** Fix defect D1 from `AUDIT_RESERVATION_CREATE.md` (P0): OData `CREATE ReservationEntries` ran `executeReservationAndAutoTR` (SAP `BAPI_RESERVATION_CREATE1` + `L_TR_CREATE`) for any `authenticated-user`; UPDATE/DELETE of tracking rows were also open.
+- **Change:**
+  - `srv/wm/reservation-entry/service.cds`: added `@restrict` on `ReservationEntries` — `READ` to `authenticated-user`; `CREATE`/`UPDATE`/`DELETE` to `WarehouseClerk`, `WarehouseManager`, `Admin` (same roles as the actions).
+  - `test/unit/wm/reservationEntryService.test.js`: new block `1b. Entity write authorization (D1)` — Viewer `bob` gets 403 on `POST /ReservationEntries` with the adapter never called, and 403 on `PATCH`/`DELETE` of a seeded row (row unchanged, still readable). Imported `PATCH` and `DELETE` (aliased `HTTP_DELETE`) from `cds.test`.
+- **Validation (executed):**
+  - `npx jest test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationEntryUi.test.js test/unit/wm/reservationTrack.test.js test/unit/wm/goodsIssueResvPrefill.test.js` → **PASS (4 suites, 146 tests)**.
+  - `npx cds compile srv/wm/reservation-entry/service.cds --to json` → OK.
+  - `npx eslint srv/wm/reservation-entry test/unit/wm/reservationEntryService.test.js` → clean. `git diff --check` → clean.
+  - Not run: full `npm test`, e2e, live SAP. No SAP call made.
+- **Status:** D1 fixed (unit-verified, not committed). D2–D17 remain open.
+- **Next recommended action:** D2 + D3 together (post-commit RKPF/RESB read-back and an attempt store on reservation creation).
+- **Assumptions:** none.

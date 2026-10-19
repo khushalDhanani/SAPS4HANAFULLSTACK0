@@ -18,7 +18,7 @@ const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/Re
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
-const { POST, GET } = cds.test(__dirname + '/../../../');
+const { POST, GET, PATCH, DELETE: HTTP_DELETE } = cds.test(__dirname + '/../../../');
 const { SELECT, DELETE } = cds.ql;
 
 const TRACK_ENTITY = 'saps4hana.wm.ReservationTrack';
@@ -187,6 +187,29 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
           authClerk
         )
       ).rejects.toMatchObject({ response: { status: 400 } });
+    });
+  });
+
+  describe('1b. Entity write authorization (D1)', () => {
+    const authViewer = { auth: { username: 'bob', password: '' } };
+    const body = {
+      ReservationNo: '0000777009', ReservationItem: '0001', MovementType: '311', Plant: '1120',
+      StorageLocation: 'CS01', Material: '1000000045', Quantity: 1, Unit: 'KG', ReceivingStorageLocation: 'ST02'
+    };
+
+    test('Viewer (bob) cannot CREATE ReservationEntries and the SAP adapter is never called', async () => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValue({ success: true, reservationNo: '777009', reservationNoRaw: '0000777009', reservationItem: '0001' });
+      await expect(POST('/odata/v4/reservation-entry/ReservationEntries', body, authViewer))
+        .rejects.toMatchObject({ response: { status: 403 } });
+      expect(createResSpy).not.toHaveBeenCalled();
+    });
+
+    test('Viewer (bob) cannot UPDATE or DELETE a tracked ReservationEntries row', async () => {
+      const key = "/odata/v4/reservation-entry/ReservationEntries(ReservationNo='0000524979',ReservationItem='0001')";
+      await expect(PATCH(key, { ErrorMessage: 'x' }, authViewer)).rejects.toMatchObject({ response: { status: 403 } });
+      await expect(HTTP_DELETE(key, authViewer)).rejects.toMatchObject({ response: { status: 403 } });
+      const row = await GET(key, authViewer);
+      expect(row.data.ErrorMessage || '').not.toBe('x');
     });
   });
 
