@@ -11652,3 +11652,14 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **17:04 IST — conditional GO re-check #3:** interface unchanged (15 parameters, no IV_BETYP/IV_BENUM); Retry LB01 not run; no SAP write.
 - **17:05 IST — conditional GO re-check #4:** interface unchanged (15 parameters, no IV_BETYP/IV_BENUM); Retry LB01 not run; no SAP write.
 - **17:05 IST — conditional GO re-check #5:** interface unchanged (15 parameters, no IV_BETYP/IV_BENUM); Retry LB01 not run; no SAP write.
+
+### 2026-10-19 17:07 IST — Step 1 interface check of Z_WM_TR_CREATE (READ-ONLY, system DS4): IV_BETYP / IV_BENUM absent → retry NOT performed
+
+- **Full interface read live at 17:05:47 IST (`RFC_GET_FUNCTION_INTERFACE`, confirmed by `FUPARAREF`, all parameters `R3STATE A`, no inactive rows; include `LZ_VENDOR_REMOTESU06` last changed 2026-10-10 14:16:00, version 5):**
+  - Import: `IV_LGNUM LGNUM CHAR3 (mandatory)`, `IV_BWLVS BWLVS NUMC3 default '311'`, `IV_MATNR MATNR CHAR40 (mandatory)`, `IV_WERKS WERKS_D CHAR4 default '1120'`, `IV_LGORT LGORT_D CHAR4 default 'CS01'`, `IV_MENGA LTBP_MENGA QUAN 13.3 (mandatory)`, `IV_ALTME LRMEI CHAR3 default 'KG'`, `IV_RSNUM RSNUM NUMC10 optional`, `IV_RSPOS RSPOS NUMC4 optional`, `IV_COMMIT CHAR1 default 'X'`.
+  - Export: `EV_TBNUM LTBK-TBNUM NUMC10`, `EV_TBPOS LTBP-TBPOS NUMC4`, `EV_SUCCESS CHAR1`, `EV_MESSAGE BAPI_MSG CHAR220`.
+  - Tables: `ET_MESSAGES BAPIRET2_T` (optional).
+  - **No `IV_BETYP`, no `IV_BENUM`, no source/destination storage type or bin parameters, no test/simulation flag.** `ZWM_TR_CREATE` (alias) is identical.
+- **Decision (per the instruction):** STOP — no Retry Step, no SAP write, server not started. Reservation 0000530233/0001 stays at status 11 (FAILED_TR, Retry LB01 available).
+- **SAP-supported interface for a real WM 241 TR:** standard `L_TR_CREATE` with `T_LTBA` items carrying `LGNUM W01, BWLVS 241, BETYP A, BENUM 0000400001 (10-char ALPHA of ANLN1 000000400001), RSNUM 0000530233, RSPOS 0001, MATNR, WERKS 1120, LGORT CS02, MENGA 1, ALTME NOS`; destination `913/<BENUM>` is derived by SAP from `T333 W01/241 (NKDYN X)`. `L_TR_CREATE` is remote-enabled but the DS4 kernel rejects its direct remote call as an incompatible RFC call (SAP Note 2295840, proven 2026-10-19), so the only usable path is a remote-enabled wrapper that accepts `BETYP`/`BENUM` and fills `LTBA-BETYP/BENUM` before calling `L_TR_CREATE` inside SAP — i.e. `Z_WM_TR_CREATE` extended with `IV_BETYP TYPE LTBK-BETYP OPTIONAL` and `IV_BENUM TYPE LTBK-BENUM OPTIONAL` (source proposed earlier), plus the alias. The application already passes them automatically once the interface exposes them (commit `bca283b`).
+- **Assumptions:** none.
