@@ -695,6 +695,14 @@ class ReservationProcessAdapter {
           tbpos = returnedItem.TBPOS || '0001';
           rawTbnum = returnedItem.TBNUM || '';
         } catch (err) {
+          // D22 (live 241, 2026-10-19): the direct L_TR_CREATE call is rejected by the kernel as an incompatible RFC call
+          // (SAP Note 2295840) and the Z wrappers carry no BETYP/BENUM, so a dynamic-coordinate TR (201/241/261) can never be
+          // created through them (L2 438) - falling back only hides the real error. Keep the ABAP details and fail fast.
+          const { key, abapMsgClass, abapMsgType, abapMsgNumber, abapMsgV1, abapMsgV2, abapMsgV3, abapMsgV4 } = err;
+          LOG.error(`[createTransferRequirement] L_TR_CREATE rejected for ${s4Lgnum}/${s4Bwlvs} (BETYP ${s4Betyp || '-'}, BENUM ${s4Benum || '-'}): ${err.message}`, { key, abapMsgClass, abapMsgType, abapMsgNumber, abapMsgV1, abapMsgV2, abapMsgV3, abapMsgV4 });
+          if (s4Betyp || s4Benum) {
+            throw Object.assign(new Error(`Transfer Requirement for WM movement ${s4Bwlvs} in ${s4Lgnum} needs requirement type ${s4Betyp} and requirement number ${s4Benum}: the direct L_TR_CREATE call was rejected (${err.message}) and the RFC wrappers ZWM_TR_CREATE / Z_WM_TR_CREATE have no IV_BETYP / IV_BENUM parameters, so the TR cannot be created from the application. Extend Z_WM_TR_CREATE with IV_BETYP and IV_BENUM in SAP, then retry step LB01.`), { wrapperMissingParams: ['IV_BETYP', 'IV_BENUM'], directError: err.message });
+          }
           // Fallback to the custom RFC wrappers (ZWM_TR_CREATE / Z_WM_TR_CREATE) when L_TR_CREATE is rejected
           try {
             let resZ;

@@ -366,6 +366,28 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       expect(ltba).toMatchObject({ BWLVS: '241', BETYP: 'A', BENUM: '0000400001', RSNUM: '0000530231', RSPOS: '0001', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'CS02' });
     });
 
+    test('D22 (live 241): direct L_TR_CREATE rejected as incompatible RFC call for a BETYP/BENUM item -> no wrapper fallback, ABAP details logged, message names IV_BETYP/IV_BENUM', async () => {
+      const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE'), { key: '', abapMsgClass: '00', abapMsgNumber: '001', abapMsgV1: 'Incompatible Call Rejected, see note 2295840', abapMsgV3: 'L_TR_CREATE' }));
+      const p = adapter.createTransferRequirement({ warehouseNumber: 'W01', wmMovementType: '241', movementType: '241', material: '8000009754', plant: '1120', storageLocation: 'CS02', quantity: 1, unit: 'NOS', reservationNo: '530233', reservationItem: '0001', assetNo: '400001', subNumber: '0000' });
+      await expect(p).rejects.toThrow('Transfer Requirement for WM movement 241 in W01 needs requirement type A and requirement number 0000400001: the direct L_TR_CREATE call was rejected (Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE) and the RFC wrappers ZWM_TR_CREATE / Z_WM_TR_CREATE have no IV_BETYP / IV_BENUM parameters');
+      await expect(p).rejects.toMatchObject({ wrapperMissingParams: ['IV_BETYP', 'IV_BENUM'] });
+      expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TR_CREATE']); // no ZWM_TR_CREATE / Z_WM_TR_CREATE call
+      expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('L_TR_CREATE rejected for W01/241 (BETYP A, BENUM 0000400001)'), expect.objectContaining({ abapMsgClass: '00', abapMsgNumber: '001', abapMsgV1: 'Incompatible Call Rejected, see note 2295840' }));
+      errSpy.mockRestore();
+    });
+
+    test('D22: an item without BETYP/BENUM (311 staging) still falls back to the Z TR wrappers when L_TR_CREATE is rejected', async () => {
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockRfc.call
+        .mockRejectedValueOnce(new Error('Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE'))
+        .mockResolvedValueOnce({ EV_TBNUM: '0001000890', EV_TBPOS: '0001', EV_SUCCESS: 'S' });
+      const res = await adapter.createTransferRequirement({ warehouseNumber: 'W01', wmMovementType: '311', movementType: '311', material: '8000000023', plant: '1120', storageLocation: 'HS01', receivingStorageLocation: 'CS01', quantity: 1, unit: 'NOS', reservationNo: '524979' });
+      expect(res.trNumber).toBe('1000890');
+      expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TR_CREATE', 'ZWM_TR_CREATE']);
+      console.error.mockRestore();
+    });
+
     test('311 (SLoc transfer) is unchanged: BWLVS 311, no BETYP/BENUM, reservation kept [mock only, not SAP verification]', async () => {
       mockRfc.call.mockResolvedValueOnce({
         T_LTBA: [{ TBNUM: '0001001839', TBPOS: '0001' }]
