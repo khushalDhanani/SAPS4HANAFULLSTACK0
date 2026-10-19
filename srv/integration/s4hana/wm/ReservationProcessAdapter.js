@@ -13,7 +13,7 @@ const {
   validateMovement311Destination,
   verifyReceivingLocationInSap
 } = require('../../../common/movementConfig');
-const { isToFullyConfirmed, getHuConfirmationItems, mapStorageTypeSearchError } = require('./toState');
+const { isToFullyConfirmed, getHuConfirmationItems, mapStorageTypeSearchError, trCompletedWithoutTo } = require('./toState');
 const { checkAuthorization } = require('./authCheck');
 
 const pad10 = (v) => String(v || '').trim().padStart(10, '0');
@@ -1736,6 +1736,12 @@ class ReservationProcessAdapter {
         // D19: the wrapper's BAPIRET2 messages carry the SAP reason; the error keeps only EV_MESSAGE
         const details = (res?.ET_MESSAGES || []).map((m) => `${m.TYPE || ''} ${m.ID || ''} ${m.NUMBER || ''} ${m.MESSAGE || ''}`.trim());
         LOG.error(`[createTransferOrderFromTR] no TO created for TR ${wh}/${s4Tr}: ${errMsg}`, { EV_SUCCESS: res?.EV_SUCCESS, ET_MESSAGES: details });
+        // D20: the wrapper reports "no TO" as XFELD_WRONG; when SAP completed the TR itself (quantity reduction), say so.
+        const done = this.rfc ? await trCompletedWithoutTo(this.rfc, wh, s4Tr) : null;
+        if (done) {
+          const bin = done.nltyp ? ` ${done.nltyp}/${done.nlpla}` : '';
+          throw Object.assign(new Error(`SAP completed Transfer Requirement ${alphaOut(s4Tr)} without a Transfer Order: the requested quantity is already available in destination bin${bin} (L3 361/362, PP-WM quantity reduction). The TR cannot be reused; Retry creates a new TR.`), { sapTrCompletedWithoutTo: true });
+        }
         throw new Error(errMsg);
       }
 

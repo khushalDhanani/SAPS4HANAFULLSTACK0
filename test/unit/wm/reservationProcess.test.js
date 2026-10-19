@@ -851,6 +851,34 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       errSpy.mockRestore();
     });
 
+    test('D20: wrapper "XFELD_WRONG" with the TR completed in SAP without a TO -> specific quantity-reduction error, TR read-only', async () => {
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      const base = mockRfc.readTable.getMockImplementation();
+      mockRfc.readTable.mockImplementation((table, fields, options) => {
+        if (table === 'LTBK') return Promise.resolve([{ LGNUM: 'W01', TBNUM: '0001001839', BWLVS: '311', RSNUM: '0000524979', STATU: 'E', NLTYP: '921', NLPLA: 'TRANSFER' }]);
+        if (table === 'LTBP') return Promise.resolve([{ TBPOS: '0001', ELIKZ: 'X', TANUM: '0000000000' }]);
+        return base(table, fields, options);
+      });
+      mockRfc.call
+        .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
+        .mockResolvedValueOnce({ EV_TANUM: '0000000000', EV_SUCCESS: 'E', EV_MESSAGE: 'XFELD_WRONG: Invalid indicator value passed.' });
+      const p = adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' });
+      await expect(p).rejects.toThrow('SAP completed Transfer Requirement 1001839 without a Transfer Order: the requested quantity is already available in destination bin 921/TRANSFER (L3 361/362, PP-WM quantity reduction)');
+      await expect(p).rejects.toMatchObject({ sapTrCompletedWithoutTo: true });
+      expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TO_CREATE_TR', 'Z_WM_TO_CREATE_FROM_TR']); // no further FM, no write
+      expect(mockRfc.readTable.mock.calls.map((c) => c[0])).toEqual(expect.arrayContaining(['LTBK', 'LTBP']));
+      console.error.mockRestore();
+    });
+
+    test('D20: wrapper "no TO" with the TR still open keeps the wrapper text (no false quantity-reduction claim)', async () => {
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockRfc.call
+        .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
+        .mockResolvedValueOnce({ EV_TANUM: '0000000000', EV_SUCCESS: 'E', EV_MESSAGE: 'XFELD_WRONG: Invalid indicator value passed.' });
+      await expect(adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' })).rejects.toThrow('XFELD_WRONG: Invalid indicator value passed.');
+      console.error.mockRestore();
+    });
+
     test('Falls back to ZWM_TO_CREATE_FROM_TR only when Z_WM_TO_CREATE_FROM_TR does not exist on the system', async () => {
       mockRfc.call
         .mockRejectedValueOnce(new Error('UCON blocked'))

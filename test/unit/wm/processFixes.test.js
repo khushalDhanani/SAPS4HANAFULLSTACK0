@@ -11,7 +11,7 @@ const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/Re
 const TrToHandler = require('../../../srv/wm/tr-to/handlers/trTo.handler');
 const { STATUS, STATUS_TEXT, STATUS_CRITICALITY, UNCONFIRMED_TO } = require('../../../srv/common/wmStatus');
 const { sapKey } = require('../../../srv/integration/s4hana/sapKey');
-const { isToFullyConfirmed, isTrClosedWithoutTo } = require('../../../srv/integration/s4hana/wm/toState');
+const { isToFullyConfirmed, isTrClosedWithoutTo, trCompletedWithoutTo } = require('../../../srv/integration/s4hana/wm/toState');
 
 const authorized = () => Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' });
 
@@ -350,5 +350,22 @@ describe('D18: isTrClosedWithoutTo (LTBK STATU E and no LTAK header) [mock only,
     expect(open.readTable).toHaveBeenCalledTimes(1);
     await expect(isTrClosedWithoutTo(rfcWith([{ STATU: 'E' }], [{ TANUM: '0001037367' }]), 'W01', '1000882')).resolves.toBe(false);
     await expect(isTrClosedWithoutTo(rfcWith([], []), 'W01', '1000999')).resolves.toBe(false);
+  });
+});
+
+describe('D20: trCompletedWithoutTo (LTBK STATU E + every LTBP item ELIKZ X without TANUM) [mock only, not SAP verification]', () => {
+  const rfcWith = (ltbk, ltbp) => ({ readTable: jest.fn(async (t) => (t === 'LTBK' ? ltbk : ltbp)) });
+  test('completed without TO -> destination bin; READ-ONLY LTBK then LTBP scoped by warehouse', async () => {
+    const rfc = rfcWith([{ STATU: 'E', NLTYP: '921', NLPLA: 'TRANSFER' }], [{ TBPOS: '0001', ELIKZ: 'X', TANUM: '0000000000' }]);
+    await expect(trCompletedWithoutTo(rfc, 'w01', '1000885')).resolves.toEqual({ nltyp: '921', nlpla: 'TRANSFER' });
+    expect(rfc.readTable.mock.calls[0]).toEqual(['LTBK', ['STATU', 'NLTYP', 'NLPLA'], ["LGNUM = 'W01'", "AND TBNUM = '0001000885'"], 1]);
+    expect(rfc.readTable.mock.calls[1].slice(0, 3)).toEqual(['LTBP', ['TBPOS', 'ELIKZ', 'TANUM'], ["LGNUM = 'W01'", "AND TBNUM = '0001000885'"]]);
+  });
+  test('open TR -> null without reading LTBP; completed with a TO on the item -> null; unknown TR -> null', async () => {
+    const open = rfcWith([{ STATU: '' }], []);
+    await expect(trCompletedWithoutTo(open, 'W01', '1000886')).resolves.toBeNull();
+    expect(open.readTable).toHaveBeenCalledTimes(1);
+    await expect(trCompletedWithoutTo(rfcWith([{ STATU: 'E' }], [{ TBPOS: '0001', ELIKZ: 'X', TANUM: '0001037367' }]), 'W01', '1000882')).resolves.toBeNull();
+    await expect(trCompletedWithoutTo(rfcWith([], []), 'W01', '1000999')).resolves.toBeNull();
   });
 });

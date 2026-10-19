@@ -49,6 +49,24 @@ async function isTrClosedWithoutTo(rfc, lgnum, tbnum) {
 }
 
 /**
+ * D20 (live 241, 2026-10-19): SAP can complete a TR without a TO when the PP-WM quantity reduction finds the open quantity
+ * already in the destination bin (L3 361 "Open quantity reduced by available stock", L3 362 "Transfer requirement will be
+ * updated"); the Z wrapper then misreports it as XFELD_WRONG. READ-ONLY LTBK + LTBP. Returns { nltyp, nlpla } when the TR
+ * header is completed (STATU 'E') and every item is delivery-complete (ELIKZ 'X') with no TO number, else null.
+ */
+async function trCompletedWithoutTo(rfc, lgnum, tbnum) {
+  const wh = sapKey(lgnum, 'lgnum');
+  const tr = sapKey(tbnum, 'tbnum').padStart(10, '0');
+  const where = [`LGNUM = '${wh}'`, `AND TBNUM = '${tr}'`];
+  const heads = await rfc.readTable('LTBK', ['STATU', 'NLTYP', 'NLPLA'], where, 1);
+  if (!Array.isArray(heads) || !heads.length || String(heads[0].STATU || '').trim() !== 'E') return null;
+  const items = await rfc.readTable('LTBP', ['TBPOS', 'ELIKZ', 'TANUM'], where);
+  const noTo = Array.isArray(items) && items.length > 0 &&
+    items.every((i) => String(i.ELIKZ || '').trim() === 'X' && /^0*$/.test(String(i.TANUM || '').trim()));
+  return noTo ? { nltyp: String(heads[0].NLTYP || '').trim(), nlpla: String(heads[0].NLPLA || '').trim() } : null;
+}
+
+/**
  * Builds Handling Unit confirmation table (T_LTAP_CONF_HU) for a Transfer Order.
  * When LTAP items involve Handling Units (VLENR is present), L_TO_CONFIRM requires
  * T_LTAP_CONF_HU with complete HU withdrawal (HUENT = 'X') to avoid error L3 848
@@ -113,4 +131,4 @@ function mapStorageTypeSearchError(rawMsg, lgnum, mvt = '') {
   return `Data for storage type search is not defined in warehouse ${wh} for WM movement type ${mvt || '311'}: missing customizing key in table T334T (Warehouse: ${wh}, Operation: ${op} [${opText}], Storage Type Indicator: '${indicator}'${extraStr}). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > ${sproStrategy} > Determine Storage Type Search.`;
 }
 
-module.exports = { isToFullyConfirmed, findUnconfirmedToItems, isTrClosedWithoutTo, getHuConfirmationItems, mapStorageTypeSearchError };
+module.exports = { isToFullyConfirmed, findUnconfirmedToItems, isTrClosedWithoutTo, trCompletedWithoutTo, getHuConfirmationItems, mapStorageTypeSearchError };
