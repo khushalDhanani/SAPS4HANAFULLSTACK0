@@ -5,6 +5,41 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **MVT 201 — Live WM Routing Verification: Real Movement vs Staging/311 Fallback (Item 16) (2026-10-19, 10:05 IST):** Complete.
+  - **Item 16 (Verify 201 WM routing: Confirm live configuration for 201 → real WM movement, 201 → staging/311 fallback matches application's WM_REAL_MOVEMENT behavior):**
+    - Executed live READ-ONLY RFC queries on SAP S/4HANA (Client 220):
+      1. **Table T333 (Warehouse Movement Types) in Warehouse W01:**
+         - Movement 201 (Real WM): `BWLVS = '201'`, `TRART = 'A'`, `BETYP = 'K'`, `NLTYP = '911'`, `NLPLA = ''`, `NKDYN = 'X'`, `TBMAN = 'X'`, `DRUKZ = '02'`.
+           - Destination interim bin is dynamic (`NKDYN = 'X'`), generated directly from Cost Center `BENUM`.
+         - Movement 311 (Staging Fallback): `BWLVS = '311'`, `TRART = 'A'`, `BETYP = ''`, `NLTYP = '921'`, `NLPLA = 'TRANSFER'`, `NKDYN = ''`, `TBMAN = 'X'`, `DRUKZ = '02'`.
+           - Destination interim bin is fixed (`TRANSFER`), requiring no dynamic requirement tracking.
+      2. **Table T301T (Storage Type Text):**
+         - `LGNUM = 'W01'`, `LGTYP = '911'` → German: `"WA-Zone Kostenstelle"`, English: `"GI Area for Cost Center"`.
+         - `LGNUM = 'W01'`, `LGTYP = '921'` → German: `"Umlagerung Lagerort"`, English: `"Stock Transfers (StLoc)"`.
+      3. **Table T156S & T321 (IM-WM Interface):**
+         - `T156S`: `BWART = '201'` maps to `RBLVS = '201'`.
+         - `T321`: `LGNUM = '***'`, `BWLVS = '201'`, `RBLVS = '201'`, `BSLVS = ''`, `SOBKZ = ''` / `'K'`, `TBFKZ = 'X'`.
+      4. **Live LTBK / LQUA Records in SAP:**
+         - Live TRs in `LTBK` (e.g., `0001000834`, `0001000759`, `0001000693`) confirm: `BWLVS = '201'`, `BETYP = 'K'`, `BENUM = '1011201301'`, `NLTYP = '911'`, `NLPLA = '1011201301'`.
+         - Live quants in `LQUA` for `LGTYP = '911'` (e.g. `0001044980`, `0001044448`) confirm dynamic bins are cost centers (`1011201301`, `1011101301`, `1011202701`).
+      5. **Application Flag Support & Behavior:**
+         - Mode 1: Real WM Movement (`WM_REAL_MOVEMENT = true` or `WM_TR_REAL_MOVEMENT = true`):
+           - `resolveWmMovement('201')` returns `'201'`.
+           - TR creation passes `BWLVS = '201'`, `BETYP = 'K'`, and formatted 10-digit Cost Center `BENUM`.
+           - Fails closed with 400 if Cost Center is missing (precludes SAP error `L2 438`).
+           - Staged positive quant in `911/<CostCenter>` is directly offset and cleared by MIGO 201's negative quant in `911/<CostCenter>`, leaving net 0.000 stranded stock.
+         - Mode 2: Staging Fallback (`WM_REAL_MOVEMENT = false` or unset):
+           - `resolveWmMovement('201')` returns `'311'`.
+           - TR creation passes `BWLVS = '311'`, omitting `BETYP`/`BENUM` and preserving `RSNUM`/`RSPOS`.
+           - Staged stock moves to `921/TRANSFER`, which bypasses requirement number validation when Cost Center is omitted, but leaves quant in `921` requiring separate clearing.
+         - Application Compatibility Update: Enhanced `srv/common/movementConfig.js` and `srv/integration/s4hana/wm/ReservationProcessAdapter.js` to recognize both `WM_REAL_MOVEMENT` and `WM_TR_REAL_MOVEMENT`.
+    - **Validation & Test Results:**
+      - Live RFC Table Queries: `T333`, `T301T`, `T156S`, `T321`, `LTBK`, `LQUA` → **CONFIRMED MATCH (READ-ONLY)**.
+      - `npx jest test/unit/wm/mvt201Routing.test.js`: **PASS (12/12 tests passed, 100% green)**.
+      - Full WM test suites (`npx jest test/unit/wm`): **82/82 active test suites passed, 1,986 passed tests, 56 skipped (live-only), 0 failed (100% green)**.
+      - `npm run lint`: Clean, 0 errors, 0 warnings.
+      - `git diff --check`: 0 whitespace errors.
+
 - **MVT 201 — Dual-Path Regression Suite (Direct 201 vs Reservation → 201) (Item 15) (2026-10-19, 09:55 IST):** Complete.
   - **Item 15 (Regression-test both 201 paths: Direct 201 and Reservation → 201):**
     - Implemented dedicated, comprehensive dual-path regression suite in `test/unit/wm/goodsIssue201DualPaths.test.js` (24 tests) proving side-by-side agreement across all 8 required dimensions:
@@ -3185,7 +3220,10 @@ The previous log was removed in commit `b741337`; this file restarts it.
 - **Previous Recommended Action (Step 5 — 2026-10-14, 13:05 IST):** Separate TR creation from TO creation (Reservation → TR → TR validation → TO).
 - **Previous Recommended Action (Step 4 — 2026-10-14, 12:50 IST):** Make Background TR creation independently reliable and deterministic with critical 8-field verification rule.
 - **Previous Recommended Action (Step 3 — 2026-10-14, 12:35 IST):** Make MB21 creation independently reliable and decouple TR creation until reservation creation is confirmed.
-- **Next Recommended Action (2026-10-19, 09:55 IST):**
+- **Next Recommended Action (2026-10-19, 10:05 IST):**
+  1. Continue Movement 201 verification or proceed to subsequent planned P2 items as requested by user.
+  2. Maintain 100% green status across all WM suites, ESLint, and diff checks.
+- **Previous Recommended Action (2026-10-19, 09:55 IST):**
   1. Continue Movement 201 verification or proceed to subsequent planned P2 items as requested by user.
   2. Maintain 100% green status across all WM suites, ESLint, and diff checks.
 - **Previous Recommended Action (2026-10-15, 13:20 IST):**
@@ -3204,6 +3242,23 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-19 10:05 IST — MVT 201: Live WM Routing Verification: Real Movement vs Staging/311 Fallback (Item 16)
+
+- **Reason for Change:** User requested: "16. Verify 201 WM routing / Confirm live configuration for: 201 → real WM movement, 201 → staging/311 fallback matches the application's WM_REAL_MOVEMENT behavior."
+- **Files Changed:**
+  - `srv/common/movementConfig.js`: Added support for both `process.env.WM_REAL_MOVEMENT === 'true'` and `process.env.WM_TR_REAL_MOVEMENT === 'true'` in movement resolution.
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: Added support for `process.env.WM_REAL_MOVEMENT === 'true'` alongside `process.env.WM_TR_REAL_MOVEMENT === 'true'` in TR creation logic.
+  - `test/unit/wm/mvt201Routing.test.js`: New dedicated 12-test suite confirming live customizing alignment (`T333`, `T301T`, `T321`, `T156S`), application routing behavior with both flags, dynamic coordinates mapping (`NKDYN = 'X'`, `BETYP = 'K'`, `BENUM` Cost Center), and net quant balance.
+  - `WORKSTATUS.md`: Logged task completion, verification results, and updated current status and next steps.
+- **Verification Commands Executed & Results:**
+  - Live RFC Table Queries: `T333`, `T301T`, `T156S`, `T321`, `LTBK`, `LQUA` → **CONFIRMED MATCH (READ-ONLY)**.
+  - `npx jest test/unit/wm/mvt201Routing.test.js` → **PASS (12/12 tests passed, 100% green)**.
+  - `npx jest test/unit/wm` → **PASS (82/82 active test suites passed, 1,986 passed tests, 56 skipped (live-only), 0 failed)**.
+  - `npm run lint` → **PASS (0 errors, 0 warnings)**.
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+- **Errors / blockers:** None.
+- **Next action:** Proceed with subsequent P2 tasks or await user instruction.
 
 ### 2026-10-19 09:55 IST — MVT 201: Dual Paths Regression Suite (Direct 201 vs Reservation -> 201) (Item 15)
 

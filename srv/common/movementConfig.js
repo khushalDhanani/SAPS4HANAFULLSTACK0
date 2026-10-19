@@ -26,7 +26,7 @@ const MOVEMENT_CONFIG = Object.freeze({
     configuredWmMovement: '201',
     stagingWmMovement: '311',
     get wmMovement() {
-      return process.env.WM_TR_REAL_MOVEMENT === 'true' ? '201' : '311';
+      return (process.env.WM_TR_REAL_MOVEMENT === 'true' || process.env.WM_REAL_MOVEMENT === 'true') ? '201' : '311';
     },
     requirementType: 'K',
     interimStorageType: '911',
@@ -45,7 +45,7 @@ const MOVEMENT_CONFIG = Object.freeze({
     configuredWmMovement: '241',
     stagingWmMovement: '311',
     get wmMovement() {
-      return process.env.WM_TR_REAL_MOVEMENT === 'true' ? '241' : '311';
+      return (process.env.WM_TR_REAL_MOVEMENT === 'true' || process.env.WM_REAL_MOVEMENT === 'true') ? '241' : '311';
     },
     requirementType: 'A',
     interimStorageType: '913',
