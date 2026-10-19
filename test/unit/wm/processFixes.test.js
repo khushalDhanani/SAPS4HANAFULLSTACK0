@@ -11,7 +11,7 @@ const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/Re
 const TrToHandler = require('../../../srv/wm/tr-to/handlers/trTo.handler');
 const { STATUS, STATUS_TEXT, STATUS_CRITICALITY, UNCONFIRMED_TO } = require('../../../srv/common/wmStatus');
 const { sapKey } = require('../../../srv/integration/s4hana/sapKey');
-const { isToFullyConfirmed, isTrClosedWithoutTo, trCompletedWithoutTo } = require('../../../srv/integration/s4hana/wm/toState');
+const { isToFullyConfirmed, isTrClosedWithoutTo, trCompletedWithoutTo, stagedStockCoveringTr } = require('../../../srv/integration/s4hana/wm/toState');
 
 const authorized = () => Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' });
 
@@ -367,5 +367,32 @@ describe('D20: trCompletedWithoutTo (LTBK STATU E + every LTBP item ELIKZ X with
     expect(open.readTable).toHaveBeenCalledTimes(1);
     await expect(trCompletedWithoutTo(rfcWith([{ STATU: 'E' }], [{ TBPOS: '0001', ELIKZ: 'X', TANUM: '0001037367' }]), 'W01', '1000882')).resolves.toBeNull();
     await expect(trCompletedWithoutTo(rfcWith([], []), 'W01', '1000999')).resolves.toBeNull();
+  });
+});
+
+describe('Live 241: stagedStockCoveringTr (PP-WM quantity-reduction guard) [mock only, not SAP verification]', () => {
+  const rfcWith = (t) => ({ readTable: jest.fn(async (table) => t[table] ?? []) });
+  const tables = {
+    LTBK: [{ RSNUM: '0000530231', NLTYP: '921', NLPLA: 'TRANSFER' }],
+    T331: [{ MRAUS: '' }],
+    LTBP: [{ TBPOS: '0001', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'CS02', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: '' }],
+    LQUA: [{ LENUM: '00000000002000019368', VERME: '1.000', EINME: '0.000' }],
+    RESB: []
+  };
+  test('covered item with bin, stock, open quantity and storage units; READ-ONLY reads in SAP order (LTBK, T331, LTBP, LQUA, RESB)', async () => {
+    const rfc = rfcWith(tables);
+    await expect(stagedStockCoveringTr(rfc, 'w01', '1000886')).resolves.toEqual({ tbpos: '0001', material: '000000008000009754', plant: '1120', storageLocation: 'CS02', open: 1, unit: 'NOS', bin: '921/TRANSFER', stock: 1, storageUnits: ['2000019368'] });
+    expect(rfc.readTable.mock.calls.map((c) => c[0])).toEqual(['LTBK', 'T331', 'LTBP', 'LQUA', 'RESB']);
+    expect(rfc.readTable.mock.calls[1]).toEqual(['T331', ['MRAUS'], ["LGNUM = 'W01'", "AND LGTYP = '921'"], 1]);
+  });
+  test('null when the TR has no RSNUM or no destination bin, when MRAUS = X, when the item is already delivered, or when EINME alone does not cover', async () => {
+    await expect(stagedStockCoveringTr(rfcWith({ ...tables, LTBK: [{ RSNUM: '', NLTYP: '921', NLPLA: 'TRANSFER' }] }), 'W01', '1')).resolves.toBeNull();
+    await expect(stagedStockCoveringTr(rfcWith({ ...tables, LTBK: [{ RSNUM: '0000530231', NLTYP: '', NLPLA: '' }] }), 'W01', '1')).resolves.toBeNull();
+    const mr = rfcWith({ ...tables, T331: [{ MRAUS: 'X' }] });
+    await expect(stagedStockCoveringTr(mr, 'W01', '1')).resolves.toBeNull();
+    expect(mr.readTable).toHaveBeenCalledTimes(2);
+    await expect(stagedStockCoveringTr(rfcWith({ ...tables, LTBP: [{ ...tables.LTBP[0], ELIKZ: 'X' }] }), 'W01', '1')).resolves.toBeNull();
+    await expect(stagedStockCoveringTr(rfcWith({ ...tables, LQUA: [{ LENUM: '', VERME: '0.000', EINME: '0.500' }] }), 'W01', '1')).resolves.toBeNull();
+    await expect(stagedStockCoveringTr(rfcWith({ ...tables, LQUA: [{ LENUM: '', VERME: '0.000', EINME: '1.000' }] }), 'W01', '1')).resolves.toMatchObject({ stock: 1, storageUnits: [] });
   });
 });

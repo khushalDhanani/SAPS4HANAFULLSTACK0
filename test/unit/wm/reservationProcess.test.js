@@ -879,6 +879,56 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       console.error.mockRestore();
     });
 
+    // Live 241 (2026-10-19): TR W01/0001000885 was completed by SAP without a TO because the 201 storage unit 2000019368
+    // already sat in the destination bin 921/TRANSFER for CS02. The guard must refuse BEFORE any FM call.
+    const sapWithBinStock = ({ rsnum = '0000530231', mraus = '', quants = [{ LENUM: '00000000002000019368', VERME: '1.000', EINME: '0.000' }], resb = [] } = {}) => {
+      const base = mockRfc.readTable.getMockImplementation();
+      mockRfc.readTable.mockImplementation((table, fields, options) => {
+        if (table === 'LTBK') return Promise.resolve([{ LGNUM: 'W01', TBNUM: '0001001839', BWLVS: '311', RSNUM: rsnum, STATU: '', NLTYP: '921', NLPLA: 'TRANSFER' }]);
+        if (table === 'T331') return Promise.resolve([{ MRAUS: mraus }]);
+        if (table === 'LTBP') return Promise.resolve([{ TBPOS: '0001', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'CS02', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: '' }]);
+        if (table === 'LQUA') return Promise.resolve(quants);
+        if (table === 'RESB') return Promise.resolve(resb);
+        return base(table, fields, options);
+      });
+    };
+
+    test('Live 241 regression: destination bin already holds the open quantity for CS02 -> refused with 409 before any FM call, TR untouched', async () => {
+      sapWithBinStock();
+      const p = adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839', movementType: '241' });
+      await expect(p).rejects.toThrow('Transfer Order not created for TR 1001839: SAP would complete the TR without a TO because bin W01 921/TRANSFER already holds 1 NOS of material 8000009754 for 1120/CS02 (storage unit 2000019368), covering the open 1 NOS (PP-WM quantity reduction, L3 361/362)');
+      await expect(p).rejects.toMatchObject({ status: 409, sapQuantityReduction: true, covered: { bin: '921/TRANSFER', stock: 1, open: 1, storageUnits: ['2000019368'] } });
+      expect(mockRfc.call).not.toHaveBeenCalled();
+      const lqua = mockRfc.readTable.mock.calls.find((c) => c[0] === 'LQUA');
+      expect(lqua[2]).toEqual(["LGNUM = 'W01'", "AND LGTYP = '921'", "AND LGPLA = 'TRANSFER'", "AND MATNR = '000000008000009754'", "AND WERKS = '1120'", "AND LGORT = 'CS02'"]);
+    });
+
+    test('201 behaviour preserved: same TR shape with no stock in the destination bin -> Z_WM_TO_CREATE_FROM_TR is called and the TO is created', async () => {
+      sapWithBinStock({ rsnum: '0000530229', quants: [] });
+      mockRfc.call
+        .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
+        .mockResolvedValueOnce({ EV_TANUM: '0001012966', EV_SUCCESS: 'S' });
+      const result = await adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839', movementType: '201' });
+      expect(result.toNumber).toBe('1012966');
+      expect(mockRfc.call.mock.calls[1]).toEqual(['Z_WM_TO_CREATE_FROM_TR', { IV_LGNUM: 'W01', IV_TBNUM: '0001001839', IV_COMMIT: 'X', IV_SQUIT: ' ' }]);
+    });
+
+    test('Guard stays silent when SAP would not reduce: MRAUS = X, or TR without RSNUM, or stock below the open quantity, or bin reservations exist', async () => {
+      const ok = async () => {
+        mockRfc.call.mockReset();
+        mockRfc.call
+          .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
+          .mockResolvedValueOnce({ EV_TANUM: '0001012966', EV_SUCCESS: 'S' });
+        const r = await adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' });
+        expect(r.toNumber).toBe('1012966');
+        expect(mockRfc.call).toHaveBeenCalledTimes(2);
+      };
+      sapWithBinStock({ mraus: 'X' }); await ok();
+      sapWithBinStock({ rsnum: '0000000000' }); await ok();
+      sapWithBinStock({ quants: [{ LENUM: '', VERME: '0.500', EINME: '0.000' }] }); await ok();
+      sapWithBinStock({ resb: [{ RSNUM: '0000529999' }] }); await ok();
+    });
+
     test('Falls back to ZWM_TO_CREATE_FROM_TR only when Z_WM_TO_CREATE_FROM_TR does not exist on the system', async () => {
       mockRfc.call
         .mockRejectedValueOnce(new Error('UCON blocked'))

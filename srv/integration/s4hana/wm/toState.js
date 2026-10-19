@@ -67,6 +67,44 @@ async function trCompletedWithoutTo(rfc, lgnum, tbnum) {
 }
 
 /**
+ * Pre-TO guard for SAP's PP-WM quantity reduction (live 241, 2026-10-19, TR W01/0001000885):
+ * for a reservation-linked TR (LTBK-RSNUM) with a destination bin (NLTYP/NLPLA) and T331-MRAUS blank, SAPML03T
+ * d0131_tb_bearbeiten takes the stock already in that bin for the item's plant + storage location (L_WMPP_MAT_BIN_SITUATION:
+ * FVMNG = LQUA VERME + EINME - bin reservations) and, when it covers the open quantity, completes the TR WITHOUT a TO
+ * (L3 361 / 362) - the TR is then unusable. READ-ONLY. Returns the first covered item, or null when SAP would create a TO.
+ * shortcut: bin reservations (RESB with LGNUM/LGTYP/LGPLA) are not subtracted; when any exist the guard stays silent and
+ * lets SAP decide - upgrade to the supply-area logic of LLCPPF2G if such reservations ever appear on a staging bin.
+ */
+async function stagedStockCoveringTr(rfc, lgnum, tbnum) {
+  const wh = sapKey(lgnum, 'lgnum');
+  const tr = sapKey(tbnum, 'tbnum').padStart(10, '0');
+  const where = [`LGNUM = '${wh}'`, `AND TBNUM = '${tr}'`];
+  const heads = await rfc.readTable('LTBK', ['RSNUM', 'NLTYP', 'NLPLA'], where, 1);
+  const h = heads?.[0];
+  const rsnum = String(h?.RSNUM || '').trim(), nltyp = String(h?.NLTYP || '').trim(), nlpla = String(h?.NLPLA || '').trim();
+  if (!h || /^0*$/.test(rsnum) || !nltyp || !nlpla) return null;
+  const t331 = await rfc.readTable('T331', ['MRAUS'], [`LGNUM = '${wh}'`, `AND LGTYP = '${nltyp}'`], 1);
+  if (String(t331?.[0]?.MRAUS || '').trim() === 'X') return null;
+  const items = await rfc.readTable('LTBP', ['TBPOS', 'MATNR', 'WERKS', 'LGORT', 'MENGE', 'TAMEN', 'MEINS', 'ELIKZ'], where);
+  for (const i of items || []) {
+    if (String(i.ELIKZ || '').trim() === 'X') continue;
+    const open = Number(i.MENGE || 0) - Number(i.TAMEN || 0);
+    if (!(open > 0)) continue;
+    const binWhere = [`LGNUM = '${wh}'`, `AND LGTYP = '${nltyp}'`, `AND LGPLA = '${nlpla}'`, `AND MATNR = '${i.MATNR}'`, `AND WERKS = '${i.WERKS}'`, `AND LGORT = '${i.LGORT}'`];
+    const quants = await rfc.readTable('LQUA', ['LENUM', 'VERME', 'EINME'], binWhere);
+    const stock = (quants || []).reduce((sum, q) => sum + Number(q.VERME || 0) + Number(q.EINME || 0), 0);
+    if (stock < open) continue;
+    const reserved = await rfc.readTable('RESB', ['RSNUM'], [`LGNUM = '${wh}'`, `AND LGTYP = '${nltyp}'`, `AND LGPLA = '${nlpla}'`, `AND MATNR = '${i.MATNR}'`], 1);
+    if (Array.isArray(reserved) && reserved.length) continue;
+    return {
+      tbpos: i.TBPOS, material: i.MATNR, plant: i.WERKS, storageLocation: i.LGORT, open, unit: String(i.MEINS || '').trim(),
+      bin: `${nltyp}/${nlpla}`, stock, storageUnits: (quants || []).map((q) => String(q.LENUM || '').trim().replace(/^0+/, '')).filter(Boolean)
+    };
+  }
+  return null;
+}
+
+/**
  * Builds Handling Unit confirmation table (T_LTAP_CONF_HU) for a Transfer Order.
  * When LTAP items involve Handling Units (VLENR is present), L_TO_CONFIRM requires
  * T_LTAP_CONF_HU with complete HU withdrawal (HUENT = 'X') to avoid error L3 848
@@ -131,4 +169,4 @@ function mapStorageTypeSearchError(rawMsg, lgnum, mvt = '') {
   return `Data for storage type search is not defined in warehouse ${wh} for WM movement type ${mvt || '311'}: missing customizing key in table T334T (Warehouse: ${wh}, Operation: ${op} [${opText}], Storage Type Indicator: '${indicator}'${extraStr}). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > ${sproStrategy} > Determine Storage Type Search.`;
 }
 
-module.exports = { isToFullyConfirmed, findUnconfirmedToItems, isTrClosedWithoutTo, trCompletedWithoutTo, getHuConfirmationItems, mapStorageTypeSearchError };
+module.exports = { isToFullyConfirmed, findUnconfirmedToItems, isTrClosedWithoutTo, trCompletedWithoutTo, stagedStockCoveringTr, getHuConfirmationItems, mapStorageTypeSearchError };

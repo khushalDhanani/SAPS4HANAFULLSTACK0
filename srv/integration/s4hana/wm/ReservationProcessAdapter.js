@@ -13,7 +13,7 @@ const {
   validateMovement311Destination,
   verifyReceivingLocationInSap
 } = require('../../../common/movementConfig');
-const { isToFullyConfirmed, getHuConfirmationItems, mapStorageTypeSearchError, trCompletedWithoutTo } = require('./toState');
+const { isToFullyConfirmed, getHuConfirmationItems, mapStorageTypeSearchError, trCompletedWithoutTo, stagedStockCoveringTr } = require('./toState');
 const { checkAuthorization } = require('./authCheck');
 
 const pad10 = (v) => String(v || '').trim().padStart(10, '0');
@@ -1683,6 +1683,19 @@ class ReservationProcessAdapter {
       const verifiedTR = await this.getTransferRequirement(s4Tr, wh);
       if (!verifiedTR) {
         throw httpError(400, `Created TR ${alphaOut(s4Tr)} cannot be verified in SAP before TO creation`);
+      }
+    }
+
+    // Live 241 (2026-10-19): SAP completes a reservation-linked TR without a TO when the destination bin already holds the
+    // open quantity for the item's storage location (PP-WM quantity reduction) - the TR is consumed and no TO exists.
+    // Refuse before any FM call so the TR stays usable; the message names the stock that has to be consumed or moved.
+    if (this.rfc) {
+      const covered = await stagedStockCoveringTr(this.rfc, wh, s4Tr);
+      if (covered) {
+        const su = covered.storageUnits.length ? ` (storage unit${covered.storageUnits.length > 1 ? 's' : ''} ${covered.storageUnits.join(', ')})` : '';
+        throw Object.assign(httpError(409,
+          `Transfer Order not created for TR ${alphaOut(s4Tr)}: SAP would complete the TR without a TO because bin ${wh} ${covered.bin} already holds ${covered.stock} ${covered.unit} of material ${alphaOut(covered.material)} for ${covered.plant}/${covered.storageLocation}${su}, covering the open ${covered.open} ${covered.unit} (PP-WM quantity reduction, L3 361/362). Consume or move that stock, or have quantity reduction switched off for storage type ${covered.bin.split('/')[0]} (T331), then retry.`),
+          { sapQuantityReduction: true, covered });
       }
     }
 
