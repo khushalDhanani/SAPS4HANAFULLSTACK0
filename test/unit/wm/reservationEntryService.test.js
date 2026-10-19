@@ -96,6 +96,43 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
     });
   });
 
+  describe('1f. SAP infrastructure errors are shown user-safe (browser audit follow-up)', () => {
+    const body = { MovementType: '311', Plant: '1120', StorageLocation: 'CS01', ReceivingStorageLocation: 'ST02', Material: '1000000045', Quantity: 1, Unit: 'KG' };
+    const infra = (msg) => Object.assign(new Error(msg), { status: 503 });
+    const expectSafe = async (p, status) => {
+      const err = await p.catch((e) => e);
+      expect(err.response.status).toBe(status);
+      const text = err.response.data.error.message;
+      expect(text).toMatch(/SAP system connection is currently unavailable; nothing was sent to SAP/);
+      expect(text).not.toMatch(/S4_RFC_SYSNR|\.env|node-rfc|RFC connection/);
+    };
+
+    test('T320 read fails with the RFC configuration error -> generic 503 text, technical text only in the log', async () => {
+      t320Spy.mockImplementation(async () => { throw infra('RFC connection not configured: set S4_RFC_SYSNR in .env.local'); });
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValue({ success: true });
+      await expectSafe(POST('/odata/v4/reservation-entry/createReservationEntry', body, authClerk), 503);
+      expect(createResSpy).not.toHaveBeenCalled();
+    });
+
+    test('BAPI call fails with an RFC communication failure -> generic text, attempt records it as unknown', async () => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockRejectedValue(Object.assign(new Error('RFC_COMMUNICATION_FAILURE: partner not reached'), { status: 502 }));
+      await expectSafe(POST('/odata/v4/reservation-entry/createReservationEntry', body, authClerk), 502);
+    });
+
+    test('a SAP business rejection keeps its text', async () => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockRejectedValue(Object.assign(new Error('BAPI_RESERVATION_CREATE1 failed: Deficit of stock'), { status: 400, error: 'Deficit of stock' }));
+      await expect(POST('/odata/v4/reservation-entry/createReservationEntry', body, authClerk)).rejects.toMatchObject({ response: { status: 400, data: { error: { message: expect.stringMatching(/Deficit of stock/) } } } });
+    });
+
+    test('createReservation action: infrastructure failure returns the generic text in stage WAREHOUSE', async () => {
+      t320Spy.mockImplementation(async () => { throw infra('node-rfc is not available (not installed)'); });
+      const { data } = await POST('/odata/v4/reservation-entry/createReservation', body, authClerk);
+      expect(data).toMatchObject({ success: false, stage: 'WAREHOUSE' });
+      expect(data.error).toMatch(/SAP system connection is currently unavailable/);
+      expect(data.error).not.toMatch(/node-rfc/);
+    });
+  });
+
   describe('1d. Warehouse determination (Step 7.5, audit D8)', () => {
     const resNo = '0000777075';
     const okRes = { success: true, reservationNo: '777075', reservationNoRaw: resNo, reservationItem: '0001', status: '01' };
@@ -159,6 +196,14 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       const { data } = await POST('/odata/v4/reservation-entry/createReservation', { ...body311, WarehouseNumber: 'W02' }, authClerk);
       expect(data).toMatchObject({ success: false, stage: 'WAREHOUSE', error: expect.stringMatching(/does not match/) });
       expect(createResSpy).not.toHaveBeenCalled();
+    });
+
+    test('D7: CreatedByUser is never an invented user: SAP USNAM, else the requesting user', async () => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValue({ ...okRes, createdByUser: null });
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement').mockResolvedValue(okTr);
+      const { data } = await post({});
+      expect(data.CreatedByUser).toBe('carol');
+      expect(data.CreatedByUser).not.toBe('KHUSHAL');
     });
 
     test('createTransferRequirement action: supplied warehouse validated against T320 -> 400 on mismatch', async () => {

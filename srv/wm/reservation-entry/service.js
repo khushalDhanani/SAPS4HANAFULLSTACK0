@@ -8,6 +8,7 @@ const { STATUS, STEP_ERROR, UNCONFIRMED_TO, PROCESS_STATUS } = require('../../co
 const { sapKey } = require('../../integration/s4hana/sapKey');
 const { withReservationLock, isLockConflict } = require('../../integration/s4hana/wm/resLock');
 const attemptStore = require('./ReservationAttemptStore');
+const { userFacingSapError } = require('../../common/sapErrorText');
 const { classifyCreateFailure } = require('./ReservationAttemptStore');
 const { validateReservationInput, getMovementConfig, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
 const LOG = cds.log('reservation-entry');
@@ -93,7 +94,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       try {
         determinedWh = await resolveWarehouses(MovementType, Plant, StorageLocation, ReceivingStorageLocation, WarehouseNumber);
       } catch (whErr) {
-        req.error(whErr.status || 502, whErr.message);
+        req.error(whErr.status || 502, userFacingSapError(whErr, req, 'warehouse determination'));
         return;
       }
 
@@ -132,7 +133,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         const docHint = prior.ReservationNo ? ` SAP reservation ${alphaOut(prior.ReservationNo)} belongs to that attempt.` : '';
         req.error(409, claim.reason === 'in_progress'
           ? `An identical reservation request is still in progress (attempt ${prior.AttemptKey}); wait for it to finish.${docHint}`
-          : `A previous identical request is at stage ${prior.Stage} (${prior.LastError || 'no error text'}).${docHint} Resolve it (open the reservation in the app to import it) before creating a new one.`);
+          : `A previous identical request is at stage ${prior.Stage} (${prior.LastError ? userFacingSapError({ message: prior.LastError }, req, 'prior attempt') : 'no error text'}).${docHint} Resolve it (open the reservation in the app to import it) before creating a new one.`);
         return;
       }
       const attemptId = claim.row.ID;
@@ -164,9 +165,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           batch: Batch
         });
       } catch (err) {
-        const errorMsg = err.error || err.message;
+        const errorMsg = userFacingSapError(err, req, 'BAPI_RESERVATION_CREATE1');
         const stage = classifyCreateFailure(err);
-        await attemptStore.setStage(attemptId, stage, { LastError: errorMsg, ...(err.reservationNo ? { ReservationNo: String(err.reservationNo).padStart(10, '0'), ReservationItem: '0001' } : {}) });
+        await attemptStore.setStage(attemptId, stage, { LastError: String(err.error || err.message || ''), ...(err.reservationNo ? { ReservationNo: String(err.reservationNo).padStart(10, '0'), ReservationItem: '0001' } : {}) });
         const hint = stage === 'RESERVATION_UNKNOWN'
           ? ' The outcome in SAP is unknown: check the reservation list before submitting again (the app blocks an identical re-submit until this attempt is resolved).'
           : (stage === 'RESERVATION_CREATED_MISMATCH' ? ` Reservation ${alphaOut(err.reservationNo)} exists in SAP; open it in the app to import it.` : '');
@@ -241,7 +242,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
 
       // Step 1b: Persist tracking row immediately with RSNUM as soon as SAP returns it
-      const sCreatedBy = payload.CreatedByUser || (resResult && (resResult.createdByUser || resResult.USNAM)) || (req.user && req.user.id) || 'KHUSHAL';
+      const sCreatedBy = payload.CreatedByUser || (resResult && (resResult.createdByUser || resResult.USNAM)) || (req.user && req.user.id) || '';
       const initialTrackRecord = {
         ReservationNo: resNo,
         ReservationItem: resItem,
@@ -398,7 +399,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         stageLater('TR_CREATED', { TransferRequirement: trNumber });
       } catch (err) {
         // Reservation exists but the backend created no TR: status 11 (TR error), a backend issue to fix in SAP.
-        trError = `TR creation failed in SAP backend: ${err.message}`;
+        trError = `TR creation failed in SAP backend: ${userFacingSapError(err, req, 'L_TR_CREATE')}`;
         stageLater('TR_FAILED', { LastError: trError });
 
         await UPDATE(ReservationEntries).set({
@@ -575,7 +576,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       try {
         determinedWh = await resolveWarehouses(payload.MovementType, payload.Plant, payload.StorageLocation, payload.ReceivingStorageLocation, payload.WarehouseNumber);
       } catch (whErr) {
-        return { success: false, stage: 'WAREHOUSE', error: whErr.message };
+        return { success: false, stage: 'WAREHOUSE', error: userFacingSapError(whErr, req, 'warehouse determination') };
       }
       try {
         const stock = await adapter.checkStockForReservation({ plant: payload.Plant, storageLocation: payload.StorageLocation, material: payload.Material, batch: payload.Batch, quantity: payload.Quantity, unit: payload.Unit, warehouseNumber: determinedWh });
@@ -617,11 +618,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           throwError: false
         });
       } catch (err) {
-        await attemptStore.setStage(attemptId, classifyCreateFailure(err), { LastError: err.error || err.message, ...(err.reservationNo ? { ReservationNo: String(err.reservationNo).padStart(10, '0'), ReservationItem: '0001' } : {}) });
+        const errorMsg = userFacingSapError(err, req, 'BAPI_RESERVATION_CREATE1');
+        await attemptStore.setStage(attemptId, classifyCreateFailure(err), { LastError: String(err.error || err.message || ''), ...(err.reservationNo ? { ReservationNo: String(err.reservationNo).padStart(10, '0'), ReservationItem: '0001' } : {}) });
         return {
           success: false,
           stage: 'RESERVATION',
-          error: err.error || err.message
+          error: errorMsg
         };
       }
 
@@ -643,7 +645,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       await attemptStore.setStage(attemptId, 'RESERVATION_CREATED', { ReservationNo: resNo, ReservationItem: resItem });
 
       // Persist reservation in tracking table with status RES_CREATED
-      const sCreatedBy = payload.CreatedByUser || (resResult && (resResult.createdByUser || resResult.USNAM)) || (req.user && req.user.id) || 'KHUSHAL';
+      const sCreatedBy = payload.CreatedByUser || (resResult && (resResult.createdByUser || resResult.USNAM)) || (req.user && req.user.id) || '';
       const initialTrackRecord = {
         ReservationNo: resNo,
         ReservationItem: resItem,
@@ -731,7 +733,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       try {
         determinedWh = await warehouseFor(track.Plant, track.StorageLocation, WarehouseNumber || track.WarehouseNumber);
       } catch (whErr) {
-        return req.error(whErr.status || 502, whErr.message);
+        return req.error(whErr.status || 502, userFacingSapError(whErr, req, 'warehouse determination'));
       }
 
       let trResult;

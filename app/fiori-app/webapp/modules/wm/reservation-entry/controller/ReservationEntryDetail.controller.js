@@ -42,18 +42,21 @@ sap.ui.define([
             }
         },
 
+        // No master-data defaults: plant, storage locations, material, unit, account assignment and
+        // order data come from the user via the value helps (PlantVH, StorageLocationVH, MaterialVH,
+        // CostCenterVH, OrderTypeVH, InternalOrderVH). MovementType is the first entry of the select.
         _getDefaultCreateData: function () {
             return {
                 MovementType: "311",
-                Plant: "1120",
-                StorageLocation: "CS01",
+                Plant: "",
+                StorageLocation: "",
                 WarehouseNumber: "",
-                Material: "1000000045",
-                MaterialName: "Raw Material 45",
-                Quantity: 10,
-                Unit: "KG",
+                Material: "",
+                MaterialName: "",
+                Quantity: "",
+                Unit: "",
                 Batch: "",
-                ReceivingStorageLocation: "ST02",
+                ReceivingStorageLocation: "",
                 ReceivingPlant: "",
                 CostCenter: "",
                 AssetNo: "",
@@ -191,12 +194,9 @@ sap.ui.define([
             this._oCreateModel.setProperty("/MovementType", sMvt);
             this._oViewModel.setProperty("/errorMessage", "");
 
-            // Adjust default values per movement type to help the user
+            // Clear the fields the selected movement type does not use; never prefill business values.
             switch (sMvt) {
                 case "201":
-                    if (!this._oCreateModel.getProperty("/CostCenter")) {
-                        this._oCreateModel.setProperty("/CostCenter", "1011201301");
-                    }
                     this._oCreateModel.setProperty("/ReceivingStorageLocation", "");
                     this._oCreateModel.setProperty("/ReceivingPlant", "");
                     this._oCreateModel.setProperty("/AssetNo", "");
@@ -205,10 +205,6 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "241":
-                    if (!this._oCreateModel.getProperty("/AssetNo")) {
-                        this._oCreateModel.setProperty("/AssetNo", "000000400092");
-                        this._oCreateModel.setProperty("/SubNumber", "0000");
-                    }
                     this._oCreateModel.setProperty("/ReceivingStorageLocation", "");
                     this._oCreateModel.setProperty("/ReceivingPlant", "");
                     this._oCreateModel.setProperty("/CostCenter", "");
@@ -216,10 +212,9 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "311":
-                    var sCurrentSLoc = this._oCreateModel.getProperty("/StorageLocation") || "CS01";
-                    var sCurrentRecSLoc = this._oCreateModel.getProperty("/ReceivingStorageLocation");
-                    if (!sCurrentRecSLoc || sCurrentRecSLoc === sCurrentSLoc) {
-                        this._oCreateModel.setProperty("/ReceivingStorageLocation", sCurrentSLoc === "ST02" ? "CS01" : "ST02");
+                    // A receiving SLoc equal to the issuing one is invalid for 311: clear it, the user picks another.
+                    if (this._oCreateModel.getProperty("/ReceivingStorageLocation") === this._oCreateModel.getProperty("/StorageLocation")) {
+                        this._oCreateModel.setProperty("/ReceivingStorageLocation", "");
                     }
                     this._oCreateModel.setProperty("/ReceivingPlant", "");
                     this._oCreateModel.setProperty("/CostCenter", "");
@@ -229,12 +224,6 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "301":
-                    if (!this._oCreateModel.getProperty("/ReceivingPlant")) {
-                        this._oCreateModel.setProperty("/ReceivingPlant", "1130");
-                    }
-                    if (!this._oCreateModel.getProperty("/ReceivingStorageLocation")) {
-                        this._oCreateModel.setProperty("/ReceivingStorageLocation", "ST02");
-                    }
                     this._oCreateModel.setProperty("/CostCenter", "");
                     this._oCreateModel.setProperty("/AssetNo", "");
                     this._oCreateModel.setProperty("/SubNumber", "");
@@ -242,9 +231,6 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/OrderID", "");
                     break;
                 case "261":
-                    if (!this._oCreateModel.getProperty("/OrderType")) {
-                        this._oCreateModel.setProperty("/OrderType", "ZEMP");
-                    }
                     this._oCreateModel.setProperty("/OrderID", "");
                     this._oCreateModel.setProperty("/ReceivingStorageLocation", "");
                     this._oCreateModel.setProperty("/ReceivingPlant", "");
@@ -370,7 +356,7 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/Plant", oData.Plant);
                 }
                 if (this._oCreateModel.getProperty("/MovementType") === "311" && this._oCreateModel.getProperty("/ReceivingStorageLocation") === sKey) {
-                    this._oCreateModel.setProperty("/ReceivingStorageLocation", sKey === "ST02" ? "CS01" : "ST02");
+                    this._oCreateModel.setProperty("/ReceivingStorageLocation", ""); // same SLoc is invalid for 311
                 }
                 oInput.setValueState("None");
             } else if (sId.indexOf("inputRecSLoc") !== -1) {

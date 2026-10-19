@@ -257,7 +257,7 @@
                                                 id="inputQuantity"
                                                 value="{create>/Quantity}"
                                                 type="Number"
-                                                placeholder="10"
+                                                placeholder="{i18n>resPlaceholderQuantity}"
                                                 width="65%"
                                                 class="sapUiTinyMarginEnd"
                                                 liveChange=".onFieldLiveChange" />
@@ -364,7 +364,7 @@
                                     <Input
                                         id="inputCostCenter"
                                         value="{create>/CostCenter}"
-                                        placeholder="1011201301"
+                                        placeholder="{i18n>resPlaceholderCostCenter}"
                                         maxLength="10"
                                         showValueHelp="true"
                                         showSuggestion="true"
@@ -388,7 +388,7 @@
                                     <Input
                                         id="inputAssetNo"
                                         value="{create>/AssetNo}"
-                                        placeholder="000000400092"
+                                        placeholder="{i18n>resPlaceholderAssetNo}"
                                         maxLength="12"
                                         visible="{= ${create>/MovementType} === '241' }"
                                         liveChange=".onFieldLiveChange" />
@@ -400,7 +400,7 @@
                                     <Input
                                         id="inputSubNumber"
                                         value="{create>/SubNumber}"
-                                        placeholder="0000"
+                                        placeholder="{i18n>resPlaceholderSubNumber}"
                                         maxLength="4"
                                         visible="{= ${create>/MovementType} === '241' }" />
 

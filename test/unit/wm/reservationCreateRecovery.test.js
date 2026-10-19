@@ -95,9 +95,12 @@ describe('Step 7.7: reservation-create partial failure and recovery', () => {
 
   test('timeout / unknown SAP response: stage RESERVATION_UNKNOWN, identical re-submit is blocked with 409 (no duplicate)', async () => {
     const resSpy = spy('createReservation').mockRejectedValueOnce(Object.assign(new Error('RFC_COMMUNICATION_FAILURE: timeout'), { status: 504 }));
-    await expect(create()).rejects.toMatchObject({ response: { status: 504, data: { error: { message: expect.stringMatching(/outcome in SAP is unknown/) } } } });
+    const unknownErr = await create().catch((e) => e);
+    expect(unknownErr.response.status).toBe(504);
+    expect(unknownErr.response.data.error.message).toMatch(/outcome in SAP is unknown/);
+    expect(unknownErr.response.data.error.message).not.toMatch(/RFC_COMMUNICATION_FAILURE/); // technical code stays in the log / attempt row
     expect((await attempts())[0]).toMatchObject({ Stage: 'RESERVATION_UNKNOWN', LastError: 'RFC_COMMUNICATION_FAILURE: timeout' });
-    await expect409(create(), /is at stage RESERVATION_UNKNOWN .*RFC_COMMUNICATION_FAILURE: timeout/);
+    await expect409(create(), /is at stage RESERVATION_UNKNOWN \(The SAP system connection is currently unavailable/);
     expect(resSpy).toHaveBeenCalledTimes(1);
     expect(await attempts()).toHaveLength(1);
   });

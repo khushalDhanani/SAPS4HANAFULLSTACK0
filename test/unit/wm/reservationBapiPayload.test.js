@@ -74,6 +74,17 @@ describe('Step 7.4: exact BAPI_RESERVATION_CREATE1 payload per movement (MOVEMEN
     expect(headerKeys).not.toContain('GL_ACCOUNT');
   });
 
+  test('241 (D7): no company-code or sub-number fallback - missing T001K row is reported, SUB_NUMBER is what was sent', async () => {
+    const rfc = makeRfc({ T001K: [] });
+    await expect(new ReservationProcessAdapter({ rfc }).createReservation(inputs['241']))
+      .rejects.toMatchObject({ status: 400, message: 'No company code is assigned to plant 1120 (T001K); the asset cannot be validated' });
+    expect(rfc.call).not.toHaveBeenCalled();
+    const rfc2 = makeRfc({ RKPF: rkpfFor({ ...expectedHeader['241'], SUB_NUMBER: '0002' }), RESB: resbFor() });
+    await new ReservationProcessAdapter({ rfc: rfc2 }).createReservation({ ...inputs['241'], subNumber: '2' });
+    expect(bapiArgs(rfc2).RESERVATIONHEADER.SUB_NUMBER).toBe('0002');
+    expect(rfc2.readTable.mock.calls.find((c) => c[0] === 'ANLA')[2]).toEqual(["BUKRS = '1000'", "AND ANLN1 = '000000400092'", "AND ANLN2 = '0002'"]);
+  });
+
   test('201: alphanumeric cost center is sent as entered (no zero padding), numeric is ALPHA-padded to 10', async () => {
     const rfc = makeRfc({ CSKS: [{ KOSTL: 'SAP-DUMMY', DATAB: '20200101', DATBI: '99991231', BKZKP: '' }] });
     await new ReservationProcessAdapter({ rfc }).createReservation({ ...inputs['201'], costCenter: 'SAP-DUMMY' });

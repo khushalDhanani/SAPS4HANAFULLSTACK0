@@ -240,6 +240,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Class B: Batch material completes 241 reservation with batch, TR, TO, and MIGO [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'MARC') return [{ MATNR: '000000008900000004', WERKS: '1120', XCHPF: 'X', SERNP: '' }];
         if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
         if (table === 'MARD') return [{ LGORT: 'CS01', LABST: '50.000' }];
@@ -303,6 +304,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Class C: Serial material completes 241 with serial numbers in MIGO [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'MARC') return [{ MATNR: '000000008000006485', WERKS: '1120', XCHPF: '', SERNP: 'ZSN2' }];
         if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS02' }];
         if (table === 'MARD') return [{ LGORT: 'CS02', LABST: '10.000' }];
@@ -342,6 +344,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Class E: Small SU stock (VOLLE = blank) allows partial pick [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'T331') return [{ VOLLE: '' }];
         if (table === 'MARC') return [{ XCHPF: '', SERNP: '' }];
         if (table === 'MAKT') return [{ MAKTX: 'Small SU Mat' }];
@@ -369,6 +372,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Class F: Large SU stock (VOLLE = X) allows full SU pick [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'T331') return [{ VOLLE: 'X' }];
         if (table === 'LQUA') return [{ VERME: '100.000' }];
         if (table === 'MARC') return [{ XCHPF: 'X', SERNP: '' }];
@@ -400,6 +404,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
   describe('2. Defect & Validation Guard Tests [mock only, not SAP verification]', () => {
     test('Missing batch for batch-managed material (Class B/D) fails with clear 400 naming batch [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'MARC') return [{ XCHPF: 'X' }];
         if (table === 'T320') return [{ LGNUM: 'W01' }];
         if (table === 'MARD') return [{ LGORT: 'CS01' }];
@@ -423,6 +428,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Missing serial for serial-managed material (Class C/D) fails with clear 400 naming serial numbers [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'MARC') return [{ SERNP: 'ZSN2' }];
         if (table === 'T320') return [{ LGNUM: 'W01' }];
         if (table === 'MARD') return [{ LGORT: 'CS02', LABST: '10.000' }];
@@ -448,6 +454,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Serial count mismatch against quantity fails with clear 400 [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'MARC') return [{ SERNP: 'ZSN2' }];
         if (table === 'MARD') return [{ LGORT: 'CS02', LABST: '10.000' }];
         if (table === 'ANLA') return [{ BUKRS: '1000', ANLN1: '000000400001', ANLN2: '0000', AKTIV: '20250529' }];
@@ -472,6 +479,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Partial pick from VOLLE = X storage unit fails with clear 400 [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'T331') return [{ VOLLE: 'X' }];
         if (table === 'LQUA') return [{ VERME: '100.000' }];
         if (table === 'MARC') return [{ XCHPF: '', SERNP: '' }];
@@ -494,6 +502,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Insufficient stock in SLoc fails with clear 400 [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '0.000' }];
         if (table === 'ANLA') return [{ BUKRS: '1000', ANLN1: '000000400001', ANLN2: '0000', AKTIV: '20250529' }];
         return [];
@@ -542,6 +551,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Nonexistent asset in ANLA fails with clear 400 [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'T320') return [{ LGNUM: 'W01' }];
         if (table === 'ANLA') return []; // Asset not found
         return [];
@@ -563,6 +573,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Deactivated asset in ANLA (DEAKT) fails with clear 400 naming deactivation date [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'T320') return [{ LGNUM: 'W01' }];
         if (table === 'ANLA') return [{ BUKRS: '1000', ANLN1: '000000400000', ANLN2: '0000', AKTIV: '20250521', DEAKT: '20250521' }];
         return [];
@@ -584,6 +595,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Uncapitalized / inactive asset in ANLA (AKTIV = 0) fails with clear 400 [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'T320') return [{ LGNUM: 'W01' }];
         if (table === 'ANLA') return [{ BUKRS: '1000', ANLN1: '000000400002', ANLN2: '0000', AKTIV: '00000000', DEAKT: '00000000' }];
         return [];
@@ -605,6 +617,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Asset marked for deletion (ANLA-XLOEV = X) fails with clear 400 [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'T320') return [{ LGNUM: 'W01' }];
         if (table === 'ANLA') return [{ BUKRS: '1000', ANLN1: '000000400003', ANLN2: '0000', AKTIV: '20250501', DEAKT: '00000000', XLOEV: 'X' }];
         return [];
@@ -626,6 +639,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Asset locked for postings (ANLA-XSPEB = X) fails with clear 400 [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'T320') return [{ LGNUM: 'W01' }];
         if (table === 'ANLA') return [{ BUKRS: '1000', ANLN1: '000000400004', ANLN2: '0000', AKTIV: '20250501', DEAKT: '00000000', XSPEB: 'X' }];
         return [];
@@ -669,6 +683,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
       // Retry: found already posted in MATDOC
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'MATDOC') return [{ MBLNR: '4900050149', MJAHR: '2026' }];
         return [];
       });
@@ -693,6 +708,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
     test('Confirmed TO quantity (CONF_MENGE) from LTAP scopes MIGO quantity [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table, fields) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'LTAP' && fields.includes('NISTM')) return [{ VSOLM: '5.000', NISTM: '3.000' }];
         if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '10.000' }];
         if (table === 'ANLA') return [{ BUKRS: '1000', ANLN1: '000000400001', ANLN2: '0000', AKTIV: '20250529' }];
@@ -765,6 +781,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
     test('T321 warning surfaces when TBFKZ = X [mock only, not SAP verification]', async () => {
       process.env.WM_PRE_MIGO_T321_CHECK = 'true';
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'T321') return [{ LGNUM: '***', RBLVS: '241', TBFKZ: 'X' }];
         if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
         if (table === 'ANLA') return [{ BUKRS: '1000', ANLN1: '000000400001', ANLN2: '0000', AKTIV: '20250529' }];

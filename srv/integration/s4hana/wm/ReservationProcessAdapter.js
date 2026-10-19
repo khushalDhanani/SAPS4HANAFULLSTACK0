@@ -96,7 +96,7 @@ class ReservationProcessAdapter {
       }
 
       if (String(movementType).trim() === '241') {
-        await this.validateAsset(assetNo, subNumber, plant);
+        await this.validateAsset(assetNo, subNumber, plant, new Date(), { requireCompanyCode: true });
       }
 
       // Canonical adapter contract (Step 7.2): orderId / orderType only; callers normalize aliases before calling.
@@ -172,7 +172,7 @@ class ReservationProcessAdapter {
         ...(targetMovePlant ? { MOVE_PLANT: sapKey(targetMovePlant, 'plant') } : {}),
         ...(dest.allowsReceivingSloc && receivingStorageLocation ? { MOVE_STLOC: sapKey(receivingStorageLocation, 'lgort') } : {}),
         ...(acct.type === 'CostCenter' && costCenter ? { COSTCENTER: padIfNumeric(costCenter, 10) } : {}),
-        ...(acct.type === 'Asset' && assetNo ? { ASSET_NO: padIfNumeric(assetNo, 12), SUB_NUMBER: padIfNumeric(subNumber || '0000', 4) } : {}),
+        ...(acct.type === 'Asset' && assetNo ? { ASSET_NO: padIfNumeric(assetNo, 12), SUB_NUMBER: padIfNumeric(subNumber, 4) } : {}),
         ...(acct.type === 'Order' && sOrderId ? { ORDERID: pad12(sOrderId) } : {})
       };
 
@@ -2837,7 +2837,7 @@ class ReservationProcessAdapter {
   /**
    * Validate Asset validity and lock status against ANLA before calling SAP.
    */
-  async validateAsset(assetNo, subNumber = '0000', plant = '1120', date = new Date()) {
+  async validateAsset(assetNo, subNumber, plant, date = new Date(), options = {}) {
     if (!assetNo || !String(assetNo).trim()) {
       throw httpError(400, 'Asset number is mandatory for Movement Type 241 (GI to Asset)');
     }
@@ -2846,14 +2846,20 @@ class ReservationProcessAdapter {
     const s4Anln2 = pad4(subNumber || '0000');
     const dateStr = typeof date === 'string' && /^\d{8}$/.test(date) ? date : this._sapDate(date);
 
-    let bukrs = '1000';
+    // Company code comes from the plant's valuation area (T001K). Reservation creation (requireCompanyCode)
+    // reports a missing assignment instead of assuming one.
+    let bukrs = '';
     if (plant) {
       try {
         const t001kRows = await this.rfc.readTable('T001K', ['BWKEY', 'BUKRS'], [`BWKEY = '${sapKey(plant, 'plant')}'`], 1);
-        if (t001kRows?.[0]?.BUKRS?.trim()) {
-          bukrs = t001kRows[0].BUKRS.trim();
-        }
-      } catch (_e) { /* fallback 1000 */ }
+        bukrs = String(t001kRows?.[0]?.BUKRS || '').trim();
+      } catch (e) {
+        if (options.requireCompanyCode) throw e;
+      }
+    }
+    if (!bukrs) {
+      if (options.requireCompanyCode) throw httpError(400, `No company code is assigned to plant ${plant || '(none)'} (T001K); the asset cannot be validated`);
+      bukrs = '1000'; // shortcut: legacy fallback of the proven MIGO 241 posting path, kept unchanged; remove once that path is validated against T001K
     }
 
     let rows = [];

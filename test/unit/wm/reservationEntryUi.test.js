@@ -87,80 +87,64 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
     });
 
     describe('ReservationEntryDetail: Defaults & Movement Type Switching', () => {
-        it('returns correct default creation data for 311', () => {
+        const switchTo = (subject, mvt) => subject.onMovementTypeChange({ getParameter: (p) => p === 'selectedItem' ? { getKey: () => mvt } : null });
+        const BUSINESS_FIELDS = ['Plant', 'StorageLocation', 'WarehouseNumber', 'Material', 'MaterialName', 'Quantity', 'Unit', 'Batch', 'ReceivingStorageLocation', 'ReceivingPlant', 'CostCenter', 'AssetNo', 'SubNumber', 'OrderType', 'OrderID'];
+
+        it('D7: the create form carries no master-data defaults (only the first movement type of the select)', () => {
             const subject = createDetailSubject();
             const defaults = subject._getDefaultCreateData();
             expect(defaults.MovementType).toBe('311');
-            expect(defaults.Plant).toBe('1120');
-            expect(defaults.StorageLocation).toBe('CS01');
-            expect(defaults.ReceivingStorageLocation).toBe('ST02');
-            expect(defaults.Quantity).toBe(10);
-            expect(defaults.Unit).toBe('KG');
-            expect(defaults.WarehouseNumber).toBe('');
-            expect(defaults.Batch).toBe('');
+            for (const f of BUSINESS_FIELDS) expect(`${f}=${defaults[f]}`).toBe(`${f}=`);
+            expect(Object.keys(defaults).sort()).toEqual(['MovementType', ...BUSINESS_FIELDS].sort());
         });
 
-        it('switches to Movement 311: avoids SLoc collision when issuing SLoc is ST02', () => {
+        it.each(['201', '241', '261', '301', '311'])('D7: switching to %s prefills no business value', (mvt) => {
+            const subject = createDetailSubject();
+            switchTo(subject, mvt);
+            expect(subject._oCreateModel.getProperty('/MovementType')).toBe(mvt);
+            for (const f of BUSINESS_FIELDS) expect(`${f}=${subject._oCreateModel.getProperty('/' + f)}`).toBe(`${f}=`);
+        });
+
+        it('switching movement type clears the fields the new type does not use and keeps the ones it does', () => {
+            const subject = createDetailSubject();
+            subject._oCreateModel.setProperty('/CostCenter', 'CC1');
+            subject._oCreateModel.setProperty('/AssetNo', 'A1');
+            subject._oCreateModel.setProperty('/SubNumber', '0001');
+            subject._oCreateModel.setProperty('/OrderType', 'OT');
+            subject._oCreateModel.setProperty('/OrderID', 'O1');
+            subject._oCreateModel.setProperty('/ReceivingPlant', 'P2');
+            subject._oCreateModel.setProperty('/ReceivingStorageLocation', 'S2');
+            switchTo(subject, '201');
+            expect(['CostCenter', 'AssetNo', 'SubNumber', 'OrderType', 'OrderID', 'ReceivingPlant', 'ReceivingStorageLocation'].map((f) => subject._oCreateModel.getProperty('/' + f))).toEqual(['CC1', '', '', '', '', '', '']);
+            subject._oCreateModel.setProperty('/ReceivingPlant', 'P2');
+            subject._oCreateModel.setProperty('/ReceivingStorageLocation', 'S2');
+            switchTo(subject, '301');
+            expect(['CostCenter', 'ReceivingPlant', 'ReceivingStorageLocation'].map((f) => subject._oCreateModel.getProperty('/' + f))).toEqual(['', 'P2', 'S2']);
+        });
+
+        it('switches to Movement 311: a receiving SLoc equal to the issuing SLoc is cleared, never replaced by a guessed one', () => {
             const subject = createDetailSubject();
             subject._oCreateModel.setProperty('/StorageLocation', 'ST02');
-            subject.onMovementTypeChange({
-                getParameter: (p) => p === 'selectedItem' ? { getKey: () => '311' } : null
-            });
-
-            expect(subject._oCreateModel.getProperty('/MovementType')).toBe('311');
-            expect(subject._oCreateModel.getProperty('/StorageLocation')).toBe('ST02');
-            expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe('CS01');
-        });
-
-        it('switches to Movement 201: sets Cost Center default and clears destination locations', () => {
-            const subject = createDetailSubject();
-            subject.onMovementTypeChange({
-                getParameter: (p) => p === 'selectedItem' ? { getKey: () => '201' } : null
-            });
-
-            expect(subject._oCreateModel.getProperty('/CostCenter')).toBe('1011201301');
+            subject._oCreateModel.setProperty('/ReceivingStorageLocation', 'ST02');
+            switchTo(subject, '311');
             expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe('');
-            expect(subject._oCreateModel.getProperty('/ReceivingPlant')).toBe('');
-            expect(subject._oCreateModel.getProperty('/AssetNo')).toBe('');
+            subject._oCreateModel.setProperty('/ReceivingStorageLocation', 'HS01');
+            switchTo(subject, '311');
+            expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe('HS01');
         });
 
-        it('switches to Movement 241: sets Asset & Subnumber defaults and clears Cost Center and SLoc', () => {
-            const subject = createDetailSubject();
-            subject.onMovementTypeChange({
-                getParameter: (p) => p === 'selectedItem' ? { getKey: () => '241' } : null
-            });
-
-            expect(subject._oCreateModel.getProperty('/AssetNo')).toBe('000000400092');
-            expect(subject._oCreateModel.getProperty('/SubNumber')).toBe('0000');
-            expect(subject._oCreateModel.getProperty('/CostCenter')).toBe('');
-            expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe('');
-            expect(subject._oCreateModel.getProperty('/ReceivingPlant')).toBe('');
-        });
-
-        it('switches to Movement 301: sets Receiving Plant default, defaults Receiving SLoc, and clears Cost Center', () => {
-            const subject = createDetailSubject();
-            subject.onMovementTypeChange({
-                getParameter: (p) => p === 'selectedItem' ? { getKey: () => '301' } : null
-            });
-
-            expect(subject._oCreateModel.getProperty('/ReceivingPlant')).toBe('1130');
-            expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe('ST02');
-            expect(subject._oCreateModel.getProperty('/CostCenter')).toBe('');
-            expect(subject._oCreateModel.getProperty('/AssetNo')).toBe('');
-        });
-
-        it('switches to Movement 261: defaults OrderType to ZEMP, resets OrderID, and clears non-261 fields', () => {
-            const subject = createDetailSubject();
-            subject.onMovementTypeChange({
-                getParameter: (p) => p === 'selectedItem' ? { getKey: () => '261' } : null
-            });
-            expect(subject._oCreateModel.getProperty('/MovementType')).toBe('261');
-            expect(subject._oCreateModel.getProperty('/OrderType')).toBe('ZEMP');
-            expect(subject._oCreateModel.getProperty('/OrderID')).toBe('');
-            expect(subject._oCreateModel.getProperty('/CostCenter')).toBe('');
-            expect(subject._oCreateModel.getProperty('/AssetNo')).toBe('');
-            expect(subject._oCreateModel.getProperty('/ReceivingPlant')).toBe('');
-            expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe('');
+        it('D7: the create view and i18n contain no sample master-data placeholders', () => {
+            const fs = require('fs');
+            const path = require('path');
+            const base = path.join(__dirname, '../../../app/fiori-app/webapp');
+            const view = fs.readFileSync(path.join(base, 'modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml'), 'utf8');
+            expect(view.match(/placeholder="[^{][^"]*"/g) || []).toEqual([]);
+            for (const f of ['i18n/i18n.properties', 'i18n/i18n_en.properties']) {
+                const bundle = fs.readFileSync(path.join(base, f), 'utf8');
+                expect(bundle.match(/^resPlaceholder\w+=.*(e\.g\.|\b1120\b|\bCS01\b|\bST02\b|\bZEMP\b|1011201301|400092|IN26001170).*$/m)).toBeNull();
+            }
+            const ctrl = fs.readFileSync(path.join(base, 'modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js'), 'utf8');
+            expect(ctrl.match(/1120|CS01|ST02|1130|1000000045|1011201301|400092|ZEMP|Raw Material/g)).toBeNull();
         });
     });
 
@@ -261,7 +245,8 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             const serviceMock = { createReservationEntry: jest.fn() };
             const subject = createDetailSubject(serviceMock);
 
-            subject._oCreateModel.setProperty('/Quantity', 0); // Invalid
+            // D7: the form starts empty, so fill the business fields and make only the quantity invalid
+            subject._oCreateModel.setData({ MovementType: '311', Plant: '1120', StorageLocation: 'CS01', Material: '100', Unit: 'KG', ReceivingStorageLocation: 'ST02', Quantity: 0 });
             subject.onSave();
 
             expect(serviceMock.createReservationEntry).not.toHaveBeenCalled();
@@ -931,7 +916,7 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             subject._handleValueHelpSelected(mockInput, 'ST02', null, { StorageLocation: 'ST02' });
 
             expect(subject._oCreateModel.getProperty('/StorageLocation')).toBe('ST02');
-            expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe('CS01');
+            expect(subject._oCreateModel.getProperty('/ReceivingStorageLocation')).toBe(''); // cleared, never guessed (D7)
         });
 
         it('item selection event handlers trigger _handleValueHelpSelected', () => {

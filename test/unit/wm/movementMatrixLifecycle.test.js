@@ -129,6 +129,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
     // Default readTable handlers
     const setupDefaultTables = (overrides = {}) => {
       mockRfc.readTable.mockImplementation(async (table, fields, where = []) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (required on the create path since the D7 fix)
         const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
         if (overrides[table]) return overrides[table](fields, where, whereStr);
 

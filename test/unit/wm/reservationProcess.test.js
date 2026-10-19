@@ -23,6 +23,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       call: jest.fn(),
       readTable: jest.fn((table, fields, options) => {
         if (table === 'MARD') return Promise.resolve([{ LGORT: 'HS01' }, { LGORT: 'CS01' }]);
+        if (table === 'T001K') return Promise.resolve([{ BWKEY: '1120', BUKRS: '1000' }]); // company code from the plant (required on the create path since the D7 fix)
         if (table === 'T320') return Promise.resolve([{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }, { LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }]);
         if (table === 'LTBK') {
           const optStr = JSON.stringify(options || []);

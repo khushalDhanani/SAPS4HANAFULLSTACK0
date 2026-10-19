@@ -86,7 +86,7 @@ Fix: never upsert over a tracked row with progress (reject or merge); on adoptio
 `validateCostCenter` pads only numeric values (`adapter.js:2727`) but the header uses `pad10` unconditionally (`adapter.js:159`); same for `pad12` on `ASSET_NO` (160). Example `SAP-DUMMY` validates against CSKS as `SAP-DUMMY` but is sent as `0SAP-DUMMY`. The TR path already handles this case correctly (`adapter.js:483-485`).
 Fix: one shared `padIfNumeric` helper used by validation, header and TR mapping.
 
-**D7 — P2 — Hard-coded environment and user values.**
+**D7 — P2 — FIXED 2026-10-19 18:35 IST on the create path (no UI defaults/sample placeholders, no `'KHUSHAL'` / sub-number / company-code fallback; the MIGO 241 posting path keeps its legacy `bukrs 1000` fallback, marked as a shortcut) — Hard-coded environment and user values.**
 `service.js:168` and `service.js:567` fallback `CreatedByUser … || 'KHUSHAL'`; `adapter.js:2756` `plant = '1120'` default and `2765` `bukrs = '1000'` fallback; `controller.js:45-64, 187-246` default master data (1120, CS01, 1000000045, 1011201301, 000000400092, 1130, ST02, ZEMP). AGENTS.md forbids environment-specific values in code; a wrong `CreatedByUser` corrupts the audit trail.
 Fix: drop the `'KHUSHAL'` fallback (fail or store `''`), require BUKRS from T001K (error if missing), move UI defaults to configuration or leave empty.
 
