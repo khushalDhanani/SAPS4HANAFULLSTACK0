@@ -11475,3 +11475,10 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Conclusion:** the only document SAP exposes for the SU is TO 0001037367, the placement into 921/TRANSFER. **No move out of 921/TRANSFER exists in this client** (no later TO, no open removal — `AUSME` 0, no material document). Prerequisite A still unmet → **UNVERIFIED**, no Retry, no SAP write.
 - **Next action (user):** post the move (LT09/LT10 for SU 2000019368 out of 921/TRANSFER, or the 201 goods issue) in the client the app connects to, then ask for the READ-ONLY re-check.
 - **Assumptions:** none.
+
+### 2026-10-20 02:05 IST — 241 pre-retry READ-ONLY re-check #3 ("move now posted"): SAP still unchanged
+
+- `LQUA`/`LEIN` of SU 2000019368: still `W01 921/TRANSFER, LGORT CS02, GESME 1.000, VERME 1.000, AUSME 0, BTANR 0001037367, BDATU/BZEIT 20261019 143533`; TO trail unchanged (last 0001037367); highest TO in W01 still 0001037367; `MATDOC` since 2026-10-19 for the material: only 4900050277 (13:28, pre-test); `RESB 0000530229 ENMNG 0`.
+- TR W01/0001000886 open, no TO; `T331 W01/921 MRAUS ''`.
+- **Prerequisite A NOT met → UNVERIFIED; no Retry, no SAP write.** Three consecutive checks (01:20, 01:35, 02:05 IST) show no posting in the client the app connects to. **Next action (user):** post the move in that client and give its TO/document number, or confirm which system/client was used.
+- **Assumptions:** none.
