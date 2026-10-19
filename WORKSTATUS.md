@@ -11459,3 +11459,11 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Consequence:** `FVMNG` is still 1.000 ≥ 1.000 → a TO attempt on TR 0001000886 now would again be completed without a TO. **Prerequisite A NOT met in the SAP client this session reads (UNVERIFIED on the user's side: the move may be unposted, in another client/system, or not yet saved).** No Retry performed, no SAP write.
 - **EXACT next action (user):** confirm the move was saved in the same system/client as the app's `.env.local` connection (TO or material document number), or post it; then this session re-runs this READ-ONLY check and waits for GO.
 - **Assumptions:** none.
+
+### 2026-10-20 01:35 IST — 241 pre-retry READ-ONLY re-check #2 ("move now posted in the same client"): SAP still unchanged
+
+- **Result (RFC_READ_TABLE only, connection = `S4_RFC_*` values in `.env.local`):** byte-for-byte the same as the 01:20 IST check. `LQUA` by `LENUM 2000019368`: still `W01 / 921 / TRANSFER, WERKS 1120, LGORT CS02, VERME 1.000, AUSME 0, EINME 0, EDATU/EZEIT 20261019 143533`; `LTAP` with `VLENR 2000019368`: last TO still 0001037367 (EN1 → 921/TRANSFER, confirmed); `LTAK W01` dated ≥ 2026-10-19: only 0001037367; `MATDOC` for the material since 2026-10-19: only 4900050277 (311 CS02→FG01 at 13:28, RSNUM 0, pre-test); `RESB 0000530229 ENMNG 0` (201 not issued). CS02 stock of the material in W01: 15 quants, same bins as before.
+- **TR W01/0001000886:** open (`STATU ''`, `ELIKZ ''`, `TANUM 0`); **no TO** (`LTAK` by TBNUM / by RSNUM 0000530231 empty). `T331 W01/921 MRAUS ''`. Bin reservations: none.
+- **Conclusion:** in the system/client the app connects to, no posting that removes SU 2000019368 from 921/TRANSFER exists (no TO, no AUSME, no material document). `FVMNG` is still 1.000 ≥ 1.000. **Prerequisite A still NOT met → UNVERIFIED; no Retry, no SAP write.**
+- **EXACT next action (user):** provide the document number of the move (TO number for an LT01/LT09/LT10 move, or material document for a goods issue/transfer) so it can be looked up READ-ONLY; if it was posted elsewhere, post it in the system/client whose connection parameters are in `.env.local` (`S4_RFC_ASHOST` / `S4_RFC_SYSNR` / `S4_RFC_CLIENT`, values not shown here).
+- **Assumptions:** none.
