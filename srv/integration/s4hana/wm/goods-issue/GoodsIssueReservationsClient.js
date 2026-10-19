@@ -71,14 +71,15 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
     }
     const headers = await this._get(
       '/sap/opu/odata/sap/UI_RESERVATION_HDR_MNG_V2/C_ReservationDocTP_F4839',
-      `$select=Reservation,IssuingOrReceivingPlant,IssuingOrReceivingStorageLoc&$orderby=${encodeURIComponent('Reservation desc')}&$top=500&$filter=${encodeURIComponent(filter)}&$format=json`
+      `$select=Reservation,CostCenter,IssuingOrReceivingPlant,IssuingOrReceivingStorageLoc&$orderby=${encodeURIComponent('Reservation desc')}&$top=500&$filter=${encodeURIComponent(filter)}&$format=json`
     );
     const map = new Map();
     for (const h of Array.isArray(headers) ? headers : []) {
       if (!h.Reservation) continue;
       map.set(String(h.Reservation).replace(/^0+/, ''), {
         ReceivingPlant: h.IssuingOrReceivingPlant || '',
-        ReceivingStorageLocation: h.IssuingOrReceivingStorageLoc || ''
+        ReceivingStorageLocation: h.IssuingOrReceivingStorageLoc || '',
+        CostCenter: h.CostCenter ? String(h.CostCenter).trim().replace(/^0+/, '') : ''
       });
     }
     return map;

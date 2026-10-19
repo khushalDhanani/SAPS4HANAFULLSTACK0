@@ -225,6 +225,9 @@ async function reservationReconcileCheck(req, normalized, { receiving = false, b
   if (normalized.OrderNo && item.OrderNo && normMat(normalized.OrderNo) !== normMat(item.OrderNo)) {
     mismatches.push(`Order (submitted ${normalized.OrderNo}, reservation ${item.OrderNo})`);
   }
+  if (normalized.CostCenter && item.CostCenter && normMat(normalized.CostCenter) !== normMat(item.CostCenter)) {
+    mismatches.push(`Cost Center (submitted ${normalized.CostCenter}, reservation ${item.CostCenter})`);
+  }
   if (receiving) {
     if (normalized.ReceivingPlant && item.ReceivingPlant && norm(normalized.ReceivingPlant) !== norm(item.ReceivingPlant)) {
       mismatches.push(`Receiving Plant (submitted ${normalized.ReceivingPlant}, reservation ${item.ReceivingPlant})`);
@@ -274,7 +277,7 @@ async function reservationReconcileCheck(req, normalized, { receiving = false, b
     }
   }
 
-  const fromReservation = ['Material', 'Plant', 'StorageLocation', 'Batch', 'OrderNo'].concat(receiving ? ['ReceivingPlant', 'ReceivingStorageLocation'] : []);
+  const fromReservation = ['Material', 'Plant', 'StorageLocation', 'Batch', 'OrderNo', 'CostCenter'].concat(receiving ? ['ReceivingPlant', 'ReceivingStorageLocation'] : []);
   fromReservation.forEach((f) => { if (item[f]) normalized[f] = item[f]; });
   item.OpenQty = authoritativeOpenQty;
   return item;
@@ -541,7 +544,8 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue201Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue201Payload(req.data, { user: req.user?.id });
-      if (!(await reservationReconcileCheck(req, normalized))) return;
+      if (!(await reservationReconcileCheck(req, normalized, { batch: true }))) return;
+      if (!(await serialCountCheck(req, normalized))) return;
       if (!(await checkPendingConfirmation(req, normalized))) return;
 
       const preCheck = async () => (await stockPreCheck201(req, normalized)) && (await serialPreCheck(req, normalized));

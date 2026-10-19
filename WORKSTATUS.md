@@ -5,6 +5,64 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **MVT 201 — Dual-Path Regression Suite (Direct 201 vs Reservation → 201) (Item 15) (2026-10-19, 09:55 IST):** Complete.
+  - **Item 15 (Regression-test both 201 paths: Direct 201 and Reservation → 201):**
+    - Implemented dedicated, comprehensive dual-path regression suite in `test/unit/wm/goodsIssue201DualPaths.test.js` (24 tests) proving side-by-side agreement across all 8 required dimensions:
+      1. **Authorization:**
+         - Both reject unauthenticated / unauthorized requests (`Viewer` role) with HTTP 403.
+         - Both permit authorized warehouse roles (`WarehouseClerk`, `WarehouseManager`, `Admin`).
+      2. **Cost Center:**
+         - Mandatory for both paths; validated as 1–10 alphanumeric characters.
+         - Padded to 10 digits for SAP S/4HANA (e.g., `0001011201` / `1011201301`).
+         - Reservation path reconciles payload `CostCenter` against authoritative reservation header `CostCenter` (from `C_ReservationDocTP_F4839`), rejecting mismatches with HTTP 400.
+         - Populates reservation header CostCenter when omitted from client payload.
+      3. **Batch:**
+         - Uppercase normalization (`in26001170` → `IN26001170`) across both paths.
+         - Validates batch against unrestricted stock in plant/storage location.
+         - Reservation path rejects mismatched batch when reservation is batch-pinned.
+      4. **Serial Number:**
+         - Strict 1:1 serial number mapping to `IssueQty` across both paths.
+         - Rejects serial count / quantity mismatches with HTTP 400 before SAP dispatch.
+         - Added `serialCountCheck` to `postGoodsIssue201` handler, eliminating parity divergence with direct 201 and 301/311.
+      5. **Stock Pre-check:**
+         - Both paths execute pre-check stock revalidation before SAP dispatch.
+         - Both fail-closed with HTTP 422 if stock is deficient in plant/SLoc/batch.
+      6. **Quantity:**
+         - Both reject non-positive or non-numeric quantities (`<= 0`, `NaN`, `Infinity`) with HTTP 400.
+         - Reservation path enforces open quantity ceiling (`RequiredQty - WithdrawnQty`), rejecting over-issue with HTTP 422.
+         - Reservation path rejects deleted (`IsMarkedForDeletion`) or completed (`ReservationIsFinallyIssued`) items with HTTP 422.
+      7. **Idempotency & Replay Protection:**
+         - Both paths register atomic idempotency attempt in `GoodsIssueAttemptStore` (`createOrGet`).
+         - Both reject concurrent in-flight submissions on the same idempotency key with HTTP 409 (`already in progress`).
+         - Both record `unconfirmed` status on network timeout/HTTP 504 to prevent blind duplicate retries.
+      8. **SAP Posting Result:**
+         - Both post standardized deep insert payload to `API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`:
+           - `GoodsMovementCode = '03'` (Goods Issue).
+           - `GoodsMovementType = '201'`.
+           - Padded 10-digit `CostCenter` on item.
+           - Reservation path includes `Reservation` and `ReservationItem`.
+         - Both return standardized Material Document response (`MaterialDocument`, `MaterialDocYear`, `Status: 'posted'`).
+    - **Code Fixes Delivered for Strict Parity:**
+      - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`: Added `CostCenter` to `$select` and returned `CostCenter` in `_fetchReservationHeaderReceiving` map.
+      - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`: Added `'201'` to `getReservationItemAuthoritative` header lookup and returned `CostCenter: String(resvItem.CostCenter || resvItem.KOSTL || recv.CostCenter || '').trim()`.
+      - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`:
+        - Added Cost Center mismatch check and mapping in `reservationReconcileCheck`.
+        - Enabled batch validation on 201 reservation check: `reservationReconcileCheck(req, normalized, { batch: true })`.
+        - Added missing `serialCountCheck(req, normalized)` to `postGoodsIssue201` handler.
+    - **Validation & Test Results:**
+      - `test/unit/wm/goodsIssue201DualPaths.test.js`: **24/24 tests passed (100% green)**.
+      - Full WM test suites (`npx jest test/unit/wm`): **81/81 active test suites passed, 1,974 passed tests, 56 skipped (live-only), 0 failed (100% green)**.
+      - `npm run lint`: Clean, 0 errors, 0 warnings.
+      - `git diff --check`: 0 whitespace errors.
+
+- **Full Workspace Health & UI Consistency i18n Fix (2026-10-19, 09:40 IST):** Complete.
+  - **Resolution of Pre-existing i18n Bundle Defect:** Added missing keys `resFieldBatch=Batch Number` and `resPlaceholderBatch=e.g. IN26001170` to `app/fiori-app/webapp/i18n/i18n_en.properties`, resolving the longstanding failure in `test/unit/controller/uiConsistency.test.js`.
+  - **Test Suite Results:**
+    - `test/unit/controller/uiConsistency.test.js`: 7/7 tests passed (100% green).
+    - `npm test`: 170/170 active test suites passed, 3,216 passed, 56 skipped (live-only), 0 failed (100% green).
+    - `npm run lint`: Clean, 0 errors, 0 warnings.
+    - `git diff --check`: 0 whitespace errors.
+
 - **MVT 241 — Live SAP Customizing & Staging/Real Movement Behavior Verification (Item 14) (2026-10-17, 18:10 IST):** Complete.
   - **Item 14 (Verify 241 WM customizing: BETYP = A, NLTYP = 913, and configured WM staging/real movement behavior):**
     - Executed live READ-ONLY RFC queries on SAP S/4HANA (Client 220):
@@ -3127,7 +3185,10 @@ The previous log was removed in commit `b741337`; this file restarts it.
 - **Previous Recommended Action (Step 5 — 2026-10-14, 13:05 IST):** Separate TR creation from TO creation (Reservation → TR → TR validation → TO).
 - **Previous Recommended Action (Step 4 — 2026-10-14, 12:50 IST):** Make Background TR creation independently reliable and deterministic with critical 8-field verification rule.
 - **Previous Recommended Action (Step 3 — 2026-10-14, 12:35 IST):** Make MB21 creation independently reliable and decouple TR creation until reservation creation is confirmed.
-- **Next Recommended Action (2026-10-15, 13:20 IST):**
+- **Next Recommended Action (2026-10-19, 09:55 IST):**
+  1. Continue Movement 201 verification or proceed to subsequent planned P2 items as requested by user.
+  2. Maintain 100% green status across all WM suites, ESLint, and diff checks.
+- **Previous Recommended Action (2026-10-15, 13:20 IST):**
   1. Final sign-off: With all 14 code-quality and architectural audit dimensions verified and 0 defects remaining, proceed to final git commit and push to `feature/mvt261_01`.
   2. BTP Deployment: Execute `npx mbt build` and deploy the MTA archive to the target SAP BTP Cloud Foundry environment using `cf deploy`.
   3. Hand over verified production runbooks and verification test reports to the WM operations team.
@@ -3143,6 +3204,23 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-19 09:55 IST — MVT 201: Dual Paths Regression Suite (Direct 201 vs Reservation -> 201) (Item 15)
+
+- **Reason for Change:** User requested: "🟡 P2 — Movement 201 / 15. Regression-test both 201 paths / Test: Direct 201 and Reservation → 201. They should agree on: authorization, cost center, batch, serial, stock, quantity, idempotency, SAP posting result."
+- **Files Changed:**
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`: Added `CostCenter` to `$select` and mapped `CostCenter` in header retrieval.
+  - `srv/integration/s4hana/wm/GoodsIssueAdapter.js`: Added movement `'201'` to `getReservationItemAuthoritative` header retrieval and exposed `CostCenter` in authoritative item payload.
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`: Added Cost Center reconciliation in `reservationReconcileCheck`, enabled batch check for 201 reservations, and added missing `serialCountCheck` to `postGoodsIssue201` handler.
+  - `test/unit/wm/goodsIssue201DualPaths.test.js`: New comprehensive 24-test suite validating side-by-side agreement across all 8 dimensions.
+  - `WORKSTATUS.md`: Logged task completion, verification results, and updated current status and next steps.
+- **Verification Commands Executed & Results:**
+  - `npx jest test/unit/wm/goodsIssue201DualPaths.test.js` → **PASS (24/24 tests passed, 100% green)**.
+  - `npx jest test/unit/wm` → **PASS (81/81 active test suites passed, 1,974 passed tests, 56 skipped (live-only), 0 failed)**.
+  - `npm run lint` → **PASS (0 errors, 0 warnings)**.
+  - `git diff --check` → **PASS (0 whitespace errors)**.
+- **Errors / blockers:** None.
+- **Next action:** Proceed with subsequent P2 tasks or await user instruction.
 
 ### 2026-10-17 15:20 IST — AGENTS.md Stop Rule Update: Mandatory Agent Search Before Stop
 
@@ -10605,3 +10683,18 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - Zero errors or customizing mismatches. All live SAP findings match application assumptions.
 - **Next Recommended Action:**
   - Ready for user review / commit on branch `feature01`.
+
+### 2026-10-19 09:40 IST — Full Workspace Test Verification & UI Consistency i18n Fix
+
+- **Work Session / Reason:** Routine workspace health check and resolution of longstanding pre-existing test defect in `test/unit/controller/uiConsistency.test.js`.
+- **Changes Delivered:**
+  - `app/fiori-app/webapp/i18n/i18n_en.properties`: Added missing translation keys `resFieldBatch=Batch Number` and `resPlaceholderBatch=e.g. IN26001170` referenced by `modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`.
+- **Validation Results:**
+  - `npx jest test/unit/controller/uiConsistency.test.js`: 7/7 tests passed (100% green).
+  - Full workspace suite `npm test`: 170/170 active test suites passed, 3,216 passed, 56 skipped (live-only), 0 failed (100% green).
+  - `npm run lint`: Clean, 0 errors, 0 warnings.
+  - `git diff --check`: 0 whitespace errors.
+- **Errors / Warnings / Blockers:**
+  - Zero failures across all unit and integration test suites in the repository.
+- **Next Recommended Action:**
+  - Branch `feature01` is 100% test-clean and ready for the next prioritized user instruction.
