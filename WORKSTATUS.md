@@ -11619,3 +11619,4 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 ### 2026-10-19 16:52 IST — Wrapper interface re-check #3: unchanged (no IV_BETYP/IV_BENUM); adapter unchanged
 
 - READ-ONLY at 16:51:28 IST: `Z_WM_TR_CREATE` / `ZWM_TR_CREATE` still 15 parameters, source without BETYP/BENUM. Third consecutive read with no change in the system the app connects to. No code change, no SAP write. **Assumptions:** none.
+- **16:52 IST — re-check #4:** unchanged (15 parameters, no IV_BETYP/IV_BENUM, no BETYP/BENUM in source). No code change, no SAP write.
