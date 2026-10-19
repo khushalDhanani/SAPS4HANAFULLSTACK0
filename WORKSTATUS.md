@@ -11615,3 +11615,7 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 ### 2026-10-19 16:50 IST — Wrapper interface re-check #2: still no IV_BETYP/IV_BENUM; adapter unchanged
 
 - READ-ONLY at 16:50:05 IST (`RFC_GET_FUNCTION_INTERFACE`, `RPY_PROGRAM_READ` active + latest): `Z_WM_TR_CREATE` and `ZWM_TR_CREATE` still 15 parameters, no `IV_BETYP` / `IV_BENUM`; include `LZ_VENDOR_REMOTESU06` has no BETYP/BENUM statement. The reported activation is not visible in the system the app connects to. No code change, no SAP write. **Assumptions:** none.
+
+### 2026-10-19 16:52 IST — Wrapper interface re-check #3: unchanged (no IV_BETYP/IV_BENUM); adapter unchanged
+
+- READ-ONLY at 16:51:28 IST: `Z_WM_TR_CREATE` / `ZWM_TR_CREATE` still 15 parameters, source without BETYP/BENUM. Third consecutive read with no change in the system the app connects to. No code change, no SAP write. **Assumptions:** none.
