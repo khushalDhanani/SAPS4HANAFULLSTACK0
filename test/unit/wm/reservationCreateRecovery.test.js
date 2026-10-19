@@ -214,6 +214,65 @@ describe('Step 7.7: reservation-create partial failure and recovery', () => {
       expect(trSpy).not.toHaveBeenCalled();
     });
 
+    // D18 (live 241, 2026-10-19): SAP completed TR W01/0001000885 (LTBK STATU 'E') without any TO after XFELD_WRONG.
+    const sapTrClosedNoTo = () => {
+      const impl = jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01' }];
+        if (table === 'LTBK') return [{ STATU: 'E' }];
+        if (table === 'LTAK' || table === 'LTAP') return [];
+        throw Object.assign(new Error('node-rfc is not available (test stub)'), { status: 503 });
+      });
+      spies.push(impl);
+      return impl;
+    };
+
+    test('D18: TR completed in SAP without a TO -> explicit LB01 creates a new TR (reservation kept), log names the replaced TR', async () => {
+      await seed({ TransferRequirement: '0001000885', Status_code: '12', ErrorStep: 'LT04', ErrorMessage: 'XFELD_WRONG: Invalid indicator value passed.' });
+      const readSpy = sapTrClosedNoTo();
+      const trSpy = spy('createTransferRequirement').mockResolvedValue({ ...okTr, trNumber: '1000890', trNumberRaw: '0001000890' });
+      const resSpy = spy('createReservation');
+      const toSpy = spy('createTransferOrderFromTR');
+      const { data } = await POST(`${URL}/retryStep`, { ReservationNo: RES, ReservationItem: '0001', Step: 'LB01' }, auth);
+      expect(data).toMatchObject({ Status_code: '02', TransferRequirement: '0001000890', ErrorMessage: '', ErrorStep: '' });
+      expect(trSpy).toHaveBeenCalledTimes(1);
+      expect(resSpy).not.toHaveBeenCalled();
+      expect(toSpy).not.toHaveBeenCalled();
+      expect(readSpy.mock.calls.map((c) => c[0])).toEqual(expect.arrayContaining(['LTBK', 'LTAK'])); // READ-ONLY check happened
+      const logs = await cds.db.run(SELECT.from(LOGS).where({ ReservationNo: RES, Step: 'LB01' }));
+      expect(logs.map((l) => l.MessageText)).toEqual([expect.stringMatching(/1000890 created .*replaces TR 1000885, completed in SAP without a TO/)]);
+    });
+
+    test('D18: AUTO retry on status 12 goes to LB01 (not LT04) when the TR is completed without a TO', async () => {
+      await seed({ TransferRequirement: '0001000885', Status_code: '12', ErrorStep: 'LT04' });
+      sapTrClosedNoTo();
+      const trSpy = spy('createTransferRequirement').mockResolvedValue({ ...okTr, trNumber: '1000890', trNumberRaw: '0001000890' });
+      const toSpy = spy('createTransferOrderFromTR');
+      const { data } = await POST(`${URL}/retryStep`, { ReservationNo: RES, ReservationItem: '0001', Step: 'AUTO' }, auth);
+      expect(data).toMatchObject({ Status_code: '02', TransferRequirement: '0001000890' });
+      expect(trSpy).toHaveBeenCalledTimes(1);
+      expect(toSpy).not.toHaveBeenCalled();
+    });
+
+    test('D18: a completed TR that has a TO is not replaced (LB01 refused, AUTO stays at LT04)', async () => {
+      await seed({ TransferRequirement: '0001000885', Status_code: '12', ErrorStep: 'LT04' });
+      spies.push(jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01' }];
+        if (table === 'LTBK') return [{ STATU: 'E' }];
+        if (table === 'LTAK') return [{ TANUM: '0001037367', KQUIT: 'X' }];
+        if (table === 'LTAP') return [];
+        throw Object.assign(new Error('node-rfc is not available (test stub)'), { status: 503 });
+      }));
+      const trSpy = spy('createTransferRequirement');
+      await expect(POST(`${URL}/retryStep`, { ReservationNo: RES, ReservationItem: '0001', Step: 'LB01' }, auth))
+        .rejects.toMatchObject({ response: { status: 400, data: { error: { message: expect.stringMatching(/already exists .* retry LT04/) } } } });
+      spy('getTransferRequirement').mockResolvedValue({ success: true, trNumber: '1000885', trNumberRaw: '0001000885', warehouse: 'W01' });
+      const toSpy = spy('createTransferOrderFromTR').mockRejectedValue(new Error('TR_COMPLETED'));
+      const { data } = await POST(`${URL}/retryStep`, { ReservationNo: RES, ReservationItem: '0001', Step: 'AUTO' }, auth); // failed step: row in status 12
+      expect(data).toMatchObject({ Status_code: '12', ErrorStep: 'LT04', ErrorMessage: expect.stringMatching(/TR_COMPLETED/), TransferRequirement: '0001000885' });
+      expect(toSpy).toHaveBeenCalledTimes(1);
+      expect(trSpy).not.toHaveBeenCalled();
+    });
+
     test('MIGO failure: status 90 with the error, TR/TO kept; retry resumes at MIGO only', async () => {
       await seed({ TransferRequirement: '0001007077', TransferOrder: '0001012977', Status_code: '04' });
       const migoSpy = spy('postGoodsMovement').mockRejectedValueOnce(new Error('Posting period closed')).mockResolvedValue({ success: true, materialDocument: '4900059977', materialDocumentYear: '2026', withdrawnQuantity: 3, remainingQuantity: 0, completelyProcessed: true });

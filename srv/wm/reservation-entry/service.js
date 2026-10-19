@@ -3,7 +3,7 @@
 const cds = require('@sap/cds');
 const ReservationProcessAdapter = require('../../integration/s4hana/wm/ReservationProcessAdapter');
 const GoodsIssueAdapter = require('../../integration/s4hana/wm/GoodsIssueAdapter');
-const { findUnconfirmedToItems } = require('../../integration/s4hana/wm/toState');
+const { findUnconfirmedToItems, isTrClosedWithoutTo } = require('../../integration/s4hana/wm/toState');
 const { STATUS, STEP_ERROR, UNCONFIRMED_TO, PROCESS_STATUS } = require('../../common/wmStatus');
 const { sapKey } = require('../../integration/s4hana/sapKey');
 const { withReservationLock, isLockConflict } = require('../../integration/s4hana/wm/resLock');
@@ -1740,9 +1740,18 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         return req.error(404, `Reservation ${sResNo}/${sResItem} not found`);
       }
 
+      // D18 (live 241): SAP can complete a TR without creating a TO (XFELD_WRONG). LT04 would then fail on a completed TR,
+      // so such a TR may be replaced by a new one (LB01). READ-ONLY LTBK/LTAK check, only when it can matter.
+      const isAuto = !requestedStep || requestedStep === 'AUTO';
+      let trClosedWithoutTo = false;
+      if (track.TransferRequirement && adapter.rfc && (requestedStep === 'LB01' || (isAuto && track.Status_code === STATUS.TO_ERROR))) {
+        const trWh = track.WarehouseNumber || await warehouseFor(track.Plant, track.StorageLocation, '');
+        trClosedWithoutTo = await isTrClosedWithoutTo(adapter.rfc, trWh, track.TransferRequirement);
+      }
+
       // Auto-detect step if not specified: the failed step's status, else the next open step
-      if (!requestedStep || requestedStep === 'AUTO') {
-        const byStatus = { [STATUS.TR_ERROR]: 'LB01', [STATUS.TO_ERROR]: 'LT04', [STATUS.TO_CONFIRM_ERROR]: 'LT12', [STATUS.GI_ERROR]: 'MIGO' }[track.Status_code];
+      if (isAuto) {
+        const byStatus = { [STATUS.TR_ERROR]: 'LB01', [STATUS.TO_ERROR]: trClosedWithoutTo ? 'LB01' : 'LT04', [STATUS.TO_CONFIRM_ERROR]: 'LT12', [STATUS.GI_ERROR]: 'MIGO' }[track.Status_code];
         if (byStatus) {
           requestedStep = byStatus;
         } else if (!track.TransferRequirement || track.Status_code === STATUS.RES_CREATED) {
@@ -1758,9 +1767,11 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       if (!STEP_ERROR[requestedStep]) {
         return req.error(400, `Unsupported retry step: '${requestedStep}'. Supported: LB01, LT04, LT12, MIGO`);
       }
-      if (requestedStep === 'LB01' && track.TransferRequirement) {
+      if (requestedStep === 'LB01' && track.TransferRequirement && !trClosedWithoutTo) {
         return req.error(400, `Transfer Requirement ${alphaOut(track.TransferRequirement)} already exists for reservation ${sResNo}/${sResItem}; retry LT04 (TO creation) instead`);
       }
+      const replacedTr = requestedStep === 'LB01' && trClosedWithoutTo ? track.TransferRequirement : '';
+      if (replacedTr) LOG.warn(`[retryStep] TR ${alphaOut(replacedTr)} of reservation ${sResNo}/${sResItem} is completed in SAP without a TO; creating a new TR`);
       if (requestedStep === 'MIGO' && track.MaterialDocument && track.Status_code === STATUS.GI_POSTED) {
         return req.error(400, `Material Document ${track.MaterialDocument} is already posted for reservation ${sResNo}/${sResItem}`);
       }
@@ -1856,7 +1867,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           }).where(key);
 
           await logRow({ ...common, DocumentNo: trNo, Step: 'LB01', Status: STATUS.TR_CREATED, MessageType: 'S', MessageId: 'L3', MessageNo: '001',
-            MessageText: `Retry successful: Transfer Requirement ${trNo} created via L_TR_CREATE` });
+            MessageText: `Retry successful: Transfer Requirement ${trNo} created via L_TR_CREATE${replacedTr ? ` (replaces TR ${alphaOut(replacedTr)}, completed in SAP without a TO)` : ''}` });
         } else if (requestedStep === 'LT04' || requestedStep === 'LT12') {
           // A tracked unconfirmed TO (03/13) is confirmed only; a confirmed TO never blocks another TO for the open quantity.
           let toNo = UNCONFIRMED_TO.includes(track.Status_code) ? track.TransferOrder : '';

@@ -1715,7 +1715,12 @@ class ReservationProcessAdapter {
             throw new Error(mapStorageTypeSearchError(zErr.message, wh, movementType));
           }
           const missingFm = /FU_NOT_FOUND|NOT_FOUND|does not exist/.test(zErr.message || '');
-          if (!missingFm) throw zErr; // business / customizing / authorization error: surface SAP's own message
+          if (!missingFm) {
+            // D19: keep the ABAP exception details (live 241: only "XFELD_WRONG" survived); business error is surfaced as is
+            const { key, abapMsgClass, abapMsgType, abapMsgNumber, abapMsgV1, abapMsgV2, abapMsgV3, abapMsgV4 } = zErr;
+            LOG.error(`[createTransferOrderFromTR] Z_WM_TO_CREATE_FROM_TR failed for TR ${wh}/${s4Tr}: ${zErr.message}`, { key, abapMsgClass, abapMsgType, abapMsgNumber, abapMsgV1, abapMsgV2, abapMsgV3, abapMsgV4 });
+            throw zErr;
+          }
           LOG.warn(`Z_WM_TO_CREATE_FROM_TR not found on system (${zErr.message}), trying ZWM_TO_CREATE_FROM_TR`);
           res = await call('ZWM_TO_CREATE_FROM_TR', {
             IV_LGNUM: wh,
@@ -1728,6 +1733,9 @@ class ReservationProcessAdapter {
       const tanum = res?.E_TANUM || res?.EV_TANUM || '';
       if (!tanum || tanum === '0000000000') {
         const errMsg = res?.EV_MESSAGE || 'No Transfer Order document created';
+        // D19: the wrapper's BAPIRET2 messages carry the SAP reason; the error keeps only EV_MESSAGE
+        const details = (res?.ET_MESSAGES || []).map((m) => `${m.TYPE || ''} ${m.ID || ''} ${m.NUMBER || ''} ${m.MESSAGE || ''}`.trim());
+        LOG.error(`[createTransferOrderFromTR] no TO created for TR ${wh}/${s4Tr}: ${errMsg}`, { EV_SUCCESS: res?.EV_SUCCESS, ET_MESSAGES: details });
         throw new Error(errMsg);
       }
 

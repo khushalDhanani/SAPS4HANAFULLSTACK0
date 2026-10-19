@@ -11,7 +11,7 @@ const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/Re
 const TrToHandler = require('../../../srv/wm/tr-to/handlers/trTo.handler');
 const { STATUS, STATUS_TEXT, STATUS_CRITICALITY, UNCONFIRMED_TO } = require('../../../srv/common/wmStatus');
 const { sapKey } = require('../../../srv/integration/s4hana/sapKey');
-const { isToFullyConfirmed } = require('../../../srv/integration/s4hana/wm/toState');
+const { isToFullyConfirmed, isTrClosedWithoutTo } = require('../../../srv/integration/s4hana/wm/toState');
 
 const authorized = () => Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' });
 
@@ -333,5 +333,22 @@ describe('Fix 13: confirmation state read from LTAP-PQUIT, not from message 055 
     await expect(new TrToAdapter({ rfc: open }).confirmTO({ lgnum: 'W01', toNumber: '1012966' })).rejects.toThrow(/055 already confirmed/);
     const openRpa = fakeRfc({ fm: { L_TO_CONFIRM: () => { throw sapError(); } }, tables: { LTAP: [] } });
     await expect(new ReservationProcessAdapter({ rfc: openRpa }).confirmTransferOrder({ warehouseNumber: 'W01', toNumber: '1012966' })).rejects.toThrow(/055/);
+  });
+});
+
+describe('D18: isTrClosedWithoutTo (LTBK STATU E and no LTAK header) [mock only, not SAP verification]', () => {
+  const rfcWith = (ltbk, ltak) => ({ readTable: jest.fn(async (t) => (t === 'LTBK' ? ltbk : ltak)) });
+  test('completed TR without TO -> true (READ-ONLY: LTBK then LTAK, scoped by warehouse)', async () => {
+    const rfc = rfcWith([{ STATU: 'E' }], []);
+    await expect(isTrClosedWithoutTo(rfc, 'w01', '1000885')).resolves.toBe(true);
+    expect(rfc.readTable.mock.calls[0]).toEqual(['LTBK', ['STATU'], ["LGNUM = 'W01'", "AND TBNUM = '0001000885'"], 1]);
+    expect(rfc.readTable.mock.calls[1][0]).toBe('LTAK');
+  });
+  test('open TR -> false without reading LTAK; completed TR with a TO -> false; unknown TR -> false', async () => {
+    const open = rfcWith([{ STATU: '' }], []);
+    await expect(isTrClosedWithoutTo(open, 'W01', '1000885')).resolves.toBe(false);
+    expect(open.readTable).toHaveBeenCalledTimes(1);
+    await expect(isTrClosedWithoutTo(rfcWith([{ STATU: 'E' }], [{ TANUM: '0001037367' }]), 'W01', '1000882')).resolves.toBe(false);
+    await expect(isTrClosedWithoutTo(rfcWith([], []), 'W01', '1000999')).resolves.toBe(false);
   });
 });

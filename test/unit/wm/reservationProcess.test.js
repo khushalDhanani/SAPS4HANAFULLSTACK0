@@ -831,6 +831,26 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TO_CREATE_TR', 'Z_WM_TO_CREATE_FROM_TR']);
     });
 
+    test('D19: an ABAP exception from Z_WM_TO_CREATE_FROM_TR is logged with its message details before it is surfaced', async () => {
+      const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockRfc.call
+        .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
+        .mockRejectedValueOnce(Object.assign(new Error('XFELD_WRONG: Invalid indicator value passed.'), { key: 'XFELD_WRONG', abapMsgClass: 'L3', abapMsgNumber: '045', abapMsgV1: '000' }));
+      await expect(adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' })).rejects.toThrow('XFELD_WRONG');
+      expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('Z_WM_TO_CREATE_FROM_TR failed for TR W01/0001001839: XFELD_WRONG'), expect.objectContaining({ key: 'XFELD_WRONG', abapMsgClass: 'L3', abapMsgNumber: '045', abapMsgV1: '000' }));
+      errSpy.mockRestore();
+    });
+
+    test('D19: a wrapper result without a TO number logs EV_SUCCESS and ET_MESSAGES; EV_MESSAGE is the error', async () => {
+      const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockRfc.call
+        .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
+        .mockResolvedValueOnce({ EV_TANUM: '0000000000', EV_SUCCESS: 'E', EV_MESSAGE: 'No TO created', ET_MESSAGES: [{ TYPE: 'E', ID: 'L3', NUMBER: '007', MESSAGE: 'Data for storage type search is not defined (A 001)' }] });
+      await expect(adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' })).rejects.toThrow('No TO created');
+      expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('no TO created for TR W01/0001001839: No TO created'), { EV_SUCCESS: 'E', ET_MESSAGES: ['E L3 007 Data for storage type search is not defined (A 001)'] });
+      errSpy.mockRestore();
+    });
+
     test('Falls back to ZWM_TO_CREATE_FROM_TR only when Z_WM_TO_CREATE_FROM_TR does not exist on the system', async () => {
       mockRfc.call
         .mockRejectedValueOnce(new Error('UCON blocked'))

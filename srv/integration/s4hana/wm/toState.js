@@ -35,6 +35,20 @@ async function findUnconfirmedToItems(rfc, lgnum, tbnum, tbpos = '') {
 }
 
 /**
+ * A TR that SAP completed (LTBK-STATU 'E') without any TO header in LTAK (live 241 run 2026-10-19: Z_WM_TO_CREATE_FROM_TR
+ * raised XFELD_WRONG and SAP still closed TR W01/0001000885). Such a TR cannot be retried at LT04; only a new TR helps.
+ * READ-ONLY. Returns false when the TR is open, partially processed, or has any TO (confirmed or not).
+ */
+async function isTrClosedWithoutTo(rfc, lgnum, tbnum) {
+  const wh = sapKey(lgnum, 'lgnum');
+  const tr = sapKey(tbnum, 'tbnum').padStart(10, '0');
+  const heads = await rfc.readTable('LTBK', ['STATU'], [`LGNUM = '${wh}'`, `AND TBNUM = '${tr}'`], 1);
+  if (!Array.isArray(heads) || !heads.length || String(heads[0].STATU || '').trim() !== 'E') return false;
+  const tos = await rfc.readTable('LTAK', ['TANUM'], [`LGNUM = '${wh}'`, `AND TBNUM = '${tr}'`], 1);
+  return !(Array.isArray(tos) && tos.length);
+}
+
+/**
  * Builds Handling Unit confirmation table (T_LTAP_CONF_HU) for a Transfer Order.
  * When LTAP items involve Handling Units (VLENR is present), L_TO_CONFIRM requires
  * T_LTAP_CONF_HU with complete HU withdrawal (HUENT = 'X') to avoid error L3 848
@@ -99,4 +113,4 @@ function mapStorageTypeSearchError(rawMsg, lgnum, mvt = '') {
   return `Data for storage type search is not defined in warehouse ${wh} for WM movement type ${mvt || '311'}: missing customizing key in table T334T (Warehouse: ${wh}, Operation: ${op} [${opText}], Storage Type Indicator: '${indicator}'${extraStr}). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > ${sproStrategy} > Determine Storage Type Search.`;
 }
 
-module.exports = { isToFullyConfirmed, findUnconfirmedToItems, getHuConfirmationItems, mapStorageTypeSearchError };
+module.exports = { isToFullyConfirmed, findUnconfirmedToItems, isTrClosedWithoutTo, getHuConfirmationItems, mapStorageTypeSearchError };
