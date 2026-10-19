@@ -212,5 +212,5 @@ Reservation `0000530229/0001`, TR `W01/0001000882`; full evidence in the WORKSTA
 
 - Same create/TO code path as 201; no code change was needed for Step 1, none made for Step 2.
 - New defects: **D18** (P1) no in-app recovery when SAP closes a TR without a TO (LT04 would hit a completed TR, LB01 is refused while a TR is tracked); **D19** (P2) the TO wrapper's `ET_MESSAGES`/`EV_MESSAGE` are not logged, so only the exception name survives.
-- D18 and D19 fixed 2026-10-19 22:40 IST (unit tests only; live recovery of 0000530231 pending a go).
-- Evidence and SAP reads: WORKSTATUS.md entries 2026-10-19 21:45 IST, 22:10 IST and 22:40 IST.
+- D18 and D19 fixed 2026-10-19 22:40 IST; D18 proven live 23:05 IST (Retry Step created replacement TR W01/0001000886, no TO, no new reservation).
+- Evidence and SAP reads: WORKSTATUS.md entries 2026-10-19 21:45 IST, 22:10 IST, 22:40 IST and 23:05 IST.

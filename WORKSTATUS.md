@@ -5,7 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **LIVE 241 (2026-10-19): Step 1 PASS, Step 2 FAIL (22:10 IST).** Reservation `0000530231/0001` + TR `W01/0001000885` proven in SAP; the authorized TO creation (`Z_WM_TO_CREATE_FROM_TR`, IV_SQUIT blank) was rejected by SAP with `XFELD_WRONG`, no TO exists, and SAP closed the TR (STATU E / ELIKZ X). Stopped. D18 (new TR via Retry when SAP shows the TR completed without a TO) and D19 (wrapper messages logged) implemented 22:40 IST with unit tests, not yet exercised live; SAP-side XFELD_WRONG cause UNKNOWN. MIGO not performed.
+- **LIVE 241 (2026-10-19): Step 1 PASS, Step 2 FAIL, recovered (23:05 IST).** Reservation `0000530231/0001` proven in SAP; the first TO attempt was rejected by SAP with `XFELD_WRONG` and SAP closed TR 0001000885 without a TO; D18 (Retry → new TR when SAP shows the TR completed without a TO) and D19 (wrapper messages logged) were implemented (`930bc48`) and D18 proven live: replacement TR `W01/0001000886` is open (LTBK STATU '', no TO). TO creation for 241 still UNVERIFIED; SAP-side XFELD_WRONG cause UNKNOWN; MIGO not performed.
 
 - **LIVE 201 (2026-10-19, 21:05 IST): Step 1 PASS, Step 2 PASS (user-triggered Retry Step confirmed), MIGO UNVERIFIED.** Reservation 0000530229/0001, TR W01/0001000882 (completed), TO W01/0001037367 (confirmed, SU 2000019368 in 921/TRANSFER). Live-found defects fixed: cross-warehouse TO lookup, fabricated SLG1 handle, legacy TO wrapper, ProcessStatus on retry. Open: replay shown as "created" (P3).
 
@@ -11405,3 +11405,13 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **Not done / not verified:** no live SAP action. The real recovery of reservation 0000530231/0001 (new TR for the TR SAP closed) is a SAP write and needs a separate go; whether the new TR's TO creation then succeeds for 241 is still unknown (SAP-side `XFELD_WRONG` cause unresolved). The UI "Retry Step" button sends `AUTO`, so the status-12 row now routes to LB01 automatically once SAP shows the TR closed without a TO.
 - **Assumptions:** none.
 - **Full `npm test` (jest --forceExit, 22:50 IST):** Test Suites: 1 skipped, 179 passed, 179 of 180 total Tests:       56 skipped, 3500 passed, 3556 total 
+
+### 2026-10-19 23:05 IST — LIVE 241 recovery: replacement TR created via Retry Step (D18 proven live), stopped before TO
+
+- **Authorization:** user "GO: run Retry Step on reservation 0000530231/0001 on your port-4010 server to create the replacement TR (L_TR_CREATE), stopping before any TO creation or MIGO." One click on the detail page "Retry Step" (`retryStep` AUTO) on this session's port-4010 RFC-enabled server (`930bc48`).
+- **Pre-check (READ-ONLY):** `LTBK` by RSNUM 0000530231: only `0001000885 STATU E`; `LTAK` for it: empty; `RESB BDMNG 1.000 / ENMNG 0.000 / KZEAR ''`; local track `12 / LT04 / TR 0001000885`.
+- **Path taken (server log):** `[retryStep] TR 1000885 of reservation 0000530231/0001 is completed in SAP without a TO; creating a new TR` → AUTO routed to LB01 (D18 READ-ONLY LTBK/LTAK check), no LT04 attempted.
+- **SAP write (WRITE, 1 object):** `L_TR_CREATE` → **TR W01/0001000886**. `LTBK: BWLVS 311, RSNUM 0000530231, BETYP '', BENUM '', STATU '', BDATU 20261019, BZEIT 153448, BNAME KHUSHAL`; `LTBP 0001: MATNR 000000008000009754, WERKS 1120, LGORT CS02, MENGA 1.000, ALTME NOS, ELIKZ ''`. `LTAK` for 0001000886: empty (no TO); the only W01 TO today is still the 201 one (0001037367). `RKPF` 241 today: only 0000530231 (no new reservation). `RESB` unchanged. TR 0001000885 remains `STATU E` in SAP (not touched).
+- **Response / local DB:** HTTP 200 row `TransferRequirement 0001000886, Status_code 02 "TR Created", ProcessStatus TR_CREATED, ErrorMessage '', ErrorStep '', TransferOrder null`; `ReservationLog` + `LB01/02/S/L3 001, DocumentNo 0001000886, "Retry successful: Transfer Requirement 0001000886 created via L_TR_CREATE (replaces TR 1000885, completed in SAP without a TO)"` (4 rows). UI: header "TR Created", TR 0001000886 (Auto), TO "-", Retry available.
+- **Result:** D18 works live for 241. Reservation 0000530231/0001 is back at the Step 1 end state with the open TR 0001000886. TO creation/confirmation remains **UNVERIFIED** for 241 (not run; the SAP-side `XFELD_WRONG` cause is still unknown, so a new TO attempt may fail the same way and could close this TR too). MIGO not performed. Server stopped, mock password removed.
+- **Code changes:** none. **Assumptions:** none.
