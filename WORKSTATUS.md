@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Step 7.2 contract normalization (2026-10-19, 12:45 IST):** `createReservation`/`createReservationEntry` now accept only `ReservationDate`, `OrderID`, `OrderType` (lowercase duplicates removed from CDS, handler, adapter); CAP returns 400 for any obsolete variant. 15 suites / 438 tests PASS. Not committed. Audit D14 closed.
+
 - **D1 fix (2026-10-19, 12:20 IST):** `ReservationEntries` entity writes now `@restrict`ed to `WarehouseClerk`/`WarehouseManager`/`Admin` (`srv/wm/reservation-entry/service.cds`); Viewer 403 tests added; 4 suites / 146 tests PASS. Not committed. D2–D17 from `AUDIT_RESERVATION_CREATE.md` still open.
 
 - **Reservation Creation Baseline Audit (Step 7.1) (2026-10-19, 12:01 IST):** Complete (Verdict: **FAIL — 1×P0, 4×P1, 7×P2, 5×P3**; see `AUDIT_RESERVATION_CREATE.md` and the 12:01 IST Changes Log entry). Zero code changes, zero SAP calls. P0: OData `CREATE ReservationEntries` reaches `BAPI_RESERVATION_CREATE1` with only `authenticated-user`. P1: no RKPF/RESB read-back, no idempotency guard, forbidden fields not enforced at creation (201/241/301/311), 261 M7 126 adoption overwrites tracking. Read-only tests: 6 suites / 249 tests PASS.
@@ -11073,4 +11075,26 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - Not run: full `npm test`, e2e, live SAP. No SAP call made.
 - **Status:** D1 fixed (unit-verified, not committed). D2–D17 remain open.
 - **Next recommended action:** D2 + D3 together (post-commit RKPF/RESB read-back and an attempt store on reservation creation).
+- **Assumptions:** none.
+
+### 2026-10-19 12:45 IST — Step 7.2: Normalize the reservation-create API contract (one canonical name per field)
+
+- **Work Session / Reason:** `createReservation` and `createReservationEntry` accepted duplicate parameter variants (`ReservationDate`/`reservationDate`, `OrderID`/`orderId`, `OrderType`/`orderType`); the handler also read a never-declared `OrderId`, and the adapter resolved eight aliases for the order number. Step 7.2 removes the duplicates after inventorying every caller. No SAP behaviour changed, no SAP call made.
+- **Caller inventory (CONFIRMED by grep, dist/ and node_modules excluded):**
+  - HTTP callers of the two actions: `ReservationEntryDetail.controller.js#onSave` (PascalCase only), `tools/run1..5-mvt*-live.js`, `tools/sandbox-matrix.js` (PascalCase only), `test/unit/wm/reservationEntryService.test.js` (PascalCase only), docs `docs/abap/test-runbook.md`, `docs/abap/sandbox-results.md` (URL mention only). `ReservationEntryService.js#createReservation` (UI wrapper) has no caller; left as is.
+  - Callers of `ReservationProcessAdapter.createReservation`: `service.js` (both handlers, camelCase), `ReservationProcessAdapter.executeReservationWarehouseFlow` (passes `normInput`, which already resolves `orderId`/`orderType`), 16 unit-test files (all camelCase `orderId`/`orderType`).
+  - Probe (temporary test, removed): CAP Node rejects an unknown action parameter with HTTP 400 `Property "x" does not exist in …createReservation` before the handler runs — so dropped variants fail loudly.
+- **Changes:**
+  - `srv/wm/reservation-entry/service.cds`: removed `reservationDate`, `orderId`, `orderType` from `createReservation` and `createReservationEntry` (6 lines). Canonical: `ReservationDate`, `OrderID`, `OrderType`.
+  - `srv/wm/reservation-entry/service.js`: `executeReservationAndAutoTR` and the `createReservation` handler read only `ReservationDate`/`OrderID`/`OrderType`; the `createReservation` handler now also persists `OrderType` on the track row (closes audit D14).
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js#createReservation`: reads only `orderId`/`orderType` from its params (alias chain `OrderId/OrderID/orderNo/OrderNo/aufnr/Aufnr/AUFNR/auart/Auart` removed).
+  - `test/unit/wm/reservationEntryService.test.js`: new block `1c` — `test.each` over 201/241/261/301/311 proving the canonical payload maps 1:1 onto the adapter call with no PascalCase leftovers; `createReservation` 261 persists `OrderID`+`OrderType`; 12 cases proving `orderId`, `orderType`, `OrderId`, `reservationDate`, `orderNo`, `aufnr` are rejected with 400 on both actions with the adapter never called.
+  - `test/unit/wm/reservationProcess.test.js`: adapter 261 test — alias keys are ignored (400 "Order number is mandatory", no RFC call) while canonical `orderId` yields `ORDERID = '000000001011'`.
+- **Out of scope / left unchanged (reported):** `executeReservationWarehouseFlow` and `postMigoGoodsMovement` still declare camelCase/alias variants (`service.cds` lines ~201-211, ~453-463); `createTransferRequirement` (adapter ~442) and `postGoodsMovement` (~1906) still resolve order-number aliases; `retryStep` reads `data.orderId` (`service.js` ~1410, ~1491). These are different actions and were not part of the 7.1 create-path defects.
+- **Validation (executed):**
+  - `npx jest test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationProcess.test.js test/unit/wm/reservationEntryUi.test.js test/unit/wm/movement261UnifiedLifecycle.test.js test/unit/wm/trToCorruptedStagingRecovery.test.js test/unit/wm/mvt201Process.test.js test/unit/wm/mvt241Process.test.js test/unit/wm/mvt301Process.test.js test/unit/wm/mvt311Process.test.js test/unit/wm/step17Mvt201.test.js test/unit/wm/step18Mvt241.test.js test/unit/wm/step19Mvt311.test.js test/unit/wm/step20Mvt301.test.js test/unit/wm/movementConfig.test.js test/unit/wm/reservationTrack.test.js` → **PASS (15 suites, 438 tests)**.
+  - `npx cds compile srv/wm/reservation-entry/service.cds --to json` → OK. `npx eslint` on the 5 changed files → clean. `git diff --check` → clean.
+  - Not run: full `npm test`, e2e, lint of the whole repo, live SAP.
+- **Status:** Done, not committed. Audit D14 closed; D2–D13, D15–D17 remain open.
+- **Next recommended action:** D2 + D3 (post-commit RKPF/RESB read-back and an attempt store on reservation creation).
 - **Assumptions:** none.

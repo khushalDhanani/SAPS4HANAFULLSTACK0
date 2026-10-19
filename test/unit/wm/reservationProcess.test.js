@@ -1065,6 +1065,25 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       await expect(adapter.createReservation({ movementType: '311', plant: '1120', material: '123', quantity: 0 })).rejects.toMatchObject({ status: 400 });
     });
 
+    test('createReservation (261) ignores alias keys OrderID/OrderType/orderNo/aufnr: only orderId/orderType are read (Step 7.2)', async () => {
+      const base = { movementType: '261', plant: '1120', storageLocation: 'CS01', material: '1000000045', unit: 'KG', quantity: 1, orderType: 'ZEMP' };
+      for (const alias of [{ OrderID: '1011' }, { orderNo: '1011' }, { aufnr: '1011' }, { OrderId: '1011' }]) {
+        await expect(adapter.createReservation({ ...base, ...alias })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/Order number is mandatory/) });
+      }
+      expect(mockRfc.call).not.toHaveBeenCalled();
+      mockRfc.readTable.mockImplementation((table) => {
+        if (table === 'AUFK') return Promise.resolve([{ AUFNR: '000000001011', AUART: 'ZEMP', WERKS: '1120', LOEKZ: '', ASTKZ: '' }]);
+        if (table === 'JEST') return Promise.resolve([{ STAT: 'I0002', INACT: '' }]);
+        if (table === 'T320') return Promise.resolve([{ LGNUM: 'W01' }]);
+        if (table === 'MARD') return Promise.resolve([{ LGORT: 'CS01' }]);
+        return Promise.resolve([]);
+      });
+      mockRfc.call.mockResolvedValueOnce({ RESERVATION: '0000529999', RETURN: [] }).mockResolvedValueOnce({});
+      const res = await adapter.createReservation({ ...base, orderId: '1011' });
+      expect(res.success).toBe(true);
+      expect(mockRfc.call.mock.calls[0][1].RESERVATIONHEADER).toMatchObject({ MOVE_TYPE: '261', ORDERID: '000000001011' });
+    });
+
     test('createReservation throws 400 when BAPI returns error message', async () => {
       mockRfc.call.mockResolvedValueOnce({
         RESERVATION: '',

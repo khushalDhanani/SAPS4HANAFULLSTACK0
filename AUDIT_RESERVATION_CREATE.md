@@ -112,7 +112,7 @@ Fix: remove the parameters from `createReservationEntry` (reservations carry no 
 
 **D13 — P3 — ReservationDate never sent; track stores `null` while SAP stores today.** `controller.js:587-604` omits it; `adapter.js:154` defaults `RES_DATE` to the server date; `service.js:178` persists `effResDate || null`. Fix: persist the date actually sent (or read `RKPF-RSDAT` back, see D2).
 
-**D14 — P3 — `createReservation` action omits `OrderType` from its track record** (`service.js:548-575`) while `createReservationEntry` persists it (`service.js:180`). Fix: share one record builder.
+**D14 — P3 — FIXED 2026-10-19 12:45 IST (Step 7.2) — `createReservation` action omits `OrderType` from its track record** (`service.js:548-575`) while `createReservationEntry` persists it (`service.js:180`). Fix: share one record builder.
 
 **D15 — P3 — Batch character rules disagree.** `sapKey` batch pattern allows `_ - . /` (`sapKey.js:18`), `MOVEMENT_CONFIG.batchRules.regex` allows alphanumerics only (`movementConfig.js:72`). Fix: one regex.
 

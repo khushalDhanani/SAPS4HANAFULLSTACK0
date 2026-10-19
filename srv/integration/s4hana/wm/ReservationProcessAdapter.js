@@ -78,6 +78,8 @@ class ReservationProcessAdapter {
       costCenter,
       assetNo,
       subNumber,
+      orderId,
+      orderType,
       batch,
       testrun = false,
       throwError = true
@@ -95,8 +97,9 @@ class ReservationProcessAdapter {
         await this.validateAsset(assetNo, subNumber, plant);
       }
 
-      const sOrderId = params.orderId || params.OrderId || params.OrderID || params.orderNo || params.OrderNo || params.aufnr || params.Aufnr || params.AUFNR || '';
-      const sOrderType = params.orderType || params.OrderType || params.auart || params.Auart || '';
+      // Canonical adapter contract (Step 7.2): orderId / orderType only; callers normalize aliases before calling.
+      const sOrderId = String(orderId || '').trim();
+      const sOrderType = String(orderType || '').trim();
       let orderValidation = null;
       if (String(movementType).trim() === '261') {
         orderValidation = await this.validateOrder(sOrderId, plant, sOrderType);

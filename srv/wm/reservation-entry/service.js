@@ -50,7 +50,6 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         Quantity,
         Unit,
         ReservationDate,
-        reservationDate,
         ReceivingPlant,
         ReceivingStorageLocation,
         CostCenter,
@@ -59,14 +58,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         WarehouseNumber,
         Batch,
         OrderID,
-        OrderId,
-        orderId,
-        OrderType,
-        orderType
+        OrderType
       } = payload;
-      const effResDate = ReservationDate || reservationDate || undefined;
-      const effOrderId = OrderID || OrderId || orderId || '';
-      const effOrderType = OrderType || orderType || '';
+      // Canonical contract (Step 7.2): PascalCase only; CAP rejects unknown parameters such as orderId/reservationDate.
+      const effResDate = ReservationDate || undefined;
+      const effOrderId = OrderID || '';
+      const effOrderType = OrderType || '';
 
       // Task 8: SLoc pre-check at reservation creation: read LQUA for item's plant/SLoc.
       let slocWarning = '';
@@ -516,7 +513,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
 
       const payload = req.data;
-      const effResDate = payload.ReservationDate || payload.reservationDate || undefined;
+      const effResDate = payload.ReservationDate || undefined;
 
       let resResult;
       try {
@@ -533,8 +530,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           costCenter: payload.CostCenter,
           assetNo: payload.AssetNo,
           subNumber: payload.SubNumber,
-          orderId: payload.OrderID || payload.OrderId || payload.orderId,
-          orderType: payload.OrderType || payload.orderType,
+          orderId: payload.OrderID,
+          orderType: payload.OrderType,
           batch: payload.Batch,
           throwError: false
         });
@@ -579,7 +576,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         CostCenter: payload.CostCenter || '',
         AssetNo: payload.AssetNo || '',
         SubNumber: payload.SubNumber || '',
-        OrderID: payload.OrderID || payload.OrderId || payload.orderId || '',
+        OrderID: payload.OrderID || '',
+        OrderType: payload.OrderType || '',
         TransferRequirement: '',
         LogHandle: '',
         ExternalId: extId,

@@ -213,6 +213,60 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
     });
   });
 
+  describe('1c. Canonical API contract (Step 7.2): one PascalCase name per business field', () => {
+    const resNo = '0000777072';
+    const base = { Plant: '1120', StorageLocation: 'CS01', Material: '1000000045', Quantity: 2, Unit: 'KG', WarehouseNumber: 'W01', Batch: 'B1' };
+    const perType = {
+      '201': { payload: { CostCenter: '1011201301' }, adapter: { costCenter: '1011201301', receivingPlant: undefined } },
+      '241': { payload: { AssetNo: '400092', SubNumber: '0000' }, adapter: { assetNo: '400092', subNumber: '0000' } },
+      '261': { payload: { OrderType: 'ZEMP', OrderID: '1011' }, adapter: { orderId: '1011', orderType: 'ZEMP' } },
+      '301': { payload: { ReceivingPlant: '1130', ReceivingStorageLocation: 'ST02' }, adapter: { receivingPlant: '1130', receivingStorageLocation: 'ST02' } },
+      '311': { payload: { ReceivingStorageLocation: 'ST02' }, adapter: { receivingPlant: '1120', receivingStorageLocation: 'ST02' } }
+    };
+    const okRes = { success: true, reservationNo: '777072', reservationNoRaw: resNo, reservationItem: '0001', status: '01' };
+    const okTr = { success: true, warehouseNumber: 'W01', trNumber: '1007072', trNumberRaw: '0001007072', trItem: '0001', status: '02' };
+
+    afterEach(async () => {
+      await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: resNo }));
+      await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: resNo }));
+    });
+
+    test.each(Object.keys(perType))('createReservationEntry %s: canonical payload maps 1:1 onto the adapter call', async (mvt) => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValueOnce(okRes);
+      createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement').mockResolvedValueOnce(okTr);
+      const { status, data } = await POST('/odata/v4/reservation-entry/createReservationEntry', { MovementType: mvt, ...base, ...perType[mvt].payload }, authClerk);
+      expect(status).toBe(200);
+      expect(data.ReservationNo).toBe(resNo);
+      expect(createResSpy).toHaveBeenCalledTimes(1);
+      expect(createResSpy.mock.calls[0][0]).toMatchObject({
+        movementType: mvt, plant: '1120', storageLocation: 'CS01', material: '1000000045', quantity: 2, unit: 'KG', batch: 'B1', reservationDate: undefined,
+        ...perType[mvt].adapter
+      });
+      // Nothing but the canonical fields reaches the adapter: no leftover alias keys.
+      expect(Object.keys(createResSpy.mock.calls[0][0]).filter((k) => /^[A-Z]/.test(k))).toEqual([]);
+    });
+
+    test('createReservation (261): canonical payload persists OrderID and OrderType on the track row', async () => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValueOnce(okRes);
+      const { status } = await POST('/odata/v4/reservation-entry/createReservation', { MovementType: '261', ...base, ...perType['261'].payload }, authClerk);
+      expect(status).toBe(200);
+      expect(createResSpy.mock.calls[0][0]).toMatchObject({ orderId: '1011', orderType: 'ZEMP' });
+      const row = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: resNo, ReservationItem: '0001' }));
+      expect(row).toMatchObject({ OrderID: '1011', OrderType: 'ZEMP' });
+    });
+
+    const obsolete = [['orderId', '1011'], ['orderType', 'ZEMP'], ['OrderId', '1011'], ['reservationDate', '2026-10-19'], ['orderNo', '1011'], ['aufnr', '1011']];
+    test.each([
+      ...obsolete.map(([k, v]) => ['createReservationEntry', k, v]),
+      ...obsolete.map(([k, v]) => ['createReservation', k, v])
+    ])('%s rejects obsolete parameter %s with 400 before any SAP call', async (action, key, value) => {
+      createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValue(okRes);
+      await expect(POST(`/odata/v4/reservation-entry/${action}`, { MovementType: '261', ...base, OrderType: 'ZEMP', OrderID: '1011', [key]: value }, authClerk))
+        .rejects.toMatchObject({ response: { status: 400, data: { error: { message: expect.stringMatching(new RegExp(`"${key}" does not exist`)) } } } });
+      expect(createResSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('2. On Save: Create Reservation + Auto-TR Creation', () => {
     const testResNo = '0000777001';
 
