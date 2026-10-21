@@ -3655,7 +3655,21 @@ The previous log was removed in commit `b741337`; this file restarts it.
 - **Previous Recommended Action (2026-10-13, 13:15 IST):**
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
-## Changes Log
+### 2026-10-21 22:15 IST — Live Step 1 picking TO executed on delivery 0080000134 in W01; TO 1037372 created & confirmed; LIKP-KOSTK = 'C'
+
+- **Authorization:** user explicit written "Go" for Step 1 write retry (`tools/test-step1-picking-to.js`).
+- **Execution & Root Cause Handling (WRITE):**
+  - First attempt calling `Z_WM_TO_CREATE_DN` with `IV_SQUIT = 'X'` returned SAP error `L3 181: Movement type 241 does not allow immediate confirmation`.
+  - Root cause: SAP WM customizing for movement type 241 forbids immediate confirmation at creation (`squit_forbidden`).
+  - Code fix in `ReservationProcessAdapter.createDeliveryPickingTO`: detect `squitForbidden` (L3 181 / squit_forbidden), re-attempt creation with `IV_SQUIT = ' '` (create only), and immediately confirm via `confirmTo` (`L_TO_CONFIRM` with `I_SQUIT = 'X'` and HU table fallback).
+  - Executed `ALLOW_LIVE_SAP_TOOLS=1 node tools/test-step1-picking-to.js --allow-live-sap`.
+- **Live Verification Results (READ-ONLY CONFIRMED in SAP Client 220):**
+  - `createDeliveryPickingTO`: returned `{ success: true, deliveryNumber: '0080000134', transferOrder: '1037372', confirmed: true, step: 'picking TO 1037372 created and confirmed' }`.
+  - `LIKP` after: `VBELN = '0080000134'`, `WBSTK = 'A'` (Open goods issue), `KOSTK = 'C'` (Completely picked), `LVSTK = 'C'` (Completely processed in WM).
+  - `LTAK` after: `LGNUM = 'W01'`, `TANUM = '0001037372'`, `KQUIT = 'X'` (Confirmed), `VBELN = '0080000134'`, `BNAME = 'KHUSHAL'`, `BDATU = '20261021'`, `BZEIT = '165115'`.
+  - `LTAP` item: `TANUM = '0001037372'`, `TAPOS = '0001'`, `MATNR = '000000008000009754'`, `WERKS = '1120'`, `LGORT = 'CS02'`, `VSOLA = '1.000'`, `MEINS = 'NOS'`, `VLTYP = 'EN1'`, `VLPLA = '1-L0001-04'`, `NLTYP = '913'`, `NLPLA = '0080000134'`, `PQUIT = 'X'`.
+- **Validation:** `npx eslint srv/integration/s4hana/wm/ReservationProcessAdapter.js` clean; `npx jest test/unit/wm/autoMigoPosting.test.js -t "completeDeliveryGoodsIssue|createDeliveryPickingTO"`: 9 passed (100% green); `git diff --check` clean.
+- **Next action:** User confirmation of serial number (candidates: `MBP00001`, `MBP00002`, `000000000000123451`, `000000000000123461`) and explicit "GO" for Step 2 (`BAPI_OUTB_DELIVERY_CHANGE ITEM_SERIAL_NO` + COMMIT + SER01 read-back).
 
 ### 2026-10-21 21:55 IST — Modular picking TO creation implemented in ReservationProcessAdapter; standalone & in-session wired
 
