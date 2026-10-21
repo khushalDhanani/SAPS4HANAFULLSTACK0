@@ -15,14 +15,46 @@ const ITEMS = [
 const QUANT = { LQNUM: '0001035375', MATNR: '000000001000000867', WERKS: '1000', LGORT: 'RM01', CHARG: 'IN25003572',
   VERME: '11.210,000', MEINS: 'KG', LGTYP: 'RM1', LGPLA: 'ONHOLD' };
 
-function fakeRfc({ header = HEADER, items = ITEMS, quants = [QUANT], create } = {}) {
+function fakeRfc({ header = HEADER, items = ITEMS, quants = [QUANT], create, pendingTos = [], readback = true } = {}) {
+  let createParams = null;
   return {
-    call: jest.fn(async (fm) => {
+    call: jest.fn(async (fm, params) => {
       if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') return { ET_TR_HEADER: header ? [header] : [], ET_TR_ITEMS: items };
-      if (fm === 'ZWM_TO_CREATE_FROM_TR') return create;
+      if (fm === 'ZWM_TO_CREATE_FROM_TR') {
+        createParams = params;
+        return create;
+      }
       throw new Error(`unexpected ${fm}`);
     }),
-    readTable: jest.fn(async (table) => (table === 'MAKT' ? [{ MAKTX: 'IPA, Extra Pure' }] : quants))
+    readTable: jest.fn(async (table) => {
+      if (table === 'MAKT') return [{ MAKTX: 'IPA, Extra Pure' }];
+      if (table === 'LTAK') {
+        if (!createParams) return pendingTos;
+        if (!readback) return [];
+        return [{ LGNUM: createParams.IV_LGNUM, TANUM: create?.EV_TANUM, TBNUM: createParams.IV_TBNUM, KQUIT: '' }];
+      }
+      if (table === 'LTAP') {
+        if (!createParams) return pendingTos.map((to) => ({ TAPOS: '0001', TBPOS: to.TBPOS || '0001' }));
+        if (!readback) return [];
+        const toItem = createParams.IT_ITEMS[0];
+        const trItem = items.find((item) => item.TBPOS === toItem.TBPOS);
+        return [{
+          LGNUM: createParams.IV_LGNUM,
+          TANUM: create?.EV_TANUM,
+          TAPOS: '0001',
+          TBPOS: toItem.TBPOS,
+          MATNR: trItem?.MATNR,
+          WERKS: trItem?.WERKS,
+          LGORT: trItem?.LGORT,
+          CHARG: toItem.CHARG,
+          NSOLA: toItem.ANFME,
+          ALTME: toItem.ALTME,
+          VLENR: toItem.VLENR,
+          PQUIT: ''
+        }];
+      }
+      return quants;
+    })
   };
 }
 
@@ -105,6 +137,58 @@ describe('TrToAdapter (RFC)', () => {
         VLTYP: 'RM1', VLPLA: 'ONHOLD', VLENR: '00000000001000043935' }]
     });
     expect(res).toEqual({ TransferOrder: '1036601', Success: true, Message: 'Transfer Order 0001036601 created successfully.', Confirmed: false });
+    expect(rfc.readTable).toHaveBeenCalledWith('LTAK', ['LGNUM', 'TANUM', 'TBNUM', 'BWLVS', 'KQUIT', 'BDATU'], ["LGNUM = 'W01'", "AND TANUM = '0001036601'"], 1);
+    expect(rfc.readTable).toHaveBeenCalledWith('LTAP', expect.arrayContaining(['TBPOS', 'MATNR', 'VLENR']), ["LGNUM = 'W01'", "AND TANUM = '0001036601'"]);
+  });
+
+  it('createTO blocks a retry when SAP already has an unconfirmed TO for the selected TR item', async () => {
+    const rfc = fakeRfc({
+      pendingTos: [{ TANUM: '0001036001', KQUIT: '', TBPOS: '0001' }],
+      create: { EV_SUCCESS: 'S', EV_TANUM: '0001036602', EV_MESSAGE: 'created' }
+    });
+
+    await expect(new TrToAdapter({ rfc }).createTO({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 500 }))
+      .rejects.toMatchObject({ status: 409, message: expect.stringContaining('Unconfirmed Transfer Order 1036001 exists') });
+    expect(rfc.call).not.toHaveBeenCalledWith('ZWM_TO_CREATE_FROM_TR', expect.anything());
+  });
+
+  it('createTO rejects a simultaneous backend request for the same TR while the first create is in flight', async () => {
+    const rfc = fakeRfc({ create: { EV_SUCCESS: 'S', EV_TANUM: '0001036601', EV_MESSAGE: 'created' } });
+    const originalCall = rfc.call;
+    let releaseCreate;
+    let signalCreateStarted;
+    const createStarted = new Promise((resolve) => { signalCreateStarted = resolve; });
+    const createGate = new Promise((resolve) => { releaseCreate = resolve; });
+    rfc.call = jest.fn(async (...args) => {
+      if (args[0] === 'ZWM_TO_CREATE_FROM_TR') {
+        signalCreateStarted();
+        await createGate;
+      }
+      return originalCall(...args);
+    });
+
+    const adapter = new TrToAdapter({ rfc });
+    const params = { lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 500 };
+    const first = adapter.createTO(params);
+    await createStarted;
+    await expect(adapter.createTO(params)).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining('creation is already in progress')
+    });
+    releaseCreate();
+    await expect(first).resolves.toMatchObject({ TransferOrder: '1036601', Success: true });
+    expect(rfc.call.mock.calls.filter(([fm]) => fm === 'ZWM_TO_CREATE_FROM_TR')).toHaveLength(1);
+  });
+
+  it('createTO does not report success when the created TO cannot be read back from SAP', async () => {
+    const rfc = fakeRfc({
+      create: { EV_SUCCESS: 'S', EV_TANUM: '0001036601', EV_MESSAGE: 'created' },
+      readback: false
+    });
+
+    await expect(new TrToAdapter({ rfc }).createTO({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 500 }))
+      .rejects.toMatchObject({ status: 502, Status: '12', ErrorStep: 'LT04' });
+    expect(rfc.call).toHaveBeenCalledWith('ZWM_TO_CREATE_FROM_TR', expect.anything());
   });
 
   it('createTO rejects qty above min(SU stock, TR open) without calling SAP create', async () => {

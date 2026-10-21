@@ -68,6 +68,7 @@ class TrToAdapter {
   constructor(options = {}) {
     this.rfc = options.rfc || new RfcClient();
     this._checkSlocExistence = Boolean(options.checkSlocExistence);
+    this._toCreateInFlight = new Set();
   }
 
   async _findTrackedReservationForTR(tbnum) {
@@ -475,7 +476,7 @@ class TrToAdapter {
       items = await this._rfc(
         () => this.rfc.readTable(
           'LTAP',
-          ['LGNUM', 'TANUM', 'TAPOS', 'TBPOS', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'NSOLA', 'VSOLA', 'ALTME', 'PQUIT'],
+          ['LGNUM', 'TANUM', 'TAPOS', 'TBPOS', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'NSOLA', 'VSOLA', 'ALTME', 'VLENR', 'PQUIT'],
           [`LGNUM = '${wh}'`, `AND TANUM = '${to}'`]
         ),
         `Read Transfer Order Items for ${alphaOut(to)}`
@@ -504,6 +505,7 @@ class TrToAdapter {
         Batch: i.CHARG,
         TargetQty: sapNum(i.NSOLA || i.VSOLA),
         Unit: i.ALTME,
+        StorageUnit: alphaOut(i.VLENR),
         Pquit: i.PQUIT === 'X'
       }))
     };
@@ -676,7 +678,23 @@ class TrToAdapter {
   }
 
   /** Create only (as ZTO): confirmation stays in LT12 until the ABAP side offers it. */
-  async createTO({ lgnum, tbnum, lenum, qty } = {}) {
+  async createTO(params = {}) {
+    const wh = warehouse(params.lgnum);
+    const tr = sapKey(params.tbnum, 'tbnum');
+    const key = `${wh}:${tr}`;
+    if (this._toCreateInFlight.has(key)) {
+      throw httpError(409, `Transfer Order creation is already in progress for TR ${alphaOut(tr)} in warehouse ${wh}`);
+    }
+
+    this._toCreateInFlight.add(key);
+    try {
+      return await this._createTO(params);
+    } finally {
+      this._toCreateInFlight.delete(key);
+    }
+  }
+
+  async _createTO({ lgnum, tbnum, lenum, qty } = {}) {
     const quantity = Number(qty);
     if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
 
@@ -713,6 +731,16 @@ class TrToAdapter {
       }
     }
 
+    // A retry after a lost response must not create another TO while SAP still has
+    // an unconfirmed TO for this exact TR item. Confirmed TOs do not block a new pick.
+    const pending = await this._rfc(
+      () => findUnconfirmedToItems(this.rfc, wh, tr.Tbnum, item.Tbpos),
+      `Check open Transfer Orders of TR ${alphaOut(tr.Tbnum)}`
+    );
+    if (pending.length) {
+      throw httpError(409, `Unconfirmed Transfer Order ${alphaOut(pending[0].TANUM)} exists for TR ${alphaOut(tr.Tbnum)} item ${item.Tbpos}; confirm it before creating another TO`);
+    }
+
     LOG.info(`Creating TO for TR ${tr.Tbnum} item ${item.Tbpos}, SU ${su}, qty ${quantity} ${quant.MEINS}`);
     const res = await this._rfc(
       () => this.rfc.call('ZWM_TO_CREATE_FROM_TR', {
@@ -738,10 +766,27 @@ class TrToAdapter {
       const errMsg = mapStorageTypeSearchError(res?.EV_MESSAGE, wh, tr.Bwlvs);
       throw httpError(400, errMsg || `SAP did not create a Transfer Order for TR ${alphaOut(tr.Tbnum)}`);
     }
+
+    const tanum = alphaOut(res.EV_TANUM);
+    const verified = await this.getTransferOrder(tanum, wh);
+    const verifiedItem = verified?.Items.find((toItem) =>
+      toItem.Tbpos === item.Tbpos &&
+      toItem.Material === item.Material &&
+      toItem.StorageUnit === alphaOut(su)
+    );
+    const expectedTr = sapKey(tr.Tbnum, 'tbnum');
+    const actualTr = verified?.TbnumRaw ? sapKey(verified.TbnumRaw, 'tbnum') : '';
+    if (!verified || verified.Lgnum !== wh || actualTr !== expectedTr || !verifiedItem) {
+      const err = httpError(502, `Transfer Order ${tanum} was returned by SAP but read-back did not confirm the expected warehouse, TR, item, material, and Storage Unit`);
+      err.Status = STATUS.TO_ERROR;
+      err.ErrorStep = 'LT04';
+      throw err;
+    }
+
     return {
-      TransferOrder: alphaOut(res.EV_TANUM),
+      TransferOrder: tanum,
       Success: true,
-      Message: res.EV_MESSAGE || `Transfer Order ${alphaOut(res.EV_TANUM)} created.`,
+      Message: res.EV_MESSAGE || `Transfer Order ${tanum} created and verified in SAP.`,
       Confirmed: false
     };
   }

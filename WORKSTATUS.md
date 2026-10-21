@@ -5,6 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Standalone TO backend duplicate guard and SAP read-back (2026-10-21 12:30 IST): CODE DELIVERED locally.** Standalone `createTO` checks SAP for an unconfirmed TO on the selected TR item before invoking the wrapper, rejects same-TR concurrent calls within one adapter instance, and reads the returned TO back from LTAK/LTAP, checking warehouse, TR, item, material, and Storage Unit. Targeted tests passed (2 suites / 82 tests), changed-file ESLint and `git diff --check` passed. No SAP calls or writes; live persistence and cross-process locking remain unverified.
 - **L9/514 PGI retry recovery (2026-10-21 12:27 IST): CODE DELIVERED locally.** Adapter errors retain the committed delivery number, and the MIGO handler stores it on the retryable error track so retry resumes PGI directly. Focused tests passed (2 suites / 101 tests), changed-file ESLint passed, and staged/unstaged diff checks passed. No SAP calls or writes; live SAP behavior remains unverified.
 - **WM audit reconciliation + local fixes (2026-10-21 11:47 IST):** current HEAD review confirms #1, #3, #4, #6, #8–#13, #16, #17, and #19 implemented; #2 mapper change is present but live re-proof remains pending; #14 and #301 destination reconciliation were open and fixed in this session; #12 was still open despite older overlapping work-log claims and is now fixed/tested. #15 is UI-guarded but has no backend duplicate guard. #5, #7, and #18 remain blocked on read-only SAP evidence (no SAP writes). #20 local hygiene is improved: sample key blank, defaults removed, seed files untracked/outside db/data, live writer scripts gated, and technical RFC user no longer returned; provider key revocation and Git-history cleanup remain external follow-up. No proven movement behavior was live-retested or changed in SAP. Focused suites pass; the full WM run remains incomplete because 10 HTTP-backed suites cannot bind in this sandbox (`listen EPERM`); see the Changes Log entry for exact counts and other validations.
 
@@ -3385,6 +3386,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Exact Next Recommended Action (standalone TO duplicate guard/read-back — 2026-10-21 12:30 IST):** if live proof is desired, obtain explicit WRITE authorization and test data for the specific TO creation; then verify the SAP-generated TANUM and read it back from SAP. No live SAP call was made in this session.
 - **Exact Next Recommended Action (movement matrix follow-up — 2026-10-21 11:39 IST):** refresh the matrix against current HEAD before using its remaining FAIL labels as implementation instructions. Prior fixes in WORKSTATUS already cover items 3, 6, 8, 9, 10, 13, 15, 16, 17, and 19, while items 5, 7, and read-back portions of 18 remain blocked on SAP evidence. For further local work, next cover the direct 301 receiving-field reconciliation and failure-first retry tests; these were not changed in this session.
 
 - **Exact Next Recommended Action (audit fix 8 — 2026-10-21 11:37 IST):** revoke the previously committed NVIDIA API key in its provider console, issue a replacement, and put the replacement only in private local/BTP configuration. The tracked `.env.example` value is blank, but prior Git history may retain it. If history cleanup is needed, coordinate repository-wide history rewrite before doing it. Live scripts now require `ALLOW_LIVE_SAP_TOOLS=1` plus `--allow-live-sap` for JavaScript/Python scripts; shell scripts require the environment opt-in.
@@ -3485,6 +3487,15 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 12:30 IST — Standalone TO duplicate guard and SAP read-back
+
+- **Status:** Complete locally; live SAP persistence proof remains unverified.
+- **Change:** The standalone `createTO` path now rejects same-TR concurrent calls within one adapter instance, uses the existing SAP open-TO lookup for the exact TR item, and blocks retries while an unconfirmed TO exists. After the create wrapper returns TANUM, the adapter reads LTAK/LTAP back and verifies warehouse, TR link, selected TR item, material, and scanned Storage Unit before returning success. `getTransferOrder` now reads the SAP `VLENR` field for this check. Mock tests cover concurrent-call rejection, retry blocking and missing read-back.
+- **Evidence/contract:** Repository SAP source `docs/wm-discovery/pass2/fm_ZWM_TO_CREATE_FROM_TR.abap` shows the wrapper input/output and that it calls `L_TO_CREATE_TR`; `docs/abap/system-metadata.md` documents LTAK-TBNUM and LTAP-TBPOS/MATNR/VLENR; the same `getTransferOrder` read-back and `findUnconfirmedToItems` guard are already used by the adjacent create-from-TR flow. No live SAP call was made.
+- **Affected files:** `srv/integration/s4hana/wm/TrToAdapter.js`, `test/unit/wm/trToAdapter.test.js`, `WORKSTATUS.md`.
+- **Validation:** `npx jest test/unit/wm/trToAdapter.test.js test/unit/wm/trToHandler.test.js --runInBand --silent` — PASS (2 suites, 82 tests); `npx eslint srv/integration/s4hana/wm/TrToAdapter.js test/unit/wm/trToAdapter.test.js` — PASS; `git diff --check` and `git diff --cached --check` — PASS. Final diff/status reviewed. No SAP calls or writes.
+- **Next action:** If live proof is desired, obtain specific WRITE authorization and test data, create one TO, confirm its TANUM, and perform read-only LTAK/LTAP read-back. No further local changes are pending.
 
 ### 2026-10-21 12:27 IST — Preserve L9/514 delivery number through PGI failure
 
