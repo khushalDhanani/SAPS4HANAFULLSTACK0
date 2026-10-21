@@ -114,3 +114,5 @@ ehthumbs.db
 
 # Agent skill eval / scratch workspaces (see skills/README.md)
 *-workspace/
+db.sqlite-*
+.backup-db-corrupt-*/

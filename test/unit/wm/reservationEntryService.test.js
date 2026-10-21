@@ -1466,6 +1466,22 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(data.value[0]).toHaveProperty('CostCenter');
       expect(data.value[0]).toHaveProperty('CostCenterName');
     });
+
+    test('GET CostCenterVH returns one row per cost center when CSKS has the same KOSTL in several controlling areas', async () => {
+      t320Spy.mockImplementation(async (table) => {
+        if (table === 'CSKS') return [
+          { KOSTL: '0000010100', BUKRS: 'CA01' },
+          { KOSTL: '0000010100', BUKRS: 'US01' },
+          { KOSTL: '1011201301', BUKRS: '1000' }
+        ];
+        if (table === 'CSKT') return [{ KOSTL: '0000010100', KTEXT: 'Sales' }];
+        return [];
+      });
+      const { status, data } = await GET('/odata/v4/reservation-entry/CostCenterVH', authClerk);
+      expect(status).toBe(200);
+      expect(data.value.map((r) => r.CostCenter)).toEqual(['1011201301', '0000010100']);
+      expect(data.value[1]).toEqual({ CostCenter: '0000010100', CostCenterName: 'Sales', CompanyCode: 'CA01' });
+    });
   });
 
   describe('4. Action: postMigoGoodsMovement', () => {

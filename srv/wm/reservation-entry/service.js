@@ -1438,7 +1438,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             const k = String(t.KOSTL || '').trim();
             if (k) descMap[k] = String(t.KTEXT || '').trim();
           });
-          const result = (csks || []).map((c) => {
+          // CSKS key is KOKRS+KOSTL; the entity key is CostCenter only, so keep one row per KOSTL (UI5 rejects duplicate key predicates)
+          const seen = new Set();
+          const result = (csks || []).filter((c) => {
+            const cc = String(c.KOSTL || '').trim();
+            return cc && !seen.has(cc) && seen.add(cc);
+          }).map((c) => {
             const cc = String(c.KOSTL || '').trim();
             return {
               CostCenter: cc,

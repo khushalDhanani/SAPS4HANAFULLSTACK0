@@ -5,6 +5,12 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Reservation Entry detail 500 + CostCenterVH duplicate key — RESOLVED (2026-10-21 10:06 IST).** User swapped `db.sqlite` and ran `db-migrate-20261021-deliverynumber.sql` (`ok`, `17`). Live 4004 verified: `ReservationEntries(0000530232/0001)?$expand=Status,Logs` 200, `getReservationDetail(...)` 200, `ReservationEntries?$top=5` 200, `reservation-track/ReservationTracks?$top=5` 200, `CostCenterVH` 72 rows / 0 duplicates. Remaining housekeeping: delete the migration script, untrack `db.sqlite-shm`/`db.sqlite-wal` (`git rm --cached`), keep `.backup-db-corrupt-20261021/` until not needed. Corruption cause still UNKNOWN. Earlier detail below.
+- **(superseded) Reservation Entry detail 500 + CostCenterVH duplicate key (2026-10-21 09:58 IST): CostCenterVH FIXED; local SQLite file CORRUPT — recovered copy prepared, swap PENDING user action.**
+  - **Root cause of the 500s** (`ReservationEntries(...)?$expand=Status,Logs`, `getReservationDetail(...)`, any DB read): local `db.sqlite` fails with `database disk image is malformed` (SQLite `PRAGMA integrity_check` fails at prepare). CAP 10 (`server.shutdown_on_uncaught_errors = true`) treats it as an uncaught error, runs `cds.shutdown` → `cds.db.disconnect()` drains the connection pool, but the process keeps serving; every later DB request surfaces as `Pool is draining and cannot fulfil request` (HTTP 500). Not an SAP error.
+  - **Recovery (non-destructive, done):** `sqlite3 db.sqlite .recover` → `db.recovered.sqlite` (project root, git-ignored via `*.sqlite`): `integrity_check = ok`, 18 tables, 6 views, 17 `ReservationTrack` rows (incl. 0000530233 status 02), 42 `ReservationLog` rows, WAL disabled + VACUUM. Replacing `db.sqlite` was denied by the session permission classifier (irreversible local destruction) → user must swap (see Next Steps).
+  - **CostCenterVH duplicate key (`Duplicate key predicate: ('0000010100')`, fixed):** CSKS key is KOKRS+KOSTL, entity key is `CostCenter` only; same KOSTL in several controlling areas (`0000010100` ×2, `SAP-DUMMY` ×22) produced duplicate OData keys and UI5 rejected the list. Handler now keeps the first row per KOSTL (`srv/wm/reservation-entry/service.js`). Live 4004 (restarted by `cds watch`): 72 rows, 0 duplicates.
+
 - **Outbound Delivery PGI Automation on L9 514 (2026-10-21 09:50 IST): PGI EXECUTION, MATDOC VERIFICATION (BWART 241), AND TR COMPLETION GUARD DELIVERED.**
   - **Delivered Architecture & Capability:**
     1. **Automated PGI Dispatch (`ReservationProcessAdapter.js`):** Implemented `postDeliveryGoodsIssue(deliveryNumber, options)` and updated `postGoodsMovement` so that when SAP standard shipping-managed storage locations return message `L9 514` (`Delivery <deliv> created`) with an empty material document, the adapter commits delivery creation (`BAPI_TRANSACTION_COMMIT`), immediately executes Goods Issue (PGI) via standard `BAPI_OUTB_DELIVERY_CONFIRM_DEC` (`HEADER_CONTROL.POST_GI_FLG = 'X'`) or configured authorized wrapper (`options.wrapperFm || this._deliveryWrapperFm || process.env.S4_DELIVERY_PGI_FM`), and commits PGI on success.
@@ -3357,6 +3363,9 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Exact Next Recommended Action (recovered SQLite schema gap — 2026-10-21, 10:03 IST):** user swapped `db.sqlite` (backup in `.backup-db-corrupt-20261021/`); the pool is healthy again but detail reads now fail with `no such column: $R.DeliveryNumber` because the recovered data predates the 09:50 `DeliveryNumber` column. Column diff model vs DB: only `saps4hana_wm_ReservationTrack.DeliveryNumber` missing (views `ReservationEntryService_ReservationEntries` and `ReservationTrackService_ReservationTracks` project it). Applying `ALTER TABLE` + view recreation was denied by the session permission classifier → run `sqlite3 db.sqlite < db-migrate-20261021-deliverynumber.sql` (additive script in project root; expected output `ok` and `17`), then re-open the detail page. Delete the script afterwards.
+- **Exact Next Recommended Action (corrupt local SQLite — 2026-10-21, 09:58 IST):** stop `cds watch`, then in the project root run `mkdir -p .backup-db-corrupt-20261021 && mv db.sqlite db.sqlite-shm db.sqlite-wal .backup-db-corrupt-20261021/ && mv db.recovered.sqlite db.sqlite`, restart `npm run watch`, and re-open `ReservationEntries(ReservationNo='0000530232',ReservationItem='0001')`. `db.sqlite-shm` / `db.sqlite-wal` are tracked in git and will show as deleted; they should be untracked (`git rm --cached`) since `*.sqlite` is already ignored. Cause of the corruption is UNKNOWN (file mtime 09:41 IST, 0-byte WAL at 09:48 IST).
+
 - **Exact Next Recommended Action (Movement Policy Centralization Complete — Items 17 & 18 — 2026-10-19, 10:35 IST):**
   1. Review verified changes across `srv/common/movementConfig.js`, `srv/wm/goods-issue/validation/`, `srv/wm/mvt261/service.js`, and `srv/integration/s4hana/wm/` mappers/adapters.
   2. Confirm 100% green test results (172/172 test suites, 3,284 tests passing).
@@ -3444,6 +3453,42 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 10:12 IST — SQLite runtime files untracked and ignored (corruption prevention)
+
+- User ran `git rm --cached db.sqlite-shm db.sqlite-wal` (staged deletions; files stay on disk). `.gitignore`: added `db.sqlite-*` (the existing `*.sqlite` rule did not match the `-shm`/`-wal` suffixes) and `.backup-db-corrupt-*/`. `git check-ignore` confirms all three paths ignored.
+- Reason: tracked WAL/SHM files can be overwritten by checkout/stash/pull while the server holds the database open — the prime suspect (INFERRED, not proven) for today's `database disk image is malformed`.
+- No code change, no test impact, no SAP call. **Assumptions:** none.
+
+### 2026-10-21 10:06 IST — DeliveryNumber migration applied by user; incident verified resolved on live 4004
+
+- User ran `sqlite3 db.sqlite < db-migrate-20261021-deliverynumber.sql` → `ok`, `17`.
+- Verification (live 4004, mock user alice, READ-ONLY, no SAP write): detail with `$expand=Status,Logs` 200 (record 0000530232/0001, MVT 311, W01/1120 returned), `getReservationDetail` 200, `ReservationEntries?$top=5` 200, `ReservationTracks?$top=5` 200.
+- **Done:** both console errors from the incident resolved. **Not done:** cleanup (delete migration script, untrack `db.sqlite-shm`/`-wal`). **Still unknown:** cause of the file corruption. **Assumptions:** none.
+
+### 2026-10-21 10:03 IST — db.sqlite swapped by user; DeliveryNumber column migration script prepared (apply pending)
+
+- User ran the swap command from the previous entry. Verified: `db.sqlite` (204800 B) `integrity_check ok`, 17 `ReservationTrack` rows; corrupt originals in `.backup-db-corrupt-20261021/`. Live 4004 DB pool works again (no more `Pool is draining`).
+- New failure on `ReservationEntries(...)?$expand=Status,Logs` and `getReservationDetail(...)`: `no such column: $R.DeliveryNumber` — recovered data was written before `db/wm/reservation-track.cds` gained `DeliveryNumber` (09:50 entry). `cds compile '*' --to sql` vs `pragma table_info` over all 18 tables: only that column is missing (the `cds_outbox_Messages.partition` difference is quoting only).
+- Created `db-migrate-20261021-deliverynumber.sql` (ALTER TABLE ADD COLUMN + DROP/CREATE of the two views, DDL copied from the compiled model). Executing it was denied by the session permission classifier (DROP VIEW) → **Not done**, left for the user. No code change. **Assumptions:** none.
+
+### 2026-10-21 09:58 IST — Reservation Entry detail 500 diagnosed (corrupt local SQLite) and CostCenterVH duplicate OData key fixed
+
+- **User incident (browser console):** `GET .../ReservationEntries(ReservationNo='0000530232',ReservationItem='0001')?$expand=Status,Logs` → 500, `GET .../getReservationDetail(...)` → 500, and UI5 `Failed to get contexts for /odata/v4/reservation-entry/CostCenterVH ... Duplicate key predicate: ('0000010100')`.
+- **Diagnosis (CONFIRMED):**
+  - Live server (port 4004, `cds watch` child) answered every DB read with `{"error":{"message":"Pool is draining and cannot fulfil request","code":"500"}}`; RFC-only reads (CostCenterVH) worked.
+  - Fresh `cds serve --port 4010` reproduced it; its log shows per request `❗️Uncaught Error: database disk image is malformed` → `❗️server shutdown ...❗️` → 500. `sqlite3 db.sqlite "PRAGMA integrity_check"` → `database disk image is malformed (11)`. Mechanism: `@sap/cds` 10.1.1 `bin/serve.js` `_shutdown` → `cds.db.disconnect()` (`@cap-js/db-service` 3.1.1 `DatabaseService.js:11,132`) drains the pool; the pending request is rejected by `generic-pool.js:177`. 4010 server stopped afterwards.
+  - CostCenterVH: `CSKS` returned the same `KOSTL` for several controlling areas / company codes (`0000010100` CA01+US01, `SAP-DUMMY` ×22); entity key is `CostCenter` only → duplicate key predicates.
+- **Changes:**
+  - `srv/wm/reservation-entry/service.js` (`READ CostCenterVH`): dedupe by trimmed `KOSTL` (first row wins) before mapping; empty KOSTL dropped.
+  - `test/unit/wm/reservationEntryService.test.js`: new test "returns one row per cost center when CSKS has the same KOSTL in several controlling areas" (stubbed `readTable`; asserts unique keys, order, name from CSKT, first company code kept).
+  - `db.recovered.sqlite` (new, git-ignored): `sqlite3 db.sqlite .recover` output, `journal_mode=DELETE`, `VACUUM`, `integrity_check ok`, 18 tables / 6 views, 17 `ReservationTrack` + 42 `ReservationLog` rows. **`db.sqlite` NOT replaced** — the swap was denied by the session permission classifier; left for the user (command in Next Steps).
+- **Validation:**
+  - `npx jest test/unit/wm/reservationEntryService.test.js` → PASS (87/87).
+  - `git diff --check` → clean.
+  - Live 4004 after `cds watch` restart (pid 5368): `CostCenterVH?$top=100` → 72 rows, 0 duplicate `CostCenter`; `ReservationEntries?$top=1` still 500 (corrupt DB not swapped yet).
+- **SAP calls:** READ-ONLY only (`RFC_READ_TABLE` CSKS/CSKT via the running CAP server). No write.
+- **Not done:** `db.sqlite` swap (permission denied); root cause of the file corruption UNKNOWN. **Assumptions:** none.
 
 ### 2026-10-21 09:50 IST — Outbound Delivery PGI Automation on L9 514 with Strict MATDOC Verification & TR Completion Guard
 
