@@ -38,10 +38,38 @@ const { sapKey } = require(path.join(root, 'srv/integration/s4hana/sapKey'));
   console.log(`\n--- WRITE: Calling BAPI_OUTB_DELIVERY_CHANGE with serial '${chosenSerial}' ---`);
   await rfc.session(async (call) => {
     const s4Serial = sapKey(chosenSerial, 'serial');
-    const changeRes = await call('BAPI_OUTB_DELIVERY_CHANGE', {
+
+    const vepo = await rfc.readTable('VEPO', ['VENUM', 'VEPOS', 'VBELN', 'POSNR'], [`VBELN = '${delivNo}'`, `AND POSNR = '${itemNo}'`], 5);
+    const handlingUnitSerno = [];
+    for (const v of vepo || []) {
+      const vekp = await rfc.readTable('VEKP', ['VENUM', 'EXIDV'], [`VENUM = '${v.VENUM}'`], 1);
+      const exidv = vekp?.[0]?.EXIDV;
+      if (exidv) {
+        handlingUnitSerno.push({
+          OBJECT_DOC: delivNo,
+          ITM_NUMBER: itemNo,
+          HU_EXID: exidv,
+          SERIALNO: s4Serial
+        });
+      }
+    }
+    console.log('Handling unit serials to pass:', handlingUnitSerno);
+
+    const changeRes = await call('BAPI_OUTB_DELIVERY_CONFIRM_DEC', {
       HEADER_DATA: { DELIV_NUMB: delivNo },
-      HEADER_CONTROL: { DELIV_NUMB: delivNo },
+      HEADER_CONTROL: {
+        DELIV_NUMB: delivNo,
+        POST_GI_FLG: ''
+      },
       DELIVERY: delivNo,
+      ITEM_DATA: [{
+        DELIV_NUMB: delivNo,
+        DELIV_ITEM: itemNo
+      }],
+      ITEM_CONTROL: [{
+        DELIV_NUMB: delivNo,
+        DELIV_ITEM: itemNo
+      }],
       ITEM_SERIAL_NO: [{
         DELIV_NUMB: delivNo,
         ITM_NUMBER: itemNo,

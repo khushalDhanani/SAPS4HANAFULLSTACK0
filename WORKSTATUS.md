@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Delivery completion Step 1 PASSED & Step 2/3 DIAGNOSED (2026-10-21 22:35 IST): Picking Transfer Order 1037372 confirmed in W01 (LIKP-KOSTK = 'C'). User selected serial number MBP00001 (unrestricted stock in 1120/CS02). Execution of BAPI_OUTB_DELIVERY_CONFIRM_DEC revealed root cause blocker L3 866: "SU type for pack. mat. type Z007 could not be determined in warehouse no. W01". Inspection of SAP transparent table T319A confirms W01 only maps packaging material types 0001 and Z003 to Storage Unit Type E1; mapping for Z007 is missing in customizing. Maintaining SPRO entry W01 / Z007 -> E1 (or table T319A) will enable delivery confirmation and PGI with serial numbers.**
+
 - **Delivery completion Step 1 LIVE PROOF PASSED (2026-10-21 22:15 IST): Picking Transfer Order 1037372 created and confirmed in SAP Client 220 for Outbound Delivery 0080000134 in W01 under user "Go". Live read-back confirms LIKP-KOSTK = 'C' (completely picked), LIKP-LVSTK = 'C', LTAK TANUM 0001037372 KQUIT = 'X', LTAP item 0001 picked 1.000 NOS of 8000009754 from EN1/1-L0001-04 to 913/0080000134 (PQUIT = 'X'). Handled L3 181 (movement type 241 forbids immediate confirmation) by creating with IV_SQUIT blank and confirming via L_TO_CONFIRM. Step 2 (serial number assignment) and Step 3 (PGI) pending user serial selection and explicit "GO".**
 
 - **Delivery completion & picking TO implementation (2026-10-21 21:55 IST): modular `createDeliveryPickingTO` implemented in `ReservationProcessAdapter.js` with standalone and in-session execution; picking step in `completeDeliveryGoodsIssue` delegates to it; session-wrapping ensured so callers without an active session do not fail. Tested in `autoMigoPosting.test.js` (+2 tests: fallback to `Z_WM_TO_CREATE_DN` on Note 2295840 rejection, already-picked return; 9/9 delivery tests green). Live proof of Step 1 (`Z_WM_TO_CREATE_DN` on delivery 0080000134) ready and waiting for explicit user 'go'.**
@@ -3656,6 +3658,22 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 22:35 IST — Step 2 serial number assignment & confirmation attempted; root cause diagnosed in T319A (L3 866)
+
+- **Authorization:** user response "(Recommended) Assign serial number MBP00001 and proceed with GO for Step 2 write".
+- **Discovery & Execution (WRITE & READ-ONLY):**
+  - Executed `tools/test-step2-assign-serial.js` with chosen serial `MBP00001`.
+  - Discovery in `LIPS`/`VEPO`: delivery item `0080000134/000010` has serial profile `ZSN2` (`LIPS-SERAIL`) with mandatory serialization (`T377` `SDLS = 03`, `MMSL = 03`), and was packed during picking into Handling Unit `00000000002000019371` with packaging material `2000000340` (`VEKP-VHART = 'Z007'`).
+  - Standard delivery confirmation BAPI `BAPI_OUTB_DELIVERY_CONFIRM_DEC` returned error:
+    `L3 866: SU type for pack. mat. type Z007 could not be determined in warehouse no. W01`.
+  - Live query of transparent table `T319A` (Assignment Automatic Pick-HU Creation / SUT to Packaging Material Type) confirms:
+    - `LGNUM = 'W01', VHART = '0001' -> LETYP = 'E1'`
+    - `LGNUM = 'W01', VHART = 'Z003' -> LETYP = 'E1'`
+    - Entry for `VHART = 'Z007'` is missing in warehouse `W01`.
+  - SPRO configuration path: `Logistics - General > Handling Unit Management > Basics > Warehouse Management > Assign Storage Unit Type to Packaging Material Type`.
+- **Validation:** `npx jest test/unit/wm/autoMigoPosting.test.js -t "completeDeliveryGoodsIssue|createDeliveryPickingTO"` 9 passed (100% green); `git diff --check` clean.
+- **Next recommended action:** Maintain `T319A` entry `W01 / Z007 -> E1` in SPRO/customizing, then re-run delivery confirmation & PGI with serial number `MBP00001`.
 
 ### 2026-10-21 22:15 IST — Live Step 1 picking TO executed on delivery 0080000134 in W01; TO 1037372 created & confirmed; LIKP-KOSTK = 'C'
 
