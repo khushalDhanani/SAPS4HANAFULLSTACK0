@@ -226,7 +226,9 @@ class TrToHandler {
       }
 
       // PROCESS_ID of this GI step: reused on retry so an already posted document is found, never posted twice.
-      const processId = data.ProcessId || existingTrack?.ProcessId || cds.utils.uuid();
+      // After a posted document the next issue on this item is a new step and gets a fresh id.
+      const priorDocPosted = Boolean(existingTrack?.MaterialDocument) && existingTrack?.Status_code === STATUS.GI_POSTED;
+      const processId = data.ProcessId || (!priorDocPosted && existingTrack?.ProcessId) || cds.utils.uuid();
       const trackKey = existingTrack ? { ReservationNo: existingTrack.ReservationNo, ReservationItem: existingTrack.ReservationItem } : null;
       if (trackKey && existingTrack.ProcessId !== processId) {
         await UPDATE(ReservationTrack).set({ ProcessId: processId }).where(trackKey);

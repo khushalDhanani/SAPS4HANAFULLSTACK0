@@ -2922,6 +2922,49 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       expect(cancelledCheck.alreadyPosted).toBe(false);
     });
 
+    describe('reservation-item lookup (MATDOC-SGTXT is blank on this system): replay vs new partial issue, fail closed on read errors', () => {
+      const withTrack = async (track, fn) => {
+        const origCds = global.cds;
+        global.cds = { db: { run: jest.fn().mockResolvedValue(track) }, ql: { SELECT: { one: { from: () => ({ where: () => ({}) }) } } } };
+        try { return await fn(); } finally { global.cds = origCds; }
+      };
+      const priorDoc = [{ MBLNR: '5000111111', MJAHR: '2026' }];
+      const keyParams = { reservationNumber: '0000520235', reservationItem: '0001', processId: 'E5B42701-1111-4222-8333-000000000007', movementType: '201' };
+
+      test('fails closed with 503 when the MATDOC read throws; nothing is posted', async () => {
+        setupDefaultReadTable({ MATDOC: () => { throw new Error('RFC_COMMUNICATION_FAILURE'); } });
+        await expect(adapter.checkMigoIdempotency(keyParams)).rejects.toMatchObject({ status: 503, idempotencyCheckFailed: true });
+        expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
+      });
+
+      test('earlier partial issue (RESB withdrawn equals tracked withdrawn) does not block the next quantity', async () => {
+        setupDefaultReadTable({
+          MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
+          RESB: () => [{ ENMNG: '6.000', KZEAR: '' }]
+        });
+        const res = await withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', Status_code: '05', MaterialDocument: '5000111111', WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(keyParams));
+        expect(res.alreadyPosted).toBe(false);
+      });
+
+      test('lost response (RESB withdrawn greater than tracked withdrawn) is a replay: returns the SAP document', async () => {
+        setupDefaultReadTable({
+          MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
+          RESB: () => [{ ENMNG: '10.000', KZEAR: '' }]
+        });
+        const res = await withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', Status_code: '90', MaterialDocument: null, WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(keyParams));
+        expect(res).toMatchObject({ alreadyPosted: true, materialDocument: '5000111111', source: 'SAP' });
+      });
+
+      test('final-issued item (RESB KZEAR = X) is a replay regardless of quantities', async () => {
+        setupDefaultReadTable({
+          MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
+          RESB: () => [{ ENMNG: '6.000', KZEAR: 'X' }]
+        });
+        const res = await withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(keyParams));
+        expect(res.alreadyPosted).toBe(true);
+      });
+    });
+
     test('Subsequent partial issue with a new TO and fresh ProcessId is NOT blocked by idempotency', async () => {
       setupDefaultFmCalls();
       const bapiCalls = [];

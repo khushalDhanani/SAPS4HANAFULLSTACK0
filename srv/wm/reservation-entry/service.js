@@ -1478,7 +1478,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const sMvt = data.movementType || data.MovementType || track.MovementType;
       const sPlant = data.plant || data.Plant || data.sourcePlant || data.SourcePlant || track.Plant;
       // PROCESS_ID of this GI step; persisted before posting so a retry finds an already posted document.
-      const processId = data.ProcessId || track.ProcessId || cds.utils.uuid();
+      // After a posted document the next issue on this item is a new step: a fresh id, so the SGTXT lookup cannot return the earlier document.
+      const priorDocPosted = Boolean(track.MaterialDocument) && track.Status_code === STATUS.GI_POSTED;
+      const processId = data.ProcessId || (!priorDocPosted && track.ProcessId) || cds.utils.uuid();
       if (track.ProcessId !== processId) await UPDATE(ReservationEntries).set({ ProcessId: processId }).where(key);
 
       // SAP-side lock (feature flag, off by default); lock, authorization checks and posting share one RFC session.
@@ -1609,19 +1611,16 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       // Step 15: Idempotency Protection — if MIGO was already posted for this reservation item and TO/processId, return existing record
       if (existing.MaterialDocument && (existing.Status_code === STATUS.GI_POSTED || existing.ProcessStatus === PROCESS_STATUS.MIGO_POSTED || existing.ProcessStatus === PROCESS_STATUS.COMPLETED)) {
-        const reqTo = data.TransferOrder || data.transferOrder || '';
-        const reqPid = data.ProcessId || '';
-        const toMatches = reqTo && existing.TransferOrder && sapKey(existing.TransferOrder, 'tanum') === sapKey(reqTo, 'tanum');
-        const pidMatches = reqPid && existing.ProcessId && existing.ProcessId === reqPid;
-        const bKeyMatches = existing.MigoBusinessKey && (data.businessKey === existing.MigoBusinessKey || (reqPid && existing.MigoBusinessKey.includes(reqPid)));
-        if (bKeyMatches || pidMatches || toMatches) {
-          const bKey = existing.MigoBusinessKey || `RES:${sResNo}/${sResItem}#TO:${existing.TransferOrder || reqTo || 'NONE'}#PID:${existing.ProcessId || reqPid || 'NONE'}`;
-          LOG.info(`[Idempotency Guard] Reservation ${sResNo}/${sResItem} already has Material Document ${existing.MaterialDocument}; returning existing record`);
+        // The action declares no TO / process id, so the only safe replay test is: nothing left to issue on this item.
+        const nothingLeft = existing.CompletelyProcessed === true || (existing.RemainingQuantity != null && Number(existing.RemainingQuantity) <= 0);
+        if (nothingLeft) {
+          const bKey = existing.MigoBusinessKey || `RES:${sResNo}/${sResItem}#TO:${existing.TransferOrder || 'NONE'}#PID:${existing.ProcessId || 'NONE'}`;
+          LOG.info(`[Idempotency Guard] Reservation ${sResNo}/${sResItem} already has Material Document ${existing.MaterialDocument} and no open quantity; returning existing record`);
           await logRow({
-            ...key, LogHandle: sLogHandle, ExternalId: extId, SubObject: 'PROCESS', ProcessId: existing.ProcessId || reqPid || null, DocumentNo: existing.MaterialDocument,
+            ...key, LogHandle: sLogHandle, ExternalId: extId, SubObject: 'PROCESS', ProcessId: existing.ProcessId || null, DocumentNo: existing.MaterialDocument,
             Step: 'MIGO', Status: STATUS.GI_POSTED, MessageType: 'I', MessageId: 'M7', MessageNo: '060',
             MigoBusinessKey: bKey,
-            MessageText: `Idempotency guard: Material Document ${existing.MaterialDocument}/${existing.MaterialDocYear || ''} already posted for business key ${bKey}; returning existing document`
+            MessageText: `Idempotency guard: Material Document ${existing.MaterialDocument}/${existing.MaterialDocYear || ''} already posted for business key ${bKey} and the item is completely processed; returning existing document`
           });
           return existing;
         }

@@ -1966,9 +1966,10 @@ class ReservationProcessAdapter {
     }
 
     // 2. Persistent CAP database check (ZRES_TRACK)
+    let trk = null;
     if (global.cds?.db && reservationNo) {
       try {
-        const trk = await global.cds.db.run(
+        trk = await global.cds.db.run(
           global.cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack').where({
             ReservationNo: reservationNo,
             ReservationItem: reservationItem
@@ -1991,26 +1992,48 @@ class ReservationProcessAdapter {
       } catch (_) { /* ignore DB query errors in mock unit test environments */ }
     }
 
-    // 3. SAP MATDOC transparent table query
+    // 3. SAP MATDOC transparent table query, keyed on THIS attempt (PROCESS_ID in SGTXT, or the TO in XBLNR).
+    //    A read failure fails closed: posting without knowing whether the previous attempt committed could double-post.
+    //    No lookup by reservation item alone: a later partial issue on the same item is a new document, not a replay.
     if (this.rfc) {
+      const lookup = async (label, where) => {
+        try {
+          return await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], where, 1);
+        } catch (err) {
+          throw Object.assign(
+            httpError(503, `Cannot verify in SAP (MATDOC by ${label}) whether this goods movement was already posted: ${err.message}. Nothing was posted; retry when the SAP connection is available.`),
+            { stage: 'MIGO', idempotencyCheckFailed: true }
+          );
+        }
+      };
       let found = null;
       if (processId) {
-        try {
-          const where = [`SGTXT = '${processId}'`, ...(s4Mat ? [`AND MATNR = '${s4Mat}'`] : []), ...(sPlant ? [`AND WERKS = '${sPlant}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
-          found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], where, 1);
-        } catch (_) {}
+        found = await lookup('process id', [`SGTXT = '${processId}'`, ...(s4Mat ? [`AND MATNR = '${s4Mat}'`] : []), ...(sPlant ? [`AND WERKS = '${sPlant}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"]);
       }
       if (!found?.[0]?.MBLNR && transferOrder) {
-        try {
-          const toWhere = [`XBLNR = 'TO ${alphaOut(transferOrder)}'`, ...(sMvt ? [`AND BWART = '${sMvt}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
-          found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], toWhere, 1);
-        } catch (_) {}
+        found = await lookup('transfer order', [`XBLNR = 'TO ${alphaOut(transferOrder)}'`, ...(sMvt ? [`AND BWART = '${sMvt}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"]);
       }
+      // Reservation-item lookup: on this system MATDOC-SGTXT is blank for every posting (customer exit, see WORKSTATUS
+      // 2026-10-12 13:45), so this is the guard that works live. A document on the item is a replay of THIS request only
+      // when SAP has withdrawn more than the tracking row knows (lost response) or the item is final-issued; otherwise it
+      // is an earlier partial issue and the new quantity must still be posted.
       if (!found?.[0]?.MBLNR && reservationNo) {
-        try {
-          const resWhere = [`RSNUM = '${reservationNo}'`, `AND RSPOS = '${reservationItem}'`, ...(sMvt ? [`AND BWART = '${sMvt}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"];
-          found = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR'], resWhere, 1);
-        } catch (_) {}
+        const docs = await lookup('reservation item', [`RSNUM = '${reservationNo}'`, `AND RSPOS = '${reservationItem}'`, ...(sMvt ? [`AND BWART = '${sMvt}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"]);
+        if (docs?.[0]?.MBLNR) {
+          let resb;
+          try {
+            resb = (await this.rfc.readTable('RESB', ['ENMNG', 'KZEAR'], [`RSNUM = '${reservationNo}'`, `AND RSPOS = '${reservationItem}'`], 1))?.[0];
+          } catch (err) {
+            throw Object.assign(httpError(503, `Cannot verify in SAP (RESB) whether material document ${alphaOut(docs[0].MBLNR)} belongs to this request: ${err.message}. Nothing was posted.`), { stage: 'MIGO', idempotencyCheckFailed: true });
+          }
+          const sapWithdrawn = Number(resb?.ENMNG) || 0;
+          const knownWithdrawn = trk ? (Number(trk.WithdrawnQuantity) || 0) : null;
+          const finalIssued = String(resb?.KZEAR || '').trim() === 'X';
+          // shortcut: with no tracking row the app has no withdrawn baseline, so any document on the item counts as a replay (no partial issues for untracked items); add an attempt id to the SAP posting once a persisted text field is available.
+          const replay = knownWithdrawn === null || finalIssued || sapWithdrawn > knownWithdrawn;
+          if (replay) found = docs;
+          else LOG.info(`[Idempotency Guard] Reservation ${reservationNo}/${reservationItem}: document ${alphaOut(docs[0].MBLNR)} is an earlier partial issue (RESB withdrawn ${sapWithdrawn} = tracked ${knownWithdrawn}); posting the new quantity`);
+        }
       }
 
       if (found?.[0]?.MBLNR) {

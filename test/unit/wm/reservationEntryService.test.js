@@ -1629,6 +1629,8 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
     });
 
     test('POST /odata/v4/reservation-entry/postMigoGoodsMovement handles failure with status 90 (GI error) and error log', async () => {
+      // the previous test completed the item; a further posting attempt only makes sense while quantity is open
+      await cds.db.run(cds.ql.UPDATE(TRACK_ENTITY).set({ CompletelyProcessed: false, RemainingQuantity: 4 }).where({ ReservationNo: testMigoResNo, ReservationItem: '0001' }));
       postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement').mockRejectedValueOnce(
         new Error('Posting period 10/2026 closed')
       );
@@ -1658,6 +1660,18 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       );
       expect(log).toBeTruthy();
       expect(log.MessageType).toBe('E');
+    });
+
+    test('POST postMigoGoodsMovement on a completely processed item returns the existing record and does not call the adapter', async () => {
+      await cds.db.run(cds.ql.UPDATE(TRACK_ENTITY).set({ MaterialDocument: '4900050777', MaterialDocYear: '2026', Status_code: '05', CompletelyProcessed: true, RemainingQuantity: 0 }).where({ ReservationNo: testMigoResNo, ReservationItem: '0001' }));
+      postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement');
+
+      const { status, data } = await POST('/odata/v4/reservation-entry/postMigoGoodsMovement', { ReservationNo: testMigoResNo, ReservationItem: '0001' }, authClerk);
+
+      expect(status).toBe(200);
+      expect(data.MaterialDocument).toBe('4900050777');
+      expect(postGoodsMvtSpy).not.toHaveBeenCalled();
+      await cds.db.run(cds.ql.UPDATE(TRACK_ENTITY).set({ MaterialDocument: null, MaterialDocYear: null, Status_code: '04', CompletelyProcessed: false, RemainingQuantity: null }).where({ ReservationNo: testMigoResNo, ReservationItem: '0001' }));
     });
   });
 

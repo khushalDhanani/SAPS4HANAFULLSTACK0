@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Audit fix 3 of 9 (2026-10-21 11:35 IST, items 11 + 4): MIGO idempotency — service guard now effective, adapter lookup fails closed and distinguishes replay from a new partial issue — DELIVERED, unit-tested (WM suite 2247 passed, 0 failed). Fix 2's live 311 re-proof still pending your "go".**
+
 - **Audit fix 2 of 9 (2026-10-21 11:05 IST): 301/311 direct-post mappers now send the idempotency `ReferenceDocument` header — CODE DELIVERED, unit-tested; live re-proof BLOCKED on explicit WRITE "go" (candidate 311: reservation 529698/0001, material 8000001699, 1120 HS01→MT01, 1 NOS; candidate 301: 525864/0001, 8900000004, 1120/CS01→1110/CS01, 1 KG).**
 
 - **Audit fix 1 of 9 (2026-10-21 10:45 IST): 261 KI 248 retry no longer uses a hard-coded cost center or drops the reservation reference — DELIVERED, unit-tested; live 261 re-proof PENDING.** Remaining audit items 2-9 (301/311 reference document, MIGO idempotency, uncalled write actions, UI double-submit, sapKey on remaining WHERE texts, L9/514 recovery, test honesty, hygiene) are open; see the 10:40 audit entry.
@@ -3457,6 +3459,17 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 11:35 IST — Audit fix 3 (items 11 + 4): MIGO idempotency at the service; adapter MATDOC lookup fails closed and tells a replay from a new partial issue
+
+- **Reason:** (11) `postMigoGoodsMovement` guard compared request fields (`TransferOrder`, `ProcessId`, `businessKey`) that the action never declares, so it could never fire. (4) `checkMigoIdempotency` swallowed every MATDOC read error (→ posted blind) and returned any non-cancelled document on the reservation item as "already posted", so a second partial issue was silently replaced by the first document. **Constraint found in WORKSTATUS (2026-10-12 13:45, live-verified):** `MATDOC-SGTXT` is blank for every posting on this system (customer exit `ZXMBCU02`), so the PROCESS_ID lookup never matches live and the reservation-item lookup is the only guard that works against a lost response. It was therefore kept, not removed.
+- **Changes:**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js` `checkMigoIdempotency`: all MATDOC reads go through one `lookup()` that throws 503 (`idempotencyCheckFailed`, `stage: 'MIGO'`) on error instead of continuing to post. Order unchanged: SGTXT = processId → XBLNR = 'TO n' → RSNUM/RSPOS/BWART. For a hit on the reservation item the adapter now reads `RESB ENMNG/KZEAR` (error → 503) and treats the document as a replay only if the tracking row is unknown, `KZEAR = 'X'`, or SAP withdrawn > `ReservationTrack.WithdrawnQuantity` (SAP moved stock the app did not record = lost response). Equal quantities = earlier partial issue → the new quantity is posted. `shortcut:` comment documents that untracked items keep the conservative "any document = replay" behaviour.
+  - `srv/wm/reservation-entry/service.js` `postMigoGoodsMovement`: guard now returns the existing record when the item has a material document and nothing left to issue (`CompletelyProcessed` or `RemainingQuantity <= 0`); the dead parameter checks are gone. `postMigoForTrack`: a GI step after a posted document gets a fresh PROCESS_ID instead of reusing the previous one.
+  - `srv/wm/tr-to/handlers/trTo.handler.js` `handlePostMigoGoodsMovement`: same fresh PROCESS_ID rule.
+- **Tests:** `test/unit/wm/autoMigoPosting.test.js` new describe (4 tests): 503 on MATDOC read error, earlier partial not blocked, lost response blocked with the SAP document, KZEAR = X blocked. `test/unit/wm/reservationEntryService.test.js`: new test "completely processed item returns the existing record and does not call the adapter"; status-90 test now resets completion flags first (it models an item with open quantity).
+- **Validation:** `npx jest test/unit/wm` → 87 suites passed, 1 skipped, 2243 passed before the 4 new adapter tests; `npx jest test/unit/wm/autoMigoPosting.test.js` → 78/78 after; `git diff --check` clean. No SAP call.
+- **Not done:** live verification of the replay path; audit items 5-9; fix 2 re-proof. **Still unknown:** none for the code. **Assumptions:** `ReservationTrack.WithdrawnQuantity` is kept current by the post-MIGO verification (it is written at service.js after each posted document — the partial-issue tests at reservationEntryService 1533/1582 cover it).
 
 ### 2026-10-21 11:05 IST — Audit fix 2: 301/311 direct goods-issue mappers send `ReferenceDocument`; live re-proof pending authorization
 
