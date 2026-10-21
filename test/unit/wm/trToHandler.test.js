@@ -177,6 +177,23 @@ describe('TrToHandler', () => {
       expect(resProcessAdapter.postGoodsMovement).not.toHaveBeenCalled();
     });
 
+    it('case 2b: PGI on the created delivery fails -> the SAP reason reaches ErrorMessage, delivery number kept, status 90', async () => {
+      adapter.createTOFromTR.mockResolvedValue({
+        TransferOrder: '1037371', Confirmed: true, Status: '04', ReservationNo: '530233', ReservationItem: '0001',
+        MovementType: '241', Material: '8000009754', Plant: '1120', StorageLocation: 'CS02', Quantity: 1, Unit: 'NOS', Batch: ''
+      });
+      const pgiErr = Object.assign(new Error('PGI failed for Outbound Delivery 0080000134: [E] Delivery has not yet been picked (completely); [E] Item 000010 requires exactly 1 serial numbers'), { status: 400, stage: 'PGI', deliveryNumber: '0080000134' });
+      resProcessAdapter.postGoodsMovement = jest.fn().mockRejectedValue(pgiErr);
+
+      const result = await handlers.createTOFromTR(mkReq({ autoConfirm: true, autoPostMigo: true }));
+
+      expect(result.DeliveryNumber).toBe('0080000134');
+      expect(result.Status).toBe('90');
+      expect(result.ErrorMessage).toContain('Delivery has not yet been picked');
+      expect(result.ErrorMessage).toContain('requires exactly 1 serial numbers');
+      expect(result.Message).toContain('Delivery has not yet been picked');
+    });
+
     it('case 3: autoConfirm=false autoPostMigo=true — MIGO NOT triggered (confirm was skipped, Confirmed=false)', async () => {
       adapter.createTOFromTR.mockResolvedValue({
         TransferOrder: '99003', Confirmed: false, Status: '03',

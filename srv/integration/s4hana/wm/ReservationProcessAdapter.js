@@ -2096,6 +2096,30 @@ class ReservationProcessAdapter {
    * Commits the PGI, queries VBFA / MATDOC for the resulting material document, and returns it.
    * On failure, issues BAPI_TRANSACTION_ROLLBACK and throws an error.
    */
+  /**
+   * Newest outbound delivery of a reservation item whose goods issue is not yet posted (LIPS RSNUM/RSPOS, LIKP WBSTK <> 'C').
+   * READ-ONLY. A read failure fails closed: posting without knowing would create a duplicate delivery.
+   */
+  async _findOpenDeliveryForReservation(rsnum, rspos) {
+    const fail = (table, e) => Object.assign(
+      httpError(503, `Cannot verify in SAP (${table}) whether reservation ${rsnum}/${rspos} already has an open outbound delivery: ${e.message}. Nothing was posted.`),
+      { stage: 'MIGO', idempotencyCheckFailed: true }
+    );
+    let lips;
+    try {
+      lips = await this.rfc.readTable('LIPS', ['VBELN', 'POSNR'], [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`], 20);
+    } catch (e) { throw fail('LIPS', e); }
+    const deliveries = Array.from(new Set((lips || []).map((r) => String(r.VBELN || '').trim()).filter(Boolean))).sort().reverse();
+    for (const vbeln of deliveries) {
+      let likp;
+      try {
+        likp = await this.rfc.readTable('LIKP', ['VBELN', 'WBSTK'], [`VBELN = '${vbeln}'`], 1);
+      } catch (e) { throw fail('LIKP', e); }
+      if (likp?.[0] && String(likp[0].WBSTK || '').trim() !== 'C') return vbeln;
+    }
+    return null;
+  }
+
   async postDeliveryGoodsIssue(deliveryNumber, options = {}) {
     if (!deliveryNumber) {
       const err = httpError(400, 'Delivery number is mandatory for post goods issue');
@@ -2271,7 +2295,7 @@ class ReservationProcessAdapter {
     const completeReservation = params.completeReservation === true || params.CompleteReservation === true;
     const processId = params.processId || params.ProcessId || '';
     const testrun = params.testrun || false;
-    const directDelivery = params.deliveryNumber || params.DeliveryNumber || null;
+    const directDeliveryParam = params.deliveryNumber || params.DeliveryNumber || null;
 
     if (!movementType) throw httpError(400, 'MovementType is mandatory');
     if (!plant) throw httpError(400, 'Plant is mandatory');
@@ -2777,6 +2801,20 @@ class ReservationProcessAdapter {
       SERIALNO: sapKey(s, 'serial')
     }));
 
+    // A shipping-managed storage location answers BAPI_GOODSMVT_CREATE with an outbound delivery (L9 514) instead of a
+    // material document. Posting again while such a delivery is still open creates ANOTHER delivery (seen live:
+    // 0080000115 / 0080000116 / 0080000134 for one reservation item). Reuse the open one and go straight to PGI.
+    let directDelivery = directDeliveryParam;
+    let reusedOpenDelivery = false;
+    if (!directDelivery && hasRes && this.rfc && !testrun) {
+      const open = await this._findOpenDeliveryForReservation(sResNo, sResItem);
+      if (open) {
+        directDelivery = open;
+        reusedOpenDelivery = true;
+        LOG.warn(`[postGoodsMovement] Reservation ${sResNo}/${sResItem} already has open Outbound Delivery ${open} (goods issue not posted); not creating another one, posting PGI on it`);
+      }
+    }
+
     return await this.rfc.session(async (call) => {
       let createdDeliveryNumber = directDelivery ? pad10(directDelivery) : null;
       let matDoc = '';
@@ -2784,7 +2822,7 @@ class ReservationProcessAdapter {
       let resMessages = [];
 
       if (directDelivery) {
-        LOG.info(`[postGoodsMovement] Direct PGI requested for Outbound Delivery ${directDelivery}`);
+        LOG.info(`[postGoodsMovement] Direct PGI requested for Outbound Delivery ${directDelivery}${reusedOpenDelivery ? ' (open delivery found in SAP for this reservation item)' : ''}`);
         const pgiRes = await this.postDeliveryGoodsIssue(directDelivery, { call });
         matDoc = pgiRes.materialDocument;
         docYear = pgiRes.materialDocYear;

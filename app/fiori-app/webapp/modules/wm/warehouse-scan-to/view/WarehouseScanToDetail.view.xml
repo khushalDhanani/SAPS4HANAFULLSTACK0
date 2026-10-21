@@ -25,7 +25,7 @@
                 <Switch
                     id="switchAutoMigo"
                     state="{scanView>/autoPostMigo}"
-                    enabled="{= !${scanView>/goodsMovementPosted} }"
+                    enabled="{= !${scanView>/goodsMovementPosted} &amp;&amp; !${scanView>/shippingManaged} }"
                     customTextOn="{i18n>commonYes}"
                     customTextOff="{i18n>commonNo}"
                     change=".onAutoMigoChange"
@@ -386,6 +386,13 @@
                 </Panel>
 
                 <!-- SECTION: TRANSFER DESTINATION / ACCOUNT ASSIGNMENT -->
+                <MessageStrip
+                    id="stripShippingManaged"
+                    type="Warning"
+                    showIcon="true"
+                    visible="{= ${scanView>/hasTR} &amp;&amp; ${scanView>/shippingManaged} === true }"
+                    text="{scanView>/shippingManagedText}"
+                    class="sapUiSmallMarginBottom" />
                 <MessageStrip
                     id="stripGoodsMovementPosted"
                     type="Information"

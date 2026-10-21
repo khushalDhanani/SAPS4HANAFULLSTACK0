@@ -592,9 +592,10 @@ class TrToHandler {
               result.MaterialDocument = '';
               result.MaterialDocYear = '';
               result.ErrorStep = 'MIGO';
-              result.ErrorMessage = `Outbound Delivery ${deliv} created, but Material Document not confirmed in SAP. Goods issue pending.`;
+              const sapReason = migoResult.ErrorMessage || migoResult.error || '';
+              result.ErrorMessage = sapReason || `Outbound Delivery ${deliv} created, but Material Document not confirmed in SAP. Goods issue pending.`;
               result.Warning = migoResult.Warning || migoResult.warning || '';
-              result.Message = `Transfer Order ${result.TransferOrder} confirmed; Outbound Delivery ${deliv} created, but Goods Issue (PGI) is pending. Material Document not confirmed.`;
+              result.Message = `Transfer Order ${result.TransferOrder} confirmed; Outbound Delivery ${deliv} created, but Goods Issue (PGI) is pending${sapReason ? `: ${sapReason}` : '. Material Document not confirmed.'}`;
               if (result.Warning && req && typeof req.warn === 'function') {
                 req.warn(result.Warning);
               }

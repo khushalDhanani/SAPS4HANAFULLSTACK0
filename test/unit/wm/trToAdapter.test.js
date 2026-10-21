@@ -1268,6 +1268,16 @@ describe('TR created by an already posted material document (header MBLNR): no s
     expect(res).toMatchObject({ WarehouseNumber: 'W12', MovementType: '301', GoodsMovementPosted: true, MaterialDocument: '4900047610', MaterialDocYear: '2026', ReceivingPlant: '1130', ReservationNo: '' });
   });
 
+  it('lookupTR flags a shipping-managed storage location (T001L sales area) and says automatic MIGO is off', async () => {
+    const rfc = rfcFor(() => ({}));
+    rfc.readTable = jest.fn(async (table) => (table === 'T001L' ? [{ WERKS: '1130', LGORT: 'HS01', VKORG: '1000' }] : table === 'MATDOC' ? matdoc : []));
+    const res = await new TrToAdapter({ rfc }).lookupTR('0001000891', 'W12', 'TR');
+    expect(res.ShippingManaged).toBe(true);
+    expect(res.Warning).toMatch(/shipping-managed .* automatic MIGO is switched off/);
+    const plain = await new TrToAdapter({ rfc: rfcFor(() => ({})) }).lookupTR('0001000891', 'W12', 'TR');
+    expect(plain.ShippingManaged).toBe(false);
+  });
+
   it('createTOFromTR no longer rejects "Receiving Plant must be different" for such a TR (SAP already posted it inside one plant)', async () => {
     const rfc = rfcFor(() => { throw new Error('TO create reached (mocked)'); });
     // The receiving-plant rule sits before the SAP authorization check; reaching the (unmocked) AUTHORITY_CHECK proves it no longer fires.

@@ -521,6 +521,46 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       expect(mockRfc.call).toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
     });
 
+    describe('open outbound delivery already exists for the reservation item (shipping-managed storage location)', () => {
+      // Live facts 2026-10-21: reservation 530233/0001 had three open HOD deliveries (0080000115/116/134) because every MIGO retry posted again.
+      const stubWith = (wbstk, lipsError) => jest.fn((table, fields, where) => {
+        const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+        if (table === 'T001K') return Promise.resolve([{ BWKEY: '1120', BUKRS: '1000' }]);
+        if (table === 'LIPS') { if (lipsError) return Promise.reject(new Error('RFC_COMMUNICATION_FAILURE')); return Promise.resolve([{ VBELN: '0080000134', POSNR: '000010' }]); }
+        if (table === 'LIKP') return Promise.resolve([{ VBELN: '0080000134', WBSTK: wbstk }]);
+        if (table === 'VBFA') return Promise.resolve([{ VBELV: '0080000134', VBELN: '5000999999', VBTYP_N: 'R' }]);
+        if (table === 'MATDOC' && (whereStr.includes('5000999999') || whereStr.includes('0080000134'))) {
+          return Promise.resolve([{ MBLNR: '5000999999', MJAHR: '2026', ZEILE: '0001', BWART: '241', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'CS02', MENGE: '1.000', MEINS: 'NOS', RSNUM: '0000530233', RSPOS: '0001', ANLN1: '000000400001' }]);
+        }
+        if (table === 'RESB') return Promise.resolve([{ RSNUM: '0000530233', RSPOS: '0001', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'CS02', BDMNG: '1.000', ENMNG: '1.000', MEINS: 'NOS', KZEAR: 'X', XLOEK: '' }]);
+        return Promise.resolve([]);
+      });
+      const input = { reservationNo: '530233', reservationItem: '0001', movementType: '241', material: '8000009754', plant: '1120', storageLocation: 'CS02', quantity: 1, unit: 'NOS', assetNo: '400001', subNumber: '0000' };
+
+      test('posts PGI on the open delivery instead of creating another one (no BAPI_GOODSMVT_CREATE)', async () => {
+        mockRfc.readTable = stubWith('A');
+        mockRfc.call.mockImplementation(async (fm) => (fm === 'BAPI_OUTB_DELIVERY_CONFIRM_DEC' ? { RETURN: [] } : {}));
+        const res = await adapter.postGoodsMovement(input);
+        expect(res).toMatchObject({ success: true, deliveryNumber: '0080000134', materialDocument: '5000999999' });
+        expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
+        expect(mockRfc.call).toHaveBeenCalledWith('BAPI_OUTB_DELIVERY_CONFIRM_DEC', expect.objectContaining({ DELIVERY: '0080000134' }));
+      });
+
+      test('a completed delivery (WBSTK C) does not count as open: the goods movement is posted normally', async () => {
+        mockRfc.readTable = stubWith('C');
+        mockRfc.call.mockImplementation(async (fm) => (fm === 'BAPI_GOODSMVT_CREATE' ? { MATERIALDOCUMENT: '5000999999', MATDOCUMENTYEAR: '2026', RETURN: [] } : {}));
+        await adapter.postGoodsMovement(input);
+        expect(mockRfc.call).toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
+      });
+
+      test('fails closed with 503 when the open-delivery check cannot read SAP; nothing is posted', async () => {
+        mockRfc.readTable = stubWith('A', true);
+        await expect(adapter.postGoodsMovement(input)).rejects.toMatchObject({ status: 503, idempotencyCheckFailed: true });
+        expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
+        expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_OUTB_DELIVERY_CONFIRM_DEC', expect.anything());
+      });
+    });
+
     test('fails loudly and rolls back when PGI on outbound delivery fails', async () => {
       mockRfc.call
         .mockResolvedValueOnce({

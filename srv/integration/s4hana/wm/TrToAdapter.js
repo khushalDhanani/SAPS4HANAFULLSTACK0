@@ -1474,7 +1474,22 @@ class TrToAdapter {
       }
     }
 
+    // Shipping-managed storage location (T001L sales area maintained): SAP posts the goods issue through an outbound
+    // delivery (L9 514) that must be picked in WM and, for serialized material, carry serial numbers before PGI.
+    let shippingManaged = false;
+    if (item && this.rfc && typeof this.rfc.readTable === 'function') {
+      try {
+        const t001l = await this.rfc.readTable('T001L', ['WERKS', 'LGORT', 'VKORG'], [`WERKS = '${sapKey(sel.Plant, 'plant')}'`, `AND LGORT = '${sapKey(sel.StorageLocation, 'lgort')}'`], 1);
+        shippingManaged = Boolean(String(t001l?.[0]?.VKORG || '').trim());
+      } catch (e) {
+        LOG.warn(`T001L shipping-managed check failed for ${sel.Plant}/${sel.StorageLocation}: ${e.message}`);
+      }
+    }
+
     let warning = '';
+    if (shippingManaged) {
+      warning = `Storage location ${sel.StorageLocation} in plant ${sel.Plant} is shipping-managed (T001L sales area): the goods issue is posted through an outbound delivery that must be picked in WM and carry the serial numbers before PGI; automatic MIGO is switched off for this TR`;
+    }
     const trRsnumClean = String(tr.Rsnum || '').replace(/^0+/, '');
     const trRsposClean = String(item?.Rspos || '').replace(/^0+/, '');
     const trackRsnumClean = String(trackedReservation?.ReservationNo || '').replace(/^0+/, '');
@@ -1488,7 +1503,8 @@ class TrToAdapter {
     );
     const allowMismatchedTR = isMismatchOverrideEnabled() || trackedMismatch;
     if (reservationMovementType && tr.Bwlvs && reservationMovementType !== tr.Bwlvs) {
-      warning = `TR movement ${tr.Bwlvs} does not match reservation movement ${reservationMovementType}`;
+      const mm = `TR movement ${tr.Bwlvs} does not match reservation movement ${reservationMovementType}`;
+      warning = warning ? `${warning}; ${mm}` : mm;
     }
     if (tr._recoveredFrom) {
       const recMsg = `Corrupted TR ${alphaOut(tr._recoveredFrom)} (closed without TO) auto-recovered to active staging TR ${alphaOut(tr.Tbnum)}`;
@@ -1500,6 +1516,7 @@ class TrToAdapter {
       TRNumber: alphaOut(tr.Tbnum),
       TRItem: item ? item.Tbpos : '',
       WarehouseNumber: wh,
+      ShippingManaged: shippingManaged,
       MovementType: tr.Bwlvs || '',
       // TR created by an already posted IM document (header MBLNR): the goods movement is done, the TO only moves stock to the interim bin.
       MaterialDocument: tr.Mblnr && String(tr.Mblnr).trim() ? alphaOut(tr.Mblnr) : '',
