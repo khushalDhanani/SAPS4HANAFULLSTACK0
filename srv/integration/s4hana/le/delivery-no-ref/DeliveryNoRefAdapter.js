@@ -128,17 +128,21 @@ class DeliveryNoRefAdapter {
       }
     }
 
-    // Resolve org context from BusinessConfig (overrides from caller take priority)
-    const cfg = await businessConfigResolver.resolve({
+    // Resolve org context from BusinessConfig.
+    // Overrides are accepted ONLY from trusted server-side options, never from request body payload.
+    const isTrusted = options.isTrusted === true || options.trustedContext === true;
+    const trustedOverrides = options.trustedOverrides || (isTrusted ? {
+      salesOrganization:   payload.salesOrg    || undefined,
+      distributionChannel: payload.distChannel || undefined,
+      division:            payload.division    || undefined
+    } : undefined);
+
+    const cfg = await (this.resolver || businessConfigResolver).resolve({
       plant: String(payload.plant).trim(),
       warehouseNumber: payload.warehouseNumber || '',
       storageLocation: String(payload.storageLocation || '').trim(),
       fields: ['salesOrganization', 'distributionChannel', 'division'],
-      overrides: {
-        salesOrganization:   payload.salesOrg    || undefined,
-        distributionChannel: payload.distChannel || undefined,
-        division:            payload.division    || undefined
-      }
+      trustedOverrides
     });
 
     const s4Payload = {

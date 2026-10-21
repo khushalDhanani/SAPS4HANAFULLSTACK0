@@ -76,7 +76,7 @@ describe('Unit: DeliveryNoRefAdapter', () => {
         items: [
           { material: '4000000186', quantity: 2, uom: 'KG' }
         ]
-      });
+      }, { isTrusted: true });
 
       expect(result.OutboundDelivery).toBe('80000059');
       expect(result.ShippingPoint).toBe('1104');
@@ -128,7 +128,20 @@ describe('Unit: DeliveryNoRefAdapter', () => {
         plant: '1110',
         storageLocation: 'FG01',
         items: [{ material: '4000000186', quantity: 1, uom: 'KG' }]
-      })).rejects.toThrow('Document is incomplete');
+      }, { isTrusted: true })).rejects.toThrow('Document is incomplete');
+    });
+
+    test('tamper protection: ignores untrusted salesOrg in request body and fails closed when not in DB', async () => {
+      await expect(adapter.createDeliveryWithoutRef({
+        shippingPoint: '1104',
+        shipToParty: '10135',
+        salesOrg: 'MALICIOUS_ORG',
+        distChannel: '99',
+        division: '99',
+        plant: '9999',
+        storageLocation: 'FG01',
+        items: [{ material: '4000000186', quantity: 1, uom: 'KG' }]
+      })).rejects.toThrow(/could not resolve required business config/);
     });
 
     test('throws BusinessConfigError when org context cannot be resolved', async () => {

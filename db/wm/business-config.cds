@@ -16,6 +16,10 @@ using { managed } from '@sap/cds/common';
  * Resolved at request time by BusinessConfigResolver.
  */
 @assert.unique: { plantWarehouse: [Plant, WarehouseNumber] }
+@restrict: [
+    { grant: 'READ', to: 'authenticated-user' },
+    { grant: ['CREATE', 'UPDATE', 'DELETE', 'WRITE'], to: 'WMAdmin' }
+]
 entity BusinessConfig : managed {
     key Plant              : String(4)  not null;    // WERKS — SAP Plant (e.g. '1120')
     key WarehouseNumber    : String(3)  not null;    // LGNUM — WM Warehouse (e.g. 'W01'); '' = plant-level

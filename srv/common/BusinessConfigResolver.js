@@ -6,14 +6,18 @@
  * Resolves business-data values (SD org context, WM customizing) for a specific
  * plant/warehouse/storageLocation context at request time.
  *
- * S/4HANA enterprise discipline:
- *   - Never reads business defaults from package.json or process.env
- *   - Never falls back to silent defaults
+ * Hardened enterprise security & performance discipline:
+ *   - Overrides are accepted ONLY from trusted server-side context (trustedOverrides / isTrusted).
+ *     Request body values can never tamper with business customizing.
+ *   - Never reads business defaults from package.json or process.env.
+ *   - Never falls back to silent defaults.
+ *   - Per-key TTL cache (default 5 min) with invalidation on admin writes.
  *   - Resolves dynamically per request/document in strict order:
- *       1. Request context / document values (explicit overrides)
- *       2. SAP customizing tables (e.g. T001L, T320 via RFC or customizing provider)
- *       3. Admin-maintained BusinessConfig table (CDS entity keyed by plant or warehouse)
- *       4. Throw BusinessConfigError with actionable diagnostic message
+ *       1. Trusted server-side overrides
+ *       2. Cached valid entry (per plant/warehouse key)
+ *       3. SAP customizing tables (T001L, T320 via RFC or customizer provider)
+ *       4. Admin-maintained BusinessConfig table (CDS entity keyed by plant or warehouse)
+ *       5. Throw BusinessConfigError with actionable diagnostic message
  *
  * Fields resolved:
  *   salesOrg / salesOrganization, distChannel / distributionChannel, division, currency,
@@ -84,11 +88,64 @@ class BusinessConfigResolver {
    * @param {Function} [options.dbQuery] - Injectable async (plant, warehouseNumber) => row | null
    * @param {Function} [options.sapCustomizing] - Injectable async (context) => partialConfig | null
    * @param {Object} [options.rfc] - Optional RFC client for querying SAP customizing tables (T001L, T320)
+   * @param {number} [options.ttlMs=300000] - Per-key TTL cache duration in milliseconds (default 5 minutes; 0 disables)
    */
   constructor(options = {}) {
     this._dbQuery = options.dbQuery || null;
     this._sapCustomizing = options.sapCustomizing || null;
     this._rfc = options.rfc || null;
+    this._ttlMs = options.ttlMs !== undefined ? options.ttlMs : 300000;
+    this._cache = new Map();
+  }
+
+  /**
+   * Generates a per-key cache identifier.
+   * @private
+   */
+  _getCacheKey(plant, warehouse, fields) {
+    const pl = plant || '*';
+    const wh = warehouse || '*';
+    const f = Array.isArray(fields) && fields.length > 0 ? fields.slice().sort().join(',') : 'ALL';
+    return `${pl}|${wh}|${f}`;
+  }
+
+  /**
+   * Invalidate cached entries.
+   * @param {string} [plant]
+   * @param {string} [warehouse]
+   */
+  invalidate(plant, warehouse) {
+    const pl = plant ? String(plant).trim() : '';
+    const wh = warehouse ? String(warehouse).trim() : '';
+
+    if (!pl && !wh) {
+      this._cache.clear();
+      return;
+    }
+
+    for (const [key, entry] of this._cache.entries()) {
+      const matchPlant = !pl || entry.plant === pl;
+      const matchWh = !wh || entry.warehouse === wh;
+      if (matchPlant && matchWh) {
+        this._cache.delete(key);
+      }
+    }
+  }
+
+  /** Clears the entire TTL cache. */
+  clearCache() {
+    this._cache.clear();
+  }
+
+  /** Returns number of active cache keys. */
+  getCacheSize() {
+    return this._cache.size;
+  }
+
+  /** Returns raw cache entry for testing. */
+  getCacheEntry(plant, warehouse, fields) {
+    const key = this._getCacheKey(plant, warehouse, fields);
+    return this._cache.get(key) || null;
   }
 
   /**
@@ -224,7 +281,10 @@ class BusinessConfigResolver {
    * @param {string} [context.plant]           - SAP Plant (WERKS, e.g. '1120')
    * @param {string} [context.storageLocation] - Storage Location (LGORT, e.g. 'CS01')
    * @param {Array<string>} [context.fields]   - Specific required fields; defaults to all standard fields
-   * @param {Object} [context.overrides]       - Explicit values from request/document
+   * @param {Object} [context.trustedOverrides] - Explicit trusted overrides from verified server-side context
+   * @param {boolean} [context.isTrusted]      - Flag declaring context is trusted server-side (enables context.overrides)
+   * @param {boolean} [context.trustedContext]  - Alias for isTrusted
+   * @param {Object} [context.overrides]       - Overrides evaluated ONLY when isTrusted/trustedContext is true
    * @returns {Promise<Object>}
    * @throws {BusinessConfigError} if a required field cannot be resolved
    */
@@ -244,27 +304,35 @@ class BusinessConfigResolver {
       storageLocation: storageLocation || ''
     };
 
-    // ─── Step 1: Request context & overrides ──────────────────────────────────
-    const overrides = { ...(context.overrides || {}) };
+    // ─── Step 1: Trusted Server-Side Overrides (Tamper Protection) ───────────
+    // Overrides are accepted ONLY from trusted server-side context.
+    // Untrusted request bodies with salesOrg/currency/etc. are strictly ignored.
+    const isTrusted = context.isTrusted === true || context.trustedContext === true;
+    let overrides = {};
 
-    // Also collect any direct top-level arguments on context
-    const DIRECT_KEYS = [
-      'salesOrganization', 'salesOrg',
-      'distributionChannel', 'distChannel',
-      'division', 'currency',
-      'inquiryType', 'orderType', 'conditionType',
-      'shippingPoints',
-      'salesMaterialTypes', 'materialTypes',
-      'differenceStorageType',
-      'mvt261NotReadyBins'
-    ];
-    for (const k of DIRECT_KEYS) {
-      if (context[k] !== undefined && overrides[k] === undefined) {
-        overrides[k] = context[k];
+    if (context.trustedOverrides && typeof context.trustedOverrides === 'object') {
+      overrides = { ...context.trustedOverrides };
+    } else if (isTrusted && context.overrides && typeof context.overrides === 'object') {
+      overrides = { ...context.overrides };
+    } else if (isTrusted) {
+      const DIRECT_KEYS = [
+        'salesOrganization', 'salesOrg',
+        'distributionChannel', 'distChannel',
+        'division', 'currency',
+        'inquiryType', 'orderType', 'conditionType',
+        'shippingPoints',
+        'salesMaterialTypes', 'materialTypes',
+        'differenceStorageType',
+        'mvt261NotReadyBins'
+      ];
+      for (const k of DIRECT_KEYS) {
+        if (context[k] !== undefined) {
+          overrides[k] = context[k];
+        }
       }
     }
 
-    // Normalize override keys
+    // Normalize trusted override keys
     if (overrides.salesOrg !== undefined && overrides.salesOrganization === undefined) {
       overrides.salesOrganization = overrides.salesOrg;
     }
@@ -291,7 +359,27 @@ class BusinessConfigResolver {
 
     let missing = requiredFields.filter(f => result[f] === undefined);
 
-    // ─── Step 2: SAP Customizing ──────────────────────────────────────────────
+    // If completely satisfied by trusted overrides, return immediately (no cache pollution)
+    if (missing.length === 0) {
+      if (result.mvt261NotReadyBins === undefined) result.mvt261NotReadyBins = [];
+      result.salesOrg = result.salesOrganization;
+      result.distChannel = result.distributionChannel;
+      result.materialTypes = result.salesMaterialTypes;
+      return result;
+    }
+
+    // ─── Step 2: Per-Key TTL Cache Check ─────────────────────────────────────
+    const cacheKey = this._getCacheKey(plant, warehouse, context.fields);
+    const hasOverrides = Object.keys(overrides).length > 0;
+
+    if (!hasOverrides && this._ttlMs > 0) {
+      const cached = this._cache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        return JSON.parse(JSON.stringify(cached.value));
+      }
+    }
+
+    // ─── Step 3: SAP Customizing ──────────────────────────────────────────────
     if (missing.length > 0) {
       const sapData = await this._querySapCustomizing({
         plant,
@@ -338,7 +426,7 @@ class BusinessConfigResolver {
       missing = requiredFields.filter(f => result[f] === undefined);
     }
 
-    // ─── Step 3: Admin Config Table (BusinessConfig) ──────────────────────────
+    // ─── Step 4: Admin Config Table (BusinessConfig) ──────────────────────────
     if (missing.length > 0) {
       const row = await this._queryDb(result.plant || plant, result.warehouse || warehouse);
       if (row) {
@@ -377,7 +465,7 @@ class BusinessConfigResolver {
       missing = requiredFields.filter(f => result[f] === undefined);
     }
 
-    // ─── Step 4: Throw if required fields remain unresolved ───────────────────
+    // ─── Step 5: Throw if required fields remain unresolved ───────────────────
     if (missing.length > 0) {
       const loc = `Plant=${result.plant || plant || '(none)'}, Warehouse=${result.warehouse || warehouse || '(none)'}, StorageLocation=${storageLocation || '(none)'}`;
       throw new BusinessConfigError(
@@ -395,6 +483,16 @@ class BusinessConfigResolver {
     result.salesOrg = result.salesOrganization;
     result.distChannel = result.distributionChannel;
     result.materialTypes = result.salesMaterialTypes;
+
+    // Cache the resolved authentic configuration (if no request overrides were applied)
+    if (!hasOverrides && this._ttlMs > 0) {
+      this._cache.set(cacheKey, {
+        value: JSON.parse(JSON.stringify(result)),
+        expiresAt: Date.now() + this._ttlMs,
+        plant: result.plant || plant,
+        warehouse: result.warehouse || warehouse
+      });
+    }
 
     return result;
   }
