@@ -3155,7 +3155,7 @@ class ReservationProcessAdapter {
   /**
    * Validate Asset validity and lock status against ANLA before calling SAP.
    */
-  async validateAsset(assetNo, subNumber, plant, date = new Date(), options = {}) {
+  async validateAsset(assetNo, subNumber, plant, date = new Date(), _options = {}) {
     if (!assetNo || !String(assetNo).trim()) {
       throw httpError(400, 'Asset number is mandatory for Movement Type 241 (GI to Asset)');
     }
@@ -3164,21 +3164,16 @@ class ReservationProcessAdapter {
     const s4Anln2 = pad4(subNumber || '0000');
     const dateStr = typeof date === 'string' && /^\d{8}$/.test(date) ? date : this._sapDate(date);
 
-    // Company code comes from the plant's valuation area (T001K). Reservation creation (requireCompanyCode)
-    // reports a missing assignment instead of assuming one.
-    let bukrs = '';
-    if (plant) {
-      try {
-        const t001kRows = await this.rfc.readTable('T001K', ['BWKEY', 'BUKRS'], [`BWKEY = '${sapKey(plant, 'plant')}'`], 1);
-        bukrs = String(t001kRows?.[0]?.BUKRS || '').trim();
-      } catch (e) {
-        if (options.requireCompanyCode) throw e;
-      }
+    // Company code comes from the plant's valuation area (T001K); never assumed. Every caller gets the same strict rule.
+    if (!plant) throw httpError(400, 'Plant is required to determine the company code (T001K) for asset validation');
+    let t001kRows;
+    try {
+      t001kRows = await this.rfc.readTable('T001K', ['BWKEY', 'BUKRS'], [`BWKEY = '${sapKey(plant, 'plant')}'`], 1);
+    } catch (e) {
+      throw Object.assign(httpError(502, `Company code of plant ${plant} could not be read from SAP (T001K): ${e.message}`), { cause: e });
     }
-    if (!bukrs) {
-      if (options.requireCompanyCode) throw httpError(400, `No company code is assigned to plant ${plant || '(none)'} (T001K); the asset cannot be validated`);
-      bukrs = '1000'; // shortcut: legacy fallback of the proven MIGO 241 posting path, kept unchanged; remove once that path is validated against T001K
-    }
+    const bukrs = String(t001kRows?.[0]?.BUKRS || '').trim();
+    if (!bukrs) throw httpError(400, `No company code is assigned to plant ${plant} (T001K); the asset cannot be validated`);
 
     let rows = [];
     try {
@@ -3187,8 +3182,8 @@ class ReservationProcessAdapter {
         `AND ANLN1 = '${s4Anln1}'`,
         `AND ANLN2 = '${s4Anln2}'`
       ], 1);
-    } catch (_anlaErr) {
-      return;
+    } catch (anlaErr) {
+      throw Object.assign(httpError(502, `Asset ${assetNo}/${subNumber || '0000'} could not be read from SAP (ANLA): ${anlaErr.message}`), { cause: anlaErr });
     }
 
     if (!rows || !rows.length) {

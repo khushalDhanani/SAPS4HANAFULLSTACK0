@@ -380,6 +380,19 @@ describe('Unit: CustomerReturnAdapter', () => {
       );
     });
 
+    test.each([
+      ['Plant', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG' }] }, 'Plant for item M1'],
+      ['OrderQuantity', { Items: [{ Material: 'M1', OrderQuantityUnit: 'KG', ProductionPlant: '1110' }] }, 'Order quantity for item M1'],
+      ['OrderQuantityUnit', { Items: [{ Material: 'M1', OrderQuantity: 1, ProductionPlant: '1110' }] }, 'Order quantity unit for item M1'],
+      ['Currency with a price', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110', UnitPrice: '5' }] }, 'Currency for the unit price of item M1'],
+      ['SalesOrganization', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }], DistributionChannel: '10', OrganizationDivision: '52' }, 'Sales organization'],
+      ['DistributionChannel', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }], SalesOrganization: '1000', OrganizationDivision: '52' }, 'Distribution channel'],
+      ['Division', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }], SalesOrganization: '1000', DistributionChannel: '10' }, 'Division']
+    ])('rejects a missing %s with 400 instead of assuming a default; nothing is posted', async (_what, extra, text) => {
+      await expect(adapter.createCustomerReturn({ SoldToParty: '10082', ReturnsOrderReason: '101', ...extra })).rejects.toMatchObject({ code: 400, message: expect.stringContaining(text) });
+      expect(mockHttpClient.post).not.toHaveBeenCalled();
+    });
+
     test('rejects missing ReturnsOrderReason with 400', async () => {
       await expect(adapter.createCustomerReturn({ SoldToParty: '10082' })).rejects.toThrow(
         'ReturnsOrderReason is mandatory for Customer Return creation'
@@ -418,11 +431,15 @@ describe('Unit: CustomerReturnAdapter', () => {
         ReturnsOrderReason: '101',
         ReferenceSDDocument: '31000007',
         ReferenceSDDocumentCategory: 'M',
+        SalesOrganization: '1000',
+        DistributionChannel: '10',
+        OrganizationDivision: '52',
         Items: [
           {
             Material: '4000000001',
             OrderQuantity: 10,
-            OrderQuantityUnit: 'KG'
+            OrderQuantityUnit: 'KG',
+            ProductionPlant: '1110'
           }
         ]
       };
@@ -468,7 +485,10 @@ describe('Unit: CustomerReturnAdapter', () => {
         adapter.createCustomerReturn({
           SoldToParty: '10082',
           ReturnsOrderReason: '101',
-          Items: [{ Material: '4000000001' }]
+          SalesOrganization: '1000',
+          DistributionChannel: '10',
+          OrganizationDivision: '52',
+          Items: [{ Material: '4000000001', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }]
         })
       ).rejects.toMatchObject({
         code: 502,

@@ -1324,8 +1324,15 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       return result;
     });
 
+    // Value helps are read from SAP customizing/master data only. No local list is ever returned:
+    // an unreadable SAP table is an error the user must see, not a silent substitute.
+    const vhUnavailable = (req, what, err) => req.reject(
+      err ? (err.status || 502) : 503,
+      err ? `${what} could not be read from SAP: ${userFacingSapError(err, req, what)}` : `${what} cannot be read: the SAP RFC connection is not configured`
+    );
+
     // Value Help for Order Types (loaded dynamically from SAP customizing tables T003O & T003P)
-    this.on('READ', OrderTypeVH, async () => {
+    this.on('READ', OrderTypeVH, async (req) => {
       try {
         if (adapter.rfc) {
           const [t003o, t003p] = await Promise.all([
@@ -1353,29 +1360,16 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           const result = Array.from(typeMap.entries()).map(([auart, autyp]) => ({
             OrderType: auart,
             OrderTypeName: descMap[auart] || `Order Type ${auart}`,
-            OrderCategory: autyp || '01'
+            OrderCategory: autyp
           }));
 
-          result.sort((a, b) => {
-            if (a.OrderType === 'ZEMP') return -1;
-            if (b.OrderType === 'ZEMP') return 1;
-            if (a.OrderType === 'ZP01') return -1;
-            if (b.OrderType === 'ZP01') return 1;
-            return a.OrderType.localeCompare(b.OrderType);
-          });
+          result.sort((a, b) => a.OrderType.localeCompare(b.OrderType));
           return result;
         }
       } catch (err) {
-        LOG.warn(`[OrderTypeVH] SAP read error: ${err.message}`);
+        return vhUnavailable(req, 'Order types (T003O)', err);
       }
-      return [
-        { OrderType: 'ZEMP', OrderTypeName: 'Internal orders: EMP', OrderCategory: '01' },
-        { OrderType: 'ZP01', OrderTypeName: 'Process Order', OrderCategory: '40' },
-        { OrderType: 'PP01', OrderTypeName: 'Standard Production Order', OrderCategory: '10' },
-        { OrderType: 'PM01', OrderTypeName: 'Maintenance Order', OrderCategory: '30' },
-        { OrderType: '0100', OrderTypeName: 'Internal orders: Development', OrderCategory: '01' },
-        { OrderType: '0400', OrderTypeName: 'Internal orders: Marketing', OrderCategory: '01' }
-      ];
+      return vhUnavailable(req, 'Order types (T003O)');
     });
 
     // Value Help for Internal Orders (AUFK dynamically queried by OrderType / Plant)
@@ -1424,20 +1418,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             }));
         }
       } catch (err) {
-        LOG.warn(`[InternalOrderVH] SAP read error: ${err.message}`);
+        return vhUnavailable(req, 'Internal orders (AUFK)', err);
       }
-      return [
-        { OrderID: '1007', OrderType: 'ZEMP', OrderDescription: '1006-Birendra Baitha', Plant: '1120', Status: 'REL' },
-        { OrderID: '1011', OrderType: 'ZEMP', OrderDescription: '1059-Naresh Nagar', Plant: '1120', Status: 'REL' },
-        { OrderID: '1002790', OrderType: 'ZP01', OrderDescription: 'CDCT Organic Process Order', Plant: '1120', Status: 'REL' },
-        { OrderID: '1012', OrderType: 'ZEMP', OrderDescription: '1066-Suresh Bagada', Plant: '1120', Status: 'REL' },
-        { OrderID: '1016', OrderType: 'ZEMP', OrderDescription: '1151-Purnima Desai', Plant: '1120', Status: 'REL' },
-        { OrderID: '1019', OrderType: 'ZEMP', OrderDescription: '1180-Hemant Badgujar', Plant: '1120', Status: 'REL' }
-      ];
+      return vhUnavailable(req, 'Internal orders (AUFK)');
     });
 
     // Value Help for Cost Centers (loaded dynamically from CSKS and CSKT)
-    this.on('READ', CostCenterVH, async () => {
+    this.on('READ', CostCenterVH, async (req) => {
       try {
         if (adapter.rfc) {
           const [csks, cskt] = await Promise.all([
@@ -1459,26 +1446,16 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             return {
               CostCenter: cc,
               CostCenterName: descMap[cc] || `Cost Center ${cc}`,
-              CompanyCode: String(c.BUKRS || '').trim() || '1000'
+              CompanyCode: String(c.BUKRS || '').trim()
             };
           });
-          result.sort((a, b) => {
-            if (a.CostCenter === '1011201301') return -1;
-            if (b.CostCenter === '1011201301') return 1;
-            return a.CostCenter.localeCompare(b.CostCenter);
-          });
+          result.sort((a, b) => a.CostCenter.localeCompare(b.CostCenter));
           return result;
         }
       } catch (err) {
-        LOG.warn(`[CostCenterVH] SAP read error: ${err.message}`);
+        return vhUnavailable(req, 'Cost centers (CSKS/CSKT)', err);
       }
-      return [
-        { CostCenter: '1011201301', CostCenterName: 'AIL 8202 Production', CompanyCode: '1000' },
-        { CostCenter: '1010001001', CostCenterName: 'AIL HO Admin', CompanyCode: '1000' },
-        { CostCenter: '1010001301', CostCenterName: 'AIL HO CIS', CompanyCode: '1000' },
-        { CostCenter: '1011301801', CostCenterName: 'AIL 8202 Finance', CompanyCode: '1000' },
-        { CostCenter: '1011302001', CostCenterName: 'AIL 8202 Logistic', CompanyCode: '1000' }
-      ];
+      return vhUnavailable(req, 'Cost centers (CSKS/CSKT)');
     });
 
     /** Goods movement for a tracked reservation item (step MIGO). Shares one adapter path with tr-to. */

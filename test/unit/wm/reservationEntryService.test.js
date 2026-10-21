@@ -1477,45 +1477,45 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(admin.data.value.some((row) => row.Plant === '1120')).toBe(true);
     });
 
-    test('GET /odata/v4/reservation-entry/OrderTypeVH returns order types with ZEMP priority and production/process types', async () => {
+    // Value helps come from SAP tables only. The default readTable stub throws 503 for every table but T320,
+    // so without an explicit table stub each value help must fail with the SAP read error, never a local list.
+    test.each(['OrderTypeVH', 'InternalOrderVH', 'CostCenterVH'])('GET %s returns the SAP read error (no local fallback list) when the table read fails', async (vh) => {
+      await expect(GET(`/odata/v4/reservation-entry/${vh}`, authClerk)).rejects.toMatchObject({ response: { status: 503 } });
+    });
+
+    test('GET /odata/v4/reservation-entry/OrderTypeVH returns order types from T003O/T003P sorted by key, no pinned entries', async () => {
+      t320Spy.mockImplementation(async (table) => {
+        if (table === 'T003O') return [{ AUART: 'ZP01', AUTYP: '40' }, { AUART: 'ZEMP', AUTYP: '01' }, { AUART: 'SM01', AUTYP: '30' }, { AUART: 'ZZ99', AUTYP: '50' }];
+        if (table === 'T003P') return [{ AUART: 'ZEMP', TXT: 'Internal orders: EMP' }];
+        return [];
+      });
       const { status, data } = await GET('/odata/v4/reservation-entry/OrderTypeVH', authClerk);
       expect(status).toBe(200);
-      expect(Array.isArray(data.value)).toBe(true);
-      expect(data.value.length).toBeGreaterThan(0);
-      const zemp = data.value.find((o) => o.OrderType === 'ZEMP');
-      expect(zemp).toBeTruthy();
-      expect(zemp.OrderTypeName).toContain('EMP');
-      expect(zemp.OrderCategory).toBe('01');
-
-      // Verify non-internal order categories like ZP01 or PP01 are supported
-      const zp01 = data.value.find((o) => o.OrderType === 'ZP01');
-      if (zp01) {
-        expect(zp01.OrderCategory).toBe('40');
-      }
+      expect(data.value.map((o) => o.OrderType)).toEqual(['SM01', 'ZEMP', 'ZP01']); // category 50 excluded, plain key order
+      expect(data.value[1]).toEqual({ OrderType: 'ZEMP', OrderTypeName: 'Internal orders: EMP', OrderCategory: '01' });
     });
 
-    test('GET /odata/v4/reservation-entry/InternalOrderVH returns internal orders and process/production orders', async () => {
+    test('GET /odata/v4/reservation-entry/InternalOrderVH returns AUFK orders without deletion flag', async () => {
+      t320Spy.mockImplementation(async (table) => (table === 'AUFK'
+        ? [{ AUFNR: '000000001011', AUART: 'ZEMP', WERKS: '1120', KTEXT: 'Order text', LOEKZ: '' }, { AUFNR: '000000001012', AUART: 'ZEMP', WERKS: '1120', KTEXT: 'Deleted', LOEKZ: 'X' }]
+        : []));
       const { status, data } = await GET('/odata/v4/reservation-entry/InternalOrderVH', authClerk);
       expect(status).toBe(200);
-      expect(Array.isArray(data.value)).toBe(true);
-      expect(data.value.length).toBeGreaterThan(0);
-      expect(data.value[0]).toHaveProperty('OrderID');
-      expect(data.value[0]).toHaveProperty('OrderType');
-
-      const processOrder = data.value.find((o) => o.OrderID === '1002790');
-      if (processOrder) {
-        expect(processOrder.OrderType).toBe('ZP01');
-        expect(processOrder.Plant).toBe('1120');
-      }
+      expect(data.value).toEqual([{ OrderID: '1011', OrderType: 'ZEMP', OrderDescription: 'Order text', Plant: '1120', Status: 'REL' }]);
     });
 
-    test('GET /odata/v4/reservation-entry/CostCenterVH returns cost centers for movement 201', async () => {
+    test('GET /odata/v4/reservation-entry/CostCenterVH returns CSKS/CSKT rows sorted by key; company code is SAP value or empty', async () => {
+      t320Spy.mockImplementation(async (table) => {
+        if (table === 'CSKS') return [{ KOSTL: '1011201301', BUKRS: '1000' }, { KOSTL: '0000010100', BUKRS: '' }];
+        if (table === 'CSKT') return [{ KOSTL: '0000010100', KTEXT: 'Sales' }];
+        return [];
+      });
       const { status, data } = await GET('/odata/v4/reservation-entry/CostCenterVH', authClerk);
       expect(status).toBe(200);
-      expect(Array.isArray(data.value)).toBe(true);
-      expect(data.value.length).toBeGreaterThan(0);
-      expect(data.value[0]).toHaveProperty('CostCenter');
-      expect(data.value[0]).toHaveProperty('CostCenterName');
+      expect(data.value).toEqual([
+        { CostCenter: '0000010100', CostCenterName: 'Sales', CompanyCode: '' },
+        { CostCenter: '1011201301', CostCenterName: 'Cost Center 1011201301', CompanyCode: '1000' }
+      ]);
     });
 
     test('GET CostCenterVH returns one row per cost center when CSKS has the same KOSTL in several controlling areas', async () => {
@@ -1530,8 +1530,8 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       });
       const { status, data } = await GET('/odata/v4/reservation-entry/CostCenterVH', authClerk);
       expect(status).toBe(200);
-      expect(data.value.map((r) => r.CostCenter)).toEqual(['1011201301', '0000010100']);
-      expect(data.value[1]).toEqual({ CostCenter: '0000010100', CostCenterName: 'Sales', CompanyCode: 'CA01' });
+      expect(data.value.map((r) => r.CostCenter)).toEqual(['0000010100', '1011201301']);
+      expect(data.value[0]).toEqual({ CostCenter: '0000010100', CostCenterName: 'Sales', CompanyCode: 'CA01' });
     });
   });
 

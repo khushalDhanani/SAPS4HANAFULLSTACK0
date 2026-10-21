@@ -457,19 +457,27 @@ class CustomerReturnAdapter {
       ? payload.Items
       : [{ Material: payload.Material, OrderQuantity: payload.OrderQuantity, OrderQuantityUnit: payload.OrderQuantityUnit, ProductionPlant: payload.ProductionPlant }];
 
+    // Every org/business value must come from the caller (resolved upstream); nothing is assumed here.
+    const missing = (what) => { const e = new Error(`${what} is required to create a Customer Return; no default is assumed`); e.code = 400; e.status = 400; throw e; };
     const deepItems = rawItems.filter(it => it && it.Material).map(it => {
+      const material = String(it.Material).trim();
+      const plant = String(it.ProductionPlant || it.Plant || '').trim();
+      if (!plant) missing(`Plant for item ${material}`);
+      if (!(Number(it.OrderQuantity) > 0)) missing(`Order quantity for item ${material}`);
+      if (!String(it.OrderQuantityUnit || '').trim()) missing(`Order quantity unit for item ${material}`);
       const itemObj = {
-        MaterialID: String(it.Material).trim(),
-        OrderQty: String(it.OrderQuantity || '1.000'),
-        SalesUnit: it.OrderQuantityUnit || 'KG',
-        Plant: it.ProductionPlant || it.Plant || '1110'
+        MaterialID: material,
+        OrderQty: String(it.OrderQuantity),
+        SalesUnit: String(it.OrderQuantityUnit).trim(),
+        Plant: plant
       };
       if (it.UnitPrice && !isNaN(Number(it.UnitPrice))) {
+        if (!String(it.Currency || '').trim()) missing(`Currency for the unit price of item ${material}`);
         itemObj.PriceCondSet = [
           {
-            CondTypeCode: 'ZPR1',
+            CondTypeCode: 'ZPR1', // shortcut: condition type still hard-coded, resolve via BusinessConfigResolver.conditionType in Phase 2 step 2
             AmountInternal: String(it.UnitPrice),
-            RateUnitExternal: it.Currency || 'INR'
+            RateUnitExternal: String(it.Currency).trim()
           }
         ];
       }
@@ -485,9 +493,9 @@ class CustomerReturnAdapter {
     // 2. Assemble Deep Insert Payload for Lean Order Framework
     const deepPayload = {
       SalesOrderTypeCode: returnType,
-      SalesOrganization: payload.SalesOrganization || '1000',
-      DistributionChannel: payload.DistributionChannel || '10',
-      Division: payload.OrganizationDivision || '52',
+      SalesOrganization: String(payload.SalesOrganization || '').trim() || missing('Sales organization'),
+      DistributionChannel: String(payload.DistributionChannel || '').trim() || missing('Distribution channel'),
+      Division: String(payload.OrganizationDivision || '').trim() || missing('Division'),
       SoldToPartyID: String(payload.SoldToParty).trim(),
       PurchaseOrderNumber: payload.PurchaseOrderByCustomer
         ? String(payload.PurchaseOrderByCustomer).trim()
@@ -538,7 +546,7 @@ class CustomerReturnAdapter {
       }
 
       const totalNet = verifiedDoc?.TotalNetAmount ?? (createdHeader?.TotalAmount ? Number(createdHeader.TotalAmount) : (createdHeader?.NetAmount ? Number(createdHeader.NetAmount) : null));
-      const currency = verifiedDoc?.TransactionCurrency || createdHeader?.DocumentCurrency || 'INR';
+      const currency = verifiedDoc?.TransactionCurrency || createdHeader?.DocumentCurrency || null; // document already exists in SAP: report what SAP returned, never invent a currency
 
       return {
         CustomerReturn: returnNumber,

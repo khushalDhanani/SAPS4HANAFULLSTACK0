@@ -31,6 +31,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       readTable: jest.fn(async (table) => {
         if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
         if (table === 'MARD') return [{ LGORT: 'CS01' }, { LGORT: 'HS01' }];
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code of the plant: validateAsset no longer assumes one
         return [];
       }) // RESB / LTAP / MARC reads: nothing found, material not batch-managed
     };
@@ -42,6 +43,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
       if (overrides[table]) return overrides[table](fields, where, whereStr);
       if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
+      if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }];
       if (table === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011201301', DATAB: '20200101', DATBI: '99991231', BKZKP: '' }];
       if (table === 'MARC') return [{ XCHPF: '' }];
       if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
@@ -380,6 +382,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
     test('Batch Resolution: auto-resolves batch from LTAP when batch is omitted', async () => {
       mockRfc.readTable = jest.fn((table) => {
         if (table === 'LTAP') return Promise.resolve([{ CHARG: 'INJW260001' }]);
+        if (table === 'T001K') return Promise.resolve([{ BWKEY: '1120', BUKRS: '1000' }]);
         return Promise.resolve([]);
       });
       mockRfc.call
@@ -444,6 +447,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
     test('handles L9 514 outbound delivery creation by posting PGI, committing, and confirming material document', async () => {
       mockRfc.readTable = jest.fn((table, fields, where) => {
         const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+        if (table === 'T001K') return Promise.resolve([{ BWKEY: '1120', BUKRS: '1000' }]);
         if (table === 'VBFA') {
           return Promise.resolve([{ VBELV: '0080000115', VBELN: '5000999999', VBTYP_N: 'R' }]);
         }
@@ -599,7 +603,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
     });
 
     test('rolls back and throws error when PGI succeeds but material document cannot be confirmed in MATDOC/VBFA', async () => {
-      mockRfc.readTable = jest.fn(() => Promise.resolve([]));
+      mockRfc.readTable = jest.fn((table) => Promise.resolve(table === 'T001K' ? [{ BWKEY: '1120', BUKRS: '1000' }] : []));
       mockRfc.call
         .mockResolvedValueOnce({
           MATERIALDOCUMENT: '',

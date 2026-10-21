@@ -158,6 +158,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
 
       // Step 3: TO Creation from TR
       mockRfc.readTable.mockImplementation(async (tbl, flds, where) => {
+        if (tbl === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }];
         if (tbl === 'MARC') return [{ XCHPF: '', SERNP: '' }];
         if (tbl === 'MAKT') return [{ MAKTX: 'Plain Material' }];
         if (tbl === 'T331') return [{ VOLLE: '' }];
