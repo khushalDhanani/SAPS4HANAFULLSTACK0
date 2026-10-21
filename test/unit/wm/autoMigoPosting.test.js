@@ -669,6 +669,34 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         expect(mockRfc.call).toHaveBeenCalledWith('BAPI_OUTB_DELIVERY_CHANGE', expect.objectContaining({ ITEM_SERIAL_NO: [{ DELIV_NUMB: D, ITM_NUMBER: '000010', SERIALNO: 'MBP00001' }] }));
       });
 
+      test('direct L_TO_CREATE_DN rejected by the kernel (note 2295840): the Z_WM_TO_CREATE_DN wrapper creates the picking TO', async () => {
+        const state = { wbstk: 'A', kostk: 'A', serialsAssigned: true, posted: false };
+        mockRfc.readTable = mkRead(state);
+        mockRfc.call.mockImplementation(async (fm) => {
+          if (fm === 'L_TO_CREATE_DN') throw Object.assign(new Error('Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TO_CREATE_DN'), { abapMsgClass: '00', abapMsgNumber: '001' });
+          if (fm === 'RFC_GET_FUNCTION_INTERFACE') return { PARAMS: [{ PARAMETER: 'IV_LGNUM' }, { PARAMETER: 'IV_VBELN' }, { PARAMETER: 'IV_SQUIT' }, { PARAMETER: 'IV_COMMIT' }, { PARAMETER: 'EV_TANUM' }, { PARAMETER: 'EV_SUCCESS' }] };
+          if (fm === 'Z_WM_TO_CREATE_DN') { state.kostk = 'C'; return { EV_TANUM: '0001037401', EV_SUCCESS: 'S', EV_MESSAGE: 'Transfer Order 0001037401 created for delivery 0080000134 and confirmed.' }; }
+          if (fm === 'BAPI_OUTB_DELIVERY_CONFIRM_DEC') { state.posted = true; return { RETURN: [] }; }
+          return {};
+        });
+        const res = await adapter.completeDeliveryGoodsIssue(D, { call: mockRfc.call, warehouse: 'W01' });
+        expect(res.steps).toEqual(['picking TO 1037401 created and confirmed']);
+        expect(mockRfc.call).toHaveBeenCalledWith('Z_WM_TO_CREATE_DN', { IV_LGNUM: 'W01', IV_VBELN: D, IV_SQUIT: 'X', IV_COMMIT: 'X' });
+        expect(fmNames()).toEqual(['L_TO_CREATE_DN', 'RFC_GET_FUNCTION_INTERFACE', 'Z_WM_TO_CREATE_DN', 'BAPI_OUTB_DELIVERY_CONFIRM_DEC', 'BAPI_TRANSACTION_COMMIT']);
+      });
+
+      test('direct call rejected and no wrapper active: clear error naming Z_WM_TO_CREATE_DN, nothing else called', async () => {
+        mockRfc.readTable = mkRead({ wbstk: 'A', kostk: 'A', serialsAssigned: true, posted: false });
+        mockRfc.call.mockImplementation(async (fm) => {
+          if (fm === 'L_TO_CREATE_DN') throw new Error('Incompatible Call Rejected, see note 2295840');
+          if (fm === 'RFC_GET_FUNCTION_INTERFACE') throw new Error('FU_NOT_FOUND');
+          return {};
+        });
+        await expect(adapter.completeDeliveryGoodsIssue(D, { call: mockRfc.call, warehouse: 'W01' }))
+          .rejects.toMatchObject({ status: 400, wrapperMissing: 'Z_WM_TO_CREATE_DN', message: expect.stringContaining('z_wm_to_create_dn.fugr_z_vendor_remotes.abap') });
+        expect(fmNames()).toEqual(['L_TO_CREATE_DN', 'RFC_GET_FUNCTION_INTERFACE']);
+      });
+
       test('already picked and serials present: only PGI', async () => {
         mockRfc.readTable = mkRead({ wbstk: 'A', kostk: 'C', serialsAssigned: true, posted: true });
         mockRfc.call.mockImplementation(async (fm) => (fm === 'BAPI_OUTB_DELIVERY_CONFIRM_DEC' ? { RETURN: [] } : {}));
@@ -697,6 +725,30 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         mockRfc.readTable = mkRead({ wbstk: 'C', kostk: 'C', serialsAssigned: true, posted: true });
         const res = await adapter.completeDeliveryGoodsIssue(D, { call: mockRfc.call });
         expect(res).toMatchObject({ alreadyPosted: true, materialDocument: '5000999999' });
+        expect(mockRfc.call).not.toHaveBeenCalled();
+      });
+
+      test('createDeliveryPickingTO: creates picking TO via Z_WM_TO_CREATE_DN and reads back KOSTK C', async () => {
+        const state = { wbstk: 'A', kostk: 'A' };
+        mockRfc.readTable = mkRead(state);
+        mockRfc.call.mockImplementation(async (fm) => {
+          if (fm === 'L_TO_CREATE_DN') throw new Error('Incompatible Call Rejected, see note 2295840');
+          if (fm === 'RFC_GET_FUNCTION_INTERFACE') return { PARAMS: [{ PARAMETER: 'IV_VBELN' }, { PARAMETER: 'EV_TANUM' }] };
+          if (fm === 'Z_WM_TO_CREATE_DN') {
+            state.kostk = 'C';
+            return { EV_TANUM: '0001037402', EV_SUCCESS: 'S', EV_MESSAGE: 'TO created' };
+          }
+          return {};
+        });
+        const res = await adapter.createDeliveryPickingTO(D, { call: mockRfc.call, warehouse: 'W01' });
+        expect(res).toMatchObject({ success: true, deliveryNumber: D, transferOrder: '1037402', confirmed: true });
+        expect(mockRfc.call).toHaveBeenCalledWith('Z_WM_TO_CREATE_DN', { IV_LGNUM: 'W01', IV_VBELN: D, IV_SQUIT: 'X', IV_COMMIT: 'X' });
+      });
+
+      test('createDeliveryPickingTO: already picked delivery returns without calling SAP', async () => {
+        mockRfc.readTable = mkRead({ wbstk: 'A', kostk: 'C' });
+        const res = await adapter.createDeliveryPickingTO(D, { call: mockRfc.call, warehouse: 'W01' });
+        expect(res).toMatchObject({ success: true, deliveryNumber: D, alreadyPicked: true });
         expect(mockRfc.call).not.toHaveBeenCalled();
       });
     });

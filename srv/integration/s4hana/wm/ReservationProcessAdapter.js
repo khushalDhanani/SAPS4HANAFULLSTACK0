@@ -2132,6 +2132,129 @@ class ReservationProcessAdapter {
    * BAPIDLVITMSERNO DELIV_NUMB/ITM_NUMBER/SERIALNO. Live proof of the write sequence is still pending (needs an explicit go).
    * shortcut: serial numbers are assigned to the first delivery item only (this app creates single-item deliveries); extend when multi-item deliveries appear.
    */
+  /** READ-ONLY: is the RFC wrapper Z_WM_TO_CREATE_DN active (RFC_GET_FUNCTION_INTERFACE)? Cached per adapter instance. */
+  async _deliveryToWrapperAvailable(call) {
+    if (this._deliveryToWrapper !== undefined) return this._deliveryToWrapper;
+    try {
+      const r = await call('RFC_GET_FUNCTION_INTERFACE', { FUNCNAME: 'Z_WM_TO_CREATE_DN', LANGUAGE: 'E' });
+      const names = new Set((r.PARAMS || []).map((p) => String(p.PARAMETER || '').trim()));
+      this._deliveryToWrapper = names.has('IV_VBELN') && names.has('EV_TANUM');
+    } catch (_e) {
+      this._deliveryToWrapper = false;
+    }
+    return this._deliveryToWrapper;
+  }
+
+  /**
+   * Standalone Picking Transfer Order creation for Outbound Delivery (Step 1):
+   * Checks LIKP-KOSTK (already picked); confirms open TO if present; else calls L_TO_CREATE_DN / Z_WM_TO_CREATE_DN;
+   * reads back LIKP-KOSTK = 'C'. Can be called standalone or within an active RFC session.
+   */
+  async createDeliveryPickingTO(deliveryNumber, { call, warehouse = '' } = {}) {
+    const delivNo = sapKey(deliveryNumber, 'vbeln').padStart(10, '0');
+    const fail = (status, msg, extra = {}) => Object.assign(httpError(status, msg), { stage: 'PICKING', deliveryNumber: delivNo, ...extra });
+    const read = async (table, fields, where, rows) => {
+      try { return await this.rfc.readTable(table, fields, where, rows); } catch (e) {
+        throw fail(502, `Outbound Delivery ${delivNo}: ${table} could not be read from SAP: ${e.message}`, { cause: e });
+      }
+    };
+    const readHeader = async () => (await read('LIKP', ['VBELN', 'WBSTK', 'KOSTK', 'LVSTK'], [`VBELN = '${delivNo}'`], 1))?.[0];
+
+    let header = await readHeader();
+    if (!header) throw fail(404, `Outbound Delivery ${delivNo} not found in SAP (LIKP)`);
+    if (String(header.KOSTK || '').trim() === 'C') {
+      return { success: true, deliveryNumber: delivNo, alreadyPicked: true, transferOrder: '', confirmed: true, step: 'picking already completed' };
+    }
+
+    const items = await read('LIPS', ['VBELN', 'POSNR', 'MATNR', 'LGNUM', 'LFIMG'], [`VBELN = '${delivNo}'`], 20);
+    if (!items || !items.length) throw fail(400, `Outbound Delivery ${delivNo} has no items (LIPS)`);
+    const item = items[0];
+    const lgnum = String(item.LGNUM || warehouse || '').trim();
+    if (!lgnum) throw fail(400, `Outbound Delivery ${delivNo} is not picked and no warehouse is known for the picking Transfer Order`);
+    const s4Lgnum = sapKey(lgnum, 'lgnum');
+
+    const executePicking = async (activeCall) => {
+      const ltak = await read('LTAK', ['TANUM', 'KQUIT'], [`LGNUM = '${s4Lgnum}'`, `AND VBELN = '${delivNo}'`], 5);
+      const openTo = (ltak || []).find((r) => String(r.KQUIT || '').trim() !== 'X');
+      let tanum = '';
+      const confirmTo = async (toNo) => {
+        const s4To = sapKey(toNo, 'tanum').padStart(10, '0');
+        const confirmParams = { I_LGNUM: s4Lgnum, I_TANUM: s4To, I_SQUIT: 'X', I_COMMIT_WORK: 'X' };
+        try {
+          await activeCall('L_TO_CONFIRM', confirmParams);
+        } catch (e) {
+          const errMsg = String(e?.message || '');
+          if (errMsg.includes('destination handling unit') || errMsg.includes('848')) {
+            const confHu = await getHuConfirmationItems(this.rfc, s4Lgnum, s4To);
+            if (confHu.length > 0) {
+              confirmParams.T_LTAP_CONF_HU = confHu;
+              await activeCall('L_TO_CONFIRM', confirmParams);
+              return;
+            }
+          }
+          let confirmedInSap = false;
+          try { confirmedInSap = await isToFullyConfirmed(this.rfc, s4Lgnum, s4To); } catch (_) {}
+          if (!confirmedInSap) {
+            throw fail(400, `Picking Transfer Order ${alphaOut(s4To)} of Outbound Delivery ${delivNo} could not be confirmed (L_TO_CONFIRM${e.key ? ' ' + e.key : ''}): ${e.message}`, { cause: e });
+          }
+        }
+      };
+
+      if (openTo) {
+        await confirmTo(openTo.TANUM);
+        tanum = openTo.TANUM;
+      } else {
+        // Direct call first; on SAP Note 2295840 rejection, fall back to RFC wrapper Z_WM_TO_CREATE_DN
+        let directErr = null;
+        try {
+          const res = await activeCall('L_TO_CREATE_DN', { I_LGNUM: s4Lgnum, I_VBELN: delivNo, I_COMMIT_WORK: 'X', I_SQUIT: 'X' });
+          tanum = String(res?.E_TANUM || res?.T_LTAK?.[0]?.TANUM || '').trim();
+          if (!tanum || /^0+$/.test(tanum)) throw fail(500, `L_TO_CREATE_DN returned no Transfer Order number for Outbound Delivery ${delivNo}`);
+        } catch (e) {
+          if (e.status === 500) throw e;
+          directErr = e;
+        }
+        if (directErr) {
+          const wrapperAvailable = await this._deliveryToWrapperAvailable(activeCall);
+          if (!wrapperAvailable) {
+            throw fail(400, `Picking Transfer Order for Outbound Delivery ${delivNo} could not be created: the direct L_TO_CREATE_DN call was rejected (${directErr.message}) and the RFC wrapper Z_WM_TO_CREATE_DN is not active in SAP. Activate it (source docs/abap/z_wm_to_create_dn.fugr_z_vendor_remotes.abap), then retry.`, { cause: directErr, wrapperMissing: 'Z_WM_TO_CREATE_DN' });
+          }
+          let resZ = await activeCall('Z_WM_TO_CREATE_DN', { IV_LGNUM: s4Lgnum, IV_VBELN: delivNo, IV_SQUIT: 'X', IV_COMMIT: 'X' });
+          const squitForbidden = (resZ?.ET_MESSAGES || []).some((m) => m.NUMBER === '181' || /immediate confirmation|squit_forbidden/i.test(m.MESSAGE || '')) ||
+            /immediate confirmation|squit_forbidden/i.test(String(resZ?.EV_MESSAGE || ''));
+          let needsConfirmation = false;
+          if (squitForbidden) {
+            // Movement type (e.g. 241) does not permit immediate confirmation at creation.
+            // Create the TO without immediate confirmation, then confirm via L_TO_CONFIRM.
+            resZ = await activeCall('Z_WM_TO_CREATE_DN', { IV_LGNUM: s4Lgnum, IV_VBELN: delivNo, IV_SQUIT: ' ', IV_COMMIT: 'X' });
+            needsConfirmation = true;
+          }
+          tanum = String(resZ?.EV_TANUM || '').trim();
+          if (String(resZ?.EV_SUCCESS || '').trim() !== 'S' || !tanum || /^0+$/.test(tanum)) {
+            throw fail(400, `Picking Transfer Order for Outbound Delivery ${delivNo} was not created (Z_WM_TO_CREATE_DN): ${String(resZ?.EV_MESSAGE || '').trim() || 'no message'}`, { messages: resZ?.ET_MESSAGES || [] });
+          }
+          if (needsConfirmation) {
+            await confirmTo(tanum);
+          }
+        }
+      }
+      header = await readHeader();
+      if (String(header?.KOSTK || '').trim() !== 'C') {
+        throw fail(500, `Outbound Delivery ${delivNo} is still not completely picked after the picking Transfer Order (LIKP-KOSTK '${String(header?.KOSTK || '').trim()}')`);
+      }
+      return {
+        success: true,
+        deliveryNumber: delivNo,
+        transferOrder: alphaOut(tanum),
+        confirmed: true,
+        step: openTo ? `picking TO ${alphaOut(openTo.TANUM)} confirmed` : `picking TO ${alphaOut(tanum)} created and confirmed`
+      };
+    };
+
+    if (call) return await executePicking(call);
+    return await this.rfc.session(executePicking);
+  }
+
   async completeDeliveryGoodsIssue(deliveryNumber, { call, warehouse = '', serials = [] } = {}) {
     const delivNo = sapKey(deliveryNumber, 'vbeln').padStart(10, '0');
     const fail = (status, msg, extra = {}) => Object.assign(httpError(status, msg), { stage: 'PGI', deliveryNumber: delivNo, ...extra });
@@ -2158,63 +2281,44 @@ class ReservationProcessAdapter {
     const item = items[0];
     const lgnum = String(item.LGNUM || warehouse || '').trim();
 
-    // 1. Picking (LIKP-KOSTK C = completely picked)
-    if (String(header.KOSTK || '').trim() !== 'C') {
-      if (!lgnum) throw fail(400, `Outbound Delivery ${delivNo} is not picked and no warehouse is known for the picking Transfer Order`);
-      const s4Lgnum = sapKey(lgnum, 'lgnum');
-      const ltak = await read('LTAK', ['TANUM', 'KQUIT'], [`LGNUM = '${s4Lgnum}'`, `AND VBELN = '${delivNo}'`], 5);
-      const openTo = (ltak || []).find((r) => String(r.KQUIT || '').trim() !== 'X');
-      if (openTo) {
-        try {
-          await call('L_TO_CONFIRM', { I_LGNUM: s4Lgnum, I_TANUM: openTo.TANUM, I_COMMIT_WORK: 'X' });
-        } catch (e) {
-          throw fail(400, `Picking Transfer Order ${alphaOut(openTo.TANUM)} of Outbound Delivery ${delivNo} could not be confirmed (L_TO_CONFIRM${e.key ? ' ' + e.key : ''}): ${e.message}`, { cause: e });
-        }
-        steps.push(`picking TO ${alphaOut(openTo.TANUM)} confirmed`);
-      } else {
-        let res;
-        try {
-          res = await call('L_TO_CREATE_DN', { I_LGNUM: s4Lgnum, I_VBELN: delivNo, I_COMMIT_WORK: 'X', I_SQUIT: 'X' });
-        } catch (e) {
-          throw fail(400, `Picking Transfer Order for Outbound Delivery ${delivNo} could not be created (L_TO_CREATE_DN${e.key ? ' ' + e.key : ''}): ${e.message}`, { cause: e });
-        }
-        const tanum = String(res?.E_TANUM || res?.T_LTAK?.[0]?.TANUM || '').trim();
-        if (!tanum || /^0+$/.test(tanum)) throw fail(500, `L_TO_CREATE_DN returned no Transfer Order number for Outbound Delivery ${delivNo}`);
-        steps.push(`picking TO ${alphaOut(tanum)} created and confirmed`);
+    const executeInSession = async (activeCall) => {
+      // 1. Picking (LIKP-KOSTK C = completely picked)
+      if (String(header.KOSTK || '').trim() !== 'C') {
+        const pickRes = await this.createDeliveryPickingTO(delivNo, { call: activeCall, warehouse: lgnum });
+        if (pickRes?.step) steps.push(pickRes.step);
       }
-      header = await readHeader();
-      if (String(header?.KOSTK || '').trim() !== 'C') {
-        throw fail(500, `Outbound Delivery ${delivNo} is still not completely picked after the picking Transfer Order (LIKP-KOSTK '${String(header?.KOSTK || '').trim()}')`);
-      }
-    }
 
-    // 2. Serial numbers on the delivery item (SER01 holds the assignment)
-    const serialList = (Array.isArray(serials) ? serials : [serials]).filter(Boolean).map((v) => sapKey(v, 'serial'));
-    if (serialList.length) {
-      const serWhere = [`LIEF_NR = '${delivNo}'`, `AND POSNR = '${item.POSNR}'`];
-      const ser01 = await read('SER01', ['LIEF_NR', 'POSNR', 'OBKNR'], serWhere, 1);
-      if (!ser01 || !ser01.length) {
-        const res = await call('BAPI_OUTB_DELIVERY_CHANGE', {
-          HEADER_DATA: { DELIV_NUMB: delivNo },
-          HEADER_CONTROL: { DELIV_NUMB: delivNo },
-          DELIVERY: delivNo,
-          ITEM_SERIAL_NO: serialList.map((sn) => ({ DELIV_NUMB: delivNo, ITM_NUMBER: item.POSNR, SERIALNO: sn }))
-        });
-        const errs = (res?.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
-        if (errs.length) {
-          try { await call('BAPI_TRANSACTION_ROLLBACK', {}); } catch (_) { /* nothing committed */ }
-          throw fail(400, `Serial number assignment to Outbound Delivery ${delivNo} item ${item.POSNR} failed: ${errs.map((e) => `[${e.TYPE}] ${e.MESSAGE || (e.ID + e.NUMBER)}`).join('; ')}`, { messages: res?.RETURN || [] });
+      // 2. Serial numbers on the delivery item (SER01 holds the assignment)
+      const serialList = (Array.isArray(serials) ? serials : [serials]).filter(Boolean).map((v) => sapKey(v, 'serial'));
+      if (serialList.length) {
+        const serWhere = [`LIEF_NR = '${delivNo}'`, `AND POSNR = '${item.POSNR}'`];
+        const ser01 = await read('SER01', ['LIEF_NR', 'POSNR', 'OBKNR'], serWhere, 1);
+        if (!ser01 || !ser01.length) {
+          const res = await activeCall('BAPI_OUTB_DELIVERY_CHANGE', {
+            HEADER_DATA: { DELIV_NUMB: delivNo },
+            HEADER_CONTROL: { DELIV_NUMB: delivNo },
+            DELIVERY: delivNo,
+            ITEM_SERIAL_NO: serialList.map((sn) => ({ DELIV_NUMB: delivNo, ITM_NUMBER: item.POSNR, SERIALNO: sn }))
+          });
+          const errs = (res?.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
+          if (errs.length) {
+            try { await activeCall('BAPI_TRANSACTION_ROLLBACK', {}); } catch (_) { /* nothing committed */ }
+            throw fail(400, `Serial number assignment to Outbound Delivery ${delivNo} item ${item.POSNR} failed: ${errs.map((e) => `[${e.TYPE}] ${e.MESSAGE || (e.ID + e.NUMBER)}`).join('; ')}`, { messages: res?.RETURN || [] });
+          }
+          await activeCall('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+          const check = await read('SER01', ['LIEF_NR', 'POSNR', 'OBKNR'], serWhere, 1);
+          if (!check || !check.length) throw fail(500, `Serial numbers were not persisted on Outbound Delivery ${delivNo} item ${item.POSNR} (SER01)`);
+          steps.push(`${serialList.length} serial number(s) assigned`);
         }
-        await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
-        const check = await read('SER01', ['LIEF_NR', 'POSNR', 'OBKNR'], serWhere, 1);
-        if (!check || !check.length) throw fail(500, `Serial numbers were not persisted on Outbound Delivery ${delivNo} item ${item.POSNR} (SER01)`);
-        steps.push(`${serialList.length} serial number(s) assigned`);
       }
-    }
 
-    // 3. PGI
-    const pgi = await this.postDeliveryGoodsIssue(delivNo, { call });
-    return { ...pgi, steps };
+      // 3. PGI
+      const pgi = await this.postDeliveryGoodsIssue(delivNo, { call: activeCall });
+      return { ...pgi, steps };
+    };
+
+    if (call) return await executeInSession(call);
+    return await this.rfc.session(executeInSession);
   }
 
   async postDeliveryGoodsIssue(deliveryNumber, options = {}) {

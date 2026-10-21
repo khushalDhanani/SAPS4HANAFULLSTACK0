@@ -5,6 +5,10 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Delivery completion Step 1 LIVE PROOF PASSED (2026-10-21 22:15 IST): Picking Transfer Order 1037372 created and confirmed in SAP Client 220 for Outbound Delivery 0080000134 in W01 under user "Go". Live read-back confirms LIKP-KOSTK = 'C' (completely picked), LIKP-LVSTK = 'C', LTAK TANUM 0001037372 KQUIT = 'X', LTAP item 0001 picked 1.000 NOS of 8000009754 from EN1/1-L0001-04 to 913/0080000134 (PQUIT = 'X'). Handled L3 181 (movement type 241 forbids immediate confirmation) by creating with IV_SQUIT blank and confirming via L_TO_CONFIRM. Step 2 (serial number assignment) and Step 3 (PGI) pending user serial selection and explicit "GO".**
+
+- **Delivery completion & picking TO implementation (2026-10-21 21:55 IST): modular `createDeliveryPickingTO` implemented in `ReservationProcessAdapter.js` with standalone and in-session execution; picking step in `completeDeliveryGoodsIssue` delegates to it; session-wrapping ensured so callers without an active session do not fail. Tested in `autoMigoPosting.test.js` (+2 tests: fallback to `Z_WM_TO_CREATE_DN` on Note 2295840 rejection, already-picked return; 9/9 delivery tests green). Live proof of Step 1 (`Z_WM_TO_CREATE_DN` on delivery 0080000134) ready and waiting for explicit user 'go'.**
+
 - **Delivery goods-issue completion flow BUILT (2026-10-21 20:40 IST): `completeDeliveryGoodsIssue` = picking TO (`L_TO_CREATE_DN`, I_SQUIT) or confirm open TO → serial numbers on the delivery item (`BAPI_OUTB_DELIVERY_CHANGE ITEM_SERIAL_NO` + COMMIT, checked in SER01) → PGI, every step read back; wired into both delivery branches of `postGoodsMovement`; unit-tested (0 regressions). LIVE PROOF PENDING: first write = `L_TO_CREATE_DN` for delivery 0080000134 in W01 — needs the user's explicit go (plus the serial number scanned for TO 1037371).**
 
 - **Scan-to on a shipping-managed storage location (2026-10-21 19:50 IST): CS02 goods issue runs through an outbound delivery that the app cannot complete yet (WM picking TO + serial numbers + PGI). DELIVERED now: no further duplicate deliveries (open delivery reused, fail-closed check), the real SAP PGI reasons reach the user, shipping-managed TRs are flagged and automatic MIGO is switched off for them. BLOCKED on owner decisions: (1) build the delivery-completion flow (`L_TO_CREATE_DN` → `L_TO_CONFIRM` → `BAPI_OUTB_DELIVERY_CHANGE ITEM_SERIAL_NO` → `BAPI_OUTB_DELIVERY_CONFIRM_DEC`, each a SAP write needing proof) and (2) SAP cleanup of reservation 530233: three open HOD deliveries 0080000115/0080000116/0080000134 and four 1-NOS quants at 913 for a 1-NOS reservation.**
@@ -3652,6 +3656,67 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 21:55 IST — Modular picking TO creation implemented in ReservationProcessAdapter; standalone & in-session wired
+
+- **Requirement:** "implement where needed Actually."
+- **Changes in `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:**
+  - Added `createDeliveryPickingTO(deliveryNumber, { call, warehouse })`: modular Step 1 implementation checking LIKP-KOSTK (already picked check), confirming open LTAK TO if present, else calling `L_TO_CREATE_DN` with fallback to `Z_WM_TO_CREATE_DN`, and verifying `LIKP-KOSTK = 'C'`.
+  - Updated `completeDeliveryGoodsIssue`: now delegates Step 1 to `createDeliveryPickingTO(delivNo, { call: activeCall, warehouse: lgnum })`.
+  - Added session encapsulation: when `call` is not supplied, `completeDeliveryGoodsIssue` and `createDeliveryPickingTO` wrap their calls in `this.rfc.session()`, enabling direct caller invocations without crashing.
+- **Tests in `test/unit/wm/autoMigoPosting.test.js`:**
+  - Added `test('createDeliveryPickingTO: creates picking TO via Z_WM_TO_CREATE_DN and reads back KOSTK C')`.
+  - Added `test('createDeliveryPickingTO: already picked delivery returns without calling SAP')`.
+  - Ran focused tests: 9 passed (100% green).
+- **Validation:** `npx eslint srv/integration/s4hana/wm/ReservationProcessAdapter.js` clean; `npx cds compile srv/ --to csn` clean; `git diff --check` clean.
+- **Next action:** User "go" for re-running Step 1 live write (picking TO creation via `Z_WM_TO_CREATE_DN` on delivery 0080000134 in W01).
+
+### 2026-10-21 21:50 IST — Z_WM_TO_CREATE_DN deployed and activated in $TMP via ADT under user authorization; verified active over RFC
+
+- **Authorization:** user explicit instruction "Than make live in $TMP". Executed `tools/adt-create-to-wrapper.js` with `ALLOW_LIVE_SAP_TOOLS=1` and `--allow-live-sap`.
+- **ABAP Source Adjustments:** line 83 in `docs/abap/z_wm_to_create_dn.fugr_z_vendor_remotes.abap` was 282 characters long, which SAP ADT rejected with `SEDI_ADT 015: The line 83 exceeds 255 characters`. Wrapped the formatted message string across multiple lines (max line length now under 140 chars).
+- **Execution & Deployment (WRITE):**
+  - Metadata created in Function Group `Z_VENDOR_REMOTES` in package `$TMP` (HTTP 201).
+  - Metadata updated to set `fmodule:processingType="rfc"` (HTTP 200).
+  - Function module locked with stateful ADT session.
+  - Source code uploaded via PUT (HTTP 200).
+  - Object unlocked.
+  - Activated via `/sap/bc/adt/activation?method=activate` (HTTP 200).
+- **Verification (READ-ONLY):**
+  - `RFC_GET_FUNCTION_INTERFACE` live query confirms `Z_WM_TO_CREATE_DN` is ACTIVE with 8 parameters:
+    - `EV_MESSAGE` (`BAPI_MSG`, EXPORTING)
+    - `EV_SUCCESS` (`CHAR1`, EXPORTING)
+    - `EV_TANUM` (`LTAK-TANUM`, EXPORTING)
+    - `IV_COMMIT` (`CHAR1`, IMPORTING, default 'X', optional)
+    - `IV_LGNUM` (`LGNUM`, IMPORTING)
+    - `IV_SQUIT` (`CHAR1`, IMPORTING, default 'X', optional)
+    - `IV_VBELN` (`VBELN_VL`, IMPORTING)
+    - `ET_MESSAGES` (`BAPIRET2_T`, TABLES, optional)
+  - `TFDIR` transparent table query confirms `FUNCNAME = 'Z_WM_TO_CREATE_DN'`, `FMODE = 'R'` (Remote-enabled), `PNAME = 'SAPLZ_VENDOR_REMOTES'`.
+- **Validation:** `npx jest test/unit/wm/autoMigoPosting.test.js -t "direct L_TO_CREATE_DN rejected"` passed; `git diff --check` clean.
+- **Next action:** User "go" for re-running Step 1 live write (picking TO creation via `Z_WM_TO_CREATE_DN` on delivery 0080000134 in W01).
+
+### 2026-10-21 21:45 IST — Z_WM_TO_CREATE_DN existence confirmed missing in live SAP; ADT creation tool delivered
+
+- **Discovery (READ-ONLY RFC & ADT):**
+  - Queried `TFDIR` for `Z_WM_TO_CREATE_DN`: returned `[]` (0 records).
+  - Queried `RFC_GET_FUNCTION_INTERFACE` for `Z_WM_TO_CREATE_DN`: returned `FU_NOT_FOUND`.
+  - Queried `TFDIR` for `PNAME = 'SAPLZ_VENDOR_REMOTES'`: confirmed 7 active FMs (`Z_RFC_VENDOR_INSERT`, `Z_RFC_VENDOR_UPDATE`, `Z_RFC_PARTNER_FUNC_UPSERT`, `Z_RFC_GET_CONTACT_PARNR`, `Z_WM_TO_CREATE_FROM_TR`, `ZWM_TR_CREATE`, `Z_WM_TR_CREATE`), but `Z_WM_TO_CREATE_DN` is not present.
+  - Queried ADT for `Z_VENDOR_REMOTES`: confirmed active in package `$TMP`.
+  - Root cause of user inquiry: in transaction `SE37`, entering `Z_WM_TO_CREATE_DN` and clicking Display or Change outputs `Function module Z_WM_TO_CREATE_DN does not exist` because new function modules must be created via the **Create** button (`F5`).
+- **Delivered:** `tools/adt-create-to-wrapper.js` — automated ADT creation and activation script protected by `live-sap-gate.js`. Reads `docs/abap/z_wm_to_create_dn.fugr_z_vendor_remotes.abap`, creates `Z_WM_TO_CREATE_DN` metadata in `Z_VENDOR_REMOTES` ($TMP), locks, uploads source, unlocks, activates via `/sap/bc/adt/activation`, and runs read-only verification over RFC.
+- **Validation:** `node tools/adt-create-to-wrapper.js` correctly blocked by `live-sap-gate.js` (exit 1); `npx eslint tools/adt-create-to-wrapper.js` 0 errors / 0 warnings; `git diff --check` clean. Zero SAP writes.
+- **Next action:** Either user creates/activates `Z_WM_TO_CREATE_DN` in SE37 (Option 1) OR user provides explicit "go" to execute `tools/adt-create-to-wrapper.js` via ADT (Option 2) → read-only interface check → step 1 live write re-run with go.
+
+### 2026-10-21 21:10 IST — Live step 1 (`L_TO_CREATE_DN` on 0080000134/W01) rejected by the kernel; Z_WM_TO_CREATE_DN wrapper delivered; adapter fallback
+
+- **Authorization:** user "Go" for step 1 only (picking TO; no serial, no PGI). Executed `scratchpad/step1-write.js`: READ-ONLY pre-check (`LIKP 0080000134 WBSTK A / KOSTK A / LVSTK A`, no `LTAK` row for the delivery) → **WRITE** `L_TO_CREATE_DN { I_LGNUM W01, I_VBELN 0080000134, I_COMMIT_WORK X, I_SQUIT X }` → **rejected before execution**: `00/001 "Incompatible Call Rejected, see note 2295840; Called Incompatible Function : L_TO_CREATE_DN"`. READ-ONLY read-back: LIKP unchanged, LTAK still empty, LQUA 913/0000400001 unchanged (two quants of 1.000). **No SAP change.**
+- **Discovery (READ-ONLY `TFDIR`):** `L_TO_CREATE_DN` is flagged remote-enabled (FMODE R) yet rejected — identical to `L_TR_CREATE` (solved 2026-10-19 with `Z_WM_TR_CREATE`). Other remote-enabled candidates exist (`L_TO_CREATE_DN_MULTIPLE`, `L_TO_CREATE_SINGLE`, `BAPI_WHSE_TO_CREATE_STOCK`, `WS_DELIVERY_UPDATE`) but none was tried (each attempt is a write; untested compatibility). Customer wrappers present: `Z_WM_TR_CREATE`, `ZWM_TR_CREATE`, `Z_WM_TO_CREATE_FROM_TR`, `ZWM_TO_CREATE_FROM_TR`, `Z_WM_GET_TR_MATERIAL_LIST`, `Z_WM_GET_ALL_TR_HEADERS` — no delivery-picking wrapper yet.
+- **Delivered:** `docs/abap/z_wm_to_create_dn.fugr_z_vendor_remotes.abap` — RFC wrapper in the style of `Z_WM_TR_CREATE`: IMPORTING `IV_LGNUM`, `IV_VBELN` (ALPHA conversion), `IV_SQUIT` default X, `IV_COMMIT` default X; EXPORTING `EV_TANUM`, `EV_SUCCESS` S/E, `EV_MESSAGE`; TABLES `ET_MESSAGES`; calls `L_TO_CREATE_DN` with the 15 documented exceptions mapped, `COMMIT WORK AND WAIT` on success. Must be created/activated in DS4 by the user (not ADT-deployable from this session, as before).
+- **`srv/integration/s4hana/wm/ReservationProcessAdapter.js`:** `completeDeliveryGoodsIssue` picking step: direct `L_TO_CREATE_DN` first; on rejection → `_deliveryToWrapperAvailable(call)` (`RFC_GET_FUNCTION_INTERFACE Z_WM_TO_CREATE_DN`, needs `IV_VBELN`+`EV_TANUM`, cached per instance) → `Z_WM_TO_CREATE_DN { IV_LGNUM, IV_VBELN, IV_SQUIT X, IV_COMMIT X }`, `EV_SUCCESS S` + `EV_TANUM` required; wrapper absent → 400 naming the wrapper and the source file (`wrapperMissing`). The `LIKP KOSTK = C` read-back after the TO is unchanged.
+- **Tests:** `autoMigoPosting.test.js` +2 (kernel rejection → wrapper creates the TO, exact call order and parameters; rejection + no wrapper → clear error, nothing else called). Suite: 95 passed, 1 failed (= baseline `Batch Resolution`). eslint 0/0; `git diff --check` clean.
+- **Also recorded (20:55, READ-ONLY):** the serial scanned for TO 1037371 was never sent to SAP (`createTOFromTR` validates and returns `Serials` but `L_TO_CONFIRM` is called without them) — follow-up: pass `T_LTAP_CONF_HU_SERIAL`/serial data at confirmation (interface read shows the table) once the serial-at-confirmation contract is verified. Serials of 8000009754 in unrestricted stock at 1120/CS02 (`EQBS`+`EQUI`): 000000000000123451, …123461, …123471, …123481, …123491, MBP00001–MBP00005.
+- **Next action:** user activates `Z_WM_TO_CREATE_DN` in DS4 (SE37, function group as for Z_WM_TR_CREATE) → READ-ONLY interface check → "go" for step 1 again (now via the wrapper) → step 2 needs the chosen serial + go → step 3 PGI + go. **Not done:** steps 1-3. **Still unknown:** physical serial; whether `L_TO_CREATE_DN` picks from the 913 asset bin. **Assumptions:** none.
 
 ### 2026-10-21 20:40 IST — Delivery goods-issue completion flow (picking TO → serial numbers → PGI) built and unit-tested; live proof awaits authorization
 
