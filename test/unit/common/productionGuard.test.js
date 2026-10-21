@@ -1,6 +1,6 @@
 'use strict';
 
-const { assertDevFlagsOff, ProductionGuardError } = require('../../../srv/common/productionGuard');
+const { assertDevFlagsOff, assertS4ConnectionConfig, ProductionGuardError } = require('../../../srv/common/productionGuard');
 
 describe('Unit: productionGuard — assertDevFlagsOff()', () => {
 
@@ -169,6 +169,29 @@ describe('Unit: productionGuard — assertDevFlagsOff()', () => {
       })).toThrow(ProductionGuardError);
 
       process.env.NODE_ENV = originalNodeEnv;
+    });
+  });
+
+  describe('assertS4ConnectionConfig — S/4 connection comes from BTP destinations in production, from .env.local in development', () => {
+    const vcapWithDestination = JSON.stringify({ destination: [{ name: 'dest', credentials: {} }] });
+    test('test profile is not checked', () => {
+      expect(() => assertS4ConnectionConfig({ NODE_ENV: 'test' })).not.toThrow();
+    });
+    test('production passes with a Destination binding and both destination names', () => {
+      expect(() => assertS4ConnectionConfig({ NODE_ENV: 'production', VCAP_SERVICES: vcapWithDestination, S4_DESTINATION_NAME: 'S4', S4_RFC_DESTINATION_NAME: 'S4_RFC' })).not.toThrow();
+    });
+    test('production fails at startup without the binding or a destination name', () => {
+      expect(() => assertS4ConnectionConfig({ NODE_ENV: 'production', S4_DESTINATION_NAME: 'S4', S4_RFC_DESTINATION_NAME: 'S4_RFC' })).toThrow(/VCAP_SERVICES\.destination/);
+      expect(() => assertS4ConnectionConfig({ NODE_ENV: 'production', VCAP_SERVICES: vcapWithDestination, S4_DESTINATION_NAME: 'S4' })).toThrow(/S4_RFC_DESTINATION_NAME/);
+    });
+    test('production refuses credentials, URL or client in environment variables', () => {
+      expect(() => assertS4ConnectionConfig({ NODE_ENV: 'production', VCAP_SERVICES: vcapWithDestination, S4_DESTINATION_NAME: 'S4', S4_RFC_DESTINATION_NAME: 'S4_RFC', S4_PASSWORD: 'x', S4_CLIENT: '220' }))
+        .toThrow(/not allowed in production.*S4_CLIENT, S4_PASSWORD/s);
+    });
+    test('development requires S4_DESTINATION_URL and S4_CLIENT', () => {
+      expect(() => assertS4ConnectionConfig({ NODE_ENV: 'development', S4_DESTINATION_URL: 'https://h:443', S4_CLIENT: '100' })).not.toThrow();
+      expect(() => assertS4ConnectionConfig({ NODE_ENV: 'development', S4_DESTINATION_URL: 'https://h:443' })).toThrow(/missing: S4_CLIENT/);
+      expect(() => assertS4ConnectionConfig({})).toThrow(/missing: S4_DESTINATION_URL, S4_CLIENT/);
     });
   });
 });

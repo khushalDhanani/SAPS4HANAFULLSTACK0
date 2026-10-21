@@ -289,6 +289,7 @@
         }
       }
     },
+    "s4": {},
     "log": {
       "format": "plain",
       "levels": {
@@ -303,9 +304,6 @@
         "goods-issue-adapter": "info",
         "tr-to-adapter": "info"
       }
-    },
-    "s4": {
-      "client": ""
     }
   },
   "optionalDependencies": {

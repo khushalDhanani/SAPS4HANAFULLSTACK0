@@ -55,8 +55,8 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       });
     });
 
-    test('package.json cds.s4.client is empty string (must come from env or BTP)', () => {
-      expect(pkg.cds.s4.client).toBe('');
+    test('package.json cds.s4 carries no client placeholder (client comes from env locally or from the BTP destination)', () => {
+      expect(pkg.cds.s4).not.toHaveProperty('client');
     });
   });
 

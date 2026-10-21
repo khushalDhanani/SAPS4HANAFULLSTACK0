@@ -11,10 +11,60 @@ const REQUIRED_ENV = ['S4_DESTINATION_URL', 'S4_RFC_SYSNR', 'S4_CLIENT', 'S4_USE
 
 const unavailable = (msg) => Object.assign(new Error(msg), { status: 503 });
 
+// Property names of an RFC-type destination as the Destination service returns them (originalProperties).
+// Not verified against a live BTP destination yet: a destination without these keys fails closed with the keys it has.
+const RFC_DESTINATION_PROPS = { ashost: 'jco.client.ashost', sysnr: 'jco.client.sysnr', client: 'jco.client.client', user: 'jco.client.user', passwd: 'jco.client.passwd' };
+const DESTINATION_PARAMS_TTL_MS = 5 * 60 * 1000;
+
 class RfcClient {
-  constructor(env = process.env, loader = () => require('node-rfc')) {
+  /**
+   * @param {object} [env] - process.env
+   * @param {Function} [loader] - node-rfc loader (tests)
+   * @param {Function} [getDestination] - Cloud SDK destination lookup (tests); used when S4_RFC_DESTINATION_NAME is set
+   */
+  constructor(env = process.env, loader = () => require('node-rfc'), getDestination) {
     this.env = env;
     this.loader = loader;
+    this._getDestination = getDestination;
+    this._destinationParams = null;
+  }
+
+  /**
+   * Connection parameters from the BTP RFC destination named by S4_RFC_DESTINATION_NAME (deployed environments),
+   * otherwise from the local environment (development only; refused in production).
+   */
+  async resolveConnectionParams() {
+    const destinationName = String(this.env.S4_RFC_DESTINATION_NAME || '').trim();
+    if (!destinationName) {
+      if (String(this.env.NODE_ENV || '').toLowerCase() === 'production') {
+        throw unavailable('RFC connection in production must come from a BTP RFC destination: set S4_RFC_DESTINATION_NAME (credentials in environment variables are not allowed)');
+      }
+      return this.connectionParams();
+    }
+    const cached = this._destinationParams;
+    if (cached && cached.expiresAt > Date.now()) return cached.params;
+    const getDestination = this._getDestination || require('@sap-cloud-sdk/connectivity').getDestination;
+    let dest;
+    try {
+      dest = await getDestination({ destinationName });
+    } catch (e) {
+      throw unavailable(`RFC destination '${destinationName}' could not be read from the Destination service: ${e.message}`);
+    }
+    if (!dest) throw unavailable(`RFC destination '${destinationName}' not found in the Destination service`);
+    const props = dest.originalProperties || {};
+    const params = {};
+    const missing = [];
+    for (const [key, prop] of Object.entries(RFC_DESTINATION_PROPS)) {
+      const v = props[prop];
+      if (v === undefined || v === null || String(v).trim() === '') missing.push(prop); else params[key] = String(v).trim();
+    }
+    if (missing.length) {
+      throw unavailable(`RFC destination '${destinationName}' lacks ${missing.join(', ')} (properties present: ${Object.keys(props).filter((k) => !/passwd|password/i.test(k)).join(', ') || 'none'})`);
+    }
+    params.lang = String(props['jco.client.lang'] || 'EN').trim();
+    params.trace = this.env.S4_RFC_TRACE || '0';
+    this._destinationParams = { params, expiresAt: Date.now() + DESTINATION_PARAMS_TTL_MS };
+    return params;
   }
 
   /** Check if the native node-rfc module is available and can be loaded. */
@@ -65,7 +115,7 @@ class RfcClient {
       const why = e.code === 'MODULE_NOT_FOUND' ? 'not installed' : e.message.split('\n')[0];
       throw unavailable(`node-rfc is not available (${why}). Install the SAP NW RFC SDK, then run: npm install node-rfc`);
     }
-    const client = new noderfc.Client(this.connectionParams());
+    const client = new noderfc.Client(await this.resolveConnectionParams());
     await client.open();
     try {
       return await fn((fm, params = {}) => client.call(fm, params));

@@ -70,4 +70,37 @@ function assertDevFlagsOff(env = process.env, auth) {
   }
 }
 
-module.exports = { assertDevFlagsOff, ProductionGuardError };
+/**
+ * Asserts that the S/4HANA connection is configured for the current profile, at startup:
+ *   production  – Destination service binding (VCAP_SERVICES) + S4_DESTINATION_NAME + S4_RFC_DESTINATION_NAME;
+ *                 no credentials, URL or client in environment variables (they come from the destinations)
+ *   development – S4_DESTINATION_URL and S4_CLIENT (local .env.local)
+ *   test        – not checked (tests mock SAP)
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @throws {ProductionGuardError}
+ */
+function assertS4ConnectionConfig(env = process.env) {
+  const nodeEnv = String(env.NODE_ENV || '').trim().toLowerCase();
+  if (nodeEnv === 'test') return;
+  const missing = [];
+  const forbidden = [];
+  if (nodeEnv === 'production') {
+    let hasDestinationBinding = false;
+    try { hasDestinationBinding = Boolean(JSON.parse(env.VCAP_SERVICES || '{}').destination); } catch (_) { hasDestinationBinding = false; }
+    if (!hasDestinationBinding) missing.push('Destination service binding (VCAP_SERVICES.destination)');
+    for (const k of ['S4_DESTINATION_NAME', 'S4_RFC_DESTINATION_NAME']) if (!String(env[k] || '').trim()) missing.push(k);
+    for (const k of ['S4_DESTINATION_URL', 'S4_CLIENT', 'S4_USERNAME', 'S4_PASSWORD', 'S4_RFC_SYSNR']) if (String(env[k] || '').trim()) forbidden.push(k);
+  } else {
+    for (const k of ['S4_DESTINATION_URL', 'S4_CLIENT']) if (!String(env[k] || '').trim()) missing.push(k);
+  }
+  if (missing.length || forbidden.length) {
+    throw new ProductionGuardError(
+      `S/4HANA connection configuration check failed (NODE_ENV=${nodeEnv || '(unset)'}):` +
+      (missing.length ? `\n  missing: ${missing.join(', ')}` : '') +
+      (forbidden.length ? `\n  not allowed in production (use the BTP destinations instead): ${forbidden.join(', ')}` : '')
+    );
+  }
+}
+
+module.exports = { assertDevFlagsOff, assertS4ConnectionConfig, ProductionGuardError };

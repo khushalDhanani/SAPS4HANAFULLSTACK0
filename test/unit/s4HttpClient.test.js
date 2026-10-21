@@ -28,7 +28,7 @@ function makeClient(overrides = {}) {
     const client = new S4HttpClient({
         getDestination,
         executeHttpRequest,
-        env: overrides.env || {},
+        env: { S4_DESTINATION_NAME: 'S4HANA_PO_API', ...(overrides.env || {}) }, // the client has no built-in destination name any more
         cdsRequires: overrides.cdsRequires || (() => ({}))
     });
     return { client, executeHttpRequest, getDestination };

@@ -23,7 +23,6 @@ const SessionContext = require('./SessionContext');
  *   3. Credentials configured on a remote service in cds.env (origin only)
  */
 
-const DEFAULT_DESTINATION_NAME = 'S4HANA_PO_API';
 
 /** Remote services whose locally configured credentials may serve as the last-resort fallback. */
 const LOCAL_CREDENTIAL_SOURCES = ['MM_PUR_PO_MAINT_V2_SRV', 'C_PURCHASEORDER_FS_SRV'];
@@ -113,7 +112,7 @@ function sapMessageOf(body) {
 class S4HttpClient {
     /**
      * @param {Object} [deps]
-     * @param {string} [deps.destinationName] - Destination name (default: S4_DESTINATION_NAME or S4HANA_PO_API)
+     * @param {string} [deps.destinationName] - Destination name (default: S4_DESTINATION_NAME; none -> local S4_DESTINATION_URL configuration)
      * @param {Function} [deps.getDestination] - SDK destination lookup (tests)
      * @param {Function} [deps.executeHttpRequest] - SDK request executor (tests)
      * @param {Object} [deps.env] - Environment object (default: process.env; tests)
@@ -121,7 +120,7 @@ class S4HttpClient {
      */
     constructor({ destinationName, getDestination, executeHttpRequest, env, cdsRequires } = {}) {
         this._env = env || process.env;
-        this.destinationName = destinationName || this._env.S4_DESTINATION_NAME || DEFAULT_DESTINATION_NAME;
+        this.destinationName = destinationName || this._env.S4_DESTINATION_NAME || ''; // no built-in default: production names it, development uses S4_DESTINATION_URL
         this._customGetDestination = getDestination;
         this._customExecute = executeHttpRequest;
         this._cdsRequires = cdsRequires || (() => cds.env.requires);
@@ -178,10 +177,10 @@ class S4HttpClient {
         const userJwt = S4HttpClient.extractUserJwt(options);
 
         try {
-            const dest = await this._getDestination({
+            const dest = this.destinationName ? await this._getDestination({
                 destinationName: this.destinationName,
                 ...(userJwt ? { userJwt } : {})
-            });
+            }) : null;
             if (dest && dest.url) return dest;
         } catch (_) {
             // No Destination service binding and no registered destination: use local configuration.
@@ -406,6 +405,5 @@ module.exports = {
     serviceRootOf,
     joinQuery,
     DESTINATION_NOT_CONFIGURED,
-    DEFAULT_DESTINATION_NAME,
     LOCAL_CREDENTIAL_SOURCES
 };
