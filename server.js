@@ -15,7 +15,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
 }
 
 require('./srv/common/wmMismatchOverrideGuard').assertMismatchOverrideAllowed();
-require('./srv/common/productionGuard').assertDevFlagsOff();
+require('./srv/common/productionGuard').assertDevFlagsOff(process.env, cds.env.requires && cds.env.requires.auth);
 
 
 // Register local development S4_USERNAME in mock auth users if running in development

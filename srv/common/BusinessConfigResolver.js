@@ -34,6 +34,8 @@ try {
   cds = null;
 }
 
+const { sapKey } = require('../integration/s4hana/sapKey');
+
 class BusinessConfigError extends Error {
   constructor(message) {
     super(message);
@@ -127,11 +129,11 @@ class BusinessConfigResolver {
    * Generates a per-key cache identifier.
    * @private
    */
-  _getCacheKey(plant, warehouse, fields) {
+  _getCacheKey(plant, warehouse, fields, flow = '') {
     const pl = plant || '*';
     const wh = warehouse || '*';
     const f = Array.isArray(fields) && fields.length > 0 ? fields.slice().sort().join(',') : 'ALL';
-    return `${pl}|${wh}|${f}`;
+    return `${pl}|${wh}|${flow || '*'}|${f}`;
   }
 
   /**
@@ -168,8 +170,8 @@ class BusinessConfigResolver {
   }
 
   /** Returns raw cache entry for testing. */
-  getCacheEntry(plant, warehouse, fields) {
-    const key = this._getCacheKey(plant, warehouse, fields);
+  getCacheEntry(plant, warehouse, fields, flow = '') {
+    const key = this._getCacheKey(plant, warehouse, fields, flow);
     return this._cache.get(key) || null;
   }
 
@@ -196,6 +198,9 @@ class BusinessConfigResolver {
       const plant = context.plant;
       const sLoc = context.storageLocation;
       const wh = context.warehouse;
+      // Read failures are not silent: they are reported in the final error when a field stays unresolved.
+      const sapReadErrors = [];
+      const readFailed = (table, e) => sapReadErrors.push(`${table}: ${e && e.message ? e.message : e}`);
 
       // 1. T001L: Storage Location in Plant (gives VKORG, VTWEG, SPART)
       if (plant && sLoc) {
@@ -209,7 +214,21 @@ class BusinessConfigResolver {
             if (t001l[0].VTWEG && t001l[0].VTWEG.trim()) result.distributionChannel = t001l[0].VTWEG.trim();
             if (t001l[0].SPART && t001l[0].SPART.trim()) result.division = t001l[0].SPART.trim();
           }
-        } catch (_) {}
+        } catch (e) { readFailed('T001L', e); }
+      }
+
+      // 1b. T001K (valuation area = plant) -> company code, T001 -> company code currency
+      if (plant) {
+        try {
+          const t001k = await rfc.readTable('T001K', ['BWKEY', 'BUKRS'], [`BWKEY = '${plant}'`], 1);
+          const bukrs = String(t001k?.[0]?.BUKRS || '').trim();
+          if (bukrs) {
+            result.companyCode = bukrs;
+            const t001 = await rfc.readTable('T001', ['BUKRS', 'WAERS'], [`BUKRS = '${bukrs}'`], 1);
+            const waers = String(t001?.[0]?.WAERS || '').trim();
+            if (waers) result.currency = waers;
+          }
+        } catch (e) { readFailed('T001K/T001', e); }
       }
 
       // 2. T320: Warehouse assignment
@@ -223,14 +242,14 @@ class BusinessConfigResolver {
             result.warehouseNumber = t320[0].LGNUM.trim();
             result.warehouse = result.warehouseNumber;
           }
-        } catch (_) {}
+        } catch (e) { readFailed('T320', e); }
       } else if (wh && !plant) {
         try {
           const t320 = await rfc.readTable('T320', ['WERKS'], [`LGNUM = '${wh}'`]);
           if (t320 && t320[0] && t320[0].WERKS) {
             result.plant = t320[0].WERKS.trim();
           }
-        } catch (_) {}
+        } catch (e) { readFailed('T320', e); }
       }
 
       // 3. TVSTZ: Plant to Shipping Point assignment
@@ -245,9 +264,10 @@ class BusinessConfigResolver {
               result.shippingPoints = points;
             }
           }
-        } catch (_) {}
+        } catch (e) { readFailed('TVSTZ', e); }
       }
 
+      if (sapReadErrors.length) result.sapReadErrors = sapReadErrors;
       return Object.keys(result).length > 0 ? result : null;
     }
 
@@ -329,9 +349,17 @@ class BusinessConfigResolver {
    * @throws {BusinessConfigError} if a required field cannot be resolved
    */
   async resolve(context = {}) {
-    const warehouse = String(context.warehouse || context.warehouseNumber || context.lgnum || '').trim();
-    const plant = String(context.plant || context.werks || '').trim();
-    const storageLocation = String(context.storageLocation || context.lgort || '').trim();
+    // Keys are validated before they are used in any SAP WHERE text or cache key; an invalid key fails closed.
+    const keyOf = (value, field, label) => {
+      const v = String(value || '').trim();
+      if (!v) return '';
+      try { return sapKey(v, field); } catch (e) {
+        throw new BusinessConfigError(`BusinessConfigResolver rejected ${label} '${v.slice(0, 20)}': ${e.message}`);
+      }
+    };
+    const warehouse = keyOf(context.warehouse || context.warehouseNumber || context.lgnum, 'lgnum', 'warehouse');
+    const plant = keyOf(context.plant || context.werks, 'plant', 'plant');
+    const storageLocation = keyOf(context.storageLocation || context.lgort, 'lgort', 'storage location');
 
     const flow = context.flow ? String(context.flow).toLowerCase().trim() : '';
     const requiredFields = Array.isArray(context.fields) && context.fields.length > 0
@@ -412,7 +440,7 @@ class BusinessConfigResolver {
     }
 
     // ─── Step 2: Per-Key TTL Cache Check ─────────────────────────────────────
-    const cacheKey = this._getCacheKey(plant, warehouse, requiredFields);
+    const cacheKey = this._getCacheKey(plant, warehouse, requiredFields, flow);
     const hasOverrides = Object.keys(overrides).length > 0;
 
     if (!hasOverrides && this._ttlMs > 0) {
@@ -423,6 +451,7 @@ class BusinessConfigResolver {
     }
 
     // ─── Step 3: SAP Customizing ──────────────────────────────────────────────
+    let sapReadErrors = [];
     if (missing.length > 0) {
       const sapData = await this._querySapCustomizing({
         plant,
@@ -433,6 +462,8 @@ class BusinessConfigResolver {
       });
 
       if (sapData) {
+        if (Array.isArray(sapData.sapReadErrors)) sapReadErrors = sapData.sapReadErrors;
+        if (sapData.companyCode && result.companyCode === undefined) result.companyCode = sapData.companyCode;
         if (sapData.salesOrganization && result.salesOrganization === undefined) result.salesOrganization = sapData.salesOrganization;
         if (sapData.salesOrg && result.salesOrganization === undefined) result.salesOrganization = sapData.salesOrg;
         if (sapData.distributionChannel && result.distributionChannel === undefined) result.distributionChannel = sapData.distributionChannel;
@@ -467,6 +498,14 @@ class BusinessConfigResolver {
       }
 
       missing = requiredFields.filter(f => result[f] === undefined);
+    }
+
+    // Fail closed: without a plant or warehouse there is no key to look anything up by.
+    if (!(result.plant || plant) && !(result.warehouse || warehouse)) {
+      throw new BusinessConfigError(
+        `BusinessConfigResolver cannot resolve [${missing.join(', ')}]: neither plant nor warehouse could be determined` +
+        (sapReadErrors.length ? ` (SAP reads failed: ${sapReadErrors.join('; ')})` : '') + '.'
+      );
     }
 
     // ─── Step 4: Admin Config Table (BusinessConfig) ──────────────────────────
@@ -513,7 +552,8 @@ class BusinessConfigResolver {
       const loc = `Plant=${result.plant || plant || '(none)'}, Warehouse=${result.warehouse || warehouse || '(none)'}, StorageLocation=${storageLocation || '(none)'}`;
       throw new BusinessConfigError(
         `BusinessConfigResolver could not resolve required business config fields [${missing.join(', ')}] for ${loc}. ` +
-        `Maintain the values in SAP customizing or via the BusinessConfig admin table.`
+        `Maintain the values in SAP customizing or via the BusinessConfig admin table.` +
+        (sapReadErrors.length ? ` SAP reads failed: ${sapReadErrors.join('; ')}.` : '')
       );
     }
 

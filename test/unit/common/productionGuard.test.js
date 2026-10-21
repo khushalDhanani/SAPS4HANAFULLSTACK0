@@ -25,6 +25,16 @@ describe('Unit: productionGuard — assertDevFlagsOff()', () => {
     });
   });
 
+  describe('Production: mocked authentication is refused (Q4 guard)', () => {
+    test.each(['mocked', 'dummy', 'basic'])('throws when NODE_ENV=production and auth.kind=%s', (kind) => {
+      expect(() => assertDevFlagsOff({ NODE_ENV: 'production' }, { kind })).toThrow(/Authentication kind '.*' is not allowed in production/);
+    });
+    test('passes with xsuaa in production and ignores mocked auth outside production', () => {
+      expect(() => assertDevFlagsOff({ NODE_ENV: 'production' }, { kind: 'xsuaa' })).not.toThrow();
+      expect(() => assertDevFlagsOff({ NODE_ENV: 'development' }, { kind: 'mocked' })).not.toThrow();
+    });
+  });
+
   // ─── Production: clean env passes ───────────────────────────────────────
 
   describe('Production with clean env — passes', () => {

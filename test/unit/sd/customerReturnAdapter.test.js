@@ -9,13 +9,21 @@ const {
 describe('Unit: CustomerReturnAdapter', () => {
   let adapter;
   let mockHttpClient;
+  let mockRfc;
 
   beforeEach(() => {
     mockHttpClient = {
       get: jest.fn(),
       post: jest.fn()
     };
-    adapter = new CustomerReturnAdapter({ client: mockHttpClient });
+    mockRfc = {
+      readTable: jest.fn(async (table, fields, where) => {
+        if (table === 'KNVV') return [{ VKORG: '1000', VTWEG: '14', SPART: '00', LOEVM: '' }, { VKORG: '1000', VTWEG: '10', SPART: '52', LOEVM: '' }];
+        if (table === 'T001W') return String(where).includes("'1110'") ? [{ WERKS: '1110' }] : [];
+        return [];
+      })
+    };
+    adapter = new CustomerReturnAdapter({ client: mockHttpClient, rfcClient: mockRfc });
   });
 
   afterEach(() => {
@@ -385,11 +393,31 @@ describe('Unit: CustomerReturnAdapter', () => {
       ['OrderQuantity', { Items: [{ Material: 'M1', OrderQuantityUnit: 'KG', ProductionPlant: '1110' }] }, 'Order quantity for item M1'],
       ['OrderQuantityUnit', { Items: [{ Material: 'M1', OrderQuantity: 1, ProductionPlant: '1110' }] }, 'Order quantity unit for item M1'],
       ['Currency with a price', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110', UnitPrice: '5' }] }, 'Currency for the unit price of item M1'],
-      ['SalesOrganization', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }], DistributionChannel: '10', OrganizationDivision: '52' }, 'Sales organization'],
-      ['DistributionChannel', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }], SalesOrganization: '1000', OrganizationDivision: '52' }, 'Distribution channel'],
-      ['Division', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }], SalesOrganization: '1000', DistributionChannel: '10' }, 'Division']
+      ['SalesOrganization (partial sales area)', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }], DistributionChannel: '10', OrganizationDivision: '52' }, 'given together'],
+      ['DistributionChannel (partial sales area)', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }], SalesOrganization: '1000', OrganizationDivision: '52' }, 'given together'],
+      ['Division (partial sales area)', { Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }], SalesOrganization: '1000', DistributionChannel: '10' }, 'given together']
     ])('rejects a missing %s with 400 instead of assuming a default; nothing is posted', async (_what, extra, text) => {
       await expect(adapter.createCustomerReturn({ SoldToParty: '10082', ReturnsOrderReason: '101', ...extra })).rejects.toMatchObject({ code: 400, message: expect.stringContaining(text) });
+      expect(mockHttpClient.post).not.toHaveBeenCalled();
+    });
+
+    test('sales area comes from KNVV: a single maintained area is used without any request values', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => (table === 'KNVV' ? [{ VKORG: '1000', VTWEG: '14', SPART: '00', LOEVM: '' }] : table === 'T001W' ? [{ WERKS: '1110' }] : []));
+      mockHttpClient.post.mockResolvedValueOnce({ data: { d: { SalesOrderID: '4500100', SalesOrderTypeCode: 'ZRET', DocumentCurrency: 'INR' } } });
+      mockHttpClient.get.mockResolvedValueOnce({ data: { d: { CustomerReturn: '4500100', TransactionCurrency: 'INR' } } });
+      await adapter.createCustomerReturn({ SoldToParty: '1120', ReturnsOrderReason: '101', Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }] });
+      expect(mockHttpClient.post.mock.calls[0][1].data).toMatchObject({ SalesOrganization: '1000', DistributionChannel: '14', Division: '00' });
+    });
+
+    test('a requested sales area that KNVV does not hold for the customer is rejected with 400; nothing is posted', async () => {
+      await expect(adapter.createCustomerReturn({ SoldToParty: '10082', ReturnsOrderReason: '101', SalesOrganization: '2000', DistributionChannel: '10', OrganizationDivision: '52', Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }] }))
+        .rejects.toMatchObject({ code: 400, message: expect.stringContaining('not maintained for customer 10082') });
+      expect(mockHttpClient.post).not.toHaveBeenCalled();
+    });
+
+    test('a plant unknown to SAP (T001W) is rejected with 400; nothing is posted', async () => {
+      await expect(adapter.createCustomerReturn({ SoldToParty: '10082', ReturnsOrderReason: '101', Items: [{ Material: 'M1', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '9999' }] }))
+        .rejects.toMatchObject({ code: 400, message: expect.stringContaining('Plant 9999 does not exist in SAP (T001W)') });
       expect(mockHttpClient.post).not.toHaveBeenCalled();
     });
 

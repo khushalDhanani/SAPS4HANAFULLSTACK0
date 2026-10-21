@@ -465,6 +465,58 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
     });
   });
 
+  describe('Phase 2 step 2: T001K/T001 company code and currency, validated keys, flow-aware cache key', () => {
+    const sapRfc = (overrides = {}) => ({
+      readTable: jest.fn(async (table, fields, where) => {
+        if (overrides[table]) return overrides[table](where);
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }];
+        if (table === 'T001') return [{ BUKRS: '1000', WAERS: 'INR' }];
+        if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'CS02', VKORG: '1000', VTWEG: '14', SPART: '00' }];
+        if (table === 'TVSTZ') return [{ WERKS: '1120', VSTEL: '1112' }];
+        return [];
+      })
+    });
+
+    test('company code (T001K) and its currency (T001) are read from SAP before the admin table', async () => {
+      const db = jest.fn(async () => ({ Plant: '1120', WarehouseNumber: 'W01', Currency: 'EUR' })); // admin row must NOT win over SAP
+      const resolver = new BusinessConfigResolver({ rfc: sapRfc(), dbQuery: db, ttlMs: 0 });
+      const res = await resolver.resolve({ plant: '1120', warehouse: 'W01', storageLocation: 'CS02', fields: ['currency', 'salesOrganization'] });
+      expect(res).toMatchObject({ companyCode: '1000', currency: 'INR', salesOrganization: '1000' });
+    });
+
+    test('an invalid plant key fails closed before any SAP read or DB query', async () => {
+      const rfc = sapRfc(); const db = jest.fn();
+      const resolver = new BusinessConfigResolver({ rfc, dbQuery: db, ttlMs: 0 });
+      await expect(resolver.resolve({ plant: "1120' OR WERKS <> '", fields: ['currency'] })).rejects.toThrow(/rejected plant/);
+      expect(rfc.readTable).not.toHaveBeenCalled();
+      expect(db).not.toHaveBeenCalled();
+    });
+
+    test('neither plant nor warehouse -> specific error, no unfiltered admin lookup', async () => {
+      const db = jest.fn(async () => ({ Plant: '', WarehouseNumber: '', Currency: 'INR' }));
+      const resolver = new BusinessConfigResolver({ dbQuery: db, ttlMs: 0 });
+      await expect(resolver.resolve({ fields: ['currency'] })).rejects.toThrow(/neither plant nor warehouse/);
+      expect(db).not.toHaveBeenCalled();
+    });
+
+    test('SAP read failures are named in the final error instead of being swallowed', async () => {
+      const rfc = sapRfc({ T001K: () => { throw new Error('RFC_COMMUNICATION_FAILURE'); }, T001L: () => [] });
+      const resolver = new BusinessConfigResolver({ rfc, dbQuery: async () => null, ttlMs: 0 });
+      await expect(resolver.resolve({ plant: '1120', storageLocation: 'CS02', fields: ['currency'] })).rejects.toThrow(/T001K\/T001: RFC_COMMUNICATION_FAILURE/);
+    });
+
+    test('cache key includes the flow: same plant/warehouse resolved for two flows are two entries', async () => {
+      const db = jest.fn(async () => ({ Plant: '1120', WarehouseNumber: 'W01', SalesOrganization: '1000', DistributionChannel: '14', Division: '00', Mvt261NotReadyBinsJson: '[]' }));
+      const resolver = new BusinessConfigResolver({ dbQuery: db, ttlMs: 60000 });
+      await resolver.resolve({ plant: '1120', warehouse: 'W01', flow: 'delivery-no-ref' });
+      await resolver.resolve({ plant: '1120', warehouse: 'W01', flow: '261' });
+      expect(resolver.getCacheSize()).toBe(2);
+      expect(resolver.getCacheEntry('1120', 'W01', resolver.FLOW_REQUIRED_FIELDS['261'], '261')).toBeTruthy();
+      await resolver.resolve({ plant: '1120', warehouse: 'W01', flow: '261' }); // served from cache
+      expect(db).toHaveBeenCalledTimes(2);
+    });
+  });
+
   // ─── Unresolved case & strict fail-closed errors ──────────────────────────
 
   describe('Unresolved case: strict fail-closed and no fallback to defaults', () => {

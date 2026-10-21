@@ -2,6 +2,9 @@ const LOG = require('../../../../common/logger')('customer-return-adapter');
 const { S4HttpClient } = require('../../S4HttpClient');
 const { odataString } = require('../../../../common/filterUtils');
 const { mapS4Error } = require('../../S4ErrorMapper');
+const { RfcClient } = require('../../RfcClient');
+const { sapKey } = require('../../sapKey');
+const { resolveCustomerSalesArea } = require('../customerSalesArea');
 
 const SERVICE_PATH = '/sap/opu/odata/sap/SD_F2651_CRT_CREATE_SRV';
 const TRANSACTIONAL_SERVICE_PATH = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
@@ -142,6 +145,7 @@ function _formatReturnItemRow(row) {
 class CustomerReturnAdapter {
   constructor(client) {
     this.client = client?.client || client || new S4HttpClient();
+    this.rfc = client?.rfcClient || new RfcClient(); // READ-ONLY master data (KNVV, T001W)
   }
 
   /**
@@ -490,12 +494,29 @@ class CustomerReturnAdapter {
       throw err;
     }
 
+    // Plants must exist in SAP (T001W); the sales area must be one maintained for the customer (KNVV). Read-only.
+    for (const plant of new Set(deepItems.map((it) => it.Plant))) {
+      let t001w;
+      try {
+        t001w = await this.rfc.readTable('T001W', ['WERKS'], [`WERKS = '${sapKey(plant, 'plant', 'Plant')}'`], 1);
+      } catch (e) {
+        if (e.status === 400) throw Object.assign(e, { code: 400 });
+        throw Object.assign(new Error(`Plant ${plant} could not be verified in SAP (T001W): ${e.message}`), { status: 502, code: 502, cause: e });
+      }
+      if (!t001w || !t001w.length) { const e = new Error(`Plant ${plant} does not exist in SAP (T001W)`); e.status = 400; e.code = 400; throw e; }
+    }
+    const salesArea = await resolveCustomerSalesArea(this.rfc, payload.SoldToParty, {
+      salesOrganization: payload.SalesOrganization,
+      distributionChannel: payload.DistributionChannel,
+      division: payload.OrganizationDivision
+    });
+
     // 2. Assemble Deep Insert Payload for Lean Order Framework
     const deepPayload = {
       SalesOrderTypeCode: returnType,
-      SalesOrganization: String(payload.SalesOrganization || '').trim() || missing('Sales organization'),
-      DistributionChannel: String(payload.DistributionChannel || '').trim() || missing('Distribution channel'),
-      Division: String(payload.OrganizationDivision || '').trim() || missing('Division'),
+      SalesOrganization: salesArea.salesOrganization,
+      DistributionChannel: salesArea.distributionChannel,
+      Division: salesArea.division,
       SoldToPartyID: String(payload.SoldToParty).trim(),
       PurchaseOrderNumber: payload.PurchaseOrderByCustomer
         ? String(payload.PurchaseOrderByCustomer).trim()

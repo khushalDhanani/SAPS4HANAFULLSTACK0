@@ -10,6 +10,7 @@
  *   ENABLE_DEV_TOKEN_ISSUER  – local JWT issuer, must be absent / 'false' in prod
  *   LOCAL_AUTH_SECRET        – JWT signing secret for local dev, must be absent in prod
  *   WM_ALLOW_MISMATCHED_TR   – sandbox-only WM override (also checked in wmMismatchOverrideGuard)
+ *   auth.kind                – mocked/dummy/basic authentication (dev profile) must not reach production
  */
 
 class ProductionGuardError extends Error {
@@ -23,12 +24,22 @@ class ProductionGuardError extends Error {
  * Asserts that no development-only flags are active when NODE_ENV=production.
  *
  * @param {NodeJS.ProcessEnv} [env] - defaults to process.env; injectable for tests
+ * @param {{kind?: string}} [auth] - the effective cds.requires.auth config (optional)
  * @throws {ProductionGuardError} if a dev flag is found active in production
  */
-function assertDevFlagsOff(env = process.env) {
+function assertDevFlagsOff(env = process.env, auth) {
   if (String(env.NODE_ENV || '').trim().toLowerCase() !== 'production') return;
 
   const violations = [];
+
+  // Mocked users (with their Plant attributes) live under the [development] profile only; XSUAA is the production source.
+  const authKind = String((auth && auth.kind) || '').trim().toLowerCase();
+  if (authKind === 'mocked' || authKind === 'dummy' || authKind === 'basic') {
+    violations.push(
+      `Authentication kind '${authKind}' is not allowed in production. ` +
+      'Mocked users and their Plant attributes are a [development] profile convenience; bind XSUAA in deployed environments.'
+    );
+  }
 
   if (String(env.ENABLE_DEV_TOKEN_ISSUER || '').trim().toLowerCase() === 'true') {
     violations.push(
