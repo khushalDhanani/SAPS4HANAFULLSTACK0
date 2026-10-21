@@ -1445,10 +1445,10 @@ class TrToAdapter {
     }
 
     // 3. MATDOC (via MBLNR)
-    if ((!receivingStorageLocation || !receivingPlant) && tr.Mblnr && String(tr.Mblnr).trim() !== '' && this.rfc) {
+    if ((!receivingStorageLocation || !receivingPlant) && tr.Mblnr && String(tr.Mblnr).trim() !== '' && String(tr.Mjahr || '').trim() !== '' && this.rfc) {
       try {
         const mblnr = String(tr.Mblnr).trim();
-        const mjahr = String(tr.Mjahr || '2026').trim();
+        const mjahr = String(tr.Mjahr).trim(); // from the TR header; never a guessed year
         const matdocRows = await this._rfc(
           () => this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'WERKS', 'LGORT', 'UMWRK', 'UMLGO'], [
             `MBLNR = '${mblnr}'`,
@@ -1501,6 +1501,10 @@ class TrToAdapter {
       TRItem: item ? item.Tbpos : '',
       WarehouseNumber: wh,
       MovementType: tr.Bwlvs || '',
+      // TR created by an already posted IM document (header MBLNR): the goods movement is done, the TO only moves stock to the interim bin.
+      MaterialDocument: tr.Mblnr && String(tr.Mblnr).trim() ? alphaOut(tr.Mblnr) : '',
+      MaterialDocYear: String(tr.Mjahr || '').trim(),
+      GoodsMovementPosted: Boolean(tr.Mblnr && String(tr.Mblnr).trim()),
       RequirementType: tr.Betyp || '',
       RequirementNumber: alphaOut(tr.Benum) || '',
       ReservationNo: (tr.Rsnum && tr.Rsnum !== '0000000000') ? alphaOut(tr.Rsnum) : (trackedReservation ? alphaOut(trackedReservation.ReservationNo) : ''),
@@ -1966,7 +1970,11 @@ class TrToAdapter {
     }
 
     // Validation of Receiving Storage Location & Receiving Plant
-    if (finalRecSLoc) {
+    // Receiving plant / storage location only matter for the IM posting that follows the TO. A TR that SAP created from an
+    // already posted material document (header MBLNR) needs no posting: SAP's own document (e.g. 4900047610: 301 inside
+    // plant 1130, HS01 -> MT01) is not re-validated or re-posted here.
+    const goodsMovementPosted = Boolean(tr.Mblnr && String(tr.Mblnr).trim());
+    if (finalRecSLoc && !goodsMovementPosted) {
       finalRecSLoc = sapKey(finalRecSLoc, 'lgort', 'Receiving Storage Location');
       if (tr.Bwlvs === '311' && finalRecSLoc === item.StorageLocation) {
         throw httpError(400, 'Receiving Storage Location must be different from Issuing Storage Location');
@@ -2002,7 +2010,7 @@ class TrToAdapter {
       }
     }
 
-    if (finalRecPlant) {
+    if (finalRecPlant && !goodsMovementPosted) {
       finalRecPlant = sapKey(finalRecPlant, 'plant', 'Receiving Plant');
       if (tr.Bwlvs === '301' && finalRecPlant === item.Plant) {
         throw httpError(400, 'Receiving Plant must be different from Issuing Plant for Movement Type 301 (Plant to Plant Transfer)');
@@ -2265,6 +2273,10 @@ class TrToAdapter {
         ReservationItem: effFinalResItem,
         ReservationMovementType: effResMvt,
         MovementType: tr.Bwlvs || '',
+        // TR created by an already posted IM document (header MBLNR): the goods movement is done, the TO only moves stock to the interim bin.
+        MaterialDocument: tr.Mblnr && String(tr.Mblnr).trim() ? alphaOut(tr.Mblnr) : '',
+        MaterialDocYear: String(tr.Mjahr || '').trim(),
+        GoodsMovementPosted: Boolean(tr.Mblnr && String(tr.Mblnr).trim()),
         CostCenter: finalCostCenter,
         AssetNo: finalAssetNo,
         SubNumber: finalSubNumber,
@@ -2308,6 +2320,10 @@ class TrToAdapter {
       ReservationItem: effFinalResItem,
       ReservationMovementType: effResMvt,
       MovementType: tr.Bwlvs || '',
+      // TR created by an already posted IM document (header MBLNR): the goods movement is done, the TO only moves stock to the interim bin.
+      MaterialDocument: tr.Mblnr && String(tr.Mblnr).trim() ? alphaOut(tr.Mblnr) : '',
+      MaterialDocYear: String(tr.Mjahr || '').trim(),
+      GoodsMovementPosted: Boolean(tr.Mblnr && String(tr.Mblnr).trim()),
       CostCenter: finalCostCenter,
       AssetNo: finalAssetNo,
       SubNumber: finalSubNumber,

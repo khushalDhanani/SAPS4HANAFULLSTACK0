@@ -1248,3 +1248,31 @@ describe('_findTrackedReservationForTR: the warehouse is part of the key (TR num
     expect(cds.db.run).not.toHaveBeenCalled();
   });
 });
+
+describe('TR created by an already posted material document (header MBLNR): no second goods movement', () => {
+  // Live facts (READ-ONLY, 2026-10-21): W12 TR 0001000891 = BWLVS 301, MBLNR 4900047610/2026, both MATDOC lines inside plant 1130 (HS01 -> MT01).
+  const header = { LGNUM: 'W12', TBNUM: '0001000891', BWLVS: '301', BWART: '301', STATU: '', NLTYP: '920', NLPLA: 'TRANSFER', MBLNR: '4900047610', MJAHR: '2026', RSNUM: '0000000000' };
+  const items = [{ LGNUM: 'W12', TBNUM: '0001000891', TBPOS: '0001', MATNR: '000000008000000244', WERKS: '1130', LGORT: 'HS01', MENGE: '23.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: '' }];
+  const matdoc = [{ MBLNR: '4900047610', MJAHR: '2026', ZEILE: '0001', BWART: '301', WERKS: '1130', LGORT: 'HS01', UMWRK: '1130', UMLGO: 'MT01' }];
+  const rfcFor = (toCreate) => ({
+    call: jest.fn(async (fm) => {
+      if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') return { ET_TR_HEADER: [header], ET_TR_ITEMS: items };
+      if (fm === 'Z_WM_TO_CREATE_FROM_TR') return toCreate();
+      throw new Error(`unexpected FM ${fm}`);
+    }),
+    readTable: jest.fn(async (table) => (table === 'MATDOC' ? matdoc : []))
+  });
+
+  it('lookupTR exposes GoodsMovementPosted and the material document, with the TR warehouse and WM movement', async () => {
+    const res = await new TrToAdapter({ rfc: rfcFor(() => ({})) }).lookupTR('0001000891', 'W12', 'TR');
+    expect(res).toMatchObject({ WarehouseNumber: 'W12', MovementType: '301', GoodsMovementPosted: true, MaterialDocument: '4900047610', MaterialDocYear: '2026', ReceivingPlant: '1130', ReservationNo: '' });
+  });
+
+  it('createTOFromTR no longer rejects "Receiving Plant must be different" for such a TR (SAP already posted it inside one plant)', async () => {
+    const rfc = rfcFor(() => { throw new Error('TO create reached (mocked)'); });
+    // The receiving-plant rule sits before the SAP authorization check; reaching the (unmocked) AUTHORITY_CHECK proves it no longer fires.
+    await expect(new TrToAdapter({ rfc }).createTOFromTR({ lgnum: 'W12', tbnum: '1000891', tbpos: '0001', qty: 1, unit: 'NOS', receivingPlant: '1130', receivingStorageLocation: 'MT01' }))
+      .rejects.toThrow(/Authorization check L_BWLVS/);
+    expect(rfc.readTable).not.toHaveBeenCalledWith('T001L', expect.anything(), expect.anything(), expect.anything());
+  });
+});

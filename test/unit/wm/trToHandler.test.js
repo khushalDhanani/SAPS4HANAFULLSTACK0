@@ -233,4 +233,15 @@ describe('TrToHandler', () => {
       );
     });
   });
+
+  it('createTOFromTR does not auto-post MIGO when the TR was created by an already posted material document', async () => {
+    const postGoodsMovement = jest.fn();
+    const h = {};
+    const a = { createTOFromTR: jest.fn().mockResolvedValue({ success: true, Confirmed: true, TransferOrder: '0001037400', MovementType: '301', GoodsMovementPosted: true, MaterialDocument: '4900047610', Message: 'Transfer Order 0001037400 confirmed.' }) };
+    TrToHandler.init({ on: (e, fn) => { h[e] = fn; } }, { adapter: a, resProcessAdapter: { checkAuthorization: jest.fn(), postGoodsMovement } });
+    const result = await h.createTOFromTR(req({ lgnum: 'W12', tbnum: '1000891', autoConfirm: true, autoPostMigo: true }));
+    expect(postGoodsMovement).not.toHaveBeenCalled();
+    expect(result.MigoSkipped).toBe(true);
+    expect(result.Message).toContain('material document 4900047610');
+  });
 });

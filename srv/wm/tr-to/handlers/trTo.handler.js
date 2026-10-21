@@ -119,12 +119,19 @@ class TrToHandler {
       // Resilient destination/account resolution from TO (LTAK -> LTAP -> RESB/RKPF) if missing on untracked records
       if (sTanum && resProcessAdapter.rfc) {
         try {
-          const ltakRows = await resProcessAdapter.rfc.readTable('LTAK', ['TBNUM', 'RSNUM', 'BWLVS', 'KQUIT'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
+          const ltakRows = await resProcessAdapter.rfc.readTable('LTAK', ['LGNUM', 'TBNUM', 'RSNUM', 'BWLVS', 'KQUIT'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
           if (ltakRows?.[0]) {
             if (ltakRows[0].KQUIT !== undefined && ltakRows[0].KQUIT !== null && ltakRows[0].KQUIT.trim() === '') {
               throw httpError(400, `Transfer Order ${sTanum} is not confirmed in SAP (LTAK-KQUIT is blank). TO must be confirmed before posting MIGO goods movement.`);
             }
             const tbnum = ltakRows[0].TBNUM?.trim();
+            // Never post a second goods movement for a TR that SAP created from an already posted material document.
+            if (tbnum && ltakRows[0].LGNUM?.trim() && typeof adapter.getTR === 'function') {
+              const trHeader = await adapter.getTR(tbnum, ltakRows[0].LGNUM.trim()).catch(() => null);
+              if (trHeader?.Mblnr && String(trHeader.Mblnr).trim()) {
+                throw httpError(409, `Transfer Requirement ${tbnum} was created by material document ${String(trHeader.Mblnr).trim()}: the goods movement is already posted in SAP; MIGO is not allowed.`);
+              }
+            }
             const rsnumRaw = ltakRows[0].RSNUM?.trim();
             const rsnum = rsnumRaw ? sapKey(rsnumRaw, 'rsnum').padStart(10, '0') : '';
             if (!sMvt && ltakRows[0].BWLVS?.trim()) sMvt = ltakRows[0].BWLVS.trim();
@@ -518,8 +525,13 @@ class TrToHandler {
           }
         }
 
+        // A TR created by an already posted material document needs no MIGO: posting again would move the stock twice.
+        if (result.GoodsMovementPosted && data.autoPostMigo && result.Confirmed && result.success !== false) {
+          result.MigoSkipped = true;
+          result.Message = `${result.Message ? result.Message + ' ' : ''}Goods movement already posted in SAP as material document ${result.MaterialDocument}; no MIGO posted.`;
+        }
         // Auto-trigger MIGO only if both autoConfirm and autoPostMigo are on and the TO is confirmed successfully
-        if (data.autoConfirm !== false && data.autoPostMigo && result.Confirmed && result.success !== false) {
+        if (data.autoConfirm !== false && data.autoPostMigo && result.Confirmed && result.success !== false && !result.GoodsMovementPosted) {
           try {
             const confirmedQty = Number(result.ConfirmedQuantity != null && result.ConfirmedQuantity > 0 ? result.ConfirmedQuantity : result.Quantity);
             const effMvt = result.ReservationMovementType || data.ReservationMovementType || data.reservationMovementType || existing?.MovementType || result.MovementType || data.MovementType || data.movementType;

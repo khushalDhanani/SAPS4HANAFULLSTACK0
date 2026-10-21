@@ -25,6 +25,7 @@
                 <Switch
                     id="switchAutoMigo"
                     state="{scanView>/autoPostMigo}"
+                    enabled="{= !${scanView>/goodsMovementPosted} }"
                     customTextOn="{i18n>commonYes}"
                     customTextOff="{i18n>commonNo}"
                     change=".onAutoMigoChange"
@@ -385,10 +386,17 @@
                 </Panel>
 
                 <!-- SECTION: TRANSFER DESTINATION / ACCOUNT ASSIGNMENT -->
+                <MessageStrip
+                    id="stripGoodsMovementPosted"
+                    type="Information"
+                    showIcon="true"
+                    visible="{= ${scanView>/hasTR} &amp;&amp; ${scanView>/goodsMovementPosted} === true }"
+                    text="{scanView>/goodsMovementPostedText}"
+                    class="sapUiSmallMarginBottom" />
                 <Panel
                     id="panelDestination"
                     headerText="{= (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '301' ? ${i18n>scanToPanelDestination301} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '311' ? ${i18n>scanToPanelDestination311} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '201' ? ${i18n>scanToPanelAccount201} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '241' ? ${i18n>scanToPanelAccount241} : ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '261' ? ${i18n>scanToPanelAccount261} : ${i18n>scanToPanelDestinationTitle})))) }"
-                    visible="{= ${scanView>/hasTR} &amp;&amp; ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '301' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '311' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '201' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '241' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '261') }"
+                    visible="{= ${scanView>/hasTR} &amp;&amp; !${scanView>/goodsMovementPosted} &amp;&amp; ((${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '301' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '311' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '201' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '241' || (${scanView>/effectiveMovementType} || ${scanView>/tr/MovementType}) === '261') }"
                     expandable="false"
                     expanded="true"
                     class="sapUiSmallMarginBottom">

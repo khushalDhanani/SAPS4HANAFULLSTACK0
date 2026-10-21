@@ -172,6 +172,9 @@ sap.ui.define([
             oModel.setProperty("/result", null);
             oModel.setProperty("/resultMessage", "");
             oModel.setProperty("/receivingPlant", "");
+            oModel.setProperty("/goodsMovementPosted", false);
+            oModel.setProperty("/postedMaterialDocument", "");
+            oModel.setProperty("/goodsMovementPostedText", "");
             oModel.setProperty("/receivingPlantSource", "");
             oModel.setProperty("/receivingStorageLocation", "");
             oModel.setProperty("/receivingStorageLocationSource", "");
@@ -312,6 +315,12 @@ sap.ui.define([
                 oModel.setProperty("/serialsCount", 0);
 
                 // Initialize destination & account assignment
+                // TR created by an already posted material document: no destination/account input, no MIGO.
+                var bPosted = Boolean(oDetail.GoodsMovementPosted);
+                oModel.setProperty("/goodsMovementPosted", bPosted);
+                oModel.setProperty("/postedMaterialDocument", oDetail.MaterialDocument || "");
+                oModel.setProperty("/goodsMovementPostedText", bPosted ? that.getText("scanToMsgGoodsMovementPosted", [oDetail.MaterialDocument || ""]) : "");
+                if (bPosted) { oModel.setProperty("/autoPostMigo", false); }
                 oModel.setProperty("/receivingPlant", oDetail.ReceivingPlant || "");
                 oModel.setProperty("/receivingPlantSource", oDetail.ReceivingPlantSource || "");
                 oModel.setProperty("/recPlantValueState", "None");
@@ -865,8 +874,10 @@ sap.ui.define([
 
             var sEffectiveMvt = (oModel.getProperty("/effectiveMovementType") || oTR.MovementType || "").trim();
 
-            // Movement 301 (Plant to Plant Transfer) requires Receiving Plant
-            if (sEffectiveMvt === "301") {
+            var bGoodsMovementPosted = oModel.getProperty("/goodsMovementPosted") === true;
+
+            // Movement 301 (Plant to Plant Transfer) requires Receiving Plant (only when a goods movement is still to be posted)
+            if (sEffectiveMvt === "301" && !bGoodsMovementPosted) {
                 var sRecPlant = (oModel.getProperty("/receivingPlant") || "").trim();
                 if (!sRecPlant) {
                     oModel.setProperty("/recPlantValueState", "Error");
@@ -889,7 +900,7 @@ sap.ui.define([
             }
 
             // Movement 311 (Storage Location Transfer) requires Receiving Storage Location
-            if (sEffectiveMvt === "311") {
+            if (sEffectiveMvt === "311" && !bGoodsMovementPosted) {
                 var sRecSLoc = (oModel.getProperty("/receivingStorageLocation") || "").trim();
                 if (!sRecSLoc) {
                     oModel.setProperty("/recSLocValueState", "Error");
@@ -1061,7 +1072,7 @@ sap.ui.define([
                 subNumber: (oModel.getProperty("/subNumber") || "").trim(),
                 orderId: (oModel.getProperty("/orderId") || "").trim(),
                 autoConfirm: bAutoConfirm,
-                autoPostMigo: bAutoPostMigo,
+                autoPostMigo: bAutoPostMigo && oModel.getProperty("/goodsMovementPosted") !== true,
                 CompleteReservation: oModel.getProperty("/completeReservation") === true,
                 storageUnit: (oModel.getProperty("/storageUnit") || oModel.getProperty("/lenum") || "").trim(),
                 ReservationMovementType: oTR.ReservationMovementType || "",
