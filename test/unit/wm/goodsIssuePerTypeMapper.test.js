@@ -38,6 +38,16 @@ describe.each([
   });
 });
 
+test.each([
+  ['201', M201, { CostCenter: '1011202902' }],
+  ['301', M301, { ReceivingPlant: '1120', ReceivingStorageLocation: 'CS01' }],
+  ['311', M311, { ReceivingStorageLocation: 'CS01' }]
+])('%s mapper puts the idempotency ReferenceDocument on the header (max 16 chars) and omits it when absent', (type, M, extra) => {
+  const data = { ...base, ...extra, Material: '1000000980' };
+  expect(M.mapToMaterialDocumentPayload({ ...data, ReferenceDocument: 'GI345678901234567890' }).ReferenceDocument).toBe('GI34567890123456');
+  expect(M.mapToMaterialDocumentPayload(data).ReferenceDocument).toBeUndefined();
+});
+
 test('serial numbers deep-insert is emitted', () => {
   const p = M201.mapToMaterialDocumentPayload({ ...base, CostCenter: 'CC1', Material: 'M1', SerialNumbers: ['SN1', 'SN2'], IssueQty: 2 });
   expect(item(p).to_SerialNumbers.results).toEqual([{ SerialNumber: 'SN1' }, { SerialNumber: 'SN2' }]);

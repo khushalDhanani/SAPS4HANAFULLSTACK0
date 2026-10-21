@@ -34,7 +34,9 @@ function mapToMaterialDocumentPayload(data) {
     headerText,
     postingDate: data.PostingDate,
     documentDate: data.DocumentDate,
-    item
+    item,
+    // Idempotency reference: the attempt store's recheck finds the document only by this header field.
+    referenceDocument: data.ReferenceDocument
   });
 }
 

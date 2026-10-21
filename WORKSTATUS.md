@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Audit fix 2 of 9 (2026-10-21 11:05 IST): 301/311 direct-post mappers now send the idempotency `ReferenceDocument` header — CODE DELIVERED, unit-tested; live re-proof BLOCKED on explicit WRITE "go" (candidate 311: reservation 529698/0001, material 8000001699, 1120 HS01→MT01, 1 NOS; candidate 301: 525864/0001, 8900000004, 1120/CS01→1110/CS01, 1 KG).**
+
 - **Audit fix 1 of 9 (2026-10-21 10:45 IST): 261 KI 248 retry no longer uses a hard-coded cost center or drops the reservation reference — DELIVERED, unit-tested; live 261 re-proof PENDING.** Remaining audit items 2-9 (301/311 reference document, MIGO idempotency, uncalled write actions, UI double-submit, sapKey on remaining WHERE texts, L9/514 recovery, test honesty, hygiene) are open; see the 10:40 audit entry.
 
 - **Reservation Entry detail 500 + CostCenterVH duplicate key — RESOLVED (2026-10-21 10:06 IST).** User swapped `db.sqlite` and ran `db-migrate-20261021-deliverynumber.sql` (`ok`, `17`). Live 4004 verified: `ReservationEntries(0000530232/0001)?$expand=Status,Logs` 200, `getReservationDetail(...)` 200, `ReservationEntries?$top=5` 200, `reservation-track/ReservationTracks?$top=5` 200, `CostCenterVH` 72 rows / 0 duplicates. Remaining housekeeping: delete the migration script, untrack `db.sqlite-shm`/`db.sqlite-wal` (`git rm --cached`), keep `.backup-db-corrupt-20261021/` until not needed. Corruption cause still UNKNOWN. Earlier detail below.
@@ -3455,6 +3457,15 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 11:05 IST — Audit fix 2: 301/311 direct goods-issue mappers send `ReferenceDocument`; live re-proof pending authorization
+
+- **Reason:** audit finding 2 (P0). `GoodsIssue301Mapper` / `GoodsIssue311Mapper` built the header without `referenceDocument`, unlike the 201 mapper (`GoodsIssue201Mapper.js:39`, live-proven). The attempt store's recheck resolves `sending`/`unconfirmed` rows only via `findPostedGoodsIssueByReference` (`GoodsIssueAttemptStore.js:440`), so a 301/311 that SAP committed but whose response was lost would be marked `not_posted` after 15 min and the UI would tell the operator to post again.
+- **Change:** `srv/integration/s4hana/wm/goods-issue/GoodsIssue301Mapper.js` and `GoodsIssue311Mapper.js`: pass `referenceDocument: data.ReferenceDocument` to `buildHeaderEnvelope` (which already trims to 16 chars and omits the field when empty, `s4common.js:104-106`). Header field `ReferenceDocument` on `A_MaterialDocumentHeader` is the same one proven live for 201. No change to the 201 path, items, or the posting client.
+- **Tests:** `test/unit/wm/goodsIssuePerTypeMapper.test.js`: new `test.each` over 201/301/311 asserting the header carries `ReferenceDocument` truncated to 16 chars and omits it when absent.
+- **Validation:** `npx jest` on goodsIssuePerTypeMapper, goodsIssueMapper, mvt301Process, mvt311Process, goodsIssuePerTypePostingClient, goodsIssueAttempt → 6 suites, 100 tests PASS; `npx jest test/unit/wm` → 87 suites passed, 1 skipped, 2242 passed, 56 skipped, 0 failed; `git diff --check` clean. `cds watch` restarted the local server (pid 15202, 10:43) with the new mappers.
+- **READ-ONLY candidate discovery for the re-proof (local CAP → live S/4, GET only):** scanned 25 open 311 and 25 open 301 reservations with item, serial flag, stock and local-track status. Untracked, non-serial, in-stock candidates: 311 → `529698/0001` (8000001699, 1120 HS01→MT01, open 100 NOS, stock 200); 301 → `525864/0001` (8900000004, 1120/CS01→1110/CS01, open 1 KG, stock 1239). Rejected: 530232/530230/530228 (tracked in the WM TR flow or stock 0), serial-managed items (need serial numbers).
+- **Not done:** the live write. Plan once authorized: `POST /odata/v4/goods-issue/postGoodsIssue311` for 529698/0001, IssueQty 1 NOS, with a `ClientAttemptId`; verify response `MaterialDocument` + `Confirmed`; READ-ONLY: SAP header lookup by `ReferenceDocument` (`findPostedByReference`) returns the document, attempt row `posted`. No 301 write unless separately authorized. **Still unknown:** none for the code. **Assumptions:** none.
 
 ### 2026-10-21 10:45 IST — Audit fix 1: remove hard-coded cost center fallback from the 261 KI 248 MIGO retry; keep reservation reference; rollback before retry
 
