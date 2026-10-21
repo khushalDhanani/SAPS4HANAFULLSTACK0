@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 // Supervised live test of ONE goods issue 261 and its reversal. WRITES TO SAP: one 261 and one cancel.
 // Usage: node tools/test-261-post-cycle.js <reservation> <item> <quantity> <expectedOpen> <expectedStock> [batch]
 //   Aborts before posting unless the item is exactly as expected. Stops at the first error; never retries.

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from live_sap_gate import require_live_sap_tool
+require_live_sap_tool()
 """Which live services expose Incoterms, and are they writable on a sales order?
 Reads $metadata (GET only) of every service that answered 200 in catalog-audit.csv and reports every
 property whose name contains 'incoterm', with its entity type and property-level creatable/updatable flags.

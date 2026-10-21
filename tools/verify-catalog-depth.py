@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from live_sap_gate import require_live_sap_tool
+require_live_sap_tool()
 """
 Depth verification for every catalogued S/4HANA service.
 

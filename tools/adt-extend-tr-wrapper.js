@@ -1,3 +1,4 @@
+require('./live-sap-gate')();
 'use strict';
 /**
  * ADT deployment of the extended TR wrappers (live 241 audit, 2026-10-19):

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from live_sap_gate import require_live_sap_tool
+require_live_sap_tool()
 """Pass 2 (read-only): source of the candidate Z objects + WM CDS views, tcode->program map,
 and live WM table samples via ADT data preview. Output: docs/wm-discovery/pass2/.
 Usage: P='USER:PASS' python3 tools/find-wm-sources-2.py"""

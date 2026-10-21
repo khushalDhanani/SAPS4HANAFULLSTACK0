@@ -438,6 +438,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       ).rejects.toThrow('Deficit of BA Unrestricted-use stock 5 EA');
 
       expect(mockRfc.call).toHaveBeenCalledWith('BAPI_TRANSACTION_ROLLBACK', {});
+      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', expect.anything());
     });
 
     test('handles L9 514 outbound delivery creation by posting PGI, committing, and confirming material document', async () => {

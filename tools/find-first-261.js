@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 // Live check of the first movement type 261 document (read-only, GET only).
 // Usage: node tools/find-first-261.js <plant> [A|B|C] [material] [productionOrder] [dateFrom] [dateTo]
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local') });

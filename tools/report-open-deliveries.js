@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 // READ-ONLY report: open outbound deliveries (LIKP/LIPS) for every reservation item that got a
 // delivery on the given day (default today). Changes nothing in SAP.
 // Usage: node tools/report-open-deliveries.js [YYYYMMDD]

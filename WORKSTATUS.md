@@ -5,6 +5,10 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Audit fix 8 of 9 (2026-10-21 11:37 IST, test honesty + hygiene): CODE DELIVERED locally.** Replaced the weak concurrency assertions with an exact one-post assertion; this first exposed four duplicate MIGO posts (two per movement) and is now protected by a same-adapter, same-`ProcessId` in-flight guard. Added no-COMMIT assertions to BAPI error paths. Blank NVIDIA key from tracked `.env.example`; moved three ignored CSVs out of `db/data`; added explicit opt-in gates to 56 live SAP/live CAP tools. Focused tests 166/166, lint, CDS compile, script syntax, gate smoke checks, and `git diff --check` passed. **External credential revocation/reissue is NOT DONE**; Git history still retains the prior committed value. No SAP calls or writes.
+
+- **Audit fix 7 of 9 (2026-10-21 11:32 IST, items 5, 7, 18): INSPECTED; CODE BLOCKED by mandatory SAP API Discovery evidence.** No implementation changes and no SAP writes. Existing source has a reservation-linked delivery lookup pattern, and `createTransferOrderFromTR` already checks for unconfirmed TO items; successful `confirmTransferOrder` still lacks a confirmation read-back. A READ-ONLY RFC metadata request for `BAPI_TRANSACTION_COMMIT`, `L_TO_CONFIRM`, and LIKP/LIPS field interfaces failed with `RFC_COMMUNICATION_FAILURE` / OS `Operation not permitted` in this sandbox. Do not change transaction behavior until the SAP metadata/read-back contract and required live verification are available.
+
 - **Audit fix 6 of 9 (2026-10-21 11:28 IST, items 3 + 19): cited RFC_READ_TABLE filter values now pass through field-specific `sapKey`; reservation keys are canonicalized, Batch/SerialNo are persisted, and TrToAdapter recovery uses object-predicate CQN — CODE DELIVERED. Focused adapter/key tests and CDS compile passed; ReservationEntry CAP HTTP tests remain blocked by sandbox `listen EPERM`; additive SQLite migration prepared but not applied. No SAP call.**
 
 - **Audit fix 5 of 9 (2026-10-21 11:24 IST, items 15, 16, 17): UI duplicate-submit protection, stable goods-issue attempt IDs, and early attempt replay lookup — DELIVERED; focused UI/handler tests 298/298 passed, UI5 lint clean, UI5 build and CDS compile succeeded.** TO ambiguity remains protected at the UI in-flight level only; no backend TO idempotency change was made in this slice.
@@ -3376,6 +3380,10 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Exact Next Recommended Action (audit fix 8 — 2026-10-21 11:37 IST):** revoke the previously committed NVIDIA API key in its provider console, issue a replacement, and put the replacement only in private local/BTP configuration. The tracked `.env.example` value is blank, but prior Git history may retain it. If history cleanup is needed, coordinate repository-wide history rewrite before doing it. Live scripts now require `ALLOW_LIVE_SAP_TOOLS=1` plus `--allow-live-sap` for JavaScript/Python scripts; shell scripts require the environment opt-in.
+
+- **Exact Next Recommended Action (audit fixes 5, 7, 18 — 2026-10-21 11:32 IST):** obtain the READ-ONLY SAP metadata/read-back results for `BAPI_TRANSACTION_COMMIT`, `L_TO_CONFIRM`, and the delivery link fields (`LIKP`/`LIPS`) from an environment with SAP RFC connectivity. Then establish the verified operation contract and prepare focused code/tests. Any live transaction proof requires a separate explicit WRITE “go” for the specific SAP call and test data. No application code changed in this session.
+
 - **Exact Next Recommended Action (audit fixes 3 + 19 — 2026-10-21 11:28 IST):** review and apply `db-migrate-20261021-reservation-batch-serial.sql` to the local SQLite database (after its documented DeliveryNumber migration prerequisite), then rerun `npx jest test/unit/wm/reservationEntryService.test.js --runInBand` in an environment where tests may bind `127.0.0.1`. Run the two SAP-filter tests with controlled malicious values when practical; no live SAP check is required for these read-boundary changes. This session made no live SAP calls.
 
 - **Exact Next Recommended Action (audit fixes 15, 16, 17 — 2026-10-21 11:24 IST):** review the controller and handler changes and test results. The full WM suite was not rerun; the previous run could not bind test servers in this sandbox. UI5 MCP and CAP MCP tools were configured in `.mcp.json` but unavailable in this session; UI5 lint/build and focused local CAP handler tests were used instead. No live SAP call was made.
@@ -3470,6 +3478,29 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 11:37 IST — Audit fix 8: test honesty and hygiene
+
+- **Plan:** strengthen the concurrency and no-COMMIT tests before adapter changes; inspect tracked credential/example and seed paths; gate all live SAP/live CAP tools without running them.
+- **Test-first finding:** `productionHardeningAudit.test.js` previously allowed two BAPI calls and used equal mocked material-document values as a fallback proof. The strengthened exact-count assertion failed on all four movements with two BAPI posts each. After adding the attempt guard, the focused regression suite passed.
+- **Changes:**
+  - `test/unit/wm/productionHardeningAudit.test.js` now asserts exactly one posting for concurrent identical calls. `test/unit/wm/autoMigoPosting.test.js` and `test/unit/wm/reservationProcess.test.js` assert no `BAPI_TRANSACTION_COMMIT` after error returns.
+  - `ReservationProcessAdapter.js` shares an in-flight MIGO result for an identical `ProcessId` and intent on the same adapter instance; reuse of that ID for a different intent returns 409. This is an in-process guard; multi-process/distributed idempotency remains **UNKNOWN** and is not proven by this test.
+  - Blank `NVIDIA_API_KEY` in tracked `.env.example`; no credential value is included here. **Not done:** provider-side revocation/reissue; Git history still retains the previously committed key value, and no provider console/account access is available in this session.
+  - Moved the three ignored local seed CSV files from `db/data/` to ignored `seed-data-local/`, outside CAP's seed auto-loading directory.
+  - Added reusable JS/Python gates and environment gates for shell tools; 56 live SAP/live CAP tools require explicit opt-in. Updated the `find-creatable.py` instructions in `AGENTS.md`, usage text, and incoterms runbook. Gate requires `ALLOW_LIVE_SAP_TOOLS=1` and `--allow-live-sap` for JS/Python; shell tools require the environment setting. No live tool was run.
+  - Added `test/unit/liveSapToolGate.test.js` for the opt-in behavior.
+- **Validation:** focused Jest — PASS (4 suites / 166 tests); `npm run lint` — PASS; `npx cds compile srv/ --to csn` — PASS; syntax — PASS (56 gated scripts and both gate helpers; 33 JS / 11 Python / 12 shell sources); gate smoke checks — PASS (blocked without opt-in; Python offline selftest passed); `git diff --check` — PASS. No SAP connectivity check/write was attempted.
+- **Still unknown:** whether the previously committed key remains active; distributed multi-process idempotency for warehouse-flow MIGO; whether a history rewrite is required after key revocation. **Assumptions:** none about key validity or provider-side rotation.
+
+### 2026-10-21 11:32 IST — Audit fix 7 inspection (items 5, 7, 18): L9/514 recovery, TR wrapper single-attempt behavior, SAP read-backs
+
+- **Plan:** inspect the reservation MIGO/L9 514 path, TR wrapper fallbacks, and TO confirmation path; locate existing SAP metadata/read-back evidence; modify transaction code only if required SAP contracts can be verified under `AGENTS.md`.
+- **Findings:** L9/514 currently commits the delivery before PGI; if PGI throws, `createdDeliveryNumber` is assigned too late to preserve the number in the failure result. Existing `GoodsIssuePostingClient` provides a reservation-item lookup pattern via LIPS RSNUM/RSPOS and LIKP, but its applicability to this RFC/BAPI flow is not proven. TR creation catches a ZWM wrapper error and may send the same request to `Z_WM_TR_CREATE`; repository history records the wrapper interface but does not prove the current commit/exception semantics. Reservation TO creation already checks for unconfirmed TO items and reads the created TO back; successful `confirmTransferOrder` does not verify confirmation after `L_TO_CONFIRM` returns.
+- **SAP discovery:** issued only READ-ONLY RFC metadata/table requests for `BAPI_TRANSACTION_COMMIT`, `L_TO_CONFIRM`, and LIKP/LIPS interface fields. They failed before receiving SAP data with `RFC_COMMUNICATION_FAILURE`, code 1, `NiIConnectSocket` / OS `Operation not permitted` (sandbox networking). No SAP write was called. The return structure/commit semantics and delivery lookup applicability remain unverified.
+- **Change:** no application code changed because required SAP transaction contract verification and live validation are blocked; no local fallback was introduced.
+- **Validation:** `git diff --check` — PASS after this log entry; `git status --short` inspected. No tests run because application code was unchanged.
+- **Not done / Still unknown:** items 5, 7, and the confirmation-readback portion of 18 remain unresolved. The unconfirmed-TO guard portion of 18 is already present in `ReservationProcessAdapter.js`. **Assumptions:** none about SAP fields or transaction semantics.
 
 ### 2026-10-21 11:24 IST — Audit fix 5 extension: resolve stable attempt IDs before reservation and stock reads
 

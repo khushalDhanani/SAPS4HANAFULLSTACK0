@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # Existence is not reality. This counts ROWS behind every entity set the code reads.
 # A service can answer 200 on $metadata and hold nothing - EWM does exactly that.
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"

@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # Find OData V4 services. The v=2 catalog cannot see these.
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 set -a

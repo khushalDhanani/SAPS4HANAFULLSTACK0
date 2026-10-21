@@ -1,3 +1,5 @@
+from live_sap_gate import require_live_sap_tool
+require_live_sap_tool()
 import json, base64, csv, sys, time
 import urllib.request, urllib.error
 

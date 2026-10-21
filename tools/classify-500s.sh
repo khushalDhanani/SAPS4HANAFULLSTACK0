@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # Read the ERROR BODY of every service that returned 500, and group by SAP error
 # code. A status code alone does not identify the fault - proven twice today.
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"

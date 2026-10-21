@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # What does SAP really call the 7 fields EwmMapper reads but never receives?
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 set -a

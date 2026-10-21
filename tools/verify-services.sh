@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # Verify every SAP OData service this project calls, by fetching $metadata.
 # 200 = live | 500 = registered, no system alias | 404 = not there | 401 = bad creds
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"

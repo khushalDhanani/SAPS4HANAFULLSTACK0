@@ -1,3 +1,4 @@
+require('./live-sap-gate')();
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
 const { RfcClient } = require('../srv/integration/s4hana/RfcClient');

@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # Probe every service in all_catalog_services.json. Writes catalog-audit.csv.
 # Uses the service root (small) and retries non-200 against $metadata.
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"

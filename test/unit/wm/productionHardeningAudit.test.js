@@ -596,9 +596,9 @@ describe('Final SAP WM Production Hardening Audit Suite [mock only, not SAP veri
       expect(res1.materialDocument).toBe(`5000000${mvt}`);
       expect(res2.materialDocument).toBe(`5000000${mvt}`);
 
-      // At most one SAP BAPI posting occurred
-      expect(postCount).toBeLessThanOrEqual(2);
-      expect(res1.alreadyPosted || res2.alreadyPosted || (res1.materialDocument === res2.materialDocument)).toBe(true);
+      // Exactly one SAP BAPI posting occurred; matching mocked document numbers alone
+      // cannot prove that the concurrent request was deduplicated.
+      expect(postCount).toBe(1);
     });
   });
 });

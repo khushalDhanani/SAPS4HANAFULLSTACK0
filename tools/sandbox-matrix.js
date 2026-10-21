@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 'use strict';
 /**
  * WM sandbox matrix (Phase C). Drives the real CAP endpoints (reservation -> TR -> TO -> confirm -> goods movement),

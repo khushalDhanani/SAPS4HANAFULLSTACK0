@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 // Live timing of the Goods Issue reservation list (read-only).
 // Usage: node tools/time-gi-reservations.js [plant]
 //  1) old query shape: full entity, 100 per page (up to 2,000 items)  2) new: $select + $orderby, 1,000 per page

@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # Find SAP field names used in code that exist in NO entity set of the services
 # this project calls. Catches the "Material vs Product" class of bug.
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"

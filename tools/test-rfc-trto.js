@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 // Live RFC check of the TR->TO adapter. Read-only unless --create is given.
 // Usage: node tools/test-rfc-trto.js --list [mvt] [warehouse]
 //        node tools/test-rfc-trto.js <TR> [SU] [--create <qty>]      (warehouse W01)

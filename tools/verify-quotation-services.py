@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from live_sap_gate import require_live_sap_tool
+require_live_sap_tool()
 """Evidence-only search: which service can CREATE a Sales Quotation (default) or any other SD object? GET requests only.
 Override with env: PATTERN (regex matched against metadata text/names), OUT (output dir), DIRECT (comma-separated name=path probes).
   e.g. PATTERN='sales.?contract|slscontr' OUT=docs/contract-metadata DIRECT='API_SALES_CONTRACT_SRV=/sap/opu/odata/sap/API_SALES_CONTRACT_SRV' python3 tools/verify-quotation-services.py

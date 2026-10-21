@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # Which registered EWM service exposes warehouse-order queue, assigned user,
 # bin max weight, or resource type? Searches candidates from the live catalog.
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"

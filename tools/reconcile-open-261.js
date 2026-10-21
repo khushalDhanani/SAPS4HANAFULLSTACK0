@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 // Proof: open movement type 261 items of the app vs SAP table RESB (read-only: RFC_READ_TABLE + OData GET).
 // Usage: node tools/reconcile-open-261.js [plant]     exit code 1 on any difference
 // Baseline SQL (same as SE16N on RESB):  BWART = '261' AND XLOEK = '' AND KZEAR = '' [AND WERKS = <plant>]

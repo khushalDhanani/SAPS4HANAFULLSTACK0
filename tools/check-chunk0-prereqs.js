@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 /**
  * Chunk 0: Prerequisites and Setup Inspection Script
  * Inspects:

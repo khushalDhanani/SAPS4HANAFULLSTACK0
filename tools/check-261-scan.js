@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 // Live read-only check of the 261 scan rules: page context of one reservation item, then one check per storage unit.
 // Usage: node tools/check-261-scan.js <reservation> <item> [storageUnit ...]
 //   Without storage units it lists the material's storage-unit quants in the plant (LQUA) instead.

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from live_sap_gate import require_live_sap_tool
+require_live_sap_tool()
 """
 Test & Validate Phase 2 ZWM_RF_TRTO_SRV Contract against Live SAP S/4HANA DS4 220.
 Simulates:

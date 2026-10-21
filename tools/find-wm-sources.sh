@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # Read-only discovery for the TR/SU RF screen. Writes raw results to docs/wm-discovery/.
 # Usage: P='USER:PASS' bash tools/find-wm-sources.sh   (or omit P to use .env.local)
 cd "$(dirname "$0")/.."

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 // Supervised live proof of the HU BAPIs (BAPI_HU_CREATE / PACK / UNPACK / DELETE + BAPI_TRANSACTION_COMMIT).
 // WRITE commands change SAP; they run only with the trailing flag --go (one SAP write per invocation, then a
 // read-back). Stops at the first error; never retries. Read-only commands: candidates, read.

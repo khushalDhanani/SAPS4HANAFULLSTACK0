@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from live_sap_gate import require_live_sap_tool
+require_live_sap_tool()
 """Read-only: settle the open SAP-side facts behind ZWM_RF_TRTO_SRV. Output: docs/wm-discovery/verify/.
 Usage: P='USER:PASS' python3 tools/verify-trto-sap.py"""
 import os, re, base64, urllib.request, urllib.error

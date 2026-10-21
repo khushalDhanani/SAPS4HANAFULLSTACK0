@@ -1324,6 +1324,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         success: false,
         message: expect.stringMatching(/Deficit of BA Unrestricted-use stock/)
       });
+      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', expect.anything());
     });
 
     test('createReservation returns { success: false, stage: "RESERVATION", error: "..." } when throwError is false', async () => {

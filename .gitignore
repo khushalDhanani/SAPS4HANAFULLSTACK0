@@ -69,6 +69,8 @@ claude output/
 
 # Analysis & Reality CSVs & Workbooks
 *.csv
+# Local seed data is deliberately outside CAP's db/data auto-loading directory.
+seed-data-local/
 *.xlsx
 # creatable-services.xlsx is the one committed workbook (see AGENTS.md) — keep it tracked
 !creatable-services.xlsx

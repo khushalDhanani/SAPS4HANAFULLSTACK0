@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "${ALLOW_LIVE_SAP_TOOLS:-}" != "1" ]]; then
+  echo "Blocked: live integration tool requires ALLOW_LIVE_SAP_TOOLS=1" >&2
+  exit 2
+fi
 # Which goods-movement services actually accept a backend POST?
 # Parses $metadata: EntitySets not marked sap:creatable="false", and
 # FunctionImports with m:HttpMethod="POST".

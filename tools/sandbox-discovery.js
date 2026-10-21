@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 'use strict';
 /**
  * Read-only discovery for the WM sandbox matrix (Phase A). Every value comes from the live system

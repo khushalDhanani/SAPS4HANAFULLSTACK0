@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 // Live check of open movement type 261 reservation items (read-only, GET only).
 // Usage: [ALL=1] node tools/list-open-261.js [plant] [material] [productionOrder]
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local') });

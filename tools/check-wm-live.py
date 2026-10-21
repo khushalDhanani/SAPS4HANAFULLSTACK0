@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from live_sap_gate import require_live_sap_tool
+require_live_sap_tool()
 import os, base64, urllib.request, xml.etree.ElementTree as ET
 
 for line in open('.env.local'):

@@ -34,6 +34,7 @@ class ReservationProcessAdapter {
     this._checkMarcExistence = Boolean(options.checkMarcExistence);
     this._checkMbewExistence = Boolean(options.checkMbewExistence);
     this._checkSernpMatch = Boolean(options.checkSernpMatch);
+    this._goodsMovementInFlight = new Map();
   }
 
   /** Same adapter bound to another RFC client (used to run a step inside one locked RFC session). */
@@ -2181,6 +2182,45 @@ class ReservationProcessAdapter {
    *  - Batch: input -> reservation (RESB) -> TO (LTAP); none for a batch-managed material (MARC-XCHPF) stops with 400.
    */
   async postGoodsMovement(params = {}) {
+    const attemptId = params.processId || params.ProcessId;
+    if (!attemptId) return this._postGoodsMovement(params);
+
+    const intent = JSON.stringify({
+      reservationNumber: params.reservationNumber || params.reservationNo || params.ReservationNo || '',
+      reservationItem: params.reservationItem || params.ReservationItem || '0001',
+      movementType: params.movementType || params.MovementType || '',
+      material: params.material || params.Material || '',
+      plant: params.plant || params.Plant || params.sourcePlant || params.SourcePlant || '',
+      storageLocation: params.storageLocation || params.StorageLocation || params.sourceStorageLocation || params.SourceStorageLocation || '',
+      quantity: params.quantity != null ? params.quantity : params.Quantity,
+      unit: params.unit || params.Unit || '',
+      receivingPlant: params.receivingPlant || params.ReceivingPlant || params.destinationPlant || params.DestinationPlant || '',
+      receivingStorageLocation: params.receivingStorageLocation || params.ReceivingStorageLocation || params.destinationStorageLocation || params.DestinationStorageLocation || '',
+      transferOrder: params.transferOrder || params.TransferOrder || '',
+      batch: params.batch || params.Batch || '',
+      serials: params.serials || params.Serials || []
+    });
+    const key = String(attemptId).trim();
+    if (!key) return this._postGoodsMovement(params);
+
+    let attempt = this._goodsMovementInFlight.get(key);
+    if (attempt && attempt.intent !== intent) {
+      throw Object.assign(httpError(409, 'ProcessId is already being used for a different goods movement'), { code: 'ATTEMPT_ID_CONFLICT' });
+    }
+    if (!attempt) {
+      attempt = { intent, promise: null };
+      attempt.promise = Promise.resolve().then(() => this._postGoodsMovement(params));
+      this._goodsMovementInFlight.set(key, attempt);
+    }
+
+    try {
+      return await attempt.promise;
+    } finally {
+      if (this._goodsMovementInFlight.get(key) === attempt) this._goodsMovementInFlight.delete(key);
+    }
+  }
+
+  async _postGoodsMovement(params = {}) {
     const rawResNo = params.reservationNumber || params.reservationNo || params.ReservationNo || '';
     const rawResItem = params.reservationItem || params.ReservationItem || '0001';
     const movementType = params.movementType || params.MovementType || '';

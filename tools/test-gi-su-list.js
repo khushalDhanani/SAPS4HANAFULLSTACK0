@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 // Live check: Storage Units valid for one Goods Issue reservation line (read-only).
 // Usage: node tools/test-gi-su-list.js <reservation> [item]      e.g. node tools/test-gi-su-list.js 519366
 //        node tools/test-gi-su-list.js <reservation> <item> <SU>  -> also resolve that SU for the line

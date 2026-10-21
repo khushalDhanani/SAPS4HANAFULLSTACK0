@@ -1,3 +1,4 @@
+require('./live-sap-gate')();
 'use strict';
 
 require('dotenv').config({ path: '.env.local' });

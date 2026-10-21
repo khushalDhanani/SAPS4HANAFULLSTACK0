@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 // Print every non-empty field of one reservation item as SAP returns it (read-only).
 // Usage: node tools/show-resv-item.js <reservation> [item]      e.g. node tools/show-resv-item.js 519366
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local') });

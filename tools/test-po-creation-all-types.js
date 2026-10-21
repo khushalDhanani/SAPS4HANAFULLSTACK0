@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+require('./live-sap-gate')();
 /**
  * test-po-creation-all-types.js
  * Comprehensive automated verification tool for Purchase Order creation across all 16 PO types.

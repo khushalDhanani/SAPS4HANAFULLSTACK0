@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from live_sap_gate import require_live_sap_tool
+require_live_sap_tool()
 """Pass 3 (read-only): find the RF screen program, RFC flags of the TR FMs, OData projects,
 live WM table samples. Output: docs/wm-discovery/pass3/.  Usage: P='USER:PASS' python3 tools/find-wm-sources-3.py"""
 import os, re, base64, urllib.request, urllib.error
