@@ -1,7 +1,6 @@
 const LOG = require('../../../common/logger')('outbound-delivery');
 const outboundDeliveryAdapter = require('../../../integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
 const deliveryNoRefAdapter = require('../../../integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter');
-const s4Config = require('../../../common/s4Config');
 const { applyPaging, extractFilterParam } = require('../../../common/filterUtils');
 
 /**
@@ -52,10 +51,11 @@ function registerOutboundDeliveryHandlers(srv) {
       return req.error(400, 'SalesOrder is required to create an outbound delivery.');
     }
 
-    const configuredSPs = s4Config.getShippingPoints();
-    const resolvedSP = ShippingPoint && String(ShippingPoint).trim() !== ''
-      ? String(ShippingPoint).trim()
-      : configuredSPs[0];
+    if (!ShippingPoint || String(ShippingPoint).trim() === '') {
+      return req.error(400, 'ShippingPoint is required to create an outbound delivery and cannot be defaulted.');
+    }
+
+    const resolvedSP = String(ShippingPoint).trim();
 
     try {
       const result = await outboundDeliveryAdapter.createDeliveryFromOrder({
@@ -72,10 +72,9 @@ function registerOutboundDeliveryHandlers(srv) {
 
   // 4. Function getDefaultShippingPoint
   srv.on('getDefaultShippingPoint', async () => {
-    const configuredSPs = s4Config.getShippingPoints();
     return {
-      ShippingPoint: configuredSPs[0],
-      ShippingPoints: configuredSPs
+      ShippingPoint: '',
+      ShippingPoints: []
     };
   });
 

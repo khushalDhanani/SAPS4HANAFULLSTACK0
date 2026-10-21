@@ -1,6 +1,5 @@
 const LOG = require('../../../../common/logger')('outbound-delivery-adapter');
 const { S4HttpClient } = require('../../S4HttpClient');
-const s4Config = require('../../../../common/s4Config');
 const { odataString, extractFilterParam } = require('../../../../common/filterUtils');
 const { mapS4Error } = require('../../S4ErrorMapper');
 
@@ -97,15 +96,6 @@ class OutboundDeliveryAdapter {
       // If ShippingPoint is specified, filter by it using odataString
       if (sp) {
         filterClauses.push(`ShippingPoint eq ${odataString(sp)}`);
-      } else {
-        // Default to configured shipping points from cds.s4.shippingPoints
-        const configuredSPs = s4Config.getShippingPoints();
-        if (configuredSPs.length === 1) {
-          filterClauses.push(`ShippingPoint eq ${odataString(configuredSPs[0])}`);
-        } else if (configuredSPs.length > 1) {
-          const spOrs = configuredSPs.map(item => `ShippingPoint eq ${odataString(item)}`).join(' or ');
-          filterClauses.push(`(${spOrs})`);
-        }
       }
 
       // Filter by SalesOrder if provided
@@ -196,8 +186,15 @@ class OutboundDeliveryAdapter {
       throw err;
     }
 
+    if (!shippingPoint || String(shippingPoint).trim() === '') {
+      const err = new Error('ShippingPoint is required to create an outbound delivery and cannot be defaulted.');
+      err.status = 400;
+      err.statusCode = 400;
+      throw err;
+    }
+
     const cleanOrder = String(salesOrder).trim();
-    const cleanSP = String(shippingPoint || s4Config.getShippingPoints()[0]).trim();
+    const cleanSP = String(shippingPoint).trim();
 
     // Verify approval status unless explicitly skipped
     if (!options.skipApprovalCheck) {

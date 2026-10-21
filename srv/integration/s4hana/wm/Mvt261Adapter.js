@@ -173,7 +173,9 @@ class Mvt261Adapter {
       const cfg = await this._resolver.resolve({
         plant: targetPlant,
         warehouseNumber: targetWh,
-        warehouse: targetWh
+        warehouse: targetWh,
+        flow: '261',
+        fields: ['mvt261NotReadyBins']
       });
       this._notReadyBinsCache = cfg.mvt261NotReadyBins || [];
     } catch (e) {

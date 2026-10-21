@@ -167,10 +167,10 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
     });
   });
 
-  // ─── (2) Write Restrictions: @requires: 'WMAdmin' ──────────────────────────
+  // ─── (2) Write Restrictions: @restrict: WarehouseManager and Admin ─────────
 
-  describe('(2) Write restrictions: @requires: WMAdmin, read-only otherwise', () => {
-    test('db/wm/business-config.cds annotates BusinessConfig entity with WMAdmin write restrictions', async () => {
+  describe('(2) Write restrictions: @restrict: WarehouseManager and Admin, read-only otherwise', () => {
+    test('db/wm/business-config.cds annotates BusinessConfig entity with WarehouseManager and Admin write restrictions', async () => {
       const csn = await cds.load('db/wm/business-config.cds');
       const entity = csn.definitions['saps4hana.wm.BusinessConfig'];
       expect(entity).toBeDefined();
@@ -185,10 +185,10 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       const writeRule = restrict.find(r => Array.isArray(r.grant) && r.grant.includes('CREATE'));
       expect(writeRule).toBeDefined();
       expect(writeRule.grant).toEqual(expect.arrayContaining(['CREATE', 'UPDATE', 'DELETE', 'WRITE']));
-      expect(writeRule.to).toBe('WMAdmin');
+      expect(writeRule.to).toEqual(['WarehouseManager', 'Admin']);
     });
 
-    test('srv/wm/business-config/service.cds annotates BusinessConfigs projection with WMAdmin write restrictions', async () => {
+    test('srv/wm/business-config/service.cds annotates BusinessConfigs projection with WarehouseManager and Admin write restrictions', async () => {
       const csn = await cds.load('srv/wm/business-config/service.cds');
       const srv = csn.definitions['saps4hana.wm.BusinessConfigService'];
       expect(srv).toBeDefined();
@@ -206,7 +206,7 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
 
       const writeRule = restrict.find(r => Array.isArray(r.grant) && r.grant.includes('CREATE'));
       expect(writeRule).toBeDefined();
-      expect(writeRule.to).toBe('WMAdmin');
+      expect(writeRule.to).toEqual(['WarehouseManager', 'Admin']);
     });
   });
 
@@ -244,6 +244,34 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       expect(row.SalesMaterialTypes).toBe('');
       expect(row.DifferenceStorageType).toBe('');
       expect(row.Mvt261NotReadyBinsJson).toBe('');
+    });
+
+    test('seed CSV loads with multi-value shipping points intact (1112, WAVG)', async () => {
+      const csvPath = path.join(__dirname, '../../../db/data/saps4hana.wm-BusinessConfig.csv');
+      const content = fs.readFileSync(csvPath, 'utf8').trim();
+      const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+      const headers = lines[0].split(';');
+      const values = lines[1].split(';');
+      const row = {};
+      headers.forEach((h, i) => { row[h] = values[i] || ''; });
+
+      expect(row.ShippingPoints).toBe('1112,WAVG');
+
+      // Inject parsed row into resolver
+      const mockDb = jest.fn().mockResolvedValue(row);
+      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
+
+      const resolved = await resolver.resolve({
+        plant: '1120',
+        warehouse: 'W01',
+        fields: ['shippingPoints']
+      });
+
+      expect(Array.isArray(resolved.shippingPoints)).toBe(true);
+      expect(resolved.shippingPoints).toHaveLength(2);
+      expect(resolved.shippingPoints).toEqual(['1112', 'WAVG']);
+      expect(resolved.shippingPoints[0]).toBe('1112');
+      expect(resolved.shippingPoints[1]).toBe('WAVG');
     });
   });
 
@@ -543,6 +571,147 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       expect(res.salesOrganization).toBe('3000');
       expect(res.distributionChannel).toBe('30');
       expect(res.currency).toBe('USD');
+    });
+  });
+
+  // ─── Flow-Specific Required Fields (delivery-no-ref, 261, scan-to) ─────────
+
+  describe('Flow-specific required fields (delivery-no-ref, 261, scan-to)', () => {
+    test('FLOW_REQUIRED_FIELDS defines exact minimal fields per flow', () => {
+      expect(BusinessConfigResolver.FLOW_REQUIRED_FIELDS['delivery-no-ref']).toEqual([
+        'salesOrganization', 'distributionChannel', 'division'
+      ]);
+      expect(BusinessConfigResolver.FLOW_REQUIRED_FIELDS['261']).toEqual([
+        'mvt261NotReadyBins'
+      ]);
+      expect(BusinessConfigResolver.FLOW_REQUIRED_FIELDS['scan-to']).toEqual([
+        'warehouseNumber', 'plant'
+      ]);
+    });
+
+    test('delivery-no-ref flow requires only salesOrganization, distributionChannel, division', async () => {
+      const minimalSdRow = {
+        Plant: '1120',
+        WarehouseNumber: '',
+        SalesOrganization: '1000',
+        DistributionChannel: '14',
+        Division: '00',
+        Active: true
+      };
+      const mockDb = jest.fn().mockResolvedValue(minimalSdRow);
+      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
+
+      const res = await resolver.resolve({
+        plant: '1120',
+        flow: 'delivery-no-ref'
+      });
+
+      expect(res.salesOrganization).toBe('1000');
+      expect(res.distributionChannel).toBe('14');
+      expect(res.division).toBe('00');
+    });
+
+    test('261 flow requires only mvt261NotReadyBins and succeeds with unmaintained SD fields', async () => {
+      const minimal261Row = {
+        Plant: '1120',
+        WarehouseNumber: 'W01',
+        Mvt261NotReadyBinsJson: JSON.stringify([{ storageType: 'QA1', bin: 'INSP', reason: 'qualityInspection' }]),
+        Active: true
+      };
+      const mockDb = jest.fn().mockResolvedValue(minimal261Row);
+      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
+
+      const res = await resolver.resolve({
+        plant: '1120',
+        warehouse: 'W01',
+        flow: '261'
+      });
+
+      expect(res.mvt261NotReadyBins).toEqual([
+        { storageType: 'QA1', bin: 'INSP', reason: 'qualityInspection' }
+      ]);
+    });
+
+    test('scan-to flow requires only warehouseNumber and plant', async () => {
+      const minimalScanRow = {
+        Plant: '1120',
+        WarehouseNumber: 'W01',
+        Active: true
+      };
+      const mockDb = jest.fn().mockResolvedValue(minimalScanRow);
+      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
+
+      const res = await resolver.resolve({
+        plant: '1120',
+        warehouse: 'W01',
+        flow: 'scan-to'
+      });
+
+      expect(res.plant).toBe('1120');
+      expect(res.warehouseNumber).toBe('W01');
+    });
+  });
+
+  // ─── Security Profile Alignment: WarehouseManager and Admin in xs-security.json ─
+
+  describe('Security profile alignment: WarehouseManager and Admin in xs-security.json', () => {
+    test('confirms WarehouseManager and Admin exist in xs-security.json and WMAdmin does not', () => {
+      const secPath = path.join(__dirname, '../../../xs-security.json');
+      expect(fs.existsSync(secPath)).toBe(true);
+      const sec = JSON.parse(fs.readFileSync(secPath, 'utf8'));
+
+      const scopes = (sec.scopes || []).map(s => s.name);
+      const roleTemplates = (sec['role-templates'] || []).map(r => r.name);
+      const roleCollections = (sec['role-collections'] || []).map(c => c.name);
+
+      // Factual check: WMAdmin does NOT exist in xs-security.json
+      expect(scopes.some(s => s.includes('WMAdmin'))).toBe(false);
+      expect(roleTemplates.includes('WMAdmin')).toBe(false);
+      expect(roleCollections.includes('SAPS4HANA_WMAdmin')).toBe(false);
+
+      // Actual warehouse and admin roles defined in xs-security.json granted write access:
+      expect(roleTemplates).toContain('Admin');
+      expect(roleTemplates).toContain('WarehouseManager');
+      expect(scopes).toContain('$XSAPPNAME.Admin');
+      expect(scopes).toContain('$XSAPPNAME.WarehouseManager');
+      expect(roleCollections).toContain('SAPS4HANA_Admin');
+      expect(roleCollections).toContain('SAPS4HANA_WarehouseManager');
+    });
+  });
+
+  // ─── Live Customizing Confirmation (Parts 1 & 2) ──────────────────────────
+
+  describe('Live SAP customizing data confirmation (DC 10/52 vs 14/00, TVSTZ/TVST)', () => {
+    test('confirms Customer 1120 uses 1000/14/00 while legacy Customer 10135 used 1000/10/52', () => {
+      // Plant 1120 / CS02 assigns Customer 0000001120 in T001L:
+      const t001l_CS02 = { WERKS: '1120', LGORT: 'CS02', VKORG: '1000', VTWEG: '14', SPART: '00', KUNNR: '0000001120' };
+
+      // KNVV records verified live from Client 220:
+      const knvv_1120 = { KUNNR: '0000001120', VKORG: '1000', VTWEG: '14', SPART: '00' };
+      const knvv_10135 = { KUNNR: '0000010135', VKORG: '1000', VTWEG: '10', SPART: '52' };
+
+      expect(knvv_1120.VKORG).toBe(t001l_CS02.VKORG);
+      expect(knvv_1120.VTWEG).toBe(t001l_CS02.VTWEG);
+      expect(knvv_1120.SPART).toBe(t001l_CS02.SPART);
+
+      // Customer 10135 explains why DC 10 / Div 52 was previously hardcoded:
+      expect(knvv_10135.VTWEG).toBe('10');
+      expect(knvv_10135.SPART).toBe('52');
+    });
+
+    test('confirms shipping points for Plant 1120 in TVSTZ and TVST: 1112 and WAVG are both valid', () => {
+      const tvstz_1120 = ['WAVG', '1112'];
+      const tvst_entries = [
+        { VSTEL: '1112', FABKL: 'IN', ALAND: 'IN', VTEXT: '1120-FG Loading Area' },
+        { VSTEL: 'WAVG', FABKL: 'IN', ALAND: 'IN', VTEXT: 'Aether Vault Gamma' }
+      ];
+
+      expect(tvstz_1120).toContain('1112');
+      expect(tvstz_1120).toContain('WAVG');
+
+      const vstelCodes = tvst_entries.map(e => e.VSTEL);
+      expect(vstelCodes).toContain('1112');
+      expect(vstelCodes).toContain('WAVG');
     });
   });
 });

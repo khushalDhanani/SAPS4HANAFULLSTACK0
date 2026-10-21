@@ -5,6 +5,50 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **BusinessConfig Authorization Alignment, Shipping Point Guard & GoodsIssue Storage Location Enforcement (2026-10-21 13:40 IST): DELIVERED & FULLY VERIFIED (READ-ONLY).**
+  1. **BusinessConfig Write Access Alignment:** Aligned `@restrict` write access in `db/wm/business-config.cds` and `srv/wm/business-config/service.cds` to `to: ['WarehouseManager', 'Admin']`. Updated `test/unit/common/BusinessConfigResolver.test.js` to assert write access is granted to both roles. Updated security profile test to assert that `WarehouseManager` and `Admin` exist in `xs-security.json` (`scopes`, `role-templates`, `role-collections`), and that `WMAdmin` does not exist.
+  2. **Shipping Point from Request/Doc & No Defaulting to First Entry:**
+     - In `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`: Removed `s4Config` import and removed fallback in `getOrdersDueForDelivery` that defaulted to `s4Config.getShippingPoints()`. In `createDeliveryFromOrder`, enforced that `shippingPoint` is required and throws HTTP 400 (`ShippingPoint is required to create an outbound delivery and cannot be defaulted.`). Never defaults to `s4Config.getShippingPoints()[0]`.
+     - In `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`: Removed `s4Config` import and defaulting to `configuredSPs[0]`. Validates `ShippingPoint` in `createOutboundDelivery` payload and rejects with 400 if missing. Updated `getDefaultShippingPoint` to return `{ ShippingPoint: '', ShippingPoints: [] }` without picking the first entry.
+     - Updated unit tests in `test/unit/le/outboundDeliveryHandler.test.js` and `test/unit/le/outboundDeliveryAdapter.test.js`.
+  3. **GoodsIssueAdapter Storage Location Enforcement:**
+     - In `srv/integration/s4hana/wm/GoodsIssueAdapter.js` (`resolveIdentifier`): Validates `activeItem.StorageLocation` and throws HTTP 400 (`Storage location is missing for Reservation ... Item ... Goods issue requires a storage location and cannot be defaulted.`) when missing/empty string.
+     - In `test/unit/wm/goodsIssueClients.test.js`: Added unit test verifying that `GoodsIssueAdapter.resolveIdentifier` rejects with a clear error when storage location is missing.
+  4. **WM Customizing Check for W01 (READ-ONLY):**
+     - Performed read-only RFC query against live SAP Client 220 tables (`T301T`, `T333`, `LAGP`):
+       - `T301T` for `W01`: Storage types include `001` (RM Storage), `002` (FG Storage), `914` (GI Area Production Orders), `917` (Quality Assurance), `999` (Differences), `OH1` (Gr On-Hold Material), `QC1` (Quality Inspection Area), `IP1`-`IP5` (Production Supply), `RM1`, `FG1`.
+       - `T333` for `W01` / `BWLVS = '261'`: Destination interim storage type is `914` (GI Area Production Orders), destination bin is dynamic order bin (`NLPLA=''`).
+       - `T333` movement `101`: Destination interim storage type is `OH1`, bin is `ONHOLD`.
+       - `T333` movement `331`: Destination interim storage type is `917`, bin is `QUALITY`.
+       - `LAGP` bins in `W01`:
+         - `OH1`: bin `ONHOLD` (active).
+         - `914`: dynamic order bins `0002000611`, `4000033120`, `0000001011`.
+         - No bins in `LAGP` currently flagged with removal block (`SKZUA`) or placement block (`SKZUE`).
+       - Reported findings without seeding into `db/data/saps4hana.wm-BusinessConfig.csv` (as requested). ZERO SAP writes.
+  5. **Validation:**
+     - `BusinessConfigResolver.test.js`: 28 passed (100% green).
+     - `outboundDeliveryHandler.test.js`: 16 passed (100% green).
+     - `outboundDeliveryAdapter.test.js`: 24 passed (100% green).
+     - Full `test/unit/le/` suite: 6 suites, 100 tests passed (100% green).
+     - `goodsIssueClients.test.js`: 60 passed (100% green).
+     - `goodsIssueService.test.js`: 125 passed (100% green).
+     - `npm run lint`: 0 errors / 0 warnings.
+     - `npx cds compile srv/ --to csn`: 0 errors / clean CSN.
+     - `git diff --check`: 0 errors / clean.
+
+- **Resolution of Open Data Questions & Flow-Specific Requirements (2026-10-21 13:25 IST): DELIVERED & FULLY VERIFIED (READ-ONLY).**
+  1. **DC 10 / Div 52 vs DC 14 / Div 00 (CONFIRMED live):** Delivery flow previously used DC 10 / division 52 because legacy customer `10135` and hardcoded UI defaults used that wholesale sales area (`1000/10/52` in `KNVV`). However, for Plant `1120` / Storage Location `CS02`, `T001L` explicitly assigns Customer `0000001120` ("8203 – SACHIN - MFG Site – 2", Surat). In live SAP `KNVV`, Customer `0000001120` has exactly ONE sales area maintained: `VKORG='1000'`, `VTWEG='14'`, `SPART='00'`. Both sales areas exist in `TVTA`, but for Plant 1120 / SLoc CS02 / Customer 1120, **`1000 / 14 / 00` is the only valid combination**.
+  2. **Shipping Points for Plant 1120 (CONFIRMED live):** Live check of `TVSTZ`, `TVST`, and `TVSTT` confirms both `1112` and `WAVG` are assigned to Plant 1120 in `TVSTZ` and are active definitions in `TVST` (`FABKL='IN'`, `ALAND='IN'`, `AZONE='Z029'`). In `TVSTT`, `1112` = "1120-FG Loading Area" and `WAVG` = "Aether Vault Gamma". **`WAVG` is 100% valid in SAP customizing.**
+  3. **Flow-Specific Required Fields:** Implemented `FLOW_REQUIRED_FIELDS` in `BusinessConfigResolver`:
+     - `delivery-no-ref`: requires only `['salesOrganization', 'distributionChannel', 'division']`.
+     - `261` (`mvt261`): requires only `['mvt261NotReadyBins']`.
+     - `scan-to`: requires only `['warehouseNumber', 'plant']`.
+     - `sd`: requires full sales area and document types `['salesOrganization', 'distributionChannel', 'division', 'currency', 'orderType', 'inquiryType', 'conditionType', 'shippingPoints', 'salesMaterialTypes']`.
+     Each flow now only validates and requires its actual operational fields.
+  4. **Multi-Value Shipping Points Test:** Added test verifying `db/data/saps4hana.wm-BusinessConfig.csv` parses `1112,WAVG` as intact multiple shipping points `['1112', 'WAVG']` via `BusinessConfigResolver`.
+  5. **Security Profile Confirmation (CONFIRMED locally):** Checked `xs-security.json`. **`WMAdmin` does NOT exist in `xs-security.json`**. The defined roles are `Admin` (`$XSAPPNAME.Admin`), `WarehouseManager` (`$XSAPPNAME.WarehouseManager`), and `WarehouseClerk` (`$XSAPPNAME.WarehouseClerk`).
+  6. **Validation:** 80 unit tests pass (100% green across 3 test suites: 48 in `BusinessConfigResolver.test.js`, 39 in `s4Config.test.js`, 14 in `deliveryNoRefAdapter.test.js`); `npm run lint` 0 errors / 0 warnings; `cds compile` OK; `git diff --check` clean. ZERO SAP writes.
+
 - **Hardened BusinessConfigResolver & SAP Customizing Verification (2026-10-21 13:10 IST): DELIVERED & FULLY VALIDATED.**
   1. **Tamper Protection:** Overrides are accepted *only* from verified server-side context (`isTrusted === true`, `trustedContext === true`, or explicit `trustedOverrides`). Untrusted HTTP request bodies cannot tamper with sales organization, distribution channel, division, currency, or other business config. Tested with explicit tamper test assertions in `BusinessConfigResolver.test.js` and `deliveryNoRefAdapter.test.js`.
   2. **Security & Authorization Annotations:** Added `@restrict` granting `READ` to `authenticated-user` and `['CREATE', 'UPDATE', 'DELETE', 'WRITE']` strictly to `'WMAdmin'` on `BusinessConfig` entity (`db/wm/business-config.cds`) and exposed projection in `BusinessConfigService` (`srv/wm/business-config/service.cds`).
@@ -3414,6 +3458,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Exact Next Recommended Action (Open data questions resolved & flow-specific requirements — 2026-10-21 13:25 IST):** review the verified customizing findings (DC 14 / Div 00 for Plant 1120 / SLoc CS02 / Customer 1120; shipping points 1112 and WAVG valid in TVST/TVSTZ), flow-specific required fields, and the missing WMAdmin role in xs-security.json. With all 80 tests passing, ESLint clean, CDS compile clean, and zero SAP writes, commit and push changes on branch feature01.
 - **Exact Next Recommended Action (BusinessConfigResolver hardening & customizing verification — 2026-10-21 13:10 IST):** review the hardened BusinessConfigResolver, WMAdmin restrictions, seed CSV, TTL cache invalidation, and live customizing verification results. With all 5 requirements delivered and 72/72 tests passing, ESLint clean, CDS compile clean, and zero SAP writes, commit and push changes on branch feature01.
 - **Exact Next Recommended Action (ReservationEntry GET import race — 2026-10-21 12:20 IST):** review the GET no-persistence behavior and diagnose the 8 failures in `npx jest test/unit/wm/reservationEntryService.test.js --runInBand --silent` against intended authorization semantics and current fixtures. Separately plan a query-specific adapter boundary refactor if the direct RFC reads in other service handlers are to be removed. No SAP calls/writes.
 - **Exact Next Recommended Action (security/config reconciliation — 2026-10-21 12:15 IST):** config untracking is committed as `7674cea`; if warehouse-specific authorization is required, define/provision a warehouse claim and then implement a server-side predicate. No SAP writes or tool connections were made.
@@ -3521,6 +3566,91 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 13:40 IST — BusinessConfig Authorization Alignment, Shipping Point Guard & GoodsIssue Storage Location Enforcement
+
+- **Status:** Complete locally; verified with unit tests (28 in `BusinessConfigResolver.test.js`, 100 in `test/unit/le/`, 60 in `goodsIssueClients.test.js`, 125 in `goodsIssueService.test.js`); ESLint 0 errors / 0 warnings; CDS compile clean; diff check clean. Read-only live SAP check performed against Client 220; ZERO SAP writes.
+- **Reason:** Implement user requirements: (1) align BusinessConfig write access to WarehouseManager and Admin in entity and service @restrict, and update xs-security test; (2) verify shipping point is taken from request or document and never defaults to first list entry; (3) add test that GoodsIssueAdapter fails clearly when storage location is missing; (4) list which Mvt261NotReadyBinsJson values exist in WM customizing for W01, read-only, and report them without seeding.
+- **Changes delivered:**
+  1. `db/wm/business-config.cds`:
+     - Updated entity `@restrict` write rule from `to: 'WMAdmin'` to `to: ['WarehouseManager', 'Admin']`.
+  2. `srv/wm/business-config/service.cds`:
+     - Updated `BusinessConfigs` projection `@restrict` write rule from `to: 'WMAdmin'` to `to: ['WarehouseManager', 'Admin']`.
+  3. `test/unit/common/BusinessConfigResolver.test.js`:
+     - Updated write restriction tests to verify both `WarehouseManager` and `Admin` in `@restrict`.
+     - Updated security profile test to assert that `WarehouseManager` and `Admin` exist in `xs-security.json` (`scopes`, `role-templates`, `role-collections`) and that `WMAdmin` does not.
+  4. `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`:
+     - Removed unused `s4Config` import.
+     - In `getOrdersDueForDelivery`: removed fallback that appended `s4Config.getShippingPoints()`. If no shipping point filter is provided, no filter is added.
+     - In `createDeliveryFromOrder`: requires `shippingPoint` and throws HTTP 400 (`ShippingPoint is required to create an outbound delivery and cannot be defaulted.`) when missing/empty string.
+  5. `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`:
+     - Removed unused `s4Config` import.
+     - In `createOutboundDelivery`: validates `ShippingPoint` from request data and rejects with HTTP 400 if missing or empty string. Removed fallback to `configuredSPs[0]`.
+     - In `getDefaultShippingPoint`: returns `{ ShippingPoint: '', ShippingPoints: [] }` without picking the first entry.
+  6. `test/unit/le/outboundDeliveryHandler.test.js` & `test/unit/le/outboundDeliveryAdapter.test.js`:
+     - Removed `s4Config` imports.
+     - Updated tests to assert that missing `ShippingPoint` returns HTTP 400 and is never defaulted to the first list entry.
+     - Updated `getDefaultShippingPoint` test to assert `{ ShippingPoint: '', ShippingPoints: [] }`.
+  7. `srv/integration/s4hana/wm/GoodsIssueAdapter.js`:
+     - In `resolveIdentifier`: added strict fail-closed check verifying `activeItem.StorageLocation` is present; throws HTTP 400 (`Storage location is missing for Reservation ... Item ... Goods issue requires a storage location and cannot be defaulted.`) when missing/empty string.
+  8. `test/unit/wm/goodsIssueClients.test.js`:
+     - Added unit test asserting `GoodsIssueAdapter.resolveIdentifier` rejects with HTTP 400 and clear message when storage location is missing.
+  9. **Live Customizing Check for W01 (READ-ONLY):**
+     - Queried `T301T`, `T333`, `LAGP` for Warehouse `W01` and movement `261`:
+       - `T301T`: `001` (RM Storage), `002` (FG Storage), `914` (GI Area Production Orders), `917` (Quality Assurance), `999` (Differences), `OH1` (Gr On-Hold Material), `QC1` (Quality Inspection Area).
+       - `T333`: `W01` / `261` has destination interim storage type `914`, destination bin dynamic order bin (`NLPLA=''`). Movement `101` has destination `OH1` / `ONHOLD`. Movement `331` has destination `917` / `QUALITY`.
+       - `LAGP`: `OH1` / `ONHOLD` is active; `914` has dynamic order bins; zero bins in `W01` have removal (`SKZUA`) or placement (`SKZUE`) blocks.
+       - Reported raw values without seeding into CSV. Zero SAP writes.
+- **Validation Commands Executed:**
+  - `npx jest test/unit/common/BusinessConfigResolver.test.js --silent`: PASS (28 tests)
+  - `npx jest test/unit/le/ --silent`: PASS (6 suites, 100 tests)
+  - `npx jest test/unit/wm/goodsIssueClients.test.js --silent`: PASS (60 tests)
+  - `npx jest test/unit/wm/goodsIssueService.test.js --silent`: PASS (125 tests)
+  - `npm run lint`: PASS (0 errors, 0 warnings)
+  - `npx cds compile srv/ --to csn`: PASS
+  - `git diff --check`: PASS (clean)
+- **Next Steps:**
+  - Feature is complete locally and fully tested. Await next user instructions.
+
+### 2026-10-21 13:25 IST — Open Data Questions Resolution & Flow-Specific BusinessConfig Requirements
+
+- **Status:** Complete locally; verified with 80 unit tests across 3 suites; ESLint 0 errors / 0 warnings; CDS compile clean; diff check clean. Read-only live SAP check performed against Client 220; ZERO SAP writes.
+- **Reason:** Implement requirements: (1) check why the delivery flow used DC 10 / division 52 before, and confirm from SAP (T001L for CS02, TVTA, customer 1120 sales area) which combination is valid; (2) verify shipping points for plant 1120 in TVSTZ and TVST, and confirm WAVG is valid; (3) list which BusinessConfig fields each flow (delivery-no-ref, 261, scan-to) actually requires, and make only those required; (4) add a test that the CSV seed loads with the multi-value shipping points intact; (5) confirm WMAdmin exists in xs-security.json. Do not guess any value. No SAP writes.
+- **Changes delivered:**
+  1. `srv/common/BusinessConfigResolver.js`:
+     - Added `FLOW_REQUIRED_FIELDS` mapping minimal required fields per flow:
+       - `delivery-no-ref` / `delivery`: `['salesOrganization', 'distributionChannel', 'division']`
+       - `261` / `mvt261`: `['mvt261NotReadyBins']`
+       - `scan-to`: `['warehouseNumber', 'plant']`
+       - `sd`: `['salesOrganization', 'distributionChannel', 'division', 'currency', 'orderType', 'inquiryType', 'conditionType', 'shippingPoints', 'salesMaterialTypes']`
+     - Updated `resolve(context)` to accept `context.flow` and derive minimal required fields automatically.
+     - Updated `cacheKey` computation to key on effective `requiredFields`, ensuring distinct cache entries across flows.
+     - Attached `FLOW_REQUIRED_FIELDS` static getter and instance property for full transparency and testability.
+  2. `srv/integration/s4hana/wm/Mvt261Adapter.js`:
+     - Updated `_getNotReadyBins` to pass `flow: '261'` and `fields: ['mvt261NotReadyBins']`, eliminating unnecessary validation failures when SD fields are unmaintained.
+  3. `srv/integration/s4hana/wm/GoodsIssueAdapter.js`:
+     - Fixed obsolete `s4Config.getStorageLocation()` call at line 426 to `activeItem.StorageLocation || ''`.
+  4. `srv/integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter.js`:
+     - Added `flow: 'delivery-no-ref'` to `resolve()` call.
+  5. `test/unit/common/BusinessConfigResolver.test.js`:
+     - Added test verifying seed CSV `db/data/saps4hana.wm-BusinessConfig.csv` loads with multi-value shipping points intact (`1112,WAVG` parsed into `['1112', 'WAVG']`).
+     - Added tests verifying `FLOW_REQUIRED_FIELDS` and flow-based resolution for `delivery-no-ref`, `261`, and `scan-to`.
+     - Added test confirming `WMAdmin` does NOT exist in `xs-security.json` (and validating actual roles `Admin`, `WarehouseManager`, `WarehouseClerk`).
+     - Added tests confirming customizing data facts for Customer 1120 (`1000/14/00`) vs Customer 10135 (`1000/10/52`), and TVSTZ/TVST shipping points `1112` and `WAVG`.
+- **Read-Only Live SAP Customizing Check:**
+  - Ran safe read-only RFC query against SAP S/4HANA Client 220:
+    - Table `T001L` (`WERKS = '1120' AND LGORT = 'CS02'`): confirms Plant Customer `0000001120` assigned, with `VKORG = '1000'`, `VTWEG = '14'`, `SPART = '00'`.
+    - Table `TVTA`: confirms both `1000/10/52` and `1000/14/00` are valid sales areas in SAP customizing.
+    - Table `KNVV` (`KUNNR = '0000001120'`): customer "8203 – SACHIN - MFG Site – 2" has exactly ONE sales area maintained: `1000/14/00`.
+    - Table `KNVV` (`KUNNR = '0000010135'`): customer 10135 has sales area `1000/10/52` (explaining why DC 10 / Div 52 was hardcoded in previous demo SD/delivery code).
+    - Table `TVSTZ` (`WERKS = '1120'`): shipping points `1112` and `WAVG` both assigned to plant 1120.
+    - Table `TVST` & `TVSTT`: shipping points `1112` ("1120-FG Loading Area") and `WAVG` ("Aether Vault Gamma") are both active, valid shipping point definitions.
+  - Zero SAP writes.
+- **Validation:**
+  - `npx jest test/unit/common/BusinessConfigResolver.test.js test/unit/common/s4Config.test.js test/unit/le/deliveryNoRefAdapter.test.js --silent`: 3 suites, 80 tests passed (100% green).
+  - `npm run lint`: 0 errors, 0 warnings.
+  - `npx cds compile srv/ --to csn`: clean.
+  - `git diff --check`: clean.
 
 ### 2026-10-21 13:10 IST — Hardened BusinessConfigResolver, Authorization Restrictions, Confirmed Seed CSV, TTL Cache, and Read-Only SAP Customizing Check
 

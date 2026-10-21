@@ -141,6 +141,7 @@ class DeliveryNoRefAdapter {
       plant: String(payload.plant).trim(),
       warehouseNumber: payload.warehouseNumber || '',
       storageLocation: String(payload.storageLocation || '').trim(),
+      flow: 'delivery-no-ref',
       fields: ['salesOrganization', 'distributionChannel', 'division'],
       trustedOverrides
     });

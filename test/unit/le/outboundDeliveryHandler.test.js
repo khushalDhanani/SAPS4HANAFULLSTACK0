@@ -10,7 +10,6 @@ jest.mock('../../../srv/integration/s4hana/le/outbound-delivery/OutboundDelivery
 
 const outboundDeliveryAdapter = require('../../../srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
 const registerOutboundDeliveryHandlers = require('../../../srv/le/outbound-delivery/handlers/outboundDelivery.handler');
-const s4Config = require('../../../srv/common/s4Config');
 
 function createMockService() {
   const handlers = {};
@@ -180,11 +179,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       expect(req.error).not.toHaveBeenCalled();
     });
 
-    test('defaults shipping point from s4Config when none provided in payload', async () => {
-      outboundDeliveryAdapter.createDeliveryFromOrder.mockResolvedValue({
-        OutboundDelivery: '13000526'
-      });
-
+    test('rejects with 400 when ShippingPoint is missing and never defaults to first list entry', async () => {
       const req = {
         data: {
           SalesOrder: '5000104'
@@ -194,12 +189,8 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
 
       await handlers['createOutboundDelivery'](req);
 
-      const configuredDefaultSP = s4Config.getShippingPoints()[0];
-      expect(outboundDeliveryAdapter.createDeliveryFromOrder).toHaveBeenCalledWith({
-        salesOrder: '5000104',
-        shippingPoint: configuredDefaultSP,
-        deliveryDate: undefined
-      });
+      expect(req.error).toHaveBeenCalledWith(400, 'ShippingPoint is required to create an outbound delivery and cannot be defaulted.');
+      expect(outboundDeliveryAdapter.createDeliveryFromOrder).not.toHaveBeenCalled();
     });
 
     test('propagates mapped adapter error to req.error', async () => {
@@ -225,13 +216,12 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
   });
 
   describe('getDefaultShippingPoint function', () => {
-    test('returns primary shipping point and configured list from s4Config', async () => {
+    test('does not default shipping point to first list entry', async () => {
       const result = await handlers['getDefaultShippingPoint']();
 
-      const expectedSPs = s4Config.getShippingPoints();
       expect(result).toEqual({
-        ShippingPoint: expectedSPs[0],
-        ShippingPoints: expectedSPs
+        ShippingPoint: '',
+        ShippingPoints: []
       });
     });
   });

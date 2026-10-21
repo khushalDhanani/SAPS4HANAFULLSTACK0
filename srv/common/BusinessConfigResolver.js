@@ -74,15 +74,39 @@ function parseJsonArray(json, fieldName) {
 }
 
 /**
+ * Flow-specific required fields mappings.
+ * Each flow specifies only the business config fields it actually needs:
+ * - delivery-no-ref: salesOrganization, distributionChannel, division
+ * - 261 (mvt261):   mvt261NotReadyBins
+ * - scan-to:        warehouseNumber, plant
+ * - sd:             salesOrganization, distributionChannel, division, currency, orderType, inquiryType, conditionType, shippingPoints, salesMaterialTypes
+ */
+const FLOW_REQUIRED_FIELDS = Object.freeze({
+  'delivery-no-ref': Object.freeze(['salesOrganization', 'distributionChannel', 'division']),
+  'delivery':        Object.freeze(['salesOrganization', 'distributionChannel', 'division']),
+  '261':             Object.freeze(['mvt261NotReadyBins']),
+  'mvt261':          Object.freeze(['mvt261NotReadyBins']),
+  'scan-to':         Object.freeze(['warehouseNumber', 'plant']),
+  'sd':              Object.freeze([
+    'salesOrganization', 'distributionChannel', 'division', 'currency',
+    'orderType', 'inquiryType', 'conditionType',
+    'shippingPoints', 'salesMaterialTypes'
+  ])
+});
+
+/**
  * Standard required fields when full resolution is requested.
  */
-const ALL_REQUIRED_FIELDS = [
-  'salesOrganization', 'distributionChannel', 'division', 'currency',
-  'orderType', 'inquiryType', 'conditionType',
-  'shippingPoints', 'salesMaterialTypes'
-];
+const ALL_REQUIRED_FIELDS = FLOW_REQUIRED_FIELDS.sd;
 
 class BusinessConfigResolver {
+  /**
+   * Flow-specific required field definitions.
+   */
+  static get FLOW_REQUIRED_FIELDS() {
+    return FLOW_REQUIRED_FIELDS;
+  }
+
   /**
    * @param {Object} [options]
    * @param {Function} [options.dbQuery] - Injectable async (plant, warehouseNumber) => row | null
@@ -96,6 +120,7 @@ class BusinessConfigResolver {
     this._rfc = options.rfc || null;
     this._ttlMs = options.ttlMs !== undefined ? options.ttlMs : 300000;
     this._cache = new Map();
+    this.FLOW_REQUIRED_FIELDS = FLOW_REQUIRED_FIELDS;
   }
 
   /**
@@ -293,9 +318,12 @@ class BusinessConfigResolver {
     const plant = String(context.plant || context.werks || '').trim();
     const storageLocation = String(context.storageLocation || context.lgort || '').trim();
 
+    const flow = context.flow ? String(context.flow).toLowerCase().trim() : '';
     const requiredFields = Array.isArray(context.fields) && context.fields.length > 0
       ? context.fields
-      : ALL_REQUIRED_FIELDS;
+      : (flow && FLOW_REQUIRED_FIELDS[flow])
+        ? FLOW_REQUIRED_FIELDS[flow]
+        : ALL_REQUIRED_FIELDS;
 
     const result = {
       plant: plant || '',
@@ -369,7 +397,7 @@ class BusinessConfigResolver {
     }
 
     // ─── Step 2: Per-Key TTL Cache Check ─────────────────────────────────────
-    const cacheKey = this._getCacheKey(plant, warehouse, context.fields);
+    const cacheKey = this._getCacheKey(plant, warehouse, requiredFields);
     const hasOverrides = Object.keys(overrides).length > 0;
 
     if (!hasOverrides && this._ttlMs > 0) {

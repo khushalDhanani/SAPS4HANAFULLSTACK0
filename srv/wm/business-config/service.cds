@@ -7,7 +7,7 @@ using { saps4hana.wm as wm } from '../../../db/wm/business-config';
 service BusinessConfigService {
     @restrict: [
         { grant: 'READ', to: 'authenticated-user' },
-        { grant: ['CREATE', 'UPDATE', 'DELETE', 'WRITE'], to: 'WMAdmin' }
+        { grant: ['CREATE', 'UPDATE', 'DELETE', 'WRITE'], to: ['WarehouseManager', 'Admin'] }
     ]
     entity BusinessConfigs as projection on wm.BusinessConfig;
 }

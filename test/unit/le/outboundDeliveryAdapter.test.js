@@ -1,5 +1,4 @@
 const { OutboundDeliveryAdapter, _formatODataV2Date, _parseODataV2Date } = require('../../../srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
-const s4Config = require('../../../srv/common/s4Config');
 
 describe('Unit: OutboundDeliveryAdapter', () => {
   let adapter;
@@ -216,17 +215,12 @@ describe('Unit: OutboundDeliveryAdapter', () => {
       expect(url).toContain("ShippingPoint eq '11''2'");
     });
 
-    test('defaults to configured shipping points when no shipping point filter is provided', async () => {
+    test('does not append shipping point filter when no shipping point filter is provided and never defaults', async () => {
       mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
 
       await adapter.getOrdersDueForDelivery({});
       const url = mockClient.get.mock.calls[0][0];
-      const configuredSPs = s4Config.getShippingPoints();
-      if (configuredSPs.length > 1) {
-        configuredSPs.forEach(sp => expect(url).toContain(`ShippingPoint eq '${sp}'`));
-      } else {
-        expect(url).toContain(`ShippingPoint eq '${configuredSPs[0]}'`);
-      }
+      expect(url).not.toContain('ShippingPoint eq');
     });
 
     test('does not append $top or $skip for CAP requests so applyPaging manages pagination', async () => {
@@ -343,6 +337,11 @@ describe('Unit: OutboundDeliveryAdapter', () => {
     test('throws 400 when SalesOrder reference is missing', async () => {
       await expect(adapter.createDeliveryFromOrder({ salesOrder: '' })).rejects.toThrow('SalesOrder reference is required');
       await expect(adapter.createDeliveryFromOrder({})).rejects.toThrow('SalesOrder reference is required');
+    });
+
+    test('throws 400 when ShippingPoint is missing and never defaults to first list entry', async () => {
+      await expect(adapter.createDeliveryFromOrder({ salesOrder: '5000104' })).rejects.toThrow('ShippingPoint is required to create an outbound delivery and cannot be defaulted.');
+      await expect(adapter.createDeliveryFromOrder({ salesOrder: '5000104', shippingPoint: '' })).rejects.toThrow('ShippingPoint is required to create an outbound delivery and cannot be defaulted.');
     });
 
     test('POSTs minimal payload with ReferenceSDDocument and ShippingPoint only', async () => {

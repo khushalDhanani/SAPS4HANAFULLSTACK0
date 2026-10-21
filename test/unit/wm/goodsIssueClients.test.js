@@ -1681,5 +1681,30 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       spyOpen.mockRestore();
       spyBatches.mockRestore();
     });
+
+    it('fails clearly when storage location is missing in GoodsIssueAdapter', async () => {
+      const spyGet = jest.spyOn(GoodsIssueAdapter, '_get').mockResolvedValue([
+        { Reservation: '375049', OrderID: '1001954' }
+      ]);
+      const spyOpen = jest.spyOn(GoodsIssueAdapter, 'getOpenItems').mockResolvedValue([
+        {
+          ReservationNo: '375049',
+          ReservationItem: '0001',
+          OrderNo: '1001954',
+          Material: '3000000299',
+          Plant: '1120',
+          StorageLocation: '',
+          OpenQty: 25,
+          Batch: ''
+        }
+      ]);
+
+      await expect(GoodsIssueAdapter.resolveIdentifier('375049')).rejects.toThrow(
+        'Storage location is missing for Reservation 375049 Item 0001. Goods issue requires a storage location and cannot be defaulted.'
+      );
+
+      spyGet.mockRestore();
+      spyOpen.mockRestore();
+    });
   });
 });

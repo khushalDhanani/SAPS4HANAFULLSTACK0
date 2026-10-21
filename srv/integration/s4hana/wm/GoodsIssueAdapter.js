@@ -368,6 +368,16 @@ class GoodsIssueAdapter {
       }
     }
 
+    // Fail clearly if StorageLocation is missing
+    if (!activeItem.StorageLocation || String(activeItem.StorageLocation).trim() === '') {
+      const err = new Error(
+        `Storage location is missing for Reservation ${resolvedResv} Item ${activeItem.ReservationItem || '1'}. Goods issue requires a storage location and cannot be defaulted.`
+      );
+      err.status = 400;
+      err.statusCode = 400;
+      throw err;
+    }
+
     // Retrieve batches for active item's material and plant
     const allBatches = await this.getMaterialBatches(activeItem.Material, activeItem.Plant, activeItem.StorageLocation);
 
@@ -423,7 +433,7 @@ class GoodsIssueAdapter {
       Items: openItems,
       AvailableBatches: issuableBatches,
       AvailableStock: availableStock,
-      DefaultStorageLocation: activeItem.StorageLocation || s4Config.getStorageLocation(),
+      DefaultStorageLocation: activeItem.StorageLocation || '',
       DefaultStorageLocationName: activeItem.StorageLocationName || 'Raw Material'
     };
   }
