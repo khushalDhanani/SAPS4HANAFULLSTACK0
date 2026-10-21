@@ -1948,7 +1948,8 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
     let rtSpy;
     afterEach(() => rtSpy?.mockRestore());
 
-    test('auto-imports untracked GUI reservation on key READ', async () => {
+    test('serves concurrent untracked GUI reservation reads without persisting tracking or log rows', async () => {
+      const reservationNo = '0000999842';
       rtSpy = jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(async (table) => {
         if (table === 'RKPF') return [{ BWART: '311', KOSTL: '', ANLN1: '', ANLN2: '', UMWRK: '1120', UMLGO: 'MT01' }];
         if (table === 'RESB') return [{ MATNR: '000000008000006485', WERKS: '1120', LGORT: 'HS01', BDMNG: '1.000', MEINS: 'NOS', CHARG: '', KZEAR: '' }];
@@ -1957,23 +1958,29 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
         return [];
       });
 
-      const { status, data } = await GET(
-        "/odata/v4/reservation-entry/ReservationEntries(ReservationNo='0000527599',ReservationItem='0001')",
-        authClerk
-      );
-
-      expect(status).toBe(200);
-      expect(data).toMatchObject({
-        ReservationNo: '0000527599',
-        ReservationItem: '0001',
-        MovementType: '311',
-        Material: '8000006485',
-        MaterialName: 'Graphite Condenser, 40m2',
-        Plant: '1120',
-        StorageLocation: 'HS01',
-        ReceivingStorageLocation: 'MT01',
-        Status_code: '01'
-      });
+      const path = `/odata/v4/reservation-entry/ReservationEntries(ReservationNo='${reservationNo}',ReservationItem='0001')`;
+      try {
+        const responses = await Promise.all([GET(path, authClerk), GET(path, authClerk)]);
+        for (const { status, data } of responses) {
+          expect(status).toBe(200);
+          expect(data).toMatchObject({
+            ReservationNo: reservationNo,
+            ReservationItem: '0001',
+            MovementType: '311',
+            Material: '8000006485',
+            MaterialName: 'Graphite Condenser, 40m2',
+            Plant: '1120',
+            StorageLocation: 'HS01',
+            ReceivingStorageLocation: 'MT01',
+            Status_code: '01'
+          });
+        }
+        expect(await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: reservationNo, ReservationItem: '0001' }))).toBeFalsy();
+        expect(await cds.db.run(SELECT.from(LOG_ENTITY).where({ ReservationNo: reservationNo, ReservationItem: '0001' }))).toEqual([]);
+      } finally {
+        await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: reservationNo, ReservationItem: '0001' }));
+        await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: reservationNo, ReservationItem: '0001' }));
+      }
     });
 
     test('retryStep auto-imports untracked GUI reservation and creates TR', async () => {

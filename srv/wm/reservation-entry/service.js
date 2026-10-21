@@ -1295,56 +1295,17 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           if (!isPlantAllowed(live.Plant, allowedPlants)) {
             return req.error(404, `Reservation ${keyResNo}/${keyResItem} not found`);
           }
-          const imported = {
+          // A keyed GET stays read-only: return the live SAP view without inserting local
+          // tracking/log rows. The retryStep POST path imports a missing row before writes.
+          return {
+            ...live,
             ReservationNo: sPadded,
             ReservationItem: sItem,
-            MovementType: live.MovementType,
-            WarehouseNumber: live.WarehouseNumber || '',
-            Plant: live.Plant,
-            StorageLocation: live.StorageLocation,
-            Material: live.Material,
-            MaterialName: live.MaterialName || '',
-            Batch: live.Batch || '',
-            SerialNo: live.SerialNo || '',
-            Quantity: live.Quantity,
-            Unit: live.Unit,
-            CreatedByUser: live.CreatedByUser || live.createdBy || '',
-            ReceivingPlant: live.ReceivingPlant || '',
-            ReceivingStorageLocation: live.ReceivingStorageLocation || '',
-            CostCenter: live.CostCenter || '',
-            AssetNo: live.AssetNo || '',
-            SubNumber: live.SubNumber || '',
-            TransferRequirement: live.TransferRequirement || '',
-            TransferOrder: live.TransferOrder || '',
-            LogHandle: `LOG_${Date.now().toString(36).toUpperCase()}`,
             ExternalId: `${sPadded}/${keyResItem}`,
-            Status_code: live.Status_code || STATUS.RES_CREATED,
+            LogHandle: '',
             ErrorStep: '',
             ErrorMessage: ''
           };
-          await INSERT.into(ReservationEntries).entries(imported);
-
-          await INSERT.into(ReservationLogs).entries({
-            ID: cds.utils.uuid(),
-            ReservationNo: sPadded,
-            ReservationItem: sItem,
-            LogHandle: imported.LogHandle,
-            ExternalId: imported.ExternalId,
-            SubObject: 'TRACK',
-            Step: 'MB21',
-            Status: imported.Status_code,
-            MessageType: 'S',
-            MessageId: 'M7',
-            MessageNo: '060',
-            MessageText: `Reservation ${sPadded} imported from SAP GUI / S/4HANA`
-          });
-
-          const importedWhere = {
-            ReservationNo: sPadded,
-            ReservationItem: sItem
-          };
-          if (allowedPlants !== null) importedWhere.Plant = { in: allowedPlants };
-          return await SELECT.one.from(ReservationEntries).where(importedWhere);
         }
       }
 
