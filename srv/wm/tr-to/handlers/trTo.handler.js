@@ -385,13 +385,16 @@ class TrToHandler {
         };
       } catch (err) {
         // Rollback executed by the adapter; tracking goes to 90 (GI error, retryable)
+        const failedDeliveryNo = err.deliveryNumber || err.DeliveryNumber || existingTrack?.DeliveryNumber || '';
         if (trackKey) {
           try {
-            await UPDATE(ReservationTrack).set({ Status_code: STATUS.GI_ERROR, ErrorMessage: err.message, ErrorStep: 'MIGO' }).where(trackKey);
+            const errorFields = { Status_code: STATUS.GI_ERROR, ErrorMessage: err.message, ErrorStep: 'MIGO' };
+            if (failedDeliveryNo) errorFields.DeliveryNumber = failedDeliveryNo;
+            await UPDATE(ReservationTrack).set(errorFields).where(trackKey);
             await log(ReservationLog, {
-              ...trackKey, ProcessId: processId, DocumentNo: '',
+              ...trackKey, ProcessId: processId, DocumentNo: failedDeliveryNo,
               Step: 'MIGO', Status: STATUS.GI_ERROR, MessageType: 'E', MessageId: 'M7', MessageNo: '021',
-              MessageText: `Goods movement failed: ${err.message}`
+              MessageText: `Goods movement failed${failedDeliveryNo ? ` for Outbound Delivery ${failedDeliveryNo}` : ''}: ${err.message}`
             });
           } catch (dbErr) {
             console.warn('[trTo.handler] DB MIGO error status update warning:', dbErr.message);
@@ -405,10 +408,14 @@ class TrToHandler {
           error: err.message,
           MaterialDocument: '',
           MaterialDocYear: '',
+          DeliveryNumber: failedDeliveryNo,
+          deliveryNumber: failedDeliveryNo,
           Status: STATUS.GI_ERROR,
           StatusText: STATUS_TEXT[STATUS.GI_ERROR],
           StockEffect: '',
-          Message: `Goods movement failed: ${err.message}`,
+          Message: failedDeliveryNo
+            ? (err.stage === 'PGI' ? err.message : `PGI failed for Outbound Delivery ${failedDeliveryNo}: ${err.message}`)
+            : `Goods movement failed: ${err.message}`,
           ErrorStep: 'MIGO',
           ErrorMessage: err.message
         };

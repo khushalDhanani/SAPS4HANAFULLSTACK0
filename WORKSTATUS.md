@@ -5,6 +5,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **L9/514 PGI retry recovery (2026-10-21 12:27 IST): CODE DELIVERED locally.** Adapter errors retain the committed delivery number, and the MIGO handler stores it on the retryable error track so retry resumes PGI directly. Focused tests passed (2 suites / 101 tests), changed-file ESLint passed, and staged/unstaged diff checks passed. No SAP calls or writes; live SAP behavior remains unverified.
 - **WM audit reconciliation + local fixes (2026-10-21 11:47 IST):** current HEAD review confirms #1, #3, #4, #6, #8–#13, #16, #17, and #19 implemented; #2 mapper change is present but live re-proof remains pending; #14 and #301 destination reconciliation were open and fixed in this session; #12 was still open despite older overlapping work-log claims and is now fixed/tested. #15 is UI-guarded but has no backend duplicate guard. #5, #7, and #18 remain blocked on read-only SAP evidence (no SAP writes). #20 local hygiene is improved: sample key blank, defaults removed, seed files untracked/outside db/data, live writer scripts gated, and technical RFC user no longer returned; provider key revocation and Git-history cleanup remain external follow-up. No proven movement behavior was live-retested or changed in SAP. Focused suites pass; the full WM run remains incomplete because 10 HTTP-backed suites cannot bind in this sandbox (`listen EPERM`); see the Changes Log entry for exact counts and other validations.
 
 - **Movement matrix follow-up (2026-10-21 11:39 IST):** added explicit no-`BAPI_TRANSACTION_COMMIT` assertions after failed goods-movement BAPI responses for 201, 241, 301, and 311 retry tests. Four focused suites passed (79 tests). This closes that stated test gap; it does not prove SAP behavior.
@@ -3484,6 +3485,14 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 12:27 IST — Preserve L9/514 delivery number through PGI failure
+
+- **Status:** Complete locally; live SAP verification remains unverified.
+- **Change:** `postGoodsMovement` now records the committed L9/514 delivery number before attempting PGI. `postDeliveryGoodsIssue` annotates all failures, including transport exceptions, with the delivery number and PGI stage. The MIGO handler persists that number and writes it to the error log when PGI fails; the existing retry path supplies the tracked number back to the adapter, which enters direct PGI without calling `BAPI_GOODSMVT_CREATE`.
+- **Affected files:** `srv/integration/s4hana/wm/ReservationProcessAdapter.js`, `srv/wm/tr-to/handlers/trTo.handler.js`, `test/unit/wm/autoMigoPosting.test.js`, `test/unit/wm/trToHandler.test.js`, `WORKSTATUS.md`.
+- **Validation:** `npx jest test/unit/wm/autoMigoPosting.test.js test/unit/wm/trToHandler.test.js --runInBand --silent` — PASS (2 suites, 101 tests); `npx eslint srv/integration/s4hana/wm/ReservationProcessAdapter.js srv/wm/tr-to/handlers/trTo.handler.js test/unit/wm/autoMigoPosting.test.js test/unit/wm/trToHandler.test.js` — PASS; `git diff --cached --check` and `git diff --check` — PASS. Final diff reviewed; no SAP calls or writes.
+- **Next action:** If desired, re-prove L9/514 create/PGI failure/retry in SAP only after separately authorizing the specific live write and test data; no further local change is pending.
 
 ### 2026-10-21 11:47 IST — WM audit reconciliation and remaining local fixes
 

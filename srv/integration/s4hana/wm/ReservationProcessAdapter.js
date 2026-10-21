@@ -2166,10 +2166,18 @@ class ReservationProcessAdapter {
       };
     };
 
-    if (options.call) {
-      return executeInSession(options.call);
+    try {
+      if (options.call) {
+        return await executeInSession(options.call);
+      }
+      return await this.rfc.session(executeInSession);
+    } catch (err) {
+      // The delivery is committed before PGI. Preserve its key on every PGI failure,
+      // including transport exceptions, so a later request can resume PGI directly.
+      if (err && !err.deliveryNumber) err.deliveryNumber = delivNo;
+      if (err && !err.stage) err.stage = 'PGI';
+      throw err;
     }
-    return this.rfc.session(executeInSession);
   }
 
   /**
@@ -2822,11 +2830,13 @@ class ReservationProcessAdapter {
         if (!testrun) {
           if (deliveryNo && !matDoc) {
             await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+            // This delivery is already committed. Keep it available if PGI fails so
+            // the handler can persist it and retry directly against the same delivery.
+            createdDeliveryNumber = deliveryNo;
             LOG.warn(`[postGoodsMovement] Movement ${sMvt} for reservation ${sResNo}/${sResItem}: SAP created outbound delivery ${deliveryNo} (L9/514); posting Goods Issue (PGI)...`);
             const pgiRes = await this.postDeliveryGoodsIssue(deliveryNo, { call });
             matDoc = pgiRes.materialDocument;
             docYear = pgiRes.materialDocYear;
-            createdDeliveryNumber = deliveryNo;
             if (pgiRes.messages && pgiRes.messages.length) {
               resMessages = [...resMessages, ...pgiRes.messages];
             }

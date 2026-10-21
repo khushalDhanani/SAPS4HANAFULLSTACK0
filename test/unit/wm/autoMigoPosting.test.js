@@ -530,8 +530,9 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         }) // BAPI_OUTB_DELIVERY_CONFIRM_DEC (PGI fails)
         .mockResolvedValueOnce({}); // ROLLBACK
 
-      await expect(
-        adapter.postGoodsMovement({
+      let failure;
+      try {
+        await adapter.postGoodsMovement({
           reservationNo: '530233',
           reservationItem: '0001',
           movementType: '241',
@@ -542,10 +543,59 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           unit: 'NOS',
           assetNo: '400001',
           subNumber: '0000'
-        })
-      ).rejects.toThrow(/PGI failed for Outbound Delivery 0080000115: \[E\] Delivery item blocked for goods issue/);
+        });
+      } catch (err) {
+        failure = err;
+      }
+
+      expect(failure).toMatchObject({
+        stage: 'PGI',
+        deliveryNumber: '0080000115'
+      });
+      expect(failure.message).toMatch(/PGI failed for Outbound Delivery 0080000115: \[E\] Delivery item blocked for goods issue/);
 
       expect(mockRfc.call).toHaveBeenCalledWith('BAPI_TRANSACTION_ROLLBACK', {});
+    });
+
+    test('retries a persisted L9/514 delivery by posting PGI without creating another delivery', async () => {
+      setupDefaultReadTable();
+      const pgi = jest.spyOn(adapter, 'postDeliveryGoodsIssue').mockResolvedValue({
+        success: true,
+        materialDocument: '5000999999',
+        materialDocYear: '2026',
+        messages: []
+      });
+
+      const res = await adapter.postGoodsMovement({
+        reservationNo: '530233',
+        reservationItem: '0001',
+        movementType: '241',
+        material: '8000009754',
+        plant: '1120',
+        storageLocation: 'CS02',
+        quantity: 1,
+        unit: 'NOS',
+        assetNo: '400001',
+        subNumber: '0000',
+        deliveryNumber: '0080000115',
+        testrun: true,
+        skipStockVerification: true,
+        skipReservationVerification: true
+      });
+
+      expect(pgi).toHaveBeenCalledWith('0080000115', expect.objectContaining({ call: expect.any(Function) }));
+      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
+      expect(res.deliveryNumber).toBe('0080000115');
+    });
+
+    test('keeps the delivery key when the PGI RFC call fails at the transport layer', async () => {
+      const call = jest.fn().mockRejectedValue(new Error('connection lost'));
+
+      await expect(adapter.postDeliveryGoodsIssue('80000115', { call })).rejects.toMatchObject({
+        message: 'connection lost',
+        stage: 'PGI',
+        deliveryNumber: '0080000115'
+      });
     });
 
     test('rolls back and throws error when PGI succeeds but material document cannot be confirmed in MATDOC/VBFA', async () => {

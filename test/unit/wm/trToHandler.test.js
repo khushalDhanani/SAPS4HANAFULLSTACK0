@@ -91,6 +91,15 @@ describe('TrToHandler', () => {
     expect(lookup).toMatch(/trackedReservation = existing\?\.TransferRequirement[\s\S]*WarehouseNumber: existing\.WarehouseNumber/);
   });
 
+  it('persists an L9/514 delivery number when MIGO/PGI fails so retry can resume that delivery', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../../srv/wm/tr-to/handlers/trTo.handler.js'), 'utf8');
+    const catchBlock = source.slice(source.indexOf('// Rollback executed by the adapter; tracking goes to 90 (GI error, retryable)'), source.indexOf("srv.on('postMigoGoodsMovement'"));
+    expect(catchBlock).toMatch(/const failedDeliveryNo = err\.deliveryNumber \|\| err\.DeliveryNumber \|\| existingTrack\?\.DeliveryNumber/);
+    expect(catchBlock).toMatch(/if \(failedDeliveryNo\) errorFields\.DeliveryNumber = failedDeliveryNo/);
+    expect(catchBlock).toMatch(/DeliveryNumber: failedDeliveryNo/);
+    expect(source).toMatch(/deliveryNumber: data\.deliveryNumber \|\| data\.DeliveryNumber \|\| existingTrack\?\.DeliveryNumber/);
+  });
+
   it('does not return the technical RFC user as ConfirmedBy when CAP has no user identity', async () => {
     const previousUsername = process.env.S4_USERNAME;
     process.env.S4_USERNAME = 'technical-rfc-user';
