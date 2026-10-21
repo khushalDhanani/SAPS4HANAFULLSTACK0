@@ -521,6 +521,7 @@ class ReservationProcessAdapter {
       orderId: reqOrderIdRaw,
       isTransferPosting: reqIsTransferPosting,
       batch,
+      isRetry = Boolean(params.isRetry),
       throwError = true
     } = params;
     const reqOrderId = reqOrderIdRaw || params.orderId || params.OrderId || params.OrderID || params.orderNo || params.OrderNo || params.aufnr || params.Aufnr || params.AUFNR;
@@ -659,6 +660,43 @@ class ReservationProcessAdapter {
       const s4TrRsnum = isTransferPosting ? '' : s4Rsnum;
       const s4TrRspos = isTransferPosting ? '' : s4Rspos;
 
+      if (isRetry && this.rfc && s4TrRsnum) {
+        try {
+          const ltbkRows = await this.rfc.readTable(
+            'LTBK',
+            ['LGNUM', 'TBNUM', 'BWLVS', 'BETYP', 'BENUM', 'RSNUM', 'STATU'],
+            [`LGNUM = '${s4Lgnum}'`, `AND RSNUM = '${s4TrRsnum}'`]
+          );
+          const openRows = (ltbkRows || []).filter((r) => r.TBNUM && String(r.STATU || '').trim() !== 'E');
+          if (openRows.length > 0) {
+            const existing = openRows[0];
+            const cleanTbnum = alphaOut(existing.TBNUM);
+            LOG.warn(`[createTransferRequirement] Open Transfer Requirement ${cleanTbnum} already exists in SAP LTBK for reservation ${s4TrRsnum} in warehouse ${s4Lgnum}; adopting existing TR`);
+            const cleanResNo = s4Rsnum ? alphaOut(s4Rsnum) : alphaOut(reservationNo);
+            return {
+              success: true,
+              reservationNumber: cleanResNo,
+              trNumber: cleanTbnum,
+              trItem: '0001',
+              material: alphaOut(s4Mat),
+              quantity: s4Menga,
+              plant: s4Werks,
+              storageLocation: s4Lgort,
+              warehouse: s4Lgnum,
+              warehouseNumber: s4Lgnum,
+              movement: String(existing.BWLVS || s4Bwlvs).trim(),
+              movementType: s4Bwlvs,
+              trNumberRaw: existing.TBNUM,
+              status: STATUS.TR_CREATED,
+              item: existing,
+              alreadyExisted: true
+            };
+          }
+        } catch (_ltbkErr) {
+          LOG.warn(`[createTransferRequirement] Pre-creation LTBK check error: ${_ltbkErr.message}`);
+        }
+      }
+
       const sTrBatch = sapKeyOpt(batch, 'batch');
       const ltbaItem = {
         LGNUM: s4Lgnum,
@@ -740,32 +778,7 @@ class ReservationProcessAdapter {
               tbpos = resZ.EV_TBPOS || resZ.E_TBPOS || '0001';
               returnedItem = resZ;
             } else if (resZ && resZ.EV_SUCCESS === 'E' && resZ.EV_MESSAGE) {
-              if (s4Bwlvs === '261') {
-                LOG.warn(`[createTransferRequirement] Z_WM_TR_CREATE rejected WM 261 (${resZ.EV_MESSAGE}); staging via WM 311 for reservation ${s4Rsnum}`);
-                const resFallback = await call('Z_WM_TR_CREATE', {
-                  IV_LGNUM: s4Lgnum,
-                  IV_BWLVS: '311',
-                  IV_MATNR: s4Mat,
-                  IV_WERKS: s4Werks,
-                  IV_LGORT: s4Lgort,
-                  IV_MENGA: s4Menga,
-                  IV_ALTME: s4Altme,
-                  IV_RSNUM: '',
-                  IV_RSPOS: '',
-                  IV_COMMIT: 'X'
-                });
-                rawTbnum = resFallback && (resFallback.EV_TBNUM || resFallback.E_TBNUM);
-                const cleanFallback = rawTbnum && rawTbnum !== '0000000000' ? alphaOut(rawTbnum) : '';
-                if (cleanFallback) {
-                  tbnum = cleanFallback;
-                  tbpos = resFallback.EV_TBPOS || resFallback.E_TBPOS || '0001';
-                  returnedItem = resFallback;
-                } else {
-                  throw new Error(resFallback?.EV_MESSAGE || resZ.EV_MESSAGE);
-                }
-              } else {
-                throw new Error(resZ.EV_MESSAGE);
-              }
+              throw new Error(resZ.EV_MESSAGE);
             }
           } catch (_zwmErr) {
             if (_zwmErr.message && !_zwmErr.message.includes('NOT_FOUND') && !_zwmErr.message.includes('RFC_NO_AUTHORITY')) {
@@ -2226,26 +2239,11 @@ class ReservationProcessAdapter {
         }
       } catch (_) {}
     }
-    if (!material && (sMvt === '311' || sMvt === '301') && this.rfc) {
-      try {
-        const mardRows = await this.rfc.readTable('MARD', ['MATNR'], [`WERKS = '${plant}'`, ...(storageLocation ? [`AND LGORT = '${storageLocation}'`] : [])], 1);
-        if (mardRows?.[0]?.MATNR?.trim()) material = mardRows[0].MATNR.trim();
-      } catch (_) {}
-    }
-    if (!material && (sMvt === '311' || sMvt === '301')) {
-      material = `MAT-${sMvt}`;
-    }
-    if ((!quantity || Number(quantity) <= 0) && (sMvt === '311' || sMvt === '301')) {
-      quantity = 1;
-    }
     if (!unit && hasRes && this.rfc) {
       try {
         const resbRows = await this.rfc.readTable('RESB', ['MEINS'], [`RSNUM = '${sResNo}'`, `AND RSPOS = '${sResItem}'`], 1);
         if (resbRows?.[0]?.MEINS?.trim()) unit = resbRows[0].MEINS.trim();
       } catch (_) {}
-    }
-    if (!unit) {
-      unit = 'EA';
     }
 
     if (!material) throw httpError(400, 'Material is mandatory');
@@ -3613,10 +3611,6 @@ class ReservationProcessAdapter {
         }
       } catch (_) {}
     }
-    if (!existingTrNo && (existingToNo || normInput.toConfirmed)) {
-      existingTrNo = `TR_FOR_${existingToNo || 'TO'}`;
-    }
-
     if (existingTrNo) {
       tr = {
         success: true,
@@ -3625,6 +3619,12 @@ class ReservationProcessAdapter {
         warehouseNumber: normInput.warehouseNumber,
         movementType: normInput.movementType,
         existing: true
+      };
+    } else if (existingToNo || normInput.toConfirmed) {
+      tr = {
+        success: false,
+        stage: 'TR',
+        error: `Transfer Requirement cannot be resolved in SAP for Transfer Order ${existingToNo || 'TO'}`
       };
     } else {
       try {

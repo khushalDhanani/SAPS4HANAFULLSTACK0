@@ -835,6 +835,9 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
 
       const res = await adapter.postGoodsMovement({
         movementType: '311',
+        material: 'MAT-311',
+        quantity: 1,
+        unit: 'EA',
         plant: '1000',
         sourceStorageLocation: '0001',
         destinationStorageLocation: '0002'
@@ -880,6 +883,9 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
 
       const res = await adapter.postGoodsMovement({
         movementType: '301',
+        material: 'MAT-301',
+        quantity: 1,
+        unit: 'EA',
         sourcePlant: '1000',
         sourceStorageLocation: '0001',
         destinationPlant: '2000',
@@ -3111,6 +3117,174 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       expect(result.idempotentRetry).toBe(true);
       expect(result.businessKey).toBe('RES:520235/1#TO:1037299#PID:E5B42701-1111-4222-8333-000000000008');
       expect(result.materialDocument).toBe('5000999999');
+    });
+  });
+
+  describe('Audit items 6, 8, 9, 10: uncalled writes, duplicate guards, fake documents, defaults removal', () => {
+    test('Item 6: createTransferRequirement on retry (isRetry: true) returns existing open TR from LTBK without calling L_TR_CREATE', async () => {
+      mockRfc.readTable.mockImplementation(async (table, fields, where = []) => {
+        const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+        if (table === 'LTBK' && whereStr.includes("RSNUM = '0000529999'")) {
+          return [{
+            LGNUM: 'W01',
+            TBNUM: '0001000888',
+            BWLVS: '201',
+            BETYP: 'K',
+            BENUM: '001011201301',
+            RSNUM: '0000529999',
+            STATU: ' '
+          }];
+        }
+        return [];
+      });
+
+      const res = await adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        movementType: '201',
+        material: '8000009754',
+        plant: '1120',
+        storageLocation: 'CS02',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '0000529999',
+        costCenter: '1011201301',
+        isRetry: true
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.trNumber).toBe('1000888');
+      expect(res.alreadyExisted).toBe(true);
+      expect(mockRfc.session).not.toHaveBeenCalled();
+      expect(mockRfc.call).not.toHaveBeenCalled();
+    });
+
+    test('Item 8: createTransferRequirement for 261 does NOT fall back to 311 staging TR and throws EV_MESSAGE', async () => {
+      mockRfc.readTable.mockImplementation(async () => []);
+      mockRfc.call.mockImplementation(async (fm) => {
+        if (fm === 'L_TR_CREATE') {
+          const err = new Error('RFC_CALL_REJECTED');
+          err.key = 'RFC_CALL_REJECTED';
+          throw err;
+        }
+        if (fm === 'RFC_GET_FUNCTION_INTERFACE') {
+          return { PARAMS: [{ PARAMETER: 'IV_BETYP' }, { PARAMETER: 'IV_BENUM' }] };
+        }
+        if (fm === 'ZWM_TR_CREATE') {
+          throw new Error('NOT_SUPPORTED');
+        }
+        if (fm === 'Z_WM_TR_CREATE') {
+          return {
+            EV_SUCCESS: 'E',
+            EV_MESSAGE: 'Order 1002790 is locked by user',
+            EV_TBNUM: '0000000000'
+          };
+        }
+        return {};
+      });
+
+      await expect(
+        adapter.createTransferRequirement({
+          warehouseNumber: 'W01',
+          movementType: '261',
+          material: '8000009754',
+          plant: '1120',
+          storageLocation: 'CS01',
+          quantity: 1,
+          unit: 'KG',
+          reservationNo: '0000529998',
+          orderId: '1002790'
+        })
+      ).rejects.toThrow('Order 1002790 is locked by user');
+
+      const zCalls = mockRfc.call.mock.calls.filter((c) => c[0] === 'Z_WM_TR_CREATE');
+      for (const call of zCalls) {
+        expect(call[1]?.IV_BWLVS).not.toBe('311');
+      }
+    });
+
+    test('Item 9: executeReservationWarehouseFlow fails TR stage when existingToNo has no resolvable TR (no fake TR_FOR_)', async () => {
+      mockRfc.readTable.mockImplementation(async () => []);
+
+      const result = await adapter.executeReservationWarehouseFlow({
+        movementType: '201',
+        material: '8000009754',
+        plant: '1120',
+        storageLocation: 'CS02',
+        quantity: 1,
+        unit: 'NOS',
+        costCenter: '1011201301',
+        reservationNo: '529997',
+        toNumber: '0001037999',
+        throwError: false
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.stage).toBe('TR');
+      expect(result.error).toContain('Transfer Requirement cannot be resolved in SAP for Transfer Order 0001037999');
+      expect(result.transferRequirement).toBeUndefined();
+    });
+
+    test('Item 10: postGoodsMovement for 311/301 without material throws 400 Material is mandatory', async () => {
+      await expect(
+        adapter.postGoodsMovement({
+          movementType: '311',
+          plant: '1120',
+          sourceStorageLocation: 'CS01',
+          destinationStorageLocation: 'HS01',
+          quantity: 1,
+          unit: 'EA'
+        })
+      ).rejects.toMatchObject({
+        message: 'Material is mandatory',
+        status: 400
+      });
+
+      await expect(
+        adapter.postGoodsMovement({
+          movementType: '301',
+          sourcePlant: '1120',
+          destinationPlant: '1110',
+          sourceStorageLocation: 'CS01',
+          destinationStorageLocation: 'CS01',
+          quantity: 1,
+          unit: 'EA'
+        })
+      ).rejects.toMatchObject({
+        message: 'Material is mandatory',
+        status: 400
+      });
+    });
+
+    test('Item 10: postGoodsMovement for 311/301 without quantity throws 400 Valid Quantity is mandatory', async () => {
+      await expect(
+        adapter.postGoodsMovement({
+          movementType: '311',
+          material: '8000009754',
+          plant: '1120',
+          sourceStorageLocation: 'CS01',
+          destinationStorageLocation: 'HS01',
+          unit: 'EA'
+        })
+      ).rejects.toMatchObject({
+        message: 'Valid Quantity is mandatory',
+        status: 400
+      });
+    });
+
+    test('Item 10: postGoodsMovement for 311/301 without unit throws 400 Unit is mandatory', async () => {
+      await expect(
+        adapter.postGoodsMovement({
+          movementType: '311',
+          material: '8000009754',
+          plant: '1120',
+          sourceStorageLocation: 'CS01',
+          destinationStorageLocation: 'HS01',
+          quantity: 1
+        })
+      ).rejects.toMatchObject({
+        message: 'Unit is mandatory',
+        status: 400
+      });
     });
   });
 });

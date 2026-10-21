@@ -911,6 +911,28 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(track.Status_code).toBe('02');
       expect(track.TransferRequirement).toBe('0001001839');
 
+      // Second call when TR already exists on track must reject with 400 (reusing retryStep line 1775 guard)
+      await expect(
+        POST(
+          '/odata/v4/reservation-entry/createTransferRequirement',
+          {
+            ReservationNo: testRes,
+            ReservationItem: '0001',
+            WarehouseNumber: 'W01'
+          },
+          authClerk
+        )
+      ).rejects.toMatchObject({
+        response: {
+          status: 400,
+          data: {
+            error: {
+              message: expect.stringContaining('already exists for reservation 0000529991/0001; retry LT04')
+            }
+          }
+        }
+      });
+
       await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: testRes }));
       await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: testRes }));
     });

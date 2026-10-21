@@ -742,6 +742,14 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         return req.error(whErr.status || 502, userFacingSapError(whErr, req, 'warehouse determination'));
       }
 
+      let trClosedWithoutTo = false;
+      if (track.TransferRequirement && adapter.rfc) {
+        trClosedWithoutTo = await isTrClosedWithoutTo(adapter.rfc, determinedWh || track.WarehouseNumber, track.TransferRequirement);
+      }
+      if (track.TransferRequirement && !trClosedWithoutTo) {
+        return req.error(400, `Transfer Requirement ${alphaOut(track.TransferRequirement)} already exists for reservation ${sResNo}/${sResItem}; retry LT04 (TO creation) instead`);
+      }
+
       let trResult;
       try {
         trResult = await adapter.createTransferRequirement({
@@ -760,6 +768,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           assetNo: track.AssetNo,
           subNumber: track.SubNumber,
           batch: track.Batch,
+          isRetry: true,
           throwError: false
         });
       } catch (err) {
@@ -1828,7 +1837,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
               costCenter: track.CostCenter,
               assetNo: track.AssetNo,
               subNumber: track.SubNumber,
-              batch: track.Batch
+              batch: track.Batch,
+              isRetry: true
             });
 
             if (trResult.warning) {

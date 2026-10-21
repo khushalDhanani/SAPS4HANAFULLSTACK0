@@ -9,7 +9,7 @@
  */
 const cds = require('@sap/cds');
 
-const { POST, GET } = cds.test(__dirname + '/../../../');
+const { POST, GET, PATCH } = cds.test(__dirname + '/../../../');
 const { SELECT, DELETE } = cds.ql;
 
 const TRACK_ENTITY = 'saps4hana.wm.ReservationTrack';
@@ -307,6 +307,42 @@ describe('Chunk 1: Data Model — ZRES_TRACK & ZRES_LOG', () => {
           authViewer
         )
       ).rejects.toMatchObject({ response: { status: 403 } });
+    });
+
+    test('ReservationTracks and ReservationLogs reject direct CUD writes (@readonly)', async () => {
+      // POST directly to ReservationTracks is rejected with 405 Method Not Allowed
+      await expect(
+        POST(
+          '/odata/v4/reservation-track/ReservationTracks',
+          {
+            ReservationNo: '0000999099',
+            ReservationItem: '0001',
+            Status_code: '05'
+          },
+          authClerk
+        )
+      ).rejects.toMatchObject({ response: { status: 405 } });
+
+      // PATCH directly to ReservationTracks is rejected with 405 Method Not Allowed
+      await expect(
+        PATCH(
+          "/odata/v4/reservation-track/ReservationTracks(ReservationNo='0000524979',ReservationItem='0001')",
+          { Status_code: '05' },
+          authViewer
+        )
+      ).rejects.toMatchObject({ response: { status: 405 } });
+
+      // POST directly to ReservationLogs is rejected with 405 Method Not Allowed
+      await expect(
+        POST(
+          '/odata/v4/reservation-track/ReservationLogs',
+          {
+            ReservationNo: '0000999099',
+            ReservationItem: '0001'
+          },
+          authClerk
+        )
+      ).rejects.toMatchObject({ response: { status: 405 } });
     });
   });
 });

@@ -5,6 +5,9 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Audit fix 4 of 9 (2026-10-21 11:55 IST, items 13, 6, 9, 8, 10): uncalled write actions, duplicate TR guards, fake document removal, and 311/301 MIGO defaults deleted — DELIVERED, unit-tested (WM suite 2254 passed, 0 failed, eslint and git diff clean). Fix 2's live 311 re-proof still pending your "go".**
+  - **Review validation (2026-10-21 11:16 IST):** focused adapter tests passed (3 suites / 132 tests), ESLint and CDS compile passed, and `git diff --check` passed. A fresh full WM run was **incomplete in this sandbox**: 76 suites passed, 10 failed and 1 skipped; failures were CAP HTTP tests unable to bind `127.0.0.1` (`listen EPERM`), not assertion failures. No live SAP call was made.
+
 - **Audit fix 3 of 9 (2026-10-21 11:35 IST, items 11 + 4): MIGO idempotency — service guard now effective, adapter lookup fails closed and distinguishes replay from a new partial issue — DELIVERED, unit-tested (WM suite 2247 passed, 0 failed). Fix 2's live 311 re-proof still pending your "go".**
 
 - **Audit fix 2 of 9 (2026-10-21 11:05 IST): 301/311 direct-post mappers now send the idempotency `ReferenceDocument` header — CODE DELIVERED, unit-tested; live re-proof BLOCKED on explicit WRITE "go" (candidate 311: reservation 529698/0001, material 8000001699, 1120 HS01→MT01, 1 NOS; candidate 301: 525864/0001, 8900000004, 1120/CS01→1110/CS01, 1 KG).**
@@ -3369,6 +3372,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Exact Next Recommended Action (audit fixes 13, 6, 9, 8, 10 — 2026-10-21 11:16 IST):** rerun `npx jest test/unit/wm/ --runInBand` in an environment that permits CAP test servers to bind `127.0.0.1`; the current sandbox run is blocked by `listen EPERM` in 10 HTTP-backed suites. The focused adapter checks, ESLint, CDS compile, and diff check passed. Separately, do not perform the live 311 re-proof until the user provides explicit WRITE authorization for that specific SAP call.
 - **Exact Next Recommended Action (recovered SQLite schema gap — 2026-10-21, 10:03 IST):** user swapped `db.sqlite` (backup in `.backup-db-corrupt-20261021/`); the pool is healthy again but detail reads now fail with `no such column: $R.DeliveryNumber` because the recovered data predates the 09:50 `DeliveryNumber` column. Column diff model vs DB: only `saps4hana_wm_ReservationTrack.DeliveryNumber` missing (views `ReservationEntryService_ReservationEntries` and `ReservationTrackService_ReservationTracks` project it). Applying `ALTER TABLE` + view recreation was denied by the session permission classifier → run `sqlite3 db.sqlite < db-migrate-20261021-deliverynumber.sql` (additive script in project root; expected output `ok` and `17`), then re-open the detail page. Delete the script afterwards.
 - **Exact Next Recommended Action (corrupt local SQLite — 2026-10-21, 09:58 IST):** stop `cds watch`, then in the project root run `mkdir -p .backup-db-corrupt-20261021 && mv db.sqlite db.sqlite-shm db.sqlite-wal .backup-db-corrupt-20261021/ && mv db.recovered.sqlite db.sqlite`, restart `npm run watch`, and re-open `ReservationEntries(ReservationNo='0000530232',ReservationItem='0001')`. `db.sqlite-shm` / `db.sqlite-wal` are tracked in git and will show as deleted; they should be untracked (`git rm --cached`) since `*.sqlite` is already ignored. Cause of the corruption is UNKNOWN (file mtime 09:41 IST, 0-byte WAL at 09:48 IST).
 
@@ -3459,6 +3463,37 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 11:55 IST — Audit fix 4 (items 13, 6, 9, 8, 10): close or delete uncalled write actions, duplicate TR guards, fake document removal, and MIGO defaults
+
+- **Reason:** audit findings (P1):
+  - (13) `ReservationTrackService` exposed tracking and log tables writable to any authenticated user. Added `@readonly` to both `ReservationTracks` and `ReservationLogs` projections.
+  - (6) TR creation had no duplicate guard; `createTransferRequirement` standalone action and `createTransferRequirement` adapter could generate duplicate open TRs in SAP on retry. Guarded standalone action by reusing `retryStep` line 1775 guard (rejects with 400 when TR exists), and in adapter reads `LTBK` by `LGNUM + RSNUM` with `STATU != 'E'` on retry (`isRetry: true`) to adopt the existing open TR without calling `L_TR_CREATE`.
+  - (9) Fake TR number `TR_FOR_<to>` was generated in `ReservationProcessAdapter.js:executeReservationWarehouseFlow` when an existing TO was passed without a resolvable TR, violating the no-fake-document rule. Removed the fake document generation and now fails the TR stage instead.
+  - (8) Movement 261 fell back to a 311 staging TR without reservation or requirement when `Z_WM_TR_CREATE` returned `EV_SUCCESS === 'E'`, yet was reported as 261. Deleted the 311 fallback and now fails fast throwing `EV_MESSAGE`.
+  - (10) 311/301 MIGO defaults in `ReservationProcessAdapter.js:postGoodsMovement` picked a random material from MARD, quantity = 1, and unit = 'EA' when inputs were missing. Deleted these defaults and kept mandatory throws for `Material`, `Valid Quantity`, and `Unit`.
+- **Changes:**
+  - `srv/wm/reservation-track/service.cds`: added `@readonly` to `ReservationTracks` and `ReservationLogs`.
+  - `srv/wm/reservation-entry/service.js`: in action `createTransferRequirement`, added duplicate check using `isTrClosedWithoutTo` and 400 rejection; passed `isRetry: true` from both `createTransferRequirement` action and `retryStep` LB01.
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+    - in `createTransferRequirement`: destructured `isRetry`, added pre-creation `LTBK` read by `LGNUM + RSNUM` with `STATU != 'E'` on retry to adopt existing open TR;
+    - in `createTransferRequirement` fallback catch: deleted 261 fallback to 311 staging TR; re-throws `EV_MESSAGE` directly;
+    - in `executeReservationWarehouseFlow`: deleted `TR_FOR_${existingToNo || 'TO'}` fake document generation; returns failure with `stage: 'TR'` when existing TO has no resolvable TR;
+    - in `postGoodsMovement`: deleted MARD random material lookup, `MAT-${sMvt}`, `quantity = 1` default, and `unit = 'EA'` default for 311/301; keeps mandatory field throws.
+  - `srv/integration/s4hana/wm/toState.js`: wrapped `isTrClosedWithoutTo` in `try / catch` returning `false` on RFC table read failure.
+- **Tests:**
+  - `test/unit/wm/reservationTrack.test.js`: added tests verifying POST to `/ReservationTracks`, PATCH to `/ReservationTracks`, and POST to `/ReservationLogs` are rejected with HTTP 405 Method Not Allowed (`ENTITY_IS_READ_ONLY`).
+  - `test/unit/wm/reservationEntryService.test.js`: added test verifying `createTransferRequirement` action rejects duplicate invocation when TR already exists on track with HTTP 400.
+  - `test/unit/wm/autoMigoPosting.test.js`: updated 311 and 301 clear request tests with explicit material, quantity, and unit; added new describe block covering Items 6, 8, 9, 10.
+- **Validation:**
+  - `npx jest test/unit/wm/reservationTrack.test.js`: 12/12 PASS.
+  - `npx jest test/unit/wm/reservationEntryService.test.js`: 88/88 PASS.
+  - `npx jest test/unit/wm/autoMigoPosting.test.js`: 84/84 PASS.
+  - `npx jest test/unit/wm`: 87 suites passed, 1 skipped, 2254 passed, 56 skipped, 0 failed.
+  - `npm run lint`: 0 errors, 0 warnings.
+  - `git diff --check`: clean (0 whitespace/formatting errors). No SAP write call made.
+- **Validation rerun (2026-10-21 11:16 IST):** `npx jest test/unit/wm/autoMigoPosting.test.js test/unit/wm/movement261UnifiedLifecycle.test.js test/unit/wm/mvt311Process.test.js --runInBand --silent` — PASS, 3 suites / 132 tests. `npx eslint` on the six changed JS/test files — PASS. `npx cds compile srv/wm/reservation-track/service.cds srv/wm/reservation-entry/service.cds --to csn` — PASS. `git diff --check` — PASS. `npx jest test/unit/wm/ --runInBand` — INCOMPLETE, 76 suites passed, 10 failed, 1 skipped; 209 tests failed because CAP test servers could not bind `127.0.0.1` (`listen EPERM`), 2,037 passed, 56 skipped. This environmental failure supersedes the earlier full-suite green claim for this rerun; focused checks passed. No SAP read or write call was made.
+- **Not done:** live write re-proof of Fix 2 (pending user "go"). **Still unknown:** none for this change. **Assumptions:** none.
 
 ### 2026-10-21 11:35 IST — Audit fix 3 (items 11 + 4): MIGO idempotency at the service; adapter MATDOC lookup fails closed and tells a replay from a new partial issue
 

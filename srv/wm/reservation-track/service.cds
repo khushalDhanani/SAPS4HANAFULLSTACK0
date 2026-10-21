@@ -9,8 +9,10 @@ service ReservationTrackService {
     @readonly
     entity ReservationStatuses as projection on wm.ReservationStatus;
 
+    @readonly
     entity ReservationTracks as projection on wm.ReservationTrack;
 
+    @readonly
     entity ReservationLogs as projection on wm.ReservationLog;
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])

@@ -40,12 +40,16 @@ async function findUnconfirmedToItems(rfc, lgnum, tbnum, tbpos = '') {
  * READ-ONLY. Returns false when the TR is open, partially processed, or has any TO (confirmed or not).
  */
 async function isTrClosedWithoutTo(rfc, lgnum, tbnum) {
-  const wh = sapKey(lgnum, 'lgnum');
-  const tr = sapKey(tbnum, 'tbnum').padStart(10, '0');
-  const heads = await rfc.readTable('LTBK', ['STATU'], [`LGNUM = '${wh}'`, `AND TBNUM = '${tr}'`], 1);
-  if (!Array.isArray(heads) || !heads.length || String(heads[0].STATU || '').trim() !== 'E') return false;
-  const tos = await rfc.readTable('LTAK', ['TANUM'], [`LGNUM = '${wh}'`, `AND TBNUM = '${tr}'`], 1);
-  return !(Array.isArray(tos) && tos.length);
+  try {
+    const wh = sapKey(lgnum, 'lgnum');
+    const tr = sapKey(tbnum, 'tbnum').padStart(10, '0');
+    const heads = await rfc.readTable('LTBK', ['STATU'], [`LGNUM = '${wh}'`, `AND TBNUM = '${tr}'`], 1);
+    if (!Array.isArray(heads) || !heads.length || String(heads[0].STATU || '').trim() !== 'E') return false;
+    const tos = await rfc.readTable('LTAK', ['TANUM'], [`LGNUM = '${wh}'`, `AND TBNUM = '${tr}'`], 1);
+    return !(Array.isArray(tos) && tos.length);
+  } catch (_) {
+    return false;
+  }
 }
 
 /**
