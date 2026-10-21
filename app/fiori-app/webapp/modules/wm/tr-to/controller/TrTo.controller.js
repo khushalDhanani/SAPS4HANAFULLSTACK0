@@ -34,6 +34,7 @@ sap.ui.define([
                 availableSUs: [],
                 isLoadingTRs: false,
                 isLoadingSUs: false,
+                isCreatingTO: false,
                 hasActiveTR: false,
                 hasActiveSU: false,
                 canCreateTO: false,
@@ -580,6 +581,7 @@ sap.ui.define([
          */
         onCreateTO: function () {
             var oModel = this.getModel("trToView");
+            if (this._bCreatingTO || oModel.getProperty("/isCreatingTO")) return Promise.resolve(null);
             var sTbnum = oModel.getProperty("/trNumber");
             var sLenum = oModel.getProperty("/storageUnit");
             var nQty = parseFloat(oModel.getProperty("/scanQty") || 0);
@@ -608,9 +610,14 @@ sap.ui.define([
             };
 
             var that = this;
+            this._bCreatingTO = true;
+            oModel.setProperty("/isCreatingTO", true);
+            oModel.setProperty("/canCreateTO", false);
             this.getView().setBusy(true);
 
             return TrToService.createTO(oPayload).then(function (oResult) {
+                that._bCreatingTO = false;
+                oModel.setProperty("/isCreatingTO", false);
                 that.getView().setBusy(false);
                 that._playAudio("success");
 
@@ -624,6 +631,9 @@ sap.ui.define([
                     }
                 });
             }).catch(function (oErr) {
+                that._bCreatingTO = false;
+                oModel.setProperty("/isCreatingTO", false);
+                oModel.setProperty("/canCreateTO", true);
                 that.getView().setBusy(false);
                 that._playAudio("error");
                 var sErrorMsg = oErr.message || that.getText("trToCreateError");

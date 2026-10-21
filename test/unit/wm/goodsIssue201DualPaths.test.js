@@ -462,6 +462,38 @@ describe('Movement 201 Dual Paths Regression Suite (Direct 201 vs Reservation ->
       expect(GoodsIssueAdapter.postGoodsIssue201).not.toHaveBeenCalled();
     });
 
+    test('Direct 201: replays the existing unplanned attempt before running stock checks again', async () => {
+      const request = { ...DIRECT_PAYLOAD, ClientAttemptId: 'ATTEMPT-201-UNPLANNED-REPLAY' };
+      const first = await handlers.postGoodsIssue201(createReq(request));
+      expect(first.MaterialDocument).toBe('4900050100');
+      expect(GoodsIssueAdapter.revalidateStockBeforePosting).toHaveBeenCalledTimes(1);
+
+      GoodsIssueAdapter.revalidateStockBeforePosting.mockResolvedValueOnce({
+        StockReadSuccess: true,
+        StockSufficient: false,
+        Message: 'Stock was consumed after the original post'
+      });
+      const replay = await handlers.postGoodsIssue201(createReq(request));
+
+      expect(replay.MaterialDocument).toBe(first.MaterialDocument);
+      expect(GoodsIssueAdapter.revalidateStockBeforePosting).toHaveBeenCalledTimes(1);
+      expect(GoodsIssueAdapter.postGoodsIssue201).toHaveBeenCalledTimes(1);
+    });
+
+    test('Reservation 201: replays the existing attempt before reservation reconciliation', async () => {
+      const request = { ...RESERVATION_PAYLOAD, ClientAttemptId: 'ATTEMPT-201-RESV-REPLAY' };
+      const first = await handlers.postGoodsIssue201(createReq(request));
+      expect(first.MaterialDocument).toBe('4900050100');
+      expect(GoodsIssueAdapter.getReservationItemAuthoritative).toHaveBeenCalledTimes(1);
+
+      GoodsIssueAdapter.getReservationItemAuthoritative.mockRejectedValueOnce(new Error('Reservation is now closed'));
+      const replay = await handlers.postGoodsIssue201(createReq(request));
+
+      expect(replay.MaterialDocument).toBe(first.MaterialDocument);
+      expect(GoodsIssueAdapter.getReservationItemAuthoritative).toHaveBeenCalledTimes(1);
+      expect(GoodsIssueAdapter.postGoodsIssue201).toHaveBeenCalledTimes(1);
+    });
+
     test('Reservation -> 201: rejects concurrent submission with 409 while reservation attempt is pending', async () => {
       // Seed pending attempt for reservation 520888 / 0001
       await GoodsIssueAttemptStore.create({

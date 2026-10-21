@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Audit fix 5 of 9 (2026-10-21 11:24 IST, items 15, 16, 17): UI duplicate-submit protection, stable goods-issue attempt IDs, and early attempt replay lookup — DELIVERED; focused UI/handler tests 298/298 passed, UI5 lint clean, UI5 build and CDS compile succeeded.** TO ambiguity remains protected at the UI in-flight level only; no backend TO idempotency change was made in this slice.
+
 - **Audit fix 4 of 9 (2026-10-21 11:55 IST, items 13, 6, 9, 8, 10): uncalled write actions, duplicate TR guards, fake document removal, and 311/301 MIGO defaults deleted — DELIVERED, unit-tested (WM suite 2254 passed, 0 failed, eslint and git diff clean). Fix 2's live 311 re-proof still pending your "go".**
   - **Review validation (2026-10-21 11:16 IST):** focused adapter tests passed (3 suites / 132 tests), ESLint and CDS compile passed, and `git diff --check` passed. A fresh full WM run was **incomplete in this sandbox**: 76 suites passed, 10 failed and 1 skipped; failures were CAP HTTP tests unable to bind `127.0.0.1` (`listen EPERM`), not assertion failures. No live SAP call was made.
 
@@ -3372,6 +3374,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Exact Next Recommended Action (audit fixes 15, 16, 17 — 2026-10-21 11:24 IST):** review the controller and handler changes and test results. The full WM suite was not rerun; the previous run could not bind test servers in this sandbox. UI5 MCP and CAP MCP tools were configured in `.mcp.json` but unavailable in this session; UI5 lint/build and focused local CAP handler tests were used instead. No live SAP call was made.
 - **Exact Next Recommended Action (audit fixes 13, 6, 9, 8, 10 — 2026-10-21 11:16 IST):** rerun `npx jest test/unit/wm/ --runInBand` in an environment that permits CAP test servers to bind `127.0.0.1`; the current sandbox run is blocked by `listen EPERM` in 10 HTTP-backed suites. The focused adapter checks, ESLint, CDS compile, and diff check passed. Separately, do not perform the live 311 re-proof until the user provides explicit WRITE authorization for that specific SAP call.
 - **Exact Next Recommended Action (recovered SQLite schema gap — 2026-10-21, 10:03 IST):** user swapped `db.sqlite` (backup in `.backup-db-corrupt-20261021/`); the pool is healthy again but detail reads now fail with `no such column: $R.DeliveryNumber` because the recovered data predates the 09:50 `DeliveryNumber` column. Column diff model vs DB: only `saps4hana_wm_ReservationTrack.DeliveryNumber` missing (views `ReservationEntryService_ReservationEntries` and `ReservationTrackService_ReservationTracks` project it). Applying `ALTER TABLE` + view recreation was denied by the session permission classifier → run `sqlite3 db.sqlite < db-migrate-20261021-deliverynumber.sql` (additive script in project root; expected output `ok` and `17`), then re-open the detail page. Delete the script afterwards.
 - **Exact Next Recommended Action (corrupt local SQLite — 2026-10-21, 09:58 IST):** stop `cds watch`, then in the project root run `mkdir -p .backup-db-corrupt-20261021 && mv db.sqlite db.sqlite-shm db.sqlite-wal .backup-db-corrupt-20261021/ && mv db.recovered.sqlite db.sqlite`, restart `npm run watch`, and re-open `ReservationEntries(ReservationNo='0000530232',ReservationItem='0001')`. `db.sqlite-shm` / `db.sqlite-wal` are tracked in git and will show as deleted; they should be untracked (`git rm --cached`) since `*.sqlite` is already ignored. Cause of the corruption is UNKNOWN (file mtime 09:41 IST, 0-byte WAL at 09:48 IST).
@@ -3463,6 +3466,32 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 11:24 IST — Audit fix 5 extension: resolve stable attempt IDs before reservation and stock reads
+
+- **Reason:** A stable `ClientAttemptId` was not enough if the handler re-read SAP reservation/stock state before consulting the attempt store. After a successful post, reconciliation could reject an identical retry before the server recognized its existing attempt, especially for planned 201/301/311 or unplanned 201 whose stock changed.
+- **Changes:** `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js` now checks the existing attempt by the stable client-derived reference immediately after payload normalization and before reservation reconciliation, pending-reservation checks, or stock checks. Existing results are replayed; key collisions and attempt-store errors fail closed. The original reservation pending check remains for a different ClientAttemptId against an open reservation attempt.
+- **Tests:** `test/unit/wm/goodsIssue201DualPaths.test.js` now verifies an unplanned 201 replay bypasses a second stock check and a planned 201 replay bypasses reservation reconciliation, returning the original document without another SAP post.
+- **Validation:** focused rerun across the six UI/controller/handler suites — PASS, 6 suites / 298 tests. `npx eslint` on the modified CAP handler and test files — PASS. `npx cds compile srv/ --to csn` — PASS. `git diff --check` — PASS. No live SAP call was made.
+- **Not done:** full WM suite rerun; the previous sandbox run could not bind test servers (`listen EPERM`). UI5 and CAP MCP tools were unavailable despite their `.mcp.json` registrations. **Still unknown:** TO create outcome after browser/process restart; the UI lock only prevents repeat submissions while the controller instance remains alive. **Assumptions:** retry requests retain the same `ClientAttemptId` and payload.
+
+### 2026-10-21 11:23 IST — Audit fix 5 (items 15, 16, 17): TO/scan-to duplicate-submit guards and stable goods-issue attempt IDs
+
+- **Plan:** lock the RF TO create action before its async call; retain scan-to Submit disablement and give an SAP document-check instruction after an unknown result; pass a stable attempt ID from each 201/301/311 form and reuse it for ambiguous retries. Preserve existing request contracts and attempt-store behavior. No SAP call planned.
+- **MCP guidance:** `.mcp.json` lists `cds-mcp` and `ui5-mcp`, but their tools were not present in this session's available tool catalog. Followed existing local controller/handler patterns and ran the installed UI5 lint/build instead.
+- **Changes:**
+  - `TrTo.controller.js`: added a synchronous in-flight lock, clears `canCreateTO` before the request, and restores availability after a rejected request. F2 enters the same guarded method.
+  - `WarehouseScanToDetail.controller.js`: blocks repeated TO submission while a request is active; on a timeout/network/500-series or explicitly unconfirmed response, leaves Submit disabled across form validation and warns the operator to check SAP TO/material-document lists before any further action. A fresh route reset clears the lock.
+  - `GoodsIssue201.controller.js` and `GoodsIssueTransferBaseController.js`: create one `ClientAttemptId` per form attempt, send it with 201/301/311 POSTs, retain it after unknown outcomes, and rotate it after a confirmed document, definitive failure, or new route/form. Added controller-level busy guards. The three views already had `busyIndicatorDelay="0"`; no view change was needed.
+  - `i18n.properties` and `i18n_en.properties`: added the scan-to unknown-outcome instruction.
+  - UI controller tests cover concurrent TO calls, scan-to unknown outcome lock, and stable IDs across ambiguous retries for 201/301/311. Existing `goodsIssue201DualPaths` direct 201 idempotency case verifies the server attempt store reuses an unplanned 201 attempt ID.
+- **Validation:**
+  - `npx jest test/unit/wm/trToController.test.js test/unit/wm/warehouseScanToUi.test.js test/unit/wm/goodsIssue201Controller.test.js test/unit/wm/goodsIssue301Controller.test.js test/unit/wm/goodsIssue311Controller.test.js test/unit/wm/goodsIssue201DualPaths.test.js --runInBand --silent` — PASS, 6 suites / 296 tests.
+  - `npm run lint` in `app/fiori-app` — PASS, UI5 linter reported no findings; update-check emitted a permissions warning for the local config store.
+  - `npm run build` in `app/fiori-app` — PASS; emitted a pre-existing missing source-map warning for bundled `jspdf.umd.min.js` and a local update-check permissions warning.
+  - `npx eslint` on changed test files — PASS. Running ESLint directly on UI5 controller files reports them ignored by the repository ignore configuration; UI5 linter validated those files.
+  - `git diff --check` — PASS. No live SAP read or write call made.
+- **Not done:** full WM suite rerun; prior sandbox limitation (`listen EPERM` binding `127.0.0.1`) remains. Backend TO-level idempotency is not included in this change; duplicate prevention for direct TO action is client in-flight protection only. **Still unknown:** behavior after browser/process restart during a timed-out TO create; operators are instructed to check SAP documents before proceeding. **Assumptions:** an ambiguous request remains on the same form/controller instance for its stable goods-issue attempt ID to be reused.
 
 ### 2026-10-21 11:55 IST — Audit fix 4 (items 13, 6, 9, 8, 10): close or delete uncalled write actions, duplicate TR guards, fake document removal, and MIGO defaults
 

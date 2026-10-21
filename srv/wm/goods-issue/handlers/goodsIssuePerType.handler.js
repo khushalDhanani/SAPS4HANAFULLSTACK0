@@ -420,6 +420,15 @@ function classifyPostingError(err) {
  */
 async function checkPendingConfirmation(req, normalized) {
   ensureIdempotencyKey(normalized);
+  if (normalized.ClientAttemptId && normalized.ReferenceDocument && normalized.RequestHash) {
+    try {
+      const existing = await getIdempotentAttempt(normalized);
+      if (existing) return attemptResponse(existing);
+    } catch (err) {
+      req.error(err.status || 503, err.message || 'Goods Issue attempt could not be verified. Posting was NOT sent to SAP.');
+      return false;
+    }
+  }
   const sResv = String(normalized.ReservationNo || '').trim();
   const sItem = String(normalized.ReservationItem || '').trim();
   if (!sResv) return true;
@@ -544,9 +553,10 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue201Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue201Payload(req.data, { user: req.user?.id });
+      const priorAttempt = await checkPendingConfirmation(req, normalized);
+      if (priorAttempt !== true) return priorAttempt;
       if (!(await reservationReconcileCheck(req, normalized, { batch: true }))) return;
       if (!(await serialCountCheck(req, normalized))) return;
-      if (!(await checkPendingConfirmation(req, normalized))) return;
 
       const preCheck = async () => (await stockPreCheck201(req, normalized)) && (await serialPreCheck(req, normalized));
       return executeMovementPost(req, normalized, (d) => GoodsIssueAdapter.postGoodsIssue201(d), preCheck);
@@ -556,9 +566,10 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue301Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue301Payload(req.data, { user: req.user?.id });
+      const priorAttempt = await checkPendingConfirmation(req, normalized);
+      if (priorAttempt !== true) return priorAttempt;
       const resvItem = await reservationReconcileCheck(req, normalized);
       if (!resvItem) return;
-      if (!(await checkPendingConfirmation(req, normalized))) return;
       if (!normalized.ReceivingPlant && !resvItem.ReceivingPlant) {
         return req.error(400, `ReceivingPlant is required for Movement 301: reservation ${normalized.ReservationNo} item ${normalized.ReservationItem} carries no receiving plant. Goods Issue was NOT posted.`);
       }
@@ -586,8 +597,9 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue311Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue311Payload(req.data, { user: req.user?.id });
+      const priorAttempt = await checkPendingConfirmation(req, normalized);
+      if (priorAttempt !== true) return priorAttempt;
       if (!(await reservationReconcileCheck(req, normalized, { receiving: true }))) return;
-      if (!(await checkPendingConfirmation(req, normalized))) return;
       if (typeof GoodsIssueAdapter.verifyReceivingLocation === 'function') {
         const sapCheck = await GoodsIssueAdapter.verifyReceivingLocation({
           movementType: '311',

@@ -817,6 +817,21 @@ describe('GoodsIssue311 Controller Unit Tests (Movement 311)', () => {
             );
         });
 
+        it('reuses the form attempt id after an unknown outcome retry', async () => {
+            mockGoodsIssue311Model.validate.mockReturnValue({ isValid: true, errors: {} });
+            const unknown = new Error('Posting outcome unconfirmed in SAP; do not post again.');
+            mockGoodsIssue311Service.postGoodsIssue.mockRejectedValueOnce(unknown).mockRejectedValueOnce(unknown);
+
+            controller.onPostGoodsIssue();
+            await flush();
+            const firstId = mockGoodsIssue311Service.postGoodsIssue.mock.calls[0][0].ClientAttemptId;
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(firstId).toEqual(expect.any(String));
+            expect(mockGoodsIssue311Service.postGoodsIssue.mock.calls[1][0].ClientAttemptId).toBe(firstId);
+        });
+
         it('onPostGoodsIssue with fromReservation:true returns to wmGoodsIssue311Pending with outcome query', async () => {
             mockGoodsIssue311Model.validate.mockReturnValueOnce({ isValid: true, errors: {} });
             mockGoodsIssue311Service.postGoodsIssue.mockResolvedValueOnce({ MaterialDocument: '4900000999', MaterialDocYear: '2026' });

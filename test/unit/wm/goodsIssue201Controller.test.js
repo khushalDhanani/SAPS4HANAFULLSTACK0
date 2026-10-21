@@ -522,6 +522,21 @@ describe('GoodsIssue201 Controller Unit Tests', () => {
             );
         });
 
+        it('reuses the form attempt id after an unknown outcome retry', async () => {
+            makeValid();
+            const unknown = new Error('Posting outcome unconfirmed in SAP; do not post again.');
+            mockService.postGoodsIssue.mockRejectedValueOnce(unknown).mockRejectedValueOnce(unknown);
+
+            controller.onPostGoodsIssue();
+            await flush();
+            const firstId = mockService.postGoodsIssue.mock.calls[0][0].ClientAttemptId;
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(firstId).toEqual(expect.any(String));
+            expect(mockService.postGoodsIssue.mock.calls[1][0].ClientAttemptId).toBe(firstId);
+        });
+
         it('should route back to the Pending list with the SAP document when completing a reservation', async () => {
             makeValid();
             controller._oModel.setProperty('/fromReservation', true);

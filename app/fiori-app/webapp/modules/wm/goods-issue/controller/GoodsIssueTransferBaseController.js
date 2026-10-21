@@ -69,8 +69,14 @@ sap.ui.define([
         _resetModel: function () {
             var oInitData = this._c.Model.getInitialData();
             this._oModel.setData(oInitData);
+            this._newClientAttemptId();
             this._aResolvedItems = [];
             this._validateLive();
+        },
+
+        _newClientAttemptId: function () {
+            this._sClientAttemptId = ("GIA" + Date.now().toString(36) + Math.random().toString(36).slice(2, 12)).toUpperCase();
+            return this._sClientAttemptId;
         },
 
         /**
@@ -748,6 +754,7 @@ sap.ui.define([
         // =============================================================
 
         onPostGoodsIssue: function () {
+            if (this._oModel.getProperty("/busy")) return;
             if (!this._validateLive()) {
                 MessageBox.error(this._t("ValidationErrorsSummary"));
                 return;
@@ -757,6 +764,7 @@ sap.ui.define([
             var cfg = this._c;
             var oData = this._oModel.getData();
             var oPayload = cfg.Model.toBackendPayload(oData);
+            oPayload.ClientAttemptId = this._sClientAttemptId || this._newClientAttemptId();
 
             this._oModel.setProperty("/busy", true);
 
@@ -770,6 +778,8 @@ sap.ui.define([
                         MessageBox.error(sMsg);
                         return;
                     }
+
+                    that._newClientAttemptId();
 
                     // Open/Pending list workflow: return to the pending list page carrying completion outcome
                     if (that._oModel.getProperty("/fromReservation") && cfg.pendingRoute) {
@@ -814,6 +824,11 @@ sap.ui.define([
                     if (err.response && err.response.data && err.response.data.error) {
                         var oErr = err.response.data.error;
                         sErrMsg = (oErr.message && oErr.message.value) || oErr.message || sErrMsg;
+                    }
+                    var iStatus = Number(err && (err.status || err.statusCode || err.response && err.response.status) || 0);
+                    if (iStatus && iStatus !== 409 && iStatus !== 500 && iStatus !== 502 && iStatus !== 504 &&
+                        !/outcome unconfirmed|do not post again|may have been posted/i.test(sErrMsg)) {
+                        that._newClientAttemptId();
                     }
                     MessageBox.error(sErrMsg, {
                         title: that._t("PostFailedTitle")

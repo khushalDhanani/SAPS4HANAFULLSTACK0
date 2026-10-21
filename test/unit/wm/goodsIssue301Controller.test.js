@@ -697,6 +697,21 @@ describe('GoodsIssue301 Controller Unit Tests (Movement 301)', () => {
                 expect.objectContaining({ title: 'gi301PostFailedTitle' })
             );
         });
+
+        it('reuses the form attempt id after an unknown outcome retry', async () => {
+            mockGoodsIssue301Model.validate.mockReturnValue({ isValid: true, errors: {} });
+            const unknown = new Error('Posting outcome unconfirmed in SAP; do not post again.');
+            mockGoodsIssue301Service.postGoodsIssue.mockRejectedValueOnce(unknown).mockRejectedValueOnce(unknown);
+
+            controller.onPostGoodsIssue();
+            await flush();
+            const firstId = mockGoodsIssue301Service.postGoodsIssue.mock.calls[0][0].ClientAttemptId;
+            controller.onPostGoodsIssue();
+            await flush();
+
+            expect(firstId).toEqual(expect.any(String));
+            expect(mockGoodsIssue301Service.postGoodsIssue.mock.calls[1][0].ClientAttemptId).toBe(firstId);
+        });
     });
 
     // =============================================================

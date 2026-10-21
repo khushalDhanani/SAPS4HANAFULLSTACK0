@@ -53,7 +53,8 @@ if (origSapDefine) {
 
 const mockMessageBox = {
     error: jest.fn(),
-    success: jest.fn()
+    success: jest.fn(),
+    warning: jest.fn()
 };
 
 const mockMessageToast = {
@@ -887,6 +888,24 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
                     storageUnit: ''
                 })
             );
+        });
+
+        it('keeps Submit disabled after an unknown TO/MIGO outcome and directs the operator to check SAP documents', async () => {
+            detailModel.setProperty('/hasTR', true);
+            detailModel.setProperty('/tr', { TRNumber: '1000803', TRItem: '0001', Material: '1000000204', OpenQty: 5, Unit: 'KG' });
+            detailModel.setProperty('/pickQty', 5);
+            detailCtrl._validateForm();
+            const err = new Error('Posting outcome unconfirmed. Do not post again.');
+            err.status = 504;
+            mockWarehouseScanToService.createTOFromTR.mockRejectedValueOnce(err);
+
+            await detailCtrl.onProcessTO();
+            expect(mockMessageBox.warning).toHaveBeenCalledWith('scanToPostUnknown');
+            expect(detailModel.getProperty('/postingUnknown')).toBe(true);
+            expect(detailModel.getProperty('/canSubmit')).toBe(false);
+            expect(detailCtrl._validateForm()).toBe(false);
+            await detailCtrl.onProcessTO();
+            expect(mockWarehouseScanToService.createTOFromTR).toHaveBeenCalledTimes(1);
         });
 
         it('fixed button: btnRetryMigo recovers failed goods movement to status 05 [mock only, not browser verification]', async () => {

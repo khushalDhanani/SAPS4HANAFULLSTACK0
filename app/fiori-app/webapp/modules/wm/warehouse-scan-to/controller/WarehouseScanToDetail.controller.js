@@ -99,6 +99,7 @@ sap.ui.define([
                 serialsStatusText: "",
                 serialsStatusState: "None",
                 canSubmit: false,
+                postingUnknown: false,
                 scanVerificationStatusText: "READY FOR TO",
                 scanVerificationStatusState: "Success",
                 storageUnit: "",
@@ -164,6 +165,7 @@ sap.ui.define([
             oModel.setProperty("/serials", []);
             oModel.setProperty("/serialsCount", 0);
             oModel.setProperty("/canSubmit", false);
+            oModel.setProperty("/postingUnknown", false);
             oModel.setProperty("/scanVerificationStatusText", "");
             oModel.setProperty("/scanVerificationStatusState", "None");
             oModel.setProperty("/hasResult", false);
@@ -797,6 +799,10 @@ sap.ui.define([
 
         _validateForm: function () {
             var oModel = this.getModel("scanView");
+            if (oModel.getProperty("/postingUnknown") || this._bProcessingTO) {
+                oModel.setProperty("/canSubmit", false);
+                return false;
+            }
             var bHasTR = oModel.getProperty("/hasTR");
             var oTR = oModel.getProperty("/tr");
             if (!bHasTR || !oTR || !oTR.TRItem) {
@@ -1021,6 +1027,7 @@ sap.ui.define([
         },
 
         onProcessTO: function () {
+            if (this._bProcessingTO || this.getModel("scanView").getProperty("/postingUnknown")) return Promise.resolve(null);
             if (!this._validateForm()) {
                 this._showError(this.getText("scanToErrValidationFailed"));
                 return Promise.resolve(null);
@@ -1063,9 +1070,11 @@ sap.ui.define([
             };
 
             var that = this;
+            this._bProcessingTO = true;
             oModel.setProperty("/canSubmit", false);
 
             return WarehouseScanToService.createTOFromTR(oPayload).then(function (oResult) {
+                that._bProcessingTO = false;
                 that._playAudio("success");
 
                 // Normalize and enrich properties for UI panelResult
@@ -1129,9 +1138,20 @@ sap.ui.define([
                 MessageToast.show(sActionText);
                 return oResult;
             }).catch(function (oErr) {
+                that._bProcessingTO = false;
                 that._playAudio("error");
+                var iStatus = Number(oErr && (oErr.status || oErr.statusCode || oErr.response && oErr.response.status) || 0);
+                var sError = String(oErr && oErr.message || "");
+                var bUnknown = !iStatus || iStatus === 500 || iStatus === 502 || iStatus === 504 ||
+                    /outcome unconfirmed|do not post again|may have been posted/i.test(sError);
+                if (bUnknown) {
+                    oModel.setProperty("/postingUnknown", true);
+                    oModel.setProperty("/canSubmit", false);
+                    MessageBox.warning(that.getText("scanToPostUnknown"));
+                    return;
+                }
                 oModel.setProperty("/canSubmit", true);
-                MessageBox.error(oErr.message || that.getText("scanToErrCreateFailed"));
+                MessageBox.error(sError || that.getText("scanToErrCreateFailed"));
             });
         },
 

@@ -445,6 +445,20 @@ describe('TrTo Controller Unit Tests (Zebra MC220 RF Screen 9001)', () => {
             );
         });
 
+        it('locks F2 and create until the active TO request settles', async () => {
+            let resolveCreate;
+            mockTrToService.createTO.mockReturnValueOnce(new Promise((resolve) => { resolveCreate = resolve; }));
+
+            const first = controller.onCreateTO();
+            expect(controller.getModel('trToView').getProperty('/canCreateTO')).toBe(false);
+            expect(controller.getModel('trToView').getProperty('/isCreatingTO')).toBe(true);
+            await controller.onCreateTO();
+            expect(mockTrToService.createTO).toHaveBeenCalledTimes(1);
+
+            resolveCreate({ TransferOrder: '0001010999', Success: true });
+            await first;
+        });
+
         it('should display MessageBox.error when backend rejects TO creation', async () => {
             mockTrToService.createTO.mockRejectedValue(new Error('Storage Unit blocked for stock removal'));
 
@@ -454,6 +468,8 @@ describe('TrTo Controller Unit Tests (Zebra MC220 RF Screen 9001)', () => {
                 'Storage Unit blocked for stock removal',
                 { title: 'trToCreateFailedTitle' }
             );
+            expect(controller.getModel('trToView').getProperty('/canCreateTO')).toBe(true);
+            expect(controller.getModel('trToView').getProperty('/isCreatingTO')).toBe(false);
         });
     });
 
