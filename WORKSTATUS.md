@@ -5,6 +5,80 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Orders Due For Delivery Fail-Closed Guard, Authenticated User Plant Scope & Tamper Protection, TVSTZ TTL Cache Confirmation, and W01 Storage Type 901/WE-ZONE Live Re-check (2026-10-21 14:40 IST): DELIVERED & FULLY VERIFIED (READ-ONLY).**
+  1. **Fail-Closed Plant Resolution & Authenticated User Attribute Derivation:**
+     - In `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js` (`getOrdersDueForDelivery`):
+       - Fail closed with HTTP 400 (`No plant resolved for orders due for delivery. Query failed closed.`) if no plant resolves from query, options, or user context.
+       - Derives authorized plants strictly from server-side authenticated user attributes (`plantScope(user)`).
+       - Enforces tamper protection: if non-Admin user requests `query.plant` outside authorized plants, immediately rejects with HTTP 403 (`Plant '<plant>' is outside user's authorized plants: [<list>]. Access denied.`).
+       - If non-Admin user has no authorized plants (empty array), rejects with HTTP 403 (`User has no authorized plants. Access denied.`).
+       - Strictly defaults to user's authorized plant (`authorizedPlants[0]`) when no plant is requested.
+     - In `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js` (`getOrdersDueMetrics`): Passed `req` instead of `{}` to `outboundDeliveryAdapter.getOrdersDueForDelivery(req)` so user context and plant scope are preserved for metrics.
+  2. **TVSTZ TTL Cache Confirmation:**
+     - In `OutboundDeliveryAdapter.js`: Added helper methods `clearTvstzCache()` and `getTvstzCacheEntry(plant)`. Added `forceRefresh` support to bypass cache when explicitly requested.
+     - In `test/unit/le/outboundDeliveryAdapter.test.js`: Added dedicated test suite `describe('getShippingPointsForPlant (TVSTZ TTL Cache)')` with 6 unit tests confirming:
+       - Cache population and structure on initial read.
+       - Cache HIT on subsequent reads (RFC readTable is NOT called again).
+       - Cache expiration and RFC re-query when TTL expires.
+       - Cache bypass when `forceRefresh: true`.
+       - Cache flush and RFC re-query on `clearTvstzCache()`.
+       - Cache hit integration across repeated `getOrdersDueForDelivery` calls.
+  3. **T301T and LAGP Re-check for 901 / WE-ZONE in W01 (READ-ONLY Live SAP Check):**
+     - Live queried SAP Client 220 via RFC (READ-ONLY):
+       - `T301T` for `LGNUM = 'W01', LGTYP = '901'`:
+         - German (`D`): `LTYPT = 'WE-Zone Produktion'`
+         - English (`E`): `LTYPT = 'GR Area for Production'`
+       - `LAGP` for `LGNUM = 'W01', LGTYP = '901'`:
+         - Row 1: `LGNUM='W01', LGTYP='901', LGPLA='0001002750', SKZUA='', SKZUE=''`
+         - Row 2: `LGNUM='W01', LGTYP='901', LGPLA='0001002730', SKZUA='', SKZUE=''`
+         - Row 3: `LGNUM='W01', LGTYP='901', LGPLA='0001002731', SKZUA='', SKZUE=''`
+         - **Conclusion**: There is **NO bin named `WE-ZONE` in storage type `901`**. The bins are dynamic production order bins.
+       - `LAGP` for `LGPLA = 'WE-ZONE'`:
+         - Exists in Storage Type `902` (`LGNUM='W01', LGTYP='902', LGPLA='WE-ZONE', SKZUA='', SKZUE=''`). Storage type 902 is "GR Area External Receipts" (in German `T301T`: "WE-Zone extern").
+       - **Root Cause of Prior Conflation**: The German description of storage type 901 in `T301T` is "WE-Zone Produktion", which was previously confused with a bin name. The actual bin `WE-ZONE` is in `902`.
+  4. **Open Bin Question Recording & Business Ownership:**
+     - Recorded candidate bin classification question as **OPEN**.
+     - **Owner**: Warehouse Operations Lead / Named Business Contact (Business Process Owner for Warehouse Management).
+     - **Unseeded**: `Mvt261NotReadyBinsJson` remains unseeded (`""` in `db/data/saps4hana.wm-BusinessConfig.csv`).
+     - **SAP writes**: Zero (strictly read-only).
+  5. **Validation:**
+     - `test/unit/le/outboundDeliveryAdapter.test.js`: 41 passed (100% green).
+     - `test/unit/le/outboundDeliveryHandler.test.js`: 16 passed (100% green).
+     - `test/unit/le/`: 6 suites, 114 tests passed (100% green).
+     - `test/unit/wm/goodsIssueClients.test.js`: 61 passed (100% green).
+     - `test/unit/wm/mvt261Auth.test.js`: 10 passed (100% green).
+     - `test/unit/common/BusinessConfigResolver.test.js`: 28 passed (100% green).
+     - `npx cds compile srv/ --to csn`: clean CSN.
+     - `git diff --check`: 0 errors / clean.
+     - Zero SAP writes.
+
+- **TVSTZ Shipping Point Filtering, UI Selection & Required Validation, Reservation 0000530233 Storage Location Resolution, and Mvt261 Startup Warning (2026-10-21 14:25 IST): DELIVERED & FULLY VERIFIED (READ-ONLY).**
+  1. **TVSTZ Shipping Point Restoration in `getOrdersDueForDelivery`:**
+     - In `srv/common/BusinessConfigResolver.js`: Added `TVSTZ` table read in `_querySapCustomizing` when plant is provided and RFC client is available.
+     - In `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`: Added `getShippingPointsForPlant(plant, options)` resolving valid shipping points dynamically from TVSTZ via RFC or `BusinessConfigResolver`. In `getOrdersDueForDelivery`, when no shipping point is specified, derives the user's plant (from query/options or `req.user.attr.Plant`) and applies `ShippingPoint eq ...` (or `(ShippingPoint eq '1112' or ShippingPoint eq 'WAVG')`). If plant is absent or TVSTZ has no points, no shipping point filter is applied and no config default is assumed.
+     - In `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`: Passed `{ req }` to `outboundDeliveryAdapter.getShippingPoints({ req })` so value help is scoped to the user's plant.
+  2. **UI TVSTZ Selection & Required Validation:**
+     - In `app/fiori-app/webapp/modules/le/outbound-delivery/view/CreateDeliveryDialog.fragment.xml`: Bound `valueState`, `valueStateText`, and `change=".onShippingPointChange"` on `comboDeliveryShippingPoint`.
+     - In `app/fiori-app/webapp/modules/le/outbound-delivery/view/OrdersDueForDelivery.view.xml`: Added shipping point filter ComboBox (`comboFilterShippingPoint`) to table toolbar bound to `outboundDelivery>/ShippingPointVH`.
+     - In `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`: Implemented `onShippingPointChange`, `onFilterShippingPointChange`, updated `_applyCombinedFilters`, and in `onConfirmCreateDelivery` enforced required shipping point validation setting `valueState="Error"` and displaying `"Shipping Point is required. Please choose a valid shipping point from TVSTZ."`.
+     - In `i18n.properties` & `i18n_en.properties`: Updated `msgShippingPointRequired=Shipping Point is required. Please choose a valid shipping point from TVSTZ.` and added `ordersDueFilterShippingPointPlaceholder=Filter by Shipping Point`.
+  3. **Real Reservation 0000530233 / 0001 Storage Location Resolution:**
+     - Live verified against SAP Client 220 in read-only mode: `RESB` confirms `RSNUM='0000530233', RSPOS='0001', WERKS='1120', LGORT='CS02'`. `GoodsIssueAdapter.resolveIdentifier('0000530233')` resolves `DefaultStorageLocation = 'CS02'` and `ActiveItem.StorageLocation = 'CS02'`.
+     - Added dedicated unit test in `test/unit/wm/goodsIssueClients.test.js` asserting authentic resolution of storage location `CS02`.
+  4. **Startup Warning when `mvt261NotReadyBins` is Empty:**
+     - Added startup checks in `srv/wm/mvt261/service.js` `init()` and `server.js` `cds.on('listening', ...)` logging: `[STARTUP WARNING] mvt261NotReadyBins is empty. Blocked/staging bins (such as on-hold or quality inspection bins) are not configured for Movement 261. Maintain Mvt261NotReadyBinsJson in BusinessConfig or customizing.`.
+     - Added unit test in `test/unit/wm/mvt261Auth.test.js` verifying the startup warning is emitted when `mvt261NotReadyBins` is empty.
+  5. **Validation:**
+     - `test/unit/le/outboundDeliveryAdapter.test.js`: 32 passed (100% green).
+     - `test/unit/le/outboundDeliveryHandler.test.js`: 16 passed (100% green).
+     - `test/unit/wm/goodsIssueClients.test.js`: 61 passed (100% green).
+     - `test/unit/wm/mvt261Auth.test.js`: 10 passed (100% green).
+     - `test/unit/common/BusinessConfigResolver.test.js`: 28 passed (100% green).
+     - Full multi-suite regression test: 10 suites, 242 tests passed (100% green).
+     - `npx cds compile srv/ --to csn`: clean CSN.
+     - `git diff --check`: 0 errors / clean.
+     - Zero SAP writes.
+
 - **BusinessConfig Authorization Alignment, Shipping Point Guard & GoodsIssue Storage Location Enforcement (2026-10-21 13:40 IST): DELIVERED & FULLY VERIFIED (READ-ONLY).**
   1. **BusinessConfig Write Access Alignment:** Aligned `@restrict` write access in `db/wm/business-config.cds` and `srv/wm/business-config/service.cds` to `to: ['WarehouseManager', 'Admin']`. Updated `test/unit/common/BusinessConfigResolver.test.js` to assert write access is granted to both roles. Updated security profile test to assert that `WarehouseManager` and `Admin` exist in `xs-security.json` (`scopes`, `role-templates`, `role-collections`), and that `WMAdmin` does not exist.
   2. **Shipping Point from Request/Doc & No Defaulting to First Entry:**
@@ -12435,3 +12509,87 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
 - **SAP evidence:** existing adapter code and WORKSTATUS contain read-only usage/evidence for LTBK, LTAK and T320 fields; this change adds only RFC_READ_TABLE reads and no transactional calls. Live SAP calls are not planned.
 - **Validation pending:** focused Jest tests, affected adapter suites, ESLint, CDS compile if applicable, `git diff --check`, and final `git status`.
 - **Next action:** implement the resolver and adapt callers/tests; no SAP writes.
+
+
+### 2026-10-21 14:25 IST — Restore TVSTZ Shipping Point Filtering, UI Selection & Required Validation, Reservation 0000530233 Storage Location Resolution, and Mvt261 Startup Warning
+
+- **Status:** Complete & verified (READ-ONLY).
+- **Reason:** Satisfy user requests:
+  (1) Restore shipping point filter in `getOrdersDueForDelivery` using the user's plant and valid points from TVSTZ with no config default.
+  (2) Make sure the UI lets the user choose a shipping point from TVSTZ and shows a clear required-field message.
+  (3) Test `GoodsIssueAdapter` with real reservation `0000530233 / 0001` and confirm storage location resolves.
+  (4) Add a startup warning when `mvt261NotReadyBins` is empty.
+  (5) Write the list of candidate bins (`OH1/ONHOLD`, `917/QUALITY`, and the removed `901/WE-ZONE`) as a question for the business without seeding.
+- **Affected files:**
+  - `srv/common/BusinessConfigResolver.js`: Added `TVSTZ` table read in `_querySapCustomizing` when plant is present and RFC client is available.
+  - `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`: Added `getShippingPointsForPlant(plant, options)`. Restored dynamic plant-based TVSTZ shipping point filtering in `getOrdersDueForDelivery` with zero config defaulting. Scoped `getShippingPoints` to plant TVSTZ entries when plant context is provided.
+  - `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`: Passed `{ req }` to `getShippingPoints({ req })`.
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/view/CreateDeliveryDialog.fragment.xml`: Bound `valueState`, `valueStateText`, and `change=".onShippingPointChange"` on `comboDeliveryShippingPoint`.
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/view/OrdersDueForDelivery.view.xml`: Added `comboFilterShippingPoint` in `tableToolbar` bound to `outboundDelivery>/ShippingPointVH`.
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`: Added `onShippingPointChange`, `onFilterShippingPointChange`, updated `_applyCombinedFilters`, and enforced required shipping point validation setting `valueState="Error"` and displaying `"Shipping Point is required. Please choose a valid shipping point from TVSTZ."`.
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`: Updated `msgShippingPointRequired=Shipping Point is required. Please choose a valid shipping point from TVSTZ.` and added `ordersDueFilterShippingPointPlaceholder=Filter by Shipping Point`.
+  - `srv/wm/mvt261/service.js` & `server.js`: Added startup warning checks when `mvt261NotReadyBins` is empty.
+  - `test/unit/wm/goodsIssueClients.test.js`: Added test for real reservation `0000530233 / 0001` confirming `DefaultStorageLocation` and `ActiveItem.StorageLocation` resolve to `CS02`.
+  - `test/unit/le/outboundDeliveryAdapter.test.js`: Added tests for TVSTZ plant-based shipping point filtering, single-point filter, user-attribute plant extraction, and TVSTZ value-help filtering.
+  - `test/unit/wm/mvt261Auth.test.js`: Added test verifying startup warning is logged when `mvt261NotReadyBins` is empty.
+- **Validation results:**
+  - `test/unit/le/outboundDeliveryAdapter.test.js`: 32 passed (100% green).
+  - `test/unit/le/outboundDeliveryHandler.test.js`: 16 passed (100% green).
+  - `test/unit/wm/goodsIssueClients.test.js`: 61 passed (100% green).
+  - `test/unit/wm/mvt261Auth.test.js`: 10 passed (100% green).
+  - `test/unit/common/BusinessConfigResolver.test.js`: 28 passed (100% green).
+  - Combined multi-suite test pass: 10 suites, 242 tests passed (100% green).
+  - `npx cds compile srv/ --to csn`: clean CSN.
+  - `git diff --check`: 0 errors / clean.
+  - Zero SAP writes.
+- **Next action:** Present candidate bins question to the business for decision on W01 `mvt261NotReadyBins`.
+
+
+### 2026-10-21 14:40 IST — Orders Due For Delivery Fail-Closed Guard, Authenticated User Plant Scope & Tamper Protection, TVSTZ TTL Cache Confirmation, and W01 Storage Type 901/WE-ZONE Live Re-check
+
+- **Status:** Complete & verified (READ-ONLY).
+- **Reason:** Satisfy user requests:
+  (1) In `getOrdersDueForDelivery`, fail closed when no plant resolves.
+  (2) Take plant from authenticated user attribute only, and reject or ignore `query.plant` outside user's authorized plants, with a tamper test.
+  (3) Confirm TVSTZ reads use TTL cache.
+  (4) Re-check `T301T` and `LAGP` for `901 / WE-ZONE` in `W01` and report actual rows.
+  (5) Record bin question as open, with owner, until a named business contact confirms. Do not seed. No SAP writes.
+- **Affected files:**
+  - `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`:
+    - In `getOrdersDueForDelivery`: fail closed with HTTP 400 when no plant resolves. Derive plant strictly from authenticated user attribute (`plantScope(user)`). Reject `query.plant` outside authorized plants with HTTP 403 (tamper protection). Reject non-Admin users with empty authorized plants with HTTP 403. Default to user's authorized plant (`authorizedPlants[0]`).
+    - Added `clearTvstzCache()` and `getTvstzCacheEntry(plant)`. Supported `forceRefresh` option to bypass cache.
+  - `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`:
+    - Line 124: Passed `req` to `outboundDeliveryAdapter.getOrdersDueForDelivery(req)` so user context and plant scope are preserved for metrics.
+  - `test/unit/le/outboundDeliveryAdapter.test.js`:
+    - Added fail-closed tests (HTTP 400 when no plant, HTTP 403 when user has empty plants).
+    - Added tamper tests (HTTP 403 when query.plant outside authorized plants, HTTP 403 when CAP filter plant outside authorized plants).
+    - Added test for strict extraction from authenticated user attribute without query.plant.
+    - Added TVSTZ TTL Cache test suite (6 tests confirming cache hit, expiration, forceRefresh, clearTvstzCache, and getOrdersDueForDelivery cache reuse).
+  - `test/unit/le/outboundDeliveryHandler.test.js`:
+    - Updated expectation for `getOrdersDueMetrics` to assert `toHaveBeenCalledWith(req)`.
+  - `WORKSTATUS.md`: Updated current status and changes log.
+- **SAP Live Evidence (Client 220, READ-ONLY):**
+  - `T301T` for `W01 / 901`:
+    - `SPRAS='D', LGNUM='W01', LGTYP='901', LTYPT='WE-Zone Produktion'`
+    - `SPRAS='E', LGNUM='W01', LGTYP='901', LTYPT='GR Area for Production'`
+  - `LAGP` for `W01 / 901`:
+    - `0001002750`, `0001002730`, `0001002731` (dynamic production order bins only; NO bin named `WE-ZONE` in 901).
+  - `LAGP` for `WE-ZONE`:
+    - `LGNUM='W01', LGTYP='902', LGPLA='WE-ZONE', SKZUA='', SKZUE=''` (Storage Type 902 = GR Area External Receipts).
+- **Open Issue / Question:**
+  - **Issue**: Confirmation of candidate bins for `Mvt261NotReadyBinsJson` in Warehouse `W01`. Candidate bins: `OH1/ONHOLD` (GR On-Hold Material), `917/QUALITY` (Quality Inspection Area). (Clarification: `901` has only dynamic production order bins; `WE-ZONE` is in `902`).
+  - **Status**: OPEN.
+  - **Owner**: Warehouse Operations Lead / Named Business Contact (Business Process Owner for Warehouse Management).
+  - **Seeding**: NOT SEEDED (`Mvt261NotReadyBinsJson` remains `""` in `db/data/saps4hana.wm-BusinessConfig.csv`).
+  - **SAP writes**: Zero.
+- **Validation results:**
+  - `test/unit/le/outboundDeliveryAdapter.test.js`: 41 passed (100% green).
+  - `test/unit/le/outboundDeliveryHandler.test.js`: 16 passed (100% green).
+  - `test/unit/le/`: 6 suites, 114 tests passed (100% green).
+  - `test/unit/wm/goodsIssueClients.test.js`: 61 passed (100% green).
+  - `test/unit/wm/mvt261Auth.test.js`: 10 passed (100% green).
+  - `test/unit/common/BusinessConfigResolver.test.js`: 28 passed (100% green).
+  - `npx cds compile srv/ --to csn`: clean CSN.
+  - `git diff --check`: 0 errors / clean.
+  - Zero SAP writes.
+- **Next action:** Await named business contact confirmation on W01 `mvt261NotReadyBins`.

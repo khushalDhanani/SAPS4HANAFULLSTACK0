@@ -233,6 +233,21 @@ class BusinessConfigResolver {
         } catch (_) {}
       }
 
+      // 3. TVSTZ: Plant to Shipping Point assignment
+      if (plant && result.shippingPoints === undefined) {
+        try {
+          const tvstz = await rfc.readTable('TVSTZ', ['WERKS', 'VSTEL'], [
+            `WERKS = '${plant}'`
+          ]);
+          if (Array.isArray(tvstz) && tvstz.length > 0) {
+            const points = Array.from(new Set(tvstz.map(r => r.VSTEL && r.VSTEL.trim()).filter(Boolean)));
+            if (points.length > 0) {
+              result.shippingPoints = points;
+            }
+          }
+        } catch (_) {}
+      }
+
       return Object.keys(result).length > 0 ? result : null;
     }
 

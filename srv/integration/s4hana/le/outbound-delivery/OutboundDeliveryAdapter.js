@@ -3,6 +3,21 @@ const { S4HttpClient } = require('../../S4HttpClient');
 const { odataString, extractFilterParam } = require('../../../../common/filterUtils');
 const { mapS4Error } = require('../../S4ErrorMapper');
 
+let RfcClient = null;
+try {
+  ({ RfcClient } = require('../../RfcClient'));
+} catch (_) {}
+
+let BusinessConfigResolver = null;
+try {
+  BusinessConfigResolver = require('../../../../common/BusinessConfigResolver');
+} catch (_) {}
+
+let plantScope = null;
+try {
+  plantScope = require('../../../../wm/handling-unit/plantScope');
+} catch (_) {}
+
 const SERVICE_PATH = '/sap/opu/odata/sap/LE_SHP_QC_DLVREF_SRV';
 // Verified in docs/sd-metadata (22 Sep 2026): function imports, HttpMethod POST, parameters in the URL.
 const PGI_SERVICE_PATH = '/sap/opu/odata/sap/SD_SOFM_CREDIT_BLOCK_SRV';
@@ -50,12 +65,98 @@ function _parseODataV2Date(dateVal) {
 class OutboundDeliveryAdapter {
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
+    this.rfc = options.rfc || (RfcClient && RfcClient.isAvailable && RfcClient.isAvailable() ? new RfcClient() : null);
+    this.businessConfigResolver = options.businessConfigResolver || BusinessConfigResolver;
     this.servicePath = options.servicePath || SERVICE_PATH;
     this.cacheTtlMs = options.cacheTtlMs !== undefined ? options.cacheTtlMs : 60000;
     this._approvalCache = {
       timestamp: 0,
       map: new Map()
     };
+    this._tvstzCache = new Map();
+  }
+
+  /**
+   * Retrieves valid shipping points for a plant from TVSTZ (or BusinessConfigResolver).
+   *
+   * @param {string} plant
+   * @param {Object} [options]
+   * @returns {Promise<Array<string>>}
+   */
+  async getShippingPointsForPlant(plant, options = {}) {
+    if (!plant) return [];
+    const cleanPlant = String(plant).trim().toUpperCase();
+    if (!cleanPlant) return [];
+
+    if (options.shippingPoints && Array.isArray(options.shippingPoints)) {
+      return options.shippingPoints;
+    }
+    if (typeof options.tvstzResolver === 'function') {
+      return await options.tvstzResolver(cleanPlant);
+    }
+
+    if (!options.forceRefresh && this._tvstzCache && this._tvstzCache.has(cleanPlant)) {
+      const entry = this._tvstzCache.get(cleanPlant);
+      if (entry && entry.expiresAt > Date.now()) {
+        return entry.points;
+      }
+    }
+
+    let points = [];
+    const rfc = options.rfc || this.rfc;
+    if (rfc && typeof rfc.readTable === 'function') {
+      try {
+        const rows = await rfc.readTable('TVSTZ', ['WERKS', 'VSTEL'], [`WERKS = '${cleanPlant}'`]);
+        if (Array.isArray(rows)) {
+          points = Array.from(new Set(rows.map(r => r.VSTEL && r.VSTEL.trim()).filter(Boolean)));
+        }
+      } catch (err) {
+        LOG.warn(`Failed to read TVSTZ for plant ${cleanPlant}: ${err.message}`);
+      }
+    }
+
+    if (points.length === 0 && this.businessConfigResolver) {
+      try {
+        const cfg = await this.businessConfigResolver.resolve({
+          plant: cleanPlant,
+          fields: ['shippingPoints'],
+          rfc
+        });
+        if (cfg && Array.isArray(cfg.shippingPoints)) {
+          points = cfg.shippingPoints;
+        }
+      } catch (_) {}
+    }
+
+    if (this._tvstzCache) {
+      this._tvstzCache.set(cleanPlant, {
+        points,
+        expiresAt: Date.now() + this.cacheTtlMs
+      });
+    }
+
+    return points;
+  }
+
+  /**
+   * Clears in-memory TVSTZ cache.
+   */
+  clearTvstzCache() {
+    if (this._tvstzCache) {
+      this._tvstzCache.clear();
+    }
+  }
+
+  /**
+   * Gets cached TVSTZ entry for a plant.
+   *
+   * @param {string} plant
+   * @returns {Object|null}
+   */
+  getTvstzCacheEntry(plant) {
+    if (!this._tvstzCache || !plant) return null;
+    const cleanPlant = String(plant).trim().toUpperCase();
+    return this._tvstzCache.get(cleanPlant) || null;
   }
 
   /**
@@ -70,6 +171,69 @@ class OutboundDeliveryAdapter {
       let filterClauses = [];
       let top = null;
       let skip = null;
+
+      // Resolve user context from options, query, or ambient CDS context
+      const user = options.user ||
+        query.user ||
+        query.req?.user ||
+        options.req?.user ||
+        (query && typeof query.is === 'function' ? query : null) ||
+        (typeof cds !== 'undefined' && cds?.context?.user) ||
+        null;
+
+      // Determine authorized plants from authenticated user (server-side, never from browser)
+      let authorizedPlants = null;
+      if (user) {
+        authorizedPlants = plantScope ? plantScope(user) : (user.is && user.is('Admin') ? null : [].concat(user.attr?.Plant || []).map(p => String(p).trim().toUpperCase()).filter(Boolean));
+      }
+
+      // Extract requested plant from query or options (e.g., query params, CAP filters, options)
+      let requestedPlant = options.plant ||
+        query.plant ||
+        query.Plant ||
+        (query.req || query.query || query.data ? extractFilterParam(query, 'Plant') : null) ||
+        null;
+      if (requestedPlant) {
+        requestedPlant = String(requestedPlant).trim().toUpperCase();
+      }
+
+      // Authenticated user plant derivation & tamper protection
+      let resolvedPlant = null;
+      if (user) {
+        if (authorizedPlants !== null) {
+          // Non-admin user: authorizedPlants is strictly checked
+          if (authorizedPlants.length === 0) {
+            const err = new Error('User has no authorized plants. Access denied.');
+            err.status = 403;
+            err.statusCode = 403;
+            throw err;
+          }
+          if (requestedPlant && !authorizedPlants.includes(requestedPlant)) {
+            const err = new Error(`Plant '${requestedPlant}' is outside user's authorized plants: [${authorizedPlants.join(', ')}]. Access denied.`);
+            err.status = 403;
+            err.statusCode = 403;
+            throw err;
+          }
+          // Take plant from authenticated user attribute only
+          resolvedPlant = requestedPlant && authorizedPlants.includes(requestedPlant)
+            ? requestedPlant
+            : authorizedPlants[0];
+        } else {
+          // Admin user: unrestricted
+          resolvedPlant = requestedPlant || (user.attr?.Plant && [].concat(user.attr.Plant).map(p => String(p).trim().toUpperCase()).filter(Boolean)[0]) || null;
+        }
+      } else {
+        // No user context (e.g. system calls or unit tests specifying plant directly)
+        resolvedPlant = requestedPlant;
+      }
+
+      // (1) Fail closed when no plant resolves
+      if (!resolvedPlant) {
+        const err = new Error('No plant resolved for orders due for delivery. Query failed closed.');
+        err.status = 400;
+        err.statusCode = 400;
+        throw err;
+      }
 
       if (typeof query === 'string') {
         const url = `${this.servicePath}/C_SalesOrderDueForDeliveryVH?${query}`;
@@ -96,6 +260,15 @@ class OutboundDeliveryAdapter {
       // If ShippingPoint is specified, filter by it using odataString
       if (sp) {
         filterClauses.push(`ShippingPoint eq ${odataString(sp)}`);
+      } else {
+        // When ShippingPoint is not specified, filter by valid points from TVSTZ for the resolved plant
+        const validPoints = await this.getShippingPointsForPlant(resolvedPlant, options);
+        if (validPoints.length === 1) {
+          filterClauses.push(`ShippingPoint eq ${odataString(validPoints[0])}`);
+        } else if (validPoints.length > 1) {
+          const spOrs = validPoints.map(item => `ShippingPoint eq ${odataString(item)}`).join(' or ');
+          filterClauses.push(`(${spOrs})`);
+        }
       }
 
       // Filter by SalesOrder if provided
@@ -150,12 +323,28 @@ class OutboundDeliveryAdapter {
       LOG.info(`Reading shipping points from: ${url}`);
       const res = await this.client.get(url, options);
       const rawResults = res.data?.d?.results || res.data?.results || res.data?.value || [];
-      return rawResults.map(sp => ({
+      let list = rawResults.map(sp => ({
         ShippingPoint: sp.ShippingPoint,
         ShippingPointName: sp.ShippingPointName || sp.ShippingPoint_Text || '',
         ShippingPoint_Text: sp.ShippingPoint_Text || sp.ShippingPointName || '',
         ActiveDepartureCountry: sp.ActiveDepartureCountry || ''
       }));
+
+      // If plant is specified or derived from request context, filter to points valid in TVSTZ
+      const plant = options.plant ||
+        (options.req?.user?.attr?.Plant && [].concat(options.req.user.attr.Plant)[0]) ||
+        (options.user?.attr?.Plant && [].concat(options.user.attr.Plant)[0]) ||
+        null;
+
+      if (plant) {
+        const validPoints = await this.getShippingPointsForPlant(plant, options);
+        if (validPoints && validPoints.length > 0) {
+          const set = new Set(validPoints);
+          list = list.filter(sp => set.has(sp.ShippingPoint));
+        }
+      }
+
+      return list;
     } catch (err) {
       const sapErr = mapS4Error(err);
       LOG.error(`Failed to read shipping points (${sapErr.status}): ${sapErr.message}`);

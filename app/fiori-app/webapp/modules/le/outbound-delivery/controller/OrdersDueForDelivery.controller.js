@@ -45,6 +45,8 @@ sap.ui.define([
             var oDialogModel = new JSONModel({
                 salesOrder: "",
                 shippingPoint: "",
+                shippingPointValueState: "None",
+                shippingPointValueStateText: "",
                 deliveryDate: this._getTodayDateString()
             });
             this.getView().setModel(oDialogModel, "deliveryDialog");
@@ -184,6 +186,10 @@ sap.ui.define([
             this._applyCombinedFilters();
         },
 
+        onFilterShippingPointChange: function () {
+            this._applyCombinedFilters();
+        },
+
         _applyCombinedFilters: function () {
             var oTable = (typeof this.byId === "function")
                 ? this.byId("ordersDueTable")
@@ -199,6 +205,11 @@ sap.ui.define([
                 aFilters.push(new Filter("IsDeliverable", FilterOperator.EQ, true));
             } else if (sTab === "inApproval") {
                 aFilters.push(new Filter("SalesDocApprovalStatus", FilterOperator.EQ, "A"));
+            }
+
+            var sFilterSP = oViewModel && oViewModel.getProperty("/filterShippingPoint");
+            if (sFilterSP && String(sFilterSP).trim()) {
+                aFilters.push(new Filter("ShippingPoint", FilterOperator.EQ, String(sFilterSP).trim()));
             }
 
             var oSearchField = (typeof this.byId === "function")
@@ -273,10 +284,26 @@ sap.ui.define([
             if (oDialogModel) {
                 oDialogModel.setProperty("/salesOrder", sSalesOrder);
                 oDialogModel.setProperty("/shippingPoint", sShippingPoint);
+                oDialogModel.setProperty("/shippingPointValueState", "None");
+                oDialogModel.setProperty("/shippingPointValueStateText", "");
                 oDialogModel.setProperty("/deliveryDate", sGoodsIssueDate);
             }
 
             this._openCreateDeliveryDialog();
+        },
+
+        onShippingPointChange: function (oEvent) {
+            var sKey = oEvent.getParameter("selectedItem")
+                ? oEvent.getParameter("selectedItem").getKey()
+                : (oEvent.getSource().getSelectedKey() || oEvent.getSource().getValue());
+            var oDialogModel = this.getView().getModel("deliveryDialog");
+            if (oDialogModel) {
+                oDialogModel.setProperty("/shippingPoint", sKey);
+                if (sKey && String(sKey).trim()) {
+                    oDialogModel.setProperty("/shippingPointValueState", "None");
+                    oDialogModel.setProperty("/shippingPointValueStateText", "");
+                }
+            }
         },
 
         _openCreateDeliveryDialog: function () {
@@ -321,8 +348,13 @@ sap.ui.define([
                 MessageBox.error(this._text("msgSalesOrderRequired", "Sales Order is required."));
                 return;
             }
-            if (!sShippingPoint) {
-                MessageBox.error(this._text("msgShippingPointRequired", "Shipping Point is required."));
+            if (!sShippingPoint || !String(sShippingPoint).trim()) {
+                var sRequiredMsg = this._text("msgShippingPointRequired", "Shipping Point is required. Please choose a valid shipping point from TVSTZ.");
+                if (oDialogModel) {
+                    oDialogModel.setProperty("/shippingPointValueState", "Error");
+                    oDialogModel.setProperty("/shippingPointValueStateText", sRequiredMsg);
+                }
+                MessageBox.error(sRequiredMsg);
                 return;
             }
 

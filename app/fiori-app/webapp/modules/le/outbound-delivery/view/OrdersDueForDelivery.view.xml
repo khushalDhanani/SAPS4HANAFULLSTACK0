@@ -151,6 +151,20 @@
                                     <SegmentedButtonItem id="segBtnAll" key="all" text="{i18n>ordersDueTabAll}" />
                                 </items>
                             </SegmentedButton>
+                            <ComboBox
+                                id="comboFilterShippingPoint"
+                                width="13rem"
+                                placeholder="{i18n>ordersDueFilterShippingPointPlaceholder}"
+                                selectedKey="{ordersDueView>/filterShippingPoint}"
+                                selectionChange=".onFilterShippingPointChange"
+                                items="{
+                                    path: 'outboundDelivery>/ShippingPointVH',
+                                    sorter: { path: 'ShippingPoint' }
+                                }">
+                                <core:ListItem
+                                    key="{outboundDelivery>ShippingPoint}"
+                                    text="{= ${outboundDelivery>ShippingPointName} ? ${outboundDelivery>ShippingPoint} + ' - ' + ${outboundDelivery>ShippingPointName} : ${outboundDelivery>ShippingPoint} }" />
+                            </ComboBox>
                             <SearchField
                                 id="searchOrdersDue"
                                 width="16rem"

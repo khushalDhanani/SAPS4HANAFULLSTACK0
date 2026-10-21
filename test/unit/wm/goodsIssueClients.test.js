@@ -1706,5 +1706,49 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       spyGet.mockRestore();
       spyOpen.mockRestore();
     });
+
+    it('resolves authentic storage location CS02 for real reservation 0000530233 / 0001 without defaulting', async () => {
+      const spyGet = jest.spyOn(GoodsIssueAdapter, '_get').mockResolvedValue([
+        {
+          Reservation: '0000530233',
+          ReservationItem: '0001',
+          OrderID: '0001002345',
+          Product: '000000008000009754',
+          Plant: '1120',
+          StorageLocation: 'CS02',
+          ResvnItmRequiredQtyInBaseUnit: '1.000',
+          ResvnItmWithdrawnQtyInBaseUnit: '0.000',
+          ReservationItemIsFinallyIssued: false,
+          ReservationItmIsMarkedForDeltn: false
+        }
+      ]);
+      const spyOpen = jest.spyOn(GoodsIssueAdapter, 'getOpenItems').mockResolvedValue([
+        {
+          ReservationNo: '0000530233',
+          ReservationItem: '0001',
+          OrderNo: '0001002345',
+          Material: '000000008000009754',
+          Plant: '1120',
+          StorageLocation: 'CS02',
+          OpenQty: 1,
+          Batch: ''
+        }
+      ]);
+      const spyBatches = jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue([]);
+
+      const res = await GoodsIssueAdapter.resolveIdentifier('0000530233');
+
+      expect(res.ReservationNo).toBe('0000530233');
+      expect(res.Plant).toBe('1120');
+      expect(res.DefaultStorageLocation).toBe('CS02');
+      expect(res.ActiveItem).toBeDefined();
+      expect(res.ActiveItem.StorageLocation).toBe('CS02');
+      expect(res.ActiveItem.Material).toBe('000000008000009754');
+      expect(res.ActiveItem.OpenQty).toBe(1);
+
+      spyGet.mockRestore();
+      spyOpen.mockRestore();
+      spyBatches.mockRestore();
+    });
   });
 });

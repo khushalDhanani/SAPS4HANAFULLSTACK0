@@ -138,3 +138,20 @@ describe('Mvt261Service 518006/3 empty-issue-location, end-to-end through the se
     expect(item.BlockReason).toContain('in supply area CS01; issue location PT01 is empty');
   });
 });
+
+describe('Mvt261Service startup warning', () => {
+  it('logs a warning on startup when mvt261NotReadyBins is empty', async () => {
+    const Mvt261Service = require('../../../srv/wm/mvt261/service');
+    const LOG = require('../../../srv/common/logger')('mvt261-service');
+    const warnSpy = jest.spyOn(LOG, 'warn').mockImplementation(() => {});
+
+    const srv = new Mvt261Service();
+    srv.on = jest.fn();
+    await srv.init();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[STARTUP WARNING] mvt261NotReadyBins is empty')
+    );
+    warnSpy.mockRestore();
+  });
+});

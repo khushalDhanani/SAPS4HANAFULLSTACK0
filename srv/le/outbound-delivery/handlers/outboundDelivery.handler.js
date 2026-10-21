@@ -35,7 +35,7 @@ function registerOutboundDeliveryHandlers(srv) {
   // 2. READ ShippingPointVH
   srv.on('READ', 'ShippingPointVH', async (req) => {
     try {
-      const shippingPoints = await outboundDeliveryAdapter.getShippingPoints();
+      const shippingPoints = await outboundDeliveryAdapter.getShippingPoints({ req });
       return applyPaging(shippingPoints, req);
     } catch (err) {
       LOG.error(`Failed to read shipping points: ${err.message}`);
@@ -121,7 +121,7 @@ function registerOutboundDeliveryHandlers(srv) {
   // 6. Function getOrdersDueMetrics: counts over the full due set (same SAP read as the worklist, unpaged)
   srv.on('getOrdersDueMetrics', async (req) => {
     try {
-      const rows = await outboundDeliveryAdapter.getOrdersDueForDelivery({});
+      const rows = await outboundDeliveryAdapter.getOrdersDueForDelivery(req);
       if (!Array.isArray(rows)) {
         throw new Error('Orders due for delivery could not be read from S/4HANA');
       }

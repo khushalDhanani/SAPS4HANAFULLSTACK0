@@ -12,6 +12,18 @@ const strip = (v) => String(v || '').replace(/^0+(?=.)/, '');
 module.exports = class Mvt261Service extends cds.ApplicationService {
   async init() {
     const adapter = new Mvt261Adapter();
+
+    // Startup check: warn if mvt261NotReadyBins is empty
+    try {
+      const resolver = require('../../common/BusinessConfigResolver');
+      const cfg = await resolver.resolve({ flow: '261', fields: ['mvt261NotReadyBins'] });
+      if (!Array.isArray(cfg.mvt261NotReadyBins) || cfg.mvt261NotReadyBins.length === 0) {
+        LOG.warn('[STARTUP WARNING] mvt261NotReadyBins is empty. Blocked/staging bins (such as on-hold or quality inspection bins) are not configured for Movement 261. Maintain Mvt261NotReadyBinsJson in BusinessConfig or customizing.');
+      }
+    } catch (e) {
+      LOG.warn(`[STARTUP WARNING] mvt261NotReadyBins is empty or unconfigured: ${e.message}`);
+    }
+
     // Plant authorization (server-side, from the authenticated user; never from the browser) - see
     // ../handling-unit/plantScope. Out-of-scope plant -> 403 in the adapter, never a silent empty list.
     const scope = (req) => plantScope(req.user);

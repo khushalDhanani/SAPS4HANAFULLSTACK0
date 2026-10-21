@@ -245,7 +245,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
         readyOrdersCount: 1,
         inApprovalOrdersCount: 1
       });
-      expect(outboundDeliveryAdapter.getOrdersDueForDelivery).toHaveBeenCalledWith({});
+      expect(outboundDeliveryAdapter.getOrdersDueForDelivery).toHaveBeenCalledWith(req);
       expect(req.error).not.toHaveBeenCalled();
     });
 
