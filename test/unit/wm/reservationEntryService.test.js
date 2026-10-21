@@ -19,7 +19,7 @@ const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssue
 const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
 const { POST, GET, PATCH, DELETE: HTTP_DELETE } = cds.test(__dirname + '/../../../');
-const { SELECT, DELETE } = cds.ql;
+const { SELECT, INSERT, DELETE } = cds.ql;
 
 const TRACK_ENTITY = 'saps4hana.wm.ReservationTrack';
 const LOG_ENTITY = 'saps4hana.wm.ReservationLog';
@@ -1868,6 +1868,37 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
         Unit: 'NOS',
         Status_code: '01'
       });
+    });
+
+    test('does not use a tracking fallback row from a different warehouse', async () => {
+      const reservationNo = '0000999841';
+      await cds.db.run(INSERT.into(TRACK_ENTITY).entries({
+        ReservationNo: reservationNo,
+        ReservationItem: '0001',
+        MovementType: '201',
+        WarehouseNumber: 'W02',
+        Plant: '1120',
+        StorageLocation: 'HS01',
+        TransferRequirement: '0001000999',
+        Status_code: '02'
+      }));
+      rtSpy = jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(async (table) => {
+        if (table === 'RKPF') return [{ BWART: '201', KOSTL: '1011201301', ANLN1: '', ANLN2: '', UMWRK: '', UMLGO: '' }];
+        if (table === 'RESB') return [{ MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01', BDMNG: '1.000', MEINS: 'NOS', CHARG: '', KZEAR: '' }];
+        if (table === 'LTBK') return [];
+        if (table === 'T320') return [{ LGNUM: 'W01' }];
+        return [];
+      });
+
+      try {
+        const { data } = await GET(
+          `/odata/v4/reservation-entry/getReservationDetail(ReservationNo='${reservationNo}',ReservationItem='0001')`,
+          authClerk
+        );
+        expect(data).toMatchObject({ WarehouseNumber: 'W01', TransferRequirement: '', Status_code: '01' });
+      } finally {
+        await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: reservationNo, ReservationItem: '0001' }));
+      }
     });
 
     test('returns 404 when the reservation item does not exist in SAP', async () => {

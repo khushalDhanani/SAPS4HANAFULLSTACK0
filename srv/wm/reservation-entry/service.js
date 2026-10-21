@@ -463,6 +463,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         const completelyProcessed = closed;
         const sMat = strip(i.MATNR);
         const sMatPad = String(i.MATNR).padStart(18, '0');
+        const reservationWarehouse = await warehouseFor(i.WERKS, i.LGORT, '').catch(() => '');
 
         let matName = '';
         try {
@@ -484,14 +485,16 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         } catch (_trErr) {}
 
         let existingTo = '';
-        if (!allTr) {
+        if (!allTr && reservationWarehouse) {
           try {
             const track = (await SELECT.one.from(ReservationEntries).columns(['TransferRequirement', 'TransferOrder', 'WarehouseNumber']).where({
               ReservationNo: s4Rsnum,
-              ReservationItem: s4Rspos
+              ReservationItem: s4Rspos,
+              WarehouseNumber: reservationWarehouse
             })) || (await SELECT.one.from(ReservationEntries).columns(['TransferRequirement', 'TransferOrder', 'WarehouseNumber']).where({
               ReservationNo: strip(resNo),
-              ReservationItem: s4Rspos
+              ReservationItem: s4Rspos,
+              WarehouseNumber: reservationWarehouse
             }));
             if (track) {
               if (track.TransferRequirement) {
@@ -551,7 +554,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           AssetNo: strip((h && h.ANLN1) || ''),
           SubNumber: String((h && h.ANLN2) || '').trim(),
           OrderID: strip((i && i.AUFNR) || (h && h.AUFNR) || ''),
-          WarehouseNumber: await warehouseFor(i.WERKS, i.LGORT, '').catch(() => ''),
+          WarehouseNumber: reservationWarehouse,
           Status_code: statusCode,
           StatusText: statusText,
           TransferRequirement: allTr ? String(allTr).replace(/^0+/, '') : '',
