@@ -385,6 +385,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
 
     test('Batch Resolution: auto-resolves batch from LTAP when batch is omitted', async () => {
       mockRfc.readTable = jest.fn((table) => {
+        if (table === 'T320') return Promise.resolve([{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }]);
         if (table === 'LTAP') return Promise.resolve([{ CHARG: 'INJW260001' }]);
         if (table === 'T001K') return Promise.resolve([{ BWKEY: '1120', BUKRS: '1000' }]);
         return Promise.resolve([]);
@@ -750,6 +751,105 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         const res = await adapter.createDeliveryPickingTO(D, { call: mockRfc.call, warehouse: 'W01' });
         expect(res).toMatchObject({ success: true, deliveryNumber: D, alreadyPicked: true });
         expect(mockRfc.call).not.toHaveBeenCalled();
+      });
+
+      test('PGI fails with L3 866 (SU type missing): clear error "Packaging type <VHART> has no storage unit type in warehouse <LGNUM>. Contact the SAP administrator.", rolls back, zero auto-fix', async () => {
+        mockRfc.readTable = mkRead({ wbstk: 'A', kostk: 'C', serialsAssigned: true, posted: false });
+        mockRfc.call.mockImplementation(async (fm) => {
+          if (fm === 'BAPI_OUTB_DELIVERY_CONFIRM_DEC') {
+            return {
+              RETURN: [{
+                TYPE: 'E',
+                ID: 'L3',
+                NUMBER: '866',
+                MESSAGE: 'SU type for pack. mat. type Z007 could not be determined in warehouse no. W01',
+                MESSAGE_V1: 'Z007',
+                MESSAGE_V2: 'W01'
+              }]
+            };
+          }
+          return {};
+        });
+
+        let caughtErr;
+        try {
+          await adapter.completeDeliveryGoodsIssue(D, { call: mockRfc.call, warehouse: 'W01', serials: ['MBP00001'] });
+        } catch (err) {
+          caughtErr = err;
+        }
+
+        expect(caughtErr).toBeDefined();
+        expect(caughtErr.status).toBe(400);
+        expect(caughtErr.code).toBe('SU_TYPE_UNDETERMINED');
+        expect(caughtErr.packagingMaterialType).toBe('Z007');
+        expect(caughtErr.warehouse).toBe('W01');
+        expect(caughtErr.message).toBe('Packaging type Z007 has no storage unit type in warehouse W01. Contact the SAP administrator.');
+        expect(fmNames()).toEqual(['BAPI_OUTB_DELIVERY_CONFIRM_DEC', 'BAPI_TRANSACTION_ROLLBACK']);
+        // Verify no commit and no automatic fix attempt
+        expect(fmNames()).not.toContain('BAPI_TRANSACTION_COMMIT');
+      });
+
+      test('postDeliveryGoodsIssue fails with L3 866: exact message, rolls back, zero auto-fix', async () => {
+        mockRfc.call.mockImplementation(async (fm) => {
+          if (fm === 'BAPI_OUTB_DELIVERY_CONFIRM_DEC') {
+            return {
+              RETURN: [{
+                TYPE: 'E',
+                ID: 'L3',
+                NUMBER: '866',
+                MESSAGE: 'SU type for pack. mat. type Z007 could not be determined in warehouse no. W01',
+                MESSAGE_V1: 'Z007',
+                MESSAGE_V2: 'W01'
+              }]
+            };
+          }
+          return {};
+        });
+
+        await expect(adapter.postDeliveryGoodsIssue(D, { call: mockRfc.call, warehouse: 'W01', serials: ['MBP00001'] }))
+          .rejects.toMatchObject({
+            status: 400,
+            code: 'SU_TYPE_UNDETERMINED',
+            packagingMaterialType: 'Z007',
+            warehouse: 'W01',
+            message: 'Packaging type Z007 has no storage unit type in warehouse W01. Contact the SAP administrator.'
+          });
+        expect(mockRfc.call).toHaveBeenCalledWith('BAPI_TRANSACTION_ROLLBACK', {});
+        expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', expect.anything());
+      });
+
+      test('BAPI_OUTB_DELIVERY_CHANGE fails with L3 866: clear error "Packaging type <VHART> has no storage unit type in warehouse <LGNUM>. Contact the SAP administrator.", rolls back, no PGI, zero auto-fix', async () => {
+        mockRfc.readTable = mkRead({ wbstk: 'A', kostk: 'C', serialsAssigned: false, posted: false });
+        mockRfc.call.mockImplementation(async (fm) => {
+          if (fm === 'BAPI_OUTB_DELIVERY_CHANGE') {
+            return {
+              RETURN: [{
+                TYPE: 'E',
+                ID: 'L3',
+                NUMBER: '866',
+                MESSAGE: 'SU type for pack. mat. type Z007 could not be determined in warehouse no. W01',
+                MESSAGE_V1: 'Z007',
+                MESSAGE_V2: 'W01'
+              }]
+            };
+          }
+          return {};
+        });
+
+        let caughtErr;
+        try {
+          await adapter.completeDeliveryGoodsIssue(D, { call: mockRfc.call, warehouse: 'W01', serials: ['MBP00001'] });
+        } catch (err) {
+          caughtErr = err;
+        }
+
+        expect(caughtErr).toBeDefined();
+        expect(caughtErr.status).toBe(400);
+        expect(caughtErr.code).toBe('SU_TYPE_UNDETERMINED');
+        expect(caughtErr.packagingMaterialType).toBe('Z007');
+        expect(caughtErr.warehouse).toBe('W01');
+        expect(caughtErr.message).toBe('Packaging type Z007 has no storage unit type in warehouse W01. Contact the SAP administrator.');
+        expect(fmNames()).toEqual(['BAPI_OUTB_DELIVERY_CHANGE', 'BAPI_TRANSACTION_ROLLBACK']);
       });
     });
 

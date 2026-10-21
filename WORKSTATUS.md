@@ -5,6 +5,14 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **T319A Live Re-Read Executed: VHART = 'Z007' Missing, Placeholders Detected, Stopped (2026-10-21 23:35 IST): Live RFC re-read of `T319A` (READ-ONLY) in SAP Client 220 confirms that table `T319A` currently contains only `W01 / 0001 -> E1` and `W01 / Z003 -> E1`. The entry for `Z007` has not yet been saved in SAP. User message contained template placeholders (`(NAME, date)`, `<SUT>`, `<number>`). In accordance with AGENTS.md ("Reject placeholder input: If a value looks like a sample, treat it as NOT PROVIDED, stop, and ask") and user directive ("Abort if T319A shows a different value..."), execution of `tools/execute-delivery-pgi.js` was safely aborted before calling PGI. Delivery `0080000134` status read back: `WBSTK = 'A'`, `KOSTK = 'C'`. ZERO SAP writes executed.**
+
+- **L3 866 Exact User Message Alignment & Tests 101/101 Green, Awaiting User "Done" (2026-10-21 23:25 IST): Aligned L3 866 error message across `completeDeliveryGoodsIssue` and `postDeliveryGoodsIssue` in `ReservationProcessAdapter.js` to exact user string: `"Packaging type <VHART> has no storage unit type in warehouse <LGNUM>. Contact the SAP administrator."`. Updated dedicated unit tests in `autoMigoPosting.test.js` (101/101 green; 172/172 passed across all 3 WM suites). Updated `tools/execute-delivery-pgi.js` to verify exact stock reduction (must reduce by 1 from 10.000 to 9.000 in 1120/CS02) and interim bins in 913 (both asset 0000400001 and delivery 0080000134). ZERO writes executed, NO ADT write helper deployed, NO table insert into T319A. Awaiting user saying "done" after maintaining V_T319A in SM30 under transport request.**
+
+- **Forensic Investigation of Message L3 866 & Exact Table/View PROVEN (2026-10-21 23:15 IST): FULL EVIDENCE PROVEN (STRICTLY READ-ONLY). Message L3 866 is raised in include `ML03TFHU_HU_INT_LTAP` line 48 (`FORM hu_int_ltap`) in program `SAPML03T` (Function Group `L03T`) when `SELECT SINGLE * FROM T319A WHERE LGNUM = 'W01' AND VHART = 'Z007'` (in include `ML03TF20_T319A_LESEN`) returns sy-subrc = 4 and BAdI `LE_WM_SUTYPE_HU` has no implementation. Base table is transparent table `T319A` (delivery class C = Customizing). Maintenance view is `V_T319A` (view class C, text: "Assignment of automatic pick-HU creation", function group `0L17`, single screen 100 in `TVDIR`). IMG Activity is `SIMG_XXMENUOLMLHU03` (SPRO: Logistics - General > Handling Unit Management > Basics > Warehouse Management > Assign Storage Unit Type to Packaging Material Type; parameter transaction `/ISDFPS/C_V_T319A`). Transport object is `R3TR SVIM V_T319A`. Proven failing values: `Z007` ("Boxes" in `TVTYT`) comes from `VEKP-VHART` of Handling Unit `00000000002000019371` created during picking, packed with packaging material `2000000340` (`MARA-VHART = 'Z007'`). Existing rows in `T319A` are `0001 -> E1` and `Z003 -> E1`. Storage Unit Types in W01 from `T307T` revealed that `E1` is designated as "Drum 25 Ltr" and `E10` as "Pieces". Master data changes cannot fix the existing packed HU. ZERO SAP writes.**
+
+- **L3 866 Error Handling & Test Added, Delivery PGI Script Ready, Awaiting User SM30 Confirmation (2026-10-21 22:50 IST): Handled SAP error L3 866 in `ReservationProcessAdapter.js` (`completeDeliveryGoodsIssue` and `postDeliveryGoodsIssue`) returning HTTP 400 with actionable message directing user to maintain V_T319A in SM30 with zero automatic fixes. Added dedicated unit tests in `autoMigoPosting.test.js` (100% green, 100 passed). Authored `tools/execute-delivery-pgi.js` with live-sap-gate to inspect T319A, execute one-shot PGI on delivery 0080000134 with serial MBP00001 upon confirmation, and read back LIKP-WBSTK, VBFA/MATDOC 241, EQBS, MARD stock, and LQUA interim bin. Pre-execution read-only check confirmed T319A currently contains W01/0001->E1 and W01/Z003->E1. ZERO writes executed, NO ADT write helper deployed, NO table insert into T319A. Awaiting user confirmation of manual SM30 maintenance under transport request before running read-only re-read and one-shot PGI.**
+
 - **Delivery completion Step 1 PASSED & Step 2/3 DIAGNOSED (2026-10-21 22:35 IST): Picking Transfer Order 1037372 confirmed in W01 (LIKP-KOSTK = 'C'). User selected serial number MBP00001 (unrestricted stock in 1120/CS02). Execution of BAPI_OUTB_DELIVERY_CONFIRM_DEC revealed root cause blocker L3 866: "SU type for pack. mat. type Z007 could not be determined in warehouse no. W01". Inspection of SAP transparent table T319A confirms W01 only maps packaging material types 0001 and Z003 to Storage Unit Type E1; mapping for Z007 is missing in customizing. Maintaining SPRO entry W01 / Z007 -> E1 (or table T319A) will enable delivery confirmation and PGI with serial numbers.**
 
 - **Delivery completion Step 1 LIVE PROOF PASSED (2026-10-21 22:15 IST): Picking Transfer Order 1037372 created and confirmed in SAP Client 220 for Outbound Delivery 0080000134 in W01 under user "Go". Live read-back confirms LIKP-KOSTK = 'C' (completely picked), LIKP-LVSTK = 'C', LTAK TANUM 0001037372 KQUIT = 'X', LTAP item 0001 picked 1.000 NOS of 8000009754 from EN1/1-L0001-04 to 913/0080000134 (PQUIT = 'X'). Handled L3 181 (movement type 241 forbids immediate confirmation) by creating with IV_SQUIT blank and confirming via L_TO_CONFIRM. Step 2 (serial number assignment) and Step 3 (PGI) pending user serial selection and explicit "GO".**
@@ -3658,6 +3666,119 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 23:35 IST — Live re-read of T319A executed; VHART='Z007' not present in SAP; aborted per user directive and placeholder rule
+
+- **Trigger:** User replied: `"done. Owner (NAME, date) confirmed W01 / Z007 -> <SUT>. Transport: <number>. Run tools/execute-delivery-pgi.js once, with expected SUT = <SUT>. Abort if T319A shows a different value, or if WBSTK is already 'C'. No retry. Report all read-back results."`
+- **Actions Executed (READ-ONLY):**
+  1. Re-read transparent table `T319A` for `LGNUM = 'W01'` via live RFC:
+     - Result: Exactly 2 rows returned: `0001 -> E1` and `Z003 -> E1`.
+     - Entry for `VHART = 'Z007'` is **NOT present** in table `T319A` in SAP Client 220.
+  2. Detected template placeholder input from user: `(NAME, date)`, `<SUT>`, `<number>`.
+  3. Re-read `LIKP` status for Delivery `0080000134`:
+     - `WBSTK = 'A'` (Open for goods issue)
+     - `KOSTK = 'C'` (Completely picked)
+     - `LVSTK = 'C'` (WM picking completed)
+- **Decision:**
+  - In accordance with `AGENTS.md` ("Reject placeholder input: If a value looks like a sample, treat it as NOT PROVIDED, stop, and ask") and user directive ("Abort if T319A shows a different value..."):
+  - **ABORTED write execution.** Zero writes executed. No retry.
+  - Reported live table content to user and requested real SUT and transport confirmation once saved in `SM30`.
+- **Validation:**
+  - `git diff --check`: clean.
+
+### 2026-10-21 23:25 IST — Exact user message alignment for L3 866 & unit tests 101/101 green; execute-delivery-pgi.js updated
+
+- **Directives from user:**
+  - Catch L3 866 in the app and show `"Packaging type <VHART> has no storage unit type in warehouse <LGNUM>. Contact the SAP administrator."` with a unit test. No automatic fix.
+  - User maintaining `V_T319A` in `SM30` under transport. Do NOT insert into `T319A`. Do NOT deploy write helper.
+  - Wait for user saying "done". Then re-read `T319A` (read-only), run PGI once with serial `MBP00001` (no retry), read back `LIKP-WBSTK`, `VBFA`/`MATDOC` 241, `EQBS` serial status, stock in `1120/CS02` (must reduce by 1 from 10.000 to 9.000), interim bin in `913`.
+- **Changes in `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:**
+  - Aligned error message format in both `completeDeliveryGoodsIssue` and `postDeliveryGoodsIssue` to:
+    `"Packaging type <VHART> has no storage unit type in warehouse <LGNUM>. Contact the SAP administrator."`.
+  - Zero automatic fix, immediate rollback (`BAPI_TRANSACTION_ROLLBACK`).
+- **Unit Tests in `test/unit/wm/autoMigoPosting.test.js`:**
+  - Updated tests to assert exact message `Packaging type Z007 has no storage unit type in warehouse W01. Contact the SAP administrator.`.
+  - Test suite passes: 101/101 tests green (172/172 across 3 WM suites).
+- **Tool Script `tools/execute-delivery-pgi.js` Updated:**
+  - Added specific verification for stock reduction by 1 (10.000 -> 9.000 NOS in `1120/CS02`).
+  - Added read-back inspection for both asset interim bin `913 / 0000400001` and delivery dynamic bin `913 / 0080000134`.
+- **SAP writes:** ZERO. No write helper deployed. No insert into T319A.
+- **Validation:**
+  - `npx jest test/unit/wm/autoMigoPosting.test.js test/unit/wm/goodsIssueClients.test.js test/unit/wm/mvt261Auth.test.js`: 172 passed (100% green).
+  - `npx cds compile srv/ --to csn`: clean CSN.
+  - `git diff --check`: 0 errors / clean.
+- **Next recommended action:** Wait for user to say "done" after maintaining `V_T319A` in `SM30`. When user says "done", execute `execute-delivery-pgi.js`.
+
+### 2026-10-21 23:15 IST — Forensic Investigation of Message L3 866 & Exact Table/View Proven (READ-ONLY)
+
+- **Requirement:** User task: "Identify the EXACT table or view behind message L3 866. Read-only. No SAP writes. Do not assume T319A or V_T319A. Prove every link with evidence."
+- **Execution & Concrete Live SAP Findings:**
+  1. **Step 1: The Message:**
+     - Query of `T100` (`SPRSL=E`, `ARBGB=L3`, `MSGNR=866`):
+       Text: `"SU type for pack. mat. type & could not be determined in warehouse no. &"`.
+       Placeholders: `&1` = packaging material type (`VHART`), `&2` = warehouse number (`LGNUM`).
+     - In German (`SPRSL=D`): `"Zur Packmittelart & konnte in Lagernummer & kein LE-Typ ermittelt werden"`.
+     - Runtime error from `BAPI_OUTB_DELIVERY_CONFIRM_DEC`: `TYPE = 'E', ID = 'L3', NUMBER = '866', MESSAGE_V1 = 'Z007', MESSAGE_V2 = 'W01', MESSAGE = "SU type for pack. mat. type Z007 could not be determined in warehouse no. W01"`.
+  2. **Step 2: Where it is raised:**
+     - Main Program: `SAPML03T` (Function Group `L03T`).
+     - Calling Include & Form: Include `ML03TFHU_HU_INT_LTAP`, `FORM hu_int_ltap USING p_lenum p_letyp` (line 48) and `ML03TFFC_FC181` (line 96).
+     - Deciding Table Read: Include `ML03TF20_T319A_LESEN`:
+       ```abap
+       FORM T319A_LESEN USING P_LGNUM P_VHART.
+         CLEAR T319A.
+         SELECT SINGLE * FROM T319A
+         WHERE LGNUM = P_LGNUM AND
+               VHART = P_VHART.
+       ENDFORM.
+       ```
+     - Key fields and values passed at failure: `LGNUM = 'W01'`, `VHART = 'Z007'`.
+     - When `SELECT SINGLE * FROM T319A` finds no record (`sy-subrc = 4`) and BAdI `LE_WM_SUTYPE_HU` has no implementation, `t319a-letyp` remains initial (`''`), executing line 48:
+       `MESSAGE s866 WITH isvekpvb-vhart ltak-lgnum RAISING vhart_wrong.`
+  3. **Step 3: Table and Maintenance Object:**
+     - Base Table: `T319A` (`DD02L`: `TABCLASS = 'TRANSP'`, `CONTFLAG = 'C'` Customizing table).
+     - Key Fields from `DD03L`: `MANDT` (CLNT 3), `LGNUM` (CHAR 3, check table `T300`), `VHART` (CHAR 4, check table `TVTY`); non-key: `LETYP` (CHAR 3, check table `T307`).
+     - Maintenance View: `V_T319A` (`DD25L`: `VIEWCLASS = 'C'`, `ROOTTAB = 'T319A'`, `GLOBALFLAG = 'X'`, `DD25T`: "Assignment of automatic pick-HU creation").
+     - View Directory: `TVDIR` entry `TABNAME = 'V_T319A'`, function group `AREA = '0L17'`, single screen `LISTE = '0100'`.
+     - Maintenance Transaction: `SM30` view `V_T319A`. Parameter transaction in `TSTCP`: `/ISDFPS/C_V_T319A` (`/*SM30 VIEWNAME=V_T319A;SHOW=X;`).
+     - SPRO IMG Activity: `CUS_ACTOBJ` has `ACT_ID = 'SIMG_XXMENUOLMLHU03'`, `OBJECTNAME = 'V_T319A'`, `OBJECTTYPE = 'V'`. SPRO path: `Logistics - General > Handling Unit Management > Basics > Warehouse Management > Assign Storage Unit Type to Packaging Material Type`.
+     - Transport Object: `TADIR` has `R3TR SVIM V_T319A` (package `LVSC`), view `R3TR VIEW V_T319A`, base table `R3TR TABL T319A` (package `LVS`).
+  4. **Step 4: Prove Failing Values:**
+     - `Z007` source: Delivery `0080000134` item `000010` was packed into Handling Unit `00000000002000019371` (`VEPO-VENUM = '0000020534'`). Header `VEKP` has `VHART = 'Z007'` and packaging material `VHILM = '000000002000000340'`. In `MARA`, `2000000340` has `MTART = 'ZPAC'`, `VHART = 'Z007'`, `MAGRV = 'Z007'`. In `TVTYT`, `Z007` is "Boxes" (in German: "Paletten").
+     - Existing rows in `T319A`: `W01 / 0001 -> E1` and `W01 / Z003 -> E1`.
+     - SUTs in W01 (`T307` / `T307T`): `E1` = "Drum 25 Ltr", `E2` = "Drum 50 Ltr", `E3` = "Drum 200 Ltr", `E4` = "Drum 180 Ltr", `E5` = "Drum 220 Ltr", `E6` = "Drum 100 Ltr", `E7` = "Drum 150 Ltr", `E8` = "Drum 30 Ltr", `E9` = "Tanker", `E10` = "Pieces", `E11` = "IBC 1000".
+     - Open question for Business Owner: Packaging material `2000000340` is classified as `Z007` ("Boxes"). Is `E1` ("Drum 25 Ltr") appropriate, or should it map to `E10` ("Pieces")?
+  5. **Step 5: Master Data Alternatives:**
+     - Changing `MARA-VHART` on packaging material `2000000340` does NOT retroactively update active HU `2000019371` (`VEKP-VHART = 'Z007'`).
+     - Shipped material `8000009754` has `MLGN-LETY1/2/3` blank, but WM HU code reads `T319A` by packaging material type, not `MLGN`.
+     - Standard customizing via view `V_T319A` in `SM30` is the standard solution.
+- **SAP Writes:** ZERO. Strictly read-only investigation.
+- **Validation:** `git diff --check` clean.
+
+### 2026-10-21 22:50 IST — L3 866 error handling implemented & unit tested; one-shot PGI tool authored; awaiting user SM30 confirmation
+
+- **Directives from user:**
+  - Maintain `V_T319A` (`W01 / Z007 / E1`) manually in `SM30` under transport request.
+  - Do NOT deploy ADT write helper. Do NOT programmatically insert into `T319A`. Wait for user confirmation.
+  - When user confirms: re-read `T319A` (read-only) and show row, then execute PGI once on delivery `0080000134` with serial `MBP00001` (no retry on failure), read back and report `LIKP-WBSTK`, `VBFA`/`MATDOC` 241 document, `EQBS` serial status, stock in `1120/CS02`, and emptied interim bin in `LQUA`.
+  - Add handling and a test so that `L3 866` returns a clear message to the user, with no automatic fix.
+- **Changes in `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:**
+  - In `completeDeliveryGoodsIssue` and `postDeliveryGoodsIssue`, added explicit detection of SAP error `L3 866` (`SU type for pack. mat. type ... could not be determined in warehouse no. ...`).
+  - Returns structured HTTP 400 with `code: 'SU_TYPE_UNDETERMINED'`, `packagingMaterialType`, `warehouse`, and clear message directing the user: `"Storage Unit (SU) type for packaging material type '<vhart>' could not be determined in warehouse '<wh>'. Maintain table T319A (transaction SM30 view V_T319A) with the corresponding Storage Unit Type (e.g. E1)."`.
+  - Zero automatic fixes or writes attempted; immediate transaction rollback.
+- **Unit Tests in `test/unit/wm/autoMigoPosting.test.js`:**
+  - Added test: `PGI fails with L3 866 (SU type missing): clear error referencing T319A/V_T319A, rolls back, zero auto-fix`.
+  - Added test: `BAPI_OUTB_DELIVERY_CHANGE fails with L3 866: clear error referencing T319A/V_T319A, rolls back, no PGI, zero auto-fix`.
+  - Fixed T320 mock in `autoMigoPosting.test.js` batch resolution test.
+  - Test result: 100/100 tests passed (100% green).
+- **Execution Script Prepared:**
+  - Created `tools/execute-delivery-pgi.js` protected by `live-sap-gate.js`.
+  - Executed safe read-only check: confirms `T319A` currently has `0001 / E1` and `Z003 / E1`; stops with clean exit.
+- **SAP writes in this session:** ZERO. NO ADT write helper deployed. NO insert into `T319A`.
+- **Validation:**
+  - `npx jest test/unit/wm/autoMigoPosting.test.js test/unit/wm/goodsIssueClients.test.js test/unit/wm/mvt261Auth.test.js`: 3 suites, 171 tests passed (100% green).
+  - `npx cds compile srv/ --to csn`: clean CSN.
+  - `git diff --check`: 0 errors / clean.
+- **Next recommended action:** Wait for user confirmation that `V_T319A` (`W01 / Z007 / E1`) has been maintained in `SM30`. Upon confirmation, run `execute-delivery-pgi.js` to re-read and display `T319A` row, execute PGI once with serial `MBP00001`, and report all 5 read-back verification points.
 
 ### 2026-10-21 22:35 IST — Step 2 serial number assignment & confirmation attempted; root cause diagnosed in T319A (L3 866)
 

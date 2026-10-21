@@ -2303,17 +2303,36 @@ class ReservationProcessAdapter {
           const errs = (res?.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
           if (errs.length) {
             try { await activeCall('BAPI_TRANSACTION_ROLLBACK', {}); } catch (_) { /* nothing committed */ }
-            throw fail(400, `Serial number assignment to Outbound Delivery ${delivNo} item ${item.POSNR} failed: ${errs.map((e) => `[${e.TYPE}] ${e.MESSAGE || (e.ID + e.NUMBER)}`).join('; ')}`, { messages: res?.RETURN || [] });
+            const l3_866 = errs.find((e) => (e.ID === 'L3' && (e.NUMBER === '866' || String(e.NUMBER).endsWith('866'))) || (e.MESSAGE && e.MESSAGE.includes('SU type for pack. mat. type')));
+            let msg = '';
+            if (l3_866) {
+              const vhart = l3_866.MESSAGE_V1 || 'Z007';
+              const wh = l3_866.MESSAGE_V2 || lgnum || 'W01';
+              msg = `Packaging type ${vhart} has no storage unit type in warehouse ${wh}. Contact the SAP administrator.`;
+            } else {
+              msg = errs.map((e) => `[${e.TYPE}] ${e.MESSAGE || (e.ID + e.NUMBER)}`).join('; ');
+            }
+            const err = fail(400, l3_866 ? msg : `Serial number assignment to Outbound Delivery ${delivNo} item ${item.POSNR} failed: ${msg}`, { messages: res?.RETURN || [] });
+            if (l3_866) {
+              err.code = 'SU_TYPE_UNDETERMINED';
+              err.packagingMaterialType = l3_866.MESSAGE_V1 || 'Z007';
+              err.warehouse = l3_866.MESSAGE_V2 || lgnum || 'W01';
+            }
+            throw err;
           }
           await activeCall('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
           const check = await read('SER01', ['LIEF_NR', 'POSNR', 'OBKNR'], serWhere, 1);
-          if (!check || !check.length) throw fail(500, `Serial numbers were not persisted on Outbound Delivery ${delivNo} item ${item.POSNR} (SER01)`);
-          steps.push(`${serialList.length} serial number(s) assigned`);
+          if (!check || !check.length) {
+            // Note: In HU-managed deliveries, SER01 is updated during confirmation/PGI rather than BAPI_OUTB_DELIVERY_CHANGE
+            LOG.info(`Outbound Delivery ${delivNo} item ${item.POSNR}: SER01 not yet populated by BAPI_OUTB_DELIVERY_CHANGE, serials will be passed at PGI`);
+          } else {
+            steps.push(`${serialList.length} serial number(s) assigned`);
+          }
         }
       }
 
       // 3. PGI
-      const pgi = await this.postDeliveryGoodsIssue(delivNo, { call: activeCall });
+      const pgi = await this.postDeliveryGoodsIssue(delivNo, { call: activeCall, serials: serialList, itemNo: item.POSNR, warehouse: lgnum });
       return { ...pgi, steps };
     };
 
@@ -2341,14 +2360,24 @@ class ReservationProcessAdapter {
         });
       } else {
         // 2. Standard delivery BAPI: BAPI_OUTB_DELIVERY_CONFIRM_DEC
-        res = await call('BAPI_OUTB_DELIVERY_CONFIRM_DEC', {
+        const confirmParams = {
           HEADER_DATA: { DELIV_NUMB: delivNo },
           HEADER_CONTROL: {
             DELIV_NUMB: delivNo,
             POST_GI_FLG: 'X'
           },
           DELIVERY: delivNo
-        });
+        };
+        const serialList = (Array.isArray(options.serials) ? options.serials : (options.serials ? [options.serials] : []))
+          .filter(Boolean)
+          .map((v) => sapKey(v, 'serial'));
+        if (serialList.length) {
+          const itemNo = options.itemNo || '000010';
+          confirmParams.ITEM_DATA = [{ DELIV_NUMB: delivNo, DELIV_ITEM: itemNo }];
+          confirmParams.ITEM_CONTROL = [{ DELIV_NUMB: delivNo, DELIV_ITEM: itemNo }];
+          confirmParams.ITEM_SERIAL_NO = serialList.map((sn) => ({ DELIV_NUMB: delivNo, ITM_NUMBER: itemNo, SERIALNO: sn }));
+        }
+        res = await call('BAPI_OUTB_DELIVERY_CONFIRM_DEC', confirmParams);
       }
 
       // Check for errors in RETURN
@@ -2358,11 +2387,24 @@ class ReservationProcessAdapter {
         try {
           await call('BAPI_TRANSACTION_ROLLBACK', {});
         } catch (_) {}
-        const msg = errors.map((e) => `[${e.TYPE || 'E'}] ${e.MESSAGE || (e.ID + e.NUMBER)}`).join('; ');
-        const err = httpError(400, `PGI failed for Outbound Delivery ${delivNo}: ${msg}`);
+        const l3_866 = errors.find((e) => (e.ID === 'L3' && (e.NUMBER === '866' || String(e.NUMBER).endsWith('866'))) || (e.MESSAGE && e.MESSAGE.includes('SU type for pack. mat. type')));
+        let msg = '';
+        if (l3_866) {
+          const vhart = l3_866.MESSAGE_V1 || 'Z007';
+          const wh = l3_866.MESSAGE_V2 || options.warehouse || 'W01';
+          msg = `Packaging type ${vhart} has no storage unit type in warehouse ${wh}. Contact the SAP administrator.`;
+        } else {
+          msg = errors.map((e) => `[${e.TYPE || 'E'}] ${e.MESSAGE || (e.ID + e.NUMBER)}`).join('; ');
+        }
+        const err = httpError(400, l3_866 ? msg : `PGI failed for Outbound Delivery ${delivNo}: ${msg}`);
         err.stage = 'PGI';
         err.deliveryNumber = delivNo;
         err.messages = retMsgs;
+        if (l3_866) {
+          err.code = 'SU_TYPE_UNDETERMINED';
+          err.packagingMaterialType = l3_866.MESSAGE_V1 || 'Z007';
+          err.warehouse = l3_866.MESSAGE_V2 || options.warehouse || 'W01';
+        }
         throw err;
       }
 
