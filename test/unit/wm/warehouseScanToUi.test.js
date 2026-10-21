@@ -318,10 +318,25 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             expect(mockRouter.navTo).not.toHaveBeenCalled();
         });
 
-        it('row press in open TR list navigates to detail route [mock only, not browser verification]', () => {
+        const rowCtx = (fields) => ({ getProperty: (name) => fields[name] });
+
+        it('row press in open TR list opens the TR in the warehouse of that row (no warehouse question) [mock only, not browser verification]', () => {
             mainCtrl.onOpenTRPress({
                 getParameter: () => null,
-                getSource: () => ({ getBindingContext: () => ({ getProperty: () => '1000800' }) })
+                getSource: () => ({ getBindingContext: () => rowCtx({ Tbnum: '1000800', Lgnum: 'W13' }) })
+            });
+
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanToDetailWithWh', {
+                lgnum: 'W13',
+                docType: 'TR',
+                number: '1000800'
+            });
+        });
+
+        it('row press without a warehouse on the row still navigates to the warehouse-less detail route [mock only, not browser verification]', () => {
+            mainCtrl.onOpenTRPress({
+                getParameter: () => null,
+                getSource: () => ({ getBindingContext: () => rowCtx({ Tbnum: '1000800' }) })
             });
 
             expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanToDetail', {
@@ -330,15 +345,16 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             });
         });
 
-        it('value help selection navigates to detail route [mock only, not browser verification]', () => {
+        it('value help selection opens the TR in the warehouse of the selected row [mock only, not browser verification]', () => {
             mainCtrl.onConfirmTRValueHelp({
                 getParameter: () => ({
-                    getBindingContext: () => ({ getProperty: () => '1000027' }),
+                    getBindingContext: () => rowCtx({ Tbnum: '1000027', Lgnum: 'W01' }),
                     getTitle: () => 'TR 1000027'
                 })
             });
 
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanToDetail', {
+            expect(mockRouter.navTo).toHaveBeenCalledWith('wmWarehouseScanToDetailWithWh', {
+                lgnum: 'W01',
                 docType: 'TR',
                 number: '1000027'
             });

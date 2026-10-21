@@ -877,7 +877,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
 
             expect(result.ReservationMovementType).toBe('201');
             expect(result.AllowMismatchedTR).toBe(true);
-            expect(adapter._findTrackedReservationForTR).toHaveBeenCalledWith('0001000823');
+            expect(adapter._findTrackedReservationForTR).toHaveBeenCalledWith('0001000823', 'W01'); // warehouse is part of the tracking key
         });
 
         it('createTOFromTR blocks mismatched TR when WM_ALLOW_MISMATCHED_TR is default false [mock only, not browser verification]', async () => {

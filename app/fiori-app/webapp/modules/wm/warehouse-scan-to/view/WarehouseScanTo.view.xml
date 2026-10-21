@@ -182,7 +182,7 @@
                         growingThreshold="15"
                         class="sapUiSizeCompact">
                         <StandardListItem
-                            title="{scanView>Tbnum}"
+                            title="{= ${scanView>Tbnum} + (${scanView>Lgnum} ? ' · ' + ${scanView>Lgnum} : '') }"
                             description="{scanView>DisplayText}"
                             info="{= ${scanView>Statu} === 'T' ? 'Partial' : 'Open' }"
                             infoState="{= ${scanView>Statu} === 'T' ? 'Warning' : 'Success' }"

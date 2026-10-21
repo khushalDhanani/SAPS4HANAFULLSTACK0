@@ -171,10 +171,12 @@ sap.ui.define([
             var oItem = oEvent.getParameter("listItem") || oEvent.getSource();
             var oCtx = oItem && oItem.getBindingContext("scanView");
             var sTbnum = oCtx ? oCtx.getProperty("Tbnum") : "";
+            // The list row carries its own warehouse (LTBK-LGNUM): open the TR there, never ask again.
+            var sRowWh = oCtx ? (oCtx.getProperty("Lgnum") || "") : "";
             if (sTbnum) {
                 this.getModel("scanView").setProperty("/docType", "TR");
                 this.getModel("scanView").setProperty("/scannedTR", sTbnum);
-                this._navigateToDetail("TR", sTbnum);
+                this._navigateToDetail("TR", sTbnum, sRowWh);
             }
         },
 
@@ -304,7 +306,7 @@ sap.ui.define([
                 if (sTbnum) {
                     this.getModel("scanView").setProperty("/docType", "TR");
                     this.getModel("scanView").setProperty("/scannedTR", sTbnum);
-                    this._navigateToDetail("TR", sTbnum);
+                    this._navigateToDetail("TR", sTbnum, oCtx ? (oCtx.getProperty("Lgnum") || "") : "");
                 }
             }
         },

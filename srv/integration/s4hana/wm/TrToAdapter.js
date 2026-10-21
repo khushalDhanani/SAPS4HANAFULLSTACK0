@@ -69,14 +69,20 @@ class TrToAdapter {
     this._toCreateInFlight = new Set();
   }
 
-  async _findTrackedReservationForTR(tbnum) {
+  /**
+   * Tracking row of a TR. TR numbers are unique per warehouse only (the same TBNUM exists in W01, W10 and W12 on
+   * this system), so the warehouse is part of the key; without it nothing is returned rather than another warehouse's row.
+   */
+  async _findTrackedReservationForTR(tbnum, wh) {
     const cds = require('@sap/cds');
     if (!cds?.db) return null;
+    const warehouse = String(wh || '').trim().toUpperCase();
+    if (!warehouse) return null;
     const raw = alphaOut(tbnum);
     try {
       const read = (value) => cds.db.run(
         cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
-          .where({ TransferRequirement: value })
+          .where({ TransferRequirement: value, WarehouseNumber: warehouse })
       );
       return (await read(raw)) || (raw.padStart(10, '0') !== raw ? await read(raw.padStart(10, '0')) : null);
     } catch (_dbErr) {
@@ -111,7 +117,7 @@ class TrToAdapter {
 
     // 2. Check if this TR belongs to an open tracked reservation (from CDS DB or directly from SAP RESB/RKPF)
     try {
-      let track = await this._findTrackedReservationForTR(tr.Tbnum);
+      let track = await this._findTrackedReservationForTR(tr.Tbnum, wh || tr.Lgnum);
       const rawRs = tr.Rsnum && String(tr.Rsnum).trim() !== '' && String(tr.Rsnum).trim() !== '0000000000'
         ? alphaOut(tr.Rsnum)
         : (track?.ReservationNo ? alphaOut(track.ReservationNo) : '');
@@ -1412,7 +1418,7 @@ class TrToAdapter {
     // 2. Tracking table (ReservationTrack by TBNUM)
     if (!receivingStorageLocation || !receivingPlant || !orderId) {
       try {
-        const track = await this._findTrackedReservationForTR(tr.Tbnum);
+        const track = await this._findTrackedReservationForTR(tr.Tbnum, wh || tr.Lgnum);
         if (track) {
           trackedReservation = track;
           if (!reservationMovementType && track.MovementType?.trim()) {
@@ -1920,7 +1926,7 @@ class TrToAdapter {
 
     if (!trackedReservation) {
       try {
-        const track = await this._findTrackedReservationForTR(tr.Tbnum);
+        const track = await this._findTrackedReservationForTR(tr.Tbnum, wh || tr.Lgnum);
         if (track) {
           trackedReservation = {
             TransferRequirement: track.TransferRequirement,

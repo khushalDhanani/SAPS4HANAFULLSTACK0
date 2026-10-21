@@ -1227,3 +1227,24 @@ describe('getOpenTRs without a warehouse: derived from the user Plant attribute 
     expect(rfc2.readTable).not.toHaveBeenCalledWith('T320', expect.anything(), expect.anything());
   });
 });
+
+describe('_findTrackedReservationForTR: the warehouse is part of the key (TR numbers repeat across warehouses)', () => {
+  const cds = require('@sap/cds');
+  let savedDb;
+  beforeEach(() => { savedDb = cds.db; });
+  afterEach(() => { cds.db = savedDb; });
+
+  it('queries ReservationTrack by TransferRequirement AND WarehouseNumber', async () => {
+    const wheres = [];
+    cds.db = { run: jest.fn(async (q) => { wheres.push(JSON.stringify(q.SELECT.where)); return null; }) };
+    await new TrToAdapter({ rfc: { readTable: jest.fn() } })._findTrackedReservationForTR('1000891', 'w12');
+    expect(wheres.length).toBeGreaterThan(0);
+    for (const w of wheres) { expect(w).toContain('TransferRequirement'); expect(w).toContain('"W12"'); }
+  });
+
+  it('returns nothing without a warehouse instead of another warehouse\'s tracking row', async () => {
+    cds.db = { run: jest.fn(async () => ({ ReservationNo: '0000530744', WarehouseNumber: 'W01' })) };
+    await expect(new TrToAdapter({ rfc: { readTable: jest.fn() } })._findTrackedReservationForTR('1000891', '')).resolves.toBeNull();
+    expect(cds.db.run).not.toHaveBeenCalled();
+  });
+});
