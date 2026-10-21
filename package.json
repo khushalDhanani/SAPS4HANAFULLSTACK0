@@ -305,9 +305,7 @@
       }
     },
     "s4": {
-      "client": "",
-      "plant": "",
-      "storageLocation": ""
+      "client": ""
     }
   },
   "optionalDependencies": {

@@ -122,10 +122,23 @@ describe('Unit: DeliveryNoRefAdapter', () => {
       await expect(adapter.createDeliveryWithoutRef({
         shippingPoint: '1104',
         shipToParty: '10135',
+        salesOrg: '1000',
+        distChannel: '10',
+        division: '52',
         plant: '1110',
         storageLocation: 'FG01',
         items: [{ material: '4000000186', quantity: 1, uom: 'KG' }]
       })).rejects.toThrow('Document is incomplete');
+    });
+
+    test('throws BusinessConfigError when org context cannot be resolved', async () => {
+      await expect(adapter.createDeliveryWithoutRef({
+        shippingPoint: '1104',
+        shipToParty: '10135',
+        plant: '9999',
+        storageLocation: 'FG01',
+        items: [{ material: '4000000186', quantity: 1, uom: 'KG' }]
+      })).rejects.toThrow(/could not resolve required business config/);
     });
   });
 

@@ -1,0 +1,410 @@
+'use strict';
+
+/**
+ * BusinessConfigResolver.js
+ *
+ * Resolves business-data values (SD org context, WM customizing) for a specific
+ * plant/warehouse/storageLocation context at request time.
+ *
+ * S/4HANA enterprise discipline:
+ *   - Never reads business defaults from package.json or process.env
+ *   - Never falls back to silent defaults
+ *   - Resolves dynamically per request/document in strict order:
+ *       1. Request context / document values (explicit overrides)
+ *       2. SAP customizing tables (e.g. T001L, T320 via RFC or customizing provider)
+ *       3. Admin-maintained BusinessConfig table (CDS entity keyed by plant or warehouse)
+ *       4. Throw BusinessConfigError with actionable diagnostic message
+ *
+ * Fields resolved:
+ *   salesOrg / salesOrganization, distChannel / distributionChannel, division, currency,
+ *   orderType, inquiryType, conditionType,
+ *   shippingPoints (string[]), materialTypes / salesMaterialTypes (string[]),
+ *   mvt261NotReadyBins ({ storageType, bin, reason }[]),
+ *   differenceStorageType
+ */
+
+let cds;
+try {
+  cds = require('@sap/cds');
+} catch (_) {
+  cds = null;
+}
+
+class BusinessConfigError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'BusinessConfigError';
+  }
+}
+
+/**
+ * Parses a CSV string into a trimmed, non-empty string array.
+ * Returns [] if input is null/undefined/blank.
+ */
+function parseCsv(csv) {
+  if (!csv || !String(csv).trim()) return [];
+  return String(csv).split(',').map(v => v.trim()).filter(Boolean);
+}
+
+/**
+ * Parses a JSON string into an array.
+ * Returns [] if input is null/undefined/blank.
+ * Throws BusinessConfigError if invalid.
+ */
+function parseJsonArray(json, fieldName) {
+  if (!json || !String(json).trim()) return [];
+  let parsed;
+  try {
+    parsed = typeof json === 'string' ? JSON.parse(json) : json;
+  } catch (e) {
+    throw new BusinessConfigError(
+      `BusinessConfig.${fieldName} contains invalid JSON: ${e.message}`
+    );
+  }
+  if (!Array.isArray(parsed)) {
+    throw new BusinessConfigError(
+      `BusinessConfig.${fieldName} must be a JSON array, got: ${typeof parsed}`
+    );
+  }
+  return parsed;
+}
+
+/**
+ * Standard required fields when full resolution is requested.
+ */
+const ALL_REQUIRED_FIELDS = [
+  'salesOrganization', 'distributionChannel', 'division', 'currency',
+  'orderType', 'inquiryType', 'conditionType',
+  'shippingPoints', 'salesMaterialTypes'
+];
+
+class BusinessConfigResolver {
+  /**
+   * @param {Object} [options]
+   * @param {Function} [options.dbQuery] - Injectable async (plant, warehouseNumber) => row | null
+   * @param {Function} [options.sapCustomizing] - Injectable async (context) => partialConfig | null
+   * @param {Object} [options.rfc] - Optional RFC client for querying SAP customizing tables (T001L, T320)
+   */
+  constructor(options = {}) {
+    this._dbQuery = options.dbQuery || null;
+    this._sapCustomizing = options.sapCustomizing || null;
+    this._rfc = options.rfc || null;
+  }
+
+  /**
+   * Query SAP customizing tables via RFC or customizer provider.
+   * @private
+   */
+  async _querySapCustomizing(context) {
+    const customizer = context.sapCustomizing || this._sapCustomizing;
+    if (typeof customizer === 'function') {
+      try {
+        const res = await customizer(context);
+        if (res && typeof res === 'object') return res;
+      } catch (_err) {
+        // Continue to next resolution step
+      }
+    } else if (customizer && typeof customizer === 'object') {
+      return customizer;
+    }
+
+    const rfc = context.rfc || this._rfc;
+    if (rfc && typeof rfc.readTable === 'function') {
+      const result = {};
+      const plant = context.plant;
+      const sLoc = context.storageLocation;
+      const wh = context.warehouse;
+
+      // 1. T001L: Storage Location in Plant (gives VKORG, VTWEG, SPART)
+      if (plant && sLoc) {
+        try {
+          const t001l = await rfc.readTable('T001L', ['WERKS', 'LGORT', 'VKORG', 'VTWEG', 'SPART'], [
+            `WERKS = '${plant}'`,
+            `AND LGORT = '${sLoc}'`
+          ]);
+          if (t001l && t001l[0]) {
+            if (t001l[0].VKORG && t001l[0].VKORG.trim()) result.salesOrganization = t001l[0].VKORG.trim();
+            if (t001l[0].VTWEG && t001l[0].VTWEG.trim()) result.distributionChannel = t001l[0].VTWEG.trim();
+            if (t001l[0].SPART && t001l[0].SPART.trim()) result.division = t001l[0].SPART.trim();
+          }
+        } catch (_) {}
+      }
+
+      // 2. T320: Warehouse assignment
+      if (plant && sLoc && !wh) {
+        try {
+          const t320 = await rfc.readTable('T320', ['LGNUM'], [
+            `WERKS = '${plant}'`,
+            `AND LGORT = '${sLoc}'`
+          ]);
+          if (t320 && t320[0] && t320[0].LGNUM) {
+            result.warehouseNumber = t320[0].LGNUM.trim();
+            result.warehouse = result.warehouseNumber;
+          }
+        } catch (_) {}
+      } else if (wh && !plant) {
+        try {
+          const t320 = await rfc.readTable('T320', ['WERKS'], [`LGNUM = '${wh}'`]);
+          if (t320 && t320[0] && t320[0].WERKS) {
+            result.plant = t320[0].WERKS.trim();
+          }
+        } catch (_) {}
+      }
+
+      return Object.keys(result).length > 0 ? result : null;
+    }
+
+    return null;
+  }
+
+  /**
+   * Queries the BusinessConfig table for the given plant/warehouse combination.
+   * @private
+   */
+  async _queryDb(plant, warehouseNumber) {
+    if (this._dbQuery) {
+      return this._dbQuery(plant, warehouseNumber);
+    }
+
+    if (!cds || typeof cds.entities !== 'function' || !cds.model) {
+      return null;
+    }
+
+    let BusinessConfig;
+    try {
+      const entities = cds.entities('saps4hana.wm');
+      BusinessConfig = entities ? entities.BusinessConfig : null;
+    } catch (_) {
+      return null;
+    }
+    if (!BusinessConfig) return null;
+
+    const pl = (plant || '').trim();
+    const wh = (warehouseNumber || '').trim();
+
+    // 1. Exact match: plant + warehouse
+    if (pl && wh) {
+      const exact = await cds.run(
+        SELECT.one.from(BusinessConfig).where({ Plant: pl, WarehouseNumber: wh, Active: true })
+      );
+      if (exact) return exact;
+    }
+
+    // 2. Warehouse-level row (e.g. when warehouse is supplied)
+    if (wh) {
+      const byWh = await cds.run(
+        SELECT.one.from(BusinessConfig).where({ WarehouseNumber: wh, Active: true })
+      );
+      if (byWh) return byWh;
+    }
+
+    // 3. Plant-level fallback (WarehouseNumber = '')
+    if (pl) {
+      const plantLevel = await cds.run(
+        SELECT.one.from(BusinessConfig).where({ Plant: pl, WarehouseNumber: '', Active: true })
+      );
+      if (plantLevel) return plantLevel;
+
+      // Or any active row for this plant
+      const anyPlant = await cds.run(
+        SELECT.one.from(BusinessConfig).where({ Plant: pl, Active: true })
+      );
+      if (anyPlant) return anyPlant;
+    }
+
+    return null;
+  }
+
+  /**
+   * Resolves business configuration.
+   *
+   * @param {Object} context
+   * @param {string} [context.warehouse]       - WM Warehouse (e.g. 'W01')
+   * @param {string} [context.warehouseNumber] - Alias for warehouse
+   * @param {string} [context.plant]           - SAP Plant (WERKS, e.g. '1120')
+   * @param {string} [context.storageLocation] - Storage Location (LGORT, e.g. 'CS01')
+   * @param {Array<string>} [context.fields]   - Specific required fields; defaults to all standard fields
+   * @param {Object} [context.overrides]       - Explicit values from request/document
+   * @returns {Promise<Object>}
+   * @throws {BusinessConfigError} if a required field cannot be resolved
+   */
+  async resolve(context = {}) {
+    const warehouse = String(context.warehouse || context.warehouseNumber || context.lgnum || '').trim();
+    const plant = String(context.plant || context.werks || '').trim();
+    const storageLocation = String(context.storageLocation || context.lgort || '').trim();
+
+    const requiredFields = Array.isArray(context.fields) && context.fields.length > 0
+      ? context.fields
+      : ALL_REQUIRED_FIELDS;
+
+    const result = {
+      plant: plant || '',
+      warehouse: warehouse || '',
+      warehouseNumber: warehouse || '',
+      storageLocation: storageLocation || ''
+    };
+
+    // ─── Step 1: Request context & overrides ──────────────────────────────────
+    const overrides = { ...(context.overrides || {}) };
+
+    // Also collect any direct top-level arguments on context
+    const DIRECT_KEYS = [
+      'salesOrganization', 'salesOrg',
+      'distributionChannel', 'distChannel',
+      'division', 'currency',
+      'inquiryType', 'orderType', 'conditionType',
+      'shippingPoints',
+      'salesMaterialTypes', 'materialTypes',
+      'differenceStorageType',
+      'mvt261NotReadyBins'
+    ];
+    for (const k of DIRECT_KEYS) {
+      if (context[k] !== undefined && overrides[k] === undefined) {
+        overrides[k] = context[k];
+      }
+    }
+
+    // Normalize override keys
+    if (overrides.salesOrg !== undefined && overrides.salesOrganization === undefined) {
+      overrides.salesOrganization = overrides.salesOrg;
+    }
+    if (overrides.distChannel !== undefined && overrides.distributionChannel === undefined) {
+      overrides.distributionChannel = overrides.distChannel;
+    }
+    if (overrides.materialTypes !== undefined && overrides.salesMaterialTypes === undefined) {
+      overrides.salesMaterialTypes = overrides.materialTypes;
+    }
+
+    for (const [k, v] of Object.entries(overrides)) {
+      if (v !== undefined && v !== null && v !== '') {
+        if (k === 'shippingPoints' && typeof v === 'string') {
+          result[k] = parseCsv(v);
+        } else if (k === 'salesMaterialTypes' && typeof v === 'string') {
+          result[k] = parseCsv(v);
+        } else if (k === 'mvt261NotReadyBins' && typeof v === 'string') {
+          result[k] = parseJsonArray(v, 'mvt261NotReadyBins');
+        } else {
+          result[k] = v;
+        }
+      }
+    }
+
+    let missing = requiredFields.filter(f => result[f] === undefined);
+
+    // ─── Step 2: SAP Customizing ──────────────────────────────────────────────
+    if (missing.length > 0) {
+      const sapData = await this._querySapCustomizing({
+        plant,
+        warehouse,
+        storageLocation,
+        rfc: context.rfc,
+        sapCustomizing: context.sapCustomizing
+      });
+
+      if (sapData) {
+        if (sapData.salesOrganization && result.salesOrganization === undefined) result.salesOrganization = sapData.salesOrganization;
+        if (sapData.salesOrg && result.salesOrganization === undefined) result.salesOrganization = sapData.salesOrg;
+        if (sapData.distributionChannel && result.distributionChannel === undefined) result.distributionChannel = sapData.distributionChannel;
+        if (sapData.distChannel && result.distributionChannel === undefined) result.distributionChannel = sapData.distChannel;
+        if (sapData.division && result.division === undefined) result.division = sapData.division;
+        if (sapData.currency && result.currency === undefined) result.currency = sapData.currency;
+        if (sapData.orderType && result.orderType === undefined) result.orderType = sapData.orderType;
+        if (sapData.inquiryType && result.inquiryType === undefined) result.inquiryType = sapData.inquiryType;
+        if (sapData.conditionType && result.conditionType === undefined) result.conditionType = sapData.conditionType;
+        if (sapData.shippingPoints && result.shippingPoints === undefined) {
+          result.shippingPoints = typeof sapData.shippingPoints === 'string' ? parseCsv(sapData.shippingPoints) : sapData.shippingPoints;
+        }
+        if (sapData.salesMaterialTypes && result.salesMaterialTypes === undefined) {
+          result.salesMaterialTypes = typeof sapData.salesMaterialTypes === 'string' ? parseCsv(sapData.salesMaterialTypes) : sapData.salesMaterialTypes;
+        }
+        if (sapData.materialTypes && result.salesMaterialTypes === undefined) {
+          result.salesMaterialTypes = typeof sapData.materialTypes === 'string' ? parseCsv(sapData.materialTypes) : sapData.materialTypes;
+        }
+        if (sapData.mvt261NotReadyBins && result.mvt261NotReadyBins === undefined) {
+          result.mvt261NotReadyBins = typeof sapData.mvt261NotReadyBins === 'string'
+            ? parseJsonArray(sapData.mvt261NotReadyBins, 'mvt261NotReadyBins')
+            : sapData.mvt261NotReadyBins;
+        }
+        if (sapData.differenceStorageType && result.differenceStorageType === undefined) {
+          result.differenceStorageType = sapData.differenceStorageType;
+        }
+        if (sapData.plant && !result.plant) result.plant = sapData.plant;
+        if (sapData.warehouse && !result.warehouse) {
+          result.warehouse = sapData.warehouse;
+          result.warehouseNumber = sapData.warehouse;
+        }
+      }
+
+      missing = requiredFields.filter(f => result[f] === undefined);
+    }
+
+    // ─── Step 3: Admin Config Table (BusinessConfig) ──────────────────────────
+    if (missing.length > 0) {
+      const row = await this._queryDb(result.plant || plant, result.warehouse || warehouse);
+      if (row) {
+        if (!result.plant && row.Plant) result.plant = row.Plant;
+        if (!result.warehouse && row.WarehouseNumber) {
+          result.warehouse = row.WarehouseNumber;
+          result.warehouseNumber = row.WarehouseNumber;
+        }
+
+        const assign = (field, val) => {
+          if (result[field] === undefined && val && String(val).trim()) {
+            result[field] = String(val).trim();
+          }
+        };
+
+        assign('salesOrganization',   row.SalesOrganization);
+        assign('distributionChannel', row.DistributionChannel);
+        assign('division',            row.Division);
+        assign('currency',            row.Currency);
+        assign('inquiryType',         row.InquiryType);
+        assign('orderType',           row.OrderType);
+        assign('conditionType',       row.ConditionType);
+        assign('differenceStorageType', row.DifferenceStorageType);
+
+        if (result.shippingPoints === undefined && row.ShippingPoints) {
+          result.shippingPoints = parseCsv(row.ShippingPoints);
+        }
+        if (result.salesMaterialTypes === undefined && row.SalesMaterialTypes) {
+          result.salesMaterialTypes = parseCsv(row.SalesMaterialTypes);
+        }
+        if (result.mvt261NotReadyBins === undefined && row.Mvt261NotReadyBinsJson) {
+          result.mvt261NotReadyBins = parseJsonArray(row.Mvt261NotReadyBinsJson, 'Mvt261NotReadyBinsJson');
+        }
+      }
+
+      missing = requiredFields.filter(f => result[f] === undefined);
+    }
+
+    // ─── Step 4: Throw if required fields remain unresolved ───────────────────
+    if (missing.length > 0) {
+      const loc = `Plant=${result.plant || plant || '(none)'}, Warehouse=${result.warehouse || warehouse || '(none)'}, StorageLocation=${storageLocation || '(none)'}`;
+      throw new BusinessConfigError(
+        `BusinessConfigResolver could not resolve required business config fields [${missing.join(', ')}] for ${loc}. ` +
+        `Maintain the values in SAP customizing or via the BusinessConfig admin table.`
+      );
+    }
+
+    // Default optional mvt261NotReadyBins to empty array if not defined
+    if (result.mvt261NotReadyBins === undefined) {
+      result.mvt261NotReadyBins = [];
+    }
+
+    // Map convenient aliases
+    result.salesOrg = result.salesOrganization;
+    result.distChannel = result.distributionChannel;
+    result.materialTypes = result.salesMaterialTypes;
+
+    return result;
+  }
+}
+
+// Singleton export with class constructors attached
+const instance = new BusinessConfigResolver();
+instance.BusinessConfigResolver = BusinessConfigResolver;
+instance.BusinessConfigError = BusinessConfigError;
+instance.parseCsv = parseCsv;
+instance.parseJsonArray = parseJsonArray;
+
+module.exports = instance;

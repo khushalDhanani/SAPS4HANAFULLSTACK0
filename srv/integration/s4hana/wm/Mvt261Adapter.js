@@ -4,7 +4,7 @@ const LOG = require('../logger')('mvt261-adapter');
 const { S4HttpClient } = require('../S4HttpClient');
 const { formatDateToYMD } = require('../../../common/dateUtils');
 const { RfcClient } = require('../RfcClient');
-const s4Config = require('../s4Config');
+const businessConfigResolver = require('../../../common/BusinessConfigResolver');
 const { parseSapNumber } = require('../sapFacts');
 const { buildBaseItem, buildHeaderEnvelope } = require('./goods-issue/s4common');
 const GoodsIssuePostingClient = require('./goods-issue/GoodsIssuePostingClient');
@@ -119,13 +119,68 @@ const isoInstant = (v) => {
 };
 
 class Mvt261Adapter {
+  /**
+   * @param {Object} [options]
+   * @param {Object}   [options.client]          - S4HttpClient override (for tests)
+   * @param {Object}   [options.rfc]             - RfcClient override (for tests)
+   * @param {Array}    [options.notReadyBins]    - Explicit notReadyBins override (for tests; skips DB lookup)
+   * @param {string}   [options.plant]           - WERKS; used when resolving notReadyBins from BusinessConfig
+   * @param {string}   [options.warehouseNumber] - LGNUM; used to narrow BusinessConfig lookup
+   * @param {Object}   [options.resolver]        - BusinessConfigResolver override (for tests)
+   */
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
     this.rfc = options.rfc || new RfcClient();
-    // Storage type / bin combinations whose stock is not ready to issue (R4).
-    // Sourced from S4_MVT261_NOT_READY_BINS env var (JSON) or cds.env.s4.mvt261NotReadyBins.
-    // Empty array = rule switched off.  Never hard-coded.
-    this.notReadyBins = options.notReadyBins ?? s4Config.getMvt261NotReadyBins();
+    this._plant           = options.plant           || '';
+    this._warehouseNumber = options.warehouseNumber || '';
+    this._resolver        = options.resolver        || businessConfigResolver;
+    // If notReadyBins are supplied directly (e.g. in tests) use them without a DB call.
+    // Otherwise they are resolved lazily on the first call to _getNotReadyBins().
+    if (options.notReadyBins !== undefined) {
+      this._notReadyBinsCache = options.notReadyBins;
+    } else {
+      this._notReadyBinsCache = null; // lazy
+    }
+  }
+
+  get notReadyBins() {
+    return this._notReadyBinsCache || [];
+  }
+
+  set notReadyBins(val) {
+    this._notReadyBinsCache = Array.isArray(val) ? val : [];
+  }
+
+  /**
+   * Returns the notReadyBins array, resolving it from BusinessConfig on first use.
+   * @param {string} [plant]
+   * @param {string} [warehouseNumber]
+   * @returns {Promise<Array>}
+   * @private
+   */
+  async _getNotReadyBins(plant = this._plant, warehouseNumber = this._warehouseNumber) {
+    if (this._notReadyBinsCache !== null) return this._notReadyBinsCache;
+
+    const targetPlant = plant || this._plant;
+    const targetWh = warehouseNumber || this._warehouseNumber;
+    if (!targetPlant && !targetWh) {
+      // No plant or warehouse context: feature off
+      this._notReadyBinsCache = [];
+      return [];
+    }
+
+    try {
+      const cfg = await this._resolver.resolve({
+        plant: targetPlant,
+        warehouseNumber: targetWh,
+        warehouse: targetWh
+      });
+      this._notReadyBinsCache = cfg.mvt261NotReadyBins || [];
+    } catch (e) {
+      LOG.warn(`Mvt261Adapter: could not resolve notReadyBins for plant=${targetPlant}, warehouse=${targetWh}: ${e.message}. R4 rule disabled.`);
+      this._notReadyBinsCache = [];
+    }
+    return this._notReadyBinsCache;
   }
 
   async _results(path, params, context) {

@@ -5,9 +5,13 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **Business-data removal from package.json cds.s4 (2026-10-21 12:38 IST): DONE.** Removed 10 hardcoded business values (`salesOrganization`, `distributionChannel`, `division`, `currency`, `inquiryType`, `orderType`, `conditionType`, `shippingPoints`, `salesMaterialTypes`, `mvt261NotReadyBins`) from `package.json cds.s4`. Added production startup guard (`srv/common/productionGuard.js`) blocking `ENABLE_DEV_TOKEN_ISSUER=true`, `LOCAL_AUTH_SECRET`, and `WM_ALLOW_MISMATCHED_TR=true` in `NODE_ENV=production`. Fixed three silent fallbacks in `DeliveryNoRefAdapter.js` (`|| '1000'`, `|| '10'`, `|| '52'`). Fixed `Mvt261Adapter.js` to use `s4Config.getMvt261NotReadyBins()` instead of `_getRaw`. Added `getMvt261NotReadyBins()` with JSON env-var support. Updated `getAll()`/`validate()` to only assert env-config keys. All 78 targeted tests pass; ESLint 0 errors; CDS compile OK; `git diff --check` clean. No SAP calls. No environment-specific values committed.
-
-- **WM warehouse resolution (2026-10-21 12:27 IST): IMPLEMENTATION IN PROGRESS.** Removing the global `cds.s4.warehouseNumber` dependency and all `W01` runtime fallbacks. Planned per-request order: supplied route LGNUM, SAP LTBK/LTAK document header, then T320 by plant/storage location; otherwise return an actionable error. Focused resolver tests planned; no SAP writes.
+- **Business-data removal & Dynamic BusinessConfigResolver (2026-10-21 12:56 IST): DONE.**
+  1. Removed `plant`, `storageLocation`, and all business-data keys from `package.json cds.s4` (now contains only `"client": ""`), `.env.example`, and `srv/common/s4Config.js` (`s4Config` now contains only environment config: client, system, and resLockEnabled).
+  2. Created new CDS entity `BusinessConfig` (`db/wm/business-config.cds`), registered in `db/schema.cds`, keyed by `Plant` and `WarehouseNumber` for admin-maintained SD and WM org customizing values.
+  3. Created `srv/common/BusinessConfigResolver.js` resolving `{ warehouse | plant | storageLocation }` in strict 4-tier order: (1) request context / overrides, (2) SAP customizing (T001L, T320 via RFC/customizer), (3) admin config table (`BusinessConfig`), (4) throw `BusinessConfigError` fail-closed with actionable context. Never reads from `process.env` or `package.json`.
+  4. Wired resolver into `DeliveryNoRefAdapter.js` (dynamically resolves salesOrg, distChannel, division) and `Mvt261Adapter.js` (lazily resolves mvt261NotReadyBins, preserving synchronous getter and backwards compatibility).
+  5. Added comprehensive test suite `test/unit/common/BusinessConfigResolver.test.js` (14 tests) covering all 3 resolution paths, multi-warehouse isolation in a single runtime (W01 and W02 with distinct config), unresolved fail-closed case, and error cases. Updated `test/unit/common/s4Config.test.js` (39 tests) and `test/unit/le/deliveryNoRefAdapter.test.js`.
+  6. All 154 targeted unit tests pass; ESLint 0 errors / 0 warnings; `cds compile` OK; `git diff --check` clean. No SAP calls or writes. No environment-specific secrets committed.
 
 - **Local ReservationEntry 500 fixed (2026-10-21 12:24 IST): LOCAL SQLITE SCHEMA REPAIRED; BOTH GETS RETURN HTTP 200.** The ignored development `db.sqlite` was behind the current CDS model: base table lacked `Batch`/`SerialNo`, and the ReservationEntry SQL view also omitted them. Added those nullable columns and refreshed only that view after protected backups; no records were dropped. `PRAGMA integrity_check` is `ok`. The first endpoint replay after adding only columns still returned 500; after refreshing the stale view both routes returned 200. Full `cds deploy` was avoided because its dry-run emits DROP TABLE statements. No tracked application code changed; SAP writes were not made.
 - **ReservationEntry keyed GET made read-only (2026-10-21 12:20 IST): CODE CHANGED; TARGETED TESTS PASS.** A single-item read of an SAP-created reservation now returns the live SAP view without inserting ReservationTrack/ReservationLog rows. The existing `retryStep` POST import remains. Concurrent GET regression and retryStep import test pass. The full ReservationEntry service suite has 8 failures / 88 passes when run with loopback permission; failures include authorization-status mismatches, a collection-count mismatch, and MIGO fixture 404s; causes remain undiagnosed. See the latest Changes Log entry. The direct `adapter.rfc` boundary issue remains in other ReservationEntry paths and was not refactored in this change. No SAP calls or writes.
@@ -3503,6 +3507,47 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 12:56 IST — Remove business data from s4Config & package.json; Add BusinessConfigResolver
+
+- **Status:** Complete locally; verified with 154 unit tests across 6 suites; ESLint 0 errors / 0 warnings; CDS compile clean; diff check clean. No SAP calls or writes.
+- **Reason:** Business data (`plant`, `storageLocation`, `salesOrganization`, `distributionChannel`, `division`, `currency`, `inquiryType`, `orderType`, `conditionType`, `shippingPoints`, `salesMaterialTypes`, `mvt261NotReadyBins`) was previously hardcoded or defaulted in `package.json cds.s4`, `.env.example`, and `s4Config.js`. S/4HANA enterprise architecture requires runtime dynamic resolution per request/document, strict separation of environment connectivity from transactional business data, fail-closed handling without fallback defaults, and multi-tenant/multi-warehouse isolation.
+- **Changes delivered:**
+  1. `package.json cds.s4`: Removed `plant` and `storageLocation`. `cds.s4` now strictly contains only `"client": ""`.
+  2. `.env.example`: Removed all business data variables (`S4_PLANT`, `S4_STORAGE_LOCATION`, `S4_SALES_ORGANIZATION`, etc.).
+  3. `srv/common/s4Config.js`: Retained environment configuration only (`client`, `systemName`, `systemLabel`, `resLockEnabled`, `getAll()`, `validate()`). Removed all 13 business-data methods and property getters.
+  4. `db/wm/business-config.cds`: Created new managed CDS entity `BusinessConfig` keyed by `Plant` and `WarehouseNumber` for admin-maintained SD and WM org customizing values.
+  5. `db/schema.cds`: Registered `using from './wm/business-config';`.
+  6. `srv/common/BusinessConfigResolver.js`: Created runtime resolver taking `{ warehouse | plant | storageLocation }` and resolving values in strict order:
+     - Step 1: Request context / overrides
+     - Step 2: SAP customizing (T001L, T320 via RFC or customizer)
+     - Step 3: Admin config table (`BusinessConfig`)
+     - Step 4: Throw `BusinessConfigError` with clear error; never falls back to defaults or reads from process.env / package.json
+     - Exposes aliases `salesOrg`/`salesOrganization`, `distChannel`/`distributionChannel`, `materialTypes`/`salesMaterialTypes`.
+  7. `srv/integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter.js`: Updated to call `businessConfigResolver.resolve()` dynamically for `salesOrganization`, `distributionChannel`, `division`.
+  8. `srv/integration/s4hana/wm/Mvt261Adapter.js`: Updated constructor and methods to resolve `notReadyBins` dynamically from `businessConfigResolver.resolve()` keyed on plant/warehouse context, preserving backwards-compatible getter/setter.
+  9. `test/unit/common/BusinessConfigResolver.test.js`: Added 14 unit tests covering all 3 resolution paths, multi-warehouse isolation in a single runtime (W01 and W02 returning distinct configs), unresolved fail-closed error handling, and malformed inputs.
+  10. `test/unit/common/s4Config.test.js`: Updated tests (39 tests) asserting that business methods are removed and package.json contains environment keys only.
+  11. `test/unit/le/deliveryNoRefAdapter.test.js`: Updated tests asserting successful resolution and error handling when business config cannot be resolved.
+- **Affected files:**
+  - `package.json`
+  - `.env.example`
+  - `db/wm/business-config.cds`
+  - `db/schema.cds`
+  - `srv/common/s4Config.js`
+  - `srv/common/BusinessConfigResolver.js`
+  - `srv/integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter.js`
+  - `srv/integration/s4hana/wm/Mvt261Adapter.js`
+  - `test/unit/common/s4Config.test.js`
+  - `test/unit/common/BusinessConfigResolver.test.js`
+  - `test/unit/le/deliveryNoRefAdapter.test.js`
+  - `WORKSTATUS.md`
+- **Validation:**
+  - `npx jest test/unit/common/BusinessConfigResolver.test.js test/unit/common/s4Config.test.js test/unit/common/productionGuard.test.js test/unit/le/deliveryNoRefAdapter.test.js test/unit/le/deliveryNoRefHandler.test.js test/unit/wm/mvt261Adapter.test.js --silent`: PASS (6 suites, 154 tests passed).
+  - `npx eslint srv/common/BusinessConfigResolver.js srv/common/s4Config.js srv/integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter.js srv/integration/s4hana/wm/Mvt261Adapter.js test/unit/common/BusinessConfigResolver.test.js test/unit/common/s4Config.test.js test/unit/le/deliveryNoRefAdapter.test.js`: PASS (0 errors, 0 warnings).
+  - `npx cds compile db/schema.cds --to csn`: PASS.
+  - `git diff --check`: PASS (0 whitespace/formatting issues).
+  - S/4 checks: READ-ONLY / safe checks; no live SAP writes. No environment-specific credentials committed.
 
 ### 2026-10-21 12:03 IST — Reservation Entry read authorization
 

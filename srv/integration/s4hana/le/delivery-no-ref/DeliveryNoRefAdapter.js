@@ -1,6 +1,6 @@
 const LOG = require('../../../../common/logger')('delivery-no-ref-adapter');
 const { S4HttpClient } = require('../../S4HttpClient');
-const s4Config = require('../../../../common/s4Config');
+const businessConfigResolver = require('../../../../common/BusinessConfigResolver');
 const { odataString } = require('../../../../common/filterUtils');
 const { mapS4Error } = require('../../S4ErrorMapper');
 
@@ -60,16 +60,17 @@ class DeliveryNoRefAdapter {
    * Creates an Outbound Delivery without reference using C_DelivWthoutRefQuickCreate deep insert.
    *
    * @param {Object} payload
-   * @param {string} payload.shippingPoint - e.g. '1104'
-   * @param {string} [payload.deliveryType='LO2'] - e.g. 'LO2'
-   * @param {string} [payload.salesOrg='1000'] - Sales Organization
-   * @param {string} [payload.distChannel='10'] - Distribution Channel
-   * @param {string} [payload.division='52'] - Division
-   * @param {string} payload.shipToParty - Customer number e.g. '10135'
-   * @param {string} payload.plant - Delivering Plant e.g. '1110'
-   * @param {string} payload.storageLocation - Storage Location e.g. 'FG01'
+   * @param {string} payload.shippingPoint       - e.g. '1104' (required)
+   * @param {string} [payload.deliveryType='LO2']- e.g. 'LO2'
+   * @param {string} [payload.salesOrg]          - Override SalesOrganization (resolved from BusinessConfig if absent)
+   * @param {string} [payload.distChannel]       - Override DistributionChannel (resolved from BusinessConfig if absent)
+   * @param {string} [payload.division]          - Override Division (resolved from BusinessConfig if absent)
+   * @param {string} payload.shipToParty         - Customer number e.g. '10135'
+   * @param {string} payload.plant               - Delivering Plant (WERKS, e.g. '1110') — used as resolver key
+   * @param {string} payload.storageLocation     - Storage Location e.g. 'FG01'
+   * @param {string} [payload.warehouseNumber]   - WM Warehouse (LGNUM, e.g. 'W01'); used to narrow resolver lookup
    * @param {string|Date} payload.plannedGoodsIssueDate - Planned GI date
-   * @param {Array<Object>} payload.items - Line items [{ material, quantity, uom, itemNo }]
+   * @param {Array<Object>} payload.items        - Line items [{ material, quantity, uom, itemNo }]
    * @param {Object} [options]
    * @returns {Promise<Object>} Created delivery details from SAP
    */
@@ -127,12 +128,25 @@ class DeliveryNoRefAdapter {
       }
     }
 
+    // Resolve org context from BusinessConfig (overrides from caller take priority)
+    const cfg = await businessConfigResolver.resolve({
+      plant: String(payload.plant).trim(),
+      warehouseNumber: payload.warehouseNumber || '',
+      storageLocation: String(payload.storageLocation || '').trim(),
+      fields: ['salesOrganization', 'distributionChannel', 'division'],
+      overrides: {
+        salesOrganization:   payload.salesOrg    || undefined,
+        distributionChannel: payload.distChannel || undefined,
+        division:            payload.division    || undefined
+      }
+    });
+
     const s4Payload = {
       ShippingPoint: String(payload.shippingPoint).trim(),
       DeliveryDocumentType: String(payload.deliveryType || 'LO2').trim(),
-      SalesOrganization: String(payload.salesOrg || s4Config.getSalesOrganization()).trim(),
-      DistributionChannel: String(payload.distChannel || s4Config.getDistributionChannel()).trim(),
-      Division: String(payload.division || s4Config.getDivision()).trim(),
+      SalesOrganization:   cfg.salesOrganization,
+      DistributionChannel: cfg.distributionChannel,
+      Division:            cfg.division,
       ShipToParty: String(payload.shipToParty).trim(),
       Plant: String(payload.plant).trim(),
       StorageLocation: String(payload.storageLocation).trim(),
@@ -140,7 +154,7 @@ class DeliveryNoRefAdapter {
       to_DeliveryItemQuickCreate: s4Items
     };
 
-    LOG.info(`Creating Delivery Without Reference: SP=${s4Payload.ShippingPoint}, Type=${s4Payload.DeliveryDocumentType}, Plant=${s4Payload.Plant}, SLoc=${s4Payload.StorageLocation}, ShipTo=${s4Payload.ShipToParty}, Items=${s4Items.length}`);
+    LOG.info(`Creating Delivery Without Reference: SP=${s4Payload.ShippingPoint}, Type=${s4Payload.DeliveryDocumentType}, SalesOrg=${s4Payload.SalesOrganization}, Plant=${s4Payload.Plant}, SLoc=${s4Payload.StorageLocation}, ShipTo=${s4Payload.ShipToParty}, Items=${s4Items.length}`);
 
     try {
       const res = await this.client.post(`${this.servicePath}/C_DelivWthoutRefQuickCreate`, {
