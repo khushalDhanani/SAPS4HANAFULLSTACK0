@@ -30,7 +30,7 @@ class TrToHandler {
       }
     };
 
-    srv.on('getOpenTRs', run(({ lgnum, mvt }) => adapter.getOpenTRs(lgnum, mvt)));
+    srv.on('getOpenTRs', run(({ lgnum, mvt }, req) => adapter.getOpenTRs(lgnum, mvt, req?.user)));
     srv.on('getTR', run(({ tbnum, lgnum }) => adapter.getTR(tbnum, lgnum)));
     srv.on('lookupTR', run(({ tbnum, lgnum, docType, tbpos }, req) => adapter.lookupTR(tbnum, lgnum, docType, tbpos, req?.user)));
     srv.on('getFifoBatches', run(({ material, plant, storageLocation, warehouseNumber }) => adapter.getFifoBatches(material, plant, storageLocation, warehouseNumber)));

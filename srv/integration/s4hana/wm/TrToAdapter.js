@@ -8,6 +8,7 @@ const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatu
 const { isMismatchOverrideEnabled } = require('../../../common/wmMismatchOverrideGuard');
 const { isToFullyConfirmed, findUnconfirmedToItems, getHuConfirmationItems } = require('./toState');
 const { checkAuthorization } = require('./authCheck');
+const plantScope = require('../../../wm/handling-unit/plantScope');
 
 /**
  * TR -> TO over RFC, using only objects that already exist in SAP (no ABAP change):
@@ -359,16 +360,52 @@ class TrToAdapter {
     return out;
   }
 
-  async getOpenTRs(lgnum = '', mvt = '') {
-    const wh = await resolveWarehouse(this.rfc, { warehouseNumber: lgnum });
-    const where = [`LGNUM = '${wh}'`, "AND STATU <> 'E'"];
-    const sMvt = sapKeyOpt(mvt, 'mvt');
-    if (sMvt) where.push(`AND BWLVS = '${sMvt}'`);
+  /**
+   * Warehouses the user may list without naming one: derived from the authenticated Plant attribute via T320
+   * (Admin without a plant restriction: every warehouse in T320). Never a configured default. Cached 5 min per plant.
+   */
+  async _userWarehouses(user) {
+    const plants = plantScope(user); // null = Admin (unrestricted)
+    if (plants && plants.length === 0) {
+      throw httpError(403, 'No warehouse can be derived: your user has no Plant attribute; select a warehouse or ask for the Plant assignment');
+    }
+    const now = Date.now();
+    this._t320Cache = this._t320Cache || new Map();
+    const readWarehouses = async (plant) => {
+      const key = plant || '*';
+      const hit = this._t320Cache.get(key);
+      if (hit && hit.expiresAt > now) return hit.warehouses;
+      const rows = await this._rfc(
+        () => this.rfc.readTable('T320', ['WERKS', 'LGNUM'], plant ? [`WERKS = '${sapKey(plant, 'plant')}'`] : []),
+        `Read warehouses of plant ${plant || '(all)'} (T320)`
+      );
+      const warehouses = Array.from(new Set((rows || []).map((r) => String(r.LGNUM || '').trim()).filter(Boolean)));
+      this._t320Cache.set(key, { warehouses, expiresAt: now + 5 * 60 * 1000 });
+      return warehouses;
+    };
+    const all = new Set();
+    for (const plant of plants || ['']) for (const wh of await readWarehouses(plant)) all.add(wh);
+    if (!all.size) {
+      throw httpError(400, `No warehouse is assigned in SAP (T320) to plant ${plants ? plants.join(', ') : '(any)'}`);
+    }
+    return Array.from(all).sort();
+  }
 
-    const rows = await this._rfc(
-      () => this.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'BETYP', 'BENUM', 'RSNUM', 'STATU', 'BDATU'], where),
-      `Read open TR list for warehouse ${wh}`
-    );
+  async getOpenTRs(lgnum = '', mvt = '', user) {
+    const warehouses = lgnum
+      ? [await resolveWarehouse(this.rfc, { warehouseNumber: lgnum })]
+      : await this._userWarehouses(user);
+    const sMvt = sapKeyOpt(mvt, 'mvt');
+
+    const rows = [];
+    for (const wh of warehouses) {
+      const where = [`LGNUM = '${wh}'`, "AND STATU <> 'E'"];
+      if (sMvt) where.push(`AND BWLVS = '${sMvt}'`);
+      rows.push(...await this._rfc(
+        () => this.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'BETYP', 'BENUM', 'RSNUM', 'STATU', 'BDATU'], where),
+        `Read open TR list for warehouse ${wh}`
+      ));
+    }
 
     rows.sort((a, b) => (b.BDATU || '').localeCompare(a.BDATU || '') || (b.TBNUM || '').localeCompare(a.TBNUM || ''));
 
@@ -1074,7 +1111,6 @@ class TrToAdapter {
       // null = Admin (all allowed)
       // [] = no plants allowed (deny all)
       // ['1120', ...] = only those plants
-      const plantScope = require('../../../wm/handling-unit/plantScope');
       const allowedPlants = plantScope(user);
 
       const isWhAuthorized = (lg) => {

@@ -16,7 +16,7 @@ describe('TrToHandler', () => {
   it('delegates getOpenTRs with lgnum and mvt', async () => {
     adapter.getOpenTRs = jest.fn().mockResolvedValue([{ Tbnum: '0001000663' }]);
     await expect(handlers.getOpenTRs(req({ lgnum: 'W01', mvt: '319' }))).resolves.toEqual([{ Tbnum: '0001000663' }]);
-    expect(adapter.getOpenTRs).toHaveBeenCalledWith('W01', '319');
+    expect(adapter.getOpenTRs).toHaveBeenCalledWith('W01', '319', undefined); // user of the request (none in this fixture)
   });
 
   it('delegates getTR / checkSU / getAvailableSUs with the request values unchanged (no defaults)', async () => {

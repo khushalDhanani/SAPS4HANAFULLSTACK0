@@ -1183,3 +1183,47 @@ describe('RfcClient', () => {
     expect(client.close).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('getOpenTRs without a warehouse: derived from the user Plant attribute via T320, never a default', () => {
+  const ltbk = (lgnum) => [{ LGNUM: lgnum, TBNUM: `000100${lgnum === 'W01' ? '0001' : '0002'}`, BWLVS: '311', BETYP: '', BENUM: '', RSNUM: '', STATU: '', BDATU: '20261021' }];
+  const rfcFor = (t320) => ({
+    readTable: jest.fn(async (table, fields, where) => {
+      if (table === 'T320') return t320.filter((r) => !where.length || where[0].includes(`'${r.WERKS}'`));
+      if (table === 'LTBK') return ltbk(/LGNUM = '(\w+)'/.exec(where[0])[1]);
+      return [];
+    })
+  });
+  const clerk = (plants) => ({ is: () => false, attr: { Plant: plants } });
+
+  it('a clerk with Plant 1120 lists the TRs of the T320 warehouses of that plant only', async () => {
+    const rfc = rfcFor([{ WERKS: '1120', LGNUM: 'W01' }, { WERKS: '1130', LGNUM: 'W13' }]);
+    const rows = await new TrToAdapter({ rfc }).getOpenTRs('', '', clerk(['1120']));
+    expect(rows.map((r) => r.Lgnum)).toEqual(['W01']);
+    expect(rfc.readTable).toHaveBeenCalledWith('T320', ['WERKS', 'LGNUM'], ["WERKS = '1120'"]);
+    expect(rfc.readTable.mock.calls.filter(([t]) => t === 'LTBK').map(([, , w]) => w[0])).toEqual(["LGNUM = 'W01'"]);
+  });
+
+  it('two plants -> the union of their warehouses; the T320 read is cached per plant', async () => {
+    const rfc = rfcFor([{ WERKS: '1120', LGNUM: 'W01' }, { WERKS: '1130', LGNUM: 'W13' }]);
+    const adapter = new TrToAdapter({ rfc });
+    expect((await adapter.getOpenTRs('', '', clerk(['1120', '1130']))).map((r) => r.Lgnum).sort()).toEqual(['W01', 'W13']);
+    await adapter.getOpenTRs('', '', clerk(['1120', '1130']));
+    expect(rfc.readTable.mock.calls.filter(([t]) => t === 'T320')).toHaveLength(2);
+  });
+
+  it('a clerk without a Plant attribute gets 403 and no SAP read; a plant without warehouses gets 400', async () => {
+    const rfc = rfcFor([]);
+    await expect(new TrToAdapter({ rfc }).getOpenTRs('', '', clerk([]))).rejects.toMatchObject({ status: 403 });
+    expect(rfc.readTable).not.toHaveBeenCalled();
+    await expect(new TrToAdapter({ rfc }).getOpenTRs('', '', clerk(['1120']))).rejects.toMatchObject({ status: 400, message: expect.stringContaining('T320') });
+  });
+
+  it('Admin without a plant restriction lists every T320 warehouse; an explicit warehouse is used as before', async () => {
+    const rfc = rfcFor([{ WERKS: '1120', LGNUM: 'W01' }, { WERKS: '1130', LGNUM: 'W13' }]);
+    const admin = { is: (r) => r === 'Admin', attr: {} };
+    expect((await new TrToAdapter({ rfc }).getOpenTRs('', '', admin)).map((r) => r.Lgnum).sort()).toEqual(['W01', 'W13']);
+    const rfc2 = rfcFor([]);
+    expect((await new TrToAdapter({ rfc: rfc2 }).getOpenTRs('W01', '', clerk(['1120']))).map((r) => r.Lgnum)).toEqual(['W01']);
+    expect(rfc2.readTable).not.toHaveBeenCalledWith('T320', expect.anything(), expect.anything());
+  });
+});
