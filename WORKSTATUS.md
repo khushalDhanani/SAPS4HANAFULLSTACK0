@@ -3655,6 +3655,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 - **Previous Recommended Action (2026-10-13, 13:15 IST):**
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
+## Changes Log
+
 ### 2026-10-21 22:15 IST — Live Step 1 picking TO executed on delivery 0080000134 in W01; TO 1037372 created & confirmed; LIKP-KOSTK = 'C'
 
 - **Authorization:** user explicit written "Go" for Step 1 write retry (`tools/test-step1-picking-to.js`).
