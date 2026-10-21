@@ -680,6 +680,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
           processId: '123e4567-e89b-12d3-a456-426614174000'
         })
       ).rejects.toThrow(/Posting period 01\/2026 is closed/);
+      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', expect.anything());
 
       // Retry: found already posted in MATDOC
       mockRfc.readTable.mockImplementation(async (table) => {

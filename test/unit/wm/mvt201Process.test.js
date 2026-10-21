@@ -532,6 +532,7 @@ describe('Movement Type 201 (GI to Cost Center) Process Tests [mock only, not SA
         costCenter: '1011202701',
         processId: '11111111-2222-3333-4444-555555555555'
       })).rejects.toThrow(/BAPI_GOODSMVT_CREATE failed: Deficit of SL Unrestricted-use/);
+      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', expect.anything());
 
       // 2nd attempt: Retry succeeds
       mockRfc.call

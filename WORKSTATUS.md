@@ -5,6 +5,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Movement matrix follow-up (2026-10-21 11:39 IST):** added explicit no-`BAPI_TRANSACTION_COMMIT` assertions after failed goods-movement BAPI responses for 201, 241, 301, and 311 retry tests. Four focused suites passed (79 tests). This closes that stated test gap; it does not prove SAP behavior.
+
 - **Audit fix 8 of 9 (2026-10-21 11:37 IST, test honesty + hygiene): CODE DELIVERED locally.** Replaced the weak concurrency assertions with an exact one-post assertion; this first exposed four duplicate MIGO posts (two per movement) and is now protected by a same-adapter, same-`ProcessId` in-flight guard. Added no-COMMIT assertions to BAPI error paths. Blank NVIDIA key from tracked `.env.example`; moved three ignored CSVs out of `db/data`; added explicit opt-in gates to 56 live SAP/live CAP tools. Focused tests 166/166, lint, CDS compile, script syntax, gate smoke checks, and `git diff --check` passed. **External credential revocation/reissue is NOT DONE**; Git history still retains the prior committed value. No SAP calls or writes.
 
 - **Audit fix 7 of 9 (2026-10-21 11:32 IST, items 5, 7, 18): INSPECTED; CODE BLOCKED by mandatory SAP API Discovery evidence.** No implementation changes and no SAP writes. Existing source has a reservation-linked delivery lookup pattern, and `createTransferOrderFromTR` already checks for unconfirmed TO items; successful `confirmTransferOrder` still lacks a confirmation read-back. A READ-ONLY RFC metadata request for `BAPI_TRANSACTION_COMMIT`, `L_TO_CONFIRM`, and LIKP/LIPS field interfaces failed with `RFC_COMMUNICATION_FAILURE` / OS `Operation not permitted` in this sandbox. Do not change transaction behavior until the SAP metadata/read-back contract and required live verification are available.
@@ -3380,6 +3382,8 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Exact Next Recommended Action (movement matrix follow-up — 2026-10-21 11:39 IST):** refresh the matrix against current HEAD before using its remaining FAIL labels as implementation instructions. Prior fixes in WORKSTATUS already cover items 3, 6, 8, 9, 10, 13, 15, 16, 17, and 19, while items 5, 7, and read-back portions of 18 remain blocked on SAP evidence. For further local work, next cover the direct 301 receiving-field reconciliation and failure-first retry tests; these were not changed in this session.
+
 - **Exact Next Recommended Action (audit fix 8 — 2026-10-21 11:37 IST):** revoke the previously committed NVIDIA API key in its provider console, issue a replacement, and put the replacement only in private local/BTP configuration. The tracked `.env.example` value is blank, but prior Git history may retain it. If history cleanup is needed, coordinate repository-wide history rewrite before doing it. Live scripts now require `ALLOW_LIVE_SAP_TOOLS=1` plus `--allow-live-sap` for JavaScript/Python scripts; shell scripts require the environment opt-in.
 
 - **Exact Next Recommended Action (audit fixes 5, 7, 18 — 2026-10-21 11:32 IST):** obtain the READ-ONLY SAP metadata/read-back results for `BAPI_TRANSACTION_COMMIT`, `L_TO_CONFIRM`, and the delivery link fields (`LIKP`/`LIPS`) from an environment with SAP RFC connectivity. Then establish the verified operation contract and prepare focused code/tests. Any live transaction proof requires a separate explicit WRITE “go” for the specific SAP call and test data. No application code changed in this session.
@@ -3478,6 +3482,13 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 11:39 IST — Movement matrix follow-up: failed MIGO no-COMMIT assertions
+
+- **Plan:** add the matrix's missing error-path assertions for no commit after an `E` response in 201, 241, 301, and 311 goods movements; make no adapter changes.
+- **Changes:** the retry-after-failure cases in `mvt201Process.test.js`, `mvt241Process.test.js`, `mvt301Process.test.js`, and `mvt311Process.test.js` now assert that `BAPI_TRANSACTION_COMMIT` was not called after the initial BAPI error.
+- **Validation:** `npx jest test/unit/wm/mvt201Process.test.js test/unit/wm/mvt241Process.test.js test/unit/wm/mvt301Process.test.js test/unit/wm/mvt311Process.test.js --runInBand --silent` — PASS (4 suites / 79 tests). `git diff --check` — PASS after this entry.
+- **Not done:** no adapter behavior changed; no live SAP call. **Assumptions:** none.
 
 ### 2026-10-21 11:37 IST — Audit fix 8: test honesty and hygiene
 

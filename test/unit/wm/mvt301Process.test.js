@@ -710,6 +710,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
       });
 
       expect(mockRfc.call).toHaveBeenCalledWith('BAPI_TRANSACTION_ROLLBACK', {});
+      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', expect.anything());
 
       // Retry attempt succeeds
       mockRfc.call

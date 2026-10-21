@@ -730,6 +730,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
         status: 400,
         message: expect.stringContaining('BAPI_GOODSMVT_CREATE failed: Deficit of BA Unrestricted-use stock')
       });
+      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', expect.anything());
 
       // Attempt 2: Retry after stock resolved - succeeds
       mockRfc.call
