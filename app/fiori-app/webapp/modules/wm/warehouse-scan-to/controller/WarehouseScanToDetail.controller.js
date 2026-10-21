@@ -1106,6 +1106,12 @@ sap.ui.define([
                         oResult.ErrorMessage || ""
                     ]);
                     oModel.setProperty("/canRetryMigo", true);
+                } else if (oResult.DeliveryNumber) {
+                    sActionText = that.getText("scanToMsgSuccessDeliveryCreated", [
+                        oResult.TransferOrder,
+                        oResult.DeliveryNumber
+                    ]);
+                    oModel.setProperty("/canRetryMigo", true);
                 } else if (oResult.IsConfirmed) {
                     sActionText = that.getText("scanToMsgSuccessConfirmed", [oResult.TransferOrder, oResult.ConfirmationNumber || oResult.TransferOrder]);
                     oModel.setProperty("/canRetryMigo", false);

@@ -24,7 +24,8 @@ const PATTERNS = Object.freeze({
   serial: [/^[A-Z0-9_\-./]{1,18}$/, 'Serial number'],
   uuid: [/^[0-9A-F-]{36}$/i, 'Process ID'],
   mblnr: [/^\d{1,10}$/, 'Material Document number'],
-  mjahr: [/^\d{4}$/, 'Material Document year']
+  mjahr: [/^\d{4}$/, 'Material Document year'],
+  vbeln: [/^\d{1,10}$/, 'Delivery number']
 });
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });

@@ -18,7 +18,7 @@
 
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
 const TrToHandler = require('../../../srv/wm/tr-to/handlers/trTo.handler');
-const { PROCESS_STATUS } = require('../../../srv/common/wmStatus');
+const { STATUS, PROCESS_STATUS } = require('../../../srv/common/wmStatus');
 
 describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
   let mockRfc;
@@ -436,6 +436,168 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           unit: 'NOS',
           })
       ).rejects.toThrow('Deficit of BA Unrestricted-use stock 5 EA');
+
+      expect(mockRfc.call).toHaveBeenCalledWith('BAPI_TRANSACTION_ROLLBACK', {});
+    });
+
+    test('handles L9 514 outbound delivery creation by posting PGI, committing, and confirming material document', async () => {
+      mockRfc.readTable = jest.fn((table, fields, where) => {
+        const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
+        if (table === 'VBFA') {
+          return Promise.resolve([{ VBELV: '0080000115', VBELN: '5000999999', VBTYP_N: 'R' }]);
+        }
+        if (table === 'MATDOC' && (whereStr.includes('5000999999') || whereStr.includes('0080000115'))) {
+          return Promise.resolve([{
+            MBLNR: '5000999999',
+            MJAHR: '2026',
+            ZEILE: '0001',
+            BWART: '241',
+            MATNR: '000000008000009754',
+            WERKS: '1120',
+            LGORT: 'CS02',
+            MENGE: '1.000',
+            MEINS: 'NOS',
+            RSNUM: '0000530233',
+            RSPOS: '0001',
+            ANLN1: '000000400001'
+          }]);
+        }
+        if (table === 'RESB') {
+          return Promise.resolve([{
+            RSNUM: '0000530233',
+            RSPOS: '0001',
+            MATNR: '000000008000009754',
+            WERKS: '1120',
+            LGORT: 'CS02',
+            BDMNG: '1.000',
+            ENMNG: '1.000',
+            MEINS: 'NOS',
+            KZEAR: 'X',
+            XLOEK: ''
+          }]);
+        }
+        return Promise.resolve([]);
+      });
+
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '',
+          MATDOCUMENTYEAR: '0000',
+          RETURN: [{ TYPE: 'S', ID: 'L9', NUMBER: '514', MESSAGE: 'Delivery 80000115 created', MESSAGE_V1: '80000115' }]
+        }) // BAPI_GOODSMVT_CREATE
+        .mockResolvedValueOnce({}) // COMMIT delivery
+        .mockResolvedValueOnce({ RETURN: [] }) // BAPI_OUTB_DELIVERY_CONFIRM_DEC (PGI)
+        .mockResolvedValueOnce({}); // COMMIT PGI
+
+      const res = await adapter.postGoodsMovement({
+        reservationNo: '530233',
+        reservationItem: '0001',
+        movementType: '241',
+        material: '8000009754',
+        plant: '1120',
+        storageLocation: 'CS02',
+        quantity: 1,
+        unit: 'NOS',
+        assetNo: '400001',
+        subNumber: '0000'
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.stage).toBe('MIGO');
+      expect(res.deliveryNumber).toBe('0080000115');
+      expect(res.materialDocument).toBe('5000999999');
+      expect(res.materialDocYear).toBe('2026');
+      expect(res.status).toBe(STATUS.GI_POSTED);
+      expect(mockRfc.call).toHaveBeenCalledWith('BAPI_OUTB_DELIVERY_CONFIRM_DEC', {
+        HEADER_DATA: { DELIV_NUMB: '0080000115' },
+        HEADER_CONTROL: { DELIV_NUMB: '0080000115', POST_GI_FLG: 'X' },
+        DELIVERY: '0080000115'
+      });
+      expect(mockRfc.call).toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+    });
+
+    test('fails loudly and rolls back when PGI on outbound delivery fails', async () => {
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '',
+          MATDOCUMENTYEAR: '0000',
+          RETURN: [{ TYPE: 'S', ID: 'L9', NUMBER: '514', MESSAGE: 'Delivery 80000115 created', MESSAGE_V1: '80000115' }]
+        }) // BAPI_GOODSMVT_CREATE
+        .mockResolvedValueOnce({}) // COMMIT delivery
+        .mockResolvedValueOnce({
+          RETURN: [{ TYPE: 'E', ID: 'VL', NUMBER: '001', MESSAGE: 'Delivery item blocked for goods issue' }]
+        }) // BAPI_OUTB_DELIVERY_CONFIRM_DEC (PGI fails)
+        .mockResolvedValueOnce({}); // ROLLBACK
+
+      await expect(
+        adapter.postGoodsMovement({
+          reservationNo: '530233',
+          reservationItem: '0001',
+          movementType: '241',
+          material: '8000009754',
+          plant: '1120',
+          storageLocation: 'CS02',
+          quantity: 1,
+          unit: 'NOS',
+          assetNo: '400001',
+          subNumber: '0000'
+        })
+      ).rejects.toThrow(/PGI failed for Outbound Delivery 0080000115: \[E\] Delivery item blocked for goods issue/);
+
+      expect(mockRfc.call).toHaveBeenCalledWith('BAPI_TRANSACTION_ROLLBACK', {});
+    });
+
+    test('rolls back and throws error when PGI succeeds but material document cannot be confirmed in MATDOC/VBFA', async () => {
+      mockRfc.readTable = jest.fn(() => Promise.resolve([]));
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '',
+          MATDOCUMENTYEAR: '0000',
+          RETURN: [{ TYPE: 'S', ID: 'L9', NUMBER: '514', MESSAGE: 'Delivery 80000115 created', MESSAGE_V1: '80000115' }]
+        }) // BAPI_GOODSMVT_CREATE
+        .mockResolvedValueOnce({}) // COMMIT delivery
+        .mockResolvedValueOnce({ RETURN: [] }) // BAPI_OUTB_DELIVERY_CONFIRM_DEC (PGI)
+        .mockResolvedValueOnce({}); // COMMIT PGI
+
+      await expect(
+        adapter.postGoodsMovement({
+          reservationNo: '530233',
+          reservationItem: '0001',
+          movementType: '241',
+          material: '8000009754',
+          plant: '1120',
+          storageLocation: 'CS02',
+          quantity: 1,
+          unit: 'NOS',
+          assetNo: '400001',
+          subNumber: '0000'
+        })
+      ).rejects.toThrow(/PGI was posted for Outbound Delivery 0080000115, but Material Document was not returned or confirmed in SAP/);
+    });
+
+    test('calls BAPI_TRANSACTION_ROLLBACK when BAPI returns empty material document without delivery', async () => {
+      mockRfc.call
+        .mockResolvedValueOnce({
+          MATERIALDOCUMENT: '',
+          MATDOCUMENTYEAR: '0000',
+          RETURN: [{ TYPE: 'W', ID: 'M7', NUMBER: '392', MESSAGE: 'Storage location CS02 requires manual check' }]
+        })
+        .mockResolvedValueOnce({}); // ROLLBACK
+
+      await expect(
+        adapter.postGoodsMovement({
+          reservationNo: '530233',
+          reservationItem: '0001',
+          movementType: '241',
+          material: '8000009754',
+          plant: '1120',
+          storageLocation: 'CS02',
+          quantity: 1,
+          unit: 'NOS',
+          assetNo: '400001',
+          subNumber: '0000'
+        })
+      ).rejects.toThrow('Storage location CS02 requires manual check');
 
       expect(mockRfc.call).toHaveBeenCalledWith('BAPI_TRANSACTION_ROLLBACK', {});
     });

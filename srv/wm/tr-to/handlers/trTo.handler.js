@@ -41,18 +41,9 @@ class TrToHandler {
 
     const entities = () => {
       if (!cds.db) return {};
-      let ReservationTrack = cds.model?.definitions?.['saps4hana.wm.ReservationTrack'];
-      let ReservationLog = cds.model?.definitions?.['saps4hana.wm.ReservationLog'];
-      if (!ReservationTrack && typeof cds.entities === 'function') {
-        try {
-          const wm = cds.entities('saps4hana.wm');
-          ReservationTrack = wm?.ReservationTrack;
-          ReservationLog = wm?.ReservationLog;
-        } catch (_) {}
-      }
       return {
-        ReservationTrack: ReservationTrack || 'saps4hana.wm.ReservationTrack',
-        ReservationLog: ReservationLog || 'saps4hana.wm.ReservationLog'
+        ReservationTrack: 'saps4hana.wm.ReservationTrack',
+        ReservationLog: 'saps4hana.wm.ReservationLog'
       };
     };
     const userOf = (req) => req.user?.id || process.env.S4_USERNAME || '';
@@ -287,46 +278,62 @@ class TrToHandler {
           serials: sSerials,
           completeReservation,
           confMenge: data.confMenge || data.ConfirmedQuantity,
+          deliveryNumber: data.deliveryNumber || data.DeliveryNumber || existingTrack?.DeliveryNumber || undefined,
+          DeliveryNumber: data.deliveryNumber || data.DeliveryNumber || existingTrack?.DeliveryNumber || undefined,
           processId
         });
+
+        const delivNo = migoRes.deliveryNumber || migoRes.DeliveryNumber || '';
+        const matDocNo = migoRes.materialDocument || migoRes.MaterialDocument || '';
+        const isDocConfirmed = Boolean(matDocNo);
 
         if (trackKey) {
           try {
             const resVer = migoRes.reservationVerification;
             const isCompletelyProcessed = resVer ? resVer.completelyProcessed === true : (completeReservation === true);
             const updateFields = {
-              MaterialDocument: migoRes.materialDocument,
-              MaterialDocYear: migoRes.materialDocYear,
-              Status_code: STATUS.GI_POSTED,
-              ErrorMessage: '',
-              ErrorStep: ''
+              MaterialDocument: matDocNo,
+              MaterialDocYear: migoRes.materialDocYear || migoRes.materialDocumentYear || '',
+              Status_code: isDocConfirmed ? STATUS.GI_POSTED : STATUS.GI_ERROR,
+              ErrorMessage: isDocConfirmed ? '' : (migoRes.ErrorMessage || 'Material document not confirmed in SAP'),
+              ErrorStep: isDocConfirmed ? '' : 'MIGO'
             };
+            if (delivNo) {
+              updateFields.DeliveryNumber = delivNo;
+            }
             if (migoRes.businessKey) {
               updateFields.MigoBusinessKey = migoRes.businessKey;
             }
             if (resVer) {
               updateFields.WithdrawnQuantity = resVer.issuedQuantity;
               updateFields.RemainingQuantity = resVer.remainingQuantity;
-              updateFields.CompletelyProcessed = isCompletelyProcessed;
+              updateFields.CompletelyProcessed = isDocConfirmed ? isCompletelyProcessed : false;
             }
             await UPDATE(ReservationTrack)
               .set(updateFields)
               .where(trackKey);
             await log(ReservationLog, {
-              ...trackKey, ProcessId: processId, DocumentNo: migoRes.materialDocument,
-              Step: 'MIGO', Status: STATUS.GI_POSTED, MessageType: 'S', MessageId: 'M7', MessageNo: '060',
+              ...trackKey, ProcessId: processId, DocumentNo: matDocNo || delivNo,
+              Step: 'MIGO', Status: isDocConfirmed ? STATUS.GI_POSTED : STATUS.GI_ERROR,
+              MessageType: isDocConfirmed ? 'S' : 'E',
+              MessageId: isDocConfirmed ? (delivNo ? 'L9' : 'M7') : 'M7',
+              MessageNo: isDocConfirmed ? (delivNo ? '514' : '060') : '021',
               MigoBusinessKey: migoRes.businessKey || '',
-              MessageText: migoRes.alreadyPosted
-                ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for process ${processId}; not posted again`
-                : (isCompletelyProcessed
-                    ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect}) - Reservation completely processed`
-                    : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect}) - Partial issue: remaining quantity ${resVer?.remainingQuantity ?? 'open'}`)
+              MessageText: isDocConfirmed
+                ? (delivNo
+                    ? `PGI posted for Outbound Delivery ${delivNo}; Material Document ${matDocNo}/${migoRes.materialDocYear || ''} confirmed in SAP`
+                    : (migoRes.alreadyPosted
+                        ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for process ${processId}; not posted again`
+                        : (isCompletelyProcessed
+                            ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect}) - Reservation completely processed`
+                            : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect}) - Partial issue: remaining quantity ${resVer?.remainingQuantity ?? 'open'}`)))
+                : `Goods issue failed: Material Document not confirmed (Outbound Delivery ${delivNo || 'unknown'})`
             });
             if (migoRes.warning) {
               if (req && typeof req.warn === 'function') req.warn(migoRes.warning);
               await log(ReservationLog, {
-                ...trackKey, ProcessId: processId, DocumentNo: migoRes.materialDocument,
-                Step: 'MIGO', Status: STATUS.GI_POSTED, MessageType: 'W', MessageId: 'L3', MessageNo: '001',
+                ...trackKey, ProcessId: processId, DocumentNo: matDocNo || delivNo,
+                Step: 'MIGO', Status: isDocConfirmed ? STATUS.GI_POSTED : STATUS.GI_ERROR, MessageType: 'W', MessageId: 'L3', MessageNo: '001',
                 MigoBusinessKey: migoRes.businessKey || '',
                 MessageText: migoRes.warning
               });
@@ -338,17 +345,19 @@ class TrToHandler {
 
         return {
           ...result,
-          success: true,
-          Success: true,
+          success: isDocConfirmed,
+          Success: isDocConfirmed,
           stage: 'MIGO',
-          materialDocument: migoRes.materialDocument,
-          materialDocumentYear: migoRes.materialDocumentYear || migoRes.materialDocYear,
+          materialDocument: matDocNo,
+          materialDocumentYear: migoRes.materialDocumentYear || migoRes.materialDocYear || '',
           movementType: migoRes.movementType || sMvt,
           MovementType: migoRes.movementType || sMvt,
-          MaterialDocument: migoRes.materialDocument,
-          MaterialDocYear: migoRes.materialDocYear,
-          Status: STATUS.GI_POSTED,
-          StatusText: STATUS_TEXT[STATUS.GI_POSTED],
+          MaterialDocument: matDocNo,
+          MaterialDocYear: migoRes.materialDocYear || '',
+          DeliveryNumber: delivNo,
+          deliveryNumber: delivNo,
+          Status: isDocConfirmed ? STATUS.GI_POSTED : STATUS.GI_ERROR,
+          StatusText: isDocConfirmed ? STATUS_TEXT[STATUS.GI_POSTED] : STATUS_TEXT[STATUS.GI_ERROR],
           ReservationNo: migoRes.reservationNo || sResNo,
           Batch: migoRes.batch || sBatch,
           StockEffect: migoRes.stockEffect,
@@ -361,9 +370,13 @@ class TrToHandler {
           reservationVerification: migoRes.reservationVerification || null,
           ReceivingTr: migoRes.receivingTr || null,
           Warning: migoRes.warning || '',
-          Message: migoRes.alreadyPosted
-            ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for this process step; not posted again.`
-            : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} posted successfully.`,
+          Message: isDocConfirmed
+            ? (delivNo
+                ? `PGI posted for Outbound Delivery ${delivNo}; Material Document ${matDocNo}/${migoRes.materialDocYear || ''} confirmed in SAP.`
+                : (migoRes.alreadyPosted
+                    ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for this process step; not posted again.`
+                    : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} posted successfully.`))
+            : `Outbound Delivery ${delivNo} created, but Material Document not confirmed in SAP. Goods issue pending.`,
           ErrorStep: '',
           ErrorMessage: ''
         };
@@ -543,7 +556,24 @@ class TrToHandler {
               if (result.Warning && req && typeof req.warn === 'function') {
                 req.warn(result.Warning);
               }
-              result.Message = `Transfer Order ${result.TransferOrder} confirmed and Material Document ${migoResult.MaterialDocument} posted successfully.`;
+              result.DeliveryNumber = migoResult.DeliveryNumber || migoResult.deliveryNumber || '';
+              result.deliveryNumber = result.DeliveryNumber;
+              result.Message = `Transfer Order ${result.TransferOrder} confirmed and Material Document ${migoResult.MaterialDocument} posted successfully${result.DeliveryNumber ? ` via Delivery ${result.DeliveryNumber}` : ''}.`;
+            } else if (migoResult && (migoResult.deliveryNumber || migoResult.DeliveryNumber) && !migoResult.MaterialDocument) {
+              const deliv = migoResult.deliveryNumber || migoResult.DeliveryNumber;
+              result.Status = STATUS.GI_ERROR;
+              result.StatusText = 'Delivery Created - PGI Pending';
+              result.DeliveryNumber = deliv;
+              result.deliveryNumber = deliv;
+              result.MaterialDocument = '';
+              result.MaterialDocYear = '';
+              result.ErrorStep = 'MIGO';
+              result.ErrorMessage = `Outbound Delivery ${deliv} created, but Material Document not confirmed in SAP. Goods issue pending.`;
+              result.Warning = migoResult.Warning || migoResult.warning || '';
+              result.Message = `Transfer Order ${result.TransferOrder} confirmed; Outbound Delivery ${deliv} created, but Goods Issue (PGI) is pending. Material Document not confirmed.`;
+              if (result.Warning && req && typeof req.warn === 'function') {
+                req.warn(result.Warning);
+              }
             } else {
               result.Status = STATUS.GI_ERROR;
               result.StatusText = STATUS_TEXT[STATUS.GI_ERROR];
@@ -555,6 +585,26 @@ class TrToHandler {
             result.StatusText = STATUS_TEXT[STATUS.GI_ERROR];
             result.ErrorStep = 'MIGO';
             result.ErrorMessage = migoErr.message;
+          }
+
+          if (trackKey) {
+            try {
+              const postMigoUpdate = {
+                Status_code: result.Status,
+                ErrorMessage: result.ErrorMessage || '',
+                ErrorStep: result.ErrorStep || ''
+              };
+              if (result.MaterialDocument) {
+                postMigoUpdate.MaterialDocument = result.MaterialDocument;
+                postMigoUpdate.MaterialDocYear = result.MaterialDocYear;
+              }
+              if (result.DeliveryNumber) {
+                postMigoUpdate.DeliveryNumber = result.DeliveryNumber;
+              }
+              await UPDATE(ReservationTrack).set(postMigoUpdate).where(trackKey);
+            } catch (dbErr) {
+              console.warn('[trTo.handler] Tracking update after MIGO warning:', dbErr.message);
+            }
           }
         }
 

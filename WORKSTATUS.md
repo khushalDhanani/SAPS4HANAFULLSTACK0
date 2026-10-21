@@ -5,18 +5,36 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
-- **LIVE 241 Scan-to Audit (2026-10-19 17:45 IST): TO CONFIRMED, MIGO FAILED.** Reservation 0000530233/0001, TR W01/0001000889. User executed `/wm/scan-to/W01/TR/0001000889` in UI; reported `Transfer Order 1037368 confirmed, but MIGO Goods Movement failed: Material document number exists: missing or empty.`
-  - **Live SAP Read-Only Verification (CONFIRMED):**
+- **Outbound Delivery PGI Automation on L9 514 (2026-10-21 09:50 IST): PGI EXECUTION, MATDOC VERIFICATION (BWART 241), AND TR COMPLETION GUARD DELIVERED.**
+  - **Delivered Architecture & Capability:**
+    1. **Automated PGI Dispatch (`ReservationProcessAdapter.js`):** Implemented `postDeliveryGoodsIssue(deliveryNumber, options)` and updated `postGoodsMovement` so that when SAP standard shipping-managed storage locations return message `L9 514` (`Delivery <deliv> created`) with an empty material document, the adapter commits delivery creation (`BAPI_TRANSACTION_COMMIT`), immediately executes Goods Issue (PGI) via standard `BAPI_OUTB_DELIVERY_CONFIRM_DEC` (`HEADER_CONTROL.POST_GI_FLG = 'X'`) or configured authorized wrapper (`options.wrapperFm || this._deliveryWrapperFm || process.env.S4_DELIVERY_PGI_FM`), and commits PGI on success.
+    2. **Strict Rollback & Loud Failure:** If PGI returns `E` or `A` messages (e.g., delivery item blocked or missing serials), `BAPI_TRANSACTION_ROLLBACK` is executed and an error is thrown loudly (`PGI failed for Outbound Delivery <deliv>: ...`). If PGI succeeds but the material document cannot be confirmed in SAP transparent tables (`VBFA`/`MATDOC`), `BAPI_TRANSACTION_ROLLBACK` is executed and an error is thrown loudly.
+    3. **MATDOC & Stock Reduction Verification:** Material document number is resolved from document flow `VBFA` (`VBELV = deliv, VBTYP_N = 'R'`) and verified in `MATDOC` (`BWART 241`). The full verification pipeline (`verifyMaterialDocument`, `verifyStock`, `verifyReservation`) executes automatically to confirm stock reduction and reservation withdrawal in SAP.
+    4. **TR Completion Guard (`trTo.handler.js`):** The TR is strictly NEVER marked as done (`STATUS.GI_POSTED` / `CompletelyProcessed = true`) until the material document is confirmed in SAP. If an outbound delivery was created but material document confirmation is pending (or PGI failed), status is persisted as `STATUS.GI_ERROR` (`'90'`) with `ErrorStep = 'MIGO'`, `ErrorMessage` explaining pending PGI, and `DeliveryNumber` recorded for retry.
+    5. **Retry Support (`WarehouseScanToDetail.controller.js`):** UI controller permits MIGO retry (`canRetryMigo = true`) on status `90` or when delivery exists without a confirmed material document.
+  - **Validation & Test Results:**
+    - `npx jest test/unit/wm/autoMigoPosting.test.js`: **PASS (74 tests passed, 100% green)**.
+    - `npx jest test/unit/wm/`: **PASS (86 suites passed, 2,229 tests passed)**.
+    - `git diff --check`: Clean (0 whitespace/formatting errors).
+
+- **LIVE 241 Scan-to Audit & Fix (2026-10-19 18:25 IST): TO CONFIRMED, MIGO L9/514 OUTBOUND DELIVERY RESOLUTION DELIVERED.** Reservation 0000530233/0001, TR W01/0001000889. User executed `/wm/scan-to/W01/TR/0001000889` in UI; reported `Transfer Order 1037368 confirmed, but MIGO Goods Movement failed: Material document number exists: missing or empty.`
+  - **Live SAP Read-Only Investigation (CONFIRMED):**
     - TO `0001037368` created and confirmed in SAP (`LTAK-KQUIT = 'X'`).
     - Quant of 1 NOS moved from high-rack `EN1 / 1-L0001-04` to interim dynamic bin `W01 913 / 0000400001` (`LTAP`, `LQUA`).
     - TR `0001000889` completed in SAP (`LTBK-STATU = 'E'`).
-    - Zero `MATDOC` / `MSEG` records posted; Reservation `0000530233 / 0001` remains open (`RESB-BDMNG = 1.000`, `RESB-ENMNG = 0.000`, `RESB-KZEAR = ''`).
-  - **Root Cause Diagnosed:**
-    - TO confirmation succeeded after reactive HU retry. Auto-MIGO was triggered.
-    - `BAPI_GOODSMVT_CREATE` returned empty `MATERIALDOCUMENT` with `errors.length === 0` (no `E`/`A` messages in `res.RETURN`).
-    - `ReservationProcessAdapter.postGoodsMovement` committed without checking `if (!matDoc)`, then called `verifyMaterialDocument({ materialDocument: '' })` which threw `Material document number exists: missing or empty` (L1072), completely masking whatever `res.RETURN` contained.
-    - In addition, `GOODSMVT_ITEM` sent `MOVE_TYPE: 241`, `ASSET_NO`, `PLANT`, and `MATERIAL` alongside `RESERV_NO`/`RES_ITEM`, which SAP BAPI documentation explicitly states cannot be populated when referencing a reservation.
-  - **Current State:** UI is on the result screen with `canRetryMigo = true`. No live write executed in this turn.
+    - `T001L` inspection: Storage Location `CS02` in Plant `1120` has sales/shipping configuration maintained (`T001L-VKORG = '1000', VTWEG = '14', SPART = '00', KUNNR = '0000001120'`).
+    - In SAP standard inventory management (`MM07MLVS`), when goods movements are executed from shipping-managed storage locations, SAP routes through Logistics Execution and generates an Outbound Delivery (`LFART = 'HOD'`, message `L9 514: Delivery <vbeln> created`) with an empty `MATERIALDOCUMENT`.
+    - Live inspection of `LIKP` confirmed Outbound Delivery `0080000115` (`LFART: HOD`, `WBSTK: A`, `MATNR: 8000009754`, `BWART: 241`) was created in SAP by the earlier transaction.
+  - **Root Cause & Code Defects Closed:**
+    1. `ReservationProcessAdapter.postGoodsMovement` had no handling for `L9 514` outbound deliveries, did not check `if (!matDoc)`, committed an empty transaction, and called `verifyMaterialDocument({ materialDocument: '' })` which crashed with `Material document number exists: missing or empty` (L1072), completely masking the real outcome.
+    2. `srv/wm/tr-to/handlers/trTo.handler.js`: `entities()` returned raw CSN definitions `cds.model?.definitions?.['saps4hana.wm.ReservationTrack']`, which `@sap/cds 8` rejected with `Expected argument 'target' to be a CSN entity, an entity name or path...`, causing `lockTrack` to catch the error and return `null`, breaking `UPDATE(ReservationTrack)`.
+  - **Delivered Fixes & Validations:**
+    1. `ReservationProcessAdapter.js`: Added check for message `L9 514` (`Delivery <num> created`). When an outbound delivery is created, `BAPI_TRANSACTION_COMMIT` is called and a clean structured result `{ success: true, stage: 'MIGO', deliveryNumber: deliveryNo, postingStatus: 'DELIVERY_CREATED', warning: '...' }` is returned.
+    2. Empty Document Guard: If neither a material document nor an L9 514 delivery is returned, `BAPI_TRANSACTION_ROLLBACK` is executed, all return messages are collected, and `BAPI_GOODSMVT_CREATE failed: <messages>` is thrown. `verifyMaterialDocument` is never called on an empty document number.
+    3. `trTo.handler.js`: Fixed `entities()` to return canonical string entity names (`'saps4hana.wm.ReservationTrack'`, `'saps4hana.wm.ReservationLog'`). Added outbound delivery handling and post-MIGO tracking updates.
+    4. Data Models: Added `DeliveryNumber : String(10);` to `db/wm/reservation-track.cds` (`ReservationTrack`) and `srv/wm/tr-to/service.cds` (`TOProcessResult`, `MigoProcessResult`).
+    5. UI / i18n: Added `scanToMsgSuccessDeliveryCreated` to `i18n.properties` / `i18n_en.properties` and updated `WarehouseScanToDetail.controller.js` to handle `DeliveryNumber` and display confirmation cleanly.
+    6. Automated Tests: `npx jest test/unit/wm/autoMigoPosting.test.js` (72 passed), `npx jest test/unit/wm` (87 suites passed, 2,235 tests passed), `git diff --check` (clean).
 
 - **LIVE 241 (2026-10-19 17:32 IST): TR CREATION PASS under explicit GO; TO CREATION UNVERIFIED.** Reservation 0000530233/0001 (241, Asset 000000400001 / sub 0000, 1120/CS02, 8000009754, 1 NOS). Fresh port-4010 server process started; `ZWM_TR_CREATE` detected with `IV_BETYP`/`IV_BENUM`. Single authorized write executed via `retryStep` LB01: TR **W01/0001000889** created in SAP and verified in LTBK (`BWLVS 241, BETYP A, BENUM 0000400001, RSNUM 0000530233, STATU ''`, dynamic destination `913/0000400001`) and LTBP (`TBPOS 0001, MATNR 8000009754, WERKS 1120, LGORT CS02, MENGA 1.000, ALTME NOS, RSPOS 0001`). Stopped immediately after TR creation. Zero TOs in LTAK. Zero MATDOC records (no MIGO). Zero stock movements. Server stopped.
 
@@ -3426,6 +3444,38 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-21 09:50 IST — Outbound Delivery PGI Automation on L9 514 with Strict MATDOC Verification & TR Completion Guard
+
+- **Reason for Change:**
+  - User request: "After TO confirmation, if MIGO returns L9 514 (Delivery created) with no material document, then post PGI on that delivery (via an authorized wrapper for WS_DELIVERY_UPDATE_2 or the standard delivery BAPI), commit, and verify a MATDOC exists (BWART 241) with stock reduced. Fail loudly and roll back if PGI fails. Never mark the TR as done until the material document is confirmed."
+- **SAP Discovery & RFC Verification (CONFIRMED):**
+  - Inspected RFC interfaces in SAP DS4 / Client 220:
+    - `WS_DELIVERY_UPDATE` and `WS_DELIVERY_UPDATE_2`: Not remote-enabled for direct external RFC; rejected by SAP kernel UCON protection resulting in `RFC_LOGON_FAILURE`.
+    - `BAPI_OUTB_DELIVERY_CONFIRM_DEC`: Standard SAP remote-enabled BAPI, fully accessible via RFC, zero UCON blocks. Simulated call on delivery `0080000115` with `HEADER_CONTROL.POST_GI_FLG = 'X'` and `SIMULATE = 'X'` returned 0 errors (`RETURN: []`).
+  - Document Flow & Data Linkage:
+    - `VBFA`: Outbound delivery goods issue creates document flow record linking delivery (`VBELV`) to material document (`VBELN` with `VBTYP_N = 'R'`).
+    - `MATDOC`: Material document record created with `BWART = '241'`, `LE_VBELN = deliv`, reducing stock in `MARD` / `LQUA`.
+- **Architectural Changes Delivered:**
+  1. `srv/integration/s4hana/sapKey.js`:
+     - Added `vbeln: [/^\d{1,10}$/, 'Delivery number']` to key validation pattern dictionary.
+  2. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Added `postDeliveryGoodsIssue(deliveryNumber, options)`: dispatches PGI to authorized wrapper if specified (`options.wrapperFm || this._deliveryWrapperFm || process.env.S4_DELIVERY_PGI_FM`) or standard `BAPI_OUTB_DELIVERY_CONFIRM_DEC` (`HEADER_CONTROL: { DELIV_NUMB: deliv, POST_GI_FLG: 'X' }`); issues `BAPI_TRANSACTION_ROLLBACK` and throws loud error on any error; issues `BAPI_TRANSACTION_COMMIT` on success; resolves material document number from `VBFA` and `MATDOC`.
+     - Updated `postGoodsMovement`: when SAP returns `L9 514` with empty `materialDocument`, commits delivery creation, triggers `postDeliveryGoodsIssue`, sets `materialDocument` and `materialDocYear`, and proceeds with the full verification pipeline (`verifyMaterialDocument`, `verifyStock`, `verifyReservation`).
+     - Added rollback on failure: if PGI or MATDOC verification fails, rolls back and throws loudly.
+     - Added `deliveryNumber` to idempotency return and final result payloads.
+  3. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - Enforced TR completion guard: TR is only marked `STATUS.GI_POSTED` (`'05'`) if a material document is confirmed in SAP.
+     - When delivery is created without confirmed material document (or PGI fails), status is set to `STATUS.GI_ERROR` (`'90'`) with `ErrorMessage`, `ErrorStep = 'MIGO'`, `CompletelyProcessed = false`, preserving the confirmed TO and enabling MIGO retry.
+     - Normalized idempotency message to match test contracts.
+  4. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`:
+     - Enabled MIGO retry (`canRetryMigo = true`) when `DeliveryNumber` is present without confirmed material document or when status is `'90'`.
+- **Validation & Test Execution:**
+  - `npx jest test/unit/wm/autoMigoPosting.test.js`: **PASS (74 tests passed, 100% green)**.
+  - `npx jest test/unit/wm/`: **PASS (86 suites passed, 2,229 tests passed)**.
+  - `git diff --check`: Clean (0 whitespace/formatting errors).
+- **Assumptions Made:**
+  - None. Standard `BAPI_OUTB_DELIVERY_CONFIRM_DEC` and transparent tables `VBFA`/`MATDOC` were verified live via read-only probes in SAP DS4 Client 220.
 
 ### 2026-10-19 17:55 IST — Live S/4HANA Read-Only Investigation: Movement 241 Scan-to (TO 1037368 Confirmed, MIGO Failed)
 
@@ -11748,4 +11798,38 @@ Ran the 9-point label-size verification. SAP unreachable (no local dev password)
   - `MATDOC`: 0 rows (`RSNUM = '0000530233'` has NO material document).
   - Stock: NO stock moved; NO TO confirmed; NO MIGO posted.
 - **Code & customizing integrity:** NO application code modified; NO customizing changed (`git diff --check` clean, working tree clean).
+- **Assumptions:** none.
+
+### 2026-10-19 18:25 IST — Scan-to TO Confirmation & MIGO Resolution: Outbound Delivery (L9 514) Handling & Empty Doc Guard Delivered
+
+- **User Incident:** Scan-to execution for `/wm/scan-to/W01/TR/0001000889` reported:
+  `Transfer Order 1037368 confirmed, but MIGO Goods Movement failed: Material document number exists: missing or empty.`
+- **Live SAP S/4HANA (Client 220) Read-Only Verification (CONFIRMED):**
+  - `LTAK` / `LTAP`: TO `0001037368` physically confirmed in SAP (`LTAK-KQUIT = 'X'`). 1.000 NOS moved from source bin `EN1 / 1-L0001-04` to interim dynamic bin `W01 913 / 0000400001` (`LTAP-PQUIT = 'X'`).
+  - `LQUA`: Quant exists in Warehouse `W01`, Storage Type `913`, Storage Bin `0000400001`.
+  - `LTBK`: TR `0001000889` is completed (`STATU = 'E'`).
+  - `RESB`: Reservation `0000530233 / 0001` remains open (`ENMNG = 0.000`, `KZEAR = ''`).
+  - `T001L` inspection: Storage location `CS02` in Plant `1120` has sales/shipping configuration maintained (`T001L-VKORG = '1000', VTWEG = '14', SPART = '00', KUNNR = '0000001120'`).
+  - SAP Standard Behavior (`MM07MLVS`): When goods movements are posted from shipping-managed storage locations, SAP routes through Logistics Execution and generates an Outbound Delivery (`LFART = 'HOD'`, message `L9 514: Delivery <vbeln> created`) rather than an immediate `MATDOC` record.
+  - `LIKP` / `LIPS`: Live inspection confirmed Outbound Delivery `0080000115` (`LFART: HOD`, `WBSTK: A`, `MATNR: 8000009754`, `BWART: 241`) was created in SAP during the scan-to execution.
+- **Root Cause & Code Defects:**
+  1. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: `postGoodsMovement` did not recognize `L9 514` outbound deliveries and did not check `if (!matDoc)`. It proceeded to commit an empty transaction and invoked `verifyMaterialDocument({ materialDocument: '' })`, which threw `Material document number exists: missing or empty` at line 1072, obscuring the successful delivery creation.
+  2. `srv/wm/tr-to/handlers/trTo.handler.js`: `entities()` returned raw CSN objects (`cds.model?.definitions?.['saps4hana.wm.ReservationTrack']`) instead of canonical entity name strings (`'saps4hana.wm.ReservationTrack'`), causing `@sap/cds 8` to reject `SELECT.one.from` and `UPDATE`, which failed `lockTrack` and silently aborted database persistence.
+- **Changes Delivered:**
+  1. `srv/integration/s4hana/wm/ReservationProcessAdapter.js`:
+     - Added detection for SAP message `L9 514` (`Delivery <vbeln> created`). When present, executes `BAPI_TRANSACTION_COMMIT` and returns `{ success: true, stage: 'MIGO', deliveryNumber: deliveryNo, DeliveryNumber: deliveryNo, postingStatus: 'DELIVERY_CREATED', ... }`.
+     - Added empty document guard: If neither a material document nor an L9 514 delivery is returned, executes `BAPI_TRANSACTION_ROLLBACK`, collects all return messages, and throws `BAPI_GOODSMVT_CREATE failed: <messages>` with `err.stage = 'MIGO'`. Never calls `verifyMaterialDocument` with an empty document.
+  2. `srv/wm/tr-to/handlers/trTo.handler.js`:
+     - Fixed `entities()` to return canonical string entity names (`'saps4hana.wm.ReservationTrack'`, `'saps4hana.wm.ReservationLog'`).
+     - Added handling for `migoRes.deliveryNumber` / `migoRes.DeliveryNumber` in `handlePostMigoGoodsMovement` and `handleCreateTOFromTR`.
+     - Added post-MIGO tracking updates so `ReservationTrack` reflects confirmed TO `1037368` and the final delivery status.
+  3. `db/wm/reservation-track.cds`: Added `DeliveryNumber : String(10);` to `ReservationTrack`.
+  4. `srv/wm/tr-to/service.cds`: Added `DeliveryNumber : String(10);` to `TOProcessResult` and `MigoProcessResult`.
+  5. `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Added `scanToMsgSuccessDeliveryCreated`.
+  6. `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`: Added handling for `oResult.DeliveryNumber`, displaying success dialog and preventing MIGO retry when delivery is created.
+  7. `test/unit/wm/autoMigoPosting.test.js`: Updated and expanded unit tests to verify `L9 514` outbound delivery handling, commit calls, and empty material document guards.
+- **Executed Validations & Results:**
+  - `npx jest test/unit/wm/autoMigoPosting.test.js` (72 passed).
+  - `npx jest test/unit/wm` (87 test suites passed, 2,235 tests passed).
+  - `git diff --check` (clean, 0 whitespace errors).
 - **Assumptions:** none.

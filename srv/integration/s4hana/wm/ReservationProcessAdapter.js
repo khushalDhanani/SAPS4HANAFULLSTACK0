@@ -2028,6 +2028,112 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * Post Goods Issue (PGI) on an Outbound Delivery.
+   * Checks for an authorized custom wrapper (e.g. ZWM_DELIVERY_PGI, Z_WM_DELIVERY_PGI),
+   * falling back to standard BAPI_OUTB_DELIVERY_CONFIRM_DEC.
+   * Commits the PGI, queries VBFA / MATDOC for the resulting material document, and returns it.
+   * On failure, issues BAPI_TRANSACTION_ROLLBACK and throws an error.
+   */
+  async postDeliveryGoodsIssue(deliveryNumber, options = {}) {
+    if (!deliveryNumber) {
+      const err = httpError(400, 'Delivery number is mandatory for post goods issue');
+      err.stage = 'PGI';
+      throw err;
+    }
+    const delivNo = sapKey(deliveryNumber, 'vbeln').padStart(10, '0');
+
+    const executeInSession = async (call) => {
+      let res = null;
+      const customFm = options.wrapperFm || this._deliveryWrapperFm || process.env.S4_DELIVERY_PGI_FM;
+
+      // 1. If an authorized wrapper is explicitly configured, invoke it
+      if (customFm) {
+        res = await call(customFm, {
+          IV_VBELN: delivNo,
+          IV_COMMIT: ' '
+        });
+      } else {
+        // 2. Standard delivery BAPI: BAPI_OUTB_DELIVERY_CONFIRM_DEC
+        res = await call('BAPI_OUTB_DELIVERY_CONFIRM_DEC', {
+          HEADER_DATA: { DELIV_NUMB: delivNo },
+          HEADER_CONTROL: {
+            DELIV_NUMB: delivNo,
+            POST_GI_FLG: 'X'
+          },
+          DELIVERY: delivNo
+        });
+      }
+
+      // Check for errors in RETURN
+      const retMsgs = res?.RETURN || res?.ET_RETURN || [];
+      const errors = retMsgs.filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
+      if (errors.length > 0) {
+        try {
+          await call('BAPI_TRANSACTION_ROLLBACK', {});
+        } catch (_) {}
+        const msg = errors.map((e) => `[${e.TYPE || 'E'}] ${e.MESSAGE || (e.ID + e.NUMBER)}`).join('; ');
+        const err = httpError(400, `PGI failed for Outbound Delivery ${delivNo}: ${msg}`);
+        err.stage = 'PGI';
+        err.deliveryNumber = delivNo;
+        err.messages = retMsgs;
+        throw err;
+      }
+
+      // Commit the PGI in SAP
+      await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+
+      // Find the created Material Document from VBFA / MATDOC
+      let matDoc = res?.MATERIALDOCUMENT || res?.EV_MBLNR || '';
+      let docYear = res?.MATDOCUMENTYEAR || res?.EV_MJAHR || new Date().getFullYear().toString();
+
+      if (!matDoc && this.rfc) {
+        try {
+          const vbfaRows = await this.rfc.readTable('VBFA', ['VBELV', 'VBELN', 'VBTYP_N'], [
+            `VBELV = '${delivNo}'`,
+            `AND VBTYP_N = 'R'`
+          ], 1);
+          if (vbfaRows?.[0]?.VBELN) {
+            matDoc = vbfaRows[0].VBELN.trim();
+          }
+        } catch (_) {}
+
+        if (!matDoc) {
+          try {
+            const matdocRows = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'BWART'], [
+              `( VBELN_IM = '${delivNo}' OR LE_VBELN = '${delivNo}' )`
+            ], 1);
+            if (matdocRows?.[0]?.MBLNR) {
+              matDoc = matdocRows[0].MBLNR.trim();
+              if (matdocRows[0].MJAHR) docYear = matdocRows[0].MJAHR.trim();
+            }
+          } catch (_) {}
+        }
+      }
+
+      if (!matDoc) {
+        const err = httpError(500, `PGI was posted for Outbound Delivery ${delivNo}, but Material Document was not returned or confirmed in SAP (MATDOC/VBFA)`);
+        err.stage = 'MIGO';
+        err.deliveryNumber = delivNo;
+        throw err;
+      }
+
+      return {
+        success: true,
+        stage: 'PGI',
+        deliveryNumber: delivNo,
+        materialDocument: matDoc,
+        materialDocYear: docYear,
+        messages: retMsgs
+      };
+    };
+
+    if (options.call) {
+      return executeInSession(options.call);
+    }
+    return this.rfc.session(executeInSession);
+  }
+
+  /**
    * Step 5: post_migo
    * Wraps BAPI_GOODSMVT_CREATE.
    *  - RESERV_NO/RES_ITEM only when the caller/tracking row names a reservation (never looked up by material).
@@ -2056,6 +2162,7 @@ class ReservationProcessAdapter {
     const completeReservation = params.completeReservation === true || params.CompleteReservation === true;
     const processId = params.processId || params.ProcessId || '';
     const testrun = params.testrun || false;
+    const directDelivery = params.deliveryNumber || params.DeliveryNumber || null;
 
     if (!movementType) throw httpError(400, 'MovementType is mandatory');
     if (!plant) throw httpError(400, 'Plant is mandatory');
@@ -2234,6 +2341,8 @@ class ReservationProcessAdapter {
         materialDocumentYear: docYear,
         materialDocYear: docYear,
         movementType: sMvt,
+        deliveryNumber: params.deliveryNumber || params.DeliveryNumber || null,
+        DeliveryNumber: params.deliveryNumber || params.DeliveryNumber || null,
         alreadyPosted: true,
         idempotentRetry: true,
         businessKey: bKey.key,
@@ -2566,71 +2675,114 @@ class ReservationProcessAdapter {
     }));
 
     return await this.rfc.session(async (call) => {
-      const res = await call('BAPI_GOODSMVT_CREATE', {
-        GOODSMVT_HEADER: header,
-        GOODSMVT_CODE: { GM_CODE: sGmCode },
-        GOODSMVT_ITEM: [item],
-        ...(serialItems.length ? { GOODSMVT_SERIALNUMBER: serialItems } : {}),
-        ...(testrun ? { TESTRUN: 'X' } : {})
-      });
+      let createdDeliveryNumber = directDelivery ? pad10(directDelivery) : null;
+      let matDoc = '';
+      let docYear = '';
+      let resMessages = [];
 
-      let errors = (res.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
-      if (errors.length) {
-        // KI 248 handling: statistical orders (e.g. ZEMP) require true cost accounting assignment
-        const isKi248 = errors.some((e) => (e.ID === 'KI' && String(e.NUMBER) === '248') || (e.MESSAGE && e.MESSAGE.includes('requires a true account assignment')));
-        if (isKi248 && sMvt === '261' && orderId) {
-          LOG.warn(`[postGoodsMovement] BAPI_GOODSMVT_CREATE returned KI 248 for Order ${orderId}; resolving responsible cost center and retrying with true account assignment...`);
-          let ccFallback = sCostCenter;
-          if (!ccFallback && this.rfc) {
+      if (directDelivery) {
+        LOG.info(`[postGoodsMovement] Direct PGI requested for Outbound Delivery ${directDelivery}`);
+        const pgiRes = await this.postDeliveryGoodsIssue(directDelivery, { call });
+        matDoc = pgiRes.materialDocument;
+        docYear = pgiRes.materialDocYear;
+        resMessages = pgiRes.messages || [];
+      } else {
+        const res = await call('BAPI_GOODSMVT_CREATE', {
+          GOODSMVT_HEADER: header,
+          GOODSMVT_CODE: { GM_CODE: sGmCode },
+          GOODSMVT_ITEM: [item],
+          ...(serialItems.length ? { GOODSMVT_SERIALNUMBER: serialItems } : {}),
+          ...(testrun ? { TESTRUN: 'X' } : {})
+        });
+        resMessages = res.RETURN || [];
+
+        let errors = (res.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
+        if (errors.length) {
+          // KI 248 handling: statistical orders (e.g. ZEMP) require true cost accounting assignment
+          const isKi248 = errors.some((e) => (e.ID === 'KI' && String(e.NUMBER) === '248') || (e.MESSAGE && e.MESSAGE.includes('requires a true account assignment')));
+          if (isKi248 && sMvt === '261' && orderId) {
+            LOG.warn(`[postGoodsMovement] BAPI_GOODSMVT_CREATE returned KI 248 for Order ${orderId}; resolving responsible cost center and retrying with true account assignment...`);
+            let ccFallback = sCostCenter;
+            if (!ccFallback && this.rfc) {
+              try {
+                const aufkRows = await this.rfc.readTable('AUFK', ['KOSTV', 'ASTKZ'], [`AUFNR = '${pad12(orderId)}'`], 1);
+                if (aufkRows?.[0]?.KOSTV?.trim()) ccFallback = aufkRows[0].KOSTV.trim();
+              } catch (_) {}
+            }
+            ccFallback = ccFallback || '1011201301';
+            const retryItem = {
+              ...item,
+              COSTCENTER: pad10(ccFallback)
+            };
+            delete retryItem.RESERV_NO;
+            delete retryItem.RES_ITEM;
+            delete retryItem.NO_MORE_GR;
+
+            const retryRes = await call('BAPI_GOODSMVT_CREATE', {
+              GOODSMVT_HEADER: header,
+              GOODSMVT_CODE: { GM_CODE: sGmCode },
+              GOODSMVT_ITEM: [retryItem],
+              ...(serialItems.length ? { GOODSMVT_SERIALNUMBER: serialItems } : {}),
+              ...(testrun ? { TESTRUN: 'X' } : {})
+            });
+            const retryErrors = (retryRes.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
+            if (!retryErrors.length) {
+              errors = [];
+              res.MATERIALDOCUMENT = retryRes.MATERIALDOCUMENT;
+              res.MATDOCUMENTYEAR = retryRes.MATDOCUMENTYEAR;
+              res.GOODSMVT_HEADRET = retryRes.GOODSMVT_HEADRET;
+              resMessages = retryRes.RETURN || [];
+            }
+          }
+        }
+
+        if (errors.length) {
+          if (!testrun) {
             try {
-              const aufkRows = await this.rfc.readTable('AUFK', ['KOSTV', 'ASTKZ'], [`AUFNR = '${pad12(orderId)}'`], 1);
-              if (aufkRows?.[0]?.KOSTV?.trim()) ccFallback = aufkRows[0].KOSTV.trim();
-            } catch (_) {}
+              await call('BAPI_TRANSACTION_ROLLBACK', {});
+            } catch (_rbErr) {
+              // suppress rollback call error
+            }
           }
-          ccFallback = ccFallback || '1011201301';
-          const retryItem = {
-            ...item,
-            COSTCENTER: pad10(ccFallback)
-          };
-          delete retryItem.RESERV_NO;
-          delete retryItem.RES_ITEM;
-          delete retryItem.NO_MORE_GR;
-
-          const retryRes = await call('BAPI_GOODSMVT_CREATE', {
-            GOODSMVT_HEADER: header,
-            GOODSMVT_CODE: { GM_CODE: sGmCode },
-            GOODSMVT_ITEM: [retryItem],
-            ...(serialItems.length ? { GOODSMVT_SERIALNUMBER: serialItems } : {}),
-            ...(testrun ? { TESTRUN: 'X' } : {})
-          });
-          const retryErrors = (retryRes.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
-          if (!retryErrors.length) {
-            errors = [];
-            res.MATERIALDOCUMENT = retryRes.MATERIALDOCUMENT;
-            res.MATDOCUMENTYEAR = retryRes.MATDOCUMENTYEAR;
-            res.GOODSMVT_HEADRET = retryRes.GOODSMVT_HEADRET;
-          }
+          const msg = errors.map((e) => e.MESSAGE).join('; ');
+          throw httpError(400, `BAPI_GOODSMVT_CREATE failed: ${msg}`);
         }
-      }
 
-      if (errors.length) {
+        // Check if SAP created an outbound delivery instead of a material document (L9 514: WM/shipping-managed location)
+        const l9Msg = (res.RETURN || []).find((r) => (r.ID === 'L9' && String(r.NUMBER) === '514') || /^Delivery\s+\d+\s+created/i.test(r.MESSAGE || ''));
+        const deliveryNo = l9Msg ? (String(l9Msg.MESSAGE_V1 || '').trim().padStart(10, '0') || (/(\d{8,10})/.exec(l9Msg.MESSAGE || '')?.[1] || '').padStart(10, '0')) : null;
+
+        matDoc = res.MATERIALDOCUMENT || (res.GOODSMVT_HEADRET && res.GOODSMVT_HEADRET.MAT_DOC) || '';
+        docYear = res.MATDOCUMENTYEAR || (res.GOODSMVT_HEADRET && res.GOODSMVT_HEADRET.DOC_YEAR) || '';
+
         if (!testrun) {
-          try {
-            await call('BAPI_TRANSACTION_ROLLBACK', {});
-          } catch (_rbErr) {
-            // suppress rollback call error
+          if (deliveryNo && !matDoc) {
+            await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+            LOG.warn(`[postGoodsMovement] Movement ${sMvt} for reservation ${sResNo}/${sResItem}: SAP created outbound delivery ${deliveryNo} (L9/514); posting Goods Issue (PGI)...`);
+            const pgiRes = await this.postDeliveryGoodsIssue(deliveryNo, { call });
+            matDoc = pgiRes.materialDocument;
+            docYear = pgiRes.materialDocYear;
+            createdDeliveryNumber = deliveryNo;
+            if (pgiRes.messages && pgiRes.messages.length) {
+              resMessages = [...resMessages, ...pgiRes.messages];
+            }
           }
+
+          if (!matDoc || matDoc === '0' || matDoc === '0000000000') {
+            try {
+              await call('BAPI_TRANSACTION_ROLLBACK', {});
+            } catch (_) {}
+            const allMsgs = (res.RETURN || []).map((e) => `[${e.TYPE || 'E'}] ${e.MESSAGE || (e.ID + e.NUMBER)}`).join('; ');
+            const failMsg = allMsgs || 'SAP BAPI_GOODSMVT_CREATE did not return a material document number';
+            LOG.error(`[postGoodsMovement] BAPI_GOODSMVT_CREATE did not produce a material document: ${failMsg}`);
+            const err = httpError(400, `BAPI_GOODSMVT_CREATE failed: ${failMsg}`);
+            err.stage = 'MIGO';
+            throw err;
+          }
+
+          await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
         }
-        const msg = errors.map((e) => e.MESSAGE).join('; ');
-        throw httpError(400, `BAPI_GOODSMVT_CREATE failed: ${msg}`);
       }
-
-      if (!testrun) {
-        await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
-      }
-
-      const matDoc = res.MATERIALDOCUMENT || (res.GOODSMVT_HEADRET && res.GOODSMVT_HEADRET.MAT_DOC) || '';
-      const docYear = res.MATDOCUMENTYEAR || (res.GOODSMVT_HEADRET && res.GOODSMVT_HEADRET.DOC_YEAR) || '';
 
       // Step 10: Verify the material document in SAP
       let verification = {
@@ -2726,6 +2878,8 @@ class ReservationProcessAdapter {
         alreadyPosted: false,
         idempotentRetry: false,
         businessKey: bKey.key,
+        deliveryNumber: createdDeliveryNumber || null,
+        DeliveryNumber: createdDeliveryNumber || null,
         materialDocument: verification.materialDocument || alphaOut(matDoc),
         materialDocumentYear: verification.materialDocumentYear || docYear,
         materialDocYear: docYear,
@@ -2735,7 +2889,7 @@ class ReservationProcessAdapter {
         processId: sProcessId,
         batch: sBatch,
         stockEffect: this._computeStockEffect(sMvt, { ...params, costCenter: sCostCenter, assetNo: sAssetNo, subNumber: sSubNumber, receivingPlant: sRecPlant, receivingStorageLocation: sRecSLoc }),
-        messages: res.RETURN || [],
+        messages: resMessages || [],
         ...(receivingTr ? { receivingTr } : {}),
         ...(combinedWarning ? { warning: combinedWarning } : {})
       };

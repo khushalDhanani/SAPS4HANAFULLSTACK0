@@ -102,6 +102,7 @@ service TrToService @(path: '/odata/v4/tr-to') {
         Message             : String(255);
         MaterialDocument    : String(10);
         MaterialDocYear     : String(4);
+        DeliveryNumber      : String(10);
         StockEffect         : String(80);
         ErrorMessage        : String(255);
         ReceivingPlant      : String(4);
@@ -133,6 +134,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         movementType         : String(3);
         MaterialDocument     : String(10);
         MaterialDocYear      : String(4);
+        DeliveryNumber       : String(10);
+        deliveryNumber       : String(10);
         Status               : String(2);
         StatusText           : String(40);
         ReservationNo        : String(10);
