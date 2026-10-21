@@ -299,10 +299,10 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       );
     });
 
-    test('Surfaces SAP\'s own rejection of L_TR_CREATE unchanged when no wrapper creates a TR (caller records status 11)', async () => {
+    test('Surfaces the selected wrapper error and does not call another writer (caller records status 11)', async () => {
       mockRfc.call
         .mockRejectedValueOnce(new Error('Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE'))
-        .mockRejectedValueOnce(new Error('Function ZWM_TR_CREATE not found'));
+        .mockRejectedValueOnce(new Error('ZWM_TR_CREATE backend failure after possible commit'));
 
       await expect(
         adapter.createTransferRequirement({
@@ -315,7 +315,96 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
           unit: 'NOS',
           reservationNo: '524979'
         })
-      ).rejects.toThrow('Incompatible Call Rejected, see note 2295840; Called Incompatible Function :L_TR_CREATE');
+      ).rejects.toThrow('ZWM_TR_CREATE backend failure after possible commit');
+      expect(mockRfc.call.mock.calls.map(([fm]) => fm)).toEqual(['L_TR_CREATE', 'ZWM_TR_CREATE']);
+    });
+
+    test('retry LTBK lookup fails closed when SAP cannot verify whether a TR already exists', async () => {
+      mockRfc.readTable.mockRejectedValueOnce(new Error('RFC communication failed'));
+
+      await expect(adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        wmMovementType: '311',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '524979',
+        isRetry: true
+      })).rejects.toThrow(/could not verify.*open Transfer Requirement/i);
+
+      expect(mockRfc.call).not.toHaveBeenCalledWith('L_TR_CREATE', expect.anything());
+      expect(mockRfc.call).not.toHaveBeenCalledWith('ZWM_TR_CREATE', expect.anything());
+    });
+
+    test('retry TR creation serializes by warehouse and reservation and reuses the first TR', async () => {
+      let reads = 0;
+      const firstReadGate = {};
+      firstReadGate.promise = new Promise((resolve) => { firstReadGate.resolve = resolve; });
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table !== 'LTBK') return [];
+        reads += 1;
+        if (reads === 1) {
+          await firstReadGate.promise;
+          return [];
+        }
+        return [{ LGNUM: 'W01', TBNUM: '0001001839', BWLVS: '311', RSNUM: '0000524979', STATU: '' }];
+      });
+      mockRfc.call.mockResolvedValueOnce({
+        T_LTBA: [{ TBNUM: '0001001839', TBPOS: '0001', BWLVS: '311', MATNR: '000000008000000023', WERKS: '1120', LGORT: 'HS01', MENGA: 1, ALTME: 'NOS', LGNUM: 'W01' }]
+      });
+
+      const retry = () => adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        wmMovementType: '311',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '524979',
+        isRetry: true
+      });
+      const first = retry();
+      const second = adapter.withRfc(mockRfc).createTransferRequirement({
+        warehouseNumber: 'W01',
+        wmMovementType: '311',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '524979',
+        isRetry: true
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      firstReadGate.resolve();
+      const [created, adopted] = await Promise.all([first, second]);
+
+      expect(created.trNumber).toBe('1001839');
+      expect(adopted.trNumber).toBe('1001839');
+      expect(adopted.alreadyExisted).toBe(true);
+      expect(reads).toBe(2);
+      expect(mockRfc.call.mock.calls.filter(([fm]) => fm === 'L_TR_CREATE')).toHaveLength(1);
+    });
+
+    test('retry without an LTBK-searchable reservation link fails closed', async () => {
+      await expect(adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        wmMovementType: '301',
+        movementType: '301',
+        isTransferPosting: true,
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '524979',
+        isRetry: true
+      })).rejects.toThrow(/cannot safely retry.*no reservation reference/i);
+
+      expect(mockRfc.call).not.toHaveBeenCalledWith('L_TR_CREATE', expect.anything());
     });
 
     test('D21: 201 sends its real WM movement by default (BWLVS 201, BETYP K, cost centre BENUM, RSNUM kept); no 311 substitution [mock only, not SAP verification]', async () => {

@@ -24,6 +24,21 @@ const padIfNumeric = (v, n) => (/^\d+$/.test(String(v || '').trim()) ? String(v)
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 const padMat = (m) => (/^\d+$/.test(m) ? m.padStart(18, '0') : m);
 const sapNum = (v) => (v == null || v === '' ? 0 : Number(String(v).trim()));
+const trRetryQueues = new Map();
+
+async function withSerializedTrRetry(key, operation) {
+  const previous = trRetryQueues.get(key);
+  let release;
+  const queued = new Promise((resolve) => { release = resolve; });
+  trRetryQueues.set(key, queued);
+  if (previous) await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (trRetryQueues.get(key) === queued) trRetryQueues.delete(key);
+  }
+}
 
 class ReservationProcessAdapter {
   constructor(options = {}) {
@@ -502,9 +517,21 @@ class ReservationProcessAdapter {
 
   /**
    * Step 2: create_tr
-   * Wraps L_TR_CREATE with fallback to custom wrapper ZWM_TR_CREATE
+   * Creates a TR through L_TR_CREATE or one eligible custom wrapper.
    */
   async createTransferRequirement(params = {}) {
+    if (params.isRetry) {
+      const warehouse = params.warehouseNumber || params.WarehouseNumber;
+      const reservation = params.reservationNo || params.ReservationNo || params.ReservationNumber;
+      if (warehouse && reservation) {
+        const key = `${sapKey(warehouse, 'lgnum')}:${sapKey(reservation, 'rsnum').padStart(10, '0')}`;
+        return withSerializedTrRetry(key, () => this._createTransferRequirement(params));
+      }
+    }
+    return this._createTransferRequirement(params);
+  }
+
+  async _createTransferRequirement(params = {}) {
     const {
       warehouseNumber,
       wmMovementType = params.movementType || params.MovementType,
@@ -661,13 +688,21 @@ class ReservationProcessAdapter {
       const s4TrRsnum = isTransferPosting ? '' : s4Rsnum;
       const s4TrRspos = isTransferPosting ? '' : s4Rspos;
 
-      if (isRetry && this.rfc && s4TrRsnum) {
+      if (isRetry && !s4TrRsnum) {
+        throw httpError(409, `Cannot safely retry Transfer Requirement creation for reservation ${s4Rsnum}: this TR has no reservation reference for the SAP duplicate check. Reconcile open Transfer Requirements in SAP before retrying.`);
+      }
+
+      if (isRetry) {
+        if (!this.rfc || typeof this.rfc.readTable !== 'function') {
+          throw httpError(502, 'Could not verify whether an open Transfer Requirement exists in SAP; retry was stopped to prevent a duplicate.');
+        }
         try {
           const ltbkRows = await this.rfc.readTable(
             'LTBK',
             ['LGNUM', 'TBNUM', 'BWLVS', 'BETYP', 'BENUM', 'RSNUM', 'STATU'],
             [`LGNUM = '${s4Lgnum}'`, `AND RSNUM = '${s4TrRsnum}'`]
           );
+          if (!Array.isArray(ltbkRows)) throw new Error('LTBK lookup returned an invalid response');
           const openRows = (ltbkRows || []).filter((r) => r.TBNUM && String(r.STATU || '').trim() !== 'E');
           if (openRows.length > 0) {
             const existing = openRows[0];
@@ -693,8 +728,9 @@ class ReservationProcessAdapter {
               alreadyExisted: true
             };
           }
-        } catch (_ltbkErr) {
-          LOG.warn(`[createTransferRequirement] Pre-creation LTBK check error: ${_ltbkErr.message}`);
+        } catch (ltbkErr) {
+          LOG.error(`[createTransferRequirement] Retry stopped because the LTBK duplicate check failed for ${s4Lgnum}/${s4TrRsnum}: ${ltbkErr.message}`);
+          throw httpError(502, `Could not verify whether an open Transfer Requirement exists in SAP for reservation ${alphaOut(s4Rsnum)}; retry was stopped to prevent a duplicate. SAP check error: ${ltbkErr.message}`);
         }
       }
 
@@ -734,9 +770,9 @@ class ReservationProcessAdapter {
           tbpos = returnedItem.TBPOS || '0001';
           rawTbnum = returnedItem.TBNUM || '';
         } catch (err) {
-          // D22 (live 241, 2026-10-19): the direct L_TR_CREATE call is rejected by the kernel as an incompatible RFC call
-          // (SAP Note 2295840) and the Z wrappers carry no BETYP/BENUM, so a dynamic-coordinate TR (201/241/261) can never be
-          // created through them (L2 438) - falling back only hides the real error. Keep the ABAP details and fail fast.
+          // Live 241 evidence (2026-10-19): the direct L_TR_CREATE call can be rejected by the kernel as incompatible
+          // (SAP Note 2295840). Requirement-bearing items are routed only through a wrapper whose live interface check
+          // confirms IV_BETYP and IV_BENUM; keep the original ABAP details if no eligible wrapper exists.
           const { key, abapMsgClass, abapMsgType, abapMsgNumber, abapMsgV1, abapMsgV2, abapMsgV3, abapMsgV4 } = err;
           LOG.error(`[createTransferRequirement] L_TR_CREATE rejected for ${s4Lgnum}/${s4Bwlvs} (BETYP ${s4Betyp || '-'}, BENUM ${s4Benum || '-'}): ${err.message}`, { key, abapMsgClass, abapMsgType, abapMsgNumber, abapMsgV1, abapMsgV2, abapMsgV3, abapMsgV4 });
           // A requirement item can only go through a wrapper that exposes IV_BETYP/IV_BENUM (read-only interface check, cached).
@@ -758,33 +794,19 @@ class ReservationProcessAdapter {
             IV_COMMIT: 'X',
             ...(needsReq ? { IV_BETYP: s4Betyp, IV_BENUM: s4Benum } : {})
           };
-          // Fallback to the custom RFC wrappers (ZWM_TR_CREATE / Z_WM_TR_CREATE) when L_TR_CREATE is rejected
-          try {
-            let resZ;
-            if (support.ZWM_TR_CREATE) {
-              try {
-                resZ = await call('ZWM_TR_CREATE', wrapperParams);
-              } catch (_z1Err) {
-                resZ = undefined;
-              }
-            }
-            if (resZ === undefined) {
-              resZ = await call('Z_WM_TR_CREATE', wrapperParams);
-            }
+          // A wrapper failure can arrive after SAP committed. Select one writer and call it only once.
+          const wrapperName = support.ZWM_TR_CREATE ? 'ZWM_TR_CREATE' : (support.Z_WM_TR_CREATE ? 'Z_WM_TR_CREATE' : '');
+          if (!wrapperName) throw err;
+          const resZ = await call(wrapperName, wrapperParams);
 
-            rawTbnum = resZ && (resZ.EV_TBNUM || resZ.E_TBNUM);
-            const cleanTbnum = rawTbnum && rawTbnum !== '0000000000' ? alphaOut(rawTbnum) : '';
-            if (cleanTbnum) {
-              tbnum = cleanTbnum;
-              tbpos = resZ.EV_TBPOS || resZ.E_TBPOS || '0001';
-              returnedItem = resZ;
-            } else if (resZ && resZ.EV_SUCCESS === 'E' && resZ.EV_MESSAGE) {
-              throw new Error(resZ.EV_MESSAGE);
-            }
-          } catch (_zwmErr) {
-            if (_zwmErr.message && !_zwmErr.message.includes('NOT_FOUND') && !_zwmErr.message.includes('RFC_NO_AUTHORITY')) {
-              throw _zwmErr;
-            }
+          rawTbnum = resZ && (resZ.EV_TBNUM || resZ.E_TBNUM);
+          const cleanTbnum = rawTbnum && rawTbnum !== '0000000000' ? alphaOut(rawTbnum) : '';
+          if (cleanTbnum) {
+            tbnum = cleanTbnum;
+            tbpos = resZ.EV_TBPOS || resZ.E_TBPOS || '0001';
+            returnedItem = resZ;
+          } else if (resZ && resZ.EV_SUCCESS === 'E' && resZ.EV_MESSAGE) {
+            throw new Error(resZ.EV_MESSAGE);
           }
 
           if (!tbnum) {

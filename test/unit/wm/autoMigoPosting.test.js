@@ -3209,7 +3209,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       expect(mockRfc.call).not.toHaveBeenCalled();
     });
 
-    test('Item 8: createTransferRequirement for 261 does NOT fall back to 311 staging TR and throws EV_MESSAGE', async () => {
+    test('Item 8: createTransferRequirement for 261 preserves wrapper EV_MESSAGE and does not call a second wrapper', async () => {
       mockRfc.readTable.mockImplementation(async () => []);
       mockRfc.call.mockImplementation(async (fm) => {
         if (fm === 'L_TR_CREATE') {
@@ -3221,9 +3221,6 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           return { PARAMS: [{ PARAMETER: 'IV_BETYP' }, { PARAMETER: 'IV_BENUM' }] };
         }
         if (fm === 'ZWM_TR_CREATE') {
-          throw new Error('NOT_SUPPORTED');
-        }
-        if (fm === 'Z_WM_TR_CREATE') {
           return {
             EV_SUCCESS: 'E',
             EV_MESSAGE: 'Order 1002790 is locked by user',
@@ -3247,10 +3244,9 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         })
       ).rejects.toThrow('Order 1002790 is locked by user');
 
+      expect(mockRfc.call.mock.calls.filter((c) => c[0] === 'ZWM_TR_CREATE')).toHaveLength(1);
       const zCalls = mockRfc.call.mock.calls.filter((c) => c[0] === 'Z_WM_TR_CREATE');
-      for (const call of zCalls) {
-        expect(call[1]?.IV_BWLVS).not.toBe('311');
-      }
+      expect(zCalls).toHaveLength(0);
     });
 
     test('Item 9: executeReservationWarehouseFlow fails TR stage when existingToNo has no resolvable TR (no fake TR_FOR_)', async () => {
