@@ -2700,23 +2700,24 @@ class ReservationProcessAdapter {
         if (errors.length) {
           // KI 248 handling: statistical orders (e.g. ZEMP) require true cost accounting assignment
           const isKi248 = errors.some((e) => (e.ID === 'KI' && String(e.NUMBER) === '248') || (e.MESSAGE && e.MESSAGE.includes('requires a true account assignment')));
+          let ccFallback = '';
           if (isKi248 && sMvt === '261' && orderId) {
             LOG.warn(`[postGoodsMovement] BAPI_GOODSMVT_CREATE returned KI 248 for Order ${orderId}; resolving responsible cost center and retrying with true account assignment...`);
-            let ccFallback = sCostCenter;
+            ccFallback = sCostCenter;
             if (!ccFallback && this.rfc) {
               try {
                 const aufkRows = await this.rfc.readTable('AUFK', ['KOSTV', 'ASTKZ'], [`AUFNR = '${pad12(orderId)}'`], 1);
                 if (aufkRows?.[0]?.KOSTV?.trim()) ccFallback = aufkRows[0].KOSTV.trim();
               } catch (_) {}
             }
-            ccFallback = ccFallback || '1011201301';
-            const retryItem = {
-              ...item,
-              COSTCENTER: pad10(ccFallback)
-            };
-            delete retryItem.RESERV_NO;
-            delete retryItem.RES_ITEM;
-            delete retryItem.NO_MORE_GR;
+          }
+          // Retry only with a cost center read from the order (AUFK-KOSTV) or supplied by the caller; never a built-in default.
+          // The reservation reference stays on the item so RESB is consumed by the retry.
+          if (isKi248 && sMvt === '261' && orderId && ccFallback) {
+            const retryItem = { ...item, COSTCENTER: pad10(ccFallback) };
+            if (!testrun) {
+              try { await call('BAPI_TRANSACTION_ROLLBACK', {}); } catch (_rbErr) { /* nothing committed yet */ }
+            }
 
             const retryRes = await call('BAPI_GOODSMVT_CREATE', {
               GOODSMVT_HEADER: header,

@@ -229,47 +229,44 @@ describe('Corrupted Staging TR Auto-Recovery & Statistical Order KI 248 Handling
             }));
         });
 
-        it('auto-resolves responsible cost center and retries MIGO when SAP returns KI 248 error', async () => {
-            // BAPI_GOODSMVT_CREATE first call fails with KI 248
-            mockRfc.call.mockResolvedValueOnce({
-                MATERIALDOCUMENT: '',
-                MATDOCUMENTYEAR: '',
-                RETURN: [{
-                    TYPE: 'E',
-                    ID: 'KI',
-                    NUMBER: '248',
-                    MESSAGE: 'Account 500020 requires a true account assignment relevant to cost accounting'
-                }]
-            });
-            // AUFK lookup finds KOSTV
-            mockRfc.readTable.mockResolvedValueOnce([{
-                AUFNR: '000000001011',
-                KOSTV: '1011201301'
-            }]);
-            // Retry call succeeds
-            mockRfc.call.mockResolvedValueOnce({
-                MATERIALDOCUMENT: '4900050253',
-                MATDOCUMENTYEAR: '2026',
-                RETURN: []
-            });
-            // BAPI_TRANSACTION_COMMIT
-            mockRfc.call.mockResolvedValueOnce({});
+        const ki248 = { TYPE: 'E', ID: 'KI', NUMBER: '248', MESSAGE: 'Account 500020 requires a true account assignment relevant to cost accounting' };
+        const input261 = {
+            reservationNo: '0000528771', reservationItem: '1', movementType: '261',
+            plant: '1120', storageLocation: 'HS01', material: '8000009754', quantity: 1, unit: 'NOS', orderId: '1011'
+        };
+        const bapiCalls = () => mockRfc.call.mock.calls.filter(([fm]) => fm === 'BAPI_GOODSMVT_CREATE');
+        const fmSequence = () => mockRfc.call.mock.calls.map(([fm]) => fm);
 
-            const res = await resAdapter.postGoodsMovement({
-                reservationNo: '0000528771',
-                reservationItem: '1',
-                movementType: '261',
-                plant: '1120',
-                storageLocation: 'HS01',
-                material: '8000009754',
-                quantity: 1,
-                unit: 'NOS',
-                orderId: '1011'
+        it('retries MIGO with the AUFK-KOSTV cost center after KI 248, keeps the reservation reference, and rolls back the failed attempt first', async () => {
+            mockRfc.readTable.mockImplementation(async (table) => {
+                if (table === 'AUFK') return [{ AUFNR: '000000001011', OBJNR: 'OR000000001011', AUART: 'ZEMP', LOEKZ: '', ASTKZ: 'X', KOSTV: '1011201301' }];
+                if (table === 'JEST') return [{ OBJNR: 'OR000000001011', STAT: 'I0002', INACT: '' }];
+                return [];
             });
+            mockRfc.call.mockImplementation(async (fm, params) => {
+                if (fm !== 'BAPI_GOODSMVT_CREATE') return {};
+                if (!params.GOODSMVT_ITEM[0].COSTCENTER) return { MATERIALDOCUMENT: '', MATDOCUMENTYEAR: '', RETURN: [ki248] };
+                return { MATERIALDOCUMENT: '4900050253', MATDOCUMENTYEAR: '2026', RETURN: [] };
+            });
+
+            const res = await resAdapter.postGoodsMovement(input261);
 
             expect(res.success).toBe(true);
             expect(res.materialDocument).toBe('4900050253');
-            expect(res.materialDocYear).toBe('2026');
+            const [, retry] = bapiCalls();
+            expect(retry[1].GOODSMVT_ITEM[0]).toEqual(expect.objectContaining({ COSTCENTER: '1011201301', RESERV_NO: '0000528771', RES_ITEM: '0001' }));
+            expect(fmSequence()).toEqual(['BAPI_GOODSMVT_CREATE', 'BAPI_TRANSACTION_ROLLBACK', 'BAPI_GOODSMVT_CREATE', 'BAPI_TRANSACTION_COMMIT']);
+        });
+
+        it('fails with the KI 248 text and never retries with a built-in cost center when AUFK has no KOSTV', async () => {
+            mockRfc.readTable.mockImplementation(async () => []);
+            mockRfc.call.mockImplementation(async (fm) => (fm === 'BAPI_GOODSMVT_CREATE' ? { MATERIALDOCUMENT: '', RETURN: [ki248] } : {}));
+
+            await expect(resAdapter.postGoodsMovement(input261)).rejects.toThrow('requires a true account assignment');
+
+            expect(bapiCalls()).toHaveLength(1);
+            expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', expect.anything());
+            expect(mockRfc.call).toHaveBeenCalledWith('BAPI_TRANSACTION_ROLLBACK', {});
         });
     });
 });
