@@ -1620,6 +1620,56 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
   // =========================================================================
   // Failure Paths: Fixes, Retries & Resumption across all 12 Scenarios
   // =========================================================================
+  describe('Failure-first MIGO rejection and retry [mock only, not SAP verification]', () => {
+    test.each([
+      ['201', { movementType: '201', costCenter: '1011201301' }],
+      ['241', { movementType: '241', assetNo: '000000400001', subNumber: '0000' }],
+      ['301', { movementType: '301', receivingPlant: '1110', receivingStorageLocation: 'CS01' }],
+      ['311', { movementType: '311', receivingStorageLocation: 'CS01' }]
+    ])('Movement %s: a first SAP rejection rolls back and a corrected retry can complete', async (mvt, movementFields) => {
+      const env = createTestEnvironment(mvt);
+      let postCalls = 0;
+      env.setupDefaultFms({
+        BAPI_GOODSMVT_CREATE: () => {
+          postCalls++;
+          if (postCalls === 1) {
+            return {
+              MATERIALDOCUMENT: '',
+              MATDOCUMENTYEAR: '',
+              RETURN: [{ TYPE: 'E', ID: 'M7', NUMBER: '021', MESSAGE: 'Simulated first-attempt rejection' }]
+            };
+          }
+          return {
+            MATERIALDOCUMENT: `5000000${mvt}`,
+            MATDOCUMENTYEAR: '2026',
+            RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: `Document 5000000${mvt} posted` }]
+          };
+        }
+      });
+      env.setupDefaultTables();
+      const input = {
+        ...movementFields,
+        plant: '1120', storageLocation: 'HS01', material: mvt === '241' ? '8000008977' : '8000000023',
+        quantity: 10, unit: mvt === '241' ? 'KG' : 'NOS', warehouseNumber: 'W01',
+        processId: `E5B42701-1111-4222-8333-000000000${mvt}`
+      };
+
+      const rejected = await env.adapter.executeReservationWarehouseFlow(input);
+      expect(rejected.success).toBe(false);
+      expect(rejected.stage).toBe('MIGO');
+      expect(rejected.error).toMatch(/Simulated first-attempt rejection/);
+      const firstBapiIndex = env.mockRfc.call.mock.calls.findIndex(([fm]) => fm === 'BAPI_GOODSMVT_CREATE');
+      const afterFirstBapi = env.mockRfc.call.mock.calls.slice(firstBapiIndex + 1).map(([fm]) => fm);
+      expect(afterFirstBapi).toContain('BAPI_TRANSACTION_ROLLBACK');
+      expect(afterFirstBapi).not.toContain('BAPI_TRANSACTION_COMMIT');
+
+      const retried = await env.adapter.executeReservationWarehouseFlow(input);
+      expect(retried.success).toBe(true);
+      expect(retried.migo.materialDocument).toBe(`5000000${mvt}`);
+      expect(postCalls).toBe(2);
+    });
+  });
+
   describe('Movement Type 201 — Failure Paths: Fixes, Retries & Resumptions for All 12 Scenarios', () => {
     const env = createTestEnvironment('201');
 

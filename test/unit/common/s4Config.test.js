@@ -29,10 +29,22 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
   });
 
   describe('Standard Configuration Resolution from cds.env.s4', () => {
-    test('should load all standard defaults from package.json cds.s4 configuration', () => {
+    beforeEach(() => {
+      process.env.S4_CLIENT = '220';
+      process.env.S4_PLANT = '1120';
+      process.env.S4_STORAGE_LOCATION = 'CS01';
+      process.env.S4_WAREHOUSE_NUMBER = 'W01';
+    });
+
+    test('loads system-specific values from the environment instead of repository defaults', () => {
+      process.env.S4_CLIENT = '220';
+      process.env.S4_PLANT = '1120';
+      process.env.S4_STORAGE_LOCATION = 'CS01';
+      process.env.S4_WAREHOUSE_NUMBER = 'W01';
       expect(s4Config.getClient()).toBe('220');
       expect(s4Config.getPlant()).toBe('1120');
       expect(s4Config.getStorageLocation()).toBe('CS01');
+      expect(s4Config.getWarehouseNumber()).toBe('W01');
       expect(s4Config.getSalesOrganization()).toBe('1000');
       expect(s4Config.getDistributionChannel()).toBe('10');
       expect(s4Config.getDivision()).toBe('52');
@@ -41,6 +53,13 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       expect(s4Config.getOrderType()).toBe('ZDOM');
       expect(s4Config.getConditionType()).toBe('ZPR1');
       expect(s4Config.getShippingPoints()).toEqual(['1120', '1112', '1108', '1109']);
+    });
+
+    test('repository config leaves client, plant, storage location, and warehouse unset', () => {
+      const packageJson = require('../../../package.json');
+      for (const key of ['client', 'plant', 'storageLocation', 'warehouseNumber']) {
+        expect(packageJson.cds.s4[key]).toBe('');
+      }
     });
 
     test('property getters should match method results', () => {
@@ -142,6 +161,9 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
     });
 
     test('validate() should fail loudly when any required key is missing', () => {
+      process.env.S4_CLIENT = '220';
+      process.env.S4_PLANT = '1120';
+      process.env.S4_STORAGE_LOCATION = 'CS01';
       delete cds.env.s4.division;
       delete process.env.CDS_S4_DIVISION;
       delete process.env.S4_DIVISION;

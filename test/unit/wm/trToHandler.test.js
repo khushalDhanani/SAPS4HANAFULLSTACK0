@@ -81,6 +81,31 @@ describe('TrToHandler', () => {
     expect(source).toMatch(/MessageText: `Linked reservation staging: TR movement[\s\S]*verify the TR destination before processing\.`/);
   });
 
+  it('scopes the tracking lookup by warehouse when TR numbers collide across warehouses', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../../srv/wm/tr-to/handlers/trTo.handler.js'), 'utf8');
+    const lookup = source.slice(source.indexOf('const handleCreateTOFromTR'), source.indexOf("srv.on('createTOFromTR'"));
+    expect(lookup).toMatch(/if \(ReservationTrack && wh\)/);
+    expect(lookup.match(/WarehouseNumber: wh/g)).toHaveLength(4);
+    expect(lookup).toMatch(/TransferRequirement: tbnum, WarehouseNumber: wh/);
+    expect(lookup).toMatch(/ReservationNo: rsnum, WarehouseNumber: wh/);
+    expect(lookup).toMatch(/trackedReservation = existing\?\.TransferRequirement[\s\S]*WarehouseNumber: existing\.WarehouseNumber/);
+  });
+
+  it('does not return the technical RFC user as ConfirmedBy when CAP has no user identity', async () => {
+    const previousUsername = process.env.S4_USERNAME;
+    process.env.S4_USERNAME = 'technical-rfc-user';
+    adapter.createTOFromTR = jest.fn().mockResolvedValue({
+      success: true, TransferOrder: '0001030001', Confirmed: true, Status: '04'
+    });
+    try {
+      const result = await handlers.createTOFromTR(req({ lgnum: 'W13', tbnum: '1000663', autoConfirm: true }));
+      expect(result.ConfirmedBy).toBe('');
+    } finally {
+      if (previousUsername === undefined) delete process.env.S4_USERNAME;
+      else process.env.S4_USERNAME = previousUsername;
+    }
+  });
+
   // ─── autoConfirm × autoPostMigo MIGO gate matrix (handler level) ───────────
   // Tests the fix at trTo.handler.js: `data.autoConfirm !== false && data.autoPostMigo && result.Confirmed`
   // [mock only, not SAP verification]

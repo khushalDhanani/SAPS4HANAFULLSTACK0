@@ -181,7 +181,7 @@ async function stockPreCheck201(req, normalized) {
  * Fails CLOSED when the reservation cannot be read. A storage location the reservation does not
  * carry cannot be reconciled, so a submitted one is accepted in that case.
  * On success the reservation's own Material / Plant / Storage Location / Batch replace the submitted
- * ones, so what is posted never comes from the client. With `receiving` (311) the receiving plant /
+ * ones, so what is posted never comes from the client. With `receiving` (301/311) the receiving plant /
  * storage location of the reservation header are reconciled and applied the same way.
  */
 async function reservationReconcileCheck(req, normalized, { receiving = false, batch = false, expectedMovementType = '' } = {}) {
@@ -568,7 +568,7 @@ const PerTypeGoodsIssueHandler = {
       const normalized = normalizeGoodsIssue301Payload(req.data, { user: req.user?.id });
       const priorAttempt = await checkPendingConfirmation(req, normalized);
       if (priorAttempt !== true) return priorAttempt;
-      const resvItem = await reservationReconcileCheck(req, normalized);
+      const resvItem = await reservationReconcileCheck(req, normalized, { receiving: true });
       if (!resvItem) return;
       if (!normalized.ReceivingPlant && !resvItem.ReceivingPlant) {
         return req.error(400, `ReceivingPlant is required for Movement 301: reservation ${normalized.ReservationNo} item ${normalized.ReservationItem} carries no receiving plant. Goods Issue was NOT posted.`);

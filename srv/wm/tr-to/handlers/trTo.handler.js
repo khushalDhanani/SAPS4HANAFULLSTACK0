@@ -46,7 +46,8 @@ class TrToHandler {
         ReservationLog: 'saps4hana.wm.ReservationLog'
       };
     };
-    const userOf = (req) => req.user?.id || process.env.S4_USERNAME || '';
+    // Confirm the authenticated CAP user; never expose the technical RFC account in an API response.
+    const userOf = (req) => req.user?.id || '';
     const log = async (ReservationLog, row) => {
       if (!ReservationLog || !cds.db) return;
       try {
@@ -420,21 +421,22 @@ class TrToHandler {
       const data = req.data || {};
       const { ReservationTrack, ReservationLog } = entities();
       let existing = null;
+      const wh = sapKeyOpt(data.lgnum || data.WarehouseNumber || data.warehouseNumber, 'lgnum');
 
-      if (ReservationTrack) {
+      if (ReservationTrack && wh) {
         try {
           const tbnum = sapKeyOpt(data.tbnum, 'tbnum').padStart(10, '0');
           const rsnum = sapKeyOpt(data.ReservationNo || data.reservationNo, 'rsnum');
           if (tbnum.trim()) {
-            existing = await lockTrack(ReservationTrack, { TransferRequirement: tbnum });
+            existing = await lockTrack(ReservationTrack, { TransferRequirement: tbnum, WarehouseNumber: wh });
             if (!existing) {
-              existing = await lockTrack(ReservationTrack, { TransferRequirement: alphaOut(tbnum) });
+              existing = await lockTrack(ReservationTrack, { TransferRequirement: alphaOut(tbnum), WarehouseNumber: wh });
             }
           }
           if (!existing && rsnum) {
-            existing = await lockTrack(ReservationTrack, { ReservationNo: rsnum });
+            existing = await lockTrack(ReservationTrack, { ReservationNo: rsnum, WarehouseNumber: wh });
             if (!existing) {
-              existing = await lockTrack(ReservationTrack, { ReservationNo: rsnum.padStart(10, '0') });
+              existing = await lockTrack(ReservationTrack, { ReservationNo: rsnum.padStart(10, '0'), WarehouseNumber: wh });
             }
           }
         } catch (_) {}
@@ -455,6 +457,7 @@ class TrToHandler {
           TransferRequirement: existing.TransferRequirement,
           ReservationNo: existing.ReservationNo,
           ReservationItem: existing.ReservationItem,
+          WarehouseNumber: existing.WarehouseNumber,
           MovementType: existing.MovementType
         } : null;
         // SAP-side lock (feature flag, off by default) around the TO step only; a conflict leaves as 409.

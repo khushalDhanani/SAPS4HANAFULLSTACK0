@@ -159,6 +159,29 @@ describe('Movement 261 Reconciliation Test Suite', () => {
   });
 
   describe('2. SAP rejected → DB = rejected', () => {
+    it('uses a distinct attempt reference when a rejected quantity is corrected without changing open quantity', async () => {
+      await svc.init();
+      const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
+        .mockRejectedValueOnce(Object.assign(new Error('Quantity 5 rejected by SAP'), { status: 422 }))
+        .mockResolvedValue({ MaterialDocument: '4900050048', MaterialDocumentYear: '2026', Pending: false });
+
+      const first = req({ reservation: '512851', item: '3', quantity: 5, batch: 'B1' });
+      await handlers.postGoodsIssue(first);
+      expect(first.error).toHaveBeenCalledWith(422, expect.stringContaining('Quantity 5 rejected'));
+
+      const corrected = req({ reservation: '512851', item: '3', quantity: 4, batch: 'B1' });
+      const result = await handlers.postGoodsIssue(corrected);
+
+      expect(corrected.error).not.toHaveBeenCalled();
+      expect(result.MaterialDocument).toBe('4900050048');
+      expect(postSpy).toHaveBeenCalledTimes(2);
+      const attempts = Array.from(GoodsIssueAttemptStore._memoryStore.values());
+      expect(attempts).toHaveLength(2);
+      expect(attempts[0].Status).toBe('rejected');
+      expect(attempts[1]).toMatchObject({ Status: 'posted', IssueQty: 4 });
+      expect(attempts[1].ReferenceDocument).not.toBe(attempts[0].ReferenceDocument);
+    });
+
     it('when SAP rejects with 422 business error, attempt record transitions to rejected with LastError and allows subsequent reclaim', async () => {
       await svc.init();
 

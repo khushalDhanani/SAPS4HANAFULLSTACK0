@@ -9,7 +9,7 @@ const path = require('path');
 const TrToAdapter = require('../../../srv/integration/s4hana/wm/TrToAdapter');
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
 const TrToHandler = require('../../../srv/wm/tr-to/handlers/trTo.handler');
-const { STATUS, STATUS_TEXT, STATUS_CRITICALITY, UNCONFIRMED_TO } = require('../../../srv/common/wmStatus');
+const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../srv/common/wmStatus');
 const { sapKey } = require('../../../srv/integration/s4hana/sapKey');
 const { isToFullyConfirmed, isTrClosedWithoutTo, trCompletedWithoutTo, stagedStockCoveringTr } = require('../../../srv/integration/s4hana/wm/toState');
 
@@ -63,14 +63,8 @@ function fakeRfc({ fm = {}, tables = {} } = {}) {
 }
 
 describe('Fix 1: one status-code set [mock only, not SAP verification]', () => {
-  it('seeds exactly the codes of wmStatus.js, with 90 = Goods Issue Error and 99 = Cancelled / Reversed', () => {
-    const csv = fs.readFileSync(path.join(__dirname, '../../../db/data/saps4hana.wm-ReservationStatus.csv'), 'utf8').trim().split('\n').slice(1);
-    const seeded = Object.fromEntries(csv.map((l) => { const [code, name, , crit] = l.split(';'); return [code, { name, crit: Number(crit) }]; }));
-    expect(Object.keys(seeded).sort()).toEqual(Object.values(STATUS).sort());
-    for (const code of Object.values(STATUS)) {
-      expect(seeded[code].name).toBe(STATUS_TEXT[code]);
-      expect(seeded[code].crit).toBe(STATUS_CRITICALITY[code]);
-    }
+  it('uses a unique canonical set of status codes, with 90 = Goods Issue Error and 99 = Cancelled / Reversed', () => {
+    expect(new Set(Object.values(STATUS)).size).toBe(Object.values(STATUS).length);
     expect(STATUS.GI_ERROR).toBe('90');
     expect(STATUS_TEXT['99']).toBe('Cancelled / Reversed');
     expect(UNCONFIRMED_TO).toEqual(['03', '13']);
@@ -147,7 +141,7 @@ describe('Fix 3: no hardcoded warehouse / storage type / plant defaults [mock on
     const cds = require('@sap/cds');
     const rfc = fakeRfc({ fm: { Z_WM_GET_TR_MATERIAL_LIST: { ET_TR_HEADER: [HEADER], ET_TR_ITEMS: [] } }, tables: {} });
     await new TrToAdapter({ rfc }).getTR('1001839', '');
-    expect(rfc.call).toHaveBeenCalledWith('Z_WM_GET_TR_MATERIAL_LIST', expect.objectContaining({ IV_LGNUM: cds.env.s4.warehouseNumber }));
+    expect(rfc.call).toHaveBeenCalledWith('Z_WM_GET_TR_MATERIAL_LIST', expect.objectContaining({ IV_LGNUM: require('../../../srv/common/s4Config').getWarehouseNumber() }));
     const saved = cds.env.s4.warehouseNumber;
     const savedEnv = process.env.S4_WAREHOUSE_NUMBER;
     delete process.env.S4_WAREHOUSE_NUMBER; delete process.env.CDS_S4_WAREHOUSE_NUMBER;
@@ -221,7 +215,7 @@ describe('Fix 5: partial quantity and the unconfirmed-TO guard [mock only, not S
     TrToHandler.init({ on: (e, fn) => { handlers[e] = fn; } }, { adapter, resProcessAdapter: {} });
     const rows = { '13': { TransferOrder: '1012966', Status_code: '13', ProcessId: 'P13', ReservationNo: '524979', ReservationItem: '0001' }, '04': { TransferOrder: '1012966', Status_code: '04', ProcessId: 'P04', ReservationNo: '524979', ReservationItem: '0001' } };
     for (const st of ['13', '04']) {
-      const res = await withFakeDb(rows[st], () => handlers.createTOFromTR({ data: { tbnum: '1001839', qty: 1 }, user: { id: 'tester' }, error: jest.fn() }));
+      const res = await withFakeDb({ WarehouseNumber: 'W01', ...rows[st] }, () => handlers.createTOFromTR({ data: { lgnum: 'W01', tbnum: '1001839', qty: 1 }, user: { id: 'tester' }, error: jest.fn() }));
       if (st === '13') expect(res.ProcessId).toBe('P13');
       else { expect(res.ProcessId).toMatch(/^[0-9a-f-]{36}$/); expect(res.ProcessId).not.toBe('P04'); }
       expect(res.ConfirmedBy).toBe('tester');

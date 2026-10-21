@@ -74,17 +74,16 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
       }
       const effBatch = reservedBatch || batch;
 
-      // F3: deterministic idempotency identity = reservation + item + open quantity. Two concurrent
-      // posts compute the same base key and only one wins; after a partial post the open quantity drops,
-      // so the next post gets a new key. Re-claim (createOrGet with a policy): a prior attempt that
+      // F3: deterministic idempotency identity = the complete posting request. Corrected rejected
+      // requests must get a distinct base key even when the reservation's open quantity is unchanged.
+      // Re-claim (createOrGet with a policy): a prior attempt that
       // proves nothing posted ('rejected' = definite SAP refusal, or 'not_posted' = recheck confirmed
       // no document) is re-claimable, so fixing the cause and retrying works; a live/posted attempt
       // ('sending'/'unconfirmed'/'posted'/'delivery_created'/'needs-attention') still blocks (409). The
       // old row is kept and a new generation is suffixed to the base reference (audit trail).
       const openQty = Number(c.OpenQuantity) || 0;
-      const keyHash = crypto.createHash('sha1').update(`261|${strip(reservation)}|${strip(item)}|${openQty}`).digest('hex');
-      const baseRef = `GI${keyHash.slice(0, 12)}`.toUpperCase(); // base (14 chars); createOrGet adds the generation suffix
       const requestHash = crypto.createHash('sha1').update(`${strip(reservation)}|${strip(item)}|${quantity}|${effBatch}|${openQty}`).digest('hex');
+      const baseRef = `GI${requestHash.slice(0, 12)}`.toUpperCase(); // base (14 chars); createOrGet adds the generation suffix
 
       let claim;
       try {

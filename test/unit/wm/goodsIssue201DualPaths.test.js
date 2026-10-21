@@ -124,6 +124,32 @@ describe('Movement 201 Dual Paths Regression Suite (Direct 201 vs Reservation ->
   // =========================================================================
   // 1. Authorization Agreement
   // =========================================================================
+  describe('301 receiving reservation reconciliation', () => {
+    test('rejects destination values that differ from the authoritative reservation before posting', async () => {
+      const reservation = {
+        ...RESERVATION_RECORD,
+        MovementType: '301',
+        ReceivingPlant: '1130',
+        ReceivingStorageLocation: 'MT01'
+      };
+      jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue(reservation);
+      const verifyReceiving = jest.spyOn(GoodsIssueAdapter, 'verifyReceivingLocation').mockResolvedValue({ valid: true });
+      const post301 = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue301').mockResolvedValue({
+        Success: true, MaterialDocument: '4900050301', MaterialDocYear: '2026'
+      });
+
+      await expect(handlers.postGoodsIssue301(createReq({
+        ReservationNo: '520888', ReservationItem: '0001',
+        Material: '1000000928', Plant: '1120', StorageLocation: 'CS01',
+        IssueQty: 1, Unit: 'KG', ReceivingPlant: '1110', ReceivingStorageLocation: 'CS01',
+        PostingDate: '2026-10-19', DocumentDate: '2026-10-19', ClientAttemptId: '301-DEST-MISMATCH'
+      }))).rejects.toThrow(/Receiving Plant.*submitted 1110, reservation 1130.*Receiving Storage Location.*submitted CS01, reservation MT01/);
+
+      expect(verifyReceiving).not.toHaveBeenCalled();
+      expect(post301).not.toHaveBeenCalled();
+    });
+  });
+
   describe('1. Authorization Agreement', () => {
     const clerkUser = { id: 'CLERK_USER', roles: ['WarehouseClerk'] };
     const managerUser = { id: 'MANAGER_USER', roles: ['WarehouseManager'] };

@@ -305,10 +305,10 @@
       }
     },
     "s4": {
-      "client": "220",
-      "plant": "1120",
-      "storageLocation": "CS01",
-      "warehouseNumber": "W01",
+      "client": "",
+      "plant": "",
+      "storageLocation": "",
+      "warehouseNumber": "",
       "salesOrganization": "1000",
       "distributionChannel": "10",
       "division": "52",

@@ -182,6 +182,9 @@ describe('server posts the reservation values, not the client values', () => {
 
   test('301: serial-managed material with too few serials -> 400 before SAP', async () => {
     GoodsIssueAdapter.isSerialManaged.mockResolvedValue(true);
+    jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({
+      ...resv, MovementType: '301', ReceivingPlant: '1130', ReceivingStorageLocation: 'CS01'
+    });
     const post301 = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue301').mockResolvedValue({});
     const r = req({ ...body, ReceivingPlant: '1130', ReceivingStorageLocation: 'CS01', SerialNumbers: ['110'] });
     await handlers.postGoodsIssue301(r);
