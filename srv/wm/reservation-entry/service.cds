@@ -106,6 +106,7 @@ service ReservationEntryService {
         OrderType               : String(4),
         WarehouseNumber         : String(3),
         Batch                   : String(10),
+        SerialNo                : String(18),
         ClientAttemptId         : String(36)
     ) returns ReservationCreatedResponse;
 

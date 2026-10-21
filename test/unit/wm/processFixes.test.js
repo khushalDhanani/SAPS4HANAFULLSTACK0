@@ -239,6 +239,11 @@ describe('Fix 7: strict input validation before RFC filters [mock only, not SAP 
   it('accepts and normalises valid keys', () => {
     expect(sapKey(' hs01 ', 'lgort')).toBe('HS01');
     expect(sapKey('8000000023', 'matnr')).toBe('8000000023');
+    expect(sapKey(' 10516 ', 'kunnr')).toBe('10516');
+    expect(sapKey('1000', 'vkorg')).toBe('1000');
+    expect(sapKey('10', 'vtweg')).toBe('10');
+    expect(sapKey('000010', 'posnr')).toBe('000010');
+    expect(() => sapKey("10516' OR '1'='1", 'kunnr')).toThrow(expect.objectContaining({ status: 400 }));
   });
 });
 

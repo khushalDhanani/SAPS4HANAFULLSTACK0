@@ -27,6 +27,8 @@ entity ReservationTrack : managed {
     StorageLocation         : String(4);     // LGORT
     Material                : String(40);    // MATNR
     MaterialName            : String(40);    // MAKTX
+    Batch                   : String(10);    // CHARG
+    SerialNo                : String(18);    // SERNR (single-serial retry context)
     Quantity                : Decimal(13,3); // MENGE
     Unit                    : String(3);     // MEINS
     ReservationDate         : Date;          // RES_DATE (MB21)

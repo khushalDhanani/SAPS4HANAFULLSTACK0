@@ -13,6 +13,8 @@ const { classifyCreateFailure } = require('./ReservationAttemptStore');
 const { validateReservationInput, getMovementConfig, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
 const LOG = cds.log('reservation-entry');
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
+const reservationNoKey = (value) => sapKey(value, 'rsnum').padStart(10, '0');
+const reservationItemKey = (value) => sapKey(value || '0001', 'rspos').padStart(4, '0');
 
 module.exports = class ReservationEntryService extends cds.ApplicationService {
   async init() {
@@ -81,6 +83,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         SubNumber,
         WarehouseNumber,
         Batch,
+        SerialNo,
         OrderID,
         OrderType
       } = payload;
@@ -167,7 +170,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       } catch (err) {
         const errorMsg = userFacingSapError(err, req, 'BAPI_RESERVATION_CREATE1');
         const stage = classifyCreateFailure(err);
-        await attemptStore.setStage(attemptId, stage, { LastError: String(err.error || err.message || ''), ...(err.reservationNo ? { ReservationNo: String(err.reservationNo).padStart(10, '0'), ReservationItem: '0001' } : {}) });
+        await attemptStore.setStage(attemptId, stage, { LastError: String(err.error || err.message || ''), ...(err.reservationNo ? { ReservationNo: reservationNoKey(err.reservationNo), ReservationItem: '0001' } : {}) });
         const hint = stage === 'RESERVATION_UNKNOWN'
           ? ' The outcome in SAP is unknown: check the reservation list before submitting again (the app blocks an identical re-submit until this attempt is resolved).'
           : (stage === 'RESERVATION_CREATED_MISMATCH' ? ` Reservation ${alphaOut(err.reservationNo)} exists in SAP; open it in the app to import it.` : '');
@@ -191,8 +194,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
 
       const resNumber = resResult.reservation?.number || resResult.reservationNo;
-      const resItem = resResult.reservation?.item || resResult.reservationItem || '0001';
-      const resNo = resResult.reservationNoRaw || String(resNumber).padStart(10, '0');
+      const resItem = reservationItemKey(resResult.reservation?.item || resResult.reservationItem || '0001');
+      const resNo = reservationNoKey(resResult.reservationNoRaw || resNumber);
       const extId = `${resNo}/${resItem}`;
       await attemptStore.setStage(attemptId, 'RESERVATION_CREATED', { ReservationNo: resNo, ReservationItem: resItem, LastError: resResult.sapVerified ? '' : 'RKPF/RESB read-back unavailable' });
 
@@ -252,6 +255,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         StorageLocation,
         Material,
         MaterialName: MaterialName || '',
+        Batch: Batch || '',
+        SerialNo: SerialNo || '',
         Quantity: Number(Quantity),
         Unit,
         ReservationDate: resResult.reservationDate || effResDate || null,
@@ -625,7 +630,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         });
       } catch (err) {
         const errorMsg = userFacingSapError(err, req, 'BAPI_RESERVATION_CREATE1');
-        await attemptStore.setStage(attemptId, classifyCreateFailure(err), { LastError: String(err.error || err.message || ''), ...(err.reservationNo ? { ReservationNo: String(err.reservationNo).padStart(10, '0'), ReservationItem: '0001' } : {}) });
+        await attemptStore.setStage(attemptId, classifyCreateFailure(err), { LastError: String(err.error || err.message || ''), ...(err.reservationNo ? { ReservationNo: reservationNoKey(err.reservationNo), ReservationItem: '0001' } : {}) });
         return {
           success: false,
           stage: 'RESERVATION',
@@ -645,8 +650,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
 
       const resNumber = resResult.reservation?.number || resResult.reservationNo;
-      const resItem = resResult.reservation?.item || resResult.reservationItem || '0001';
-      const resNo = resResult.reservationNoRaw || String(resNumber).padStart(10, '0');
+      const resItem = reservationItemKey(resResult.reservation?.item || resResult.reservationItem || '0001');
+      const resNo = reservationNoKey(resResult.reservationNoRaw || resNumber);
       const extId = `${resNo}/${resItem}`;
       await attemptStore.setStage(attemptId, 'RESERVATION_CREATED', { ReservationNo: resNo, ReservationItem: resItem });
 
@@ -661,6 +666,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         StorageLocation: payload.StorageLocation,
         Material: payload.Material,
         MaterialName: payload.MaterialName || '',
+        Batch: payload.Batch || '',
+        SerialNo: payload.SerialNo || '',
         Quantity: Number(payload.Quantity),
         Unit: payload.Unit,
         ReservationDate: resResult.reservationDate || effResDate || null,
@@ -723,8 +730,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
     this.on('createTransferRequirement', async (req) => {
       const { ReservationNo, ReservationItem, WarehouseNumber } = req.data;
       if (!ReservationNo) return req.error(400, 'ReservationNo is mandatory');
-      const sResNo = String(ReservationNo).padStart(10, '0');
-      const sResItem = String(ReservationItem || '0001').padStart(4, '0');
+      const sResNo = reservationNoKey(ReservationNo);
+      const sResItem = reservationItemKey(ReservationItem);
 
       const track = await SELECT.one.from(ReservationEntries).where({
         ReservationNo: sResNo,
@@ -863,8 +870,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         return req.error(400, 'ReservationNo or TRNumber is mandatory');
       }
 
-      const sResNo = ReservationNo ? String(ReservationNo).padStart(10, '0') : '';
-      const sResItem = String(ReservationItem || '0001').padStart(4, '0');
+      const sResNo = ReservationNo ? reservationNoKey(ReservationNo) : '';
+      const sResItem = reservationItemKey(ReservationItem);
 
       let track = null;
       if (sResNo) {
@@ -1124,8 +1131,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
     this.on('confirmTransferOrder', async (req) => {
       const { ReservationNo, ReservationItem, WarehouseNumber, TransferOrder } = req.data || {};
       if (!TransferOrder) return req.error(400, 'TransferOrder is mandatory');
-      const sResNo = ReservationNo ? String(ReservationNo).padStart(10, '0') : '';
-      const sResItem = String(ReservationItem || '0001').padStart(4, '0');
+      const sResNo = ReservationNo ? reservationNoKey(ReservationNo) : '';
+      const sResItem = reservationItemKey(ReservationItem);
 
       let track = null;
       if (sResNo) {
@@ -1240,13 +1247,14 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           return result;
         }
 
-        const sClean = String(keyResNo).trim().replace(/^0+/, '');
-        const sPadded = sClean.padStart(10, '0');
-        const altKey = keyResNo === sPadded ? sClean : sPadded;
+        const sPadded = reservationNoKey(keyResNo);
+        const sClean = alphaOut(sPadded);
+        const sItem = reservationItemKey(keyResItem);
+        const altKey = sClean;
 
         const altEntry = await SELECT.one.from(ReservationEntries).where({
           ReservationNo: altKey,
-          ReservationItem: keyResItem
+          ReservationItem: sItem
         });
         if (altEntry) {
           if (!altEntry.CreatedByUser && altEntry.createdBy) {
@@ -1260,13 +1268,15 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         if (live) {
           const imported = {
             ReservationNo: sPadded,
-            ReservationItem: keyResItem,
+            ReservationItem: sItem,
             MovementType: live.MovementType,
             WarehouseNumber: live.WarehouseNumber || '',
             Plant: live.Plant,
             StorageLocation: live.StorageLocation,
             Material: live.Material,
             MaterialName: live.MaterialName || '',
+            Batch: live.Batch || '',
+            SerialNo: live.SerialNo || '',
             Quantity: live.Quantity,
             Unit: live.Unit,
             CreatedByUser: live.CreatedByUser || live.createdBy || '',
@@ -1288,7 +1298,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           await INSERT.into(ReservationLogs).entries({
             ID: cds.utils.uuid(),
             ReservationNo: sPadded,
-            ReservationItem: keyResItem,
+            ReservationItem: sItem,
             LogHandle: imported.LogHandle,
             ExternalId: imported.ExternalId,
             SubObject: 'TRACK',
@@ -1302,7 +1312,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
           return await SELECT.one.from(ReservationEntries).where({
             ReservationNo: sPadded,
-            ReservationItem: keyResItem
+            ReservationItem: sItem
           });
         }
       }
@@ -1571,8 +1581,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
     // Action handler for MIGO Goods Movement posting
     this.on('postMigoGoodsMovement', async (req) => {
       const data = req.data || {};
-      const sResNo = data.ReservationNo;
-      const sResItem = data.ReservationItem || '0001';
+      const sResNo = reservationNoKey(data.ReservationNo);
+      const sResItem = reservationItemKey(data.ReservationItem);
 
       if (!sResNo) {
         return req.error(400, 'ReservationNo is mandatory for MIGO posting');
@@ -1698,8 +1708,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
     // Retry Action per failed step
     this.on('retryStep', async (req) => {
       const data = req.data || {};
-      const sResNo = data.ReservationNo;
-      const sResItem = data.ReservationItem || '0001';
+      const sResNo = reservationNoKey(data.ReservationNo);
+      const sResItem = reservationItemKey(data.ReservationItem);
       let requestedStep = (data.Step || '').toUpperCase().trim();
 
       if (!sResNo) {
@@ -1710,8 +1720,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       let track = await lockEntry(key);
 
       if (!track) {
-        const sClean = String(sResNo).trim().replace(/^0+/, '');
-        const sPadded = sClean.padStart(10, '0');
+        const sPadded = reservationNoKey(sResNo);
+        const sClean = alphaOut(sPadded);
         track = await lockEntry({ ReservationNo: sPadded, ReservationItem: sResItem }) ||
           await lockEntry({ ReservationNo: sClean, ReservationItem: sResItem });
       }
@@ -1719,16 +1729,19 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       if (!track && adapter.rfc) {
         const live = await fetchSapReservation(sResNo, sResItem);
         if (live) {
-          const sPadded = String(sResNo).padStart(10, '0');
+          const sPadded = reservationNoKey(sResNo);
+          const sCanonicalItem = reservationItemKey(sResItem);
           const imported = {
             ReservationNo: sPadded,
-            ReservationItem: sResItem,
+            ReservationItem: sCanonicalItem,
             MovementType: live.MovementType,
             WarehouseNumber: live.WarehouseNumber || '',
             Plant: live.Plant,
             StorageLocation: live.StorageLocation,
             Material: live.Material,
             MaterialName: live.MaterialName || '',
+            Batch: live.Batch || '',
+            SerialNo: live.SerialNo || '',
             Quantity: live.Quantity,
             Unit: live.Unit,
             ReceivingPlant: live.ReceivingPlant || '',
@@ -1739,13 +1752,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             TransferRequirement: live.TransferRequirement || '',
             TransferOrder: live.TransferOrder || '',
             LogHandle: `LOG_${Date.now().toString(36).toUpperCase()}`,
-            ExternalId: `${sPadded}/${sResItem}`,
+            ExternalId: `${sPadded}/${sCanonicalItem}`,
             Status_code: live.Status_code || STATUS.RES_CREATED,
             ErrorStep: '',
             ErrorMessage: ''
           };
           await INSERT.into(ReservationEntries).entries(imported);
-          track = await lockEntry({ ReservationNo: sPadded, ReservationItem: sResItem });
+          track = await lockEntry({ ReservationNo: sPadded, ReservationItem: sCanonicalItem });
         }
       }
 
@@ -1977,7 +1990,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       if (!ReservationNo) return req.error(400, 'ReservationNo is mandatory');
 
       return await SELECT.from(ReservationLogs)
-        .where({ ReservationNo, ReservationItem })
+        .where({ ReservationNo: reservationNoKey(ReservationNo), ReservationItem: reservationItemKey(ReservationItem) })
         .orderBy('createdAt desc');
     });
 
@@ -1988,8 +2001,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       if (!live) return req.error(404, `Reservation ${ReservationNo}/${ReservationItem} not found in SAP`);
 
       const key = {
-        ReservationNo: String(ReservationNo).padStart(10, '0'),
-        ReservationItem: String(ReservationItem).padStart(4, '0')
+            ReservationNo: reservationNoKey(ReservationNo),
+            ReservationItem: reservationItemKey(ReservationItem)
       };
       const track = await SELECT.one.from(ReservationEntries).where(key);
       if (track?.ProcessStatus) {
@@ -2055,8 +2068,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           const resItem = extra.reservationItem || '0001';
           if (!resNo) return;
           const key = {
-            ReservationNo: String(resNo).padStart(10, '0'),
-            ReservationItem: String(resItem).padStart(4, '0')
+            ReservationNo: reservationNoKey(resNo),
+            ReservationItem: reservationItemKey(resItem)
           };
           const existing = await SELECT.one.from(ReservationEntries).where(key);
           const updateData = { ProcessStatus: status };

@@ -9,6 +9,7 @@ const { parseSapNumber } = require('../sapFacts');
 const { buildBaseItem, buildHeaderEnvelope } = require('./goods-issue/s4common');
 const GoodsIssuePostingClient = require('./goods-issue/GoodsIssuePostingClient');
 const { calculateMovement261StockEligibility, getGmCode } = require('../../../common/movementConfig');
+const { sapKey } = require('../sapKey');
 
 /**
  * Read-only finder for the FIRST goods movement of movement type 261 (GET only, no ABAP change).
@@ -1190,10 +1191,10 @@ class Mvt261Adapter {
    * @returns {Promise<{ MaterialDocument: string, MaterialDocYear: string, Confirmed: boolean, Status: string }>}
    */
   async readBackDocument(materialDocument, materialDocYear) {
-    const doc = String(materialDocument || '').trim();
-    const year = String(materialDocYear || '').trim();
-    if (!doc) return null;
-
+    const rawDoc = String(materialDocument || '').trim();
+    if (!rawDoc) return null;
+    const doc = sapKey(rawDoc, 'mblnr');
+    const year = materialDocYear ? sapKey(materialDocYear, 'mjahr') : '';
     // 1. Primary: RFC readTable on MATDOC if RFC client is available
     if (this.rfc && typeof this.rfc.readTable === 'function') {
       try {
@@ -1261,7 +1262,7 @@ class Mvt261Adapter {
     const ref = String(referenceDocument || '').trim();
     if (!ref) return null;
     try {
-      const rows = await this.rfc.readTable('LIKP', ['VBELN', 'LIFEX'], [`LIFEX = '${ref}'`], 1);
+      const rows = await this.rfc.readTable('LIKP', ['VBELN', 'LIFEX'], [`LIFEX = '${sapKey(ref, 'lifex')}'`], 1);
       if (Array.isArray(rows) && rows.length > 0) {
         return { DeliveryNumber: rows[0].VBELN, ExternalId: rows[0].LIFEX };
       }

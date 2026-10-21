@@ -2031,11 +2031,13 @@ class ReservationProcessAdapter {
       // when SAP has withdrawn more than the tracking row knows (lost response) or the item is final-issued; otherwise it
       // is an earlier partial issue and the new quantity must still be posted.
       if (!found?.[0]?.MBLNR && reservationNo) {
-        const docs = await lookup('reservation item', [`RSNUM = '${reservationNo}'`, `AND RSPOS = '${reservationItem}'`, ...(sMvt ? [`AND BWART = '${sMvt}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"]);
+        const safeResnum = sapKey(reservationNo, 'rsnum');
+        const safeRspos = sapKey(reservationItem, 'rspos');
+        const docs = await lookup('reservation item', [`RSNUM = '${safeResnum}'`, `AND RSPOS = '${safeRspos}'`, ...(sMvt ? [`AND BWART = '${sMvt}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"]);
         if (docs?.[0]?.MBLNR) {
           let resb;
           try {
-            resb = (await this.rfc.readTable('RESB', ['ENMNG', 'KZEAR'], [`RSNUM = '${reservationNo}'`, `AND RSPOS = '${reservationItem}'`], 1))?.[0];
+            resb = (await this.rfc.readTable('RESB', ['ENMNG', 'KZEAR'], [`RSNUM = '${safeResnum}'`, `AND RSPOS = '${safeRspos}'`], 1))?.[0];
           } catch (err) {
             throw Object.assign(httpError(503, `Cannot verify in SAP (RESB) whether material document ${alphaOut(docs[0].MBLNR)} belongs to this request: ${err.message}. Nothing was posted.`), { stage: 'MIGO', idempotencyCheckFailed: true });
           }

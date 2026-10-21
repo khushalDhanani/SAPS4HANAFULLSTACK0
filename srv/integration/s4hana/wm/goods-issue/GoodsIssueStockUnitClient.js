@@ -1,6 +1,7 @@
 const LOG = require('../../logger')('goods-issue-stock-unit');
 const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
 const { RfcClient } = require('../../RfcClient');
+const { sapKey } = require('../../sapKey');
 
 // Classic WM (LE-WM) Storage Units live in LEIN/LQUA, not in EWM Handling Units.
 // Values below go into RFC_READ_TABLE WHERE clauses, so only [A-Z0-9] is accepted.
@@ -721,8 +722,8 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
    * path used by the final posting check.
    */
   async _resolveStagingRequirement(reservationNo, reservationItem, plant, sloc, material, orderNo = '', warehouse = '') {
-    const sResv = String(reservationNo).trim();
-    const sItem = String(reservationItem).trim().padStart(4, '0');
+    const sResv = sapKey(reservationNo, 'rsnum');
+    const sItem = sapKey(reservationItem, 'rspos').padStart(4, '0');
     const resvPadded = sResv.padStart(10, '0');
     if (!this.rfc || typeof this.rfc.readTable !== 'function') {
       const err = new Error('SAP RFC table access is unavailable; reservation staging cannot be verified.');
@@ -1252,7 +1253,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
    * Multiple items in one reservation: check each.
    */
   async checkStagingForReservation(reservationNo, reservationItem = null) {
-    const sResv = String(reservationNo || '').trim();
+    const sResv = reservationNo ? sapKey(reservationNo, 'rsnum') : '';
     if (!sResv) return { isStaged: true };
 
     const resvPadded = sResv.padStart(10, '0');
@@ -1262,7 +1263,7 @@ class GoodsIssueStockUnitClient extends BaseGoodsIssueClient {
       try {
         const where = [`RSNUM = '${resvPadded}'`, `AND XLOEK = ''`, `AND KZEAR = ''`];
         if (reservationItem) {
-          where.push(`AND RSPOS = '${String(reservationItem).trim().padStart(4, '0')}'`);
+          where.push(`AND RSPOS = '${sapKey(reservationItem, 'rspos').padStart(4, '0')}'`);
         }
         const resbRows = await this.rfc.readTable(
           'RESB',

@@ -284,13 +284,20 @@ class TrToAdapter {
         const newTrPadded = freshTbnum.padStart(10, '0');
         const existing = await cds.db.run(
           cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
-            .where(`(ReservationNo = '${sClean}' OR ReservationNo = '${sPad}') AND (ReservationItem = '${sItem}' OR ReservationItem = '${alphaOut(sItem)}')`)
+            .where({ ReservationNo: sPad, ReservationItem: sItem })
+        ) || await cds.db.run(
+          cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack')
+            .where({ ReservationNo: sClean, ReservationItem: alphaOut(sItem) })
         );
         if (existing) {
           await cds.db.run(
             cds.ql.UPDATE('saps4hana.wm.ReservationTrack')
               .set({ TransferRequirement: newTrPadded, Status_code: STATUS.TR_CREATED, ProcessStatus: 'TR_CREATED' })
-              .where(`(ReservationNo = '${sClean}' OR ReservationNo = '${sPad}') AND (ReservationItem = '${sItem}' OR ReservationItem = '${alphaOut(sItem)}')`)
+              .where({ ReservationNo: sPad, ReservationItem: sItem })
+          ) || await cds.db.run(
+            cds.ql.UPDATE('saps4hana.wm.ReservationTrack')
+              .set({ TransferRequirement: newTrPadded, Status_code: STATUS.TR_CREATED, ProcessStatus: 'TR_CREATED' })
+              .where({ ReservationNo: sClean, ReservationItem: alphaOut(sItem) })
           );
         } else {
           await cds.db.run(

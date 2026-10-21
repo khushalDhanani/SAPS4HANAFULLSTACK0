@@ -25,7 +25,22 @@ const PATTERNS = Object.freeze({
   uuid: [/^[0-9A-F-]{36}$/i, 'Process ID'],
   mblnr: [/^\d{1,10}$/, 'Material Document number'],
   mjahr: [/^\d{4}$/, 'Material Document year'],
-  vbeln: [/^\d{1,10}$/, 'Delivery number']
+  vbeln: [/^\d{1,10}$/, 'Delivery number'],
+  posnr: [/^\d{1,6}$/, 'Delivery item'],
+  kunnr: [/^\d{1,10}$/, 'Customer number'],
+  vkorg: [/^[A-Z0-9]{1,4}$/, 'Sales organization'],
+  vtweg: [/^[A-Z0-9]{1,2}$/, 'Distribution channel'],
+  spart: [/^[A-Z0-9]{1,2}$/, 'Division'],
+  venum: [/^\d{1,10}$/, 'Handling unit number'],
+  exidv: [/^[A-Z0-9_./-]{1,20}$/, 'Handling unit external identifier'],
+  lifex: [/^[A-Z0-9_./-]{1,35}$/, 'External delivery reference'],
+  equnr: [/^\d{1,18}$/, 'Equipment number'],
+  sernr: [/^[A-Z0-9_./-]{1,18}$/, 'Serial number'],
+  objnr: [/^[A-Z0-9]{1,22}$/, 'Object number'],
+  aufnr: [/^\d{1,12}$/, 'Order number'],
+  kostl: [/^[A-Z0-9]{1,10}$/, 'Cost center'],
+  anln1: [/^\d{1,12}$/, 'Asset number'],
+  anln2: [/^\d{1,4}$/, 'Asset subnumber']
 });
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });

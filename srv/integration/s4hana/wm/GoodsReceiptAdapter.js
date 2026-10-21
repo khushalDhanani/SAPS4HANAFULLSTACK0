@@ -4,6 +4,7 @@ const S4ErrorMapper = require('../S4ErrorMapper');
 const { S4HttpClient } = require('../S4HttpClient');
 const { RfcClient } = require('../RfcClient');
 const s4Config = require('../s4Config');
+const { sapKey } = require('../sapKey');
 
 const { enrichBatchStatus } = require('../../../common/batchUtils');
 const { formatDateToYMD } = require('../../../common/dateUtils');
@@ -314,10 +315,11 @@ class GoodsReceiptAdapter {
    */
   async _readDeliveryItemFacts(deliveryDocument, deliveryItem) {
     if (!this.rfc || typeof this.rfc.readTable !== 'function') return null;
-    const vbeln = /^\d+$/.test(deliveryDocument) ? deliveryDocument.padStart(10, '0') : deliveryDocument;
+    const vbeln = sapKey(deliveryDocument, 'vbeln').padStart(10, '0');
+    const posnr = sapKey(deliveryItem, 'posnr').padStart(6, '0');
     try {
       const rows = await this.rfc.readTable('LIPS', ['VBELN', 'POSNR', 'LGORT', 'CHARG', 'LFIMG', 'MEINS', 'VRKME', 'LGNUM', 'LGPLA', 'WBSTA'], [
-        `VBELN = '${vbeln}' AND POSNR = '${deliveryItem}'`
+        `VBELN = '${vbeln}' AND POSNR = '${posnr}'`
       ]);
       if (!rows.length) return null;
       const li = rows[0];

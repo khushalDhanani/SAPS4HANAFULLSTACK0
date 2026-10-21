@@ -4,6 +4,7 @@ const { S4HttpClient } = require('../../S4HttpClient');
 const { RfcClient } = require('../../RfcClient');
 const s4Config = require('../../s4Config');
 const TtlCache = require('../../../../common/TtlCache');
+const { sapKey } = require('../../sapKey');
 
 const LEAN_ORDER_PATH = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
 
@@ -1215,11 +1216,14 @@ class SalesInquiryAdapter {
     // Direct RFC read on KNVV (Customer Master Sales Data) for INCO1, INCO2, ZTERM, VKBUR, VKGRP
     if (this.rfc && typeof this.rfc.readTable === 'function') {
       try {
-        const sCustPadded = sCust.padStart(10, '0');
+        const sCustPadded = sapKey(sCust, 'kunnr').padStart(10, '0');
+        const sOrgKey = sOrg ? sapKey(sOrg, 'vkorg') : '';
+        const sChannelKey = sChannel ? sapKey(sChannel, 'vtweg') : '';
+        const sDivisionKey = sDivision ? sapKey(sDivision, 'spart') : '';
         const knvvWhere = [`KUNNR = '${sCustPadded}'`];
-        if (sOrg) knvvWhere.push(`AND VKORG = '${sOrg}'`);
-        if (sChannel) knvvWhere.push(`AND VTWEG = '${sChannel}'`);
-        if (sDivision) knvvWhere.push(`AND SPART = '${sDivision}'`);
+        if (sOrgKey) knvvWhere.push(`AND VKORG = '${sOrgKey}'`);
+        if (sChannelKey) knvvWhere.push(`AND VTWEG = '${sChannelKey}'`);
+        if (sDivisionKey) knvvWhere.push(`AND SPART = '${sDivisionKey}'`);
         let knvvRows = await this.rfc.readTable('KNVV', ['INCO1', 'INCO2', 'ZTERM', 'VKBUR', 'VKGRP'], knvvWhere).catch(() => []);
         if ((!knvvRows || knvvRows.length === 0) && (sOrg || sChannel || sDivision)) {
           knvvRows = await this.rfc.readTable('KNVV', ['INCO1', 'INCO2', 'ZTERM', 'VKBUR', 'VKGRP'], [`KUNNR = '${sCustPadded}'`]).catch(() => []);
