@@ -28,10 +28,12 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
     mockRfc = {
       session: jest.fn(async (fn) => fn(mockRfc.call)),
       call: jest.fn(),
-      readTable: jest.fn(async (table) => {
+      readTable: jest.fn(async (table, fields, where) => {
         if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
         if (table === 'MARD') return [{ LGORT: 'CS01' }, { LGORT: 'HS01' }];
         if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code of the plant: validateAsset no longer assumes one
+        if (table === 'LIKP') return [{ VBELN: (String(where).match(/\d{10}/) || ['0080000115'])[0], WBSTK: 'A', KOSTK: 'C', LVSTK: 'C' }]; // delivery exists, picked
+        if (table === 'LIPS' && String(where).includes('VBELN')) return [{ VBELN: (String(where).match(/\d{10}/) || ['0080000115'])[0], POSNR: '000010', LGNUM: 'W01', MATNR: '000000008000009754', LFIMG: '1.000' }];
         return [];
       }) // RESB / LTAP / MARC reads: nothing found, material not batch-managed
     };
@@ -44,6 +46,8 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       if (overrides[table]) return overrides[table](fields, where, whereStr);
       if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
       if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }];
+      if (table === 'LIKP') return [{ VBELN: (whereStr.match(/\d{10}/) || ['0080000115'])[0], WBSTK: 'A', KOSTK: 'C', LVSTK: 'C' }];
+      if (table === 'LIPS' && whereStr.includes('VBELN')) return [{ VBELN: (whereStr.match(/\d{10}/) || ['0080000115'])[0], POSNR: '000010', LGNUM: 'W01', MATNR: '000000008000009754', LFIMG: '1.000' }];
       if (table === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011201301', DATAB: '20200101', DATBI: '99991231', BKZKP: '' }];
       if (table === 'MARC') return [{ XCHPF: '' }];
       if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
@@ -448,6 +452,8 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       mockRfc.readTable = jest.fn((table, fields, where) => {
         const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
         if (table === 'T001K') return Promise.resolve([{ BWKEY: '1120', BUKRS: '1000' }]);
+        if (table === 'LIKP') return Promise.resolve([{ VBELN: (String(where).match(/\d{10}/) || ['0080000115'])[0], WBSTK: 'A', KOSTK: 'C', LVSTK: 'C' }]); // delivery exists, picked
+        if (table === 'LIPS' && String(where).includes('VBELN')) return Promise.resolve([{ VBELN: (String(where).match(/\d{10}/) || ['0080000115'])[0], POSNR: '000010', LGNUM: 'W01', MATNR: '000000008000009754', LFIMG: '1.000' }]);
         if (table === 'VBFA') {
           return Promise.resolve([{ VBELV: '0080000115', VBELN: '5000999999', VBTYP_N: 'R' }]);
         }
@@ -527,7 +533,8 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         const whereStr = Array.isArray(where) ? where.join(' ') : String(where);
         if (table === 'T001K') return Promise.resolve([{ BWKEY: '1120', BUKRS: '1000' }]);
         if (table === 'LIPS') { if (lipsError) return Promise.reject(new Error('RFC_COMMUNICATION_FAILURE')); return Promise.resolve([{ VBELN: '0080000134', POSNR: '000010' }]); }
-        if (table === 'LIKP') return Promise.resolve([{ VBELN: '0080000134', WBSTK: wbstk }]);
+        if (table === 'LIKP') return Promise.resolve([{ VBELN: '0080000134', WBSTK: wbstk, KOSTK: 'C', LVSTK: 'C' }]);
+        if (table === 'LIPS' && String(where).includes('VBELN')) return Promise.resolve([{ VBELN: (String(where).match(/\d{10}/) || ['0080000115'])[0], POSNR: '000010', LGNUM: 'W01', MATNR: '000000008000009754', LFIMG: '1.000' }]);
         if (table === 'VBFA') return Promise.resolve([{ VBELV: '0080000134', VBELN: '5000999999', VBTYP_N: 'R' }]);
         if (table === 'MATDOC' && (whereStr.includes('5000999999') || whereStr.includes('0080000134'))) {
           return Promise.resolve([{ MBLNR: '5000999999', MJAHR: '2026', ZEILE: '0001', BWART: '241', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'CS02', MENGE: '1.000', MEINS: 'NOS', RSNUM: '0000530233', RSPOS: '0001', ANLN1: '000000400001' }]);
@@ -632,6 +639,68 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       expect(res.deliveryNumber).toBe('0080000115');
     });
 
+    describe('completeDeliveryGoodsIssue: picking TO -> serial numbers -> PGI, each read back [mock only, not SAP verification]', () => {
+      const D = '0080000134';
+      const mkRead = (state) => jest.fn(async (table, fields, where) => {
+        const w = String(where);
+        if (table === 'LIKP') return [{ VBELN: D, WBSTK: state.wbstk, KOSTK: state.kostk, LVSTK: state.kostk }];
+        if (table === 'LIPS') return [{ VBELN: D, POSNR: '000010', LGNUM: 'W01', MATNR: '000000008000009754', LFIMG: '1.000' }];
+        if (table === 'LTAK') return state.openTo ? [{ TANUM: state.openTo, KQUIT: '' }] : [];
+        if (table === 'SER01') return state.serialsAssigned ? [{ LIEF_NR: D, POSNR: '000010', OBKNR: '1' }] : [];
+        if (table === 'VBFA' && w.includes(D)) return state.posted ? [{ VBELV: D, VBELN: '5000999999', VBTYP_N: 'R' }] : [];
+        return [];
+      });
+      const fmNames = () => mockRfc.call.mock.calls.map(([fm]) => fm);
+
+      test('not picked, no serials on the delivery: L_TO_CREATE_DN (I_SQUIT), serial assignment + COMMIT, then PGI + COMMIT', async () => {
+        const state = { wbstk: 'A', kostk: 'A', serialsAssigned: false, posted: false };
+        mockRfc.readTable = mkRead(state);
+        mockRfc.call.mockImplementation(async (fm, params) => {
+          if (fm === 'L_TO_CREATE_DN') { state.kostk = 'C'; return { E_TANUM: '0001037400' }; }
+          if (fm === 'BAPI_OUTB_DELIVERY_CHANGE') { state.serialsAssigned = true; return { RETURN: [] }; }
+          if (fm === 'BAPI_OUTB_DELIVERY_CONFIRM_DEC') { state.posted = true; return { RETURN: [] }; }
+          return {};
+        });
+        const res = await adapter.completeDeliveryGoodsIssue(D, { call: mockRfc.call, warehouse: 'W01', serials: ['MBP00001'] });
+        expect(res).toMatchObject({ success: true, deliveryNumber: D, materialDocument: '5000999999' });
+        expect(res.steps).toEqual(['picking TO 1037400 created and confirmed', '1 serial number(s) assigned']);
+        expect(fmNames()).toEqual(['L_TO_CREATE_DN', 'BAPI_OUTB_DELIVERY_CHANGE', 'BAPI_TRANSACTION_COMMIT', 'BAPI_OUTB_DELIVERY_CONFIRM_DEC', 'BAPI_TRANSACTION_COMMIT']);
+        expect(mockRfc.call).toHaveBeenCalledWith('L_TO_CREATE_DN', { I_LGNUM: 'W01', I_VBELN: D, I_COMMIT_WORK: 'X', I_SQUIT: 'X' });
+        expect(mockRfc.call).toHaveBeenCalledWith('BAPI_OUTB_DELIVERY_CHANGE', expect.objectContaining({ ITEM_SERIAL_NO: [{ DELIV_NUMB: D, ITM_NUMBER: '000010', SERIALNO: 'MBP00001' }] }));
+      });
+
+      test('already picked and serials present: only PGI', async () => {
+        mockRfc.readTable = mkRead({ wbstk: 'A', kostk: 'C', serialsAssigned: true, posted: true });
+        mockRfc.call.mockImplementation(async (fm) => (fm === 'BAPI_OUTB_DELIVERY_CONFIRM_DEC' ? { RETURN: [] } : {}));
+        const res = await adapter.completeDeliveryGoodsIssue(D, { call: mockRfc.call, warehouse: 'W01', serials: ['MBP00001'] });
+        expect(res.materialDocument).toBe('5000999999');
+        expect(fmNames()).toEqual(['BAPI_OUTB_DELIVERY_CONFIRM_DEC', 'BAPI_TRANSACTION_COMMIT']);
+      });
+
+      test('serial assignment rejected by SAP: rollback, error with the SAP text, no PGI', async () => {
+        mockRfc.readTable = mkRead({ wbstk: 'A', kostk: 'C', serialsAssigned: false, posted: false });
+        mockRfc.call.mockImplementation(async (fm) => (fm === 'BAPI_OUTB_DELIVERY_CHANGE' ? { RETURN: [{ TYPE: 'E', ID: 'VL', NUMBER: '123', MESSAGE: 'Serial number MBP00001 not in stock' }] } : {}));
+        await expect(adapter.completeDeliveryGoodsIssue(D, { call: mockRfc.call, serials: ['MBP00001'] }))
+          .rejects.toMatchObject({ status: 400, stage: 'PGI', deliveryNumber: D, message: expect.stringContaining('Serial number MBP00001 not in stock') });
+        expect(fmNames()).toEqual(['BAPI_OUTB_DELIVERY_CHANGE', 'BAPI_TRANSACTION_ROLLBACK']);
+      });
+
+      test('picking TO created but SAP still reports not picked: stop before serials and PGI', async () => {
+        mockRfc.readTable = mkRead({ wbstk: 'A', kostk: 'A', serialsAssigned: false, posted: false });
+        mockRfc.call.mockImplementation(async (fm) => (fm === 'L_TO_CREATE_DN' ? { E_TANUM: '0001037400' } : {}));
+        await expect(adapter.completeDeliveryGoodsIssue(D, { call: mockRfc.call, warehouse: 'W01', serials: ['MBP00001'] }))
+          .rejects.toMatchObject({ status: 500, message: expect.stringContaining('still not completely picked') });
+        expect(fmNames()).toEqual(['L_TO_CREATE_DN']);
+      });
+
+      test('goods issue already posted (WBSTK C): returns the document from VBFA without any call', async () => {
+        mockRfc.readTable = mkRead({ wbstk: 'C', kostk: 'C', serialsAssigned: true, posted: true });
+        const res = await adapter.completeDeliveryGoodsIssue(D, { call: mockRfc.call });
+        expect(res).toMatchObject({ alreadyPosted: true, materialDocument: '5000999999' });
+        expect(mockRfc.call).not.toHaveBeenCalled();
+      });
+    });
+
     test('keeps the delivery key when the PGI RFC call fails at the transport layer', async () => {
       const call = jest.fn().mockRejectedValue(new Error('connection lost'));
 
@@ -643,7 +712,12 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
     });
 
     test('rolls back and throws error when PGI succeeds but material document cannot be confirmed in MATDOC/VBFA', async () => {
-      mockRfc.readTable = jest.fn((table) => Promise.resolve(table === 'T001K' ? [{ BWKEY: '1120', BUKRS: '1000' }] : []));
+      mockRfc.readTable = jest.fn((table, fields, where) => {
+        if (table === 'T001K') return Promise.resolve([{ BWKEY: '1120', BUKRS: '1000' }]);
+        if (table === 'LIKP') return Promise.resolve([{ VBELN: (String(where).match(/\d{10}/) || ['0080000115'])[0], WBSTK: 'A', KOSTK: 'C', LVSTK: 'C' }]); // delivery exists, picked
+        if (table === 'LIPS' && String(where).includes('VBELN')) return Promise.resolve([{ VBELN: (String(where).match(/\d{10}/) || ['0080000115'])[0], POSNR: '000010', LGNUM: 'W01', MATNR: '000000008000009754', LFIMG: '1.000' }]);
+        return Promise.resolve([]);
+      });
       mockRfc.call
         .mockResolvedValueOnce({
           MATERIALDOCUMENT: '',

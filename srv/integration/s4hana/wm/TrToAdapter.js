@@ -1488,7 +1488,7 @@ class TrToAdapter {
 
     let warning = '';
     if (shippingManaged) {
-      warning = `Storage location ${sel.StorageLocation} in plant ${sel.Plant} is shipping-managed (T001L sales area): the goods issue is posted through an outbound delivery that must be picked in WM and carry the serial numbers before PGI; automatic MIGO is switched off for this TR`;
+      warning = `Storage location ${sel.StorageLocation} in plant ${sel.Plant} is shipping-managed (T001L sales area): the goods issue is posted through an outbound delivery; the app picks it (WM TO), assigns the scanned serial numbers and posts goods issue, each step read back from SAP`;
     }
     const trRsnumClean = String(tr.Rsnum || '').replace(/^0+/, '');
     const trRsposClean = String(item?.Rspos || '').replace(/^0+/, '');

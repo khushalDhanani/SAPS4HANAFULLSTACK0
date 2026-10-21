@@ -326,7 +326,6 @@ sap.ui.define([
                 var bShipping = Boolean(oDetail.ShippingManaged);
                 oModel.setProperty("/shippingManaged", bShipping);
                 oModel.setProperty("/shippingManagedText", bShipping ? that.getText("scanToMsgShippingManaged", [oDetail.StorageLocation || "", oDetail.Plant || ""]) : "");
-                if (bShipping) { oModel.setProperty("/autoPostMigo", false); }
                 oModel.setProperty("/receivingPlant", oDetail.ReceivingPlant || "");
                 oModel.setProperty("/receivingPlantSource", oDetail.ReceivingPlantSource || "");
                 oModel.setProperty("/recPlantValueState", "None");
@@ -1078,7 +1077,7 @@ sap.ui.define([
                 subNumber: (oModel.getProperty("/subNumber") || "").trim(),
                 orderId: (oModel.getProperty("/orderId") || "").trim(),
                 autoConfirm: bAutoConfirm,
-                autoPostMigo: bAutoPostMigo && oModel.getProperty("/goodsMovementPosted") !== true && oModel.getProperty("/shippingManaged") !== true,
+                autoPostMigo: bAutoPostMigo && oModel.getProperty("/goodsMovementPosted") !== true,
                 CompleteReservation: oModel.getProperty("/completeReservation") === true,
                 storageUnit: (oModel.getProperty("/storageUnit") || oModel.getProperty("/lenum") || "").trim(),
                 ReservationMovementType: oTR.ReservationMovementType || "",

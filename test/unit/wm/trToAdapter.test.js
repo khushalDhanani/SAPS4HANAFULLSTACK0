@@ -1273,7 +1273,7 @@ describe('TR created by an already posted material document (header MBLNR): no s
     rfc.readTable = jest.fn(async (table) => (table === 'T001L' ? [{ WERKS: '1130', LGORT: 'HS01', VKORG: '1000' }] : table === 'MATDOC' ? matdoc : []));
     const res = await new TrToAdapter({ rfc }).lookupTR('0001000891', 'W12', 'TR');
     expect(res.ShippingManaged).toBe(true);
-    expect(res.Warning).toMatch(/shipping-managed .* automatic MIGO is switched off/);
+    expect(res.Warning).toMatch(/shipping-managed .* outbound delivery/);
     const plain = await new TrToAdapter({ rfc: rfcFor(() => ({})) }).lookupTR('0001000891', 'W12', 'TR');
     expect(plain.ShippingManaged).toBe(false);
   });

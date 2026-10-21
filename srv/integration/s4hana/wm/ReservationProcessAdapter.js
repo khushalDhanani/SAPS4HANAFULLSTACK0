@@ -2120,6 +2120,103 @@ class ReservationProcessAdapter {
     return null;
   }
 
+  /**
+   * Finish the goods issue of an outbound delivery that SAP created from a goods movement on a shipping-managed storage
+   * location (L9 514). SAP refuses PGI until the delivery is picked by a WM transfer order and, for serialized material,
+   * carries the serial numbers (live: "Delivery has not yet been picked (completely)", "not been completely processed by
+   * WM", "Item 000010 requires exactly 1 serial numbers"). Steps, each read back from SAP before the next:
+   *   1. picking TO for the delivery: L_TO_CREATE_DN (I_SQUIT = immediate confirmation) or L_TO_CONFIRM of an open one
+   *   2. serial numbers on the delivery item: BAPI_OUTB_DELIVERY_CHANGE ITEM_SERIAL_NO (+ COMMIT), checked in SER01
+   *   3. PGI: postDeliveryGoodsIssue
+   * Interfaces read on 2026-10-21 (RFC_GET_FUNCTION_INTERFACE, DD03L): L_TO_CREATE_DN I_LGNUM/I_VBELN/I_COMMIT_WORK/I_SQUIT/E_TANUM;
+   * BAPIDLVITMSERNO DELIV_NUMB/ITM_NUMBER/SERIALNO. Live proof of the write sequence is still pending (needs an explicit go).
+   * shortcut: serial numbers are assigned to the first delivery item only (this app creates single-item deliveries); extend when multi-item deliveries appear.
+   */
+  async completeDeliveryGoodsIssue(deliveryNumber, { call, warehouse = '', serials = [] } = {}) {
+    const delivNo = sapKey(deliveryNumber, 'vbeln').padStart(10, '0');
+    const fail = (status, msg, extra = {}) => Object.assign(httpError(status, msg), { stage: 'PGI', deliveryNumber: delivNo, ...extra });
+    const read = async (table, fields, where, rows) => {
+      try { return await this.rfc.readTable(table, fields, where, rows); } catch (e) {
+        throw fail(502, `Outbound Delivery ${delivNo}: ${table} could not be read from SAP: ${e.message}`, { cause: e });
+      }
+    };
+    const readHeader = async () => (await read('LIKP', ['VBELN', 'WBSTK', 'KOSTK', 'LVSTK'], [`VBELN = '${delivNo}'`], 1))?.[0];
+    const steps = [];
+
+    let header = await readHeader();
+    if (!header) throw fail(404, `Outbound Delivery ${delivNo} not found in SAP (LIKP)`);
+    if (String(header.WBSTK || '').trim() === 'C') {
+      // Goods issue already posted: return the document instead of posting again.
+      const vbfa = await read('VBFA', ['VBELV', 'VBELN', 'VBTYP_N'], [`VBELV = '${delivNo}'`, "AND VBTYP_N = 'R'"], 1);
+      const matDoc = String(vbfa?.[0]?.VBELN || '').trim();
+      if (!matDoc) throw fail(500, `Outbound Delivery ${delivNo} has goods issue status C but no material document in the document flow (VBFA)`);
+      return { success: true, stage: 'PGI', deliveryNumber: delivNo, materialDocument: alphaOut(matDoc), materialDocYear: String(new Date().getFullYear()), messages: [], alreadyPosted: true, steps: ['goods issue already posted'] };
+    }
+
+    const items = await read('LIPS', ['VBELN', 'POSNR', 'MATNR', 'LGNUM', 'LFIMG'], [`VBELN = '${delivNo}'`], 20);
+    if (!items || !items.length) throw fail(400, `Outbound Delivery ${delivNo} has no items (LIPS)`);
+    const item = items[0];
+    const lgnum = String(item.LGNUM || warehouse || '').trim();
+
+    // 1. Picking (LIKP-KOSTK C = completely picked)
+    if (String(header.KOSTK || '').trim() !== 'C') {
+      if (!lgnum) throw fail(400, `Outbound Delivery ${delivNo} is not picked and no warehouse is known for the picking Transfer Order`);
+      const s4Lgnum = sapKey(lgnum, 'lgnum');
+      const ltak = await read('LTAK', ['TANUM', 'KQUIT'], [`LGNUM = '${s4Lgnum}'`, `AND VBELN = '${delivNo}'`], 5);
+      const openTo = (ltak || []).find((r) => String(r.KQUIT || '').trim() !== 'X');
+      if (openTo) {
+        try {
+          await call('L_TO_CONFIRM', { I_LGNUM: s4Lgnum, I_TANUM: openTo.TANUM, I_COMMIT_WORK: 'X' });
+        } catch (e) {
+          throw fail(400, `Picking Transfer Order ${alphaOut(openTo.TANUM)} of Outbound Delivery ${delivNo} could not be confirmed (L_TO_CONFIRM${e.key ? ' ' + e.key : ''}): ${e.message}`, { cause: e });
+        }
+        steps.push(`picking TO ${alphaOut(openTo.TANUM)} confirmed`);
+      } else {
+        let res;
+        try {
+          res = await call('L_TO_CREATE_DN', { I_LGNUM: s4Lgnum, I_VBELN: delivNo, I_COMMIT_WORK: 'X', I_SQUIT: 'X' });
+        } catch (e) {
+          throw fail(400, `Picking Transfer Order for Outbound Delivery ${delivNo} could not be created (L_TO_CREATE_DN${e.key ? ' ' + e.key : ''}): ${e.message}`, { cause: e });
+        }
+        const tanum = String(res?.E_TANUM || res?.T_LTAK?.[0]?.TANUM || '').trim();
+        if (!tanum || /^0+$/.test(tanum)) throw fail(500, `L_TO_CREATE_DN returned no Transfer Order number for Outbound Delivery ${delivNo}`);
+        steps.push(`picking TO ${alphaOut(tanum)} created and confirmed`);
+      }
+      header = await readHeader();
+      if (String(header?.KOSTK || '').trim() !== 'C') {
+        throw fail(500, `Outbound Delivery ${delivNo} is still not completely picked after the picking Transfer Order (LIKP-KOSTK '${String(header?.KOSTK || '').trim()}')`);
+      }
+    }
+
+    // 2. Serial numbers on the delivery item (SER01 holds the assignment)
+    const serialList = (Array.isArray(serials) ? serials : [serials]).filter(Boolean).map((v) => sapKey(v, 'serial'));
+    if (serialList.length) {
+      const serWhere = [`LIEF_NR = '${delivNo}'`, `AND POSNR = '${item.POSNR}'`];
+      const ser01 = await read('SER01', ['LIEF_NR', 'POSNR', 'OBKNR'], serWhere, 1);
+      if (!ser01 || !ser01.length) {
+        const res = await call('BAPI_OUTB_DELIVERY_CHANGE', {
+          HEADER_DATA: { DELIV_NUMB: delivNo },
+          HEADER_CONTROL: { DELIV_NUMB: delivNo },
+          DELIVERY: delivNo,
+          ITEM_SERIAL_NO: serialList.map((sn) => ({ DELIV_NUMB: delivNo, ITM_NUMBER: item.POSNR, SERIALNO: sn }))
+        });
+        const errs = (res?.RETURN || []).filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
+        if (errs.length) {
+          try { await call('BAPI_TRANSACTION_ROLLBACK', {}); } catch (_) { /* nothing committed */ }
+          throw fail(400, `Serial number assignment to Outbound Delivery ${delivNo} item ${item.POSNR} failed: ${errs.map((e) => `[${e.TYPE}] ${e.MESSAGE || (e.ID + e.NUMBER)}`).join('; ')}`, { messages: res?.RETURN || [] });
+        }
+        await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+        const check = await read('SER01', ['LIEF_NR', 'POSNR', 'OBKNR'], serWhere, 1);
+        if (!check || !check.length) throw fail(500, `Serial numbers were not persisted on Outbound Delivery ${delivNo} item ${item.POSNR} (SER01)`);
+        steps.push(`${serialList.length} serial number(s) assigned`);
+      }
+    }
+
+    // 3. PGI
+    const pgi = await this.postDeliveryGoodsIssue(delivNo, { call });
+    return { ...pgi, steps };
+  }
+
   async postDeliveryGoodsIssue(deliveryNumber, options = {}) {
     if (!deliveryNumber) {
       const err = httpError(400, 'Delivery number is mandatory for post goods issue');
@@ -2823,7 +2920,7 @@ class ReservationProcessAdapter {
 
       if (directDelivery) {
         LOG.info(`[postGoodsMovement] Direct PGI requested for Outbound Delivery ${directDelivery}${reusedOpenDelivery ? ' (open delivery found in SAP for this reservation item)' : ''}`);
-        const pgiRes = await this.postDeliveryGoodsIssue(directDelivery, { call });
+        const pgiRes = await this.completeDeliveryGoodsIssue(directDelivery, { call, warehouse: params.warehouseNumber || params.WarehouseNumber || '', serials });
         matDoc = pgiRes.materialDocument;
         docYear = pgiRes.materialDocYear;
         resMessages = pgiRes.messages || [];
@@ -2904,7 +3001,7 @@ class ReservationProcessAdapter {
             // the handler can persist it and retry directly against the same delivery.
             createdDeliveryNumber = deliveryNo;
             LOG.warn(`[postGoodsMovement] Movement ${sMvt} for reservation ${sResNo}/${sResItem}: SAP created outbound delivery ${deliveryNo} (L9/514); posting Goods Issue (PGI)...`);
-            const pgiRes = await this.postDeliveryGoodsIssue(deliveryNo, { call });
+            const pgiRes = await this.completeDeliveryGoodsIssue(deliveryNo, { call, warehouse: params.warehouseNumber || params.WarehouseNumber || '', serials });
             matDoc = pgiRes.materialDocument;
             docYear = pgiRes.materialDocYear;
             if (pgiRes.messages && pgiRes.messages.length) {
