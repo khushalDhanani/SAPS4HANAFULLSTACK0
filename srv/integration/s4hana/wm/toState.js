@@ -154,7 +154,7 @@ async function getHuConfirmationItems(rfc, lgnum, tanum) {
  */
 function mapStorageTypeSearchError(rawMsg, lgnum, mvt = '') {
   if (!rawMsg) return rawMsg;
-  const wh = (lgnum || '').trim().toUpperCase() || 'W01';
+  const wh = (lgnum || '').trim().toUpperCase() || 'unresolved';
   const match = String(rawMsg).match(
     /(?:Data for storage type search is not defined|Daten zur Lagertypfindung sind nicht definiert)\s*\(([^)]*)\)/i
   );

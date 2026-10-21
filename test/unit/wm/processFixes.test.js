@@ -45,6 +45,11 @@ function fakeRfc({ fm = {}, tables = {} } = {}) {
     readTable: jest.fn(async (table, fields, where) => {
       const h = tables[table];
       const optStr = (where || []).join(' ');
+      if (table === 'LTBK' && optStr.includes('TBNUM') && h === undefined) {
+        const match = optStr.match(/TBNUM\s*=\s*'(\d+)'/);
+        const tbnum = match ? match[1] : HEADER.TBNUM;
+        return [{ LGNUM: HEADER.LGNUM, TBNUM: tbnum, BWLVS: HEADER.BWLVS, RSNUM: HEADER.RSNUM, STATU: '' }];
+      }
       if (table === 'LTAK' && optStr.includes('TANUM') && (!h || (Array.isArray(h) && h.length === 0))) {
         const match = optStr.match(/TANUM\s*=\s*'(\d+)'/);
         const tanum = match ? match[1] : '0001012966';
@@ -137,21 +142,15 @@ describe('Fix 3: no hardcoded warehouse / storage type / plant defaults [mock on
     expect(noRow.call).not.toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.anything());
   });
 
-  it('resolves the warehouse from configuration when the caller sends none, and rejects an unconfigured one', async () => {
-    const cds = require('@sap/cds');
+  it('resolves the warehouse from the SAP TR header when the caller sends none, and fails clearly without a source', async () => {
     const rfc = fakeRfc({ fm: { Z_WM_GET_TR_MATERIAL_LIST: { ET_TR_HEADER: [HEADER], ET_TR_ITEMS: [] } }, tables: {} });
     await new TrToAdapter({ rfc }).getTR('1001839', '');
-    expect(rfc.call).toHaveBeenCalledWith('Z_WM_GET_TR_MATERIAL_LIST', expect.objectContaining({ IV_LGNUM: require('../../../srv/common/s4Config').getWarehouseNumber() }));
-    const saved = cds.env.s4.warehouseNumber;
-    const savedEnv = process.env.S4_WAREHOUSE_NUMBER;
-    delete process.env.S4_WAREHOUSE_NUMBER; delete process.env.CDS_S4_WAREHOUSE_NUMBER;
-    cds.env.s4.warehouseNumber = '';
-    try {
-      await expect(new TrToAdapter({ rfc }).getTR('1001839', '')).rejects.toThrow(/Missing required S\/4HANA configuration: s4.warehouseNumber/);
-    } finally {
-      cds.env.s4.warehouseNumber = saved;
-      if (savedEnv !== undefined) process.env.S4_WAREHOUSE_NUMBER = savedEnv;
-    }
+    expect(rfc.call).toHaveBeenCalledWith('Z_WM_GET_TR_MATERIAL_LIST', expect.objectContaining({ IV_LGNUM: 'W01' }));
+    const noHeader = fakeRfc({ tables: { LTBK: [] } });
+    await expect(new TrToAdapter({ rfc: noHeader }).getTR('1001839', '')).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringContaining('Cannot resolve warehouse')
+    });
   });
 
   it('handler refuses a goods movement whose plant/movement type are neither in the request nor tracked', async () => {

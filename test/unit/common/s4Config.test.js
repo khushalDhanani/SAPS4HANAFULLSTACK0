@@ -33,18 +33,15 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       process.env.S4_CLIENT = '220';
       process.env.S4_PLANT = '1120';
       process.env.S4_STORAGE_LOCATION = 'CS01';
-      process.env.S4_WAREHOUSE_NUMBER = 'W01';
     });
 
     test('loads system-specific values from the environment instead of repository defaults', () => {
       process.env.S4_CLIENT = '220';
       process.env.S4_PLANT = '1120';
       process.env.S4_STORAGE_LOCATION = 'CS01';
-      process.env.S4_WAREHOUSE_NUMBER = 'W01';
       expect(s4Config.getClient()).toBe('220');
       expect(s4Config.getPlant()).toBe('1120');
       expect(s4Config.getStorageLocation()).toBe('CS01');
-      expect(s4Config.getWarehouseNumber()).toBe('W01');
       expect(s4Config.getSalesOrganization()).toBe('1000');
       expect(s4Config.getDistributionChannel()).toBe('10');
       expect(s4Config.getDivision()).toBe('52');
@@ -57,9 +54,10 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
 
     test('repository config leaves client, plant, storage location, and warehouse unset', () => {
       const packageJson = require('../../../package.json');
-      for (const key of ['client', 'plant', 'storageLocation', 'warehouseNumber']) {
+      for (const key of ['client', 'plant', 'storageLocation']) {
         expect(packageJson.cds.s4[key]).toBe('');
       }
+      expect(packageJson.cds.s4).not.toHaveProperty('warehouseNumber');
     });
 
     test('property getters should match method results', () => {

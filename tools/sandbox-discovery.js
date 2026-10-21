@@ -10,7 +10,7 @@ require('./live-sap-gate')();
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env.local'), quiet: true });
 const { RfcClient } = require('../srv/integration/s4hana/RfcClient');
-const s4Config = require('../srv/common/s4Config');
+const { resolveWarehouse } = require('../srv/integration/s4hana/wm/warehouseResolver');
 
 const MVTS = ['201', '241', '311', '301'];
 const yyyymmdd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
@@ -45,7 +45,7 @@ function createReaders(rfc) {
 
   return {
     dd03l, dd04t, fieldsWithText,
-    warehouse: () => s4Config.getWarehouseNumber(),
+    warehouse: (lgnum) => resolveWarehouse(rfc, { warehouseNumber: lgnum }),
 
     /** A1: plant / storage location pairs assigned to the warehouse (T320). */
     wmPairs: (wh) => rfc.readTable('T320', ['WERKS', 'LGORT', 'LGNUM', 'LGNTB', 'OBEST'], [`LGNUM = '${wh}'`]),
@@ -260,8 +260,9 @@ if (require.main === module) {
   const table = (rows, cols) => { if (!rows || !rows.length) { out('(no rows)'); return; } out(`| ${cols.join(' | ')} |`); out(`|${cols.map(() => '---').join('|')}|`); for (const r of rows) out(`| ${cols.map((c) => String(r[c] ?? '').replace(/\|/g, '/')).join(' | ')} |`); };
   const r = createReaders(new RfcClient());
   (async () => {
-    const wh = r.warehouse();
-    out(`\n## Discovery (${new Date().toISOString().slice(0, 10)}, read-only; warehouse ${wh} from cds.s4.warehouseNumber)`);
+    const lgnum = process.argv.find((arg) => arg.startsWith('--lgnum='))?.slice('--lgnum='.length) || '';
+    const wh = await r.warehouse(lgnum);
+    out(`\n## Discovery (${new Date().toISOString().slice(0, 10)}, read-only; request warehouse ${wh})`);
 
     out('\n### A1. WM-managed plant / storage location pairs (T320)');
     let pairs = [];

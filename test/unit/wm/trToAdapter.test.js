@@ -27,6 +27,7 @@ function fakeRfc({ header = HEADER, items = ITEMS, quants = [QUANT], create, pen
       throw new Error(`unexpected ${fm}`);
     }),
     readTable: jest.fn(async (table) => {
+      if (table === 'LTBK') return header ? [{ LGNUM: header.LGNUM, TBNUM: header.TBNUM }] : [];
       if (table === 'MAKT') return [{ MAKTX: 'IPA, Extra Pure' }];
       if (table === 'LTAK') {
         if (!createParams) return pendingTos;
@@ -85,10 +86,11 @@ describe('TrToAdapter (RFC)', () => {
     expect(rfc.call).not.toHaveBeenCalled();
   });
 
-  it('uses the configured warehouse (cds.s4.warehouseNumber) when the caller sends none, never a literal', async () => {
+  it('resolves the warehouse from the SAP TR header when the caller sends none', async () => {
     const rfc = fakeRfc();
     await new TrToAdapter({ rfc }).getTR('1000663', '');
-    expect(rfc.call).toHaveBeenCalledWith('Z_WM_GET_TR_MATERIAL_LIST', { IV_TR_NUMBER: '0001000663', IV_LGNUM: require('../../../srv/common/s4Config').getWarehouseNumber() });
+    expect(rfc.readTable).toHaveBeenCalledWith('LTBK', ['LGNUM'], ["TBNUM = '0001000663'"], 10);
+    expect(rfc.call).toHaveBeenCalledWith('Z_WM_GET_TR_MATERIAL_LIST', { IV_TR_NUMBER: '0001000663', IV_LGNUM: 'W01' });
   });
 
   it('checkSU accepts an SU holding an open TR material in the same plant (batch ignored, as ZTO)', async () => {

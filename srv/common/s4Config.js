@@ -175,11 +175,6 @@ class S4Config {
     return this._requireString('differenceStorageType', ['CDS_S4_DIFFERENCE_STORAGE_TYPE', 'S4_DIFFERENCE_STORAGE_TYPE']);
   }
 
-  /** WM warehouse number the TR/TO process runs in (e.g. 'W01'); warehouse customizing, never defaulted in code. */
-  getWarehouseNumber() {
-    return this._requireString('warehouseNumber', ['CDS_S4_WAREHOUSE_NUMBER', 'S4_WAREHOUSE_NUMBER']);
-  }
-
   /** SAP-side reservation lock via Z_WM_RES_LOCK. OFF unless explicitly 'true'/'X'; never required. */
   getResLockEnabled() {
     const v = this._getRaw('resLockEnabled', ['CDS_S4_RES_LOCK_ENABLED', 'S4_RES_LOCK_ENABLED']);
@@ -206,7 +201,6 @@ class S4Config {
   get conditionType() { return this.getConditionType(); }
   get shippingPoints() { return this.getShippingPoints(); }
   get differenceStorageType() { return this.getDifferenceStorageType(); }
-  get warehouseNumber() { return this.getWarehouseNumber(); }
   get salesMaterialTypes() { return this.getSalesMaterialTypes(); }
 
   /**

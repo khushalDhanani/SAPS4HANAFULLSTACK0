@@ -14,6 +14,7 @@ const {
   verifyReceivingLocationInSap
 } = require('../../../common/movementConfig');
 const { isToFullyConfirmed, getHuConfirmationItems, mapStorageTypeSearchError, trCompletedWithoutTo, stagedStockCoveringTr } = require('./toState');
+const { resolveWarehouse } = require('./warehouseResolver');
 const { checkAuthorization } = require('./authCheck');
 
 const pad10 = (v) => String(v || '').trim().padStart(10, '0');
@@ -967,7 +968,7 @@ class ReservationProcessAdapter {
         success: true,
         trNumber: alphaOut(s4Tr),
         trNumberRaw: s4Tr,
-        warehouse: wh || 'W01',
+        warehouse: wh,
         movement: params.movement || params.movementType || '311',
         status: 'O',
         source: 'MOCK'
@@ -2341,13 +2342,22 @@ class ReservationProcessAdapter {
     // Pre-MIGO check (Task 6): read T321 for the movement; if TBFKZ = X, set warning and log
     let t321Warning = '';
     const checkT321 = process.env.WM_PRE_MIGO_T321_CHECK === 'true' || process.env.WM_CHECK_T321_AUTO_TR === 'true';
+    const currentWh = this.rfc && (sMvt === '301' || checkT321)
+      ? await resolveWarehouse(this.rfc, {
+        warehouseNumber: params.warehouseNumber || params.WarehouseNumber,
+        trNumber: params.transferRequirement || params.TransferRequirement,
+        toNumber: params.transferOrder || params.TransferOrder,
+        reservationNumber: sResNo,
+        plant: sPlant,
+        storageLocation: sSLoc
+      })
+      : '';
     if (checkT321 && this.rfc) {
       try {
-        const wh = params.warehouseNumber || 'W01';
         const t321Rows = await this.rfc.readTable(
           'T321',
           ['LGNUM', 'RBLVS', 'TBFKZ'],
-          [`( LGNUM = '***' OR LGNUM = '${wh}' )`, `AND RBLVS = '${sMvt}'`]
+          [`( LGNUM = '***' OR LGNUM = '${currentWh}' )`, `AND RBLVS = '${sMvt}'`]
         );
         const autoTrRow = (t321Rows || []).find((r) => String(r.TBFKZ || '').trim() === 'X');
         if (autoTrRow) {
@@ -2942,7 +2952,6 @@ class ReservationProcessAdapter {
       let externalTrWarning = '';
       if (sMvt === '301' && this.rfc && matDoc) {
         try {
-          const currentWh = params.warehouseNumber || 'W01';
           const ltbkRows = await this.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'STATU'], [
             `MBLNR = '${matDoc}'`
           ], 10);
@@ -3725,7 +3734,7 @@ class ReservationProcessAdapter {
         stage: 'TR_VERIFICATION',
         verified: true,
         trNumber: tr.trNumber,
-        warehouseNumber: tr.warehouseNumber || normInput.warehouseNumber || 'W01',
+        warehouseNumber: tr.warehouseNumber || normInput.warehouseNumber || '',
         movement: normInput.movementType,
         existing: true
       };

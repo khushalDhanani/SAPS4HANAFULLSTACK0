@@ -3,7 +3,7 @@
 const LOG = require('../logger')('tr-to-adapter');
 const { RfcClient } = require('../RfcClient');
 const { sapKey, sapKeyOpt, httpError } = require('../sapKey');
-const s4Config = require('../s4Config');
+const { resolveWarehouse } = require('./warehouseResolver');
 const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
 const { isMismatchOverrideEnabled } = require('../../../common/wmMismatchOverrideGuard');
 const { isToFullyConfirmed, findUnconfirmedToItems, getHuConfirmationItems } = require('./toState');
@@ -18,9 +18,6 @@ const { checkAuthorization } = require('./authCheck');
  * SU must hold an open TR material in the same plant; qty <= min(SU stock, TR open).
  * Unlike ZTO (built for batch-less 319 staging TRs), a TR item that names a batch only matches that batch.
  */
-
-/** Warehouse from the caller, else from configuration (cds.s4.warehouseNumber / S4_WAREHOUSE_NUMBER); never a literal. */
-const warehouse = (lgnum) => sapKey(lgnum || s4Config.getWarehouseNumber(), 'lgnum');
 
 const alphaIn = (v, len) => (/^\d+$/.test(v) ? v.padStart(len, '0') : v);
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
@@ -363,7 +360,7 @@ class TrToAdapter {
   }
 
   async getOpenTRs(lgnum = '', mvt = '') {
-    const wh = warehouse(lgnum);
+    const wh = await resolveWarehouse(this.rfc, { warehouseNumber: lgnum });
     const where = [`LGNUM = '${wh}'`, "AND STATU <> 'E'"];
     const sMvt = sapKeyOpt(mvt, 'mvt');
     if (sMvt) where.push(`AND BWLVS = '${sMvt}'`);
@@ -403,7 +400,7 @@ class TrToAdapter {
 
   /** A number scanned as a TR is read as a TR only; a reservation number goes through getTRByReservation. */
   async getTR(tbnum, lgnum) {
-    const wh = warehouse(lgnum);
+    const wh = await resolveWarehouse(this.rfc, { warehouseNumber: lgnum, trNumber: tbnum });
     const tr = sapKey(tbnum, 'tbnum').padStart(10, '0');
     this._lastTr = tr;
     LOG.info(`Reading TR ${tr} in warehouse ${wh}`);
@@ -446,7 +443,7 @@ class TrToAdapter {
    * Ensures the document actually exists and is persisted in SAP.
    */
   async getTransferOrder(tanum, lgnum) {
-    const wh = warehouse(lgnum);
+    const wh = await resolveWarehouse(this.rfc, { warehouseNumber: lgnum, toNumber: tanum });
     const to = sapKey(tanum, 'tanum').padStart(10, '0');
     LOG.info(`Reading Transfer Order ${to} in warehouse ${wh}`);
 
@@ -516,7 +513,7 @@ class TrToAdapter {
    * did not create one: status 11 (TR error), to be fixed in SAP, not by the operator.
    */
   async getTRByReservation(rsnum, lgnum) {
-    const wh = warehouse(lgnum);
+    const wh = await resolveWarehouse(this.rfc, { warehouseNumber: lgnum, reservationNumber: rsnum });
     const rs = sapKey(rsnum, 'rsnum').padStart(10, '0');
     const rows = await this._rfc(
       () => this.rfc.readTable('LTBK', ['TBNUM', 'STATU'], [`LGNUM = '${wh}'`, `AND RSNUM = '${rs}'`]),
@@ -556,7 +553,7 @@ class TrToAdapter {
 
   /** Shared by checkSU and createTO so the server never trusts client quantities. */
   async _validate(lenum, tbnum, lgnum) {
-    const wh = warehouse(lgnum);
+    const wh = await resolveWarehouse(this.rfc, { warehouseNumber: lgnum, trNumber: tbnum });
     const su = sapKey(lenum, 'lenum').padStart(20, '0');
     const tr = await this.getTR(tbnum, wh);
 
@@ -602,7 +599,7 @@ class TrToAdapter {
 
   /** Retrieve available Storage Units in the warehouse that can satisfy open TR line items. */
   async getAvailableSUs(tbnum, lgnum, tbpos = '') {
-    const wh = warehouse(lgnum);
+    const wh = await resolveWarehouse(this.rfc, { warehouseNumber: lgnum, trNumber: tbnum });
     const tr = await this.getTR(tbnum, wh);
 
     let items = tr.Items.filter((i) => !i.DeliveryCompleted && i.OpenQty > 0);
@@ -679,7 +676,7 @@ class TrToAdapter {
 
   /** Create only (as ZTO): confirmation stays in LT12 until the ABAP side offers it. */
   async createTO(params = {}) {
-    const wh = warehouse(params.lgnum);
+    const wh = await resolveWarehouse(this.rfc, { warehouseNumber: params.lgnum, trNumber: params.tbnum });
     const tr = sapKey(params.tbnum, 'tbnum');
     const key = `${wh}:${tr}`;
     if (this._toCreateInFlight.has(key)) {
@@ -845,7 +842,7 @@ class TrToAdapter {
     if (!material) throw httpError(400, 'Material is required for batch suggestion');
     const matClean = alphaOut(material);
     const matPadded = alphaIn(sapKey(matClean, 'matnr'), 18);
-    const wh = warehouse(warehouseNumber);
+    const wh = await resolveWarehouse(this.rfc, { warehouseNumber, plant, storageLocation });
     const s4Plant = sapKeyOpt(plant, 'plant');
     const s4Lgort = sapKeyOpt(storageLocation, 'lgort');
 
@@ -1136,7 +1133,11 @@ class TrToAdapter {
     }
 
     if (!wh) {
-      wh = warehouse(lgnum);
+      wh = await resolveWarehouse(this.rfc, {
+        warehouseNumber: lgnum,
+        trNumber: type === 'TR' ? tbnum : '',
+        reservationNumber: type === 'RES' ? tbnum : ''
+      });
     }
 
     let tr = type === 'RES' ? await this.getTRByReservation(tbnum, wh) : await this.getTR(tbnum, wh);
@@ -1510,7 +1511,7 @@ class TrToAdapter {
    * from LTAP-PQUIT: fully confirmed -> success, otherwise the SAP error is surfaced unchanged.
    */
   async confirmTO({ lgnum, toNumber, squit = 'X' } = {}) {
-    const wh = warehouse(lgnum);
+    const wh = await resolveWarehouse(this.rfc, { warehouseNumber: lgnum, toNumber });
     const s4To = sapKey(toNumber, 'tanum').padStart(10, '0');
     LOG.info(`Confirming Transfer Order ${alphaOut(s4To)} in warehouse ${wh}`);
     await checkAuthorization(this.rfc, 'L_LGNUM', { LGNUM: wh });
@@ -1769,7 +1770,12 @@ class TrToAdapter {
     if (!effTbnum) throw httpError(400, 'Transfer Requirement number (tbnum/trNumber) is required');
 
     const effWh = lgnum || warehouseNumber || WarehouseNumber || '';
-    const wh = warehouse(effWh);
+    const wh = await resolveWarehouse(this.rfc, {
+      warehouseNumber: effWh,
+      trNumber: effTbnum,
+      plant: plant || Plant,
+      storageLocation: storageLocation || StorageLocation
+    });
 
     // Step 2: Validate TR in SAP
     let tr = await this.getTR(effTbnum, wh);
