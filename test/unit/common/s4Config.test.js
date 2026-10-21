@@ -21,155 +21,293 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
     process.env = { ...savedEnv };
   });
 
+  // ─── Re-export wiring ─────────────────────────────────────────────────────
+
   describe('Integration Re-Export', () => {
-    test('srv/integration/s4hana/s4Config should re-export srv/common/s4Config instance', () => {
+    test('srv/integration/s4hana/s4Config re-exports the same instance as srv/common/s4Config', () => {
       expect(s4ConfigFromIntegration).toBe(s4Config);
       expect(s4Config.ConfigurationError).toBe(ConfigurationError);
     });
   });
 
-  describe('Standard Configuration Resolution from cds.env.s4', () => {
-    beforeEach(() => {
-      process.env.S4_CLIENT = '220';
-      process.env.S4_PLANT = '1120';
-      process.env.S4_STORAGE_LOCATION = 'CS01';
-    });
+  // ─── package.json must NOT contain any business data ──────────────────────
 
-    test('loads system-specific values from the environment instead of repository defaults', () => {
-      process.env.S4_CLIENT = '220';
-      process.env.S4_PLANT = '1120';
-      process.env.S4_STORAGE_LOCATION = 'CS01';
-      expect(s4Config.getClient()).toBe('220');
-      expect(s4Config.getPlant()).toBe('1120');
-      expect(s4Config.getStorageLocation()).toBe('CS01');
-      expect(s4Config.getSalesOrganization()).toBe('1000');
-      expect(s4Config.getDistributionChannel()).toBe('10');
-      expect(s4Config.getDivision()).toBe('52');
-      expect(s4Config.getCurrency()).toBe('INR');
-      expect(s4Config.getInquiryType()).toBe('ZIN');
-      expect(s4Config.getOrderType()).toBe('ZDOM');
-      expect(s4Config.getConditionType()).toBe('ZPR1');
-      expect(s4Config.getShippingPoints()).toEqual(['1120', '1112', '1108', '1109']);
-    });
+  describe('package.json cds.s4 — no business data committed', () => {
+    const pkg = require('../../../package.json');
+    const businessKeys = [
+      'salesOrganization', 'distributionChannel', 'division', 'currency',
+      'inquiryType', 'orderType', 'conditionType', 'shippingPoints',
+      'salesMaterialTypes', 'mvt261NotReadyBins'
+    ];
 
-    test('repository config leaves client, plant, storage location, and warehouse unset', () => {
-      const packageJson = require('../../../package.json');
-      for (const key of ['client', 'plant', 'storageLocation']) {
-        expect(packageJson.cds.s4[key]).toBe('');
+    test('package.json cds.s4 contains only env-config keys (client, plant, storageLocation)', () => {
+      const allowedKeys = new Set(['client', 'plant', 'storageLocation']);
+      const actualKeys = Object.keys(pkg.cds.s4);
+      for (const k of actualKeys) {
+        expect(allowedKeys).toContain(k);
       }
-      expect(packageJson.cds.s4).not.toHaveProperty('warehouseNumber');
     });
 
-    test('property getters should match method results', () => {
-      expect(s4Config.client).toBe(s4Config.getClient());
-      expect(s4Config.plant).toBe(s4Config.getPlant());
-      expect(s4Config.storageLocation).toBe(s4Config.getStorageLocation());
-      expect(s4Config.salesOrganization).toBe(s4Config.getSalesOrganization());
-      expect(s4Config.distributionChannel).toBe(s4Config.getDistributionChannel());
-      expect(s4Config.division).toBe(s4Config.getDivision());
-      expect(s4Config.currency).toBe(s4Config.getCurrency());
-      expect(s4Config.inquiryType).toBe(s4Config.getInquiryType());
-      expect(s4Config.orderType).toBe(s4Config.getOrderType());
-      expect(s4Config.conditionType).toBe(s4Config.getConditionType());
-      expect(s4Config.shippingPoints).toEqual(s4Config.getShippingPoints());
-    });
-
-    test('getAll() and validate() should return the full configuration dictionary', () => {
-      const all = s4Config.getAll();
-      expect(all).toEqual({
-        client: '220',
-        plant: '1120',
-        storageLocation: 'CS01',
-        salesOrganization: '1000',
-        distributionChannel: '10',
-        division: '52',
-        currency: 'INR',
-        inquiryType: 'ZIN',
-        orderType: 'ZDOM',
-        conditionType: 'ZPR1',
-        shippingPoints: ['1120', '1112', '1108', '1109']
+    businessKeys.forEach(key => {
+      test(`package.json cds.s4 must not define ${key}`, () => {
+        expect(pkg.cds.s4).not.toHaveProperty(key);
       });
-      expect(s4Config.validate()).toEqual(all);
+    });
+
+    test('package.json cds.s4.client/plant/storageLocation are empty strings (must come from env)', () => {
+      for (const key of ['client', 'plant', 'storageLocation']) {
+        expect(pkg.cds.s4[key]).toBe('');
+      }
     });
   });
 
-  describe('Environment Variable Fallbacks and Overrides', () => {
-    test('should use environment variables when cds.env.s4 key is missing', () => {
-      delete cds.env.s4.client;
-      delete cds.env.s4.plant;
-      delete cds.env.s4.shippingPoints;
+  // ─── Environment-variable resolution ──────────────────────────────────────
 
-      process.env.S4_CLIENT = '100';
-      process.env.S4_PLANT = '2000';
-      process.env.S4_SHIPPING_POINTS = '2000, 2001, 2002';
-
-      expect(s4Config.getClient()).toBe('100');
-      expect(s4Config.getPlant()).toBe('2000');
-      expect(s4Config.getShippingPoints()).toEqual(['2000', '2001', '2002']);
+  describe('Resolution from environment variables — env-config keys', () => {
+    test('getClient() resolves from S4_CLIENT', () => {
+      delete cds.env.s4?.client;
+      process.env.S4_CLIENT = '220';
+      expect(s4Config.getClient()).toBe('220');
     });
 
-    test('should prefer CDS_S4_* prefix if provided', () => {
-      delete cds.env.s4.currency;
+    test('getPlant() resolves from S4_PLANT', () => {
+      delete cds.env.s4?.plant;
+      process.env.S4_PLANT = '1120';
+      expect(s4Config.getPlant()).toBe('1120');
+    });
+
+    test('getStorageLocation() resolves from S4_STORAGE_LOCATION', () => {
+      delete cds.env.s4?.storageLocation;
+      process.env.S4_STORAGE_LOCATION = 'CS01';
+      expect(s4Config.getStorageLocation()).toBe('CS01');
+    });
+
+    test('getStorageLocation() resolves from S4_SLOC as alias', () => {
+      delete cds.env.s4?.storageLocation;
+      delete process.env.S4_STORAGE_LOCATION;
+      process.env.S4_SLOC = 'HS01';
+      expect(s4Config.getStorageLocation()).toBe('HS01');
+    });
+  });
+
+  describe('Resolution from environment variables — business-data keys', () => {
+    test('getSalesOrganization() resolves from S4_SALES_ORGANIZATION', () => {
+      if (cds.env.s4) delete cds.env.s4.salesOrganization;
+      process.env.S4_SALES_ORGANIZATION = '1000';
+      expect(s4Config.getSalesOrganization()).toBe('1000');
+    });
+
+    test('getDistributionChannel() resolves from S4_DISTRIBUTION_CHANNEL', () => {
+      if (cds.env.s4) delete cds.env.s4.distributionChannel;
+      process.env.S4_DISTRIBUTION_CHANNEL = '10';
+      expect(s4Config.getDistributionChannel()).toBe('10');
+    });
+
+    test('getDivision() resolves from S4_DIVISION', () => {
+      if (cds.env.s4) delete cds.env.s4.division;
+      process.env.S4_DIVISION = '52';
+      expect(s4Config.getDivision()).toBe('52');
+    });
+
+    test('getCurrency() resolves from S4_CURRENCY', () => {
+      if (cds.env.s4) delete cds.env.s4.currency;
+      process.env.S4_CURRENCY = 'INR';
+      expect(s4Config.getCurrency()).toBe('INR');
+    });
+
+    test('getInquiryType() resolves from S4_INQUIRY_TYPE', () => {
+      if (cds.env.s4) delete cds.env.s4.inquiryType;
+      process.env.S4_INQUIRY_TYPE = 'ZIN';
+      expect(s4Config.getInquiryType()).toBe('ZIN');
+    });
+
+    test('getOrderType() resolves from S4_ORDER_TYPE', () => {
+      if (cds.env.s4) delete cds.env.s4.orderType;
+      process.env.S4_ORDER_TYPE = 'ZDOM';
+      expect(s4Config.getOrderType()).toBe('ZDOM');
+    });
+
+    test('getConditionType() resolves from S4_CONDITION_TYPE', () => {
+      if (cds.env.s4) delete cds.env.s4.conditionType;
+      process.env.S4_CONDITION_TYPE = 'ZPR1';
+      expect(s4Config.getConditionType()).toBe('ZPR1');
+    });
+
+    test('getShippingPoints() resolves from S4_SHIPPING_POINTS (comma-separated)', () => {
+      if (cds.env.s4) delete cds.env.s4.shippingPoints;
+      process.env.S4_SHIPPING_POINTS = '1120, 1112, 1108, 1109';
+      expect(s4Config.getShippingPoints()).toEqual(['1120', '1112', '1108', '1109']);
+    });
+
+    test('getSalesMaterialTypes() resolves from S4_SALES_MATERIAL_TYPES (comma-separated)', () => {
+      if (cds.env.s4) delete cds.env.s4.salesMaterialTypes;
+      process.env.S4_SALES_MATERIAL_TYPES = 'ZFRT, FERT';
+      expect(s4Config.getSalesMaterialTypes()).toEqual(['ZFRT', 'FERT']);
+    });
+
+    test('CDS_S4_* prefix takes priority over S4_* fallback', () => {
+      if (cds.env.s4) delete cds.env.s4.currency;
       process.env.CDS_S4_CURRENCY = 'EUR';
       process.env.S4_CURRENCY = 'USD';
-
       expect(s4Config.getCurrency()).toBe('EUR');
     });
   });
 
-  describe('Fail Loudly on Missing Required Configuration', () => {
-    const requiredKeys = [
-      { key: 'client', getter: () => s4Config.getClient(), envs: ['CDS_S4_CLIENT', 'S4_CLIENT'] },
-      { key: 'plant', getter: () => s4Config.getPlant(), envs: ['CDS_S4_PLANT', 'S4_PLANT'] },
-      { key: 'storageLocation', getter: () => s4Config.getStorageLocation(), envs: ['CDS_S4_STORAGE_LOCATION', 'S4_STORAGE_LOCATION', 'S4_SLOC'] },
-      { key: 'salesOrganization', getter: () => s4Config.getSalesOrganization(), envs: ['CDS_S4_SALES_ORGANIZATION', 'S4_SALES_ORGANIZATION', 'S4_SALES_ORG'] },
-      { key: 'distributionChannel', getter: () => s4Config.getDistributionChannel(), envs: ['CDS_S4_DISTRIBUTION_CHANNEL', 'S4_DISTRIBUTION_CHANNEL', 'S4_CHANNEL'] },
-      { key: 'division', getter: () => s4Config.getDivision(), envs: ['CDS_S4_DIVISION', 'S4_DIVISION'] },
-      { key: 'currency', getter: () => s4Config.getCurrency(), envs: ['CDS_S4_CURRENCY', 'S4_CURRENCY'] },
-      { key: 'inquiryType', getter: () => s4Config.getInquiryType(), envs: ['CDS_S4_INQUIRY_TYPE', 'S4_INQUIRY_TYPE'] },
-      { key: 'conditionType', getter: () => s4Config.getConditionType(), envs: ['CDS_S4_CONDITION_TYPE', 'S4_CONDITION_TYPE'] },
-      { key: 'shippingPoints', getter: () => s4Config.getShippingPoints(), envs: ['CDS_S4_SHIPPING_POINTS', 'S4_SHIPPING_POINTS'] }
+  // ─── Fail-loud tests — env-config keys ────────────────────────────────────
+
+  describe('Fail loudly on missing required env-config values', () => {
+    const envConfigKeys = [
+      { key: 'client',          getter: () => s4Config.getClient(),          envs: ['CDS_S4_CLIENT', 'S4_CLIENT'] },
+      { key: 'plant',           getter: () => s4Config.getPlant(),           envs: ['CDS_S4_PLANT', 'S4_PLANT'] },
+      { key: 'storageLocation', getter: () => s4Config.getStorageLocation(), envs: ['CDS_S4_STORAGE_LOCATION', 'S4_STORAGE_LOCATION', 'S4_SLOC'] }
     ];
 
-    requiredKeys.forEach(({ key, getter, envs }) => {
-      test(`should throw ConfigurationError when ${key} is missing`, () => {
-        delete cds.env.s4[key];
-        envs.forEach(env => delete process.env[env]);
-
+    envConfigKeys.forEach(({ key, getter, envs }) => {
+      test(`throws ConfigurationError when ${key} is absent`, () => {
+        if (cds.env.s4) cds.env.s4[key] = '';
+        envs.forEach(e => delete process.env[e]);
         expect(() => getter()).toThrow(ConfigurationError);
-        expect(() => getter()).toThrow(new RegExp(`Missing required S/4HANA configuration: s4\\.${key}`));
+        expect(() => getter()).toThrow(new RegExp(`s4\\.${key}`));
       });
 
-      test(`should throw ConfigurationError when ${key} is empty string`, () => {
-        cds.env.s4[key] = '   ';
-        envs.forEach(env => delete process.env[env]);
-
+      test(`throws ConfigurationError when ${key} is whitespace-only`, () => {
+        if (cds.env.s4) cds.env.s4[key] = '   ';
+        envs.forEach(e => delete process.env[e]);
         expect(() => getter()).toThrow(ConfigurationError);
-        expect(() => getter()).toThrow(new RegExp(`Missing required S/4HANA configuration: s4\\.${key}`));
       });
     });
 
-    test('should throw ConfigurationError when shippingPoints is empty array', () => {
-      cds.env.s4.shippingPoints = [];
-      delete process.env.CDS_S4_SHIPPING_POINTS;
-      delete process.env.S4_SHIPPING_POINTS;
-
-      expect(() => s4Config.getShippingPoints()).toThrow(ConfigurationError);
-      expect(() => s4Config.getShippingPoints()).toThrow(/Missing required S\/4HANA configuration: s4\.shippingPoints/);
-    });
-
-    test('validate() should fail loudly when any required key is missing', () => {
+    test('getAll() returns only client / plant / storageLocation', () => {
       process.env.S4_CLIENT = '220';
       process.env.S4_PLANT = '1120';
       process.env.S4_STORAGE_LOCATION = 'CS01';
-      delete cds.env.s4.division;
-      delete process.env.CDS_S4_DIVISION;
-      delete process.env.S4_DIVISION;
+      const all = s4Config.getAll();
+      expect(Object.keys(all).sort()).toEqual(['client', 'plant', 'storageLocation'].sort());
+      expect(all.client).toBe('220');
+      expect(all.plant).toBe('1120');
+      expect(all.storageLocation).toBe('CS01');
+    });
 
-      expect(() => s4Config.validate()).toThrow(ConfigurationError);
-      expect(() => s4Config.validate()).toThrow(/Missing required S\/4HANA configuration: s4\.division/);
+    test('validate() returns the same shape as getAll()', () => {
+      process.env.S4_CLIENT = '220';
+      process.env.S4_PLANT = '1120';
+      process.env.S4_STORAGE_LOCATION = 'CS01';
+      expect(s4Config.validate()).toEqual(s4Config.getAll());
     });
   });
+
+  // ─── Fail-loud tests — business-data keys ─────────────────────────────────
+
+  describe('Fail loudly on missing required business-data values', () => {
+    const businessKeys = [
+      { key: 'salesOrganization',   getter: () => s4Config.getSalesOrganization(),   envs: ['CDS_S4_SALES_ORGANIZATION', 'S4_SALES_ORGANIZATION', 'S4_SALES_ORG'] },
+      { key: 'distributionChannel', getter: () => s4Config.getDistributionChannel(), envs: ['CDS_S4_DISTRIBUTION_CHANNEL', 'S4_DISTRIBUTION_CHANNEL', 'S4_CHANNEL'] },
+      { key: 'division',            getter: () => s4Config.getDivision(),            envs: ['CDS_S4_DIVISION', 'S4_DIVISION'] },
+      { key: 'currency',            getter: () => s4Config.getCurrency(),            envs: ['CDS_S4_CURRENCY', 'S4_CURRENCY'] },
+      { key: 'inquiryType',         getter: () => s4Config.getInquiryType(),         envs: ['CDS_S4_INQUIRY_TYPE', 'S4_INQUIRY_TYPE'] },
+      { key: 'orderType',           getter: () => s4Config.getOrderType(),           envs: ['CDS_S4_ORDER_TYPE', 'S4_ORDER_TYPE'] },
+      { key: 'conditionType',       getter: () => s4Config.getConditionType(),       envs: ['CDS_S4_CONDITION_TYPE', 'S4_CONDITION_TYPE'] }
+    ];
+
+    businessKeys.forEach(({ key, getter, envs }) => {
+      test(`${key}: throws ConfigurationError when absent from env and cds.env.s4`, () => {
+        if (cds.env.s4) delete cds.env.s4[key];
+        envs.forEach(e => delete process.env[e]);
+        expect(() => getter()).toThrow(ConfigurationError);
+        expect(() => getter()).toThrow(new RegExp(`s4\\.${key}`));
+      });
+
+      test(`${key}: throws ConfigurationError when set to whitespace`, () => {
+        if (!cds.env.s4) cds.env.s4 = {};
+        cds.env.s4[key] = '  ';
+        envs.forEach(e => delete process.env[e]);
+        expect(() => getter()).toThrow(ConfigurationError);
+      });
+    });
+
+    test('getShippingPoints(): throws ConfigurationError when absent', () => {
+      if (cds.env.s4) delete cds.env.s4.shippingPoints;
+      delete process.env.CDS_S4_SHIPPING_POINTS;
+      delete process.env.S4_SHIPPING_POINTS;
+      expect(() => s4Config.getShippingPoints()).toThrow(ConfigurationError);
+      expect(() => s4Config.getShippingPoints()).toThrow(/s4\.shippingPoints/);
+    });
+
+    test('getShippingPoints(): throws ConfigurationError when set to empty array', () => {
+      if (!cds.env.s4) cds.env.s4 = {};
+      cds.env.s4.shippingPoints = [];
+      delete process.env.CDS_S4_SHIPPING_POINTS;
+      delete process.env.S4_SHIPPING_POINTS;
+      expect(() => s4Config.getShippingPoints()).toThrow(ConfigurationError);
+    });
+
+    test('getSalesMaterialTypes(): throws ConfigurationError when absent', () => {
+      if (cds.env.s4) delete cds.env.s4.salesMaterialTypes;
+      delete process.env.CDS_S4_SALES_MATERIAL_TYPES;
+      delete process.env.S4_SALES_MATERIAL_TYPES;
+      expect(() => s4Config.getSalesMaterialTypes()).toThrow(ConfigurationError);
+      expect(() => s4Config.getSalesMaterialTypes()).toThrow(/s4\.salesMaterialTypes/);
+    });
+  });
+
+  // ─── getMvt261NotReadyBins ─────────────────────────────────────────────────
+
+  describe('getMvt261NotReadyBins()', () => {
+    beforeEach(() => {
+      if (cds.env.s4) delete cds.env.s4.mvt261NotReadyBins;
+      delete process.env.S4_MVT261_NOT_READY_BINS;
+    });
+
+    test('returns [] when neither cds.env.s4 nor env var is set (feature off)', () => {
+      expect(s4Config.getMvt261NotReadyBins()).toEqual([]);
+    });
+
+    test('returns the array from cds.env.s4.mvt261NotReadyBins when set', () => {
+      const bins = [{ storageType: 'OH1', bin: 'ONHOLD', reason: 'onHold' }];
+      if (!cds.env.s4) cds.env.s4 = {};
+      cds.env.s4.mvt261NotReadyBins = bins;
+      expect(s4Config.getMvt261NotReadyBins()).toEqual(bins);
+    });
+
+    test('parses S4_MVT261_NOT_READY_BINS JSON env var', () => {
+      const bins = [
+        { storageType: 'OH1', bin: 'ONHOLD', reason: 'onHold' },
+        { storageType: '901', bin: 'WE-ZONE', reason: 'goodsReceiptZone' }
+      ];
+      process.env.S4_MVT261_NOT_READY_BINS = JSON.stringify(bins);
+      expect(s4Config.getMvt261NotReadyBins()).toEqual(bins);
+    });
+
+    test('cds.env.s4 array takes priority over env var JSON', () => {
+      const fromCds = [{ storageType: 'A', bin: 'BIN1', reason: 'r1' }];
+      const fromEnv = [{ storageType: 'B', bin: 'BIN2', reason: 'r2' }];
+      if (!cds.env.s4) cds.env.s4 = {};
+      cds.env.s4.mvt261NotReadyBins = fromCds;
+      process.env.S4_MVT261_NOT_READY_BINS = JSON.stringify(fromEnv);
+      expect(s4Config.getMvt261NotReadyBins()).toEqual(fromCds);
+    });
+
+    test('throws ConfigurationError when S4_MVT261_NOT_READY_BINS is malformed JSON', () => {
+      process.env.S4_MVT261_NOT_READY_BINS = 'not-json!';
+      expect(() => s4Config.getMvt261NotReadyBins()).toThrow(ConfigurationError);
+      expect(() => s4Config.getMvt261NotReadyBins()).toThrow(/invalid JSON/);
+    });
+
+    test('throws ConfigurationError when S4_MVT261_NOT_READY_BINS is not an array', () => {
+      process.env.S4_MVT261_NOT_READY_BINS = '{"storageType":"OH1"}';
+      expect(() => s4Config.getMvt261NotReadyBins()).toThrow(ConfigurationError);
+      expect(() => s4Config.getMvt261NotReadyBins()).toThrow(/JSON array/);
+    });
+
+    test('property getter .mvt261NotReadyBins matches method result', () => {
+      const bins = [{ storageType: 'X', bin: 'Y', reason: 'z' }];
+      if (!cds.env.s4) cds.env.s4 = {};
+      cds.env.s4.mvt261NotReadyBins = bins;
+      expect(s4Config.mvt261NotReadyBins).toEqual(s4Config.getMvt261NotReadyBins());
+    });
+  });
+
+  // ─── Difference Storage Type (WM customizing) ─────────────────────────────
 
   describe('Difference Storage Type (WM customizing, never defaulted)', () => {
     test('throws ConfigurationError when neither cds.s4 nor env define it', () => {
@@ -180,7 +318,7 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       expect(() => s4Config.differenceStorageType).toThrow(/differenceStorageType/);
     });
 
-    test('reads S4_DIFFERENCE_STORAGE_TYPE from the environment', () => {
+    test('reads S4_DIFFERENCE_STORAGE_TYPE from the environment (trimmed)', () => {
       if (cds.env.s4) delete cds.env.s4.differenceStorageType;
       process.env.S4_DIFFERENCE_STORAGE_TYPE = ' 999 ';
       expect(s4Config.getDifferenceStorageType()).toBe('999');

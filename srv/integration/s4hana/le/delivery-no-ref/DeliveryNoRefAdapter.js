@@ -130,9 +130,9 @@ class DeliveryNoRefAdapter {
     const s4Payload = {
       ShippingPoint: String(payload.shippingPoint).trim(),
       DeliveryDocumentType: String(payload.deliveryType || 'LO2').trim(),
-      SalesOrganization: String(payload.salesOrg || s4Config.getSalesOrganization() || '1000').trim(),
-      DistributionChannel: String(payload.distChannel || s4Config.getDistributionChannel() || '10').trim(),
-      Division: String(payload.division || s4Config.getDivision() || '52').trim(),
+      SalesOrganization: String(payload.salesOrg || s4Config.getSalesOrganization()).trim(),
+      DistributionChannel: String(payload.distChannel || s4Config.getDistributionChannel()).trim(),
+      Division: String(payload.division || s4Config.getDivision()).trim(),
       ShipToParty: String(payload.shipToParty).trim(),
       Plant: String(payload.plant).trim(),
       StorageLocation: String(payload.storageLocation).trim(),

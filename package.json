@@ -307,36 +307,7 @@
     "s4": {
       "client": "",
       "plant": "",
-      "storageLocation": "",
-      "salesOrganization": "1000",
-      "distributionChannel": "10",
-      "division": "52",
-      "currency": "INR",
-      "inquiryType": "ZIN",
-      "orderType": "ZDOM",
-      "conditionType": "ZPR1",
-      "shippingPoints": [
-        "1120",
-        "1112",
-        "1108",
-        "1109"
-      ],
-      "salesMaterialTypes": [
-        "ZFRT",
-        "FERT"
-      ],
-      "mvt261NotReadyBins": [
-        {
-          "storageType": "OH1",
-          "bin": "ONHOLD",
-          "reason": "onHold"
-        },
-        {
-          "storageType": "901",
-          "bin": "WE-ZONE",
-          "reason": "goodsReceiptZone"
-        }
-      ]
+      "storageLocation": ""
     }
   },
   "optionalDependencies": {

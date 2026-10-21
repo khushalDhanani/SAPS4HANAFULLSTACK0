@@ -1,8 +1,16 @@
 /**
  * s4Config.js
- * Central configuration module for S/4HANA environment-specific values and defaults.
- * Reads directly from cds.env (package.json "cds.s4", .cdsrc.json, or environment variables)
- * and fails loudly with a ConfigurationError when any required value is missing.
+ * Central configuration module for S/4HANA environment-specific values.
+ *
+ * Resolution order for every value:
+ *   1. cds.env.s4.<key>  (set by BTP service bindings or CDS_S4_* env vars at startup)
+ *   2. process.env S4_* / CDS_S4_* fallback
+ *   3. ConfigurationError — never fall back to a hardcoded default
+ *
+ * Business data (salesOrganization, distributionChannel, division, currency,
+ * inquiryType, orderType, conditionType, shippingPoints, salesMaterialTypes,
+ * mvt261NotReadyBins) MUST come from env vars or BTP destinations, not from
+ * package.json.  No default values are supplied here.
  */
 
 let cds;
@@ -175,6 +183,39 @@ class S4Config {
     return this._requireString('differenceStorageType', ['CDS_S4_DIFFERENCE_STORAGE_TYPE', 'S4_DIFFERENCE_STORAGE_TYPE']);
   }
 
+  /**
+   * WM storage type / bin combinations whose stock is not ready to issue (R4).
+   * Sourced from env var S4_MVT261_NOT_READY_BINS (JSON array) or cds.env.s4.mvt261NotReadyBins.
+   * An empty array means the rule is switched off — never throws, never defaults to hard-coded bins.
+   * Each entry: { storageType: string, bin: string, reason: string }
+   * @returns {{ storageType: string, bin: string, reason: string }[]}
+   */
+  getMvt261NotReadyBins() {
+    // Prefer cds.env.s4 (set by BTP service binding or CDS_S4_* prefix) first
+    const fromCds = this._getRaw('mvt261NotReadyBins');
+    if (Array.isArray(fromCds)) return fromCds;
+
+    // JSON env-var fallback: S4_MVT261_NOT_READY_BINS='[{"storageType":"OH1","bin":"ONHOLD","reason":"onHold"}]'
+    const raw = process.env.S4_MVT261_NOT_READY_BINS;
+    if (raw && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+        throw new ConfigurationError(
+          'S4_MVT261_NOT_READY_BINS must be a JSON array of { storageType, bin, reason } objects'
+        );
+      } catch (e) {
+        if (e instanceof ConfigurationError) throw e;
+        throw new ConfigurationError(
+          `S4_MVT261_NOT_READY_BINS contains invalid JSON: ${e.message}`
+        );
+      }
+    }
+
+    // Not configured: feature is off
+    return [];
+  }
+
   /** SAP-side reservation lock via Z_WM_RES_LOCK. OFF unless explicitly 'true'/'X'; never required. */
   getResLockEnabled() {
     const v = this._getRaw('resLockEnabled', ['CDS_S4_RES_LOCK_ENABLED', 'S4_RES_LOCK_ENABLED']);
@@ -202,29 +243,26 @@ class S4Config {
   get shippingPoints() { return this.getShippingPoints(); }
   get differenceStorageType() { return this.getDifferenceStorageType(); }
   get salesMaterialTypes() { return this.getSalesMaterialTypes(); }
+  get mvt261NotReadyBins() { return this.getMvt261NotReadyBins(); }
 
   /**
-   * Returns a snapshot of all configured values.
+   * Returns a snapshot of the environment-config keys (client, plant, storageLocation).
+   * Business-data keys (salesOrganization, distributionChannel, etc.) are intentionally
+   * omitted — they must be resolved at the call site by the relevant adapter, not cached
+   * at startup as static defaults.
    */
   getAll() {
     return {
       client: this.getClient(),
       plant: this.getPlant(),
-      storageLocation: this.getStorageLocation(),
-      salesOrganization: this.getSalesOrganization(),
-      distributionChannel: this.getDistributionChannel(),
-      division: this.getDivision(),
-      currency: this.getCurrency(),
-      inquiryType: this.getInquiryType(),
-      orderType: this.getOrderType(),
-      conditionType: this.getConditionType(),
-      shippingPoints: this.getShippingPoints()
+      storageLocation: this.getStorageLocation()
     };
   }
 
   /**
-   * Validates all required values at once and returns the configuration object.
+   * Validates the environment-config keys and returns them.
    * Throws ConfigurationError if any required value is missing.
+   * Does NOT validate business-data keys — those throw at point of use in the adapter.
    */
   validate() {
     return this.getAll();

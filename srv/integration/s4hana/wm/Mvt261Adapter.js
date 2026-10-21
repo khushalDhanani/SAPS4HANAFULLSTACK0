@@ -122,9 +122,10 @@ class Mvt261Adapter {
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
     this.rfc = options.rfc || new RfcClient();
-    // Storage type / bin combinations whose stock is not ready to issue (R4). Configuration, not SAP data:
-    // cds.env.s4.mvt261NotReadyBins = [{ storageType, bin, reason }]. Empty list = rule switched off.
-    this.notReadyBins = options.notReadyBins || s4Config._getRaw('mvt261NotReadyBins') || [];
+    // Storage type / bin combinations whose stock is not ready to issue (R4).
+    // Sourced from S4_MVT261_NOT_READY_BINS env var (JSON) or cds.env.s4.mvt261NotReadyBins.
+    // Empty array = rule switched off.  Never hard-coded.
+    this.notReadyBins = options.notReadyBins ?? s4Config.getMvt261NotReadyBins();
   }
 
   async _results(path, params, context) {
