@@ -25,6 +25,8 @@ const TRACK_ENTITY = 'saps4hana.wm.ReservationTrack';
 const LOG_ENTITY = 'saps4hana.wm.ReservationLog';
 
 const authClerk = { auth: { username: 'carol', password: '' } };
+const authPlant1130 = { auth: { username: 'dave', password: '' } };
+const authNoPlant = { auth: { username: 'eve', password: '' } };
 
 describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservation + Auto-TR)', () => {
   let createResSpy;
@@ -1448,6 +1450,33 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(r311.StatusText).toBe('Reservation Created');
     });
 
+    test('ReservationEntries collection and keyed reads are restricted to the authenticated Plant attribute', async () => {
+      const list = await GET('/odata/v4/reservation-entry/ReservationEntries?$top=50', authPlant1130);
+      expect(list.status).toBe(200);
+      expect(list.data.value.every((row) => row.Plant === '1130')).toBe(true);
+
+      await expect(GET(
+        "/odata/v4/reservation-entry/ReservationEntries(ReservationNo='0000524979',ReservationItem='0001')",
+        authPlant1130
+      )).rejects.toMatchObject({ response: { status: 404 } });
+    });
+
+    test('a non-Admin without a Plant attribute sees no ReservationEntries', async () => {
+      const list = await GET('/odata/v4/reservation-entry/ReservationEntries?$top=50', authNoPlant);
+      expect(list.status).toBe(200);
+      expect(list.data.value).toEqual([]);
+      await expect(GET(
+        "/odata/v4/reservation-entry/ReservationEntries(ReservationNo='0000524979',ReservationItem='0001')",
+        authNoPlant
+      )).rejects.toMatchObject({ response: { status: 404 } });
+    });
+
+    test('Admin remains unrestricted by the Plant predicate', async () => {
+      const admin = await GET('/odata/v4/reservation-entry/ReservationEntries?$top=50', { auth: { username: 'alice', password: '' } });
+      expect(admin.status).toBe(200);
+      expect(admin.data.value.some((row) => row.Plant === '1120')).toBe(true);
+    });
+
     test('GET /odata/v4/reservation-entry/OrderTypeVH returns order types with ZEMP priority and production/process types', async () => {
       const { status, data } = await GET('/odata/v4/reservation-entry/OrderTypeVH', authClerk);
       expect(status).toBe(200);
@@ -1782,6 +1811,32 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
         GET("/odata/v4/reservation-entry/getOpenReservations(plant='',movementType='')", authClerk)
       ).rejects.toMatchObject({ response: { status: 502 } });
     });
+
+    test('queries only authenticated plants and filters any out-of-scope SAP rows', async () => {
+      openResvSpy = jest.spyOn(GoodsIssueAdapter, 'getOpenReservations').mockResolvedValue([
+        { ReservationNo: '111', MovementType: '311', Plant: '1120' },
+        { ReservationNo: '222', MovementType: '311', Plant: '1130' }
+      ]);
+
+      const { status, data } = await GET(
+        "/odata/v4/reservation-entry/getOpenReservations(plant='',movementType='')",
+        authClerk
+      );
+
+      expect(status).toBe(200);
+      expect(openResvSpy).toHaveBeenCalledTimes(1);
+      expect(openResvSpy).toHaveBeenCalledWith('311,201,241,301,261', '1120');
+      expect(data.value.map((row) => row.Plant)).toEqual(['1120']);
+    });
+
+    test('rejects a requested plant outside the authenticated Plant attribute before SAP read', async () => {
+      openResvSpy = jest.spyOn(GoodsIssueAdapter, 'getOpenReservations');
+      await expect(GET(
+        "/odata/v4/reservation-entry/getOpenReservations(plant='1120',movementType='')",
+        authPlant1130
+      )).rejects.toMatchObject({ response: { status: 403 } });
+      expect(openResvSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('getReservationDetail (live detail for untracked reservations)', () => {
@@ -1831,6 +1886,30 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       await expect(
         GET("/odata/v4/reservation-entry/getReservationDetail(ReservationNo='519944',ReservationItem='0001')", authClerk)
       ).rejects.toMatchObject({ response: { status: 404 } });
+    });
+
+    test('does not return or auto-import a live reservation outside the authenticated Plant attribute', async () => {
+      rtSpy = jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(async (table) => {
+        if (table === 'RKPF') return [{ BWART: '311', KOSTL: '', ANLN1: '', ANLN2: '', UMWRK: '1120', UMLGO: 'CIS1' }];
+        if (table === 'RESB') return [{ MATNR: '000000008000009753', WERKS: '1120', LGORT: 'HS01', BDMNG: '1.000', MEINS: 'NOS', CHARG: '', KZEAR: '' }];
+        return [];
+      });
+      const reservationNo = '0000777991';
+
+      await expect(GET(
+        `/odata/v4/reservation-entry/getReservationDetail(ReservationNo='${reservationNo}',ReservationItem='0001')`,
+        authPlant1130
+      )).rejects.toMatchObject({ response: { status: 404 } });
+      expect(await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: reservationNo }))).toBeFalsy();
+    });
+  });
+
+  describe('getApplicationLogs plant scope', () => {
+    test('does not expose logs for a reservation outside the authenticated Plant attribute', async () => {
+      await expect(GET(
+        "/odata/v4/reservation-entry/getApplicationLogs(ReservationNo='0000524979',ReservationItem='0001')",
+        authPlant1130
+      )).rejects.toMatchObject({ response: { status: 404 } });
     });
   });
 
@@ -2001,4 +2080,5 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       }
     });
   });
+
 });

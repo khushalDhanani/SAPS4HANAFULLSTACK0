@@ -11,6 +11,7 @@ const attemptStore = require('./ReservationAttemptStore');
 const { userFacingSapError } = require('../../common/sapErrorText');
 const { classifyCreateFailure } = require('./ReservationAttemptStore');
 const { validateReservationInput, getMovementConfig, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
+const { plantScope, applyPlantScope, isPlantAllowed } = require('./readScope');
 const LOG = cds.log('reservation-entry');
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 const reservationNoKey = (value) => sapKey(value, 'rsnum').padStart(10, '0');
@@ -1231,6 +1232,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
     // OData Standard READ handler on ReservationEntries: supports auto-resolving GUI-created reservations from SAP
     this.on('READ', ReservationEntries, async (req, next) => {
+      const allowedPlants = plantScope(req.user);
+      applyPlantScope(req.query, allowedPlants);
       const result = await next();
 
       const isSingleKeyRead = req.params && req.params.length > 0;
@@ -1240,11 +1243,19 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         req.data?.ReservationItem || '0001';
 
       if (isSingleKeyRead && keyResNo) {
-        if (result) {
-          if (!result.CreatedByUser && result.createdBy) {
-            result.CreatedByUser = result.createdBy;
+        const row = Array.isArray(result) ? result[0] : result;
+        if (row) {
+          if (!isPlantAllowed(row.Plant, allowedPlants)) {
+            return req.error(404, `Reservation ${keyResNo}/${keyResItem} not found`);
           }
-          return result;
+          if (!row.CreatedByUser && row.createdBy) {
+            row.CreatedByUser = row.createdBy;
+          }
+          return row;
+        }
+
+        if (allowedPlants !== null && allowedPlants.length === 0) {
+          return req.error(404, `Reservation ${keyResNo}/${keyResItem} not found`);
         }
 
         const sPadded = reservationNoKey(keyResNo);
@@ -1252,10 +1263,22 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         const sItem = reservationItemKey(keyResItem);
         const altKey = sClean;
 
-        const altEntry = await SELECT.one.from(ReservationEntries).where({
+        if (allowedPlants !== null) {
+          const trackedForScope = await SELECT.one.from(ReservationEntries).columns(['Plant']).where({
+            ReservationNo: { in: [...new Set([sPadded, sClean])] },
+            ReservationItem: sItem
+          });
+          if (trackedForScope && !isPlantAllowed(trackedForScope.Plant, allowedPlants)) {
+            return req.error(404, `Reservation ${keyResNo}/${keyResItem} not found`);
+          }
+        }
+
+        const altWhere = {
           ReservationNo: altKey,
           ReservationItem: sItem
-        });
+        };
+        if (allowedPlants !== null) altWhere.Plant = { in: allowedPlants };
+        const altEntry = await SELECT.one.from(ReservationEntries).where(altWhere);
         if (altEntry) {
           if (!altEntry.CreatedByUser && altEntry.createdBy) {
             altEntry.CreatedByUser = altEntry.createdBy;
@@ -1266,6 +1289,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         // Auto-seed from SAP if created outside this app (e.g. SAP GUI)
         const live = await fetchSapReservation(keyResNo, keyResItem);
         if (live) {
+          if (!isPlantAllowed(live.Plant, allowedPlants)) {
+            return req.error(404, `Reservation ${keyResNo}/${keyResItem} not found`);
+          }
           const imported = {
             ReservationNo: sPadded,
             ReservationItem: sItem,
@@ -1310,10 +1336,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             MessageText: `Reservation ${sPadded} imported from SAP GUI / S/4HANA`
           });
 
-          return await SELECT.one.from(ReservationEntries).where({
+          const importedWhere = {
             ReservationNo: sPadded,
             ReservationItem: sItem
-          });
+          };
+          if (allowedPlants !== null) importedWhere.Plant = { in: allowedPlants };
+          return await SELECT.one.from(ReservationEntries).where(importedWhere);
         }
       }
 
@@ -1989,6 +2017,19 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const { ReservationNo, ReservationItem = '0001' } = req.data || {};
       if (!ReservationNo) return req.error(400, 'ReservationNo is mandatory');
 
+      const allowedPlants = plantScope(req.user);
+      if (allowedPlants !== null) {
+        if (allowedPlants.length === 0) return req.error(404, `Reservation ${ReservationNo}/${ReservationItem} not found`);
+        const item = reservationItemKey(ReservationItem);
+        const reservationKeys = [...new Set([reservationNoKey(ReservationNo), alphaOut(reservationNoKey(ReservationNo))])];
+        const track = await SELECT.one.from(ReservationEntries).where({
+          ReservationNo: { in: reservationKeys },
+          ReservationItem: item,
+          Plant: { in: allowedPlants }
+        });
+        if (!track) return req.error(404, `Reservation ${ReservationNo}/${item} not found`);
+      }
+
       return await SELECT.from(ReservationLogs)
         .where({ ReservationNo: reservationNoKey(ReservationNo), ReservationItem: reservationItemKey(ReservationItem) })
         .orderBy('createdAt desc');
@@ -1997,8 +2038,15 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
     this.on('getReservationDetail', async (req) => {
       const { ReservationNo, ReservationItem = '0001' } = req.data || {};
       if (!ReservationNo) return req.error(400, 'ReservationNo is mandatory');
+      const allowedPlants = plantScope(req.user);
+      if (allowedPlants !== null && allowedPlants.length === 0) {
+        return req.error(404, `Reservation ${ReservationNo}/${ReservationItem} not found`);
+      }
       const live = await fetchSapReservation(ReservationNo, ReservationItem);
       if (!live) return req.error(404, `Reservation ${ReservationNo}/${ReservationItem} not found in SAP`);
+      if (!isPlantAllowed(live.Plant, allowedPlants)) {
+        return req.error(404, `Reservation ${ReservationNo}/${ReservationItem} not found`);
+      }
 
       const key = {
             ReservationNo: reservationNoKey(ReservationNo),
@@ -2024,8 +2072,14 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
     // All open reservations, read live from SAP S/4HANA (reuses the proven open-reservations reader).
     this.on('getOpenReservations', async (req) => {
-      const plant = String(req.data.plant || '').trim();
+      const plant = String(req.data.plant || '').trim().toUpperCase();
       const mvt = String(req.data.movementType || '').trim();
+      const allowedPlants = plantScope(req.user);
+
+      if (allowedPlants !== null && allowedPlants.length === 0) return [];
+      if (allowedPlants !== null && plant && !isPlantAllowed(plant, allowedPlants)) {
+        return req.error(403, `Plant ${plant} is outside the authenticated user's plant scope`);
+      }
 
       if (mvt && !SUPPORTED_MOVEMENT_TYPES.includes(mvt)) {
         return [];
@@ -2033,9 +2087,14 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       const targetMvt = mvt || '311,201,241,301,261';
       try {
-        const rows = await GoodsIssueAdapter.getOpenReservations(targetMvt, plant);
+        const plantsToQuery = allowedPlants === null ? [plant] : (plant ? [plant] : allowedPlants);
+        const rowSets = await Promise.all(plantsToQuery.map((requestedPlant) =>
+          GoodsIssueAdapter.getOpenReservations(targetMvt, requestedPlant)
+        ));
+        const rows = rowSets.flat();
         const filteredRows = (rows || []).filter((r) =>
-          SUPPORTED_MOVEMENT_TYPES.includes(String(r.MovementType || '').trim())
+          SUPPORTED_MOVEMENT_TYPES.includes(String(r.MovementType || '').trim()) &&
+          isPlantAllowed(r.Plant, allowedPlants)
         );
         return filteredRows.map((r) => ({
           ReservationNo: r.ReservationNo || '',
