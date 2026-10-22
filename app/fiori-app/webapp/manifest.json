@@ -229,7 +229,10 @@
         "type": "View",
         "path": "saps4hana.fiori.view",
         "controlId": "app",
-        "controlAggregation": "pages"
+        "controlAggregation": "pages",
+        "bypassed": {
+          "target": "TargetDashboard"
+        }
       },
       "routes": [
         {
@@ -291,11 +294,6 @@
           "name": "createSalesOrder",
           "pattern": "sd/sales-orders/create",
           "target": "TargetCreateSalesOrder"
-        },
-        {
-          "name": "wmGoodsIssue201Pending",
-          "pattern": "wm/goods-issue/201/open-reservations:?query:",
-          "target": "TargetGoodsIssue201Pending"
         },
         {
           "name": "wmGoodsIssue201",
@@ -485,11 +483,6 @@
         "TargetGoodsIssue201": {
           "id": "goodsIssue201",
           "name": "GoodsIssue201",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
-        },
-        "TargetGoodsIssue201Pending": {
-          "id": "goodsIssue201Pending",
-          "name": "GoodsIssue201Pending",
           "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },
         "TargetGoodsIssue301Pending": {
