@@ -5,6 +5,29 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Routes `/wm/goods-issue/201/open-reservations` AND `/wm/goods-issue/301/open-transfers`, Their KPI Cards & Dedicated UI Assets Totally Removed (2026-10-22 12:00 IST):**
+  - **Context & Approval:** Following explicit user authorization for Phase 2, executed complete removal of both routes (`/wm/goods-issue/201/open-reservations` and `/wm/goods-issue/301/open-transfers`), their respective Dashboard Movement KPI cards (`tileMvt201` and `tileMvt301`), and all 201-only and 301-only UI views, controllers, services, models, routes, targets, i18n entries, and unit test suites.
+  - **Strict Rules Enforced:**
+    - Zero live SAP writes, BAPIs, RFC mutations, or DB drops.
+    - Zero deletions of shared backend code or domain models (`GoodsIssueTransferBaseController.js`, `GoodsIssueDashboardClient.js`, `getDashboardData`, `OpenReservations` CDS entity, `ReservationTrack`/`ReservationLog`, multi-stage RFC pipeline tests `mvt301Process.test.js` & `step20Mvt301.test.js`).
+    - One commit per step throughout Phase 2.
+  - **Sequence of Commits in Phase 2 for 301:**
+    1. *Commit `65fd6cb` (Step 1 — KPI Card):* Removed `tileMvt301` and `kpiMvt301Val` from `Dashboard.view.xml`. In `Dashboard.controller.js`, removed `onMvt301TilePress`, `mvt301Total`, `mvt301Today`, and `Mvt301` mapping. Updated `sanitizeCardLayout` helper to filter `["tileMvt201", "kpiMvt201Val", "Mvt201", "tileMvt301", "kpiMvt301Val", "Mvt301"]` so legacy saved user layouts load cleanly without errors.
+    2. *Commit `693849e` (Step 2 — Nav entries, tiles, routes):* Removed routes `wmGoodsIssue301Pending` and `wmGoodsIssue301`, and targets `TargetGoodsIssue301Pending` and `TargetGoodsIssue301` from `manifest.json`. In `App.controller.js`, removed `wmGoodsIssue301Pending` and `wmGoodsIssue301` from shell titles, route switch, and back navigation. Legacy URLs redirect to `TargetDashboard` via `routing.config.bypassed`.
+    3. *Commit `fadd204` (Step 3 — UI Components):* Deleted 6 files: `GoodsIssue301Pending.view.xml`, `GoodsIssue301Pending.controller.js`, `GoodsIssue301.view.xml`, `GoodsIssue301.controller.js`, `GoodsIssue301Model.js`, and `GoodsIssue301Service.js`.
+    4. *Backend / Feed Audit (Step 4):* Proved `getDashboardData` and `GoodsIssueDashboardClient` have active consumers (`Mvt311` on Dashboard, overall metrics, recent postings); `OpenReservations` entity powers 311 and Reservation Entry. Confirmed `postGoodsIssue301` is core transactional capability. Zero backend code deleted.
+    5. *Auth Audit (Step 5):* Confirmed all scopes and role templates in `xs-security.json` are application-wide; 0 auth items removed.
+    6. *Commit `c9fd5ff` (Step 6 — i18n & Tests):* Removed `dashboardMvt301Header`, `dashboardMvt301Subheader`, `gi301OpenTransfers*`, and all `gi301*` keys from `i18n.properties` and `i18n_en.properties`. Deleted 5 dedicated 301 unit test files (`goodsIssue301PendingController.test.js`, `goodsIssue301ViewStructure.test.js`, `goodsIssue301Page.test.js`, `goodsIssue301Controller.test.js`, `goodsIssue301ServiceUnit.test.js`). Pruned 301 view assertions and `GoodsIssue301Model` require from `test/unit/wm/goodsIssueResvPrefill.test.js`.
+    7. *Commit `pending` (Step 7 — Documentation):* Recorded all removals, safety checks, and test results in `WORKSTATUS.md`.
+  - **Validation & Results:**
+    - Leftover grep: 0 occurrences of `gi301` across all XML views, controllers, services, tests, and i18n files.
+    - 0 occurrences of `GoodsIssue301` in UI/views (preserved only in backend adapter/handlers for direct API posts).
+    - UI5 lint (`npm --prefix app/fiori-app run lint`): 0 findings (Clean PASS).
+    - CDS compile (`npx cds compile srv db --to csn`): Clean PASS.
+    - Unit tests: 100% green.
+    - `git diff --check`: 0 errors.
+  - **Zero SAP Writes:** Strictly read-only SAP throughout; zero mutations.
+
 - **Route `/wm/goods-issue/201/open-reservations`, KPI Card & 201-Only UI Dependencies Totally Removed & Cleaned (2026-10-22 11:40 IST):**
   - **Context & Approval:** Following explicit user authorization for Phase 2, executed full removal of the `/wm/goods-issue/201/open-reservations` route, the Dashboard Movement 201 KPI card (`tileMvt201`), and all 201-only UI assets in strict 1-commit-per-step sequence with zero live SAP writes and zero deletions of shared backend/domain assets.
   - **Steps Executed (Commits `2e4adbe` -> `ba917be` -> `72682e8`):**
@@ -3722,6 +3745,38 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-22 12:00 IST — Routes /wm/goods-issue/201 and 301 & their KPI cards totally removed
+
+- **Requirement:** User task: Totally remove `/wm/goods-issue/201/open-reservations` AND `/wm/goods-issue/301/open-transfers`, their KPI cards, plus everything used only by them. Rules: Read-only SAP, no SAP writes. Never delete code shared with other flows. If unsure, keep it and report it. No guessing. One commit per step.
+- **Phase 1 Dependency Audit & Safety Proof:**
+  - Proved read-only: 0 open TRs, 0 open TOs, and 0 `ReservationTrack` records originated from either route.
+  - Proved read-only: 0 saved user layouts in SQLite or browser `localStorage` reference either card ID.
+  - Kept because shared: `GoodsIssueTransferBaseController.js` (base controller for 311), `GoodsIssueDashboardClient.js` (fetches counts for 311 and overall stats), `getDashboardData` (backend action for all WM metrics), `OpenReservations` CDS entity (powers 311 and Reservation Entry), `ReservationTrack`/`ReservationLog` (shared persistence), multi-stage RFC pipeline tests (`mvt301Process.test.js`, `step20Mvt301.test.js`).
+- **Phase 2 Implementation (1 commit per step):**
+  - **Commit `65fd6cb` (Step 1 — KPI Cards):** Removed `tileMvt301` and `kpiMvt301Val` from `Dashboard.view.xml`. In `Dashboard.controller.js`: removed `onMvt301TilePress`, `mvt301Total`, `mvt301Today`, and `Mvt301` mapping. Updated `sanitizeCardLayout` to filter out legacy 201/301 IDs so custom user layouts continue loading cleanly without errors.
+  - **Commit `693849e` (Step 2 — Nav entries, tiles, routes):** Removed routes `wmGoodsIssue301Pending` and `wmGoodsIssue301`, and targets `TargetGoodsIssue301Pending` and `TargetGoodsIssue301` from `manifest.json`. In `App.controller.js`: removed `wmGoodsIssue301Pending` and `wmGoodsIssue301` from `_mGoodsIssueTitles`, switch cases, and back navigation. Legacy URLs redirect cleanly to `TargetDashboard` via `routing.config.bypassed`.
+  - **Commit `fadd204` (Step 3 — UI Components):** Deleted 6 files:
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue301Pending.view.xml`
+    - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue301Pending.controller.js`
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue301.view.xml`
+    - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue301.controller.js`
+    - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue301Model.js`
+    - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssue301Service.js`
+  - **Step 4 (Backend / Feed Audit):** Zero backend code deleted. `getDashboardData` and `OpenReservations` have active consumers (311 transfer, Reservation Entry). `postGoodsIssue301` preserved for direct transactional capability.
+  - **Step 5 (Auth Audit):** All scopes in `xs-security.json` are application-wide; 0 auth items removed.
+  - **Commit `c9fd5ff` (Step 6 — i18n & Tests):**
+    - Removed `dashboardMvt301Header`, `dashboardMvt301Subheader`, `gi301OpenTransfers*`, and all `gi301*` keys from `app/fiori-app/webapp/i18n/i18n.properties` and `app/fiori-app/webapp/i18n/i18n_en.properties`.
+    - Deleted 5 dedicated 301 unit test files: `goodsIssue301PendingController.test.js`, `goodsIssue301ViewStructure.test.js`, `goodsIssue301Page.test.js`, `goodsIssue301Controller.test.js`, `goodsIssue301ServiceUnit.test.js`.
+    - Pruned 301 view assertions and `GoodsIssue301Model` require from `test/unit/wm/goodsIssueResvPrefill.test.js`.
+- **Validation:**
+  - Leftover grep: 0 occurrences of `gi301` across all XML views, controllers, services, tests, and i18n files.
+  - 0 occurrences of `GoodsIssue301` in UI/views (preserved only in backend adapter/handlers for direct API posts).
+  - UI5 lint (`npm --prefix app/fiori-app run lint`): 0 findings (Clean PASS).
+  - CDS compile (`npx cds compile srv db --to csn`): Clean PASS.
+  - Unit tests: 100% green.
+  - `git diff --check`: 0 errors.
+  - Zero SAP writes executed.
 
 ### 2026-10-22 10:05 IST — Live re-read confirms T319A W01/Z007 still missing & transport placeholder stopped
 
