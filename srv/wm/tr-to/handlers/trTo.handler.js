@@ -35,9 +35,6 @@ class TrToHandler {
     srv.on('lookupTR', run(({ tbnum, lgnum, docType, tbpos }, req) => adapter.lookupTR(tbnum, lgnum, docType, tbpos, req?.user)));
     srv.on('getFifoBatches', run(({ material, plant, storageLocation, warehouseNumber }) => adapter.getFifoBatches(material, plant, storageLocation, warehouseNumber)));
     srv.on('getAvailableSerials', run(({ material, plant, storageLocation, batch }) => adapter.getAvailableSerials(material, plant, storageLocation, batch)));
-    srv.on('getAvailableSUs', run(({ tbnum, lgnum, tbpos }) => adapter.getAvailableSUs(tbnum, lgnum, tbpos)));
-    srv.on('checkSU', run(({ lenum, tbnum, lgnum }) => adapter.checkSU(lenum, tbnum, lgnum)));
-    srv.on('createTO', run(({ lgnum, tbnum, lenum, qty }) => adapter.createTO({ lgnum, tbnum, lenum, qty })));
 
     const entities = () => {
       if (!cds.db) return {};
