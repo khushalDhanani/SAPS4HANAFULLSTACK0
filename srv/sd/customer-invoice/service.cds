@@ -2,7 +2,7 @@
 service CustomerInvoiceService @(path: '/odata/v4/customer-invoice') {
 
     @readonly
-    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'FinanceViewer', 'Admin'])
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
     entity CustomerInvoices {
         key BillingDocument            : String(10);
             BillingDocumentType        : String(4);
@@ -28,7 +28,7 @@ service CustomerInvoiceService @(path: '/odata/v4/customer-invoice') {
             CancelledBillingDocument   : String(10);
     };
 
-    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'FinanceViewer', 'Admin'])
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'Admin'])
     function getInvoiceMetrics() returns {
         totalInvoices          : Integer;
         pendingAccountingCount : Integer;
@@ -36,7 +36,7 @@ service CustomerInvoiceService @(path: '/odata/v4/customer-invoice') {
         cancelledCount         : Integer;
     };
 
-    @(requires: ['SalesManager', 'FinanceManager', 'Admin'])
+    @(requires: ['SalesManager', 'Admin'])
     action releaseInvoiceToAccounting(
         BillingDocument : String
     ) returns {

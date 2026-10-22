@@ -326,13 +326,10 @@ class PurchaseOrderAdapter {
       const sources = {
         totalCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs?$inlinecount=allpages&$top=1&$select=PurchaseOrder'),
         supplierCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_SupplierValueHelp?$inlinecount=allpages&$top=1'),
-        fiDocCount: () => fetchCount('/sap/opu/odata/sap/FAC_GL_JOURNALENTRY_VER_SRV/C_GLJrnlEntryItemToBeVerified?$inlinecount=allpages&$top=1'),
         salesInquiryCount: () => fetchCount('/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370?$inlinecount=allpages&$top=1'),
         customerCount: () => fetchCount('/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV/I_Customer_VH?$inlinecount=allpages&$top=1'),
         openSalesOrderCount: () => fetchCount("/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$inlinecount=allpages&$top=1&$filter=OverallSDProcessStatus ne 'C'"),
         totalSalesOrderCount: () => fetchCount('/sap/opu/odata/sap/SD_F1873_SO_WL_SRV/C_SalesOrderWl_F1873?$inlinecount=allpages&$top=1'),
-        glAccountCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_GLAccountStdVH?$inlinecount=allpages&$top=1'),
-        costCenterCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/I_CostCenterVH?$inlinecount=allpages&$top=1'),
         warehouseCount: () => fetchCount('/sap/opu/odata/sap/API_WAREHOUSE/Warehouse?$inlinecount=allpages&$top=1'),
         openReservationCount: () => fetchCount('/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem?$inlinecount=allpages&$top=1&$filter=ReservationItemIsFinallyIssued eq false and ReservationItmIsMarkedForDeltn eq false'),
         inboundDeliveryCount: () => fetchCount('/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/HMmimGr4inbdelSet?$inlinecount=allpages&$top=1'),
@@ -344,8 +341,6 @@ class PurchaseOrderAdapter {
       const MASTER_DATA_METRIC_KEYS = new Set([
         'supplierCount',
         'customerCount',
-        'glAccountCount',
-        'costCenterCount',
         'warehouseCount'
       ]);
 
