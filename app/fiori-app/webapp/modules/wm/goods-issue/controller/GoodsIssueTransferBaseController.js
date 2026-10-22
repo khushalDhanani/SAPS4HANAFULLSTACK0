@@ -40,7 +40,7 @@ sap.ui.define([
             throw new Error("GoodsIssueTransferBaseController subclass must implement _getConfig()");
         },
 
-        /** Prefixed getText: resolves an i18n key under the movement type's prefix (e.g. gi301/gi311). */
+        /** Prefixed getText: resolves an i18n key under the movement type's prefix (e.g. gi311). */
         _t: function (sKey, aArgs) {
             return this.getText(this._c.i18nPrefix + sKey, aArgs);
         },
