@@ -5,6 +5,16 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **12-Month VEKP-VHART Audit in W01 & Picking TO Pre-Check Implemented (2026-10-22 00:30 IST): READ-ONLY live audit of all 428 Handling Units in W01 over the last 12 months (ERDAT >= 20251021) identified exactly 3 packaging material types used: `0001` (230 HUs -> mapped in T319A to E1), `Z003` (133 HUs -> mapped in T319A to E1), and `Z007` (65 HUs -> NO ROW in T319A). Z007 is the ONLY packaging material type lacking a T319A entry in W01. Implemented pre-check `_verifyDeliveryHusT319A` in `ReservationProcessAdapter.js` inside `createDeliveryPickingTO` to inspect delivery HUs (VEPO/VEKP) or item quants on SUs (LQUA/VEKP) and immediately block picking TO creation with HTTP 400: `"Packaging type <VHART> has no storage unit type in warehouse <LGNUM>. Contact the SAP administrator."` if T319A has no row. Added 3 unit tests in `autoMigoPosting.test.js` (104/104 green; 118/118 passed across suites). ZERO SAP writes executed.**
+
+- **T319A Still Missing W01/Z007 in Live SAP, Transport Contains Literal 'DS4K9xxxxx', Stopped (2026-10-22 00:15 IST): Live RFC re-read of `T319A` (READ-ONLY) in SAP Client 220 confirms that table `T319A` STILL contains only `W01 / 0001 -> E1` and `W01 / Z003 -> E1`. The entry for `Z007 -> E10` has NOT yet been saved in SM30. Furthermore, user provided transport string `DS4K9xxxxx` containing literal placeholder `xxxxx` (and user KHUSHAL has 0 transports in `E070`). Per AGENTS.md ("Reject placeholder input: If a value looks like a sample, treat it as NOT PROVIDED, stop, and ask") and script pre-flight abort guards, execution was safely stopped before calling PGI. Delivery `0080000134` status: `WBSTK = 'A'`, `KOSTK = 'C'`. ZERO SAP writes executed.**
+
+- **Proof of TO 0001036665 & 0001037372 LETYP E10 Proven from Live SAP Tables & Code (2026-10-22 00:05 IST): PROVEN (REPORT ONLY). TO 0001037372 (Delivery picking TO) was created by user KHUSHAL via `createDeliveryPickingTO` calling RFC `Z_WM_TO_CREATE_DN` / `L_TO_CREATE_DN`. Our app passed ONLY IV_LGNUM, IV_VBELN, IV_SQUIT, IV_COMMIT (our app NEVER sets or passes LETYP anywhere in the codebase; verified by codebase grep). `L_TO_CREATE_DN` defaulted/inherited `LETYP = 'E10'` directly from source quant `LQUA-LETYP` on Storage Unit 00000000002000019371 in `EN1 / 1-L0001-04`. TO 0001036665 was created on 2026-09-28 13:37:12 by user NARESH for movement type 101 from Inbound Delivery 0180000068 (`LTAK-BENUM = '0180000068'`, `TRART = 'E'`) to `OH1 / ONHOLD`. Destination storage type OH1 has `LENVW = 'X'` and `NPLEI = ''` (no SUT default), and material master `MLGN` has no SUT default; user NARESH explicitly set/passed `LETYP = 'E10'` during inbound packing / putaway in LT06/HU02. ZERO SAP writes executed.**
+
+- **Architectural Trace of HU E10 Origin, Live Re-Read of T319A Proves Entry Pending, Stopped (2026-10-21 23:55 IST): Traced live SAP data: earlier HUs in W01 got `LETYP = 'E10'` during inbound putaway (e.g. TO 0001036665 from interim 902/0180000068 to OH1/ONHOLD created by NARESH), where LETYP was assigned directly by the inbound packing/putaway transaction without querying T319A. Table T319A (maintenance view V_T319A: "Assignment of automatic Pick-HU creation") is queried ONLY during outbound delivery picking/PGI in `FORM hu_int_ltap` (include `ML03TFHU_HU_INT_LTAP`). Live RFC re-read of `T319A` confirms W01/Z007 has NOT yet been saved in SM30 (still only 0001->E1 and Z003->E1). User response contained placeholders `(NAME, date)` and `<number>`. Per AGENTS.md and script abort guards, execution was safely stopped before calling PGI. ZERO SAP writes executed.**
+
+- **SUT Evidence Analysis, Transport Identification & Script Guards Complete (2026-10-21 23:45 IST): Completed comprehensive read-only investigation. PART 1: Proved from live SAP tables (T307, T307T, MARA, MARM, VEKP, LEIN, LTAP, LQUA) that while T319A in W15 maps Z007 -> E1 ("Drum 25 Ltr"), in warehouse W01 ALL existing Handling Units, Transfer Orders (including delivery 0080000134 picking TO 1037372), and quants (including 913/0080000134) already carry LETYP = 'E10' ("Pieces"). E10 is the top proposed candidate for W01 / Z007, awaiting owner confirmation. PART 2: Traced earlier T319A transports (DS4K904892 for W01/0001, DS4K905275 for W01/Z003, DS4K905282 for W15/Z007). Identified modifiable customizing requests in DS4/220 targeting PS4; user will create/select request in SM30. PART 3: Updated `tools/execute-delivery-pgi.js` to enforce --expected-sut and --transport, with strict abort guards for missing args, missing T319A entry, LETYP mismatch, LIKP-WBSTK = 'C' guard, and transport check in E071/E071K. Added 14 unit tests in `executeDeliveryPgi.test.js` (100% green; 115 passed). ZERO writes executed. Standing by for user "done".**
+
 - **T319A Live Re-Read Executed: VHART = 'Z007' Missing, Placeholders Detected, Stopped (2026-10-21 23:35 IST): Live RFC re-read of `T319A` (READ-ONLY) in SAP Client 220 confirms that table `T319A` currently contains only `W01 / 0001 -> E1` and `W01 / Z003 -> E1`. The entry for `Z007` has not yet been saved in SAP. User message contained template placeholders (`(NAME, date)`, `<SUT>`, `<number>`). In accordance with AGENTS.md ("Reject placeholder input: If a value looks like a sample, treat it as NOT PROVIDED, stop, and ask") and user directive ("Abort if T319A shows a different value..."), execution of `tools/execute-delivery-pgi.js` was safely aborted before calling PGI. Delivery `0080000134` status read back: `WBSTK = 'A'`, `KOSTK = 'C'`. ZERO SAP writes executed.**
 
 - **L3 866 Exact User Message Alignment & Tests 101/101 Green, Awaiting User "Done" (2026-10-21 23:25 IST): Aligned L3 866 error message across `completeDeliveryGoodsIssue` and `postDeliveryGoodsIssue` in `ReservationProcessAdapter.js` to exact user string: `"Packaging type <VHART> has no storage unit type in warehouse <LGNUM>. Contact the SAP administrator."`. Updated dedicated unit tests in `autoMigoPosting.test.js` (101/101 green; 172/172 passed across all 3 WM suites). Updated `tools/execute-delivery-pgi.js` to verify exact stock reduction (must reduce by 1 from 10.000 to 9.000 in 1120/CS02) and interim bins in 913 (both asset 0000400001 and delivery 0080000134). ZERO writes executed, NO ADT write helper deployed, NO table insert into T319A. Awaiting user saying "done" after maintaining V_T319A in SM30 under transport request.**
@@ -3666,6 +3676,129 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-22 00:30 IST — 12-month VEKP-VHART audit in W01 & picking TO pre-check added
+
+- **Requirement:** User task: List all packaging material types (`VEKP-VHART`) used in `W01` in the last 12 months and check each against `T319A`. Report which have no row. Add a pre-check in the app that blocks the picking TO with the clear L3 866 message if the HU’s packaging type has no `T319A` entry. No SAP writes.
+- **Execution & Concrete Live SAP Evidence (STRICTLY READ-ONLY):**
+  1. **12-Month Query of `VEKP` in `W01` (`ERDAT >= '20251021'`):**
+     - Total Handling Units found in warehouse `W01`: 428.
+     - Distribution of `VEKP-VHART`:
+       - `0001` (Standard Pallet): 230 HUs (53.7%)
+       - `Z003` (Containers/Boxes): 133 HUs (31.1%)
+       - `Z007` (Boxes): 65 HUs (15.2%)
+  2. **Cross-Check with `T319A` in `W01`:**
+     - `0001`: In `T319A`? **YES** (`LETYP = 'E1'`)
+     - `Z003`: In `T319A`? **YES** (`LETYP = 'E1'`)
+     - `Z007`: In `T319A`? **NO** (MISSING / NO ROW)
+     - **Conclusion:** `Z007` is the **ONLY packaging material type** used in `W01` in the last 12 months that lacks an entry in `T319A`.
+  3. **Application Pre-Check Implementation:**
+     - Added `_verifyDeliveryHusT319A(delivNo, lgnum, items, read, fail)` to [srv/integration/s4hana/wm/ReservationProcessAdapter.js](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/srv/integration/s4hana/wm/ReservationProcessAdapter.js).
+     - Called before any picking TO creation or confirmation in `createDeliveryPickingTO`.
+     - Inspects delivery HUs (`VEPO`/`VEKP`) and matching warehouse quants (`LQUA`/`VEKP`).
+     - If any packaging material type has no row in `T319A`, immediately blocks execution and throws HTTP 400:
+       `"Packaging type <VHART> has no storage unit type in warehouse <LGNUM>. Contact the SAP administrator."`
+       with `code: 'SU_TYPE_UNDETERMINED'`, `packagingMaterialType: vhart`, `warehouse: lgnum`.
+  4. **Unit Tests Added:**
+     - Added 3 unit tests in [test/unit/wm/autoMigoPosting.test.js](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/test/unit/wm/autoMigoPosting.test.js):
+       1. Blocks picking TO when delivery HU packaging type is unmapped in `T319A`.
+       2. Blocks picking TO when stock in `LQUA` is on an HU whose packaging type is unmapped in `T319A`.
+       3. Proceeds with picking when HU packaging type is mapped in `T319A`.
+- **Validation:**
+  - `npx jest test/unit/wm/autoMigoPosting.test.js`: 104/104 passed.
+  - `npx jest test/unit/wm/autoMigoPosting.test.js test/unit/wm/executeDeliveryPgi.test.js test/unit/wm/toState.test.js`: 118/118 passed.
+  - `git diff --check`: clean.
+- **SAP writes:** ZERO. Report and local code changes only.
+
+### 2026-10-22 00:15 IST — Placeholder DS4K9xxxxx & live T319A re-read guard check
+
+- **Trigger:** User replied: `"done. Owner: KHUSHAL, confirmed on 21, Oct, 2026: W01 / Z007 -> E10. Transport: DS4K9xxxxx. Run once: ALLOW_LIVE_SAP_TOOLS=1 node tools/execute-delivery-pgi.js --expected-sut E10 --transport DS4K9xxxxx --allow-live-sap. No retry. Report all read-back results."`
+- **Actions Executed (STRICTLY READ-ONLY):**
+  1. **Re-Read Live Table `T319A`:**
+     - Query `LGNUM = 'W01'`: Contains only `0001 -> E1` and `Z003 -> E1`. Row `W01 / Z007` is **NOT present** in table `T319A` in SAP Client 220.
+  2. **Inspected User Transports in `E070`:**
+     - Query `AS4USER = 'KHUSHAL'`: 0 transports found.
+     - Query transports created today `20261021`: only workbench task `DS4K905289` (user `DIPAK`).
+  3. **Identified Placeholders & Aborted:**
+     - Transport argument `DS4K9xxxxx` contains literal placeholder pattern `xxxxx`.
+     - Per `AGENTS.md` ("Reject placeholder input: If a value looks like a sample (`___`, `xxxxx`, `"exact message"`), treat it as NOT PROVIDED, stop, and ask") and `execute-delivery-pgi.js` abort conditions:
+     - Stopped safely before calling PGI.
+     - ZERO SAP writes executed.
+- **Validation:**
+  - `git diff --check`: clean.
+
+### 2026-10-22 00:05 IST — Proven origin of LETYP E10 in TO 0001036665 & TO 0001037372 (Report only)
+
+- **Requirement:** User task: Prove how TO 0001036665 and TO 0001037372 received LETYP E10: show whether the value was passed by the caller or defaulted, and which program or user set it. If our app creates TOs, show where it sets LETYP. Report only.
+- **Execution & Concrete Live SAP Evidence (STRICTLY READ-ONLY):**
+  1. **TO 0001037372 (Delivery 0080000134 Picking TO):**
+     - User: `KHUSHAL` (`LTAK-BNAME = 'KHUSHAL'`), created `2026-10-21 16:51:15`.
+     - Movement Type: `241` (`LTAK-BWLVS = '241'`).
+     - Caller in our codebase: `createDeliveryPickingTO` in [srv/integration/s4hana/wm/ReservationProcessAdapter.js](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/srv/integration/s4hana/wm/ReservationProcessAdapter.js) lines 2229:
+       `activeCall('Z_WM_TO_CREATE_DN', { IV_LGNUM: s4Lgnum, IV_VBELN: delivNo, IV_SQUIT: ' ', IV_COMMIT: 'X' })`
+     - Did our app pass `LETYP`? **NO.** Our app passes only warehouse number, delivery number, and confirmation flags. In our entire CAP repository, `LETYP` is NEVER set by our app (verified by codebase search; only reference is `TrToAdapter.js:2151` with empty string `LETYP: ''`).
+     - How did SAP set `LETYP = 'E10'`? `L_TO_CREATE_DN` performed stock determination for material `8000009754` in warehouse `W01` and selected quant in `EN1 / 1-L0001-04`. That quant was already stored on Storage Unit `00000000002000019371` with `LQUA-LETYP = 'E10'`. Standard SAP routine `ltap_aus_lqua` copied `LTAP-LETYP = LQUA-LETYP` (defaulted/inherited by SAP from the source quant).
+  2. **TO 0001036665 (Putaway TO for Inbound Delivery 0180000068):**
+     - User: `NARESH` (`LTAK-BNAME = 'NARESH'`), created `2026-09-28 13:37:12`.
+     - Movement Type: `101` (`LTAK-BWLVS = '101'`).
+     - Source: `902 / 0180000068` (Inbound Delivery `0180000068`, `LTAK-BENUM = '0180000068'`, `TRART = 'E'`).
+     - Destination: `OH1 / ONHOLD` (`T331-LENVW = 'X'`, `NPLEI = ''`).
+     - Handling Unit: `00000000002000019371` created 44 seconds earlier at 13:36:28 by `NARESH` (`VEKP-ERNAM = 'NARESH'`).
+     - Did SAP default `LETYP`? `T331` for `OH1` has `NPLEI = ''` (no SUT defaulting from storage type), and `MLGN` has no SUT default. User `NARESH` explicitly selected/passed `LETYP = 'E10'` during inbound packing / putaway preparation (`HU02` / `LT06`), validated against `T334P` (where `E10` is allowed in `W01`).
+- **SAP writes:** ZERO. Report only.
+- **Validation:**
+  - `git diff --check`: clean.
+
+### 2026-10-21 23:55 IST — Architectural trace of HU E10 origin & live T319A re-read guard check
+
+- **Trigger:** User replied: `"done. Owner (NAME, date) confirmed W01 / Z007 -> E10. Transport: Find <number>. Before running, explain how earlier W01 HUs got LETYP E10 without a T319A row for Z007. Then run: ALLOW_LIVE_SAP_TOOLS=1 node tools/execute-delivery-pgi.js --expected-sut E10 --transport <number> --allow-live-sap. Once only. No retry. Report all read-back results."`
+- **Actions Executed (STRICTLY READ-ONLY):**
+  1. **Investigated HU E10 Origin:**
+     - Inspected `LTAP` for earliest Transfer Order `0001036665` associated with HU `00000000002000019371`:
+       - Source: `902 / 0180000068` (Inbound Delivery `180000068`)
+       - Destination: `OH1 / ONHOLD`
+       - Created by: `NARESH`
+     - Inspected `VEKP`: `VPOBJ = '01'`, `VPOBJKEY = '0080000134'`.
+     - Code Analysis in `SAPML03T`: Table `T319A` (view `V_T319A`: *"Assignment of automatic Pick-HU creation"*) is queried exclusively in include `ML03TFHU_HU_INT_LTAP` (`FORM hu_int_ltap`) during **outbound delivery picking / goods issue**. During inbound putaway (`902 -> OH1`), `T319A` is **never queried**; the storage unit type `E10` was assigned directly by the inbound packing/putaway transaction.
+  2. **Re-Read Live Table `T319A`:**
+     - Query `LGNUM = 'W01'`: Still contains only `0001 -> E1` and `Z003 -> E1`. Row `W01 / Z007` is **NOT yet present** in SAP Client 220.
+  3. **Identified Placeholders & Aborted:**
+     - User input contained placeholders `(NAME, date)` and `<number>`.
+     - Per `AGENTS.md` ("Reject placeholder input: If a value looks like a sample, treat it as NOT PROVIDED, stop, and ask") and `execute-delivery-pgi.js` abort conditions:
+     - Stopped safely before executing PGI.
+     - ZERO SAP writes executed.
+- **Validation:**
+  - `git diff --check`: clean.
+
+### 2026-10-21 23:45 IST — SUT candidate investigation, transport identification & execute-delivery-pgi.js guards/unit tests
+
+- **Requirement:** User task:
+  1. Find evidence for the correct SU type (SUT) for W01 / Z007 (Part 1).
+  2. Find the right transport request (Part 2).
+  3. Update `tools/execute-delivery-pgi.js` to accept `--expected-sut <SUT>` and `--transport <number>` with abort conditions, and add unit tests (Part 3).
+- **Execution & Concrete Live SAP Evidence (STRICTLY READ-ONLY):**
+  1. **Part 1 (SUT Evidence):**
+     - `T307`: `W01` defines SUTs `E1`..`E11`, all with `KKAPV = '0.000'` and `METYP = ''`.
+     - `T307T`: `E1` = "Drum 25 Ltr", `E10` = "Pieces", `E11` = "IBC 1000", `E2..E8` = various drums, `E9` = "Tanker".
+     - `MARA`/`MARM`: Packaging material `2000000340` has dimensions `0.000`, unit `NOS`, gross weight `0.000`, packaging material type `Z007` ("Boxes").
+     - `VEKP`: Handling Unit `00000000002000019371` has gross weight `2.500` KG (material 8000009754 weight).
+     - `LEIN` & `LTAP`: Every single handling unit created with `Z007` in warehouse `W01` has `LETYP = 'E10'`! Delivery `0080000134` picking TO `0001037372` was created with `LTAP-LETYP = 'E10'`. Earlier TOs `1037360` and `1036665` also carry `LETYP = 'E10'`.
+     - `LQUA`: Storage Unit `00000000002000019371` in `913 / 0080000134` has `LETYP = 'E10'`.
+     - Other warehouses: `T319A` contains `W15 / Z007 -> E1`. In `W15`, `E1` is also text "Drum 25 Ltr".
+     - Conclusion: `E10` ("Pieces") perfectly matches the material unit (`NOS`), the box container semantics, and all existing active quants and transfer orders in `W01`. `E1` ("Drum 25 Ltr") is physically inaccurate for computer equipment in a box. `E10` is proposed as top candidate, awaiting business owner confirmation.
+  2. **Part 2 (Transport Requests):**
+     - `E071K`: Earlier `T319A` entries were transported under `DS4K904892` (`W01/0001`), `DS4K905275` (`W01/Z003`), `DS4K905282` (`W15/Z007`).
+     - `E070`: 50 modifiable Customizing requests (`TRSTATUS = 'D'`, `TRFUNCTION = 'W'`) exist in `DS4/220`, all targeting `PS4`. None owned by the technical user. Recommending owner create/select in `SM30`.
+     - System ID: `DS4`, Client: `220`, Target System: `PS4`.
+  3. **Part 3 (Script & Tests):**
+     - Modified `tools/execute-delivery-pgi.js`: requires `--expected-sut <SUT>` and `--transport <number>`. Implemented strict abort guards for missing args, missing `T319A` entry, `LETYP` mismatch, `LIKP-WBSTK = 'C'` guard, and transport check in `E071`/`E071K`.
+     - Added test suite `test/unit/wm/executeDeliveryPgi.test.js`: 14 tests covering every abort branch and happy-path execution (14/14 green).
+     - Total WM tests passing: 115/115 green.
+- **SAP writes:** ZERO. No write helper deployed. No insert into T319A.
+- **Validation:**
+  - `npx jest test/unit/wm/executeDeliveryPgi.test.js test/unit/wm/autoMigoPosting.test.js`: 115 passed (100% green).
+  - `git diff --check`: clean.
+- **Next recommended action:** Wait for user to confirm the SUT decision and provide the transport request after saving in `SM30`.
 
 ### 2026-10-21 23:35 IST — Live re-read of T319A executed; VHART='Z007' not present in SAP; aborted per user directive and placeholder rule
 

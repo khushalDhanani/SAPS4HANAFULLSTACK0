@@ -753,6 +753,70 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         expect(mockRfc.call).not.toHaveBeenCalled();
       });
 
+      test('createDeliveryPickingTO: blocks picking TO with clear L3 866 error when delivery HU packaging type has no T319A entry', async () => {
+        const state = { wbstk: 'A', kostk: 'A' };
+        const baseRead = mkRead(state);
+        mockRfc.readTable = jest.fn(async (table, fields, where) => {
+          if (table === 'VEPO') return [{ VENUM: '0000020534', VBELN: D }];
+          if (table === 'VEKP') return [{ VENUM: '0000020534', VHART: 'Z007', LGNUM: 'W01' }];
+          if (table === 'T319A') return []; // unmapped in T319A
+          return baseRead(table, fields, where);
+        });
+        await expect(adapter.createDeliveryPickingTO(D, { call: mockRfc.call, warehouse: 'W01' }))
+          .rejects.toMatchObject({
+            status: 400,
+            code: 'SU_TYPE_UNDETERMINED',
+            packagingMaterialType: 'Z007',
+            warehouse: 'W01',
+            message: 'Packaging type Z007 has no storage unit type in warehouse W01. Contact the SAP administrator.'
+          });
+        expect(mockRfc.call).not.toHaveBeenCalledWith('L_TO_CREATE_DN', expect.anything());
+        expect(mockRfc.call).not.toHaveBeenCalledWith('Z_WM_TO_CREATE_DN', expect.anything());
+      });
+
+      test('createDeliveryPickingTO: blocks picking TO with clear L3 866 error when stock in LQUA is on HU whose packaging type has no T319A entry', async () => {
+        const state = { wbstk: 'A', kostk: 'A' };
+        const baseRead = mkRead(state);
+        mockRfc.readTable = jest.fn(async (table, fields, where) => {
+          if (table === 'VEPO') return [];
+          if (table === 'LQUA') return [{ LGNUM: 'W01', MATNR: '000000008000009754', LENUM: '00000000002000019371' }];
+          if (table === 'VEKP') return [{ EXIDV: '00000000002000019371', VHART: 'Z007', LGNUM: 'W01' }];
+          if (table === 'T319A') return []; // unmapped
+          return baseRead(table, fields, where);
+        });
+        await expect(adapter.createDeliveryPickingTO(D, { call: mockRfc.call, warehouse: 'W01' }))
+          .rejects.toMatchObject({
+            status: 400,
+            code: 'SU_TYPE_UNDETERMINED',
+            packagingMaterialType: 'Z007',
+            warehouse: 'W01',
+            message: 'Packaging type Z007 has no storage unit type in warehouse W01. Contact the SAP administrator.'
+          });
+        expect(mockRfc.call).not.toHaveBeenCalledWith('L_TO_CREATE_DN', expect.anything());
+        expect(mockRfc.call).not.toHaveBeenCalledWith('Z_WM_TO_CREATE_DN', expect.anything());
+      });
+
+      test('createDeliveryPickingTO: proceeds with picking when HU packaging type is maintained in T319A', async () => {
+        const state = { wbstk: 'A', kostk: 'A' };
+        const baseRead = mkRead(state);
+        mockRfc.readTable = jest.fn(async (table, fields, where) => {
+          if (table === 'VEPO') return [{ VENUM: '0000019051', VBELN: D }];
+          if (table === 'VEKP') return [{ VENUM: '0000019051', VHART: '0001', LGNUM: 'W01' }];
+          if (table === 'T319A') return [{ LGNUM: 'W01', VHART: '0001', LETYP: 'E1' }];
+          return baseRead(table, fields, where);
+        });
+        mockRfc.call.mockImplementation(async (fm) => {
+          if (fm === 'L_TO_CREATE_DN') {
+            state.kostk = 'C';
+            return { E_TANUM: '0001037403' };
+          }
+          return {};
+        });
+        const res = await adapter.createDeliveryPickingTO(D, { call: mockRfc.call, warehouse: 'W01' });
+        expect(res).toMatchObject({ success: true, deliveryNumber: D, transferOrder: '1037403', confirmed: true });
+        expect(mockRfc.call).toHaveBeenCalledWith('L_TO_CREATE_DN', expect.objectContaining({ I_VBELN: D }));
+      });
+
       test('PGI fails with L3 866 (SU type missing): clear error "Packaging type <VHART> has no storage unit type in warehouse <LGNUM>. Contact the SAP administrator.", rolls back, zero auto-fix', async () => {
         mockRfc.readTable = mkRead({ wbstk: 'A', kostk: 'C', serialsAssigned: true, posted: false });
         mockRfc.call.mockImplementation(async (fm) => {

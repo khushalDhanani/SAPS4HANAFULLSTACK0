@@ -1,4 +1,3 @@
-require('./live-sap-gate')();
 'use strict';
 /**
  * One-shot Delivery PGI Execution & Read-back Verification
@@ -10,36 +9,112 @@ require('./live-sap-gate')();
  * Serial Number: MBP00001
  *
  * Sequence:
- * 1. Read-only: Inspect transparent table T319A for W01 / Z007 / E1.
- * 2. Execute PGI once via BAPI_OUTB_DELIVERY_CONFIRM_DEC with POST_GI_FLG = 'X' and ITEM_SERIAL_NO = MBP00001.
- *    (NO RETRY ON FAILURE)
- * 3. Read back and report:
- *    - LIKP-WBSTK (goods movement status)
- *    - VBFA & MATDOC (movement type 241 material document)
+ * 1. Validate CLI arguments (--expected-sut and --transport).
+ * 2. Step 1: Read T319A (read-only) and verify W01 / Z007 entry matches --expected-sut.
+ * 3. Verify LIKP-WBSTK is not already 'C' (abort if already posted).
+ * 4. Verify transport number appears in E071 / E071K for V_T319A / T319A.
+ * 5. Step 2: WRITE: Call BAPI_OUTB_DELIVERY_CONFIRM_DEC once (no retry).
+ * 6. Step 3: READ-ONLY Read back:
+ *    - LIKP-WBSTK = 'C'
+ *    - VBFA & MATDOC 241 material document
  *    - EQBS serial status for MBP00001
- *    - Stock in 1120/CS02 (MARD-LABST)
- *    - Emptied interim bin 913 / 0080000134 (LQUA)
+ *    - Stock in 1120/CS02 reduced by exactly 1
+ *    - Interim bins W01 913 / 0000400001 and 913 / 0080000134 empty.
  */
 
 const path = require('path');
 const root = path.resolve(__dirname, '..');
 require(path.join(root, 'node_modules/dotenv')).config({ path: path.join(root, '.env.local') });
 
-const { RfcClient } = require(path.join(root, 'srv/integration/s4hana/RfcClient'));
 const { sapKey } = require(path.join(root, 'srv/integration/s4hana/sapKey'));
 
-(async () => {
-  const rfc = new RfcClient();
-  const delivNo = '0080000134';
-  const itemNo = '000010';
-  const serialNo = 'MBP00001';
-  const matnr = '000000008000009754';
-  const plant = '1120';
-  const sloc = 'CS02';
-  const lgnum = 'W01';
+function parseArgs(argv = process.argv) {
+  let expectedSut = '';
+  let transport = '';
+  let readOnly = false;
+
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--expected-sut' && argv[i + 1]) {
+      expectedSut = argv[i + 1].trim();
+      i++;
+    } else if (argv[i] === '--transport' && argv[i + 1]) {
+      transport = argv[i + 1].trim();
+      i++;
+    } else if (argv[i] === '--read-t319a-only') {
+      readOnly = true;
+    }
+  }
+
+  if (!expectedSut) {
+    throw new Error('Missing required argument: --expected-sut <SUT> must be specified.');
+  }
+  if (!transport) {
+    throw new Error('Missing required argument: --transport <number> must be specified.');
+  }
+
+  return { expectedSut, transport, readOnly };
+}
+
+function validateT319A(t319aRows, expectedSut, lgnum = 'W01', vhart = 'Z007') {
+  const normLgnum = lgnum.trim().toUpperCase();
+  const normVhart = vhart.trim().toUpperCase();
+  const entry = (t319aRows || []).find(
+    (r) => (r.LGNUM || '').trim().toUpperCase() === normLgnum &&
+           (r.VHART || '').trim().toUpperCase() === normVhart
+  );
+
+  if (!entry) {
+    throw new Error(`[ABORT] T319A does not contain entry for warehouse '${lgnum}' and packaging material type '${vhart}'.`);
+  }
+
+  const actualSut = (entry.LETYP || '').trim().toUpperCase();
+  const reqSut = expectedSut.trim().toUpperCase();
+  if (actualSut !== reqSut) {
+    throw new Error(`[ABORT] T319A LETYP '${actualSut}' does not match expected SUT '${reqSut}'.`);
+  }
+
+  return entry;
+}
+
+function validateLikpStatus(likpRecord) {
+  if (likpRecord && likpRecord.WBSTK === 'C') {
+    throw new Error(`[ABORT] Outbound Delivery ${likpRecord.VBELN || '0080000134'} is already completely posted (LIKP-WBSTK = 'C'). Aborting to prevent double posting.`);
+  }
+}
+
+function validateTransport(e071Rows, e071kRows, transport) {
+  const normTr = transport.trim().toUpperCase();
+  const inE071 = (e071Rows || []).some(
+    (r) => (r.TRKORR || '').trim().toUpperCase() === normTr &&
+           ((r.OBJ_NAME || '').includes('T319A') || (r.OBJECT || '').includes('VDAT') || (r.OBJECT || '').includes('TABU'))
+  );
+
+  const inE071K = (e071kRows || []).some(
+    (r) => (r.TRKORR || '').trim().toUpperCase() === normTr &&
+           ((r.OBJNAME || '').includes('T319A') || (r.TABKEY || '').includes('Z007'))
+  );
+
+  if (!inE071 && !inE071K) {
+    throw new Error(`[ABORT] Transport '${transport}' does not appear in E071 or E071K for table/view T319A/V_T319A.`);
+  }
+
+  return true;
+}
+
+async function runPgiFlow(rfc, options = {}) {
+  const delivNo = options.delivNo || '0080000134';
+  const itemNo = options.itemNo || '000010';
+  const serialNo = options.serialNo || 'MBP00001';
+  const matnr = options.matnr || '000000008000009754';
+  const plant = options.plant || '1120';
+  const sloc = options.sloc || 'CS02';
+  const lgnum = options.lgnum || 'W01';
+  const expectedSut = options.expectedSut;
+  const transport = options.transport;
 
   console.log('================================================================');
   console.log(`PGI Execution on Outbound Delivery ${delivNo} with Serial ${serialNo}`);
+  console.log(`Expected SUT: ${expectedSut} | Transport: ${transport}`);
   console.log('================================================================\n');
 
   // STEP 1: READ-ONLY Verification of T319A
@@ -48,80 +123,73 @@ const { sapKey } = require(path.join(root, 'srv/integration/s4hana/sapKey'));
   console.log(`Current T319A entries for warehouse ${lgnum}:`);
   console.table(t319aRows || []);
 
-  const z007Entry = (t319aRows || []).find((r) => r.VHART?.trim() === 'Z007');
-  if (process.argv.includes('--read-t319a-only')) {
-    if (z007Entry) {
-      console.log(`\n[CONFIRMED] Found T319A entry: LGNUM='${z007Entry.LGNUM?.trim()}', VHART='${z007Entry.VHART?.trim()}', LETYP='${z007Entry.LETYP?.trim()}'.`);
-    } else {
-      console.log(`\n[PENDING] T319A does not yet contain an entry for VHART = 'Z007' in warehouse '${lgnum}'.`);
-    }
-    console.log('\n--read-t319a-only flag specified. Stopping here.');
-    process.exit(0);
-  }
+  const z007Entry = validateT319A(t319aRows, expectedSut, lgnum, 'Z007');
+  console.log(`\n[CONFIRMED] Found T319A entry: LGNUM='${z007Entry.LGNUM?.trim()}', VHART='${z007Entry.VHART?.trim()}', LETYP='${z007Entry.LETYP?.trim()}'. Matches expected SUT '${expectedSut}'.`);
 
-  if (!z007Entry) {
-    console.error(`\n[BLOCKER] T319A does not contain an entry for VHART = 'Z007' in warehouse '${lgnum}'!`);
-    console.error('PGI execution aborted to avoid L3 866 failure.');
-    process.exit(1);
-  }
-
-  console.log(`\n[CONFIRMED] Found T319A entry: LGNUM='${z007Entry.LGNUM?.trim()}', VHART='${z007Entry.VHART?.trim()}', LETYP='${z007Entry.LETYP?.trim()}'.`);
-
-  // Check current LIKP status
+  // Verify LIKP-WBSTK is not already 'C'
+  console.log('\n--- Step 1b: Verify LIKP Status (READ-ONLY) ---');
   const likpPre = await rfc.readTable('LIKP', ['VBELN', 'WBSTK', 'KOSTK', 'LVSTK'], [`VBELN = '${delivNo}'`], 1);
-  console.log('\nCurrent LIKP status:', JSON.stringify(likpPre?.[0] || {}));
-  if (likpPre?.[0]?.WBSTK === 'C') {
-    console.log('\n[INFO] Delivery goods issue is already completely posted (WBSTK = C). Skipping write.');
-  } else {
-    // STEP 2: WRITE: Execute PGI once (no retry on failure)
-    console.log(`\n--- Step 2: WRITE: Calling BAPI_OUTB_DELIVERY_CONFIRM_DEC (ONE-SHOT, NO RETRY) ---`);
-    console.log(`Payload: DELIV_NUMB = '${delivNo}', POST_GI_FLG = 'X', SERIALNO = '${serialNo}'`);
+  console.log('Current LIKP status:', JSON.stringify(likpPre?.[0] || {}));
+  validateLikpStatus(likpPre?.[0]);
+  console.log(`[CONFIRMED] Delivery ${delivNo} is open for goods issue (WBSTK = '${likpPre?.[0]?.WBSTK}').`);
 
-    const confirmParams = {
-      HEADER_DATA: { DELIV_NUMB: delivNo },
-      HEADER_CONTROL: {
-        DELIV_NUMB: delivNo,
-        POST_GI_FLG: 'X'
-      },
-      DELIVERY: delivNo,
-      ITEM_DATA: [{
-        DELIV_NUMB: delivNo,
-        DELIV_ITEM: itemNo
-      }],
-      ITEM_CONTROL: [{
-        DELIV_NUMB: delivNo,
-        DELIV_ITEM: itemNo
-      }],
-      ITEM_SERIAL_NO: [{
-        DELIV_NUMB: delivNo,
-        ITM_NUMBER: itemNo,
-        SERIALNO: sapKey(serialNo, 'serial')
-      }]
-    };
+  // Verify transport in E071 / E071K
+  console.log('\n--- Step 1c: Verify Transport in E071 / E071K (READ-ONLY) ---');
+  const e071Rows = await rfc.readTable('E071', ['TRKORR', 'PGMID', 'OBJECT', 'OBJ_NAME'], [`TRKORR = '${transport}'`], 50);
+  const e071kRows = await rfc.readTable('E071K', ['TRKORR', 'PGMID', 'OBJECT', 'OBJNAME', 'TABKEY'], [`TRKORR = '${transport}'`], 50);
+  console.log(`E071 records for transport ${transport}:`, e071Rows?.length || 0);
+  console.log(`E071K records for transport ${transport}:`, e071kRows?.length || 0);
+  validateTransport(e071Rows, e071kRows, transport);
+  console.log(`[CONFIRMED] Transport ${transport} contains valid T319A/V_T319A entry.`);
 
-    let pgiReturn = [];
-    await rfc.session(async (call) => {
-      const res = await call('BAPI_OUTB_DELIVERY_CONFIRM_DEC', confirmParams);
-      pgiReturn = res?.RETURN || [];
-      const errs = pgiReturn.filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
+  // STEP 2: WRITE: Execute PGI once (no retry on failure)
+  console.log(`\n--- Step 2: WRITE: Calling BAPI_OUTB_DELIVERY_CONFIRM_DEC (ONE-SHOT, NO RETRY) ---`);
+  console.log(`Payload: DELIV_NUMB = '${delivNo}', POST_GI_FLG = 'X', SERIALNO = '${serialNo}'`);
 
-      if (errs.length > 0) {
-        try {
-          await call('BAPI_TRANSACTION_ROLLBACK', {});
-        } catch (_) {}
-        console.error('\n[ERROR] BAPI_OUTB_DELIVERY_CONFIRM_DEC returned errors:');
-        console.table(errs);
-        throw new Error(`PGI failed: ${errs.map((e) => `[${e.TYPE}] ${e.MESSAGE || (e.ID + e.NUMBER)}`).join('; ')}`);
-      }
+  const confirmParams = {
+    HEADER_DATA: { DELIV_NUMB: delivNo },
+    HEADER_CONTROL: {
+      DELIV_NUMB: delivNo,
+      POST_GI_FLG: 'X'
+    },
+    DELIVERY: delivNo,
+    ITEM_DATA: [{
+      DELIV_NUMB: delivNo,
+      DELIV_ITEM: itemNo
+    }],
+    ITEM_CONTROL: [{
+      DELIV_NUMB: delivNo,
+      DELIV_ITEM: itemNo
+    }],
+    ITEM_SERIAL_NO: [{
+      DELIV_NUMB: delivNo,
+      ITM_NUMBER: itemNo,
+      SERIALNO: sapKey(serialNo, 'serial')
+    }]
+  };
 
-      console.log('\nBAPI_OUTB_DELIVERY_CONFIRM_DEC messages:');
-      console.table(pgiReturn);
+  let pgiReturn = [];
+  await rfc.session(async (call) => {
+    const res = await call('BAPI_OUTB_DELIVERY_CONFIRM_DEC', confirmParams);
+    pgiReturn = res?.RETURN || [];
+    const errs = pgiReturn.filter((r) => r.TYPE === 'E' || r.TYPE === 'A');
 
-      console.log('\nCommitting transaction...');
-      const commitRes = await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
-      console.log('BAPI_TRANSACTION_COMMIT response:', JSON.stringify(commitRes || {}));
-    });
-  }
+    if (errs.length > 0) {
+      try {
+        await call('BAPI_TRANSACTION_ROLLBACK', {});
+      } catch (_) {}
+      console.error('\n[ERROR] BAPI_OUTB_DELIVERY_CONFIRM_DEC returned errors:');
+      console.table(errs);
+      throw new Error(`PGI failed: ${errs.map((e) => `[${e.TYPE}] ${e.MESSAGE || (e.ID + e.NUMBER)}`).join('; ')}`);
+    }
+
+    console.log('\nBAPI_OUTB_DELIVERY_CONFIRM_DEC messages:');
+    console.table(pgiReturn);
+
+    console.log('\nCommitting transaction...');
+    const commitRes = await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+    console.log('BAPI_TRANSACTION_COMMIT response:', JSON.stringify(commitRes || {}));
+  });
 
   // STEP 3: READ-ONLY Read-back verification of all 5 requested items
   console.log('\n================================================================');
@@ -204,9 +272,35 @@ const { sapKey } = require(path.join(root, 'srv/integration/s4hana/sapKey'));
   }
 
   console.log('\n================================================================');
-  console.log('Execution & Read-back Completed.');
+  console.log('One-shot PGI Flow Completed.');
   console.log('================================================================');
-})().catch((err) => {
-  console.error('\n[FATAL ERROR]', err.message);
-  process.exit(1);
-});
+
+  return {
+    likpPost,
+    vbfa,
+    matDocNo,
+    eqbs,
+    stock: currentStock,
+    lquaDeliv
+  };
+}
+
+// CLI Execution gate
+if (require.main === module) {
+  require('./live-sap-gate')();
+  const { RfcClient } = require(path.join(root, 'srv/integration/s4hana/RfcClient'));
+  const args = parseArgs(process.argv);
+  const rfc = new RfcClient();
+  runPgiFlow(rfc, args).catch((err) => {
+    console.error('\nExecution failed:', err.message || err);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  parseArgs,
+  validateT319A,
+  validateLikpStatus,
+  validateTransport,
+  runPgiFlow
+};

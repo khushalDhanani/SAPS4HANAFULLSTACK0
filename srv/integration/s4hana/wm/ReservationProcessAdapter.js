@@ -2146,6 +2146,80 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * Pre-check for Outbound Delivery Picking:
+   * Inspects Handling Units assigned to the delivery (VEPO/VEKP) or HUs on matching warehouse quants (LQUA/VEKP).
+   * For any packaging material type (VHART), verifies that a Storage Unit Type (LETYP) is maintained in T319A.
+   * If any packaging material type is unmapped, throws HTTP 400 with the clear L3 866 error to prevent creating stuck picking TOs.
+   */
+  async _verifyDeliveryHusT319A(delivNo, lgnum, items, read, fail) {
+    if (!delivNo || !lgnum) return;
+    try {
+      const vharts = new Set();
+      // 1. Check if delivery already has assigned HUs in VEPO / VEKP
+      let vepo = [];
+      try {
+        vepo = await read('VEPO', ['VENUM', 'VBELN'], [`VBELN = '${delivNo}'`], 20);
+      } catch (_) {}
+      if (vepo && vepo.length) {
+        const venums = [...new Set(vepo.map((r) => r.VENUM).filter(Boolean))];
+        for (const venum of venums) {
+          try {
+            const vekp = await read('VEKP', ['VENUM', 'VHART', 'LGNUM'], [`VENUM = '${venum}'`], 1);
+            const vhart = String(vekp?.[0]?.VHART || '').trim();
+            if (vhart) vharts.add(vhart);
+          } catch (_) {}
+        }
+      }
+
+      // 2. If no delivery HUs yet, check if quants for the delivery items in LQUA are stored on HUs / SUs
+      if (vharts.size === 0 && items && items.length) {
+        for (const itm of items) {
+          const matnr = padMat(String(itm.MATNR || '').trim());
+          if (!matnr) continue;
+          const lquaWhere = [`LGNUM = '${lgnum}'`, `AND MATNR = '${matnr}'`, "AND LENUM <> ''"];
+          if (itm.WERKS) lquaWhere.push(`AND WERKS = '${itm.WERKS}'`);
+          if (itm.LGORT) lquaWhere.push(`AND LGORT = '${itm.LGORT}'`);
+          let quants = [];
+          try {
+            quants = await read('LQUA', ['LGNUM', 'MATNR', 'LENUM'], lquaWhere, 5);
+          } catch (_) {}
+          for (const q of (quants || [])) {
+            const lenum = String(q.LENUM || '').trim();
+            if (lenum && !/^0+$/.test(lenum)) {
+              try {
+                const vekp = await read('VEKP', ['EXIDV', 'VHART', 'LGNUM'], [`EXIDV = '${lenum}'`], 1);
+                const vhart = String(vekp?.[0]?.VHART || '').trim();
+                if (vhart) vharts.add(vhart);
+              } catch (_) {}
+            }
+          }
+        }
+      }
+
+      // 3. For each identified packaging material type, verify row in T319A
+      for (const vhart of vharts) {
+        let t319a = [];
+        try {
+          t319a = await read('T319A', ['LGNUM', 'VHART', 'LETYP'], [`LGNUM = '${lgnum}'`, `AND VHART = '${vhart}'`], 1);
+        } catch (_) {}
+        const letyp = String(t319a?.[0]?.LETYP || '').trim();
+        if (!letyp) {
+          const err = fail(400, `Packaging type ${vhart} has no storage unit type in warehouse ${lgnum}. Contact the SAP administrator.`);
+          err.code = 'SU_TYPE_UNDETERMINED';
+          err.packagingMaterialType = vhart;
+          err.warehouse = lgnum;
+          throw err;
+        }
+      }
+    } catch (e) {
+      if (e.code === 'SU_TYPE_UNDETERMINED' || (e.status === 400 && String(e.message).includes('Packaging type'))) {
+        throw e;
+      }
+      LOG.warn(`_verifyDeliveryHusT319A: pre-check skipped due to error: ${e.message}`);
+    }
+  }
+
+  /**
    * Standalone Picking Transfer Order creation for Outbound Delivery (Step 1):
    * Checks LIKP-KOSTK (already picked); confirms open TO if present; else calls L_TO_CREATE_DN / Z_WM_TO_CREATE_DN;
    * reads back LIKP-KOSTK = 'C'. Can be called standalone or within an active RFC session.
@@ -2172,6 +2246,10 @@ class ReservationProcessAdapter {
     const lgnum = String(item.LGNUM || warehouse || '').trim();
     if (!lgnum) throw fail(400, `Outbound Delivery ${delivNo} is not picked and no warehouse is known for the picking Transfer Order`);
     const s4Lgnum = sapKey(lgnum, 'lgnum');
+
+    // Pre-check: If any HU for this delivery or its items has a packaging material type with no row in T319A,
+    // block picking TO creation immediately with the clear L3 866 error.
+    await this._verifyDeliveryHusT319A(delivNo, s4Lgnum, items, read, fail);
 
     const executePicking = async (activeCall) => {
       const ltak = await read('LTAK', ['TANUM', 'KQUIT'], [`LGNUM = '${s4Lgnum}'`, `AND VBELN = '${delivNo}'`], 5);
