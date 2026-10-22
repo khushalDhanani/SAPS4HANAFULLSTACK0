@@ -566,6 +566,7 @@ describe('Movement Type 201 (GI to Cost Center) Process Tests [mock only, not SA
       process.env.WM_PRE_MIGO_T321_CHECK = 'true';
 
       mockRfc.readTable.mockImplementation(async (tbl) => {
+        if (tbl === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
         if (tbl === 'T321') return [{ LGNUM: '***', RBLVS: '201', TBFKZ: 'X' }];
         if (tbl === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011202701', DATAB: '20230401', DATBI: '99991231', BKZKP: '' }];
         if (tbl === 'MARC') return [{ XCHPF: '', SERNP: '' }];
