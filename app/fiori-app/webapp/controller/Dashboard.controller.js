@@ -24,13 +24,10 @@ sap.ui.define([
     var METRIC_KEYS = [
         "totalCount",
         "supplierCount",
-        "fiDocCount",
         "salesInquiryCount",
         "customerCount",
         "openSalesOrderCount",
         "totalSalesOrderCount",
-        "glAccountCount",
-        "costCenterCount",
         "warehouseCount",
         "openReservationCount",
         "inboundDeliveryCount",
@@ -252,9 +249,6 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("createPurchaseOrder");
         },
 
-        onNavigateToJournalEntries: function () {
-            this.getOwnerComponent().getRouter().navTo("journalEntries");
-        },
 
         onNavigateToSalesInquiries: function () {
             this.getOwnerComponent().getRouter().navTo("salesInquiries");
@@ -349,7 +343,14 @@ sap.ui.define([
                 "panelMdBusinessPartner",
                 "panelMdProduct",
                 "panelMdFinancial",
-                "panelMdOrganization"
+                "panelMdOrganization",
+                "tabFI",
+                "btnQuickManageFI",
+                "panelCategoryFinance",
+                "tileModuleFI",
+                "kpiFIDocsVal",
+                "tileOverviewCostCenters",
+                "tileOverviewGLAccounts"
             ];
             return aCardIds.filter(function (sId) {
                 return sId && aRemoved.indexOf(sId) === -1;

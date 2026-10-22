@@ -81,49 +81,7 @@
                             text="{i18n>tabOverviewTitle}"
                             tooltip="{i18n>tabOverviewTooltip}">
                             <VBox class="sapUiSmallMarginTop">
-                                <!-- Finance -->
-                                <Panel
-                                    id="panelCategoryFinance"
-                                    headerText="{i18n>overviewCategoryFinance}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" alignItems="Center" class="dashboardTileContainer">
-                                        <GenericTile
-                                            id="tileModuleFI"
-                                            header="{i18n>dashboardModuleFI}"
-                                            subheader="{i18n>dashboardModuleFISub}"
-                                            press=".onNavigateToJournalEntries"
-                                            state="{path: 'dashboardView>/fiDocCount', formatter: '.formatTileState'}"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{i18n>dashboardKpiFIDocs}">
-                                                <NumericContent id="kpiFIDocsVal" value="{path: 'dashboardView>/fiDocCount', formatter: '.formatMetricValue'}" icon="sap-icon://accounting-document-verification" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
 
-                                        <GenericTile
-                                            id="tileOverviewCostCenters"
-                                            header="{i18n>dashCostCenters}"
-                                            subheader="{i18n>dashControllingMasterData}"
-                                            state="{path: 'dashboardView>/costCenterCount', formatter: '.formatTileState'}"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{i18n>dashCostCenters}">
-                                                <NumericContent value="{path: 'dashboardView>/costCenterCount', formatter: '.formatMetricValue'}" icon="sap-icon://money-bills" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewGLAccounts"
-                                            header="{i18n>dashGLAccounts}"
-                                            subheader="{i18n>dashFinancialMasterData}"
-                                            state="{path: 'dashboardView>/glAccountCount', formatter: '.formatTileState'}"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{i18n>dashAccounts}">
-                                                <NumericContent value="{path: 'dashboardView>/glAccountCount', formatter: '.formatMetricValue'}" icon="sap-icon://ledger" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
 
                                 <!-- Supply Chain & Sales -->
                                 <Panel
@@ -243,33 +201,7 @@
                                 </Panel>
                             </VBox>
                         </IconTabFilter>
-                        <IconTabSeparator />
 
-                        <!-- FINANCE (FI) -->
-                        <IconTabFilter
-                            id="tabFI"
-                            key="fi"
-                            icon="sap-icon://lead"
-                            text="{i18n>tabFITitle}"
-                            tooltip="{i18n>tabFITooltip}">
-                            <VBox class="sapUiSmallMarginTop">
-                                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap">
-                                    <VBox class="sapUiTinyMarginBottom">
-                                        <Title text="{i18n>tabFIHeading}" level="H3" titleStyle="H4" />
-                                        <Text text="{i18n>tabFISubheading}" class="textMuted" />
-                                    </VBox>
-                                    <Button id="btnQuickManageFI" text="{i18n>dashboardModuleFIAction}" icon="sap-icon://accounting-document-verification" type="Emphasized" press=".onNavigateToJournalEntries" class="sapUiTinyMarginBottom" />
-                                </HBox>
-
-                                <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
-                                    <GenericTile header="{i18n>dashboardModuleFI}" subheader="{i18n>dashGLLineItemsToBeVerified}" press=".onNavigateToJournalEntries" state="{path: 'dashboardView>/fiDocCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="{i18n>dashboardKpiFIDocs}">
-                                            <NumericContent value="{path: 'dashboardView>/fiDocCount', formatter: '.formatMetricValue'}" icon="sap-icon://accounting-document-verification" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
-                                </HBox>
-                            </VBox>
-                        </IconTabFilter>
 
                         <!-- PROCUREMENT (MM) -->
                         <IconTabFilter

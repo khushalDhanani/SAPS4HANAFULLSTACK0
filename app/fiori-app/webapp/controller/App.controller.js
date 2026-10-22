@@ -41,8 +41,6 @@ sap.ui.define([
                 this._updateShell("purchaseOrderDetail", { PurchaseOrder: sPoId });
             } else if (sHash.indexOf("mm/purchase-orders") === 0) {
                 this._updateShell("purchaseOrders");
-            } else if (sHash.indexOf("fi/journal-entries") === 0) {
-                this._updateShell("journalEntries");
             } else if (sHash.indexOf("sd/sales-orders/create") === 0) {
                 this._updateShell("createSalesOrder");
             } else if (sHash.indexOf("sd/sales-orders") === 0) {
@@ -181,11 +179,7 @@ sap.ui.define([
                         sTitle = oBundle ? oBundle.getText("poDetailShellTitle") : "Purchase Order Details";
                     }
                     bShowNav = true;
-                    break;
-                case "journalEntries":
-                    sTitle = oBundle ? oBundle.getText("fiPageTitle") : "Journal Entry Items";
-                    bShowNav = true;
-                    break;
+
                 case "salesInquiries":
                     sTitle = oBundle ? oBundle.getText("salesInquiriesTitle") : "Manage Sales Inquiries";
                     bShowNav = true;
@@ -332,7 +326,7 @@ sap.ui.define([
                 this.onNavBack("wmReservationEntryList");
             } else if (sRoute === "wmReservationEntryList") {
                 this.onNavBack("dashboard");
-            } else if (sRoute === "purchaseOrders" || sRoute === "journalEntries" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
+            } else if (sRoute === "purchaseOrders" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
                 this.onNavBack("dashboard");
             } else {
                 this.onNavBack("dashboard");

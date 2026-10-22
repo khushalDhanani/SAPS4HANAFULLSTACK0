@@ -22,14 +22,6 @@
           "odataVersion": "4.0"
         }
       },
-      "fiService": {
-        "uri": "/odata/v4/journal-entry/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "odataVersion": "4.0"
-        }
-      },
       "salesInquiryService": {
         "uri": "/odata/v4/sales-inquiry/",
         "type": "OData",
@@ -139,13 +131,6 @@
       },
       "": {
         "dataSource": "mainService",
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true
-        }
-      },
-      "fiService": {
-        "dataSource": "fiService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -264,11 +249,6 @@
           "name": "purchaseOrderDetail",
           "pattern": "mm/purchase-orders/{PurchaseOrder}",
           "target": "TargetPurchaseOrderDetail"
-        },
-        {
-          "name": "journalEntries",
-          "pattern": "fi/journal-entries",
-          "target": "TargetJournalEntries"
         },
         {
           "name": "salesInquiries",
@@ -411,11 +391,6 @@
           "id": "createPurchaseOrder",
           "name": "CreatePurchaseOrder",
           "path": "saps4hana.fiori.modules.mm.purchase-order.view"
-        },
-        "TargetJournalEntries": {
-          "id": "journalEntries",
-          "name": "JournalEntries",
-          "path": "saps4hana.fiori.modules.fi.journal-entry.view"
         },
         "TargetSalesInquiries": {
           "id": "salesInquiries",
