@@ -571,39 +571,7 @@
                                     </VBox>
                                 </HBox>
 
-                                <MessageStrip
-                                    id="dashboardGiKpiError"
-                                    text="{dashboardView>/giKpiError}"
-                                    type="Warning"
-                                    showIcon="true"
-                                    visible="{= !!${dashboardView>/giKpiError} }"
-                                    class="sapUiSmallMarginBottom" />
 
-                                <!-- Movement-Type KPI Cards (201 / 301 / 311) -->
-                                <Panel
-                                    id="panelMvtTypeKpis"
-                                    headerText="{i18n>giKpiSectionTitle}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" alignItems="Center" class="dashboardTileContainer">
-                                        <GenericTile
-                                            id="tileMvt311"
-                                            header="{i18n>dashboardMvt311Header}"
-                                            subheader="{i18n>dashboardMvt311Subheader}"
-                                            press=".onMvt311TilePress"
-                                            state="{path: 'dashboardView>/mvt311Total', formatter: '.formatTileState'}"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{path: 'dashboardView>/mvt311Today', formatter: '.formatMvtTodayUnit'}">
-                                                <NumericContent
-                                                    id="kpiMvt311Val"
-                                                    value="{path: 'dashboardView>/mvt311Total', formatter: '.formatMetricValue'}"
-                                                    icon="sap-icon://inventory"
-                                                    valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
 
                                 <HBox wrap="Wrap" class="dashboardTileContainer sapUiTinyMarginBottom">
                                     <GenericTile id="tileGoodsReceipt" header="{i18n>dashGoodsReceipt101}" subheader="{i18n>dashInboundDeliveries}" press=".onNavigateToGoodsReceipt" state="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatTileState'}" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">

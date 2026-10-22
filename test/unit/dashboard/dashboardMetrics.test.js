@@ -317,7 +317,6 @@ describe('Unit: Dashboard Controller live figures', () => {
             const controller = makeController(new MockJSONModel({}));
             controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: (n) => (n === 'auth' ? oAuthModel : null) });
             controller._loadMetrics = jest.fn();
-            controller._loadGiKpis = jest.fn();
             return controller;
         };
 
@@ -333,7 +332,6 @@ describe('Unit: Dashboard Controller live figures', () => {
             const controller = setup(makeAuthModel(true));
             controller._onDashboardMatched();
             expect(controller._loadMetrics).toHaveBeenCalledTimes(1);
-            expect(controller._loadGiKpis).toHaveBeenCalledTimes(1);
         });
 
         test('route matched before the session check finished: loads once it authenticates, exactly once', () => {
@@ -347,7 +345,6 @@ describe('Unit: Dashboard Controller live figures', () => {
             oAuth.set(true);
             oAuth.set(true);
             expect(controller._loadMetrics).toHaveBeenCalledTimes(1);
-            expect(controller._loadGiKpis).toHaveBeenCalledTimes(1);
         });
 
         test('never authenticated (redirect to login): nothing is requested', () => {
@@ -377,22 +374,12 @@ describe('Unit: Dashboard Controller live figures', () => {
             .forEach((fn) => expect(controller[fn]).toBeUndefined());
     });
 
-    test('routes movement type tile presses to their dedicated pages (311)', () => {
+    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, tileMvt301, tileMvt311, etc.)', () => {
         const controller = new DashboardControllerClass();
-        controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: () => null });
-
-        expect(controller.mRoutes).toEqual({
-            "311": "wmGoodsIssue311Pending"
-        });
-
-        controller.onMvt311TilePress();
-        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311Pending');
-    });
-
-    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, tileMvt301, etc.)', () => {
-        const controller = new DashboardControllerClass();
-        expect(controller.sanitizeCardLayout(['tileMvt301', 'tileMvt201', 'kpiMvt201Val', 'kpiMvt301Val', 'Mvt301', 'tileMvt311']))
-            .toEqual(['tileMvt311']);
+        expect(controller.sanitizeCardLayout([
+            'tileMvt301', 'tileMvt201', 'kpiMvt201Val', 'kpiMvt301Val', 'Mvt301',
+            'tileMvt311', 'kpiMvt311Val', 'Mvt311', 'panelMvtTypeKpis', 'tileGoodsReceipt'
+        ])).toEqual(['tileGoodsReceipt']);
         expect(controller.sanitizeCardLayout(null)).toEqual([]);
     });
 });
@@ -402,11 +389,7 @@ describe('Unit: Dashboard view binds only live figures', () => {
     const controllerSource = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/controller/Dashboard.controller.js'), 'utf8');
     const metricKeys = [...controllerSource.match(/var METRIC_KEYS = \[([\s\S]*?)\];/)[1].matchAll(/"([A-Za-z]+)"/g)].map((m) => m[1]);
     const nonMetricModelKeys = [
-        'selectedTab', 'connectionText', 'connectionState', 'metricsError',
-        // Movement-type KPI card model keys (loaded from GoodsIssueService.getDashboardData)
-        'giKpiError',
-        'mvt301Total', 'mvt301Today',
-        'mvt311Total', 'mvt311Today'
+        'selectedTab', 'connectionText', 'connectionState', 'metricsError'
     ];
 
     test('every dashboardView binding is a live SAP metric or a status field', () => {

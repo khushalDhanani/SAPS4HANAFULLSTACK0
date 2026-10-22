@@ -3,14 +3,12 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/service/ODataClient",
     "sap/m/MessageToast",
-    "saps4hana/fiori/modules/wm/goods-issue/service/GoodsIssueService",
     "sap/ui/core/Fragment"
 ], function (
     BaseController,
     JSONModel,
     ODataClient,
     MessageToast,
-    GoodsIssueService,
     Fragment
 ) {
     "use strict";
@@ -55,15 +53,6 @@ sap.ui.define([
         "customerReturnCount"
     ];
 
-    // Movement-type KPI model property keys (loaded from GoodsIssueService.getDashboardData)
-    var GI_KPI_KEYS = [
-        "mvt311Total", "mvt311Today"
-    ];
-
-    var mRoutes = {
-        "311": "wmGoodsIssue311Pending"
-    };
-
     function toCount(vValue) {
         if (vValue === null || vValue === undefined || String(vValue).trim() === "") {
             return null;
@@ -74,7 +63,6 @@ sap.ui.define([
 
     return BaseController.extend("saps4hana.fiori.controller.Dashboard", {
         METRIC_KEYS: METRIC_KEYS,
-        mRoutes: mRoutes,
 
         onInit: function () {
             var oViewModel = new JSONModel({
@@ -146,7 +134,6 @@ sap.ui.define([
         _loadDashboard: function () {
             this._bLoadPending = false;
             this._loadMetrics();
-            this._loadGiKpis();
         },
 
         /**
@@ -266,7 +253,6 @@ sap.ui.define([
 
         onRefresh: function () {
             var that = this;
-            this._loadGiKpis(true);
             this._loadMetrics().then(function () {
                 MessageToast.show(that._text("dashboardActionRefreshDesc", "Fetch latest changes from SAP Gateway"));
             });
@@ -362,91 +348,10 @@ sap.ui.define([
         onSelectTabSD: function () { this.switchToTab("sd"); },
         onSelectTabEWM: function () { this.switchToTab("ewm"); },
         onSelectTabMasterData: function () { this.switchToTab("masterData"); },
-
-        // ─── Movement-Type KPI Cards (EWM Tab) ───────────────────────────
-
-        /**
-         * Loads Goods Issue KPI data (movement types 201/301/311) from
-         * GoodsIssueService.getDashboardData. The server uses a 60 s cache.
-         *
-         * Model properties set:
-         *   /mvt{201|301|311}Total  — all-time posting count (number|null|undefined)
-         *   /mvt{201|301|311}Today  — today's posting count (number|null|undefined)
-         *   /giKpiError                 — error string (empty when OK)
-         *
-         * @param {boolean} [bForceRefresh] - bypass server cache
-         * @returns {Promise<void>}
-         */
-        _loadGiKpis: function (bForceRefresh) {
-            var oViewModel = this.getView().getModel("dashboardView");
-            if (!oViewModel) {
-                return Promise.resolve();
-            }
-
-            var that = this;
-
-            // Set loading (undefined = Loading tile state)
-            GI_KPI_KEYS.forEach(function (sKey) {
-                oViewModel.setProperty("/" + sKey, undefined);
-            });
-            oViewModel.setProperty("/giKpiError", "");
-
-            // Reuse the shared GoodsIssueService (same call the WM dashboard uses) rather than
-            // re-building the getDashboardData URL inline.
-            return GoodsIssueService.getDashboardData(30, "", Boolean(bForceRefresh))
-                .then(function (oData) {
-                    if (!oData || !oData.Kpis) {
-                        throw new Error(that._text("dashboardMvtNoData", "No movement data"));
-                    }
-                    var oKpis = oData.Kpis;
-
-                    var mMapping = {
-                        "Mvt311": { total: "mvt311Total", today: "mvt311Today" }
-                    };
-
-                    Object.keys(mMapping).forEach(function (sKpiKey) {
-                        var oItem = oKpis[sKpiKey];
-                        var mTarget = mMapping[sKpiKey];
-                        if (oItem && typeof oItem.TotalCount === "number") {
-                            oViewModel.setProperty("/" + mTarget.total, oItem.TotalCount);
-                        } else {
-                            oViewModel.setProperty("/" + mTarget.total, null);
-                        }
-                        if (oItem && typeof oItem.TodayPostingsCount === "number") {
-                            oViewModel.setProperty("/" + mTarget.today, oItem.TodayPostingsCount);
-                        } else {
-                            oViewModel.setProperty("/" + mTarget.today, null);
-                        }
-                    });
-                })
-                .catch(function (err) {
-                    GI_KPI_KEYS.forEach(function (sKey) {
-                        oViewModel.setProperty("/" + sKey, null);
-                    });
-                    oViewModel.setProperty("/giKpiError", that._text(
-                        "dashboardMvtLoadError",
-                        "Movement type KPIs could not be loaded from SAP S/4HANA: {0}",
-                        [(err && err.message) || String(err || "")]
-                    ));
-                });
-        },
-
-        /**
-         * Formats today's count into the tile unit text, e.g. "Today: 5".
-         * @param {*} vToday
-         * @returns {string}
-         */
-        formatMvtTodayUnit: function (vToday) {
-            if (typeof vToday === "number") {
-                return this._text("dashboardMvtTodayUnit", "Today: {0}", [String(vToday)]);
-            }
-            return this._text("dashboardMvtTotalUnit", "Total Postings");
-        },
-
         /**
          * Sanitizes a saved or externally supplied card layout, ignoring any obsolete or removed
-         * tile IDs (such as tileMvt201 / kpiMvt201Val / Mvt201 / tileMvt301 / kpiMvt301Val / Mvt301)
-         * so legacy layouts load without error.
+         * tile IDs (such as tileMvt201 / kpiMvt201Val / Mvt201 / tileMvt301 / kpiMvt301Val / Mvt301 /
+         * tileMvt311 / kpiMvt311Val / Mvt311 / panelMvtTypeKpis) so legacy layouts load without error.
          * @param {Array<string>} [aCardIds]
          * @returns {Array<string>}
          */
@@ -456,33 +361,13 @@ sap.ui.define([
             }
             var aRemoved = [
                 "tileMvt201", "kpiMvt201Val", "Mvt201",
-                "tileMvt301", "kpiMvt301Val", "Mvt301"
+                "tileMvt301", "kpiMvt301Val", "Mvt301",
+                "tileMvt311", "kpiMvt311Val", "Mvt311",
+                "panelMvtTypeKpis"
             ];
             return aCardIds.filter(function (sId) {
                 return sId && aRemoved.indexOf(sId) === -1;
             });
-        },
-
-        /**
-         * Opens the Goods Issue transfer worklists for movement types.
-         * @param {string} sMvtType - "311"
-         * @private
-         */
-        _navigateToGiFiltered: function (sMvtType) {
-            var mRoutes = {
-                "311": "wmGoodsIssue311Pending"
-            };
-            var sRoute = mRoutes[sMvtType] || "dashboard";
-            this.getOwnerComponent().getRouter().navTo(sRoute);
-            MessageToast.show(this._text(
-                "dashboardMvtOpenPostings",
-                "Opening movement {0} page",
-                [sMvtType]
-            ));
-        },
-
-        onMvt311TilePress: function () {
-            this._navigateToGiFiltered("311");
         },
 
         onExit: function () {
