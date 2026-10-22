@@ -1,7 +1,10 @@
 /* Shared text utilities (used across the module views) */
 .fontBold,
 .fontBold.sapMText,
-.fontBold .sapMObjStatusText {
+.fontBold .sapMObjStatusText,
+.textBold,
+.textBold.sapMText,
+.textBold.sapMLabel {
     font-weight: bold;
 }
 
@@ -594,6 +597,36 @@
     font-size: 0.95rem;
     font-weight: 700;
     color: #0f172a;
+}
+
+.rackCenterTitleGroup {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+.rackCounterPill {
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-family: monospace;
+    display: inline-block;
+    line-height: 1.2;
+}
+
+.rackRightControls {
+    display: flex;
+    align-items: center;
+}
+
+.rackToolbarLabel {
+    font-size: 0.85rem;
+    color: #475569;
 }
 
 .rackMainWorkspace {

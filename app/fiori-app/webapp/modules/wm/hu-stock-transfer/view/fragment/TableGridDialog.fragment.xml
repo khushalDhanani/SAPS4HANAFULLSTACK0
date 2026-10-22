@@ -1,0 +1,72 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog
+        id="tableGridDialog"
+        title="{i18n>rackTableGridTitle}"
+        contentWidth="65rem"
+        contentHeight="35rem"
+        resizable="true"
+        draggable="true">
+        <content>
+            <Table
+                id="tableGridList"
+                items="{path: 'rackView>/tableGridBins'}"
+                mode="SingleSelectMaster"
+                itemPress=".onSelectTableGridItem"
+                selectionChange=".onSelectTableGridItem"
+                noDataText="{i18n>rackTableGridNoData}"
+                growing="true"
+                busy="{rackView>/busy}"
+                busyIndicatorDelay="0">
+                <headerToolbar>
+                    <OverflowToolbar>
+                        <Title text="{i18n>storageBinsTableTitle} ({= ${rackView>/tableGridBins}.length })" level="H4" />
+                        <ToolbarSpacer />
+                        <SearchField id="searchTableGridField" width="14rem" search=".onSearchTableGrid" placeholder="{i18n>rackTableGridSearchPlaceholder}" />
+                        <Text text="{i18n>storageBinsClickPrompt}" class="textMuted" />
+                    </OverflowToolbar>
+                </headerToolbar>
+                <columns>
+                    <Column width="7rem" hAlign="Center">
+                        <Text text="{i18n>storageBinsColStatus}" />
+                    </Column>
+                    <Column width="9rem">
+                        <Text text="{i18n>storageBinsColUnit}" />
+                    </Column>
+                    <Column width="4.5rem" hAlign="Center">
+                        <Text text="{i18n>storageBinsColType}" />
+                    </Column>
+                    <Column width="6rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
+                        <Text text="{i18n>storageBinsColSut}" />
+                    </Column>
+                    <Column width="8rem">
+                        <Text text="{i18n>storageBinsColBin}" />
+                    </Column>
+                    <Column width="6rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline">
+                        <Text text="{i18n>storageBinsColBatch}" />
+                    </Column>
+                    <Column width="6rem" hAlign="End">
+                        <Text text="{i18n>storageBinsColStock}" />
+                    </Column>
+                </columns>
+                <items>
+                    <ColumnListItem type="Active" press=".onSelectTableGridItem">
+                        <cells>
+                            <ObjectStatus text="{rackView>StorageStatus}" state="{= ${rackView>SortPriority} === 1 ? 'Success' : ${rackView>SortPriority} === 4 ? 'Error' : ${rackView>SortPriority} === 3 ? 'Warning' : 'Information' }" />
+                            <ObjectIdentifier title="{= ${rackView>UnitNumber} || ${rackView>StorageBin} || ${rackView>ActualStorageBin} }" text="{rackView>UnitCategory}" />
+                            <Text text="{rackView>StorageType}" />
+                            <Text text="{rackView>SutCode} {rackView>SutDescription}" />
+                            <ObjectIdentifier title="{= ${rackView>StorageBin} || ${rackView>ActualStorageBin} }" text="{rackView>StorageSectionDesc}" />
+                            <Text text="{rackView>Batch}" />
+                            <ObjectNumber number="{= ${rackView>AvailableStock} || ${rackView>AvailableQuantity} }" unit="{rackView>BaseUnit}" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+            </Table>
+        </content>
+        <beginButton>
+            <Button text="{i18n>commonClose}" press=".onCloseTableGridDialog" />
+        </beginButton>
+    </Dialog>
+</core:FragmentDefinition>

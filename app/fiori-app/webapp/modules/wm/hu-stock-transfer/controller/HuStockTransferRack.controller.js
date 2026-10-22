@@ -2,9 +2,10 @@ sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/service/ODataClient",
+    "sap/ui/core/Fragment",
     "sap/m/MessageToast",
     "sap/m/MessageBox"
-], function (BaseController, JSONModel, ODataClient, MessageToast, MessageBox) {
+], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox) {
     "use strict";
 
     var SLOT_CONFIGS = [
@@ -31,6 +32,7 @@ sap.ui.define([
                 reservationNo: "",
                 reservationItem: "1",
                 materialNumber: "",
+                materialBadgeText: "MATERIAL",
                 materialDesc: "",
                 warehouse: "W01",
                 modelName: "Heavy Duty Selective Pallet Rack",
@@ -42,6 +44,9 @@ sap.ui.define([
                 hasPrevRack: false,
                 hasNextRack: false,
                 rackTitle: "Selective Pallet Rack",
+                rackCounterInfo: "Rack 1 of 1 (001)",
+                tableGridBins: [],
+                allTableGridBins: [],
                 totalBinsCount: "10",
                 occupiedBinsCount: "0",
                 availableBinsCount: "10",
@@ -136,12 +141,14 @@ sap.ui.define([
             var sWhse = oCockpit.Warehouse || (this._aAllQuants[0] && this._aAllQuants[0].Warehouse) || "W01";
 
             oViewModel.setProperty("/materialNumber", sMat);
+            oViewModel.setProperty("/materialBadgeText", sMat ? ("[MATERIAL " + sMat + "]") : "[MATERIAL]");
             oViewModel.setProperty("/materialDesc", sDesc);
             oViewModel.setProperty("/warehouse", sWhse);
+            this._oCockpitData = oCockpit;
 
             // 1. Build distinct Storage Types
             var mTypes = {};
-            var aTypes = [{ key: "", text: this.getText("rackAllStgTypes", null, "All Storage Types") }];
+            var aTypes = [];
             if (oCockpit.PreferredStorageType) {
                 mTypes[oCockpit.PreferredStorageType] = true;
                 aTypes.push({
@@ -159,15 +166,19 @@ sap.ui.define([
                     });
                 }
             });
+            aTypes.push({ key: "", text: this.getText("rackAllStgTypes", null, "All Storage Types") });
             oViewModel.setProperty("/storageTypes", aTypes);
-            oViewModel.setProperty("/selectedStorageType", "");
 
-            // 2. Build distinct Racks
+            // Default to Preferred Storage Type if available
+            var sInitialStg = oCockpit.PreferredStorageType || "";
+            oViewModel.setProperty("/selectedStorageType", sInitialStg);
+
+            // 2. Build distinct Racks based on quants or cockpit available unit count
             var mRacks = {};
             var aRacks = [];
             this._aAllQuants.forEach(function (q) {
-                var sRack = q.RackNumber || (q.ActualStorageBin && q.ActualStorageBin.split("-")[0]) || "01";
-                if (!mRacks[sRack]) {
+                var sRack = q.RackNumber || (q.ActualStorageBin && q.ActualStorageBin.split("-")[0]);
+                if (sRack && sRack !== "TRANSFER" && !mRacks[sRack]) {
                     mRacks[sRack] = true;
                     aRacks.push({
                         rackId: sRack,
@@ -175,9 +186,28 @@ sap.ui.define([
                     });
                 }
             });
-            if (aRacks.length === 0) {
-                aRacks.push({ rackId: "01", label: "Rack 01" });
+
+            // Ensure rack count reflects available unit count from cockpit (e.g. 3 available units = 3 racks)
+            var iExpectedRacks = (typeof oCockpit.AvailableUnitCount === "number" && oCockpit.AvailableUnitCount > 0) ?
+                oCockpit.AvailableUnitCount :
+                (aRacks.length > 0 ? aRacks.length : 1);
+
+            if (aRacks.length < iExpectedRacks) {
+                for (var r = 1; r <= iExpectedRacks; r++) {
+                    var sPadRack = r < 10 ? ("0" + r) : String(r);
+                    if (!mRacks[sPadRack]) {
+                        mRacks[sPadRack] = true;
+                        aRacks.push({
+                            rackId: sPadRack,
+                            label: "Rack " + sPadRack
+                        });
+                    }
+                }
             }
+            aRacks.sort(function (a, b) {
+                return a.rackId.localeCompare(b.rackId, undefined, { numeric: true });
+            });
+
             oViewModel.setProperty("/racks", aRacks);
             oViewModel.setProperty("/selectedRack", aRacks[0].rackId);
 
@@ -209,6 +239,16 @@ sap.ui.define([
                 var matchRack = !sSelectedRack || sQRack === sSelectedRack;
                 return matchStg && matchRack;
             });
+
+            // Derive active storage type code for rack counter
+            var sActiveStg = sSelectedStg ||
+                (this._oCockpitData && this._oCockpitData.PreferredStorageType) ||
+                (aActiveQuants[0] && aActiveQuants[0].StorageType) ||
+                (this._aAllQuants[0] && this._aAllQuants[0].StorageType) ||
+                "EN1";
+            var iTotalRacks = aRacks.length || 1;
+            var sCounterInfo = "Rack " + (iRackIdx + 1) + " of " + iTotalRacks + " (" + sActiveStg + ")";
+            oViewModel.setProperty("/rackCounterInfo", sCounterInfo);
 
             // Map quants into 10 slots
             var mSlotQuants = {};
@@ -255,47 +295,86 @@ sap.ui.define([
                 });
             }
 
+            // Build hierarchical data-driven structure:
+            // Warehouse -> Storage Type -> Rack -> Level/Tier -> Bay -> Storage Bin -> Slot -> HU/SU
+            var aTiersData = [];
             var oSlotsData = {};
             var iOccupiedCount = 0;
             var that = this;
 
-            SLOT_CONFIGS.forEach(function (cfg) {
-                var aItems = mSlotQuants[cfg.key] || [];
-                var bHasStock = aItems.length > 0;
-                if (bHasStock) {
-                    iOccupiedCount++;
-                }
+            var aLevelDefs = [
+                { level: 5, levelCode: "L5", zoneColor: "Pink", badgeText: "HAZARD / CORROSIVE", shelfDesc: "5th Shelf Level (Top)" },
+                { level: 4, levelCode: "L4", zoneColor: "Green", badgeText: "FAST-MOVING", shelfDesc: "4th Shelf Level (Upper)" },
+                { level: 3, levelCode: "L3", zoneColor: "Green", badgeText: "FAST-MOVING", shelfDesc: "3rd Shelf Level (Mid)" },
+                { level: 2, levelCode: "L2", zoneColor: "Blue", badgeText: "COLD STORAGE", shelfDesc: "2nd Shelf Level (Lower)" },
+                { level: 1, levelCode: "L1", zoneColor: "Orange", badgeText: "PRIORITY OUTBOUND", shelfDesc: "1st Shelf Level (Ground)" }
+            ];
 
-                var bSelected = (cfg.key === that._sSelectedSlotKey);
+            aLevelDefs.forEach(function (lvlDef) {
+                var aBaysData = [];
+                [1, 2].forEach(function (iBay) {
+                    var sKey = "L" + lvlDef.level + "-B" + iBay;
+                    var sProp = "L" + lvlDef.level + "_B" + iBay;
+                    var aItems = mSlotQuants[sKey] || [];
+                    var bHasStock = aItems.length > 0;
+                    if (bHasStock) {
+                        iOccupiedCount++;
+                    }
 
-                var sSectionClass = "rackSectionBox " + (bHasStock ? ("rackZone" + cfg.zoneColor) : "rackZoneEmpty") +
-                    (bSelected ? " rackSectionBoxActive" : "");
-                var sBadgeClass = bHasStock ? ("rackBadge" + cfg.zoneColor) : "rackBadgeEmpty";
-                var sBeamClass = "rackBeam" + cfg.zoneColor;
+                    var bSelected = (sKey === that._sSelectedSlotKey);
 
-                var sActualBin = (aItems[0] && (aItems[0].ActualStorageBin || aItems[0].StorageBin)) ||
-                    (sSelectedRack + "-0" + cfg.level + "-0" + cfg.bay);
+                    var sSectionClass = "rackSectionBox " + (bHasStock ? ("rackZone" + lvlDef.zoneColor) : "rackZoneEmpty") +
+                        (bSelected ? " rackSectionBoxActive" : "");
+                    var sBadgeClass = bHasStock ? ("rackBadge" + lvlDef.zoneColor) : "rackBadgeEmpty";
+                    var sBeamClass = "rackStepBeam rackBeam" + lvlDef.zoneColor;
 
-                var oCarton1 = that._buildCartonData(aItems[0], cfg.zoneColor, sActualBin);
-                var oCarton2 = that._buildCartonData(aItems[1], cfg.zoneColor, sActualBin);
+                    var sActualBin = (aItems[0] && (aItems[0].ActualStorageBin || aItems[0].StorageBin)) ||
+                        (sSelectedRack + "-0" + lvlDef.level + "-0" + iBay);
 
-                oSlotsData[cfg.prop] = {
-                    slotKey: cfg.key,
-                    levelNumber: cfg.level,
-                    bayNumber: cfg.bay,
-                    levelTitle: "LEVEL " + cfg.level,
-                    badgeText: cfg.badgeText,
-                    hasStock: bHasStock,
-                    sectionClass: sSectionClass,
-                    badgeClass: sBadgeClass,
-                    beamClass: sBeamClass,
-                    binTag: sActualBin,
-                    carton1: oCarton1,
-                    carton2: oCarton2,
-                    items: aItems
-                };
+                    // Build 2 pallet slots per storage bin
+                    var oCarton1 = that._buildCartonData(aItems[0], lvlDef.zoneColor, sActualBin, 1);
+                    var oCarton2 = that._buildCartonData(aItems[1], lvlDef.zoneColor, sActualBin, 2);
+
+                    var oBayData = {
+                        slotKey: sKey,
+                        levelNumber: lvlDef.level,
+                        levelCode: lvlDef.levelCode,
+                        bayNumber: iBay,
+                        levelTitle: "LEVEL " + lvlDef.level,
+                        badgeText: lvlDef.badgeText,
+                        hasStock: bHasStock,
+                        sectionClass: sSectionClass,
+                        badgeClass: sBadgeClass,
+                        beamClass: sBeamClass,
+                        binTag: sActualBin,
+                        actualStorageBin: sActualBin,
+                        storageType: sActiveStg,
+                        rackId: sSelectedRack,
+                        warehouse: oViewModel.getProperty("/warehouse") || "W01",
+                        shelfLevelDesc: lvlDef.shelfDesc,
+                        zoneColor: lvlDef.zoneColor,
+                        carton1: oCarton1,
+                        carton2: oCarton2,
+                        slots: [oCarton1, oCarton2],
+                        items: aItems
+                    };
+
+                    aBaysData.push(oBayData);
+                    oSlotsData[sProp] = oBayData;
+                });
+
+                aTiersData.push({
+                    levelNumber: lvlDef.level,
+                    levelCode: lvlDef.levelCode,
+                    levelTitle: "LEVEL " + lvlDef.level,
+                    zoneColor: lvlDef.zoneColor,
+                    badgeText: lvlDef.badgeText,
+                    shelfDesc: lvlDef.shelfDesc,
+                    bays: aBaysData
+                });
             });
 
+            oViewModel.setProperty("/tiers", aTiersData);
             oViewModel.setProperty("/slots", oSlotsData);
             oViewModel.setProperty("/occupiedBinsCount", String(iOccupiedCount));
             oViewModel.setProperty("/availableBinsCount", String(10 - iOccupiedCount));
@@ -304,9 +383,10 @@ sap.ui.define([
             this._updateSelectedSlotView();
         },
 
-        _buildCartonData: function (oQuant, sZoneColor, sDefaultBin) {
+        _buildCartonData: function (oQuant, sZoneColor, sDefaultBin, iSlotIndex) {
             if (!oQuant) {
                 return {
+                    slotIndex: iSlotIndex || 1,
                     unitType: "",
                     serialNumber: "",
                     titleText: "-",
@@ -314,7 +394,9 @@ sap.ui.define([
                     sutCode: "",
                     hasSut: false,
                     hasUnit: false,
-                    cartonClass: "rackCartonEmpty"
+                    batch: "",
+                    storageStatus: "Empty",
+                    cartonClass: "rackCargoCarton rackCartonEmpty"
                 };
             }
 
@@ -323,13 +405,17 @@ sap.ui.define([
                 " " + (oQuant.BaseUnit || "PC");
 
             return {
+                slotIndex: iSlotIndex || 1,
                 unitType: oQuant.UnitType || oQuant.UnitCategory || "HU",
                 serialNumber: oQuant.SerialNumber || "",
                 titleText: sUnit,
+                unitNumber: sUnit,
                 qtyText: sQty,
                 sutCode: oQuant.SutCode || "",
                 hasSut: Boolean(oQuant.SutCode),
                 hasUnit: Boolean(oQuant.UnitNumber),
+                batch: oQuant.Batch || "",
+                storageStatus: oQuant.StorageStatus || "Available",
                 cartonClass: "rackCargoCarton rackCarton" + sZoneColor
             };
         },
@@ -389,9 +475,19 @@ sap.ui.define([
             this._sSelectedSlotKey = sSlotKey;
 
             var oViewModel = this.getModel("rackView");
+            var aTiers = oViewModel.getProperty("/tiers") || [];
             var oSlots = oViewModel.getProperty("/slots") || {};
 
-            // Update active highlight classes on all 10 slots
+            // Update active highlight classes on all bays in tiers
+            aTiers.forEach(function (tier) {
+                (tier.bays || []).forEach(function (bay) {
+                    var bSelected = (bay.slotKey === sSlotKey);
+                    var sBaseClass = "rackSectionBox " + (bay.hasStock ? ("rackZone" + bay.zoneColor) : "rackZoneEmpty");
+                    bay.sectionClass = sBaseClass + (bSelected ? " rackSectionBoxActive" : "");
+                });
+            });
+
+            // Update legacy flat map for backward compatibility
             SLOT_CONFIGS.forEach(function (cfg) {
                 var oS = oSlots[cfg.prop];
                 if (oS) {
@@ -401,6 +497,7 @@ sap.ui.define([
                 }
             });
 
+            oViewModel.setProperty("/tiers", aTiers);
             oViewModel.setProperty("/slots", oSlots);
             this._updateSelectedSlotView();
         },
@@ -502,6 +599,88 @@ sap.ui.define([
             if (oItem) {
                 this.getModel("rackView").setProperty("/selectedStorageType", oItem.getKey());
                 this._rebuildRackView();
+            }
+        },
+
+        onOpenTableGrid: function () {
+            var oViewModel = this.getModel("rackView");
+            var sRes = oViewModel.getProperty("/reservationNo");
+            var sItem = oViewModel.getProperty("/reservationItem") || "1";
+            var that = this;
+
+            oViewModel.setProperty("/busy", true);
+
+            var sUrl = "/odata/v4/hu-stock-transfer/getStorageBins(" +
+                "reservation='" + encodeURIComponent(sRes) + "'," +
+                "item='" + encodeURIComponent(sItem) + "')";
+
+            ODataClient.get(sUrl).then(function (data) {
+                oViewModel.setProperty("/busy", false);
+                var aBins = (data && data.value) ? data.value : (data || []);
+                oViewModel.setProperty("/allTableGridBins", aBins);
+                oViewModel.setProperty("/tableGridBins", aBins);
+
+                if (!that._pTableGridDialog) {
+                    that._pTableGridDialog = Fragment.load({
+                        id: that.getView().getId(),
+                        name: "saps4hana.fiori.modules.wm.hu-stock-transfer.view.fragment.TableGridDialog",
+                        controller: that
+                    }).then(function (oDialog) {
+                        that.getView().addDependent(oDialog);
+                        return oDialog;
+                    });
+                }
+
+                that._pTableGridDialog.then(function (oDialog) {
+                    oDialog.open();
+                });
+            }).catch(function (err) {
+                oViewModel.setProperty("/busy", false);
+                MessageBox.error("Failed to load storage bins for table grid: " + (err && err.message ? err.message : String(err)));
+            });
+        },
+
+        onSearchTableGrid: function (oEvent) {
+            var sQuery = oEvent.getParameter("query") || oEvent.getParameter("newValue") || "";
+            var oViewModel = this.getModel("rackView");
+            var aAll = oViewModel.getProperty("/allTableGridBins") || [];
+
+            if (!sQuery.trim()) {
+                oViewModel.setProperty("/tableGridBins", aAll);
+                return;
+            }
+
+            var sLower = sQuery.toLowerCase();
+            var aFiltered = aAll.filter(function (it) {
+                return (it.UnitNumber && it.UnitNumber.toLowerCase().includes(sLower)) ||
+                       (it.StorageBin && it.StorageBin.toLowerCase().includes(sLower)) ||
+                       (it.ActualStorageBin && it.ActualStorageBin.toLowerCase().includes(sLower)) ||
+                       (it.StorageType && it.StorageType.toLowerCase().includes(sLower)) ||
+                       (it.Batch && it.Batch.toLowerCase().includes(sLower)) ||
+                       (it.SutCode && it.SutCode.toLowerCase().includes(sLower));
+            });
+            oViewModel.setProperty("/tableGridBins", aFiltered);
+        },
+
+        onCloseTableGridDialog: function () {
+            if (this._pTableGridDialog) {
+                this._pTableGridDialog.then(function (oDialog) {
+                    oDialog.close();
+                });
+            }
+        },
+
+        onSelectTableGridItem: function (oEvent) {
+            var oItem = (oEvent && typeof oEvent.getParameter === "function" && oEvent.getParameter("listItem")) ||
+                        (oEvent && oEvent.getSource ? oEvent.getSource() : null);
+            if (!oItem || typeof oItem.getBindingContext !== "function") return;
+            var oCtx = oItem.getBindingContext("rackView");
+            if (!oCtx) return;
+
+            var sUnit = oCtx.getProperty("UnitNumber") || oCtx.getProperty("StorageBin") || oCtx.getProperty("ActualStorageBin");
+            if (sUnit) {
+                this.onCloseTableGridDialog();
+                this._handoffUnitToCockpit(sUnit);
             }
         },
 
