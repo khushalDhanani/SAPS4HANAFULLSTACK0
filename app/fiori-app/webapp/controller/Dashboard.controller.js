@@ -295,10 +295,6 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("wmOpen261");
         },
 
-        onNavigateToMvt261: function () {
-            this.getOwnerComponent().getRouter().navTo("wmMvt261");
-        },
-
         onNavigateToHandlingUnits: function () {
             this.getOwnerComponent().getRouter().navTo("wmHandlingUnits");
         },
@@ -348,7 +344,7 @@ sap.ui.define([
         /**
          * Sanitizes a saved or externally supplied card layout, ignoring any obsolete or removed
          * tile IDs (such as tileMvt201 / kpiMvt201Val / Mvt201 / tileMvt301 / kpiMvt301Val / Mvt301 /
-         * tileMvt311 / kpiMvt311Val / Mvt311 / panelMvtTypeKpis) so legacy layouts load without error.
+         * tileMvt311 / kpiMvt311Val / Mvt311 / panelMvtTypeKpis / tileTrTo / tileMvt261) so legacy layouts load without error.
          * @param {Array<string>} [aCardIds]
          * @returns {Array<string>}
          */
@@ -361,7 +357,8 @@ sap.ui.define([
                 "tileMvt301", "kpiMvt301Val", "Mvt301",
                 "tileMvt311", "kpiMvt311Val", "Mvt311",
                 "panelMvtTypeKpis",
-                "tileTrTo"
+                "tileTrTo",
+                "tileMvt261"
             ];
             return aCardIds.filter(function (sId) {
                 return sId && aRemoved.indexOf(sId) === -1;
