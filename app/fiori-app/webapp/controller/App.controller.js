@@ -157,11 +157,6 @@ sap.ui.define([
             });
         },
 
-        /** Goods issue routes: shell title key, and for an execution page the list it returns to. */
-        _mGoodsIssueTitles: {
-            wmGoodsIssue311Pending: "gi311OpenTransfersTitle",
-            wmGoodsIssue311: "gi311PageTitle"
-        },
 
         _updateShell: function (sRouteName, oArgs) {
             this._sCurrentRoute = sRouteName;
@@ -220,11 +215,6 @@ sap.ui.define([
                     break;
                 case "createSalesOrder":
                     sTitle = oBundle ? oBundle.getText("createSalesOrderTitle") : "Create Sales Order (VA01)";
-                    bShowNav = true;
-                    break;
-                case "wmGoodsIssue311Pending":
-                case "wmGoodsIssue311":
-                    sTitle = this.getText(this._mGoodsIssueTitles[sRouteName]);
                     bShowNav = true;
                     break;
                 case "wmGoodsReceipt":
@@ -344,8 +334,7 @@ sap.ui.define([
                 this.onNavBack("salesOrders");
             } else if (sRoute === "createCustomerReturn") {
                 this.onNavBack("customerReturns");
-            } else if (sRoute === "wmGoodsIssue311") {
-                this.onNavBack("wmGoodsIssue311Pending");
+
             } else if (sRoute === "wmGoodsReceiptDetail") {
                 this.onNavBack("wmGoodsReceipt");
             } else if (sRoute === "wmHandlingUnitDetail") {
