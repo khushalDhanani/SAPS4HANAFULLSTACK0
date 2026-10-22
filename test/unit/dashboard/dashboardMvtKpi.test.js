@@ -167,7 +167,6 @@ describe('Unit: Dashboard Controller — GI Movement-Type KPI Loading Logic', ()
     // focusing on model property mapping from the API response.
 
     const GI_KPI_KEYS = [
-        'mvt301Total', 'mvt301Today',
         'mvt311Total', 'mvt311Today'
     ];
 
@@ -183,14 +182,12 @@ describe('Unit: Dashboard Controller — GI Movement-Type KPI Loading Logic', ()
     test('maps Kpis response to correct model properties', () => {
         const oModel = createMockModel();
         const oKpis = {
-            Mvt301: { TotalCount: 3020, OpenPendingCount: 0, TodayPostingsCount: 0 },
             Mvt311: { TotalCount: 1052, OpenPendingCount: 5, TodayPostingsCount: 1 },
             Overall: { TotalCount: 4072, OpenPendingCount: 5, TodayPostingsCount: 1 }
         };
 
         // Simulate the mapping logic from the controller
         const mMapping = {
-            'Mvt301': { total: 'mvt301Total', today: 'mvt301Today' },
             'Mvt311': { total: 'mvt311Total', today: 'mvt311Today' }
         };
 
@@ -209,8 +206,6 @@ describe('Unit: Dashboard Controller — GI Movement-Type KPI Loading Logic', ()
             }
         });
 
-        expect(oModel.data['/mvt301Total']).toBe(3020);
-        expect(oModel.data['/mvt301Today']).toBe(0);
         expect(oModel.data['/mvt311Total']).toBe(1052);
         expect(oModel.data['/mvt311Today']).toBe(1);
     });

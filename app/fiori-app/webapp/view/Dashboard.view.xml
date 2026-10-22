@@ -588,22 +588,6 @@
                                     expanded="true">
                                     <HBox wrap="Wrap" alignItems="Center" class="dashboardTileContainer">
                                         <GenericTile
-                                            id="tileMvt301"
-                                            header="{i18n>dashboardMvt301Header}"
-                                            subheader="{i18n>dashboardMvt301Subheader}"
-                                            press=".onMvt301TilePress"
-                                            state="{path: 'dashboardView>/mvt301Total', formatter: '.formatTileState'}"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{path: 'dashboardView>/mvt301Today', formatter: '.formatMvtTodayUnit'}">
-                                                <NumericContent
-                                                    id="kpiMvt301Val"
-                                                    value="{path: 'dashboardView>/mvt301Total', formatter: '.formatMetricValue'}"
-                                                    icon="sap-icon://journey-change"
-                                                    valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
                                             id="tileMvt311"
                                             header="{i18n>dashboardMvt311Header}"
                                             subheader="{i18n>dashboardMvt311Subheader}"

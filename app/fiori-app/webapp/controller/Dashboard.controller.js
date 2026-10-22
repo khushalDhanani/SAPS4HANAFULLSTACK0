@@ -57,12 +57,10 @@ sap.ui.define([
 
     // Movement-type KPI model property keys (loaded from GoodsIssueService.getDashboardData)
     var GI_KPI_KEYS = [
-        "mvt301Total", "mvt301Today",
         "mvt311Total", "mvt311Today"
     ];
 
     var mRoutes = {
-        "301": "wmGoodsIssue301Pending",
         "311": "wmGoodsIssue311Pending"
     };
 
@@ -403,7 +401,6 @@ sap.ui.define([
                     var oKpis = oData.Kpis;
 
                     var mMapping = {
-                        "Mvt301": { total: "mvt301Total", today: "mvt301Today" },
                         "Mvt311": { total: "mvt311Total", today: "mvt311Today" }
                     };
 
@@ -448,7 +445,8 @@ sap.ui.define([
 
         /**
          * Sanitizes a saved or externally supplied card layout, ignoring any obsolete or removed
-         * tile IDs (such as tileMvt201 / kpiMvt201Val / Mvt201) so legacy layouts load without error.
+         * tile IDs (such as tileMvt201 / kpiMvt201Val / Mvt201 / tileMvt301 / kpiMvt301Val / Mvt301)
+         * so legacy layouts load without error.
          * @param {Array<string>} [aCardIds]
          * @returns {Array<string>}
          */
@@ -456,20 +454,22 @@ sap.ui.define([
             if (!Array.isArray(aCardIds)) {
                 return [];
             }
-            var aRemoved = ["tileMvt201", "kpiMvt201Val", "Mvt201"];
+            var aRemoved = [
+                "tileMvt201", "kpiMvt201Val", "Mvt201",
+                "tileMvt301", "kpiMvt301Val", "Mvt301"
+            ];
             return aCardIds.filter(function (sId) {
                 return sId && aRemoved.indexOf(sId) === -1;
             });
         },
 
         /**
-         * Opens the Goods Issue transfer worklists for movement types 301 and 311.
-         * @param {string} sMvtType - "301" or "311"
+         * Opens the Goods Issue transfer worklists for movement types.
+         * @param {string} sMvtType - "311"
          * @private
          */
         _navigateToGiFiltered: function (sMvtType) {
             var mRoutes = {
-                "301": "wmGoodsIssue301Pending",
                 "311": "wmGoodsIssue311Pending"
             };
             var sRoute = mRoutes[sMvtType] || "dashboard";
@@ -479,10 +479,6 @@ sap.ui.define([
                 "Opening movement {0} page",
                 [sMvtType]
             ));
-        },
-
-        onMvt301TilePress: function () {
-            this._navigateToGiFiltered("301");
         },
 
         onMvt311TilePress: function () {

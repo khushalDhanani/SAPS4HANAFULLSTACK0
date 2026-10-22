@@ -377,26 +377,22 @@ describe('Unit: Dashboard Controller live figures', () => {
             .forEach((fn) => expect(controller[fn]).toBeUndefined());
     });
 
-    test('routes movement type tile presses to their dedicated pages (301/311)', () => {
+    test('routes movement type tile presses to their dedicated pages (311)', () => {
         const controller = new DashboardControllerClass();
         controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: () => null });
 
         expect(controller.mRoutes).toEqual({
-            "301": "wmGoodsIssue301Pending",
             "311": "wmGoodsIssue311Pending"
         });
-
-        controller.onMvt301TilePress();
-        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue301Pending');
 
         controller.onMvt311TilePress();
         expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311Pending');
     });
 
-    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, kpiMvt201Val, Mvt201)', () => {
+    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, tileMvt301, etc.)', () => {
         const controller = new DashboardControllerClass();
-        expect(controller.sanitizeCardLayout(['tileMvt301', 'tileMvt201', 'kpiMvt201Val', 'tileMvt311']))
-            .toEqual(['tileMvt301', 'tileMvt311']);
+        expect(controller.sanitizeCardLayout(['tileMvt301', 'tileMvt201', 'kpiMvt201Val', 'kpiMvt301Val', 'Mvt301', 'tileMvt311']))
+            .toEqual(['tileMvt311']);
         expect(controller.sanitizeCardLayout(null)).toEqual([]);
     });
 });
