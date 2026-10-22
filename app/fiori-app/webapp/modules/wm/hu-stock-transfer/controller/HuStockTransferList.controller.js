@@ -12,6 +12,7 @@ sap.ui.define([
         onInit: function () {
             var oViewModel = new JSONModel({
                 busy: false,
+                selectedItem: null,
                 filters: {
                     plant: "1120",
                     storageLocation: "",
@@ -54,6 +55,7 @@ sap.ui.define([
                     var aItems = (oPayload && oPayload.Items) || (Array.isArray(oPayload) ? oPayload : []);
                     oViewModel.setProperty("/items", aItems);
                     oViewModel.setProperty("/allItems", aItems);
+                    oViewModel.setProperty("/selectedItem", null);
                     oViewModel.setProperty("/busy", false);
                 })
                 .catch(function (err) {
@@ -105,18 +107,48 @@ sap.ui.define([
             oViewModel.setProperty("/items", aFiltered);
         },
 
+        onSelectionChange: function (oEvent) {
+            var oItem = oEvent.getParameter("listItem");
+            var oContext = oItem ? oItem.getBindingContext("listView") : null;
+            var oViewModel = this.getModel("listView");
+            if (oContext) {
+                oViewModel.setProperty("/selectedItem", oContext.getObject());
+            } else {
+                oViewModel.setProperty("/selectedItem", null);
+            }
+        },
+
+        onProcessSelected: function () {
+            var oViewModel = this.getModel("listView");
+            var oSelected = oViewModel.getProperty("/selectedItem");
+            if (!oSelected) {
+                MessageToast.show(this.getText("selectReservationPrompt", [], "Please select a reservation to process"));
+                return;
+            }
+            this._navigateToDetail(oSelected.ReservationNo, oSelected.ReservationItem);
+        },
+
         onItemPress: function (oEvent) {
-            var oItem = oEvent.getParameter("listItem") || oEvent.getSource();
-            var oContext = oItem.getBindingContext("listView");
+            var oItem = (oEvent && typeof oEvent.getParameter === "function" && oEvent.getParameter("listItem")) ||
+                        (oEvent && oEvent.getSource ? oEvent.getSource() : null);
+            var oContext = oItem ? oItem.getBindingContext("listView") : null;
             if (!oContext) return;
 
             var sReservation = oContext.getProperty("ReservationNo");
             var sItem = oContext.getProperty("ReservationItem");
 
-            this.getRouter().navTo("wmHuStockTransferDetail", {
-                reservation: sReservation,
-                item: sItem
-            });
+            this._navigateToDetail(sReservation, sItem);
+        },
+
+        _navigateToDetail: function (sReservation, sItem) {
+            if (!sReservation) return;
+            var oRouter = (this.getOwnerComponent && this.getOwnerComponent().getRouter()) || this.getRouter();
+            if (oRouter) {
+                oRouter.navTo("wmHuStockTransferDetail", {
+                    reservation: String(sReservation),
+                    item: String(sItem || "1")
+                });
+            }
         }
     });
 });

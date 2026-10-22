@@ -25,6 +25,7 @@
                     items="{path: 'cockpitView>/visualRack'}"
                     mode="SingleSelectMaster"
                     noDataText="{i18n>visualRackNoData}"
+                    itemPress=".onSelectRackItem"
                     selectionChange=".onSelectRackItem">
                     <items>
                         <CustomListItem type="Active" press=".onSelectRackItem">
@@ -41,7 +42,7 @@
                                             <Text text="{cockpitView>ShelfLevelDesc}" class="boldText" />
                                         </HBox>
                                         <Text text="Bin: {cockpitView>ActualStorageBin} ({cockpitView>StorageTypeDesc})" class="textMuted" />
-                                        <Text text="Pallet / Unit: {cockpitView>UnitNumber} · SUT: {cockpitView>SutCode} {cockpitView>SutDescription}" />
+                                        <Text text="{= ${cockpitView>UnitNumber} ? 'Pallet / Unit: ' + ${cockpitView>UnitNumber} : 'Bin Stock: ' + ${cockpitView>ActualStorageBin} } · SUT: {cockpitView>SutCode} {cockpitView>SutDescription}" />
                                     </VBox>
                                 </HBox>
                                 <VBox alignItems="End">

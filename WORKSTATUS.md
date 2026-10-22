@@ -7,6 +7,70 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Full-Page SAPUI5 Warehouse Pallet Rack Visualizer (`/wm/hu-stock-transfer/{reservation}/{item}/rack`) (2026-10-22 17:35 IST):**
+  - **Context & Objective:** Built a full-screen, responsive SAPUI5/Fiori warehouse rack visualizer as the primary workspace experience for the HU Stock Transfer module, replacing temporary popups/dialogs with a dedicated Fiori page.
+  - **Layout & Fiori Architecture:**
+    1. **Primary Workspace (78% / 22% split):**
+       - Left Rack Visualizer container (~78%): Displays 10 Bins organized into 5 Tiers (Level 5 down to 1) × 2 Bays (Bay 1 & Bay 2), complete with color-coded storage sections (Level 5 Pink Hazard/Corrosive, Levels 4/3 Green Fast-Moving, Level 2 Blue Cold Storage, Level 1 Orange Priority Outbound), dual-pallet side-by-side carton slots, wooden pallets (slat + runners), and color-coded step beams with clickable actual bin tags (`beamBinTag`) and level badges.
+       - Right Detail Panel (~22%): Houses the Slot & Bin Inspector card (quant specs, section, SUT, serial, batch, status, and emphasized "Select Unit for Transfer" button) and Bin Units & Pallets card (interactive HU list table with quick-select button and color reference legend).
+    2. **Top Control Bar & Bottom Physical Spec Bar:**
+       - Top Bar: Material number badge, material description, Storage Type filter dropdown, Rack navigation arrows with Rack selection dropdown, and Back to Cockpit navigation.
+       - Bottom Bar: Warehouse code, rack model name, physical dimensions, total bins (10), occupied bins count, and available bins count.
+    3. **Two-Way Handoff & SAP Integration:**
+       - Clicking any slot, beam, or unit table row enables immediate selection.
+       - Clicking "Select Unit for Transfer" or row "Select" sets the preselected unit in the component `cockpitShared` model and returns to `wmHuStockTransferDetail`, where the unit is automatically populated and validated against SAP for 311 posting.
+       - Pure SAPUI5 XML View and Controller with JSONModel and ODataClient consuming backend endpoints `getCockpitDetail`, `getVisualRack`, and `getStorageBins`. Zero backend business logic or SAP payloads modified.
+  - **Files Changed:**
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferRack.view.xml` (Created)
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferRack.controller.js` (Created)
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferDetail.controller.js` (Updated navigation & preselected unit auto-validation)
+    - `app/fiori-app/webapp/controller/App.controller.js` (Updated ShellBar routing and navBack)
+    - `app/fiori-app/webapp/manifest.json` (Added `wmHuStockTransferRack` route & target)
+    - `app/fiori-app/webapp/css/style.css` (Added rack responsive layout, tier, carton, beam, and inspector styling)
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties` (Added 43 rack i18n keys)
+  - **Validation & Results:**
+    - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected** (0 errors, 0 warnings).
+    - `npx jest test/unit/controller/uiConsistency.test.js test/unit/wm/huStockTransferAdapter.test.js --no-coverage`: **22/22 tests PASS (100% green)**.
+    - `git diff --check`: **0 errors**.
+  - **Zero SAP Writes:** Strictly read-only; no live SAP mutations executed.
+
+- **HU Stock Transfer Module — Row Click, Dialog Bin Selection & Backend Processing Fix (2026-10-22 17:15 IST):**
+  - **Context & Objective:** Fixed issue where clicking on any reservation row or attempting further processing on `/wm/hu-stock-transfer` failed or stalled, including navigation to the cockpit, bin/unit selection in dialogs, and validation of storage bin quants.
+  - **Root Cause & Fixes:**
+    1. **Worklist Table Row Navigation (`HuStockTransferList.view.xml` & `controller.js`):**
+       - `HuStockTransferList.view.xml` defined `mode="SingleSelectMaster"` on `<Table id="reservationsTable">`, causing row cell clicks to fire table selection rather than column item press. Attached `itemPress=".onItemPress"` and `selectionChange=".onSelectionChange"` to the table.
+       - Added explicit toolbar button `<Button id="btnProcessTransfer" text="{i18n>btnProcessTransferText}" tooltip="{i18n>btnProcessTransferTooltip}" icon="sap-icon://process" type="Emphasized" press=".onProcessSelected" enabled="{= !!${listView>/selectedItem} }" />`.
+       - Implemented `onSelectionChange`, `onProcessSelected`, and unified `onItemPress` to route to `wmHuStockTransferDetail` (`#/wm/hu-stock-transfer/{reservation}/{item}`).
+    2. **ShellBar State on Direct URL Navigation (`App.controller.js`):**
+       - Added `wm/hu-stock-transfer/` and `wm/hu-stock-transfer` hash checks in `App.controller.js` `onInit` to synchronize title and navigation button on browser refresh.
+    3. **Storage Bins & Visual Shelf Rack Dialog Interactivity (`StorageBinsDialog.fragment.xml`, `VisualRackDialog.fragment.xml`, `HuStockTransferDetail.controller.js`):**
+       - Added `itemPress=".onSelectBinItem"` to `<Table id="storageBinsTable">` and `itemPress=".onSelectRackItem"` to `<List id="visualRackList">` so clicking any row/item immediately triggers selection.
+       - Supported fallback to `StorageBin` / `ActualStorageBin` when `UnitNumber` is not present (standard non-SU bins), displaying the bin identifier in the dialogs and auto-populating `inputUnitNumber` for immediate validation upon row selection.
+    4. **SAP Backend Adapter Quant Validation (`HuStockTransferAdapter.js`):**
+       - Supported Storage Bin validation in `validateUnit` when warehouse storage unit management is not active on that storage type, safely structured in separate RFC_READ_TABLE WHERE lines (< 72 characters).
+       - Added `_parseSapQty` to correctly handle SAP trailing minus signs (`10.000-`) and filtered out negative interim clearing quants (e.g. storage type 902) from `getStorageBins` and `getVisualRack`.
+       - Set `UnitNumber: this._unpad(q.LENUM) || q.LGPLA` and `UnitCategory: 'BIN'` when SU is not present.
+  - **Files Changed:**
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferList.view.xml`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferList.controller.js`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/fragment/StorageBinsDialog.fragment.xml`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/fragment/VisualRackDialog.fragment.xml`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferDetail.controller.js`
+    - `app/fiori-app/webapp/controller/App.controller.js`
+    - `app/fiori-app/webapp/i18n/i18n.properties`
+    - `app/fiori-app/webapp/i18n/i18n_en.properties`
+    - `srv/integration/s4hana/wm/HuStockTransferAdapter.js`
+  - **Validation & Results:**
+    - UI5 lint (`npm --prefix app/fiori-app run lint`): **Success! No findings detected** (0 errors, 0 warnings).
+    - Jest tests (`test/unit/controller/uiConsistency.test.js` & `test/unit/wm/huStockTransferAdapter.test.js`): **22/22 tests PASS (100% green)**.
+    - Live S/4HANA OData queries:
+      - `getOpenReservations`: PASS (Returned real S/4HANA reservations including 525271, 527591).
+      - `getCockpitDetail`: PASS (Context loaded with material 1000000045, open qty 5 KG).
+      - `getStorageBins`: PASS (Negative interim quant filtered, positive stock in TRANSFER bin returned).
+      - `validateUnit` with TRANSFER bin: PASS (`Valid: true`, `UnitType: Storage Bin Stock`, `DefaultTransferQty: 5`).
+    - `git diff --check`: **0 errors**.
+  - **Zero SAP Writes:** Strictly read-only; no live SAP mutations executed.
+
 - **HU Stock Transfer Module — UI5 MCP Polish & Strict Fiori Guidelines (2026-10-22 16:45 IST):**
   - **Context & Objective:** Polished the `/wm/hu-stock-transfer` frontend module to strict SAPUI5 (v1.136+) and Fiori UX guidelines using the `sap-ui5` MCP tool suite, ensuring zero linter warnings, robust responsive layouts, and accessibility.
   - **Enhancements Implemented:**

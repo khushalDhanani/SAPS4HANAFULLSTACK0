@@ -558,3 +558,498 @@
     border-radius: 6px;
     padding: 0.75rem 1rem;
 }
+
+/* ── Full-Page Warehouse Pallet Rack Visualizer ──────────────────────────── */
+
+.rackVisualizerPage {
+    height: 100%;
+}
+
+.rackAppWrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: #eef2f6;
+}
+
+.rackTopBar {
+    background: #ffffff !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    padding: 0.5rem 1rem !important;
+}
+
+.rackTitleBadge {
+    font-weight: 700;
+    font-family: monospace;
+    font-size: 0.8rem;
+}
+
+.rackMatDesc {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.rackMainWorkspace {
+    display: flex;
+    flex: 1 1 auto;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.rackVisualizerContainer {
+    flex: 3.5 1 78%;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+    overflow: hidden;
+    min-height: 0;
+}
+
+.rackModelHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    flex-shrink: 0;
+    gap: 0.5rem;
+}
+
+.rackStage {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 0.25rem;
+}
+
+.rackTiersWrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.rackTierRow {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.625rem;
+    flex-grow: 1;
+    flex-shrink: 0;
+    min-height: 4.8rem;
+}
+
+.rackBayColumn {
+    display: flex;
+    flex-direction: column;
+    min-height: 4.8rem;
+    height: 100%;
+    justify-content: flex-end;
+}
+
+.rackSectionBox {
+    border-radius: 6px 6px 0 0;
+    padding: 0.25rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 2px solid transparent;
+    border-bottom: none;
+    flex: 1 1 auto;
+    min-height: 3.6rem;
+    justify-content: space-between;
+}
+
+.rackSectionBox:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.rackSectionBoxActive {
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.4), 0 6px 16px rgba(0, 0, 0, 0.12) !important;
+}
+
+.rackZonePink {
+    background: #fdf2f8;
+    border-color: #f472b6;
+}
+
+.rackZoneGreen {
+    background: #f0fdf4;
+    border-color: #4ade80;
+}
+
+.rackZoneBlue {
+    background: #f0f9ff;
+    border-color: #38bdf8;
+}
+
+.rackZoneOrange {
+    background: #fff7ed;
+    border-color: #fb923c;
+}
+
+.rackZoneEmpty {
+    background: #f8fafc;
+    border: 1.5px dashed #cbd5e1;
+    border-bottom: none;
+}
+
+.rackZoneBadgeBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 0.125rem;
+    line-height: 1;
+}
+
+.rackBadgePink {
+    color: #db2777;
+}
+
+.rackBadgeGreen {
+    color: #16a34a;
+}
+
+.rackBadgeBlue {
+    color: #0284c7;
+}
+
+.rackBadgeOrange {
+    color: #ea580c;
+}
+
+.rackBadgeEmpty {
+    color: #94a3b8;
+}
+
+.rackPalletsPair {
+    display: flex;
+    gap: 0.375rem;
+    align-items: flex-end;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.rackPalletCargo {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.rackCargoCarton {
+    min-height: 2.25rem;
+    height: 100%;
+    max-height: 3rem;
+    border-radius: 4px;
+    padding: 0.2rem 0.35rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    cursor: pointer;
+}
+
+.rackCartonPink {
+    background: linear-gradient(180deg, #fbcfe8 0%, #f472b6 100%);
+    border: 1px solid #ec4899;
+    color: #831843;
+}
+
+.rackCartonGreen {
+    background: linear-gradient(180deg, #bbf7d0 0%, #86efac 100%);
+    border: 1px solid #4ade80;
+    color: #14532d;
+}
+
+.rackCartonBlue {
+    background: linear-gradient(180deg, #bae6fd 0%, #7dd3fc 100%);
+    border: 1px solid #38bdf8;
+    color: #0c4a6e;
+}
+
+.rackCartonOrange {
+    background: linear-gradient(180deg, #fed7aa 0%, #fdba74 100%);
+    border: 1px solid #fb923c;
+    color: #7c2d12;
+}
+
+.rackCartonEmpty {
+    background: #f1f5f9;
+    border: 1px dashed #cbd5e1;
+    color: #94a3b8;
+    min-height: 2.25rem;
+    height: 100%;
+    max-height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+}
+
+.rackCartonHeader {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.55rem;
+    font-weight: 700;
+    opacity: 0.85;
+    line-height: 1;
+}
+
+.rackCartonTitle {
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-align: center;
+    font-family: monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rackCartonFooter {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 0.55rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.rackSkuPill {
+    background: rgba(255, 255, 255, 0.75);
+    padding: 1px 3px;
+    border-radius: 2px;
+    font-size: 0.55rem;
+    font-weight: 800;
+}
+
+.rackPalletWood {
+    width: 100%;
+    margin-top: 1px;
+}
+
+.rackPalletSlat {
+    height: 3px;
+    background: #c48b57;
+    width: 100%;
+    border-radius: 1px;
+}
+
+.rackPalletRunners {
+    height: 4px;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 4px;
+}
+
+.rackRunnerBlock {
+    width: 8px;
+    height: 100%;
+    background: #854d0e;
+}
+
+.rackStepBeam {
+    height: 1.35rem;
+    border-radius: 0 0 3px 3px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0.4rem;
+    font-family: monospace;
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: #ffffff;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+}
+
+.rackStepBeam:hover {
+    filter: brightness(1.08);
+}
+
+.rackBeamBinTag {
+    background: #ffffff;
+    color: #0f172a;
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.rackBeamBinTag.sapMLnk {
+    text-decoration: none;
+    display: inline-block;
+}
+
+.rackBeamBinTag.sapMLnk:hover {
+    text-decoration: none;
+    color: #0284c7;
+}
+
+.rackBeamLevelLabel {
+    font-size: 0.6rem;
+    color: #ffffff;
+    font-weight: 700;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.rackBeamPink {
+    background: linear-gradient(180deg, #f472b6 0%, #ec4899 55%, #db2777 100%) !important;
+    box-shadow: 0 2px 4px rgba(219, 39, 119, 0.25) !important;
+}
+
+.rackBeamGreen {
+    background: linear-gradient(180deg, #4ade80 0%, #16a34a 55%, #15803d 100%) !important;
+    box-shadow: 0 2px 4px rgba(22, 163, 74, 0.25) !important;
+}
+
+.rackBeamBlue {
+    background: linear-gradient(180deg, #38bdf8 0%, #0284c7 55%, #0369a1 100%) !important;
+    box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25) !important;
+}
+
+.rackBeamOrange {
+    background: linear-gradient(180deg, #fb923c 0%, #ea580c 55%, #c2410c 100%) !important;
+    box-shadow: 0 2px 4px rgba(234, 88, 12, 0.25) !important;
+}
+
+.rackDetailPanel {
+    flex: 1 1 22%;
+    width: 22%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    overflow-y: auto;
+    max-height: 100%;
+    min-width: 17rem;
+}
+
+.rackInspectorCard {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 0.85rem 1rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.rackUnitsCard {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 0.85rem 1rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.rackPropRow {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    padding: 2px 0;
+}
+
+.rackPropLabel {
+    color: #64748b;
+}
+
+.rackPropVal {
+    font-weight: 700;
+    color: #0f172a;
+    font-family: monospace;
+    text-align: right;
+}
+
+.btnSelectUnitAction {
+    width: 100%;
+    font-weight: 700;
+}
+
+.rackColorLegendGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem;
+    font-size: 0.65rem;
+    margin-top: 0.35rem;
+}
+
+.rackLegendRowPink {
+    background: #fdf2f8;
+    color: #be185d;
+    border: 1px solid #fbcfe8;
+    padding: 3px 6px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 700;
+}
+
+.rackLegendRowGreen {
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+    padding: 3px 6px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 700;
+}
+
+.rackLegendRowBlue {
+    background: #f0f9ff;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+    padding: 3px 6px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 700;
+}
+
+.rackLegendRowOrange {
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #fed7aa;
+    padding: 3px 6px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 700;
+}
+
+.rackBottomInfoBar {
+    background: #ffffff !important;
+    border-top: 1px solid #e2e8f0 !important;
+    padding: 0.35rem 1rem !important;
+    flex-shrink: 0;
+    font-size: 0.75rem;
+}

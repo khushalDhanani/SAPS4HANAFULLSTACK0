@@ -48,15 +48,27 @@ sap.ui.define([
             this.loadCockpitDetail(sRes, sItem);
 
             var that = this;
-            setTimeout(function () {
-                var oInput = that.byId("inputUnitNumber");
-                if (oInput && oInput.focus) {
-                    oInput.focus();
-                }
-            }, 300);
+            var oShared = this.getOwnerComponent().getModel("cockpitShared");
+            var sPreselected = oShared ? oShared.getProperty("/preselectedUnit") : "";
+            if (sPreselected) {
+                oShared.setProperty("/preselectedUnit", "");
+                oViewModel.setProperty("/scanUnitNumber", sPreselected);
+                setTimeout(function () {
+                    that.onValidateUnit();
+                }, 400);
+            } else {
+                setTimeout(function () {
+                    var oInput = that.byId("inputUnitNumber");
+                    if (oInput && oInput.focus) {
+                        oInput.focus();
+                    }
+                }, 300);
+            }
         },
 
         loadCockpitDetail: function (sRes, sItem) {
+            if (!sRes) return;
+            sItem = sItem || "1";
             var oViewModel = this.getModel("cockpitView");
             oViewModel.setProperty("/busy", true);
 
@@ -202,51 +214,31 @@ sap.ui.define([
         },
 
         onSelectBinItem: function (oEvent) {
-            var oItem = oEvent.getParameter("listItem") || oEvent.getSource();
+            var oItem = (oEvent && typeof oEvent.getParameter === "function" && oEvent.getParameter("listItem")) ||
+                        (oEvent && oEvent.getSource ? oEvent.getSource() : null);
+            if (!oItem || typeof oItem.getBindingContext !== "function") return;
             var oCtx = oItem.getBindingContext("cockpitView");
             if (!oCtx) return;
 
-            var sUnit = oCtx.getProperty("UnitNumber");
+            var sUnit = oCtx.getProperty("UnitNumber") || oCtx.getProperty("StorageBin");
             if (sUnit) {
                 this.getModel("cockpitView").setProperty("/scanUnitNumber", sUnit);
                 this.onCloseStorageBinsDialog();
                 this.onValidateUnit();
+            } else {
+                var sBin = oCtx.getProperty("StorageBin");
+                MessageToast.show("Selected bin " + sBin + " has no specific HU/SU or Bin number.");
             }
         },
 
         onShowVisualRack: function () {
             var oViewModel = this.getModel("cockpitView");
             var sRes = oViewModel.getProperty("/reservationNo");
-            var sItem = oViewModel.getProperty("/reservationItem");
-            var that = this;
-
-            var sUrl = "/odata/v4/hu-stock-transfer/getVisualRack(" +
-                "reservation='" + encodeURIComponent(sRes) + "'," +
-                "item='" + encodeURIComponent(sItem) + "')";
-
-            ODataClient.get(sUrl)
-                .then(function (data) {
-                    var aRack = (data && data.value) || (Array.isArray(data) ? data : []);
-                    oViewModel.setProperty("/visualRack", aRack);
-                    oViewModel.setProperty("/allVisualRack", aRack);
-
-                    if (!that._pVisualRackDialog) {
-                        that._pVisualRackDialog = Fragment.load({
-                            id: that.getView().getId(),
-                            name: "saps4hana.fiori.modules.wm.hu-stock-transfer.view.fragment.VisualRackDialog",
-                            controller: that
-                        }).then(function (oDialog) {
-                            that.getView().addDependent(oDialog);
-                            return oDialog;
-                        });
-                    }
-                    that._pVisualRackDialog.then(function (oDialog) {
-                        oDialog.open();
-                    });
-                })
-                .catch(function (err) {
-                    MessageBox.error("Failed to load visual rack: " + (err && err.message ? err.message : String(err)));
-                });
+            var sItem = oViewModel.getProperty("/reservationItem") || "1";
+            this.getRouter().navTo("wmHuStockTransferRack", {
+                reservation: sRes,
+                item: sItem
+            });
         },
 
         onSearchVisualRack: function (oEvent) {
@@ -278,15 +270,20 @@ sap.ui.define([
         },
 
         onSelectRackItem: function (oEvent) {
-            var oItem = oEvent.getParameter("listItem") || oEvent.getSource();
+            var oItem = (oEvent && typeof oEvent.getParameter === "function" && oEvent.getParameter("listItem")) ||
+                        (oEvent && oEvent.getSource ? oEvent.getSource() : null);
+            if (!oItem || typeof oItem.getBindingContext !== "function") return;
             var oCtx = oItem.getBindingContext("cockpitView");
             if (!oCtx) return;
 
-            var sUnit = oCtx.getProperty("UnitNumber");
+            var sUnit = oCtx.getProperty("UnitNumber") || oCtx.getProperty("ActualStorageBin");
             if (sUnit) {
                 this.getModel("cockpitView").setProperty("/scanUnitNumber", sUnit);
                 this.onCloseVisualRackDialog();
                 this.onValidateUnit();
+            } else {
+                var sBin = oCtx.getProperty("ActualStorageBin");
+                MessageToast.show("Selected bin " + sBin + " has no specific HU/SU or Bin number.");
             }
         },
 

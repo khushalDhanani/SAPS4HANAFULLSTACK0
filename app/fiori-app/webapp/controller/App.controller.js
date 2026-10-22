@@ -73,6 +73,15 @@ sap.ui.define([
                 this._updateShell("wmReservationEntryDetail", { ReservationNo: aResParts[0], ReservationItem: aResParts[1] || "" });
             } else if (sHash.indexOf("wm/reservation-entry") === 0) {
                 this._updateShell("wmReservationEntryList");
+            } else if (sHash.indexOf("wm/hu-stock-transfer/") === 0) {
+                var aHuParts = sHash.replace("wm/hu-stock-transfer/", "").split("/");
+                if (aHuParts.length >= 3 && aHuParts[2] === "rack") {
+                    this._updateShell("wmHuStockTransferRack", { reservation: aHuParts[0], item: aHuParts[1] || "1" });
+                } else {
+                    this._updateShell("wmHuStockTransferDetail", { reservation: aHuParts[0], item: aHuParts[1] || "" });
+                }
+            } else if (sHash.indexOf("wm/hu-stock-transfer") === 0) {
+                this._updateShell("wmHuStockTransfer");
             } else if (sHash.indexOf("le/orders-due") === 0) {
                 this._updateShell("ordersDueForDelivery");
             } else if (sHash.indexOf("sd/invoices") === 0) {
@@ -94,6 +103,7 @@ sap.ui.define([
         _onRouteMatched: function (oEvent) {
             var sRouteName = oEvent.getParameter("name");
             var oArgs = oEvent.getParameter("arguments");
+            this._oLastArgs = oArgs;
             this._updateShell(sRouteName, oArgs);
             this._attachListErrorStates(oEvent.getParameter("view"));
         },
@@ -263,6 +273,10 @@ sap.ui.define([
                     sTitle = oBundle ? oBundle.getText("huTransferTitle") : "HU Stock Transfer";
                     bShowNav = true;
                     break;
+                case "wmHuStockTransferRack":
+                    sTitle = oBundle ? oBundle.getText("rackVisualizerTitle") : "Warehouse Pallet Rack Visualizer";
+                    bShowNav = true;
+                    break;
                 case "wmHuStockTransferDetail":
                     sTitle = oBundle ? oBundle.getText("cockpitPageTitle") : "Transfer Cockpit";
                     bShowNav = true;
@@ -334,6 +348,12 @@ sap.ui.define([
                 this.onNavBack("wmReservationEntryList");
             } else if (sRoute === "wmReservationEntryList") {
                 this.onNavBack("dashboard");
+            } else if (sRoute === "wmHuStockTransferRack") {
+                var oRackArgs = this._oLastArgs || {};
+                this.getRouter().navTo("wmHuStockTransferDetail", {
+                    reservation: oRackArgs.reservation || "",
+                    item: oRackArgs.item || "1"
+                });
             } else if (sRoute === "wmHuStockTransferDetail") {
                 this.onNavBack("wmHuStockTransfer");
             } else if (sRoute === "wmHuStockTransfer") {

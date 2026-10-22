@@ -1,0 +1,773 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.hu-stock-transfer.controller.HuStockTransferRack"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1">
+    <Page class="rackVisualizerPage">
+        <content>
+            <VBox class="rackAppWrapper">
+                <!-- 1. Top Control & Summary Bar -->
+                <HBox class="rackTopBar" justifyContent="SpaceBetween" alignItems="Center">
+                    <HBox alignItems="Center">
+                        <ObjectStatus text="{rackView>/materialNumber}" class="rackTitleBadge sapUiTinyMarginEnd" inverted="true" state="Information" />
+                        <Text text="{rackView>/materialDesc}" class="rackMatDesc" />
+                    </HBox>
+                    <HBox alignItems="Center">
+                        <Label text="{i18n>rackStgTypeLabel}:" class="sapUiTinyMarginEnd" />
+                        <Select items="{rackView>/storageTypes}" selectedKey="{rackView>/selectedStorageType}" change=".onStorageTypeChange" class="sapUiSmallMarginEnd">
+                            <core:Item key="{rackView>key}" text="{rackView>text}" />
+                        </Select>
+                        <Button icon="sap-icon://navigation-left-arrow" tooltip="{i18n>rackPrevTooltip}" enabled="{rackView>/hasPrevRack}" press=".onPrevRack" class="sapUiTinyMarginEnd" />
+                        <Select items="{rackView>/racks}" selectedKey="{rackView>/selectedRack}" change=".onRackSelectChange" class="sapUiTinyMarginEnd">
+                            <core:Item key="{rackView>rackId}" text="{rackView>label}" />
+                        </Select>
+                        <Button icon="sap-icon://navigation-right-arrow" tooltip="{i18n>rackNextTooltip}" enabled="{rackView>/hasNextRack}" press=".onNextRack" class="sapUiSmallMarginEnd" />
+                        <Button text="{i18n>rackBackCockpitText}" icon="sap-icon://nav-back" type="Transparent" press=".onNavBackToCockpit" />
+                    </HBox>
+                </HBox>
+
+                <!-- 2. Main Workspace: Rack Visualizer (78%) + Detail Panel (22%) -->
+                <HBox class="rackMainWorkspace" alignItems="Stretch">
+                    <!-- Left: Rack Visualization Container (~78% of workspace) -->
+                    <VBox class="rackVisualizerContainer">
+                        <!-- Model Header -->
+                        <HBox class="rackModelHeader" justifyContent="SpaceBetween" alignItems="Center">
+                            <HBox alignItems="Center">
+                                <Title text="{rackView>/rackTitle}" level="H4" />
+                                <Text text="({i18n>rack10BinsHint})" class="sapUiTinyMarginBegin textMuted" />
+                            </HBox>
+                            <Text text="{i18n>rackClickSlotHint}" class="textMuted" />
+                        </HBox>
+
+                        <!-- Rack Stage: 5 Tiers (Level 5 down to Level 1) × 2 Bays -->
+                        <VBox class="rackStage">
+                            <VBox class="rackTiersWrapper">
+                                <!-- Tier 5 (Top Shelf Level - Hazard / Corrosive) -->
+                                <HBox class="rackTierRow">
+                                    <!-- Level 5 Bay 1 -->
+                                    <VBox class="rackBayColumn">
+                                        <VBox class="{rackView>/slots/L5_B1/sectionClass}" app:slotKey="L5-B1">
+                                            <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
+                                                <Text text="{rackView>/slots/L5_B1/badgeText}" class="{rackView>/slots/L5_B1/badgeClass}" />
+                                                <Text text="{rackView>/slots/L5_B1/levelTitle}" class="{rackView>/slots/L5_B1/badgeClass}" />
+                                            </HBox>
+                                            <HBox class="rackPalletsPair" alignItems="End">
+                                                <!-- Pallet 1 -->
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L5_B1/carton1/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L5_B1/carton1/unitType}" />
+                                                            <Text text="{rackView>/slots/L5_B1/carton1/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L5_B1/carton1/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L5_B1/carton1/qtyText}" />
+                                                            <Text text="{rackView>/slots/L5_B1/carton1/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L5_B1/carton1/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L5_B1/carton1/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                                <!-- Pallet 2 -->
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L5_B1/carton2/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L5_B1/carton2/unitType}" />
+                                                            <Text text="{rackView>/slots/L5_B1/carton2/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L5_B1/carton2/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L5_B1/carton2/qtyText}" />
+                                                            <Text text="{rackView>/slots/L5_B1/carton2/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L5_B1/carton2/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L5_B1/carton2/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                            </HBox>
+                                        </VBox>
+                                        <HBox class="{rackView>/slots/L5_B1/beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="L5-B1">
+                                            <Link text="{rackView>/slots/L5_B1/binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="L5-B1" />
+                                            <Text text="{rackView>/slots/L5_B1/slotKey}" class="rackBeamLevelLabel" />
+                                        </HBox>
+                                    </VBox>
+
+                                    <!-- Level 5 Bay 2 -->
+                                    <VBox class="rackBayColumn">
+                                        <VBox class="{rackView>/slots/L5_B2/sectionClass}" app:slotKey="L5-B2">
+                                            <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
+                                                <Text text="{rackView>/slots/L5_B2/badgeText}" class="{rackView>/slots/L5_B2/badgeClass}" />
+                                                <Text text="{rackView>/slots/L5_B2/levelTitle}" class="{rackView>/slots/L5_B2/badgeClass}" />
+                                            </HBox>
+                                            <HBox class="rackPalletsPair" alignItems="End">
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L5_B2/carton1/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L5_B2/carton1/unitType}" />
+                                                            <Text text="{rackView>/slots/L5_B2/carton1/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L5_B2/carton1/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L5_B2/carton1/qtyText}" />
+                                                            <Text text="{rackView>/slots/L5_B2/carton1/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L5_B2/carton1/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L5_B2/carton1/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L5_B2/carton2/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L5_B2/carton2/unitType}" />
+                                                            <Text text="{rackView>/slots/L5_B2/carton2/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L5_B2/carton2/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L5_B2/carton2/qtyText}" />
+                                                            <Text text="{rackView>/slots/L5_B2/carton2/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L5_B2/carton2/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L5_B2/carton2/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                            </HBox>
+                                        </VBox>
+                                        <HBox class="{rackView>/slots/L5_B2/beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="L5-B2">
+                                            <Link text="{rackView>/slots/L5_B2/binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="L5-B2" />
+                                            <Text text="{rackView>/slots/L5_B2/slotKey}" class="rackBeamLevelLabel" />
+                                        </HBox>
+                                    </VBox>
+                                </HBox>
+
+                                <!-- Tier 4 (Fast-Moving) -->
+                                <HBox class="rackTierRow">
+                                    <!-- Level 4 Bay 1 -->
+                                    <VBox class="rackBayColumn">
+                                        <VBox class="{rackView>/slots/L4_B1/sectionClass}" app:slotKey="L4-B1">
+                                            <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
+                                                <Text text="{rackView>/slots/L4_B1/badgeText}" class="{rackView>/slots/L4_B1/badgeClass}" />
+                                                <Text text="{rackView>/slots/L4_B1/levelTitle}" class="{rackView>/slots/L4_B1/badgeClass}" />
+                                            </HBox>
+                                            <HBox class="rackPalletsPair" alignItems="End">
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L4_B1/carton1/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L4_B1/carton1/unitType}" />
+                                                            <Text text="{rackView>/slots/L4_B1/carton1/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L4_B1/carton1/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L4_B1/carton1/qtyText}" />
+                                                            <Text text="{rackView>/slots/L4_B1/carton1/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L4_B1/carton1/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L4_B1/carton1/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L4_B1/carton2/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L4_B1/carton2/unitType}" />
+                                                            <Text text="{rackView>/slots/L4_B1/carton2/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L4_B1/carton2/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L4_B1/carton2/qtyText}" />
+                                                            <Text text="{rackView>/slots/L4_B1/carton2/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L4_B1/carton2/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L4_B1/carton2/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                            </HBox>
+                                        </VBox>
+                                        <HBox class="{rackView>/slots/L4_B1/beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="L4-B1">
+                                            <Link text="{rackView>/slots/L4_B1/binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="L4-B1" />
+                                            <Text text="{rackView>/slots/L4_B1/slotKey}" class="rackBeamLevelLabel" />
+                                        </HBox>
+                                    </VBox>
+
+                                    <!-- Level 4 Bay 2 -->
+                                    <VBox class="rackBayColumn">
+                                        <VBox class="{rackView>/slots/L4_B2/sectionClass}" app:slotKey="L4-B2">
+                                            <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
+                                                <Text text="{rackView>/slots/L4_B2/badgeText}" class="{rackView>/slots/L4_B2/badgeClass}" />
+                                                <Text text="{rackView>/slots/L4_B2/levelTitle}" class="{rackView>/slots/L4_B2/badgeClass}" />
+                                            </HBox>
+                                            <HBox class="rackPalletsPair" alignItems="End">
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L4_B2/carton1/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L4_B2/carton1/unitType}" />
+                                                            <Text text="{rackView>/slots/L4_B2/carton1/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L4_B2/carton1/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L4_B2/carton1/qtyText}" />
+                                                            <Text text="{rackView>/slots/L4_B2/carton1/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L4_B2/carton1/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L4_B2/carton1/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L4_B2/carton2/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L4_B2/carton2/unitType}" />
+                                                            <Text text="{rackView>/slots/L4_B2/carton2/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L4_B2/carton2/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L4_B2/carton2/qtyText}" />
+                                                            <Text text="{rackView>/slots/L4_B2/carton2/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L4_B2/carton2/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L4_B2/carton2/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                            </HBox>
+                                        </VBox>
+                                        <HBox class="{rackView>/slots/L4_B2/beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="L4-B2">
+                                            <Link text="{rackView>/slots/L4_B2/binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="L4-B2" />
+                                            <Text text="{rackView>/slots/L4_B2/slotKey}" class="rackBeamLevelLabel" />
+                                        </HBox>
+                                    </VBox>
+                                </HBox>
+
+                                <!-- Tier 3 (Fast-Moving) -->
+                                <HBox class="rackTierRow">
+                                    <!-- Level 3 Bay 1 -->
+                                    <VBox class="rackBayColumn">
+                                        <VBox class="{rackView>/slots/L3_B1/sectionClass}" app:slotKey="L3-B1">
+                                            <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
+                                                <Text text="{rackView>/slots/L3_B1/badgeText}" class="{rackView>/slots/L3_B1/badgeClass}" />
+                                                <Text text="{rackView>/slots/L3_B1/levelTitle}" class="{rackView>/slots/L3_B1/badgeClass}" />
+                                            </HBox>
+                                            <HBox class="rackPalletsPair" alignItems="End">
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L3_B1/carton1/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L3_B1/carton1/unitType}" />
+                                                            <Text text="{rackView>/slots/L3_B1/carton1/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L3_B1/carton1/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L3_B1/carton1/qtyText}" />
+                                                            <Text text="{rackView>/slots/L3_B1/carton1/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L3_B1/carton1/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L3_B1/carton1/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L3_B1/carton2/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L3_B1/carton2/unitType}" />
+                                                            <Text text="{rackView>/slots/L3_B1/carton2/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L3_B1/carton2/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L3_B1/carton2/qtyText}" />
+                                                            <Text text="{rackView>/slots/L3_B1/carton2/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L3_B1/carton2/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L3_B1/carton2/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                            </HBox>
+                                        </VBox>
+                                        <HBox class="{rackView>/slots/L3_B1/beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="L3-B1">
+                                            <Link text="{rackView>/slots/L3_B1/binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="L3-B1" />
+                                            <Text text="{rackView>/slots/L3_B1/slotKey}" class="rackBeamLevelLabel" />
+                                        </HBox>
+                                    </VBox>
+
+                                    <!-- Level 3 Bay 2 -->
+                                    <VBox class="rackBayColumn">
+                                        <VBox class="{rackView>/slots/L3_B2/sectionClass}" app:slotKey="L3-B2">
+                                            <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
+                                                <Text text="{rackView>/slots/L3_B2/badgeText}" class="{rackView>/slots/L3_B2/badgeClass}" />
+                                                <Text text="{rackView>/slots/L3_B2/levelTitle}" class="{rackView>/slots/L3_B2/badgeClass}" />
+                                            </HBox>
+                                            <HBox class="rackPalletsPair" alignItems="End">
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L3_B2/carton1/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L3_B2/carton1/unitType}" />
+                                                            <Text text="{rackView>/slots/L3_B2/carton1/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L3_B2/carton1/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L3_B2/carton1/qtyText}" />
+                                                            <Text text="{rackView>/slots/L3_B2/carton1/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L3_B2/carton1/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L3_B2/carton1/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L3_B2/carton2/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L3_B2/carton2/unitType}" />
+                                                            <Text text="{rackView>/slots/L3_B2/carton2/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L3_B2/carton2/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L3_B2/carton2/qtyText}" />
+                                                            <Text text="{rackView>/slots/L3_B2/carton2/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L3_B2/carton2/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L3_B2/carton2/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                            </HBox>
+                                        </VBox>
+                                        <HBox class="{rackView>/slots/L3_B2/beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="L3-B2">
+                                            <Link text="{rackView>/slots/L3_B2/binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="L3-B2" />
+                                            <Text text="{rackView>/slots/L3_B2/slotKey}" class="rackBeamLevelLabel" />
+                                        </HBox>
+                                    </VBox>
+                                </HBox>
+
+                                <!-- Tier 2 (Cold Storage) -->
+                                <HBox class="rackTierRow">
+                                    <!-- Level 2 Bay 1 -->
+                                    <VBox class="rackBayColumn">
+                                        <VBox class="{rackView>/slots/L2_B1/sectionClass}" app:slotKey="L2-B1">
+                                            <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
+                                                <Text text="{rackView>/slots/L2_B1/badgeText}" class="{rackView>/slots/L2_B1/badgeClass}" />
+                                                <Text text="{rackView>/slots/L2_B1/levelTitle}" class="{rackView>/slots/L2_B1/badgeClass}" />
+                                            </HBox>
+                                            <HBox class="rackPalletsPair" alignItems="End">
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L2_B1/carton1/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L2_B1/carton1/unitType}" />
+                                                            <Text text="{rackView>/slots/L2_B1/carton1/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L2_B1/carton1/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L2_B1/carton1/qtyText}" />
+                                                            <Text text="{rackView>/slots/L2_B1/carton1/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L2_B1/carton1/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L2_B1/carton1/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L2_B1/carton2/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L2_B1/carton2/unitType}" />
+                                                            <Text text="{rackView>/slots/L2_B1/carton2/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L2_B1/carton2/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L2_B1/carton2/qtyText}" />
+                                                            <Text text="{rackView>/slots/L2_B1/carton2/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L2_B1/carton2/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L2_B1/carton2/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                            </HBox>
+                                        </VBox>
+                                        <HBox class="{rackView>/slots/L2_B1/beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="L2-B1">
+                                            <Link text="{rackView>/slots/L2_B1/binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="L2-B1" />
+                                            <Text text="{rackView>/slots/L2_B1/slotKey}" class="rackBeamLevelLabel" />
+                                        </HBox>
+                                    </VBox>
+
+                                    <!-- Level 2 Bay 2 -->
+                                    <VBox class="rackBayColumn">
+                                        <VBox class="{rackView>/slots/L2_B2/sectionClass}" app:slotKey="L2-B2">
+                                            <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
+                                                <Text text="{rackView>/slots/L2_B2/badgeText}" class="{rackView>/slots/L2_B2/badgeClass}" />
+                                                <Text text="{rackView>/slots/L2_B2/levelTitle}" class="{rackView>/slots/L2_B2/badgeClass}" />
+                                            </HBox>
+                                            <HBox class="rackPalletsPair" alignItems="End">
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L2_B2/carton1/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L2_B2/carton1/unitType}" />
+                                                            <Text text="{rackView>/slots/L2_B2/carton1/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L2_B2/carton1/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L2_B2/carton1/qtyText}" />
+                                                            <Text text="{rackView>/slots/L2_B2/carton1/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L2_B2/carton1/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L2_B2/carton1/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L2_B2/carton2/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L2_B2/carton2/unitType}" />
+                                                            <Text text="{rackView>/slots/L2_B2/carton2/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L2_B2/carton2/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L2_B2/carton2/qtyText}" />
+                                                            <Text text="{rackView>/slots/L2_B2/carton2/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L2_B2/carton2/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L2_B2/carton2/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                            </HBox>
+                                        </VBox>
+                                        <HBox class="{rackView>/slots/L2_B2/beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="L2-B2">
+                                            <Link text="{rackView>/slots/L2_B2/binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="L2-B2" />
+                                            <Text text="{rackView>/slots/L2_B2/slotKey}" class="rackBeamLevelLabel" />
+                                        </HBox>
+                                    </VBox>
+                                </HBox>
+
+                                <!-- Tier 1 (Ground Shelf Level - Priority Outbound) -->
+                                <HBox class="rackTierRow">
+                                    <!-- Level 1 Bay 1 -->
+                                    <VBox class="rackBayColumn">
+                                        <VBox class="{rackView>/slots/L1_B1/sectionClass}" app:slotKey="L1-B1">
+                                            <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
+                                                <Text text="{rackView>/slots/L1_B1/badgeText}" class="{rackView>/slots/L1_B1/badgeClass}" />
+                                                <Text text="{rackView>/slots/L1_B1/levelTitle}" class="{rackView>/slots/L1_B1/badgeClass}" />
+                                            </HBox>
+                                            <HBox class="rackPalletsPair" alignItems="End">
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L1_B1/carton1/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L1_B1/carton1/unitType}" />
+                                                            <Text text="{rackView>/slots/L1_B1/carton1/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L1_B1/carton1/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L1_B1/carton1/qtyText}" />
+                                                            <Text text="{rackView>/slots/L1_B1/carton1/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L1_B1/carton1/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L1_B1/carton1/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L1_B1/carton2/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L1_B1/carton2/unitType}" />
+                                                            <Text text="{rackView>/slots/L1_B1/carton2/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L1_B1/carton2/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L1_B1/carton2/qtyText}" />
+                                                            <Text text="{rackView>/slots/L1_B1/carton2/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L1_B1/carton2/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L1_B1/carton2/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                            </HBox>
+                                        </VBox>
+                                        <HBox class="{rackView>/slots/L1_B1/beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="L1-B1">
+                                            <Link text="{rackView>/slots/L1_B1/binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="L1-B1" />
+                                            <Text text="{rackView>/slots/L1_B1/slotKey}" class="rackBeamLevelLabel" />
+                                        </HBox>
+                                    </VBox>
+
+                                    <!-- Level 1 Bay 2 -->
+                                    <VBox class="rackBayColumn">
+                                        <VBox class="{rackView>/slots/L1_B2/sectionClass}" app:slotKey="L1-B2">
+                                            <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
+                                                <Text text="{rackView>/slots/L1_B2/badgeText}" class="{rackView>/slots/L1_B2/badgeClass}" />
+                                                <Text text="{rackView>/slots/L1_B2/levelTitle}" class="{rackView>/slots/L1_B2/badgeClass}" />
+                                            </HBox>
+                                            <HBox class="rackPalletsPair" alignItems="End">
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L1_B2/carton1/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L1_B2/carton1/unitType}" />
+                                                            <Text text="{rackView>/slots/L1_B2/carton1/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L1_B2/carton1/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L1_B2/carton1/qtyText}" />
+                                                            <Text text="{rackView>/slots/L1_B2/carton1/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L1_B2/carton1/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L1_B2/carton1/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                                <VBox class="rackPalletCargo">
+                                                    <VBox class="{rackView>/slots/L1_B2/carton2/cartonClass}">
+                                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                                            <Text text="{rackView>/slots/L1_B2/carton2/unitType}" />
+                                                            <Text text="{rackView>/slots/L1_B2/carton2/serialNumber}" />
+                                                        </HBox>
+                                                        <Text text="{rackView>/slots/L1_B2/carton2/titleText}" class="rackCartonTitle" />
+                                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                                            <Text text="{rackView>/slots/L1_B2/carton2/qtyText}" />
+                                                            <Text text="{rackView>/slots/L1_B2/carton2/sutCode}" class="rackSkuPill" visible="{rackView>/slots/L1_B2/carton2/hasSut}" />
+                                                        </HBox>
+                                                    </VBox>
+                                                    <VBox class="rackPalletWood" visible="{rackView>/slots/L1_B2/carton2/hasUnit}">
+                                                        <HBox class="rackPalletSlat" />
+                                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                            <HBox class="rackRunnerBlock" />
+                                                        </HBox>
+                                                    </VBox>
+                                                </VBox>
+                                            </HBox>
+                                        </VBox>
+                                        <HBox class="{rackView>/slots/L1_B2/beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="L1-B2">
+                                            <Link text="{rackView>/slots/L1_B2/binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="L1-B2" />
+                                            <Text text="{rackView>/slots/L1_B2/slotKey}" class="rackBeamLevelLabel" />
+                                        </HBox>
+                                    </VBox>
+                                </HBox>
+                            </VBox>
+                        </VBox>
+                    </VBox>
+
+                    <!-- Right: Selected Bin / HU Details & Action Panel (~22% of workspace) -->
+                    <VBox class="rackDetailPanel">
+                        <!-- Card 1: Slot & Bin Inspector -->
+                        <VBox class="rackInspectorCard">
+                            <HBox justifyContent="SpaceBetween" alignItems="Center">
+                                <Title text="{i18n>rackSlotInspectorTitle}" level="H5" />
+                                <ObjectStatus text="{rackView>/selectedSlot/sectionBadgeText}" state="{rackView>/selectedSlot/sectionState}" />
+                            </HBox>
+                            <Text text="{rackView>/selectedSlot/headingText}" class="sapUiTinyMarginBottom textMuted" />
+
+                            <VBox class="sapUiTinyMarginTop">
+                                <HBox class="rackPropRow">
+                                    <Text text="{i18n>rackSectionTitle}" class="rackPropLabel" />
+                                    <Text text="{rackView>/selectedSlot/storageSectionDesc}" class="rackPropVal" />
+                                </HBox>
+                                <HBox class="rackPropRow">
+                                    <Text text="{i18n>rackStgType}" class="rackPropLabel" />
+                                    <Text text="{rackView>/selectedSlot/storageType}" class="rackPropVal" />
+                                </HBox>
+                                <HBox class="rackPropRow">
+                                    <Text text="{i18n>rackBinType}" class="rackPropLabel" />
+                                    <Text text="{rackView>/selectedSlot/binType}" class="rackPropVal" />
+                                </HBox>
+                                <HBox class="rackPropRow">
+                                    <Text text="{i18n>rackActualBin}" class="rackPropLabel" />
+                                    <Text text="{rackView>/selectedSlot/actualStorageBin}" class="rackPropVal" />
+                                </HBox>
+                                <HBox class="rackPropRow">
+                                    <Text text="{i18n>rackPalletCapacity}" class="rackPropLabel" />
+                                    <Text text="{rackView>/selectedSlot/palletCapacity}" class="rackPropVal" />
+                                </HBox>
+                                <HBox class="rackPropRow">
+                                    <Text text="{i18n>rackAssignedMaterial}" class="rackPropLabel" />
+                                    <Text text="{rackView>/selectedSlot/assignedMaterial}" class="rackPropVal" />
+                                </HBox>
+                                <HBox class="rackPropRow">
+                                    <Text text="{i18n>rackUnitLabel}" class="rackPropLabel" />
+                                    <Text text="{rackView>/selectedSlot/unitNumber}" class="rackPropVal" />
+                                </HBox>
+                                <HBox class="rackPropRow">
+                                    <Text text="{i18n>rackAvailStock}" class="rackPropLabel" />
+                                    <Text text="{rackView>/selectedSlot/availableStock}" class="rackPropVal" />
+                                </HBox>
+                                <HBox class="rackPropRow">
+                                    <Text text="{i18n>rackBatchLabel}" class="rackPropLabel" />
+                                    <Text text="{rackView>/selectedSlot/batch}" class="rackPropVal" />
+                                </HBox>
+                                <HBox class="rackPropRow">
+                                    <Text text="{i18n>rackSerialLabel}" class="rackPropLabel" />
+                                    <Text text="{rackView>/selectedSlot/serialNumber}" class="rackPropVal" />
+                                </HBox>
+                                <HBox class="rackPropRow">
+                                    <Text text="{i18n>rackStockStatus}" class="rackPropLabel" />
+                                    <Text text="{rackView>/selectedSlot/storageStatus}" class="rackPropVal" />
+                                </HBox>
+                            </VBox>
+
+                            <Button text="{i18n>rackBtnSelectUnit}" type="Emphasized" icon="sap-icon://accept" press=".onSelectSlotUnitForTransfer" enabled="{rackView>/selectedSlot/hasUnit}" class="btnSelectUnitAction sapUiSmallMarginTop" />
+                        </VBox>
+
+                        <!-- Card 2: Units in Bin & Color Legend -->
+                        <VBox class="rackUnitsCard">
+                            <Title text="{i18n>rackBinUnitsTitle}" level="H5" />
+                            <Table id="slotUnitsTable" items="{path: 'rackView>/selectedSlotItems'}" noDataText="{i18n>rackNoUnitsInBin}" class="sapUiTinyMarginTop">
+                                <columns>
+                                    <Column><Text text="{i18n>rackColUnit}" /></Column>
+                                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>rackColSerial}" /></Column>
+                                    <Column hAlign="End"><Text text="{i18n>rackColQty}" /></Column>
+                                    <Column hAlign="End"><Text text="{i18n>rackColAction}" /></Column>
+                                </columns>
+                                <items>
+                                    <ColumnListItem>
+                                        <cells>
+                                            <Text text="{rackView>UnitNumber}" />
+                                            <Text text="{rackView>SerialNumber}" />
+                                            <ObjectNumber number="{rackView>AvailableQuantity}" unit="{rackView>BaseUnit}" />
+                                            <Button text="{i18n>rackBtnSelect}" type="Transparent" press=".onSelectRowUnit" />
+                                        </cells>
+                                    </ColumnListItem>
+                                </items>
+                            </Table>
+
+                            <Title text="{i18n>rackLegendTitle}" level="H6" class="sapUiSmallMarginTop" />
+                            <VBox class="rackColorLegendGrid">
+                                <HBox class="rackLegendRowPink" justifyContent="SpaceBetween">
+                                    <Text text="{i18n>rackLegendPink}" />
+                                    <Text text="{i18n>rackLevel5Tag}" />
+                                </HBox>
+                                <HBox class="rackLegendRowGreen" justifyContent="SpaceBetween">
+                                    <Text text="{i18n>rackLegendGreen}" />
+                                    <Text text="{i18n>rackLevel4Tag}" />
+                                </HBox>
+                                <HBox class="rackLegendRowBlue" justifyContent="SpaceBetween">
+                                    <Text text="{i18n>rackLegendBlue}" />
+                                    <Text text="{i18n>rackLevel2Tag}" />
+                                </HBox>
+                                <HBox class="rackLegendRowOrange" justifyContent="SpaceBetween">
+                                    <Text text="{i18n>rackLegendOrange}" />
+                                    <Text text="{i18n>rackLevel1Tag}" />
+                                </HBox>
+                            </VBox>
+                        </VBox>
+                    </VBox>
+                </HBox>
+
+                <!-- 3. Physical Rack Information (Bottom Bar) -->
+                <HBox class="rackBottomInfoBar" justifyContent="SpaceBetween" alignItems="Center">
+                    <HBox alignItems="Center">
+                        <Label text="{i18n>rackWhseLabel}:" class="sapUiTinyMarginEnd textMuted" />
+                        <Text text="{rackView>/warehouse}" class="sapUiSmallMarginEnd" />
+                        <Label text="{i18n>rackModelLabel}:" class="sapUiTinyMarginEnd textMuted" />
+                        <Text text="{rackView>/modelName}" class="sapUiSmallMarginEnd" />
+                        <Label text="{i18n>rackDimensionsLabel}:" class="sapUiTinyMarginEnd textMuted" />
+                        <Text text="{rackView>/dimensions}" />
+                    </HBox>
+                    <HBox alignItems="Center">
+                        <Label text="{i18n>rackTotalBinsLabel}:" class="sapUiTinyMarginEnd textMuted" />
+                        <Text text="{rackView>/totalBinsCount}" class="sapUiSmallMarginEnd" />
+                        <Label text="{i18n>rackOccupiedBinsLabel}:" class="sapUiTinyMarginEnd textMuted" />
+                        <Text text="{rackView>/occupiedBinsCount}" class="sapUiSmallMarginEnd" />
+                        <Label text="{i18n>rackAvailableBinsLabel}:" class="sapUiTinyMarginEnd textMuted" />
+                        <Text text="{rackView>/availableBinsCount}" />
+                    </HBox>
+                </HBox>
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

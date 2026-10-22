@@ -559,22 +559,54 @@ class HuStockTransferAdapter {
       }
 
     } else {
-      // 2. Check if Unit is a Storage Unit (SU) in LQUA
+      // 2. Check if Unit is a Storage Unit (SU) in LQUA or Storage Bin (LGPLA)
       let lquaRows = [];
-      try {
-        lquaRows = await this.rfc.readTable(
-          'LQUA',
-          ['MATNR', 'CHARG', 'GESME', 'MEINS', 'WERKS', 'LGORT', 'LGNUM', 'LGTYP', 'LGPLA', 'LETYP'],
-          [`( LENUM = '${s4UnitAlpha}' OR LENUM = '${s4Unit}' )`],
-          1
-        );
-      } catch (e) {
-        LOG.warn('Could not read LQUA for SU:', e.message);
+      let isSuMatch = false;
+      const s4MatPad = cockpit.Material ? this._pad(cockpit.Material, 18) : '';
+      const isAllZeros = /^0+$/.test(s4Unit);
+
+      if (!isAllZeros) {
+        try {
+          const suWhere = [
+            `( LENUM = '${s4UnitAlpha}' OR LENUM = '${s4Unit}' )`,
+            `AND GESME > 0`
+          ];
+          if (cockpit.Warehouse) suWhere.push(`AND LGNUM = '${cockpit.Warehouse}'`);
+          if (s4MatPad) suWhere.push(`AND MATNR = '${s4MatPad}'`);
+          lquaRows = await this.rfc.readTable(
+            'LQUA',
+            ['MATNR', 'CHARG', 'GESME', 'MEINS', 'WERKS', 'LGORT', 'LGNUM', 'LGTYP', 'LGPLA', 'LETYP', 'LENUM'],
+            suWhere,
+            1
+          );
+          if (lquaRows.length) isSuMatch = true;
+        } catch (e) {
+          LOG.warn('Could not read LQUA for SU:', e.message);
+        }
+      }
+
+      if (!lquaRows.length) {
+        try {
+          const binWhere = [
+            `LGPLA = '${s4Unit}'`,
+            `AND GESME > 0`
+          ];
+          if (cockpit.Warehouse) binWhere.push(`AND LGNUM = '${cockpit.Warehouse}'`);
+          if (s4MatPad) binWhere.push(`AND MATNR = '${s4MatPad}'`);
+          lquaRows = await this.rfc.readTable(
+            'LQUA',
+            ['MATNR', 'CHARG', 'GESME', 'MEINS', 'WERKS', 'LGORT', 'LGNUM', 'LGTYP', 'LGPLA', 'LETYP', 'LENUM'],
+            binWhere,
+            1
+          );
+        } catch (e) {
+          LOG.warn('Could not read LQUA for bin:', e.message);
+        }
       }
 
       if (lquaRows.length > 0 && parseFloat(lquaRows[0].GESME || 0) > 0) {
-        unitType = 'Storage Unit (SU)';
         const lq = lquaRows[0];
+        unitType = isSuMatch ? 'Storage Unit (SU)' : 'Storage Bin Stock';
         matnr = this._unpad(lq.MATNR);
         charg = lq.CHARG || '';
         qty = parseFloat(lq.GESME || 0);
@@ -591,7 +623,7 @@ class HuStockTransferAdapter {
           UnitNumber: s4Unit,
           UnitType: 'Unknown',
           StatusState: 'Error',
-          StatusMessage: `Scanned unit "${s4Unit}" does not exist in VEKP (HU) or LQUA (Storage Unit).`
+          StatusMessage: `Scanned unit or bin "${s4Unit}" does not exist in VEKP (HU) or LQUA (Storage Unit / Bin).`
         };
       }
     }
@@ -691,6 +723,15 @@ class HuStockTransferAdapter {
     };
   }
 
+  _parseSapQty(val) {
+    if (!val) return 0;
+    const s = String(val).trim();
+    if (s.endsWith('-')) {
+      return -parseFloat(s.slice(0, -1)) || 0;
+    }
+    return parseFloat(s) || 0;
+  }
+
   /**
    * Retrieves storage bins and quants for the reservation material (Screen 2000 "View Storage Bins & Units").
    */
@@ -717,7 +758,7 @@ class HuStockTransferAdapter {
       LOG.warn('Could not read LQUA for storage bins:', e.message);
     }
 
-    const nonZeroLqua = lquaRows.filter((q) => parseFloat(q.GESME || 0) > 0);
+    const nonZeroLqua = lquaRows.filter((q) => this._parseSapQty(q.GESME) > 0);
 
     // Read Storage Type descriptions from T301T
     const t301tMap = new Map();
@@ -757,8 +798,8 @@ class HuStockTransferAdapter {
 
       return {
         StorageStatus: stgStatus,
-        UnitCategory: q.KZHUQ === 'X' ? 'HU' : 'SU',
-        UnitNumber: this._unpad(q.LENUM),
+        UnitCategory: q.KZHUQ === 'X' ? 'HU' : (q.LENUM && this._unpad(q.LENUM) ? 'SU' : 'BIN'),
+        UnitNumber: this._unpad(q.LENUM) || q.LGPLA,
         SutCode: q.LETYP || '',
         SutDescription: t307tMap.get(`${q.LGNUM}|${q.LETYP}`) || '',
         StorageType: q.LGTYP,
@@ -768,7 +809,7 @@ class HuStockTransferAdapter {
         StorageBin: q.LGPLA,
         BinPosition: q.LGPLA.slice(-2),
         SerialNumber: '',
-        AvailableStock: parseFloat(q.GESME || 0),
+        AvailableStock: this._parseSapQty(q.GESME),
         BaseUnit: q.MEINS,
         Batch: q.CHARG || '',
         Warehouse: q.LGNUM,

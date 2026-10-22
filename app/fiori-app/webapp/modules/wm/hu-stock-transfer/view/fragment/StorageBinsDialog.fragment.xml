@@ -13,6 +13,7 @@
                 id="storageBinsTable"
                 items="{path: 'cockpitView>/storageBins'}"
                 mode="SingleSelectMaster"
+                itemPress=".onSelectBinItem"
                 selectionChange=".onSelectBinItem"
                 noDataText="{i18n>storageBinsNoData}"
                 growing="true"
@@ -53,7 +54,7 @@
                     <ColumnListItem type="Active" press=".onSelectBinItem">
                         <cells>
                             <ObjectStatus text="{cockpitView>StorageStatus}" state="{= ${cockpitView>SortPriority} === 1 ? 'Success' : ${cockpitView>SortPriority} === 4 ? 'Error' : ${cockpitView>SortPriority} === 3 ? 'Warning' : 'Information' }" />
-                            <ObjectIdentifier title="{cockpitView>UnitNumber}" text="{cockpitView>UnitCategory}" />
+                            <ObjectIdentifier title="{= ${cockpitView>UnitNumber} || ${cockpitView>StorageBin} }" text="{cockpitView>UnitCategory}" />
                             <Text text="{cockpitView>StorageType}" />
                             <Text text="{cockpitView>SutCode} {cockpitView>SutDescription}" />
                             <ObjectIdentifier title="{cockpitView>StorageBin}" text="{cockpitView>StorageSectionDesc}" />

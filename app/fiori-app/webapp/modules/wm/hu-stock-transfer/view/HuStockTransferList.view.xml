@@ -80,6 +80,8 @@
                 id="reservationsTable"
                 items="{path: 'listView>/items'}"
                 mode="SingleSelectMaster"
+                itemPress=".onItemPress"
+                selectionChange=".onSelectionChange"
                 noDataText="{i18n>huTransferNoData}"
                 growing="true"
                 growingThreshold="20"
@@ -92,6 +94,14 @@
                         <Title id="tableTitle" text="{i18n>huTransferWorklistTitle} ({= ${listView>/items}.length })" level="H3" />
                         <ToolbarSpacer />
                         <SearchField id="searchField" width="18rem" search=".onLiveSearch" placeholder="{i18n>huTransferSearchPlaceholder}" />
+                        <Button
+                            id="btnProcessTransfer"
+                            text="{i18n>btnProcessTransferText}"
+                            tooltip="{i18n>btnProcessTransferTooltip}"
+                            icon="sap-icon://process"
+                            type="Emphasized"
+                            press=".onProcessSelected"
+                            enabled="{= !!${listView>/selectedItem} }" />
                     </OverflowToolbar>
                 </headerToolbar>
                 <columns>
