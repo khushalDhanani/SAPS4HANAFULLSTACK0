@@ -296,11 +296,6 @@
           "target": "TargetCreateSalesOrder"
         },
         {
-          "name": "wmGoodsIssue201",
-          "pattern": "wm/goods-issue/cost-center-201:?query:",
-          "target": "TargetGoodsIssue201"
-        },
-        {
           "name": "wmGoodsIssue301Pending",
           "pattern": "wm/goods-issue/301/open-transfers:?query:",
           "target": "TargetGoodsIssue301Pending"
@@ -479,11 +474,6 @@
           "id": "createSalesOrder",
           "name": "CreateSalesOrder",
           "path": "saps4hana.fiori.modules.sd.sales-order.view"
-        },
-        "TargetGoodsIssue201": {
-          "id": "goodsIssue201",
-          "name": "GoodsIssue201",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
         },
         "TargetGoodsIssue301Pending": {
           "id": "goodsIssue301Pending",
