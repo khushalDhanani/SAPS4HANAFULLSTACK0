@@ -338,11 +338,6 @@
           "target": "TargetScan261"
         },
         {
-          "name": "wmOpen261",
-          "pattern": "wm/mvt261/open",
-          "target": "TargetOpen261"
-        },
-        {
           "name": "wmHandlingUnitDetail",
           "pattern": "wm/handling-unit/{hu}:?query:",
           "target": "TargetHandlingUnitDetail"
@@ -482,11 +477,6 @@
         "TargetCycle261": {
           "id": "cycle261",
           "name": "Cycle261",
-          "path": "saps4hana.fiori.modules.wm.mvt261.view"
-        },
-        "TargetOpen261": {
-          "id": "open261",
-          "name": "Open261",
           "path": "saps4hana.fiori.modules.wm.mvt261.view"
         },
         "TargetHandlingUnits": {
