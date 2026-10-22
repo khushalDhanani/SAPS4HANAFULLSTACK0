@@ -9,7 +9,7 @@ describe('TrToHandler', () => {
 
   beforeEach(() => {
     handlers = {};
-    adapter = { getTR: jest.fn(), checkSU: jest.fn(), createTO: jest.fn() };
+    adapter = { getTR: jest.fn(), lookupTR: jest.fn() };
     TrToHandler.init({ on: (event, fn) => { handlers[event] = fn; } }, { adapter });
   });
 
@@ -19,18 +19,17 @@ describe('TrToHandler', () => {
     expect(adapter.getOpenTRs).toHaveBeenCalledWith('W01', '319', undefined); // user of the request (none in this fixture)
   });
 
-  it('delegates getTR / checkSU / getAvailableSUs with the request values unchanged (no defaults)', async () => {
+  it('delegates getTR with the request values unchanged (no defaults)', async () => {
     adapter.getTR.mockResolvedValue({ Tbnum: '0001000663' });
-    adapter.checkSU.mockResolvedValue({ IsValid: true });
-    adapter.getAvailableSUs = jest.fn().mockResolvedValue([{ StorageUnit: '1000041635' }]);
 
     await expect(handlers.getTR(req({ tbnum: '1000663', lgnum: 'W01' }))).resolves.toEqual({ Tbnum: '0001000663' });
-    await handlers.checkSU(req({ lenum: '1000043935', tbnum: '1000663' }));
-    await expect(handlers.getAvailableSUs(req({ tbnum: '1000663', lgnum: 'W01', tbpos: '0001' }))).resolves.toEqual([{ StorageUnit: '1000041635' }]);
-
     expect(adapter.getTR).toHaveBeenCalledWith('1000663', 'W01');
-    expect(adapter.checkSU).toHaveBeenCalledWith('1000043935', '1000663', undefined);
-    expect(adapter.getAvailableSUs).toHaveBeenCalledWith('1000663', 'W01', '0001');
+  });
+
+  it('delegates lookupTR to adapter', async () => {
+    adapter.lookupTR = jest.fn().mockResolvedValue({ TransferRequirement: '1000663' });
+    await expect(handlers.lookupTR(req({ tbnum: '1000663', lgnum: 'W01', docType: 'TR', tbpos: '0001' }))).resolves.toEqual({ TransferRequirement: '1000663' });
+    expect(adapter.lookupTR).toHaveBeenCalledWith('1000663', 'W01', 'TR', '0001', undefined);
   });
 
   it('delegates getFifoBatches and getAvailableSerials to adapter', async () => {
@@ -46,24 +45,16 @@ describe('TrToHandler', () => {
     expect(adapter.getAvailableSerials).toHaveBeenCalledWith('8000006485', '1120', 'CS01', 'B01');
   });
 
-  it('passes only operator input to createTO (item, unit, limits come from SAP)', async () => {
-    adapter.createTO.mockResolvedValue({ TransferOrder: '1036601', Success: true, Confirmed: false });
-    const r = req({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 50, unit: 'KG', openQty: 999, confirmImmediate: true });
-
-    await expect(handlers.createTO(r)).resolves.toMatchObject({ TransferOrder: '1036601', Confirmed: false });
-    expect(adapter.createTO).toHaveBeenCalledWith({ lgnum: 'W01', tbnum: '1000663', lenum: '1000043935', qty: 50 });
-  });
-
   it('maps adapter errors to req.error with their status, 500 when none', async () => {
     adapter.getTR.mockRejectedValue(Object.assign(new Error('Warehouse is missing or invalid'), { status: 400 }));
-    adapter.createTO.mockRejectedValue(new Error('boom'));
+    adapter.lookupTR = jest.fn().mockRejectedValue(new Error('boom'));
 
     const r1 = req({ tbnum: '1' });
     await handlers.getTR(r1);
     expect(r1.error).toHaveBeenCalledWith(400, 'Warehouse is missing or invalid');
 
     const r2 = req({});
-    await handlers.createTO(r2);
+    await handlers.lookupTR(r2);
     expect(r2.error).toHaveBeenCalledWith(500, 'boom');
   });
 
