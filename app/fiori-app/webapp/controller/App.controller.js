@@ -62,8 +62,6 @@ sap.ui.define([
                 this._updateShell(/\/cycle$/.test(sHash) ? "wmCycle261" : "wmScan261");
             } else if (sHash.indexOf("wm/mvt261/open") === 0) {
                 this._updateShell("wmOpen261");
-            } else if (sHash.indexOf("wm/mvt261") === 0) {
-                this._updateShell("wmMvt261");
             } else if (sHash.indexOf("wm/handling-unit/") === 0) {
                 this._updateShell("wmHandlingUnitDetail");
             } else if (sHash.indexOf("wm/handling-unit") === 0) {
@@ -237,10 +235,6 @@ sap.ui.define([
                     break;
                 case "wmOpen261":
                     sTitle = oBundle ? oBundle.getText("open261Title") : "Open 261 Items";
-                    bShowNav = true;
-                    break;
-                case "wmMvt261":
-                    sTitle = oBundle ? oBundle.getText("mvt261Title") : "First Goods Issue 261";
                     bShowNav = true;
                     break;
                 case "wmHandlingUnits":
