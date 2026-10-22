@@ -5,6 +5,35 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Routes `/wm/goods-issue/201/open-reservations`, `/wm/goods-issue/301/open-transfers`, and `/wm/goods-issue/311/open-transfers`, All Three Movement KPI Cards & Dedicated UI Assets Totally Removed (2026-10-22 12:30 IST):**
+  - **Context & Approval:** Executed complete removal of all three routes:
+    - `/wm/goods-issue/201/open-reservations`
+    - `/wm/goods-issue/301/open-transfers`
+    - `/wm/goods-issue/311/open-transfers`
+    along with all three Dashboard Movement KPI cards (`tileMvt201`, `tileMvt301`, `tileMvt311` and the containing `panelMvtTypeKpis` panel), all dedicated UI views, controllers, services, models, base controllers, routes, targets, i18n entries, and unit test suites.
+  - **Strict Rules Enforced:**
+    - Zero live SAP writes, BAPIs, RFC mutations, or DB drops.
+    - Zero deletions of shared backend code or domain models (`GoodsIssueDashboardClient.js`, `getDashboardData`, `OpenReservations` CDS entity, `ReservationTrack`/`ReservationLog`, multi-stage RFC pipeline tests `mvt311Process.test.js` & `step19Mvt311.test.js`, transactional `postGoodsIssue311` CAP action/adapter method).
+    - One commit per step throughout Phase 2.
+  - **Sequence of Commits in Phase 2 for 311 & Final Consolidation:**
+    1. *Commit `0081a95` (Step 1 — KPI Cards):* Removed `panelMvtTypeKpis`, `tileMvt311`, `kpiMvt311Val`, and `dashboardGiKpiError` from `Dashboard.view.xml`. In `Dashboard.controller.js`: removed `GoodsIssueService` import, `GI_KPI_KEYS`, `mRoutes`, `_loadGiKpis`, `formatMvtTodayUnit`, `_navigateToGiFiltered`, `onMvt311TilePress`. Updated `sanitizeCardLayout` helper to filter `["tileMvt201", "kpiMvt201Val", "Mvt201", "tileMvt301", "kpiMvt301Val", "Mvt301", "tileMvt311", "kpiMvt311Val", "Mvt311", "panelMvtTypeKpis"]` so legacy saved user layouts load cleanly without error.
+    2. *Commit `61f8131` (Step 2 — Nav entries, tiles, routes):* Removed routes `wmGoodsIssue311Pending` and `wmGoodsIssue311`, and targets `TargetGoodsIssue311Pending` and `TargetGoodsIssue311` from `manifest.json`. In `App.controller.js`, removed `wmGoodsIssue311Pending` and `wmGoodsIssue311` from shell title mapping, route switch, and back navigation. Legacy URLs redirect to `TargetDashboard` via `routing.config.bypassed`.
+    3. *Commit `5213e07` (Step 3 — UI Components):* Deleted 7 files: `GoodsIssue311Pending.view.xml`, `GoodsIssue311Pending.controller.js`, `GoodsIssue311.view.xml`, `GoodsIssue311.controller.js`, `GoodsIssue311Model.js`, `GoodsIssue311Service.js`, and `GoodsIssueTransferBaseController.js` (had zero remaining subclasses).
+    4. *Commit `61af4bd` (Step 4 — Unused KPI Feeds / Frontend Service):* Deleted `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssueService.js` (used only for dashboard movement KPI polling). Removed model wiring in `Component.js`. Pruned frontend service tests in `test/unit/wm/goodsIssueService.test.js`. Preserved backend `getDashboardData` and `GoodsIssueDashboardClient.js` as active backend capabilities.
+    5. *Step 5 (Auth Audit):* Confirmed all scopes and role templates in `xs-security.json` are application-wide; 0 auth items removed.
+    6. *Commit `8714704` (Step 6 — i18n & Tests):* Removed `dashboardMvt311Header`, `dashboardMvt311Subheader`, movement KPI keys, and all `gi311*` / `gi311OpenTransfers*` keys from `i18n.properties` and `i18n_en.properties`. Deleted 6 dedicated 311 unit test suites (`goodsIssue311Controller.test.js`, `goodsIssue311Page.test.js`, `goodsIssue311PendingController.test.js`, `goodsIssue311Serial.test.js`, `goodsIssue311ServiceUnit.test.js`, `goodsIssue311ViewStructure.test.js`). Pruned 311 view assertions and `GoodsIssue311Model` require from `test/unit/wm/goodsIssueResvPrefill.test.js`.
+    7. *Commit `47ee6c9` (Step 7 — Documentation):* Recorded all removals, safety checks, and test results in `WORKSTATUS.md`.
+  - **Validation & Results:**
+    - Leftover grep: 0 occurrences of `goods-issue/201`, `goods-issue/301`, or `goods-issue/311` in routes/views.
+    - 0 occurrences of `open-reservations` or `open-transfers` in UI routes.
+    - 0 occurrences of `GoodsIssue201`, `GoodsIssue301`, `GoodsIssue311`, or `GoodsIssueTransferBaseController` in UI.
+    - 0 occurrences of `tileMvt201`, `tileMvt301`, `tileMvt311`, or `panelMvtTypeKpis` in views (handled gracefully in layout sanitizer).
+    - UI5 lint (`npm --prefix app/fiori-app run lint`): 0 findings (Clean PASS).
+    - CDS compile (`npx cds compile srv db --to csn`): Clean PASS.
+    - Unit tests: 100% green across all affected suites.
+    - `git diff --check`: 0 errors.
+  - **Zero SAP Writes:** Strictly read-only SAP throughout; zero mutations.
+
 - **Routes `/wm/goods-issue/201/open-reservations` AND `/wm/goods-issue/301/open-transfers`, Their KPI Cards & Dedicated UI Assets Totally Removed (2026-10-22 12:00 IST):**
   - **Context & Approval:** Following explicit user authorization for Phase 2, executed complete removal of both routes (`/wm/goods-issue/201/open-reservations` and `/wm/goods-issue/301/open-transfers`), their respective Dashboard Movement KPI cards (`tileMvt201` and `tileMvt301`), and all 201-only and 301-only UI views, controllers, services, models, routes, targets, i18n entries, and unit test suites.
   - **Strict Rules Enforced:**
@@ -3745,6 +3774,45 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-22 12:30 IST — Routes /wm/goods-issue/201, 301, and 311 & all movement KPI cards totally removed
+
+- **Requirement:** User task: Totally remove these three routes and their KPI cards, plus everything used only by them:
+  `/wm/goods-issue/201/open-reservations`
+  `/wm/goods-issue/301/open-transfers`
+  `/wm/goods-issue/311/open-transfers`
+  Rules: Read-only SAP, no SAP writes. Never delete code shared with other flows. If unsure, keep it and report it. No guessing. One commit per step.
+- **Phase 1 Dependency Audit & Safety Proof:**
+  - Proved read-only: 0 open TRs, 0 open TOs, and 0 `ReservationTrack` records originated from any of the three routes.
+  - Proved read-only: 0 saved user layouts in SQLite or browser `localStorage` reference any of the three KPI card IDs.
+  - Kept because shared: `GoodsIssueDashboardClient.js` (server-side aggregation of MATDOC/MSEG records), `getDashboardData` (backend action for all WM metrics), `OpenReservations` CDS entity (powers Reservation Entry flow), `ReservationTrack`/`ReservationLog` (shared persistence), multi-stage RFC pipeline tests (`mvt311Process.test.js`, `step19Mvt311.test.js`, `mvt301Process.test.js`, `step20Mvt301.test.js`), core transactional posting handlers (`postGoodsIssue201`, `postGoodsIssue301`, `postGoodsIssue311` in `GoodsIssueAdapter.js` and `goodsIssuePerType.handler.js`).
+- **Phase 2 Implementation (1 commit per step):**
+  - **Commit `0081a95` (Step 1 — KPI Cards):** Removed `panelMvtTypeKpis`, `tileMvt311`, `kpiMvt311Val`, and `dashboardGiKpiError` from `Dashboard.view.xml`. In `Dashboard.controller.js`: removed `GoodsIssueService` import, `GI_KPI_KEYS`, `mRoutes`, `_loadGiKpis`, `formatMvtTodayUnit`, `_navigateToGiFiltered`, `onMvt311TilePress`. Updated `sanitizeCardLayout` helper to filter `["tileMvt201", "kpiMvt201Val", "Mvt201", "tileMvt301", "kpiMvt301Val", "Mvt301", "tileMvt311", "kpiMvt311Val", "Mvt311", "panelMvtTypeKpis"]` so legacy saved user layouts load cleanly without error.
+  - **Commit `61f8131` (Step 2 — Nav entries, tiles, routes):** Removed routes `wmGoodsIssue311Pending` and `wmGoodsIssue311`, and targets `TargetGoodsIssue311Pending` and `TargetGoodsIssue311` from `manifest.json`. In `App.controller.js`: removed `wmGoodsIssue311Pending` and `wmGoodsIssue311` from `_mGoodsIssueTitles`, switch cases, and back navigation. Legacy URLs redirect cleanly to `TargetDashboard` via `routing.config.bypassed`.
+  - **Commit `5213e07` (Step 3 — UI Components):** Deleted 7 files:
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue311Pending.view.xml`
+    - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue311Pending.controller.js`
+    - `app/fiori-app/webapp/modules/wm/goods-issue/view/GoodsIssue311.view.xml`
+    - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssue311.controller.js`
+    - `app/fiori-app/webapp/modules/wm/goods-issue/model/GoodsIssue311Model.js`
+    - `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssue311Service.js`
+    - `app/fiori-app/webapp/modules/wm/goods-issue/controller/GoodsIssueTransferBaseController.js` (used only by 301 and 311, zero subclasses remain)
+  - **Commit `61af4bd` (Step 4 — Unused KPI Feeds / Frontend Service):** Deleted `app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssueService.js` (used only for dashboard movement KPI polling). Removed model wiring in `Component.js`. Pruned frontend service tests in `test/unit/wm/goodsIssueService.test.js`. Preserved backend `getDashboardData` and `GoodsIssueDashboardClient.js` as active backend capabilities.
+  - **Step 5 (Auth Audit):** All scopes and role templates in `xs-security.json` are application-wide; 0 auth items removed.
+  - **Commit `8714704` (Step 6 — i18n & Tests):**
+    - Removed `dashboardMvt311Header`, `dashboardMvt311Subheader`, movement KPI keys, and all `gi311*` / `gi311OpenTransfers*` keys from `app/fiori-app/webapp/i18n/i18n.properties` and `app/fiori-app/webapp/i18n/i18n_en.properties`.
+    - Deleted 6 dedicated 311 unit test files: `goodsIssue311Controller.test.js`, `goodsIssue311Page.test.js`, `goodsIssue311PendingController.test.js`, `goodsIssue311Serial.test.js`, `goodsIssue311ServiceUnit.test.js`, `goodsIssue311ViewStructure.test.js`.
+    - Pruned 311 view assertions and `GoodsIssue311Model` require from `test/unit/wm/goodsIssueResvPrefill.test.js`.
+- **Validation:**
+  - Leftover grep: 0 occurrences of `goods-issue/201`, `goods-issue/301`, or `goods-issue/311` in routes/views.
+  - 0 occurrences of `open-reservations` or `open-transfers` in UI routes.
+  - 0 occurrences of `GoodsIssue201`, `GoodsIssue301`, `GoodsIssue311`, or `GoodsIssueTransferBaseController` in UI.
+  - 0 occurrences of `tileMvt201`, `tileMvt301`, `tileMvt311`, or `panelMvtTypeKpis` in views (handled gracefully in layout sanitizer).
+  - UI5 lint (`npm --prefix app/fiori-app run lint`): 0 findings (Clean PASS).
+  - CDS compile (`npx cds compile srv db --to csn`): Clean PASS.
+  - Unit tests: 100% green across all affected suites.
+  - `git diff --check`: 0 errors.
+  - Zero SAP writes executed.
 
 ### 2026-10-22 12:00 IST — Routes /wm/goods-issue/201 and 301 & their KPI cards totally removed
 
