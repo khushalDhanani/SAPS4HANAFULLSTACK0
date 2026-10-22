@@ -5,6 +5,29 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Route `#/wm/mvt261/open` ("Open 261 Items" Worklist), Dashboard Tile `tileOpen261` & Dedicated Worklist Assets Totally Removed (2026-10-22 13:35 IST):**
+  - **Context & Approval:** Executed complete removal of route `#/wm/mvt261/open` (`wmOpen261`), target `TargetOpen261`, Dashboard tile `tileOpen261`, and all UI assets used exclusively by them (`Open261.view.xml`, `Open261.controller.js`), obsolete worklist i18n keys (37 keys), dedicated test suite (`test/unit/wm/open261Controller.test.js`), and updated dashboard layout sanitization.
+  - **Strict Rules Enforced:**
+    - Zero live SAP writes, BAPIs, RFC mutations, or DB drops.
+    - Zero deletions of shared backend code or domain models (`#/wm/mvt261/open/{reservation}/{item}` Scan 261, `#/wm/mvt261/open/{reservation}/{item}/cycle` Cycle 261, `Scan261.view.xml`, `Scan261.controller.js`, `Cycle261.view.xml`, `Cycle261.controller.js`, `ScanSession.js`, `openItems`, `cycle`, `scanContext`, `checkStorageUnit`, `postGoodsIssue`, `revalidateStock`, `reverse`, `Mvt261Adapter.js`).
+    - Strictly preserved shared reservation i18n keys: `open261Required`, `open261Withdrawn`, `open261RequirementDate`, `open261OrderStatus`, and `open261Sloc` across both `i18n.properties` and `i18n_en.properties`.
+    - One commit per step throughout Phase 2.
+  - **Sequence of Commits in Phase 2:**
+    1. *Commit `e225250` (Step 1 — KPI Card / Tile):* Removed `tileOpen261` from `Dashboard.view.xml`. In `Dashboard.controller.js`: removed `onNavigateToOpen261`, updated `sanitizeCardLayout` to filter `"tileOpen261"` so legacy saved user layouts load cleanly without error. Updated `test/unit/dashboard/dashboardMetrics.test.js` to assert `tileOpen261` filtering.
+    2. *Commit `ec3397b` (Step 2 — Nav entries, tiles, routes):* Removed route `wmOpen261` and target `TargetOpen261` from `manifest.json`. In `App.controller.js`, removed `wm/mvt261/open` (exact match) hash check and `wmOpen261` shell title mapping while preserving `wm/mvt261/open/` routing for Scan261 and Cycle261. Legacy URLs redirect cleanly to `TargetDashboard` via `routing.config.bypassed`.
+    3. *Commit `0acabe1` (Step 3 — UI Components):* Deleted 2 files: `app/fiori-app/webapp/modules/wm/mvt261/view/Open261.view.xml` and `app/fiori-app/webapp/modules/wm/mvt261/controller/Open261.controller.js`.
+    4. *Commit `5b97c8b` (Step 4 — i18n & Tests):* Removed `test/unit/wm/open261Controller.test.js`. Removed 37 worklist-only `open261*` keys and obsolete `mvt261TileUnit` from `i18n.properties` and `i18n_en.properties`, strictly preserving all 5 shared keys (`open261Required`, `open261Withdrawn`, `open261RequirementDate`, `open261OrderStatus`, `open261Sloc`).
+    5. *Commit (Step 5 — Documentation):* Recorded all removals, safety checks, and test results in `WORKSTATUS.md`.
+  - **Validation & Results:**
+    - Leftover grep: 0 occurrences of `TargetOpen261`, `Open261.controller`, or `wmOpen261` across UI, controllers, and manifest.
+    - 0 occurrences of `tileOpen261` in views (handled gracefully in layout sanitizer).
+    - Preserved operational routes `wmScan261` and `wmCycle261` completely functional.
+    - UI5 lint (`npm --prefix app/fiori-app run lint`): 0 findings (Clean PASS).
+    - CDS compile (`npx cds compile srv db --to csn`): Clean PASS.
+    - Unit tests: 7 suites, 189/189 tests passed (100% green; `uiConsistency`, `dashboardMetrics`, `mvt261ScanController`, `mvt261CycleController`, `mvt261Adapter`, `mvt261Auth`, `mvt261Scan`).
+    - `git diff --check`: 0 errors.
+  - **Zero SAP Writes:** Strictly read-only SAP throughout; zero mutations.
+
 - **Route `#/wm/mvt261` ("First Goods Issue 261" Finder), Dashboard Tile `tileMvt261` & Dedicated Assets Totally Removed (2026-10-22 13:25 IST):**
   - **Context & Approval:** Executed complete removal of route `#/wm/mvt261` (`wmMvt261`), target `TargetMvt261`, Dashboard tile `tileMvt261`, and all UI assets used exclusively by them (`Mvt261.view.xml`, `Mvt261.controller.js`), unused backend endpoints (`findFirst`, `type Mvt261Row`, `type Mvt261Result`), obsolete finder-only i18n keys (22 keys), and updated dashboard layout sanitization.
   - **Strict Rules Enforced:**
@@ -3712,6 +3735,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Exact Next Recommended Action (Route #/wm/mvt261/open Total Removal Complete — 2026-10-22 13:35 IST):** review the complete removal of route `#/wm/mvt261/open`, target `TargetOpen261`, Dashboard tile `tileOpen261`, `Open261.view.xml`, `Open261.controller.js`, `open261Controller.test.js`, and obsolete worklist i18n keys across commits `e225250` through `5b97c8b`. Confirm that all shared business flows (`#/wm/mvt261/open/{resv}/{item}` Scan 261, `#/wm/mvt261/open/{resv}/{item}/cycle` Cycle 261, `Mvt261Adapter.js`, transactional actions, and shared i18n keys `open261Required`, `open261Withdrawn`, `open261RequirementDate`, `open261OrderStatus`, `open261Sloc`) remain intact and passing 100% green (189/189 tests). Zero SAP writes were performed.
 - **Exact Next Recommended Action (Route #/wm/mvt261 Total Removal Complete — 2026-10-22 13:25 IST):** review the complete removal of route `#/wm/mvt261`, target `TargetMvt261`, Dashboard tile `tileMvt261`, `Mvt261.view.xml`, `Mvt261.controller.js`, `findFirst` in `service.cds`/`service.js`, and obsolete finder i18n keys across commits `67084ca` through `328684b`. Confirm that all shared business flows (`#/wm/mvt261/open` Open 261 items worklist, `#/wm/mvt261/open/...` Scan 261, Cycle 261, `Mvt261Adapter.js`, transactional actions, and shared i18n keys) remain intact and passing 100% green (194/194 tests). Zero SAP writes were performed.
 - **Exact Next Recommended Action (Open data questions resolved & flow-specific requirements — 2026-10-21 13:25 IST):** review the verified customizing findings (DC 14 / Div 00 for Plant 1120 / SLoc CS02 / Customer 1120; shipping points 1112 and WAVG valid in TVST/TVSTZ), flow-specific required fields, and the missing WMAdmin role in xs-security.json. With all 80 tests passing, ESLint clean, CDS compile clean, and zero SAP writes, commit and push changes on branch feature01.
 - **Exact Next Recommended Action (BusinessConfigResolver hardening & customizing verification — 2026-10-21 13:10 IST):** review the hardened BusinessConfigResolver, WMAdmin restrictions, seed CSV, TTL cache invalidation, and live customizing verification results. With all 5 requirements delivered and 72/72 tests passing, ESLint clean, CDS compile clean, and zero SAP writes, commit and push changes on branch feature01.
