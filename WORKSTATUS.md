@@ -5,6 +5,29 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Route `#/wm/tr-to`, Dashboard Tile `tileTrTo` & Dedicated tr-to Assets Totally Removed (2026-10-22 13:00 IST):**
+  - **Context & Approval:** Executed complete removal of route `#/wm/tr-to` (`wmTrTo`), target `TargetTrTo`, Dashboard tile `tileTrTo`, and all UI assets used exclusively by them (`TrTo.view.xml`, `TrSelectDialog.fragment.xml`, `SuSelectDialog.fragment.xml`, `TrTo.controller.js`, `TrToService.js`), unused backend endpoints (`getAvailableSUs`, `checkSU`, `createTO`), obsolete i18n keys, and dedicated unit test suites (`trToController.test.js`, `trToService.test.js`).
+  - **Strict Rules Enforced:**
+    - Zero live SAP writes, BAPIs, RFC mutations, or DB drops.
+    - Zero deletions of shared backend code or domain models (`scan-to` flow `/wm/scan-to/...`, `TrToAdapter.js`, `createTOFromTR`, `confirmTO`, `postMigoGoodsMovement`, `getOpenTRs`, `lookupTR`, `getFifoBatches`, `getAvailableSerials`, `getTR`, `getTRByReservation`, `validateTrReservationConsistency`, T319A pre-check, `WM_ALLOW_MISMATCHED_TR`, `ReservationTrack`, `ReservationLog`, and movements 201/241/261/301/311).
+    - Preserved shared i18n keys `trToAudioEnabled` and `trToAudioMuted` used by `WarehouseScanTo` and `WarehouseScanToDetail`.
+    - One commit per step throughout Phase 2.
+  - **Sequence of Commits in Phase 2:**
+    1. *Commit `364c075` (Step 1 — KPI Card / Tile):* Removed `tileTrTo` from `Dashboard.view.xml`. In `Dashboard.controller.js`: removed `onNavigateToTrTo`, updated `sanitizeCardLayout` to filter `"tileTrTo"` so legacy saved user layouts load cleanly without error. Updated `test/unit/dashboard/dashboardMetrics.test.js` to assert `tileTrTo` filtering.
+    2. *Commit `0cb8b56` (Step 2 — Nav entries, tiles, routes):* Removed route `wmTrTo` and target `TargetTrTo` from `manifest.json`. In `App.controller.js`, removed `wm/tr-to` hash check and `wmTrTo` shell title mapping. Legacy URLs redirect cleanly to `TargetDashboard` via `routing.config.bypassed`.
+    3. *Commit `3f4d3a7` (Step 3 — UI Components):* Deleted 5 files in `app/fiori-app/webapp/modules/wm/tr-to/`: `TrTo.view.xml`, `TrSelectDialog.fragment.xml`, `SuSelectDialog.fragment.xml`, `TrTo.controller.js`, and `TrToService.js`.
+    4. *Commit `ca7f7c6` (Step 4 — Backend Pruning):* Removed uncalled endpoints `getAvailableSUs`, `checkSU`, and `createTO`, and unused types `SUQuant`, `StorageUnit`, and `TOConfirmation` from `srv/wm/tr-to/service.cds`. Removed handlers from `srv/wm/tr-to/handlers/trTo.handler.js`. All shared capabilities (`getTR`, `getOpenTRs`, `lookupTR`, `getFifoBatches`, `getAvailableSerials`, `createTOFromTR`, `postMigoGoodsMovement`) and `TrToAdapter.js` preserved intact.
+    5. *Commit `d8718e1` (Step 5 — i18n & Tests):* Removed `dashRFMobile`, `dashTOCreationZTO`, `dashTransferOrdersFromTR`, and all ~54 `trTo*` keys from `i18n.properties` and `i18n_en.properties`, strictly preserving shared audio keys `trToAudioEnabled` and `trToAudioMuted`. Deleted `test/unit/wm/trToController.test.js` and `test/unit/wm/trToService.test.js`. Updated `test/unit/wm/trToHandler.test.js` to focus on active handlers.
+    6. *Commit (Step 6 — Documentation):* Recorded all removals, safety checks, and test results in `WORKSTATUS.md`.
+  - **Validation & Results:**
+    - Leftover grep: 0 occurrences of `wm/tr-to` or `TrTo.controller` across UI and routes.
+    - 0 occurrences of `tileTrTo` in views (handled gracefully in layout sanitizer).
+    - UI5 lint (`npm --prefix app/fiori-app run lint`): 0 findings (Clean PASS).
+    - CDS compile (`npx cds compile srv db --to csn`): Clean PASS.
+    - Unit tests: 100% green across all affected suites.
+    - `git diff --check`: 0 errors.
+  - **Zero SAP Writes:** Strictly read-only SAP throughout; zero mutations.
+
 - **Routes `/wm/goods-issue/201/open-reservations`, `/wm/goods-issue/301/open-transfers`, and `/wm/goods-issue/311/open-transfers`, All Three Movement KPI Cards & Dedicated UI Assets Totally Removed (2026-10-22 12:30 IST):**
   - **Context & Approval:** Executed complete removal of all three routes:
     - `/wm/goods-issue/201/open-reservations`
