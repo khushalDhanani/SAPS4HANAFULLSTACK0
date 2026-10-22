@@ -7,7 +7,7 @@
     xmlns:core="sap.ui.core"
     displayBlock="true">
 
-    <f:DynamicPage id="huStockTransferListPage" headerExpanded="true">
+    <f:DynamicPage id="huStockTransferListPage" headerExpanded="true" busy="{listView>/busy}" busyIndicatorDelay="0">
         <f:title>
             <f:DynamicPageTitle>
                 <f:heading>
@@ -27,7 +27,7 @@
 
         <f:header>
             <f:DynamicPageHeader pinnable="true">
-                <fb:FilterBar id="resFilterBar" search=".onSearch" useToolbar="false" showGoOnFB="true">
+                <fb:FilterBar id="resFilterBar" search=".onSearch" clear=".onClearFilters" showClearOnFB="true" showGoOnFB="true" useToolbar="false">
                     <fb:filterGroupItems>
                         <fb:FilterGroupItem name="Plant" label="{i18n>huTransferPlant}" groupName="G1" visibleInFilterBar="true">
                             <fb:control>
@@ -83,6 +83,9 @@
                 noDataText="{i18n>huTransferNoData}"
                 growing="true"
                 growingThreshold="20"
+                busy="{listView>/busy}"
+                busyIndicatorDelay="0"
+                ariaLabelledBy="tableTitle"
                 class="sapUiResponsiveMargin">
                 <headerToolbar>
                     <OverflowToolbar id="tableToolbar">
@@ -104,10 +107,10 @@
                     <Column id="colMat" width="10rem">
                         <Text text="{i18n>huTransferColMaterial}" />
                     </Column>
-                    <Column id="colBatch" width="6rem" minScreenWidth="Tablet" demandPopin="true">
+                    <Column id="colBatch" width="6rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                         <Text text="{i18n>huTransferColBatch}" />
                     </Column>
-                    <Column id="colSloc" width="8rem" minScreenWidth="Tablet" demandPopin="true">
+                    <Column id="colSloc" width="8rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                         <Text text="{i18n>huTransferColSlocRoute}" />
                     </Column>
                     <Column id="colReqQty" width="6rem" hAlign="End">
@@ -116,7 +119,7 @@
                     <Column id="colOpenQty" width="6rem" hAlign="End">
                         <Text text="{i18n>huTransferColOpenQty}" />
                     </Column>
-                    <Column id="colRequester" width="8rem" minScreenWidth="Desktop" demandPopin="true">
+                    <Column id="colRequester" width="8rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline">
                         <Text text="{i18n>huTransferColRequester}" />
                     </Column>
                     <Column id="colStatus" width="7rem" hAlign="Center">
@@ -132,8 +135,13 @@
                             <ObjectIdentifier title="{listView>Material}" text="{listView>MaterialDesc}" />
                             <Text text="{listView>Batch}" />
                             <Text text="{listView>StorageLocation} → {listView>ReceivingStorageLocation}" />
-                            <ObjectNumber number="{listView>RequiredQty}" unit="{listView>BaseUnit}" />
-                            <ObjectNumber number="{listView>OpenQty}" unit="{listView>BaseUnit}" state="{= ${listView>OpenQty} > 0 ? 'Warning' : 'Success' }" />
+                            <ObjectNumber
+                                number="{listView>RequiredQty}"
+                                unit="{listView>BaseUnit}" />
+                            <ObjectNumber
+                                number="{listView>OpenQty}"
+                                unit="{listView>BaseUnit}"
+                                state="{= ${listView>OpenQty} > 0 ? 'Warning' : 'Success' }" />
                             <Text text="{listView>RequesterName}" />
                             <ObjectStatus text="{listView>StatusText}" state="{listView>StatusState}" />
                         </cells>

@@ -15,11 +15,14 @@
                 mode="SingleSelectMaster"
                 selectionChange=".onSelectBinItem"
                 noDataText="{i18n>storageBinsNoData}"
-                growing="true">
+                growing="true"
+                busy="{cockpitView>/busy}"
+                busyIndicatorDelay="0">
                 <headerToolbar>
                     <OverflowToolbar>
                         <Title text="{i18n>storageBinsTableTitle} ({= ${cockpitView>/storageBins}.length })" level="H4" />
                         <ToolbarSpacer />
+                        <SearchField id="searchBinsField" width="14rem" search=".onSearchStorageBins" placeholder="{i18n>storageBinsSearchPlaceholder}" />
                         <Text text="{i18n>storageBinsClickPrompt}" class="textMuted" />
                     </OverflowToolbar>
                 </headerToolbar>
@@ -33,13 +36,13 @@
                     <Column width="4.5rem" hAlign="Center">
                         <Text text="{i18n>storageBinsColType}" />
                     </Column>
-                    <Column width="6rem">
+                    <Column width="6rem" minScreenWidth="Tablet" demandPopin="true" popinDisplay="Inline">
                         <Text text="{i18n>storageBinsColSut}" />
                     </Column>
                     <Column width="8rem">
                         <Text text="{i18n>storageBinsColBin}" />
                     </Column>
-                    <Column width="6rem">
+                    <Column width="6rem" minScreenWidth="Desktop" demandPopin="true" popinDisplay="Inline">
                         <Text text="{i18n>storageBinsColBatch}" />
                     </Column>
                     <Column width="6rem" hAlign="End">

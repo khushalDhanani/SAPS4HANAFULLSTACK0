@@ -46,6 +46,14 @@ sap.ui.define([
             oViewModel.setProperty("/statusStateType", "None");
 
             this.loadCockpitDetail(sRes, sItem);
+
+            var that = this;
+            setTimeout(function () {
+                var oInput = that.byId("inputUnitNumber");
+                if (oInput && oInput.focus) {
+                    oInput.focus();
+                }
+            }, 300);
         },
 
         loadCockpitDetail: function (sRes, sItem) {
@@ -143,6 +151,7 @@ sap.ui.define([
                 .then(function (data) {
                     var aBins = (data && data.value) || (Array.isArray(data) ? data : []);
                     oViewModel.setProperty("/storageBins", aBins);
+                    oViewModel.setProperty("/allStorageBins", aBins);
 
                     if (!that._pStorageBinsDialog) {
                         that._pStorageBinsDialog = Fragment.load({
@@ -161,6 +170,27 @@ sap.ui.define([
                 .catch(function (err) {
                     MessageBox.error("Failed to load storage bins: " + (err && err.message ? err.message : String(err)));
                 });
+        },
+
+        onSearchStorageBins: function (oEvent) {
+            var sQuery = oEvent.getParameter("query") || oEvent.getParameter("newValue") || "";
+            var oViewModel = this.getModel("cockpitView");
+            var aAll = oViewModel.getProperty("/allStorageBins") || [];
+
+            if (!sQuery.trim()) {
+                oViewModel.setProperty("/storageBins", aAll);
+                return;
+            }
+
+            var sLower = sQuery.toLowerCase();
+            var aFiltered = aAll.filter(function (it) {
+                return (it.UnitNumber && it.UnitNumber.toLowerCase().includes(sLower)) ||
+                       (it.StorageBin && it.StorageBin.toLowerCase().includes(sLower)) ||
+                       (it.StorageType && it.StorageType.toLowerCase().includes(sLower)) ||
+                       (it.Batch && it.Batch.toLowerCase().includes(sLower)) ||
+                       (it.SutCode && it.SutCode.toLowerCase().includes(sLower));
+            });
+            oViewModel.setProperty("/storageBins", aFiltered);
         },
 
         onCloseStorageBinsDialog: function () {
@@ -198,6 +228,7 @@ sap.ui.define([
                 .then(function (data) {
                     var aRack = (data && data.value) || (Array.isArray(data) ? data : []);
                     oViewModel.setProperty("/visualRack", aRack);
+                    oViewModel.setProperty("/allVisualRack", aRack);
 
                     if (!that._pVisualRackDialog) {
                         that._pVisualRackDialog = Fragment.load({
@@ -216,6 +247,26 @@ sap.ui.define([
                 .catch(function (err) {
                     MessageBox.error("Failed to load visual rack: " + (err && err.message ? err.message : String(err)));
                 });
+        },
+
+        onSearchVisualRack: function (oEvent) {
+            var sQuery = oEvent.getParameter("query") || oEvent.getParameter("newValue") || "";
+            var oViewModel = this.getModel("cockpitView");
+            var aAll = oViewModel.getProperty("/allVisualRack") || [];
+
+            if (!sQuery.trim()) {
+                oViewModel.setProperty("/visualRack", aAll);
+                return;
+            }
+
+            var sLower = sQuery.toLowerCase();
+            var aFiltered = aAll.filter(function (it) {
+                return (it.UnitNumber && it.UnitNumber.toLowerCase().includes(sLower)) ||
+                       (it.ActualStorageBin && it.ActualStorageBin.toLowerCase().includes(sLower)) ||
+                       (it.ShelfLevelDesc && it.ShelfLevelDesc.toLowerCase().includes(sLower)) ||
+                       (it.LevelCode && it.LevelCode.toLowerCase().includes(sLower));
+            });
+            oViewModel.setProperty("/visualRack", aFiltered);
         },
 
         onCloseVisualRackDialog: function () {
@@ -246,6 +297,7 @@ sap.ui.define([
             var sUnit = oViewModel.getProperty("/scanUnitNumber");
             var nQty = parseFloat(oViewModel.getProperty("/transferQty") || 0);
             var bFull = oViewModel.getProperty("/isFullUnit");
+            var oCockpit = oViewModel.getProperty("/cockpit") || {};
             var that = this;
 
             if (!sUnit) {
@@ -257,8 +309,20 @@ sap.ui.define([
                 return;
             }
 
-            MessageBox.confirm("Post 311 Stock Transfer for Unit " + sUnit + " (" + nQty + " " + (oViewModel.getProperty("/cockpit/BaseUnit") || "") + ")?", {
-                title: "Confirm SAP Stock Transfer",
+            var oBundle = this.getView().getModel("i18n") ? this.getView().getModel("i18n").getResourceBundle() : null;
+            var sTitle = oBundle ? oBundle.getText("confirmPostTitle") : "Confirm SAP Stock Transfer";
+            var sPrompt = oBundle ? oBundle.getText("confirmPostPrompt", [
+                sUnit,
+                oCockpit.Material || "",
+                nQty,
+                oCockpit.BaseUnit || "",
+                oCockpit.StorageLocation || "",
+                oCockpit.ReceivingStorageLocation || "",
+                oCockpit.Plant || ""
+            ]) : ("Post 311 Stock Transfer for Unit " + sUnit + " (" + nQty + " " + (oCockpit.BaseUnit || "") + ")?");
+
+            MessageBox.confirm(sPrompt, {
+                title: sTitle,
                 actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
                 emphasizedAction: MessageBox.Action.OK,
                 onClose: function (sAction) {

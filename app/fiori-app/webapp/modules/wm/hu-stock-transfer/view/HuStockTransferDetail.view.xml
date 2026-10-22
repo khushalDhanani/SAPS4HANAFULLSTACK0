@@ -6,7 +6,7 @@
     xmlns:core="sap.ui.core"
     displayBlock="true">
 
-    <Page id="cockpitPage" class="sapUiSizeCompact">
+    <Page id="cockpitPage" class="sapUiSizeCompact" busy="{cockpitView>/busy}" busyIndicatorDelay="0">
         <content>
             <VBox class="sapUiResponsiveMargin" width="auto">
 
@@ -67,6 +67,7 @@
                 <Panel id="panelScanUnit" headerText="{i18n>panelScanUnitTitle}" class="sapUiSmallMarginBottom" expandable="false">
                     <VBox class="sapUiSmallMargin">
                         <Label text="{i18n>scanUnitLabel}" labelFor="inputUnitNumber" required="true" class="boldText" />
+                        <Text text="{i18n>scanUnitPromptGuidance}" class="textMuted sapUiTinyMarginBottom" visible="{= !${cockpitView>/validatedUnit} }" />
                         <HBox alignItems="Center" class="sapUiTinyMarginBottom">
                             <Input
                                 id="inputUnitNumber"
@@ -96,6 +97,7 @@
                                 </HBox>
                                 <VBox alignItems="End">
                                     <ObjectNumber number="{cockpitView>/validatedUnit/AvailableQuantity}" unit="{cockpitView>/validatedUnit/BaseUnit}" />
+                                    <ObjectStatus text="{= ${cockpitView>/validatedUnit/IsPreferredStorage} ? ${i18n>huTransferPrefStorageBadge} : ${i18n>huTransferStdStorageBadge} }" state="{= ${cockpitView>/validatedUnit/IsPreferredStorage} ? 'Success' : 'None' }" />
                                     <ObjectStatus text="{= ${cockpitView>/validatedUnit/Batch} ? 'Batch: ' + ${cockpitView>/validatedUnit/Batch} : 'No Batch' }" />
                                     <Text text="SN: {cockpitView>/validatedUnit/SerialNumber}" visible="{= !!${cockpitView>/validatedUnit/SerialNumber} }" />
                                 </VBox>
@@ -118,6 +120,7 @@
                                 min="0.001"
                                 max="{cockpitView>/maxAllowedQty}"
                                 step="1"
+                                displayValuePrecision="3"
                                 editable="{= !${cockpitView>/isFullUnit} }"
                                 width="12rem" />
                             <Text text="{cockpitView>/cockpit/BaseUnit}" class="sapUiTinyMarginBegin" />
@@ -139,7 +142,8 @@
                     icon="sap-icon://paper-plane"
                     type="Emphasized"
                     press=".onPostTransfer"
-                    enabled="{= !!${cockpitView>/validatedUnit/Valid} &amp;&amp; ${cockpitView>/transferQty} > 0 }" />
+                    enabled="{= !!${cockpitView>/validatedUnit/Valid} &amp;&amp; ${cockpitView>/transferQty} > 0 }"
+                    busy="{cockpitView>/busy}" />
             </OverflowToolbar>
         </footer>
     </Page>

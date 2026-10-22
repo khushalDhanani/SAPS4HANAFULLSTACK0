@@ -7,6 +7,33 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **HU Stock Transfer Module — UI5 MCP Polish & Strict Fiori Guidelines (2026-10-22 16:45 IST):**
+  - **Context & Objective:** Polished the `/wm/hu-stock-transfer` frontend module to strict SAPUI5 (v1.136+) and Fiori UX guidelines using the `sap-ui5` MCP tool suite, ensuring zero linter warnings, robust responsive layouts, and accessibility.
+  - **Enhancements Implemented:**
+    1. **DynamicPage & Table Async Feedback:** Added `busy="{listView>/busy}"` and `busyIndicatorDelay="0"` to `DynamicPage` and `Table` in `HuStockTransferList.view.xml`, and to `Page` in `HuStockTransferDetail.view.xml` and `StorageBinsDialog.fragment.xml`, ensuring immediate visual loading feedback.
+    2. **FilterBar Reset Capability:** Enabled `showClearOnFB="true"` and implemented `clear=".onClearFilters"` in `HuStockTransferList.controller.js` to reset plant, storage location, movement type, reservation, material, and status filters with a single click.
+    3. **Responsive Mobile & Tablet Popins:** Added `popinDisplay="Inline"` to responsive columns (`colBatch`, `colSloc`, `colRequester` in worklist; `storageBinsColSut` and `storageBinsColBatch` in storage bins dialog) preventing column truncation on tablets and mobile screens.
+    4. **Barcode RF Auto-Focus:** Configured `_onRouteMatched` in `HuStockTransferDetail.controller.js` to automatically set focus on the barcode scan input `inputUnitNumber` after route navigation, streamlining hands-free RF barcode scanning.
+    5. **Client-Side Live Filtering in Dialogs:** Added instant live `SearchField` filters to both `StorageBinsDialog.fragment.xml` and `VisualRackDialog.fragment.xml` with debounced search across bin numbers, unit IDs, SUT types, batches, and rack shelf levels.
+    6. **Storage Strategy Visibility:** Added visual indicator badge (`huTransferPrefStorageBadge` vs `huTransferStdStorageBadge`) on the validated unit summary card to indicate whether the scanned unit satisfies the SAP reservation's preferred storage type strategy.
+    7. **Fiori Dialog Badge Standard:** Replaced non-standard `<Badge` tag in `VisualRackDialog.fragment.xml` with standard SAPUI5 `<ObjectStatus inverted="true" state="Information" />`.
+    8. **Detailed Confirmation Modal:** Enhanced `onPostTransfer` in `HuStockTransferDetail.controller.js` using `confirmPostPrompt` i18n bundle formatting to present material, transfer quantity, base unit, and storage location routing (`SLoc XXXX → YYYY (Plant ZZZZ)`) before posting.
+  - **Files Changed:**
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferList.view.xml`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferList.controller.js`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferDetail.view.xml`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferDetail.controller.js`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/fragment/StorageBinsDialog.fragment.xml`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/fragment/VisualRackDialog.fragment.xml`
+    - `app/fiori-app/webapp/i18n/i18n.properties`
+    - `app/fiori-app/webapp/i18n/i18n_en.properties`
+  - **Validation & Results:**
+    - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected.** (0 errors, 0 warnings).
+    - `npx jest test/unit/controller/uiConsistency.test.js test/unit/wm/huStockTransferAdapter.test.js --no-coverage`: **22/22 tests PASS (100% green)**.
+    - `npx cds compile srv db --to csn`: **Clean PASS**.
+    - `git diff --check`: **0 whitespace/format errors**.
+  - **Zero SAP Writes:** Strictly read-only SAP checks and UI enhancements; zero live SAP mutations.
+
 - **HU Stock Transfer Module — 401 Unauthorized & RFC Query Hardening Fix (2026-10-22 16:26 IST):**
   - **Context & Objective:** Fixed HTTP 401 (Unauthorized) error reported when navigating to `/wm/hu-stock-transfer` and hardened `HuStockTransferAdapter` RFC queries against SAP NetWeaver table reader limitations.
   - **Root Cause & Issues Resolved:**

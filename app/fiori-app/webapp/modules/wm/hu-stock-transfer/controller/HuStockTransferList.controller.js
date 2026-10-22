@@ -66,6 +66,20 @@ sap.ui.define([
             this.loadReservations();
         },
 
+        onClearFilters: function () {
+            var oViewModel = this.getModel("listView");
+            oViewModel.setProperty("/filters", {
+                plant: "1120",
+                storageLocation: "",
+                movementType: "311",
+                reservation: "",
+                material: "",
+                requester: "",
+                status: "open"
+            });
+            this.loadReservations();
+        },
+
         onRefresh: function () {
             this.loadReservations();
             MessageToast.show("Reservations refreshed");

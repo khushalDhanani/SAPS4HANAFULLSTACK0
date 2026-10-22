@@ -10,18 +10,21 @@
         draggable="true">
         <content>
             <VBox class="sapUiSmallMargin">
-                <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                <OverflowToolbar design="Transparent" class="sapUiTinyMarginBottom">
                     <core:Icon src="sap-icon://shelf" size="1.5rem" class="sapUiTinyMarginEnd" color="#0369a1" />
                     <VBox>
                         <Title text="{i18n>visualRackHeading}" level="H4" />
                         <Text text="{i18n>visualRackSubheading}" class="textMuted" />
                     </VBox>
-                </HBox>
+                    <ToolbarSpacer />
+                    <SearchField id="searchRackField" width="14rem" search=".onSearchVisualRack" placeholder="{i18n>visualRackSearchPlaceholder}" />
+                </OverflowToolbar>
 
                 <List
                     id="visualRackList"
                     items="{path: 'cockpitView>/visualRack'}"
                     mode="SingleSelectMaster"
+                    noDataText="{i18n>visualRackNoData}"
                     selectionChange=".onSelectRackItem">
                     <items>
                         <CustomListItem type="Active" press=".onSelectRackItem">
@@ -34,7 +37,7 @@
                                         color="{= ${cockpitView>SortPriority} === 1 ? '#166534' : ${cockpitView>SortPriority} === 4 ? '#b91c1c' : '#0369a1' }" />
                                     <VBox>
                                         <HBox alignItems="Center">
-                                            <Badge text="{cockpitView>LevelCode}" class="sapUiTinyMarginEnd" />
+                                            <ObjectStatus text="{cockpitView>LevelCode}" inverted="true" state="Information" class="sapUiTinyMarginEnd" />
                                             <Text text="{cockpitView>ShelfLevelDesc}" class="boldText" />
                                         </HBox>
                                         <Text text="Bin: {cockpitView>ActualStorageBin} ({cockpitView>StorageTypeDesc})" class="textMuted" />
