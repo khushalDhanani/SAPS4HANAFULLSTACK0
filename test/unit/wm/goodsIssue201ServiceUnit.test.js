@@ -252,29 +252,6 @@ describe('GoodsIssue201Service Unit Tests', () => {
         });
     });
 
-    describe('fetchPendingReservations', () => {
-        it('should query open 201 reservations', async () => {
-            mockODataClient.get.mockResolvedValue({ value: [{ ReservationNo: '101' }] });
-            const result = await Service.fetchPendingReservations();
-            const url = mockODataClient.get.mock.calls[0][0];
-            expect(url).toContain('/odata/v4/goods-issue/OpenReservations');
-            expect(url).toContain("MovementType eq '201'");
-            expect(url).toContain('$top=200');
-            expect(result).toEqual([{ ReservationNo: '101' }]);
-        });
-
-        it('should add a plant filter when provided', async () => {
-            mockODataClient.get.mockResolvedValue({ value: [] });
-            await Service.fetchPendingReservations('1710');
-            expect(mockODataClient.get.mock.calls[0][0]).toContain("Plant eq '1710'");
-        });
-
-        it('should propagate backend errors', async () => {
-            mockODataClient.get.mockRejectedValue(new Error('Backend offline'));
-            await expect(Service.fetchPendingReservations()).rejects.toThrow('Backend offline');
-        });
-    });
-
     describe('fetchReservationItems', () => {
         it('should query GIItems filtered by reservation number', async () => {
             mockODataClient.get.mockResolvedValue({ value: [{ ReservationItem: '1' }] });

@@ -537,7 +537,7 @@ describe('GoodsIssue201 Controller Unit Tests', () => {
             expect(mockService.postGoodsIssue.mock.calls[1][0].ClientAttemptId).toBe(firstId);
         });
 
-        it('should route back to the Pending list with the SAP document when completing a reservation', async () => {
+        it('should show success MessageBox with the SAP document when completing a reservation', async () => {
             makeValid();
             controller._oModel.setProperty('/fromReservation', true);
             controller._oModel.setProperty('/reservationNo', '0000123456');
@@ -545,10 +545,9 @@ describe('GoodsIssue201 Controller Unit Tests', () => {
             mockService.postGoodsIssue.mockResolvedValueOnce({ MaterialDocument: '4900009999', MaterialDocYear: '2025' });
             controller.onPostGoodsIssue();
             await flush();
-            expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue201Pending', {
-                '?query': expect.objectContaining({ resv: '0000123456', item: '0001', doc: '4900009999' })
-            });
-            expect(mockMessageBox.success).not.toHaveBeenCalled();
+            expect(controller._oModel.getProperty('/hasPosted')).toBe(true);
+            expect(controller._oModel.getProperty('/postedDocument')).toBe('4900009999');
+            expect(mockMessageBox.success).toHaveBeenCalled();
         });
     });
 

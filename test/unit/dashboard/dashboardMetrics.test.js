@@ -377,18 +377,18 @@ describe('Unit: Dashboard Controller live figures', () => {
             .forEach((fn) => expect(controller[fn]).toBeUndefined());
     });
 
-    test('routes movement type tile presses to their dedicated pending pages (201/301/311)', () => {
+    test('routes movement type tile presses to their dedicated pages (201/301/311)', () => {
         const controller = new DashboardControllerClass();
         controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: () => null });
 
         expect(controller.mRoutes).toEqual({
-            "201": "wmGoodsIssue201Pending",
+            "201": "wmGoodsIssue201",
             "301": "wmGoodsIssue301Pending",
             "311": "wmGoodsIssue311Pending"
         });
 
         controller.onMvt201TilePress();
-        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue201Pending');
+        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue201');
 
         controller.onMvt301TilePress();
         expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue301Pending');
