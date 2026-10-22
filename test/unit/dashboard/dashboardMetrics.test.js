@@ -374,11 +374,11 @@ describe('Unit: Dashboard Controller live figures', () => {
             .forEach((fn) => expect(controller[fn]).toBeUndefined());
     });
 
-    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, tileMvt301, tileMvt311, tileTrTo, tileMvt261, etc.)', () => {
+    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, tileMvt301, tileMvt311, tileTrTo, tileMvt261, tileOpen261, etc.)', () => {
         const controller = new DashboardControllerClass();
         expect(controller.sanitizeCardLayout([
             'tileMvt301', 'tileMvt201', 'kpiMvt201Val', 'kpiMvt301Val', 'Mvt301',
-            'tileMvt311', 'kpiMvt311Val', 'Mvt311', 'panelMvtTypeKpis', 'tileTrTo', 'tileMvt261', 'tileGoodsReceipt'
+            'tileMvt311', 'kpiMvt311Val', 'Mvt311', 'panelMvtTypeKpis', 'tileTrTo', 'tileMvt261', 'tileOpen261', 'tileGoodsReceipt'
         ])).toEqual(['tileGoodsReceipt']);
         expect(controller.sanitizeCardLayout(null)).toEqual([]);
     });

@@ -579,11 +579,6 @@
                                             <NumericContent value="{path: 'dashboardView>/inboundDeliveryCount', formatter: '.formatMetricValue'}" icon="sap-icon://inbox" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile id="tileOpen261" header="{i18n>open261Title}" subheader="{i18n>open261TileSub}" press=".onNavigateToOpen261" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="{i18n>mvt261TileUnit}">
-                                            <NumericContent icon="sap-icon://list" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
                                     <GenericTile id="tileHandlingUnits" header="{i18n>huTitle}" subheader="{i18n>huTileSub}" press=".onNavigateToHandlingUnits" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                         <TileContent unit="{i18n>huTileUnit}">
                                             <NumericContent icon="sap-icon://pallet" valueColor="Neutral" />
