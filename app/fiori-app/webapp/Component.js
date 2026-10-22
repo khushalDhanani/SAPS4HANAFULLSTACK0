@@ -4,14 +4,13 @@ sap.ui.define([
     "sap/m/MessageToast",
     "saps4hana/fiori/model/models",
     "saps4hana/fiori/service/AuthService",
-    "saps4hana/fiori/modules/wm/goods-issue/service/GoodsIssueService",
     "saps4hana/fiori/modules/wm/goods-receipt/service/GoodsReceiptService",
     "saps4hana/fiori/modules/mm/purchase-order/service/PurchaseOrderService",
     "saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService",
     "saps4hana/fiori/modules/sd/sales-order/service/SalesOrderService",
     "saps4hana/fiori/modules/le/outbound-delivery/service/OutboundDeliveryService",
     "saps4hana/fiori/modules/sd/customer-invoice/service/CustomerInvoiceService"
-], function (UIComponent, Device, MessageToast, models, AuthService, GoodsIssueService, GoodsReceiptService, PurchaseOrderService, SalesInquiryService, SalesOrderService, OutboundDeliveryService, CustomerInvoiceService) {
+], function (UIComponent, Device, MessageToast, models, AuthService, GoodsReceiptService, PurchaseOrderService, SalesInquiryService, SalesOrderService, OutboundDeliveryService, CustomerInvoiceService) {
     "use strict";
 
     // Defensive normalization for UI5 MessageToast dock validation issue (SAP DINC0487249)
@@ -64,11 +63,6 @@ sap.ui.define([
             // set the device model
             this.setModel(models.createDeviceModel(), "device");
 
-            // Wire OData V4 models to services for entity set reads
-            var oGoodsIssueModel = this.getModel("goodsIssue");
-            if (oGoodsIssueModel && GoodsIssueService && typeof GoodsIssueService.setModel === "function") {
-                GoodsIssueService.setModel(oGoodsIssueModel);
-            }
             var oGoodsReceiptModel = this.getModel("goodsReceipt");
             if (oGoodsReceiptModel && GoodsReceiptService && typeof GoodsReceiptService.setModel === "function") {
                 GoodsReceiptService.setModel(oGoodsReceiptModel);

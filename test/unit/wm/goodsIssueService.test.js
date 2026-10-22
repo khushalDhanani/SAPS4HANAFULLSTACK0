@@ -920,55 +920,5 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       });
     });
   });
-
-  describe('Frontend GoodsIssueService V4 Model Operations', () => {
-    let FrontendGoodsIssueService;
-    let mockODataClient;
-    let mockModel;
-    let mockBinding;
-
-    beforeAll(() => {
-      mockODataClient = {
-        get: jest.fn(),
-        post: jest.fn()
-      };
-      const origSap = global.sap;
-      global.sap = {
-        ui: {
-          define: (deps, factory) => {
-            FrontendGoodsIssueService = factory(mockODataClient);
-          }
-        }
-      };
-      delete require.cache[require.resolve('../../../app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssueService')];
-      require('../../../app/fiori-app/webapp/modules/wm/goods-issue/service/GoodsIssueService');
-      global.sap = origSap;
-    });
-
-    beforeEach(() => {
-      mockBinding = {
-        requestContexts: jest.fn().mockResolvedValue([
-          { getObject: () => ({ ReservationNo: '18025', ReservationItem: '0001', Material: '100001' }) }
-        ])
-      };
-      mockModel = {
-        bindList: jest.fn().mockReturnValue(mockBinding)
-      };
-    });
-
-    it('supports setModel and getModel', () => {
-      FrontendGoodsIssueService.setModel(mockModel);
-      expect(FrontendGoodsIssueService.getModel()).toBe(mockModel);
-      FrontendGoodsIssueService.setModel(null);
-      expect(FrontendGoodsIssueService.getModel()).toBeNull();
-    });
-
-    it('fetches dashboard data with day/plant/movementType query params', async () => {
-      mockODataClient.get.mockResolvedValueOnce({ KPIs: {} });
-      await FrontendGoodsIssueService.getDashboardData(7, '1120', true, '301');
-      expect(mockODataClient.get).toHaveBeenCalledWith(
-        expect.stringContaining("/odata/v4/goods-issue/getDashboardData(days=7,plant='1120',forceRefresh=true,movementType='301')")
-      );
-    });
-  });
 });
+
