@@ -46,7 +46,7 @@ sap.ui.define([
         },
 
         /**
-         * Pre-fill the 201 form from an open cost-center reservation (opened from the 201 Pending list),
+         * Pre-fill the 201 form from an open cost-center reservation (via reservation number query parameter),
          * so the user can review and complete/post it. Material, plant, storage location, unit, open
          * quantity and cost center all come from the reservation item; the reservation link is carried
          * on the post so SAP marks the reservation withdrawn.

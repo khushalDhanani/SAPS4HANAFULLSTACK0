@@ -458,7 +458,7 @@ sap.ui.define([
          */
         _navigateToGiFiltered: function (sMvtType) {
             // Direct navigation to each movement type's own dedicated page (no filter toggle).
-            // 201, 301, and 311 open their Open Reservations/Transfers list (a reservation-to-complete workflow).
+            // 201 opens its dedicated Cost Center Goods Issue page; 301 and 311 open their Open Transfers list.
             var mRoutes = {
                 "201": "wmGoodsIssue201",
                 "301": "wmGoodsIssue301Pending",

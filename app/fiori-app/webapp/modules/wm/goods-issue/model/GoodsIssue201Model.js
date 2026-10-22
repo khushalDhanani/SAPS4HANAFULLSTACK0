@@ -62,7 +62,7 @@
                 documentDate: sToday,
                 headerText: "",
 
-                // Planned-reservation linkage (populated only when completing a 201 from the Pending list)
+                // Planned-reservation linkage (populated when completing a reservation-referenced 201)
                 reservationNo: "",
                 reservationItem: "",
                 fromReservation: false,
@@ -446,7 +446,7 @@
                 HeaderText: oData.headerText ? String(oData.headerText).trim() : ("GI CC " + sCC),
                 SerialNumbers: aSerials,
                 // Reservation linkage: empty for an unplanned 201, populated when completing a
-                // planned cost-center reservation opened from the 201 Pending list.
+                // planned cost-center reservation prefilled into the form.
                 ReservationNo: oData.reservationNo ? String(oData.reservationNo).trim() : "",
                 ReservationItem: oData.reservationItem ? String(oData.reservationItem).trim() : ""
                 // GLAccount intentionally omitted: system-determined via OBYC/GBB-VBR for

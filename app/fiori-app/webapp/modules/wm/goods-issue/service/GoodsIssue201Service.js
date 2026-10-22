@@ -279,7 +279,7 @@ sap.ui.define([
 
         /**
          * Fetch the item detail of a 201 reservation (material, plant, storage location, unit,
-         * open quantity, cost center) used to pre-fill the create page from the pending list.
+         * open quantity, cost center) used to pre-fill the 201 create page from a reservation.
          * @param {string} sReservationNo
          * @returns {Promise<Array>}
          */

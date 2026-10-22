@@ -204,7 +204,7 @@ describe('Movement 201 Dedicated Page: Model & Service Tests', () => {
             expect(payload.GLAccount).toBeUndefined();
         });
 
-        it('toBackendPayload carries the reservation link when completing a planned 201 from the Pending list', () => {
+        it('toBackendPayload carries the reservation link when completing a planned reservation-referenced 201', () => {
             const data = GoodsIssue201Model.getInitialData();
             data.costCenter = '1011101301';
             data.material = '8000009753';
