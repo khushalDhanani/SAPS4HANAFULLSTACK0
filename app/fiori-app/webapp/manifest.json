@@ -325,11 +325,7 @@
           "name": "createCustomerReturn",
           "pattern": "sd/returns/create",
           "target": "TargetCreateCustomerReturn"
-        },
-        {
-          "name": "wmTrTo",
-          "pattern": "wm/tr-to",
-          "target": "TargetTrTo"
+
         },
         {
           "name": "wmCycle261",
@@ -481,11 +477,7 @@
           "id": "createCustomerReturn",
           "name": "CreateCustomerReturn",
           "path": "saps4hana.fiori.modules.sd.customer-return.view"
-        },
-        "TargetTrTo": {
-          "id": "trTo",
-          "name": "TrTo",
-          "path": "saps4hana.fiori.modules.wm.tr-to.view"
+
         },
         "TargetScan261": {
           "id": "scan261",

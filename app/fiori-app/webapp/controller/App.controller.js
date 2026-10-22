@@ -58,8 +58,7 @@ sap.ui.define([
                 this._updateShell("wmWarehouseScanToDetail");
             } else if (sHash.indexOf("wm/scan-to") === 0) {
                 this._updateShell("wmWarehouseScanTo");
-            } else if (sHash.indexOf("wm/tr-to") === 0) {
-                this._updateShell("wmTrTo");
+
             } else if (sHash.indexOf("wm/mvt261/open/") === 0) {
                 this._updateShell(/\/cycle$/.test(sHash) ? "wmCycle261" : "wmScan261");
             } else if (sHash.indexOf("wm/mvt261/open") === 0) {
@@ -222,10 +221,7 @@ sap.ui.define([
                     sTitle = oBundle ? oBundle.getText("grPageTitle") : "Goods Receipt against Storage Unit (101)";
                     bShowNav = true;
                     break;
-                case "wmTrTo":
-                    sTitle = oBundle ? oBundle.getText("trToTitle") : "TO Creation (ZTO)";
-                    bShowNav = true;
-                    break;
+
                 case "wmWarehouseScanTo":
                 case "wmWarehouseScanToDetail":
                 case "wmWarehouseScanToDetailWithWh":
