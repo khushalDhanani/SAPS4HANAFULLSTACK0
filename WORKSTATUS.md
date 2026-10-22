@@ -5,6 +5,18 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Route `/wm/goods-issue/201/open-reservations`, KPI Card & 201 UI Dependencies Totally Removed (2026-10-22 11:30 IST):**
+  - **Context & Approval:** Following explicit user authorization for Phase 2, executed full removal of the `/wm/goods-issue/201/open-reservations` route, the Dashboard Movement 201 KPI card (`tileMvt201`), and all 201-only UI assets in strict 1-commit-per-step sequence.
+  - **Steps Executed (Commits `2e4adbe` -> `ba917be`):**
+    1. *KPI Card Removal (Commit `2e4adbe`):* Removed `tileMvt201` and `kpiMvt201Val` from `Dashboard.view.xml`. In `Dashboard.controller.js`, removed `onMvt201TilePress`, `mvt201Total`, `mvt201Today`, and `Mvt201` mapping. Added `sanitizeCardLayout` helper so any saved or external layout referencing removed card IDs loads cleanly without errors. Updated unit tests in `dashboardMetrics.test.js` and `dashboardMvtKpi.test.js`.
+    2. *Nav Entries & Route Removal (Commit `64f42f8`):* Removed route `wmGoodsIssue201` and target `TargetGoodsIssue201` from `manifest.json`. In `App.controller.js`, removed `wmGoodsIssue201` from shell title mapping, route switch, and back navigation. Legacy URLs (`#/wm/goods-issue/201/open-reservations` and `#/wm/goods-issue/cost-center-201`) cleanly match `bypassed: { target: "TargetDashboard" }`.
+    3. *UI Components Removal (Commit `768138c`):* Deleted `GoodsIssue201.view.xml`, `GoodsIssue201.controller.js`, `GoodsIssue201Model.js`, and `GoodsIssue201Service.js`.
+    4. *Backend & KPI Feed Audit:* Confirmed `getDashboardData` and `GoodsIssueDashboardClient` have active consumers (`Mvt301`, `Mvt311` on Dashboard). Confirmed `OpenReservations` entity powers 301 and 311 open transfers. Zero shared backend code deleted.
+    5. *Auth Items Audit:* Confirmed all scopes and role templates in `xs-security.json` are application-wide; 0 auth items removed.
+    6. *i18n & Test Suites Removal (Commit `ba917be`):* Removed `dashboardMvt201Header`, `dashboardMvt201Subheader`, and all `gi201*` properties from `i18n.properties` and `i18n_en.properties`. Deleted 6 dedicated 201 UI test suites (`goodsIssue201Controller.test.js`, `goodsIssue201DualPaths.test.js`, `goodsIssue201Page.test.js`, `goodsIssue201Posting.test.js`, `goodsIssue201Scan.test.js`, `goodsIssue201ServiceUnit.test.js`).
+    7. *Persistence & Safety:* Zero database columns or entities dropped (`ReservationTrack` and `ReservationLog` preserved intact).
+  - **Zero SAP Writes:** Strictly read-only SAP throughout; zero mutations.
+
 - **Route `/wm/goods-issue/201/open-reservations` & 201-Only Dependencies Cleanly Removed (2026-10-22 11:05 IST):**
   - **Context & Audit:** Conducted full dependency map and read-only audit across routing, navigation, views, controllers, services, adapters, CDS models, SQLite persistence, and security scopes. Proved 0 open TRs, 0 open TOs, and 0 `ReservationTrack` records originated from this route. All shared assets (`OpenReservations` entity, `GoodsIssueAdapter.getOpenReservations`, `GoodsIssue201` execution view/controller, `ReservationTrack`/`ReservationLog`) were strictly preserved.
   - **Removals Executed (Phase 2):**
