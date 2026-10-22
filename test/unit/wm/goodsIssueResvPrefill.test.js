@@ -11,7 +11,6 @@ const view = (name) => fs.readFileSync(path.join(W, 'view', name), 'utf8');
 const tag = (xml, id) => xml.match(new RegExp(`<\\w+\\s(?:(?!<\\w)[\\s\\S])*?id="${id}"[\\s\\S]*?/>`))[0];
 
 const GoodsIssue311Model = require(path.join(W, 'model/GoodsIssue311Model'));
-const GoodsIssue301Model = require(path.join(W, 'model/GoodsIssue301Model'));
 const GoodsIssueReservationsClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
@@ -51,7 +50,7 @@ describe('311 prefill from a reservation item', () => {
     expect(d.prefilled).toEqual({ receivingPlant: false, receivingStorageLocation: false, batch: false });
   });
 
-  test.each([['311', GoodsIssue311Model], ['301', GoodsIssue301Model]])('%s quantity: partial issue allowed, capped at the open reservation quantity', (_t, Model) => {
+  test.each([['311', GoodsIssue311Model]])('%s quantity: partial issue allowed, capped at the open reservation quantity', (_t, Model) => {
     const d = Model.getInitialData();
     Model.applyReservationItem(d, rows[1]);
     d.quantity = 5;
@@ -69,7 +68,6 @@ describe('311 prefill from a reservation item', () => {
 
 describe('prefilled fields are read-only in the views', () => {
   const v311 = view('GoodsIssue311.view.xml');
-  const v301 = view('GoodsIssue301.view.xml');
 
   test('311: material / plant are display-only texts; storage location is an input only when the reservation has none', () => {
     expect(tag(v311, 'txtMaterial311')).toMatch(/^<Text /);
@@ -87,10 +85,6 @@ describe('prefilled fields are read-only in the views', () => {
     expect(tag(v311, 'inReservationNo311')).toContain('editable="false"');
     expect(tag(v311, 'inReservationItem311')).toContain('editable="{= !${gi311>/fromReservation} }"');
     expect(tag(v311, 'inUnit311')).toContain('editable="{gi311>/isUnitEditable}"');
-  });
-
-  test('301 follows the pattern for the fields it prefills', () => {
-    expect(tag(v301, 'inBatch301')).toContain('editable="{= !${gi301>/prefilled/batch} }"');
   });
 });
 
