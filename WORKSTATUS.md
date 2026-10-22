@@ -7,6 +7,51 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **HU Stock Transfer Module — 401 Unauthorized & RFC Query Hardening Fix (2026-10-22 16:26 IST):**
+  - **Context & Objective:** Fixed HTTP 401 (Unauthorized) error reported when navigating to `/wm/hu-stock-transfer` and hardened `HuStockTransferAdapter` RFC queries against SAP NetWeaver table reader limitations.
+  - **Root Cause & Issues Resolved:**
+    1. **HTTP 401 (Unauthorized) on `/odata/v4/hu-stock-transfer/*`** — `HuStockTransferList.controller.js` and `HuStockTransferDetail.controller.js` made raw `fetch()` calls without attaching the stored user session `Authorization: Bearer <token>` or handling CSRF tokens. Replaced all raw `fetch()` invocations across both controllers with `saps4hana/fiori/service/ODataClient` (`ODataClient.get` and `ODataClient.post`).
+    2. **Model Authorization Header Synchronization** — `AuthService.syncModelHeaders` synchronized 11 models but omitted `"huStockTransfer"`, leaving any UI5 model bindings unauthenticated. Added `"huStockTransfer"` to `aModelNames` and pruned obsolete `"fiService"`.
+    3. **RFC_READ_TABLE WHERE Clause Syntax Hardening** — In `HuStockTransferAdapter.js`:
+       - `RESB` query: Replaced potential leading `AND` syntax with a robust condition joiner, and replaced unsupported `IN ('311', '301', '201', '261')` with explicit OR group `( BWART = '311' OR BWART = '301' OR BWART = '201' OR BWART = '261' )`.
+       - `RKPF`, `MAKT`, `USR21`, `ADRP` queries: Standard NetWeaver `RFC_READ_TABLE` does not support `IN (...)` and limits WHERE lines to <= 72 characters. Converted all multi-key lookups to chunked (size 8) OR groups `( FIELD = 'val' OR FIELD = 'val' )`.
+       - `LQUA` queries: Removed packed comparison `AND GESME > 0` from WHERE clause to prevent numeric syntax errors; applied `parseFloat(q.GESME) > 0` filtering safely in JavaScript.
+  - **Files Changed:**
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferList.controller.js` — Imported `ODataClient` and converted `loadReservations` to `ODataClient.get(sUrl)`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferDetail.controller.js` — Imported `ODataClient` and converted `loadCockpitDetail`, `onValidateUnit`, `onShowStorageBins`, `onShowVisualRack` to `ODataClient.get()`, and `_executePost` to `ODataClient.post()`
+    - `app/fiori-app/webapp/service/AuthService.js` — Added `"huStockTransfer"` to `aModelNames` in `syncModelHeaders`
+    - `srv/integration/s4hana/wm/HuStockTransferAdapter.js` — Replaced `IN (...)` queries with chunked OR queries and hardened `RESB`/`LQUA` WHERE clauses
+  - **Validation & Results:**
+    - Unit tests: `test/unit/wm/huStockTransferAdapter.test.js` PASS (14/14 tests green)
+    - UI consistency: `test/unit/controller/uiConsistency.test.js` PASS (8/8 tests green)
+    - UI5 lint (`npm --prefix app/fiori-app run lint`): **0 findings — Clean PASS**
+    - CDS compile (`npx cds compile srv db --to csn`): **Clean PASS**
+    - `git diff --check`: **0 errors**
+  - **Zero SAP Writes:** All changes are strictly UI/client communication and read-adapter hardening; zero live SAP mutations.
+
+- **HU Stock Transfer Module — Full Bug Fix Pass (2026-10-22 16:12 IST):**
+  - **Context & Objective:** Inspected every file in the `/wm/hu-stock-transfer` feature area (srv, app, i18n, CSS, routes) and fixed all issues found.
+  - **Issues Found & Fixed:**
+    1. **i18n keys entirely absent** — All 64 HU Stock Transfer i18n keys were missing from both `i18n.properties` and `i18n_en.properties`. Added complete key set to both files.
+    2. **`commonClose` missing** — Shared key used by both `StorageBinsDialog.fragment.xml` and `VisualRackDialog.fragment.xml` Close buttons. Added to both i18n files.
+    3. **Double-press handler on List Table** — `HuStockTransferList.view.xml` had `itemPress=".onItemPress"` on the `Table` **and** `press=".onItemPress"` on `ColumnListItem`. Removed duplicate `itemPress`.
+    4. **Detail view Page violates ShellBar title rule** — `HuStockTransferDetail.view.xml` Page tag had `title=`, `showNavButton=`, `navButtonPress=`. Removed all three.
+    5. **ShellBar title cases missing in `App.controller.js`** — Added `wmHuStockTransfer` and `wmHuStockTransferDetail` switch cases.
+    6. **ShellBar navBack missing for HU routes** — Added correct back routing: Detail → List → Dashboard.
+    7. **`noDataText` missing on List Table** — Added `noDataText="{i18n>huTransferNoData}"`.
+    8. **`noDataText` missing on StorageBins dialog Table** — Added `noDataText="{i18n>storageBinsNoData}"`.
+    9. **Custom CSS classes undefined** — Added `boldText`, `headingText`, `rfScanInput`, `validatedUnitCard` in `style.css`.
+  - **Files Changed:**
+    - `app/fiori-app/webapp/i18n/i18n.properties`
+    - `app/fiori-app/webapp/i18n/i18n_en.properties`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferList.view.xml`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferDetail.view.xml`
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/fragment/StorageBinsDialog.fragment.xml`
+    - `app/fiori-app/webapp/controller/App.controller.js`
+    - `app/fiori-app/webapp/controller/Dashboard.controller.js`
+    - `app/fiori-app/webapp/css/style.css`
+  - **Zero SAP Writes:** No SAP calls made; all changes are UI/metadata/i18n only.
+
 - **Step 1 — ZRF_RES_HU_DNR Discovery Completed (2026-10-22 15:45 IST):**
   - **Context & Objective:** Completed comprehensive, strictly read-only discovery of custom SAP transaction `ZRF_RES_HU_DNR` ("RF & Desktop HU Stock Transfer") to prepare for converting the end-to-end business workflow into our custom SAP Fiori warehouse application.
   - **Strict Rules Enforced:**

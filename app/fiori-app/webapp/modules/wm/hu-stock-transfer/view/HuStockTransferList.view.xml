@@ -1,0 +1,145 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.hu-stock-transfer.controller.HuStockTransferList"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.f"
+    xmlns:fb="sap.ui.comp.filterbar"
+    xmlns:core="sap.ui.core"
+    displayBlock="true">
+
+    <f:DynamicPage id="huStockTransferListPage" headerExpanded="true">
+        <f:title>
+            <f:DynamicPageTitle>
+                <f:heading>
+                    <Title id="listPageTitle" text="{i18n>huTransferTitle}" />
+                </f:heading>
+                <f:expandedContent>
+                    <Label id="listPageSub" text="{i18n>huTransferSubTitle}" />
+                </f:expandedContent>
+                <f:snappedContent>
+                    <Label id="listPageSubSnapped" text="{i18n>huTransferSubTitle}" />
+                </f:snappedContent>
+                <f:actions>
+                    <Button id="btnRefreshList" icon="sap-icon://refresh" text="{i18n>commonRefresh}" press=".onRefresh" />
+                </f:actions>
+            </f:DynamicPageTitle>
+        </f:title>
+
+        <f:header>
+            <f:DynamicPageHeader pinnable="true">
+                <fb:FilterBar id="resFilterBar" search=".onSearch" useToolbar="false" showGoOnFB="true">
+                    <fb:filterGroupItems>
+                        <fb:FilterGroupItem name="Plant" label="{i18n>huTransferPlant}" groupName="G1" visibleInFilterBar="true">
+                            <fb:control>
+                                <Input id="filterPlant" value="{listView>/filters/plant}" placeholder="1120" />
+                            </fb:control>
+                        </fb:FilterGroupItem>
+                        <fb:FilterGroupItem name="StorageLocation" label="{i18n>huTransferSLoc}" groupName="G1" visibleInFilterBar="true">
+                            <fb:control>
+                                <Input id="filterSLoc" value="{listView>/filters/storageLocation}" placeholder="CS02" />
+                            </fb:control>
+                        </fb:FilterGroupItem>
+                        <fb:FilterGroupItem name="MovementType" label="{i18n>huTransferMvtType}" groupName="G1" visibleInFilterBar="true">
+                            <fb:control>
+                                <Input id="filterMvtType" value="{listView>/filters/movementType}" placeholder="311" />
+                            </fb:control>
+                        </fb:FilterGroupItem>
+                        <fb:FilterGroupItem name="Reservation" label="{i18n>huTransferResNum}" groupName="G1" visibleInFilterBar="true">
+                            <fb:control>
+                                <Input id="filterReservation" value="{listView>/filters/reservation}" />
+                            </fb:control>
+                        </fb:FilterGroupItem>
+                        <fb:FilterGroupItem name="Material" label="{i18n>huTransferMaterial}" groupName="G1" visibleInFilterBar="true">
+                            <fb:control>
+                                <Input id="filterMaterial" value="{listView>/filters/material}" />
+                            </fb:control>
+                        </fb:FilterGroupItem>
+                        <fb:FilterGroupItem name="Requester" label="{i18n>huTransferRequester}" groupName="G1" visibleInFilterBar="true">
+                            <fb:control>
+                                <Input id="filterRequester" value="{listView>/filters/requester}" />
+                            </fb:control>
+                        </fb:FilterGroupItem>
+                        <fb:FilterGroupItem name="Status" label="{i18n>huTransferStatus}" groupName="G1" visibleInFilterBar="true">
+                            <fb:control>
+                                <SegmentedButton id="filterStatus" selectedKey="{listView>/filters/status}" selectionChange=".onSearch">
+                                    <items>
+                                        <SegmentedButtonItem key="open" text="{i18n>huTransferStatusOpen}" />
+                                        <SegmentedButtonItem key="completed" text="{i18n>huTransferStatusCompleted}" />
+                                        <SegmentedButtonItem key="all" text="{i18n>huTransferStatusAll}" />
+                                    </items>
+                                </SegmentedButton>
+                            </fb:control>
+                        </fb:FilterGroupItem>
+                    </fb:filterGroupItems>
+                </fb:FilterBar>
+            </f:DynamicPageHeader>
+        </f:header>
+
+        <f:content>
+            <Table
+                id="reservationsTable"
+                items="{path: 'listView>/items'}"
+                mode="SingleSelectMaster"
+                noDataText="{i18n>huTransferNoData}"
+                growing="true"
+                growingThreshold="20"
+                class="sapUiResponsiveMargin">
+                <headerToolbar>
+                    <OverflowToolbar id="tableToolbar">
+                        <Title id="tableTitle" text="{i18n>huTransferWorklistTitle} ({= ${listView>/items}.length })" level="H3" />
+                        <ToolbarSpacer />
+                        <SearchField id="searchField" width="18rem" search=".onLiveSearch" placeholder="{i18n>huTransferSearchPlaceholder}" />
+                    </OverflowToolbar>
+                </headerToolbar>
+                <columns>
+                    <Column id="colRes" width="7rem">
+                        <Text text="{i18n>huTransferColReservation}" />
+                    </Column>
+                    <Column id="colItem" width="3.5rem" hAlign="Center">
+                        <Text text="{i18n>huTransferColItem}" />
+                    </Column>
+                    <Column id="colMvt" width="4rem" hAlign="Center">
+                        <Text text="{i18n>huTransferColMvt}" />
+                    </Column>
+                    <Column id="colMat" width="10rem">
+                        <Text text="{i18n>huTransferColMaterial}" />
+                    </Column>
+                    <Column id="colBatch" width="6rem" minScreenWidth="Tablet" demandPopin="true">
+                        <Text text="{i18n>huTransferColBatch}" />
+                    </Column>
+                    <Column id="colSloc" width="8rem" minScreenWidth="Tablet" demandPopin="true">
+                        <Text text="{i18n>huTransferColSlocRoute}" />
+                    </Column>
+                    <Column id="colReqQty" width="6rem" hAlign="End">
+                        <Text text="{i18n>huTransferColReqQty}" />
+                    </Column>
+                    <Column id="colOpenQty" width="6rem" hAlign="End">
+                        <Text text="{i18n>huTransferColOpenQty}" />
+                    </Column>
+                    <Column id="colRequester" width="8rem" minScreenWidth="Desktop" demandPopin="true">
+                        <Text text="{i18n>huTransferColRequester}" />
+                    </Column>
+                    <Column id="colStatus" width="7rem" hAlign="Center">
+                        <Text text="{i18n>huTransferColStatus}" />
+                    </Column>
+                </columns>
+                <items>
+                    <ColumnListItem type="Navigation" press=".onItemPress">
+                        <cells>
+                            <ObjectIdentifier title="{listView>ReservationNo}" />
+                            <Text text="{listView>ReservationItem}" />
+                            <ObjectStatus text="{listView>MovementType}" state="Information" />
+                            <ObjectIdentifier title="{listView>Material}" text="{listView>MaterialDesc}" />
+                            <Text text="{listView>Batch}" />
+                            <Text text="{listView>StorageLocation} → {listView>ReceivingStorageLocation}" />
+                            <ObjectNumber number="{listView>RequiredQty}" unit="{listView>BaseUnit}" />
+                            <ObjectNumber number="{listView>OpenQty}" unit="{listView>BaseUnit}" state="{= ${listView>OpenQty} > 0 ? 'Warning' : 'Success' }" />
+                            <Text text="{listView>RequesterName}" />
+                            <ObjectStatus text="{listView>StatusText}" state="{listView>StatusState}" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+            </Table>
+        </f:content>
+    </f:DynamicPage>
+</mvc:View>

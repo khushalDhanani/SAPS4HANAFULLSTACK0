@@ -93,6 +93,14 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
+      },
+      "huStockTransferService": {
+        "uri": "/odata/v4/hu-stock-transfer/",
+        "type": "OData",
+        "settings": {
+          "annotations": [],
+          "odataVersion": "4.0"
+        }
       }
     }
   },
@@ -194,6 +202,13 @@
       },
       "reservationEntry": {
         "dataSource": "reservationEntryService",
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true
+        }
+      },
+      "huStockTransfer": {
+        "dataSource": "huStockTransferService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -366,6 +381,16 @@
           "name": "wmWarehouseScanToDetail",
           "pattern": "wm/scan-to/{docType}/{number}",
           "target": "TargetWarehouseScanToDetail"
+        },
+        {
+          "name": "wmHuStockTransfer",
+          "pattern": "wm/hu-stock-transfer",
+          "target": "TargetHuStockTransferList"
+        },
+        {
+          "name": "wmHuStockTransferDetail",
+          "pattern": "wm/hu-stock-transfer/{reservation}/{item}",
+          "target": "TargetHuStockTransferDetail"
         }
       ],
       "targets": {
@@ -493,6 +518,16 @@
           "id": "warehouseScanToDetail",
           "name": "WarehouseScanToDetail",
           "path": "saps4hana.fiori.modules.wm.warehouse-scan-to.view"
+        },
+        "TargetHuStockTransferList": {
+          "id": "huStockTransferList",
+          "name": "HuStockTransferList",
+          "path": "saps4hana.fiori.modules.wm.hu-stock-transfer.view"
+        },
+        "TargetHuStockTransferDetail": {
+          "id": "huStockTransferDetail",
+          "name": "HuStockTransferDetail",
+          "path": "saps4hana.fiori.modules.wm.hu-stock-transfer.view"
         }
       }
     }

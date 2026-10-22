@@ -1,0 +1,68 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog
+        id="storageBinsDialog"
+        title="{i18n>storageBinsDialogTitle}"
+        contentWidth="65rem"
+        contentHeight="35rem"
+        resizable="true"
+        draggable="true">
+        <content>
+            <Table
+                id="storageBinsTable"
+                items="{path: 'cockpitView>/storageBins'}"
+                mode="SingleSelectMaster"
+                selectionChange=".onSelectBinItem"
+                noDataText="{i18n>storageBinsNoData}"
+                growing="true">
+                <headerToolbar>
+                    <OverflowToolbar>
+                        <Title text="{i18n>storageBinsTableTitle} ({= ${cockpitView>/storageBins}.length })" level="H4" />
+                        <ToolbarSpacer />
+                        <Text text="{i18n>storageBinsClickPrompt}" class="textMuted" />
+                    </OverflowToolbar>
+                </headerToolbar>
+                <columns>
+                    <Column width="7rem" hAlign="Center">
+                        <Text text="{i18n>storageBinsColStatus}" />
+                    </Column>
+                    <Column width="9rem">
+                        <Text text="{i18n>storageBinsColUnit}" />
+                    </Column>
+                    <Column width="4.5rem" hAlign="Center">
+                        <Text text="{i18n>storageBinsColType}" />
+                    </Column>
+                    <Column width="6rem">
+                        <Text text="{i18n>storageBinsColSut}" />
+                    </Column>
+                    <Column width="8rem">
+                        <Text text="{i18n>storageBinsColBin}" />
+                    </Column>
+                    <Column width="6rem">
+                        <Text text="{i18n>storageBinsColBatch}" />
+                    </Column>
+                    <Column width="6rem" hAlign="End">
+                        <Text text="{i18n>storageBinsColStock}" />
+                    </Column>
+                </columns>
+                <items>
+                    <ColumnListItem type="Active" press=".onSelectBinItem">
+                        <cells>
+                            <ObjectStatus text="{cockpitView>StorageStatus}" state="{= ${cockpitView>SortPriority} === 1 ? 'Success' : ${cockpitView>SortPriority} === 4 ? 'Error' : ${cockpitView>SortPriority} === 3 ? 'Warning' : 'Information' }" />
+                            <ObjectIdentifier title="{cockpitView>UnitNumber}" text="{cockpitView>UnitCategory}" />
+                            <Text text="{cockpitView>StorageType}" />
+                            <Text text="{cockpitView>SutCode} {cockpitView>SutDescription}" />
+                            <ObjectIdentifier title="{cockpitView>StorageBin}" text="{cockpitView>StorageSectionDesc}" />
+                            <Text text="{cockpitView>Batch}" />
+                            <ObjectNumber number="{cockpitView>AvailableStock}" unit="{cockpitView>BaseUnit}" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+            </Table>
+        </content>
+        <beginButton>
+            <Button text="{i18n>commonClose}" press=".onCloseStorageBinsDialog" />
+        </beginButton>
+    </Dialog>
+</core:FragmentDefinition>

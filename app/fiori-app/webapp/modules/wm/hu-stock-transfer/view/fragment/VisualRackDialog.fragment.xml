@@ -1,0 +1,58 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog
+        id="visualRackDialog"
+        title="{i18n>visualRackDialogTitle}"
+        contentWidth="60rem"
+        contentHeight="35rem"
+        resizable="true"
+        draggable="true">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                    <core:Icon src="sap-icon://shelf" size="1.5rem" class="sapUiTinyMarginEnd" color="#0369a1" />
+                    <VBox>
+                        <Title text="{i18n>visualRackHeading}" level="H4" />
+                        <Text text="{i18n>visualRackSubheading}" class="textMuted" />
+                    </VBox>
+                </HBox>
+
+                <List
+                    id="visualRackList"
+                    items="{path: 'cockpitView>/visualRack'}"
+                    mode="SingleSelectMaster"
+                    selectionChange=".onSelectRackItem">
+                    <items>
+                        <CustomListItem type="Active" press=".onSelectRackItem">
+                            <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMargin">
+                                <HBox alignItems="Center">
+                                    <core:Icon
+                                        src="sap-icon://pallet"
+                                        size="2rem"
+                                        class="sapUiSmallMarginEnd"
+                                        color="{= ${cockpitView>SortPriority} === 1 ? '#166534' : ${cockpitView>SortPriority} === 4 ? '#b91c1c' : '#0369a1' }" />
+                                    <VBox>
+                                        <HBox alignItems="Center">
+                                            <Badge text="{cockpitView>LevelCode}" class="sapUiTinyMarginEnd" />
+                                            <Text text="{cockpitView>ShelfLevelDesc}" class="boldText" />
+                                        </HBox>
+                                        <Text text="Bin: {cockpitView>ActualStorageBin} ({cockpitView>StorageTypeDesc})" class="textMuted" />
+                                        <Text text="Pallet / Unit: {cockpitView>UnitNumber} · SUT: {cockpitView>SutCode} {cockpitView>SutDescription}" />
+                                    </VBox>
+                                </HBox>
+                                <VBox alignItems="End">
+                                    <ObjectNumber number="{cockpitView>AvailableQuantity}" unit="{cockpitView>BaseUnit}" />
+                                    <ObjectStatus text="{cockpitView>StorageStatus}" state="{= ${cockpitView>SortPriority} === 1 ? 'Success' : ${cockpitView>SortPriority} === 4 ? 'Error' : 'Information' }" />
+                                </VBox>
+                            </HBox>
+                        </CustomListItem>
+                    </items>
+                </List>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button text="{i18n>commonClose}" press=".onCloseVisualRackDialog" />
+        </beginButton>
+    </Dialog>
+</core:FragmentDefinition>

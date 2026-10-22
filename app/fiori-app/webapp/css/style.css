@@ -530,3 +530,31 @@
 .sapUiTinyText {
     font-size: 0.75rem;
 }
+
+/* ── HU Stock Transfer Cockpit ────────────────────────────────────────────── */
+
+.boldText,
+.boldText.sapMText,
+.boldText.sapMLabel {
+    font-weight: 600;
+}
+
+.headingText,
+.headingText.sapMText {
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+/* RF-scanner input — green left border to signal scan-ready state */
+.rfScanInput.sapMInputBase {
+    border-left: 3px solid var(--sapPositiveColor, #107e3e);
+    border-radius: 4px;
+}
+
+/* Validated unit summary card */
+.validatedUnitCard {
+    background-color: var(--sapList_SelectionBackgroundColor, #e8f5e9);
+    border: 1px solid var(--sapPositiveColor, #107e3e);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+}

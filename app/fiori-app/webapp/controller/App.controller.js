@@ -259,6 +259,14 @@ sap.ui.define([
                     }
                     bShowNav = true;
                     break;
+                case "wmHuStockTransfer":
+                    sTitle = oBundle ? oBundle.getText("huTransferTitle") : "HU Stock Transfer";
+                    bShowNav = true;
+                    break;
+                case "wmHuStockTransferDetail":
+                    sTitle = oBundle ? oBundle.getText("cockpitPageTitle") : "Transfer Cockpit";
+                    bShowNav = true;
+                    break;
                 case "ordersDueForDelivery":
                     sTitle = oBundle ? oBundle.getText("ordersDueForDeliveryTitle") : "Orders Due for Delivery";
                     bShowNav = true;
@@ -325,6 +333,10 @@ sap.ui.define([
             } else if (sRoute === "wmReservationEntryDetail" || sRoute === "wmReservationEntryCreate") {
                 this.onNavBack("wmReservationEntryList");
             } else if (sRoute === "wmReservationEntryList") {
+                this.onNavBack("dashboard");
+            } else if (sRoute === "wmHuStockTransferDetail") {
+                this.onNavBack("wmHuStockTransfer");
+            } else if (sRoute === "wmHuStockTransfer") {
                 this.onNavBack("dashboard");
             } else if (sRoute === "purchaseOrders" || sRoute === "salesInquiries" || sRoute === "salesOrders" || sRoute === "wmGoodsReceipt" || sRoute === "ordersDueForDelivery") {
                 this.onNavBack("dashboard");

@@ -1,0 +1,146 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.hu-stock-transfer.controller.HuStockTransferDetail"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:f="sap.ui.layout.form"
+    xmlns:core="sap.ui.core"
+    displayBlock="true">
+
+    <Page id="cockpitPage" class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto">
+
+                <!-- Alert Strip for Status / Errors -->
+                <MessageStrip
+                    id="cockpitMsgStrip"
+                    visible="{= !!${cockpitView>/statusMessage} }"
+                    text="{cockpitView>/statusMessage}"
+                    type="{cockpitView>/statusStateType}"
+                    showIcon="true"
+                    class="sapUiSmallMarginBottom" />
+
+                <!-- 1. Selected Reservation Header & Material Summary -->
+                <ObjectHeader
+                    id="cockpitHeader"
+                    title="{cockpitView>/cockpit/ReservationNo} / {cockpitView>/cockpit/ReservationItem}"
+                    intro="{i18n>cockpitResHeaderIntro}"
+                    number="{cockpitView>/cockpit/OpenQty}"
+                    numberUnit="{cockpitView>/cockpit/BaseUnit}"
+                    backgroundDesign="Transparent"
+                    responsive="true">
+                    <attributes>
+                        <ObjectAttribute title="{i18n>huTransferMvtType}" text="{cockpitView>/cockpit/MovementType} ({i18n>huTransferMvt311Text})" />
+                        <ObjectAttribute title="{i18n>huTransferMaterial}" text="{cockpitView>/cockpit/Material} · {cockpitView>/cockpit/MaterialDesc}" />
+                        <ObjectAttribute title="{i18n>huTransferRequester}" text="{cockpitView>/cockpit/RequesterName} ({cockpitView>/cockpit/Requester})" />
+                        <ObjectAttribute title="{i18n>huTransferContact}" text="📞 {cockpitView>/cockpit/RequesterPhone} ✉ {cockpitView>/cockpit/RequesterEmail}" visible="{= !!${cockpitView>/cockpit/RequesterEmail} }" />
+                        <ObjectAttribute title="{i18n>huTransferRoute}" text="{cockpitView>/cockpit/StorageLocation} → {cockpitView>/cockpit/ReceivingStorageLocation} ({cockpitView>/cockpit/Plant})" />
+                    </attributes>
+                    <statuses>
+                        <ObjectStatus
+                            title="{i18n>huTransferWarehouse}"
+                            text="{cockpitView>/cockpit/Warehouse} · {i18n>huTransferPrefStg}: {cockpitView>/cockpit/PreferredStorageType}"
+                            state="Information" />
+                        <ObjectStatus
+                            title="{i18n>huTransferAvailUnits}"
+                            text="{cockpitView>/cockpit/AvailableUnitCount} {i18n>huTransferUnits} ({cockpitView>/cockpit/TotalAvailableStock} {cockpitView>/cockpit/BaseUnit})"
+                            state="{= ${cockpitView>/cockpit/AvailableUnitCount} > 0 ? 'Success' : 'Warning' }" />
+                    </statuses>
+                </ObjectHeader>
+
+                <!-- Section Navigation Buttons (Storage Bins & Visual Rack) -->
+                <HBox class="sapUiSmallMarginBottom" wrap="Wrap">
+                    <Button
+                        id="btnShowBins"
+                        text="{i18n>btnShowBinsText}"
+                        icon="sap-icon://table-view"
+                        press=".onShowStorageBins"
+                        class="sapUiTinyMarginEnd sapUiTinyMarginBottom" />
+                    <Button
+                        id="btnShowVisual"
+                        text="{i18n>btnShowVisualText}"
+                        icon="sap-icon://shelf"
+                        press=".onShowVisualRack"
+                        class="sapUiTinyMarginBottom" />
+                </HBox>
+
+                <!-- 2. Scan & Validate Unit Form -->
+                <Panel id="panelScanUnit" headerText="{i18n>panelScanUnitTitle}" class="sapUiSmallMarginBottom" expandable="false">
+                    <VBox class="sapUiSmallMargin">
+                        <Label text="{i18n>scanUnitLabel}" labelFor="inputUnitNumber" required="true" class="boldText" />
+                        <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                            <Input
+                                id="inputUnitNumber"
+                                value="{cockpitView>/scanUnitNumber}"
+                                placeholder="{i18n>scanUnitPlaceholder}"
+                                submit=".onValidateUnit"
+                                width="22rem"
+                                class="sapUiTinyMarginEnd rfScanInput" />
+                            <Button
+                                id="btnValidateUnit"
+                                text="{i18n>btnValidateText}"
+                                icon="sap-icon://accept"
+                                type="Emphasized"
+                                press=".onValidateUnit" />
+                        </HBox>
+
+                        <!-- Validated Unit Card -->
+                        <VBox visible="{= !!${cockpitView>/validatedUnit/Valid} }" class="validatedUnitCard sapUiSmallMarginTop">
+                            <HBox justifyContent="SpaceBetween" alignItems="Center">
+                                <HBox alignItems="Center">
+                                    <core:Icon src="sap-icon://pallet" size="2rem" color="#0369a1" class="sapUiSmallMarginEnd" />
+                                    <VBox>
+                                        <Text text="{cockpitView>/validatedUnit/UnitType}: {cockpitView>/validatedUnit/UnitNumber}" class="boldText headingText" />
+                                        <Text text="SUT: {cockpitView>/validatedUnit/SutCode} {cockpitView>/validatedUnit/SutDescription}" />
+                                        <Text text="Storage: {cockpitView>/validatedUnit/Warehouse} / Type {cockpitView>/validatedUnit/StorageType} / Bin {cockpitView>/validatedUnit/StorageBin}" />
+                                    </VBox>
+                                </HBox>
+                                <VBox alignItems="End">
+                                    <ObjectNumber number="{cockpitView>/validatedUnit/AvailableQuantity}" unit="{cockpitView>/validatedUnit/BaseUnit}" />
+                                    <ObjectStatus text="{= ${cockpitView>/validatedUnit/Batch} ? 'Batch: ' + ${cockpitView>/validatedUnit/Batch} : 'No Batch' }" />
+                                    <Text text="SN: {cockpitView>/validatedUnit/SerialNumber}" visible="{= !!${cockpitView>/validatedUnit/SerialNumber} }" />
+                                </VBox>
+                            </HBox>
+                        </VBox>
+                    </VBox>
+                </Panel>
+
+                <!-- 3. Transfer Quantity & Mode Form -->
+                <Panel id="panelTransferQty" headerText="{i18n>panelTransferQtyTitle}" class="sapUiSmallMarginBottom" expandable="false">
+                    <f:SimpleForm editable="true" layout="ResponsiveGridLayout" labelSpanXL="3" labelSpanL="3" labelSpanM="4" labelSpanS="12">
+                        <f:content>
+                            <Label text="{i18n>transferFullUnitLabel}" labelFor="switchFullUnit" />
+                            <Switch id="switchFullUnit" state="{cockpitView>/isFullUnit}" change=".onFullUnitChange" customTextOn="Yes" customTextOff="No" />
+
+                            <Label text="{i18n>transferQtyLabel}" labelFor="inputTransferQty" required="true" />
+                            <StepInput
+                                id="inputTransferQty"
+                                value="{cockpitView>/transferQty}"
+                                min="0.001"
+                                max="{cockpitView>/maxAllowedQty}"
+                                step="1"
+                                editable="{= !${cockpitView>/isFullUnit} }"
+                                width="12rem" />
+                            <Text text="{cockpitView>/cockpit/BaseUnit}" class="sapUiTinyMarginBegin" />
+                        </f:content>
+                    </f:SimpleForm>
+                </Panel>
+
+            </VBox>
+        </content>
+
+        <!-- Footer Toolbar -->
+        <footer>
+            <OverflowToolbar id="cockpitFooter">
+                <Button id="btnBackToWorklist" text="{i18n>btnBackToWorklistText}" icon="sap-icon://nav-back" press=".onNavBack" />
+                <ToolbarSpacer />
+                <Button
+                    id="btnPostTransfer"
+                    text="{i18n>btnPostTransferText}"
+                    icon="sap-icon://paper-plane"
+                    type="Emphasized"
+                    press=".onPostTransfer"
+                    enabled="{= !!${cockpitView>/validatedUnit/Valid} &amp;&amp; ${cockpitView>/transferQty} > 0 }" />
+            </OverflowToolbar>
+        </footer>
+    </Page>
+</mvc:View>

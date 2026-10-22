@@ -343,6 +343,11 @@
                                             <NumericContent icon="sap-icon://bar-code" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
+                                    <GenericTile id="tileHuStockTransfer" header="{i18n>huTransferTileTitle}" subheader="{i18n>huTransferTileSub}" press=".onNavigateToHuStockTransfer" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>huTransferTileUnit}">
+                                            <NumericContent icon="sap-icon://transfer" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
                                 </HBox>
                             </VBox>
                         </IconTabFilter>
