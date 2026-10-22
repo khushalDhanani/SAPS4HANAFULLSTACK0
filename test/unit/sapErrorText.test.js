@@ -8,7 +8,7 @@ describe('userFacingSapError: infrastructure details never reach the end user', 
     ['node-rfc is not available (not installed). Install the SAP NW RFC SDK, then run: npm install node-rfc', 503],
     ['RFC_COMMUNICATION_FAILURE: partner not reached', undefined],
     ['connect ECONNREFUSED 10.0.0.1:3300', undefined],
-    ['No credentials configured for "FAC_GL_JOURNALENTRY_VER_SRV".', 500]
+    ['No credentials configured for "C_PURCHASEORDER_FS_SRV".', 500]
   ])('replaces "%s"', (message, status) => {
     const err = Object.assign(new Error(message), status ? { status } : {});
     expect(isSapInfrastructureError(err)).toBe(true);

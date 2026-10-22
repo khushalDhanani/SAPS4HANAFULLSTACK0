@@ -190,7 +190,7 @@ describe('Unit: Dashboard Controller live figures', () => {
     test('populates every figure SAP returned and reports S/4HANA connected', async () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
-        const payload = fullPayload({ totalCount: 2729, openSalesOrderCount: 498, costCenterCount: 952 });
+        const payload = fullPayload({ totalCount: 2729, openSalesOrderCount: 498, customerCount: 952 });
         mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: [] }));
 
         await controller._loadMetrics();
@@ -206,26 +206,26 @@ describe('Unit: Dashboard Controller live figures', () => {
     test('accepts the OData { value: "<json>" } envelope', async () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
-        mockODataClient.get.mockResolvedValue({ value: JSON.stringify(fullPayload({ fiDocCount: 173386 })) });
+        mockODataClient.get.mockResolvedValue({ value: JSON.stringify(fullPayload({ warehouseCount: 173386 })) });
 
         await controller._loadMetrics();
 
-        expect(oViewModel.getProperty('/fiDocCount')).toBe(173386);
+        expect(oViewModel.getProperty('/warehouseCount')).toBe(173386);
         expect(oViewModel.getProperty('/connectionState')).toBe('Success');
     });
 
     test('keeps a figure SAP did not return as null (never 0) and reports partial availability', async () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
-        const payload = fullPayload({ glAccountCount: null, warehouseCount: null });
-        delete payload.costCenterCount; // missing entirely
-        mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: ['glAccountCount', 'warehouseCount'] }));
+        const payload = fullPayload({ customerCount: null, warehouseCount: null });
+        delete payload.ordersDueCount; // missing entirely
+        mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: ['customerCount', 'warehouseCount'] }));
 
         await controller._loadMetrics();
 
-        expect(oViewModel.getProperty('/glAccountCount')).toBeNull();
+        expect(oViewModel.getProperty('/customerCount')).toBeNull();
         expect(oViewModel.getProperty('/warehouseCount')).toBeNull();
-        expect(oViewModel.getProperty('/costCenterCount')).toBeNull();
+        expect(oViewModel.getProperty('/ordersDueCount')).toBeNull();
         expect(oViewModel.getProperty('/totalCount')).toBe(payload.totalCount);
         expect(oViewModel.getProperty('/connectionState')).toBe('Warning');
         expect(oViewModel.getProperty('/connectionText')).toBe(`S/4HANA partially available (${controller.METRIC_KEYS.length - 3} of ${controller.METRIC_KEYS.length} figures)`);
@@ -234,14 +234,14 @@ describe('Unit: Dashboard Controller live figures', () => {
     test('rejects non-count values from the payload instead of displaying them', async () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
-        mockODataClient.get.mockResolvedValue(fullPayload({ totalCount: 'abc', supplierCount: -1, salesInquiryCount: 3.5, fiDocCount: '42' }));
+        mockODataClient.get.mockResolvedValue(fullPayload({ totalCount: 'abc', supplierCount: -1, salesInquiryCount: 3.5, customerReturnCount: '42' }));
 
         await controller._loadMetrics();
 
         expect(oViewModel.getProperty('/totalCount')).toBeNull();
         expect(oViewModel.getProperty('/supplierCount')).toBeNull();
         expect(oViewModel.getProperty('/salesInquiryCount')).toBeNull();
-        expect(oViewModel.getProperty('/fiDocCount')).toBe(42);
+        expect(oViewModel.getProperty('/customerReturnCount')).toBe(42);
     });
 
     test('when the metrics call fails, marks every figure unavailable, shows the error and makes no fallback calls', async () => {
@@ -374,13 +374,15 @@ describe('Unit: Dashboard Controller live figures', () => {
             .forEach((fn) => expect(controller[fn]).toBeUndefined());
     });
 
-    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, tileMvt301, tileMvt311, tileTrTo, tileMvt261, tileOpen261, panelCategoryMasterData, tabMasterData, etc.)', () => {
+    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, tileMvt301, tileMvt311, tileTrTo, tileMvt261, tileOpen261, panelCategoryMasterData, tabMasterData, tabFI, panelCategoryFinance, etc.)', () => {
         const controller = new DashboardControllerClass();
         expect(controller.sanitizeCardLayout([
             'tileMvt301', 'tileMvt201', 'kpiMvt201Val', 'kpiMvt301Val', 'Mvt301',
             'tileMvt311', 'kpiMvt311Val', 'Mvt311', 'panelMvtTypeKpis', 'tileTrTo', 'tileMvt261', 'tileOpen261',
             'panelCategoryMasterData', 'tileOverviewBupaMD', 'tileOverviewProdMD', 'tileOverviewGateway',
-            'tabMasterData', 'panelMdBusinessPartner', 'panelMdProduct', 'panelMdFinancial', 'panelMdOrganization', 'tileGoodsReceipt'
+            'tabMasterData', 'panelMdBusinessPartner', 'panelMdProduct', 'panelMdFinancial', 'panelMdOrganization',
+            'tabFI', 'panelCategoryFinance', 'tileModuleFI', 'tileOverviewCostCenters', 'tileOverviewGLAccounts', 'kpiFIDocsVal', 'btnQuickManageFI',
+            'tileGoodsReceipt'
         ])).toEqual(['tileGoodsReceipt']);
         expect(controller.sanitizeCardLayout(null)).toEqual([]);
     });
@@ -413,7 +415,7 @@ describe('Unit: Dashboard view binds only live figures', () => {
         expect(viewXml).not.toMatch(/Client 220/);
         expect(viewXml).not.toMatch(/systemHealth|totalSpend|completeRate/);
         const tabKeys = [...viewXml.matchAll(/<IconTabFilter[\s\S]*?key="([a-zA-Z]+)"/g)].map((m) => m[1]);
-        expect(tabKeys).toEqual(['overview', 'fi', 'mm', 'sd', 'ewm']);
+        expect(tabKeys).toEqual(['overview', 'mm', 'sd', 'ewm']);
     });
 
     test('every press handler used by the view exists on the controller', () => {
@@ -429,7 +431,6 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         'C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs': '2729',
         'C_MM_SupplierValueHelp': '4376',
         'C_MM_MaterialValueHelp': '151976',
-        'FAC_GL_JOURNALENTRY_VER_SRV/C_GLJrnlEntryItemToBeVerified': '173386',
         'SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370': '618',
         'SD_F2370_INQY_WL_SRV/I_Customer_VH': '891',
         'I_GLAccountStdVH': '33784',
@@ -490,24 +491,21 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         expect(count).toBeNull();
     });
 
-    test('getDashboardMetrics reads all 15 counts live from SAP and reports none unavailable', async () => {
+    test('getDashboardMetrics reads all 12 counts live from SAP and reports none unavailable', async () => {
         const mockExecute = liveSap();
         const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
 
-        expect(mockExecute).toHaveBeenCalledTimes(15);
+        expect(mockExecute).toHaveBeenCalledTimes(12);
         expect(typeof metrics.asOf).toBe('string');
         expect(new Date(metrics.asOf).getTime()).not.toBeNaN();
         delete metrics.asOf; // read time, asserted above
         expect(metrics).toEqual({
             totalCount: 2729,
             supplierCount: 4376,
-            fiDocCount: 173386,
             salesInquiryCount: 618,
             customerCount: 891,
             openSalesOrderCount: 498,
             totalSalesOrderCount: 880,
-            glAccountCount: 33784,
-            costCenterCount: 952,
             warehouseCount: 1,
             openReservationCount: 54,
             inboundDeliveryCount: 12,
@@ -532,26 +530,26 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
     test('a failed service call yields null for that count only, never 0, and lists it as unavailable', async () => {
         const mockExecute = liveSap({
             'API_WAREHOUSE/Warehouse': () => Promise.reject(new Error('404 service not activated')),
-            'I_GLAccountStdVH': () => Promise.reject(new Error('403 not authorized'))
+            'SD_F2370_INQY_WL_SRV/I_Customer_VH': () => Promise.reject(new Error('403 not authorized'))
         });
         const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
 
         expect(metrics.warehouseCount).toBeNull();
-        expect(metrics.glAccountCount).toBeNull();
+        expect(metrics.customerCount).toBeNull();
         expect(metrics.totalCount).toBe(2729);
-        expect(metrics.unavailable.sort()).toEqual(['glAccountCount', 'warehouseCount']);
+        expect(metrics.unavailable.sort()).toEqual(['customerCount', 'warehouseCount']);
     });
 
     test('a response without a count yields null instead of the number of rows returned', async () => {
         const mockExecute = liveSap({
             'C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs': { data: { d: { results: [{ PurchaseOrder: '4500000001' }] } } },
-            'FAC_GL_JOURNALENTRY_VER_SRV': { data: '<html>not a count</html>' }
+            'SD_F2370_INQY_WL_SRV/C_InquiryWL_F2370': { data: '<html>not a count</html>' }
         });
         const metrics = await poAdapter.getDashboardMetrics({ destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute });
 
         expect(metrics.totalCount).toBeNull();
-        expect(metrics.fiDocCount).toBeNull();
-        expect(metrics.unavailable).toEqual(expect.arrayContaining(['totalCount', 'fiDocCount']));
+        expect(metrics.salesInquiryCount).toBeNull();
+        expect(metrics.unavailable).toEqual(expect.arrayContaining(['totalCount', 'salesInquiryCount']));
     });
 
     test('a genuine zero from SAP is kept as 0', async () => {
@@ -572,11 +570,11 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
 
         const metrics1 = await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(15);
+        expect(mockExecute).toHaveBeenCalledTimes(12);
 
         // Second call should return cached object without invoking executeHttpRequest
         const metrics2 = await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(15); // No new calls
+        expect(mockExecute).toHaveBeenCalledTimes(12); // No new calls
         expect(metrics2).toEqual(metrics1);
     });
 
@@ -586,12 +584,12 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
 
         await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(15);
+        expect(mockExecute).toHaveBeenCalledTimes(12);
 
         // With forceRefresh: true, executes calls again
         await poAdapter.getDashboardMetrics({ ...opts, forceRefresh: true });
         // The transactional counts are executed again; master data counts may hit masterDataCountCache
-        expect(mockExecute.mock.calls.length).toBeGreaterThan(15);
+        expect(mockExecute.mock.calls.length).toBeGreaterThan(12);
     });
 
     test('clearMetricsCache invalidates cached metrics', async () => {
@@ -600,14 +598,14 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
 
         await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(15);
+        expect(mockExecute).toHaveBeenCalledTimes(12);
 
         poAdapter.clearMetricsCache();
         await poAdapter.getDashboardMetrics(opts);
-        expect(mockExecute).toHaveBeenCalledTimes(30);
+        expect(mockExecute).toHaveBeenCalledTimes(24);
     });
 
-    test('coalesces concurrent in-flight getDashboardMetrics calls into a single batch of 15 requests', async () => {
+    test('coalesces concurrent in-flight getDashboardMetrics calls into a single batch of 12 requests', async () => {
         poAdapter.clearMetricsCache();
         let resolveExecute;
         const delayedExecution = new Promise((resolve) => { resolveExecute = resolve; });
@@ -625,8 +623,8 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         resolveExecute();
         const [m1, m2, m3] = await Promise.all([p1, p2, p3]);
 
-        // Only 15 calls executed total (1 single pass), not 3 * 15 = 45
-        expect(mockExecute).toHaveBeenCalledTimes(15);
+        // Only 12 calls executed total (1 single pass), not 3 * 12 = 36
+        expect(mockExecute).toHaveBeenCalledTimes(12);
         expect(m1).toEqual(m2);
         expect(m2).toEqual(m3);
         expect(m1.totalCount).toBe(2729);
@@ -638,26 +636,26 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: failMock, useCache: true, negativeTtlMs: 2000 };
 
         const metrics1 = await poAdapter.getDashboardMetrics(opts);
-        expect(failMock).toHaveBeenCalledTimes(15);
-        expect(metrics1.unavailable.length).toBe(15);
+        expect(failMock).toHaveBeenCalledTimes(12);
+        expect(metrics1.unavailable.length).toBe(12);
         expect(metrics1.error).toContain('500 Internal Server Error');
 
-        // Subsequent call within negative TTL should return cached failure without re-executing 15 calls
+        // Subsequent call within negative TTL should return cached failure without re-executing 12 calls
         const metrics2 = await poAdapter.getDashboardMetrics(opts);
-        expect(failMock).toHaveBeenCalledTimes(15); // No new calls!
+        expect(failMock).toHaveBeenCalledTimes(12); // No new calls!
         expect(metrics2).toEqual(metrics1);
     });
 
-    test('fast-fails on 401 Unauthorized probe and halts remaining 14 calls to avoid SU01 lockouts', async () => {
+    test('fast-fails on 401 Unauthorized probe and halts remaining 11 calls to avoid SU01 lockouts', async () => {
         poAdapter.clearMetricsCache();
         const authFailMock = jest.fn().mockRejectedValue(new Error('HTTP 401 Unauthorized: logon rejected'));
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: authFailMock, useCache: true };
 
         const metrics = await poAdapter.getDashboardMetrics(opts);
 
-        // Crucial: Only the 1st probe call executed, avoiding 14 more 401 errors
+        // Crucial: Only the 1st probe call executed, avoiding 11 more 401 errors
         expect(authFailMock).toHaveBeenCalledTimes(1);
-        expect(metrics.unavailable.length).toBe(15);
+        expect(metrics.unavailable.length).toBe(12);
         expect(metrics.error).toContain('HTTP 401 Unauthorized');
         expect(metrics.totalCount).toBeNull();
         expect(metrics.supplierCount).toBeNull();
