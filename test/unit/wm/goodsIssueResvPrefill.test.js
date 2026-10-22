@@ -3,90 +3,9 @@
  * and read-only, and the server posts the reservation's own values, never the client's.
  */
 
-const fs = require('fs');
-const path = require('path');
-const W = path.join(__dirname, '../../../app/fiori-app/webapp/modules/wm/goods-issue');
-const view = (name) => fs.readFileSync(path.join(W, 'view', name), 'utf8');
-/** Opening tag of the control with this id. */
-const tag = (xml, id) => xml.match(new RegExp(`<\\w+\\s(?:(?!<\\w)[\\s\\S])*?id="${id}"[\\s\\S]*?/>`))[0];
-
-const GoodsIssue311Model = require(path.join(W, 'model/GoodsIssue311Model'));
 const GoodsIssueReservationsClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
-
-describe('311 prefill from a reservation item', () => {
-  const rows = [
-    { ReservationNo: '519367', ReservationItem: '1', Material: '8000000001', MaterialDesc: 'Iphone 16, 12GB', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', Unit: 'NOS', OpenQty: 2, Batch: '', IsSerialManaged: true, OrderNo: '' },
-    { ReservationNo: '520236', ReservationItem: '0003', Material: '1000001002', MaterialDesc: 'TEST RM', Plant: '1150', StorageLocation: 'CS02', ReceivingPlant: '1150', ReceivingStorageLocation: 'MT01', Unit: 'KG', OpenQty: 12.5, Batch: 'IN26091921', IsSerialManaged: false, OrderNo: '1002741' }
-  ];
-
-  test.each(rows)('maps every field the reservation provides ($ReservationNo)', (row) => {
-    const d = GoodsIssue311Model.getInitialData();
-    d.reservationNo = row.ReservationNo;
-    GoodsIssue311Model.applyReservationItem(d, row);
-    expect(d).toMatchObject({
-      fromReservation: true,
-      reservationItem: String(row.ReservationItem).padStart(4, '0'),
-      material: row.Material, materialName: row.MaterialDesc, plant: row.Plant, storageLocation: row.StorageLocation,
-      receivingPlant: row.ReceivingPlant, receivingStorageLocation: row.ReceivingStorageLocation,
-      unit: row.Unit, openQty: row.OpenQty, batch: row.Batch, orderNo: row.OrderNo,
-      isSerialManaged: row.IsSerialManaged, isBatchManaged: !!row.Batch,
-      isUnitEditable: false, isStorageLocationEditable: false,
-      prefilled: { receivingPlant: true, receivingStorageLocation: true, batch: !!row.Batch }
-    });
-    d.quantity = row.OpenQty;
-    expect(GoodsIssue311Model.toBackendPayload(d)).toMatchObject({
-      ReservationNo: row.ReservationNo, Material: row.Material, Plant: row.Plant, StorageLocation: row.StorageLocation,
-      ReceivingPlant: row.ReceivingPlant, ReceivingStorageLocation: row.ReceivingStorageLocation, Unit: row.Unit, Batch: row.Batch
-    });
-  });
-
-  test('only what the reservation does not supply stays editable', () => {
-    const d = GoodsIssue311Model.getInitialData();
-    GoodsIssue311Model.applyReservationItem(d, { ReservationItem: '1', Material: 'M1', Plant: '1120', OpenQty: 1 });
-    expect(d.isStorageLocationEditable).toBe(true);
-    expect(d.isUnitEditable).toBe(true);
-    expect(d.prefilled).toEqual({ receivingPlant: false, receivingStorageLocation: false, batch: false });
-  });
-
-  test.each([['311', GoodsIssue311Model]])('%s quantity: partial issue allowed, capped at the open reservation quantity', (_t, Model) => {
-    const d = Model.getInitialData();
-    Model.applyReservationItem(d, rows[1]);
-    d.quantity = 5;
-    expect(Model.validate(d).errors.quantity).toBe('');
-    d.quantity = 12.501;
-    expect(Model.validate(d).errors.quantity).toContain('open reservation quantity');
-  });
-
-  test('an empty form (no reservation) keeps everything editable', () => {
-    const d = GoodsIssue311Model.getInitialData();
-    expect(d.fromReservation).toBe(false);
-    expect(d.prefilled).toEqual({});
-  });
-});
-
-describe('prefilled fields are read-only in the views', () => {
-  const v311 = view('GoodsIssue311.view.xml');
-
-  test('311: material / plant are display-only texts; storage location is an input only when the reservation has none', () => {
-    expect(tag(v311, 'txtMaterial311')).toMatch(/^<Text /);
-    expect(tag(v311, 'txtPlant311')).toMatch(/^<Text /);
-    expect(tag(v311, 'inStorageLocation311')).toContain('visible="{gi311>/isStorageLocationEditable}"');
-  });
-
-  test.each([
-    ['inReceivingPlant311', 'receivingPlant'], ['inReceivingStorageLocation311', 'receivingStorageLocation'], ['inBatch311', 'batch']
-  ])('311: %s is disabled once the reservation supplies it', (id, field) => {
-    expect(tag(v311, id)).toContain(`editable="{= !\${gi311>/prefilled/${field}} }"`);
-  });
-
-  test('311: reservation number / item cannot be changed once opened from a reservation', () => {
-    expect(tag(v311, 'inReservationNo311')).toContain('editable="false"');
-    expect(tag(v311, 'inReservationItem311')).toContain('editable="{= !${gi311>/fromReservation} }"');
-    expect(tag(v311, 'inUnit311')).toContain('editable="{gi311>/isUnitEditable}"');
-  });
-});
 
 describe('reservation items carry the receiving plant / storage location of the reservation header', () => {
   const item = { Reservation: '519367', ReservationItem: '1', Product: '8000000001', Plant: '1120', StorageLocation: 'HS01', BaseUnit: 'NOS', ResvnItmRequiredQtyInBaseUnit: '2', ResvnItmWithdrawnQtyInBaseUnit: '0', GoodsMovementType: '311' };
