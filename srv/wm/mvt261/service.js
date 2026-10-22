@@ -34,7 +34,6 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
         return req.error(err.status || 500, err.message || 'SAP S/4HANA request failed');
       }
     };
-    this.on('findFirst', run((data, req) => adapter.findFirst({ ...data, allowedPlants: scope(req) })));
     this.on('openItems', run((data, req) => adapter.openItems({ ...data, allowedPlants: scope(req) })));
     this.on('cycle', run((data, req) => adapter.cycle({ ...data, allowedPlants: scope(req) })));
     this.on('scanContext', run((data, req) => adapter.scanContext({ ...data, allowedPlants: scope(req) })));
