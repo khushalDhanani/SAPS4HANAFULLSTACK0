@@ -335,7 +335,6 @@ sap.ui.define([
         onSelectTabMM: function () { this.switchToTab("mm"); },
         onSelectTabSD: function () { this.switchToTab("sd"); },
         onSelectTabEWM: function () { this.switchToTab("ewm"); },
-        onSelectTabMasterData: function () { this.switchToTab("masterData"); },
         /**
          * Sanitizes a saved or externally supplied card layout, ignoring any obsolete or removed
          * tile IDs (such as tileMvt201 / kpiMvt201Val / Mvt201 / tileMvt301 / kpiMvt301Val / Mvt301 /
@@ -358,7 +357,12 @@ sap.ui.define([
                 "panelCategoryMasterData",
                 "tileOverviewBupaMD",
                 "tileOverviewProdMD",
-                "tileOverviewGateway"
+                "tileOverviewGateway",
+                "tabMasterData",
+                "panelMdBusinessPartner",
+                "panelMdProduct",
+                "panelMdFinancial",
+                "panelMdOrganization"
             ];
             return aCardIds.filter(function (sId) {
                 return sId && aRemoved.indexOf(sId) === -1;

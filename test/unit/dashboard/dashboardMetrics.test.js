@@ -374,12 +374,13 @@ describe('Unit: Dashboard Controller live figures', () => {
             .forEach((fn) => expect(controller[fn]).toBeUndefined());
     });
 
-    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, tileMvt301, tileMvt311, tileTrTo, tileMvt261, tileOpen261, panelCategoryMasterData, etc.)', () => {
+    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, tileMvt301, tileMvt311, tileTrTo, tileMvt261, tileOpen261, panelCategoryMasterData, tabMasterData, etc.)', () => {
         const controller = new DashboardControllerClass();
         expect(controller.sanitizeCardLayout([
             'tileMvt301', 'tileMvt201', 'kpiMvt201Val', 'kpiMvt301Val', 'Mvt301',
             'tileMvt311', 'kpiMvt311Val', 'Mvt311', 'panelMvtTypeKpis', 'tileTrTo', 'tileMvt261', 'tileOpen261',
-            'panelCategoryMasterData', 'tileOverviewBupaMD', 'tileOverviewProdMD', 'tileOverviewGateway', 'tileGoodsReceipt'
+            'panelCategoryMasterData', 'tileOverviewBupaMD', 'tileOverviewProdMD', 'tileOverviewGateway',
+            'tabMasterData', 'panelMdBusinessPartner', 'panelMdProduct', 'panelMdFinancial', 'panelMdOrganization', 'tileGoodsReceipt'
         ])).toEqual(['tileGoodsReceipt']);
         expect(controller.sanitizeCardLayout(null)).toEqual([]);
     });
@@ -412,7 +413,7 @@ describe('Unit: Dashboard view binds only live figures', () => {
         expect(viewXml).not.toMatch(/Client 220/);
         expect(viewXml).not.toMatch(/systemHealth|totalSpend|completeRate/);
         const tabKeys = [...viewXml.matchAll(/<IconTabFilter[\s\S]*?key="([a-zA-Z]+)"/g)].map((m) => m[1]);
-        expect(tabKeys).toEqual(['overview', 'masterData', 'fi', 'mm', 'sd', 'ewm']);
+        expect(tabKeys).toEqual(['overview', 'fi', 'mm', 'sd', 'ewm']);
     });
 
     test('every press handler used by the view exists on the controller', () => {
