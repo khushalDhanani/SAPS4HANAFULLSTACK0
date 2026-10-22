@@ -921,4 +921,3 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
     });
   });
 });
-
