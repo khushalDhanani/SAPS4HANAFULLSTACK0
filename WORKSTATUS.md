@@ -7,6 +7,24 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Step 1 — ZRF_RES_HU_DNR Discovery Completed (2026-10-22 15:45 IST):**
+  - **Context & Objective:** Completed comprehensive, strictly read-only discovery of custom SAP transaction `ZRF_RES_HU_DNR` ("RF & Desktop HU Stock Transfer") to prepare for converting the end-to-end business workflow into our custom SAP Fiori warehouse application.
+  - **Strict Rules Enforced:**
+    - Zero code changes to existing modules.
+    - Zero Fiori UI created yet.
+    - Zero OData services created yet.
+    - Zero SAP business logic modified.
+    - Zero live writes, BAPIs, RFC mutations, or DB drops executed (strictly read-only RFC_READ_TABLE and ADT GET reads).
+  - **Key Discoveries:**
+    - Transaction `ZRF_RES_HU_DNR` maps to custom ABAP executable program `ZRF_RES_HU_TRANSFER_DNR` (Initial Screen `1000`, Package `ZAMM`, Transport `DS4K905295`, authored by DNR / Dipak Rathod on `2026-10-16`, updated `2026-10-22`).
+    - Full 6,671 lines of ABAP source code retrieved verbatim via ADT REST API and saved to [`docs/abap/zrf_res_hu_transfer_dnr.abap`](docs/abap/zrf_res_hu_transfer_dnr.abap).
+    - Mapped complete screen architecture: Screen `1000` (Selection & Filter) -> interactive SALV worklist -> Screen `2000` (Fiori Object Page style transfer cockpit) -> Bins & Visual Rack popups.
+    - Traced dual unit handling: Supports both Handling Units (`VEKP`/`VEPO`) and Storage Units (`LQUA`), with serial numbers resolved via `SER06` -> `OBJK` and SUT from `T307T`.
+    - Traced dual posting paths: Path A for HU-Managed source storage locations (`T001L-XHUPF = 'X'`) calling `HU_CREATE_GOODS_MOVEMENT` (Event 0006) with direct `RESB` balance updates (`ENMNG`/`KZEAR`); Path B for standard/SU locations calling `BAPI_GOODSMVT_CREATE` with GM_CODE `'06'`.
+    - Traced post-posting notification: Queries `MATDOC`, builds in-memory PDF stock transfer slip, and dispatches HTML email via `cl_bcs` to requester with CC to operator.
+    - Generated exhaustive discovery documentation: [`ZRF_RES_HU_DNR_DISCOVERY.md`](ZRF_RES_HU_DNR_DISCOVERY.md).
+
+
 - **FI Module (Financial Accounting) Totally Removed from Entire Project (2026-10-22 15:30 IST):**
   - **Context & Approval:** Executed complete removal of the Financial Accounting (FI) Module across all project layers: UI module `app/fiori-app/webapp/modules/fi/`, route `#/fi/journal-entries` (`journalEntries`), target `TargetJournalEntries`, model `fiService`, Dashboard Finance tab `tabFI` and Finance overview panel `panelCategoryFinance` (with `tileModuleFI`, `tileOverviewCostCenters`, `tileOverviewGLAccounts`), CAP service `srv/fi/` (`JournalEntryService`), external metadata `FAC_GL_JOURNALENTRY_VER_SRV.*`, authorization role `FinanceViewer` across `xs-security.json`, `package.json`, `server.js`, and SD service restrictions, live query metrics `fiDocCount`, `costCenterCount`, and `glAccountCount` pruned from `PurchaseOrderAdapter.js` and `Dashboard.controller.js` (reducing live queries from 15 to 12), test suites `test/unit/fi/` and `test/integration/fi/` deleted, and all obsolete FI and Overview Finance i18n keys pruned from `i18n.properties` and `i18n_en.properties`.
   - **Strict Rules Enforced:**
@@ -530,5 +548,30 @@ Single source of truth for work history, current status, validation, unresolved 
      - Handling Unit: `00000000002000019371` created 44 seconds earlier at 13:36:28 by `NARESH` (`VEKP-ERNAM = 'NARESH'`).
      - Did SAP default `LETYP`? `T331` for `OH1` has `NPLEI = ''` (no SUT defaulting from storage type), and `MLGN` has no SUT default. User `NARESH` explicitly selected/passed `LETYP = 'E10'` during inbound packing / putaway preparation (`HU02` / `LT06`), validated against `T334P` (where `E10` is allowed in `W01`).
 - **SAP writes:** ZERO. Report only.
+- **Validation:**
+  - `git diff --check`: clean.
+
+### 2026-10-22 15:45 IST — ZRF_RES_HU_DNR End-to-End Discovery Completed (Report only)
+
+- **Requirement:** User task: Study the existing `ZRF_RES_HU_DNR` transaction and document its actual end-to-end workflow so we can reproduce the same business process in Fiori. Strictly read-only discovery; zero code mutations, zero Fiori UI, zero new OData services, zero business logic changes.
+- **Execution & Concrete Live SAP Evidence (STRICTLY READ-ONLY):**
+  1. **Transaction & Object Discovery:**
+     - Query on `TSTC`: `ZRF_RES_HU_DNR` maps to program `ZRF_RES_HU_TRANSFER_DNR`, initial screen `1000`.
+     - Query on `TSTCT`: Description is `"RF & Desktop HU Stock Transfer"`.
+     - Query on `TADIR`: Object `R3TR PROG ZRF_RES_HU_TRANSFER_DNR` belongs to package `ZAMM`, author `DIPAK`, created `20261016`.
+     - Query on `TRDIR`: Executable Program (`SUBC = 1`), updated `20261022` by `DIPAK`.
+  2. **Verbatim ABAP Source Retrieval via ADT:**
+     - Fetched complete 6,671 lines (285,803 bytes) of program `ZRF_RES_HU_TRANSFER_DNR` via ADT REST API (`/sap/bc/adt/programs/programs/ZRF_RES_HU_TRANSFER_DNR/source/main`) with HTTP basic auth.
+     - Saved verbatim to [`docs/abap/zrf_res_hu_transfer_dnr.abap`](docs/abap/zrf_res_hu_transfer_dnr.abap).
+  3. **Architecture & Flow Mapping:**
+     - Screen 1000 (Filter): Selects open reservations from `RESB` + `RKPF` (Plant, SLoc, Mvt 311, Requester, Res#, Matnr, Status filters).
+     - Interactive SALV Grid: Renders reservation items with calculated open qty, available HU/SU counts, and requester contact info (`USR21` + `ADRP` + `ADCP` + `ADR6` + `ADR2`).
+     - Screen 2000 (Cockpit): Modal Fiori Object Page layout for scanning/validating units (`p_exidv`), evaluating picking strategies (`MLGN`/`T334T`/`MLGT`/`LQUA`), and executing goods transfer.
+     - Bin & Visual Rack popups: Popups showing shelf positions, bin coordinates, stock statuses, and serial numbers.
+     - Dual Posting Engine: Path A for HU-Managed source SLocs (`T001L-XHUPF = 'X'`) calling `HU_CREATE_GOODS_MOVEMENT` (Event 0006) with direct SQL update to `RESB-ENMNG`/`KZEAR`; Path B for standard/SU locations calling `BAPI_GOODSMVT_CREATE` with GM_CODE `'06'`.
+     - Post-Posting Notification: Generates in-memory PDF stock transfer slip and dispatches HTML email via `cl_bcs` to requester with CC to operator.
+  4. **Deliverable Created:**
+     - Generated comprehensive discovery document: [`ZRF_RES_HU_DNR_DISCOVERY.md`](ZRF_RES_HU_DNR_DISCOVERY.md) containing all 10 required sections.
+- **SAP writes:** ZERO. Strictly read-only discovery.
 - **Validation:**
   - `git diff --check`: clean.
