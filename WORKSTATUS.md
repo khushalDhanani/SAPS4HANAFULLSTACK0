@@ -5,6 +5,23 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Route `/wm/goods-issue/201/open-reservations` & 201-Only Dependencies Cleanly Removed (2026-10-22 11:05 IST):**
+  - **Context & Audit:** Conducted full dependency map and read-only audit across routing, navigation, views, controllers, services, adapters, CDS models, SQLite persistence, and security scopes. Proved 0 open TRs, 0 open TOs, and 0 `ReservationTrack` records originated from this route. All shared assets (`OpenReservations` entity, `GoodsIssueAdapter.getOpenReservations`, `GoodsIssue201` execution view/controller, `ReservationTrack`/`ReservationLog`) were strictly preserved.
+  - **Removals Executed (Phase 2):**
+    1. *Entry Points (`manifest.json`, `Dashboard.controller.js`, `App.controller.js`):* Removed route `wmGoodsIssue201Pending` and target `TargetGoodsIssue201Pending`. Configured `routing.config.bypassed: { target: "TargetDashboard" }` so old/unknown URLs cleanly redirect to the Dashboard. Updated `mRoutes["201"]` to point to `"wmGoodsIssue201"` (`/wm/goods-issue/cost-center-201`), preserving `tileMvt201` on the dashboard. Updated `App.controller.js` shell titles and back navigation.
+    2. *UI Views & Controllers:* Deleted `GoodsIssue201Pending.view.xml` and `GoodsIssue201Pending.controller.js`. Updated `GoodsIssue201.controller.js` to complete reservation issues on-page with standard success notification and route back button directly to dashboard.
+    3. *Backend / Frontend Service:* Removed 201-only method `fetchPendingReservations` from `GoodsIssue201Service.js`.
+    4. *Auth Items:* Confirmed all auth scopes and role templates are shared; 0 auth items removed.
+    5. *i18n & Tests:* Removed 11 `gi201OpenResv*` keys from `i18n.properties` and `i18n_en.properties`. Deleted test file `goodsIssue201PendingController.test.js`. Removed `fetchPendingReservations` test block from `goodsIssue201ServiceUnit.test.js`. Updated tile-press assertion in `dashboardMetrics.test.js` and completion assertion in `goodsIssue201Controller.test.js`.
+  - **Validation:**
+    - Targeted unit tests: 3 suites, 109/109 tests passed (100% green).
+    - Related workflow tests: 7 suites, 331/331 tests passed (100% green; 261 auth/reconciliation, reservation entry, scan-to, delivery PGI, dual paths).
+    - Leftover grep: 0 leftovers for `GoodsIssue201Pending`, `wmGoodsIssue201Pending`, `goods-issue/201`, `fetchPendingReservations`, `gi201OpenResv`.
+    - CDS compile: `npx cds compile srv/ --to csn` clean PASS.
+    - UI5 linter: `npm --prefix app/fiori-app run lint` 0 findings (PASS).
+    - `git diff --check`: 0 errors (clean).
+    - ZERO SAP writes executed.
+
 - **Live Re-Read Confirms T319A W01/Z007 Still Missing & Transport DS4K9xxxxx Is Placeholder, Stopped (2026-10-22 10:05 IST): Live RFC re-read of `T319A` (READ-ONLY) in SAP Client 220 confirms that table `T319A` STILL contains only `W01 / 0001 -> E1` and `W01 / Z003 -> E1`. The entry for `Z007 -> E10` has NOT yet been saved in SM30. Furthermore, user provided transport string `DS4K9xxxxx` containing literal placeholder `xxxxx` (and user KHUSHAL has 0 transports in `E070`, with 0 transports created on 2026-10-22). Per AGENTS.md ("Reject placeholder input: If a value looks like a sample, treat it as NOT PROVIDED, stop, and ask") and script pre-flight abort guards, execution was safely stopped before calling PGI. Delivery `0080000134` status remains open: `WBSTK = 'A'`, `KOSTK = 'C'`. ZERO SAP writes executed.**
 
 - **12-Month VEKP-VHART Audit in W01 & Picking TO Pre-Check Implemented (2026-10-22 00:30 IST): READ-ONLY live audit of all 428 Handling Units in W01 over the last 12 months (ERDAT >= 20251021) identified exactly 3 packaging material types used: `0001` (230 HUs -> mapped in T319A to E1), `Z003` (133 HUs -> mapped in T319A to E1), and `Z007` (65 HUs -> NO ROW in T319A). Z007 is the ONLY packaging material type lacking a T319A entry in W01. Implemented pre-check `_verifyDeliveryHusT319A` in `ReservationProcessAdapter.js` inside `createDeliveryPickingTO` to inspect delivery HUs (VEPO/VEKP) or item quants on SUs (LQUA/VEKP) and immediately block picking TO creation with HTTP 400: `"Packaging type <VHART> has no storage unit type in warehouse <LGNUM>. Contact the SAP administrator."` if T319A has no row. Added 3 unit tests in `autoMigoPosting.test.js` (104/104 green; 118/118 passed across suites). ZERO SAP writes executed.**
