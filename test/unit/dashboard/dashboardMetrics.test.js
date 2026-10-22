@@ -377,24 +377,27 @@ describe('Unit: Dashboard Controller live figures', () => {
             .forEach((fn) => expect(controller[fn]).toBeUndefined());
     });
 
-    test('routes movement type tile presses to their dedicated pages (201/301/311)', () => {
+    test('routes movement type tile presses to their dedicated pages (301/311)', () => {
         const controller = new DashboardControllerClass();
         controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: () => null });
 
         expect(controller.mRoutes).toEqual({
-            "201": "wmGoodsIssue201",
             "301": "wmGoodsIssue301Pending",
             "311": "wmGoodsIssue311Pending"
         });
-
-        controller.onMvt201TilePress();
-        expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue201');
 
         controller.onMvt301TilePress();
         expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue301Pending');
 
         controller.onMvt311TilePress();
         expect(mockRouter.navTo).toHaveBeenCalledWith('wmGoodsIssue311Pending');
+    });
+
+    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, kpiMvt201Val, Mvt201)', () => {
+        const controller = new DashboardControllerClass();
+        expect(controller.sanitizeCardLayout(['tileMvt301', 'tileMvt201', 'kpiMvt201Val', 'tileMvt311']))
+            .toEqual(['tileMvt301', 'tileMvt311']);
+        expect(controller.sanitizeCardLayout(null)).toEqual([]);
     });
 });
 
@@ -406,7 +409,6 @@ describe('Unit: Dashboard view binds only live figures', () => {
         'selectedTab', 'connectionText', 'connectionState', 'metricsError',
         // Movement-type KPI card model keys (loaded from GoodsIssueService.getDashboardData)
         'giKpiError',
-        'mvt201Total', 'mvt201Today',
         'mvt301Total', 'mvt301Today',
         'mvt311Total', 'mvt311Today'
     ];

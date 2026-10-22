@@ -57,13 +57,11 @@ sap.ui.define([
 
     // Movement-type KPI model property keys (loaded from GoodsIssueService.getDashboardData)
     var GI_KPI_KEYS = [
-        "mvt201Total", "mvt201Today",
         "mvt301Total", "mvt301Today",
         "mvt311Total", "mvt311Today"
     ];
 
     var mRoutes = {
-        "201": "wmGoodsIssue201",
         "301": "wmGoodsIssue301Pending",
         "311": "wmGoodsIssue311Pending"
     };
@@ -405,7 +403,6 @@ sap.ui.define([
                     var oKpis = oData.Kpis;
 
                     var mMapping = {
-                        "Mvt201": { total: "mvt201Total", today: "mvt201Today" },
                         "Mvt301": { total: "mvt301Total", today: "mvt301Today" },
                         "Mvt311": { total: "mvt311Total", today: "mvt311Today" }
                     };
@@ -450,17 +447,28 @@ sap.ui.define([
         },
 
         /**
-         * Opens the Goods Issue dashboard, which shows a dedicated recent-postings section per
-         * movement type. No client filter is applied (the dashboard has none); the toast only
-         * confirms which movement type the user opened.
-         * @param {string} sMvtType - "201", "301", or "311"
+         * Sanitizes a saved or externally supplied card layout, ignoring any obsolete or removed
+         * tile IDs (such as tileMvt201 / kpiMvt201Val / Mvt201) so legacy layouts load without error.
+         * @param {Array<string>} [aCardIds]
+         * @returns {Array<string>}
+         */
+        sanitizeCardLayout: function (aCardIds) {
+            if (!Array.isArray(aCardIds)) {
+                return [];
+            }
+            var aRemoved = ["tileMvt201", "kpiMvt201Val", "Mvt201"];
+            return aCardIds.filter(function (sId) {
+                return sId && aRemoved.indexOf(sId) === -1;
+            });
+        },
+
+        /**
+         * Opens the Goods Issue transfer worklists for movement types 301 and 311.
+         * @param {string} sMvtType - "301" or "311"
          * @private
          */
         _navigateToGiFiltered: function (sMvtType) {
-            // Direct navigation to each movement type's own dedicated page (no filter toggle).
-            // 201 opens its dedicated Cost Center Goods Issue page; 301 and 311 open their Open Transfers list.
             var mRoutes = {
-                "201": "wmGoodsIssue201",
                 "301": "wmGoodsIssue301Pending",
                 "311": "wmGoodsIssue311Pending"
             };
@@ -471,10 +479,6 @@ sap.ui.define([
                 "Opening movement {0} page",
                 [sMvtType]
             ));
-        },
-
-        onMvt201TilePress: function () {
-            this._navigateToGiFiltered("201");
         },
 
         onMvt301TilePress: function () {
