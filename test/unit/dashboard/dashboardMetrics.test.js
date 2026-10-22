@@ -190,7 +190,7 @@ describe('Unit: Dashboard Controller live figures', () => {
     test('populates every figure SAP returned and reports S/4HANA connected', async () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
-        const payload = fullPayload({ totalCount: 2729, openSalesOrderCount: 498, gatewayCatalogCount: 1345 });
+        const payload = fullPayload({ totalCount: 2729, openSalesOrderCount: 498, plantCount: 76 });
         mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: [] }));
 
         await controller._loadMetrics();
@@ -218,14 +218,14 @@ describe('Unit: Dashboard Controller live figures', () => {
         const oViewModel = new MockJSONModel({});
         const controller = makeController(oViewModel);
         const payload = fullPayload({ bpCount: null, warehouseCount: null });
-        delete payload.gatewayCatalogCount; // missing entirely
+        delete payload.plantCount; // missing entirely
         mockODataClient.get.mockResolvedValue(JSON.stringify({ ...payload, unavailable: ['bpCount', 'warehouseCount'] }));
 
         await controller._loadMetrics();
 
         expect(oViewModel.getProperty('/bpCount')).toBeNull();
         expect(oViewModel.getProperty('/warehouseCount')).toBeNull();
-        expect(oViewModel.getProperty('/gatewayCatalogCount')).toBeNull();
+        expect(oViewModel.getProperty('/plantCount')).toBeNull();
         expect(oViewModel.getProperty('/totalCount')).toBe(payload.totalCount);
         expect(oViewModel.getProperty('/connectionState')).toBe('Warning');
         expect(oViewModel.getProperty('/connectionText')).toBe(`S/4HANA partially available (${controller.METRIC_KEYS.length - 3} of ${controller.METRIC_KEYS.length} figures)`);
@@ -374,11 +374,12 @@ describe('Unit: Dashboard Controller live figures', () => {
             .forEach((fn) => expect(controller[fn]).toBeUndefined());
     });
 
-    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, tileMvt301, tileMvt311, tileTrTo, tileMvt261, tileOpen261, etc.)', () => {
+    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, tileMvt301, tileMvt311, tileTrTo, tileMvt261, tileOpen261, panelCategoryMasterData, etc.)', () => {
         const controller = new DashboardControllerClass();
         expect(controller.sanitizeCardLayout([
             'tileMvt301', 'tileMvt201', 'kpiMvt201Val', 'kpiMvt301Val', 'Mvt301',
-            'tileMvt311', 'kpiMvt311Val', 'Mvt311', 'panelMvtTypeKpis', 'tileTrTo', 'tileMvt261', 'tileOpen261', 'tileGoodsReceipt'
+            'tileMvt311', 'kpiMvt311Val', 'Mvt311', 'panelMvtTypeKpis', 'tileTrTo', 'tileMvt261', 'tileOpen261',
+            'panelCategoryMasterData', 'tileOverviewBupaMD', 'tileOverviewProdMD', 'tileOverviewGateway', 'tileGoodsReceipt'
         ])).toEqual(['tileGoodsReceipt']);
         expect(controller.sanitizeCardLayout(null)).toEqual([]);
     });

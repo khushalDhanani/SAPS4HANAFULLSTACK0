@@ -243,51 +243,6 @@
                                         </GenericTile>
                                     </HBox>
                                 </Panel>
-
-                                <!-- Master Data -->
-                                <Panel
-                                    id="panelCategoryMasterData"
-                                    headerText="{i18n>overviewCategoryMasterData}"
-                                    class="sapUiSmallMarginBottom"
-                                    expandable="true"
-                                    expanded="true">
-                                    <HBox wrap="Wrap" alignItems="Center" class="dashboardTileContainer">
-                                        <GenericTile
-                                            id="tileOverviewBupaMD"
-                                            header="{i18n>dashBusinessPartners}"
-                                            subheader="{i18n>dashCentralBPRecords}"
-                                            press=".onSelectTabMasterData"
-                                            state="{path: 'dashboardView>/bpCount', formatter: '.formatTileState'}"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{i18n>dashPartners}">
-                                                <NumericContent value="{path: 'dashboardView>/bpCount', formatter: '.formatMetricValue'}" icon="sap-icon://customer-and-supplier" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewProdMD"
-                                            header="{i18n>dashProducts}"
-                                            subheader="{i18n>dashMaterialMasterRecords}"
-                                            press=".onSelectTabMasterData"
-                                            state="{path: 'dashboardView>/productCount', formatter: '.formatTileState'}"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{i18n>dashProducts}">
-                                                <NumericContent value="{path: 'dashboardView>/productCount', formatter: '.formatMetricValue'}" icon="sap-icon://product" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-
-                                        <GenericTile
-                                            id="tileOverviewGateway"
-                                            header="{i18n>dashGatewayServices}"
-                                            subheader="{i18n>dashSAPGatewayCatalog}"
-                                            state="{path: 'dashboardView>/gatewayCatalogCount', formatter: '.formatTileState'}"
-                                            class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                            <TileContent unit="{i18n>dashCatalogServices}">
-                                                <NumericContent value="{path: 'dashboardView>/gatewayCatalogCount', formatter: '.formatMetricValue'}" icon="sap-icon://sys-monitor" valueColor="Neutral" />
-                                            </TileContent>
-                                        </GenericTile>
-                                    </HBox>
-                                </Panel>
                             </VBox>
                         </IconTabFilter>
                         <IconTabSeparator />

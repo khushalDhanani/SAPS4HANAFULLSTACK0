@@ -47,7 +47,6 @@ sap.ui.define([
         "warehouseCount",
         "openReservationCount",
         "inboundDeliveryCount",
-        "gatewayCatalogCount",
         "ordersDueCount",
         "customerInvoiceCount",
         "customerReturnCount"
@@ -355,7 +354,11 @@ sap.ui.define([
                 "panelMvtTypeKpis",
                 "tileTrTo",
                 "tileMvt261",
-                "tileOpen261"
+                "tileOpen261",
+                "panelCategoryMasterData",
+                "tileOverviewBupaMD",
+                "tileOverviewProdMD",
+                "tileOverviewGateway"
             ];
             return aCardIds.filter(function (sId) {
                 return sId && aRemoved.indexOf(sId) === -1;
