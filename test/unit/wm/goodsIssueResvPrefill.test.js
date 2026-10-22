@@ -70,7 +70,6 @@ describe('311 prefill from a reservation item', () => {
 describe('prefilled fields are read-only in the views', () => {
   const v311 = view('GoodsIssue311.view.xml');
   const v301 = view('GoodsIssue301.view.xml');
-  const v201 = view('GoodsIssue201.view.xml');
 
   test('311: material / plant are display-only texts; storage location is an input only when the reservation has none', () => {
     expect(tag(v311, 'txtMaterial311')).toMatch(/^<Text /);
@@ -90,12 +89,8 @@ describe('prefilled fields are read-only in the views', () => {
     expect(tag(v311, 'inUnit311')).toContain('editable="{gi311>/isUnitEditable}"');
   });
 
-  test('301 / 201 follow the same pattern for the fields they prefill', () => {
+  test('301 follows the pattern for the fields it prefills', () => {
     expect(tag(v301, 'inBatch301')).toContain('editable="{= !${gi301>/prefilled/batch} }"');
-    ['inCostCenter:costCenter', 'inMaterial:material', 'inPlant:plant', 'inStorageLocation:storageLocation'].forEach((pair) => {
-      const [id, field] = pair.split(':');
-      expect(tag(v201, id)).toContain(`editable="{= !\${gi201>/prefilled/${field}} }"`);
-    });
   });
 });
 

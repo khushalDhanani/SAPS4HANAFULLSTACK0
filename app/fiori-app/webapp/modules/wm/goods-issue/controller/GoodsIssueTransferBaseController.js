@@ -711,7 +711,7 @@ sap.ui.define([
         onStorageLocationValueHelp: function () {
             this._storageLocationValueHelp(
                 this._oModel.getProperty("/plant"),
-                "SelectStorageLocation", "/storageLocation", "gi201LoadStorageLocationsError");
+                "SelectStorageLocation", "/storageLocation", "giLoadStorageLocationsError");
         },
 
         _storageLocationValueHelp: function (sPlant, sTitleKey, sProp, sErrorKey) {
