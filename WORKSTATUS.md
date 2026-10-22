@@ -5,6 +5,27 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Dashboard Dedicated Master Data Tab (`tabMasterData`), All 4 Inner Panels, Layout Sanitization & 13 Metrics Removed (2026-10-22 14:05 IST):**
+  - **Context & Approval:** Executed complete removal of the dedicated Master Data tab (`tabMasterData`), all 4 inner master data panels (`panelMdBusinessPartner`, `panelMdProduct`, `panelMdFinancial`, `panelMdOrganization`), obsolete navigation handler `onSelectTabMasterData`, layout sanitization in `Dashboard.controller.js`, 13 master-data-only live query metrics pruned from `METRIC_KEYS` in `Dashboard.controller.js` and `PurchaseOrderAdapter.js` (reducing live counts from 28 to 15), and 44 obsolete i18n keys pruned from `i18n.properties` and `i18n_en.properties`.
+  - **Strict Rules Enforced:**
+    - Zero live SAP writes, BAPIs, RFC mutations, or DB drops (strictly read-only).
+    - Preserved active operational metrics in remaining tabs (`tabMM`, `tabSD`, `tabFI`, `tabEWM`): `totalCount`, `supplierCount`, `fiDocCount`, `salesInquiryCount`, `customerCount`, `openSalesOrderCount`, `totalSalesOrderCount`, `glAccountCount`, `costCenterCount`, `warehouseCount`, `openReservationCount`, `inboundDeliveryCount`, `ordersDueCount`, `customerInvoiceCount`, `customerReturnCount`.
+    - Preserved active overview cards (`tileOverviewCostCenters`, `tileOverviewGLAccounts`) and their subheader keys (`dashControllingMasterData`, `dashFinancialMasterData`).
+    - Preserved `PurchaseOrderAdapter.getBusinessPartnerCount` standalone function.
+    - One commit per step throughout Phase 2.
+  - **Sequence of Commits in Phase 2:**
+    1. *Commit `c0503e0` (Step 1 — View & Controller Removal, Layout Sanitization):* Removed `tabMasterData` and its 4 inner panels from `Dashboard.view.xml`. Removed `press=".onSelectTabMasterData"` from `tileOverviewCostCenters` and `tileOverviewGLAccounts`. In `Dashboard.controller.js`: removed `onSelectTabMasterData` and added `"tabMasterData"`, `"panelMdBusinessPartner"`, `"panelMdProduct"`, `"panelMdFinancial"`, `"panelMdOrganization"` to `sanitizeCardLayout`. Updated layout tests.
+    2. *Commit `90f7724` (Step 2 — Metric Pruning & Adapter Tests):* Pruned 13 master-data-only metric keys from `METRIC_KEYS` in `Dashboard.controller.js` and from `sources` and `MASTER_DATA_METRIC_KEYS` in `PurchaseOrderAdapter.js`. Updated all adapter tests and mocks in `test/unit/dashboard/dashboardMetrics.test.js` from 28 to 15 live counts.
+    3. *Commit `000791d` (Step 3 — i18n Pruning):* Pruned 44 obsolete master-data tab, area, and card i18n keys from `i18n.properties` and `i18n_en.properties`.
+    4. *Commit (Step 4 — Documentation):* Recorded all removals, safety checks, and test results in `WORKSTATUS.md`.
+  - **Validation & Results:**
+    - Leftover grep: 0 occurrences of `tabMasterData`, `panelMdBusinessPartner`, `panelMdProduct`, `panelMdFinancial`, `panelMdOrganization`, or `onSelectTabMasterData` across UI views.
+    - UI5 lint (`npm --prefix app/fiori-app run lint`): 0 findings (Clean PASS).
+    - CDS compile (`npx cds compile srv db --to csn`): Clean PASS.
+    - Unit tests: 7 suites, 189/189 tests passed (100% green; `uiConsistency`, `dashboardMetrics`, `mvt261ScanController`, `mvt261CycleController`, `mvt261Adapter`, `mvt261Auth`, `mvt261Scan`).
+    - `git diff --check`: 0 errors.
+  - **Zero SAP Writes:** Strictly read-only SAP throughout; zero mutations.
+
 - **Dashboard Overview Master Data Panel (`panelCategoryMasterData`) & Dedicated Assets Removed (2026-10-22 13:50 IST):**
   - **Context & Approval:** Executed complete removal of the Overview tab Master Data panel `panelCategoryMasterData` and its 3 tiles (`tileOverviewBupaMD`, `tileOverviewProdMD`, `tileOverviewGateway`) from `Dashboard.view.xml`, layout sanitization in `Dashboard.controller.js`, backend metric pruning of `gatewayCatalogCount` in `PurchaseOrderAdapter.js` (reducing live counts from 29 to 28), and removal of dedicated obsolete i18n keys (`overviewCategoryMasterData`, `dashGatewayServices`, `dashSAPGatewayCatalog`, `dashCatalogServices`).
   - **Strict Rules Enforced:**
@@ -3756,6 +3777,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Exact Next Recommended Action (Dashboard Master Data Tab & 13 Metrics Total Removal Complete — 2026-10-22 14:05 IST):** review the complete removal of the dedicated Master Data tab (`tabMasterData`), its 4 inner panels, `onSelectTabMasterData`, 13 live metric query sources in `PurchaseOrderAdapter.js` (bringing query count to 15), and 44 obsolete i18n keys across commits `c0503e0` through `000791d`. Confirm that all operational tabs (`tabMM`, `tabSD`, `tabFI`, `tabEWM`) and overview tiles remain intact and passing 100% green (189/189 tests). Zero SAP writes were performed.
 - **Exact Next Recommended Action (Dashboard Overview Master Data Panel Removal Complete — 2026-10-22 13:50 IST):** review the complete removal of the Overview Master Data panel `panelCategoryMasterData`, tiles `tileOverviewBupaMD`, `tileOverviewProdMD`, `tileOverviewGateway`, backend metric `gatewayCatalogCount`, and obsolete i18n keys across commits `ec9fe97` through `e1935c4`. Confirm that the dedicated Master Data tab (`tabMasterData`) and all shared master data metric sources remain intact and passing 100% green (189/189 tests). Zero SAP writes were performed.
 - **Exact Next Recommended Action (Route #/wm/mvt261/open Total Removal Complete — 2026-10-22 13:35 IST):** review the complete removal of route `#/wm/mvt261/open`, target `TargetOpen261`, Dashboard tile `tileOpen261`, `Open261.view.xml`, `Open261.controller.js`, `open261Controller.test.js`, and obsolete worklist i18n keys across commits `e225250` through `5b97c8b`. Confirm that all shared business flows (`#/wm/mvt261/open/{resv}/{item}` Scan 261, `#/wm/mvt261/open/{resv}/{item}/cycle` Cycle 261, `Mvt261Adapter.js`, transactional actions, and shared i18n keys `open261Required`, `open261Withdrawn`, `open261RequirementDate`, `open261OrderStatus`, `open261Sloc`) remain intact and passing 100% green (189/189 tests). Zero SAP writes were performed.
 - **Exact Next Recommended Action (Route #/wm/mvt261 Total Removal Complete — 2026-10-22 13:25 IST):** review the complete removal of route `#/wm/mvt261`, target `TargetMvt261`, Dashboard tile `tileMvt261`, `Mvt261.view.xml`, `Mvt261.controller.js`, `findFirst` in `service.cds`/`service.js`, and obsolete finder i18n keys across commits `67084ca` through `328684b`. Confirm that all shared business flows (`#/wm/mvt261/open` Open 261 items worklist, `#/wm/mvt261/open/...` Scan 261, Cycle 261, `Mvt261Adapter.js`, transactional actions, and shared i18n keys) remain intact and passing 100% green (194/194 tests). Zero SAP writes were performed.
@@ -3867,6 +3889,28 @@ The previous log was removed in commit `b741337`; this file restarts it.
   1. Hand over [test-runbook.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/test-runbook.md) and [consultant-handover.md](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/consultant-handover.md) to the WM consultant.
 
 ## Changes Log
+
+### 2026-10-22 14:05 IST — Master Data tab (tabMasterData), all 4 inner panels, and 13 master-data-only metrics totally removed
+
+- **Requirement:** User task: Total removal of the Master Data tab (`tabMasterData`) and all inner cards/panels on the Dashboard, following previous removal of the Overview Master Data panel (`panelCategoryMasterData`).
+  Rules: Read-only SAP, zero SAP writes. Never delete code shared with other flows. If unsure, keep it and report it. No guessing. One commit per step throughout Phase 2.
+- **Phase 1 Dependency Audit & Safety Proof:**
+  - Proved read-only: 0 active SAP writes or background mutations depend on `tabMasterData` or its inner panels.
+  - Kept because shared / operational:
+    - Overview tiles `tileOverviewCostCenters` and `tileOverviewGLAccounts` preserved with their live metrics and subheaders (`dashControllingMasterData`, `dashFinancialMasterData`).
+    - Active operational metrics in `tabMM`, `tabSD`, `tabFI`, `tabEWM` preserved: `totalCount`, `supplierCount`, `fiDocCount`, `salesInquiryCount`, `customerCount`, `openSalesOrderCount`, `totalSalesOrderCount`, `glAccountCount`, `costCenterCount`, `warehouseCount`, `openReservationCount`, `inboundDeliveryCount`, `ordersDueCount`, `customerInvoiceCount`, `customerReturnCount`.
+    - Standalone function `PurchaseOrderAdapter.getBusinessPartnerCount` preserved intact for external caller compatibility.
+- **Phase 2 Implementation (1 commit per step):**
+  - **Commit `c0503e0` (Step 1 — View & Controller Removal, Layout Sanitization):** Removed `tabMasterData` and its 4 inner panels (`panelMdBusinessPartner`, `panelMdProduct`, `panelMdFinancial`, `panelMdOrganization`) from `Dashboard.view.xml`. Removed `press=".onSelectTabMasterData"` from `tileOverviewCostCenters` and `tileOverviewGLAccounts`. In `Dashboard.controller.js`: removed `onSelectTabMasterData`, added `"tabMasterData"`, `"panelMdBusinessPartner"`, `"panelMdProduct"`, `"panelMdFinancial"`, `"panelMdOrganization"` to `sanitizeCardLayout`. Updated `test/unit/dashboard/dashboardMetrics.test.js` (`tabKeys` assertion now `['overview', 'fi', 'mm', 'sd', 'ewm']`, layout sanitizer assertions).
+  - **Commit `90f7724` (Step 2 — Metric Pruning & Adapter Tests):** Pruned 13 master-data-only keys from `METRIC_KEYS` in `Dashboard.controller.js` and from `sources` and `MASTER_DATA_METRIC_KEYS` in `PurchaseOrderAdapter.js`, reducing live queries from 28 to 15. Updated `test/unit/dashboard/dashboardMetrics.test.js` to assert 15 live SAP queries, updated live counts assertion, switched service failure mock from `ZAPI_GETBUPA_SRV` to `I_GLAccountStdVH`, switched non-numeric count test to `FAC_GL_JOURNALENTRY_VER_SRV`, updated cache coalescing and fast-fail probe assertions to 15 counts (and halting remaining 14 calls).
+  - **Commit `000791d` (Step 3 — i18n Pruning):** Pruned 44 obsolete master-data tab, area, and card i18n keys from `i18n.properties` and `i18n_en.properties` (`tabMasterDataTitle`, `tabMasterDataTooltip`, `tabMasterDataHeading`, `tabMasterDataSubheading`, `mdAreaBusinessPartner`, `mdAreaProduct`, `mdAreaFinancial`, `mdAreaOrganization`, `dashAssetMasterRecords`, `dashAssets`, `dashBusinessPartners`, `dashBuyerGroups`, `dashCenters`, `dashCentralBPRecords`, `dashChartOfAccounts`, `dashCompanyCodes`, `dashContracts`, `dashControllingOrders`, `dashCostResponsibilityUnits`, `dashFixedAssets`, `dashGroups`, `dashInternalOrders`, `dashLegalEntities`, `dashLocations`, `dashMaterialGroups`, `dashMaterialMasterRecords`, `dashOperatingFacilities`, `dashOrgs`, `dashOutlineAgreements`, `dashPartners`, `dashPlantStorageLocations`, `dashPlants`, `dashProductGroups`, `dashProducts`, `dashProfitCenters`, `dashProfitabilityUnits`, `dashProjectStructure`, `dashPurchaseContracts`, `dashPurchasingGroups`, `dashPurchasingOrgUnits`, `dashPurchasingOrganizations`, `dashRecords`, `dashStorageLocations`, `dashWBSElements`), strictly preserving active keys (`dashControllingMasterData`, `dashFinancialMasterData`, `dashCostCenters`, `dashGLAccounts`, `dashAccounts`, `dashOrders`).
+  - **Step 4 (Documentation & Validation):** Updated `WORKSTATUS.md` with complete implementation log, safety proofs, and validation results.
+- **Validation:**
+  - `npm --prefix app/fiori-app run lint`: 0 findings detected.
+  - `npx cds compile srv db --to csn`: 0 errors.
+  - Unit tests: 7 suites, 189/189 tests passed (100% green; `uiConsistency`, `dashboardMetrics`, `mvt261ScanController`, `mvt261CycleController`, `mvt261Adapter`, `mvt261Auth`, `mvt261Scan`).
+  - `git diff --check`: 0 errors.
+  - READ-ONLY: zero live SAP writes or mutations executed.
 
 ### 2026-10-22 12:30 IST — Routes /wm/goods-issue/201, 301, and 311 & all movement KPI cards totally removed
 
