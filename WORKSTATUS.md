@@ -5,6 +5,27 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Current Status
 
+- **Dashboard Overview Master Data Panel (`panelCategoryMasterData`) & Dedicated Assets Removed (2026-10-22 13:50 IST):**
+  - **Context & Approval:** Executed complete removal of the Overview tab Master Data panel `panelCategoryMasterData` and its 3 tiles (`tileOverviewBupaMD`, `tileOverviewProdMD`, `tileOverviewGateway`) from `Dashboard.view.xml`, layout sanitization in `Dashboard.controller.js`, backend metric pruning of `gatewayCatalogCount` in `PurchaseOrderAdapter.js` (reducing live counts from 29 to 28), and removal of dedicated obsolete i18n keys (`overviewCategoryMasterData`, `dashGatewayServices`, `dashSAPGatewayCatalog`, `dashCatalogServices`).
+  - **Strict Rules Enforced:**
+    - Zero live SAP writes, BAPIs, RFC mutations, or DB drops.
+    - Zero deletions of shared master data capabilities: the dedicated Master Data tab (`tabMasterData`) with all 17 master data tiles and its sub-panels (`panelMdBusinessPartner`, `panelMdProduct`, `panelMdFinancial`, `panelMdOrganization`), `onSelectTabMasterData` handler, and all shared master data metric sources (`bpCount`, `productCount`, `customerCount`, `supplierCount`, `glAccountCount`, `costCenterCount`, etc.) preserved intact.
+    - Preserved shared i18n keys `dashBusinessPartners`, `dashCentralBPRecords`, `dashProducts`, `dashMaterialMasterRecords`, `dashPartners`, etc.
+    - One commit per step throughout Phase 2.
+  - **Sequence of Commits in Phase 2:**
+    1. *Commit `ec9fe97` (Step 1 — Overview Panel & Layout Sanitization):* Removed `panelCategoryMasterData` and its tiles `tileOverviewBupaMD`, `tileOverviewProdMD`, `tileOverviewGateway` from `Dashboard.view.xml`. In `Dashboard.controller.js`: updated `sanitizeCardLayout` to filter `"panelCategoryMasterData"`, `"tileOverviewBupaMD"`, `"tileOverviewProdMD"`, `"tileOverviewGateway"`; removed `"gatewayCatalogCount"` from `METRIC_KEYS`. Updated `test/unit/dashboard/dashboardMetrics.test.js`.
+    2. *Commit `98a611b` (Step 2 — Backend Metric Pruning):* In `PurchaseOrderAdapter.js`: removed `gatewayCatalogCount` query source and set entry in `MASTER_DATA_METRIC_KEYS`. Updated `test/unit/dashboard/dashboardMetrics.test.js` to assert 28 live counts instead of 29.
+    3. *Commit `e1935c4` (Step 3 — i18n Pruning):* Removed obsolete keys `overviewCategoryMasterData`, `dashGatewayServices`, `dashSAPGatewayCatalog`, `dashCatalogServices` from `i18n.properties` and `i18n_en.properties`.
+    4. *Commit (Step 4 — Documentation):* Recorded all removals, safety checks, and test results in `WORKSTATUS.md`.
+  - **Validation & Results:**
+    - Leftover grep: 0 occurrences of `panelCategoryMasterData`, `tileOverviewGateway`, `dashGatewayServices`, `dashSAPGatewayCatalog`, `dashCatalogServices` across UI views and i18n bundles.
+    - Dedicated Master Data tab (`tabMasterData`) completely intact and functioning.
+    - UI5 lint (`npm --prefix app/fiori-app run lint`): 0 findings (Clean PASS).
+    - CDS compile (`npx cds compile srv db --to csn`): Clean PASS.
+    - Unit tests: 7 suites, 189/189 tests passed (100% green).
+    - `git diff --check`: 0 errors.
+  - **Zero SAP Writes:** Strictly read-only SAP throughout; zero mutations.
+
 - **Route `#/wm/mvt261/open` ("Open 261 Items" Worklist), Dashboard Tile `tileOpen261` & Dedicated Worklist Assets Totally Removed (2026-10-22 13:35 IST):**
   - **Context & Approval:** Executed complete removal of route `#/wm/mvt261/open` (`wmOpen261`), target `TargetOpen261`, Dashboard tile `tileOpen261`, and all UI assets used exclusively by them (`Open261.view.xml`, `Open261.controller.js`), obsolete worklist i18n keys (37 keys), dedicated test suite (`test/unit/wm/open261Controller.test.js`), and updated dashboard layout sanitization.
   - **Strict Rules Enforced:**
@@ -3735,6 +3756,7 @@ The previous log was removed in commit `b741337`; this file restarts it.
 
 ## Next Steps
 
+- **Exact Next Recommended Action (Dashboard Overview Master Data Panel Removal Complete — 2026-10-22 13:50 IST):** review the complete removal of the Overview Master Data panel `panelCategoryMasterData`, tiles `tileOverviewBupaMD`, `tileOverviewProdMD`, `tileOverviewGateway`, backend metric `gatewayCatalogCount`, and obsolete i18n keys across commits `ec9fe97` through `e1935c4`. Confirm that the dedicated Master Data tab (`tabMasterData`) and all shared master data metric sources remain intact and passing 100% green (189/189 tests). Zero SAP writes were performed.
 - **Exact Next Recommended Action (Route #/wm/mvt261/open Total Removal Complete — 2026-10-22 13:35 IST):** review the complete removal of route `#/wm/mvt261/open`, target `TargetOpen261`, Dashboard tile `tileOpen261`, `Open261.view.xml`, `Open261.controller.js`, `open261Controller.test.js`, and obsolete worklist i18n keys across commits `e225250` through `5b97c8b`. Confirm that all shared business flows (`#/wm/mvt261/open/{resv}/{item}` Scan 261, `#/wm/mvt261/open/{resv}/{item}/cycle` Cycle 261, `Mvt261Adapter.js`, transactional actions, and shared i18n keys `open261Required`, `open261Withdrawn`, `open261RequirementDate`, `open261OrderStatus`, `open261Sloc`) remain intact and passing 100% green (189/189 tests). Zero SAP writes were performed.
 - **Exact Next Recommended Action (Route #/wm/mvt261 Total Removal Complete — 2026-10-22 13:25 IST):** review the complete removal of route `#/wm/mvt261`, target `TargetMvt261`, Dashboard tile `tileMvt261`, `Mvt261.view.xml`, `Mvt261.controller.js`, `findFirst` in `service.cds`/`service.js`, and obsolete finder i18n keys across commits `67084ca` through `328684b`. Confirm that all shared business flows (`#/wm/mvt261/open` Open 261 items worklist, `#/wm/mvt261/open/...` Scan 261, Cycle 261, `Mvt261Adapter.js`, transactional actions, and shared i18n keys) remain intact and passing 100% green (194/194 tests). Zero SAP writes were performed.
 - **Exact Next Recommended Action (Open data questions resolved & flow-specific requirements — 2026-10-21 13:25 IST):** review the verified customizing findings (DC 14 / Div 00 for Plant 1120 / SLoc CS02 / Customer 1120; shipping points 1112 and WAVG valid in TVST/TVSTZ), flow-specific required fields, and the missing WMAdmin role in xs-security.json. With all 80 tests passing, ESLint clean, CDS compile clean, and zero SAP writes, commit and push changes on branch feature01.
