@@ -63,7 +63,6 @@
                 "Admin",
                 "Viewer",
                 "PurchasingManager",
-                "FinanceViewer",
                 "SalesRepresentative",
                 "SalesManager",
                 "WarehouseClerk",
@@ -105,7 +104,6 @@
                 "Admin",
                 "Viewer",
                 "PurchasingManager",
-                "FinanceViewer",
                 "SalesRepresentative",
                 "SalesManager",
                 "WarehouseClerk",
@@ -122,7 +120,6 @@
                 "Admin",
                 "Viewer",
                 "PurchasingManager",
-                "FinanceViewer",
                 "SalesRepresentative",
                 "SalesManager",
                 "WarehouseClerk",
@@ -164,7 +161,6 @@
                 "Admin",
                 "Viewer",
                 "PurchasingManager",
-                "FinanceViewer",
                 "SalesRepresentative",
                 "SalesManager",
                 "WarehouseClerk",
@@ -213,24 +209,6 @@
           "credentials": {
             "destination": "S4HANA_PO_API",
             "path": "/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV"
-          }
-        }
-      },
-      "FAC_GL_JOURNALENTRY_VER_SRV": {
-        "kind": "odata-v2",
-        "model": "srv/external/FAC_GL_JOURNALENTRY_VER_SRV",
-        "[test]": {
-          "credentials": {
-            "url": "http://127.0.0.1:1",
-            "authentication": "BasicAuthentication",
-            "username": "JEST_ONLY",
-            "password": "JEST_ONLY"
-          }
-        },
-        "[production]": {
-          "credentials": {
-            "destination": "S4HANA_PO_API",
-            "path": "/sap/opu/odata/sap/FAC_GL_JOURNALENTRY_VER_SRV"
           }
         }
       },

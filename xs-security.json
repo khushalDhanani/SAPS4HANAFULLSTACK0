@@ -16,10 +16,6 @@
       "description": "Create and manage purchase orders"
     },
     {
-      "name": "$XSAPPNAME.FinanceViewer",
-      "description": "View financial accounting journal entry data"
-    },
-    {
       "name": "$XSAPPNAME.SalesRepresentative",
       "description": "Create and manage sales inquiries"
     },
@@ -62,7 +58,6 @@
         "$XSAPPNAME.Viewer",
         "$XSAPPNAME.Admin",
         "$XSAPPNAME.PurchasingManager",
-        "$XSAPPNAME.FinanceViewer",
         "$XSAPPNAME.SalesRepresentative",
         "$XSAPPNAME.SalesManager",
         "$XSAPPNAME.WarehouseClerk",
@@ -75,14 +70,6 @@
       "scope-references": [
         "$XSAPPNAME.Viewer",
         "$XSAPPNAME.PurchasingManager"
-      ]
-    },
-    {
-      "name": "FinanceViewer",
-      "description": "Financial accounting viewer",
-      "scope-references": [
-        "$XSAPPNAME.Viewer",
-        "$XSAPPNAME.FinanceViewer"
       ]
     },
     {
@@ -146,13 +133,6 @@
       "description": "SAP S/4HANA Full-Stack: purchase order processing",
       "role-template-references": [
         "$XSAPPNAME.PurchasingManager"
-      ]
-    },
-    {
-      "name": "SAPS4HANA_FinanceViewer",
-      "description": "SAP S/4HANA Full-Stack: journal entry viewing",
-      "role-template-references": [
-        "$XSAPPNAME.FinanceViewer"
       ]
     },
     {
