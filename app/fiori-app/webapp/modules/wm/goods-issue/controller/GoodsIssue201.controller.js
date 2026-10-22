@@ -588,19 +588,6 @@ sap.ui.define([
 
                     that._newClientAttemptId();
 
-                    // Pending-to-complete workflow: after completing a planned reservation, return to
-                    // the 201 Pending list carrying the outcome (SAP material document) so it can show
-                    // the result and clear the completed item from the list.
-                    if (that._oModel.getProperty("/fromReservation")) {
-                        var oOutcome = {
-                            resv: that._oModel.getProperty("/reservationNo"),
-                            item: that._oModel.getProperty("/reservationItem"),
-                            doc: res.MaterialDocument,
-                            year: res.MaterialDocYear || ""
-                        };
-                        that.getRouter().navTo("wmGoodsIssue201Pending", { "?query": oOutcome });
-                        return;
-                    }
 
                     that._oModel.setProperty("/hasPosted", true);
                     that._oModel.setProperty("/postedDocument", res.MaterialDocument || "");
@@ -723,11 +710,7 @@ sap.ui.define([
         onNavBack: function () {
             var oRouter = this.getRouter();
             if (oRouter) {
-                if (this._oModel && this._oModel.getProperty("/fromReservation")) {
-                    oRouter.navTo("wmGoodsIssue201Pending");
-                } else {
-                    oRouter.navTo("dashboard");
-                }
+                oRouter.navTo("dashboard");
             }
         }
     });
