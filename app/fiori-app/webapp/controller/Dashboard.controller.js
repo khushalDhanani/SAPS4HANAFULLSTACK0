@@ -290,9 +290,6 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("wmGoodsReceipt");
         },
 
-        onNavigateToTrTo: function () {
-            this.getOwnerComponent().getRouter().navTo("wmTrTo");
-        },
 
         onNavigateToOpen261: function () {
             this.getOwnerComponent().getRouter().navTo("wmOpen261");
@@ -363,7 +360,8 @@ sap.ui.define([
                 "tileMvt201", "kpiMvt201Val", "Mvt201",
                 "tileMvt301", "kpiMvt301Val", "Mvt301",
                 "tileMvt311", "kpiMvt311Val", "Mvt311",
-                "panelMvtTypeKpis"
+                "panelMvtTypeKpis",
+                "tileTrTo"
             ];
             return aCardIds.filter(function (sId) {
                 return sId && aRemoved.indexOf(sId) === -1;
