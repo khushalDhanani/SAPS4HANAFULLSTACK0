@@ -295,16 +295,7 @@
           "pattern": "sd/sales-orders/create",
           "target": "TargetCreateSalesOrder"
         },
-        {
-          "name": "wmGoodsIssue301Pending",
-          "pattern": "wm/goods-issue/301/open-transfers:?query:",
-          "target": "TargetGoodsIssue301Pending"
-        },
-        {
-          "name": "wmGoodsIssue301",
-          "pattern": "wm/goods-issue/plant-transfer-301:?query:",
-          "target": "TargetGoodsIssue301"
-        },
+
         {
           "name": "wmGoodsIssue311Pending",
           "pattern": "wm/goods-issue/311/open-transfers:?query:",
@@ -475,16 +466,7 @@
           "name": "CreateSalesOrder",
           "path": "saps4hana.fiori.modules.sd.sales-order.view"
         },
-        "TargetGoodsIssue301Pending": {
-          "id": "goodsIssue301Pending",
-          "name": "GoodsIssue301Pending",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
-        },
-        "TargetGoodsIssue301": {
-          "id": "goodsIssue301",
-          "name": "GoodsIssue301",
-          "path": "saps4hana.fiori.modules.wm.goods-issue.view"
-        },
+
         "TargetGoodsIssue311Pending": {
           "id": "goodsIssue311Pending",
           "name": "GoodsIssue311Pending",
