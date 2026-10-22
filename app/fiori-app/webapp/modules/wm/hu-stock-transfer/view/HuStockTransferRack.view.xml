@@ -4,7 +4,7 @@
     xmlns="sap.m"
     xmlns:core="sap.ui.core"
     xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1">
-    <Page class="rackVisualizerPage">
+    <Page class="rackVisualizerPage" enableScrolling="false">
         <content>
             <VBox class="rackAppWrapper">
                 <!-- 1. Top Control & Summary Bar -->

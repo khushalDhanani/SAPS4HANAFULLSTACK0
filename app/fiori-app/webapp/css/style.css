@@ -561,14 +561,19 @@
 
 /* ── Full-Page Warehouse Pallet Rack Visualizer ──────────────────────────── */
 
-.rackVisualizerPage {
-    height: 100%;
+.rackVisualizerPage,
+.rackVisualizerPage > section,
+.rackVisualizerPage .sapMPageEnableScrolling {
+    height: 100% !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
 }
 
 .rackAppWrapper {
     display: flex;
     flex-direction: column;
     height: 100%;
+    max-height: 100%;
     overflow: hidden;
     background: #eef2f6;
 }
