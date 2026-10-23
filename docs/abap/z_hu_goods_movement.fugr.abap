@@ -4,6 +4,14 @@
 *& Package          Z001 (Handling Unit Custom Extensions)
 *& Processing Type  Remote-Enabled Module (RFC)
 *&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*& STATUS: ON HOLD (Pending Task 4a Investigation)
+*&   Live query of plant 1120 confirms:
+*&   - Open 311 reservations in shipping-managed SLocs (CS02, Path A): 6 items.
+*&   - Open 311 reservations in HU-managed, non-shipping SLocs (Path B): 0 items.
+*&   Because all active reservations fall under Path A (delivery completion flow),
+*&   implementation of this custom RFC wrapper is ON HOLD.
+*&---------------------------------------------------------------------*
 *& Purpose:
 *&   Remote-enabled wrapper for standard SAP Handling Unit goods movements
 *&   (wrapping HU_CREATE_GOODS_MOVEMENT).
@@ -331,10 +339,14 @@ ENDFORM.
 *           postings, risks leaving stock orphaned in CIS1 without reservation
 *           linkage if Step 2 fails, and mismodels one logical transfer as two.
 *
-*   Option 2: Direct BAPI_GOODSMVT_CREATE with Auto-Unpack:
+*   Option 2: Direct BAPI_GOODSMVT_CREATE with Auto-Unpack (UNPROVEN):
 *     Moving stock from HU-managed CS02 (XHUPF='X') to non-HU CIS1 (XHUPF='')
-*     might unpack the material automatically. However, whether standard
-*     movement 311 automatically unpacks the HU without error is Not verified.
+*     might unpack the material automatically. If standard
+*     BAPI_GOODSMVT_CREATE is used with GM_CODE '06' (MB11) referencing
+*     RSNUM/RSPOS, whether SAP unpacks the HU in one atomic LUW without error
+*     is UNPROVEN and Not verified. Furthermore, on shipping-managed storage
+*     locations (e.g. CS02, T001L-VSTEL='1105'), direct BAPI goods movement
+*     is prohibited / may trigger outbound delivery requirement (see WORKSTATUS 2026-10-21 19:50).
 *
 *   Option 3: BAdI / Enhancement Implementation:
 *     Implement BAdI MB_DOCUMENT_BADI (or BADI_HU_GOODS_MOVEMENT) to pass
@@ -349,6 +361,34 @@ ENDFORM.
 *     Because the FM source code cannot be read remotely over RFC (FL 180 "Source
 *     wider than 72 char"), backend handling of CT_IMSEG is UNKNOWN and Not verified.
 *     The ABAP team must inspect include LLHU_GOODS_MOVEMENTU02 directly in SE37/SE80.
+*======================================================================*
+
+
+*======================================================================*
+* TECHNICAL USER AUTHORIZATION PROPOSAL (S_RFC)
+*======================================================================*
+* The external technical user connecting via RFC requires authorization
+* object S_RFC only for function modules that are called REMOTELY from
+* outside the SAP backend.
+*
+* REMOTELY CALLED FUNCTION MODULES & GROUPS (Requiring S_RFC):
+*   1. ZFG_HANDLINGUNIT: Contains Z_HU_GOODS_MOVEMENT (and Z_HU_ISSUE_TO_ORDER).
+*   2. SDTX: Contains RFC_READ_TABLE (PNAME = SAPLSDTX).
+*   3. RFC1: Contains RFC_GET_FUNCTION_INTERFACE (PNAME = SAPLRFC1).
+*      (Note: SIFP contains RPY_FUNCTIONMODULE_READ, not RFC_GET_FUNCTION_INTERFACE).
+*
+* INTERNAL FUNCTION MODULES (Do NOT require S_RFC for the technical user):
+*   - HU_CREATE_GOODS_MOVEMENT (FUGR HU_GOODS_MOVEMENT): Called internally by
+*     Z_HU_GOODS_MOVEMENT inside the ABAP backend.
+*   - ENQUEUE_EVVEKPE / DEQUEUE_EVVEKPE (FUGR /1BCDWBEN/HEN0000): Called
+*     internally by Z_HU_GOODS_MOVEMENT inside the ABAP backend.
+*   - BAPI_TRANSACTION_COMMIT / ROLLBACK (FUGR BAPT): Internal or remote.
+*
+* S_RFC AUTHORIZATION PROFILE SPECIFICATION:
+*   Object: S_RFC
+*     ACTVT:    16 (Execute)
+*     RFC_NAME: 'ZFG_HANDLINGUNIT', 'SDTX', 'RFC1'
+*     RFC_TYPE: 'FUGR'
 *======================================================================*
 
 

@@ -4,36 +4,36 @@
     xmlns="sap.m"
     xmlns:core="sap.ui.core"
     displayBlock="true">
-    <Page id="huStockTransferRackDemoPage" title="DEMO — Synthetic Rack Layout Preview" showNavButton="true" navButtonPress=".onNavBack">
+    <Page id="huStockTransferRackDemoPage">
         <content>
             <VBox class="sapUiResponsiveContentPadding">
                 <MessageStrip
                     id="demoNoticeStrip"
-                    text="DEMO MODE — Synthetic Rack Layout Preview: Single row of positions (floor 1, rack L0001, positions 01-05; no bays or levels). All handling unit numbers (DEMO-HU-*) are synthetic demo data."
+                    text="{i18n>demoRackNotice}"
                     type="Information"
                     showIcon="true"
                     class="sapUiSmallMarginBottom" />
 
                 <OverflowToolbar class="rackPositionToolbar">
-                    <Title text="Rack L0001 (Floor 1)" level="H2" />
+                    <Title text="{i18n>demoRackRackTitle}" level="H2" />
                     <ToolbarSpacer />
-                    <Label text="Warehouse" />
+                    <Label text="{i18n>demoRackWarehouse}" />
                     <Select width="6rem" selectedKey="{demoRack>/warehouse}" enabled="false">
-                        <core:Item key="W01" text="W01" />
+                        <core:Item key="W01" text="{demoRack>/warehouse}" />
                     </Select>
                     <Text text="›" class="rackBreadcrumbSeparator" />
-                    <Label text="Floor" />
+                    <Label text="{i18n>demoRackFloor}" />
                     <Select width="6rem" selectedKey="{demoRack>/floor}" enabled="false">
-                        <core:Item key="1" text="Floor 1" />
+                        <core:Item key="1" text="{i18n>demoRackFloor1}" />
                     </Select>
                     <Text text="›" class="rackBreadcrumbSeparator" />
-                    <Label text="Rack" />
+                    <Label text="{i18n>demoRackRack}" />
                     <Select width="8rem" selectedKey="{demoRack>/rack}" enabled="false">
-                        <core:Item key="L0001" text="Rack L0001" />
+                        <core:Item key="L0001" text="{i18n>demoRackRackL0001}" />
                     </Select>
                     <ToolbarSpacer />
                     <Button
-                        text="{= ${demoRack>/mode} === 'rack' ? 'Table Mode' : 'Position Grid' }"
+                        text="{= ${demoRack>/mode} === 'rack' ? ${i18n>demoRackTableMode} : ${i18n>demoRackPositionGrid} }"
                         icon="{= ${demoRack>/mode} === 'rack' ? 'sap-icon://table-view' : 'sap-icon://grid' }"
                         press=".onToggleMode" />
                 </OverflowToolbar>
@@ -50,7 +50,7 @@
                                 <Title text="{= 'Position ' + ${demoRack>position} }" level="H3" class="rackPositionTitle" />
                                 <Text text="{demoRack>storageBin}" class="rackPositionBin" />
                                 <ObjectStatus
-                                    text="{= ${demoRack>occupied} ? 'Occupied' : 'Empty' }"
+                                    text="{= ${demoRack>occupied} ? ${i18n>demoRackOccupied} : ${i18n>demoRackEmpty} }"
                                     state="{= ${demoRack>occupied} ? 'Success' : 'None' }"
                                     class="sapUiTinyMarginTopBottom" />
                                 <Text text="{demoRack>sectionDisplay}" class="rackPositionSection" />
@@ -60,12 +60,12 @@
                                         text="{demoRack>unitNumber}"
                                         type="Emphasized"
                                         press=".onSelectUnit"
-                                        tooltip="Click to inspect synthetic demo HU" />
+                                        tooltip="{i18n>demoRackUnitTooltip}" />
                                     <Text text="{demoRack>materialDesc}" class="sapUiTinyMarginTop" />
                                     <Text text="{= 'Stock: ' + ${demoRack>availableStock} + ' ' + ${demoRack>baseUnit} }" />
                                 </VBox>
                                 <VBox visible="{= !${demoRack>occupied} }" class="sapUiTinyMarginTop">
-                                    <Text text="No Handling Unit" class="sapUiAnnotationText" />
+                                    <Text text="{i18n>demoRackNoHandlingUnit}" class="sapUiAnnotationText" />
                                 </VBox>
                             </VBox>
                         </items>
@@ -73,14 +73,14 @@
                 </ScrollContainer>
 
                 <!-- Non-rack storage bins (DEMO) -->
-                <Panel headerText="Non-Rack Staging Bins (DEMO)" expandable="true" expanded="true" visible="{= ${demoRack>/mode} === 'rack' }">
-                    <Table items="{demoRack>/nonRackBins}" noDataText="No non-rack bins">
+                <Panel headerText="{i18n>demoRackNonRackPanel}" expandable="true" expanded="true" visible="{= ${demoRack>/mode} === 'rack' }">
+                    <Table items="{demoRack>/nonRackBins}" noDataText="{i18n>demoRackNoNonRackBins}">
                         <columns>
-                            <Column><Text text="Bin" /></Column>
-                            <Column><Text text="Storage Type" /></Column>
-                            <Column><Text text="Demo Handling Unit" /></Column>
-                            <Column><Text text="Material" /></Column>
-                            <Column hAlign="End"><Text text="Stock" /></Column>
+                            <Column><Text text="{i18n>demoRackColBin}" /></Column>
+                            <Column><Text text="{i18n>demoRackColStorageType}" /></Column>
+                            <Column><Text text="{i18n>demoRackColDemoHU}" /></Column>
+                            <Column><Text text="{i18n>demoRackColMaterial}" /></Column>
+                            <Column hAlign="End"><Text text="{i18n>demoRackColStock}" /></Column>
                         </columns>
                         <items>
                             <ColumnListItem>
@@ -101,15 +101,15 @@
                     id="demoRackTable"
                     visible="{= ${demoRack>/mode} === 'table' }"
                     items="{demoRack>/positions}"
-                    noDataText="No positions">
+                    noDataText="{i18n>demoRackNoPositions}">
                     <columns>
-                        <Column width="6rem"><Text text="Position" /></Column>
-                        <Column width="9rem"><Text text="Bin" /></Column>
-                        <Column width="6rem"><Text text="Status" /></Column>
-                        <Column><Text text="Section" /></Column>
-                        <Column><Text text="Demo HU" /></Column>
-                        <Column><Text text="Material" /></Column>
-                        <Column hAlign="End"><Text text="Stock" /></Column>
+                        <Column width="6rem"><Text text="{i18n>demoRackColPosition}" /></Column>
+                        <Column width="9rem"><Text text="{i18n>demoRackColBin}" /></Column>
+                        <Column width="6rem"><Text text="{i18n>demoRackColStatus}" /></Column>
+                        <Column><Text text="{i18n>demoRackColSection}" /></Column>
+                        <Column><Text text="{i18n>demoRackColDemoHU}" /></Column>
+                        <Column><Text text="{i18n>demoRackColMaterial}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>demoRackColStock}" /></Column>
                     </columns>
                     <items>
                         <ColumnListItem>
@@ -117,7 +117,7 @@
                                 <Text text="{demoRack>position}" />
                                 <Text text="{demoRack>storageBin}" />
                                 <ObjectStatus
-                                    text="{= ${demoRack>occupied} ? 'Occupied' : 'Empty' }"
+                                    text="{= ${demoRack>occupied} ? ${i18n>demoRackOccupied} : ${i18n>demoRackEmpty} }"
                                     state="{= ${demoRack>occupied} ? 'Success' : 'None' }" />
                                 <Text text="{demoRack>sectionDisplay}" />
                                 <Text text="{demoRack>unitNumber}" />

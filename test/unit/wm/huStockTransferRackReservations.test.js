@@ -97,10 +97,8 @@ describe("HuStockTransferRackDemo fixture shaped like rackLayout()", () => {
 
     test("view is clearly labelled DEMO with synthetic banner and single row layout", () => {
         expect(demoView).toContain('id="demoNoticeStrip"');
-        expect(demoView).toContain('DEMO MODE — Synthetic Rack Layout Preview');
-        expect(demoView).toContain('Single row of positions (floor 1, rack L0001, positions 01-05; no bays or levels)');
-        expect(demoView).toContain('All handling unit numbers (DEMO-HU-*) are synthetic demo data');
-        expect(demoView).toContain('Non-Rack Staging Bins (DEMO)');
+        expect(demoView).toContain('{i18n>demoRackNotice}');
+        expect(demoView).toContain('{i18n>demoRackNonRackPanel}');
     });
 
     test("toggles mode between rack and table", () => {

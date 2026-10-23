@@ -1,6 +1,10 @@
 # ABAP Handover: HU_CREATE_GOODS_MOVEMENT SE37 Simulation with Reservation Reference
 
-**Status:** PENDING ABAP EXECUTION  
+**Status:** ON HOLD (Pending Task 4a Investigation)
+**Hold Reason:** Task 4a live investigation of plant 1120 confirmed:
+- Open 311 reservations in shipping-managed SLocs (`CS02`, Path A): **6 items**.
+- Open 311 reservations in HU-managed, non-shipping SLocs (Path B): **0 items**.
+Because all active reservations fall under Path A (delivery completion flow with HU picking), SE37 simulation of direct `HU_CREATE_GOODS_MOVEMENT` (Path B) is placed ON HOLD.
 **Target System:** S/4HANA Client 220  
 **Target Include:** `LLHU_GOODS_MOVEMENTU02` (Function Module `HU_CREATE_GOODS_MOVEMENT`, Function Group `HU_GOODS_MOVEMENT`)  
 **Context:** Reservation-based 311 HU transfer (`CS02` -> `CIS1`, Plant `1120`, Material `8000009754`, Reservation `529960` / Item `0001`).

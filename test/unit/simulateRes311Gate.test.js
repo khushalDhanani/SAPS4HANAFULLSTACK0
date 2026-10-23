@@ -139,4 +139,52 @@ describe('tools/simulate-res-311-bapi gate and payload unit tests', () => {
       expect(payload.GOODSMVT_CODE.GM_CODE).toBe('06');
     });
   });
+
+  describe('isShippingManaged', () => {
+    const { isShippingManaged } = require('../../tools/simulate-res-311-bapi');
+
+    test('returns false when t001lRow is null or blank', () => {
+      expect(isShippingManaged(null)).toBe(false);
+      expect(isShippingManaged({ VSTEL: '', VKORG: '', KUNNR: '' })).toBe(false);
+    });
+
+    test('returns true when VSTEL (shipping point) is present', () => {
+      expect(isShippingManaged({ VSTEL: '1105' })).toBe(true);
+    });
+
+    test('returns true when sales area (VKORG) or customer (KUNNR) is present', () => {
+      expect(isShippingManaged({ VKORG: '1000' })).toBe(true);
+      expect(isShippingManaged({ KUNNR: '0000001120' })).toBe(true);
+    });
+
+    test('correctly identifies CS02 as shipping-managed and CIS1 as not shipping-managed', () => {
+      const cs02Row = {
+        WERKS: '1120',
+        LGORT: 'CS02',
+        XHUPF: 'X',
+        VSTEL: '1105',
+        VKORG: '1000'
+      };
+      const cis1Row = {
+        WERKS: '1120',
+        LGORT: 'CIS1',
+        XHUPF: '',
+        VSTEL: '',
+        VKORG: ''
+      };
+      expect(isShippingManaged(cs02Row)).toBe(true);
+      expect(isShippingManaged(cis1Row)).toBe(false);
+    });
+
+    test('relies strictly on T001L fields and returns false for CS02 if T001L shipping fields are blank', () => {
+      const blankCs02 = {
+        WERKS: '1120',
+        LGORT: 'CS02',
+        VSTEL: '',
+        VKORG: '',
+        KUNNR: ''
+      };
+      expect(isShippingManaged(blankCs02)).toBe(false);
+    });
+  });
 });

@@ -7,15 +7,18 @@
  * Even with TESTRUN='X', BAPIs that execute movement transactions are classified
  * as WRITE-class under repository policy (AGENTS.md).
  *
+ * WARNING: Do not run on shipping-managed storage locations (e.g. CS02): may create an outbound delivery; see WORKSTATUS 2026-10-21 19:50.
+ *
  * DYNAMIC: Reads reservation item from RESB at runtime based on --reservation and --item flags.
  * GM_CODE: '06' (MB11 - Goods movement with reservation reference).
  *
  * GATES:
  * 1. live-sap-gate (ALLOW_LIVE_SAP_TOOLS=1 and --allow-live-sap)
  * 2. User Written "Go" (USER_WRITTEN_GO=go and --user-go)
+ * 3. Shipping-managed safety refusal: strictly refuses shipping-managed SLocs (e.g. CS02)
  *
  * BEHAVIOR:
- * If gates are NOT met, prints the planned payload and exits with code 1.
+ * If gates are NOT met or source SLoc is shipping-managed, prints the planned payload / refusal message and exits with code 1.
  * If gates ARE met, runs BAPI_GOODSMVT_CREATE in an RFC session, ending with BAPI_TRANSACTION_ROLLBACK.
  *
  * STILL NOT RUN: Prepared only. Do not run without explicit user written "go".
@@ -127,6 +130,24 @@ async function readReservationFromSap(rfc, rsnum, rspos) {
   return rows[0];
 }
 
+function isShippingManaged(t001lRow) {
+  if (!t001lRow) return false;
+  const vstel = String(t001lRow.VSTEL || '').trim();
+  const vkorg = String(t001lRow.VKORG || '').trim();
+  const kunnr = String(t001lRow.KUNNR || '').trim();
+  return Boolean(vstel || vkorg || kunnr);
+}
+
+async function readSlocFromSap(rfc, werks, lgort) {
+  const formattedWerks = String(werks || '').trim().toUpperCase();
+  const formattedLgort = String(lgort || '').trim().toUpperCase();
+  const fields = ['WERKS', 'LGORT', 'LGOBE', 'XHUPF', 'PARLG', 'VKORG', 'VTWEG', 'SPART', 'KUNNR', 'LIFNR', 'VSTEL'];
+  const rows = await rfc.readTable('T001L', fields, [
+    `WERKS = '${formattedWerks}' AND LGORT = '${formattedLgort}'`
+  ], 1);
+  return rows?.[0] || null;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const gates = checkGates(args, process.env);
@@ -181,7 +202,27 @@ async function main() {
   console.log(JSON.stringify(plannedPayload, null, 2));
   console.log('------------------------------------------------\n');
 
-  // 3. Gate enforcement
+  // 3. Check if source storage location is shipping-managed (safety refusal)
+  let t001lRow = null;
+  try {
+    console.log(`[READ-ONLY SAP CALL] Querying T001L for storage location ${resbRow.WERKS}/${resbRow.LGORT}...`);
+    t001lRow = await readSlocFromSap(rfc, resbRow.WERKS, resbRow.LGORT);
+  } catch (err) {
+    console.warn(`Could not read T001L for ${resbRow.WERKS}/${resbRow.LGORT}: ${err.message}`);
+  }
+
+  const shippingManaged = isShippingManaged(t001lRow);
+  if (shippingManaged) {
+    const vstel = t001lRow?.VSTEL ? ` (T001L-VSTEL: '${t001lRow.VSTEL}')` : '';
+    console.error('========================================================================');
+    console.error(`REFUSED: Storage location ${resbRow.LGORT} in plant ${resbRow.WERKS} is shipping-managed${vstel}.`);
+    console.error('Do not run on shipping-managed storage locations (e.g. CS02): may create an outbound delivery; see WORKSTATUS 2026-10-21 19:50.');
+    console.error('Zero BAPI calls made. Exiting.');
+    console.error('========================================================================');
+    process.exit(1);
+  }
+
+  // 4. Gate enforcement
   if (!gates.canExecute) {
     console.error('========================================================================');
     console.error('BLOCKED: WRITE-class execution gates not met.');
@@ -196,7 +237,7 @@ async function main() {
     process.exit(1);
   }
 
-  // 4. Execution ONLY when gates explicitly passed
+  // 5. Execution ONLY when gates explicitly passed
   console.log('[WRITE-class SAP CALL] All gates passed. Opening RFC session for BAPI_GOODSMVT_CREATE...');
   await rfc.session(async (call) => {
     console.log('[WRITE-class SAP CALL] Executing BAPI_GOODSMVT_CREATE with TESTRUN = \'X\'...');
@@ -227,5 +268,7 @@ module.exports = {
   checkGates,
   buildPlannedPayload,
   readReservationFromSap,
+  isShippingManaged,
+  readSlocFromSap,
   main
 };

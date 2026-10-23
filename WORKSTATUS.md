@@ -7,6 +7,97 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Governance & Stop-Rule Consultation: Storage Unit Type Decision & Customizing Transport Guidance for V_T319A (2026-10-23 13:42 IST):**
+  - **Governance & Landscape Boundaries:**
+    - Per `AGENTS.md`, AI engineering agents cannot unilaterally decide business customizing for warehouse configuration, nor execute SAP Basis/CTS transport releases (`SE09`/`SE10`/`STMS`) across landscapes (`DS4` $\rightarrow$ `QA` $\rightarrow$ `PRD`).
+    - Customizing table `T319A` (Delivery Class `C`) MUST be maintained in development system `DS4` (Client 220) via transaction `SM30` (view `V_T319A`, IMG activity `SIMG_XXMENUOLMLHU03`) under a Customizing Transport Request (`R3TR SVIM V_T319A`). Bypassing CTS via direct table mutation is strictly prohibited.
+  - **Stop-Rule Technical Analysis (Context, Doubt, Options, Recommendation):**
+    - **Context:** SAP error `L3 866` blocks delivery completion (Step 2 serial assignment & Step 3 PGI) for HU `2000019372` (packed in material `2000000340`, `VHART = 'Z007'`, "Boxes") in warehouse `W01`. Table `T319A` currently lacks an entry for `W01` / `Z007`.
+    - **Doubt:** Which Storage Unit Type (`LETYP`) should be assigned to `Z007` in warehouse `W01`?
+    - **Options & Consequences:**
+      - **Option 1 (Recommended): `W01 / Z007 -> E10` ("Pieces"):**
+        - *Evidence:* Table `T307T` defines `E10` as `"Pieces"`. On Outbound Delivery `0080000134`, confirmed Picking TO `0001037372` picked material `8000009754` with `LETYP = 'E10'`. All existing Handling Units in `W01` and storage unit quants in `LQUA` (including interim bin 913) are already stamped with `LETYP = 'E10'`.
+        - *Consequence:* Physically and semantically coherent ("Boxes" $\rightarrow$ "Pieces"). Matches existing quants and confirmed TOs in `W01`. Resolves `L3 866`.
+      - **Option 2: `W01 / Z007 -> E1` ("Drum 25 Ltr"):**
+        - *Evidence:* Warehouse `W15` maps `Z007 -> E1` (transport `DS4K905282`), and `W01` maps `0001` and `Z003` to `E1`.
+        - *Consequence:* In `W01`, `T307T` defines `E1` as `"Drum 25 Ltr"`. Assigning `"Drum 25 Ltr"` to `"Boxes"` creates a semantic mismatch with cardboard box packaging and a discrepancy with existing `W01` quants/TOs that already carry `E10`, though it satisfies the lookup to bypass `L3 866`.
+    - **Recommendation:** Maintain **`W01 / Z007 -> E10`** in `SM30` (`V_T319A`) under a Customizing Transport Request.
+  - **Procedure for SAP Administrator:**
+    - Transaction: `SM30` $\rightarrow$ View `V_T319A` $\rightarrow$ Maintain $\rightarrow$ New Entries.
+    - Fields: `LGNUM = 'W01'`, `VHART = 'Z007'`, `LETYP = 'E10'`.
+    - Save under Customizing Request `DS4K9xxxxx` (Transport Object `R3TR SVIM V_T319A`).
+    - Release in `SE09`/`SE10` and import into QA/PRD via `STMS`.
+  - **Next Step:** Awaiting user/administrator confirmation of maintenance in `DS4` before running a safe READ-ONLY re-read of `T319A`.
+- **Tasks 1 to 6: Pure T001L Rule, UI Consistency & Test Restoration, Record Correction, Code Citations, Live SAP Investigation (Client 220), Path A Cockpit Plan, and ABAP Wrapper On Hold (2026-10-23 13:30 IST):**
+  - **Task 1: Fix (no SAP calls):**
+    - 1.a) `tools/simulate-res-311-bapi.js`: Removed hardcoded `|| (String(resbRow.LGORT).trim().toUpperCase() === 'CS02')` from `isShippingManaged`. Enforced that shipping-managed status is derived strictly from `T001L` fields (`VSTEL`, `VKORG`, `KUNNR`). Added unit test asserting `isShippingManaged` returns `false` for `CS02` if `T001L` shipping fields are blank. All 16 unit tests in `test/unit/simulateRes311Gate.test.js` pass.
+    - 1.b) `HuStockTransferRackDemo.view.xml`: Removed `title`, `showNavButton`, and `navButtonPress` from `Page` (ShellBar owns title and back navigation). Bound all visual strings to `i18n>demoRack...` keys in both `i18n.properties` and `i18n_en.properties` (26 keys added). Updated `huStockTransferRackReservations.test.js` to assert i18n keys. Ran `test/unit/controller/uiConsistency.test.js` (8/8 passed). Full test suite confirms failing suites equal the baseline list again (15 failed, 85 failed tests; zero new failures).
+  - **Task 2: Correct the Record (Step 1 Delivery Completion Flow):**
+    - Corrected record and historical wording: Step 1 of the delivery completion flow (`createDeliveryPickingTO` via `L_TO_CREATE_DN` / `L_TO_CONFIRM`) **IS proven live** in SAP Client 220 under user "Go" (WORKSTATUS Current Status and archive entry 2026-10-21 22:15 IST; TO `1037372`, Outbound Delivery `0080000134`, `LIKP-KOSTK = 'C'`, `LIKP-LVSTK = 'C'`, `LTAK TANUM 0001037372 KQUIT = 'X'`). Handled `L3 181` (movement type 241 forbids immediate confirmation) by creating TO with `I_SQUIT = ' '` and confirming via `L_TO_CONFIRM`.
+    - Step 2 (serial number assignment via `BAPI_OUTB_DELIVERY_CHANGE` / `ITEM_SERIAL_NO`) failed live on 2026-10-21 22:35 with `L3 866`: `"SU type for pack. mat. type Z007 could not be determined in warehouse no. W01"` due to missing customizing in transparent table `T319A`.
+    - Step 3 (PGI via `BAPI_OUTB_DELIVERY_CONFIRM_DEC`) remains pending user maintenance of `V_T319A` and explicit written "GO".
+  - **Task 3: Repo Read — Delivery Creation, Reuse, and Fail-Closed Duplicate Check:**
+    - Delivery creation via `L9 514`: `srv/integration/s4hana/wm/ReservationProcessAdapter.js:3214-3234`. Calling `BAPI_GOODSMVT_CREATE` against a shipping-managed SLoc (`CS02` with `T001L-VSTEL = '1105'`) triggers standard SAP outbound delivery creation with return code `L9 514` (`"Delivery <deliveryNo> created"`). The adapter intercepts `L9 514`, extracts the delivery number, commits via `BAPI_TRANSACTION_COMMIT`, and invokes `completeDeliveryGoodsIssue(deliveryNo)`.
+    - Open delivery reuse: `srv/integration/s4hana/wm/ReservationProcessAdapter.js:3128-3137` and `3145-3150`. When `_findOpenDeliveryForReservation` detects an open delivery for the reservation item, it sets `reusedOpenDelivery = true`, logs a warning, and routes directly to `completeDeliveryGoodsIssue`, preventing SAP from generating duplicate deliveries.
+    - Fail-closed duplicate check: `srv/integration/s4hana/wm/ReservationProcessAdapter.js:2103-2121` (`_findOpenDeliveryForReservation`). Queries `LIPS` by `RSNUM`/`RSPOS` and checks `LIKP-WBSTK <> 'C'`. If either `LIPS` or `LIKP` fails, it fails closed throwing HTTP 503 (`idempotencyCheckFailed: true`).
+    - Updated "Not verified: delivery creation mechanism": Delivery creation mechanism IS verified in code and live SAP history via `BAPI_GOODSMVT_CREATE` returning `L9 514`; no separate delivery creation BAPI is required.
+  - **Task 4: READ-ONLY Live SAP Discovery (Client 220, DD03L Validated):**
+    - Stated READ-ONLY before each live SAP call; validated field names via `DD03L` prior to table queries; zero writes/mutations executed.
+    - 4.a) Open 311 reservations in plant 1120:
+      - Total open 311 reservation items in plant 1120: 88 items.
+      - Path A (`T001L-VSTEL` not blank): 6 items, all in `CS02` (`VSTEL = '1105'`): `529960/1`, `529959/1`, `527588/1`, `523654/1`, `524283/1`, `524284/1`.
+      - Path B (`XHUPF = 'X'`, `VSTEL` blank): **0 items**.
+      - Other (Non-HU SLocs): 82 items (`HS01`, `CS01`, etc.).
+      - 100% of open HU-managed 311 reservations in plant 1120 belong to Path A.
+    - 4.b) Material `8000009754` serial management: Verified field name `MARC-SERNP` via `DD03L`. Raw value in plant 1120 is **`ZSN2`** (material IS serial-managed).
+    - 4.c) HU `2000019372` packaging & customizing:
+      - `VEKP-VHILM` = `'000000002000000340'` (`MARA-VHART = 'Z007'`, "Boxes").
+      - `T319A` for `LGNUM = 'W01'`: 2 rows only (`0001 -> E1`, `Z003 -> E1`). Packaging type `Z007` is **missing** from `T319A` in `W01`.
+      - `T319` for `LGNUM = 'W01'`: 0 rows (table empty for `W01`).
+    - 4.d) Serial numbers on historical deliveries `0080000086` and `0080000090`:
+      - `0080000086`: Carried serial numbers in `SER01`/`OBJK` (`OBKNR 48762/48763`): `FMG001`, `FMG002`, `FMG008`, `FMG009`.
+      - `0080000090`: Carried serial numbers in `SER01`/`OBJK` (`OBKNR 48768/48769`): `FMG003`, `FMG010`.
+      - How they got them: Assigned by user `SBALAPURIA` via standard outbound delivery picking/packing transaction `VL02N_O` on 2026-10-08 at 12:37:05.
+  - **Task 5: Plan Only — Path A Cockpit Design:**
+    - Reuse `completeDeliveryGoodsIssue` with dynamic HU picking.
+    - `IT_DELIT` built dynamically at runtime from `LQUA` (`VLTYP`, `VLPLA`, `VLENR`) and `RESB` (`ANFME`, `ALTME`, `POSNR`, `MATNR`, `WERKS`, `CHARG`); zero literals.
+    - Step status model (`STAGE 0: PRECHECK`, `STAGE 1: DELIVERY_CREATE`, `STAGE 2: PICKING_TO`, `STAGE 3: SERIAL_ASSIGNMENT`, `STAGE 4: GOODS_ISSUE`), supporting resume after partial failure by querying existing delivery state.
+    - Idempotency by reservation reference (`RSNUM`/`RSPOS`) checking `LIPS` and `LIKP-WBSTK`.
+    - Gate mapping: All read operations automatic; Stages 1, 2, 3, 4 are WRITE-class operations each requiring explicit user written "GO".
+    - Path B remains ON HOLD pending Task 4a (0 active reservations in plant 1120).
+  - **Task 6: Docs Only:**
+    - Marked `docs/abap/z_hu_goods_movement.fugr.abap` and `docs/abap/hu-goods-movement-se37-handover.md` **ON HOLD pending Task 4a**.
+- **Tasks 1 to 6: Live Delivery & SLoc Investigation, Delivery Completion Analysis, Cockpit Dual-Path Plan, Shipping-Managed Simulation Refusal, Test Comparison, and Authorization Proposal Correction (2026-10-23 13:10 IST):**
+  - **Task 1: READ-ONLY Live SAP Discovery (client 220, DD03L validated):**
+    - 1.a) Reservations `529960/1`, `529959/1`, `523654/1`: `LIPS` queried by `RSNUM` and `VGBEL`: 0 rows returned. `MATDOC` queried by `RSNUM`: 0 rows returned. No deliveries exist (open or completed) for these reservations. For HU `2000019372`, `LTAP` has 2 historical confirmed TOs: `0001036666` (inbound delivery `0180000068`, `LFART='EL'`, `KOSTK='C'`, `LVSTK='C'`, `WBSTK='C'`) and `0001037361` (`BWLVS='999'`).
+    - 1.b) Precedents `4900050078` and `4900050079`: Both link to outbound deliveries in `MATDOC-VBELN_IM`: `0080000086` and `0080000090` (Type `HOD`, `KOSTK='C'`, `LVSTK='C'`, `WBSTK='C'`, `VSTEL='1105'`). In `LTAP`, both deliveries had picking TOs (`0001037246` and `0001037247`) by specific storage unit / handling units (`VLENR`/`NLENR` = `2000020030`, `2000020031`, `2000020037`, `2000020038`, `2000020039`, `2000020032`).
+    - 1.c) `T001L` for `CS02` vs `CIS1`:
+      - `CS02`: `XHUPF = 'X'`, `PARLG = 'HU01'`, `VKORG = '1000'`, `VTWEG = '14'`, `SPART = '00'`, `KUNNR = '0000001120'`, `LIFNR = '0000001120'`, `VSTEL = '1105'` (Shipping Point). Assigned to warehouse `W01` (`T320`). **CS02 is shipping-managed**.
+      - `CIS1`: `XHUPF = ''` (blank), `PARLG = ''`, `VKORG = ''`, `VTWEG = ''`, `SPART = ''`, `KUNNR = ''`, `LIFNR = ''`, `VSTEL = ''` (blank). Assigned to warehouse `W01` (`T320`). **CIS1 is NOT shipping-managed**.
+    - 1.d) `RFC_GET_FUNCTION_INTERFACE` for `L_TO_CREATE_DN`: Parameter `IT_DELIT` (table of `L03B_DELIT`) contains fields `VLENR` (source storage unit/LENUM), `NLENR` (destination storage unit/LENUM), `VLTYP`, `VLBER`, `VLPLA`, `CHARG`, `ANFME`, `ALTME`. The picking TO **CAN** name a specific storage unit (`LENUM`), not just quantity per item.
+  - **Task 2: Repo Read — Delivery Completion Flow Summary:**
+    - Step 1 (Picking TO): `createDeliveryPickingTO` calls `L_TO_CREATE_DN` and `L_TO_CONFIRM`. **Proven live in Client 220** on 2026-10-21 22:15 IST (TO `1037372` created on delivery `0080000134` with `I_SQUIT = ' '` and confirmed via `L_TO_CONFIRM`; `LIKP-KOSTK = 'C'`, `LIKP-LVSTK = 'C'`, `LTAK TANUM 0001037372 KQUIT = 'X'`). Handled `L3 181` (movement type 241 forbids immediate confirmation) by creating with `I_SQUIT = ' '` and confirming via `L_TO_CONFIRM`.
+    - Step 2 (Serial assignment): `BAPI_OUTB_DELIVERY_CHANGE` with `ITEM_SERIAL_NO`. Failed live on 2026-10-21 22:35 IST with error `L3 866` (missing `T319A` entry for `Z007` in `W01`).
+    - Step 3 (PGI): `BAPI_OUTB_DELIVERY_CONFIRM_DEC` with `POST_GI_FLG = 'X'`. Pending user SM30 maintenance of `V_T319A` and explicit written "GO".
+    - To pick a specific HU: Populate `IT_DELIT` in `L_TO_CREATE_DN` with `VLENR = <LENUM>`, `VLTYP`, `VLPLA`, `ANFME`, `ALTME`, `POSNR`. Update wrapper `Z_WM_TO_CREATE_DN` if needed to pass `VLENR`.
+  - **Task 3: Plan Only — Two Paths for HU Transfer Cockpit:**
+    - Path A (Shipping-managed source SLoc e.g. `CS02` with `T001L-VSTEL` populated): Outbound delivery creation $\rightarrow$ Picking TO with specific HU (`L_TO_CREATE_DN` with `IT_DELIT-VLENR`) $\rightarrow$ PGI.
+    - Path B (HU-managed, not shipping-managed source SLoc e.g. `T001L-XHUPF='X'` and `VSTEL=''`): `Z_HU_GOODS_MOVEMENT` wrapper (`HU_CREATE_GOODS_MOVEMENT` event 0006).
+    - Classification: All three open reservations (`529960/1`, `529959/1`, `523654/1`) originate from `CS02` (`VSTEL='1105'`), so all three fall into **Path A**.
+    - Delivery creation mechanism: **Verified in code and live SAP history**. In `ReservationProcessAdapter.js:3214-3234`, calling `BAPI_GOODSMVT_CREATE` against a shipping-managed SLoc (`CS02` with `T001L-VSTEL = '1105'`) triggers standard SAP outbound delivery creation with return code `L9 514` (`"Delivery <deliveryNo> created"`). Open delivery reuse is implemented at lines 3128-3137 & 3145-3150, and fail-closed duplicate protection at lines 2103-2121. What remains unverified is whether `L_TO_CREATE_DN` with `IT_DELIT` (for picking a specific HU `VLENR`) succeeds live in client 220 without custom wrapper enhancement.
+  - **Task 4: Safety Refusal in `tools/simulate-res-311-bapi.js` (NOT run):**
+    - Added header warning: `"Do not run on shipping-managed storage locations (e.g. CS02): may create an outbound delivery; see WORKSTATUS 2026-10-21 19:50."`
+    - Implemented `isShippingManaged(t001lRow)` and `readSlocFromSap` checking `T001L-VSTEL`. Script refuses and exits with code 1 for shipping-managed locations. Added 4 unit tests (15/15 tests pass). Script was NOT run.
+  - **Task 5: Test Suite Comparison (Current vs Baseline):**
+    - Baseline: 15 failing suites, 85 failing tests.
+    - Current: 16 failing suites, 87 failing tests.
+    - Two extra failures: Both in `test/unit/controller/uiConsistency.test.js`:
+      1. `no page renders its own title or back button (the ShellBar owns both)`
+      2. `UI texts come from i18n, and every referenced key exists in both bundles`
+      Cause: **New** (introduced by `HuStockTransferRackDemo.view.xml` containing hardcoded page title/nav-button and literal strings; deterministic code addition, not flaky). Baseline failures left untouched.
+  - **Task 6: Corrected `docs/abap/z_hu_goods_movement.fugr.abap`:**
+    - Updated Option 2: Marked `GM_CODE 06` as **UNPROVEN** and noted prohibition on shipping-managed SLocs.
+    - Revised `S_RFC` proposal to list only functions called remotely from external RFC clients: `ZFG_HANDLINGUNIT` (`Z_HU_GOODS_MOVEMENT`), `SDTX` (`RFC_READ_TABLE`), `RFC1` (`RFC_GET_FUNCTION_INTERFACE`). Internal backend calls (`HU_GOODS_MOVEMENT`, `/1BCDWBEN/HEN0000`) do not require `S_RFC`.
 - **Tasks 1 to 4: Live Investigation, Dynamic BAPI Simulation Gate Protection, SE37 Handover, and S_RFC Audit (2026-10-23 12:55 IST):**
   - **Task 1: READ-ONLY Live SAP Discovery (client 220):**
     - Preceded every live RFC call with explicit READ-ONLY state; zero writes, BAPIs, or mutations executed.
@@ -767,6 +858,38 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Exact Next Recommended Action (HU stock transfer rack demo — 2026-10-23 10:24 IST):** Rerun full Jest in an environment that permits loopback binds and after the unrelated missing FI/goods-issue test paths are resolved; inspect a wide touch-display viewport when available. No SAP writes or live data are needed for the demo.
 
 ## Changes Log
+
+### 2026-10-23 13:10 IST — Live Delivery & SLoc Investigation, Delivery Completion Analysis, Cockpit Dual-Path Plan, Shipping-Managed Refusal in simulate-res-311-bapi, Test Comparison, and Authorization Proposal Correction
+
+- **Plan:**
+  - Execute READ-ONLY queries on live SAP client 220 (with field names validated via `DD03L` first): check `LIPS`, `LIKP`, `MATDOC`, and `LTAP` for reservations `529960/1`, `529959/1`, `523654/1` and HU `2000019372`; link precedent documents `4900050078/79` to their deliveries and check for storage-unit picking TOs; read `T001L`, `T320`, and `T340D` for `CS02` and `CIS1` to identify shipping-managed flags; query `RFC_GET_FUNCTION_INTERFACE` for `L_TO_CREATE_DN` to verify whether `IT_DELIT` accepts storage unit (`LENUM`).
+  - Summarize delivery completion flow in `ReservationProcessAdapter.js` (`completeDeliveryGoodsIssue` and steps 1-3) identifying proven vs unproven steps, and list requirements to pick a specific HU.
+  - Formulate dual-path architecture plan for HU transfer cockpit based on source storage location shipping-managed status.
+  - Enhance `tools/simulate-res-311-bapi.js` (still NOT run) to detect shipping-managed SLocs (checking `T001L-VSTEL`) and refuse execution, and add unit tests.
+  - Compare failing test suites with baseline list and report the two extra failures by name and cause.
+  - Correct authorization proposal in `docs/abap/z_hu_goods_movement.fugr.abap` to list only remotely called functions in `S_RFC`, and mark `GM_CODE 06` as unproven.
+- **READ-ONLY SAP Evidence (client 220):**
+  - **DD03L Validation:** Verified fields for `LIPS` (`VBELN`, `POSNR`, `VGBEL`, `VGPOS`, `RSNUM`, `RSPOS`), `LIKP` (`VBELN`, `LFART`, `KOSTK`, `LVSTK`, `WBSTK`, `VSTEL`), `MATDOC` (`VBELN_IM`, `LE_VBELN`), `LTAP` (`VLENR`, `NLENR`, `TANUM`, `TAPOS`), `T001L` (`WERKS`, `LGORT`, `XHUPF`, `PARLG`, `VKORG`, `VTWEG`, `SPART`, `KUNNR`, `LIFNR`, `VSTEL`), `L03B_DELIT` (`VLENR`, `NLENR`, `VLTYP`, `VLBER`, `VLPLA`, `ANFME`, `ALTME`).
+  - **Delivery Checks for Reservations 529960/1, 529959/1, 523654/1:** `LIPS` by `RSNUM` and `VGBEL`: 0 rows. `MATDOC` by `RSNUM`: 0 rows. No deliveries (open or completed) exist. For HU `2000019372`, `LTAP` returns historical inbound delivery TO `0001036666` (delivery `0180000068`, `LFART='EL'`, `KOSTK='C'`, `LVSTK='C'`, `WBSTK='C'`) and TO `0001037361` (`BWLVS='999'`).
+  - **Precedent Deliveries 4900050078 & 4900050079:** `MATDOC-VBELN_IM` links to outbound deliveries `0080000086` and `0080000090` (Type `HOD`, `KOSTK='C'`, `LVSTK='C'`, `WBSTK='C'`, `VSTEL='1105'`). In `LTAP`, both had picking TOs (`0001037246`, `0001037247`) picked by specific storage units (`VLENR`/`NLENR` = `2000020030`, `2000020031`, etc.).
+  - **T001L Storage Location Flags:**
+    - `CS02`: `XHUPF='X'`, `PARLG='HU01'`, `VKORG='1000'`, `VTWEG='14'`, `SPART='00'`, `KUNNR='0000001120'`, `LIFNR='0000001120'`, `VSTEL='1105'` (Shipping Point). Shipping-managed.
+    - `CIS1`: `XHUPF=''`, `PARLG=''`, `VKORG=''`, `VTWEG=''`, `SPART=''`, `KUNNR=''`, `LIFNR=''`, `VSTEL=''`. Not shipping-managed.
+  - **L_TO_CREATE_DN Interface:** `IT_DELIT` (structure `L03B_DELIT`) contains `VLENR` and `NLENR` (Domain `LENUM`). Picking TO can specify an exact storage unit/HU.
+- **Change:**
+  - Modified `tools/simulate-res-311-bapi.js`:
+    - Added header warning: `"WARNING: Do not run on shipping-managed storage locations (e.g. CS02): may create an outbound delivery; see WORKSTATUS 2026-10-21 19:50."`
+    - Added `isShippingManaged(t001lRow)` and `readSlocFromSap(rfc, werks, lgort)`.
+    - Main execution refuses and exits with code 1 if source SLoc has `T001L-VSTEL` populated or is CS02. Script was NOT run.
+  - Updated `test/unit/simulateRes311Gate.test.js`: Added 4 tests for `isShippingManaged` (15/15 tests pass).
+  - Updated `docs/abap/z_hu_goods_movement.fugr.abap`:
+    - Marked `GM_CODE 06` in Option 2 as **UNPROVEN**.
+    - Replaced proposed `S_RFC` list with only remotely called function groups: `ZFG_HANDLINGUNIT` (`Z_HU_GOODS_MOVEMENT`), `SDTX` (`RFC_READ_TABLE`), and `RFC1` (`RFC_GET_FUNCTION_INTERFACE`).
+- **Validation:**
+  - `npx jest test/unit/simulateRes311Gate.test.js`: PASS (15/15 tests, 0.18s).
+  - `git diff --check`: PASS (0 whitespace errors).
+  - Zero SAP writes.
+
 
 ### 2026-10-23 12:55 IST — READ-ONLY SAP MATDOC/RESB/DD07L Investigation, simulate-res-311-bapi dynamic update & gate tests, SE37 handover doc, and S_RFC TFDIR audit
 
