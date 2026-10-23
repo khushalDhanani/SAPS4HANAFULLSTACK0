@@ -87,6 +87,10 @@ sap.ui.define([
             MessageToast.show("Reservations refreshed");
         },
 
+        onOpenRackDemo: function () {
+            this.getRouter().navTo("wmHuStockTransferRackDemo");
+        },
+
         onLiveSearch: function (oEvent) {
             var sQuery = oEvent.getParameter("query") || oEvent.getParameter("newValue") || "";
             var oViewModel = this.getModel("listView");

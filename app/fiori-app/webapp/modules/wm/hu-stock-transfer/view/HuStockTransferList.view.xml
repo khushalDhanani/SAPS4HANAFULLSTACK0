@@ -20,6 +20,7 @@
                     <Label id="listPageSubSnapped" text="{i18n>huTransferSubTitle}" />
                 </f:snappedContent>
                 <f:actions>
+                    <Button id="btnOpenRackDemo" text="{i18n>rackDemoOpenButton}" icon="sap-icon://product" press=".onOpenRackDemo" />
                     <Button id="btnRefreshList" icon="sap-icon://refresh" text="{i18n>commonRefresh}" press=".onRefresh" />
                 </f:actions>
             </f:DynamicPageTitle>

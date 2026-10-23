@@ -388,6 +388,11 @@
           "target": "TargetHuStockTransferList"
         },
         {
+          "name": "wmHuStockTransferRackDemo",
+          "pattern": "wm/hu-stock-transfer/demo-rack",
+          "target": "TargetHuStockTransferRackDemo"
+        },
+        {
           "name": "wmHuStockTransferRack",
           "pattern": "wm/hu-stock-transfer/{reservation}/{item}/rack",
           "target": "TargetHuStockTransferRack"
@@ -532,6 +537,11 @@
         "TargetHuStockTransferRack": {
           "id": "huStockTransferRack",
           "name": "HuStockTransferRack",
+          "path": "saps4hana.fiori.modules.wm.hu-stock-transfer.view"
+        },
+        "TargetHuStockTransferRackDemo": {
+          "id": "huStockTransferRackDemo",
+          "name": "HuStockTransferRackDemo",
           "path": "saps4hana.fiori.modules.wm.hu-stock-transfer.view"
         },
         "TargetHuStockTransferDetail": {
