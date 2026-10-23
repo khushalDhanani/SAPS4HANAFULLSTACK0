@@ -5,8 +5,14 @@ const getLogger = require('./logger');
 const logger = getLogger('ai-client');
 
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
+const NVIDIA_MODEL = 'meta/llama-3.2-11b-vision-instruct';
 const SAP_MODEL = 'gpt-4o';
+const DEPRECATED_NVIDIA_MODELS = new Set([
+  'nvidia/nemotron-3-super-120b-a12b',
+  'meta/llama-3.1-70b-instruct',
+  'meta/llama-3.1-8b-instruct',
+  'meta/llama-3.3-70b-instruct'
+]);
 
 let _nvidia = null;
 
@@ -52,9 +58,15 @@ function notConfigured(msg) {
 }
 
 function getDefaultModel() {
-  return getProvider() === 'sap'
-    ? (process.env.AI_SAP_MODEL || SAP_MODEL).trim()
-    : (process.env.NVIDIA_MODEL || NVIDIA_MODEL).trim();
+  if (getProvider() === 'sap') {
+    return (process.env.AI_SAP_MODEL || SAP_MODEL).trim();
+  }
+  const configured = (process.env.NVIDIA_MODEL || '').trim();
+  if (configured && DEPRECATED_NVIDIA_MODELS.has(configured)) {
+    logger.warn(`Configured NVIDIA_MODEL "${configured}" is inactive/deprecated on NVIDIA NIM; falling back to "${NVIDIA_MODEL}"`);
+    return NVIDIA_MODEL;
+  }
+  return configured || NVIDIA_MODEL;
 }
 
 // ---------------- SAP AI Core via @sap-ai-sdk/orchestration ----------------
@@ -114,8 +126,17 @@ function getNvidia() {
   return _nvidia;
 }
 
+function resolveNvidiaModel(requestedModel) {
+  const model = requestedModel || getDefaultModel();
+  if (DEPRECATED_NVIDIA_MODELS.has(model)) {
+    logger.warn(`Requested NVIDIA model "${model}" is inactive/deprecated on NVIDIA NIM; falling back to "${NVIDIA_MODEL}"`);
+    return NVIDIA_MODEL;
+  }
+  return model;
+}
+
 async function chatNvidia(messages, options) {
-  const model = options.model || getDefaultModel();
+  const model = resolveNvidiaModel(options.model);
   const res = await getNvidia().chat.completions.create({
     model,
     messages,
@@ -152,8 +173,8 @@ async function chat(messages, options = {}) {
  */
 async function* chatStream(messages, options = {}) {
   const provider = getProvider();
-  const model = options.model || getDefaultModel();
   if (provider === 'sap') {
+    const model = options.model || getDefaultModel();
     if (!hasSapKey()) throw notConfigured('AICORE_SERVICE_KEY is missing or not a valid service key JSON');
     const { OrchestrationClient } = require('@sap-ai-sdk/orchestration');
     const client = new OrchestrationClient({ promptTemplating: { model: { name: model, params: {
@@ -163,6 +184,7 @@ async function* chatStream(messages, options = {}) {
     for await (const chunk of res.stream.toContentStream()) yield chunk;
     return { model };
   }
+  const model = resolveNvidiaModel(options.model);
   const stream = await getNvidia().chat.completions.create({
     model, messages, stream: true,
     temperature: options.temperature ?? num('AI_TEMPERATURE', 0.2),

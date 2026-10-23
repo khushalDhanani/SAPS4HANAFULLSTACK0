@@ -7,6 +7,19 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **AI Provider 404 Resolution: NVIDIA NIM Model Transition & Deprecation Fallback Guard (2026-10-23 17:33 IST) — COMPLETED:**
+  - Root cause diagnosed: The configured default model `nvidia/nemotron-3-super-120b-a12b` on NVIDIA NIM API endpoint `https://integrate.api.nvidia.com/v1` threw HTTP 404 with `Function 'ac74040f-9fc9-4c5e-ac74-279ba5161d69': Not found for account 'fIWkWKTWdBIGmaqnq4NoCnDVQKlDOc_aI13zaY7d0O4'`, because the function ID mapping for this model was unmapped/retired for the user account.
+  - Active model discovery: Live API scan across 84 catalog models on NVIDIA NIM verified that `meta/llama-3.2-11b-vision-instruct` is fully active, responds in ~1.7–3s with high accuracy on SAP procurement questions, streams text deltas cleanly, and avoids worker exhaustion issues present in experimental reasoning models.
+  - Fix implemented:
+    - Updated default `NVIDIA_MODEL` in `srv/common/aiClient.js` to `meta/llama-3.2-11b-vision-instruct`.
+    - Added `DEPRECATED_NVIDIA_MODELS` set and fallback guard in `getDefaultModel()`, `chatNvidia()`, and `chatStream()`, so existing local configurations or legacy requests with retired model names automatically route to `meta/llama-3.2-11b-vision-instruct` with a clear logger warning instead of failing.
+    - Updated `.env.local` and `.env.example` to set `NVIDIA_MODEL=meta/llama-3.2-11b-vision-instruct` and document active vs defunct models.
+    - Added unit test in `test/unit/ai/aiClient.test.js` validating the default model and deprecated model fallback.
+  - Validation:
+    - `npx jest --runInBand test/unit/ai test/unit/purchase-order/purchaseOrdersAskAI.test.js`: 34 of 34 unit tests passed.
+    - Live end-to-end Node verification: `aiClient.askAI` responded in 1.78s; `aiClient.chatStream` streamed SAP ME21N explanation cleanly.
+    - `git diff --check`: 0 issues.
+
 - **HU QR Code Browser End-to-End Verification (Steps 3–10) & Scannability (2026-10-23 17:02 IST) — COMPLETED:**
   - Complete verification of user checklist steps 3 through 10 conducted via browser session at `http://localhost:4004/saps4hana-fiori-app/index.html#/wm/handling-unit`:
     - **Step 3 (Row 1 QR Action):** Located row 1 in Handling Units table (HU `2000020722`, Material `Sample Bottle, Aluminum, 250ML`) and clicked the `sap-icon://qr-code` button in the Actions column.
@@ -1008,6 +1021,38 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Exact Next Recommended Action (HU stock transfer rack demo — 2026-10-23 10:24 IST):** Rerun full Jest in an environment that permits loopback binds and after the unrelated missing FI/goods-issue test paths are resolved; inspect a wide touch-display viewport when available. No SAP writes or live data are needed for the demo.
 
 ## Changes Log
+
+### 2026-10-23 17:33 IST — AI Provider 404 Fix: Inactive NVIDIA NIM Nemotron-3 Super Model Replaced with meta/llama-3.2-11b-vision-instruct & Deprecation Fallback Guard
+
+- **Plan:**
+  - Investigate user reported error: `AI provider error: 404 {"status":404,"title":"Not Found","detail":"Function 'ac74040f-9fc9-4c5e-ac74-279ba5161d69': Not found for account 'fIWkWKTWdBIGmaqnq4NoCnDVQKlDOc_aI13zaY7d0O4'"}`.
+  - Trace request path in `srv/ai/service.js`, `srv/common/aiClient.js`, `.env.local`, and `.env.example`.
+  - Scan active models on NVIDIA NIM API endpoint `https://integrate.api.nvidia.com/v1/models` using the user's account API key (without exposing secrets).
+  - Benchmark working candidates for chat completion, token usage, latency, and streaming support.
+  - Transition default `NVIDIA_MODEL` to verified working model `meta/llama-3.2-11b-vision-instruct`.
+  - Implement deprecation interception guard so existing local configurations specifying `nvidia/nemotron-3-super-120b-a12b` or EOL `meta/llama-3.1-*` models gracefully route to `meta/llama-3.2-11b-vision-instruct` instead of crashing.
+  - Validate with automated unit tests, live Node call, and diff check.
+- **Evidence & Results:**
+  - **Root Cause Confirmed:**
+    - NVIDIA NIM mapped `nvidia/nemotron-3-super-120b-a12b` to internal function UUID `ac74040f-9fc9-4c5e-ac74-279ba5161d69`.
+    - This function UUID is no longer provisioned/accessible on NVIDIA's public inference gateway for this account tier, returning HTTP 404.
+    - Similarly, `meta/llama-3.1-*` and `meta/llama-3.3-70b-instruct` returned HTTP 410 ("has reached its end of life on 2026-08-26").
+  - **Catalog Evaluation:**
+    - 84 models listed on the endpoint.
+    - Verified `meta/llama-3.2-11b-vision-instruct` responds with HTTP 200 in 1.78 seconds.
+    - Directly answers SAP queries without prefixing long chain-of-thought tokens that exhaust small token limits.
+    - Streams SSE chunks cleanly.
+  - **Code & Configuration Changes:**
+    - `srv/common/aiClient.js`: Set `NVIDIA_MODEL = 'meta/llama-3.2-11b-vision-instruct'`; introduced `DEPRECATED_NVIDIA_MODELS` and `resolveNvidiaModel()` fallback for `getDefaultModel()`, `chatNvidia()`, and `chatStream()`.
+    - `.env.local`: Updated `NVIDIA_MODEL=meta/llama-3.2-11b-vision-instruct`.
+    - `.env.example`: Updated `NVIDIA_MODEL=meta/llama-3.2-11b-vision-instruct` and added documentation notes.
+    - `test/unit/ai/aiClient.test.js`: Added unit tests covering default model selection and deprecated model fallback.
+  - **Validation Executed:**
+    - `npx jest --runInBand test/unit/ai test/unit/purchase-order/purchaseOrdersAskAI.test.js`: 34 of 34 unit tests passed.
+    - Live Node test: `aiClient.askAI` responded in 1.78s with valid SAP Purchase Order definition; `aiClient.chatStream` streamed ME21N explanation cleanly.
+    - `git diff --check`: 0 issues.
+- **Exact Next Recommended Action:**
+  - Verify "Ask AI" in the Purchase Orders Fiori application (`#/mm/purchase-orders`) in the running browser session to confirm immediate live response.
 
 ### 2026-10-23 17:02 IST — HU QR Code Browser End-to-End Verification (Steps 3–10), Dialog Width & Actions Column Adjustment
 

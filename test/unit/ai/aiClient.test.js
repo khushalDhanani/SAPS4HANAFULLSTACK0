@@ -60,6 +60,25 @@ describe('aiClient', () => {
     expect(res).toMatchObject({ content: 'Hello back', model: 'test/model', finishReason: 'stop', usage: { total_tokens: 5 } });
   });
 
+  test('nvidia: falls back to active default model if configured model is deprecated', async () => {
+    process.env.NVIDIA_API_KEY = 'test-key';
+    delete process.env.NVIDIA_MODEL;
+    expect(aiClient.getDefaultModel()).toBe('meta/llama-3.2-11b-vision-instruct');
+
+    process.env.NVIDIA_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
+    expect(aiClient.getDefaultModel()).toBe('meta/llama-3.2-11b-vision-instruct');
+
+    mockCreate.mockResolvedValue({
+      model: 'meta/llama-3.2-11b-vision-instruct',
+      choices: [{ message: { content: 'OK' } }]
+    });
+    // Explicit deprecated model in options is also intercepted and routed to the active model
+    await aiClient.askAI('test', { model: 'nvidia/nemotron-3-super-120b-a12b' });
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'meta/llama-3.2-11b-vision-instruct'
+    }));
+  });
+
   test('sap: throws AI_NOT_CONFIGURED when forced without service key', async () => {
     process.env.AI_PROVIDER = 'sap';
     await expect(aiClient.askAI('hi')).rejects.toMatchObject({ code: 'AI_NOT_CONFIGURED' });
