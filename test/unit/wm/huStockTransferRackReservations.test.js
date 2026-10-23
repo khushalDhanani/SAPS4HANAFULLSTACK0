@@ -1,9 +1,8 @@
-let ReservationController;
+let DemoRackController;
 let WorklistController;
 const fs = require("fs");
 const path = require("path");
-const view = fs.readFileSync(path.join(__dirname, "../../../app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferRackDemo.view.xml"), "utf8");
-const worklistView = fs.readFileSync(path.join(__dirname, "../../../app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferList.view.xml"), "utf8");
+const demoView = fs.readFileSync(path.join(__dirname, "../../../app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferRackDemo.view.xml"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "../../../app/fiori-app/webapp/manifest.json"), "utf8"));
 
 class MockJSONModel {
@@ -15,6 +14,8 @@ class MockJSONModel {
         target[keys[0]] = value;
     }
     getProperty(path) { return path.replace(/^\//, "").split("/").reduce((value, key) => value && value[key], this.data); }
+    setData(data) { this.data = data || {}; }
+    getData() { return this.data; }
 }
 
 const MockBaseController = {
@@ -31,88 +32,117 @@ const MockMessageBox = { error: jest.fn() };
 beforeAll(() => {
     global.sap = { ui: { define: (deps, factory) => {
         if (deps.includes("saps4hana/fiori/service/ODataClient")) {
-            if (deps.includes("sap/m/MessageBox")) {
-                WorklistController = factory(MockBaseController, MockJSONModel, MockODataClient, MockToast, MockMessageBox);
-            } else {
-                ReservationController = factory(MockBaseController, MockJSONModel, MockODataClient, MockToast);
-            }
+            WorklistController = factory(MockBaseController, MockJSONModel, MockODataClient, MockToast, MockMessageBox);
+        } else if (deps.includes("sap/m/MessageToast")) {
+            DemoRackController = factory(MockBaseController, MockJSONModel, MockToast);
         }
     } } };
     require("../../../app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferRackDemo.controller");
     require("../../../app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferList.controller");
 });
 
-describe("live rack reservation entry", () => {
+describe("HuStockTransferRackDemo fixture shaped like rackLayout()", () => {
     let controller;
 
     beforeEach(() => {
         jest.clearAllMocks();
-        controller = new ReservationController();
+        controller = new DemoRackController();
         controller.setModel = jest.fn((model) => { controller.model = model; });
         controller._mockRouter = { getRoute: () => ({ attachPatternMatched: jest.fn() }), navTo: jest.fn() };
         controller.getRouter = jest.fn(() => controller._mockRouter);
-        MockODataClient.get.mockResolvedValue({ value: { TotalCount: 1, Items: [
-            { ReservationNo: "0000042817", ReservationItem: "0001", Material: "MAT-01", MaterialDesc: "Bearing", OpenQty: 5, BaseUnit: "EA" },
-            { ReservationNo: "0000042818", ReservationItem: "0002", Material: "MAT-02", MaterialDesc: "Seal", OpenQty: 2, BaseUnit: "EA" }
-        ] } });
         controller.onInit();
     });
 
-    test("loads actual open reservation items through the existing CAP read operation", async () => {
-        await controller.loadReservations();
+    test("initializes with a fixture shaped like rackLayout() (single row of positions, floor/rack/position, no bays or levels)", () => {
+        expect(controller.model.getProperty("/isDemo")).toBe(true);
+        expect(controller.model.getProperty("/warehouse")).toBe("W01");
+        expect(controller.model.getProperty("/floor")).toBe("1");
+        expect(controller.model.getProperty("/rack")).toBe("L0001");
 
-        expect(MockODataClient.get).toHaveBeenCalledWith(expect.stringContaining("/odata/v4/hu-stock-transfer/getOpenReservations("));
-        expect(MockODataClient.get.mock.calls[0][0]).toContain("status='open'");
-        expect(MockODataClient.get.mock.calls[0][0]).toContain("includeDeleted=false");
-        expect(controller.model.getProperty("/reservations")).toHaveLength(2);
-        expect(controller.model.getProperty("/filteredReservations")[0].ReservationNo).toBe("0000042817");
-        expect(controller.model.getProperty("/busy")).toBe(false);
+        const positions = controller.model.getProperty("/positions");
+        expect(Array.isArray(positions)).toBe(true);
+        expect(positions.length).toBe(5);
+
+        // Verify single row of positions (floor/rack/position, no bays or levels)
+        positions.forEach((pos) => {
+            expect(pos.floor).toBe("1");
+            expect(pos.rack).toBe("L0001");
+            expect(pos.position).toMatch(/^\d{2}$/);
+            expect(pos.storageBin).toBe(`1-L0001-${pos.position}`);
+            expect(pos.isRackBin).toBe(true);
+            // Must have no bay or level fields
+            expect(pos.bay).toBeUndefined();
+            expect(pos.level).toBeUndefined();
+
+            // Two cell states only: 'empty' or 'occupied'
+            expect(["empty", "occupied"]).toContain(pos.status);
+            expect(pos.occupied).toBe(pos.status === "occupied");
+
+            // Synthetic HU numbers only when occupied
+            if (pos.occupied) {
+                expect(pos.unitNumber).toMatch(/^DEMO-HU-\d{3}$/);
+            } else {
+                expect(pos.unitNumber).toBe("");
+            }
+        });
     });
 
-    test("filters actual reservation items and hands the chosen reservation/item to the rack route", async () => {
-        await controller.loadReservations();
-        controller.onSearchReservations({ getParameter: () => "seal" });
-        expect(controller.model.getProperty("/filteredReservations")).toHaveLength(1);
-        expect(controller.model.getProperty("/filteredReservations")[0].ReservationNo).toBe("0000042818");
-
-        const selected = controller.model.getProperty("/filteredReservations/0");
-        controller.onReservationSelectionChange({ getParameter: () => ({ getBindingContext: () => ({ getObject: () => selected }) }) });
-        controller.onOpenSelectedRack();
-        expect(controller._mockRouter.navTo).toHaveBeenCalledWith("wmHuStockTransferRack", { reservation: "0000042818", item: "0002" });
+    test("contains separate list for non-rack bins with synthetic numbers", () => {
+        const nonRack = controller.model.getProperty("/nonRackBins");
+        expect(Array.isArray(nonRack)).toBe(true);
+        expect(nonRack.length).toBe(1);
+        expect(nonRack[0].isRackBin).toBe(false);
+        expect(nonRack[0].unitNumber).toMatch(/^DEMO-HU-\d{3}$/);
     });
 
-    test("opens a reservation directly from a row press", () => {
-        const row = { ReservationNo: "0000042817", ReservationItem: "0001" };
-        controller.onReservationPress({ getParameter: () => null, getSource: () => ({ getBindingContext: () => ({ getObject: () => row }) }) });
-        expect(controller._mockRouter.navTo).toHaveBeenCalledWith("wmHuStockTransferRack", { reservation: "0000042817", item: "0001" });
+    test("view is clearly labelled DEMO with synthetic banner and single row layout", () => {
+        expect(demoView).toContain('id="demoNoticeStrip"');
+        expect(demoView).toContain('DEMO MODE — Synthetic Rack Layout Preview');
+        expect(demoView).toContain('Single row of positions (floor 1, rack L0001, positions 01-05; no bays or levels)');
+        expect(demoView).toContain('All handling unit numbers (DEMO-HU-*) are synthetic demo data');
+        expect(demoView).toContain('Non-Rack Staging Bins (DEMO)');
     });
 
-    test("keeps read errors visible and retry reloads reservations", async () => {
-        MockODataClient.get.mockRejectedValueOnce(new Error("read failed"));
-        await controller.loadReservations();
-        expect(controller.model.getProperty("/error")).toContain("read failed");
-        expect(controller.model.getProperty("/busy")).toBe(false);
-        MockODataClient.get.mockResolvedValueOnce({ Items: [] });
-        await controller.onRetry();
-        expect(controller.model.getProperty("/error")).toBe("");
-        expect(controller.model.getProperty("/reservations")).toEqual([]);
+    test("toggles mode between rack and table", () => {
+        expect(controller.model.getProperty("/mode")).toBe("rack");
+        controller.onToggleMode();
+        expect(controller.model.getProperty("/mode")).toBe("table");
+        controller.onToggleMode();
+        expect(controller.model.getProperty("/mode")).toBe("rack");
     });
 
-    test("contains no demo fixture UI and routes to the existing reservation rack", () => {
-        expect(view).toContain("path: 'rackReservation>/filteredReservations'");
-        expect(view).toContain(".onOpenSelectedRack");
-        expect(view).not.toMatch(/DEMO|fixture|rackDemo|selectedHu|Select HU/);
-        expect(worklistView).toContain(".onOpenRackForSelected");
-        expect(worklistView).not.toMatch(/Rack Visualizer Demo/);
-        expect(manifest["sap.ui5"].routing.routes).toContainEqual(expect.objectContaining({
-            name: "wmHuStockTransferRack",
-            pattern: "wm/hu-stock-transfer/{reservation}/{item}/rack"
-        }));
+    test("selecting a synthetic HU displays a toast and tracks selectedUnit", () => {
+        const oEvent = {
+            getSource: () => ({
+                getBindingContext: () => ({
+                    getObject: () => ({ unitNumber: "DEMO-HU-001" })
+                })
+            })
+        };
+        controller.onSelectUnit(oEvent);
+        expect(controller.model.getProperty("/selectedUnit")).toBe("DEMO-HU-001");
+        expect(MockToast.show).toHaveBeenCalledWith(expect.stringContaining("DEMO-HU-001"));
+    });
+
+    test("navigates back to worklist", () => {
+        controller.onNavBack();
+        expect(controller._mockRouter.navTo).toHaveBeenCalledWith("wmHuStockTransfer");
     });
 });
 
-describe("HU reservation worklist rack handoff", () => {
-    test("opens the selected reservation item without invoking a posting action", () => {
+describe("Routing & Option A standard 311 check", () => {
+    test("manifest contains wmGoodsIssue311 alias route pointing to TargetReservationEntryDetail", () => {
+        const routes = manifest["sap.ui5"].routing.routes;
+        const goodsIssue311Route = routes.find((r) => r.name === "wmGoodsIssue311");
+        expect(goodsIssue311Route).toBeDefined();
+        expect(goodsIssue311Route.target).toBe("TargetReservationEntryDetail");
+
+        const resvEntryDetailRoute = routes.find((r) => r.name === "wmReservationEntryDetail");
+        expect(resvEntryDetailRoute).toBeDefined();
+        expect(resvEntryDetailRoute.target).toBe("TargetReservationEntryDetail");
+    });
+
+    test("HU reservation worklist rack handoff opens rack without posting", () => {
         const controller = new WorklistController();
         const selected = { ReservationNo: "0000042817", ReservationItem: "0001" };
         const navTo = jest.fn();

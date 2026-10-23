@@ -7,14 +7,55 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
-- **UI5 TemplateShareable & CustomData DOM String Warning Fix (2026-10-23 12:06 IST):**
-  - **Context & Diagnosis:** Browser console reported two `[FUTURE FATAL]` issues:
-    1. `During a clone operation, a template was found that neither was marked with 'templateShareable:true' nor 'templateShareable:false'... aggregation 'items' of object '__hbox0'`: Occurred because the inner `HBox` (`__hbox0`) within the cloned `VBox` card template did not specify `templateShareable: false`.
-    2. `CustomData with key section-color should be written to HTML of Element sap.m.VBox#__vbox0-__hbox1-0 but the value is not a string`: Occurred because `writeToDom="true"` requires a String value, but `sectionColorSlot` was a Number (`0..24`).
-  - **Fix Applied:**
-    - In `HuStockTransferRack.view.xml`: set `items="{path: 'rackView>units', templateShareable: false}"` on the inner `HBox`, and bound `value="{= String(${rackView>sectionColorSlot} || '0') }"`.
-    - In `HuStockTransferRack.controller.js`: set `sectionColorSlot: String(oBin.SectionColorSlot || 0)` in `_refreshRackGroups`.
-  - **Validation:** `npx jest test/unit/wm/huStockTransferRackController.test.js test/unit/controller/uiConsistency.test.js test/unit/wm/huStockTransferAdapter.test.js`: PASS (39/39 tests). `npm --prefix app/fiori-app run lint`: 0 findings. `git diff --check`: 0 errors. Zero SAP writes.
+- **Task 1: READ-ONLY Live SAP Discovery (2026-10-23 12:20 IST):**
+  - **Zero Writes / Strict READ-ONLY:** Stated READ-ONLY before every live call against SAP S/4HANA (client 220); zero writes or mutations executed.
+  - **1.a) DD03L for structure `HUM_DATA_MOVE_TO` & Interface of `HU_CREATE_GOODS_MOVEMENT`:**
+    - Read `DD03L`: Structure has 18 fields (`HUWBEVENT`, `MATNR`, `CHARG`, `WERKS`, `LGORT`, `BESTQ`, `SOBKZ`, `SONUM`, `LGNUM`, `GRUND`, `KONTO`, `LIFNR`, `KUNNR`, `GSBER`, `KOSTL`, `BWART`, `SGT_SCAT`, `HU_ITEMS`).
+    - **`RSNUM` and `RSPOS` are NOT present** (`Contains RSNUM: false, Contains RSPOS: false`). It carries movement/location fields only.
+    - Read interface of `HU_CREATE_GOODS_MOVEMENT` via `RFC_GET_FUNCTION_INTERFACE`: Importing (`IF_EVENT`, `IF_SIMULATE`, `IF_COMMIT`, `IF_TCODE`='HUMO', `IS_IMKPF`, `IT_EXTERNAL_ID`, `IT_INTERNAL_ID`, `IT_MOVE_TO`, `IT_IMSEG_EWM`), Changing (`CT_IMSEG`), Exporting (`EF_POSTED`, `ES_EMKPF`, `ES_MESSAGE`, `ET_MESSAGES`).
+  - **1.b) Standard HU Enqueue / Lock Object:**
+    - `TADIR` confirms Lock Object **`EVVEKPE`** (devclass `HANDLING_UNITS`, locking table `VEKP`).
+    - `TFDIR` confirms standard Enqueue FM **`ENQUEUE_EVVEKPE`** and Dequeue FM **`DEQUEUE_EVVEKPE`** (mode `E`, parameter `VENUM`, exceptions `FOREIGN_LOCK`, `SYSTEM_FAILURE`).
+    - Standard functional wrapper FM: **`HU_ENQUEUE`** (changing `CS_HEADER`, exporting `ET_LQUA`, exceptions `FOREIGN_LOCK`, `FATAL_ERROR`, `LE_NOT_FOUND`).
+  - **1.c) Reservations 529960/1, 529959/1, 523654/1 — `T001L-XHUPF` of Source and Receiving SLocs:**
+    - Read `RESB`: All 3 items are Material `8000009754`, `BWART = 311`, Source: `1120/CS02`, Destination: `1120/CIS1`, `BDMNG = 1.000`, `ENMNG = 0.000`, `KZEAR = ''` (open), `XLOEK = ''`.
+    - Read `T001L`:
+      - Source `1120/CS02` ("Raw Material"): **`XHUPF = 'X'` (HU-managed: true)**.
+      - Receiving `1120/CIS1` ("CIS Team"): **`XHUPF = ''` (HU-managed: false)**.
+    - In standard SAP, moving an HU from an HU-managed SLoc (`CS02`) to a non-HU SLoc (`CIS1`) automatically unpacks the HU upon arrival at destination.
+  - **1.d) `THUWBBWART` for Event `0006` (SLoc to SLoc):**
+    - Confirmed rows exist in client 220:
+      - `HUWBEVENT = '0006'`, `STOCK_CAT = ''` (unrestricted) -> **`MOVE_TYPE = '311'`**.
+      - `HUWBEVENT = '0006'`, `STOCK_CAT = 'Q'` (project/quality) -> `MOVE_TYPE = '323'`.
+      - `HUWBEVENT = '0006'`, `STOCK_CAT = 'S'` (blocked) -> `MOVE_TYPE = '325'`.
+  - **1.e) Live RFC Technical User Scope:**
+    - Read `UST04` / `AGR_1252`: RFC user is `KHUSHAL` (personal name) holding profile **`SAP_ALL`** and role `ZMIGO_FIORI` with `$WERKS = '*'` and `$VSTEL = '*'`.
+
+- **Task 2: ABAP FM Draft `docs/abap/z_hu_goods_movement.fugr.abap` (Docs Only, 2026-10-23 12:28 IST):**
+  - Authored comprehensive remote-enabled function module draft `Z_HU_GOODS_MOVEMENT` for the ABAP team:
+    - Authoritative SAP enqueue via `ENQUEUE_EVVEKPE` on `VEKP-VENUM` with cleanup via `DEQUEUE_EVVEKPE`.
+    - Strict `AUTHORITY-CHECK`s on `C_LO_HU` (activity 01), `M_MSEG_WMB` (activity 01 for plant), and `M_MSEG_BWA` (activity 01 for movement type).
+    - `IV_SIMULATE = 'X'` and `IV_COMMIT = 'X'` with explicit verification of `ef_posted = 'X'` and `es_emkpf-mblnr` before calling `BAPI_TRANSACTION_COMMIT WAIT = 'X'`.
+    - Flat `BAPIRET2` conversion with standard text resolution.
+    - **Strict rule enforced: NO DIRECT `UPDATE RESB`** under any circumstance.
+    - Reservation handling options analyzed (Two-step sequence vs auto-unpack vs BAdI `MB_DOCUMENT_BADI`) and runbook with SE37 test cases documented. Zero SAP changes.
+
+- **Task 3: Revised Double-Post Protection Plan (2026-10-23 12:30 IST):**
+  - Removed `BAPI_HU_STOCK_TRANSFER` and any invented document numbers (marked Not verified).
+  - Posting via remote-enabled `Z_HU_GOODS_MOVEMENT`.
+  - Two-tier lock: SAP-side `ENQUEUE_EVVEKPE` is the authoritative lock; CAP lock is fast path.
+  - Fixed lock acquisition order: Reservation Item (`RSNUM/RSPOS`) first, then Handling Unit (`EXIDV/VENUM`) second to prevent deadlocks.
+  - DB-backed attempt store (`GoodsIssueAttemptStore` pattern) writing unique `ClientAttemptId` with status `IN_PROGRESS` before invoking the SAP RFC call.
+  - Unconfirmed-outcome recheck worker querying SAP reference (`MSEG`/`MATDOC`).
+  - Mock concurrency test specification and gated live test (requiring explicit user "go").
+
+- **Task 4: Option A Route Confirmation & Demo Rack Replacement (2026-10-23 12:32 IST):**
+  - Option A route target confirmed: The standard 311 posting flow in this application is handled by `wmReservationEntryDetail` (Target `TargetReservationEntryDetail`). The old `wmGoodsIssue311` route was retired in commit `61f8131`. Added `wmGoodsIssue311` as an alias route to `TargetReservationEntryDetail` in `manifest.json`.
+  - Replaced `demo-rack` (`HuStockTransferRackDemo.view.xml` and controller) with a fixture shaped like `rackLayout()` (single row of positions, floor/rack/position, no bays or levels), labelled `DEMO` with clearly synthetic HU numbers (`DEMO-HU-001`, `DEMO-HU-002`, `DEMO-HU-003`), and two cell states only (`empty` and `occupied`).
+  - Updated `test/unit/wm/huStockTransferRackReservations.test.js` to assert the single-row `rackLayout()` shape, empty/occupied states, synthetic HU numbers, DEMO labelling, and route alias. All 8 tests PASS.
+
+- **Task 5: Proposal for Dedicated Technical RFC User (Report Only, 2026-10-23 12:33 IST):**
+  - RFC user currently holds `SAP_ALL` and is a personal name (`KHUSHAL`). Detailed proposal formulated for minimum authorization objects (`S_RFC`, `C_LO_HU`, `M_MSEG_WMB`, `M_MSEG_BWA`, `M_MSEG_LGO`, `L_LGNUM`, `S_TABU_DIS`, `S_ENQUE`). Zero SAP changes.
 
 - **Task 1: READ-ONLY Live SAP Discovery (2026-10-23 11:45 IST):**
   - **Context & Safety:** Strict READ-ONLY live SAP RFC discovery on client 220; state READ-ONLY before every SAP call; zero writes, BAPIs, or mutations.
@@ -1409,3 +1450,45 @@ Single source of truth for work history, current status, validation, unresolved 
      - In Jest, execute `Promise.all([ executeHuStockTransfer(resv1), executeHuStockTransfer(resv2), executeHuStockTransfer(resv3) ])` with reservations `529960/1`, `529959/1`, `523654/1` all requesting HU `2000019372`.
      - Assert that exactly one request succeeds with HTTP 200 and a Material Document, while the other two fail with HTTP 409 Conflict / 422 Unprocessable Entity.
      - Assert that exactly one SAP BAPI posting call was executed.
+
+### 2026-10-23 12:35 IST — Tasks 1 to 5: Live SAP Discovery, ABAP Wrapper Draft, Revised Double-Post Plan, Option A Route Check & Demo Rack Fixture, and Technical User Proposal
+
+- **Task 1: READ-ONLY Live SAP Discovery (client 220):**
+  - Stated READ-ONLY before every live SAP call. Zero writes/mutations executed.
+  - 1.a) `DD03L` for `HUM_DATA_MOVE_TO`: 18 fields (`HUWBEVENT`, `MATNR`, `CHARG`, `WERKS`, `LGORT`, `BESTQ`, `SOBKZ`, `SONUM`, `LGNUM`, `GRUND`, `KONTO`, `LIFNR`, `KUNNR`, `GSBER`, `KOSTL`, `BWART`, `SGT_SCAT`, `HU_ITEMS`). **No reservation reference fields** (`RSNUM`/`RSPOS` are absent). `HU_CREATE_GOODS_MOVEMENT` interface verified via `RFC_GET_FUNCTION_INTERFACE`.
+  - 1.b) Standard HU enqueue lock object is `EVVEKPE` (devclass `HANDLING_UNITS`, table `VEKP`) with FMs `ENQUEUE_EVVEKPE` / `DEQUEUE_EVVEKPE` (and functional wrapper `HU_ENQUEUE`).
+  - 1.c) Reservations `529960/1`, `529959/1`, `523654/1` SLocs and `T001L-XHUPF`:
+    - Material `8000009754`, `BWART = 311`, Source: `1120/CS02`, Destination: `1120/CIS1`, `BDMNG = 1.000`, `ENMNG = 0.000`, `KZEAR = ''` (open).
+    - Source `1120/CS02`: `XHUPF = 'X'` (HU-managed).
+    - Destination `1120/CIS1`: `XHUPF = ''` (NOT HU-managed). Standard SAP unpacks the HU upon arrival at destination.
+  - 1.d) Standard HU event `0006` in `THUWBBWART`: Confirmed rows exist in client 220; derives `MOVE_TYPE = '311'` for unrestricted stock (`STOCK_CAT = ''`).
+  - 1.e) RFC user is `KHUSHAL` holding `SAP_ALL` profile in `UST04` and `ZMIGO_FIORI` in `AGR_1252`.
+- **Task 2: Docs Only — ABAP RFC Wrapper `docs/abap/z_hu_goods_movement.fugr.abap`:**
+  - Authored comprehensive remote-enabled function module draft `Z_HU_GOODS_MOVEMENT`:
+    - Enqueue `ENQUEUE_EVVEKPE` on `VEKP-VENUM` with cleanup via `DEQUEUE_EVVEKPE`.
+    - `AUTHORITY-CHECK` on `C_LO_HU`, `M_MSEG_WMB`, and `M_MSEG_BWA`.
+    - Simulation (`IV_SIMULATE = 'X'`) and Post (`IV_COMMIT = 'X'`) modes with explicit verification before commit.
+    - Flat `BAPIRET2` message mapping.
+    - **NO DIRECT `UPDATE RESB`** under any circumstance.
+    - Documented architectural options for reservation consumption (Option 1 Two-Step, Option 2 Auto-Unpack, Option 3 BAdI `MB_DOCUMENT_BADI`) and transport/SE37 test runbook.
+- **Task 3: Revised Double-Post Plan:**
+  - Removed `BAPI_HU_STOCK_TRANSFER` and invented document numbers (marked Not verified).
+  - Posting via remote-enabled `Z_HU_GOODS_MOVEMENT`.
+  - Authoritative lock is SAP-side `ENQUEUE_EVVEKPE`; CAP-side lock is in-memory fast path.
+  - DB-backed attempt store (`GoodsIssueAttemptStore` pattern) writing unique `ClientAttemptId` with status `IN_PROGRESS` prior to the SAP call.
+  - Lock acquisition in fixed order: Reservation Item (`RSNUM/RSPOS`) first, Handling Unit (`EXIDV/VENUM`) second, preventing deadlocks.
+  - Unconfirmed-outcome recheck worker querying SAP reference (`MSEG`/`MATDOC`).
+  - Mock concurrency test specification and gated live test (requiring explicit user "go").
+- **Task 4: Check Option A and Demo Rack:**
+  - Confirmed Option A route target: standard 311 posting flow in this application is handled by `wmReservationEntryDetail` (Target `TargetReservationEntryDetail`). The old `wmGoodsIssue311` route was retired in commit `61f8131`. Added `wmGoodsIssue311` as an alias route to `TargetReservationEntryDetail` in `manifest.json`.
+  - Replaced `demo-rack` (`HuStockTransferRackDemo.view.xml` and controller) with a fixture shaped like `rackLayout()` (single row of positions, floor/rack/position, no bays or levels), labelled `DEMO` with clearly synthetic HU numbers (`DEMO-HU-001`, `DEMO-HU-002`, `DEMO-HU-003`), and two cell states only (`empty` and `occupied`).
+  - Updated `test/unit/wm/huStockTransferRackReservations.test.js` to assert the single-row `rackLayout()` shape, empty/occupied states, synthetic HU numbers, DEMO labelling, and route alias. All 8 tests PASS.
+- **Task 5: Proposal for Dedicated Technical RFC User (Report Only):**
+  - Documented minimal authorization objects (`S_RFC`, `C_LO_HU`, `M_MSEG_WMB`, `M_MSEG_BWA`, `M_MSEG_LGO`, `L_LGNUM`, `S_TABU_DIS`, `S_ENQUE`) as a proposal to replace personal user `KHUSHAL` holding `SAP_ALL`.
+- **Validation:**
+  - `npm test test/unit/wm/huStockTransferRackReservations.test.js`: PASS (8/8 tests).
+  - `npm test test/unit/wm/huStockTransferRackController.test.js test/unit/wm/huStockTransferAdapter.test.js`: PASS (33/33 tests).
+  - `npm --prefix app/fiori-app run lint`: 0 findings (Clean PASS).
+  - `npx eslint test/unit/wm/huStockTransferRackReservations.test.js`: 0 errors, 0 warnings.
+  - `git diff --check`: 0 errors.
+  - Zero SAP writes.

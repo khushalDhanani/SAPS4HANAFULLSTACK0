@@ -1,115 +1,179 @@
 sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
-    "saps4hana/fiori/service/ODataClient",
     "sap/m/MessageToast"
-], function (BaseController, JSONModel, ODataClient, MessageToast) {
+], function (BaseController, JSONModel, MessageToast) {
     "use strict";
 
-    function reservationItems(oResponse) {
-        var oPayload = oResponse && oResponse.value ? oResponse.value : oResponse;
-        if (Array.isArray(oPayload)) { return oPayload; }
-        return oPayload && Array.isArray(oPayload.Items) ? oPayload.Items : [];
-    }
+    var DEMO_FIXTURE = {
+        isDemo: true,
+        warehouse: "W01",
+        storageType: "001",
+        rackPrefix: "1-L0001",
+        floor: "1",
+        rack: "L0001",
+        mode: "rack",
+        selectedUnit: "",
+        nonRackCount: 1,
+        warehouses: [{ key: "W01", text: "W01" }],
+        floors: [{ key: "1", text: "Floor 1" }],
+        racks: [{ key: "L0001", text: "Rack L0001" }],
+        positions: [
+            {
+                position: "01",
+                storageBin: "1-L0001-01",
+                floor: "1",
+                rack: "L0001",
+                isRackBin: true,
+                status: "occupied",
+                occupied: true,
+                binType: "B1",
+                sectionCode: "0001",
+                sectionName: "Fast Moving",
+                sectionDisplay: "0001 Fast Moving",
+                sectionColorSlot: 1,
+                unitNumber: "DEMO-HU-001",
+                unitCategory: "HU",
+                material: "DEMO-MAT-100",
+                materialDesc: "Demo Raw Material A",
+                batch: "DEMO-B01",
+                availableStock: "5.000",
+                baseUnit: "PC"
+            },
+            {
+                position: "02",
+                storageBin: "1-L0001-02",
+                floor: "1",
+                rack: "L0001",
+                isRackBin: true,
+                status: "empty",
+                occupied: false,
+                binType: "B1",
+                sectionCode: "0001",
+                sectionName: "Fast Moving",
+                sectionDisplay: "0001 Fast Moving",
+                sectionColorSlot: 1,
+                unitNumber: "",
+                unitCategory: "",
+                material: "",
+                materialDesc: "",
+                batch: "",
+                availableStock: "0.000",
+                baseUnit: ""
+            },
+            {
+                position: "03",
+                storageBin: "1-L0001-03",
+                floor: "1",
+                rack: "L0001",
+                isRackBin: true,
+                status: "occupied",
+                occupied: true,
+                binType: "B2",
+                sectionCode: "0002",
+                sectionName: "Standard",
+                sectionDisplay: "0002 Standard",
+                sectionColorSlot: 2,
+                unitNumber: "DEMO-HU-002",
+                unitCategory: "HU",
+                material: "DEMO-MAT-200",
+                materialDesc: "Demo Packaging Unit B",
+                batch: "DEMO-B02",
+                availableStock: "10.000",
+                baseUnit: "PC"
+            },
+            {
+                position: "04",
+                storageBin: "1-L0001-04",
+                floor: "1",
+                rack: "L0001",
+                isRackBin: true,
+                status: "empty",
+                occupied: false,
+                binType: "B2",
+                sectionCode: "0002",
+                sectionName: "Standard",
+                sectionDisplay: "0002 Standard",
+                sectionColorSlot: 2,
+                unitNumber: "",
+                unitCategory: "",
+                material: "",
+                materialDesc: "",
+                batch: "",
+                availableStock: "0.000",
+                baseUnit: ""
+            },
+            {
+                position: "05",
+                storageBin: "1-L0001-05",
+                floor: "1",
+                rack: "L0001",
+                isRackBin: true,
+                status: "occupied",
+                occupied: true,
+                binType: "B1",
+                sectionCode: "0002",
+                sectionName: "Standard",
+                sectionDisplay: "0002 Standard",
+                sectionColorSlot: 2,
+                unitNumber: "DEMO-HU-003",
+                unitCategory: "HU",
+                material: "DEMO-MAT-300",
+                materialDesc: "Demo Assembly Part C",
+                batch: "DEMO-B03",
+                availableStock: "2.000",
+                baseUnit: "PC"
+            }
+        ],
+        nonRackBins: [
+            {
+                storageBin: "TRANSFER-DEMO",
+                storageType: "921",
+                storageTypeDesc: "Interim Transfer Area",
+                storageSection: "0001",
+                storageSectionDesc: "Staging",
+                unitNumber: "DEMO-HU-004",
+                unitCategory: "HU",
+                material: "DEMO-MAT-400",
+                batch: "DEMO-B04",
+                availableStock: "1.000",
+                baseUnit: "PC",
+                isRackBin: false
+            }
+        ]
+    };
 
     return BaseController.extend("saps4hana.fiori.modules.wm.hu-stock-transfer.controller.HuStockTransferRackDemo", {
         onInit: function () {
-            this._oViewModel = new JSONModel({
-                busy: false,
-                error: "",
-                reservations: [],
-                filteredReservations: [],
-                selectedReservation: null,
-                searchQuery: ""
-            });
-            this.setModel(this._oViewModel, "rackReservation");
-            this.getRouter().getRoute("wmHuStockTransferRackDemo").attachPatternMatched(this._onRouteMatched, this);
+            this._oViewModel = new JSONModel(JSON.parse(JSON.stringify(DEMO_FIXTURE)));
+            this.setModel(this._oViewModel, "demoRack");
+            var oRoute = this.getRouter && this.getRouter().getRoute("wmHuStockTransferRackDemo");
+            if (oRoute && typeof oRoute.attachPatternMatched === "function") {
+                oRoute.attachPatternMatched(this._onRouteMatched, this);
+            }
         },
 
         _onRouteMatched: function () {
-            this.loadReservations();
+            this._oViewModel.setData(JSON.parse(JSON.stringify(DEMO_FIXTURE)));
         },
 
-        loadReservations: function () {
-            this._oViewModel.setProperty("/busy", true);
-            this._oViewModel.setProperty("/error", "");
-            this._oViewModel.setProperty("/selectedReservation", null);
-
-            var sUrl = "/odata/v4/hu-stock-transfer/getOpenReservations(" +
-                "plant='1120'," +
-                "storageLocation=''," +
-                "movementType='311'," +
-                "requester=''," +
-                "reservation=''," +
-                "material=''," +
-                "status='open'," +
-                "includeDeleted=false)";
-
-            return ODataClient.get(sUrl).then(function (oResponse) {
-                var aItems = reservationItems(oResponse);
-                this._oViewModel.setProperty("/reservations", aItems);
-                this._applySearch(this._oViewModel.getProperty("/searchQuery") || "");
-            }.bind(this)).catch(function (oError) {
-                this._oViewModel.setProperty("/reservations", []);
-                this._oViewModel.setProperty("/filteredReservations", []);
-                this._oViewModel.setProperty("/error", this.getText(
-                    "rackReservationLoadError", null,
-                    "Could not load open reservations. Check your connection and retry."
-                ) + (oError && oError.message ? " " + oError.message : ""));
-            }.bind(this)).then(function () {
-                this._oViewModel.setProperty("/busy", false);
-            }.bind(this));
+        onToggleMode: function () {
+            var sCurrent = this._oViewModel.getProperty("/mode");
+            this._oViewModel.setProperty("/mode", sCurrent === "rack" ? "table" : "rack");
         },
 
-        onSearchReservations: function (oEvent) {
-            var sQuery = oEvent.getParameter("query") || oEvent.getParameter("newValue") || "";
-            this._oViewModel.setProperty("/searchQuery", sQuery);
-            this._applySearch(sQuery);
-        },
-
-        _applySearch: function (sQuery) {
-            var sNeedle = String(sQuery || "").trim().toLowerCase();
-            var aRows = this._oViewModel.getProperty("/reservations") || [];
-            var aFiltered = !sNeedle ? aRows : aRows.filter(function (oRow) {
-                return [oRow.ReservationNo, oRow.ReservationItem, oRow.Material, oRow.MaterialDesc, oRow.RequesterName]
-                    .some(function (sValue) { return String(sValue || "").toLowerCase().includes(sNeedle); });
-            });
-            this._oViewModel.setProperty("/filteredReservations", aFiltered);
-        },
-
-        onReservationSelectionChange: function (oEvent) {
-            var oItem = oEvent.getParameter("listItem");
-            var oContext = oItem && oItem.getBindingContext("rackReservation");
-            this._oViewModel.setProperty("/selectedReservation", oContext ? oContext.getObject() : null);
-        },
-
-        onReservationPress: function (oEvent) {
-            var oItem = oEvent.getParameter("listItem") || oEvent.getSource();
-            var oContext = oItem && oItem.getBindingContext("rackReservation");
-            if (oContext) { this._openRack(oContext.getObject()); }
-        },
-
-        onOpenSelectedRack: function () {
-            var oReservation = this._oViewModel.getProperty("/selectedReservation");
-            if (!oReservation) {
-                MessageToast.show(this.getText("rackReservationSelectPrompt", null, "Select a reservation item first."));
-                return;
+        onSelectUnit: function (oEvent) {
+            var oContext = oEvent.getSource().getBindingContext("demoRack");
+            var oData = oContext && oContext.getObject();
+            var sUnit = oData ? oData.unitNumber : "";
+            if (sUnit) {
+                this._oViewModel.setProperty("/selectedUnit", sUnit);
+                MessageToast.show("Selected DEMO Handling Unit: " + sUnit + " (Synthetic preview)");
             }
-            this._openRack(oReservation);
         },
 
-        _openRack: function (oReservation) {
-            if (!oReservation || !oReservation.ReservationNo || !oReservation.ReservationItem) {
-                MessageToast.show(this.getText("rackReservationDataMissing", null, "This row has no reservation item to open."));
-                return;
-            }
-            this.getRouter().navTo("wmHuStockTransferRack", {
-                reservation: oReservation.ReservationNo,
-                item: oReservation.ReservationItem
-            });
-        },
-
-        onRetry: function () { this.loadReservations(); },
-        onBackToReservations: function () { this.getRouter().navTo("wmHuStockTransfer"); }
+        onNavBack: function () {
+            this.getRouter().navTo("wmHuStockTransfer");
+        }
     });
 });
