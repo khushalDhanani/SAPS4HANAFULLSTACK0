@@ -103,13 +103,8 @@ const FLOW_REQUIRED_FIELDS = Object.freeze({
 const ALL_REQUIRED_FIELDS = FLOW_REQUIRED_FIELDS.sd;
 
 // Configured warehouse storage type rules (warehouse-specific customizing)
-const CONFIGURED_WAREHOUSE_STORAGE_TYPES = new Map([
-  ['W01', {
-    pickableStorageTypes: ['EN1'],
-    holdStorageTypes: ['OH1'],
-    interimStorageTypes: ['911', '913', '921', '902']
-  }]
-]);
+// Zero guessed defaults; must be supplied by business configuration or registered explicitly
+const CONFIGURED_WAREHOUSE_STORAGE_TYPES = new Map();
 
 class BusinessConfigResolver {
   /**
@@ -576,6 +571,11 @@ class BusinessConfigResolver {
     // ─── Step 5: Throw if required fields remain unresolved ───────────────────
     if (missing.length > 0) {
       const loc = `Plant=${result.plant || plant || '(none)'}, Warehouse=${result.warehouse || warehouse || '(none)'}, StorageLocation=${storageLocation || '(none)'}`;
+      if (flow === 'hu-stock-transfer') {
+        throw new BusinessConfigError(
+          `BusinessConfigResolver could not resolve storage type rules [${missing.join(', ')}] for ${loc}. Storage types must be supplied by business configuration; fail-closed without hardcoded defaults.`
+        );
+      }
       throw new BusinessConfigError(
         `BusinessConfigResolver could not resolve required business config fields [${missing.join(', ')}] for ${loc}. ` +
         `Maintain the values in SAP customizing or via the BusinessConfig admin table.` +
@@ -656,7 +656,7 @@ class BusinessConfigResolver {
 
     if (pickable.length === 0 || hold.length === 0 || interim.length === 0) {
       throw new BusinessConfigError(
-        `BusinessConfigResolver could not resolve storage type rules [pickableStorageTypes, holdStorageTypes, interimStorageTypes] for ${context.warehouse || context.plant || 'warehouse'}. Storage types must be configured; fail-closed without hardcoded literals.`
+        `BusinessConfigResolver could not resolve storage type rules [pickableStorageTypes, holdStorageTypes, interimStorageTypes] for ${context.warehouse || context.plant || 'warehouse'}. Storage types must be supplied by business configuration; fail-closed without hardcoded defaults.`
       );
     }
 
@@ -668,11 +668,11 @@ class BusinessConfigResolver {
         if (!lgtyp) return false;
         return pickable.includes(String(lgtyp).trim().toUpperCase());
       },
-      isOnHold(lgtyp, lgpla = '') {
+      isOnHold(lgtyp, _lgpla = '') {
         if (!lgtyp) return false;
         const type = String(lgtyp).trim().toUpperCase();
-        const bin = String(lgpla || '').trim().toUpperCase();
-        return hold.includes(type) || bin.includes('HOLD') || bin.includes('BLOCK');
+        // Classified as hold only when explicitly included in holdStorageTypes; no string heuristics on bin names
+        return hold.includes(type);
       },
       isInterim(lgtyp) {
         if (!lgtyp) return false;
@@ -689,5 +689,7 @@ instance.BusinessConfigResolver = BusinessConfigResolver;
 instance.BusinessConfigError = BusinessConfigError;
 instance.parseCsv = parseCsv;
 instance.parseJsonArray = parseJsonArray;
+instance.registerWarehouseStorageTypes = BusinessConfigResolver.registerWarehouseStorageTypes;
+instance.unregisterWarehouseStorageTypes = BusinessConfigResolver.unregisterWarehouseStorageTypes;
 
 module.exports = instance;

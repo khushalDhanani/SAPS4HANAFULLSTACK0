@@ -1,0 +1,340 @@
+{
+  "query": "T001L",
+  "fields": [
+    "WERKS",
+    "LGORT",
+    "LGOBE",
+    "XHUPF",
+    "VSTEL",
+    "VKORG",
+    "VTWEG",
+    "SPART",
+    "KUNNR"
+  ],
+  "filters": [
+    "LGORT = 'HU01' OR LGORT = 'CIS1'"
+  ],
+  "timestamp": "2026-10-23T10:22:39.868Z",
+  "rowCount": 29,
+  "rows": [
+    {
+      "WERKS": "1110",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1120",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1120",
+      "LGORT": "HU01",
+      "LGOBE": "FG Partner locat",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1130",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1140",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1150",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1160",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1500",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1510",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1520",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1600",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1600",
+      "LGORT": "HU01",
+      "LGOBE": "FG Partner locat",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1610",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1620",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1630",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1640",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "2100",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "2120",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "2500",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "2600",
+      "LGORT": "CIS1",
+      "LGOBE": "CIS Team",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1140",
+      "LGORT": "HU01",
+      "LGOBE": "FG Partner locat",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1110",
+      "LGORT": "HU01",
+      "LGOBE": "FG Partner locat",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1130",
+      "LGORT": "HU01",
+      "LGOBE": "FG Partner locat",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1150",
+      "LGORT": "HU01",
+      "LGOBE": "FG Partner locat",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1160",
+      "LGORT": "HU01",
+      "LGOBE": "FG Partner locat",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "2100",
+      "LGORT": "HU01",
+      "LGOBE": "FG Partner locat",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "2120",
+      "LGORT": "HU01",
+      "LGOBE": "FG Partner locat",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1610",
+      "LGORT": "HU01",
+      "LGOBE": "FG Partner locat",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    },
+    {
+      "WERKS": "1640",
+      "LGORT": "HU01",
+      "LGOBE": "FG Partner locat",
+      "XHUPF": "",
+      "VSTEL": "",
+      "VKORG": "",
+      "VTWEG": "",
+      "SPART": "",
+      "KUNNR": ""
+    }
+  ]
+}

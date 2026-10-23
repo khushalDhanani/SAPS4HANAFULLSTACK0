@@ -1,0 +1,40 @@
+{
+  "query": "LQUA",
+  "fields": [
+    "LGNUM",
+    "LGTYP",
+    "LGPLA",
+    "LENUM",
+    "MATNR",
+    "WERKS",
+    "LGORT",
+    "CHARG",
+    "GESME",
+    "VERME",
+    "MEINS",
+    "LETYP",
+    "KZHUQ"
+  ],
+  "filters": [
+    "LGNUM = 'W01' AND LGTYP = '913' AND LGPLA = '0080000134'"
+  ],
+  "timestamp": "2026-10-23T10:22:05.206Z",
+  "rowCount": 1,
+  "rows": [
+    {
+      "LGNUM": "W01",
+      "LGTYP": "913",
+      "LGPLA": "0080000134",
+      "LENUM": "00000000002000019371",
+      "MATNR": "000000008000009754",
+      "WERKS": "1120",
+      "LGORT": "CS02",
+      "CHARG": "",
+      "GESME": "1.000",
+      "VERME": "1.000",
+      "MEINS": "NOS",
+      "LETYP": "E10",
+      "KZHUQ": "X"
+    }
+  ]
+}

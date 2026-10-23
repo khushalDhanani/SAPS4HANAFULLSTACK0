@@ -1,0 +1,46 @@
+{
+  "query": "LTAP",
+  "fields": [
+    "LGNUM",
+    "TANUM",
+    "TAPOS",
+    "VLENR",
+    "NLENR",
+    "VLTYP",
+    "VLBER",
+    "VLPLA",
+    "NLTYP",
+    "NLBER",
+    "NLPLA",
+    "LETYP",
+    "MATNR",
+    "VSOLA",
+    "NSOLA",
+    "PQUIT"
+  ],
+  "filters": [
+    "TANUM = '0001037372'"
+  ],
+  "timestamp": "2026-10-23T10:22:04.385Z",
+  "rowCount": 1,
+  "rows": [
+    {
+      "LGNUM": "W01",
+      "TANUM": "0001037372",
+      "TAPOS": "0001",
+      "VLENR": "00000000002000019371",
+      "NLENR": "00000000002000019371",
+      "VLTYP": "EN1",
+      "VLBER": "IT1",
+      "VLPLA": "1-L0001-04",
+      "NLTYP": "913",
+      "NLBER": "001",
+      "NLPLA": "0080000134",
+      "LETYP": "E10",
+      "MATNR": "000000008000009754",
+      "VSOLA": "1.000",
+      "NSOLA": "1.000",
+      "PQUIT": "X"
+    }
+  ]
+}

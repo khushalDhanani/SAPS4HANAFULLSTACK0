@@ -188,21 +188,48 @@ describe('transferPathHelper Unit Tests', () => {
   });
 
   describe('Storage type rules via BusinessConfigResolver (fail closed, no literals)', () => {
-    test('resolves storage type rules for W01 from configured customizing', async () => {
+    test('fails closed for W01 when storage types have not been supplied by business customizing', async () => {
+      await expect(
+        resolveHuStorageTypeRules({ warehouse: 'W01', plant: '1120' })
+      ).rejects.toThrow(/Storage types must be supplied by business configuration; fail-closed without hardcoded defaults/);
+    });
+
+    test('resolves storage type rules when business configuration is explicitly registered', async () => {
+      businessConfigResolver.registerWarehouseStorageTypes('W01', {
+        pickableStorageTypes: ['EN1'],
+        holdStorageTypes: ['QUARANTINE'],
+        interimStorageTypes: ['911', '913', '921', '902']
+      });
+
       const rules = await resolveHuStorageTypeRules({ warehouse: 'W01', plant: '1120' });
       expect(rules).toBeDefined();
       expect(rules.pickableStorageTypes).toContain('EN1');
-      expect(rules.holdStorageTypes).toContain('OH1');
-      expect(rules.interimStorageTypes).toContain('911');
+      expect(rules.holdStorageTypes).toContain('QUARANTINE');
       expect(rules.interimStorageTypes).toContain('913');
 
       expect(rules.isPickable('EN1')).toBe(true);
       expect(rules.isPickable('OH1')).toBe(false);
-      expect(rules.isOnHold('OH1')).toBe(true);
-      expect(rules.isOnHold('EN1', '1-L0001-04')).toBe(false);
-      expect(rules.isOnHold('EN1', 'HOLD-BIN')).toBe(true);
+      expect(rules.isOnHold('QUARANTINE')).toBe(true);
       expect(rules.isInterim('913')).toBe(true);
-      expect(rules.isInterim('EN1')).toBe(false);
+
+      // Clean up
+      businessConfigResolver.unregisterWarehouseStorageTypes('W01');
+    });
+
+    test('does not classify OH1 or bin ONHOLD as hold without system/business evidence', async () => {
+      const customRules = await resolveHuStorageTypeRules({
+        warehouse: 'W01',
+        plant: '1120',
+        trustedOverrides: {
+          pickableStorageTypes: ['EN1'],
+          holdStorageTypes: ['QUARANTINE'], // Business defined QUARANTINE as hold, not OH1
+          interimStorageTypes: ['913']
+        }
+      });
+
+      expect(customRules.isOnHold('OH1')).toBe(false);
+      expect(customRules.isOnHold('EN1', 'ONHOLD')).toBe(false);
+      expect(customRules.isOnHold('QUARANTINE')).toBe(true);
     });
 
     test('fails closed when storage types are unconfigured for an unknown warehouse', async () => {
@@ -238,7 +265,7 @@ describe('transferPathHelper Unit Tests', () => {
             interimStorageTypes: ['STAGING']
           }
         })
-      ).rejects.toThrow(/fail-closed without hardcoded literals/);
+      ).rejects.toThrow(/fail-closed without hardcoded defaults/);
     });
   });
 

@@ -1,0 +1,124 @@
+{
+  "e070": [
+    {
+      "TRKORR": "DS4K905281",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "MSHUSSAIN",
+      "AS4DATE": "20260930",
+      "AS4TIME": "130054",
+      "STRKORR": "DS4K905280"
+    },
+    {
+      "TRKORR": "DS4K905280",
+      "TRFUNCTION": "W",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260930",
+      "AS4TIME": "134704",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20261023",
+      "AS4TIME": "133723",
+      "STRKORR": "DS4K905280"
+    }
+  ],
+  "e071": [
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "CDAT",
+      "OBJ_NAME": "MB_DELIV"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "CDAT",
+      "OBJ_NAME": "VC_T001L"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "VDAT",
+      "OBJ_NAME": "V_T320"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "VDAT",
+      "OBJ_NAME": "V_T319A"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "VDAT",
+      "OBJ_NAME": "V_T333M"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "VDAT",
+      "OBJ_NAME": "V_T333N"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "VDAT",
+      "OBJ_NAME": "V_T333"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "VDAT",
+      "OBJ_NAME": "V_T321"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "CDAT",
+      "OBJ_NAME": "MTART"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "VDAT",
+      "OBJ_NAME": "V023"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "VDAT",
+      "OBJ_NAME": "V_025K"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "VDAT",
+      "OBJ_NAME": "V025"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "VDAT",
+      "OBJ_NAME": "V_134_K"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "VDAT",
+      "OBJ_NAME": "V_T333"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "PGMID": "R3TR",
+      "OBJECT": "CDAT",
+      "OBJ_NAME": "MB_156"
+    }
+  ],
+  "timestamp": "2026-10-23T10:21:38.648Z"
+}

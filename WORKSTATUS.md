@@ -7,6 +7,13 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Phase 1 Re-Run: READ-ONLY Verification After SAP GUI Change (2026-10-23 15:25 IST) — BLOCKED / STOPPED:**
+  - Strict READ-ONLY live SAP RFC discovery on Client 220; stated READ-ONLY before every SAP call; zero writes, BAPIs, or mutations executed.
+  - `T319A`: Queried via `RFC_READ_TABLE` for `LGNUM = 'W01'`. Only 2 rows exist (`0001 -> E1`, `Z003 -> E1`). Target customizing entry `W01 | Z007 | E10` is **NOT FOUND**.
+  - CTS Scope: Queried `E071K` for `OBJNAME = 'T319A' AND TABKEY LIKE '%W01Z007%'` (0 rows). Key `100W01Z007` is **NOT FOUND**. In transport `DS4K904158`, only `100W120001` exists and 9 unrelated R3TR objects are bundled. `E070` confirms no new requests created after 13:37:23.
+  - Delivery `0080000134`: Queried `LIKP` via `RFC_READ_TABLE`: `WBSTK = 'A'`, `KOSTK = 'C'`, `LVSTK = 'C'`. Delivery remains ready for PGI and completely untouched.
+  - Status: **BLOCKED**. Zero SAP writes executed. Stopped immediately per STOP rule.
+
 - **Tasks 1 to 4: Live SAP Discovery (RESB re-read, conflict resolution, 8000006485 stock/serials, 0080000086/90 packing/TOs, T319A/DS4K905282 audit, system-wide Path B = 0), Forensic L3 866 unproven cause, shared isShippingManaged/classifyTransferPath, NO_T319A_ROW as warning, fail-closed BusinessConfigResolver HU storage type rules, competing reservation comparator & tests, neutral T319A doc update (2026-10-23 14:25 IST):**
   - **Task 1: READ-ONLY Live SAP Discovery (Client 220, field names validated via DD03L first, zero writes):**
     - Stated READ-ONLY before each call; zero writes, BAPIs, or mutations executed.
@@ -1910,3 +1917,80 @@ Single source of truth for work history, current status, validation, unresolved 
   - `npx eslint tools/simulate-res-311-bapi.js test/unit/wm/huStockTransferRackReservations.test.js`: 0 errors, 0 warnings.
   - `git diff --check`: 0 errors.
   - Zero SAP writes executed.
+
+### 2026-10-23 15:25 IST — Phase 1: Re-Run READ-ONLY Pre-Check Verification After SAP GUI Change
+
+- **Requirement:** Re-run Phase 1 READ-ONLY verification after user's SAP GUI customizing maintenance:
+  1. Confirm exact customizing row in Client 220: `T319A` with `LGNUM = 'W01'`, `VHART = 'Z007'`, `LETYP = 'E10'`.
+  2. Inspect CTS Transport scope (`E070`/`E071`/`E071K`) to confirm `100W01Z007` exists and check for unexpected objects.
+  3. Re-verify Outbound Delivery `0080000134` state (`WBSTK`, `KOSTK`, `LVSTK`) to confirm no mutation occurred.
+  4. STRICT SAFETY: Read-only only. Zero SAP writes, zero BAPIs, stop immediately if not found.
+- **Executed Live SAP READ-ONLY Checks (Client 220):**
+  - Stated READ-ONLY before each call. Zero writes, BAPIs, or mutations executed.
+  - 1. Table `T319A`: Queried via `RFC_READ_TABLE` for `LGNUM = 'W01'`:
+    - Returned 2 rows:
+      - `MANDT='220'`, `LGNUM='W01'`, `VHART='0001'`, `LETYP='E1'`
+      - `MANDT='220'`, `LGNUM='W01'`, `VHART='Z003'`, `LETYP='E1'`
+    - Target row `W01 | Z007 | E10`: **NOT FOUND** in Client 220.
+    - System-wide query on `T319A` for `VHART = 'Z007'` confirms only `W15 | Z007 | E1` exists (from earlier transport `DS4K905282`).
+  - 2. CTS Transport Tables (`E070`, `E071`, `E071K`):
+    - Queried `E071K` for `OBJNAME = 'T319A' AND TABKEY LIKE '%W01Z007%'`: 0 records found.
+    - Queried transport `DS4K904158` (provided by user previously):
+      - Created on 2025-03-01 by user `SANDHLE` (historical transport).
+      - `E071K` for `T319A` has `TABKEY = '100W120001'` (Warehouse `W12`, not `W01`).
+      - Contains 9 objects in `E071` (`MTART`, `VC_T001L_OP`, `V_T077K`, `V_TB001`, `VVC_T161_VF`, `V_163A`, `V_T319A`, `V_TWEW`, `V_T024D`) and over 50 table keys.
+      - Key `100W01Z007`: **NOT FOUND**.
+      - Unexpected objects: **YES** (unrelated tables and objects bundled).
+    - Queried `E070` for any new requests created on `20261023`: Only `DS4K902702` (10:56) and `DS4K905282` (13:37). No new transport exists in SAP.
+  - 3. Delivery `0080000134` State:
+    - Queried `LIKP` via `RFC_READ_TABLE`:
+      - `WBSTK = 'A'` (Total Goods Movement Status: Not yet processed)
+      - `KOSTK = 'C'` (Overall Picking / Putaway Status: Completely processed)
+      - `LVSTK = 'C'` (Overall Warehouse Management Status: Completely processed)
+    - Delivery ready for PGI: **YES**. Zero mutations have occurred.
+- **Phase 1 Result:**
+  - `PHASE 1 RESULT`: **BLOCKED**
+  - `T319A W01/Z007/E10`: **NOT FOUND**
+  - `100W01Z007 in E071K`: **NOT FOUND**
+  - `Unexpected transport objects`: **YES** (in `DS4K904158`)
+  - `Delivery 0080000134 ready`: **YES**
+  - `SAP WRITES`: 0
+  - `BAPI EXECUTION`: 0
+- **Action Taken:** STOP rule triggered. Execution halted immediately. Awaiting user saving the customizing in Client 220 and providing the new transport request.
+
+### 2026-10-23 15:36 IST — Phase 1: Re-Verification After "Continue" Request (Zero SAP Writes)
+
+- **Verification Executed:** Re-ran all live SAP RFC read-only checks across Client 220:
+  - `T319A` for `LGNUM = 'W01'`: Still only 2 rows (`0001 -> E1`, `Z003 -> E1`). `W01 | Z007 | E10` remains **NOT FOUND**.
+  - `E071K`: Queried for `OBJNAME = 'T319A' AND TABKEY LIKE '%W01Z007%'`. 0 rows found (`100W01Z007` **NOT FOUND**).
+  - `E070`: Queried for any transports created since 2026-10-20. Most recent customizing transport in the system is `DS4K905282` (13:37:23). No new transport exists in SAP.
+  - Delivery `0080000134` (`LIKP`): `WBSTK = 'A'`, `KOSTK = 'C'`, `LVSTK = 'C'`. No SAP mutation has occurred.
+- **Result:** `PHASE 1 = BLOCKED`.
+- **Safety:** SAP writes: 0, BAPI executions: 0. Halted immediately per strict STOP gate. Waiting for user's explicit transport number and saved customizing in Client 220.
+
+### 2026-10-23 15:40 IST — Phase 1: READ-ONLY Verification (Transport Number Not Provided)
+
+- **Verification Executed:** Re-ran all live SAP RFC read-only checks across Client 220:
+  - `T319A` for `LGNUM = 'W01'`: Still only 2 rows (`0001 -> E1`, `Z003 -> E1`). `W01 | Z007 | E10` is **NOT FOUND**.
+  - `E071K`: Queried for `OBJNAME = 'T319A' AND TABKEY LIKE '%W01Z007%'`: 0 records found (`100W01Z007` **NOT FOUND**).
+  - `E070`: Queried for new transports created after 15:00:00: 0 records found.
+  - Delivery `0080000134` (`LIKP`): `WBSTK = 'A'`, `KOSTK = 'C'`, `LVSTK = 'C'`.
+  - Application code changed: None.
+  - TO created or confirmed: None.
+  - PGI performed: None.
+  - BAPIs executed: 0.
+  - SAP writes: 0.
+- **Phase 1 Result:** `BLOCKED` (both `W01 | Z007 | E10` and `100W01Z007` are missing).
+- **Action Taken:** STOP rule triggered. Execution halted immediately. Waiting for the transport number and confirmed customizing in Client 220.
+
+### 2026-10-23 15:44 IST — Phase 1: Re-Verification After User Stated Customizing Was Saved
+
+- **Executed READ-ONLY Checks (Client 220):**
+  - `T319A` for `LGNUM = 'W01'`: Still only 2 rows (`0001 -> E1`, `Z003 -> E1`). `W01 | Z007 | E10` is **NOT FOUND**.
+  - `T319A` system-wide for `VHART = 'Z007'`: Only 1 row exists (`W15 | Z007 | E1`).
+  - `E071K`: `OBJNAME = 'T319A' AND TABKEY LIKE '%W01Z007%'` returned 0 rows (`100W01Z007` **NOT FOUND**).
+  - `E070`: No new transport created after 13:37:23.
+  - Delivery `0080000134` (`LIKP`): `WBSTK = 'A'`, `KOSTK = 'C'`, `LVSTK = 'C'` (Ready).
+  - Safety: SAP writes = 0, BAPI executions = 0, PGI = none, TO = none, code changes = none.
+- **Phase 1 Result:** `BLOCKED`.
+- **Action Taken:** STOP rule triggered. Execution halted immediately. Waiting for user's explicit transport number and confirmed save in Client 220.

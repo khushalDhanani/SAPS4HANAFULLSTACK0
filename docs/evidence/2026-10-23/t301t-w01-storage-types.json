@@ -1,0 +1,298 @@
+{
+  "query": "T301T",
+  "fields": [
+    "SPRAS",
+    "LGNUM",
+    "LGTYP",
+    "LTYPT"
+  ],
+  "filters": [
+    "SPRAS = 'E' AND LGNUM = 'W01'"
+  ],
+  "timestamp": "2026-10-23T10:22:39.161Z",
+  "rowCount": 47,
+  "rows": [
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "001",
+      "LTYPT": "RM Storage"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "002",
+      "LTYPT": "FG Storage"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "003",
+      "LTYPT": "EN Storage"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "004",
+      "LTYPT": "PG Storage"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "005",
+      "LTYPT": "Fixed Bin Storage"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "150",
+      "LTYPT": "Kanban Interface"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "1FL",
+      "LTYPT": "First Floor"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "200",
+      "LTYPT": "Intermed.Zone 2-Step Pck."
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "2FL",
+      "LTYPT": "2nd Floor"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "3FL",
+      "LTYPT": "3rd Floor"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "4FL",
+      "LTYPT": "4th Floor"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "5FL",
+      "LTYPT": "5th Floor"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "901",
+      "LTYPT": "GR Area for Production"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "902",
+      "LTYPT": "GR Area External Rcpts"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "904",
+      "LTYPT": "Returns"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "910",
+      "LTYPT": "GI Area General"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "911",
+      "LTYPT": "GI Area for Cost Center"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "912",
+      "LTYPT": "GI Area Customer Order"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "913",
+      "LTYPT": "GI Area - Fixed Assets"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "914",
+      "LTYPT": "GI Area Production Orders"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "915",
+      "LTYPT": "Fixed Bin Picking Area"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "916",
+      "LTYPT": "Shipping Area Deliveries"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "917",
+      "LTYPT": "Quality Assurance"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "918",
+      "LTYPT": "Goods Issue Area Contain."
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "920",
+      "LTYPT": "Stock Transfers (plant)"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "921",
+      "LTYPT": "Stock Transfers (StLoc)"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "922",
+      "LTYPT": "Posting Change Area"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "923",
+      "LTYPT": "Packaging Area"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "980",
+      "LTYPT": "R/3 --> R/2 Cumulative"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "998",
+      "LTYPT": "Init. Entry of Inv. Data"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "999",
+      "LTYPT": "Differences"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "COR",
+      "LTYPT": "Corrosive"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "EN1",
+      "LTYPT": "Gr Engineering material"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "FG1",
+      "LTYPT": "Gr Finished Material"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "FLM",
+      "LTYPT": "Flammable"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "GFL",
+      "LTYPT": "Ground Floor"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "GS1",
+      "LTYPT": "Gr Green Stage Material"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "IP1",
+      "LTYPT": "Production Supply - IP01"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "IP2",
+      "LTYPT": "Production Supply - IP02"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "IP3",
+      "LTYPT": "Production Supply - IP03"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "IP4",
+      "LTYPT": "Production Supply - IP04"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "IP5",
+      "LTYPT": "Production Supply - IP05"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "OH1",
+      "LTYPT": "Gr On-Hold Material"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "POW",
+      "LTYPT": "Powder / Solid"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "QC1",
+      "LTYPT": "Quality Inspection Area"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "RM1",
+      "LTYPT": "Gr Raw Material/Packing"
+    },
+    {
+      "SPRAS": "E",
+      "LGNUM": "W01",
+      "LGTYP": "TOX",
+      "LTYPT": "Toxic / Hazardous"
+    }
+  ]
+}

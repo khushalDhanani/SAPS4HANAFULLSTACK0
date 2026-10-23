@@ -1,0 +1,658 @@
+{
+  "openRequestsCount": 22,
+  "openRequests": [
+    {
+      "TRKORR": "OILT500TSW2",
+      "TRFUNCTION": "F",
+      "TRSTATUS": "D",
+      "AS4USER": "SAP",
+      "AS4DATE": "20160705",
+      "AS4TIME": "093412",
+      "STRKORR": "",
+      "objects": [
+        "CDAT VC_T001L",
+        "TABU T001L"
+      ]
+    },
+    {
+      "TRKORR": "DS4K903266",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20240619",
+      "AS4TIME": "171715",
+      "STRKORR": "DS4K903265",
+      "objects": [
+        "VDAT V_T320"
+      ]
+    },
+    {
+      "TRKORR": "DS4K903376",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20240909",
+      "AS4TIME": "134208",
+      "STRKORR": "DS4K903375",
+      "objects": [
+        "VDAT V_T320"
+      ]
+    },
+    {
+      "TRKORR": "DS4K903025",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20240523",
+      "AS4TIME": "174557",
+      "STRKORR": "DS4K903024",
+      "objects": [
+        "VDAT V_T320"
+      ]
+    },
+    {
+      "TRKORR": "DS4K903364",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "PREDDY",
+      "AS4DATE": "20240530",
+      "AS4TIME": "092806",
+      "STRKORR": "DS4K903363",
+      "objects": [
+        "VDAT V_T319A"
+      ]
+    },
+    {
+      "TRKORR": "DS4K903965",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20250108",
+      "AS4TIME": "160811",
+      "STRKORR": "DS4K903964",
+      "objects": [
+        "VDAT V_T319A"
+      ]
+    },
+    {
+      "TRKORR": "DS4K904158",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20250301",
+      "AS4TIME": "180106",
+      "STRKORR": "DS4K904157",
+      "objects": [
+        "VDAT V_T319A"
+      ]
+    },
+    {
+      "TRKORR": "DS4K904897",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260924",
+      "AS4TIME": "154112",
+      "STRKORR": "DS4K904896",
+      "objects": [
+        "VDAT V_T320"
+      ]
+    },
+    {
+      "TRKORR": "DS4K904892",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260129",
+      "AS4TIME": "124659",
+      "STRKORR": "DS4K904891",
+      "objects": [
+        "VDAT V_T320",
+        "VDAT V_T319A"
+      ]
+    },
+    {
+      "TRKORR": "DS4K904388",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20250710",
+      "AS4TIME": "175238",
+      "STRKORR": "DS4K904387",
+      "objects": [
+        "VDAT V_T319A"
+      ]
+    },
+    {
+      "TRKORR": "DS4K904619",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260401",
+      "AS4TIME": "173410",
+      "STRKORR": "DS4K904618",
+      "objects": [
+        "VDAT V_T320"
+      ]
+    },
+    {
+      "TRKORR": "DS4K905189",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260904",
+      "AS4TIME": "141933",
+      "STRKORR": "DS4K905188",
+      "objects": [
+        "VDAT V_T319A"
+      ]
+    },
+    {
+      "TRKORR": "DS4K905216",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "DIPAK",
+      "AS4DATE": "20260825",
+      "AS4TIME": "180135",
+      "STRKORR": "DS4K905215",
+      "objects": [
+        "VDAT V_T320",
+        "CDAT VC_T001L"
+      ]
+    },
+    {
+      "TRKORR": "DS4K905256",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "DIPAK",
+      "AS4DATE": "20260913",
+      "AS4TIME": "132519",
+      "STRKORR": "DS4K905255",
+      "objects": [
+        "VDAT V_T320"
+      ]
+    },
+    {
+      "TRKORR": "DS4K904886",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20261003",
+      "AS4TIME": "115436",
+      "STRKORR": "DS4K904885",
+      "objects": [
+        "CDAT VC_T001L"
+      ]
+    },
+    {
+      "TRKORR": "DS4K905262",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260921",
+      "AS4TIME": "135257",
+      "STRKORR": "DS4K905261",
+      "objects": [
+        "CDAT VC_T001L",
+        "VDAT V_T320"
+      ]
+    },
+    {
+      "TRKORR": "DS4K905264",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260930",
+      "AS4TIME": "113625",
+      "STRKORR": "DS4K905263",
+      "objects": [
+        "VDAT V_T319A"
+      ]
+    },
+    {
+      "TRKORR": "DS4K905266",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260923",
+      "AS4TIME": "152349",
+      "STRKORR": "DS4K905265",
+      "objects": [
+        "CDAT VC_T001L",
+        "VDAT V_T320"
+      ]
+    },
+    {
+      "TRKORR": "DS4K905269",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "DIPAK",
+      "AS4DATE": "20260926",
+      "AS4TIME": "123801",
+      "STRKORR": "DS4K905268",
+      "objects": [
+        "VDAT V_T320"
+      ]
+    },
+    {
+      "TRKORR": "DS4K905275",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20261002",
+      "AS4TIME": "115709",
+      "STRKORR": "DS4K905274",
+      "objects": [
+        "VDAT V_T320",
+        "VDAT V_T319A"
+      ]
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20261023",
+      "AS4TIME": "133723",
+      "STRKORR": "DS4K905280",
+      "objects": [
+        "VDAT V_T319A",
+        "CDAT VC_T001L",
+        "VDAT V_T320"
+      ]
+    },
+    {
+      "TRKORR": "DS4K905291",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "DIPAK",
+      "AS4DATE": "20261004",
+      "AS4TIME": "133634",
+      "STRKORR": "DS4K905290",
+      "objects": [
+        "VDAT V_T320"
+      ]
+    }
+  ],
+  "allRelevantE070": [
+    {
+      "TRKORR": "SAPK-100BDINS4CORE",
+      "TRFUNCTION": "P",
+      "TRSTATUS": "R",
+      "AS4USER": "SAP",
+      "AS4DATE": "20260409",
+      "AS4TIME": "051332",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "SAPK-102AOINS4HCM",
+      "TRFUNCTION": "D",
+      "TRSTATUS": "R",
+      "AS4USER": "SAP",
+      "AS4DATE": "20260409",
+      "AS4TIME": "051337",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "SAPK-100AOINS4HCM",
+      "TRFUNCTION": "D",
+      "TRSTATUS": "R",
+      "AS4USER": "SAP",
+      "AS4DATE": "20220726",
+      "AS4TIME": "173025",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "SAPK-106BDINS4CORE",
+      "TRFUNCTION": "D",
+      "TRSTATUS": "R",
+      "AS4USER": "SAP",
+      "AS4DATE": "20260409",
+      "AS4TIME": "051558",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "SAPK-108BOINS4CORE",
+      "TRFUNCTION": "D",
+      "TRSTATUS": "R",
+      "AS4USER": "SAP",
+      "AS4DATE": "20260409",
+      "AS4TIME": "051543",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "SAPK-107BOINS4CORE",
+      "TRFUNCTION": "D",
+      "TRSTATUS": "R",
+      "AS4USER": "SAP",
+      "AS4DATE": "20260409",
+      "AS4TIME": "051631",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "SAPK-10701INS4CORE",
+      "TRFUNCTION": "D",
+      "TRSTATUS": "R",
+      "AS4USER": "SAP",
+      "AS4DATE": "20230601",
+      "AS4TIME": "163705",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "SAPK-101BTINS4CORE",
+      "TRFUNCTION": "D",
+      "TRSTATUS": "R",
+      "AS4USER": "SAP",
+      "AS4DATE": "20260409",
+      "AS4TIME": "051437",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "SAPK-100BTINS4CORE",
+      "TRFUNCTION": "P",
+      "TRSTATUS": "R",
+      "AS4USER": "SAP",
+      "AS4DATE": "20260409",
+      "AS4TIME": "051400",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "OILT500TSW2",
+      "TRFUNCTION": "F",
+      "TRSTATUS": "D",
+      "AS4USER": "SAP",
+      "AS4DATE": "20160705",
+      "AS4TIME": "093412",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "DS4K903266",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20240619",
+      "AS4TIME": "171715",
+      "STRKORR": "DS4K903265"
+    },
+    {
+      "TRKORR": "DS4K903376",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20240909",
+      "AS4TIME": "134208",
+      "STRKORR": "DS4K903375"
+    },
+    {
+      "TRKORR": "DS4K903025",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20240523",
+      "AS4TIME": "174557",
+      "STRKORR": "DS4K903024"
+    },
+    {
+      "TRKORR": "DS4K903364",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "PREDDY",
+      "AS4DATE": "20240530",
+      "AS4TIME": "092806",
+      "STRKORR": "DS4K903363"
+    },
+    {
+      "TRKORR": "DS4K903965",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20250108",
+      "AS4TIME": "160811",
+      "STRKORR": "DS4K903964"
+    },
+    {
+      "TRKORR": "DS4K904158",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20250301",
+      "AS4TIME": "180106",
+      "STRKORR": "DS4K904157"
+    },
+    {
+      "TRKORR": "DS4K904897",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260924",
+      "AS4TIME": "154112",
+      "STRKORR": "DS4K904896"
+    },
+    {
+      "TRKORR": "DS4K904892",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260129",
+      "AS4TIME": "124659",
+      "STRKORR": "DS4K904891"
+    },
+    {
+      "TRKORR": "DS4K900105",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "R",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20240212",
+      "AS4TIME": "131255",
+      "STRKORR": "DS4K900104"
+    },
+    {
+      "TRKORR": "DS4K900123",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "R",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20240212",
+      "AS4TIME": "131310",
+      "STRKORR": "DS4K900122"
+    },
+    {
+      "TRKORR": "DS4K902640",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "R",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20240212",
+      "AS4TIME": "131512",
+      "STRKORR": "DS4K902639"
+    },
+    {
+      "TRKORR": "DS4K902657",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "R",
+      "AS4USER": "PREDDY",
+      "AS4DATE": "20240212",
+      "AS4TIME": "133824",
+      "STRKORR": "DS4K902656"
+    },
+    {
+      "TRKORR": "DS4K904388",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20250710",
+      "AS4TIME": "175238",
+      "STRKORR": "DS4K904387"
+    },
+    {
+      "TRKORR": "DS4K904619",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260401",
+      "AS4TIME": "173410",
+      "STRKORR": "DS4K904618"
+    },
+    {
+      "TRKORR": "DS4K900104",
+      "TRFUNCTION": "W",
+      "TRSTATUS": "R",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20240212",
+      "AS4TIME": "132508",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "DS4K900122",
+      "TRFUNCTION": "W",
+      "TRSTATUS": "R",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20240212",
+      "AS4TIME": "132806",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "DS4K902639",
+      "TRFUNCTION": "W",
+      "TRSTATUS": "R",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20240212",
+      "AS4TIME": "133207",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "DS4K902656",
+      "TRFUNCTION": "W",
+      "TRSTATUS": "R",
+      "AS4USER": "PREDDY",
+      "AS4DATE": "20240212",
+      "AS4TIME": "133833",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "SAPK816HE3",
+      "TRFUNCTION": "P",
+      "TRSTATUS": "R",
+      "AS4USER": "SAP",
+      "AS4DATE": "20260420",
+      "AS4TIME": "151230",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "DS4K905189",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260904",
+      "AS4TIME": "141933",
+      "STRKORR": "DS4K905188"
+    },
+    {
+      "TRKORR": "DS4K905216",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "DIPAK",
+      "AS4DATE": "20260825",
+      "AS4TIME": "180135",
+      "STRKORR": "DS4K905215"
+    },
+    {
+      "TRKORR": "DS4K905256",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "DIPAK",
+      "AS4DATE": "20260913",
+      "AS4TIME": "132519",
+      "STRKORR": "DS4K905255"
+    },
+    {
+      "TRKORR": "DS4K904886",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20261003",
+      "AS4TIME": "115436",
+      "STRKORR": "DS4K904885"
+    },
+    {
+      "TRKORR": "DS4K905262",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260921",
+      "AS4TIME": "135257",
+      "STRKORR": "DS4K905261"
+    },
+    {
+      "TRKORR": "DS4K905246",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "R",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260921",
+      "AS4TIME": "140514",
+      "STRKORR": "DS4K905245"
+    },
+    {
+      "TRKORR": "DS4K905245",
+      "TRFUNCTION": "W",
+      "TRSTATUS": "R",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260921",
+      "AS4TIME": "140526",
+      "STRKORR": ""
+    },
+    {
+      "TRKORR": "DS4K905264",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260930",
+      "AS4TIME": "113625",
+      "STRKORR": "DS4K905263"
+    },
+    {
+      "TRKORR": "DS4K905266",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20260923",
+      "AS4TIME": "152349",
+      "STRKORR": "DS4K905265"
+    },
+    {
+      "TRKORR": "DS4K905269",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "DIPAK",
+      "AS4DATE": "20260926",
+      "AS4TIME": "123801",
+      "STRKORR": "DS4K905268"
+    },
+    {
+      "TRKORR": "DS4K905275",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20261002",
+      "AS4TIME": "115709",
+      "STRKORR": "DS4K905274"
+    },
+    {
+      "TRKORR": "DS4K905282",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "SANDHLE",
+      "AS4DATE": "20261023",
+      "AS4TIME": "133723",
+      "STRKORR": "DS4K905280"
+    },
+    {
+      "TRKORR": "DS4K905291",
+      "TRFUNCTION": "Q",
+      "TRSTATUS": "D",
+      "AS4USER": "DIPAK",
+      "AS4DATE": "20261004",
+      "AS4TIME": "133634",
+      "STRKORR": "DS4K905290"
+    }
+  ],
+  "timestamp": "2026-10-23T10:21:47.968Z"
+}
