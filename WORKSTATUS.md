@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Rack demo operator readability pass (2026-10-23 10:31 IST):** In Progress. Split demo identity and rack controls into separate toolbar rows; expanded the visual bins and rack structure; changed physical level to a plain attribute; removed the dedicated color legend and reduced inspector density. Focused tests (20 tests across demo and UI consistency suites), UI5 lint, UI5 build, and `git diff --check` passed. UI5 lint reported no findings; build succeeded with the existing optional jsPDF source-map warning. Desktop browser review showed the two-row header, enlarged bin positions filling the rack stage, plain physical-level attribute, and no legend. Responsive browser recheck was blocked when reloading after the local server exited: UI5 server bind failed with `connect EPERM 127.0.0.1:4005`. UI5 MCP was unavailable in the session. No SAP calls or writes. Next action: repeat the responsive browser check in an environment allowing local loopback binds.
+
 - **Shell title debug fix (2026-10-23 10:29 IST):** Complete. The shared `App.controller.js` had a missing `break` after `purchaseOrderDetail`, causing purchase order detail routes to fall through and display the sales inquiries title. Added the break and a focused regression test. HU stock transfer route was checked in the running app: reservations loaded and the browser console had no errors. The new test passed; UI5 lint reported no findings; `git diff --check` passed. UI5 lint's optional update check could not access its local config store. No SAP calls or writes.
 
 - **HU stock transfer rack visualizer demo (2026-10-23 10:24 IST):** In Progress. The isolated demo route models floor, rack, physical level, and bin position independently: `1-L0001-04` displays position `04`, while physical level is a separate demo field. Demo sections A/B/C map to fixed visual tokens; 24-color cycling and unsupported physical capacity/weight claims are removed. SAP adapters, CAP/OData, posting, and reservation behavior are unchanged. Focused tests, CDS compile, root lint (7 pre-existing warnings), UI5 lint, UI5 build, and diff check passed. Full Jest remains blocked by local loopback `EPERM` and existing absent FI/goods-issue test paths. Browser review confirmed desktop and responsive tablet/phone layouts; a separate touch-display viewport was not verified. Exact next action: rerun the full Jest suite in an environment allowing loopback binds and after the unrelated missing test paths are resolved; independently inspect a wide touch-display viewport when available.
@@ -614,9 +616,18 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Exact Next Recommended Action (rack demo operator readability pass — 2026-10-23 10:31 IST):** Inspect the updated route at tablet and touch widths in an environment allowing local loopback binds; the local UI5 server could not bind due to `EPERM`.
 - **Exact Next Recommended Action (HU stock transfer rack demo — 2026-10-23 10:24 IST):** Rerun full Jest in an environment that permits loopback binds and after the unrelated missing FI/goods-issue test paths are resolved; inspect a wide touch-display viewport when available. No SAP writes or live data are needed for the demo.
 
 ## Changes Log
+
+### 2026-10-23 10:31 IST — Improved rack demo operator readability
+
+- **Requirement:** Address demo UI issues with the crowded header, short rack rendering, small bin labels, confusing physical-level affordance, decorative frame, dense inspector, and redundant section legend.
+- **Change:** Split title/data identity and navigation/display controls into two toolbars. Let the rack fill its stage, increase each bay to three readable position columns, and enlarge bin-number labels. Restyled the bay uprights/beam around the actual positions. Show physical level as plain label/value attribute, not status. Remove the section legend and two redundant inspector fields; the section remains named directly on each bin.
+- **Files changed:** `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferRackDemo.view.xml`; `app/fiori-app/webapp/css/style.css`; `app/fiori-app/webapp/i18n/i18n.properties`; `app/fiori-app/webapp/i18n/i18n_en.properties`; `test/unit/wm/huStockTransferRackDemo.test.js`; `WORKSTATUS.md`.
+- **Validation:** `npx jest test/unit/wm/huStockTransferRackDemo.test.js test/unit/controller/uiConsistency.test.js --runInBand` — PASS (20 tests); `npm --prefix app/fiori-app run lint` — PASS, no findings (optional update-check local config-store warning); `npm --prefix app/fiori-app run build` — PASS (existing optional jsPDF source-map warning and local config-store warning); `git diff --check` — PASS. Desktop Chrome review completed. Responsive browser review after changes could not be completed: `npx ui5 serve --port 4005` failed to bind with `connect EPERM 127.0.0.1:4005`.
+- **SAP:** No SAP calls or writes.
 
 ### 2026-10-23 10:29 IST — Fixed purchase order shell title fall-through
 

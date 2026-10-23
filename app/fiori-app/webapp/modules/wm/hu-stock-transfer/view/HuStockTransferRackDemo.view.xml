@@ -9,20 +9,22 @@
             <VBox class="demoRackPageContent">
                 <OverflowToolbar class="demoRackToolbar">
                     <ObjectStatus text="{i18n>rackDemoDataBadge}" state="Warning" icon="sap-icon://test-script" />
-                    <ToolbarSeparator />
-                    <VBox class="demoMaterialBadge"><Label text="{i18n>rackDemoMaterialLabel}" /><Text text="{demoRack>/material}" /></VBox>
-                    <ToolbarSeparator />
                     <Title text="{i18n>rackDemoTitle}" level="H1" />
                     <ToolbarSpacer />
+                    <VBox class="demoMaterialBadge"><Label text="{i18n>rackDemoMaterialLabel}" /><Text text="{demoRack>/material}" /></VBox>
+                </OverflowToolbar>
+                <OverflowToolbar class="demoRackControlsToolbar">
                     <Label text="{i18n>rackDemoStorageType}" />
                     <Select selectedKey="{demoRack>/selectedStorageType}" change=".onStorageTypeChange" width="9rem">
                         <core:Item key="ALL" text="{i18n>rackDemoAllTypes}" />
                         <core:Item key="EN1" text="{i18n>rackDemoTypeEN1}" />
                         <core:Item key="EN2" text="{i18n>rackDemoTypeEN2}" />
                     </Select>
+                    <ToolbarSeparator />
                     <Button text="{i18n>rackDemoPrev}" icon="sap-icon://navigation-left-arrow" press=".onPrevRack" />
-                    <ObjectStatus text="{demoRack>/rackCounter}" />
+                    <ObjectStatus text="{demoRack>/rackCounter}" class="demoRackCounter" />
                     <Button text="{i18n>rackDemoNext}" icon="sap-icon://navigation-right-arrow" iconFirst="false" press=".onNextRack" />
+                    <ToolbarSpacer />
                     <Button text="{= ${demoRack>/tableMode} ? ${i18n>rackDemoVisualMode} : ${i18n>rackDemoTableMode} }" icon="sap-icon://table-view" press=".onToggleTable" />
                     <Button text="{i18n>commonClose}" icon="sap-icon://decline" press=".onCloseDemo" />
                 </OverflowToolbar>
@@ -32,7 +34,7 @@
                         <HBox class="demoRackStageHeader" alignItems="Center">
                             <VBox><Title text="{demoRack>/rackTitle}" level="H2" /><Text text="{demoRack>/rackSubtitle}" /></VBox>
                             <ToolbarSpacer />
-                            <ObjectStatus text="{i18n>rackDemoPhysicalLevel}" state="Information" />
+                            <HBox class="demoRackLevelAttribute" alignItems="Center"><Label text="{i18n>rackDemoPhysicalLevel}" /><Text text="{demoRack>/rack/physicalLevels/0/label}" /></HBox>
                         </HBox>
                         <ScrollContainer height="100%" vertical="true" horizontal="true" focusable="true" class="demoRackScroll">
                             <VBox class="demoRackStructure">
@@ -61,9 +63,6 @@
                                 <HBox class="demoRackFloor" alignItems="Center" justifyContent="Center"><Text text="{i18n>rackDemoFrameNote}" /></HBox>
                             </VBox>
                         </ScrollContainer>
-                        <HBox items="{path: 'demoRack>/sections', templateShareable: false}" wrap="Wrap" class="demoRackColorReference" alignItems="Center">
-                            <items><HBox alignItems="Center" class="demoRackSectionLegend"><Text text="●" /><Text text="{demoRack>name}" /><Text text="{demoRack>colorName}" /></HBox></items>
-                        </HBox>
                     </VBox>
                     <VBox class="demoRackTableStage" visible="{demoRack>/tableMode}">
                         <Title text="{i18n>rackDemoTableTitle}" level="H2" />
@@ -97,13 +96,11 @@
                                 <ObjectStatus text="{demoRack>/selectedBin/status}" state="{demoRack>/selectedBin/statusState}" />
                                 <Label text="{i18n>rackDemoSelectedBin}" /><Title text="{demoRack>/selectedBin/binId}" level="H3" />
                                 <HBox class="demoRackDetailGrid" wrap="Wrap">
-                                    <VBox><Label text="{i18n>rackDemoDetailFloor}" /><Text text="{demoRack>/selectedBin/floor}" /></VBox>
                                     <VBox><Label text="{i18n>rackDemoDetailRack}" /><Text text="{demoRack>/selectedBin/rackId}" /></VBox>
                                     <VBox><Label text="{i18n>rackDemoDetailBay}" /><Text text="{demoRack>/selectedBin/bayId}" /></VBox>
                                     <VBox><Label text="{i18n>rackDemoDetailPosition}" /><Text text="{demoRack>/selectedBin/binPosition}" /></VBox>
                                     <VBox><Label text="{i18n>rackDemoDetailPhysicalLevel}" /><Text text="{demoRack>/selectedBin/physicalLevelLabel}" /></VBox>
                                     <VBox><Label text="{i18n>rackDemoDetailSection}" /><Text text="{demoRack>/selectedBin/section}" /></VBox>
-                                    <VBox><Label text="{i18n>rackDemoDetailBinType}" /><Text text="{i18n>rackDemoBinTypeValue}" /></VBox>
                                     <VBox><Label text="{i18n>rackDemoDetailMaterial}" /><Text text="{demoRack>/selectedBin/material}" /></VBox>
                                 </HBox>
                                 <HBox alignItems="Center" justifyContent="SpaceBetween" class="demoRackHuListHeader"><Title text="{i18n>rackDemoHuListTitle}" level="H3" /><ObjectStatus text="{= ${demoRack>/selectedBin/huCount} + ' HU' }" state="Information" /></HBox>

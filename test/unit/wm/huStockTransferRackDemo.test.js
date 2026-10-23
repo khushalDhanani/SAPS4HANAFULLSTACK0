@@ -1,5 +1,9 @@
 let Provider;
 let ControllerClass;
+const fs = require("fs");
+const path = require("path");
+const demoView = fs.readFileSync(path.join(__dirname, "../../../app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferRackDemo.view.xml"), "utf8");
+const demoCss = fs.readFileSync(path.join(__dirname, "../../../app/fiori-app/webapp/css/style.css"), "utf8");
 
 class MockJSONModel {
     constructor(data) { this.data = data || {}; }
@@ -25,6 +29,20 @@ beforeAll(() => {
 });
 
 describe("HU stock transfer rack demo data model", () => {
+    test("keeps rack controls scannable and physical level non-interactive", () => {
+        expect(demoView).toContain("class=\"demoRackToolbar\"");
+        expect(demoView).toContain("class=\"demoRackControlsToolbar\"");
+        expect(demoView).toContain("class=\"demoRackLevelAttribute\"");
+        expect(demoView).not.toContain("demoRackColorReference");
+        expect(demoView).not.toContain("Physical level (demo)");
+        expect(demoView).not.toMatch(/ObjectStatus text=\"\{i18n>rackDemoPhysicalLevel\}/);
+        expect(demoCss).toContain("grid-template-columns: repeat(3,minmax(0,1fr))");
+        expect(demoCss).toContain("grid-auto-rows: minmax(9.5rem,1fr)");
+        expect(demoCss).toContain("font-size: 1rem; font-weight: 800");
+        expect(demoCss).toContain(".demoRackBays { grid-template-columns: minmax(0,1fr)");
+        expect(demoCss).not.toContain("min-width: 55rem");
+    });
+
     test("keeps floor, rack, physical level, and bin position as separate values", () => {
         const data = Provider.getData();
         expect(data.demoOnly).toBe(true);
