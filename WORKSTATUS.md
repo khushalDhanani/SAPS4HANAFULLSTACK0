@@ -7,6 +7,60 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Tasks 1 to 4: Live Scope Discovery (Plant 1120/1130), Precedent HU Customizing Audit, ZSN2 Profile Analysis, CS02 Serial Stock, Neutral Evidence Sheet, Path A Blocker Precheck Implementation & Unit Tests, and Delivery 0080000134 Profile (2026-10-23 13:55 IST):**
+  - **Task 1: READ-ONLY Live SAP Discovery (Client 220, field names validated via DD03L first):**
+    - Stated READ-ONLY before each call; zero writes, BAPIs, or mutations executed.
+    - 1.a) Open 311 reservations across configured scope:
+      - Origin: Plants `1120` (bob, carol) and `1130` (dave) come from local mock config in `package.json` (`cds.requires.auth.users`). In live SAP, technical user has unrestricted plant access at the RFC layer.
+      - Plant 1120: 88 open 311 items total:
+        - Path A (Shipping-managed, `VSTEL` not blank): 6 items, all in `CS02` (`VSTEL = '1105'`): `529960/1`, `529959/1`, `527588/1`, `523654/1`, `524283/1`, `524284/1`.
+        - Path B (HU-managed, `VSTEL` blank, `XHUPF = 'X'`): 0 items.
+        - Standard (Non-shipping, Non-HU): 82 items (e.g. `HS01`, `CS01`: `527868/1`, `527869/1`, `528480/1`, `528487/1`, `529696/1`).
+      - Plant 1130: 50 open 311 items total:
+        - Path A: 0 items.
+        - Path B: 0 items.
+        - Standard: 50 items (e.g. `HS01`: `531068/1`, `531069/2`, `531067/1`, `528486/1`, `529638/1`).
+    - 1.b) Precedent HUs `2000020030`, `2000020031`, `2000020032`, `2000020037`, `2000020038`, `2000020039`:
+      - All 6 HUs have `VEKP-VHILM = '000000002000000340'` and `MARA-VHART = 'Z007'` ("Boxes").
+      - Matching `T319A/W01` row: **no** (none of the 6 precedent HUs have a matching customizing row in `T319A` for `W01`).
+    - 1.c) Serial profile `ZSN2`:
+      - Profile tables: `T377` (Operations) and `T377P` (Header). Raw fields from `DD03L`: `MANDT`, `SERAIL`, `BELEG`, `PARVW`, `SERPFLICHT`, `EQUIPFL`, `UID_USED`.
+      - Raw rows in `T377` for `ZSN2`: 12 rows. Specifically, operation `BELEG = 'SDLS'` (Maintain delivery) and `BELEG = 'SDCC'` (Completeness check for delivery) have `SERPFLICHT = '03'` (`DD07T` text: "Obligatory").
+      - Confirmed: Serial numbers **are strictly mandatory on outbound deliveries** because `T377-SERPFLICHT = '03'`.
+    - 1.d) HUs for material `8000009754` in `CS02`:
+      - `LQUA` in `1120/CS02`: 20 rows (15 distinct `LENUM` storage units; 10 net available units, all stamped with `LETYP = 'E10'`). Only 1 HU sits in high-rack bin `EN1/1-L0001-04` (`2000019372`), others in interim bins (911, 913, 921, OH1).
+      - Serials via `SER06` / `OBJK`:
+        - HU `2000019372` -> Serial `RKN000111`
+        - HU `2000019370` -> Serial `000000002000019372`
+        - HU `2000019371` -> Serial `RA`
+        - HU `2000019369` -> Serial `RKN21102026`
+        - HU `2000019368` -> Serial `RKN333333`
+      - Open TOs in `LTAP` (`PQUIT = ' '`): Exactly 0 open TOs for `8000009754` in `W01`.
+      - HU count vs six reservations: 1 available HU in rack bin (`2000019372`) and 15 distinct HUs across all `CS02` bins vs 3 open reservations for `8000009754` (3 units needed) and 3 open reservations for `8000006485` (12 units needed).
+    - 1.e) Data for ticket:
+      - `T307T` texts in `W01`: `E1` = `"Drum 25 Ltr"` (`DE`: "Europalette Höhe 1 m"); `E10` = `"Pieces"` (`DE`: "Europalette Höhe 1 m").
+      - `T307` capacity fields in `W01`: both `E1` and `E10` have `KKAPV = 0.000` and `METYP = ''` (blank).
+      - Tables referencing `LETYP` in `W01`: `T307` (2 rows), `T307T` (4 rows), `T319A` (2 rows for E1), `T334P` (`TABLE_WITHOUT_DATA`), `T337B`/`T337Z` (0 rows).
+  - **Task 2: Docs — Neutral Evidence Sheet `docs/sap-customizing/T319A-W01-Z007.md`:**
+    - Authored neutral evidence sheet for the SAP functional consultant containing verified backend facts, Option 1 (`E10`), Option 2 (`E1`), impact assessment questions, and DS4 `SM30` maintenance procedure. The word "Recommended" was omitted.
+  - **Task 3: Implementation of Read-Side Logic & Cockpit i18n Integration:**
+    - Authored `srv/integration/s4hana/wm/transferPathHelper.js` with:
+      - `classifyTransferPath(t001lRow)` -> `'A'` | `'B'` | `'standard'`.
+      - `precheckPathA(reservation, item, hu, context)` returning blockers: `NO_T319A_ROW`, `SERIAL_REQUIRED_NONE_SELECTABLE`, `HU_NOT_IN_STOCK`, `OPEN_DELIVERY_EXISTS`.
+    - Integrated with `HuStockTransferAdapter.validateUnit` and `getCockpitDetail`, returning `TransferPath` and `BlockerDetails`.
+    - Connected to cockpit frontend (`HuStockTransferDetail.controller.js`), formatting blocker messages via `this.getText(blocker.key, blocker.params)` into `statusMessage`.
+    - Added translation keys to both `i18n.properties` and `i18n_en.properties`.
+    - Authored dedicated unit test suite `test/unit/wm/transferPathPrecheck.test.js` (13/13 passed).
+    - Ran full test suite: failing test suites equal baseline (15 failed suites, 85 failed tests; zero new failures).
+  - **Task 4: Report Only — Completion Post Details for Outbound Delivery `0080000134`:**
+    - Movement Type: `241` (Goods Issue to Asset)
+    - Material: `8000009754`
+    - Quantity: `1.000 NOS`
+    - Source Plant / SLoc: `1120` / `CS02` (Stock in 1120/CS02 reduced by 1.000 from 10.000 to 9.000)
+    - Account Assignment: Asset `000000400001` (Sub-number `0000`, Company Code `1000`)
+    - Serial Number: `MBP00001`
+    - Staging Bins Cleared: Interim dynamic bins `913 / 0080000134` and `913 / 0000400001` cleared upon PGI.
+    - Zero live writes or simulations executed.
 - **Governance & Stop-Rule Consultation: Storage Unit Type Decision & Customizing Transport Guidance for V_T319A (2026-10-23 13:42 IST):**
   - **Governance & Landscape Boundaries:**
     - Per `AGENTS.md`, AI engineering agents cannot unilaterally decide business customizing for warehouse configuration, nor execute SAP Basis/CTS transport releases (`SE09`/`SE10`/`STMS`) across landscapes (`DS4` $\rightarrow$ `QA` $\rightarrow$ `PRD`).

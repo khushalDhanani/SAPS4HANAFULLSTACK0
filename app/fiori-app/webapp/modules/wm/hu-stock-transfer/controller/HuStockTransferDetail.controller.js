@@ -90,6 +90,7 @@ sap.ui.define([
         },
 
         onValidateUnit: function () {
+            var that = this;
             var oViewModel = this.getModel("cockpitView");
             var sRes = oViewModel.getProperty("/reservationNo");
             var sItem = oViewModel.getProperty("/reservationItem");
@@ -114,6 +115,12 @@ sap.ui.define([
 
                     if (!oData || !oData.Valid) {
                         var sMsg = (oData && oData.StatusMessage) || "Unit validation failed";
+                        if (oData && oData.BlockerDetails && oData.BlockerDetails.length) {
+                            var aMsgs = oData.BlockerDetails.map(function (b) {
+                                return that.getText(b.key, b.params, b.message);
+                            });
+                            sMsg = aMsgs.join("; ");
+                        }
                         oViewModel.setProperty("/statusMessage", sMsg);
                         oViewModel.setProperty("/statusStateType", "Error");
                         MessageBox.error(sMsg);

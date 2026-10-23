@@ -19,6 +19,7 @@ const cds = require('@sap/cds');
 const LOG = cds.log('hu-stock-transfer-adapter');
 const { RfcClient } = require('../RfcClient');
 const parseRackBinName = require('./parseRackBinName');
+const { classifyTransferPath, precheckPathA } = require('./transferPathHelper');
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -413,20 +414,22 @@ class HuStockTransferAdapter {
       LOG.warn('Could not calculate available unit count:', e.message);
     }
 
-    // Inspect T001L for HUM flag (XHUPF)
+    // Inspect T001L for HUM flag (XHUPF) and shipping management (VSTEL)
     let isHuManaged = false;
     let xhupf = '';
+    let transferPath = 'standard';
     if (row.WERKS && row.LGORT) {
       try {
         const t001lRows = await this.rfc.readTable(
           'T001L',
-          ['WERKS', 'LGORT', 'XHUPF'],
+          ['WERKS', 'LGORT', 'XHUPF', 'VSTEL'],
           [`WERKS = '${row.WERKS}'`, `AND LGORT = '${row.LGORT}'`],
           1
         );
         if (t001lRows.length) {
           xhupf = t001lRows[0].XHUPF || '';
           isHuManaged = xhupf === 'X';
+          transferPath = classifyTransferPath(t001lRows[0]);
         }
       } catch (e) {
         LOG.warn('Could not read T001L for cockpit:', e.message);
@@ -455,7 +458,8 @@ class HuStockTransferAdapter {
       AvailableUnitCount: availCount,
       SutMode: 'Standard Item',
       IsHuManaged: isHuManaged,
-      Xhupf: xhupf
+      Xhupf: xhupf,
+      TransferPath: transferPath
     };
   }
 
@@ -720,6 +724,35 @@ class HuStockTransferAdapter {
     } else if (isPreferred) {
       statusState = 'Success';
       statusMessage = `${unitType} ${s4Unit} verified in Preferred Storage Type ${lgtyp} (Bin: ${lgpla})! Available: ${qty} ${meins}.`;
+    }
+
+    if (cockpit.TransferPath === 'A') {
+      const vRow = vekpRows[0] || {};
+      const precheck = await this.precheckPathA(
+        cockpit,
+        reservationItem,
+        {
+          unitNumber: s4Unit,
+          inStock: qty > 0 && !isOnHold,
+          availableStock: qty,
+          warehouse: lgnum,
+          packagingType: vRow.VHART || '',
+          packagingMaterial: vRow.VHILM || '',
+          serials: sernr ? [sernr] : []
+        }
+      );
+
+      if (!precheck.valid) {
+        return {
+          Valid: false,
+          UnitNumber: s4Unit,
+          UnitType: unitType,
+          StatusState: 'Error',
+          StatusMessage: precheck.blockers.join('; '),
+          Blockers: precheck.blockers,
+          BlockerDetails: precheck.blockerDetails
+        };
+      }
     }
 
     return {
@@ -1443,6 +1476,23 @@ class HuStockTransferAdapter {
 
     return result;
   }
+
+  /**
+   * Classifies transfer path: 'A' (shipping-managed), 'B' (HUM non-shipping), or 'standard'.
+   */
+  classifyTransferPath(t001lRow) {
+    return classifyTransferPath(t001lRow);
+  }
+
+  /**
+   * Pre-checks Path A delivery completion flow for blockers.
+   */
+  async precheckPathA(reservation, item, hu, context = {}) {
+    return precheckPathA(reservation, item, hu, { rfc: this.rfc, ...context });
+  }
 }
+
+HuStockTransferAdapter.classifyTransferPath = classifyTransferPath;
+HuStockTransferAdapter.precheckPathA = precheckPathA;
 
 module.exports = HuStockTransferAdapter;
