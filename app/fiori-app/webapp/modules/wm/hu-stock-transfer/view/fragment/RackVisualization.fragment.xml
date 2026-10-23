@@ -4,51 +4,73 @@
     xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1">
     <!-- Reusable Data-Driven Warehouse Pallet Rack Visualization Component -->
     <!-- Structure: Warehouse -> Storage Type -> Rack -> Level/Tier -> Bay -> Storage Bin -> Slot -> HU/SU -->
-    <VBox class="rackTiersWrapper" items="{path: 'rackView>/tiers', templateShareable: true}">
-        <HBox class="rackTierRow" items="{path: 'rackView>bays', templateShareable: true}">
-            <VBox class="rackBayColumn">
-                <!-- Section Box (1 Bay = 1 Storage Bin) -->
-                <VBox class="{rackView>sectionClass}" app:slotKey="{rackView>slotKey}">
-                    <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
-                        <Text text="{rackView>badgeText}" class="{rackView>badgeClass}" />
-                        <Text text="{rackView>levelTitle}" class="{rackView>badgeClass}" />
-                    </HBox>
+    <VBox class="rackStageInner">
+        <!-- Bay Column Headers: BAY 1, BAY 2, ... -->
+        <HBox class="rackBayHeaderRow" alignItems="Center">
+            <VBox class="rackLevelLabelColSpacer" />
+            <HBox class="rackBaysHeaderList" items="{path: 'rackView>/baysHeader', templateShareable: true}">
+                <HBox class="rackBayHeaderCol" justifyContent="Center" alignItems="Center">
+                    <Text text="{rackView>label}" class="rackBayHeaderTitle" />
+                </HBox>
+            </HBox>
+        </HBox>
 
-                    <!-- Pallet Slots (Dual Pallets Side-by-Side) -->
-                    <HBox class="rackPalletsPair" alignItems="End" items="{path: 'rackView>slots', templateShareable: true}">
-                        <!-- Individual Pallet & Carton Position -->
-                        <VBox class="rackPalletCargo">
-                            <!-- Carton Box with HU / Unit Info -->
-                            <VBox class="{rackView>cartonClass}">
-                                <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
-                                    <Text text="{rackView>unitType}" />
-                                    <Text text="{rackView>serialNumber}" />
-                                </HBox>
-                                <Text text="{rackView>titleText}" class="rackCartonTitle" />
-                                <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
-                                    <Text text="{rackView>qtyText}" />
-                                    <Text text="{rackView>sutCode}" class="rackSkuPill" visible="{rackView>hasSut}" />
-                                </HBox>
-                            </VBox>
-                            <!-- Wooden Pallet Base (Slat + Runners) -->
-                            <VBox class="rackPalletWood" visible="{rackView>hasUnit}">
-                                <HBox class="rackPalletSlat" />
-                                <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
-                                    <HBox class="rackRunnerBlock" />
-                                    <HBox class="rackRunnerBlock" />
-                                    <HBox class="rackRunnerBlock" />
-                                </HBox>
-                            </VBox>
-                        </VBox>
-                    </HBox>
+        <!-- Dynamic Tiers: LEVEL 6 down to LEVEL 0 -->
+        <VBox class="rackTiersWrapper" items="{path: 'rackView>/tiers', templateShareable: true}">
+            <HBox class="rackTierRow" alignItems="Stretch">
+                <!-- Level Indicator Column: LEVEL 6, LEVEL 5, ..., LEVEL 0 -->
+                <VBox class="rackLevelLabelCol" justifyContent="Center" alignItems="Center">
+                    <Text text="{rackView>levelTitle}" class="rackLevelTitleText" />
+                    <Text text="{rackView>levelCode}" class="rackLevelCodeBadge" />
                 </VBox>
 
-                <!-- Color-Coded Step Beam with Bin Tag and Level Code -->
-                <HBox class="{rackView>beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="{rackView>slotKey}">
-                    <Link text="{rackView>binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="{rackView>slotKey}" />
-                    <Text text="{rackView>levelCode}" class="rackBeamLevelLabel" />
+                <!-- Bays in Tier (Storage Bins) -->
+                <HBox class="rackBaysGrid" items="{path: 'rackView>bays', templateShareable: true}">
+                    <VBox class="rackBayColumn">
+                        <!-- Section Box (1 Bay = 1 Storage Bin) -->
+                        <VBox class="{rackView>sectionClass}" app:slotKey="{rackView>slotKey}">
+                            <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
+                                <Text text="{rackView>badgeText}" class="{rackView>badgeClass}" />
+                                <Text text="{rackView>levelCode}" class="{rackView>badgeClass}" />
+                            </HBox>
+
+                            <!-- Pallet Slots (Dual Pallets Side-by-Side) -->
+                            <HBox class="rackPalletsPair" alignItems="End" items="{path: 'rackView>slots', templateShareable: true}">
+                                <!-- Individual Pallet & Carton Position -->
+                                <VBox class="rackPalletCargo">
+                                    <!-- Carton Box with HU / Unit Info -->
+                                    <VBox class="{rackView>cartonClass}">
+                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
+                                            <Text text="{rackView>unitType}" />
+                                            <Text text="{rackView>serialNumber}" />
+                                        </HBox>
+                                        <Text text="{rackView>titleText}" class="rackCartonTitle" />
+                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
+                                            <Text text="{rackView>qtyText}" />
+                                            <Text text="{rackView>sutCode}" class="rackSkuPill" visible="{rackView>hasSut}" />
+                                        </HBox>
+                                    </VBox>
+                                    <!-- Wooden Pallet Base (Slat + Runners) -->
+                                    <VBox class="rackPalletWood" visible="{rackView>hasUnit}">
+                                        <HBox class="rackPalletSlat" />
+                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                            <HBox class="rackRunnerBlock" />
+                                            <HBox class="rackRunnerBlock" />
+                                            <HBox class="rackRunnerBlock" />
+                                        </HBox>
+                                    </VBox>
+                                </VBox>
+                            </HBox>
+                        </VBox>
+
+                        <!-- Color-Coded Step Beam with Bin Tag and Level Code -->
+                        <HBox class="{rackView>beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="{rackView>slotKey}">
+                            <Link text="{rackView>binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="{rackView>slotKey}" />
+                            <Text text="{rackView>levelCode}" class="rackBeamLevelLabel" />
+                        </HBox>
+                    </VBox>
                 </HBox>
-            </VBox>
-        </HBox>
+            </HBox>
+        </VBox>
     </VBox>
 </core:FragmentDefinition>

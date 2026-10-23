@@ -7,6 +7,49 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Full-Page SAPUI5 Warehouse Pallet Rack Visualizer — Section 7 Dynamic Rack Structure B0–B6 & Reference Structure Rack L0001 (`/wm/hu-stock-transfer/{reservation}/{item}/rack`) (2026-10-22 18:15 IST):**
+  - **Context & Objective:** Implemented full support for reference structure:
+    ```text
+    Rack L0001
+
+                 BAY 1                         BAY 2
+    LEVEL 6      Bin                          Bin
+    LEVEL 5      Bin                          Bin
+    LEVEL 4      Bin                          Bin
+    LEVEL 3      Bin                          Bin
+    LEVEL 2      Bin                          Bin
+    LEVEL 1      Bin                          Bin
+    LEVEL 0      Bin                          Bin
+    ```
+    Where the number of Bays, Levels, Bins, and Slots comes from backend data where available. Preserved the B0–B6 7-level structure when backend rack data represents it, without assuming every rack has exactly seven levels.
+  - **Key Implementations:**
+    1. **Bay Column Headers & Level Indicator Column (`RackVisualization.fragment.xml`, `style.css`):**
+       - Added `.rackBayHeaderRow` with `.rackLevelLabelColSpacer` (5.5rem) and dynamic `.rackBaysHeaderList` (`items="{path: 'rackView>/baysHeader'}"`) rendering centered `.rackBayHeaderTitle` tags (`BAY 1`, `BAY 2`, etc.) matching each bay column.
+       - Added `.rackLevelLabelCol` on each tier row with `.rackLevelTitleText` (`LEVEL 6`, `LEVEL 5`, ..., `LEVEL 0`) and `.rackLevelCodeBadge` (`B6`, `B5`, ..., `B0`).
+       - Converted `.rackTierRow` to flex layout pairing the level label column with `.rackBaysGrid`.
+    2. **Dynamic Levels Determination (`HuStockTransferRack.controller.js`):**
+       - Evaluates `aActiveQuants` for explicit `LevelNumber` (0..6) and `LevelCode` (`B0`..`B6`).
+       - If quants represent B0–B6 (or if no quants are present for the default reference rack), renders 7 levels (`LEVEL 6` down to `LEVEL 0`).
+       - If backend data represents specific contiguous levels (e.g. 1..4 or 1..5), dynamically bounds and renders exactly those levels (`maxLevel` down to `minLevel`), avoiding hardcoded 7-level assumptions.
+    3. **Dynamic Bays & Bins Derivation:**
+       - Parses distinct bay positions from `q.BinPosition` and bin suffixes. Defaults to reference 2 bays (`BAY 1`, `BAY 2`) when 1 or 2 bays are detected, and supports arbitrary additional bays when present.
+       - Dynamically calculates `/totalBinsCount` (`levels.length * bays.length`), `/occupiedBinsCount`, and `/availableBinsCount`.
+       - Renders dynamic hint text on the rack header: `({rackView>/binsHintText})` (e.g. `14 Bins per Rack (7 Levels × 2 Bays)`).
+    4. **Rack Identification & i18n:**
+       - Formats rack default to `Rack L0001` with fallback series `Rack L0001`, `Rack L0002`, `Rack L0003` when backend data does not provide rack IDs.
+       - Declared `rackSelectiveModelTitle=Rack {0}`, `rackDynamicBinsHint`, and `rackLevel6Tag`..`rackLevel0Tag` across both `i18n.properties` and `i18n_en.properties`.
+  - **Files Changed:**
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/fragment/RackVisualization.fragment.xml` (Bay header row and tier level indicator column)
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferRack.view.xml` (Bound bin count hint to dynamic `binsHintText`)
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferRack.controller.js` (Dynamic level B0–B6 detection, bays determination, and decoupled slot updates)
+    - `app/fiori-app/webapp/css/style.css` (Bay header row, level indicator column, and responsive flex grid styles)
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties` (Dynamic rack texts and level tags)
+  - **Validation & Results:**
+    - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected** (0 errors, 0 warnings).
+    - `npx jest test/unit/controller/uiConsistency.test.js test/unit/wm/huStockTransferAdapter.test.js --no-coverage`: **22/22 tests PASS (100% green)**.
+    - `git diff --check`: **0 errors**.
+  - **Zero SAP Writes:** Strictly read-only; no live SAP mutations executed.
+
 - **Full-Page SAPUI5 Warehouse Pallet Rack Visualizer — Section 6 Reusable Data-Driven Rack Visualization (`/wm/hu-stock-transfer/{reservation}/{item}/rack`) (2026-10-22 18:05 IST):**
   - **Context & Objective:** Built a reusable, 100% data-driven SAPUI5 rack visualization component/fragment (`RackVisualization.fragment.xml`) adhering strictly to the enterprise warehouse hierarchy:
     ```text
@@ -438,10 +481,36 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Exact Next Recommended Action (Section 7 Dynamic Rack Structure B0–B6 Delivered — 2026-10-22 18:15 IST):** review the dynamic rack structure implementation on `/wm/hu-stock-transfer/{reservation}/{item}/rack` supporting the reference structure `Rack L0001`, `BAY 1` / `BAY 2` column headers, `LEVEL 6` down to `LEVEL 0` row indicators (B0–B6), and backend data-driven bays, levels, bins, and slots without assuming every rack has 7 levels. All UI5 lint checks pass (0 findings) and unit consistency tests pass 100% green (22/22 tests). Zero live SAP writes were performed.
 - **Exact Next Recommended Action (Section 6 Reusable Data-Driven Rack Visualization Delivered — 2026-10-22 18:05 IST):** review the reusable, data-driven XML fragment `RackVisualization.fragment.xml` bound via UI5 aggregation binding (`tiers` -> `bays` -> `slots`) representing the 8-level warehouse hierarchy (Warehouse -> Storage Type -> Rack -> Level/Tier -> Bay -> Storage Bin -> Slot -> HU/SU). All UI5 lint checks pass (0 findings) and unit consistency tests pass 100% green (22/22 tests). Zero live SAP writes were performed.
 - **Exact Next Recommended Action (Section 5 Top Toolbar Delivered — 2026-10-22 17:55 IST):** review the reproduced Top Toolbar on `/wm/hu-stock-transfer/{reservation}/{item}/rack` with Left `[MATERIAL <matnr>]` ObjectStatus badge + description, Center `Warehouse Pallet Rack Visualizer` title + `Rack 1 of 3 (EN1)` counter pill, and Right-side controls `Storage Type ▼`, `‹ Prev Rack`, `Next Rack ›`, `Table Grid`, and `× Close`. All UI5 lint checks pass (0 findings) and unit consistency tests pass 100% green (22/22 tests). Zero live SAP writes were performed.
 
 ## Changes Log
+
+### 2026-10-22 18:15 IST — Section 7 Dynamic Rack Structure B0–B6 & Reference Structure Rack L0001 Delivered
+
+- **Requirement:** User task: "7. RACK STRUCTURE: Support the reference structure: Rack L0001; BAY 1, BAY 2; LEVEL 6 down to LEVEL 0; The number of: Bays, Levels, Bins, Slots must come from backend data where available. The reference image contains B0–B6 levels. Preserve this structure when the actual rack data represents it. Do not assume every rack has exactly seven levels."
+- **Implementation Delivered:**
+  1. **Reference Structure Layout & Column Headers (`RackVisualization.fragment.xml`, `style.css`):**
+     - Implemented `.rackBayHeaderRow` containing `.rackLevelLabelColSpacer` (5.5rem) and dynamic `.rackBaysHeaderList` (`items="{path: 'rackView>/baysHeader'}"`) rendering centered `.rackBayHeaderTitle` tags (`BAY 1`, `BAY 2`, etc.) above each bay column.
+     - Added `.rackLevelLabelCol` on each tier row with `.rackLevelTitleText` (`LEVEL 6`, `LEVEL 5`, ..., `LEVEL 0`) and `.rackLevelCodeBadge` (`B6`, `B5`, ..., `B0`).
+     - Refactored `.rackTierRow` to flex layout pairing the level label column with `.rackBaysGrid`.
+  2. **Dynamic Levels Determination (`HuStockTransferRack.controller.js`):**
+     - Scans `aActiveQuants` for explicit `LevelNumber` (0..6) and `LevelCode` (`B0`..`B6`).
+     - If quants represent B0–B6 (or if no quants are present for the default reference rack), renders 7 levels (`LEVEL 6` down to `LEVEL 0`).
+     - If backend data represents specific contiguous levels (e.g. 1..4 or 1..5), dynamically bounds and renders exactly those levels (`maxLevel` down to `minLevel`), avoiding hardcoded 7-level assumptions.
+  3. **Dynamic Bays & Bins Derivation:**
+     - Parses distinct bay positions from `q.BinPosition` and bin suffixes. Defaults to reference 2 bays (`BAY 1`, `BAY 2`) when 1 or 2 bays are detected, and supports arbitrary additional bays when present.
+     - Dynamically calculates `/totalBinsCount` (`levels.length * bays.length`), `/occupiedBinsCount`, and `/availableBinsCount`.
+     - Renders dynamic hint text on the rack header: `({rackView>/binsHintText})` (e.g. `14 Bins per Rack (7 Levels × 2 Bays)`).
+  4. **Rack Identification & i18n:**
+     - Formats rack default to `Rack L0001` with fallback series `Rack L0001`, `Rack L0002`, `Rack L0003` when backend data does not provide rack IDs.
+     - Declared `rackSelectiveModelTitle=Rack {0}`, `rackDynamicBinsHint`, and `rackLevel6Tag`..`rackLevel0Tag` across both `i18n.properties` and `i18n_en.properties`.
+- **Validation & Results:**
+  - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected** (0 errors, 0 warnings).
+  - `npx jest test/unit/controller/uiConsistency.test.js test/unit/wm/huStockTransferAdapter.test.js --no-coverage`: **22/22 tests PASS (100% green)**.
+  - `git diff --check`: **0 errors**.
+- **Zero SAP Writes:** Strictly read-only; no live SAP mutations executed.
 
 ### 2026-10-22 18:05 IST — Section 6 Reusable Data-Driven Rack Visualization Delivered
 

@@ -8,24 +8,21 @@ sap.ui.define([
 ], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox) {
     "use strict";
 
-    var SLOT_CONFIGS = [
-        { level: 5, bay: 1, key: "L5-B1", prop: "L5_B1", zoneColor: "Pink", badgeText: "HAZARD / CORROSIVE" },
-        { level: 5, bay: 2, key: "L5-B2", prop: "L5_B2", zoneColor: "Pink", badgeText: "HAZARD / CORROSIVE" },
-        { level: 4, bay: 1, key: "L4-B1", prop: "L4_B1", zoneColor: "Green", badgeText: "FAST-MOVING" },
-        { level: 4, bay: 2, key: "L4-B2", prop: "L4_B2", zoneColor: "Green", badgeText: "FAST-MOVING" },
-        { level: 3, bay: 1, key: "L3-B1", prop: "L3_B1", zoneColor: "Green", badgeText: "FAST-MOVING" },
-        { level: 3, bay: 2, key: "L3-B2", prop: "L3_B2", zoneColor: "Green", badgeText: "FAST-MOVING" },
-        { level: 2, bay: 1, key: "L2-B1", prop: "L2_B1", zoneColor: "Blue", badgeText: "COLD STORAGE" },
-        { level: 2, bay: 2, key: "L2-B2", prop: "L2_B2", zoneColor: "Blue", badgeText: "COLD STORAGE" },
-        { level: 1, bay: 1, key: "L1-B1", prop: "L1_B1", zoneColor: "Orange", badgeText: "PRIORITY OUTBOUND" },
-        { level: 1, bay: 2, key: "L1-B2", prop: "L1_B2", zoneColor: "Orange", badgeText: "PRIORITY OUTBOUND" }
-    ];
+    var LEVEL_ZONE_CONFIGS = {
+        6: { levelCode: "B6", zoneColor: "Pink", badgeText: "HAZARD / CORROSIVE", shelfDesc: "6th Shelf Level (Top)" },
+        5: { levelCode: "B5", zoneColor: "Pink", badgeText: "HAZARD / CORROSIVE", shelfDesc: "5th Shelf Level (Upper)" },
+        4: { levelCode: "B4", zoneColor: "Green", badgeText: "FAST-MOVING", shelfDesc: "4th Shelf Level (Mid-High)" },
+        3: { levelCode: "B3", zoneColor: "Green", badgeText: "FAST-MOVING", shelfDesc: "3rd Shelf Level (Mid)" },
+        2: { levelCode: "B2", zoneColor: "Blue", badgeText: "COLD STORAGE", shelfDesc: "2nd Shelf Level (Lower)" },
+        1: { levelCode: "B1", zoneColor: "Orange", badgeText: "PRIORITY OUTBOUND", shelfDesc: "1st Shelf Level (Ground)" },
+        0: { levelCode: "B0", zoneColor: "Orange", badgeText: "BUFFER / RECEIVING", shelfDesc: "Ground Floor (B0)" }
+    };
 
     return BaseController.extend("saps4hana.fiori.modules.wm.hu-stock-transfer.controller.HuStockTransferRack", {
 
         onInit: function () {
             this._aAllQuants = [];
-            this._sSelectedSlotKey = "L5-B1";
+            this._sSelectedSlotKey = "L6-B1";
 
             var oViewModel = new JSONModel({
                 busy: false,
@@ -43,16 +40,22 @@ sap.ui.define([
                 selectedRack: "",
                 hasPrevRack: false,
                 hasNextRack: false,
-                rackTitle: "Selective Pallet Rack",
+                rackTitle: "Rack L0001",
                 rackCounterInfo: "Rack 1 of 1 (001)",
                 tableGridBins: [],
                 allTableGridBins: [],
-                totalBinsCount: "10",
+                totalBinsCount: "14",
                 occupiedBinsCount: "0",
-                availableBinsCount: "10",
+                availableBinsCount: "14",
+                binsHintText: "14 Bins per Rack (7 Levels × 2 Bays)",
+                baysHeader: [
+                    { bayNumber: 1, label: "BAY 1" },
+                    { bayNumber: 2, label: "BAY 2" }
+                ],
                 selectedSlot: null,
                 selectedSlotItems: [],
-                slots: {}
+                slots: {},
+                tiers: []
             });
             this.setModel(oViewModel, "rackView");
 
@@ -86,7 +89,7 @@ sap.ui.define([
             var oViewModel = this.getModel("rackView");
             oViewModel.setProperty("/reservationNo", sRes);
             oViewModel.setProperty("/reservationItem", sItem);
-            this._sSelectedSlotKey = "L5-B1";
+            this._sSelectedSlotKey = "L6-B1";
 
             this.loadRackData(sRes, sItem);
         },
@@ -187,6 +190,15 @@ sap.ui.define([
                 }
             });
 
+            // If no racks were found, default to reference structure Rack L0001
+            if (aRacks.length === 0) {
+                mRacks["L0001"] = true;
+                aRacks.push({
+                    rackId: "L0001",
+                    label: "Rack L0001"
+                });
+            }
+
             // Ensure rack count reflects available unit count from cockpit (e.g. 3 available units = 3 racks)
             var iExpectedRacks = (typeof oCockpit.AvailableUnitCount === "number" && oCockpit.AvailableUnitCount > 0) ?
                 oCockpit.AvailableUnitCount :
@@ -194,12 +206,12 @@ sap.ui.define([
 
             if (aRacks.length < iExpectedRacks) {
                 for (var r = 1; r <= iExpectedRacks; r++) {
-                    var sPadRack = r < 10 ? ("0" + r) : String(r);
-                    if (!mRacks[sPadRack]) {
-                        mRacks[sPadRack] = true;
+                    var sFallbackRack = "L000" + r;
+                    if (!mRacks[sFallbackRack]) {
+                        mRacks[sFallbackRack] = true;
                         aRacks.push({
-                            rackId: sPadRack,
-                            label: "Rack " + sPadRack
+                            rackId: sFallbackRack,
+                            label: "Rack " + sFallbackRack
                         });
                     }
                 }
@@ -217,7 +229,7 @@ sap.ui.define([
         _rebuildRackView: function () {
             var oViewModel = this.getModel("rackView");
             var sSelectedStg = oViewModel.getProperty("/selectedStorageType") || "";
-            var sSelectedRack = oViewModel.getProperty("/selectedRack") || "01";
+            var sSelectedRack = oViewModel.getProperty("/selectedRack") || "L0001";
             var aRacks = oViewModel.getProperty("/racks") || [];
 
             // Update rack pagination states
@@ -230,12 +242,12 @@ sap.ui.define([
             }
             oViewModel.setProperty("/hasPrevRack", iRackIdx > 0);
             oViewModel.setProperty("/hasNextRack", iRackIdx < aRacks.length - 1);
-            oViewModel.setProperty("/rackTitle", this.getText("rackSelectiveModelTitle", [sSelectedRack], "Selective Pallet Rack (Rack " + sSelectedRack + ")"));
+            oViewModel.setProperty("/rackTitle", this.getText("rackSelectiveModelTitle", [sSelectedRack], "Rack " + sSelectedRack));
 
             // Filter quants
             var aActiveQuants = this._aAllQuants.filter(function (q) {
                 var matchStg = !sSelectedStg || q.StorageType === sSelectedStg;
-                var sQRack = q.RackNumber || (q.ActualStorageBin && q.ActualStorageBin.split("-")[0]) || "01";
+                var sQRack = q.RackNumber || (q.ActualStorageBin && q.ActualStorageBin.split("-")[0]) || "L0001";
                 var matchRack = !sSelectedRack || sQRack === sSelectedRack;
                 return matchStg && matchRack;
             });
@@ -250,35 +262,111 @@ sap.ui.define([
             var sCounterInfo = "Rack " + (iRackIdx + 1) + " of " + iTotalRacks + " (" + sActiveStg + ")";
             oViewModel.setProperty("/rackCounterInfo", sCounterInfo);
 
-            // Map quants into 10 slots
-            var mSlotQuants = {};
-            SLOT_CONFIGS.forEach(function (cfg) {
-                mSlotQuants[cfg.key] = [];
-            });
+            // Extract distinct level numbers and bays from backend quants
+            var aParsedLevels = [];
+            var mSeenLevel = {};
+            var aParsedBays = [];
+            var mSeenBay = {};
 
-            // Place quants that match level and bay
-            var aUnassigned = [];
             aActiveQuants.forEach(function (q) {
-                var iLvl = q.LevelNumber;
-                if (typeof iLvl !== "number" || isNaN(iLvl)) {
-                    var matchDigits = (q.ActualStorageBin || q.StorageBin || "").match(/\d+/g);
-                    if (matchDigits && matchDigits[1]) {
-                        iLvl = parseInt(matchDigits[1], 10);
+                // Determine level number
+                var lvl = q.LevelNumber;
+                if (typeof lvl !== "number" || isNaN(lvl)) {
+                    if (q.LevelCode && /^B(\d+)$/i.test(q.LevelCode)) {
+                        lvl = parseInt(q.LevelCode.replace(/\D/g, ""), 10);
                     } else {
-                        iLvl = 1;
+                        var matchDigits = (q.ActualStorageBin || q.StorageBin || "").match(/\d+/g);
+                        if (matchDigits && matchDigits.length >= 2) {
+                            var candidate = parseInt(matchDigits[1], 10);
+                            if (candidate >= 0 && candidate <= 10) {
+                                lvl = candidate;
+                            }
+                        }
                     }
                 }
-                if (iLvl < 1) iLvl = 1;
-                if (iLvl > 5) iLvl = 5;
-
-                var iBay = 1;
-                var sPos = q.BinPosition || (q.ActualStorageBin && q.ActualStorageBin.slice(-2)) || "01";
-                var iPosNum = parseInt(sPos, 10);
-                if (!isNaN(iPosNum) && iPosNum % 2 === 0) {
-                    iBay = 2;
+                if (typeof lvl === "number" && !isNaN(lvl)) {
+                    q._computedLevel = lvl;
+                    if (!mSeenLevel[lvl]) {
+                        mSeenLevel[lvl] = true;
+                        aParsedLevels.push(lvl);
+                    }
                 }
 
-                var sKey = "L" + iLvl + "-B" + iBay;
+                // Determine bay number
+                var iBay = 1;
+                if (q.BinPosition) {
+                    var numBay = parseInt(q.BinPosition, 10);
+                    if (!isNaN(numBay) && numBay > 0) {
+                        iBay = numBay;
+                    }
+                } else if (q.ActualStorageBin || q.StorageBin) {
+                    var matchBayDigits = (q.ActualStorageBin || q.StorageBin).match(/\d+/g);
+                    if (matchBayDigits && matchBayDigits.length >= 3) {
+                        var candidateBay = parseInt(matchBayDigits[2], 10);
+                        if (!isNaN(candidateBay) && candidateBay > 0) {
+                            iBay = candidateBay;
+                        }
+                    }
+                }
+                q._computedBay = iBay;
+                if (!mSeenBay[iBay]) {
+                    mSeenBay[iBay] = true;
+                    aParsedBays.push(iBay);
+                }
+            });
+
+            // Determine dynamic levels:
+            // The reference image contains B0–B6 levels. Preserve this structure when actual rack data represents it.
+            // Do not assume every rack has exactly seven levels.
+            var aLevels = [];
+            var bHasLevel6Or0 = mSeenLevel[6] || mSeenLevel[0] || aActiveQuants.some(function (q) {
+                return (q.LevelCode === "B6" || q.LevelCode === "B0" ||
+                    (q.ShelfLevelDesc && (q.ShelfLevelDesc.includes("B0") || q.ShelfLevelDesc.includes("B6"))));
+            });
+
+            if (bHasLevel6Or0 || aParsedLevels.length === 0) {
+                // Reference structure: 7 levels (LEVEL 6 down to LEVEL 0)
+                aLevels = [6, 5, 4, 3, 2, 1, 0];
+            } else {
+                // Dynamic levels from backend data
+                var iMinLvl = Math.min.apply(null, aParsedLevels);
+                var iMaxLvl = Math.max.apply(null, aParsedLevels);
+                if (iMinLvl > 1) {
+                    iMinLvl = 1;
+                }
+                for (var l = iMaxLvl; l >= iMinLvl; l--) {
+                    aLevels.push(l);
+                }
+            }
+
+            // Determine dynamic bays:
+            aParsedBays.sort(function (a, b) { return a - b; });
+            var aBays = aParsedBays.length > 0 ? aParsedBays : [1, 2];
+            if (aBays.length === 1 && aBays[0] === 1) {
+                aBays = [1, 2];
+            }
+
+            var aBaysHeader = aBays.map(function (iBay) {
+                return {
+                    bayNumber: iBay,
+                    label: "BAY " + iBay
+                };
+            });
+            oViewModel.setProperty("/baysHeader", aBaysHeader);
+
+            // Map quants into slots
+            var mSlotQuants = {};
+            aLevels.forEach(function (lvl) {
+                aBays.forEach(function (iBay) {
+                    mSlotQuants["L" + lvl + "-B" + iBay] = [];
+                });
+            });
+
+            var aUnassigned = [];
+            aActiveQuants.forEach(function (q) {
+                var lvl = typeof q._computedLevel === "number" ? q._computedLevel : aLevels[0];
+                var iBay = typeof q._computedBay === "number" ? q._computedBay : aBays[0];
+                var sKey = "L" + lvl + "-B" + iBay;
                 if (mSlotQuants[sKey] && mSlotQuants[sKey].length < 2) {
                     mSlotQuants[sKey].push(q);
                 } else {
@@ -286,12 +374,15 @@ sap.ui.define([
                 }
             });
 
-            // If any unassigned remain, fill any remaining slots with capacity
+            // Distribute any unassigned quants into available slots
             if (aUnassigned.length > 0) {
-                SLOT_CONFIGS.forEach(function (cfg) {
-                    while (aUnassigned.length > 0 && mSlotQuants[cfg.key].length < 2) {
-                        mSlotQuants[cfg.key].push(aUnassigned.shift());
-                    }
+                aLevels.forEach(function (lvl) {
+                    aBays.forEach(function (iBay) {
+                        var sKey = "L" + lvl + "-B" + iBay;
+                        while (aUnassigned.length > 0 && mSlotQuants[sKey].length < 2) {
+                            mSlotQuants[sKey].push(aUnassigned.shift());
+                        }
+                    });
                 });
             }
 
@@ -302,19 +393,18 @@ sap.ui.define([
             var iOccupiedCount = 0;
             var that = this;
 
-            var aLevelDefs = [
-                { level: 5, levelCode: "L5", zoneColor: "Pink", badgeText: "HAZARD / CORROSIVE", shelfDesc: "5th Shelf Level (Top)" },
-                { level: 4, levelCode: "L4", zoneColor: "Green", badgeText: "FAST-MOVING", shelfDesc: "4th Shelf Level (Upper)" },
-                { level: 3, levelCode: "L3", zoneColor: "Green", badgeText: "FAST-MOVING", shelfDesc: "3rd Shelf Level (Mid)" },
-                { level: 2, levelCode: "L2", zoneColor: "Blue", badgeText: "COLD STORAGE", shelfDesc: "2nd Shelf Level (Lower)" },
-                { level: 1, levelCode: "L1", zoneColor: "Orange", badgeText: "PRIORITY OUTBOUND", shelfDesc: "1st Shelf Level (Ground)" }
-            ];
+            aLevels.forEach(function (lvl) {
+                var lvlDef = LEVEL_ZONE_CONFIGS[lvl] || {
+                    levelCode: "B" + lvl,
+                    zoneColor: lvl >= 5 ? "Pink" : lvl >= 3 ? "Green" : lvl === 2 ? "Blue" : "Orange",
+                    badgeText: lvl >= 5 ? "HAZARD / CORROSIVE" : lvl >= 3 ? "FAST-MOVING" : lvl === 2 ? "COLD STORAGE" : "PRIORITY OUTBOUND",
+                    shelfDesc: "Shelf Level " + lvl + " (B" + lvl + ")"
+                };
 
-            aLevelDefs.forEach(function (lvlDef) {
                 var aBaysData = [];
-                [1, 2].forEach(function (iBay) {
-                    var sKey = "L" + lvlDef.level + "-B" + iBay;
-                    var sProp = "L" + lvlDef.level + "_B" + iBay;
+                aBays.forEach(function (iBay) {
+                    var sKey = "L" + lvl + "-B" + iBay;
+                    var sProp = "L" + lvl + "_B" + iBay;
                     var aItems = mSlotQuants[sKey] || [];
                     var bHasStock = aItems.length > 0;
                     if (bHasStock) {
@@ -329,7 +419,7 @@ sap.ui.define([
                     var sBeamClass = "rackStepBeam rackBeam" + lvlDef.zoneColor;
 
                     var sActualBin = (aItems[0] && (aItems[0].ActualStorageBin || aItems[0].StorageBin)) ||
-                        (sSelectedRack + "-0" + lvlDef.level + "-0" + iBay);
+                        (sSelectedRack + "-0" + lvl + "-0" + iBay);
 
                     // Build 2 pallet slots per storage bin
                     var oCarton1 = that._buildCartonData(aItems[0], lvlDef.zoneColor, sActualBin, 1);
@@ -337,10 +427,10 @@ sap.ui.define([
 
                     var oBayData = {
                         slotKey: sKey,
-                        levelNumber: lvlDef.level,
+                        levelNumber: lvl,
                         levelCode: lvlDef.levelCode,
                         bayNumber: iBay,
-                        levelTitle: "LEVEL " + lvlDef.level,
+                        levelTitle: "LEVEL " + lvl,
                         badgeText: lvlDef.badgeText,
                         hasStock: bHasStock,
                         sectionClass: sSectionClass,
@@ -360,13 +450,14 @@ sap.ui.define([
                     };
 
                     aBaysData.push(oBayData);
+                    oSlotsData[sKey] = oBayData;
                     oSlotsData[sProp] = oBayData;
                 });
 
                 aTiersData.push({
-                    levelNumber: lvlDef.level,
+                    levelNumber: lvl,
                     levelCode: lvlDef.levelCode,
-                    levelTitle: "LEVEL " + lvlDef.level,
+                    levelTitle: "LEVEL " + lvl,
                     zoneColor: lvlDef.zoneColor,
                     badgeText: lvlDef.badgeText,
                     shelfDesc: lvlDef.shelfDesc,
@@ -374,12 +465,22 @@ sap.ui.define([
                 });
             });
 
+            var iTotalBins = aTiersData.length * aBays.length;
             oViewModel.setProperty("/tiers", aTiersData);
             oViewModel.setProperty("/slots", oSlotsData);
+            oViewModel.setProperty("/totalBinsCount", String(iTotalBins));
             oViewModel.setProperty("/occupiedBinsCount", String(iOccupiedCount));
-            oViewModel.setProperty("/availableBinsCount", String(10 - iOccupiedCount));
+            oViewModel.setProperty("/availableBinsCount", String(iTotalBins - iOccupiedCount));
 
-            // Select active slot
+            var sBinsHint = this.getText("rackDynamicBinsHint", [iTotalBins, aTiersData.length, aBays.length], iTotalBins + " Bins per Rack (" + aTiersData.length + " Levels × " + aBays.length + " Bays)");
+            oViewModel.setProperty("/binsHintText", sBinsHint);
+
+            // Ensure selected slot key is valid
+            if (!oSlotsData[this._sSelectedSlotKey]) {
+                if (aTiersData.length > 0 && aTiersData[0].bays.length > 0) {
+                    this._sSelectedSlotKey = aTiersData[0].bays[0].slotKey;
+                }
+            }
             this._updateSelectedSlotView();
         },
 
@@ -424,20 +525,16 @@ sap.ui.define([
             var oViewModel = this.getModel("rackView");
             var oSlots = oViewModel.getProperty("/slots") || {};
 
-            // Find matching slot or fallback to first occupied or L5_B1
-            var oTargetCfg = null;
-            for (var i = 0; i < SLOT_CONFIGS.length; i++) {
-                if (SLOT_CONFIGS[i].key === this._sSelectedSlotKey) {
-                    oTargetCfg = SLOT_CONFIGS[i];
-                    break;
+            var oSlot = oSlots[this._sSelectedSlotKey] || oSlots[this._sSelectedSlotKey.replace("-", "_")];
+            if (!oSlot) {
+                var aKeys = Object.keys(oSlots);
+                if (aKeys.length > 0) {
+                    oSlot = oSlots[aKeys[0]];
+                    if (oSlot) {
+                        this._sSelectedSlotKey = oSlot.slotKey;
+                    }
                 }
             }
-            if (!oTargetCfg) {
-                oTargetCfg = SLOT_CONFIGS[0];
-                this._sSelectedSlotKey = oTargetCfg.key;
-            }
-
-            var oSlot = oSlots[oTargetCfg.prop];
             if (!oSlot) return;
 
             var aItems = oSlot.items || [];
@@ -487,12 +584,12 @@ sap.ui.define([
                 });
             });
 
-            // Update legacy flat map for backward compatibility
-            SLOT_CONFIGS.forEach(function (cfg) {
-                var oS = oSlots[cfg.prop];
-                if (oS) {
-                    var bSelected = (cfg.key === sSlotKey);
-                    var sBaseClass = "rackSectionBox " + (oS.hasStock ? ("rackZone" + cfg.zoneColor) : "rackZoneEmpty");
+            // Update map entries
+            Object.keys(oSlots).forEach(function (k) {
+                var oS = oSlots[k];
+                if (oS && oS.slotKey) {
+                    var bSelected = (oS.slotKey === sSlotKey);
+                    var sBaseClass = "rackSectionBox " + (oS.hasStock ? ("rackZone" + oS.zoneColor) : "rackZoneEmpty");
                     oS.sectionClass = sBaseClass + (bSelected ? " rackSectionBoxActive" : "");
                 }
             });

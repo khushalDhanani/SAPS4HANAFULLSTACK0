@@ -42,7 +42,7 @@
                         <HBox class="rackModelHeader" justifyContent="SpaceBetween" alignItems="Center">
                             <HBox alignItems="Center">
                                 <Title text="{rackView>/rackTitle}" level="H4" />
-                                <Text text="({i18n>rack10BinsHint})" class="sapUiTinyMarginBegin textMuted" />
+                                <Text text="({rackView>/binsHintText})" class="sapUiTinyMarginBegin textMuted" />
                             </HBox>
                             <Text text="{i18n>rackClickSlotHint}" class="textMuted" />
                         </HBox>
