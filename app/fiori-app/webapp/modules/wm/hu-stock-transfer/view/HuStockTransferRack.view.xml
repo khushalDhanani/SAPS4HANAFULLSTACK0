@@ -1,183 +1,78 @@
 <mvc:View
     controllerName="saps4hana.fiori.modules.wm.hu-stock-transfer.controller.HuStockTransferRack"
     xmlns:mvc="sap.ui.core.mvc"
-    xmlns="sap.m"
-    xmlns:core="sap.ui.core"
-    xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1">
-    <Page class="rackVisualizerPage" enableScrolling="false">
+    xmlns="sap.m">
+    <Page
+        id="huStockBinsPage"
+        busy="{rackView>/busy}"
+        busyIndicatorDelay="0">
         <content>
-            <VBox class="rackAppWrapper">
-                <!-- 1. Top Action & Navigation Toolbar -->
-                <HBox class="rackTopBar" justifyContent="SpaceBetween" alignItems="Center">
-                    <!-- Left: Actual Material Number Badge & Description -->
-                    <HBox alignItems="Center">
-                        <ObjectStatus text="{rackView>/materialBadgeText}" class="rackTitleBadge sapUiTinyMarginEnd" inverted="true" state="Information" />
-                        <Text text="{rackView>/materialDesc}" class="rackMatDesc" />
-                    </HBox>
+            <VBox class="sapUiResponsiveContentPadding">
+                <ObjectHeader
+                    title="{= ${rackView>/reservationNo} + ' / ' + ${rackView>/reservationItem} }"
+                    intro="{i18n>huTransferSelectUnitIntro}"
+                    responsive="true" />
 
-                    <!-- Center: Title & Real Rack / Storage Type Indicator (e.g. Rack 1 of 3 (EN1)) -->
-                    <VBox class="rackCenterTitleGroup">
-                        <Title text="{i18n>rackVisualizerTitle}" level="H4" />
-                        <Text text="{rackView>/rackCounterInfo}" class="rackCounterPill" />
-                    </VBox>
+                <MessageStrip
+                    text="{rackView>/error}"
+                    type="Error"
+                    showIcon="true"
+                    visible="{= !!${rackView>/error} }"
+                    class="sapUiSmallMarginBottom" />
 
-                    <!-- Right-Side Controls: Storage Type, Prev, Next, Table Grid, Close -->
-                    <HBox alignItems="Center" class="rackRightControls">
-                        <Label text="{i18n>rackStgTypeLabel}:" labelFor="selectStorageType" class="sapUiTinyMarginEnd textBold rackToolbarLabel" />
-                        <Select id="selectStorageType" items="{rackView>/storageTypes}" selectedKey="{rackView>/selectedStorageType}" change=".onStorageTypeChange" class="sapUiTinyMarginEnd">
-                            <core:Item key="{rackView>key}" text="{rackView>text}" />
-                        </Select>
-                        <Button id="btnPrevRack" text="{i18n>rackPrevButtonText}" icon="sap-icon://navigation-left-arrow" enabled="{rackView>/hasPrevRack}" press=".onPrevRack" class="sapUiTinyMarginEnd" />
-                        <Button id="btnNextRack" text="{i18n>rackNextButtonText}" icon="sap-icon://navigation-right-arrow" iconFirst="false" enabled="{rackView>/hasNextRack}" press=".onNextRack" class="sapUiSmallMarginEnd" />
-                        <Button id="btnTableGrid" text="{i18n>rackTableGridText}" icon="sap-icon://table-view" type="Default" press=".onOpenTableGrid" class="sapUiSmallMarginEnd" />
-                        <Button id="btnCloseVisualizer" text="{i18n>rackCloseButtonText}" icon="sap-icon://decline" type="Reject" press=".onNavBackToCockpit" />
-                    </HBox>
-                </HBox>
+                <Button
+                    text="{i18n>rackRetryButton}"
+                    icon="sap-icon://refresh"
+                    visible="{= !!${rackView>/error} }"
+                    press=".onRetryLoad"
+                    class="sapUiSmallMarginBottom" />
 
-                <!-- 2. Main Workspace: Rack Visualizer (78%) + Detail Panel (22%) -->
-                <HBox class="rackMainWorkspace" alignItems="Stretch">
-                    <!-- Left: Rack Visualization Container (~78% of workspace) -->
-                    <VBox class="rackVisualizerContainer">
-                        <!-- Model Header -->
-                        <HBox class="rackModelHeader" justifyContent="SpaceBetween" alignItems="Center">
-                            <HBox alignItems="Center">
-                                <Title text="{rackView>/rackTitle}" level="H4" />
-                                <Text text="({rackView>/binsHintText})" class="sapUiTinyMarginBegin textMuted" />
-                            </HBox>
-                            <Text text="{i18n>rackClickSlotHint}" class="textMuted" />
-                        </HBox>
-
-                        <!-- Rack Stage: 5 Tiers (Level 5 down to Level 1) × 2 Bays -->
-                        <VBox class="rackStage">
-                            <!-- Reusable Data-Driven Rack Visualization Component -->
-                            <core:Fragment fragmentName="saps4hana.fiori.modules.wm.hu-stock-transfer.view.fragment.RackVisualization" type="XML" />
-                        </VBox>
-                    </VBox>
-
-                    <!-- Right: Selected Bin / HU Details & Action Panel (~22% of workspace) -->
-                    <VBox class="rackDetailPanel">
-                        <!-- Card 1: Slot & Bin Inspector -->
-                        <VBox class="rackInspectorCard">
-                            <HBox justifyContent="SpaceBetween" alignItems="Center">
-                                <Title text="{i18n>rackSlotInspectorTitle}" level="H5" />
-                                <ObjectStatus text="{rackView>/selectedSlot/sectionBadgeText}" state="{rackView>/selectedSlot/sectionState}" />
-                            </HBox>
-                            <Text text="{rackView>/selectedSlot/headingText}" class="sapUiTinyMarginBottom textMuted" />
-
-                            <VBox class="sapUiTinyMarginTop">
-                                <HBox class="rackPropRow">
-                                    <Text text="{i18n>rackSectionTitle}" class="rackPropLabel" />
-                                    <Text text="{rackView>/selectedSlot/storageSectionDesc}" class="rackPropVal" />
-                                </HBox>
-                                <HBox class="rackPropRow">
-                                    <Text text="{i18n>rackStgType}" class="rackPropLabel" />
-                                    <Text text="{rackView>/selectedSlot/storageType}" class="rackPropVal" />
-                                </HBox>
-                                <HBox class="rackPropRow">
-                                    <Text text="{i18n>rackBinType}" class="rackPropLabel" />
-                                    <Text text="{rackView>/selectedSlot/binType}" class="rackPropVal" />
-                                </HBox>
-                                <HBox class="rackPropRow">
-                                    <Text text="{i18n>rackActualBin}" class="rackPropLabel" />
-                                    <Text text="{rackView>/selectedSlot/actualStorageBin}" class="rackPropVal" />
-                                </HBox>
-                                <HBox class="rackPropRow">
-                                    <Text text="{i18n>rackPalletCapacity}" class="rackPropLabel" />
-                                    <Text text="{rackView>/selectedSlot/palletCapacity}" class="rackPropVal" />
-                                </HBox>
-                                <HBox class="rackPropRow">
-                                    <Text text="{i18n>rackAssignedMaterial}" class="rackPropLabel" />
-                                    <Text text="{rackView>/selectedSlot/assignedMaterial}" class="rackPropVal" />
-                                </HBox>
-                                <HBox class="rackPropRow">
-                                    <Text text="{i18n>rackUnitLabel}" class="rackPropLabel" />
-                                    <Text text="{rackView>/selectedSlot/unitNumber}" class="rackPropVal" />
-                                </HBox>
-                                <HBox class="rackPropRow">
-                                    <Text text="{i18n>rackAvailStock}" class="rackPropLabel" />
-                                    <Text text="{rackView>/selectedSlot/availableStock}" class="rackPropVal" />
-                                </HBox>
-                                <HBox class="rackPropRow">
-                                    <Text text="{i18n>rackBatchLabel}" class="rackPropLabel" />
-                                    <Text text="{rackView>/selectedSlot/batch}" class="rackPropVal" />
-                                </HBox>
-                                <HBox class="rackPropRow">
-                                    <Text text="{i18n>rackSerialLabel}" class="rackPropLabel" />
-                                    <Text text="{rackView>/selectedSlot/serialNumber}" class="rackPropVal" />
-                                </HBox>
-                                <HBox class="rackPropRow">
-                                    <Text text="{i18n>rackStockStatus}" class="rackPropLabel" />
-                                    <Text text="{rackView>/selectedSlot/storageStatus}" class="rackPropVal" />
-                                </HBox>
-                            </VBox>
-
-                            <Button text="{i18n>rackBtnSelectUnit}" type="Emphasized" icon="sap-icon://accept" press=".onSelectSlotUnitForTransfer" enabled="{rackView>/selectedSlot/hasUnit}" class="btnSelectUnitAction sapUiSmallMarginTop" />
-                        </VBox>
-
-                        <!-- Card 2: Units in Bin & Color Legend -->
-                        <VBox class="rackUnitsCard">
-                            <Title text="{i18n>rackBinUnitsTitle}" level="H5" />
-                            <Table id="slotUnitsTable" items="{path: 'rackView>/selectedSlotItems'}" noDataText="{i18n>rackNoUnitsInBin}" class="sapUiTinyMarginTop">
-                                <columns>
-                                    <Column><Text text="{i18n>rackColUnit}" /></Column>
-                                    <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>rackColSerial}" /></Column>
-                                    <Column hAlign="End"><Text text="{i18n>rackColQty}" /></Column>
-                                    <Column hAlign="End"><Text text="{i18n>rackColAction}" /></Column>
-                                </columns>
-                                <items>
-                                    <ColumnListItem>
-                                        <cells>
-                                            <Text text="{rackView>UnitNumber}" />
-                                            <Text text="{rackView>SerialNumber}" />
-                                            <ObjectNumber number="{rackView>AvailableQuantity}" unit="{rackView>BaseUnit}" />
-                                            <Button text="{i18n>rackBtnSelect}" type="Transparent" press=".onSelectRowUnit" />
-                                        </cells>
-                                    </ColumnListItem>
-                                </items>
-                            </Table>
-
-                            <Title text="{i18n>rackLegendTitle}" level="H6" class="sapUiSmallMarginTop" />
-                            <VBox class="rackColorLegendGrid">
-                                <HBox class="rackLegendRowPink" justifyContent="SpaceBetween">
-                                    <Text text="{i18n>rackLegendPink}" />
-                                    <Text text="{i18n>rackLevel5Tag}" />
-                                </HBox>
-                                <HBox class="rackLegendRowGreen" justifyContent="SpaceBetween">
-                                    <Text text="{i18n>rackLegendGreen}" />
-                                    <Text text="{i18n>rackLevel4Tag}" />
-                                </HBox>
-                                <HBox class="rackLegendRowBlue" justifyContent="SpaceBetween">
-                                    <Text text="{i18n>rackLegendBlue}" />
-                                    <Text text="{i18n>rackLevel2Tag}" />
-                                </HBox>
-                                <HBox class="rackLegendRowOrange" justifyContent="SpaceBetween">
-                                    <Text text="{i18n>rackLegendOrange}" />
-                                    <Text text="{i18n>rackLevel1Tag}" />
-                                </HBox>
-                            </VBox>
-                        </VBox>
-                    </VBox>
-                </HBox>
-
-                <!-- 3. Physical Rack Information (Bottom Bar) -->
-                <HBox class="rackBottomInfoBar" justifyContent="SpaceBetween" alignItems="Center">
-                    <HBox alignItems="Center">
-                        <Label text="{i18n>rackWhseLabel}:" class="sapUiTinyMarginEnd textMuted" />
-                        <Text text="{rackView>/warehouse}" class="sapUiSmallMarginEnd" />
-                        <Label text="{i18n>rackModelLabel}:" class="sapUiTinyMarginEnd textMuted" />
-                        <Text text="{rackView>/modelName}" class="sapUiSmallMarginEnd" />
-                        <Label text="{i18n>rackDimensionsLabel}:" class="sapUiTinyMarginEnd textMuted" />
-                        <Text text="{rackView>/dimensions}" />
-                    </HBox>
-                    <HBox alignItems="Center">
-                        <Label text="{i18n>rackTotalBinsLabel}:" class="sapUiTinyMarginEnd textMuted" />
-                        <Text text="{rackView>/totalBinsCount}" class="sapUiSmallMarginEnd" />
-                        <Label text="{i18n>rackOccupiedBinsLabel}:" class="sapUiTinyMarginEnd textMuted" />
-                        <Text text="{rackView>/occupiedBinsCount}" class="sapUiSmallMarginEnd" />
-                        <Label text="{i18n>rackAvailableBinsLabel}:" class="sapUiTinyMarginEnd textMuted" />
-                        <Text text="{rackView>/availableBinsCount}" />
-                    </HBox>
-                </HBox>
+                <Table
+                    id="huStockBinsTable"
+                    items="{path: 'rackView>/filteredBins'}"
+                    noDataText="{i18n>storageBinsNoData}"
+                    growing="true"
+                    growingScrollToLoad="true">
+                    <headerToolbar>
+                        <OverflowToolbar>
+                            <Title text="{i18n>storageBinsTableTitle}" level="H2" />
+                            <ToolbarSpacer />
+                            <SearchField
+                                width="18rem"
+                                placeholder="{i18n>rackTableGridSearchPlaceholder}"
+                                liveChange=".onSearchBins"
+                                search=".onSearchBins" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column><Text text="{i18n>storageBinsColUnit}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>storageBinsColBin}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>storageBinsColType}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>storageBinsColSut}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>storageBinsColBatch}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>rackColSerial}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>storageBinsColStock}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>rackColAction}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem>
+                            <cells>
+                                <ObjectIdentifier title="{= ${rackView>UnitCategory} === 'BIN' ? '' : ${rackView>UnitNumber} }" text="{rackView>UnitCategory}" />
+                                <Text text="{rackView>StorageBin}" />
+                                <Text text="{= ${rackView>StorageType} + (${rackView>StorageTypeDesc} ? ' · ' + ${rackView>StorageTypeDesc} : '') }" />
+                                <Text text="{= ${rackView>SutCode} + (${rackView>SutDescription} ? ' · ' + ${rackView>SutDescription} : '') }" />
+                                <Text text="{rackView>Batch}" />
+                                <Text text="{rackView>SerialNumber}" />
+                                <ObjectNumber number="{rackView>AvailableStock}" unit="{rackView>BaseUnit}" />
+                                <Button
+                                    text="{i18n>rackSelectUnitButton}"
+                                    type="Emphasized"
+                                    press=".onSelectBinUnit"
+                                    enabled="{= !!${rackView>UnitNumber} &amp;&amp; (${rackView>UnitCategory} === 'HU' || ${rackView>UnitCategory} === 'SU' || ${rackView>UnitCategory} === 'BIN') }" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
             </VBox>
         </content>
     </Page>

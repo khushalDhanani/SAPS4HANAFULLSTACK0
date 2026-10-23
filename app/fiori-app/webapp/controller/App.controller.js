@@ -274,7 +274,7 @@ sap.ui.define([
                     bShowNav = true;
                     break;
                 case "wmHuStockTransferRack":
-                    sTitle = oBundle ? oBundle.getText("rackVisualizerTitle") : "Warehouse Pallet Rack Visualizer";
+                    sTitle = oBundle ? oBundle.getText("rackVisualizerTitle") : "HU Stock Transfer — Stock Bins";
                     bShowNav = true;
                     break;
                 case "wmHuStockTransferDetail":
