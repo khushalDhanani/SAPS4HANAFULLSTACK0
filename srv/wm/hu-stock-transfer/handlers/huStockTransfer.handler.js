@@ -57,6 +57,15 @@ const HuStockTransferHandler = {
       }
     });
 
+    srv.on('rackLayout', async (req) => {
+      try {
+        return await adapter.rackLayout(req.data);
+      } catch (err) {
+        LOG.error('rackLayout failed:', err.message);
+        return req.error(err.status || 500, err.message);
+      }
+    });
+
     srv.on('executeHuStockTransfer', async (req) => {
       try {
         return await adapter.executeHuStockTransfer(req.data);

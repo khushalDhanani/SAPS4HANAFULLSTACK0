@@ -8,7 +8,7 @@
  * - Resolve warehouse mapping (T320) and picking strategy (MLGN / T334T / MLGT / LQUA).
  * - Authoritative unit validation (Handling Unit via VEKP/VEPO or Storage Unit via LQUA).
  * - Serial number mapping (SER06 -> OBJK) and SUT mapping (T307T).
- * - Storage bin stock breakdown and multi-level rack view (B0 to B6).
+   * - Storage bin stock with strict floor/rack/position parsing and SAP bin-master sections.
  * - Dual posting engine:
  *     * Path A (HU-Managed source SLoc: T001L-XHUPF = 'X'): HU_CREATE_GOODS_MOVEMENT (Event 0006, Mvt 311) + RESB updates.
  *     * Path B (Non-HUM source SLoc / Storage Unit): BAPI_GOODSMVT_CREATE (GM_CODE 06, Mvt 311, reservation ref, commit).
@@ -18,6 +18,7 @@
 const cds = require('@sap/cds');
 const LOG = cds.log('hu-stock-transfer-adapter');
 const { RfcClient } = require('../RfcClient');
+const parseRackBinName = require('./parseRackBinName');
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -404,12 +405,32 @@ class HuStockTransferAdapter {
         ];
         if (row.CHARG) lquaWhere.push(`AND CHARG = '${row.CHARG}'`);
         const lquaRows = await this.rfc.readTable('LQUA', ['LENUM', 'GESME'], lquaWhere, 200);
-        const nonZeroRows = lquaRows.filter((q) => parseFloat(q.GESME || 0) > 0);
+        const nonZeroRows = lquaRows.filter((q) => this._parseSapQty(q.GESME) > 0);
         availCount = nonZeroRows.length;
-        availStock = nonZeroRows.reduce((acc, q) => acc + parseFloat(q.GESME || 0), 0);
+        availStock = nonZeroRows.reduce((acc, q) => acc + this._parseSapQty(q.GESME), 0);
       }
     } catch (e) {
       LOG.warn('Could not calculate available unit count:', e.message);
+    }
+
+    // Inspect T001L for HUM flag (XHUPF)
+    let isHuManaged = false;
+    let xhupf = '';
+    if (row.WERKS && row.LGORT) {
+      try {
+        const t001lRows = await this.rfc.readTable(
+          'T001L',
+          ['WERKS', 'LGORT', 'XHUPF'],
+          [`WERKS = '${row.WERKS}'`, `AND LGORT = '${row.LGORT}'`],
+          1
+        );
+        if (t001lRows.length) {
+          xhupf = t001lRows[0].XHUPF || '';
+          isHuManaged = xhupf === 'X';
+        }
+      } catch (e) {
+        LOG.warn('Could not read T001L for cockpit:', e.message);
+      }
     }
 
     return {
@@ -432,7 +453,9 @@ class HuStockTransferAdapter {
       PreferredStorageType: prefStorageType,
       TotalAvailableStock: availStock,
       AvailableUnitCount: availCount,
-      SutMode: 'Standard Item'
+      SutMode: 'Standard Item',
+      IsHuManaged: isHuManaged,
+      Xhupf: xhupf
     };
   }
 
@@ -760,6 +783,36 @@ class HuStockTransferAdapter {
 
     const nonZeroLqua = lquaRows.filter((q) => this._parseSapQty(q.GESME) > 0);
 
+    // Enrich only stock bins returned by LQUA. This does not create or infer empty bins.
+    const locationKeys = [...new Set(nonZeroLqua.map((q) => `${q.LGNUM}|${q.LGTYP}`))];
+    const lagpMap = new Map();
+    const sectionNameMap = new Map();
+    await Promise.all(locationKeys.map(async (locationKey) => {
+      const [warehouse, storageType] = locationKey.split('|');
+      let locationRows = [];
+      let sectionRows = [];
+      try {
+        locationRows = await this.rfc.readTable('LAGP', ['LGNUM', 'LGTYP', 'LGPLA', 'LGBER', 'LPTYP'], [
+          `LGNUM = '${warehouse}'`, `AND LGTYP = '${storageType}'`
+        ]);
+      } catch (e) {
+        LOG.warn('Could not read LAGP bin master data:', e.message);
+      }
+      try {
+        sectionRows = await this.rfc.readTable('T302T', ['LGNUM', 'LGTYP', 'LGBER', 'SPRAS', 'LBERT'], [
+          `LGNUM = '${warehouse}'`, `AND LGTYP = '${storageType}'`, "AND SPRAS = 'E'"
+        ]);
+      } catch (e) {
+        LOG.warn('Could not read T302T section descriptions:', e.message);
+      }
+      for (const row of locationRows) {
+        lagpMap.set(`${row.LGNUM}|${row.LGTYP}|${row.LGPLA}`, row);
+      }
+      for (const row of sectionRows) {
+        sectionNameMap.set(`${row.LGNUM}|${row.LGTYP}|${row.LGBER}`, row.LBERT || '');
+      }
+    }));
+
     // Read Storage Type descriptions from T301T
     const t301tMap = new Map();
     try {
@@ -779,6 +832,12 @@ class HuStockTransferAdapter {
     }
 
     return nonZeroLqua.map((q) => {
+      const location = lagpMap.get(`${q.LGNUM}|${q.LGTYP}|${q.LGPLA}`);
+      const rackParts = parseRackBinName(q.LGPLA);
+      const sectionCode = location && location.LGBER || '';
+      const sectionName = sectionCode
+        ? sectionNameMap.get(`${q.LGNUM}|${q.LGTYP}|${sectionCode}`) || ''
+        : '';
       const isOnHold = q.LGTYP === 'OH1' || q.LGPLA.includes('HOLD') || q.LGPLA.includes('BLOCK');
       const isInProcess = q.LGTYP.startsWith('9') || q.LGTYP === '911' || q.LGTYP === '902';
       const isPref = q.LGTYP === cockpit.PreferredStorageType;
@@ -804,10 +863,18 @@ class HuStockTransferAdapter {
         SutDescription: t307tMap.get(`${q.LGNUM}|${q.LETYP}`) || '',
         StorageType: q.LGTYP,
         StorageTypeDesc: t301tMap.get(`${q.LGNUM}|${q.LGTYP}`) || '',
-        StorageSection: '',
-        StorageSectionDesc: '',
+        StorageSection: sectionCode,
+        StorageSectionDesc: sectionName,
         StorageBin: q.LGPLA,
-        BinPosition: q.LGPLA.slice(-2),
+        BinPosition: rackParts.Position,
+        Floor: rackParts.Floor,
+        Rack: rackParts.Rack,
+        Position: rackParts.Position,
+        IsRackBin: rackParts.IsRackBin,
+        BinType: location && location.LPTYP || '',
+        SectionCode: sectionCode,
+        SectionName: sectionName,
+        BinMasterFound: Boolean(location),
         SerialNumber: '',
         AvailableStock: this._parseSapQty(q.GESME),
         BaseUnit: q.MEINS,
@@ -820,54 +887,363 @@ class HuStockTransferAdapter {
   }
 
   /**
-   * Retrieves visual warehouse rack bins structure (Screen 2000 "Visual Rack & Bin View").
-   * Supports levels B0 to B6.
+   * Compatibility mapping for the former visual-rack operation. Physical levels,
+   * bays and rack references are deliberately left blank because they are unverified.
    */
   async getVisualRack(reservationNo, reservationItem) {
     const bins = await this.getStorageBins(reservationNo, reservationItem);
 
-    return bins.map((b) => {
-      // Derive level from bin suffix or type
-      let levelNum = 1;
-      let levelCode = 'B1';
-      let shelfDesc = '1st Shelf Level (Ground)';
-      const lastDigits = b.StorageBin.match(/\d+$/);
-      if (lastDigits) {
-        const num = parseInt(lastDigits[0], 10);
-        if (num >= 0 && num <= 6) {
-          levelNum = num;
-          levelCode = `B${num}`;
-          shelfDesc = num === 0 ? 'Ground Floor (B0)' : `Shelf Level ${num} (B${num})`;
+    return bins.map((b) => ({
+      ActualStorageBin: b.StorageBin,
+      RackReference: '',
+      FloorId: b.Floor,
+      RackNumber: b.Rack,
+      BinPosition: b.Position,
+      Position: b.Position,
+      ShelfLevelDesc: '',
+      LevelCode: '',
+      LevelNumber: null,
+      StorageSectionDesc: b.SectionName,
+      UnitNumber: b.UnitNumber,
+      UnitType: b.UnitCategory,
+      SutCode: b.SutCode,
+      SutDescription: b.SutDescription,
+      SerialNumber: b.SerialNumber,
+      AvailableQuantity: b.AvailableStock,
+      BaseUnit: b.BaseUnit,
+      Batch: b.Batch,
+      StorageStatus: b.StorageStatus,
+      StorageType: b.StorageType,
+      StorageTypeDesc: b.StorageTypeDesc,
+      StorageSection: b.SectionCode,
+      Warehouse: b.Warehouse,
+      StorageLocation: b.StorageLocation,
+      SortPriority: b.SortPriority,
+      IsRackBin: b.IsRackBin,
+      BinType: b.BinType,
+      SectionCode: b.SectionCode,
+      SectionName: b.SectionName,
+      BinMasterFound: b.BinMasterFound
+    }));
+  }
+
+  /**
+   * Helper: deterministic paging for LAGP bins using ROWCOUNT and ROWSKIPS,
+   * with automatic keyset-paging fallback if ROWSKIPS fails or is rejected.
+   */
+  async _readLagpPaged(warehouse, storageType, rackPrefix, pageSize = 100) {
+    const whereBase = [`LGNUM = '${warehouse}'`];
+    if (storageType) whereBase.push(`AND LGTYP = '${storageType}'`);
+    if (rackPrefix) {
+      const cleanPrefix = String(rackPrefix).trim().replace(/-+$/, '');
+      whereBase.push(`AND LGPLA LIKE '${cleanPrefix}-%'`);
+    }
+
+    const fields = ['LGNUM', 'LGTYP', 'LGPLA', 'LGBER', 'LPTYP'];
+    const allRows = [];
+    let page = 0;
+    let hasMore = true;
+    let supportsRowSkips = true;
+
+    while (hasMore) {
+      try {
+        const rows = await this.rfc.readTable(
+          'LAGP',
+          fields,
+          whereBase,
+          pageSize,
+          page * pageSize
+        );
+        allRows.push(...rows);
+        if (!rows || rows.length < pageSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      } catch (err) {
+        LOG.warn('Offset paging with ROWSKIPS failed or unsupported, falling back to keyset paging:', err.message);
+        supportsRowSkips = false;
+        hasMore = false;
+      }
+    }
+
+    if (!supportsRowSkips) {
+      allRows.length = 0;
+      let lastLgpla = '';
+      hasMore = true;
+      while (hasMore) {
+        const whereClauses = [...whereBase];
+        if (lastLgpla) {
+          whereClauses.push(`AND LGPLA > '${lastLgpla}'`);
+        }
+        const rows = await this.rfc.readTable('LAGP', fields, whereClauses, pageSize);
+        allRows.push(...rows);
+        if (!rows || rows.length < pageSize) {
+          hasMore = false;
+        } else {
+          lastLgpla = rows[rows.length - 1].LGPLA;
         }
       }
+    }
 
-      return {
-        ActualStorageBin: b.StorageBin,
-        RackReference: `RACK-${b.StorageType}-${b.BinPosition}`,
-        FloorId: levelNum <= 1 ? 'Floor 0' : 'Floor 1',
-        RackNumber: b.StorageBin.split('-')[0] || 'L0001',
-        BinPosition: b.BinPosition,
-        ShelfLevelDesc: shelfDesc,
-        LevelCode: levelCode,
-        LevelNumber: levelNum,
-        StorageSectionDesc: b.StorageTypeDesc,
-        UnitNumber: b.UnitNumber,
-        UnitType: b.UnitCategory,
-        SutCode: b.SutCode,
-        SutDescription: b.SutDescription,
-        SerialNumber: b.SerialNumber,
-        AvailableQuantity: b.AvailableStock,
-        BaseUnit: b.BaseUnit,
-        Batch: b.Batch,
-        StorageStatus: b.StorageStatus,
-        StorageType: b.StorageType,
-        StorageTypeDesc: b.StorageTypeDesc,
-        StorageSection: b.StorageSection,
-        Warehouse: b.Warehouse,
-        StorageLocation: b.StorageLocation,
-        SortPriority: b.SortPriority
-      };
-    });
+    return allRows;
+  }
+
+  /**
+   * rackLayout: Bin visualizer where LAGP is the bin universe.
+   * - Enumerate maintained locations from LAGP (deterministic paging).
+   * - Query T302T for section descriptions.
+   * - Query LQUA for positive stock quants, excluding negative and zero quants.
+   * - Overlay positive quants onto matching LAGP bins (exact key match: LGNUM, LGTYP, LGPLA).
+   * - Two cell states only: 'empty' or 'occupied'. No "no bin maintained" state.
+   * - Separate list for non-rack bins (IsRackBin === false, e.g. 921/TRANSFER).
+   * - Checks T001L-XHUPF to determine whether source SLoc is HU-managed.
+   */
+  async rackLayout(params = {}) {
+    let {
+      warehouse,
+      storageType,
+      rackPrefix,
+      reservation,
+      item = '1',
+      pageSize = 100
+    } = params;
+
+    let cockpit = null;
+    let plant = '';
+    let sloc = '';
+    let material = '';
+
+    if (reservation) {
+      cockpit = await this.getCockpitDetail(reservation, item);
+      warehouse = warehouse || cockpit.Warehouse;
+      storageType = storageType || cockpit.PreferredStorageType || 'EN1';
+      plant = cockpit.Plant;
+      sloc = cockpit.StorageLocation;
+      material = cockpit.Material;
+    }
+
+    warehouse = warehouse || 'W01';
+    storageType = storageType || 'EN1';
+
+    // 1. Inspect T001L for HUM flag (XHUPF)
+    let isHuManaged = false;
+    let xhupf = '';
+    if (cockpit) {
+      isHuManaged = cockpit.IsHuManaged || false;
+      xhupf = cockpit.Xhupf || '';
+    } else if (plant && sloc) {
+      try {
+        const t001lRows = await this.rfc.readTable(
+          'T001L',
+          ['WERKS', 'LGORT', 'XHUPF'],
+          [`WERKS = '${plant}'`, `AND LGORT = '${sloc}'`],
+          1
+        );
+        if (t001lRows.length) {
+          xhupf = t001lRows[0].XHUPF || '';
+          isHuManaged = xhupf === 'X';
+        }
+      } catch (e) {
+        LOG.warn('Could not read T001L for rackLayout:', e.message);
+      }
+    }
+
+    // 2. Query LQUA for positive quants (overlay occupancy)
+    const lquaWhere = [`LGNUM = '${warehouse}'`];
+    if (storageType) {
+      lquaWhere.push(`AND LGTYP = '${storageType}'`);
+    }
+    if (material) {
+      const s4Mat = this._pad(material, 18);
+      lquaWhere.push(`AND MATNR = '${s4Mat}'`);
+    }
+    if (plant) lquaWhere.push(`AND WERKS = '${plant}'`);
+    if (sloc) lquaWhere.push(`AND LGORT = '${sloc}'`);
+
+    let lquaRows = [];
+    try {
+      lquaRows = await this.rfc.readTable(
+        'LQUA',
+        ['LGNUM', 'LGTYP', 'LGPLA', 'LGORT', 'LENUM', 'CHARG', 'GESME', 'MEINS', 'LETYP', 'KZHUQ', 'MATNR'],
+        lquaWhere,
+        500
+      );
+    } catch (e) {
+      LOG.warn('Could not read LQUA for rackLayout:', e.message);
+    }
+
+    // Exclude negative and zero quants
+    const nonZeroLqua = lquaRows.filter((q) => this._parseSapQty(q.GESME) > 0);
+
+    // If rackPrefix was not supplied, see if any quant gives a rack prefix
+    if (!rackPrefix && nonZeroLqua.length > 0) {
+      const rackQuant = nonZeroLqua.find((q) => parseRackBinName(q.LGPLA).IsRackBin);
+      if (rackQuant) {
+        const p = parseRackBinName(rackQuant.LGPLA);
+        rackPrefix = `${p.Floor}-${p.Rack}`;
+      }
+    }
+
+    // 3. Enumerate maintained bins from LAGP as the bin universe
+    const lagpRows = await this._readLagpPaged(warehouse, storageType, rackPrefix, pageSize);
+
+    // 4. Section descriptions from T302T
+    const sectionNameMap = new Map();
+    try {
+      const sectionRows = await this.rfc.readTable(
+        'T302T',
+        ['LGNUM', 'LGTYP', 'LGBER', 'SPRAS', 'LBERT'],
+        [`LGNUM = '${warehouse}'`, `AND LGTYP = '${storageType}'`, "AND SPRAS = 'E'"],
+        100
+      );
+      for (const row of sectionRows) {
+        sectionNameMap.set(`${row.LGNUM}|${row.LGTYP}|${row.LGBER}`, row.LBERT || '');
+      }
+    } catch (e) {
+      LOG.warn('Could not read T302T section descriptions:', e.message);
+    }
+
+    // Storage type descriptions from T301T
+    const t301tMap = new Map();
+    try {
+      const t301tRows = await this.rfc.readTable('T301T', ['LGNUM', 'LGTYP', 'LTYPT'], [`SPRAS = 'E'`], 200);
+      for (const t of t301tRows) t301tMap.set(`${t.LGNUM}|${t.LGTYP}`, t.LTYPT);
+    } catch (e) {
+      LOG.warn('Could not read T301T:', e.message);
+    }
+
+    // Also read secondary non-rack stock from LQUA if material is present
+    let secondaryLqua = [];
+    if (material && plant && sloc) {
+      const s4Mat = this._pad(material, 18);
+      try {
+        const allMatLqua = await this.rfc.readTable(
+          'LQUA',
+          ['LGNUM', 'LGTYP', 'LGPLA', 'LGORT', 'LENUM', 'CHARG', 'GESME', 'MEINS', 'LETYP', 'KZHUQ', 'MATNR'],
+          [`LGNUM = '${warehouse}'`, `AND MATNR = '${s4Mat}'`, `AND WERKS = '${plant}'`, `AND LGORT = '${sloc}'`],
+          500
+        );
+        secondaryLqua = allMatLqua.filter((q) => this._parseSapQty(q.GESME) > 0);
+      } catch (e) {
+        LOG.warn('Could not read secondary LQUA:', e.message);
+      }
+    }
+
+    // Map LQUA by LGNUM|LGTYP|LGPLA
+    const lquaMap = new Map();
+    for (const q of nonZeroLqua) {
+      const key = `${q.LGNUM}|${q.LGTYP}|${q.LGPLA}`;
+      if (!lquaMap.has(key)) {
+        lquaMap.set(key, []);
+      }
+      lquaMap.get(key).push(q);
+    }
+
+    // Distinct section codes to assign color slots
+    const distinctSections = [...new Set(lagpRows.map((r) => r.LGBER).filter(Boolean))].sort();
+
+    const cells = [];
+    const nonRackBins = [];
+
+    // Process LAGP bins (the bin universe)
+    for (const lagp of lagpRows) {
+      const rackParts = parseRackBinName(lagp.LGPLA);
+      const sectionCode = lagp.LGBER || '';
+      const sectionName = sectionCode
+        ? sectionNameMap.get(`${lagp.LGNUM}|${lagp.LGTYP}|${sectionCode}`) || ''
+        : '';
+      const secIdx = distinctSections.indexOf(sectionCode);
+      const colorSlot = secIdx < 0 ? 0 : (secIdx % 24) + 1;
+
+      const quants = lquaMap.get(`${lagp.LGNUM}|${lagp.LGTYP}|${lagp.LGPLA}`) || [];
+      const isOccupied = quants.length > 0;
+      const primaryQuant = quants[0] || null;
+
+      if (rackParts.IsRackBin) {
+        cells.push({
+          StorageBin: lagp.LGPLA,
+          Floor: rackParts.Floor,
+          Rack: rackParts.Rack,
+          Position: rackParts.Position,
+          IsRackBin: true,
+          Status: isOccupied ? 'occupied' : 'empty',
+          Occupied: isOccupied,
+          StorageType: lagp.LGTYP,
+          StorageSection: sectionCode,
+          StorageSectionDesc: sectionName,
+          SectionCode: sectionCode,
+          SectionName: sectionName,
+          SectionColorSlot: colorSlot,
+          BinType: lagp.LPTYP || '',
+          UnitNumber: primaryQuant ? (this._unpad(primaryQuant.LENUM) || primaryQuant.LGPLA) : '',
+          UnitCategory: primaryQuant ? (primaryQuant.KZHUQ === 'X' ? 'HU' : (primaryQuant.LENUM ? 'SU' : 'BIN')) : '',
+          Material: primaryQuant ? this._unpad(primaryQuant.MATNR) : '',
+          Batch: primaryQuant ? (primaryQuant.CHARG || '') : '',
+          AvailableStock: primaryQuant ? this._parseSapQty(primaryQuant.GESME) : 0,
+          BaseUnit: primaryQuant ? (primaryQuant.MEINS || '') : '',
+          HandlingUnitId: primaryQuant ? (primaryQuant.LENUM || '') : ''
+        });
+      } else {
+        // Non-rack bin from LAGP
+        nonRackBins.push({
+          StorageBin: lagp.LGPLA,
+          StorageType: lagp.LGTYP,
+          StorageTypeDesc: t301tMap.get(`${lagp.LGNUM}|${lagp.LGTYP}`) || '',
+          StorageSection: sectionCode,
+          StorageSectionDesc: sectionName,
+          SectionCode: sectionCode,
+          SectionName: sectionName,
+          UnitNumber: primaryQuant ? (this._unpad(primaryQuant.LENUM) || primaryQuant.LGPLA) : '',
+          UnitCategory: primaryQuant ? (primaryQuant.KZHUQ === 'X' ? 'HU' : (primaryQuant.LENUM ? 'SU' : 'BIN')) : '',
+          Material: primaryQuant ? this._unpad(primaryQuant.MATNR) : '',
+          Batch: primaryQuant ? (primaryQuant.CHARG || '') : '',
+          AvailableStock: primaryQuant ? this._parseSapQty(primaryQuant.GESME) : 0,
+          BaseUnit: primaryQuant ? (primaryQuant.MEINS || '') : '',
+          IsRackBin: false
+        });
+      }
+    }
+
+    // Sort cells by Position in ascending numeric order
+    cells.sort((a, b) => a.Position.localeCompare(b.Position, undefined, { numeric: true }));
+
+    // Also include any non-rack stock from LQUA that wasn't in lagpRows (e.g. 921/TRANSFER)
+    const existingNonRack = new Set(nonRackBins.map((b) => `${b.StorageType}|${b.StorageBin}`));
+    for (const q of [...nonZeroLqua, ...secondaryLqua]) {
+      const parts = parseRackBinName(q.LGPLA);
+      if (!parts.IsRackBin && !existingNonRack.has(`${q.LGTYP}|${q.LGPLA}`)) {
+        existingNonRack.add(`${q.LGTYP}|${q.LGPLA}`);
+        nonRackBins.push({
+          StorageBin: q.LGPLA,
+          StorageType: q.LGTYP,
+          StorageTypeDesc: t301tMap.get(`${q.LGNUM}|${q.LGTYP}`) || '',
+          StorageSection: '',
+          StorageSectionDesc: '',
+          SectionCode: '',
+          SectionName: '',
+          UnitNumber: this._unpad(q.LENUM) || q.LGPLA,
+          UnitCategory: q.KZHUQ === 'X' ? 'HU' : (q.LENUM ? 'SU' : 'BIN'),
+          Material: this._unpad(q.MATNR),
+          Batch: q.CHARG || '',
+          AvailableStock: this._parseSapQty(q.GESME),
+          BaseUnit: q.MEINS || '',
+          IsRackBin: false
+        });
+      }
+    }
+
+    return {
+      Warehouse: warehouse,
+      StorageType: storageType,
+      RackPrefix: rackPrefix || '',
+      Plant: plant,
+      StorageLocation: sloc,
+      IsHuManaged: isHuManaged,
+      Xhupf: xhupf,
+      Cells: cells,
+      NonRackBins: nonRackBins
+    };
   }
 
   /**

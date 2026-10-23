@@ -20,7 +20,7 @@
                     <Label id="listPageSubSnapped" text="{i18n>huTransferSubTitle}" />
                 </f:snappedContent>
                 <f:actions>
-                    <Button id="btnOpenRackDemo" text="{i18n>rackDemoOpenButton}" icon="sap-icon://product" press=".onOpenRackDemo" />
+                    <Button id="btnOpenRack" text="{i18n>rackOpenForSelectedButton}" icon="sap-icon://product" press=".onOpenRackForSelected" enabled="{= !!${listView>/selectedItem} }" />
                     <Button id="btnRefreshList" icon="sap-icon://refresh" text="{i18n>commonRefresh}" press=".onRefresh" />
                 </f:actions>
             </f:DynamicPageTitle>
@@ -138,7 +138,7 @@
                     </Column>
                 </columns>
                 <items>
-                    <ColumnListItem type="Navigation" press=".onItemPress">
+                    <ColumnListItem type="Navigation">
                         <cells>
                             <ObjectIdentifier title="{listView>ReservationNo}" />
                             <Text text="{listView>ReservationItem}" />

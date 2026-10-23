@@ -135,13 +135,14 @@ class RfcClient {
    * A field that does not exist in the table fails with AD 718 (TABLE_WITHOUT_DATA).
    * rowCount > 0 caps the rows SAP returns (ROWCOUNT).
    */
-  async readTable(table, fields, where = [], rowCount = 0) {
+  async readTable(table, fields, where = [], rowCount = 0, rowSkips = 0) {
     const res = await this.call('RFC_READ_TABLE', {
       QUERY_TABLE: table,
       DELIMITER: '|',
       FIELDS: fields.map((f) => ({ FIELDNAME: f })),
       OPTIONS: where.map((t) => ({ TEXT: t })),
-      ...(rowCount > 0 ? { ROWCOUNT: rowCount } : {})
+      ...(rowCount > 0 ? { ROWCOUNT: rowCount } : {}),
+      ...(rowSkips > 0 ? { ROWSKIPS: rowSkips } : {})
     });
     return (res.DATA || []).map(({ WA }) => {
       const vals = WA.split('|');

@@ -87,8 +87,16 @@ sap.ui.define([
             MessageToast.show("Reservations refreshed");
         },
 
-        onOpenRackDemo: function () {
-            this.getRouter().navTo("wmHuStockTransferRackDemo");
+        onOpenRackForSelected: function () {
+            var oSelected = this.getModel("listView").getProperty("/selectedItem");
+            if (!oSelected || !oSelected.ReservationNo || !oSelected.ReservationItem) {
+                MessageToast.show(this.getText("selectReservationPrompt", [], "Please select a reservation to view its rack."));
+                return;
+            }
+            this.getRouter().navTo("wmHuStockTransferRack", {
+                reservation: oSelected.ReservationNo,
+                item: oSelected.ReservationItem
+            });
         },
 
         onLiveSearch: function (oEvent) {
@@ -141,7 +149,15 @@ sap.ui.define([
             var sReservation = oContext.getProperty("ReservationNo");
             var sItem = oContext.getProperty("ReservationItem");
 
-            this._navigateToDetail(sReservation, sItem);
+            this._navigateToRack(sReservation, sItem);
+        },
+
+        _navigateToRack: function (sReservation, sItem) {
+            if (!sReservation) return;
+            this.getRouter().navTo("wmHuStockTransferRack", {
+                reservation: sReservation,
+                item: sItem || "1"
+            });
         },
 
         _navigateToDetail: function (sReservation, sItem) {

@@ -1,6 +1,7 @@
 <mvc:View
     controllerName="saps4hana.fiori.modules.wm.hu-stock-transfer.controller.HuStockTransferRack"
     xmlns:mvc="sap.ui.core.mvc"
+    xmlns:core="sap.ui.core"
     xmlns="sap.m">
     <Page
         id="huStockBinsPage"
@@ -12,6 +13,18 @@
                     title="{= ${rackView>/reservationNo} + ' / ' + ${rackView>/reservationItem} }"
                     intro="{i18n>huTransferSelectUnitIntro}"
                     responsive="true" />
+
+                <MessageStrip
+                    id="stripBlankXhupf"
+                    text="{i18n>rackBlankXhupfBannerText}"
+                    type="Warning"
+                    showIcon="true"
+                    visible="{= ${rackView>/isHuManaged} === false &amp;&amp; !${rackView>/busy} }"
+                    class="sapUiSmallMarginBottom">
+                    <link>
+                        <Link text="{i18n>rackRouteToStandard311Text}" press=".onRouteToStandard311" />
+                    </link>
+                </MessageStrip>
 
                 <MessageStrip
                     text="{rackView>/error}"
@@ -27,8 +40,72 @@
                     press=".onRetryLoad"
                     class="sapUiSmallMarginBottom" />
 
+                <OverflowToolbar class="rackPositionToolbar">
+                    <Title text="{i18n>rackPositionGridTitle}" level="H2" />
+                    <ToolbarSpacer />
+                    <Label text="{i18n>rackWarehouseLabel}" labelFor="rackWarehouseSelect" />
+                    <Select id="rackWarehouseSelect" width="8rem" selectedKey="{rackView>/selectedWarehouse}" items="{rackView>/warehouses}" change=".onWarehouseChange">
+                        <core:Item key="{rackView>key}" text="{rackView>text}" />
+                    </Select>
+                    <Text text="›" class="rackBreadcrumbSeparator" />
+                    <Label text="{i18n>rackFloorLabel}" labelFor="rackFloorSelect" />
+                    <Select id="rackFloorSelect" width="6rem" selectedKey="{rackView>/selectedFloor}" items="{rackView>/floors}" change=".onFloorChange">
+                        <core:Item key="{rackView>key}" text="{rackView>text}" />
+                    </Select>
+                    <Text text="›" class="rackBreadcrumbSeparator" />
+                    <Label text="{i18n>rackRackLabel}" labelFor="rackSelect" />
+                    <Select id="rackSelect" width="8rem" selectedKey="{rackView>/selectedRack}" items="{rackView>/racks}" change=".onRackChange">
+                        <core:Item key="{rackView>key}" text="{rackView>text}" />
+                    </Select>
+                    <ToolbarSpacer />
+                    <Text
+                        text="{= ${rackView>/nonRackCount} + ' ' + ${i18n>rackNonRackTableHint} }"
+                        visible="{= ${rackView>/mode} === 'rack' &amp;&amp; ${rackView>/nonRackCount} > 0 }"
+                        class="rackNonRackHint" />
+                    <Button
+                        text="{= ${rackView>/mode} === 'rack' ? ${i18n>rackTableMode} : ${i18n>rackPositionGridMode} }"
+                        icon="{= ${rackView>/mode} === 'rack' ? 'sap-icon://table-view' : 'sap-icon://grid'}"
+                        press=".onToggleMode" />
+                </OverflowToolbar>
+                <Text text="{i18n>rackStockScopeNote}" visible="{= ${rackView>/mode} === 'rack' }" class="rackStockScopeNote" />
+
+                <ScrollContainer horizontal="true" vertical="true" height="20rem" visible="{= ${rackView>/mode} === 'rack' &amp;&amp; !(${rackView>/positions}.length === 0) }" class="rackPositionGroups">
+                    <HBox items="{rackView>/positions}" wrap="NoWrap" class="rackPositionGrid">
+                        <items>
+                            <VBox class="rackPositionCard">
+                                <customData>
+                                    <core:CustomData key="section-color" value="{= String(${rackView>sectionColorSlot} || '0') }" writeToDom="true" />
+                                </customData>
+                                <Title text="{= ${i18n>rackPositionLabel} + ' ' + ${rackView>position} }" level="H3" class="rackPositionTitle" />
+                                <Text text="{rackView>storageBin}" class="rackPositionBin" />
+                                <ObjectStatus text="{rackView>sectionDisplay}" class="rackPositionSection" />
+                                <HBox items="{path: 'rackView>units', templateShareable: false}" wrap="Wrap" class="rackPositionUnits">
+                                    <items>
+                                        <Button
+                                            text="{rackView>UnitNumber}"
+                                            tooltip="{rackView>UnitCategory}"
+                                            type="Transparent"
+                                            press=".onSelectBinUnit"
+                                            enabled="{= !!${rackView>UnitNumber} &amp;&amp; (${rackView>UnitCategory} === 'HU' || ${rackView>UnitCategory} === 'SU' || ${rackView>UnitCategory} === 'BIN') }" />
+                                    </items>
+                                </HBox>
+                            </VBox>
+                        </items>
+                    </HBox>
+                </ScrollContainer>
+                <HBox
+                    visible="{= ${rackView>/mode} === 'rack' &amp;&amp; !${rackView>/busy} &amp;&amp; !${rackView>/error} &amp;&amp; ${rackView>/positions}.length === 0 }"
+                    class="rackNoPositions">
+                    <items>
+                        <Text text="{i18n>rackNoRackBins}" />
+                        <Text text="{= ${rackView>/nonRackCount} === 1 ? ${i18n>rackOneNonRackBinIsIn} : ${rackView>/nonRackCount} + ' ' + ${i18n>rackNonRackBinsAreIn} }" />
+                        <Link text="{i18n>rackTableMode}" press=".onShowTable" />
+                    </items>
+                </HBox>
+
                 <Table
                     id="huStockBinsTable"
+                    visible="{= ${rackView>/mode} === 'table' }"
                     items="{path: 'rackView>/filteredBins'}"
                     noDataText="{i18n>storageBinsNoData}"
                     growing="true"
@@ -46,8 +123,13 @@
                     </headerToolbar>
                     <columns>
                         <Column><Text text="{i18n>storageBinsColUnit}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>rackColFloor}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>rackColRack}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>rackColPosition}" /></Column>
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>storageBinsColBin}" /></Column>
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>storageBinsColType}" /></Column>
+                        <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>rackColBinType}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>rackColSection}" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>storageBinsColSut}" /></Column>
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>storageBinsColBatch}" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>rackColSerial}" /></Column>
@@ -58,8 +140,13 @@
                         <ColumnListItem>
                             <cells>
                                 <ObjectIdentifier title="{= ${rackView>UnitCategory} === 'BIN' ? '' : ${rackView>UnitNumber} }" text="{rackView>UnitCategory}" />
+                                <Text text="{rackView>Floor}" />
+                                <Text text="{rackView>Rack}" />
+                                <Text text="{rackView>Position}" />
                                 <Text text="{rackView>StorageBin}" />
                                 <Text text="{= ${rackView>StorageType} + (${rackView>StorageTypeDesc} ? ' · ' + ${rackView>StorageTypeDesc} : '') }" />
+                                <Text text="{rackView>BinType}" />
+                                <Text text="{rackView>SectionDisplay}" />
                                 <Text text="{= ${rackView>SutCode} + (${rackView>SutDescription} ? ' · ' + ${rackView>SutDescription} : '') }" />
                                 <Text text="{rackView>Batch}" />
                                 <Text text="{rackView>SerialNumber}" />

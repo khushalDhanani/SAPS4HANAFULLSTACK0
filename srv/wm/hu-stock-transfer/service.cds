@@ -62,6 +62,8 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         TotalAvailableStock      : Decimal(13, 3);
         AvailableUnitCount       : Integer;
         SutMode                  : String(30);
+        IsHuManaged              : Boolean;
+        Xhupf                    : String(1);
     };
 
     type UnitValidationResult {
@@ -99,6 +101,14 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         StorageSectionDesc: String(40);
         StorageBin      : String(18);
         BinPosition     : String(10);
+        Floor           : String(1);
+        Rack            : String(5);
+        Position        : String(2);
+        IsRackBin       : Boolean;
+        BinType         : String(10);
+        SectionCode     : String(4);
+        SectionName     : String(40);
+        BinMasterFound  : Boolean;
         SerialNumber    : String(30);
         AvailableStock  : Decimal(15, 3);
         BaseUnit        : String(3);
@@ -115,7 +125,7 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         RackNumber       : String(15);
         BinPosition      : String(35);
         ShelfLevelDesc   : String(40);
-        LevelCode        : String(10); // B0 to B6
+        LevelCode        : String(10);
         LevelNumber      : Integer;
         StorageSectionDesc: String(40);
         UnitNumber       : String(40);
@@ -133,6 +143,65 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         Warehouse        : String(3);
         StorageLocation  : String(4);
         SortPriority     : Integer;
+        Position         : String(2);
+        IsRackBin        : Boolean;
+        BinType          : String(10);
+        SectionCode      : String(4);
+        SectionName      : String(40);
+        BinMasterFound   : Boolean;
+    };
+
+    type RackLayoutCell {
+        StorageBin         : String(18);
+        Floor              : String(1);
+        Rack               : String(5);
+        Position           : String(2);
+        IsRackBin          : Boolean;
+        Status             : String(10); // 'empty' | 'occupied'
+        Occupied           : Boolean;
+        StorageType        : String(3);
+        StorageSection     : String(4);
+        StorageSectionDesc : String(40);
+        SectionCode        : String(4);
+        SectionName        : String(40);
+        SectionColorSlot   : Integer;
+        BinType            : String(10);
+        UnitNumber         : String(40);
+        UnitCategory       : String(12); // 'HU' | 'SU' | 'BIN'
+        Material           : String(40);
+        Batch              : String(10);
+        AvailableStock     : Decimal(15, 3);
+        BaseUnit           : String(3);
+        HandlingUnitId     : String(40);
+    };
+
+    type NonRackStockItem {
+        StorageBin         : String(18);
+        StorageType        : String(3);
+        StorageTypeDesc    : String(40);
+        StorageSection     : String(4);
+        StorageSectionDesc : String(40);
+        SectionCode        : String(4);
+        SectionName        : String(40);
+        UnitNumber         : String(40);
+        UnitCategory       : String(12);
+        Material           : String(40);
+        Batch              : String(10);
+        AvailableStock     : Decimal(15, 3);
+        BaseUnit           : String(3);
+        IsRackBin          : Boolean;
+    };
+
+    type RackLayoutResult {
+        Warehouse       : String(3);
+        StorageType     : String(3);
+        RackPrefix      : String(20);
+        Plant           : String(4);
+        StorageLocation : String(4);
+        IsHuManaged     : Boolean;
+        Xhupf           : String(1);
+        Cells           : array of RackLayoutCell;
+        NonRackBins     : array of NonRackStockItem;
     };
 
     type HuStockTransferResult {
@@ -190,6 +259,15 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         reservation : String(10),
         item        : String(4)
     ) returns array of VisualRackBin;
+
+    @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function rackLayout(
+        warehouse       : String(3),
+        storageType     : String(3),
+        rackPrefix      : String(20),
+        reservation     : String(10),
+        item            : String(4)
+    ) returns RackLayoutResult;
 
     // ── Goods Transfer Action ───────────────────────────────────────────
 

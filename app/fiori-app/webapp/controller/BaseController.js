@@ -66,8 +66,9 @@ sap.ui.define([
         getText: function (sKey, aArgs, sFallback) {
             var oResourceModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("i18n") : (this.getView() ? this.getView().getModel("i18n") : null);
             var oBundle = oResourceModel ? oResourceModel.getResourceBundle() : null;
+            var aTextArgs = Array.isArray(aArgs) ? aArgs : undefined;
             if (oBundle) {
-                var sFound = oBundle.getText(sKey, aArgs);
+                var sFound = oBundle.getText(sKey, aTextArgs);
                 if (sFound !== sKey) {
                     return sFound;
                 }
@@ -81,7 +82,7 @@ sap.ui.define([
                 }
                 return sResult;
             }
-            return oBundle ? oBundle.getText(sKey, aArgs) : sKey;
+            return oBundle ? oBundle.getText(sKey, aTextArgs) : sKey;
         },
 
         /**

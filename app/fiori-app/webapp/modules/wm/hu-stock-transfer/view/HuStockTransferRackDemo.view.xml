@@ -2,121 +2,74 @@
     controllerName="saps4hana.fiori.modules.wm.hu-stock-transfer.controller.HuStockTransferRackDemo"
     xmlns:mvc="sap.ui.core.mvc"
     xmlns="sap.m"
-    xmlns:core="sap.ui.core"
     displayBlock="true">
-    <Page id="huStockTransferRackDemoPage" showHeader="false" enableScrolling="false" class="demoRackPage">
+    <Page id="huStockTransferRackReservationPage" busy="{rackReservation>/busy}" busyIndicatorDelay="0">
         <content>
-            <VBox class="demoRackPageContent">
-                <OverflowToolbar class="demoRackToolbar">
-                    <ObjectStatus text="{i18n>rackDemoDataBadge}" state="Warning" icon="sap-icon://test-script" />
-                    <Title text="{i18n>rackDemoTitle}" level="H1" />
-                    <ToolbarSpacer />
-                    <VBox class="demoMaterialBadge"><Label text="{i18n>rackDemoMaterialLabel}" /><Text text="{demoRack>/material}" /></VBox>
-                </OverflowToolbar>
-                <OverflowToolbar class="demoRackControlsToolbar">
-                    <Label text="{i18n>rackDemoStorageType}" />
-                    <Select selectedKey="{demoRack>/selectedStorageType}" change=".onStorageTypeChange" width="9rem">
-                        <core:Item key="ALL" text="{i18n>rackDemoAllTypes}" />
-                        <core:Item key="EN1" text="{i18n>rackDemoTypeEN1}" />
-                        <core:Item key="EN2" text="{i18n>rackDemoTypeEN2}" />
-                    </Select>
-                    <ToolbarSeparator />
-                    <Button text="{i18n>rackDemoPrev}" icon="sap-icon://navigation-left-arrow" press=".onPrevRack" />
-                    <ObjectStatus text="{demoRack>/rackCounter}" class="demoRackCounter" />
-                    <Button text="{i18n>rackDemoNext}" icon="sap-icon://navigation-right-arrow" iconFirst="false" press=".onNextRack" />
-                    <ToolbarSpacer />
-                    <Button text="{= ${demoRack>/tableMode} ? ${i18n>rackDemoVisualMode} : ${i18n>rackDemoTableMode} }" icon="sap-icon://table-view" press=".onToggleTable" />
-                    <Button text="{i18n>commonClose}" icon="sap-icon://decline" press=".onCloseDemo" />
-                </OverflowToolbar>
-                <MessageStrip text="{i18n>rackDemoDisclaimer}" type="Warning" showIcon="true" class="demoRackDisclaimer" />
-                <HBox class="demoRackWorkspace" renderType="Div">
-                    <VBox class="demoRackStage" visible="{= !${demoRack>/tableMode} }">
-                        <HBox class="demoRackStageHeader" alignItems="Center">
-                            <VBox><Title text="{demoRack>/rackTitle}" level="H2" /><Text text="{demoRack>/rackSubtitle}" /></VBox>
+            <VBox class="sapUiResponsiveContentPadding">
+                <Title text="{i18n>rackReservationPageTitle}" level="H1" class="sapUiSmallMarginBottom" />
+                <MessageStrip text="{i18n>rackReservationPageIntro}" type="Information" showIcon="true" class="sapUiSmallMarginBottom" />
+                <MessageStrip
+                    text="{rackReservation>/error}"
+                    type="Error"
+                    showIcon="true"
+                    visible="{= !!${rackReservation>/error} }"
+                    class="sapUiSmallMarginBottom" />
+                <Button
+                    text="{i18n>rackReservationRetry}"
+                    icon="sap-icon://refresh"
+                    press=".onRetry"
+                    visible="{= !!${rackReservation>/error} }"
+                    class="sapUiSmallMarginBottom" />
+                <Table
+                    id="rackReservationTable"
+                    items="{path: 'rackReservation>/filteredReservations'}"
+                    mode="SingleSelectMaster"
+                    itemPress=".onReservationPress"
+                    selectionChange=".onReservationSelectionChange"
+                    noDataText="{i18n>rackReservationNoData}"
+                    growing="true"
+                    growingThreshold="20"
+                    ariaLabelledBy="rackReservationTitle">
+                    <headerToolbar>
+                        <OverflowToolbar>
+                            <Title id="rackReservationTitle" text="{i18n>rackReservationTableTitle}" level="H2" />
                             <ToolbarSpacer />
-                            <HBox class="demoRackLevelAttribute" alignItems="Center"><Label text="{i18n>rackDemoPhysicalLevel}" /><Text text="{demoRack>/rack/physicalLevels/0/label}" /></HBox>
-                        </HBox>
-                        <ScrollContainer height="100%" vertical="true" horizontal="true" focusable="true" class="demoRackScroll">
-                            <VBox class="demoRackStructure">
-                                <Text text="{i18n>rackDemoAxisNote}" class="demoRackAxisNote" />
-                                <HBox items="{path: 'demoRack>/rack/physicalLevels/0/bays', templateShareable: false}" class="demoRackBays" alignItems="Stretch">
-                                    <items>
-                                        <VBox class="demoRackBay">
-                                            <Title text="{demoRack>bayLabel}" level="H3" class="demoRackBayTitle" />
-                                            <HBox items="{path: 'demoRack>bins', templateShareable: false}" class="demoRackPositions" wrap="Wrap">
-                                                <items>
-                                                    <VBox class="demoRackPosition" alignItems="Stretch">
-                                                        <customData><core:CustomData key="section" value="{demoRack>section}" writeToDom="true" /></customData>
-                                                        <ObjectStatus text="{demoRack>status}" state="{demoRack>statusState}" />
-                                                        <Text text="{= ${demoRack>huCount} + ' HU' }" class="demoRackHuCount" />
-                                                        <HBox items="{path: 'demoRack>units', templateShareable: false}" class="demoRackHuCards" wrap="Wrap">
-                                                            <items><Button text="{demoRack>cardText}" tooltip="{demoRack>unitNumber}" press=".onDemoHuPress" class="demoRackHuCard" /></items>
-                                                        </HBox>
-                                                        <Button text="{= ${i18n>rackDemoPosition} + ' ' + ${demoRack>binPosition} }" tooltip="{demoRack>binId}" press=".onDemoBinPress" class="demoRackBinLabel" type="{= ${demoRack>binId} === ${demoRack>/selectedBinId} ? 'Emphasized' : 'Transparent' }" />
-                                                        <Text text="{demoRack>section}" class="demoRackSectionText" />
-                                                    </VBox>
-                                                </items>
-                                            </HBox>
-                                        </VBox>
-                                    </items>
-                                </HBox>
-                                <HBox class="demoRackFloor" alignItems="Center" justifyContent="Center"><Text text="{i18n>rackDemoFrameNote}" /></HBox>
-                            </VBox>
-                        </ScrollContainer>
-                    </VBox>
-                    <VBox class="demoRackTableStage" visible="{demoRack>/tableMode}">
-                        <Title text="{i18n>rackDemoTableTitle}" level="H2" />
-                        <Table items="{path: 'demoRack>/bins', templateShareable: false}" noDataText="{i18n>rackDemoTableNoData}" growing="true" class="demoRackDataTable">
-                            <columns>
-                                <Column><Text text="{i18n>rackDemoColRack}" /></Column>
-                                <Column><Text text="{i18n>rackDemoColBay}" /></Column>
-                                <Column><Text text="{i18n>rackDemoColPhysicalLevel}" /></Column>
-                                <Column><Text text="{i18n>rackDemoColPosition}" /></Column>
-                                <Column><Text text="{i18n>rackDemoColBin}" /></Column>
-                                <Column><Text text="{i18n>rackDemoColSection}" /></Column>
-                                <Column><Text text="{i18n>rackDemoColStatus}" /></Column>
-                                <Column hAlign="End"><Text text="{i18n>rackDemoColHus}" /></Column>
-                                <Column><Text text="{i18n>rackDemoColMaterial}" /></Column>
-                                <Column hAlign="End"><Text text="{i18n>rackDemoColQuantity}" /></Column>
-                                <Column><Text text="{i18n>rackDemoColAction}" /></Column>
-                            </columns>
-                            <items><ColumnListItem><cells>
-                                <Text text="{demoRack>rackId}" /><Text text="{demoRack>bayId}" /><Text text="{demoRack>physicalLevelLabel}" />
-                                <Text text="{demoRack>binPosition}" /><Text text="{demoRack>binId}" /><Text text="{demoRack>section}" />
-                                <ObjectStatus text="{demoRack>status}" state="{demoRack>statusState}" /><Text text="{demoRack>huCount}" />
-                                <Text text="{demoRack>material}" /><ObjectNumber number="{demoRack>quantity}" unit="NOS" />
-                                <Button text="{i18n>rackDemoInspect}" press=".onDemoBinPress" />
-                            </cells></ColumnListItem></items>
-                        </Table>
-                    </VBox>
-                    <VBox class="demoRackInspector">
-                        <HBox alignItems="Center" justifyContent="SpaceBetween"><Title text="{i18n>rackDemoDetailsTitle}" level="H2" /><ObjectStatus text="{i18n>rackDemoOnlyBadge}" state="Warning" /></HBox>
-                        <ScrollContainer height="100%" vertical="true" class="demoRackInspectorScroll">
-                            <VBox class="demoRackInspectorContent">
-                                <ObjectStatus text="{demoRack>/selectedBin/status}" state="{demoRack>/selectedBin/statusState}" />
-                                <Label text="{i18n>rackDemoSelectedBin}" /><Title text="{demoRack>/selectedBin/binId}" level="H3" />
-                                <HBox class="demoRackDetailGrid" wrap="Wrap">
-                                    <VBox><Label text="{i18n>rackDemoDetailRack}" /><Text text="{demoRack>/selectedBin/rackId}" /></VBox>
-                                    <VBox><Label text="{i18n>rackDemoDetailBay}" /><Text text="{demoRack>/selectedBin/bayId}" /></VBox>
-                                    <VBox><Label text="{i18n>rackDemoDetailPosition}" /><Text text="{demoRack>/selectedBin/binPosition}" /></VBox>
-                                    <VBox><Label text="{i18n>rackDemoDetailPhysicalLevel}" /><Text text="{demoRack>/selectedBin/physicalLevelLabel}" /></VBox>
-                                    <VBox><Label text="{i18n>rackDemoDetailSection}" /><Text text="{demoRack>/selectedBin/section}" /></VBox>
-                                    <VBox><Label text="{i18n>rackDemoDetailMaterial}" /><Text text="{demoRack>/selectedBin/material}" /></VBox>
-                                </HBox>
-                                <HBox alignItems="Center" justifyContent="SpaceBetween" class="demoRackHuListHeader"><Title text="{i18n>rackDemoHuListTitle}" level="H3" /><ObjectStatus text="{= ${demoRack>/selectedBin/huCount} + ' HU' }" state="Information" /></HBox>
-                                <Table items="{path: 'demoRack>/selectedBin/units', templateShareable: false}" noDataText="{i18n>rackDemoNoHu}" class="demoRackHuTable">
-                                    <columns><Column><Text text="{i18n>rackDemoColHu}" /></Column><Column hAlign="End"><Text text="{i18n>rackDemoColQuantity}" /></Column></columns>
-                                    <items><ColumnListItem type="Active" press=".onDemoHuPress"><cells><Text text="{demoRack>unitNumber}" /><ObjectNumber number="{demoRack>quantity}" unit="{demoRack>unit}" /></cells></ColumnListItem></items>
-                                </Table>
-                                <VBox class="demoRackSelectedHu" visible="{= !!${demoRack>/selectedHu} }"><Label text="{i18n>rackDemoSelectedHu}" /><Title text="{demoRack>/selectedHu/unitNumber}" level="H3" /><Text text="{= ${demoRack>/selectedHu/material} + ' · ' + ${demoRack>/selectedHu/serialNumber} }" /><Text text="{= ${demoRack>/selectedHu/batch} + ' · ' + ${demoRack>/selectedHu/quantity} + ' ' + ${demoRack>/selectedHu/unit} }" /></VBox>
-                                <MessageStrip text="{demoRack>/demoSelectionText}" type="{demoRack>/demoSelectionState}" showIcon="true" visible="{= !!${demoRack>/demoSelectionText} }" />
-                                <Button text="{i18n>rackDemoSelectForTransfer}" icon="sap-icon://accept" type="Emphasized" press=".onSelectHuForDemo" class="demoRackSelectButton" />
-                                <Text text="{i18n>rackDemoNoTransfer}" class="demoRackSmallNote" />
-                            </VBox>
-                        </ScrollContainer>
-                    </VBox>
-                </HBox>
-                <HBox class="demoRackPhysicalFooter" alignItems="Center"><ObjectStatus text="{demoRack>/physicalInfo/note}" state="Information" icon="sap-icon://hint" /></HBox>
+                            <SearchField
+                                width="18rem"
+                                placeholder="{i18n>rackReservationSearchPlaceholder}"
+                                liveChange=".onSearchReservations"
+                                search=".onSearchReservations" />
+                            <Button
+                                text="{i18n>rackReservationOpenRack}"
+                                icon="sap-icon://product"
+                                type="Emphasized"
+                                press=".onOpenSelectedRack"
+                                enabled="{= !!${rackReservation>/selectedReservation} }" />
+                        </OverflowToolbar>
+                    </headerToolbar>
+                    <columns>
+                        <Column width="8rem"><Text text="{i18n>huTransferColReservation}" /></Column>
+                        <Column width="4rem" hAlign="Center"><Text text="{i18n>huTransferColItem}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huTransferColMaterial}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huTransferColSlocRoute}" /></Column>
+                        <Column hAlign="End"><Text text="{i18n>huTransferColOpenQty}" /></Column>
+                        <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huTransferColRequester}" /></Column>
+                        <Column><Text text="{i18n>huTransferColStatus}" /></Column>
+                    </columns>
+                    <items>
+                        <ColumnListItem type="Navigation">
+                            <cells>
+                                <ObjectIdentifier title="{rackReservation>ReservationNo}" />
+                                <Text text="{rackReservation>ReservationItem}" />
+                                <ObjectIdentifier title="{rackReservation>Material}" text="{rackReservation>MaterialDesc}" />
+                                <Text text="{rackReservation>StorageLocation} → {rackReservation>ReceivingStorageLocation}" />
+                                <ObjectNumber number="{rackReservation>OpenQty}" unit="{rackReservation>BaseUnit}" />
+                                <Text text="{rackReservation>RequesterName}" />
+                                <ObjectStatus text="{rackReservation>StatusText}" state="{rackReservation>StatusState}" />
+                            </cells>
+                        </ColumnListItem>
+                    </items>
+                </Table>
             </VBox>
         </content>
     </Page>

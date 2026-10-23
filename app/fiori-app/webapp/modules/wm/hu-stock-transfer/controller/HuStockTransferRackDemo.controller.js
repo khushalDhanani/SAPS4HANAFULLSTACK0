@@ -1,121 +1,115 @@
 sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
-    "sap/m/MessageToast",
-    "saps4hana/fiori/modules/wm/hu-stock-transfer/model/DemoRackDataProvider"
-], function (BaseController, JSONModel, MessageToast, DemoRackDataProvider) {
+    "saps4hana/fiori/service/ODataClient",
+    "sap/m/MessageToast"
+], function (BaseController, JSONModel, ODataClient, MessageToast) {
     "use strict";
 
-    function flattenBins(oRack) {
-        return (oRack && oRack.bins ? oRack.bins : []).map(function (oBin) {
-            return Object.assign({ warehouse: oRack.warehouse, storageType: oRack.storageType }, oBin);
-        });
+    function reservationItems(oResponse) {
+        var oPayload = oResponse && oResponse.value ? oResponse.value : oResponse;
+        if (Array.isArray(oPayload)) { return oPayload; }
+        return oPayload && Array.isArray(oPayload.Items) ? oPayload.Items : [];
     }
 
     return BaseController.extend("saps4hana.fiori.modules.wm.hu-stock-transfer.controller.HuStockTransferRackDemo", {
         onInit: function () {
-            var oData = DemoRackDataProvider.getData();
-            this._oDemoData = oData;
             this._oViewModel = new JSONModel({
-                demoOnly: true,
-                material: oData.material,
-                storageTypes: oData.storageTypes,
-                selectedStorageType: "ALL",
-                racks: oData.racks,
-                rackIndex: 0,
-                rack: oData.racks[0],
-                rackTitle: oData.racks[0].title,
-                rackSubtitle: "Floor 1 · " + oData.racks[0].storageType + " · Demo layout",
-                rackCounter: "1 of " + oData.racks.length,
-                bins: flattenBins(oData.racks[0]),
-                sections: oData.sections,
-                physicalInfo: oData.physicalInfo,
-                selectedBinId: "1-L0001-04",
-                selectedBin: null,
-                selectedHu: null,
-                tableMode: false,
-                demoSelectionText: "",
-                demoSelectionState: "Information"
+                busy: false,
+                error: "",
+                reservations: [],
+                filteredReservations: [],
+                selectedReservation: null,
+                searchQuery: ""
             });
-            this.setModel(this._oViewModel, "demoRack");
-            this._selectBin("1-L0001-04");
+            this.setModel(this._oViewModel, "rackReservation");
             this.getRouter().getRoute("wmHuStockTransferRackDemo").attachPatternMatched(this._onRouteMatched, this);
         },
 
-        _onRouteMatched: function () { this._showRack(0); },
-
-        _getFilteredRacks: function () {
-            var sType = this._oViewModel.getProperty("/selectedStorageType");
-            return this._oDemoData.racks.filter(function (oRack) { return sType === "ALL" || oRack.storageType === sType; });
+        _onRouteMatched: function () {
+            this.loadReservations();
         },
 
-        _showRack: function (iIndex) {
-            var aRacks = this._getFilteredRacks();
-            if (!aRacks.length) { return; }
-            var iSafeIndex = Math.max(0, Math.min(iIndex, aRacks.length - 1));
-            var oRack = aRacks[iSafeIndex];
-            this._oViewModel.setProperty("/racks", aRacks);
-            this._oViewModel.setProperty("/rackIndex", iSafeIndex);
-            this._oViewModel.setProperty("/rack", oRack);
-            this._oViewModel.setProperty("/rackTitle", oRack.title);
-            this._oViewModel.setProperty("/rackSubtitle", "Floor " + oRack.floor + " · " + oRack.storageType + " · Demo layout");
-            this._oViewModel.setProperty("/rackCounter", (iSafeIndex + 1) + " of " + aRacks.length);
-            this._oViewModel.setProperty("/bins", flattenBins(oRack));
-            this._oViewModel.setProperty("/selectedHu", null);
-            this._oViewModel.setProperty("/demoSelectionText", "");
-            var sCurrentBinId = this._oViewModel.getProperty("/selectedBinId");
-            var oCurrentBin = oRack.bins.find(function (oBin) { return oBin.binId === sCurrentBinId; });
-            this._selectBin(oCurrentBin ? oCurrentBin.binId : oRack.bins[0].binId);
+        loadReservations: function () {
+            this._oViewModel.setProperty("/busy", true);
+            this._oViewModel.setProperty("/error", "");
+            this._oViewModel.setProperty("/selectedReservation", null);
+
+            var sUrl = "/odata/v4/hu-stock-transfer/getOpenReservations(" +
+                "plant='1120'," +
+                "storageLocation=''," +
+                "movementType='311'," +
+                "requester=''," +
+                "reservation=''," +
+                "material=''," +
+                "status='open'," +
+                "includeDeleted=false)";
+
+            return ODataClient.get(sUrl).then(function (oResponse) {
+                var aItems = reservationItems(oResponse);
+                this._oViewModel.setProperty("/reservations", aItems);
+                this._applySearch(this._oViewModel.getProperty("/searchQuery") || "");
+            }.bind(this)).catch(function (oError) {
+                this._oViewModel.setProperty("/reservations", []);
+                this._oViewModel.setProperty("/filteredReservations", []);
+                this._oViewModel.setProperty("/error", this.getText(
+                    "rackReservationLoadError", null,
+                    "Could not load open reservations. Check your connection and retry."
+                ) + (oError && oError.message ? " " + oError.message : ""));
+            }.bind(this)).then(function () {
+                this._oViewModel.setProperty("/busy", false);
+            }.bind(this));
         },
 
-        _selectBin: function (sBinId) {
-            var oRack = this._oViewModel.getProperty("/rack");
-            var oBin = oRack && oRack.bins.find(function (oItem) { return oItem.binId === sBinId; });
-            if (!oBin) { return; }
-            this._oViewModel.setProperty("/selectedBinId", sBinId);
-            this._oViewModel.setProperty("/selectedBin", oBin);
-            this._oViewModel.setProperty("/selectedHu", null);
-            this._oViewModel.setProperty("/demoSelectionText", "");
-            this._oViewModel.setProperty("/demoSelectionState", "Information");
+        onSearchReservations: function (oEvent) {
+            var sQuery = oEvent.getParameter("query") || oEvent.getParameter("newValue") || "";
+            this._oViewModel.setProperty("/searchQuery", sQuery);
+            this._applySearch(sQuery);
         },
 
-        onPrevRack: function () {
-            var aRacks = this._getFilteredRacks();
-            this._showRack((this._oViewModel.getProperty("/rackIndex") + aRacks.length - 1) % aRacks.length);
+        _applySearch: function (sQuery) {
+            var sNeedle = String(sQuery || "").trim().toLowerCase();
+            var aRows = this._oViewModel.getProperty("/reservations") || [];
+            var aFiltered = !sNeedle ? aRows : aRows.filter(function (oRow) {
+                return [oRow.ReservationNo, oRow.ReservationItem, oRow.Material, oRow.MaterialDesc, oRow.RequesterName]
+                    .some(function (sValue) { return String(sValue || "").toLowerCase().includes(sNeedle); });
+            });
+            this._oViewModel.setProperty("/filteredReservations", aFiltered);
         },
-        onNextRack: function () {
-            var aRacks = this._getFilteredRacks();
-            this._showRack((this._oViewModel.getProperty("/rackIndex") + 1) % aRacks.length);
+
+        onReservationSelectionChange: function (oEvent) {
+            var oItem = oEvent.getParameter("listItem");
+            var oContext = oItem && oItem.getBindingContext("rackReservation");
+            this._oViewModel.setProperty("/selectedReservation", oContext ? oContext.getObject() : null);
         },
-        onStorageTypeChange: function (oEvent) {
-            this._oViewModel.setProperty("/selectedStorageType", oEvent.getParameter("selectedItem").getKey());
-            this._showRack(0);
+
+        onReservationPress: function (oEvent) {
+            var oItem = oEvent.getParameter("listItem") || oEvent.getSource();
+            var oContext = oItem && oItem.getBindingContext("rackReservation");
+            if (oContext) { this._openRack(oContext.getObject()); }
         },
-        onToggleTable: function () { this._oViewModel.setProperty("/tableMode", !this._oViewModel.getProperty("/tableMode")); },
-        onDemoBinPress: function (oEvent) {
-            var oContext = oEvent.getSource().getBindingContext("demoRack");
-            var oObject = oContext && oContext.getObject();
-            var oBin = oObject && (oObject.bin || oObject);
-            if (oBin) { this._selectBin(oBin.binId); }
-        },
-        onDemoHuPress: function (oEvent) {
-            var oContext = oEvent.getSource().getBindingContext("demoRack");
-            var oHu = oContext && oContext.getObject();
-            if (!oHu) { return; }
-            this._oViewModel.setProperty("/selectedHu", oHu);
-            MessageToast.show("Demo only: " + oHu.unitNumber + " selected; no SAP transfer was started.");
-        },
-        onSelectHuForDemo: function () {
-            var oHu = this._oViewModel.getProperty("/selectedHu") || (this._oViewModel.getProperty("/selectedBin/units") || [])[0];
-            if (!oHu) {
-                this._oViewModel.setProperty("/demoSelectionState", "Error");
-                this._oViewModel.setProperty("/demoSelectionText", "Demo validation: choose an occupied bin with a demo HU first.");
+
+        onOpenSelectedRack: function () {
+            var oReservation = this._oViewModel.getProperty("/selectedReservation");
+            if (!oReservation) {
+                MessageToast.show(this.getText("rackReservationSelectPrompt", null, "Select a reservation item first."));
                 return;
             }
-            this._oViewModel.setProperty("/selectedHu", oHu);
-            this._oViewModel.setProperty("/demoSelectionState", "Success");
-            this._oViewModel.setProperty("/demoSelectionText", "DEMO ONLY — " + oHu.unitNumber + " selected locally. No SAP transfer was started.");
+            this._openRack(oReservation);
         },
-        onCloseDemo: function () { this.getRouter().navTo("wmHuStockTransfer"); }
+
+        _openRack: function (oReservation) {
+            if (!oReservation || !oReservation.ReservationNo || !oReservation.ReservationItem) {
+                MessageToast.show(this.getText("rackReservationDataMissing", null, "This row has no reservation item to open."));
+                return;
+            }
+            this.getRouter().navTo("wmHuStockTransferRack", {
+                reservation: oReservation.ReservationNo,
+                item: oReservation.ReservationItem
+            });
+        },
+
+        onRetry: function () { this.loadReservations(); },
+        onBackToReservations: function () { this.getRouter().navTo("wmHuStockTransfer"); }
     });
 });

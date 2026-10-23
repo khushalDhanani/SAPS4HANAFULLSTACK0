@@ -369,6 +369,15 @@ sap.ui.define([
 
         onNavBack: function () {
             this.getRouter().navTo("wmHuStockTransfer");
+        },
+
+        onRouteToStandard311: function () {
+            var sRes = this.getModel("cockpitView").getProperty("/reservationNo");
+            var sItem = this.getModel("cockpitView").getProperty("/reservationItem") || "1";
+            this.getRouter().navTo("wmReservationEntryDetail", {
+                ReservationNo: sRes,
+                ReservationItem: sItem
+            });
         }
     });
 });

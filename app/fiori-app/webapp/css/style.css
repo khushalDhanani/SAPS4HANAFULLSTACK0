@@ -562,95 +562,47 @@
     padding: 0.75rem 1rem;
 }
 
-/* Isolated warehouse rack visualizer demonstration. All values shown by this page are mock data. */
-.demoRackPage,
-.demoRackPage .sapMPageCont,
-.demoRackPageContent { height: 100%; min-height: 0; }
-.demoRackPageContent { display: flex; flex-direction: column; overflow: hidden; background: #f4f7f9; }
-.demoRackToolbar,
-.demoRackControlsToolbar,
-.demoRackPhysicalFooter { flex: 0 0 auto; background: #fff; }
-.demoRackToolbar { min-height: 3.5rem; border-bottom: 1px solid #e5ebef; }
-.demoRackToolbar .sapMTitle { color: #18364a; font-size: 1.2rem; }
-.demoRackControlsToolbar { min-height: 3.25rem; border-bottom: 1px solid #d7e0e7; }
-.demoRackCounter { min-width: 3.5rem; text-align: center; }
-.demoMaterialBadge { padding: .15rem .5rem; border-radius: .25rem; background: #fff2d8; }
-.demoMaterialBadge .sapMLabel { color: #805400; font-size: .65rem; font-weight: 700; letter-spacing: .04em; }
-.demoMaterialBadge .sapMText { font-family: monospace; font-size: .8rem; }
-.demoRackDisclaimer { flex: 0 0 auto; margin: .35rem .75rem !important; }
-.demoRackWorkspace {
-    display: grid !important;
-    grid-template-columns: minmax(0, 3.6fr) minmax(19rem, 1fr);
-    gap: .65rem;
-    flex: 1 1 0;
-    min-height: 0;
-    padding: 0 .75rem .65rem;
-    overflow: hidden;
-}
-.demoRackStage,
-.demoRackTableStage,
-.demoRackInspector { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid #d6e0e7; border-radius: .35rem; background: #fff; box-shadow: 0 1px 3px rgba(25,55,75,.08); }
-.demoRackStage { display: flex; flex-direction: column; padding: .55rem .65rem .45rem; }
-.demoRackStageHeader { flex: 0 0 auto; padding-bottom: .25rem; }
-.demoRackStageHeader .sapMTitle { color: #18364a; font-size: 1.15rem; }
-.demoRackLevelAttribute { gap: .45rem; padding: .35rem .6rem; border-left: 1px solid #d7e0e7; background: #f7f9fa; }
-.demoRackLevelAttribute .sapMLabel { color: #617988; font-size: .7rem; }
-.demoRackLevelAttribute .sapMText { color: #18364a; font-size: .8rem; font-weight: 700; }
-.demoRackScroll { flex: 1 1 0; min-height: 0; border-radius: .35rem; background: linear-gradient(#f8fafb,#eef3f6); }
-.demoRackStructure { display: flex; flex-direction: column; width: 100%; min-width: 0; min-height: 100%; box-sizing: border-box; padding: .35rem .6rem .55rem; }
-.demoRackAxisNote { flex: 0 0 auto; margin: 0 0 .35rem; color: #536d7d; font-size: .72rem; }
-.demoRackBays { display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)); flex: 1 1 auto; gap: .9rem; min-height: 0; padding: 0 .25rem; }
-.demoRackBay { display: flex; flex-direction: column; min-width: 0; padding: 0 .45rem; border-right: 3px solid #78909c; border-left: 3px solid #78909c; background: transparent; }
-.demoRackBayTitle { flex: 0 0 auto; padding: .3rem; border-bottom: .4rem solid #78909c; color: #244c64; font-size: .9rem; text-align: center; }
-.demoRackPositions { display: grid !important; grid-template-columns: repeat(3,minmax(0,1fr)); grid-auto-rows: minmax(9.5rem,1fr); align-content: stretch; flex: 1 1 auto; gap: .45rem .4rem; }
-.demoRackPosition { position: relative; min-width: 0; min-height: 9.5rem; padding: .4rem; overflow: hidden; border: 1px solid #cbd6dd; border-top: 5px solid #607d8b; border-radius: .2rem; background: #fff; box-shadow: 0 2px 3px rgba(25,55,75,.08); }
-.demoRackPosition[data-section="Section A"] { border-top-color: #4389c7; }
-.demoRackPosition[data-section="Section B"] { border-top-color: #57934b; }
-.demoRackPosition[data-section="Section C"] { border-top-color: #e06b3c; }
-.demoRackPosition .sapMObjStatusText,
-.demoRackPosition .sapMObjStatusIcon { font-size: .72rem; }
-.demoRackHuCount { color: #435e6e; font-size: .75rem; }
-.demoRackHuCards { min-height: 2.15rem; gap: .15rem; }
-.demoRackHuCard.sapMBtn { height: 1.85rem; min-width: 2.6rem; border: 1px solid #b88f63; border-radius: .2rem; background: linear-gradient(#fff8e9,#ead2aa); }
-.demoRackHuCard .sapMBtnContent { white-space: pre-line; color: #49351c; font-family: monospace; font-size: .68rem; font-weight: 700; line-height: .85rem; }
-.demoRackBinLabel.sapMBtn { width: 100%; height: 2rem; min-height: 2rem; margin-top: auto; padding: 0; }
-.demoRackBinLabel .sapMBtnInner { min-height: 1.9rem; height: 1.9rem; font-family: monospace; font-size: 1rem; font-weight: 800; }
-.demoRackSectionText { overflow: hidden; color: #334e5e; font-size: .72rem; font-weight: 700; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-.demoRackFloor { height: .7rem; flex: 0 0 auto; margin-top: .35rem; border-top: .4rem solid #708491; color: #718591; font-size: .55rem; letter-spacing: .07em; }
-.demoRackInspector { display: flex; flex-direction: column; padding: .7rem; }
-.demoRackInspector > .sapMHBox { flex: 0 0 auto; padding-bottom: .35rem; }
-.demoRackInspector .sapMTitle { color: #18364a; font-size: 1rem; }
-.demoRackInspectorScroll { flex: 1 1 0; min-height: 0; }
-.demoRackInspectorContent { gap: .2rem; padding-bottom: .35rem; }
-.demoRackInspectorContent > .sapMLabel,
-.demoRackDetailGrid .sapMLabel,
-.demoRackSelectedHu .sapMLabel { color: #617988; font-size: .68rem; }
-.demoRackInspectorContent > .sapMTitle { margin: 0; }
-.demoRackDetailGrid { gap: .3rem .45rem; padding: .35rem .45rem; border-radius: .25rem; background: #f5f8fa; }
-.demoRackDetailGrid > .sapMFlexItem { flex: 1 1 42%; min-width: 6.5rem; }
-.demoRackHuListHeader { padding-top: .15rem; }
-.demoRackHuTable .sapMListTblCell { padding: .25rem .35rem; }
-.demoRackSelectedHu { gap: .12rem; padding: .35rem .45rem; border: 1px solid #91c8a5; border-radius: .3rem; background: #f0faf3; }
-.demoRackSelectButton { width: 100%; margin-top: .25rem; }
-.demoRackSmallNote { color: #617988; font-size: .68rem; text-align: center; }
-.demoRackTableStage { padding: .8rem; overflow: auto; }
-.demoRackDataTable { width: 100%; }
-.demoRackTableStage > .sapMTitle { margin-bottom: .55rem; }
-.demoRackPhysicalFooter { min-height: 2.5rem; border-top: 1px solid #d7e0e7; font-size: .69rem; }
-.demoRackPhysicalFooter .sapMObjStatusText { font-size: .67rem; }
-@media (max-width: 1050px) {
-    .demoRackWorkspace { display: flex !important; flex-direction: column; overflow: auto; }
-    .demoRackStage, .demoRackTableStage { flex: 0 0 36rem; }
-    .demoRackInspector { flex: 0 0 29rem; }
-    .demoRackToolbar, .demoRackControlsToolbar { overflow-x: auto; }
-}
+/* Neutral rack position grid. Section color tokens distinguish section codes only. */
+.rackPositionToolbar { margin-top: .65rem; border: 1px solid #d6e0e7; border-radius: .25rem .25rem 0 0; background: #fff; }
+.rackStockScopeNote { padding: .35rem .65rem; color: #526a78; font-size: .72rem; }
+.rackNonRackHint { color: #526a78; font-size: .75rem; }
+.rackPositionGroups { box-sizing: border-box; width: 100%; padding: .65rem; border: 1px solid #d6e0e7; border-top: 0; background: #fff; }
+.rackBreadcrumbSeparator { color: #718894; font-size: 1.15rem; }
+.rackPositionGrid { display: flex !important; flex-wrap: nowrap !important; align-items: stretch; gap: .45rem; width: max-content; min-width: 100%; }
+.rackPositionCard { display: flex; flex: 0 0 6rem; min-width: 0; gap: .25rem; padding: .4rem; overflow: hidden; border: 1px solid #d5dfe4; border-top: 4px solid #9aaab3; border-radius: .2rem; background: #fff; }
+.rackPositionCard .sapMTitle,
+.rackPositionTitle.sapMTitle { color: #193c52; font-size: 1rem; }
+.rackPositionBin { overflow-wrap: anywhere; color: #617988; font-family: monospace; font-size: .7rem; }
+.rackPositionSection .sapMObjStatusText { color: #435e6e; font-size: .72rem; }
+.rackPositionUnits { align-items: flex-start; gap: .2rem; }
+.rackPositionUnits .sapMBtn { margin: 0; }
+.rackPositionUnits .sapMBtnInner { min-height: 1.8rem; height: auto; padding: .1rem .35rem; border: 1px solid #d6e0e7; font-size: .7rem; }
+.rackNoPositions { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: .25rem; padding: 1.5rem .75rem; color: #526a78; text-align: center; }
+.rackPositionCard[data-section-color="1"] { border-top-color: #0070f2; }
+.rackPositionCard[data-section-color="2"] { border-top-color: #d04343; }
+.rackPositionCard[data-section-color="3"] { border-top-color: #e76500; }
+.rackPositionCard[data-section-color="4"] { border-top-color: #6c32a0; }
+.rackPositionCard[data-section-color="5"] { border-top-color: #008a8a; }
+.rackPositionCard[data-section-color="6"] { border-top-color: #bb4a8a; }
+.rackPositionCard[data-section-color="7"] { border-top-color: #497c19; }
+.rackPositionCard[data-section-color="8"] { border-top-color: #b07b00; }
+.rackPositionCard[data-section-color="9"] { border-top-color: #356ac3; }
+.rackPositionCard[data-section-color="10"] { border-top-color: #c44568; }
+.rackPositionCard[data-section-color="11"] { border-top-color: #3a7770; }
+.rackPositionCard[data-section-color="12"] { border-top-color: #8c5c31; }
+.rackPositionCard[data-section-color="13"] { border-top-color: #7256b2; }
+.rackPositionCard[data-section-color="14"] { border-top-color: #1473a5; }
+.rackPositionCard[data-section-color="15"] { border-top-color: #9a4e0b; }
+.rackPositionCard[data-section-color="16"] { border-top-color: #536d1b; }
+.rackPositionCard[data-section-color="17"] { border-top-color: #a0449a; }
+.rackPositionCard[data-section-color="18"] { border-top-color: #007c54; }
+.rackPositionCard[data-section-color="19"] { border-top-color: #8e4c53; }
+.rackPositionCard[data-section-color="20"] { border-top-color: #4d63a8; }
+.rackPositionCard[data-section-color="21"] { border-top-color: #b15a2e; }
+.rackPositionCard[data-section-color="22"] { border-top-color: #1d829c; }
+.rackPositionCard[data-section-color="23"] { border-top-color: #795223; }
+.rackPositionCard[data-section-color="24"] { border-top-color: #6c7380; }
 @media (max-width: 600px) {
-    .demoRackToolbar { min-height: 3rem; }
-    .demoRackControlsToolbar { min-height: 3rem; }
-    .demoRackToolbar .sapMTitle { font-size: .9rem; }
-    .demoRackStage, .demoRackTableStage { flex-basis: 34rem; }
-    .demoRackInspector { flex-basis: 29rem; }
-    .demoRackLevelAttribute { gap: .2rem; padding: .25rem .35rem; }
-    .demoRackBays { grid-template-columns: minmax(0,1fr); gap: .75rem; }
-    .demoRackDisclaimer { font-size: .72rem; }
+    .rackPositionToolbar { margin-top: .4rem; }
+    .rackPositionCard { flex-basis: 5.25rem; padding: .35rem; }
 }
