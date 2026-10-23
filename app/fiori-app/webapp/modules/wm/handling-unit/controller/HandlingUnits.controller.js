@@ -10,8 +10,11 @@ sap.ui.define([
     "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPdf",
     "saps4hana/fiori/modules/wm/handling-unit/util/HuBatchReader",
     "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelLayout",
-    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelSizeDialog"
-], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox, BusyDialog, HuLabelPrinter, HuLabelPdf, HuBatchReader, HuLabelLayout, HuLabelSizeDialog) {
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelSizeDialog",
+    "saps4hana/fiori/modules/wm/handling-unit/util/QrCode",
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuQrPdf",
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuQrLayoutDialog"
+], function (BaseController, JSONModel, ODataClient, Fragment, MessageToast, MessageBox, BusyDialog, HuLabelPrinter, HuLabelPdf, HuBatchReader, HuLabelLayout, HuLabelSizeDialog, QrCode, HuQrPdf, HuQrLayoutDialog) {
     "use strict";
 
     var BASE_PATH = "/odata/v4/handling-unit";
@@ -485,6 +488,139 @@ sap.ui.define([
                     fileName: that.getText("huExportFile") + ".xlsx"
                 });
                 oSheet.build().finally(function () { oSheet.destroy(); });
+            });
+        },
+
+        /**
+         * Row QR Code: shows a dialog with a QR code for the row's HU number.
+         * The dialog is lazily created once and reused. The SVG is injected into the
+         * div directly so no binding to a raw SVG string is needed.
+         */
+        onRowQr: function (oEvent) {
+            var oView = this.getView();
+            var oCtx = oEvent.getSource().getBindingContext("huView");
+            var sHuNumber = oCtx.getProperty("HandlingUnitExternalID") || "";
+            var sMaterial = oCtx.getProperty("PackagingMaterialDescription") || oCtx.getProperty("PackagingMaterial") || "";
+            if (!sHuNumber) { MessageToast.show(this.getText("huNoData")); return; }
+
+            if (!this.getModel("huQr")) {
+                this.setModel(new JSONModel({ huNumber: "", materialName: "" }), "huQr");
+            }
+            this.getModel("huQr").setProperty("/huNumber", sHuNumber);
+            this.getModel("huQr").setProperty("/materialName", sMaterial);
+
+            var self = this;
+            if (!this._pQrDialog) {
+                this._pQrDialog = Fragment.load({
+                    id: oView.getId(),
+                    name: "saps4hana.fiori.modules.wm.handling-unit.view.QrCodeDialog",
+                    controller: this
+                }).then(function (oDialog) {
+                    oView.addDependent(oDialog);
+                    return oDialog;
+                });
+            }
+            this._pQrDialog.then(function (oDialog) {
+                // Inject the QR SVG after the dialog DOM is available
+                oDialog.attachEventOnce("afterOpen", function () {
+                    var oHtml = oView.byId("huQrSvgHtml");
+                    if (oHtml) {
+                        var sSvg = QrCode.toSvg(sHuNumber, { size: 6, quiet: 4 });
+                        oHtml.setContent('<div style="display:flex;align-items:center;justify-content:center;">' + sSvg + "</div>");
+                    }
+                });
+                oDialog.open();
+            });
+        },
+
+        onCloseQr: function () {
+            if (this._pQrDialog) {
+                this._pQrDialog.then(function (oDialog) { oDialog.close(); });
+            }
+        },
+
+        /**
+         * Download QR code as vector SVG for the current dialog's HU.
+         */
+        onDownloadQrSvg: function () {
+            var oModel = this.getModel("huQr");
+            var sHuNumber = oModel ? oModel.getProperty("/huNumber") : "";
+            if (!sHuNumber) { return; }
+            HuQrPdf.downloadSvg(sHuNumber, "QR_" + sHuNumber + ".svg");
+            MessageToast.show(this.getText("huQrDownloaded", [sHuNumber]));
+        },
+
+        /**
+         * Download QR code as single-page PDF for the current dialog's HU.
+         */
+        onDownloadQrPdf: function () {
+            var oModel = this.getModel("huQr");
+            var sHuNumber = oModel ? oModel.getProperty("/huNumber") : "";
+            if (!sHuNumber) { return; }
+            var sMaterial = oModel.getProperty("/materialName") || "";
+            var self = this;
+            HuQrPdf.download([{ huNumber: sHuNumber, materialName: sMaterial }], "QR_" + sHuNumber + ".pdf", "A4single")
+                .then(function () {
+                    MessageToast.show(self.getText("huQrDownloaded", [sHuNumber]));
+                })
+                .catch(function (e) {
+                    MessageBox.error((e && e.message) || self.getText("huLoadError"));
+                });
+        },
+
+        /**
+         * Download Selected QR Codes: opens combine options dialog, then downloads combined PDF for ticked HUs.
+         */
+        onDownloadQrSelected: function () {
+            var aRows = this._rowsToObjects(this.byId("huTable").getSelectedItems());
+            if (!aRows.length) {
+                MessageToast.show(this.getText("huNoSelection"));
+                return undefined;
+            }
+            return this._pickQrLayoutThenDownload(aRows);
+        },
+
+        /**
+         * Download All QR Codes: opens combine options dialog, then downloads combined PDF for all filtered HUs.
+         */
+        onDownloadQrAll: function () {
+            var aRows = this.getModel("huView").getProperty("/items") || [];
+            if (!aRows.length) {
+                MessageToast.show(this.getText("huNoData"));
+                return undefined;
+            }
+            return this._pickQrLayoutThenDownload(aRows);
+        },
+
+        /**
+         * Opens the combine layout picker dialog (12-up, 6-up, 20-up, 1-up) and downloads combined PDF.
+         */
+        _pickQrLayoutThenDownload: function (aRows) {
+            var self = this;
+            var aItems = aRows.map(function (r) {
+                return {
+                    huNumber: r.HandlingUnitExternalID || r.huNumber || "",
+                    materialName: r.PackagingMaterialDescription || r.PackagingMaterial || "",
+                    createdDate: r.CreationDateTime || ""
+                };
+            }).filter(function (it) { return !!it.huNumber; });
+
+            if (!aItems.length) {
+                MessageToast.show(this.getText("huNoData"));
+                return undefined;
+            }
+
+            return HuQrLayoutDialog.open(this, { count: aItems.length }).then(function (oChoice) {
+                if (!oChoice) { return undefined; } // User cancelled
+                MessageToast.show(self.getText("huQrGenerating"));
+                var sFilename = "HU_QR_combined_" + self._fileStamp() + "_" + oChoice.layout + ".pdf";
+                return HuQrPdf.download(aItems, sFilename, oChoice.layout, { includeMaterial: oChoice.includeMaterial })
+                    .then(function () {
+                        MessageToast.show(self.getText("huQrCombinedDownloaded", [aItems.length]));
+                    })
+                    .catch(function (oError) {
+                        MessageBox.error((oError && oError.message) || self.getText("huLoadError"));
+                    });
             });
         }
     });

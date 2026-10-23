@@ -1,0 +1,39 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog id="huQrLayoutDialog" title="{i18n>huQrCombineTitle}" contentWidth="32rem">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <Text text="{huQrLayout>/infoText}" class="sapUiSmallMarginBottom fontBold" />
+                <List id="huQrLayoutList" mode="SingleSelectMaster" selectionChange=".onSelectQrLayout"
+                    items="{huQrLayout>/layouts}" showSeparators="Inner">
+                    <CustomListItem type="Active" selected="{= ${huQrLayout>key} === ${huQrLayout>/selectedKey} }">
+                        <HBox alignItems="Center" class="sapUiSmallMargin">
+                            <VBox width="4.5rem" alignItems="Center" justifyContent="Center">
+                                <HBox class="huSizePreview" width="{huQrLayout>previewW}px" height="{huQrLayout>previewH}px" justifyContent="Center" alignItems="Center">
+                                    <core:Icon src="sap-icon://grid" size="1rem" visible="{= ${huQrLayout>cols} > 1 }" color="#666666" />
+                                    <core:Icon src="sap-icon://qr-code" size="1rem" visible="{= ${huQrLayout>cols} === 1 }" color="#666666" />
+                                </HBox>
+                            </VBox>
+                            <VBox class="sapUiSmallMarginBegin" width="100%">
+                                <Title text="{huQrLayout>name}" level="H5" />
+                                <Text text="{huQrLayout>dims}" class="sapUiTinyMarginTop fontBold" />
+                                <Text text="{huQrLayout>desc}" class="sapUiTinyMarginTop" />
+                            </VBox>
+                        </HBox>
+                    </CustomListItem>
+                </List>
+                <HBox alignItems="Center" justifyContent="SpaceBetween" class="sapUiMediumMarginTop">
+                    <Label text="{i18n>huQrIncludeMaterial}" labelFor="huQrIncludeMatSwitch" />
+                    <Switch id="huQrIncludeMatSwitch" state="{huQrLayout>/includeMaterial}" customTextOn="Yes" customTextOff="No" />
+                </HBox>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button id="huQrLayoutConfirm" text="{huQrLayout>/confirmText}" type="Emphasized" icon="sap-icon://download" press=".onConfirmQrLayout" />
+        </beginButton>
+        <endButton>
+            <Button id="huQrLayoutCancel" text="{i18n>huQrClose}" press=".onCancelQrLayout" />
+        </endButton>
+    </Dialog>
+</core:FragmentDefinition>
