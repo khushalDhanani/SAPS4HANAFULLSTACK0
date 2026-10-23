@@ -7,55 +7,70 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
-- **Task 1: READ-ONLY Live SAP Discovery (2026-10-23 12:20 IST):**
-  - **Zero Writes / Strict READ-ONLY:** Stated READ-ONLY before every live call against SAP S/4HANA (client 220); zero writes or mutations executed.
-  - **1.a) DD03L for structure `HUM_DATA_MOVE_TO` & Interface of `HU_CREATE_GOODS_MOVEMENT`:**
-    - Read `DD03L`: Structure has 18 fields (`HUWBEVENT`, `MATNR`, `CHARG`, `WERKS`, `LGORT`, `BESTQ`, `SOBKZ`, `SONUM`, `LGNUM`, `GRUND`, `KONTO`, `LIFNR`, `KUNNR`, `GSBER`, `KOSTL`, `BWART`, `SGT_SCAT`, `HU_ITEMS`).
-    - **`RSNUM` and `RSPOS` are NOT present** (`Contains RSNUM: false, Contains RSPOS: false`). It carries movement/location fields only.
-    - Read interface of `HU_CREATE_GOODS_MOVEMENT` via `RFC_GET_FUNCTION_INTERFACE`: Importing (`IF_EVENT`, `IF_SIMULATE`, `IF_COMMIT`, `IF_TCODE`='HUMO', `IS_IMKPF`, `IT_EXTERNAL_ID`, `IT_INTERNAL_ID`, `IT_MOVE_TO`, `IT_IMSEG_EWM`), Changing (`CT_IMSEG`), Exporting (`EF_POSTED`, `ES_EMKPF`, `ES_MESSAGE`, `ET_MESSAGES`).
-  - **1.b) Standard HU Enqueue / Lock Object:**
-    - `TADIR` confirms Lock Object **`EVVEKPE`** (devclass `HANDLING_UNITS`, locking table `VEKP`).
-    - `TFDIR` confirms standard Enqueue FM **`ENQUEUE_EVVEKPE`** and Dequeue FM **`DEQUEUE_EVVEKPE`** (mode `E`, parameter `VENUM`, exceptions `FOREIGN_LOCK`, `SYSTEM_FAILURE`).
-    - Standard functional wrapper FM: **`HU_ENQUEUE`** (changing `CS_HEADER`, exporting `ET_LQUA`, exceptions `FOREIGN_LOCK`, `FATAL_ERROR`, `LE_NOT_FOUND`).
-  - **1.c) Reservations 529960/1, 529959/1, 523654/1 — `T001L-XHUPF` of Source and Receiving SLocs:**
-    - Read `RESB`: All 3 items are Material `8000009754`, `BWART = 311`, Source: `1120/CS02`, Destination: `1120/CIS1`, `BDMNG = 1.000`, `ENMNG = 0.000`, `KZEAR = ''` (open), `XLOEK = ''`.
-    - Read `T001L`:
-      - Source `1120/CS02` ("Raw Material"): **`XHUPF = 'X'` (HU-managed: true)**.
-      - Receiving `1120/CIS1` ("CIS Team"): **`XHUPF = ''` (HU-managed: false)**.
-    - In standard SAP, moving an HU from an HU-managed SLoc (`CS02`) to a non-HU SLoc (`CIS1`) automatically unpacks the HU upon arrival at destination.
-  - **1.d) `THUWBBWART` for Event `0006` (SLoc to SLoc):**
-    - Confirmed rows exist in client 220:
-      - `HUWBEVENT = '0006'`, `STOCK_CAT = ''` (unrestricted) -> **`MOVE_TYPE = '311'`**.
-      - `HUWBEVENT = '0006'`, `STOCK_CAT = 'Q'` (project/quality) -> `MOVE_TYPE = '323'`.
-      - `HUWBEVENT = '0006'`, `STOCK_CAT = 'S'` (blocked) -> `MOVE_TYPE = '325'`.
-  - **1.e) Live RFC Technical User Scope:**
-    - Read `UST04` / `AGR_1252`: RFC user is `KHUSHAL` (personal name) holding profile **`SAP_ALL`** and role `ZMIGO_FIORI` with `$WERKS = '*'` and `$VSTEL = '*'`.
-
-- **Task 2: ABAP FM Draft `docs/abap/z_hu_goods_movement.fugr.abap` (Docs Only, 2026-10-23 12:28 IST):**
-  - Authored comprehensive remote-enabled function module draft `Z_HU_GOODS_MOVEMENT` for the ABAP team:
-    - Authoritative SAP enqueue via `ENQUEUE_EVVEKPE` on `VEKP-VENUM` with cleanup via `DEQUEUE_EVVEKPE`.
-    - Strict `AUTHORITY-CHECK`s on `C_LO_HU` (activity 01), `M_MSEG_WMB` (activity 01 for plant), and `M_MSEG_BWA` (activity 01 for movement type).
-    - `IV_SIMULATE = 'X'` and `IV_COMMIT = 'X'` with explicit verification of `ef_posted = 'X'` and `es_emkpf-mblnr` before calling `BAPI_TRANSACTION_COMMIT WAIT = 'X'`.
-    - Flat `BAPIRET2` conversion with standard text resolution.
-    - **Strict rule enforced: NO DIRECT `UPDATE RESB`** under any circumstance.
-    - Reservation handling options analyzed (Two-step sequence vs auto-unpack vs BAdI `MB_DOCUMENT_BADI`) and runbook with SE37 test cases documented. Zero SAP changes.
-
-- **Task 3: Revised Double-Post Protection Plan (2026-10-23 12:30 IST):**
-  - Removed `BAPI_HU_STOCK_TRANSFER` and any invented document numbers (marked Not verified).
-  - Posting via remote-enabled `Z_HU_GOODS_MOVEMENT`.
-  - Two-tier lock: SAP-side `ENQUEUE_EVVEKPE` is the authoritative lock; CAP lock is fast path.
-  - Fixed lock acquisition order: Reservation Item (`RSNUM/RSPOS`) first, then Handling Unit (`EXIDV/VENUM`) second to prevent deadlocks.
-  - DB-backed attempt store (`GoodsIssueAttemptStore` pattern) writing unique `ClientAttemptId` with status `IN_PROGRESS` before invoking the SAP RFC call.
-  - Unconfirmed-outcome recheck worker querying SAP reference (`MSEG`/`MATDOC`).
-  - Mock concurrency test specification and gated live test (requiring explicit user "go").
-
-- **Task 4: Option A Route Confirmation & Demo Rack Replacement (2026-10-23 12:32 IST):**
-  - Option A route target confirmed: The standard 311 posting flow in this application is handled by `wmReservationEntryDetail` (Target `TargetReservationEntryDetail`). The old `wmGoodsIssue311` route was retired in commit `61f8131`. Added `wmGoodsIssue311` as an alias route to `TargetReservationEntryDetail` in `manifest.json`.
-  - Replaced `demo-rack` (`HuStockTransferRackDemo.view.xml` and controller) with a fixture shaped like `rackLayout()` (single row of positions, floor/rack/position, no bays or levels), labelled `DEMO` with clearly synthetic HU numbers (`DEMO-HU-001`, `DEMO-HU-002`, `DEMO-HU-003`), and two cell states only (`empty` and `occupied`).
-  - Updated `test/unit/wm/huStockTransferRackReservations.test.js` to assert the single-row `rackLayout()` shape, empty/occupied states, synthetic HU numbers, DEMO labelling, and route alias. All 8 tests PASS.
-
-- **Task 5: Proposal for Dedicated Technical RFC User (Report Only, 2026-10-23 12:33 IST):**
-  - RFC user currently holds `SAP_ALL` and is a personal name (`KHUSHAL`). Detailed proposal formulated for minimum authorization objects (`S_RFC`, `C_LO_HU`, `M_MSEG_WMB`, `M_MSEG_BWA`, `M_MSEG_LGO`, `L_LGNUM`, `S_TABU_DIS`, `S_ENQUE`). Zero SAP changes.
+- **Tasks 1 to 4: Live Investigation, Dynamic BAPI Simulation Gate Protection, SE37 Handover, and S_RFC Audit (2026-10-23 12:55 IST):**
+  - **Task 1: READ-ONLY Live SAP Discovery (client 220):**
+    - Preceded every live RFC call with explicit READ-ONLY state; zero writes, BAPIs, or mutations executed.
+    - 1.a) `MATDOC` Document Read (`4900050263`, `4900050268`, `4900050078`, `4900050079`):
+      - Reused validated fields: `MBLNR`, `ZEILE`, `BWART`, `WERKS`, `LGORT`, `UMLGO`, `MATNR`, `CHARG`, `MENGE`, `SHKZG`, `RSNUM`, `RSPOS`, `USNAM`, `TCODE2`, `VGART`, `BUDAT`.
+      - `4900050078` (2026-10-07, `USNAM=MPRAJAPATI`, `TCODE2='VL02N_O'`, `VGART='WA'`): 4 items (311 transfer `1120/CS02 -> CI01`). Items 1-2: Mat `8000007113`, Qty 2.000, `RSNUM='0000523657'`, `RSPOS='0001'`. Items 3-4: Mat `8000007114`, Qty 2.000, `RSNUM='0000523657'`, `RSPOS='0002'`.
+      - `4900050079` (2026-10-08, `USNAM=MPRAJAPATI`, `TCODE2='VL02N_O'`, `VGART='WA'`): 4 items (311 transfer `1120/CS02 -> CI01`). Items 1-2: Mat `8000007113`, Qty 1.000, `RSNUM='0000523957'`, `RSPOS='0001'`. Items 3-4: Mat `8000007114`, Qty 1.000, `RSNUM='0000523957'`, `RSPOS='0002'`.
+      - `4900050263` (2026-10-18, `USNAM=NARESH`, `TCODE2='VLMOVE'`, `VGART='WH'`): 2 items (311 transfer `1120/CS02 -> HU01`). Mat `8000009754`, Qty 1.000, `RSNUM='0000000000'` (no reservation reference).
+      - `4900050268` (2026-10-18, `USNAM=NARESH`, `TCODE2='VLMOVE'`, `VGART='WH'`): 2 items (311 transfer `1120/CS02 -> FG01`). Mat `8000009754`, Qty 1.000, `RSNUM='0000000000'` (no reservation reference).
+    - 1.b) `RESB` Status Check for Found Reservations (`523657` and `523957`):
+      - Reservation `523657/1`: `BDMNG = 2.000`, `ENMNG = 2.000`, `KZEAR = 'X'`, `XLOEK = ''`. **YES, SAP updated ENMNG to 2.000**.
+      - Reservation `523657/2`: `BDMNG = 2.000`, `ENMNG = 2.000`, `KZEAR = 'X'`, `XLOEK = ''`. **YES, SAP updated ENMNG to 2.000**.
+      - Reservation `523957/1`: `BDMNG = 1.000`, `ENMNG = 1.000`, `KZEAR = 'X'`, `XLOEK = ''`. **YES, SAP updated ENMNG to 1.000**.
+      - Reservation `523957/2`: `BDMNG = 1.000`, `ENMNG = 1.000`, `KZEAR = 'X'`, `XLOEK = ''`. **YES, SAP updated ENMNG to 1.000**.
+    - 1.c) Handling Unit Status in `HU01`/`FG01` (`VEPO`/`VEKP` by `MATNR + LGORT`):
+      - **INFERRED**: In `VEPO`, material `8000009754` has 35 rows (e.g. HU `2000019372` in storage unit inventory). `VEKP-LGORT` is blank because storage location is managed via storage units/LQUA.
+      - `TCODE2` proves documents were posted via standard transactions: `VL02N_O` (Outbound Delivery GI) and `VLMOVE` (HU Goods Movement), **NOT** the custom ABAP report `ZRF_RES_HU_TRANSFER_DNR`.
+    - 1.d) `DD07L`/`DD07T` & `T158G` for Domain `GM_CODE`:
+      - Standard values: `01` (MB01), `02` (MB31), `03` (MB1A), `04` (MB1B), `05` (MB1C), `06` (MB11), `07` (MB04).
+      - `GM_CODE '06'` maps to `MB11` (Goods Movement with Reference, which specifically handles reservation references `RESERV_NO`/`RES_ITEM`).
+      - `GM_CODE '04'` maps to `MB1B` (Transfer Posting without reservation reference).
+      - **Conclusion:** `GM_CODE '06'` is the correct domain code for reservation-based 311 movements.
+  - **Task 2: Dynamic BAPI Script `tools/simulate-res-311-bapi.js` (Still NOT run):**
+    - Refactored script to dynamically fetch reservation item (`MATNR`, `WERKS`, `LGORT`, `UMLGO`, open qty `BDMNG - ENMNG`, `CHARG`) from `RESB` at runtime using `--reservation` / `--item` arguments.
+    - Updated `GM_CODE` to `'06'`.
+    - Maintained both gates (`live-sap-gate` requiring `ALLOW_LIVE_SAP_TOOLS=1` & `--allow-live-sap`, and `user-go` requiring `USER_WRITTEN_GO=go` & `--user-go`), followed by `BAPI_TRANSACTION_ROLLBACK`.
+    - Exits with code 1 and prints planned payload when gates are not met.
+    - Added unit test suite `test/unit/simulateRes311Gate.test.js` (11 tests, 100% PASS).
+    - Script itself was **NOT RUN**.
+  - **Task 3: Handover Markdown `docs/abap/hu-goods-movement-se37-handover.md`:**
+    - Authored handover document for ABAP team detailing:
+      1. Include `LLHU_GOODS_MOVEMENTU02` code inspection for `CT_IMSEG` handling.
+      2. SE37 simulation steps pre-filling `CT_IMSEG` with reservation `529960/1`.
+      3. Test results recording table with all results marked **PENDING**.
+  - **Task 4: S_RFC Function-Group Verification vs `TFDIR-PNAME`:**
+    - Verified proposal (`ZFG_HANDLINGUNIT`, `SDTX`, `SIFP`, `V51E`) against live SAP `TFDIR`:
+      - `RFC_READ_TABLE`: `PNAME = SAPLSDTX` -> FUGR **`SDTX`** (Matches proposal).
+      - `RFC_GET_FUNCTION_INTERFACE`: `PNAME = SAPLRFC1` -> FUGR **`RFC1`** (**Mismatch:** proposal had `SIFP`).
+      - `HU_CREATE_GOODS_MOVEMENT`: `PNAME = SAPLHU_GOODS_MOVEMENT` -> FUGR **`HU_GOODS_MOVEMENT`** (**Mismatch:** proposal had `V51E`).
+      - `ENQUEUE_EVVEKPE` / `DEQUEUE_EVVEKPE`: `PNAME = /1BCDWBEN/SAPLHEN0000` -> FUGR **`/1BCDWBEN/HEN0000`** (**Mismatch:** proposal had `V51E`).
+      - `ENQUEUE_EMRESB` / `DEQUEUE_EMRESB`: `PNAME = /1BCDWBEN/SAPLCEN0000` -> FUGR **`/1BCDWBEN/CEN0000`** (ABAP generated lock pool).
+      - `Z_HU_GOODS_MOVEMENT`: Proposed in `ZFG_HANDLINGUNIT` (not found in `TFDIR`).
+- **Tasks 1 to 5: Investigation, Preparation, Docs, and Cleanup (2026-10-23 12:48 IST):**
+  - **Task 1: READ-ONLY Live SAP Discovery (client 220):**
+    - Stated READ-ONLY before every live SAP call; zero writes/mutations executed.
+    - 1.a) `DD03L` for `IMSEG`: Verified 314 fields total. Both `RSNUM` (pos 0049, Rollname `RSNUM`) and `RSPOS` (pos 0050, Rollname `RSPOS`) are confirmed present.
+    - 1.b) Source of `HU_CREATE_GOODS_MOVEMENT`: Remote calls attempted over RFC. `RPY_FUNCTIONMODULE_READ` failed with SAP exception `FL 180 ("Source wider than 72 char")`; `RPY_FUNCTIONMODULE_READ_NEW` returned 0 lines in `SOURCE_CODE`; `RPY_PROGRAM_READ` on include `LLHU_GOODS_MOVEMENTU02` failed with `XI 004`. As instructed, source cannot be read remotely over RFC; backend handling of `CT_IMSEG` and whether reservation fields can be pre-filled is **Not verified**.
+    - 1.c) `MATDOC`: Verified field names via `DD03L` (`MBLNR`, `MJAHR`, `ZEILE`, `BWART`, `WERKS`, `LGORT`, `UMLGO`, `BUDAT`, `USNAM`, `TCODE2`, `VGART`). Queried `BWART = '311' AND WERKS = '1120' AND LGORT = 'CS02' AND UMLGO = 'CIS1'`. Result: Exactly **0 documents found** (unexercised route). Broader query for plant 1120 / SLoc CS02 returned historical 311 movements to SLocs `CI01`, `HU01`, and `FG01`.
+    - 1.d) Repo read for `srv/integration/s4hana/wm/resLock.js`: Confirmed it calls RFC wrapper `Z_WM_RES_LOCK` wrapping standard lock object **`EMRESB`** and enqueue FM **`ENQUEUE_EMRESB`** (and `DEQUEUE_EMRESB`), NOT `ENQUEUE_EMRESBE`. Plan corrected.
+    - 1.e) `RFC_GET_FUNCTION_INTERFACE` for `BAPI_GOODSMVT_CREATE`: Confirmed parameter `TESTRUN` (`Type: BAPI2017_GM_GEN`, Default: `'SPACE'`, Class: `I`) exists.
+  - **Task 2: Prepared WRITE-Class Script `tools/simulate-res-311-bapi.js` (Not Run):**
+    - Prepared testrun simulation script calling `BAPI_GOODSMVT_CREATE` with `TESTRUN = 'X'` for reservation `529960/1`, qty `1.000 NOS`, `CS02` to `CIS1`, using `GoodsIssue311Mapper`, ending with `BAPI_TRANSACTION_ROLLBACK`.
+    - Labeled `WRITE-class`. Enforces strict gate requiring `USER_WRITTEN_GO=go` and `--user-go`; refuses to run without explicit user written "go". Script was **NOT RUN**.
+  - **Task 3: Docs Only — Updated `docs/abap/z_hu_goods_movement.fugr.abap` & Proposal:**
+    - Marked reservation options as **UNRESOLVED**.
+    - Recorded Option 1's double-movement flaw (two separate goods movements, two material documents, double accounting, potential orphaned stock).
+    - Added Option 4: Pre-filling CHANGING table `CT_IMSEG` (**Not verified**).
+    - Marked "311 unpacks the HU" as **Not verified**.
+    - Revised technical user authorization proposal to specify function-group names for `S_RFC` (`ZFG_HANDLINGUNIT`, `SDTX`, `SIFP`, `V51E`) and flagged `S_TABU_DIS` as needing security-team review.
+  - **Task 4: Repo Check & Removed `wmGoodsIssue311` Alias:**
+    - Grepped repository: Zero application references to `wmGoodsIssue311`.
+    - Removed unused `wmGoodsIssue311` route from `manifest.json`.
+    - Verified commit `61f8131` via `git show 61f8131`: Confirmed intentional deprecation of old `goods-issue` routes on 2026-10-22.
+    - Updated unit test in `test/unit/wm/huStockTransferRackReservations.test.js` to assert `wmReservationEntryDetail` and the absence of `wmGoodsIssue311`. All 41 WM unit tests pass.
 
 - **Task 1: READ-ONLY Live SAP Discovery (2026-10-23 11:45 IST):**
   - **Context & Safety:** Strict READ-ONLY live SAP RFC discovery on client 220; state READ-ONLY before every SAP call; zero writes, BAPIs, or mutations.
@@ -752,6 +767,61 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Exact Next Recommended Action (HU stock transfer rack demo — 2026-10-23 10:24 IST):** Rerun full Jest in an environment that permits loopback binds and after the unrelated missing FI/goods-issue test paths are resolved; inspect a wide touch-display viewport when available. No SAP writes or live data are needed for the demo.
 
 ## Changes Log
+
+### 2026-10-23 12:55 IST — READ-ONLY SAP MATDOC/RESB/DD07L Investigation, simulate-res-311-bapi dynamic update & gate tests, SE37 handover doc, and S_RFC TFDIR audit
+
+- **Plan:**
+  - Execute READ-ONLY queries against live SAP client 220 for documents 4900050263, 4900050268, 4900050078, 4900050079 in MATDOC; verify RESB update status for found reservations; check VEPO/VEKP HU status; inspect domain GM_CODE in DD07L/DD07T and T158G.
+  - Refactor `tools/simulate-res-311-bapi.js` (still NOT run) to dynamically fetch RESB reservation items at runtime, set GM_CODE='06', enforce both live-sap-gate and user-go gates with rollback, and print planned payload when gates are not met. Add unit tests for gate behavior.
+  - Author handover document `docs/abap/hu-goods-movement-se37-handover.md` for ABAP team detailing `HU_CREATE_GOODS_MOVEMENT` include `LLHU_GOODS_MOVEMENTU02` code trace, SE37 simulation steps for reservation 529960/1, and results table (all marked pending).
+  - Verify proposed S_RFC function groups (`ZFG_HANDLINGUNIT`, `SDTX`, `SIFP`, `V51E`) against live SAP `TFDIR` table and report discrepancies.
+- **READ-ONLY SAP Evidence (client 220):**
+  - **MATDOC:**
+    - `4900050078` (2026-10-07, `USNAM=MPRAJAPATI`, `TCODE2='VL02N_O'`, `VGART='WA'`): Items 1-2 (`BWART=311`, `1120/CS02 -> CI01`, Mat `8000007113`, Qty 2.000, `RSNUM='0000523657'`, `RSPOS='0001'`); Items 3-4 (`BWART=311`, `1120/CS02 -> CI01`, Mat `8000007114`, Qty 2.000, `RSNUM='0000523657'`, `RSPOS='0002'`).
+    - `4900050079` (2026-10-08, `USNAM=MPRAJAPATI`, `TCODE2='VL02N_O'`, `VGART='WA'`): Items 1-2 (`BWART=311`, `1120/CS02 -> CI01`, Mat `8000007113`, Qty 1.000, `RSNUM='0000523957'`, `RSPOS='0001'`); Items 3-4 (`BWART=311`, `1120/CS02 -> CI01`, Mat `8000007114`, Qty 1.000, `RSNUM='0000523957'`, `RSPOS='0002'`).
+    - `4900050263` (2026-10-18, `USNAM=NARESH`, `TCODE2='VLMOVE'`, `VGART='WH'`): Items 1-2 (`BWART=311`, `1120/CS02 -> HU01`, Mat `8000009754`, Qty 1.000, `RSNUM='0000000000'`).
+    - `4900050268` (2026-10-18, `USNAM=NARESH`, `TCODE2='VLMOVE'`, `VGART='WH'`): Items 1-2 (`BWART=311`, `1120/CS02 -> FG01`, Mat `8000009754`, Qty 1.000, `RSNUM='0000000000'`).
+  - **RESB Update Check:**
+    - `523657/1`: `BDMNG = 2.000`, `ENMNG = 2.000`, `KZEAR = 'X'`. Updated by SAP.
+    - `523657/2`: `BDMNG = 2.000`, `ENMNG = 2.000`, `KZEAR = 'X'`. Updated by SAP.
+    - `523957/1`: `BDMNG = 1.000`, `ENMNG = 1.000`, `KZEAR = 'X'`. Updated by SAP.
+    - `523957/2`: `BDMNG = 1.000`, `ENMNG = 1.000`, `KZEAR = 'X'`. Updated by SAP.
+  - **VEPO/VEKP HU Location Check (INFERRED):**
+    - Material `8000009754` has 35 rows in `VEPO`. `VEKP-LGORT` is blank (storage unit/LQUA managed). Standard transaction codes (`VL02N_O`, `VLMOVE`) posted the movements, not `ZRF_RES_HU_TRANSFER_DNR`.
+  - **DD07L/DD07T & T158G Domain GM_CODE:**
+    - Standard domain values: `01` (MB01), `02` (MB31), `03` (MB1A), `04` (MB1B), `05` (MB1C), `06` (MB11), `07` (MB04).
+    - `GM_CODE '06'` maps to `MB11` (Goods Movement with Reference, which specifically handles reservation references `RESERV_NO`/`RES_ITEM`).
+    - `GM_CODE '04'` maps to `MB1B` (Transfer Posting without reservation reference).
+    - Fits reservation-based 311: `GM_CODE '06'`.
+- **Change:**
+  - Updated `tools/simulate-res-311-bapi.js`:
+    - Replaced hardcoded material/plant/SLoc with runtime dynamic lookup from `RESB` using `--reservation` and `--item` flags.
+    - Set `GM_CODE = '06'`.
+    - Implemented strict two-tier gating (`live-sap-gate` + `user-go`), printing planned payload and exiting with code 1 if gates are not met.
+    - Wrapped call in `RfcClient.session` with explicit `BAPI_TRANSACTION_ROLLBACK`.
+    - Script was NOT run.
+  - Added `test/unit/simulateRes311Gate.test.js`:
+    - 11 unit tests covering CLI argument parsing (`-r`, `--reservation`, `--item`, `--allow-live-sap`, `--user-go`), gate check logic, open quantity calculation, and planned payload construction.
+  - Authored `docs/abap/hu-goods-movement-se37-handover.md`:
+    - Step-by-step handover instructions for ABAP consultant to inspect `LLHU_GOODS_MOVEMENTU02`, run SE37 simulation for reservation 529960/1, and record results in results table (all marked pending).
+  - Audited `S_RFC` proposal against live SAP `TFDIR`:
+    - `RFC_READ_TABLE`: `SAPLSDTX` -> FUGR `SDTX` (Match).
+    - `RFC_GET_FUNCTION_INTERFACE`: `SAPLRFC1` -> FUGR `RFC1` (Mismatch vs proposal `SIFP`).
+    - `HU_CREATE_GOODS_MOVEMENT`: `SAPLHU_GOODS_MOVEMENT` -> FUGR `HU_GOODS_MOVEMENT` (Mismatch vs proposal `V51E`).
+    - `ENQUEUE_EVVEKPE` / `DEQUEUE_EVVEKPE`: `/1BCDWBEN/SAPLHEN0000` -> FUGR `/1BCDWBEN/HEN0000` (Mismatch vs proposal `V51E`).
+    - `ENQUEUE_EMRESB` / `DEQUEUE_EMRESB`: `/1BCDWBEN/SAPLCEN0000` -> FUGR `/1BCDWBEN/CEN0000` (Mismatch).
+    - `Z_HU_GOODS_MOVEMENT`: Proposed in `ZFG_HANDLINGUNIT` (not yet in `TFDIR`).
+- **Files Modified / Created:**
+  - `tools/simulate-res-311-bapi.js`
+  - `test/unit/simulateRes311Gate.test.js`
+  - `docs/abap/hu-goods-movement-se37-handover.md`
+  - `WORKSTATUS.md`
+- **Validation:**
+  - `npx jest test/unit/simulateRes311Gate.test.js`: PASS (11/11 tests, 0.24s).
+  - `npm test`: Ran full suite (3,273 tests total: 3,130 passed, 87 failed, 56 skipped across 169 suites; baseline untouched).
+  - `git diff --check`: PASS (0 whitespace errors).
+  - Zero SAP writes.
+
 
 ### 2026-10-23 11:31 IST — Rack test-data discovery, trailing-sign quantity fix, and plan-only design
 
@@ -1492,3 +1562,33 @@ Single source of truth for work history, current status, validation, unresolved 
   - `npx eslint test/unit/wm/huStockTransferRackReservations.test.js`: 0 errors, 0 warnings.
   - `git diff --check`: 0 errors.
   - Zero SAP writes.
+
+### 2026-10-23 12:48 IST — Part 2: IMSEG Check, HU FM Remote Source Investigation, MATDOC Verification, Simulation Script Preparation, and Route Alias Cleanup
+
+- **Task 1: READ-ONLY Live SAP Discovery (client 220):**
+  - Stated READ-ONLY before every live SAP call; zero writes/mutations executed.
+  - 1.a) `DD03L` for `IMSEG`: Verified 314 fields total. Both `RSNUM` (pos 0049, Rollname `RSNUM`) and `RSPOS` (pos 0050, Rollname `RSPOS`) are confirmed present.
+  - 1.b) Source of `HU_CREATE_GOODS_MOVEMENT`: Remote calls attempted over RFC. `RPY_FUNCTIONMODULE_READ` failed with SAP exception `FL 180 ("Source wider than 72 char")`; `RPY_FUNCTIONMODULE_READ_NEW` returned 0 lines in `SOURCE_CODE`; `RPY_PROGRAM_READ` on include `LLHU_GOODS_MOVEMENTU02` failed with `XI 004`. As instructed, source cannot be read remotely over RFC; backend handling of `CT_IMSEG` and whether reservation fields can be pre-filled is **Not verified**.
+  - 1.c) `MATDOC`: Verified field names via `DD03L` (`MBLNR`, `MJAHR`, `ZEILE`, `BWART`, `WERKS`, `LGORT`, `UMLGO`, `BUDAT`, `USNAM`, `TCODE2`, `VGART`). Queried `BWART = '311' AND WERKS = '1120' AND LGORT = 'CS02' AND UMLGO = 'CIS1'`. Result: Exactly **0 documents found** (unexercised route). Broader query for plant 1120 / SLoc CS02 returned historical 311 movements to SLocs `CI01`, `HU01`, and `FG01`.
+  - 1.d) Repo read for `srv/integration/s4hana/wm/resLock.js`: Confirmed it calls RFC wrapper `Z_WM_RES_LOCK` wrapping standard lock object **`EMRESB`** and enqueue FM **`ENQUEUE_EMRESB`** (and `DEQUEUE_EMRESB`), NOT `ENQUEUE_EMRESBE`. Plan corrected.
+  - 1.e) `RFC_GET_FUNCTION_INTERFACE` for `BAPI_GOODSMVT_CREATE`: Confirmed parameter `TESTRUN` (`Type: BAPI2017_GM_GEN`, Default: `'SPACE'`, Class: `I`) exists.
+- **Task 2: Prepared WRITE-Class Script `tools/simulate-res-311-bapi.js` (Not Run):**
+  - Prepared testrun simulation script calling `BAPI_GOODSMVT_CREATE` with `TESTRUN = 'X'` for reservation `529960/1`, qty `1.000 NOS`, `CS02` to `CIS1`, using `GoodsIssue311Mapper`, ending with `BAPI_TRANSACTION_ROLLBACK`.
+  - Labeled `WRITE-class`. Enforces strict gate requiring `USER_WRITTEN_GO=go` and `--user-go`; refuses to run without explicit user written "go". Script was **NOT RUN**.
+- **Task 3: Docs Only — Updated `docs/abap/z_hu_goods_movement.fugr.abap` & Proposal:**
+  - Marked reservation options as **UNRESOLVED**.
+  - Recorded Option 1's double-movement flaw (two separate goods movements, two material documents, double accounting, potential orphaned stock).
+  - Added Option 4: Pre-filling CHANGING table `CT_IMSEG` (**Not verified**).
+  - Marked "311 unpacks the HU" as **Not verified**.
+  - Revised technical user authorization proposal to specify function-group names for `S_RFC` (`ZFG_HANDLINGUNIT`, `SDTX`, `SIFP`, `V51E`) and flagged `S_TABU_DIS` as needing security-team review.
+- **Task 4: Repo Check & Removed `wmGoodsIssue311` Alias:**
+  - Grepped repository: Zero application references to `wmGoodsIssue311`.
+  - Removed unused `wmGoodsIssue311` route from `manifest.json`.
+  - Verified commit `61f8131` via `git show 61f8131`: Confirmed intentional deprecation of old `goods-issue` routes on 2026-10-22.
+  - Updated unit test in `test/unit/wm/huStockTransferRackReservations.test.js` to assert `wmReservationEntryDetail` and the absence of `wmGoodsIssue311`.
+- **Validation:**
+  - `npm test test/unit/wm/huStockTransferRackReservations.test.js test/unit/wm/huStockTransferRackController.test.js test/unit/wm/huStockTransferAdapter.test.js`: PASS (41/41 tests).
+  - `npm --prefix app/fiori-app run lint`: 0 findings (Clean PASS).
+  - `npx eslint tools/simulate-res-311-bapi.js test/unit/wm/huStockTransferRackReservations.test.js`: 0 errors, 0 warnings.
+  - `git diff --check`: 0 errors.
+  - Zero SAP writes executed.

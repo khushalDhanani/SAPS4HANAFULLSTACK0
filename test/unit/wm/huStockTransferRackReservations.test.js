@@ -131,11 +131,10 @@ describe("HuStockTransferRackDemo fixture shaped like rackLayout()", () => {
 });
 
 describe("Routing & Option A standard 311 check", () => {
-    test("manifest contains wmGoodsIssue311 alias route pointing to TargetReservationEntryDetail", () => {
+    test("manifest contains wmReservationEntryDetail route and no unused wmGoodsIssue311 alias", () => {
         const routes = manifest["sap.ui5"].routing.routes;
         const goodsIssue311Route = routes.find((r) => r.name === "wmGoodsIssue311");
-        expect(goodsIssue311Route).toBeDefined();
-        expect(goodsIssue311Route.target).toBe("TargetReservationEntryDetail");
+        expect(goodsIssue311Route).toBeUndefined();
 
         const resvEntryDetailRoute = routes.find((r) => r.name === "wmReservationEntryDetail");
         expect(resvEntryDetailRoute).toBeDefined();

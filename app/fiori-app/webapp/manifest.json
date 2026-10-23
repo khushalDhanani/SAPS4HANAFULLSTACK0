@@ -368,11 +368,6 @@
           "target": "TargetReservationEntryDetail"
         },
         {
-          "name": "wmGoodsIssue311",
-          "pattern": "wm/goods-issue-311/{ReservationNo}/{ReservationItem}",
-          "target": "TargetReservationEntryDetail"
-        },
-        {
           "name": "wmWarehouseScanTo",
           "pattern": "wm/scan-to",
           "target": "TargetWarehouseScanTo"

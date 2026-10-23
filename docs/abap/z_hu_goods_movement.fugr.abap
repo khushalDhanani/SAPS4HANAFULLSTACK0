@@ -306,34 +306,49 @@ ENDFORM.
 
 
 *======================================================================*
-* ARCHITECTURAL NOTE: RESERVATION HANDLING (RSNUM / RSPOS)
+* ARCHITECTURAL NOTE: RESERVATION HANDLING (RSNUM / RSPOS) - UNRESOLVED
 *======================================================================*
 * Inspection of DD03L (structure HUM_DATA_MOVE_TO) and the interface of
 * HU_CREATE_GOODS_MOVEMENT confirms:
 *   - HUM_DATA_MOVE_TO carries NO fields for reservation reference (RSNUM/RSPOS).
-*   - HU_CREATE_GOODS_MOVEMENT does not expose reservation item reference.
+*   - HU_CREATE_GOODS_MOVEMENT does not expose reservation fields in IT_MOVE_TO.
 *
 * STRICT SAP RULE:
 *   NO DIRECT UPDATE OF TABLE RESB IS PERMITTED UNDER ANY CIRCUMSTANCES.
 *   Direct SQL updates of RESB-ENMNG or RESB-KZEAR corrupt Inventory
 *   Management consistency and bypass accounting/controlling reconciliation.
 *
-* OPTIONS FOR RESERVATION CONSUMPTION:
-*   Option 1: Two-Step Sequence:
+* UNRESOLVED OPTIONS FOR RESERVATION CONSUMPTION:
+*   Status: UNRESOLVED (Needs ABAP verification & decision).
+*
+*   Option 1: Two-Step Sequence (FLAWED):
 *     Step 1: Z_HU_GOODS_MOVEMENT executes physical HU 311 transfer
-*             (e.g., from HU-managed CS02 into staging/unpacking CIS1).
+*             from HU-managed CS02 into staging CIS1.
 *     Step 2: Standard BAPI_GOODSMVT_CREATE posts consumption/transfer
-*             referencing RSNUM and RSPOS against the unpacked stock,
-*             properly reducing RESB-BDMNG and updating RESB-ENMNG.
+*             referencing RSNUM and RSPOS against the unpacked stock.
+*     FLAW: Option 1 requires two separate goods movements, generating two
+*           distinct material documents. This doubles inventory/accounting
+*           postings, risks leaving stock orphaned in CIS1 without reservation
+*           linkage if Step 2 fails, and mismodels one logical transfer as two.
+*
 *   Option 2: Direct BAPI_GOODSMVT_CREATE with Auto-Unpack:
-*     Moving stock from an HU-managed SLoc (CS02) to a Non-HU-managed
-*     SLoc (CIS1) unpacks the material automatically. If standard
-*     BAPI_GOODSMVT_CREATE is used with GM_CODE 06 (MB1B) referencing
-*     RSNUM/RSPOS, verify if SAP unpacks the HU in one atomic LUW.
+*     Moving stock from HU-managed CS02 (XHUPF='X') to non-HU CIS1 (XHUPF='')
+*     might unpack the material automatically. However, whether standard
+*     movement 311 automatically unpacks the HU without error is Not verified.
+*
 *   Option 3: BAdI / Enhancement Implementation:
 *     Implement BAdI MB_DOCUMENT_BADI (or BADI_HU_GOODS_MOVEMENT) to pass
 *     reservation details from an EXPORT TO MEMORY session into IMSEG-RSNUM
 *     during HU_CREATE_GOODS_MOVEMENT processing.
+*
+*   Option 4: Pre-filling CHANGING table CT_IMSEG (Not verified):
+*     DD03L confirms structure IMSEG carries RSNUM (pos 0049) and RSPOS (pos 0050).
+*     HU_CREATE_GOODS_MOVEMENT exposes CHANGING parameter CT_IMSEG (type TY_T_IMSEG).
+*     If a caller pre-populates CT_IMSEG with reservation reference fields, can
+*     HU_CREATE_GOODS_MOVEMENT consume the reservation in a single atomic LUW?
+*     Because the FM source code cannot be read remotely over RFC (FL 180 "Source
+*     wider than 72 char"), backend handling of CT_IMSEG is UNKNOWN and Not verified.
+*     The ABAP team must inspect include LLHU_GOODS_MOVEMENTU02 directly in SE37/SE80.
 *======================================================================*
 
 
