@@ -1,44 +1,62 @@
 'use strict';
 
-const { classifyTransferPath, precheckPathA } = require('../../../srv/integration/s4hana/wm/transferPathHelper');
+const {
+  classifyTransferPath,
+  isShippingManaged,
+  precheckPathA,
+  defaultReservationComparator,
+  assignHuToCompetingReservations,
+  rankCompetingReservations,
+  resolveHuStorageTypeRules
+} = require('../../../srv/integration/s4hana/wm/transferPathHelper');
 const HuStockTransferAdapter = require('../../../srv/integration/s4hana/wm/HuStockTransferAdapter');
+const businessConfigResolver = require('../../../srv/common/BusinessConfigResolver');
+const { BusinessConfigError } = businessConfigResolver;
 
 describe('transferPathHelper Unit Tests', () => {
-  describe('classifyTransferPath', () => {
-    test('returns "A" when VSTEL is present in T001L (Shipping-managed, e.g. CS02)', () => {
+  describe('classifyTransferPath and isShippingManaged (shared pure-T001L rule)', () => {
+    test('returns "A" and isShippingManaged=true when VSTEL is present in T001L (Shipping-managed, e.g. CS02)', () => {
       const row = { WERKS: '1120', LGORT: 'CS02', VSTEL: '1105', XHUPF: 'X' };
       expect(classifyTransferPath(row)).toBe('A');
+      expect(isShippingManaged(row)).toBe(true);
     });
 
-    test('returns "A" when VSTEL is present even if XHUPF is blank', () => {
-      const row = { WERKS: '1120', LGORT: 'CS03', VSTEL: '1105', XHUPF: '' };
-      expect(classifyTransferPath(row)).toBe('A');
+    test('returns "A" and isShippingManaged=true when VKORG or KUNNR is present', () => {
+      expect(isShippingManaged({ VKORG: '1000' })).toBe(true);
+      expect(isShippingManaged({ KUNNR: '0000001120' })).toBe(true);
+      expect(classifyTransferPath({ VKORG: '1000' })).toBe('A');
     });
 
-    test('returns "B" when XHUPF is "X" and VSTEL is blank (HU-managed, non-shipping)', () => {
+    test('returns "B" and isShippingManaged=false when XHUPF is "X" and VSTEL is blank (HU-managed, non-shipping)', () => {
       const row = { WERKS: '1120', LGORT: 'HU01', VSTEL: '', XHUPF: 'X' };
       expect(classifyTransferPath(row)).toBe('B');
+      expect(isShippingManaged(row)).toBe(false);
     });
 
-    test('returns "standard" when both VSTEL and XHUPF are blank (e.g. CIS1, HS01)', () => {
+    test('returns "standard" and isShippingManaged=false when both VSTEL and XHUPF are blank (e.g. CIS1, HS01)', () => {
       const row = { WERKS: '1120', LGORT: 'CIS1', VSTEL: '', XHUPF: '' };
       expect(classifyTransferPath(row)).toBe('standard');
+      expect(isShippingManaged(row)).toBe(false);
     });
 
-    test('returns "standard" when t001lRow is null or undefined', () => {
+    test('returns "standard" and isShippingManaged=false when t001lRow is null or undefined', () => {
       expect(classifyTransferPath(null)).toBe('standard');
       expect(classifyTransferPath(undefined)).toBe('standard');
+      expect(isShippingManaged(null)).toBe(false);
     });
 
-    test('is exposed as a method and static on HuStockTransferAdapter', () => {
+    test('is exposed as a method and static on HuStockTransferAdapter and tools', () => {
       expect(typeof HuStockTransferAdapter.classifyTransferPath).toBe('function');
+      expect(typeof HuStockTransferAdapter.isShippingManaged).toBe('function');
       const adapter = new HuStockTransferAdapter({ rfcClient: {} });
       expect(typeof adapter.classifyTransferPath).toBe('function');
+      expect(typeof adapter.isShippingManaged).toBe('function');
       expect(adapter.classifyTransferPath({ VSTEL: '1105' })).toBe('A');
+      expect(adapter.isShippingManaged({ VSTEL: '1105' })).toBe(true);
     });
   });
 
-  describe('precheckPathA', () => {
+  describe('precheckPathA: blockers vs warnings (NO_T319A_ROW as warning)', () => {
     const baseReservation = {
       RSNUM: '0000529960',
       ReservationNo: '529960',
@@ -74,6 +92,8 @@ describe('transferPathHelper Unit Tests', () => {
       expect(result.path).toBe('A');
       expect(result.blockers).toEqual([]);
       expect(result.blockerDetails).toEqual([]);
+      expect(result.warnings).toEqual([]);
+      expect(result.warningDetails).toEqual([]);
     });
 
     test('blocks when open outbound delivery already exists for reservation item', async () => {
@@ -105,18 +125,20 @@ describe('transferPathHelper Unit Tests', () => {
       expect(result.blockerDetails[0].params).toEqual(['2000019372', '1120', 'CS02']);
     });
 
-    test('blocks when HU packaging type has no T319A row in warehouse (e.g. Z007 in W01)', async () => {
+    test('NO_T319A_ROW becomes a warning (not a blocker) and keeps valid: true', async () => {
       const z007Hu = {
         ...baseHu,
         packagingType: 'Z007'
       };
       const result = await precheckPathA(baseReservation, '1', z007Hu, validContext);
-      expect(result.valid).toBe(false);
-      expect(result.blockers.length).toBe(1);
-      expect(result.blockers[0]).toContain('Packaging type Z007 has no storage unit type in warehouse W01');
-      expect(result.blockerDetails[0].code).toBe('NO_T319A_ROW');
-      expect(result.blockerDetails[0].key).toBe('blockerNoT319ARow');
-      expect(result.blockerDetails[0].params).toEqual(['Z007', 'W01']);
+      expect(result.valid).toBe(true); // NOT blocked!
+      expect(result.blockers.length).toBe(0);
+      expect(result.warnings.length).toBe(1);
+      expect(result.warnings[0]).toContain('Packaging type Z007 has no storage unit type in warehouse W01');
+      expect(result.warningDetails[0].code).toBe('NO_T319A_ROW');
+      expect(result.warningDetails[0].severity).toBe('warning');
+      expect(result.warningDetails[0].key).toBe('warningNoT319ARow');
+      expect(result.warningDetails[0].params).toEqual(['Z007', 'W01']);
     });
 
     test('blocks when serial numbers are required by profile (ZSN2) but none selectable on HU', async () => {
@@ -133,26 +155,27 @@ describe('transferPathHelper Unit Tests', () => {
       expect(result.blockerDetails[0].params).toEqual(['8000009754']);
     });
 
-    test('accumulates multiple simultaneous blockers', async () => {
+    test('separates blockers from warnings when multiple conditions trigger simultaneously', async () => {
       const problematicHu = {
         ...baseHu,
-        packagingType: 'Z007',
-        inStock: false,
+        packagingType: 'Z007', // warning
+        inStock: false,        // blocker
         availableStock: 0,
-        serials: []
+        serials: []            // blocker
       };
       const ctx = {
         ...validContext,
-        openDelivery: '0080000134'
+        openDelivery: '0080000134' // blocker
       };
       const result = await precheckPathA(baseReservation, '1', problematicHu, ctx);
       expect(result.valid).toBe(false);
-      expect(result.blockers.length).toBe(4);
-      const codes = result.blockerDetails.map(b => b.code);
-      expect(codes).toContain('OPEN_DELIVERY_EXISTS');
-      expect(codes).toContain('HU_NOT_IN_STOCK');
-      expect(codes).toContain('NO_T319A_ROW');
-      expect(codes).toContain('SERIAL_REQUIRED_NONE_SELECTABLE');
+      expect(result.blockers.length).toBe(3); // openDelivery, not in stock, serial required
+      expect(result.warnings.length).toBe(1); // NO_T319A_ROW
+      const blockerCodes = result.blockerDetails.map(b => b.code);
+      expect(blockerCodes).toContain('OPEN_DELIVERY_EXISTS');
+      expect(blockerCodes).toContain('HU_NOT_IN_STOCK');
+      expect(blockerCodes).toContain('SERIAL_REQUIRED_NONE_SELECTABLE');
+      expect(result.warningDetails[0].code).toBe('NO_T319A_ROW');
     });
 
     test('is exposed as a method and static on HuStockTransferAdapter', async () => {
@@ -161,6 +184,128 @@ describe('transferPathHelper Unit Tests', () => {
       expect(typeof adapter.precheckPathA).toBe('function');
       const res = await adapter.precheckPathA(baseReservation, '1', baseHu, validContext);
       expect(res.valid).toBe(true);
+    });
+  });
+
+  describe('Storage type rules via BusinessConfigResolver (fail closed, no literals)', () => {
+    test('resolves storage type rules for W01 from configured customizing', async () => {
+      const rules = await resolveHuStorageTypeRules({ warehouse: 'W01', plant: '1120' });
+      expect(rules).toBeDefined();
+      expect(rules.pickableStorageTypes).toContain('EN1');
+      expect(rules.holdStorageTypes).toContain('OH1');
+      expect(rules.interimStorageTypes).toContain('911');
+      expect(rules.interimStorageTypes).toContain('913');
+
+      expect(rules.isPickable('EN1')).toBe(true);
+      expect(rules.isPickable('OH1')).toBe(false);
+      expect(rules.isOnHold('OH1')).toBe(true);
+      expect(rules.isOnHold('EN1', '1-L0001-04')).toBe(false);
+      expect(rules.isOnHold('EN1', 'HOLD-BIN')).toBe(true);
+      expect(rules.isInterim('913')).toBe(true);
+      expect(rules.isInterim('EN1')).toBe(false);
+    });
+
+    test('fails closed when storage types are unconfigured for an unknown warehouse', async () => {
+      await expect(
+        resolveHuStorageTypeRules({ warehouse: 'W99', plant: '9999' })
+      ).rejects.toThrow(BusinessConfigError);
+    });
+
+    test('accepts trustedOverrides for dynamic testing without modifying persistent config', async () => {
+      const customRules = await resolveHuStorageTypeRules({
+        warehouse: 'W88',
+        plant: '8888',
+        trustedOverrides: {
+          pickableStorageTypes: ['HIGH_BAY'],
+          holdStorageTypes: ['QUARANTINE'],
+          interimStorageTypes: ['STAGING']
+        }
+      });
+
+      expect(customRules.isPickable('HIGH_BAY')).toBe(true);
+      expect(customRules.isOnHold('QUARANTINE')).toBe(true);
+      expect(customRules.isInterim('STAGING')).toBe(true);
+      expect(customRules.isOnHold('HIGH_BAY')).toBe(false);
+    });
+
+    test('fails closed if any storage type list is empty in the resolved config', async () => {
+      await expect(
+        resolveHuStorageTypeRules({
+          warehouse: 'W77',
+          trustedOverrides: {
+            pickableStorageTypes: ['HIGH_BAY'],
+            holdStorageTypes: [], // empty -> invalid
+            interimStorageTypes: ['STAGING']
+          }
+        })
+      ).rejects.toThrow(/fail-closed without hardcoded literals/);
+    });
+  });
+
+  describe('HU assignment among competing reservations (earliest BDTER, then reservation number)', () => {
+    const resA = {
+      RSNUM: '0000529960',
+      ReservationNo: '529960',
+      BDTER: '20261018',
+      RSPOS: '0001'
+    };
+
+    const resB = {
+      RSNUM: '0000529959',
+      ReservationNo: '529959',
+      BDTER: '20261018',
+      RSPOS: '0001'
+    };
+
+    const resC = {
+      RSNUM: '0000523654',
+      ReservationNo: '523654',
+      BDTER: '20261007',
+      RSPOS: '0001'
+    };
+
+    test('defaultReservationComparator prioritizes earliest BDTER (Requirement Date)', () => {
+      // resC (20261007) is earlier than resA (20261018)
+      expect(defaultReservationComparator(resC, resA)).toBeLessThan(0);
+      expect(defaultReservationComparator(resA, resC)).toBeGreaterThan(0);
+    });
+
+    test('defaultReservationComparator breaks BDTER ties by ascending Reservation Number (RSNUM)', () => {
+      // resA and resB both have BDTER '20261018', but resB (529959) is earlier than resA (529960)
+      expect(defaultReservationComparator(resB, resA)).toBeLessThan(0);
+      expect(defaultReservationComparator(resA, resB)).toBeGreaterThan(0);
+    });
+
+    test('assignHuToCompetingReservations correctly assigns HU 2000019372 to winning reservation', () => {
+      const candidates = [resA, resB, resC];
+      const assignment = assignHuToCompetingReservations('2000019372', candidates);
+
+      expect(assignment).toBeDefined();
+      expect(assignment.huId).toBe('2000019372');
+      // resC (523654) has the earliest requirement date (20261007) so it wins!
+      expect(assignment.assignedReservation.RSNUM).toBe('0000523654');
+      // Full ranked list order: resC (20261007), resB (529959/20261018), resA (529960/20261018)
+      expect(assignment.rankedCandidates.map(r => r.ReservationNo)).toEqual(['523654', '529959', '529960']);
+    });
+
+    test('rankCompetingReservations returns sorted list without mutating input', () => {
+      const candidates = [resA, resB];
+      const ranked = rankCompetingReservations(candidates);
+      expect(ranked[0].ReservationNo).toBe('529959');
+      expect(ranked[1].ReservationNo).toBe('529960');
+      expect(candidates[0].ReservationNo).toBe('529960'); // original order unchanged
+    });
+
+    test('supports custom injected comparator rule', () => {
+      // Custom rule: latest BDTER first (reverse date priority)
+      const reverseDateComparator = (a, b) => b.BDTER.localeCompare(a.BDTER);
+      const assignment = assignHuToCompetingReservations('2000019372', [resA, resC], reverseDateComparator);
+      expect(assignment.assignedReservation.ReservationNo).toBe('529960');
+    });
+
+    test('returns null when reservations array is empty or invalid', () => {
+      expect(assignHuToCompetingReservations('2000019372', [])).toBeNull();
+      expect(assignHuToCompetingReservations('2000019372', null)).toBeNull();
     });
   });
 });

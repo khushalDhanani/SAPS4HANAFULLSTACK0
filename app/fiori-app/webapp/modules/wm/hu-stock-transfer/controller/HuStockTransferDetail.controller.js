@@ -127,8 +127,18 @@ sap.ui.define([
                         return;
                     }
 
-                    oViewModel.setProperty("/statusMessage", oData.StatusMessage);
-                    oViewModel.setProperty("/statusStateType", oData.StatusState || "Information");
+                    var sStatusMsg = oData.StatusMessage;
+                    var sStatusState = oData.StatusState || "Information";
+                    if (oData.WarningDetails && oData.WarningDetails.length) {
+                        var aWarnMsgs = oData.WarningDetails.map(function (w) {
+                            return that.getText(w.key, w.params, w.message);
+                        });
+                        sStatusMsg = aWarnMsgs.join("; ");
+                        sStatusState = "Warning";
+                    }
+
+                    oViewModel.setProperty("/statusMessage", sStatusMsg);
+                    oViewModel.setProperty("/statusStateType", sStatusState);
 
                     // Auto set transfer qty
                     var bFull = oViewModel.getProperty("/isFullUnit");

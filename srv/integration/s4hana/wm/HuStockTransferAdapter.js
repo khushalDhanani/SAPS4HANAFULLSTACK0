@@ -19,7 +19,15 @@ const cds = require('@sap/cds');
 const LOG = cds.log('hu-stock-transfer-adapter');
 const { RfcClient } = require('../RfcClient');
 const parseRackBinName = require('./parseRackBinName');
-const { classifyTransferPath, precheckPathA } = require('./transferPathHelper');
+const {
+  classifyTransferPath,
+  isShippingManaged,
+  precheckPathA,
+  assignHuToCompetingReservations,
+  rankCompetingReservations,
+  resolveHuStorageTypeRules
+} = require('./transferPathHelper');
+const businessConfigResolver = require('../../../common/BusinessConfigResolver');
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -28,8 +36,10 @@ function httpError(status, message) {
 }
 
 class HuStockTransferAdapter {
-  constructor({ rfcClient = null } = {}) {
+  constructor({ rfcClient = null, businessConfigResolver: bcr = null, storageTypeRules = null } = {}) {
     this.rfc = rfcClient || new RfcClient();
+    this.businessConfigResolver = bcr || businessConfigResolver;
+    this._storageTypeRules = storageTypeRules || null;
     this._attemptCache = new Map(); // In-memory idempotency cache
   }
 
@@ -707,10 +717,15 @@ class HuStockTransferAdapter {
     // Rule D: Quantity calculation (default transfer qty = min(unitQty, openQty))
     const defaultTransferQty = Math.min(qty, cockpit.OpenQty);
 
-    // Rule E: Evaluate Storage Type status
-    const isOnHold = lgtyp === 'OH1' || lgpla.includes('HOLD') || lgpla.includes('BLOCK');
-    const isInProcess = lgtyp.startsWith('9') || lgtyp === '911' || lgtyp === '902';
-    const isPreferred = lgtyp === cockpit.PreferredStorageType;
+    // Rule E: Evaluate Storage Type status via BusinessConfigResolver (no hardcoded literals)
+    const storageRules = await this.getStorageTypeRules({
+      plant: werks,
+      warehouse: lgnum,
+      isTrusted: true
+    });
+    const isOnHold = storageRules.isOnHold(lgtyp, lgpla);
+    const isInProcess = storageRules.isInterim(lgtyp);
+    const isPreferred = storageRules.isPickable(lgtyp) || (cockpit.PreferredStorageType && lgtyp === cockpit.PreferredStorageType);
 
     let statusState = 'Success';
     let statusMessage = `${unitType} ${s4Unit} validated! In Storage Type ${lgtyp} (Bin: ${lgpla}), Available: ${qty} ${meins}.`;
@@ -726,9 +741,10 @@ class HuStockTransferAdapter {
       statusMessage = `${unitType} ${s4Unit} verified in Preferred Storage Type ${lgtyp} (Bin: ${lgpla})! Available: ${qty} ${meins}.`;
     }
 
+    let precheckResult = null;
     if (cockpit.TransferPath === 'A') {
       const vRow = vekpRows[0] || {};
-      const precheck = await this.precheckPathA(
+      precheckResult = await this.precheckPathA(
         cockpit,
         reservationItem,
         {
@@ -742,16 +758,23 @@ class HuStockTransferAdapter {
         }
       );
 
-      if (!precheck.valid) {
+      if (!precheckResult.valid) {
         return {
           Valid: false,
           UnitNumber: s4Unit,
           UnitType: unitType,
           StatusState: 'Error',
-          StatusMessage: precheck.blockers.join('; '),
-          Blockers: precheck.blockers,
-          BlockerDetails: precheck.blockerDetails
+          StatusMessage: precheckResult.blockers.join('; '),
+          Blockers: precheckResult.blockers,
+          BlockerDetails: precheckResult.blockerDetails,
+          Warnings: precheckResult.warnings || [],
+          WarningDetails: precheckResult.warningDetails || []
         };
+      }
+
+      if (precheckResult.warnings && precheckResult.warnings.length > 0) {
+        statusState = 'Warning';
+        statusMessage = precheckResult.warnings.join('; ');
       }
     }
 
@@ -775,7 +798,9 @@ class HuStockTransferAdapter {
       IsPreferredStorage: isPreferred,
       StatusState: statusState,
       StatusMessage: statusMessage,
-      DefaultTransferQty: defaultTransferQty
+      DefaultTransferQty: defaultTransferQty,
+      Warnings: (precheckResult && precheckResult.warnings) ? precheckResult.warnings : [],
+      WarningDetails: (precheckResult && precheckResult.warningDetails) ? precheckResult.warningDetails : []
     };
   }
 
@@ -864,6 +889,12 @@ class HuStockTransferAdapter {
       LOG.warn('Could not read T307T:', e.message);
     }
 
+    const storageRules = await this.getStorageTypeRules({
+      plant: cockpit.Plant,
+      warehouse: cockpit.WarehouseNumber || 'W01',
+      isTrusted: true
+    });
+
     return nonZeroLqua.map((q) => {
       const location = lagpMap.get(`${q.LGNUM}|${q.LGTYP}|${q.LGPLA}`);
       const rackParts = parseRackBinName(q.LGPLA);
@@ -871,9 +902,9 @@ class HuStockTransferAdapter {
       const sectionName = sectionCode
         ? sectionNameMap.get(`${q.LGNUM}|${q.LGTYP}|${sectionCode}`) || ''
         : '';
-      const isOnHold = q.LGTYP === 'OH1' || q.LGPLA.includes('HOLD') || q.LGPLA.includes('BLOCK');
-      const isInProcess = q.LGTYP.startsWith('9') || q.LGTYP === '911' || q.LGTYP === '902';
-      const isPref = q.LGTYP === cockpit.PreferredStorageType;
+      const isOnHold = storageRules.isOnHold(q.LGTYP, q.LGPLA);
+      const isInProcess = storageRules.isInterim(q.LGTYP);
+      const isPref = storageRules.isPickable(q.LGTYP) || (cockpit.PreferredStorageType && q.LGTYP === cockpit.PreferredStorageType);
 
       let stgStatus = 'Available';
       let sortPrio = 2;
@@ -1490,9 +1521,51 @@ class HuStockTransferAdapter {
   async precheckPathA(reservation, item, hu, context = {}) {
     return precheckPathA(reservation, item, hu, { rfc: this.rfc, ...context });
   }
+
+  /**
+   * Resolves storage type rules dynamically via BusinessConfigResolver (fail closed, no literals).
+   */
+  async getStorageTypeRules(context = {}) {
+    if (this._storageTypeRules && !context.refreshRules) {
+      return this._storageTypeRules;
+    }
+    const resolver = this.businessConfigResolver || businessConfigResolver;
+    this._storageTypeRules = await resolveHuStorageTypeRules({
+      plant: context.plant || context.WERKS || '1120',
+      warehouse: context.warehouse || context.LGNUM || 'W01',
+      isTrusted: true,
+      ...context
+    }, resolver);
+    return this._storageTypeRules;
+  }
+
+  /**
+   * Evaluates if a storage location is shipping-managed using shared pure-T001L rule.
+   */
+  isShippingManaged(t001lRow) {
+    return isShippingManaged(t001lRow);
+  }
+
+  /**
+   * Assigns an available HU to competing reservations by prioritization rule (default: earliest BDTER, then RSNUM).
+   */
+  assignHuToCompetingReservations(hu, reservations, comparator) {
+    return assignHuToCompetingReservations(hu, reservations, comparator);
+  }
+
+  /**
+   * Ranks competing reservations by priority.
+   */
+  rankCompetingReservations(reservations, comparator) {
+    return rankCompetingReservations(reservations, comparator);
+  }
 }
 
 HuStockTransferAdapter.classifyTransferPath = classifyTransferPath;
+HuStockTransferAdapter.isShippingManaged = isShippingManaged;
 HuStockTransferAdapter.precheckPathA = precheckPathA;
+HuStockTransferAdapter.assignHuToCompetingReservations = assignHuToCompetingReservations;
+HuStockTransferAdapter.rankCompetingReservations = rankCompetingReservations;
+HuStockTransferAdapter.resolveHuStorageTypeRules = resolveHuStorageTypeRules;
 
 module.exports = HuStockTransferAdapter;

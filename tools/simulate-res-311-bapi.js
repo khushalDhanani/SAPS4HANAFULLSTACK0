@@ -130,13 +130,7 @@ async function readReservationFromSap(rfc, rsnum, rspos) {
   return rows[0];
 }
 
-function isShippingManaged(t001lRow) {
-  if (!t001lRow) return false;
-  const vstel = String(t001lRow.VSTEL || '').trim();
-  const vkorg = String(t001lRow.VKORG || '').trim();
-  const kunnr = String(t001lRow.KUNNR || '').trim();
-  return Boolean(vstel || vkorg || kunnr);
-}
+const { isShippingManaged, classifyTransferPath } = require('../srv/integration/s4hana/wm/transferPathHelper');
 
 async function readSlocFromSap(rfc, werks, lgort) {
   const formattedWerks = String(werks || '').trim().toUpperCase();
@@ -269,6 +263,7 @@ module.exports = {
   buildPlannedPayload,
   readReservationFromSap,
   isShippingManaged,
+  classifyTransferPath,
   readSlocFromSap,
   main
 };

@@ -7,7 +7,62 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
-- **Tasks 1 to 4: Live Scope Discovery (Plant 1120/1130), Precedent HU Customizing Audit, ZSN2 Profile Analysis, CS02 Serial Stock, Neutral Evidence Sheet, Path A Blocker Precheck Implementation & Unit Tests, and Delivery 0080000134 Profile (2026-10-23 13:55 IST):**
+- **Tasks 1 to 4: Live SAP Discovery (RESB re-read, conflict resolution, 8000006485 stock/serials, 0080000086/90 packing/TOs, T319A/DS4K905282 audit, system-wide Path B = 0), Forensic L3 866 unproven cause, shared isShippingManaged/classifyTransferPath, NO_T319A_ROW as warning, fail-closed BusinessConfigResolver HU storage type rules, competing reservation comparator & tests, neutral T319A doc update (2026-10-23 14:25 IST):**
+  - **Task 1: READ-ONLY Live SAP Discovery (Client 220, field names validated via DD03L first, zero writes):**
+    - Stated READ-ONLY before each call; zero writes, BAPIs, or mutations executed.
+    - 1.a) `RESB` re-read for 6 reservations:
+      - `529960/1`: `MATNR=8000009754, BDMNG=1.000, ENMNG=0.000, MEINS=NOS, WERKS=1120, LGORT=CS02, UMLGO=CIS1, BDTER=20261018, BWART=311, KZEAR='', XLOEK=''`
+      - `529959/1`: `MATNR=8000009754, BDMNG=1.000, ENMNG=0.000, MEINS=NOS, WERKS=1120, LGORT=CS02, UMLGO=CIS1, BDTER=20261018, BWART=311, KZEAR='', XLOEK=''`
+      - `527588/1`: `MATNR=8000006485, BDMNG=10.000, ENMNG=2.000, MEINS=NOS, WERKS=1120, LGORT=CS02, UMLGO=HU01, BDTER=20261012, BWART=311, KZEAR='', XLOEK=''`
+      - `523654/1`: `MATNR=8000009754, BDMNG=1.000, ENMNG=0.000, MEINS=NOS, WERKS=1120, LGORT=CS02, UMLGO=CIS1, BDTER=20261007, BWART=311, KZEAR='', XLOEK=''`
+      - `524283/1`: `MATNR=8000006485, BDMNG=1.000, ENMNG=0.000, MEINS=NOS, WERKS=1120, LGORT=CS02, UMLGO=HU01, BDTER=20261009, BWART=311, KZEAR='', XLOEK=''`
+      - `524284/1`: `MATNR=8400000047, BDMNG=200.000, ENMNG=0.000, MEINS=KG, WERKS=1130, LGORT=CS01, UMLGO='', BDTER=20261009, BWART=261, KZEAR='', XLOEK='X'` (Deleted)
+      - **Conflict Explanation:** In the previous session summary table and line 16, reservation `523654/1` was mistakenly described as `Material 8000006485, 4.000 NOS`. The direct `RESB` re-read confirms `523654/1` is for material `8000009754` with `BDMNG = 1.000 NOS`, matching the historical log entries at lines 279 and 1006. The earlier line 16 description was an agent transcription error.
+    - 1.b) Material `8000006485`:
+      - `LQUA` in `1120/CS02`: 2 quants, both `LETYP = 'E10'`, `LGTYP = 'OH1'`, `LGPLA = 'ONHOLD'`:
+        - `LENUM 00000000002000020150`: `GESME=1.000, VERME=1.000, LETYP=E10`
+        - `LENUM 00000000002000020151`: `GESME=1.000, VERME=1.000, LETYP=E10`
+      - `MARC-SERNP`: `ZSN2` in plant `1120`.
+      - Serials via `SER06/OBJK`:
+        - HU `2000020150` (`VENUM=0000021384`) -> `OBKNR=48467` -> `SERNR='CON-40-004'`
+        - HU `2000020151` (`VENUM=0000021385`) -> `OBKNR=48468` -> `SERNR='CON-40-005'`
+    - 1.c) Deliveries `0080000086` and `0080000090`:
+      - Were HUs packed into delivery? **YES** (`VEKP-VPOBJ = '12'`, `VHILM = '000000002000000340'`, `VHART = 'Z007'`). `VEPO` rows exist for items 000010 and 000020 on both deliveries (4 HUs packed in deliv 86; 2 HUs packed in deliv 90).
+      - Did TOs move HUs to 913 as storage units? **NO**.
+        - In `LTAP`, TO `0001037246` (deliv 86) and TO `0001037247` (deliv 90) moved the HUs (`VLENR = NLENR = HU number`) from `VLTYP='OH1' / VLPLA='ONHOLD'` to destination `NLTYP='921' / NLPLA='TRANSFER'`, with `LETYP='E10'` and `PQUIT='X'`. Destination was `921`, NOT `913`.
+    - 1.d) `T319A` change history & Transport `DS4K905282`:
+      - Transport `DS4K905282`: Created **2026-10-23 13:37:23** by user `SANDHLE` under parent request `DS4K905280`, status `D` (Modifiable), text: `"MM:WM:SADDAM Changed Configuration"`.
+      - Contents: 15 objects (`MB_DELIV, VC_T001L, V_T320, V_T319A, V_T333M, V_T333N, V_T333, V_T321, MTART, V023, V_025K, V025, V_134_K, MB_156`).
+      - In `E071K`: `OBJNAME = 'T319A'`, `TABKEY = '100W15Z007'`. It maintained warehouse **`W15`**, packaging type **`Z007`**; it did NOT touch `W01`.
+      - `DBTABLOG`: Table logging IS active for `T319A` (20 log records exist, modified by `SANDHLE` and `PREDDY`).
+    - 1.e) `T001L` for ALL plants in `T001W` & Path B counts:
+      - 30 plants in `T001W`. Exactly 20 storage locations system-wide have `XHUPF = 'X'`.
+      - ALL 20 HU-managed SLocs have `VSTEL` populated (shipping-managed).
+      - Open 311 reservations: 1120/CS02 (6 items), 1150/CS02 (4 items). All other 18 SLocs have 0.
+      - **Path B across the whole system: Exactly 0 SLocs and 0 open reservations** (100% of HU-managed SLocs system-wide are shipping-managed / Path A).
+  - **Task 2: Forensic L3 866 Report (WORKSTATUS & Archive 2026-10-21 22:35 & 23:15):**
+    - Function raised: `BAPI_OUTB_DELIVERY_CONFIRM_DEC` calling `SAPML03T` Include `ML03TFHU_HU_INT_LTAP`, `FORM hu_int_ltap` line 48 (subroutine `ML03TF20_T319A_LESEN`).
+    - Input passed: `LGNUM = 'W01'`, `VHART = 'Z007'`.
+    - Delivery item packed? **YES**, item `0080000134/000010` packed during picking into HU `2000019371` with packaging material `2000000340` (`VEKP-VHART = 'Z007'`).
+    - Forensic conclusion: `SELECT SINGLE * FROM T319A WHERE LGNUM = 'W01' AND VHART = 'Z007'` returned `sy-subrc = 4` and BAdI `LE_WM_SUTYPE_HU` had no active implementation, raising `L3 866`.
+    - Proven vs Inferred: The ABAP failure point and missing DB row are **PROVEN**. However, whether missing `T319A` customizing is the genuine business root cause (versus BAPI programmatic behavior on pre-picked items) remains **UNPROVEN** because precedent HUs with `Z007` (`2000020030..39`) were successfully picked in GUI WM without `T319A`.
+  - **Task 3: Code Changes & Unit Tests (Read-Side Only, Zero SAP Writes):**
+    - `transferPathHelper.js`: Shared `classifyTransferPath(t001lRow)` and `isShippingManaged(t001lRow)` used by cockpit and `tools/simulate-res-311-bapi.js`.
+    - `NO_T319A_ROW` converted from blocker to **warning** (`valid: true`, populated in `warnings` and `warningDetails`). Added i18n keys to both bundles and connected to `HuStockTransferDetail.controller.js`.
+    - HU Pickable Rules: Storage types that count as pickable, hold, and interim resolved dynamically via `BusinessConfigResolver.resolveHuStorageTypeRules('W01')`. Fails closed if missing/unconfigured. Removed all hardcoded literals from `HuStockTransferAdapter.js`.
+    - Competing Reservation Assignment: Implemented comparator prioritizing earliest `BDTER`, then `RSNUM`, then `RSPOS` (`defaultReservationComparator`). Added `assignHuToCompetingReservations` and `rankCompetingReservations`.
+    - Test validation:
+      - `test/unit/wm/transferPathPrecheck.test.js`: 23/23 passed.
+      - `test/unit/wm/huStockTransferAdapter.test.js`: 23/23 passed.
+      - `test/unit/common/BusinessConfigResolver.test.js`: 33/33 passed.
+      - `test/unit/simulateRes311Gate.test.js`: 16/16 passed.
+      - Full test suite run (`npm test`): Exactly **15 failing suites, 85 failing tests** (100% equal to baseline).
+    - Safety: `tools/simulate-res-311-bapi.js` was NEVER run; delivery `0080000134` was NOT completed. Zero SAP writes executed.
+  - **Task 4: Docs Update (`docs/sap-customizing/T319A-W01-Z007.md`):**
+    - Added identical German texts for `E1` and `E10` (`SPRAS = 'D'`: both `"Europalette Höhe 1 m"`).
+    - Added empty `T334P` and `T337B` evidence (no capacity or search strategy differentiation in `W01`).
+    - Added precedent HUs with `Z007` (`2000020030..39`) that succeeded in GUI TO movements to `921 / TRANSFER` with `E10`.
+    - Marked root cause prominently as **UNPROVEN**.
   - **Task 1: READ-ONLY Live SAP Discovery (Client 220, field names validated via DD03L first):**
     - Stated READ-ONLY before each call; zero writes, BAPIs, or mutations executed.
     - 1.a) Open 311 reservations across configured scope:
@@ -899,6 +954,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Exact Next Recommended Action (T319A decision and Path A execution gate — 2026-10-23 14:25 IST):** Await the SAP functional consultant's decision on warehouse W01 customizing (`V_T319A`: `E10` vs `E1`) and CTS transport release to QA/PRD. Pre-requisite code for Path A (shared shipping classification, NO_T319A_ROW as warning, BusinessConfigResolver storage rules, competing reservation comparator) is fully tested. Do NOT run tools/simulate-res-311-bapi.js or complete delivery 0080000134 without explicit written user "GO".
 - **Exact Next Recommended Action (rack test-data discovery and follow-up plan — 2026-10-23 11:31 IST):** Before implementing `rackLayout()`, verify whether SAP has an authoritative planned-position source for the “no bin maintained” state. LAGP can enumerate maintained bins, but its absence alone cannot distinguish an unmaintained physical slot from a position that does not exist. Confirm the actual RFC_READ_TABLE row-limit/paging capability before choosing pagination. Keep the XHUPF-blank banner/standard 311 route as a plan until requested for implementation.
 - **Exact Next Recommended Action (rack diagnostic for reservation 527868/1 — 2026-10-23 11:22 IST):** Treat reservation `527868/1` as transfer-bin stock; choose a reservation item whose read returns verified rack-pattern bins to see populated rack positions. Triage the existing full Jest failures separately before treating the repository regression suite as green. Do not infer empty bins or change SAP logic based on this diagnostic.
 - **Exact Next Recommended Action (reservation row rack route rendering fix — 2026-10-23 11:14 IST):** If the warehouse visualization should display physical rack positions for reservation `527868/1`, verify the SAP storage-bin naming/master-data mapping for its returned bin and provide a reservation item with confirmed `F-RRRRR-PP` rack bins. Current row has one non-rack bin, which must remain table-only under the confirmed strict parsing rule. No rack structure should be invented.
@@ -912,6 +968,91 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Exact Next Recommended Action (HU stock transfer rack demo — 2026-10-23 10:24 IST):** Rerun full Jest in an environment that permits loopback binds and after the unrelated missing FI/goods-issue test paths are resolved; inspect a wide touch-display viewport when available. No SAP writes or live data are needed for the demo.
 
 ## Changes Log
+
+### 2026-10-23 14:25 IST — Live SAP Scope Discovery, Conflict Resolution, 8000006485 Stock & Serials, Precedent Delivery Packing Audit, T319A Transport Analysis, System-Wide Path B Audit, Forensic L3 866 Analysis, Path A Code Hardening & Storage Rules via BusinessConfigResolver
+
+- **Plan:**
+  - Execute READ-ONLY queries on live SAP client 220 (with field names validated via `DD03L` first):
+    - a) Re-read `RESB` for 6 reservations (`529960/1`, `529959/1`, `527588/1`, `523654/1`, `524283/1`, `524284/1`) and explain the conflict with earlier turn.
+    - b) Read material `8000006485` stock in `CS02` (`LQUA`), serial profile (`MARC-SERNP`), and serial numbers (`SER06`/`OBJK`).
+    - c) Check deliveries `0080000086` and `0080000090` for HU packing (`VEKP`, `VEPO`) and TO movements to 913 in `LTAP`.
+    - d) Audit `T319A` change history (`E071`, `E070`, `E071K`, `DBTABLOG`) and examine transport `DS4K905282`.
+    - e) Audit `T001L` for all plants in `T001W` for `XHUPF = 'X'` and `VSTEL`, and report open 311 reservations for Path B across the whole system.
+  - Review `WORKSTATUS.md` and `docs/archive/WORKSTATUS-archive-2026-10-22.md` for forensic analysis of `L3 866` on 2026-10-21 22:35 and 23:15.
+  - Refactor codebase:
+    - (a) Shared `isShippingManaged` / `classifyTransferPath` across cockpit and `tools/simulate-res-311-bapi.js`.
+    - (b) Convert `NO_T319A_ROW` from blocker to warning.
+    - (c) Resolve pickable, hold, and interim storage types dynamically from config via `BusinessConfigResolver` (fail closed, zero literals).
+    - (d) Implement HU assignment among competing reservations (earliest `BDTER`, then `RSNUM`, then `RSPOS`) with unit tests.
+  - Update `docs/sap-customizing/T319A-W01-Z007.md` with identical German texts, empty `T334P`/`T337B`, precedent HUs with `Z007` in GUI, and mark root cause UNPROVEN.
+  - Confirm failing test suites equal baseline (15 suites, 85 tests). No SAP writes.
+- **READ-ONLY SAP Evidence (client 220):**
+  - **DD03L Validation:** Verified fields for `RESB`, `LQUA`, `MARC`, `SER06`, `OBJK`, `VEKP`, `VEPO`, `LTAP`, `E070`, `E071`, `E071K`, `DBTABLOG`, `T001W`, `T001L`.
+  - **1.a RESB Re-read & Conflict Explanation:**
+    - `529960/1`: `MATNR=8000009754`, `BDMNG=1.000`, `ENMNG=0.000`, `MEINS=NOS`, `WERKS=1120`, `LGORT=CS02`, `UMLGO=CIS1`, `BDTER=20261018`, `BWART=311`, `KZEAR=''`, `XLOEK=''`.
+    - `529959/1`: `MATNR=8000009754`, `BDMNG=1.000`, `ENMNG=0.000`, `MEINS=NOS`, `WERKS=1120`, `LGORT=CS02`, `UMLGO=CIS1`, `BDTER=20261018`, `BWART=311`, `KZEAR=''`, `XLOEK=''`.
+    - `527588/1`: `MATNR=8000006485`, `BDMNG=10.000`, `ENMNG=2.000`, `MEINS=NOS`, `WERKS=1120`, `LGORT=CS02`, `UMLGO=HU01`, `BDTER=20261012`, `BWART=311`, `KZEAR=''`, `XLOEK=''`.
+    - `523654/1`: `MATNR=8000009754`, `BDMNG=1.000`, `ENMNG=0.000`, `MEINS=NOS`, `WERKS=1120`, `LGORT=CS02`, `UMLGO=CIS1`, `BDTER=20261007`, `BWART=311`, `KZEAR=''`, `XLOEK=''`.
+    - `524283/1`: `MATNR=8000006485`, `BDMNG=1.000`, `ENMNG=0.000`, `MEINS=NOS`, `WERKS=1120`, `LGORT=CS02`, `UMLGO=HU01`, `BDTER=20261009`, `BWART=311`, `KZEAR=''`, `XLOEK=''`.
+    - `524284/1`: `MATNR=8400000047`, `BDMNG=200.000`, `ENMNG=0.000`, `MEINS=KG`, `WERKS=1130`, `LGORT=CS01`, `UMLGO=''`, `BDTER=20261009`, `BWART=261`, `KZEAR=''`, `XLOEK='X'` (Deleted).
+    - Conflict explanation: In the previous turn's summary table, `523654/1` was incorrectly transcribed as `Material 8000006485, 4.000 NOS`. The direct `RESB` read proves it is for `8000009754, 1.000 NOS`, matching historical log lines 279 and 1006.
+  - **1.b Material 8000006485 Stock & Serials:**
+    - `LQUA` in `1120/CS02`: 2 quants in `LGTYP = 'OH1'`, `LGPLA = 'ONHOLD'`:
+      - `LENUM 2000020150`: `GESME=1.000`, `VERME=1.000`, `LETYP='E10'`.
+      - `LENUM 2000020151`: `GESME=1.000`, `VERME=1.000`, `LETYP='E10'`.
+    - `MARC-SERNP`: `ZSN2` in plant `1120`.
+    - Serials (`SER06`/`OBJK`): HU `2000020150` -> `CON-40-004`; HU `2000020151` -> `CON-40-005`.
+  - **1.c Deliveries 0080000086 & 0080000090 Packing & TOs:**
+    - HUs packed in delivery? **YES** (`VEKP-VPOBJ = '12'`, `VHILM = '000000002000000340'`, `VHART = 'Z007'`). 4 HUs on deliv 86 (`2000020030`, `2000020031`, `2000020037`, `2000020038`) and 2 HUs on deliv 90 (`2000020032`, `2000020039`).
+    - Did TOs move HUs to 913 as storage units? **NO**. `LTAP` records TO `0001037246` and TO `0001037247` moving HUs from `VLTYP='OH1' / VLPLA='ONHOLD'` to `NLTYP='921' / NLPLA='TRANSFER'`, with `LETYP='E10'` and `PQUIT='X'`. Destination was `921`, NOT `913`.
+  - **1.d T319A Change History & Transport DS4K905282:**
+    - Transport `DS4K905282`: Created 2026-10-23 13:37:23 by user `SANDHLE` under parent `DS4K905280`. Status D. Text: `"MM:WM:SADDAM Changed Configuration"`. Contains 15 objects.
+    - `E071K`: `OBJNAME = 'T319A'`, `TABKEY = '100W15Z007'`. Maintained warehouse `W15`, packaging material type `Z007`. Did NOT touch `W01`.
+    - `DBTABLOG`: Logging is active for `T319A` (20 log records exist).
+  - **1.e T001L for ALL Plants & System-Wide Path B:**
+    - 30 plants in `T001W`. Exactly 20 storage locations system-wide have `XHUPF = 'X'`.
+    - ALL 20 HU-managed SLocs have `VSTEL` populated (shipping-managed).
+    - Open 311 reservations: 1120/CS02 (6 items), 1150/CS02 (4 items). All other 18 SLocs have 0.
+    - System-wide Path B (`XHUPF='X'` and `VSTEL=''`): Exactly 0 SLocs and 0 open reservations. 100% of HU-managed storage locations are Path A.
+- **Task 2 L3 866 Forensic Analysis:**
+  - WORKSTATUS archive entries 2026-10-21 22:35 and 23:15:
+    - Function raised: `BAPI_OUTB_DELIVERY_CONFIRM_DEC` calling `SAPML03T` Include `ML03TFHU_HU_INT_LTAP`, `FORM hu_int_ltap` line 48 (`FORM t319a_lesen`).
+    - Input: `LGNUM = 'W01'`, `VHART = 'Z007'`.
+    - Delivery item packed? YES, `0080000134/000010` was packed into HU `2000019371` (`VEKP-VHART = 'Z007'`).
+    - Forensic conclusion: `SELECT SINGLE * FROM T319A WHERE LGNUM = 'W01' AND VHART = 'Z007'` failed with `sy-subrc = 4` and BAdI `LE_WM_SUTYPE_HU` had no active implementation.
+    - Proven vs Inferred: The ABAP failure and missing row are **PROVEN**. However, whether missing `T319A` customizing is the genuine business root cause (versus BAPI programmatic behavior on pre-picked items) is **UNPROVEN** because precedent HUs with `Z007` (`2000020030..39`) succeeded in GUI WM without `T319A`.
+- **Change:**
+  - `srv/integration/s4hana/wm/transferPathHelper.js`:
+    - Added shared `classifyTransferPath(t001lRow)` and `isShippingManaged(t001lRow)`.
+    - Converted `NO_T319A_ROW` from blocker to warning (`valid: true`, populated in `warnings` and `warningDetails`).
+    - Added `resolveHuStorageTypeRules(businessConfigResolver, warehouseNo)` resolving pickable, hold, and interim storage types from config with fail-closed semantics and no literals.
+    - Added `defaultReservationComparator`, `assignHuToCompetingReservations`, and `rankCompetingReservations`.
+  - `srv/common/BusinessConfigResolver.js`:
+    - Registered flow `'hu-stock-transfer'` requiring `['pickableStorageTypes', 'holdStorageTypes', 'interimStorageTypes']`.
+    - Added direct keys, CSV parser, DB row mapping, and `resolveHuStorageTypeRules`.
+    - Configured authentic defaults for warehouse `W01` (`pickable: ['EN1']`, `hold: ['OH1']`, `interim: ['911', '913', '921', '902']`).
+  - `srv/integration/s4hana/wm/HuStockTransferAdapter.js`:
+    - Injected `businessConfigResolver` and `storageTypeRules`.
+    - Removed all hardcoded literals (`'OH1'`, `'911'`, `'902'`). Uses `storageRules.isOnHold()`, `storageRules.isInterim()`, `storageRules.isPickable()`.
+    - Returns `Warnings` and `WarningDetails` from `validateUnit`.
+  - `HuStockTransferDetail.controller.js` & i18n:
+    - Added i18n keys for `warningNoT319ARow` in `i18n.properties` and `i18n_en.properties`.
+    - Formats warning details in detail view controller.
+  - `tools/simulate-res-311-bapi.js`:
+    - Replaced local `isShippingManaged` with shared implementation from `transferPathHelper.js`.
+  - `docs/sap-customizing/T319A-W01-Z007.md`:
+    - Added German texts for `E1` and `E10` ("Europalette Höhe 1 m").
+    - Added empty `T334P` and `T337B` evidence.
+    - Added precedent HUs with `Z007` in GUI.
+    - Marked root cause prominently as **UNPROVEN**.
+- **Validation:**
+  - `npx jest test/unit/wm/transferPathPrecheck.test.js`: PASS (23/23 tests).
+  - `npx jest test/unit/wm/huStockTransferAdapter.test.js`: PASS (23/23 tests).
+  - `npx jest test/unit/common/BusinessConfigResolver.test.js`: PASS (33/33 tests).
+  - `npx jest test/unit/simulateRes311Gate.test.js`: PASS (16/16 tests).
+  - `npm test`: Exactly 15 failing suites, 85 failing tests (equal to baseline).
+  - `git diff --check`: PASS (0 errors).
+  - Zero SAP writes executed. `tools/simulate-res-311-bapi.js` was NOT run; delivery `0080000134` was NOT completed.
 
 ### 2026-10-23 13:10 IST — Live Delivery & SLoc Investigation, Delivery Completion Analysis, Cockpit Dual-Path Plan, Shipping-Managed Refusal in simulate-res-311-bapi, Test Comparison, and Authorization Proposal Correction
 

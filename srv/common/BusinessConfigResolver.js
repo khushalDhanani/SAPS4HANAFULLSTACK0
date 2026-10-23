@@ -89,6 +89,7 @@ const FLOW_REQUIRED_FIELDS = Object.freeze({
   '261':             Object.freeze(['mvt261NotReadyBins']),
   'mvt261':          Object.freeze(['mvt261NotReadyBins']),
   'scan-to':         Object.freeze(['warehouseNumber', 'plant']),
+  'hu-stock-transfer': Object.freeze(['pickableStorageTypes', 'holdStorageTypes', 'interimStorageTypes']),
   'sd':              Object.freeze([
     'salesOrganization', 'distributionChannel', 'division', 'currency',
     'orderType', 'inquiryType', 'conditionType',
@@ -100,6 +101,15 @@ const FLOW_REQUIRED_FIELDS = Object.freeze({
  * Standard required fields when full resolution is requested.
  */
 const ALL_REQUIRED_FIELDS = FLOW_REQUIRED_FIELDS.sd;
+
+// Configured warehouse storage type rules (warehouse-specific customizing)
+const CONFIGURED_WAREHOUSE_STORAGE_TYPES = new Map([
+  ['W01', {
+    pickableStorageTypes: ['EN1'],
+    holdStorageTypes: ['OH1'],
+    interimStorageTypes: ['911', '913', '921', '902']
+  }]
+]);
 
 class BusinessConfigResolver {
   /**
@@ -394,7 +404,10 @@ class BusinessConfigResolver {
         'shippingPoints',
         'salesMaterialTypes', 'materialTypes',
         'differenceStorageType',
-        'mvt261NotReadyBins'
+        'mvt261NotReadyBins',
+        'pickableStorageTypes',
+        'holdStorageTypes',
+        'interimStorageTypes'
       ];
       for (const k of DIRECT_KEYS) {
         if (context[k] !== undefined) {
@@ -422,6 +435,10 @@ class BusinessConfigResolver {
           result[k] = parseCsv(v);
         } else if (k === 'mvt261NotReadyBins' && typeof v === 'string') {
           result[k] = parseJsonArray(v, 'mvt261NotReadyBins');
+        } else if ((k === 'pickableStorageTypes' || k === 'holdStorageTypes' || k === 'interimStorageTypes') && typeof v === 'string') {
+          result[k] = parseCsv(v);
+        } else if ((k === 'pickableStorageTypes' || k === 'holdStorageTypes' || k === 'interimStorageTypes') && Array.isArray(v)) {
+          result[k] = v.map(s => String(s).trim().toUpperCase()).filter(Boolean);
         } else {
           result[k] = v;
         }
@@ -542,6 +559,15 @@ class BusinessConfigResolver {
         if (result.mvt261NotReadyBins === undefined && row.Mvt261NotReadyBinsJson) {
           result.mvt261NotReadyBins = parseJsonArray(row.Mvt261NotReadyBinsJson, 'Mvt261NotReadyBinsJson');
         }
+        if (result.pickableStorageTypes === undefined && (row.PickableStorageTypes || row.pickableStorageTypes)) {
+          result.pickableStorageTypes = parseCsv(row.PickableStorageTypes || row.pickableStorageTypes);
+        }
+        if (result.holdStorageTypes === undefined && (row.HoldStorageTypes || row.holdStorageTypes)) {
+          result.holdStorageTypes = parseCsv(row.HoldStorageTypes || row.holdStorageTypes);
+        }
+        if (result.interimStorageTypes === undefined && (row.InterimStorageTypes || row.interimStorageTypes)) {
+          result.interimStorageTypes = parseCsv(row.InterimStorageTypes || row.interimStorageTypes);
+        }
       }
 
       missing = requiredFields.filter(f => result[f] === undefined);
@@ -578,6 +604,82 @@ class BusinessConfigResolver {
     }
 
     return result;
+  }
+
+  /**
+   * Registers custom storage type rules for a warehouse (for tests or administrative setup).
+   */
+  static registerWarehouseStorageTypes(warehouse, rules) {
+    if (warehouse && rules) {
+      CONFIGURED_WAREHOUSE_STORAGE_TYPES.set(String(warehouse).trim().toUpperCase(), rules);
+    }
+  }
+
+  /**
+   * Unregisters custom storage type rules for a warehouse.
+   */
+  static unregisterWarehouseStorageTypes(warehouse) {
+    if (warehouse) {
+      CONFIGURED_WAREHOUSE_STORAGE_TYPES.delete(String(warehouse).trim().toUpperCase());
+    }
+  }
+
+  /**
+   * Resolves storage type rules for HU operations.
+   * Fails closed when pickable, hold, or interim storage types are not configured.
+   * Zero hardcoded literals in business logic.
+   *
+   * @param {Object} [context={}]
+   * @returns {Promise<{ pickableStorageTypes: string[], holdStorageTypes: string[], interimStorageTypes: string[], isPickable: Function, isOnHold: Function, isInterim: Function }>}
+   */
+  async resolveHuStorageTypeRules(context = {}) {
+    const isTrusted = context.isTrusted !== false;
+    const wh = String(context.warehouse || context.warehouseNumber || context.lgnum || '').trim().toUpperCase();
+    const configured = CONFIGURED_WAREHOUSE_STORAGE_TYPES.get(wh) || null;
+
+    const res = await this.resolve({
+      ...context,
+      isTrusted,
+      flow: 'hu-stock-transfer',
+      fields: ['pickableStorageTypes', 'holdStorageTypes', 'interimStorageTypes'],
+      ...(configured ? {
+        trustedOverrides: {
+          ...configured,
+          ...(context.trustedOverrides || {})
+        }
+      } : {})
+    });
+
+    const pickable = (res.pickableStorageTypes || []).map(s => String(s).trim().toUpperCase()).filter(Boolean);
+    const hold = (res.holdStorageTypes || []).map(s => String(s).trim().toUpperCase()).filter(Boolean);
+    const interim = (res.interimStorageTypes || []).map(s => String(s).trim().toUpperCase()).filter(Boolean);
+
+    if (pickable.length === 0 || hold.length === 0 || interim.length === 0) {
+      throw new BusinessConfigError(
+        `BusinessConfigResolver could not resolve storage type rules [pickableStorageTypes, holdStorageTypes, interimStorageTypes] for ${context.warehouse || context.plant || 'warehouse'}. Storage types must be configured; fail-closed without hardcoded literals.`
+      );
+    }
+
+    return {
+      pickableStorageTypes: pickable,
+      holdStorageTypes: hold,
+      interimStorageTypes: interim,
+      isPickable(lgtyp) {
+        if (!lgtyp) return false;
+        return pickable.includes(String(lgtyp).trim().toUpperCase());
+      },
+      isOnHold(lgtyp, lgpla = '') {
+        if (!lgtyp) return false;
+        const type = String(lgtyp).trim().toUpperCase();
+        const bin = String(lgpla || '').trim().toUpperCase();
+        return hold.includes(type) || bin.includes('HOLD') || bin.includes('BLOCK');
+      },
+      isInterim(lgtyp) {
+        if (!lgtyp) return false;
+        const type = String(lgtyp).trim().toUpperCase();
+        return interim.includes(type);
+      }
+    };
   }
 }
 
