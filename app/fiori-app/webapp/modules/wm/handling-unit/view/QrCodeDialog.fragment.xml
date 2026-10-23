@@ -3,15 +3,14 @@
     xmlns:core="sap.ui.core">
     <Dialog id="huQrDialog"
             title="{i18n>huQrTitle}"
-            contentWidth="auto"
-            contentHeight="auto"
+            contentWidth="26rem"
             resizable="false"
             draggable="true">
         <content>
             <VBox alignItems="Center" class="sapUiMediumMargin">
                 <!-- QR SVG is set via setContent() on this HTML control -->
                 <core:HTML id="huQrSvgHtml"
-                           content="&lt;div style=&quot;min-width:220px;min-height:220px;&quot;&gt;&lt;/div&gt;"
+                           content="&lt;div style=&quot;min-width:232px;min-height:232px;&quot;&gt;&lt;/div&gt;"
                            preferDOM="false" />
                 <Text id="huQrHuNumber"
                       text="{huQr>/huNumber}"
@@ -29,20 +28,18 @@
             </VBox>
         </content>
         <buttons>
-            <Button id="huQrDownloadPdf"
-                    icon="sap-icon://pdf-attachment"
-                    text="{i18n>huQrDownloadPdf}"
-                    press=".onDownloadQrPdf" />
-        </buttons>
-        <beginButton>
             <Button id="huQrDownloadSvg"
                     icon="sap-icon://download"
                     text="{i18n>huQrDownloadSvg}"
                     type="Emphasized"
                     press=".onDownloadQrSvg" />
-        </beginButton>
-        <endButton>
-            <Button id="huQrClose" text="{i18n>huQrClose}" press=".onCloseQr" />
-        </endButton>
+            <Button id="huQrDownloadPdf"
+                    icon="sap-icon://pdf-attachment"
+                    text="{i18n>huQrDownloadPdf}"
+                    press=".onDownloadQrPdf" />
+            <Button id="huQrClose"
+                    text="{i18n>huQrClose}"
+                    press=".onCloseQr" />
+        </buttons>
     </Dialog>
 </core:FragmentDefinition>

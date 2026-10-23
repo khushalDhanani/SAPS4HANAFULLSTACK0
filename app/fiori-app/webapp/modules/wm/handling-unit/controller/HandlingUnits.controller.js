@@ -499,8 +499,8 @@ sap.ui.define([
         onRowQr: function (oEvent) {
             var oView = this.getView();
             var oCtx = oEvent.getSource().getBindingContext("huView");
-            var sHuNumber = oCtx.getProperty("HandlingUnitExternalID") || "";
-            var sMaterial = oCtx.getProperty("PackagingMaterialDescription") || oCtx.getProperty("PackagingMaterial") || "";
+            var sHuNumber = String(oCtx.getProperty("HandlingUnitExternalID") || "").trim();
+            var sMaterial = oCtx.getProperty("PackagingMaterialName") || oCtx.getProperty("PackagingMaterialDescription") || oCtx.getProperty("PackagingMaterial") || "";
             if (!sHuNumber) { MessageToast.show(this.getText("huNoData")); return; }
 
             if (!this.getModel("huQr")) {
@@ -521,15 +521,18 @@ sap.ui.define([
                 });
             }
             this._pQrDialog.then(function (oDialog) {
-                // Inject the QR SVG after the dialog DOM is available
-                oDialog.attachEventOnce("afterOpen", function () {
+                var fnInjectSvg = function () {
                     var oHtml = oView.byId("huQrSvgHtml");
                     if (oHtml) {
-                        var sSvg = QrCode.toSvg(sHuNumber, { size: 6, quiet: 4 });
-                        oHtml.setContent('<div style="display:flex;align-items:center;justify-content:center;">' + sSvg + "</div>");
+                        var sSvg = QrCode.toSvg(sHuNumber, { size: 8, quiet: 4 });
+                        oHtml.setContent('<div style="display:flex;align-items:center;justify-content:center;padding:16px;background:#ffffff;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.12);">' + sSvg + "</div>");
                     }
-                });
-                oDialog.open();
+                };
+                oDialog.attachEventOnce("afterOpen", fnInjectSvg);
+                fnInjectSvg();
+                if (!oDialog.isOpen()) {
+                    oDialog.open();
+                }
             });
         },
 
@@ -599,8 +602,8 @@ sap.ui.define([
             var self = this;
             var aItems = aRows.map(function (r) {
                 return {
-                    huNumber: r.HandlingUnitExternalID || r.huNumber || "",
-                    materialName: r.PackagingMaterialDescription || r.PackagingMaterial || "",
+                    huNumber: String(r.HandlingUnitExternalID || r.huNumber || "").trim(),
+                    materialName: r.PackagingMaterialName || r.PackagingMaterialDescription || r.PackagingMaterial || "",
                     createdDate: r.CreationDateTime || ""
                 };
             }).filter(function (it) { return !!it.huNumber; });

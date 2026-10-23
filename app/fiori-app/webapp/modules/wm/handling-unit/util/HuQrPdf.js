@@ -115,11 +115,16 @@ sap.ui.define([
     function drawQr(doc, sHuNumber, xMm, yMm, sizeMm) {
         var qr = QrCode.encode(sHuNumber);
         var n = qr.size;
-        var quietMod = 2; // quiet zone in modules
+        var quietMod = 4; // ISO/IEC 18004 requires minimum 4 modules quiet zone for 100% scan reliability
         var totalMod = n + 2 * quietMod;
         var modMm = sizeMm / totalMod;
         var startX = xMm + quietMod * modMm;
         var startY = yMm + quietMod * modMm;
+
+        // Ensure crisp pure white background across QR symbol area & quiet zone
+        doc.setFillColor(255, 255, 255);
+        doc.rect(xMm, yMm, sizeMm, sizeMm, "F");
+
         doc.setFillColor(0, 0, 0);
         for (var r = 0; r < n; r++) {
             for (var c = 0; c < n; c++) {

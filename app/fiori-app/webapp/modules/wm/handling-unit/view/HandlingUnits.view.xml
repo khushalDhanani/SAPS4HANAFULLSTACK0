@@ -107,7 +107,7 @@
                         <Column minScreenWidth="Tablet" demandPopin="true"><Text text="{i18n>huColStatus}" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huColReference}" /></Column>
                         <Column minScreenWidth="Desktop" demandPopin="true"><Text text="{i18n>huColCreated}" /></Column>
-                        <Column width="6rem" hAlign="Center"><Text text="{i18n>huColActions}" /></Column>
+                        <Column width="8rem" hAlign="Center"><Text text="{i18n>huColActions}" /></Column>
                     </columns>
                     <items>
                         <ColumnListItem type="Navigation" press=".onOpenDetail">
