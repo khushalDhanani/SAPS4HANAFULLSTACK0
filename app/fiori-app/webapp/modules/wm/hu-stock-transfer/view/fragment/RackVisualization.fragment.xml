@@ -27,50 +27,71 @@
                 <!-- Bays in Tier (Storage Bins) -->
                 <HBox class="rackBaysGrid" items="{path: 'rackView>bays', templateShareable: true}">
                     <VBox class="rackBayColumn">
-                        <!-- Section Box (1 Bay = 1 Storage Bin) -->
-                        <VBox class="{rackView>sectionClass}" app:slotKey="{rackView>slotKey}">
-                            <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
-                                <Text text="{rackView>badgeText}" class="{rackView>badgeClass}" />
-                                <Text text="{rackView>levelCode}" class="{rackView>badgeClass}" />
-                            </HBox>
+                        <HBox class="rackBayFrameRow" alignItems="Stretch">
+                            <!-- Left Vertical Steel Upright Post -->
+                            <VBox class="rackSteelPost rackSteelPostLeft" />
 
-                            <!-- Pallet Slots (Dual Pallets Side-by-Side) -->
-                            <HBox class="rackPalletsPair" alignItems="End" items="{path: 'rackView>slots', templateShareable: true}">
-                                <!-- Individual Pallet & Carton Position -->
-                                <VBox class="rackPalletCargo">
-                                    <!-- Carton Box with HU / Unit Info -->
-                                    <VBox class="{rackView>cartonClass}">
-                                        <HBox class="rackCartonHeader" justifyContent="SpaceBetween">
-                                            <Text text="{rackView>unitType}" />
-                                            <Text text="{rackView>serialNumber}" />
-                                        </HBox>
-                                        <Text text="{rackView>titleText}" class="rackCartonTitle" />
-                                        <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End">
-                                            <Text text="{rackView>qtyText}" />
-                                            <Text text="{rackView>sutCode}" class="rackSkuPill" visible="{rackView>hasSut}" />
-                                        </HBox>
-                                    </VBox>
-                                    <!-- Wooden Pallet Base (Slat + Runners) -->
-                                    <VBox class="rackPalletWood" visible="{rackView>hasUnit}">
-                                        <HBox class="rackPalletSlat" />
-                                        <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
-                                            <HBox class="rackRunnerBlock" />
-                                            <HBox class="rackRunnerBlock" />
-                                            <HBox class="rackRunnerBlock" />
-                                        </HBox>
-                                    </VBox>
+                            <!-- Bay Storage Shelf Area (Section Box + Horizontal Step Beam) -->
+                            <VBox class="rackBayShelfArea">
+                                <!-- Section Box (1 Bay = 1 Storage Bin) -->
+                                <VBox class="{rackView>sectionClass}" app:slotKey="{rackView>slotKey}">
+                                    <HBox class="rackZoneBadgeBar" justifyContent="SpaceBetween" alignItems="Center">
+                                        <Text text="{rackView>headerLeftText}" class="{rackView>badgeClass}" />
+                                        <Text text="{rackView>headerRightText}" class="{rackView>headerRightClass}" />
+                                    </HBox>
+
+                                    <!-- Pallet Slots (Dual Pallets Side-by-Side) -->
+                                    <HBox class="rackPalletsPair" alignItems="End" items="{path: 'rackView>slots', templateShareable: true}">
+                                        <!-- Individual Pallet & Cargo Position -->
+                                        <VBox class="rackPalletCargo">
+                                            <!-- Carton Box with HU / Unit Info -->
+                                            <VBox class="{rackView>cartonClass}">
+                                                <HBox class="rackCartonHeader" justifyContent="SpaceBetween" visible="{rackView>hasUnit}">
+                                                    <Text text="{rackView>unitType}" />
+                                                    <Text text="{rackView>subInfoText}" />
+                                                </HBox>
+                                                <Text text="{rackView>titleText}" class="rackCartonTitle" />
+                                                <HBox class="rackCartonFooter" justifyContent="SpaceBetween" alignItems="End" visible="{rackView>hasUnit}">
+                                                    <Text text="{rackView>qtyText}" />
+                                                    <Text text="{rackView>sutCode}" class="rackSkuPill" visible="{rackView>hasSut}" />
+                                                </HBox>
+                                            </VBox>
+                                            <!-- Wooden Pallet Base (Slat + Runners with Forklift Pockets) -->
+                                            <VBox class="rackPalletWood" visible="{rackView>hasUnit}">
+                                                <HBox class="rackPalletSlat" />
+                                                <HBox class="rackPalletRunners" justifyContent="SpaceBetween">
+                                                    <HBox class="rackRunnerBlock" />
+                                                    <HBox class="rackRunnerBlock" />
+                                                    <HBox class="rackRunnerBlock" />
+                                                </HBox>
+                                            </VBox>
+                                        </VBox>
+                                    </HBox>
                                 </VBox>
-                            </HBox>
-                        </VBox>
 
-                        <!-- Color-Coded Step Beam with Bin Tag and Level Code -->
-                        <HBox class="{rackView>beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="{rackView>slotKey}">
-                            <Link text="{rackView>binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="{rackView>slotKey}" />
-                            <Text text="{rackView>levelCode}" class="rackBeamLevelLabel" />
+                                <!-- Heavy-Duty Horizontal Load Step Beam with Connector Brackets and Barcode Bin Tag -->
+                                <HBox class="{rackView>beamClass}" justifyContent="SpaceBetween" alignItems="Center" app:slotKey="{rackView>slotKey}">
+                                    <HBox class="rackBeamBracketLeft" />
+                                    <HBox alignItems="Center">
+                                        <HBox class="rackBarcodeStrip" />
+                                        <Link text="{rackView>binTag}" press=".onSlotBeamPress" class="rackBeamBinTag" app:slotKey="{rackView>slotKey}" />
+                                    </HBox>
+                                    <HBox alignItems="Center">
+                                        <Text text="{rackView>levelTitle}" class="rackBeamLevelLabel" />
+                                        <HBox class="rackBeamBracketRight" />
+                                    </HBox>
+                                </HBox>
+                            </VBox>
+
+                            <!-- Right Vertical Steel Upright Post -->
+                            <VBox class="rackSteelPost rackSteelPostRight" />
                         </HBox>
                     </VBox>
                 </HBox>
             </HBox>
         </VBox>
+
+        <!-- Warehouse Concrete Floor Foundation Line -->
+        <HBox class="rackWarehouseFloorLine" alignItems="Center" />
     </VBox>
 </core:FragmentDefinition>

@@ -784,13 +784,72 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    min-height: 4.5rem;
+    min-height: 4.8rem;
+    height: 100%;
+    justify-content: flex-end;
+}
+
+.rackBayFrameRow {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 4.8rem;
+    position: relative;
+}
+
+.rackSteelPost {
+    width: 0.625rem;
+    min-width: 0.625rem;
+    max-width: 0.625rem;
+    flex: 0 0 0.625rem;
+    background: linear-gradient(90deg, #0f172a 0%, #1e3a8a 35%, #2563eb 50%, #1e3a8a 65%, #0f172a 100%);
+    position: relative;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+    z-index: 2;
+}
+
+/* Authentic Teardrop / Slotted Punch Hole Pattern on the Vertical Steel Posts */
+.rackSteelPost::before {
+    content: "";
+    position: absolute;
+    top: 0.25rem;
+    bottom: 0.25rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3px;
+    background: repeating-linear-gradient(
+        180deg,
+        rgba(15, 23, 42, 0.95) 0px,
+        rgba(15, 23, 42, 0.95) 4px,
+        transparent 4px,
+        transparent 10px
+    );
+    border-radius: 1px;
+}
+
+.rackSteelPostLeft {
+    border-radius: 3px 0 0 3px;
+    border-right: 1px solid rgba(0, 0, 0, 0.4);
+}
+
+.rackSteelPostRight {
+    border-radius: 0 3px 3px 0;
+    border-left: 1px solid rgba(0, 0, 0, 0.4);
+}
+
+.rackBayShelfArea {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
     height: 100%;
     justify-content: flex-end;
 }
 
 .rackSectionBox {
-    border-radius: 6px 6px 0 0;
+    border-radius: 4px 4px 0 0;
     padding: 0.25rem 0.5rem;
     display: flex;
     flex-direction: column;
@@ -799,41 +858,49 @@
     border: 2px solid transparent;
     border-bottom: none;
     flex: 1 1 auto;
-    min-height: 3.6rem;
+    min-height: 4rem;
     justify-content: space-between;
+    position: relative;
+    background-color: #f8fafc;
+    /* Industrial Wire Mesh Decking Grid (Shelf Deck) */
+    background-image:
+        linear-gradient(rgba(148, 163, 184, 0.2) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.2) 1px, transparent 1px);
+    background-size: 10px 10px;
 }
 
 .rackSectionBox:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .rackSectionBoxActive {
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.4), 0 6px 16px rgba(0, 0, 0, 0.12) !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.5), 0 8px 20px rgba(0, 0, 0, 0.16) !important;
+    border-color: #2563eb !important;
 }
 
 .rackZonePink {
-    background: #fdf2f8;
+    background-color: #fdf2f8;
     border-color: #f472b6;
 }
 
 .rackZoneGreen {
-    background: #f0fdf4;
+    background-color: #f0fdf4;
     border-color: #4ade80;
 }
 
 .rackZoneBlue {
-    background: #f0f9ff;
+    background-color: #f0f9ff;
     border-color: #38bdf8;
 }
 
 .rackZoneOrange {
-    background: #fff7ed;
+    background-color: #fff7ed;
     border-color: #fb923c;
 }
 
 .rackZoneEmpty {
-    background: #f8fafc;
+    background-color: #f8fafc;
     border: 1.5px dashed #cbd5e1;
     border-bottom: none;
 }
@@ -870,6 +937,29 @@
     color: #94a3b8;
 }
 
+.rackAvailableBinTag {
+    color: #059669;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+.rackHuCountTag {
+    font-weight: 700;
+    font-family: monospace;
+}
+
+.rackBlockedBinTag {
+    color: #dc2626;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+.rackInProcessBinTag {
+    color: #d97706;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
 .rackPalletsPair {
     display: flex;
     gap: 0.375rem;
@@ -879,7 +969,8 @@
 }
 
 .rackPalletCargo {
-    flex: 1 1 auto;
+    flex: 1 1 0;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -895,8 +986,14 @@
     flex-direction: column;
     justify-content: space-between;
     position: relative;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     cursor: pointer;
+    transition: all 0.15s ease-in-out;
+}
+
+.rackCargoCarton:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.18);
+    transform: translateY(-1px);
 }
 
 .rackCartonPink {
@@ -924,9 +1021,9 @@
 }
 
 .rackCartonEmpty {
-    background: #f1f5f9;
+    background: #f8fafc;
     border: 1px dashed #cbd5e1;
-    color: #94a3b8;
+    color: #64748b;
     min-height: 2.25rem;
     height: 100%;
     max-height: 3rem;
@@ -935,6 +1032,27 @@
     justify-content: center;
     font-size: 0.65rem;
     font-weight: 700;
+}
+
+.rackSlotAvailableBox {
+    background: rgba(248, 250, 252, 0.85);
+    border: 1.5px dashed #94a3b8;
+    color: #334155;
+    box-shadow: inset 0 0 4px rgba(148, 163, 184, 0.15);
+    transition: all 0.2s ease;
+}
+
+.rackSlotAvailableBox:hover {
+    border-color: #2563eb;
+    background: rgba(239, 246, 255, 0.95);
+    color: #1d4ed8;
+    box-shadow: 0 0 6px rgba(37, 99, 235, 0.25);
+}
+
+.rackSlotBlockedBox {
+    background: rgba(254, 242, 242, 0.7);
+    border: 1.5px dashed #f87171;
+    color: #b91c1c;
 }
 
 .rackCartonHeader {
@@ -954,6 +1072,15 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.rackCartonEmpty .rackCartonTitle {
+    font-size: 0.65rem;
+    font-weight: 700;
+    font-family: inherit;
+    color: inherit;
+    white-space: normal;
+    text-align: center;
 }
 
 .rackCartonFooter {
@@ -979,42 +1106,109 @@
 }
 
 .rackPalletSlat {
-    height: 3px;
-    background: #c48b57;
+    height: 4px;
+    background: linear-gradient(180deg, #d97706 0%, #b45309 100%);
     width: 100%;
     border-radius: 1px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
 }
 
 .rackPalletRunners {
-    height: 4px;
+    height: 5px;
     display: flex;
     justify-content: space-between;
     padding: 0 4px;
 }
 
 .rackRunnerBlock {
-    width: 8px;
+    width: 9px;
     height: 100%;
-    background: #854d0e;
+    background: linear-gradient(180deg, #92400e 0%, #78350f 100%);
+    border-radius: 1px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .rackStepBeam {
-    height: 1.35rem;
+    height: 1.5rem;
     border-radius: 0 0 3px 3px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 0.4rem;
+    padding: 0 0.25rem;
     font-family: monospace;
     font-size: 0.65rem;
     font-weight: 800;
     color: #ffffff;
     cursor: pointer;
-    transition: filter 0.15s ease;
+    transition: filter 0.15s ease, box-shadow 0.15s ease;
+    border-top: 1.5px solid rgba(255, 255, 255, 0.4);
+    border-bottom: 2px solid rgba(15, 23, 42, 0.4);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.22);
+    position: relative;
+    z-index: 1;
 }
 
 .rackStepBeam:hover {
-    filter: brightness(1.08);
+    filter: brightness(1.1);
+}
+
+.rackBeamBracketLeft,
+.rackBeamBracketRight {
+    width: 0.45rem;
+    height: 1.15rem;
+    background: linear-gradient(180deg, #64748b 0%, #334155 50%, #1e293b 100%);
+    border: 1px solid #0f172a;
+    border-radius: 1px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    position: relative;
+    flex-shrink: 0;
+}
+
+.rackBeamBracketLeft::after,
+.rackBeamBracketRight::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    background: repeating-linear-gradient(
+        180deg,
+        #f8fafc 0px,
+        #f8fafc 2px,
+        transparent 2px,
+        transparent 5px
+    );
+}
+
+.rackBeamBracketLeft {
+    margin-right: 0.35rem;
+}
+
+.rackBeamBracketRight {
+    margin-left: 0.35rem;
+}
+
+.rackBarcodeStrip {
+    width: 1.15rem;
+    height: 0.75rem;
+    background: repeating-linear-gradient(
+        90deg,
+        #0f172a 0px,
+        #0f172a 1px,
+        #ffffff 1px,
+        #ffffff 2px,
+        #0f172a 2px,
+        #0f172a 4px,
+        #ffffff 4px,
+        #ffffff 5px
+    );
+    margin-right: 0.3rem;
+    border-radius: 1px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    border: 1px solid #ffffff;
+    flex-shrink: 0;
 }
 
 .rackBeamBinTag {
@@ -1026,7 +1220,8 @@
     font-weight: 800;
     letter-spacing: 0.3px;
     cursor: pointer;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    border: 1px solid #cbd5e1;
 }
 
 .rackBeamBinTag.sapMLnk {
@@ -1043,7 +1238,7 @@
     font-size: 0.6rem;
     color: #ffffff;
     font-weight: 700;
-    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
 }
 
 .rackBeamPink {
@@ -1064,6 +1259,50 @@
 .rackBeamOrange {
     background: linear-gradient(180deg, #fb923c 0%, #ea580c 55%, #c2410c 100%) !important;
     box-shadow: 0 2px 4px rgba(234, 88, 12, 0.25) !important;
+}
+
+.rackWarehouseFloorLine {
+    height: 0.625rem;
+    background: linear-gradient(180deg, #334155 0%, #1e293b 45%, #0f172a 100%);
+    border-top: 2px solid #475569;
+    border-radius: 0 0 6px 6px;
+    margin-top: 0.25rem;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.25);
+    position: relative;
+}
+
+/* Floor Anchor Fastener Marks */
+.rackWarehouseFloorLine::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 2rem;
+    right: 2rem;
+    height: 2px;
+    background: repeating-linear-gradient(
+        90deg,
+        #64748b 0px,
+        #64748b 4px,
+        transparent 4px,
+        transparent 3rem
+    );
+    transform: translateY(-50%);
+}
+
+.rackSteelBaseplate {
+    width: 1.1rem;
+    height: 0.35rem;
+    background: #0f172a;
+    border-top: 1px solid #475569;
+    border-radius: 1px;
+}
+
+.rackEmptySlotGuide {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
 .rackDetailPanel {

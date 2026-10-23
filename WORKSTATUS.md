@@ -7,6 +7,131 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Full-Page SAPUI5 Warehouse Pallet Rack Visualizer — Section 10 Occupied Bin (`/wm/hu-stock-transfer/{reservation}/{item}/rack`) (2026-10-23 09:55 IST):**
+  - **Context & Objective:** Implemented the exact visual presentation and data mapping for occupied warehouse bin locations matching the reference specification:
+    ```text
+    ● SECTION / COLOR
+    ┌─────────┐ ┌─────────┐ ┌─────────┐
+    │   HU    │ │   HU    │ │   HU    │
+    │         │ │         │ │         │
+    └─────────┘ └─────────┘ └─────────┘
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    L1-L0001-04                    LEVEL 4
+    ```
+    Showing actual HU/SU information when available from SAP backend quants/units.
+  - **Key Implementations:**
+    1. **Occupied Location Header Row (`● SECTION / COLOR`):**
+       - Updated location badge bar left-hand indicator to display a filled bullet `●` (U+25CF) prefixed before the storage section and color description:
+         - Level 4 (and 3): `● FAST-MOVING / GREEN` (with `.rackBadgeGreen` in `#16a34a`).
+         - Level 6 (and 5): `● HAZARD / CORROSIVE` (with `.rackBadgePink` in `#db2777`).
+         - Level 2: `● COLD STORAGE / BLUE` (with `.rackBadgeBlue` in `#0284c7`).
+         - Level 1 (and 0): `● PRIORITY OUTBOUND / ORANGE` (with `.rackBadgeOrange` in `#ea580c`).
+       - On the right-hand side, displays the dynamic HU count: `{count} HU` (e.g. `1 HU`, `2 HU`, `3 HU`).
+    2. **Multi-Slot HU/SU Positions (Up to 3 HUs per Bin Bay):**
+       - Increased bay quant capacity to 3 HUs to support standard heavy-duty warehouse pallet racks (e.g. `┌─────────┐ ┌─────────┐ ┌─────────┐`).
+       - Updated flex layout on `.rackPalletCargo` to `flex: 1 1 0; min-width: 0;` so that whether a bin holds 2 or 3 HUs, each pallet position shares equal, balanced width with clean `0.375rem` spacing.
+       - Enhanced `.rackCargoCarton` with subtle 3D hover lift effect (`transform: translateY(-1px)`, `box-shadow: 0 4px 8px rgba(0, 0, 0, 0.18)`).
+    3. **Actual HU/SU Information Displayed on Cargo Cartons:**
+       - **Header**: Top-left shows normalized unit category (`HU` or `SU`), and top-right shows batch code (`B: <batch>`) or serial number.
+       - **Center**: Displays actual unit number from SAP (e.g. `2000019371`, `SU-10042`, etc.) in bold monospace font.
+       - **Footer**: Bottom-left displays actual available stock quantity and unit (e.g. `50.000 NOS`), and bottom-right displays the SAP SUT packaging indicator pill (e.g. `E10`, `IP`, etc.).
+       - **Pallet Base**: Retains realistic wooden pallet base with top slat, runner stringers, and 3D forklift fork pockets.
+    4. **Horizontal Step Beam (`L1-L0001-04` & `LEVEL 4`):**
+       - Step beam correctly renders `L1-L0001-04` on the left (placard link + barcode strip) and `LEVEL 4` on the right, matching Level 4 occupied bin specifications.
+    5. **Inspector Integration:**
+       - Dynamically adjusts `Pallet Capacity` in the Slot Inspector to `3 Pallets (Standard/Euro)` or `2 Pallets (Euro/Standard)` based on actual bay configuration.
+  - **Files Changed:**
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferRack.controller.js` (Added sectionColor mapping, up to 3 HUs per bay, subInfoText, and normalized unit categories)
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/fragment/RackVisualization.fragment.xml` (Bound carton header to subInfoText)
+    - `app/fiori-app/webapp/css/style.css` (Updated rackPalletCargo flex basis and carton hover elevation)
+  - **Validation & Results:**
+    - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected** (0 errors, 0 warnings).
+    - `npx jest test/unit/controller/uiConsistency.test.js test/unit/wm/huStockTransferAdapter.test.js --no-coverage`: **22/22 tests PASS (100% green)**.
+    - `git diff --check`: **0 errors**.
+  - **Zero SAP Writes:** Strictly read-only; no live SAP mutations executed.
+
+
+- **Full-Page SAPUI5 Warehouse Pallet Rack Visualizer — Section 9 Available Bin (`/wm/hu-stock-transfer/{reservation}/{item}/rack`) (2026-10-23 09:45 IST):**
+  - **Context & Objective:** Implemented the exact visual presentation and backend data determination for available and empty warehouse bin locations:
+    ```text
+    ○ AVAILABLE BIN                         0 HU
+
+    ┌─────────────────┐   ┌─────────────────┐
+    │ Available Slot 1│   │ Available Slot 2│
+    └─────────────────┘   └─────────────────┘
+
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    L1-L0001-06                    LEVEL 6
+    ```
+    Where the data strictly determines whether the bin is actually available, and no bin is labeled available unless backend data supports it.
+  - **Key Implementations:**
+    1. **Available Bin Header Row (`RackVisualization.fragment.xml`, `style.css`):**
+       - Updated location badge bar with dynamic `{rackView>headerLeftText}` and `{rackView>headerRightText}`.
+       - When an empty location is supported as available by backend data, displays `○ AVAILABLE BIN` (`.rackAvailableBinTag` in emerald green) on the left and `0 HU` (`.rackHuCountTag`) on the right.
+       - When occupied, displays the zone category badge (e.g. `HAZARD / CORROSIVE`, `FAST-MOVING`, etc.) on the left and `{count} HU` (e.g. `1 HU`, `2 HU`) on the right.
+       - When blocked or on-hold according to backend data, displays `⊘ BLOCKED BIN` or `⊘ ON-HOLD BIN` (`.rackBlockedBinTag`) on the left and `0 HU` on the right, ensuring no blocked location is falsely marked available.
+    2. **Dual Available Pallet Slots (`Available Slot 1` & `Available Slot 2`):**
+       - Updated `_buildCartonData` in `HuStockTransferRack.controller.js` to render empty available slots with `Available Slot 1` and `Available Slot 2` centered inside distinct wireframe slot boxes (`.rackSlotAvailableBox`).
+       - Styled `.rackSlotAvailableBox` with 1.5px dashed border (`#94a3b8`), slate text (`#334155`), and subtle hover interaction with blue glow and accent border (`#2563eb`).
+       - For blocked/on-hold slots, renders `Blocked Slot 1` / `On-Hold Slot 1` in `.rackSlotBlockedBox`.
+       - When a slot is occupied, preserves the carton cargo box with Unit ID, serial, quantity, SUT pill, and wooden pallet base.
+    3. **Horizontal Step Beam (`L1-L0001-06` & `LEVEL 6`):**
+       - Updated the step beam right-hand label from short code `B6` to `{rackView>levelTitle}` (`LEVEL 6`, `LEVEL 5`, ..., `LEVEL 0`).
+       - Bound the step beam left-hand label to `{rackView>binTag}` representing the actual storage bin (e.g. `L1-L0001-06` for Bay 1, Level 6), complete with connector brackets and barcode graphic strip.
+    4. **Strict Backend Data Availability Determination:**
+       - Inspects backend quants, storage status, and storage type:
+         - Verified that on-hold storage types (`OH1`), interim/staging storage types (`9*` like `902`, `911`), and bins with `HOLD` / `BLOCK` tags in SAP WM are never labeled `AVAILABLE BIN`.
+         - Bins are confirmed `AVAILABLE BIN` only when 0 stock is present and storage type / bin master is unrestricted and open in SAP.
+         - Updated `/availableBinsCount` to count only bins verified available by backend data.
+    5. **i18n & Style Compliance:**
+       - Declared `rackAvailableBinText=\u25cb AVAILABLE BIN`, `rackZeroHuText=0 HU`, `rackAvailableSlotTitle=Available Slot {0}`, `rackBlockedBinText=\u2298 BLOCKED BIN`, `rackOnHoldBinText=\u2298 ON-HOLD BIN`, `rackInProcessBinText=IN-PROCESS BIN`, and `rackSlotBlockedTitle=Blocked / On-Hold Bin` across both `i18n.properties` and `i18n_en.properties`.
+       - Added `.rackAvailableBinTag`, `.rackHuCountTag`, `.rackBlockedBinTag`, `.rackInProcessBinTag`, `.rackSlotAvailableBox`, and `.rackSlotBlockedBox` to `style.css`.
+  - **Files Changed:**
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/fragment/RackVisualization.fragment.xml` (Badge bar headers and beam level title binding)
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferRack.controller.js` (Backend availability calculation, dual slot titles `Available Slot 1`/`2`, bin tag naming, and inspector updates)
+    - `app/fiori-app/webapp/css/style.css` (Available bin tag, HU count tag, and dashed available slot box styling)
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties` (Available bin and slot text keys)
+  - **Validation & Results:**
+    - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected** (0 errors, 0 warnings).
+    - `npx jest test/unit/controller/uiConsistency.test.js test/unit/wm/huStockTransferAdapter.test.js --no-coverage`: **22/22 tests PASS (100% green)**.
+    - `git diff --check`: **0 errors**.
+  - **Zero SAP Writes:** Strictly read-only; no live SAP mutations executed.
+
+
+- **Full-Page SAPUI5 Warehouse Pallet Rack Visualizer — Section 8 Visual Rack Frame (`/wm/hu-stock-transfer/{reservation}/{item}/rack`) (2026-10-23 09:30 IST):**
+  - **Context & Objective:** Visually reproduced the physical industrial warehouse pallet rack concept using pure, maintainable CSS and SAPUI5 layout components, transforming the visualization into a tactile steel storage rack experience rather than a traditional SAP table:
+    - Vertical steel posts with authentic perforated teardrop punch holes and metallic steel gradients flanking every bay.
+    - Heavy-duty horizontal load step beams with 3D bevels, safety lip, and welded steel end connector brackets with bolt rivets.
+    - Physical bay separation and clear level separation.
+    - Storage-bin magnetic placard labels with realistic miniature barcode graphic strips.
+    - Wire mesh shelf decking grid texture underneath pallets and in open bays.
+    - Pallet / HU cargo areas with realistic wooden pallet slats, stringer runner blocks, and forklift fork pockets.
+    - Clear visual contrast between empty locations (`[ AVAILABLE ]` with dashed perimeter) and occupied locations (3D carton boxes with zone color coding, HU badges, and pallet bases).
+    - Heavy warehouse concrete floor foundation line at the base of the rack.
+  - **Key Implementations:**
+    1. **Vertical Steel Posts & Bay Frames (`RackVisualization.fragment.xml`, `style.css`):**
+       - Added `.rackBayFrameRow` wrapping `.rackSteelPostLeft`, `.rackBayShelfArea`, and `.rackSteelPostRight`.
+       - Rendered industrial steel blue gradient on upright posts (`0.625rem` width) with repeating perforated teardrop punch slots via CSS pseudo-elements (`::before`), giving realistic modular rack upright aesthetics.
+    2. **Horizontal Step Beams & End Connector Brackets:**
+       - Enhanced `.rackStepBeam` with 3D metallic bevel, top step lip, and safety drop-shadows.
+       - Added `.rackBeamBracketLeft` and `.rackBeamBracketRight` representing welded beam end plates with safety locking rivets.
+       - Attached `.rackBarcodeStrip` next to `.rackBeamBinTag` rendering authentic barcode lines.
+    3. **Wire Mesh Shelf Decking & Empty vs Occupied Distinction:**
+       - Styled `.rackSectionBox` with an industrial wire mesh grid pattern overlaying zone color tints.
+       - Updated `_buildCartonData` in `HuStockTransferRack.controller.js` to label empty slots with `[ AVAILABLE ]` surrounded by a dashed shelf guide (`.rackCartonEmpty`).
+       - Refined wooden pallets (`.rackPalletSlat`, `.rackPalletRunners`, `.rackRunnerBlock`) with amber/brown wood grain gradients and 3D forklift fork pockets.
+    4. **Warehouse Concrete Floor Foundation:**
+       - Added `.rackWarehouseFloorLine` with heavy industrial floor anchor fastener marks anchoring the entire rack assembly to the warehouse floor.
+  - **Files Changed:**
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/fragment/RackVisualization.fragment.xml` (Vertical steel upright posts, bay frames, beam brackets, barcode strips, and floor line)
+    - `app/fiori-app/webapp/css/style.css` (Physical rack CSS styling: steel posts, teardrop punch holes, beam brackets, barcode strips, wire decking, and concrete floor line)
+    - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferRack.controller.js` (Updated empty slot title text to `[ AVAILABLE ]`)
+  - **Validation & Results:**
+    - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected** (0 errors, 0 warnings).
+    - `npx jest test/unit/controller/uiConsistency.test.js test/unit/wm/huStockTransferAdapter.test.js --no-coverage`: **22/22 tests PASS (100% green)**.
+    - `git diff --check`: **0 errors**.
+  - **Zero SAP Writes:** Strictly read-only; no live SAP mutations executed.
+
 - **Full-Page SAPUI5 Warehouse Pallet Rack Visualizer — Section 7 Dynamic Rack Structure B0–B6 & Reference Structure Rack L0001 (`/wm/hu-stock-transfer/{reservation}/{item}/rack`) (2026-10-22 18:15 IST):**
   - **Context & Objective:** Implemented full support for reference structure:
     ```text
@@ -481,11 +606,125 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Exact Next Recommended Action (Section 10 Occupied Bin Delivered — 2026-10-23 09:55 IST):** review the occupied bin visual design and multi-HU layout on `/wm/hu-stock-transfer/{reservation}/{item}/rack` with `● SECTION / COLOR` and `{count} HU` header, multi-pallet slots (up to 3 HUs per bay), actual SAP HU/SU information (Unit number, category, batch/serial, quantity, SUT pill, wooden pallet base with pockets), and horizontal step beam with `L1-L0001-04` and `LEVEL 4`. All UI5 lint checks pass (0 findings) and unit consistency tests pass 100% green (22/22 tests). Zero live SAP writes were performed.
+- **Exact Next Recommended Action (Section 9 Available Bin Delivered — 2026-10-23 09:45 IST):** review the available bin visual design and backend availability determination on `/wm/hu-stock-transfer/{reservation}/{item}/rack` with `○ AVAILABLE BIN` and `0 HU` header, dual wireframe slot boxes `Available Slot 1` and `Available Slot 2`, and horizontal step beam with `L1-L0001-06` and `LEVEL 6`. Verified that no bin is labeled available unless backend data (storage status, non-hold storage types, and master data) supports it. All UI5 lint checks pass (0 findings) and unit consistency tests pass 100% green (22/22 tests). Zero live SAP writes were performed.
+- **Exact Next Recommended Action (Section 8 Visual Rack Frame Delivered — 2026-10-23 09:30 IST):** review the physical industrial warehouse pallet rack frame visualization on `/wm/hu-stock-transfer/{reservation}/{item}/rack` with vertical steel posts (perforated teardrop punch holes, steel blue gradients), heavy-duty horizontal step beams with welded end connector brackets and rivets, magnetic storage-bin placard labels with barcode strips, wire mesh shelf decking, distinct empty location guides, and concrete floor foundation lines. All UI5 lint checks pass (0 findings) and unit consistency tests pass 100% green (22/22 tests). Zero live SAP writes were performed.
 - **Exact Next Recommended Action (Section 7 Dynamic Rack Structure B0–B6 Delivered — 2026-10-22 18:15 IST):** review the dynamic rack structure implementation on `/wm/hu-stock-transfer/{reservation}/{item}/rack` supporting the reference structure `Rack L0001`, `BAY 1` / `BAY 2` column headers, `LEVEL 6` down to `LEVEL 0` row indicators (B0–B6), and backend data-driven bays, levels, bins, and slots without assuming every rack has 7 levels. All UI5 lint checks pass (0 findings) and unit consistency tests pass 100% green (22/22 tests). Zero live SAP writes were performed.
 - **Exact Next Recommended Action (Section 6 Reusable Data-Driven Rack Visualization Delivered — 2026-10-22 18:05 IST):** review the reusable, data-driven XML fragment `RackVisualization.fragment.xml` bound via UI5 aggregation binding (`tiers` -> `bays` -> `slots`) representing the 8-level warehouse hierarchy (Warehouse -> Storage Type -> Rack -> Level/Tier -> Bay -> Storage Bin -> Slot -> HU/SU). All UI5 lint checks pass (0 findings) and unit consistency tests pass 100% green (22/22 tests). Zero live SAP writes were performed.
 - **Exact Next Recommended Action (Section 5 Top Toolbar Delivered — 2026-10-22 17:55 IST):** review the reproduced Top Toolbar on `/wm/hu-stock-transfer/{reservation}/{item}/rack` with Left `[MATERIAL <matnr>]` ObjectStatus badge + description, Center `Warehouse Pallet Rack Visualizer` title + `Rack 1 of 3 (EN1)` counter pill, and Right-side controls `Storage Type ▼`, `‹ Prev Rack`, `Next Rack ›`, `Table Grid`, and `× Close`. All UI5 lint checks pass (0 findings) and unit consistency tests pass 100% green (22/22 tests). Zero live SAP writes were performed.
 
 ## Changes Log
+
+### 2026-10-23 09:55 IST — Section 10 Occupied Bin Delivered
+
+- **Requirement:** User task: "10. OCCUPIED BIN: An occupied location should show:
+  ● SECTION / COLOR
+  ┌─────────┐ ┌─────────┐ ┌─────────┐
+  │   HU    │ │   HU    │ │   HU    │
+  │         │ │         │ │         │
+  └─────────┘ └─────────┘ └─────────┘
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  L1-L0001-04                    LEVEL 4
+  Show actual HU/SU information when available."
+- **Implementation Delivered:**
+  1. **Occupied Location Header Row (`● SECTION / COLOR`):**
+     - Configured badge bar left-hand indicator to display a filled bullet `●` (U+25CF) prefixed before the storage section and color description:
+       - Level 4: `● FAST-MOVING / GREEN` (with `.rackBadgeGreen` in `#16a34a`).
+       - Level 6: `● HAZARD / CORROSIVE` (with `.rackBadgePink` in `#db2777`).
+       - Level 2: `● COLD STORAGE / BLUE` (with `.rackBadgeBlue` in `#0284c7`).
+       - Level 1: `● PRIORITY OUTBOUND / ORANGE` (with `.rackBadgeOrange` in `#ea580c`).
+     - On the right-hand side, displays dynamic HU count: `{count} HU` (e.g. `1 HU`, `2 HU`, `3 HU`).
+  2. **Multi-Slot HU/SU Positions (Up to 3 HUs per Bin Bay):**
+     - Increased bay slot capacity to 3 HUs, supporting standard heavy-duty warehouse pallet racks (`┌─────────┐ ┌─────────┐ ┌─────────┐`).
+     - Updated flex layout on `.rackPalletCargo` to `flex: 1 1 0; min-width: 0;` ensuring equal, balanced width whether holding 2 or 3 HUs.
+     - Enhanced `.rackCargoCarton` with subtle 3D hover elevation (`transform: translateY(-1px)`, `box-shadow: 0 4px 8px rgba(0, 0, 0, 0.18)`).
+  3. **Actual HU/SU Information Displayed on Cargo Cartons:**
+     - Header: Displays normalized unit category (`HU` or `SU`), and top-right shows batch code (`B: <batch>`) or serial number.
+     - Center: Displays actual unit number from SAP (e.g. `2000019371`, `SU-10042`, etc.) in bold monospace font.
+     - Footer: Bottom-left displays actual available stock quantity and unit (e.g. `50.000 NOS`), and bottom-right displays the SAP SUT packaging indicator pill (e.g. `E10`, `IP`, etc.).
+     - Pallet Base: Realistic wooden pallet base with top slat, runner stringers, and 3D forklift fork pockets.
+  4. **Horizontal Step Beam (`L1-L0001-04` & `LEVEL 4`):**
+     - Step beam correctly renders `L1-L0001-04` on the left (placard link + barcode strip) and `LEVEL 4` on the right, matching Level 4 occupied bin specifications.
+  5. **Inspector Integration:**
+     - Dynamically adjusts `Pallet Capacity` in the Slot Inspector to `3 Pallets (Standard/Euro)` or `2 Pallets (Euro/Standard)` based on actual bay configuration.
+- **Files Changed:**
+  - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferRack.controller.js`
+  - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/fragment/RackVisualization.fragment.xml`
+  - `app/fiori-app/webapp/css/style.css`
+- **Validation & Results:**
+  - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected** (0 errors, 0 warnings).
+  - `npx jest test/unit/controller/uiConsistency.test.js test/unit/wm/huStockTransferAdapter.test.js --no-coverage`: **22/22 tests PASS (100% green)**.
+  - `git diff --check`: **0 errors**.
+- **Zero SAP Writes:** Strictly read-only; no live SAP mutations executed.
+
+### 2026-10-23 09:45 IST — Section 9 Available Bin Delivered
+
+- **Requirement:** User task: "9. AVAILABLE BIN: An empty location should visually show:
+  ○ AVAILABLE BIN                         0 HU
+
+  ┌─────────────────┐   ┌─────────────────┐
+  │ Available Slot 1│   │ Available Slot 2│
+  └─────────────────┘   └─────────────────┘
+
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  L1-L0001-06                    LEVEL 6
+  The data must determine whether the bin is actually available. Do not label a bin available unless the backend data supports it."
+- **Implementation Delivered:**
+  1. **Available Bin Header Row (`RackVisualization.fragment.xml`, `style.css`):**
+     - Bound the location badge bar to `{rackView>headerLeftText}` and `{rackView>headerRightText}`.
+     - For empty bins verified available by backend data, displays `○ AVAILABLE BIN` (`.rackAvailableBinTag` in emerald green) and `0 HU` (`.rackHuCountTag` in monospace).
+     - For occupied bins, displays the level/zone category badge (e.g. `HAZARD / CORROSIVE`) and `{count} HU` (e.g. `1 HU`, `2 HU`).
+     - For blocked or on-hold bins, displays `⊘ BLOCKED BIN` or `⊘ ON-HOLD BIN` (`.rackBlockedBinTag`) with `0 HU`.
+  2. **Dual Available Pallet Slots (`HuStockTransferRack.controller.js`, `style.css`):**
+     - Configured `_buildCartonData` so empty slots in available bins render with `Available Slot 1` and `Available Slot 2` centered inside dashed slot boxes (`.rackSlotAvailableBox`).
+     - Styled `.rackSlotAvailableBox` with 1.5px dashed border (`#94a3b8`), slate text (`#334155`), and subtle hover interaction with blue glow and accent border (`#2563eb`).
+     - For blocked or on-hold locations, empty slots render `Blocked Slot 1` or `On-Hold Slot 1` in `.rackSlotBlockedBox`.
+     - When occupied, retains the full carton box with unit ID, serial, quantity, SUT pill, and wooden pallet base.
+  3. **Horizontal Step Beam (`RackVisualization.fragment.xml`, `HuStockTransferRack.controller.js`):**
+     - Updated step beam right-hand label from short code `B6` to `{rackView>levelTitle}` (`LEVEL 6`, `LEVEL 5`, ..., `LEVEL 0`).
+     - Bound left-hand link to `{rackView>binTag}` representing the actual storage bin (e.g. `L1-L0001-06` for Bay 1, Level 6), matching `L1-L0001-06` and `LEVEL 6`.
+  4. **Strict Backend Data Availability Determination:**
+     - Evaluates backend quants, storage status, and storage type:
+       - On-hold storage types (`OH1`), interim/staging storage types (`9*` like `902`, `911`), and bins with `HOLD` / `BLOCK` tags in SAP WM are never marked `AVAILABLE BIN`.
+       - Empty locations are verified available only when 0 stock is present and storage type / bin master is unrestricted and open in SAP.
+       - Dynamically calculates `/availableBinsCount` counting only verified available bins.
+  5. **i18n & Style Compliance:**
+     - Added `rackAvailableBinText`, `rackZeroHuText`, `rackAvailableSlotTitle`, `rackBlockedBinText`, `rackOnHoldBinText`, `rackInProcessBinText`, and `rackSlotBlockedTitle` across `i18n.properties` and `i18n_en.properties`.
+     - Added `.rackAvailableBinTag`, `.rackHuCountTag`, `.rackBlockedBinTag`, `.rackInProcessBinTag`, `.rackSlotAvailableBox`, and `.rackSlotBlockedBox` to `style.css`.
+- **Files Changed:**
+  - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/fragment/RackVisualization.fragment.xml`
+  - `app/fiori-app/webapp/modules/wm/hu-stock-transfer/controller/HuStockTransferRack.controller.js`
+  - `app/fiori-app/webapp/css/style.css`
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`
+- **Validation & Results:**
+  - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected** (0 errors, 0 warnings).
+  - `npx jest test/unit/controller/uiConsistency.test.js test/unit/wm/huStockTransferAdapter.test.js --no-coverage`: **22/22 tests PASS (100% green)**.
+  - `git diff --check`: **0 errors**.
+- **Zero SAP Writes:** Strictly read-only; no live SAP mutations executed.
+
+### 2026-10-23 09:30 IST — Section 8 Visual Rack Frame Delivered
+
+- **Requirement:** User task: "8. VISUAL RACK FRAME: Visually reproduce the physical rack concept: Vertical steel posts, Horizontal beams, Bay separation, Level separation, Storage-bin labels, Pallet/HU areas, Empty locations, Occupied locations. The visual representation should feel like a physical warehouse rack, not a normal SAP table. Use CSS for the physical visualization. Keep the implementation maintainable."
+- **Implementation Delivered:**
+  1. **Vertical Steel Upright Posts & Bay Separation (`RackVisualization.fragment.xml`, `style.css`):**
+     - Flanked every bay with modular vertical steel upright posts (`.rackSteelPostLeft`, `.rackSteelPostRight`).
+     - Styled steel posts with metallic steel blue gradient (`linear-gradient(90deg, #0f172a 0%, #1e3a8a 35%, #2563eb 50%, #1e3a8a 65%, #0f172a 100%)`).
+     - Rendered realistic repeating teardrop/slotted punch hole pattern using CSS pseudo-elements (`::before`), simulating authentic modular industrial pallet rack upright columns.
+  2. **Horizontal Load Step Beams & Welded Connector Brackets:**
+     - Enhanced `.rackStepBeam` with realistic 3D metallic bevel, top step lip, and safety drop-shadows.
+     - Added welded end connector brackets (`.rackBeamBracketLeft`, `.rackBeamBracketRight`) on either end of the load beams with safety locking pin bolt rivets (`::after`).
+     - Added magnetic placard storage bin label (`.rackBeamBinTag`) alongside a realistic miniature barcode strip (`.rackBarcodeStrip`).
+  3. **Wire Mesh Shelf Decking & Empty vs. Occupied Locations:**
+     - Implemented industrial wire mesh decking grid texture (`background-image: linear-gradient(...)`) across `.rackSectionBox` beneath the pallet positions.
+     - Empty locations feature wire decking with dashed shelf guide borders and an explicit `[ AVAILABLE ]` slot guide.
+     - Occupied locations feature authentic wooden pallet bases (`.rackPalletSlat`, `.rackPalletRunners`, `.rackRunnerBlock`) with amber/brown wood grain gradients and 3D forklift fork pockets, supporting zone-color coded cargo cartons with unit IDs, quantities, and SUT pills.
+  4. **Concrete Warehouse Floor Foundation:**
+     - Added `.rackWarehouseFloorLine` at the bottom of the rack stage with heavy floor anchor fastener marks, anchoring the upright steel posts into the concrete warehouse floor.
+- **Validation & Results:**
+  - `npm --prefix app/fiori-app run lint`: **UI5 linter report: Success! No findings detected** (0 errors, 0 warnings).
+  - `npx jest test/unit/controller/uiConsistency.test.js test/unit/wm/huStockTransferAdapter.test.js --no-coverage`: **22/22 tests PASS (100% green)**.
+  - `git diff --check`: **0 errors**.
+- **Zero SAP Writes:** Strictly read-only; no live SAP mutations executed.
 
 ### 2026-10-22 18:15 IST — Section 7 Dynamic Rack Structure B0–B6 & Reference Structure Rack L0001 Delivered
 

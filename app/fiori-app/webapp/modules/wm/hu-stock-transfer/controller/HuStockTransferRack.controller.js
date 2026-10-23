@@ -9,13 +9,13 @@ sap.ui.define([
     "use strict";
 
     var LEVEL_ZONE_CONFIGS = {
-        6: { levelCode: "B6", zoneColor: "Pink", badgeText: "HAZARD / CORROSIVE", shelfDesc: "6th Shelf Level (Top)" },
-        5: { levelCode: "B5", zoneColor: "Pink", badgeText: "HAZARD / CORROSIVE", shelfDesc: "5th Shelf Level (Upper)" },
-        4: { levelCode: "B4", zoneColor: "Green", badgeText: "FAST-MOVING", shelfDesc: "4th Shelf Level (Mid-High)" },
-        3: { levelCode: "B3", zoneColor: "Green", badgeText: "FAST-MOVING", shelfDesc: "3rd Shelf Level (Mid)" },
-        2: { levelCode: "B2", zoneColor: "Blue", badgeText: "COLD STORAGE", shelfDesc: "2nd Shelf Level (Lower)" },
-        1: { levelCode: "B1", zoneColor: "Orange", badgeText: "PRIORITY OUTBOUND", shelfDesc: "1st Shelf Level (Ground)" },
-        0: { levelCode: "B0", zoneColor: "Orange", badgeText: "BUFFER / RECEIVING", shelfDesc: "Ground Floor (B0)" }
+        6: { levelCode: "B6", zoneColor: "Pink", badgeText: "HAZARD / CORROSIVE", sectionColor: "HAZARD / CORROSIVE", shelfDesc: "6th Shelf Level (Top)" },
+        5: { levelCode: "B5", zoneColor: "Pink", badgeText: "HAZARD / CORROSIVE", sectionColor: "HAZARD / CORROSIVE", shelfDesc: "5th Shelf Level (Upper)" },
+        4: { levelCode: "B4", zoneColor: "Green", badgeText: "FAST-MOVING", sectionColor: "FAST-MOVING / GREEN", shelfDesc: "4th Shelf Level (Mid-High)" },
+        3: { levelCode: "B3", zoneColor: "Green", badgeText: "FAST-MOVING", sectionColor: "FAST-MOVING / GREEN", shelfDesc: "3rd Shelf Level (Mid)" },
+        2: { levelCode: "B2", zoneColor: "Blue", badgeText: "COLD STORAGE", sectionColor: "COLD STORAGE / BLUE", shelfDesc: "2nd Shelf Level (Lower)" },
+        1: { levelCode: "B1", zoneColor: "Orange", badgeText: "PRIORITY OUTBOUND", sectionColor: "PRIORITY OUTBOUND / ORANGE", shelfDesc: "1st Shelf Level (Ground)" },
+        0: { levelCode: "B0", zoneColor: "Orange", badgeText: "BUFFER / RECEIVING", sectionColor: "BUFFER / ORANGE", shelfDesc: "Ground Floor (B0)" }
     };
 
     return BaseController.extend("saps4hana.fiori.modules.wm.hu-stock-transfer.controller.HuStockTransferRack", {
@@ -367,7 +367,7 @@ sap.ui.define([
                 var lvl = typeof q._computedLevel === "number" ? q._computedLevel : aLevels[0];
                 var iBay = typeof q._computedBay === "number" ? q._computedBay : aBays[0];
                 var sKey = "L" + lvl + "-B" + iBay;
-                if (mSlotQuants[sKey] && mSlotQuants[sKey].length < 2) {
+                if (mSlotQuants[sKey] && mSlotQuants[sKey].length < 3) {
                     mSlotQuants[sKey].push(q);
                 } else {
                     aUnassigned.push(q);
@@ -379,7 +379,7 @@ sap.ui.define([
                 aLevels.forEach(function (lvl) {
                     aBays.forEach(function (iBay) {
                         var sKey = "L" + lvl + "-B" + iBay;
-                        while (aUnassigned.length > 0 && mSlotQuants[sKey].length < 2) {
+                        while (aUnassigned.length > 0 && mSlotQuants[sKey].length < 3) {
                             mSlotQuants[sKey].push(aUnassigned.shift());
                         }
                     });
@@ -398,6 +398,7 @@ sap.ui.define([
                     levelCode: "B" + lvl,
                     zoneColor: lvl >= 5 ? "Pink" : lvl >= 3 ? "Green" : lvl === 2 ? "Blue" : "Orange",
                     badgeText: lvl >= 5 ? "HAZARD / CORROSIVE" : lvl >= 3 ? "FAST-MOVING" : lvl === 2 ? "COLD STORAGE" : "PRIORITY OUTBOUND",
+                    sectionColor: lvl >= 5 ? "HAZARD / CORROSIVE" : lvl >= 3 ? "FAST-MOVING / GREEN" : lvl === 2 ? "COLD STORAGE / BLUE" : "PRIORITY OUTBOUND / ORANGE",
                     shelfDesc: "Shelf Level " + lvl + " (B" + lvl + ")"
                 };
 
@@ -413,17 +414,65 @@ sap.ui.define([
 
                     var bSelected = (sKey === that._sSelectedSlotKey);
 
+                    var sRackCode = sSelectedRack.startsWith("L") ? sSelectedRack : ("L" + sSelectedRack);
+                    var sDefaultBin = "L" + iBay + "-" + sRackCode + (lvl < 10 ? ("-0" + lvl) : ("-" + lvl));
+                    var sActualBin = (aItems[0] && (aItems[0].ActualStorageBin || aItems[0].StorageBin)) || sDefaultBin;
+
+                    // Availability determination according to backend data:
+                    // The data must determine whether the bin is actually available.
+                    // Do not label a bin available unless the backend data supports it.
+                    var bIsOnHold = sActiveStg === "OH1" || sActualBin.toUpperCase().includes("HOLD") ||
+                        aItems.some(function (it) { return it.StorageStatus === "On-Hold" || it.IsOnHold; });
+                    var bIsInProcess = sActiveStg.startsWith("9") ||
+                        aItems.some(function (it) { return it.StorageStatus && it.StorageStatus.startsWith("In-Process"); });
+                    var bIsBlocked = sActualBin.toUpperCase().includes("BLOCK") ||
+                        aItems.some(function (it) { return it.StorageStatus === "Blocked"; });
+
+                    var bIsAvailable = !bHasStock && !bIsOnHold && !bIsInProcess && !bIsBlocked;
+
+                    var sHeaderLeftText = "";
+                    var sHeaderRightText = "";
+                    var sBadgeClass = "";
+                    var sHeaderRightClass = "";
+
+                    if (bHasStock) {
+                        var sSectionColor = lvlDef.sectionColor || lvlDef.badgeText;
+                        sHeaderLeftText = "● " + sSectionColor;
+                        sHeaderRightText = aItems.length + " HU";
+                        sBadgeClass = "rackBadge" + lvlDef.zoneColor;
+                        sHeaderRightClass = "rackBadge" + lvlDef.zoneColor + " rackHuCountTag";
+                    } else if (bIsAvailable) {
+                        sHeaderLeftText = that.getText("rackAvailableBinText", null, "○ AVAILABLE BIN");
+                        sHeaderRightText = that.getText("rackZeroHuText", null, "0 HU");
+                        sBadgeClass = "rackBadgeEmpty rackAvailableBinTag";
+                        sHeaderRightClass = "rackBadgeEmpty rackHuCountTag";
+                    } else if (bIsOnHold) {
+                        sHeaderLeftText = that.getText("rackOnHoldBinText", null, "⊘ ON-HOLD BIN");
+                        sHeaderRightText = that.getText("rackZeroHuText", null, "0 HU");
+                        sBadgeClass = "rackBadgeEmpty rackBlockedBinTag";
+                        sHeaderRightClass = "rackBadgeEmpty rackHuCountTag";
+                    } else if (bIsInProcess) {
+                        sHeaderLeftText = that.getText("rackInProcessBinText", null, "IN-PROCESS BIN");
+                        sHeaderRightText = that.getText("rackZeroHuText", null, "0 HU");
+                        sBadgeClass = "rackBadgeEmpty rackInProcessBinTag";
+                        sHeaderRightClass = "rackBadgeEmpty rackHuCountTag";
+                    } else {
+                        sHeaderLeftText = that.getText("rackBlockedBinText", null, "⊘ BLOCKED BIN");
+                        sHeaderRightText = that.getText("rackZeroHuText", null, "0 HU");
+                        sBadgeClass = "rackBadgeEmpty rackBlockedBinTag";
+                        sHeaderRightClass = "rackBadgeEmpty rackHuCountTag";
+                    }
+
                     var sSectionClass = "rackSectionBox " + (bHasStock ? ("rackZone" + lvlDef.zoneColor) : "rackZoneEmpty") +
                         (bSelected ? " rackSectionBoxActive" : "");
-                    var sBadgeClass = bHasStock ? ("rackBadge" + lvlDef.zoneColor) : "rackBadgeEmpty";
                     var sBeamClass = "rackStepBeam rackBeam" + lvlDef.zoneColor;
 
-                    var sActualBin = (aItems[0] && (aItems[0].ActualStorageBin || aItems[0].StorageBin)) ||
-                        (sSelectedRack + "-0" + lvl + "-0" + iBay);
-
-                    // Build 2 pallet slots per storage bin
-                    var oCarton1 = that._buildCartonData(aItems[0], lvlDef.zoneColor, sActualBin, 1);
-                    var oCarton2 = that._buildCartonData(aItems[1], lvlDef.zoneColor, sActualBin, 2);
+                    // Build pallet slots per storage bin (support 2 to 3 pallet positions)
+                    var iSlotCount = Math.max(2, aItems.length);
+                    var aBaySlots = [];
+                    for (var s = 0; s < iSlotCount; s++) {
+                        aBaySlots.push(that._buildCartonData(aItems[s], lvlDef.zoneColor, sActualBin, s + 1, bIsAvailable, bIsOnHold, bIsBlocked));
+                    }
 
                     var oBayData = {
                         slotKey: sKey,
@@ -432,6 +481,12 @@ sap.ui.define([
                         bayNumber: iBay,
                         levelTitle: "LEVEL " + lvl,
                         badgeText: lvlDef.badgeText,
+                        headerLeftText: sHeaderLeftText,
+                        headerRightText: sHeaderRightText,
+                        headerRightClass: sHeaderRightClass,
+                        isAvailable: bIsAvailable,
+                        isOnHold: bIsOnHold,
+                        isBlocked: bIsBlocked,
                         hasStock: bHasStock,
                         sectionClass: sSectionClass,
                         badgeClass: sBadgeClass,
@@ -443,9 +498,10 @@ sap.ui.define([
                         warehouse: oViewModel.getProperty("/warehouse") || "W01",
                         shelfLevelDesc: lvlDef.shelfDesc,
                         zoneColor: lvlDef.zoneColor,
-                        carton1: oCarton1,
-                        carton2: oCarton2,
-                        slots: [oCarton1, oCarton2],
+                        carton1: aBaySlots[0],
+                        carton2: aBaySlots[1],
+                        carton3: aBaySlots[2] || null,
+                        slots: aBaySlots,
                         items: aItems
                     };
 
@@ -466,11 +522,14 @@ sap.ui.define([
             });
 
             var iTotalBins = aTiersData.length * aBays.length;
+            var iAvailableCount = aTiersData.reduce(function (total, tier) {
+                return total + (tier.bays || []).filter(function (b) { return b.isAvailable; }).length;
+            }, 0);
             oViewModel.setProperty("/tiers", aTiersData);
             oViewModel.setProperty("/slots", oSlotsData);
             oViewModel.setProperty("/totalBinsCount", String(iTotalBins));
             oViewModel.setProperty("/occupiedBinsCount", String(iOccupiedCount));
-            oViewModel.setProperty("/availableBinsCount", String(iTotalBins - iOccupiedCount));
+            oViewModel.setProperty("/availableBinsCount", String(iAvailableCount));
 
             var sBinsHint = this.getText("rackDynamicBinsHint", [iTotalBins, aTiersData.length, aBays.length], iTotalBins + " Bins per Rack (" + aTiersData.length + " Levels × " + aBays.length + " Bays)");
             oViewModel.setProperty("/binsHintText", sBinsHint);
@@ -484,37 +543,53 @@ sap.ui.define([
             this._updateSelectedSlotView();
         },
 
-        _buildCartonData: function (oQuant, sZoneColor, sDefaultBin, iSlotIndex) {
+        _buildCartonData: function (oQuant, sZoneColor, sDefaultBin, iSlotIndex, bIsAvailable, bIsOnHold, bIsBlocked) {
+            var iSlot = iSlotIndex || 1;
             if (!oQuant) {
+                var sEmptyTitle = bIsAvailable ?
+                    this.getText("rackAvailableSlotTitle", [iSlot], "Available Slot " + iSlot) :
+                    (bIsOnHold ? ("On-Hold Slot " + iSlot) : ("Blocked Slot " + iSlot));
+                var sEmptyCartonClass = bIsAvailable ?
+                    "rackCargoCarton rackCartonEmpty rackSlotAvailableBox" :
+                    "rackCargoCarton rackCartonEmpty rackSlotBlockedBox";
                 return {
-                    slotIndex: iSlotIndex || 1,
+                    slotIndex: iSlot,
                     unitType: "",
                     serialNumber: "",
-                    titleText: "-",
-                    qtyText: "Empty",
+                    subInfoText: "",
+                    titleText: sEmptyTitle,
+                    qtyText: "0 HU",
                     sutCode: "",
                     hasSut: false,
                     hasUnit: false,
                     batch: "",
-                    storageStatus: "Empty",
-                    cartonClass: "rackCargoCarton rackCartonEmpty"
+                    storageStatus: bIsAvailable ? "Available" : (bIsOnHold ? "On-Hold" : "Blocked"),
+                    cartonClass: sEmptyCartonClass
                 };
             }
 
             var sUnit = oQuant.UnitNumber || oQuant.ActualStorageBin || oQuant.StorageBin || sDefaultBin;
+            var sCategory = oQuant.UnitCategory || oQuant.UnitType || "HU";
+            if (sCategory.indexOf("HU") !== -1 || sCategory === "Handling Unit") {
+                sCategory = "HU";
+            } else if (sCategory.indexOf("SU") !== -1 || sCategory === "Storage Unit") {
+                sCategory = "SU";
+            }
             var sQty = (typeof oQuant.AvailableQuantity !== "undefined" ? oQuant.AvailableQuantity : (oQuant.AvailableStock || 0)) +
                 " " + (oQuant.BaseUnit || "PC");
+            var sSubInfo = oQuant.Batch ? ("B: " + oQuant.Batch) : (oQuant.SerialNumber || "");
 
             return {
-                slotIndex: iSlotIndex || 1,
-                unitType: oQuant.UnitType || oQuant.UnitCategory || "HU",
+                slotIndex: iSlot,
+                unitType: sCategory,
                 serialNumber: oQuant.SerialNumber || "",
+                subInfoText: sSubInfo,
                 titleText: sUnit,
                 unitNumber: sUnit,
                 qtyText: sQty,
                 sutCode: oQuant.SutCode || "",
                 hasSut: Boolean(oQuant.SutCode),
-                hasUnit: Boolean(oQuant.UnitNumber),
+                hasUnit: true,
                 batch: oQuant.Batch || "",
                 storageStatus: oQuant.StorageStatus || "Available",
                 cartonClass: "rackCargoCarton rackCarton" + sZoneColor
@@ -542,24 +617,31 @@ sap.ui.define([
             var sMatNum = oViewModel.getProperty("/materialNumber") || "";
             var sMatDesc = oViewModel.getProperty("/materialDesc") || "";
 
+            var sHeadingText = "";
+            if (oSlot.hasStock) {
+                sHeadingText = this.getText("rackSlotOccupiedTitle", [oSlot.binTag, oSlot.levelNumber, oSlot.bayNumber], "Bin " + oSlot.binTag + " (Level " + oSlot.levelNumber + " Bay " + oSlot.bayNumber + ")");
+            } else if (oSlot.isAvailable) {
+                sHeadingText = this.getText("rackSlotAvailableTitle", null, "Available Bin (Empty)");
+            } else {
+                sHeadingText = this.getText("rackSlotBlockedTitle", null, "Blocked / On-Hold Bin");
+            }
+
             var oInspectorData = {
                 slotKey: oSlot.slotKey,
-                headingText: oSlot.hasStock ?
-                    this.getText("rackSlotOccupiedTitle", [oSlot.binTag, oSlot.levelNumber, oSlot.bayNumber], "Bin " + oSlot.binTag + " (Level " + oSlot.levelNumber + " Bay " + oSlot.bayNumber + ")") :
-                    this.getText("rackSlotAvailableTitle", null, "Available Bin (Empty)"),
-                sectionBadgeText: oSlot.badgeText,
-                sectionState: oSlot.hasStock ? "Information" : "None",
+                headingText: sHeadingText,
+                sectionBadgeText: oSlot.headerLeftText || oSlot.badgeText,
+                sectionState: oSlot.hasStock ? "Information" : (oSlot.isAvailable ? "Success" : "Error"),
                 storageSectionDesc: (oFirst && (oFirst.StorageSectionDesc || oFirst.StorageTypeDesc)) || oSlot.badgeText,
                 storageType: (oFirst && (oFirst.StorageType + (oFirst.StorageTypeDesc ? " (" + oFirst.StorageTypeDesc + ")" : ""))) || (oViewModel.getProperty("/selectedStorageType") || "001"),
                 binType: (oFirst && (oFirst.LevelCode || "B" + oSlot.levelNumber)) || ("B" + oSlot.levelNumber),
                 actualStorageBin: oSlot.binTag,
-                palletCapacity: "2 Pallets (Euro/Standard)",
+                palletCapacity: (oSlot.slots && oSlot.slots.length === 3 ? "3 Pallets (Standard/Euro)" : "2 Pallets (Euro/Standard)"),
                 assignedMaterial: oFirst ? (sMatNum + (sMatDesc ? " - " + sMatDesc : "")) : "-",
                 unitNumber: (oFirst && oFirst.UnitNumber) || (oSlot.hasStock ? oSlot.binTag : "-"),
                 availableStock: (oFirst && (typeof oFirst.AvailableQuantity !== "undefined" ? oFirst.AvailableQuantity : oFirst.AvailableStock) + " " + (oFirst.BaseUnit || "PC")) || "-",
                 batch: (oFirst && oFirst.Batch) || "-",
                 serialNumber: (oFirst && oFirst.SerialNumber) || "-",
-                storageStatus: (oFirst && oFirst.StorageStatus) || (oSlot.hasStock ? "Available" : "Empty"),
+                storageStatus: (oFirst && oFirst.StorageStatus) || (oSlot.hasStock ? "Available" : (oSlot.isAvailable ? "Available" : (oSlot.isOnHold ? "On-Hold" : "Blocked"))),
                 hasUnit: Boolean(oFirst && (oFirst.UnitNumber || oFirst.ActualStorageBin || oFirst.StorageBin))
             };
 
