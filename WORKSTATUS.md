@@ -7,6 +7,49 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **SAP Purchase Order AI Assistant: Structured Procurement Intent Handling across 8 Dimensions, Retrieval Plan Validation, Grounded SAP Facts, Evidence-Linked Results & PO Navigation (2026-10-24 09:35 IST) — COMPLETED:**
+  - Requirement: Introduce structured procurement intent handling for purchase orders, suppliers, materials, items, statuses, delivery dates, quantities and spend. Validate retrieval plans and ground factual answers in retrieved SAP data. Add evidence-linked results with PO numbers, relevant item details, source fields, completeness information and navigation to the existing purchase-order detail route.
+  - Implementation:
+    - In `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`:
+      - Defined `PurchaseOrdersController.PROCUREMENT_INTENTS` spanning all 8 core procurement dimensions: `PURCHASE_ORDER`, `SUPPLIER`, `MATERIAL`, `ITEM`, `STATUS`, `DELIVERY_DATE`, `QUANTITY`, and `SPEND`.
+      - Implemented `PurchaseOrdersController._detectProcurementIntents(sQuestion)`:
+        - Detects intents and extracts entities (PO numbers, search terms, status/delivery/spend/quantity/material/supplier flags).
+        - Determines deterministic primary intent based on subject matter and entity presence.
+      - Implemented `PurchaseOrdersController._buildRetrievalPlan(sQuestion, oIntents)`:
+        - Translates detected intents into structured OData retrieval operations (`READ_CONTEXT_HEADERS`, `EXPAND_PURCHASE_ORDER`, `SERVER_STATUS_COUNTS`, `SERVER_SORTED_TOP_SPEND`, `WHOLE_DATASET_ITEM_SEARCH`, `BATCH_ITEM_EXPAND`).
+      - Implemented `PurchaseOrdersController._validateRetrievalPlan(oPlan)`:
+        - Validates that every operation maps to verified SAP Gateway OData v4 entity sets (`PurchaseOrders`, `PurchaseOrderItems`) and establishes verified grounding sources (`EKKO (PurchaseOrders)`, `EKPO (PurchaseOrderItems)`).
+      - Updated `onAIAsk`:
+        - Runs `_detectProcurementIntents`, `_buildRetrievalPlan`, and `_validateRetrievalPlan` for each user query.
+        - Automatically triggers item expansions for item/material/quantity/delivery queries and status breakdowns for status queries.
+        - Stores intent and retrieval validation results on `oScope`.
+      - Enhanced `_buildAISystemPrompt`:
+        - Injected `STRUCTURED PROCUREMENT INTENT & RETRIEVAL PLAN` block summarizing detected intents, primary dimension, verified grounding sources, and plan validation.
+        - Enforced `EVIDENCE-BACKED TRACEABILITY PROTOCOL & FACTUAL GROUNDING MANDATE`: Factual answers must be grounded strictly in retrieved SAP datasets; no hallucination of figures or dates.
+        - Mandated clickable PO navigation links formatted as `[PO <number>](#/mm/purchase-orders/<number>)` or `[<number>](#/mm/purchase-orders/<number>)`.
+        - Enforced evidence-linked results containing PO numbers, supplier details, line item positions, materials, quantities, delivery dates, net amounts, technical source fields, completeness badges, and retrieval status badges.
+      - Enhanced `_toHtml`:
+        - Converts PO markdown links `[PO <po>](#/mm/purchase-orders/<po>)` and `[<po>](po:<po>)` into `<a href="#/mm/purchase-orders/<po>" class="aiPoLink" data-po="<po>">...</a>`.
+        - Autolinks raw PO references (e.g. `PO 4500001234`) and 10-digit PO numbers in table cells.
+        - Maps `[Completeness: ...]` badges to semantic CSS classes (`aiBadgeScope`, `aiBadgePartial`, `aiBadgeFailed`, `aiBadgeEmpty`).
+      - Wired `onNavToPO(sPo)` and event delegation in `_initAIWidget`:
+        - Intercepts clicks on `.aiPoLink` elements and routes directly to UI5 route `purchaseOrderDetail` with parameter `{ PurchaseOrder: sPo }`.
+    - In `app/fiori-app/webapp/css/style.css`:
+      - Added styling for `.aiPoLink` with Fiori link blue, dotted underline, hover feedback, and inverted colors in user chat bubbles.
+    - In `test/unit/purchase-order/purchaseOrdersAskAI.test.js`:
+      - Added comprehensive test suites:
+        1. `_detectProcurementIntents` across all 8 dimensions and multi-dimensional queries.
+        2. `_buildRetrievalPlan` operation synthesis.
+        3. `_validateRetrievalPlan` validation against allowed entity sets and invalid plan rejection.
+        4. `_buildAISystemPrompt` intent embedding, grounding mandate, and PO navigation.
+        5. `_toHtml` link generation, badge mapping, and table cell autolinking.
+        6. `onNavToPO` routing to `purchaseOrderDetail`.
+  - Validation:
+    - `npx jest --runInBand test/unit/purchase-order/purchaseOrdersAskAI.test.js test/unit/ai`: 48 of 48 passed (100%).
+    - `npm run lint` (root eslint): 0 errors.
+    - `npm run lint` in `app/fiori-app` (ui5lint): Success! No findings detected.
+    - `git diff --check`: 0 issues.
+
 - **SAP Purchase Order AI Assistant: Data Completeness, Deterministic Dataset Totals & Rankings, & Fallback/Partial/Exact/Empty Classification (2026-10-23 18:15 IST) — COMPLETED:**
   - Requirement: Correct data completeness. Distinguish exact totals, partial results, empty results, and failed queries. Never present capped context or fallback table rows as complete dataset analysis. Calculate totals and rankings deterministically against the appropriate SAP dataset.
   - Implementation:
@@ -1093,6 +1136,50 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Exact Next Recommended Action (HU stock transfer rack demo — 2026-10-23 10:24 IST):** Rerun full Jest in an environment that permits loopback binds and after the unrelated missing FI/goods-issue test paths are resolved; inspect a wide touch-display viewport when available. No SAP writes or live data are needed for the demo.
 
 ## Changes Log
+
+### 2026-10-24 09:35 IST — SAP Purchase Order AI Assistant: Structured Procurement Intent Handling across 8 Dimensions, Retrieval Plan Validation, Grounded SAP Facts, Evidence-Linked Results & PO Navigation
+
+- **Plan:**
+  - Address user requirement: "Introduce structured procurement intent handling for purchase orders, suppliers, materials, items, statuses, delivery dates, quantities and spend. Validate retrieval plans and ground factual answers in retrieved SAP data. Add evidence-linked results with PO numbers, relevant item details, source fields, completeness information and navigation to the existing purchase-order detail route."
+  - Architecture & Implementation strategy:
+    1. Structure Procurement Intent Handling:
+       - Implement `PROCUREMENT_INTENTS` and `_detectProcurementIntents(sQuestion)` supporting all 8 core dimensions: `PURCHASE_ORDER`, `SUPPLIER`, `MATERIAL`, `ITEM`, `STATUS`, `DELIVERY_DATE`, `QUANTITY`, `SPEND`.
+       - Extract entities including PO document numbers, search terms, and intent dimension indicators, and determine primary intent.
+    2. Retrieval Plan Synthesis & Validation:
+       - Implement `_buildRetrievalPlan(sQuestion, oIntents)` creating structured retrieval operations targeting confirmed SAP OData endpoints.
+       - Implement `_validateRetrievalPlan(oPlan)` validating operations against verified SAP Gateway entity sets (`PurchaseOrders`, `PurchaseOrderItems`) and deriving verified grounding sources (`EKKO`, `EKPO`).
+    3. Factual Grounding & Prompt Integration:
+       - Integrate intent detection and retrieval planning into `onAIAsk`.
+       - Inject `STRUCTURED PROCUREMENT INTENT & RETRIEVAL PLAN` and `EVIDENCE-BACKED TRACEABILITY PROTOCOL & FACTUAL GROUNDING MANDATE` into `_buildAISystemPrompt`.
+       - Strictly mandate that all factual statements be grounded in retrieved SAP data, with zero hallucinations of figures, quantities, or dates.
+       - Mandate navigable PO links formatted as `[PO <number>](#/mm/purchase-orders/<number>)`.
+    4. Evidence-Linked Results & Navigation:
+       - Enhance `_toHtml` to parse markdown PO links `[PO <po>](#/mm/purchase-orders/<po>)` and `[<po>](po:<po>)`, raw PO references `PO <po>`, and table cells containing 10-digit PO numbers into clickable `<a href="#/mm/purchase-orders/<po>" class="aiPoLink" data-po="<po>">` links.
+       - Wire click delegation on `#aiWidget` in `_initAIWidget` and `onNavToPO(sPo)` to route directly to `purchaseOrderDetail` route with `{ PurchaseOrder: sPo }`.
+       - Style `.aiPoLink` in `app/fiori-app/webapp/css/style.css`.
+    5. Verification & Tests:
+       - Add comprehensive unit tests in `test/unit/purchase-order/purchaseOrdersAskAI.test.js`.
+       - Run full linting (`eslint`, `ui5lint`) and git validation.
+- **Evidence & Results:**
+  - Files modified:
+    - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`:
+      - Defined `PurchaseOrdersController.PROCUREMENT_INTENTS`.
+      - Implemented `PurchaseOrdersController._detectProcurementIntents(sQuestion)`.
+      - Implemented `PurchaseOrdersController._buildRetrievalPlan(sQuestion, oIntents)`.
+      - Implemented `PurchaseOrdersController._validateRetrievalPlan(oPlan)`.
+      - Integrated intent detection and retrieval plan validation into `onAIAsk`.
+      - Implemented `onNavToPO(sPo)` and click delegation for `.aiPoLink`.
+      - Enhanced `_buildAISystemPrompt` with intent block, verified grounding sources, and PO navigation format.
+      - Enhanced `_toHtml` with PO link generation, table cell auto-linking, and completeness badges.
+    - `app/fiori-app/webapp/css/style.css`:
+      - Added CSS styles for `.aiPoLink` and hover states.
+    - `test/unit/purchase-order/purchaseOrdersAskAI.test.js`:
+      - Added unit tests for intent detection across all 8 dimensions, retrieval plan synthesis, plan validation, system prompt grounding mandate, PO link generation in `_toHtml`, and `onNavToPO` routing.
+  - Validation:
+    - `npx jest --runInBand test/unit/purchase-order/purchaseOrdersAskAI.test.js test/unit/ai`: 48 of 48 passed (100%).
+    - `npm run lint` (root eslint): 0 errors.
+    - `npm run lint` in `app/fiori-app` (ui5lint): 0 findings.
+    - `git diff --check`: 0 issues.
 
 ### 2026-10-23 18:15 IST — SAP Purchase Order AI Assistant: Data Completeness, Deterministic Dataset Totals & Rankings, & Fallback/Partial/Exact/Empty Classification
 

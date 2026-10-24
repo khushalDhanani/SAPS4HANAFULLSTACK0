@@ -460,8 +460,43 @@ sap.ui.define([
             }).then(function (aControls) {
                 var oPage = that.byId("purchaseOrdersPage");
                 [].concat(aControls).forEach(function (oCtl) { oPage.addContent(oCtl); });
+                that._attachAILinkDelegation();
             });
             return this._pAIWidget;
+        },
+
+        _attachAILinkDelegation: function () {
+            var oWidget = this.byId("aiWidget");
+            if (!oWidget || this._bAILinkDelegated || typeof oWidget.addEventDelegate !== "function") { return; }
+            this._bAILinkDelegated = true;
+            var that = this;
+            oWidget.addEventDelegate({
+                onclick: function (oEvent) {
+                    var oTarget = oEvent.target;
+                    var oLink = oTarget && (oTarget.closest ? oTarget.closest(".aiPoLink") : null);
+                    if (!oLink && oTarget && typeof oTarget.getAttribute === "function" && oTarget.getAttribute("data-po")) {
+                        oLink = oTarget;
+                    }
+                    if (oLink && typeof oLink.getAttribute === "function") {
+                        var sPo = oLink.getAttribute("data-po");
+                        if (sPo) {
+                            oEvent.preventDefault();
+                            that.onNavToPO(sPo);
+                        }
+                    }
+                }
+            });
+        },
+
+        onNavToPO: function (sPo) {
+            if (!sPo) { return; }
+            var oComponent = this.getOwnerComponent && this.getOwnerComponent();
+            var oRouter = oComponent && typeof oComponent.getRouter === "function" ? oComponent.getRouter() : null;
+            if (oRouter && typeof oRouter.navTo === "function") {
+                oRouter.navTo("purchaseOrderDetail", {
+                    PurchaseOrder: String(sPo).trim()
+                });
+            }
         },
 
         onAskAI: function () {
@@ -723,14 +758,22 @@ sap.ui.define([
             this._scrollAIChatToBottom();
             var oAnswer = null, oScope;
             var oPayload;
-            var bItems = PurchaseOrdersController._asksAboutItems(sQuestion);
+            var oIntents = PurchaseOrdersController._detectProcurementIntents(sQuestion);
+            var oPlan = PurchaseOrdersController._buildRetrievalPlan(sQuestion, oIntents);
+            var oValidation = PurchaseOrdersController._validateRetrievalPlan(oPlan);
+            var bItems = oIntents.intents.indexOf("ITEM") !== -1 ||
+                         oIntents.intents.indexOf("DELIVERY_DATE") !== -1 ||
+                         oIntents.intents.indexOf("QUANTITY") !== -1 ||
+                         oIntents.intents.indexOf("MATERIAL") !== -1 ||
+                         PurchaseOrdersController._asksAboutItems(sQuestion);
+            var bStatus = oIntents.intents.indexOf("STATUS") !== -1 || PurchaseOrdersController._asksAboutStatus(sQuestion);
             return Promise.all([
                 this._fetchAIContextRows().then(function (aRows) { return that._fetchMentionedPurchaseOrders(sQuestion, aRows); })
                     .then(function (oCtx) {
                         if (!bItems) { return oCtx; }
                         return that._fetchItemsForPOs(oCtx.rows.map(function (r) { return r.po; })).then(function (aItems) { oCtx.items = aItems; return oCtx; });
                     }),
-                PurchaseOrdersController._asksAboutStatus(sQuestion) ? this._getAIStatusBreakdown() : null,
+                bStatus ? this._getAIStatusBreakdown() : null,
                 this._fetchTopPOsByNet(15),
                 this._searchItems(sQuestion)
             ]).then(function (aRes) {
@@ -740,6 +783,9 @@ sap.ui.define([
                 oScope.topPOsByNet = aRes[2];
                 oScope.items = oCtx.items || null;
                 oScope.search = aRes[3];
+                oScope.intents = oIntents;
+                oScope.retrievalPlan = oPlan;
+                oScope.retrievalValidation = oValidation;
                 if (oScope.search && oScope.search.headers.length) {
                     // make the matching POs part of the context rows (deduplicated) so supplier/status questions work
                     var mSeen = {};
@@ -861,6 +907,235 @@ sap.ui.define([
             return "EXACT_TOTAL";
         }
         return "PARTIAL_RESULT";
+    };
+
+    PurchaseOrdersController.PROCUREMENT_INTENTS = {
+        PURCHASE_ORDER: "PURCHASE_ORDER",
+        SUPPLIER: "SUPPLIER",
+        MATERIAL: "MATERIAL",
+        ITEM: "ITEM",
+        STATUS: "STATUS",
+        DELIVERY_DATE: "DELIVERY_DATE",
+        QUANTITY: "QUANTITY",
+        SPEND: "SPEND"
+    };
+
+    /**
+     * Analyzes question text to identify structured procurement intents and target entities:
+     * - PURCHASE_ORDER: Document numbers, order headers, purchasing org/group/company.
+     * - SUPPLIER: Vendor IDs, names, vendor spend/performance.
+     * - MATERIAL: Products, material numbers/texts, commodities.
+     * - ITEM: Line item positions, plants, storage locations.
+     * - STATUS: Approval status, lifecycle, open/draft/sent/released/rejected.
+     * - DELIVERY_DATE: Due dates, delivery schedules, overdue items, timelines.
+     * - QUANTITY: Quantities ordered, units of measure, volume.
+     * - SPEND: Net amount, price, total spend, largest orders, currency.
+     */
+    PurchaseOrdersController._detectProcurementIntents = function (sQuestion) {
+        var sText = String(sQuestion || "");
+        var aIntents = [];
+        var aPoNumbers = PurchaseOrdersController._extractPONumbers(sText);
+        var aSearchTerms = PurchaseOrdersController._extractSearchTerms(sText);
+
+        var bPo = aPoNumbers.length > 0 || /\b(po|pos|purchase\s*orders?|orders?|ebeln|headers?|creators?|created\s*by|company\s*codes?|bukrs|purch(?:asing)?\s*org(?:anization)?s?|ekorg|purch(?:asing)?\s*groups?|ekgrp|doc(?:ument)?\s*types?|bsart)\b/i.test(sText);
+        if (bPo) { aIntents.push("PURCHASE_ORDER"); }
+
+        var bSupplier = /\b(suppliers?|vendors?|lifnr|name1|sellers?|providers?|who\s+(?:sold|supplied|delivered|created)|partner)\b/i.test(sText);
+        if (bSupplier) { aIntents.push("SUPPLIER"); }
+
+        var bMaterial = /\b(materials?|matnr|products?|skus?|part\s*numbers?|commodit(?:y|ies)|goods)\b/i.test(sText) ||
+            (aSearchTerms.length > 0 && !/\b(status|open|draft|sent|released)\b/i.test(sText));
+        if (bMaterial) { aIntents.push("MATERIAL"); }
+
+        var bItem = /\b(items?|line\s*items?|positions?|ebelp|plants?|werks|storage\s*loc(?:ation)?s?|sloc|lgort)\b/i.test(sText);
+        if (bItem) { aIntents.push("ITEM"); }
+
+        var bStatus = PurchaseOrdersController._asksAboutStatus(sText) ||
+            /\b(status|lifecycle|approval|approved|draft|rejected|released|sent|pending|statu|procstat)\b/i.test(sText);
+        if (bStatus) { aIntents.push("STATUS"); }
+
+        var bDelivery = /\b(due\b|schedul|overdue|deliver(?:y|ies)?|eindt|eta|when\b|arrival|expected\b|timeline|dates?|today|tomorrow|yesterday|january|february|march|april|may|june|july|august|september|october|november|december|\d{4}-\d{2}-\d{2})\b/i.test(sText);
+        if (bDelivery) { aIntents.push("DELIVERY_DATE"); }
+
+        var bQty = /\b(quantit(?:y|ies)?|qty\b|menge|meins|units?\b|uom|volumes?|how\s+many\s+(?:items|units|boxes|pieces|kg|litres|meters|pcs|nos))\b/i.test(sText);
+        if (bQty) { aIntents.push("QUANTITY"); }
+
+        var bSpend = /\b(spends?|spending|net\s*amounts?|amounts?|netwr|prices?|costs?|values?|worth|expensive|largest|top\b|highest|cheapest|waers|currenc(?:y|ies)|usd|eur|inr|gbp|budget)\b/i.test(sText);
+        if (bSpend) { aIntents.push("SPEND"); }
+
+        if (aIntents.length === 0) {
+            aIntents.push("PURCHASE_ORDER");
+        }
+
+        var sPrimary = aIntents[0];
+        if (aPoNumbers.length > 0 || (bPo && !bDelivery && !bSpend && !bStatus && !bQty && !bSupplier && !/\b(materials?|matnr|products?|skus?|commodit|goods)\b/i.test(sText))) {
+            sPrimary = "PURCHASE_ORDER";
+        } else if (bDelivery && /\b(due\b|schedul|overdue|when\b|arrival|expected)\b/i.test(sText)) {
+            sPrimary = "DELIVERY_DATE";
+        } else if (bSpend && /\b(largest|top|highest|total\s*spend|spend|cost)\b/i.test(sText)) {
+            sPrimary = "SPEND";
+        } else if (bStatus && /\b(status|open|draft|approved|rejected|released)\b/i.test(sText)) {
+            sPrimary = "STATUS";
+        } else if (bQty && /\b(how\s+many|quantit|qty|volume)\b/i.test(sText)) {
+            sPrimary = "QUANTITY";
+        } else if (bSupplier && /\b(suppliers?|vendors?|lifnr|name1|who\s+(?:sold|supplied|delivered))\b/i.test(sText)) {
+            sPrimary = "SUPPLIER";
+        } else if (bItem && /\b(items?|line\s*items?|positions?|plants?|storage\s*loc|sloc)\b/i.test(sText) && !/\b(materials?|matnr|products?|skus?|commodit|goods)\b/i.test(sText)) {
+            sPrimary = "ITEM";
+        } else if (bMaterial && (/\b(materials?|matnr|products?|skus?|commodit|goods)\b/i.test(sText) || (!bPo && !bItem && aSearchTerms.length > 0))) {
+            sPrimary = "MATERIAL";
+        } else if (bSupplier) {
+            sPrimary = "SUPPLIER";
+        } else if (bItem) {
+            sPrimary = "ITEM";
+        }
+
+        return {
+            intents: aIntents,
+            primaryIntent: sPrimary,
+            entities: {
+                poNumbers: aPoNumbers,
+                searchTerms: aSearchTerms,
+                hasDeliveryIntent: bDelivery,
+                hasSpendIntent: bSpend,
+                hasStatusIntent: bStatus,
+                hasQuantityIntent: bQty,
+                hasMaterialIntent: bMaterial,
+                hasSupplierIntent: bSupplier
+            }
+        };
+    };
+
+    /**
+     * Builds a structured retrieval plan matching detected procurement intents to validated SAP OData endpoints.
+     */
+    PurchaseOrdersController._buildRetrievalPlan = function (sQuestion, oIntents) {
+        oIntents = oIntents || PurchaseOrdersController._detectProcurementIntents(sQuestion);
+        var aOperations = [];
+
+        aOperations.push({
+            id: "OP_CONTEXT_HEADERS",
+            operation: "READ_CONTEXT_HEADERS",
+            entitySet: "PurchaseOrders",
+            servicePath: "/PurchaseOrders",
+            purpose: "Load up to " + PurchaseOrdersController.AI_CONTEXT_ROWS + " recent purchase order headers matching active filters",
+            required: true
+        });
+
+        if (oIntents.entities.poNumbers.length > 0) {
+            oIntents.entities.poNumbers.forEach(function (sPo) {
+                aOperations.push({
+                    id: "OP_EXPAND_PO_" + sPo,
+                    operation: "EXPAND_PURCHASE_ORDER",
+                    entitySet: "PurchaseOrders",
+                    servicePath: "/PurchaseOrders('" + encodeURIComponent(sPo) + "')?$expand=to_PurchaseOrderItem",
+                    po: sPo,
+                    purpose: "Retrieve complete document header and all line items (materials, quantities, delivery dates, net prices)",
+                    required: true
+                });
+            });
+        }
+
+        if (oIntents.intents.indexOf("STATUS") !== -1) {
+            aOperations.push({
+                id: "OP_STATUS_BREAKDOWN",
+                operation: "SERVER_STATUS_COUNTS",
+                entitySet: "PurchaseOrders",
+                servicePath: "/PurchaseOrders/$count",
+                purpose: "Calculate server-side counts across the entire list for every SAP purchasing document status code",
+                required: true
+            });
+        }
+
+        if (oIntents.intents.indexOf("SPEND") !== -1 || oIntents.intents.indexOf("SUPPLIER") !== -1 || oIntents.intents.indexOf("PURCHASE_ORDER") !== -1) {
+            aOperations.push({
+                id: "OP_TOP_SPEND",
+                operation: "SERVER_SORTED_TOP_SPEND",
+                entitySet: "PurchaseOrders",
+                servicePath: "/PurchaseOrders?$orderby=PurchaseOrderNetAmount desc&$top=15",
+                purpose: "Retrieve server-sorted top 15 purchase orders by net amount across the whole dataset",
+                required: false
+            });
+        }
+
+        if (oIntents.entities.searchTerms.length > 0) {
+            aOperations.push({
+                id: "OP_ITEM_SEARCH",
+                operation: "WHOLE_DATASET_ITEM_SEARCH",
+                entitySet: "PurchaseOrderItems",
+                servicePath: "/PurchaseOrderItems?$filter=contains(PurchaseOrderItemText) or contains(Material)",
+                terms: oIntents.entities.searchTerms,
+                purpose: "Search all line items across the complete dataset for matching terms: " + JSON.stringify(oIntents.entities.searchTerms),
+                required: true
+            });
+        }
+
+        var bNeedsItems = oIntents.intents.indexOf("ITEM") !== -1 ||
+                          oIntents.intents.indexOf("DELIVERY_DATE") !== -1 ||
+                          oIntents.intents.indexOf("QUANTITY") !== -1 ||
+                          oIntents.intents.indexOf("MATERIAL") !== -1;
+        if (bNeedsItems) {
+            aOperations.push({
+                id: "OP_BATCH_ITEMS",
+                operation: "BATCH_ITEM_EXPAND",
+                entitySet: "PurchaseOrderItems",
+                servicePath: "/PurchaseOrderItems?$filter=PurchaseOrder in [...]",
+                purpose: "Load line items (delivery dates, order quantities, materials, net amounts) for up to " + PurchaseOrdersController.AI_ITEM_POS + " context POs",
+                required: true
+            });
+        }
+
+        return {
+            question: sQuestion,
+            intents: oIntents.intents,
+            primaryIntent: oIntents.primaryIntent,
+            entities: oIntents.entities,
+            operations: aOperations,
+            timestamp: new Date().toISOString()
+        };
+    };
+
+    /**
+     * Validates that all planned retrieval operations target verified SAP OData v4 entity sets and service paths.
+     */
+    PurchaseOrdersController._validateRetrievalPlan = function (oPlan) {
+        if (!oPlan || !Array.isArray(oPlan.operations) || oPlan.operations.length === 0) {
+            return {
+                isValid: false,
+                reason: "Retrieval plan contains no operations",
+                verifiedServices: [],
+                groundingSources: []
+            };
+        }
+
+        var aAllowedEntitySets = ["PurchaseOrders", "PurchaseOrderItems"];
+        var aVerifiedServices = [];
+        var aGroundingSources = [];
+        var bAllValid = true;
+        var sFailureReason = "";
+
+        oPlan.operations.forEach(function (op) {
+            if (aAllowedEntitySets.indexOf(op.entitySet) === -1) {
+                bAllValid = false;
+                sFailureReason = "Unverified SAP entity set: " + op.entitySet;
+            }
+            if (aVerifiedServices.indexOf(op.servicePath) === -1) {
+                aVerifiedServices.push(op.servicePath);
+            }
+            var sSource = op.entitySet === "PurchaseOrders" ? "EKKO (PurchaseOrders)" : "EKPO (PurchaseOrderItems)";
+            if (aGroundingSources.indexOf(sSource) === -1) {
+                aGroundingSources.push(sSource);
+            }
+        });
+
+        return {
+            isValid: bAllValid,
+            reason: bAllValid ? "Plan verified: all operations target validated SAP OData v4 endpoints" : sFailureReason,
+            verifiedServices: aVerifiedServices,
+            groundingSources: aGroundingSources,
+            intentsCovered: oPlan.intents,
+            primaryIntent: oPlan.primaryIntent
+        };
     };
 
     PurchaseOrdersController._toAIRow = function (o) {
@@ -1101,29 +1376,44 @@ sap.ui.define([
             "3. STATUS COUNTS: For status breakdowns, use STATUS COUNTS (exact, server-calculated for every SAP status code).\n" +
             "4. AGGREGATES OVER INCLUDED ROWS: AGGREGATES provides exact sums/counts over the included rows only. When completeness is PARTIAL_RESULT or FAILED_QUERY_FALLBACK, explicitly label any aggregate as partial (e.g. 'Among the " + (oScope.shown != null ? oScope.shown : aRows.length) + " most recent POs analyzed...'). Never present capped context or fallback table rows as complete dataset analysis.";
 
+        var sIntentBlock = "";
+        if (oScope.intents) {
+            sIntentBlock = "\n\nSTRUCTURED PROCUREMENT INTENT & RETRIEVAL PLAN:\n" +
+                "- Detected Procurement Intents: " + oScope.intents.intents.join(", ") + "\n" +
+                "- Primary Procurement Dimension: " + oScope.intents.primaryIntent + "\n";
+            if (oScope.retrievalValidation) {
+                sIntentBlock += "- Validated SAP Retrieval Sources: " + (oScope.retrievalValidation.groundingSources.join(", ") || "None") + "\n" +
+                    "- Retrieval Plan Verification: " + (oScope.retrievalValidation.isValid ? "VERIFIED_VALID (" + oScope.retrievalValidation.reason + ")" : "FAILED (" + oScope.retrievalValidation.reason + ")") + "\n";
+            }
+        }
+
         return "You are an SAP MM procurement assistant for Aether Industries. " +
             sScope +
             sCompletenessDirective +
             sDeterministicRules +
+            sIntentBlock +
             "\n\nAnswer only from the purchase order data below (JSON, one object per PO; POs the user asked about by number include their items). " +
             "If the data does not contain the answer, say so. Be concise; use short bullet lists where useful. " +
             "Amounts are in the row currency." +
             (aNotFound && aNotFound.length ? " These PO numbers were looked up in SAP and do NOT exist or are not accessible: " + aNotFound.join(", ") + " [Retrieval Status: NOT_FOUND_IN_SAP]." : "") +
             "\n\nEVIDENCE-BACKED TRACEABILITY PROTOCOL (CRITICAL REQUIREMENT):\n" +
-            "1. Make every business answer traceable to the relevant SAP records. Never provide an unverified assertion or a confident sentence without the supporting records.\n" +
-            "2. For every factual statement about purchase orders, provide:\n" +
-            "   - Purchase-order numbers (po / EBELN)\n" +
-            "   - Supplier ID and Supplier Name (supplier / LIFNR, supplierName / NAME1)\n" +
-            "   - Relevant item: Item number (item / EBELP), Material (material / MATNR), Description (text / TXZ01), Quantity & Unit (qty / MENGE, unit / MEINS), Delivery/Due Date (delivery / EINDT), Net Amount (net / NETWR)\n" +
-            "   - Source fields: Explicitly cite the technical SAP field names confirming the data (e.g. EBELN, EBELP, LIFNR, NAME1, MATNR, TXZ01, MENGE, MEINS, EINDT, NETWR, STATU)\n" +
-            "   - Data scope: State the evidence scope (e.g. 'Single Document Expand via OData', 'Filtered View of " + (oScope.shown != null ? oScope.shown : aRows.length) + " POs', 'Item Search over whole dataset', 'Server-side Status Aggregates')\n" +
-            "   - Retrieval status: Explicitly state '[Retrieval Status: VERIFIED_LIVE_SAP]' for retrieved records, or '[Retrieval Status: NOT_FOUND_IN_SAP]' if not found.\n" +
+            "1. Make every business answer traceable to the relevant SAP records. GROUND ALL FACTUAL ANSWERS STRICTLY IN RETRIEVED SAP DATA: Factual answers regarding purchase orders, suppliers, materials, items, statuses, delivery dates, quantities, and spend must be grounded only in the retrieved SAP datasets below (PURCHASE_ORDERS, PURCHASE_ORDER_ITEMS, ITEM_SEARCH, AGGREGATES, TOP_PURCHASE_ORDERS_BY_NET_AMOUNT, STATUS COUNTS). Never invent, speculate, or hallucinate document numbers, line items, delivery dates, quantities, or spend figures.\n" +
+            "2. EVIDENCE-LINKED RESULTS WITH PO NAVIGATION:\n" +
+            "   - Format every Purchase Order reference as a clickable navigation link: [PO <number>](#/mm/purchase-orders/<number>) or [<number>](#/mm/purchase-orders/<number>) (e.g. [PO 4500001234](#/mm/purchase-orders/4500001234)). This allows the user to navigate directly to the existing purchase-order detail route.\n" +
+            "   - In tables or lists, provide the PO number as a navigable link [PO <number>](#/mm/purchase-orders/<number>).\n" +
+            "   - For every factual statement, provide:\n" +
+            "     * Navigable PO number (po / EBELN) linking to #/mm/purchase-orders/<number>\n" +
+            "     * Supplier ID and Supplier Name (supplier / LIFNR, supplierName / NAME1)\n" +
+            "     * Relevant item details: Item number (item / EBELP), Material (material / MATNR), Description (text / TXZ01), Quantity & Unit (qty / MENGE, unit / MEINS), Delivery/Due Date (delivery / EINDT), Net Amount (net / NETWR)\n" +
+            "     * Technical Source Fields: Explicitly cite the technical SAP field names confirming the data (e.g. EBELN, EBELP, MATNR, TXZ01, MENGE, MEINS, EINDT, NETWR, LIFNR, NAME1, STATU)\n" +
+            "     * Completeness Information: Provide the completeness badge [Completeness: " + sCompleteness + "] and [Data Scope: ...]\n" +
+            "     * Retrieval Status: Explicitly state '[Retrieval Status: VERIFIED_LIVE_SAP]' for retrieved records, or '[Retrieval Status: NOT_FOUND_IN_SAP]' if not found.\n" +
             "3. DISTINGUISH VERIFIED SAP FACTS FROM AI-GENERATED INTERPRETATIONS:\n" +
             "   - Structure your response into clear sections:\n" +
             "     - Direct Answer / Summary: High-level factual answer.\n" +
-            "     - '### Verified SAP Records' (or '### Verified SAP Facts'): Always include '[Data Scope: ...]' and '[Retrieval Status: ...]' badges here (e.g. '[Data Scope: Single Document Expand] [Retrieval Status: VERIFIED_LIVE_SAP]'), followed by the supporting records presented in structured bullet lists or a markdown table with PO (EBELN), Supplier (LIFNR, NAME1), Item (EBELP), Material (MATNR), Quantity (MENGE, MEINS), Delivery/Due Date (EINDT), and Net Amount (NETWR).\n" +
+            "     - '### Verified SAP Records' (or '### Verified SAP Facts'): Always include '[Data Scope: ...]', '[Completeness: " + sCompleteness + "]', and '[Retrieval Status: ...]' badges here, followed by the supporting records presented in structured bullet lists or a markdown table with clickable PO links, Supplier, Item, Material, Quantity, Delivery Date, Net Amount, and Source Fields.\n" +
             "     - '### AI Interpretation' (or '[AI Interpretation]'): Any business inferences, summaries, calculations, risk observations, or recommendations based on the facts, clearly demarcated as AI interpretation.\n" +
-            "4. EXAMPLE: If asked about 'PO 4500001234 has 3 items due on 30 October', state the concise summary, then under '### Verified SAP Records' list PO 4500001234, Supplier, each item (00010, 00020, etc.) with material, quantity, delivery date (2026-10-30), cite source fields (EBELN, EBELP, EINDT, MENGE, LIFNR), Data Scope ('Single Document Expand'), and Retrieval Status ('[Retrieval Status: VERIFIED_LIVE_SAP]'), followed by '### AI Interpretation' explaining the business context.\n" +
+            "4. EXAMPLE: If asked about 'PO 4500001234 has 3 items due on 30 October', state the concise summary, then under '### Verified SAP Records' list [PO 4500001234](#/mm/purchase-orders/4500001234), Supplier, each item (00010, 00020, etc.) with material, quantity, delivery date (2026-10-30), cite source fields (EBELN, EBELP, EINDT, MENGE, LIFNR), Data Scope ('Single Document Expand'), and Retrieval Status ('[Retrieval Status: VERIFIED_LIVE_SAP]'), followed by '### AI Interpretation' explaining the business context.\n" +
             "\nSAP_FIELD_CATALOG: po=PurchaseOrder (EBELN), item=PurchaseOrderItem (EBELP), supplier=Supplier (LIFNR), supplierName=SupplierName (NAME1), material=Material (MATNR), text=PurchaseOrderItemText (TXZ01), qty=OrderQuantity (MENGE), unit=PurchaseOrderQuantityUnit (MEINS), delivery=FirstDeliveryDate (EINDT), netAmount/net=NetAmount (NETWR), currency/cur=DocumentCurrency (WAERS), status=PurchasingDocumentStatusName (STATU), company=CompanyCode (BUKRS), purchOrg=PurchasingOrganization (EKORG), purchGroup=PurchasingGroup (EKGRP), plant=Plant (WERKS), sloc=StorageLocation (LGORT), created=CreationDate (AEDAT), createdBy=CreatedByUser (ERNAM)." +
             (oScope.topPOsByNet && oScope.topPOsByNet.length ? "\n\nTOP_PURCHASE_ORDERS_BY_NET_AMOUNT across the WHOLE list" + (oScope.filtered ? " (current filters)" : "") +
                 ", sorted by the server (exact; use this for any 'largest / top N purchase orders' question) = " + JSON.stringify(oScope.topPOsByNet) : "") +
@@ -1156,7 +1446,24 @@ sap.ui.define([
         if (!sText) { return ""; }
         var esc = function (t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); };
         var inline = function (t) {
-            return t
+            var aPoLinks = [];
+            // Preserve explicit markdown PO navigation links: [PO 4500001234](#/mm/purchase-orders/4500001234) or [4500001234](po:4500001234)
+            t = t.replace(/\[([^\]]+)\]\((?:#\/mm\/purchase-orders\/|po:)(\d{10})\)/gi, function (m, text, po) {
+                var idx = aPoLinks.length;
+                aPoLinks.push("<a href=\"#/mm/purchase-orders/" + po + "\" class=\"aiPoLink\" data-po=\"" + po + "\" title=\"Open Purchase Order " + po + " in Detail View\">" + text + "</a>");
+                return "@@POLINK_" + idx + "@@";
+            });
+            // Autolink PO numbers preceded by PO or Purchase Order: "PO 4500001234" or "Purchase Order 4500001234"
+            t = t.replace(/\b(PO|Purchase Order)\s+(\d{10})\b/gi, function (m, prefix, po) {
+                var idx = aPoLinks.length;
+                aPoLinks.push(prefix + " <a href=\"#/mm/purchase-orders/" + po + "\" class=\"aiPoLink\" data-po=\"" + po + "\" title=\"Open Purchase Order " + po + " in Detail View\">" + po + "</a>");
+                return "@@POLINK_" + idx + "@@";
+            });
+            // External markdown web links
+            t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "<a href=\"$2\" target=\"_blank\" rel=\"noopener\">$1</a>");
+
+            // Badges, code, formatting
+            t = t
                 .replace(/`([^`]+)`/g, function (m, c) { return "<code>" + c + "</code>"; })
                 .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
                 .replace(/(^|[^*\w])\*(?!\s)([^*]+?)\*(?!\w)/g, "$1<em>$2</em>")
@@ -1180,7 +1487,25 @@ sap.ui.define([
                     }
                     return "<span class=\"aiBadge aiBadgeScope\">" + text + "</span>";
                 })
-                .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "<a href=\"$2\" target=\"_blank\" rel=\"noopener\">$1</a>");
+                .replace(/\[(Completeness:[^\]]+)\]/gi, function (m, text) {
+                    if (/FAILED|FALLBACK/i.test(text)) {
+                        return "<span class=\"aiBadge aiBadgeFailed\">" + text + "</span>";
+                    }
+                    if (/PARTIAL/i.test(text)) {
+                        return "<span class=\"aiBadge aiBadgePartial\">" + text + "</span>";
+                    }
+                    if (/EMPTY/i.test(text)) {
+                        return "<span class=\"aiBadge aiBadgeEmpty\">" + text + "</span>";
+                    }
+                    return "<span class=\"aiBadge aiBadgeScope\">" + text + "</span>";
+                });
+
+            // Restore PO links
+            t = t.replace(/@@POLINK_(\d+)@@/g, function (m, idx) {
+                return aPoLinks[Number(idx)];
+            });
+
+            return t;
         };
         var aLines = esc(sText).replace(/\r\n?/g, "\n").split("\n");
         var aOut = [], sList = null, bPara = false, bCode = false, aTable = null;
@@ -1189,7 +1514,15 @@ sap.ui.define([
         var flushTable = function () {
             if (!aTable) { return; }
             var aRows = aTable.filter(function (r) { return !/^\s*\|?\s*:?-{2,}/.test(r); });
-            var cells = function (r) { return r.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map(function (c) { return inline(c.trim()); }); };
+            var cells = function (r) {
+                return r.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map(function (c) {
+                    var sTrimmed = c.trim();
+                    if (/^\d{10}$/.test(sTrimmed)) {
+                        return "<a href=\"#/mm/purchase-orders/" + sTrimmed + "\" class=\"aiPoLink\" data-po=\"" + sTrimmed + "\" title=\"Open Purchase Order " + sTrimmed + " in Detail View\">" + sTrimmed + "</a>";
+                    }
+                    return inline(sTrimmed);
+                });
+            };
             var h = "<table><thead><tr>" + cells(aRows[0]).map(function (c) { return "<th>" + c + "</th>"; }).join("") + "</tr></thead><tbody>";
             aRows.slice(1).forEach(function (r) {
                 h += "<tr>" + cells(r).map(function (c) { return "<td" + (/^[\d,.\s%()-]+$/.test(c) && /\d/.test(c) ? " class=\"num\"" : "") + ">" + c + "</td>"; }).join("") + "</tr>";

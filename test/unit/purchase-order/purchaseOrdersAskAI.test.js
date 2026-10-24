@@ -537,4 +537,169 @@ describe('PurchaseOrders Ask AI helpers', () => {
         expect(html).toContain('<span class="aiBadge aiBadgeScope">Data Scope: Complete Dataset (20 POs)</span>');
         expect(html).toContain('<span class="aiBadge aiBadgeRetrieval">Retrieval Status: VERIFIED_LIVE_SAP</span>');
     });
+
+    test('_detectProcurementIntents identifies all 8 procurement dimensions and primary intent', () => {
+        // 1. PURCHASE_ORDER
+        const poRes = ControllerClass._detectProcurementIntents('Show purchase orders created by user USR01 in company code 1000');
+        expect(poRes.intents).toContain('PURCHASE_ORDER');
+        expect(poRes.primaryIntent).toBe('PURCHASE_ORDER');
+
+        // 2. SUPPLIER
+        const supRes = ControllerClass._detectProcurementIntents('Which vendors supplied the most goods?');
+        expect(supRes.intents).toContain('SUPPLIER');
+        expect(supRes.primaryIntent).toBe('SUPPLIER');
+
+        // 3. MATERIAL
+        const matRes = ControllerClass._detectProcurementIntents('Search for material SKU-9900 products');
+        expect(matRes.intents).toContain('MATERIAL');
+        expect(matRes.primaryIntent).toBe('MATERIAL');
+
+        // 4. ITEM
+        const itemRes = ControllerClass._detectProcurementIntents('List all line items and plant storage locations');
+        expect(itemRes.intents).toContain('ITEM');
+        expect(itemRes.primaryIntent).toBe('ITEM');
+
+        // 5. STATUS
+        const statRes = ControllerClass._detectProcurementIntents('How many orders are open, draft, or approved?');
+        expect(statRes.intents).toContain('STATUS');
+        expect(statRes.primaryIntent).toBe('STATUS');
+
+        // 6. DELIVERY_DATE
+        const delRes = ControllerClass._detectProcurementIntents('Which purchase orders are due on 30 October or overdue?');
+        expect(delRes.intents).toContain('DELIVERY_DATE');
+        expect(delRes.primaryIntent).toBe('DELIVERY_DATE');
+
+        // 7. QUANTITY
+        const qtyRes = ControllerClass._detectProcurementIntents('How many units and total volume of valves were ordered?');
+        expect(qtyRes.intents).toContain('QUANTITY');
+        expect(qtyRes.primaryIntent).toBe('QUANTITY');
+
+        // 8. SPEND
+        const spendRes = ControllerClass._detectProcurementIntents('What is the total spend and largest orders by net amount?');
+        expect(spendRes.intents).toContain('SPEND');
+        expect(spendRes.primaryIntent).toBe('SPEND');
+
+        // Multi-dimension query
+        const multi = ControllerClass._detectProcurementIntents('PO 4500001234: which supplier, materials, items, delivery dates, quantities, and spend?');
+        expect(multi.intents).toContain('PURCHASE_ORDER');
+        expect(multi.intents).toContain('SUPPLIER');
+        expect(multi.intents).toContain('MATERIAL');
+        expect(multi.intents).toContain('ITEM');
+        expect(multi.intents).toContain('DELIVERY_DATE');
+        expect(multi.intents).toContain('QUANTITY');
+        expect(multi.intents).toContain('SPEND');
+        expect(multi.entities.poNumbers).toContain('4500001234');
+        expect(multi.primaryIntent).toBe('PURCHASE_ORDER');
+    });
+
+    test('_buildRetrievalPlan constructs validated operations for detected procurement intents', () => {
+        const intents = ControllerClass._detectProcurementIntents('PO 4500001234: show line items, status, and spend for Macbook');
+        const plan = ControllerClass._buildRetrievalPlan('PO 4500001234: show line items, status, and spend for Macbook', intents);
+
+        expect(plan.intents).toEqual(expect.arrayContaining(['PURCHASE_ORDER', 'ITEM', 'STATUS', 'SPEND']));
+        const opIds = plan.operations.map(o => o.id);
+        expect(opIds).toContain('OP_CONTEXT_HEADERS');
+        expect(opIds).toContain('OP_EXPAND_PO_4500001234');
+        expect(opIds).toContain('OP_STATUS_BREAKDOWN');
+        expect(opIds).toContain('OP_TOP_SPEND');
+        expect(opIds).toContain('OP_ITEM_SEARCH');
+        expect(opIds).toContain('OP_BATCH_ITEMS');
+    });
+
+    test('_validateRetrievalPlan validates entity sets and provides grounding sources', () => {
+        // Valid plan
+        const validPlan = {
+            intents: ['PURCHASE_ORDER', 'ITEM'],
+            primaryIntent: 'PURCHASE_ORDER',
+            operations: [
+                { id: '1', entitySet: 'PurchaseOrders', servicePath: '/PurchaseOrders' },
+                { id: '2', entitySet: 'PurchaseOrderItems', servicePath: '/PurchaseOrderItems' }
+            ]
+        };
+        const validation = ControllerClass._validateRetrievalPlan(validPlan);
+        expect(validation.isValid).toBe(true);
+        expect(validation.groundingSources).toContain('EKKO (PurchaseOrders)');
+        expect(validation.groundingSources).toContain('EKPO (PurchaseOrderItems)');
+
+        // Invalid plan targeting invented entity
+        const invalidPlan = {
+            intents: ['PURCHASE_ORDER'],
+            primaryIntent: 'PURCHASE_ORDER',
+            operations: [
+                { id: '1', entitySet: 'InventedEntity', servicePath: '/InventedEntity' }
+            ]
+        };
+        const invalidValidation = ControllerClass._validateRetrievalPlan(invalidPlan);
+        expect(invalidValidation.isValid).toBe(false);
+        expect(invalidValidation.reason).toContain('Unverified SAP entity set: InventedEntity');
+    });
+
+    test('_buildAISystemPrompt embeds structured procurement intent, retrieval validation, and PO navigation mandate', () => {
+        const oScope = {
+            shown: 10,
+            total: 10,
+            completeness: 'EXACT_TOTAL',
+            intents: {
+                intents: ['PURCHASE_ORDER', 'DELIVERY_DATE', 'QUANTITY'],
+                primaryIntent: 'DELIVERY_DATE'
+            },
+            retrievalValidation: {
+                isValid: true,
+                reason: 'Plan verified',
+                groundingSources: ['EKKO (PurchaseOrders)', 'EKPO (PurchaseOrderItems)']
+            }
+        };
+
+        const prompt = ControllerClass._buildAISystemPrompt([{ po: '4500001234' }], [], oScope);
+
+        expect(prompt).toContain('STRUCTURED PROCUREMENT INTENT & RETRIEVAL PLAN:');
+        expect(prompt).toContain('- Detected Procurement Intents: PURCHASE_ORDER, DELIVERY_DATE, QUANTITY');
+        expect(prompt).toContain('- Primary Procurement Dimension: DELIVERY_DATE');
+        expect(prompt).toContain('- Validated SAP Retrieval Sources: EKKO (PurchaseOrders), EKPO (PurchaseOrderItems)');
+        expect(prompt).toContain('- Retrieval Plan Verification: VERIFIED_VALID (Plan verified)');
+        expect(prompt).toContain('GROUND ALL FACTUAL ANSWERS STRICTLY IN RETRIEVED SAP DATA');
+        expect(prompt).toContain('EVIDENCE-LINKED RESULTS WITH PO NAVIGATION');
+        expect(prompt).toContain('[PO <number>](#/mm/purchase-orders/<number>)');
+        expect(prompt).toContain('[Completeness: EXACT_TOTAL]');
+    });
+
+    test('_toHtml converts PO navigation markdown links, raw PO references, and 10-digit table cells into clickable .aiPoLink elements', () => {
+        const text = 'Check [PO 4500001234](#/mm/purchase-orders/4500001234) and [4500005678](po:4500005678).\n\n' +
+            'Also review PO 4500009999 and Purchase Order 4500008888.\n\n' +
+            '[Completeness: EXACT_TOTAL] [Completeness: PARTIAL_RESULT] [Completeness: FAILED_QUERY_FALLBACK]\n\n' +
+            '| PO Number | Supplier |\n|---|---|\n| 4500001111 | 100001 |';
+
+        const html = ControllerClass._toHtml(text);
+
+        // Markdown PO links
+        expect(html).toContain('<a href="#/mm/purchase-orders/4500001234" class="aiPoLink" data-po="4500001234" title="Open Purchase Order 4500001234 in Detail View">PO 4500001234</a>');
+        expect(html).toContain('<a href="#/mm/purchase-orders/4500005678" class="aiPoLink" data-po="4500005678" title="Open Purchase Order 4500005678 in Detail View">4500005678</a>');
+
+        // Autolinked raw PO references
+        expect(html).toContain('PO <a href="#/mm/purchase-orders/4500009999" class="aiPoLink" data-po="4500009999" title="Open Purchase Order 4500009999 in Detail View">4500009999</a>');
+        expect(html).toContain('Purchase Order <a href="#/mm/purchase-orders/4500008888" class="aiPoLink" data-po="4500008888" title="Open Purchase Order 4500008888 in Detail View">4500008888</a>');
+
+        // Completeness badges
+        expect(html).toContain('<span class="aiBadge aiBadgeScope">Completeness: EXACT_TOTAL</span>');
+        expect(html).toContain('<span class="aiBadge aiBadgePartial">Completeness: PARTIAL_RESULT</span>');
+        expect(html).toContain('<span class="aiBadge aiBadgeFailed">Completeness: FAILED_QUERY_FALLBACK</span>');
+
+        // Table cell auto-linking
+        expect(html).toContain('<a href="#/mm/purchase-orders/4500001111" class="aiPoLink" data-po="4500001111" title="Open Purchase Order 4500001111 in Detail View">4500001111</a>');
+    });
+
+    test('onNavToPO navigates to purchaseOrderDetail route via UI5 router', () => {
+        const { c } = mkController();
+        const mockNavTo = jest.fn();
+        c.getOwnerComponent = () => ({
+            getRouter: () => ({
+                navTo: mockNavTo
+            })
+        });
+
+        c.onNavToPO('4500001234');
+        expect(mockNavTo).toHaveBeenCalledWith('purchaseOrderDetail', {
+            PurchaseOrder: '4500001234'
+        });
+    });
 });
