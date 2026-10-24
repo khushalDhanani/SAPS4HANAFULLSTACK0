@@ -1,4 +1,7 @@
 const Mvt261Adapter = require('../../../srv/integration/s4hana/wm/Mvt261Adapter');
+const fs = require('fs');
+const path = require('path');
+const materialDocumentMetadata = fs.readFileSync(path.join(__dirname, '../../../srv/external/API_MATERIAL_DOCUMENT_SRV.xml'), 'utf8');
 
 describe('Mvt261Adapter.findFirst', () => {
   // Shapes as returned live by MMIM_MATDOC_OV_SRV / API_MATERIAL_DOCUMENT_SRV (document 4900000255, reversed by 4900000282).
@@ -350,7 +353,8 @@ describe('Mvt261Adapter.postGoodsIssue / reverse', () => {
         ? ['4900050046', '4900050047'].map((MBLNR) => ({ MBLNR, MJAHR: '2026', BWART: '261' }))
         : (t[table] || []) },
       client: {
-        resolveDestination: async () => ({ name: 'TEST_DEST' }),
+        resolveDestination: async () => ({ name: 'TEST_DEST', url: 'https://sap.example.invalid', sapClient: '220', authentication: 'BasicAuthentication' }),
+        getText: async () => materialDocumentMetadata,
         get: async (path) => path.includes('A_MaterialDocumentHeader')
           ? ({ data: { d: { MaterialDocument: '4900050046', MaterialDocumentYear: '2026', to_MaterialDocumentItem: { results: [{ GoodsMovementType: '261' }] } } } })
           : ({ data: { d: { results: [{ BaseUnit: 'NOS' }] } } }),
@@ -856,7 +860,8 @@ describe('Mvt261 unified stock availability calculation across Scan, List, and P
         ? [{ MBLNR: '4900055001', MJAHR: '2026', BWART: '261' }]
         : (t[table] || []) },
       client: {
-        resolveDestination: async () => ({ name: 'TEST_DEST' }),
+        resolveDestination: async () => ({ name: 'TEST_DEST', url: 'https://sap.example.invalid', sapClient: '220', authentication: 'BasicAuthentication' }),
+        getText: async () => materialDocumentMetadata,
         get: async (path) => path.includes('A_MaterialDocumentHeader')
           ? ({ data: { d: { MaterialDocument: '4900055001', MaterialDocumentYear: '2026', to_MaterialDocumentItem: { results: [{ GoodsMovementType: '261' }] } } } })
           : ({
@@ -1000,7 +1005,8 @@ describe('Mvt261 unified stock availability calculation across Scan, List, and P
           ? [{ MBLNR: '4900050047', MJAHR: '2026', BWART: '261' }]
           : (t[table] || []) },
         client: {
-          resolveDestination: async () => ({ name: 'TEST_DEST' }),
+          resolveDestination: async () => ({ name: 'TEST_DEST', url: 'https://sap.example.invalid', sapClient: '220', authentication: 'BasicAuthentication' }),
+          getText: async () => materialDocumentMetadata,
           get: async (path) => path.includes('A_MaterialDocumentHeader')
             ? ({ data: { d: { MaterialDocument: '4900050047', MaterialDocumentYear: '2026', to_MaterialDocumentItem: { results: [{ GoodsMovementType: '261' }] } } } })
             : ({ data: { d: { results: [{ BaseUnit: 'KG' }] } } }),

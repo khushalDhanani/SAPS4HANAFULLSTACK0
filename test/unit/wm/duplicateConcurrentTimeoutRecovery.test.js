@@ -137,6 +137,8 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
       StorageLocation: 'CS01',
       Unit: 'KG',
       OpenQuantity: 10,
+      ProductionOrder: '4000033120',
+      OrderType: 'ZBDN',
       MovementAllowed: true,
       FinalIssue: false,
       IsDeleted: false,
@@ -226,6 +228,7 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
       jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('Persistent store unreachable'));
 
       await expect(POST('/odata/v4/goods-issue/postGoodsIssue201', {
+        MovementType: '201',
         Plant: '1120',
         StorageLocation: 'CS01',
         Material: '8000000023',
@@ -248,6 +251,7 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
       jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('DB failure'));
 
       await expect(POST('/odata/v4/goods-issue/postGoodsIssue301', {
+        MovementType: '301',
         ReservationNo: '520301',
         ReservationItem: '0001',
         Plant: '1120',
@@ -273,6 +277,7 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
       jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('Disk I/O error'));
 
       await expect(POST('/odata/v4/goods-issue/postGoodsIssue311', {
+        MovementType: '311',
         ReservationNo: '520311',
         ReservationItem: '0001',
         Plant: '1120',
@@ -297,6 +302,9 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
       jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('Attempt store write failure'));
 
       await expect(POST('/odata/v4/mvt261/postGoodsIssue', {
+        movementType: '261',
+        orderId: '4000033120',
+        orderType: 'ZBDN',
         reservation: '0000528780',
         item: '0001',
         quantity: 1,
@@ -442,6 +450,7 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
     test('postGoodsIssue201: replay of already posted goods issue returns existing document without duplicate SAP call', async () => {
       // First call succeeds and claims
       const res1 = await POST('/odata/v4/goods-issue/postGoodsIssue201', {
+        MovementType: '201',
         Plant: '1120',
         StorageLocation: 'CS01',
         Material: '8000000023',
@@ -458,6 +467,7 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
 
       // Re-posting with same ClientAttemptId returns the existing posted document
       const res2 = await POST('/odata/v4/goods-issue/postGoodsIssue201', {
+        MovementType: '201',
         Plant: '1120',
         StorageLocation: 'CS01',
         Material: '8000000023',
@@ -484,6 +494,9 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
       });
 
       await expect(POST('/odata/v4/mvt261/postGoodsIssue', {
+        movementType: '261',
+        orderId: '4000033120',
+        orderType: 'ZBDN',
         reservation: '0000528780',
         item: '0001',
         quantity: 1
@@ -547,6 +560,7 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
         IssueQty: 2,
         Unit: 'KG',
         CostCenter: '1011201301',
+        MovementType: '201',
         PostingDate: '2026-10-24',
         ClientAttemptId: 'timeout-attempt-201'
       }, authCarol)).rejects.toMatchObject({

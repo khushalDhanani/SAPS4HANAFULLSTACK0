@@ -8,6 +8,7 @@ const GoodsIssue201Mapper = require('./GoodsIssue201Mapper');
 const GoodsIssue261Mapper = require('./GoodsIssue261Mapper');
 const GoodsIssue301Mapper = require('./GoodsIssue301Mapper');
 const GoodsIssue311Mapper = require('./GoodsIssue311Mapper');
+const { assert261CapabilityReady } = require('./GoodsIssue261CapabilityPreflight');
 
 /**
  * Domain client for SAP S/4HANA Goods Issue Posting and Batch Submission.
@@ -297,6 +298,17 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       err.code = 'GI_MOVEMENT_TYPE_INTEGRITY';
       throw err;
     }
+  }
+
+  /** Read-only live metadata + RFC capability gate, always before a 261 write. */
+  async _assert261CapabilityReady(data) {
+    return assert261CapabilityReady({
+      requestedMovementType: data?.MovementType,
+      validatedMovementType: data?.ValidatedMovementType,
+      client: this.client,
+      rfc: this.rfc,
+      expectedSapClient: this.client?._env?.S4_CLIENT || process.env.S4_CLIENT || ''
+    });
   }
 
   /** @private Batch SLED hard-stop + destination resolution. Transport only. */
@@ -726,8 +738,9 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       err.status = 400;
       throw err;
     }
-    await this._preflightPosting(data);
     const payload = GoodsIssue261Mapper.mapToMaterialDocumentPayload(data);
+    await this._assert261CapabilityReady(data);
+    await this._preflightPosting(data);
     try {
       return await this._submitMaterialDocument(payload, {
         mvt: '261', label: 'Goods Issue to Order',

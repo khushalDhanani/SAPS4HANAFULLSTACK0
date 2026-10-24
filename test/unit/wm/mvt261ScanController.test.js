@@ -84,7 +84,7 @@ describe('Scan261.controller post flow', () => {
     ctrl.onPost();
     confirmOk();
     expect(model.getProperty('/busy')).toBe(true); // disabled while posting
-    expect(ODataClient.post).toHaveBeenCalledWith(BASE + '/postGoodsIssue', { reservation: '512851', item: '3', quantity: 200, batch: 'B1' });
+    expect(ODataClient.post).toHaveBeenCalledWith(BASE + '/postGoodsIssue', { movementType: '261', orderId: '', orderType: '', reservation: '512851', item: '3', quantity: 200, batch: 'B1' });
     resolvePost({ MaterialDocument: '4900050046', MaterialDocumentYear: '2026' });
     await flush(); await flush();
     expect(model.getProperty('/busy')).toBe(false);
@@ -153,6 +153,9 @@ describe('Scan261.controller post flow', () => {
       item: '3',
       quantity: 200,
       batch: 'B1',
+      movementType: '261',
+      orderId: '',
+      orderType: '',
       storageUnits: ['1000000001']
     });
   });
@@ -202,6 +205,9 @@ describe('Scan261.controller post flow', () => {
       item: '3',
       quantity: 200,
       batch: 'B1',
+      movementType: '261',
+      orderId: '',
+      orderType: '',
       storageUnits: ['1000000001', '1000000002']
     });
   });

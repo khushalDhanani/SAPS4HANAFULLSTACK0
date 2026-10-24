@@ -200,3 +200,13 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 
 > [!NOTE]
 > **Files regenerated**: [`catalog-creatable.csv`](file:///Users/khushaldhanani/Desktop/SAPS4HANA/SAPS4HANAFULLSTACK/catalog-creatable.csv) (23 Sep 12:05 IST) and [`creatable-services.xlsx`](file:///Users/khushaldhanani/Desktop/SAPS4HANA/SAPS4HANAFULLSTACK/creatable-services.xlsx) (23 Sep 12:06 IST) — both from live SAP `$metadata`, 0 errors.
+
+## Subsequent SAP Readiness Probe — 2026-10-24 16:45 IST
+
+This is a later, focused probe; it does not rewrite the dated 23 September catalog snapshot or claim that a goods movement was posted.
+
+- **READ-ONLY OData metadata GET:** `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/$metadata` succeeded against Client 220. The response was 38,620 characters and the current metadata declares `A_MaterialDocumentHeader` creation, its `to_MaterialDocumentItem` navigation, and `GoodsMovementType`. Authentication succeeded for this GET through the project's existing `S4HttpClient` destination resolution. The active local runtime resolved its environment URL credentials (`BasicAuthentication`) and client 220; no credential or URL value is recorded here.
+- **READ-ONLY RFC:** `RFC_READ_TABLE` against `T000` returned the configured client 220. The new readiness preflight also successfully read the `MATDOC` verification fields `MBLNR`, `MJAHR`, and `BWART` with a one-row cap and a fixed document-key filter.
+- **Alternate service:** a READ-ONLY GET of `/sap/opu/odata/sap/ZMMIM_MATDOC_SRV/$metadata` now returns HTTP 403 with Gateway message `/IWFND/MED/170` (service not registered). The historical report row describing HTTP 501 `CREATE_ENTITY not implemented` records an earlier observation; this probe did not issue CREATE and does not establish its current POST behavior.
+- **Write authorization and persistence:** Not verified. No POST/BAPI/write was sent. OData metadata and successful RFC reads establish readiness only; they do not prove create authorization, a generated material document, or SAP `BWART=261` read-back.
+- **Full workbook refresh:** Not run. `tools/find-creatable.py` could not start its catalog scan because the required `catalog-audit.csv` is absent in this checkout; the committed workbook remains the 23 September snapshot. Re-run the mandated catalog scan and workbook build after restoring that input file.

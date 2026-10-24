@@ -29,7 +29,7 @@ function initHandlers() {
 
 const makeReq = (data) => ({
   data,
-  user: { id: 'TESTUSER' },
+  user: { id: 'TESTUSER', attr: { Plant: ['1120', '1110'] } },
   error: jest.fn((code, msg) => {
     const err = new Error(typeof msg === 'string' ? msg : code?.message || 'Error');
     err.status = typeof code === 'number' ? code : code?.status || 500;
@@ -68,6 +68,7 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
   // -------------------------------------------------------------
   describe('Movement Type 201 (Goods Issue to Cost Center)', () => {
     const payload201 = {
+      MovementType: '201',
       ReservationNo: '201001',
       ReservationItem: '0001',
       CostCenter: '1011101301',
@@ -128,6 +129,7 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
   // -------------------------------------------------------------
   describe('Movement Type 301 (Plant-to-Plant Stock Transfer)', () => {
     const payload301 = {
+      MovementType: '301',
       ReservationNo: '301001',
       ReservationItem: '0001',
       Material: 'MAT-301-P2P',
@@ -185,6 +187,7 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
   // -------------------------------------------------------------
   describe('Movement Type 311 (Storage Location Stock Transfer)', () => {
     const payload311 = {
+      MovementType: '311',
       ReservationNo: '311001',
       ReservationItem: '0001',
       Material: 'MAT-311-SLOC',
@@ -265,6 +268,7 @@ describe('Goods Issue Pending Confirmation & Duplicate Post Prevention Per Movem
       const postSpy = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201');
 
       const req = makeReq({
+        MovementType: '201',
         ReservationNo: '201999',
         ReservationItem: '0001',
         CostCenter: '1011101301',

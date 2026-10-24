@@ -230,6 +230,8 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
         Material: 'M',
         Plant: '1120',
         StorageLocation: 'CS01',
+        ProductionOrder: '4000033120',
+        OrderType: 'ZBDN',
         Unit: 'NOS',
         OpenQuantity: 10,
         History: [{
@@ -523,6 +525,7 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
   // =========================================================================
   describe('2. GoodsIssueService Write Actions & Privilege Escalation Gating', () => {
     const giPayload201 = {
+      MovementType: '201',
       ReservationNo: '520001',
       ReservationItem: '0001',
       Material: '8000000023',
@@ -535,6 +538,7 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
     };
 
     const giPayload301 = {
+      MovementType: '301',
       ReservationNo: '520301',
       ReservationItem: '0001',
       Material: '8000000023',
@@ -548,6 +552,7 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
     };
 
     const giPayload311 = {
+      MovementType: '311',
       ReservationNo: '520001',
       ReservationItem: '0001',
       Material: '8000000023',
@@ -668,7 +673,7 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
   describe('3. Mvt261Service Gating & Plant Scope', () => {
     it('postGoodsIssue: rejects Viewer (bob) with 403; permits WarehouseClerk (carol)', async () => {
       const url = '/odata/v4/mvt261/postGoodsIssue';
-      const payload = { reservation: '528780', item: '1', quantity: 10 };
+      const payload = { movementType: '261', orderId: '4000033120', orderType: 'ZBDN', reservation: '528780', item: '1', quantity: 10 };
 
       await expect(POST(url, payload, { auth: { username: 'bob', password: '' } }))
         .rejects.toMatchObject({ response: { status: 403 } });
@@ -681,7 +686,7 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
 
     it('postGoodsIssue: rejects out-of-scope clerk (dave, plant 1130) for plant 1120 reservation with 403', async () => {
       const url = '/odata/v4/mvt261/postGoodsIssue';
-      const payload = { reservation: '528780', item: '1', quantity: 10 };
+      const payload = { movementType: '261', orderId: '4000033120', orderType: 'ZBDN', reservation: '528780', item: '1', quantity: 10 };
       await expect(POST(url, payload, { auth: { username: 'dave', password: '' } }))
         .rejects.toMatchObject({ response: { status: 403 } });
       expect(mvt261PostSpy).not.toHaveBeenCalled();
@@ -689,7 +694,7 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
 
     it('postGoodsIssue: rejects unassigned plant user (eve) with 403', async () => {
       const url = '/odata/v4/mvt261/postGoodsIssue';
-      const payload = { reservation: '528780', item: '1', quantity: 10 };
+      const payload = { movementType: '261', orderId: '4000033120', orderType: 'ZBDN', reservation: '528780', item: '1', quantity: 10 };
       await expect(POST(url, payload, { auth: { username: 'eve', password: '' } }))
         .rejects.toMatchObject({ response: { status: 403 } });
       expect(mvt261PostSpy).not.toHaveBeenCalled();

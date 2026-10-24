@@ -4,6 +4,7 @@ const GoodsIssuePostingClient = require('../../../srv/integration/s4hana/wm/good
 function setup() {
   const client = new GoodsIssuePostingClient({ client: {} });
   client._getDestination = jest.fn().mockResolvedValue({ name: 'NON_PROD_TEST_DESTINATION' });
+  client._assert261CapabilityReady = jest.fn().mockResolvedValue({ ready: true, movementType: '261' });
   const sapCalls = [];
   client._post = jest.fn(async (path, payload) => {
     sapCalls.push({ path, payload });
@@ -45,6 +46,9 @@ describe('Integration: 261 adapter → posting client → mapper → SAP payload
     const result = await adapter.postGoodsIssue(request());
     const item = sapCalls[0].payload.to_MaterialDocumentItem.results[0];
     expect(result.MaterialDocument).toBe('4900050046');
+    expect(client._assert261CapabilityReady).toHaveBeenCalledWith(expect.objectContaining({
+      MovementType: '261', ValidatedMovementType: '261'
+    }));
     expect(item.GoodsMovementType).toBe('261');
     expect(item.ManufacturingOrder).toBe('000001002707');
     expect(client.readBackDocument).toHaveBeenCalledWith('4900050046', '2026', { expectedMovementType: '261' });
@@ -55,6 +59,15 @@ describe('Integration: 261 adapter → posting client → mapper → SAP payload
     client.readBackDocument.mockResolvedValue({
       MaterialDocument: '4900050046', MaterialDocYear: '2026', Confirmed: false,
       Status: 'movement type mismatch', Items: [{ BWART: '201' }]
+    });
+    await expect(adapter.postGoodsIssue(request())).rejects.toMatchObject({ status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' });
+    expect(sapCalls[0].payload.to_MaterialDocumentItem.results[0].GoodsMovementType).toBe('261');
+  });
+
+  it('fails closed when strict SAP material-document read-back is unavailable', async () => {
+    const { adapter, client, sapCalls } = setup();
+    client.readBackDocument.mockResolvedValue({
+      MaterialDocument: '4900050046', MaterialDocYear: '2026', Confirmed: false, Status: 'not yet confirmed'
     });
     await expect(adapter.postGoodsIssue(request())).rejects.toMatchObject({ status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' });
     expect(sapCalls[0].payload.to_MaterialDocumentItem.results[0].GoodsMovementType).toBe('261');

@@ -15,7 +15,8 @@ describe('Mvt261Service postGoodsIssue authorization (F4)', () => {
   let cycleSpy;
   beforeEach(() => {
     cycleSpy = jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue({
-      Reservation: '278650', ReservationItem: '1', Material: 'M', Plant: '1120', StorageLocation: 'CS01', Unit: 'KG', OpenQuantity: 1
+      Reservation: '278650', ReservationItem: '1', Material: 'M', Plant: '1120', StorageLocation: 'CS01', Unit: 'KG', OpenQuantity: 1,
+      ProductionOrder: '4000033120', OrderType: 'ZBDN'
     });
     spy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockResolvedValue({
       MaterialDocument: '4900050046', MaterialDocumentYear: '2026', DeliveryNumber: '', Pending: false, SapMessage: ''
@@ -27,7 +28,7 @@ describe('Mvt261Service postGoodsIssue authorization (F4)', () => {
   });
 
   const call = (user) => POST('/odata/v4/mvt261/postGoodsIssue',
-    { reservation: '278650', item: '1', quantity: 1 }, { auth: { username: user, password: '' } });
+    { movementType: '261', orderId: '4000033120', orderType: 'ZBDN', reservation: '278650', item: '1', quantity: 1 }, { auth: { username: user, password: '' } });
 
   it('rejects a Viewer (bob) with 403 and never reaches the adapter', async () => {
     await expect(call('bob')).rejects.toMatchObject({ response: { status: 403 } });

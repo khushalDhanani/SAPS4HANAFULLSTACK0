@@ -22,9 +22,9 @@ function fakeService() {
   PerTypeGoodsIssueHandler.init(srv);
   return handlers;
 }
-const req = (data) => ({ data, user: { id: 'TESTER' }, error: jest.fn((code, msg) => ({ code, message: msg })) });
+const req = (data) => ({ data, user: { id: 'TESTER', attr: { Plant: ['1120'] } }, error: jest.fn((code, msg) => ({ code, message: msg })) });
 const allAttempts = () => cds.db.run(SELECT.from(ATTEMPT_ENTITY));
-const payload = { CostCenter: '1011101301', Material: '8000006645', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS', PostingDate: '2026-09-30' };
+const payload = { MovementType: '201', CostCenter: '1011101301', Material: '8000006645', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS', PostingDate: '2026-09-30' };
 const base = { MovementType: '201', Material: '8000006645', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS', CostCenter: '1011101301', PostingDate: '2026-09-30', User: 'TESTER' };
 const sapDoc = { MaterialDocument: '4900049865', MaterialDocumentYear: '2026' };
 

@@ -1560,6 +1560,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       const { status, data } = await POST(
         '/odata/v4/reservation-entry/postMigoGoodsMovement',
         {
+          MovementType: '311',
           ReservationNo: testMigoResNo,
           ReservationItem: '0001'
         },
@@ -1610,6 +1611,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       const { status, data } = await POST(
         '/odata/v4/reservation-entry/postMigoGoodsMovement',
         {
+          MovementType: '311',
           ReservationNo: testMigoResNo,
           ReservationItem: '0001',
           Quantity: 6
@@ -1659,6 +1661,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       const { status, data } = await POST(
         '/odata/v4/reservation-entry/postMigoGoodsMovement',
         {
+          MovementType: '311',
           ReservationNo: testMigoResNo,
           ReservationItem: '0001',
           Quantity: 10
@@ -1694,6 +1697,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       const { status, data } = await POST(
         '/odata/v4/reservation-entry/postMigoGoodsMovement',
         {
+          MovementType: '311',
           ReservationNo: testMigoResNo,
           ReservationItem: '0001'
         },
@@ -1722,7 +1726,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       await cds.db.run(cds.ql.UPDATE(TRACK_ENTITY).set({ MaterialDocument: '4900050777', MaterialDocYear: '2026', Status_code: '05', CompletelyProcessed: true, RemainingQuantity: 0 }).where({ ReservationNo: testMigoResNo, ReservationItem: '0001' }));
       postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement');
 
-      const { status, data } = await POST('/odata/v4/reservation-entry/postMigoGoodsMovement', { ReservationNo: testMigoResNo, ReservationItem: '0001' }, authClerk);
+      const { status, data } = await POST('/odata/v4/reservation-entry/postMigoGoodsMovement', { MovementType: '311', ReservationNo: testMigoResNo, ReservationItem: '0001' }, authClerk);
 
       expect(status).toBe(200);
       expect(data.MaterialDocument).toBe('4900050777');

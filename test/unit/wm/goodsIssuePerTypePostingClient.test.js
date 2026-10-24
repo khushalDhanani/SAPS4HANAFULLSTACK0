@@ -9,6 +9,7 @@ const GoodsIssuePostingClient = require('../../../srv/integration/s4hana/wm/good
 function makeClient() {
   const client = new GoodsIssuePostingClient({});
   client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
+  client._assert261CapabilityReady = jest.fn().mockResolvedValue({ ready: true, movementType: '261' });
   client.readBackDocument = jest.fn(async (doc, year, options = {}) => ({
     MaterialDocument: doc, MaterialDocYear: year, Confirmed: true, Status: 'confirmed',
     Items: [{ BWART: options.expectedMovementType }]
@@ -80,6 +81,17 @@ test('rejects a missing upstream validated movement type before POST', async () 
   const { client, calls } = makeClient();
   await expect(client.post261({ ...base, MovementType: '261', Material: 'M1', ReservationNo: '1', ReservationItem: '1', OrderNo: '123' }))
     .rejects.toMatchObject({ status: 400 });
+  expect(calls).toHaveLength(0);
+});
+
+test('blocks movement 261 before POST when live capability readiness fails', async () => {
+  const { client, calls } = makeClient();
+  client._assert261CapabilityReady.mockRejectedValue(Object.assign(new Error('Service unavailable'), { status: 404 }));
+  await expect(client.post261({
+    ...base, MovementType: '261', ValidatedMovementType: '261', Material: 'M1',
+    ReservationNo: '1', ReservationItem: '1', OrderNo: '123'
+  })).rejects.toMatchObject({ status: 404 });
+  expect(client._assert261CapabilityReady).toHaveBeenCalledTimes(1);
   expect(calls).toHaveLength(0);
 });
 
