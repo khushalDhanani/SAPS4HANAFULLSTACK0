@@ -124,12 +124,18 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       // Step 7.7: attempt record (own transaction) BEFORE the SAP write: RESERVATION_PENDING.
       const reqUser = (req.user && req.user.id) || '';
-      const claim = await attemptStore.claim({
-        clientAttemptId: payload.ClientAttemptId,
-        requestHash: attemptStore.constructor.hash(payload, reqUser),
-        user: reqUser,
-        fields: { MovementType, Plant, StorageLocation, Material, Quantity, Unit }
-      });
+      let claim;
+      try {
+        claim = await attemptStore.claim({
+          clientAttemptId: payload.ClientAttemptId,
+          requestHash: attemptStore.constructor.hash(payload, reqUser),
+          user: reqUser,
+          fields: { MovementType, Plant, StorageLocation, Material, Quantity, Unit }
+        });
+      } catch (attemptErr) {
+        LOG.error('Reservation attempt could not be recorded; SAP write blocked:', attemptErr.message || attemptErr);
+        return req.error(attemptErr.status || 503, `Reservation was NOT sent to SAP: production transaction logging is unavailable (${attemptErr.message || 'attempt store unavailable'}). Check the document list before retrying.`);
+      }
       if (!claim.created) {
         const prior = claim.row;
         if (claim.reason === 'replay') {
@@ -612,7 +618,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
 
       const reqUser = (req.user && req.user.id) || '';
-      const claim = await attemptStore.claim({ clientAttemptId: payload.ClientAttemptId, requestHash: attemptStore.constructor.hash(payload, reqUser), user: reqUser, fields: payload });
+      let claim;
+      try {
+        claim = await attemptStore.claim({ clientAttemptId: payload.ClientAttemptId, requestHash: attemptStore.constructor.hash(payload, reqUser), user: reqUser, fields: payload });
+      } catch (attemptErr) {
+        LOG.error('Reservation attempt could not be recorded; SAP write blocked:', attemptErr.message || attemptErr);
+        return req.error(attemptErr.status || 503, `Reservation was NOT sent to SAP: production transaction logging is unavailable (${attemptErr.message || 'attempt store unavailable'}). Check the document list before retrying.`);
+      }
       if (!claim.created) {
         const prior = claim.row;
         if (claim.reason === 'replay') {

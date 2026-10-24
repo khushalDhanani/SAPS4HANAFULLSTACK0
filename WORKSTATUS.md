@@ -7,6 +7,9 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Cross-Agent MCP Configuration (2026-10-24 14:51 IST) — CONFIGURED:** Native repo MCP configurations are present for each agent in the supported-agent matrix. JSON/TOML checks and Codex discovery pass. The other agent clients are not installed in this environment, and a direct server handshake did not return a result; operational connection remains unverified for those clients.
+- **MCP Registration Fix (2026-10-24 14:49 IST) — COMPLETED:** Added project-scoped Codex registrations for `cds-mcp` and `ui5-mcp` in `.codex/config.toml`. `codex mcp list` shows both enabled and `codex mcp get cds-mcp` confirms the stdio command. Tool handshake from this ChatGPT session remains unverified; restart/reload Codex to use the project registrations.
+
 - **P1 · Enforce Quality Gates: Smoke-Test Status Validation, Bounded Startup Readiness, Portable E2E Runners with Live Assertions, and Plant-Level Negative Test Expansion (2026-10-24 14:15 IST) — COMPLETED:**
   - Scope Delivered:
     1. Smoke-Test Status Validation & Bounded Startup Readiness (`tools/smoke-test-deployment.js`, `.github/workflows/ci.yml`, `test/smoke/postDeploymentSmoke.test.js`):
@@ -1561,6 +1564,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 
 ## Next Steps
+
+- **Exact Next Recommended Action (Cross-Agent MCP Configuration — 2026-10-24 14:51 IST):** Open the repo in each target agent (especially Gemini CLI, OpenCode, Antigravity, and Cursor), restart/reload its MCP integration, and confirm both `cds-mcp` and `ui5-mcp` appear connected. Only Codex CLI is installed here; the others could not be discovery-tested in this environment.
 
 - **Exact Next Recommended Action (P1 · Enforce Quality Gates Delivered & Fully Verified — 2026-10-24 14:15 IST):** All P1 quality gates requested by the user are complete and verified:
   1. Smoke test status validation and bounded startup readiness: `waitForServer` probe with exponential backoff replaces fragile CI `sleep 5`, `/ai/chat/stream` validator tightened to strictly fail on 404/5xx, and unit tests verify bounded readiness timeouts.
@@ -3379,3 +3384,29 @@ Single source of truth for work history, current status, validation, unresolved 
 - Not done: None.
 - Still unknown: None.
 - Assumptions: None.
+
+---
+
+## Change Entry — 2026-10-24 14:49 IST — Register Repo MCP Servers for Codex
+
+- **Finding:** `.mcp.json` declares `cds-mcp` and `ui5-mcp`, but `codex mcp list` did not show either server before a Codex project configuration existed.
+- **Change:** Added `.codex/config.toml` with project-scoped stdio registrations matching the existing pinned package commands.
+- **Reason:** Codex reads repository-scoped MCP registrations from `.codex/config.toml`; `.mcp.json` alone does not register these servers for Codex.
+- **Files changed:** `.codex/config.toml`, `WORKSTATUS.md`.
+- **Validation:** `codex mcp list` showed both `cds-mcp` and `ui5-mcp` as enabled; `codex mcp get cds-mcp` confirmed the configured stdio command; `git diff --check` passed. The MCP tools are not exposed in this ChatGPT session, so server tool handshake was not verified here.
+- **Warnings:** Codex printed that PATH aliases could not be created due to operation not permitted; it continued and listed the configured servers.
+- **Next recommended action:** Restart/reload Codex for this trusted project so it initializes the newly registered servers, then confirm their tools appear.
+- **Assumptions:** This repository is being used with Codex, consistent with the active workspace.
+
+---
+
+## Change Entry — 2026-10-24 14:51 IST — Configure MCP Servers Across Supported Agents
+
+- **Request:** Make the repository's MCP configuration work across its supported agents.
+- **Change:** Added native project registrations for Cursor (`.cursor/mcp.json`), Gemini CLI (`.gemini/settings.json`), Antigravity (`.agents/mcp_config.json`), and OpenCode (`opencode.json`); retained existing Claude/Copilot (`.mcp.json`) and Codex (`.codex/config.toml`) registrations. Updated `AGENTS.md` and `skills/README.md` with the locations and synchronization requirement.
+- **Files changed:** `.cursor/mcp.json`, `.gemini/settings.json`, `.agents/mcp_config.json`, `opencode.json`, `AGENTS.md`, `skills/README.md`, `WORKSTATUS.md`.
+- **Status:** Configuration completed; runtime verification is partial.
+- **Validation:** JSON syntax and server/package parity passed for `.mcp.json`, `.cursor/mcp.json`, `.gemini/settings.json`, `.agents/mcp_config.json`, and `opencode.json`. TOML parsing and server/package parity passed for `.codex/config.toml`. `codex mcp list` listed both servers as enabled. `git diff --check` passed. Other agent CLIs were unavailable. A direct stdio MCP initialize/tools-list attempt did not return protocol output within the execution window; handshake remains unverified.
+- **Warnings/blockers:** Runtime connection is unverified outside Codex discovery; only Codex CLI was available for discovery checks.
+- **Next recommended action:** Restart each target agent and verify both servers show connected; if any fails, capture its MCP startup log and fix that agent-specific issue.
+- **Assumptions:** “Any agents” means every agent listed in `skills/README.md`'s supported-agent matrix.

@@ -11,15 +11,15 @@ blog post (community.sap.com, June 2026).
 - Each skill is authored once at `skills/<name>/SKILL.md`. Agent skill discovery uses symlinks to these canonical directories; never copy skills into IDE configuration folders.
 - Current repository entry points:
 
-| IDE / agent | Project entry point | Skill discovery |
-| --- | --- | --- |
-| Codex | Root `AGENTS.md` | `.agents/skills/<name>` |
-| Antigravity IDE / CLI | Root `AGENTS.md` | `.agents/skills/<name>` |
-| Claude Code | Root `AGENTS.md` plus `.claude/` discovery | `.claude/skills/<name>` |
-| OpenCode | `.opencode/` discovery and root instructions | `.opencode/skills/<name>` (also compatible with `.agents/skills/` and `.claude/skills/`) |
-| Cursor | `.cursor/rules/project.mdc` and root `AGENTS.md` | Read a matching skill from `skills/` when its description applies |
-| GitHub Copilot Chat | `.github/copilot-instructions.md` | Read a matching skill from `skills/` when its description applies |
-| Gemini CLI | Root `GEMINI.md` imports `AGENTS.md` and this catalog | Read a matching skill from `skills/` when its description applies |
+| IDE / agent | Project entry point | Skill discovery | MCP configuration |
+| --- | --- | --- | --- |
+| Codex | Root `AGENTS.md` | `.agents/skills/<name>` | `.codex/config.toml` |
+| Antigravity IDE / CLI | Root `AGENTS.md` | `.agents/skills/<name>` | `.agents/mcp_config.json` |
+| Claude Code | Root `AGENTS.md` plus `.claude/` discovery | `.claude/skills/<name>` | Root `.mcp.json` |
+| OpenCode | `.opencode/` discovery and root instructions | `.opencode/skills/<name>` (also compatible with `.agents/skills/` and `.claude/skills/`) | `opencode.json` |
+| Cursor | `.cursor/rules/project.mdc` and root `AGENTS.md` | Read a matching skill from `skills/` when its description applies | `.cursor/mcp.json` |
+| GitHub Copilot Chat | `.github/copilot-instructions.md` | Read a matching skill from `skills/` when its description applies | Root `.mcp.json` (portable Copilot format) |
+| Gemini CLI | Root `GEMINI.md` imports `AGENTS.md` and this catalog | Read a matching skill from `skills/` when its description applies | `.gemini/settings.json` |
 
 For another IDE or agent, configure its repository instruction feature to include `AGENTS.md`, then tell it to consult this catalog and load only the relevant `skills/<name>/SKILL.md`. If that tool cannot discover skills, the instructions remain usable by opening the relevant file directly. IDE integrations and skill auto-discovery are version-dependent; verify them in the target IDE after setup rather than assuming they are active.
 
@@ -27,7 +27,7 @@ For another IDE or agent, configure its repository instruction feature to includ
 
 - **Frontmatter is the trigger:** `name` and `description` are required; write the description as a classifier (when to use, synonyms, file areas).
 - **Keep skills small** (1–6k tokens). Split rather than grow.
-- **MCP servers** for live docs/model lookups are registered in `.mcp.json` (`cds-mcp`, `ui5-mcp`). Skills say *when* to query them.
+- **MCP servers** for live docs/model lookups are configured per agent in the locations above (`cds-mcp`, `ui5-mcp`). Keep server names, pinned packages, and arguments synchronized. Skills say *when* to query them.
 - **Evals/scratch:** directories matching `*-workspace/` are gitignored.
 - Project rules in `AGENTS.md` apply regardless of which IDE or skill is active.
 

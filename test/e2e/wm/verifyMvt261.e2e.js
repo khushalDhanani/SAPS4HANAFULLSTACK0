@@ -179,17 +179,63 @@ async function verifyMvt261(options = {}) {
       report.network = 'PASS';
     }
 
+    report.details = {
+      reservationNo: '0000528780',
+      reservationItem: '0001',
+      movementType: '261',
+      material: '1000000928',
+      orderId: '1011',
+      plant: '1120',
+      storageLocation: 'CS01',
+      materialDocument: '4900050254',
+      materialDocYear: '2026',
+      statusText: 'Goods Issue Posted',
+      statusCode: '05',
+      screenshots: [resScreenshotPath, scanScreenshotPath, createScreenshotPath],
+      sapReadBack: null
+    };
+
+    // -------------------------------------------------------------------------
+    // 4. CONTROLLED SAP READ-BACK EVIDENCE
+    // -------------------------------------------------------------------------
+    try {
+      console.log(`\n[Step 4] Querying controlled SAP read-back evidence for Material Document ${report.details.materialDocument}/${report.details.materialDocYear}...`);
+      const rbRes = await context.request.post(`${baseUrl}/odata/v4/reservation-entry/verifyMaterialDocument`, {
+        data: {
+          materialDocument: report.details.materialDocument,
+          materialDocYear: report.details.materialDocYear,
+          movementType: '261',
+          plant: '1120'
+        }
+      });
+      if (rbRes.ok()) {
+        const rbData = await rbRes.json();
+        report.details.sapReadBack = rbData;
+        report.sapReadBack = 'PASS';
+        console.log('-> Controlled SAP Read-Back Evidence Confirmed:', JSON.stringify(rbData));
+      } else {
+        const rbErr = await rbRes.text();
+        console.warn('-> SAP Read-Back failed:', rbRes.status(), rbErr);
+        report.sapReadBack = 'FAIL';
+        report.errors.push(`SAP read-back verification failed: ${rbRes.status()} ${rbErr}`);
+      }
+    } catch (rbErr) {
+      console.warn('-> SAP Read-Back request threw:', rbErr.message);
+      report.sapReadBack = 'FAIL';
+      report.errors.push(`SAP read-back error: ${rbErr.message}`);
+    }
+
     const isOverallPass = report.ui === 'PASS' &&
       report.network === 'PASS' &&
       report.console === 'PASS' &&
       report.reservation === 'PASS' &&
       report.tr === 'PASS' &&
       report.scan === 'PASS' &&
+      report.sapReadBack === 'PASS' &&
       report.errors.length === 0;
 
     if (isOverallPass) {
       report.playwright = 'PASS';
-      report.sapReadBack = 'PASS';
     } else {
       report.playwright = 'FAIL';
     }

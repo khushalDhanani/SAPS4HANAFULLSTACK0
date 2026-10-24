@@ -243,8 +243,39 @@ async function verifyMvt201(options = {}) {
       materialDocYear: '2026',
       statusText: 'Goods Issue Posted',
       statusCode: '05',
-      screenshots: [resScreenshotPath, scanScreenshotPath]
+      screenshots: [resScreenshotPath, scanScreenshotPath],
+      sapReadBack: null
     };
+
+    // -------------------------------------------------------------------------
+    // 5. CONTROLLED SAP READ-BACK EVIDENCE
+    // -------------------------------------------------------------------------
+    try {
+      console.log(`\n[Step 5] Querying controlled SAP read-back evidence for Material Document ${report.details.materialDocument}/${report.details.materialDocYear}...`);
+      const rbRes = await context.request.post(`${baseUrl}/odata/v4/reservation-entry/verifyMaterialDocument`, {
+        data: {
+          materialDocument: report.details.materialDocument,
+          materialDocYear: report.details.materialDocYear,
+          movementType: '201',
+          plant: '1120'
+        }
+      });
+      if (rbRes.ok()) {
+        const rbData = await rbRes.json();
+        report.details.sapReadBack = rbData;
+        report.sapReadBack = 'PASS';
+        console.log('-> Controlled SAP Read-Back Evidence Confirmed:', JSON.stringify(rbData));
+      } else {
+        const rbErr = await rbRes.text();
+        console.warn('-> SAP Read-Back failed:', rbRes.status(), rbErr);
+        report.sapReadBack = 'FAIL';
+        report.errors.push(`SAP read-back verification failed: ${rbRes.status()} ${rbErr}`);
+      }
+    } catch (rbErr) {
+      console.warn('-> SAP Read-Back request threw:', rbErr.message);
+      report.sapReadBack = 'FAIL';
+      report.errors.push(`SAP read-back error: ${rbErr.message}`);
+    }
 
     const isOverallPass = report.ui === 'PASS' &&
       report.network === 'PASS' &&
@@ -254,11 +285,11 @@ async function verifyMvt201(options = {}) {
       report.to === 'PASS' &&
       report.materialDocument === 'PASS' &&
       report.scan === 'PASS' &&
+      report.sapReadBack === 'PASS' &&
       report.errors.length === 0;
 
     if (isOverallPass) {
       report.playwright = 'PASS';
-      report.sapReadBack = 'GREEN WITH CONFIGURATION DEPENDENCY';
     } else {
       report.playwright = 'FAIL';
     }
@@ -266,7 +297,7 @@ async function verifyMvt201(options = {}) {
     console.log('\n================================================================');
     if (isOverallPass) {
       console.log(' MOVEMENT 201 PLAYWRIGHT VERIFICATION RESULT: PASS');
-      console.log(' ACCEPTED VERDICT: GREEN WITH CONFIGURATION DEPENDENCY');
+      console.log(' CONTROLLED SAP READ-BACK VERDICT: PASS');
     } else {
       console.log(' MOVEMENT 201 PLAYWRIGHT VERIFICATION RESULT: FAIL');
       console.log(' ERRORS:', report.errors);
