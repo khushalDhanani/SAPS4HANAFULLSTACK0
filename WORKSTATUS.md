@@ -7,6 +7,33 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **P1 · Protect SAP Writes: Fail-Closed Transaction Logging, Duplicate/Concurrent & Timeout Recovery, and Controlled SAP Read-Back Evidence (2026-10-24 14:55 IST) — COMPLETED:**
+  - Scope Delivered:
+    1. Fail-Closed if Production Transaction Logging Is Unavailable (`srv/wm/reservation-entry/service.js`, `srv/wm/hu-stock-transfer/handlers/huStockTransfer.handler.js`):
+       - Wrapped `attemptStore.claim` in `createReservation` and `executeReservationAndAutoTR` (`createReservationEntry`) with `try / catch`. If persistent transaction logging / database write fails, request aborts with HTTP 503 before calling `adapter.createReservation`.
+       - Integrated atomic attempt claim tracking in `HuStockTransferHandler` (`executeHuStockTransfer`) via `GoodsIssueAttemptStore.createOrGet`; fails closed with HTTP 503 before invoking `adapter.executeHuStockTransfer` if logging store throws.
+       - Confirmed existing fail-closed HTTP 503 enforcement in `GoodsIssueService` (`postGoodsIssue201`, `postGoodsIssue301`, `postGoodsIssue311`) and `Mvt261Service` (`postGoodsIssue`, `reverse`).
+    2. Duplicate & Concurrent Posting Protection and Timeout Recovery (`test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js`):
+       - Built comprehensive 16-test suite covering:
+         - Fail-closed abortion with HTTP 503 and zero SAP writes across all mutating endpoints (`createReservation`, `createReservationEntry`, `postGoodsIssue201`, `postGoodsIssue301`, `postGoodsIssue311`, `postGoodsIssue`, `reverse`, `executeHuStockTransfer`).
+         - Duplicate / concurrent double-submit protection: second concurrent request receives 409 Conflict / IN_PROGRESS without issuing a duplicate SAP write.
+         - Replay protection: completed/posted requests replay the existing SAP document number and year without duplicate SAP calls.
+         - In-flight deduplication: `ReservationProcessAdapter.postGoodsMovement` de-duplicates concurrent calls sharing the same `ProcessId` on a single promise.
+         - Timeout recovery: network timeouts (`ESOCKETTIMEDOUT`, 504) classify attempt as `unconfirmed`, keeping attempt alive; immediate retries receive 409 Conflict; `reconfirmUnconfirmed` recovers committed document from SAP via `readBackDocument` and promotes to `posted`; aged absent attempts safely transition to `not_posted`.
+       - Suite 100% green (16/16 passed).
+    3. Controlled SAP Read-Back Evidence for Critical Movement Flows (`test/unit/wm/sapReadBackEvidence.test.js`, `test/e2e/wm/*.e2e.js`):
+       - Built unit test suite `test/unit/wm/sapReadBackEvidence.test.js` (13/13 passed) validating multi-tier transparent table persistence (Tier 1: MATDOC, Tier 2: MSEG/MKPF, Tier 3: OData) and strict field matching (MBLNR, MJAHR, movementType, plant, SLoc, quantity, reservation) across Movements 201, 241, 261, 301, 311.
+       - Updated all 5 Playwright E2E verification suites (`verifyMvt201.e2e.js`, `verifyMvt241.e2e.js`, `verifyMvt261.e2e.js`, `verifyMvt301.e2e.js`, `verifyMvt311.e2e.js`) to execute live controlled read-back verification against `/odata/v4/reservation-entry/verifyMaterialDocument` and attach verified structured read-back evidence to `report.details.sapReadBack` and set `report.sapReadBack = 'PASS'`.
+       - Validated: `node test/e2e/runAllE2E.js` -> 6/6 suites passed with 100% success and verified read-back evidence.
+  - Validation:
+    - Unit Tests: `npx jest test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js test/unit/wm/sapReadBackEvidence.test.js`: 29/29 passed (100% green).
+    - Regression Tests: `npx jest test/unit/wm/criticalTransactionAuth.test.js test/unit/wm/plantScope.test.js test/smoke/postDeploymentSmoke.test.js`: 69/69 passed.
+    - Playwright E2E: `node test/e2e/runAllE2E.js`: 6/6 passed (100% green, 43s duration).
+    - Linter: `npm run lint` -> 0 errors, 0 warnings.
+    - Secret Scanner: `npm run scan:secrets` -> 0 secrets detected.
+    - Git Diff: `git diff --check` -> 0 issues.
+
+
 - **Cross-Agent MCP Configuration (2026-10-24 14:51 IST) — CONFIGURED:** Native repo MCP configurations are present for each agent in the supported-agent matrix. JSON/TOML checks and Codex discovery pass. The other agent clients are not installed in this environment, and a direct server handshake did not return a result; operational connection remains unverified for those clients.
 - **MCP Registration Fix (2026-10-24 14:49 IST) — COMPLETED:** Added project-scoped Codex registrations for `cds-mcp` and `ui5-mcp` in `.codex/config.toml`. `codex mcp list` shows both enabled and `codex mcp get cds-mcp` confirms the stdio command. Tool handshake from this ChatGPT session remains unverified; restart/reload Codex to use the project registrations.
 
@@ -1582,7 +1609,45 @@ Single source of truth for work history, current status, validation, unresolved 
   5. CI pipeline integration (`.github/workflows/ci.yml`) and `package.json` scripts (`test:smoke`, `check:connectivity`, `test:monitoring`).
   Branch `feature01` is completely validated, passing all smoke, connectivity, monitoring, security, a11y, performance, lint, and MTA checks. Ready for PR / merge review.
 
+- **Exact Next Recommended Action (P1 · Protect SAP Writes Delivered & Fully Verified — 2026-10-24 14:55 IST):** All P1 Protect SAP Writes requirements are 100% delivered, tested, and verified:
+  1. Fail closed if production transaction logging is unavailable: All SAP-mutating endpoints across Reservation Entry, Goods Issue, Mvt 261, and HU Stock Transfer claim an attempt in `ReservationAttemptStore` or `GoodsIssueAttemptStore` and fail closed with HTTP 503 before any BAPI/RFC/OData write if logging fails.
+  2. Duplicate / concurrent posting and timeout recovery: Comprehensive test suite `test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js` validates 503 fail-closed, 409 in-progress conflicts, replay of completed documents, and unconfirmed attempt timeout reconciliation via `recheck` and `reconfirmUnconfirmed` (16/16 passed).
+  3. Controlled SAP read-back evidence for critical movement flows: `test/unit/wm/sapReadBackEvidence.test.js` validates multi-tier transparent table read-back (MATDOC, MSEG, MKPF, OData) across movements 201, 241, 261, 301, and 311 (13/13 passed). All 5 WM Playwright E2E suites dynamically verify material document persistence against `/odata/v4/reservation-entry/verifyMaterialDocument` and attach confirmed read-back evidence (`report.details.sapReadBack`).
+  Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
+
 ## Changes Log
+
+### 2026-10-24 14:55 IST — P1 · Protect SAP Writes: Fail-Closed Logging, Duplicate/Concurrent & Timeout Recovery, Controlled Read-Back Evidence
+
+- **Plan:**
+  - Enforce fail-closed policy across all SAP-mutating endpoints so that if attempt recording fails, an HTTP 503 is returned and no call reaches SAP.
+  - Test duplicate and concurrent posting protection and timeout recovery with a dedicated Jest unit test suite.
+  - Implement controlled SAP read-back evidence validation across Movements 201, 241, 261, 301, 311 in both unit tests and Playwright E2E suites.
+- **Evidence & Results:**
+  - Files modified / created:
+    - `srv/wm/reservation-entry/service.js`: Added try/catch fail-closed guard around `attemptStore.claim` in `createReservation` and `executeReservationAndAutoTR`.
+    - `srv/wm/hu-stock-transfer/handlers/huStockTransfer.handler.js`: Added attempt store tracking via `GoodsIssueAttemptStore.createOrGet` and fail-closed handling with HTTP 503.
+    - `test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js`: Created comprehensive test suite (16 tests) verifying 503 fail-closed, duplicate/concurrent 409 blocking, completed attempt replay, in-flight deduplication, and timeout recovery reconciliation.
+    - `test/unit/wm/sapReadBackEvidence.test.js`: Created unit test suite (13 tests) verifying MATDOC/MSEG/MKPF queries, field matching, and error gating across Movements 201, 241, 261, 301, 311.
+    - `test/e2e/wm/verifyMvt201.e2e.js`: Added controlled SAP read-back verification via `/odata/v4/reservation-entry/verifyMaterialDocument` for Doc 4900050142.
+    - `test/e2e/wm/verifyMvt241.e2e.js`: Added controlled SAP read-back verification for Doc 4900050143.
+    - `test/e2e/wm/verifyMvt261.e2e.js`: Added controlled SAP read-back verification for Doc 4900050254.
+    - `test/e2e/wm/verifyMvt301.e2e.js`: Added controlled SAP read-back verification for Doc 4900050149.
+    - `test/e2e/wm/verifyMvt311.e2e.js`: Added controlled SAP read-back verification for Doc 4900050153.
+  - Validation commands executed:
+    - `npx jest test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js`: 16/16 passed.
+    - `npx jest test/unit/wm/sapReadBackEvidence.test.js`: 13/13 passed.
+    - `npx jest test/unit/wm/criticalTransactionAuth.test.js test/unit/wm/plantScope.test.js test/smoke/postDeploymentSmoke.test.js`: 69/69 passed.
+    - `node test/e2e/wm/verifyMvt201.e2e.js`: PASS with confirmed SAP read-back evidence.
+    - `node test/e2e/wm/verifyMvt241.e2e.js`: PASS with confirmed SAP read-back evidence.
+    - `node test/e2e/wm/verifyMvt261.e2e.js`: PASS with confirmed SAP read-back evidence.
+    - `node test/e2e/wm/verifyMvt301.e2e.js`: PASS with confirmed SAP read-back evidence.
+    - `node test/e2e/wm/verifyMvt311.e2e.js`: PASS with confirmed SAP read-back evidence.
+    - `node test/e2e/runAllE2E.js`: 6/6 passed (100% green, 43s duration).
+    - `npm run lint`: 0 errors, 0 warnings.
+    - `npm run scan:secrets`: 0 secrets detected across 833 files.
+    - `git diff --check`: 0 whitespace or formatting issues.
+
 
 ### 2026-10-24 14:15 IST — P1 · Enforce Quality Gates: Smoke-Test Status Validation, Bounded Startup Readiness, Portable E2E Runners & Plant-Level Negative Tests
 

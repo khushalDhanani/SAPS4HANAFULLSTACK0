@@ -28,7 +28,7 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
   let giPost201Spy;
   let giPost301Spy;
   let giPost311Spy;
-  let mvt261CycleSpy;
+  let _mvt261CycleSpy;
   let mvt261PostSpy;
   let mvt261RevSpy;
   let huTransferSpy;
@@ -129,7 +129,7 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
       Confirmed: true
     });
 
-    mvt261CycleSpy = jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue({
+    _mvt261CycleSpy = jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue({
       Reservation: '0000528780',
       ReservationItem: '0001',
       Material: '8000000023',
