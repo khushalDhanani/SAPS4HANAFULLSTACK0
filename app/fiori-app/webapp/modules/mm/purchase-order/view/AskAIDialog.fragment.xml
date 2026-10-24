@@ -7,28 +7,95 @@
         icon="sap-icon://ai"
         type="Emphasized"
         tooltip="{i18n>aiDialogTitle}"
+        ariaLabel="{i18n>aiDialogTitle}"
         press=".onAskAI"
         visible="{= !${aiDialog>/open} }"
         class="aiFab" />
 
-    <!-- Assistant panel (bottom-right, non-modal) -->
-    <VBox id="aiWidget" class="aiWidget" visible="{aiDialog>/open}" renderType="Bare">
+    <!-- Assistant panel (bottom-right, non-modal, light-theme Fiori card) -->
+    <VBox
+        id="aiWidget"
+        class="aiWidget"
+        visible="{aiDialog>/open}"
+        renderType="Bare"
+        accessibleRole="Region"
+        ariaLabel="{i18n>aiDialogTitle}">
+        <!-- Header Toolbar -->
         <Toolbar class="aiWidgetHeader">
-            <core:Icon src="sap-icon://ai" class="sapUiTinyMarginBegin" />
-            <Title text="{i18n>aiDialogTitle}" level="H3" />
+            <core:Icon src="sap-icon://ai" class="aiHeaderIcon sapUiTinyMarginBegin sapUiTinyMarginEnd" />
+            <Title text="{i18n>aiDialogTitle}" level="H3" class="aiHeaderTitle" />
             <ToolbarSpacer />
-            <Button icon="sap-icon://clear-all" tooltip="{i18n>aiClear}" press=".onAIClear" type="Transparent" />
-            <Button icon="sap-icon://decline" tooltip="{i18n>btnClose}" press=".onAIClose" type="Transparent" />
+            <Button
+                icon="sap-icon://clear-all"
+                tooltip="{i18n>aiClear}"
+                ariaLabel="{i18n>aiClear}"
+                press=".onAIClear"
+                type="Transparent" />
+            <Button
+                icon="sap-icon://decline"
+                tooltip="{i18n>btnClose}"
+                ariaLabel="{i18n>btnClose}"
+                press=".onAIClose"
+                type="Transparent" />
         </Toolbar>
         <Text text="{i18n>aiDialogHint}" class="aiWidgetHint" />
-        <ScrollContainer id="aiChatScroll" vertical="true" horizontal="false" class="aiChatScroll">
+
+        <!-- Scrollable Conversation Area -->
+        <ScrollContainer
+            id="aiChatScroll"
+            vertical="true"
+            horizontal="false"
+            class="aiChatScroll"
+            ariaLive="Polite">
             <VBox class="sapUiSmallMargin aiChatBody">
+                <!-- Empty State & Quick Prompts -->
                 <VBox visible="{= ${aiDialog>/messages}.length === 0 }" class="aiChatEmpty">
-                    <Text text="{i18n>aiWelcome}" class="sapUiSmallMarginBottom" />
-                    <Button text="{i18n>aiPresetSummary}" press=".onAIPreset" type="Transparent" icon="sap-icon://ai" class="aiSuggestion" />
-                    <Button text="{i18n>aiPresetRisks}" press=".onAIPreset" type="Transparent" icon="sap-icon://ai" class="aiSuggestion" />
-                    <Button text="{i18n>aiPresetSuppliers}" press=".onAIPreset" type="Transparent" icon="sap-icon://ai" class="aiSuggestion" />
+                    <Text text="{i18n>aiWelcome}" class="aiWelcomeText sapUiSmallMarginBottom" />
+                    <VBox class="aiSuggestionsGrid">
+                        <Button
+                            text="{i18n>aiPresetSummary}"
+                            press=".onAIPreset"
+                            type="Transparent"
+                            icon="sap-icon://activity-individual"
+                            class="aiSuggestion"
+                            tooltip="{i18n>aiPresetSummary}"
+                            ariaLabel="{i18n>aiPresetSummary}" />
+                        <Button
+                            text="{i18n>aiPresetDelivery}"
+                            press=".onAIPreset"
+                            type="Transparent"
+                            icon="sap-icon://shipping-status"
+                            class="aiSuggestion"
+                            tooltip="{i18n>aiPresetDelivery}"
+                            ariaLabel="{i18n>aiPresetDelivery}" />
+                        <Button
+                            text="{i18n>aiPresetSpend}"
+                            press=".onAIPreset"
+                            type="Transparent"
+                            icon="sap-icon://lead"
+                            class="aiSuggestion"
+                            tooltip="{i18n>aiPresetSpend}"
+                            ariaLabel="{i18n>aiPresetSpend}" />
+                        <Button
+                            text="{i18n>aiPresetRisks}"
+                            press=".onAIPreset"
+                            type="Transparent"
+                            icon="sap-icon://alert"
+                            class="aiSuggestion"
+                            tooltip="{i18n>aiPresetRisks}"
+                            ariaLabel="{i18n>aiPresetRisks}" />
+                        <Button
+                            text="{i18n>aiPresetSuppliers}"
+                            press=".onAIPreset"
+                            type="Transparent"
+                            icon="sap-icon://supplier"
+                            class="aiSuggestion"
+                            tooltip="{i18n>aiPresetSuppliers}"
+                            ariaLabel="{i18n>aiPresetSuppliers}" />
+                    </VBox>
                 </VBox>
+
+                <!-- Messages List -->
                 <VBox items="{aiDialog>/messages}" width="100%">
                     <VBox width="100%" class="aiMsg" alignItems="{= ${aiDialog>role} === 'user' ? 'End' : 'Start' }">
                         <customData>
@@ -38,31 +105,104 @@
                             <customData>
                                 <core:CustomData key="role" value="{= ${aiDialog>error} ? 'error' : ${aiDialog>role} }" writeToDom="true" />
                             </customData>
-                            <core:HTML content="{= '&lt;div class=&quot;aiMd&quot;&gt;' + (${aiDialog>html} || '') + '&lt;/div&gt;' }" sanitizeContent="false" />
+                            <!-- Normal assistant/user response -->
+                            <core:HTML
+                                visible="{= !${aiDialog>error} }"
+                                content="{= '&lt;div class=&quot;aiMd&quot;&gt;' + (${aiDialog>html} || '') + '&lt;/div&gt;' }"
+                                sanitizeContent="false" />
+                            <!-- Structured Error State with Retry Button -->
+                            <VBox visible="{= !!${aiDialog>error} }" class="aiErrorCard">
+                                <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                                    <core:Icon src="sap-icon://alert" class="aiErrorIcon sapUiTinyMarginEnd" />
+                                    <Title text="{i18n>aiQueryErrorTitle}" level="H5" class="aiErrorTitle" />
+                                </HBox>
+                                <Text text="{aiDialog>content}" class="aiErrorText sapUiTinyMarginBottom" />
+                                <HBox>
+                                    <Button
+                                        text="{i18n>aiRetry}"
+                                        icon="sap-icon://refresh"
+                                        type="Ghost"
+                                        press=".onAIRetry"
+                                        class="aiRetryBtn"
+                                        tooltip="{i18n>aiRetry}"
+                                        ariaLabel="{i18n>aiRetry}" />
+                                </HBox>
+                            </VBox>
                         </VBox>
                         <Text text="{aiDialog>meta}" tooltip="{aiDialog>metaTooltip}" visible="{= !!${aiDialog>meta} }" class="aiMsgMeta" />
                     </VBox>
                 </VBox>
-                <HBox visible="{aiDialog>/busy}" class="aiMsg">
-                    <VBox class="aiBubble aiTyping"><HBox><core:Icon src="sap-icon://ai" class="aiTypingIcon" /><Text text="{i18n>aiThinking}" /></HBox></VBox>
+
+                <!-- Active Loading / Thinking State with Inline Stop -->
+                <HBox visible="{= !!${aiDialog>/busy} &amp;&amp; !${aiDialog>/streaming} }" class="aiMsg" alignItems="Center">
+                    <VBox class="aiBubble aiTyping">
+                        <HBox alignItems="Center" class="aiTypingRow">
+                            <core:Icon src="sap-icon://ai" class="aiTypingIcon sapUiTinyMarginEnd" />
+                            <Text text="{= ${aiDialog>/loadingStep} || ${i18n>aiThinking} }" class="aiTypingText" />
+                            <Button
+                                text="{i18n>aiStop}"
+                                icon="sap-icon://stop"
+                                type="Reject"
+                                press=".onAIStop"
+                                class="aiStopInlineBtn sapUiTinyMarginBegin"
+                                tooltip="{i18n>aiStop}"
+                                ariaLabel="{i18n>aiStop}" />
+                        </HBox>
+                    </VBox>
                 </HBox>
             </VBox>
         </ScrollContainer>
+
+        <!-- Contextual Follow-up Chips -->
+        <VBox visible="{= !!${aiDialog>/followUps} &amp;&amp; ${aiDialog>/followUps}.length &gt; 0 &amp;&amp; !${aiDialog>/busy} }" class="aiFollowUpsBox">
+            <HBox alignItems="Center" class="aiFollowUpsHeader">
+                <core:Icon src="sap-icon://lightbulb" class="aiFollowUpIcon sapUiTinyMarginEnd" />
+                <Text text="{i18n>aiFollowUpsTitle}" class="aiFollowUpsTitle" />
+            </HBox>
+            <HBox items="{aiDialog>/followUps}" wrap="Wrap" class="aiFollowUpsList">
+                <Button
+                    text="{aiDialog>text}"
+                    icon="sap-icon://feeder-arrow"
+                    type="Transparent"
+                    press=".onAIFollowUp"
+                    class="aiFollowUpChip"
+                    tooltip="{aiDialog>text}"
+                    ariaLabel="{aiDialog>text}" />
+            </HBox>
+        </VBox>
+
+        <!-- Footer Input & Controls -->
         <Toolbar class="aiChatFooter">
             <Input
                 id="aiInput"
                 value="{aiDialog>/question}"
                 placeholder="{i18n>aiQuestionPlaceholder}"
+                ariaLabel="{i18n>aiQuestionPlaceholder}"
+                showClearButton="true"
                 width="100%"
                 valueLiveUpdate="true"
                 submit=".onAIAsk"
                 enabled="{= !${aiDialog>/busy} }" />
+            <!-- Send Button (when idle) -->
             <Button
+                id="aiSendBtn"
                 icon="sap-icon://paper-plane"
                 tooltip="{i18n>aiAsk}"
+                ariaLabel="{i18n>aiAsk}"
                 type="Emphasized"
                 press=".onAIAsk"
-                enabled="{= !!${aiDialog>/question} &amp;&amp; !${aiDialog>/busy} }" />
+                visible="{= !${aiDialog>/busy} }"
+                enabled="{= !!${aiDialog>/question} }" />
+            <!-- Stop Button (when busy/streaming) -->
+            <Button
+                id="aiStopBtn"
+                icon="sap-icon://stop"
+                tooltip="{i18n>aiStop}"
+                ariaLabel="{i18n>aiStop}"
+                type="Reject"
+                press=".onAIStop"
+                visible="{aiDialog>/busy}"
+                class="aiStopBtn" />
         </Toolbar>
     </VBox>
 </core:FragmentDefinition>

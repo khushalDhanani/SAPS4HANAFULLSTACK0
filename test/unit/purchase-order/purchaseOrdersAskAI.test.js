@@ -702,4 +702,150 @@ describe('PurchaseOrders Ask AI helpers', () => {
             PurchaseOrder: '4500001234'
         });
     });
+
+    test('onAIClose closes the dialog and restores focus to aiFab', () => {
+        const { c, data } = mkController();
+        data.open = true;
+        const mockFab = { focus: jest.fn() };
+        const origById = c.byId;
+        c.byId = id => id === 'aiFab' ? mockFab : (origById ? origById(id) : null);
+        c.onAIClose();
+        expect(data.open).toBe(false);
+        expect(mockFab.focus).toHaveBeenCalled();
+    });
+
+    test('onAIClear resets messages, question, followUps, loadingStep, and lastQuestion', () => {
+        const { c, data } = mkController('previous question');
+        data.messages = [{ role: 'user', content: 'test' }];
+        data.followUps = [{ text: 'Follow-up 1' }];
+        data.loadingStep = 'Retrieving';
+        data.lastQuestion = 'previous question';
+        c._sLastQuestion = 'previous question';
+
+        c.onAIClear();
+
+        expect(data.messages).toEqual([]);
+        expect(data.question).toBe('');
+        expect(data.followUps).toEqual([]);
+        expect(data.loadingStep).toBe('');
+        expect(data.lastQuestion).toBe('');
+        expect(c._sLastQuestion).toBe('');
+    });
+
+    test('onAIFollowUp sets question and triggers onAIAsk', () => {
+        const { c, data } = mkController();
+        c.onAIAsk = jest.fn();
+
+        // Call with event containing binding context
+        const oMockSource = {
+            getBindingContext: () => ({ getProperty: p => p === 'question' ? 'Show items for PO 4500001234' : null })
+        };
+        c.onAIFollowUp({ getSource: () => oMockSource });
+
+        expect(data.question).toBe('Show items for PO 4500001234');
+        expect(c.onAIAsk).toHaveBeenCalledTimes(1);
+
+        // Call directly with string
+        c.onAIFollowUp('What is total spend?');
+        expect(data.question).toBe('What is total spend?');
+        expect(c.onAIAsk).toHaveBeenCalledTimes(2);
+    });
+
+    test('onAIRetry retrieves last question from context or model and re-runs onAIAsk', () => {
+        const { c, data } = mkController();
+        c.onAIAsk = jest.fn();
+        data.lastQuestion = 'how many POs failed?';
+
+        c.onAIRetry();
+        expect(data.question).toBe('how many POs failed?');
+        expect(c.onAIAsk).toHaveBeenCalledTimes(1);
+
+        // Call from source event with binding context
+        const oMockSource = {
+            getBindingContext: () => ({ getProperty: p => p === 'lastQuestion' ? 'retry question' : null })
+        };
+        c.onAIRetry({ getSource: () => oMockSource });
+        expect(data.question).toBe('retry question');
+        expect(c.onAIAsk).toHaveBeenCalledTimes(2);
+    });
+
+    test('onAIStop aborts active stream and appends stopped note to assistant message', () => {
+        const { c, data } = mkController();
+        const mockAbort = jest.fn();
+        c._oAIAbortController = { abort: mockAbort };
+        data.busy = true;
+        data.streaming = true;
+        data.messages = [
+            { role: 'user', content: 'test' },
+            { role: 'assistant', content: 'Here is part of the ans' }
+        ];
+
+        c.onAIStop();
+
+        expect(mockAbort).toHaveBeenCalled();
+        expect(data.busy).toBe(false);
+        expect(data.streaming).toBe(false);
+        expect(data.messages[1].content).toContain('Here is part of the ans');
+        expect(data.messages[1].content).toContain('aiStopped');
+        expect(data.messages[1].html).toContain('aiStopped');
+    });
+
+    test('_generateFollowUps creates relevant grounded suggestions across procurement dimensions', () => {
+        // Specific PO
+        const fPO = ControllerClass._generateFollowUps(null, 'What is status of PO 4500001234?');
+        expect(fPO.length).toBe(3);
+        expect(fPO[0].text).toContain('4500001234');
+        expect(fPO[0].question).toBe(fPO[0].text);
+
+        // Status intent
+        const fStatus = ControllerClass._generateFollowUps(null, 'Show approval status breakdown');
+        expect(fStatus.some(f => f.text.includes('approval') || f.text.includes('02'))).toBe(true);
+
+        // Spend intent
+        const fSpend = ControllerClass._generateFollowUps(null, 'Who are the top spend suppliers?');
+        expect(fSpend.some(f => f.text.includes('spend') || f.text.includes('net'))).toBe(true);
+
+        // Delivery date intent
+        const fDelivery = ControllerClass._generateFollowUps(null, 'Which items are overdue or due soon?');
+        expect(fDelivery.some(f => f.text.includes('due') || f.text.includes('delivery'))).toBe(true);
+
+        // Supplier intent
+        const fSupplier = ControllerClass._generateFollowUps(null, 'Show vendor performance for 100001');
+        expect(fSupplier.some(f => f.text.includes('supplier'))).toBe(true);
+
+        // Material / items intent
+        const fItem = ControllerClass._generateFollowUps(null, 'Show line item quantities for raw materials');
+        expect(fItem.some(f => f.text.includes('line items') || f.text.includes('materials'))).toBe(true);
+
+        // Default intent
+        const fDefault = ControllerClass._generateFollowUps(null, 'hello there');
+        expect(fDefault.length).toBe(3);
+    });
+
+    test('onAIAsk populates contextual follow-ups upon successful completion', async () => {
+        const { c, data } = mkController('Which POs are pending approval?');
+        mockPost.mockResolvedValue({ answer: 'Found 3 pending POs', model: 'nim-test' });
+
+        await c.onAIAsk();
+
+        expect(data.busy).toBe(false);
+        expect(data.followUps).toBeDefined();
+        expect(data.followUps.length).toBeGreaterThan(0);
+        expect(data.followUps[0].text).toBeDefined();
+    });
+
+    test('onAIAsk sets error bubble with lastQuestion and offers retry follow-up on failure', async () => {
+        const { c, data } = mkController('What is the total spend?');
+        mockPost.mockRejectedValue(new Error('Network connection timeout'));
+
+        await c.onAIAsk();
+
+        expect(data.busy).toBe(false);
+        const oLastMsg = data.messages[data.messages.length - 1];
+        expect(oLastMsg.error).toBe(true);
+        expect(oLastMsg.lastQuestion).toBe('What is the total spend?');
+        expect(data.followUps).toEqual([
+            { text: 'Retry: What is the total spend?', question: 'What is the total spend?' }
+        ]);
+    });
 });

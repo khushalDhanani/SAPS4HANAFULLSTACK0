@@ -452,7 +452,16 @@ sap.ui.define([
         _initAIWidget: function () {
             var oView = this.getView(), that = this;
             if (this._pAIWidget) { return this._pAIWidget; }
-            oView.setModel(new JSONModel({ open: false, question: "", messages: [], busy: false }), "aiDialog");
+            oView.setModel(new JSONModel({
+                open: false,
+                question: "",
+                messages: [],
+                busy: false,
+                streaming: false,
+                loadingStep: "",
+                lastQuestion: "",
+                followUps: []
+            }), "aiDialog");
             this._pAIWidget = Fragment.load({
                 id: oView.getId(),
                 name: "saps4hana.fiori.modules.mm.purchase-order.view.AskAIDialog",
@@ -511,17 +520,98 @@ sap.ui.define([
 
         onAIClose: function () {
             this.getView().getModel("aiDialog").setProperty("/open", false);
+            var oFab = this.byId("aiFab");
+            if (oFab && typeof oFab.focus === "function") {
+                oFab.focus();
+            }
         },
 
         onAIClear: function () {
             var oModel = this.getView().getModel("aiDialog");
             oModel.setProperty("/messages", []);
             oModel.setProperty("/question", "");
+            oModel.setProperty("/followUps", []);
+            oModel.setProperty("/loadingStep", "");
+            oModel.setProperty("/lastQuestion", "");
+            this._sLastQuestion = "";
         },
 
         onAIPreset: function (oEvent) {
             this.getView().getModel("aiDialog").setProperty("/question", oEvent.getSource().getText());
             this.onAIAsk();
+        },
+
+        onAIFollowUp: function (oEvent) {
+            var sQuestion = "";
+            if (oEvent && typeof oEvent.getSource === "function") {
+                var oCtx = oEvent.getSource().getBindingContext("aiDialog");
+                if (oCtx && oCtx.getProperty("question")) {
+                    sQuestion = oCtx.getProperty("question");
+                }
+                if (!sQuestion && typeof oEvent.getSource().getText === "function") {
+                    sQuestion = oEvent.getSource().getText();
+                }
+            } else if (typeof oEvent === "string") {
+                sQuestion = oEvent;
+            }
+            if (sQuestion) {
+                this.getView().getModel("aiDialog").setProperty("/question", sQuestion);
+                this.onAIAsk();
+            }
+        },
+
+        onAIRetry: function (oEvent) {
+            var sQuestion = "";
+            if (oEvent && typeof oEvent.getSource === "function") {
+                var oCtx = oEvent.getSource().getBindingContext("aiDialog");
+                if (oCtx && oCtx.getProperty("lastQuestion")) {
+                    sQuestion = oCtx.getProperty("lastQuestion");
+                }
+            }
+            var oModel = this.getView().getModel("aiDialog");
+            if (!sQuestion) {
+                sQuestion = oModel.getProperty("/lastQuestion") || this._sLastQuestion || "";
+            }
+            if (!sQuestion) {
+                var aMsgs = oModel.getProperty("/messages") || [];
+                for (var i = aMsgs.length - 1; i >= 0; i--) {
+                    if (aMsgs[i].role === "user" && aMsgs[i].content) {
+                        sQuestion = aMsgs[i].content;
+                        break;
+                    }
+                }
+            }
+            if (sQuestion) {
+                oModel.setProperty("/question", sQuestion);
+                this.onAIAsk();
+            }
+        },
+
+        onAIStop: function () {
+            if (this._oAIAbortController) {
+                try {
+                    this._oAIAbortController.abort();
+                } catch (e) {
+                    // ignore
+                }
+                this._oAIAbortController = null;
+            }
+            var oModel = this.getView().getModel("aiDialog");
+            oModel.setProperty("/busy", false);
+            oModel.setProperty("/streaming", false);
+            oModel.setProperty("/loadingStep", "");
+            var aMessages = (oModel.getProperty("/messages") || []).slice();
+            if (aMessages.length > 0) {
+                var oLast = aMessages[aMessages.length - 1];
+                if (oLast.role === "assistant" && !oLast.error) {
+                    var sStopNote = "\n\n_[" + this.getText("aiStopped", null, "Generation stopped by user.") + "]_";
+                    if (oLast.content.indexOf(sStopNote) === -1) {
+                        oLast.content += sStopNote;
+                        oLast.html = PurchaseOrdersController._toHtml(oLast.content);
+                        this._refreshAIMessages(aMessages, true);
+                    }
+                }
+            }
         },
 
         /**
@@ -750,12 +840,25 @@ sap.ui.define([
             var oModel = this.getView().getModel("aiDialog");
             var sQuestion = (oModel.getProperty("/question") || "").trim();
             if (!sQuestion || oModel.getProperty("/busy")) { return; }
+            this._sLastQuestion = sQuestion;
+            oModel.setProperty("/lastQuestion", sQuestion);
             var aMessages = (oModel.getProperty("/messages") || []).slice();
             aMessages.push({ role: "user", content: sQuestion, html: PurchaseOrdersController._toHtml(sQuestion), meta: that._formatTime(new Date()) });
             oModel.setProperty("/messages", aMessages);
             oModel.setProperty("/question", "");
             oModel.setProperty("/busy", true);
+            oModel.setProperty("/streaming", false);
+            oModel.setProperty("/loadingStep", that.getText("aiLoadingRetrieving", null, "Retrieving verified SAP records..."));
+            oModel.setProperty("/followUps", []);
             this._scrollAIChatToBottom();
+
+            if (typeof AbortController !== "undefined") {
+                this._oAIAbortController = new AbortController();
+            } else {
+                this._oAIAbortController = null;
+            }
+            var oSignal = this._oAIAbortController ? this._oAIAbortController.signal : null;
+
             var oAnswer = null, oScope;
             var oPayload;
             var oIntents = PurchaseOrdersController._detectProcurementIntents(sQuestion);
@@ -777,6 +880,11 @@ sap.ui.define([
                 this._fetchTopPOsByNet(15),
                 this._searchItems(sQuestion)
             ]).then(function (aRes) {
+                if (oSignal && oSignal.aborted) {
+                    var oErrAbort = new Error("AbortError");
+                    oErrAbort.name = "AbortError";
+                    throw oErrAbort;
+                }
                 var oCtx = aRes[0];
                 oScope = that._getAIScope(oCtx.rows.length, oCtx.isFallback, oCtx.queryFailed);
                 oScope.statusCounts = aRes[1];
@@ -801,32 +909,60 @@ sap.ui.define([
                     messages: aMessages.filter(function (m) { return !m.error; }).map(function (m) { return { role: m.role, content: m.content }; }),
                     system: PurchaseOrdersController._buildAISystemPrompt(oCtx.rows, oCtx.notFound, oScope)
                 };
+                oModel.setProperty("/loadingStep", that.getText("aiLoadingGenerating", null, "Analyzing verified SAP records..."));
                 // Streaming first; the OData action is the fallback when the stream cannot even start.
                 return that._streamAIChat(oPayload, function (sPartial) {
                     if (!oAnswer) {
                         oAnswer = { role: "assistant", content: "", html: "", meta: "" };
                         aMessages.push(oAnswer);
-                        oModel.setProperty("/busy", false);
+                        oModel.setProperty("/streaming", true);
+                        oModel.setProperty("/loadingStep", "");
                     }
                     oAnswer.content = sPartial;
                     oAnswer.html = PurchaseOrdersController._toHtml(sPartial);
                     that._refreshAIMessages(aMessages);
-                }).catch(function (oErr) {
+                }, oSignal).catch(function (oErr) {
+                    if (oErr && (oErr.name === "AbortError" || (oSignal && oSignal.aborted))) {
+                        throw oErr;
+                    }
                     if (oAnswer) { throw oErr; }
                     return ODataClient.post("/odata/v4/ai/chat", oPayload).then(function (r) { return { content: (r && r.answer) || "", model: r && r.model }; });
                 });
             }).then(function (oResult) {
+                if (oSignal && oSignal.aborted) { return; }
                 if (!oAnswer) { oAnswer = { role: "assistant" }; aMessages.push(oAnswer); }
                 if (oResult.truncated) { oResult.content += "\n\n_" + that.getText("aiTruncated") + "_"; }
                 oAnswer.content = oResult.content;
                 oAnswer.html = PurchaseOrdersController._toHtml(oResult.content);
                 oAnswer.meta = PurchaseOrdersController._aiMetaText(that, oScope, oResult.model);
                 oAnswer.metaTooltip = PurchaseOrdersController._aiMetaTooltip(oScope);
+                var aFollowUps = PurchaseOrdersController._generateFollowUps(oScope, sQuestion);
+                oModel.setProperty("/followUps", aFollowUps);
             }).catch(function (oErr) {
+                if (oErr && (oErr.name === "AbortError" || (oSignal && oSignal.aborted))) {
+                    if (!oAnswer) {
+                        var sStoppedText = "_[" + that.getText("aiStopped", null, "Generation stopped by user.") + "]_";
+                        aMessages.push({ role: "assistant", content: sStoppedText, html: PurchaseOrdersController._toHtml(sStoppedText), meta: "" });
+                    }
+                    return;
+                }
                 var sMsg = (oErr && oErr.message) || String(oErr);
-                aMessages.push({ role: "assistant", error: true, content: sMsg, html: PurchaseOrdersController._toHtml(sMsg), meta: "" });
+                aMessages.push({
+                    role: "assistant",
+                    error: true,
+                    content: sMsg,
+                    html: PurchaseOrdersController._toHtml(sMsg),
+                    lastQuestion: sQuestion,
+                    meta: ""
+                });
+                oModel.setProperty("/followUps", [
+                    { text: "Retry: " + (sQuestion.length > 30 ? sQuestion.slice(0, 30) + "..." : sQuestion), question: sQuestion }
+                ]);
             }).finally(function () {
+                that._oAIAbortController = null;
                 oModel.setProperty("/busy", false);
+                oModel.setProperty("/streaming", false);
+                oModel.setProperty("/loadingStep", "");
                 that._refreshAIMessages(aMessages, true);
             });
         },
@@ -843,13 +979,32 @@ sap.ui.define([
          * POST /ai/chat/stream (SSE). Calls onPartial with the accumulated text after each chunk.
          * Resolves {content, model}; rejects if the stream fails (before or after the first chunk).
          */
-        _streamAIChat: function (oPayload, fnPartial) {
+        _streamAIChat: function (oPayload, fnPartial, oSignal) {
             if (typeof fetch !== "function" || typeof TextDecoder !== "function") { return Promise.reject(new Error("streaming unsupported")); }
             var mHeaders = Object.assign({ "Content-Type": "application/json", "Accept": "text/event-stream" }, ODataClient.authHeaders());
-            return fetch("/ai/chat/stream", { method: "POST", headers: mHeaders, body: JSON.stringify(oPayload), credentials: "same-origin" }).then(function (oRes) {
+            var oFetchOptions = { method: "POST", headers: mHeaders, body: JSON.stringify(oPayload), credentials: "same-origin" };
+            if (oSignal) {
+                oFetchOptions.signal = oSignal;
+            }
+            return fetch("/ai/chat/stream", oFetchOptions).then(function (oRes) {
                 if (!oRes.ok || !oRes.body) { throw new Error("stream HTTP " + oRes.status); }
                 var oReader = oRes.body.getReader(), oDec = new TextDecoder(), sBuf = "", sText = "", sModel = null, sTruncated = false;
                 return new Promise(function (resolve, reject) {
+                    if (oSignal) {
+                        if (oSignal.aborted) {
+                            try { oReader.cancel(); } catch (e) {}
+                            var oAbortErr = new Error("AbortError");
+                            oAbortErr.name = "AbortError";
+                            reject(oAbortErr);
+                            return;
+                        }
+                        oSignal.addEventListener("abort", function () {
+                            try { oReader.cancel(); } catch (e) {}
+                            var oAbortErr = new Error("AbortError");
+                            oAbortErr.name = "AbortError";
+                            reject(oAbortErr);
+                        });
+                    }
                     var pump = function () {
                         oReader.read().then(function (r) {
                             if (r.done) { resolve({ content: sText, model: sModel, truncated: sTruncated }); return; }
@@ -1580,6 +1735,55 @@ sap.ui.define([
             });
         });
         return { events: aEvents, rest: sRest };
+    };
+
+    /**
+     * Generates 3 contextual follow-up questions grounded in the procurement intent and SAP entities.
+     * @param {object} oScope the AI scope object (totals, items, intents, search, topPOs)
+     * @param {string} sQuestion the user's question
+     * @returns {Array<{text: string, question: string}>}
+     */
+    PurchaseOrdersController._generateFollowUps = function (oScope, sQuestion) {
+        var aQuestions = [];
+        var sQ = (sQuestion || "").toLowerCase();
+        var aPos = PurchaseOrdersController._extractPONumbers(sQuestion);
+        var oIntents = oScope && oScope.intents ? oScope.intents : PurchaseOrdersController._detectProcurementIntents(sQuestion);
+        var aIntents = (oIntents && oIntents.intents) || [];
+
+        if (aPos.length > 0) {
+            var sPo = aPos[0];
+            aQuestions.push("Show delivery schedule and items for PO " + sPo);
+            aQuestions.push("What is the approval status of PO " + sPo + "?");
+            aQuestions.push("Who is the supplier and payment terms for PO " + sPo + "?");
+        } else if (aIntents.indexOf("STATUS") !== -1 || sQ.indexOf("status") !== -1 || sQ.indexOf("approval") !== -1) {
+            aQuestions.push("List all purchase orders pending approval (02)");
+            aQuestions.push("Which purchase orders are released (08)?");
+            aQuestions.push("Are there any rejected purchase orders?");
+        } else if (aIntents.indexOf("SPEND") !== -1 || sQ.indexOf("spend") !== -1 || sQ.indexOf("net") !== -1 || sQ.indexOf("top") !== -1 || sQ.indexOf("amount") !== -1) {
+            aQuestions.push("Which suppliers have the highest net spend?");
+            aQuestions.push("Show top 5 purchase orders by net amount");
+            aQuestions.push("What is the average PO value across the filtered list?");
+        } else if (aIntents.indexOf("DELIVERY_DATE") !== -1 || sQ.indexOf("deliver") !== -1 || sQ.indexOf("due") !== -1 || sQ.indexOf("schedule") !== -1) {
+            aQuestions.push("Which purchase orders are due this month?");
+            aQuestions.push("Show overdue line items across all suppliers");
+            aQuestions.push("List delivery dates for pending orders");
+        } else if (aIntents.indexOf("SUPPLIER") !== -1 || sQ.indexOf("supplier") !== -1 || sQ.indexOf("vendor") !== -1) {
+            aQuestions.push("What is the total spend per supplier?");
+            aQuestions.push("Show purchase orders for the top supplier");
+            aQuestions.push("Which suppliers have active pending orders?");
+        } else if (aIntents.indexOf("MATERIAL") !== -1 || aIntents.indexOf("ITEM") !== -1 || sQ.indexOf("item") !== -1 || sQ.indexOf("material") !== -1) {
+            aQuestions.push("Show line items and ordered quantities");
+            aQuestions.push("Which materials have the highest ordered volumes?");
+            aQuestions.push("List items pending delivery");
+        } else {
+            aQuestions.push("What is the total net spend across all filtered POs?");
+            aQuestions.push("Show purchase orders pending approval");
+            aQuestions.push("Which suppliers have the highest order volume?");
+        }
+
+        return aQuestions.slice(0, 3).map(function (s) {
+            return { text: s, question: s };
+        });
     };
 
     return PurchaseOrdersController;

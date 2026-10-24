@@ -7,6 +7,41 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **SAP Purchase Order AI Assistant: Light-Theme Fiori Assistant UI, Responsive Result Tables, Accessible Controls, Clear Loading & Error States, Contextual Follow-ups & Stop/Retry Handling (2026-10-24 09:55 IST) — COMPLETED:**
+  - Requirement: Improve the compact, light-theme Fiori assistant UI. Preserve existing functionality; add responsive result tables, accessible controls, clear loading/error states, contextual follow-ups and Stop/Retry handling.
+  - Implementation:
+    - In `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+      - Added localized strings for `aiStop`, `aiRetry`, `aiLoadingRetrieving`, `aiLoadingGenerating`, `aiStopped`, `aiFollowUpsTitle`, `aiQueryErrorTitle`, `aiPresetDelivery`, and `aiPresetSpend`.
+    - In `app/fiori-app/webapp/modules/mm/purchase-order/view/AskAIDialog.fragment.xml`:
+      - Upgraded assistant to Fiori Horizon light-theme card with `accessibleRole="Region"`, `ariaLabel="{i18n>aiDialogTitle}"`, and accessible labels/tooltips across all controls.
+      - Implemented empty state with an icon-driven quick prompt grid covering summary, deliveries, spend, risks, and top suppliers.
+      - Implemented structured error card with alert icon, error message text, and dedicated **Retry** button (`press=".onAIRetry"`).
+      - Added active loading state with pulsing AI indicator, dynamic loading step indicator (`loadingStep` || `aiThinking`), and inline **Stop** button (`press=".onAIStop"`).
+      - Added contextual follow-up suggestions section above the footer with interactive clickable pills (`press=".onAIFollowUp"`).
+      - Enhanced footer toolbar with clearable input, send button (visible when idle, disabled when empty), and stop button (visible when busy/streaming).
+    - In `app/fiori-app/webapp/css/style.css`:
+      - Rebuilt `.aiWidget` with clean light theme (`#ffffff` background, `#0070f2` accent top border, smooth `0 12px 32px rgba(0,0,0,0.12)` shadow, rounded corners `0.75rem`).
+      - Styled light header `.aiWidgetHeader` with high-contrast text `#1d2d3e`, brand blue icon `#0070f2`, and subtle hover backgrounds.
+      - Styled `.aiSuggestionsGrid`, `.aiErrorCard`, `.aiRetryBtn`, `.aiTypingRow`, `.aiStopInlineBtn`, `.aiFollowUpsBox`, and `.aiFollowUpChip` pills.
+      - Enhanced result tables (`.aiMd table`): added horizontal scroll wrapper, sticky headers (`position: sticky`, `top: 0`, `background: #f5f8fb`), alternating zebra striping (`background: #fafbfc`), cell border rules, and hover row highlighting (`background: #f0f7ff`).
+    - In `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`:
+      - Initialized model state in `_initAIWidget` with `open`, `question`, `messages`, `busy`, `streaming`, `loadingStep`, `lastQuestion`, and `followUps`.
+      - Enhanced `onAIClose` to restore focus to `aiFab`.
+      - Enhanced `onAIClear` to reset messages, question, followUps, loadingStep, and lastQuestion.
+      - Added `onAIFollowUp(oEvent)` to populate `/question` from follow-up chip and execute query.
+      - Added `onAIRetry(oEvent)` to retrieve failed question from error card context or `lastQuestion` and re-run.
+      - Added `onAIStop()` to abort `AbortController`, cancel reader, update loading/streaming state, and append friendly stopped note.
+      - Added static helper `PurchaseOrdersController._generateFollowUps(oScope, sQuestion)` generating 3 grounded contextual follow-ups tailored to POs, status, spend, delivery schedules, suppliers, or materials.
+      - Updated `onAIAsk`: tracks `lastQuestion`, sets progressive `loadingStep` ("Retrieving verified SAP records..." -> "Analyzing verified SAP records..."), manages `AbortController` and `AbortSignal`, populates contextual follow-up chips upon completion, and formats structured error cards with retry state.
+      - Updated `_streamAIChat(oPayload, fnPartial, oSignal)` to accept abort signal, cancel reader, and reject with `AbortError` on abort.
+    - In `test/unit/purchase-order/purchaseOrdersAskAI.test.js`:
+      - Added 8 unit tests validating `onAIClose` focus restoration, `onAIClear` state reset, `onAIFollowUp` submission, `onAIRetry` execution, `onAIStop` abort and message update, `_generateFollowUps` multi-intent generation, `onAIAsk` follow-up population, and error card retry state.
+  - Validation:
+    - `npx jest --runInBand test/unit/purchase-order/purchaseOrdersAskAI.test.js test/unit/ai`: 56 of 56 passed (100%).
+    - `npm run lint` (root eslint): 0 errors.
+    - `npm run lint` in `app/fiori-app` (ui5lint): Success! No findings detected.
+    - `git diff --check`: 0 issues.
+
 - **SAP Purchase Order AI Assistant: Structured Procurement Intent Handling across 8 Dimensions, Retrieval Plan Validation, Grounded SAP Facts, Evidence-Linked Results & PO Navigation (2026-10-24 09:35 IST) — COMPLETED:**
   - Requirement: Introduce structured procurement intent handling for purchase orders, suppliers, materials, items, statuses, delivery dates, quantities and spend. Validate retrieval plans and ground factual answers in retrieved SAP data. Add evidence-linked results with PO numbers, relevant item details, source fields, completeness information and navigation to the existing purchase-order detail route.
   - Implementation:
@@ -1136,6 +1171,47 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Exact Next Recommended Action (HU stock transfer rack demo — 2026-10-23 10:24 IST):** Rerun full Jest in an environment that permits loopback binds and after the unrelated missing FI/goods-issue test paths are resolved; inspect a wide touch-display viewport when available. No SAP writes or live data are needed for the demo.
 
 ## Changes Log
+
+### 2026-10-24 09:55 IST — SAP Purchase Order AI Assistant: Light-Theme Fiori Assistant UI, Responsive Result Tables, Accessible Controls, Clear Loading & Error States, Contextual Follow-ups & Stop/Retry Handling
+
+- **Plan:**
+  - Address user requirement: "Improve the compact, light-theme Fiori assistant UI. Preserve existing functionality; add responsive result tables, accessible controls, clear loading/error states, contextual follow-ups and Stop/Retry handling."
+  - Architecture & Implementation strategy:
+    1. Visual Design & Theme Alignment (Fiori Horizon Light):
+       - Refactor `.aiWidget` and `.aiWidgetHeader` from dark-toned styles to a clean, light Fiori card (`#ffffff` background, `#0070f2` top accent, subtle `0 12px 32px rgba(0,0,0,0.12)` shadow, high contrast `#1d2d3e` typography).
+       - Maintain compact footprint (width `420px`, max-width `calc(100vw - 2rem)`, max-height `min(660px, calc(100vh - 5.5rem))`) floating above the page.
+    2. Responsive Result Tables:
+       - Update markdown table renderer and styling: ensure sticky headers (`position: sticky`, `top: 0`, `#f5f8fb`), alternating zebra striping (`#fafbfc`), cell padding, border separation, row hover highlighting (`#f0f7ff`), and touch horizontal scroll wrapper (`overflow-x: auto`, `-webkit-overflow-scrolling: touch`).
+    3. Accessible Controls & Focus Management:
+       - Add `accessibleRole="Region"` and `ariaLabel="{i18n>aiDialogTitle}"` on `#aiWidget`.
+       - Add `ariaLive="Polite"` on `#aiChatScroll`.
+       - Add tooltips and `ariaLabel` attributes across launcher button, clear button, close button, preset chips, retry buttons, stop buttons, follow-up chips, and send button.
+       - Restore focus to `#aiFab` when closing dialog via `onAIClose`.
+    4. Clear Loading & Error States:
+       - Implement dynamic loading step indicator (`loadingStep` property transitioning from "Retrieving verified SAP records..." to "Analyzing verified SAP records...").
+       - Render structured error cards with alert icon, error message, and dedicated **Retry** button (`press=".onAIRetry"`).
+    5. Contextual Follow-ups:
+       - Add smart contextual follow-up chips above the footer generated via `PurchaseOrdersController._generateFollowUps(oScope, sQuestion)` covering specific PO numbers, statuses, spend, delivery schedules, suppliers, and materials.
+       - Provide clickable follow-up pills (`press=".onAIFollowUp"`) that immediately load and run the query.
+    6. Stop / Retry Handling:
+       - Instantiate `AbortController` in `onAIAsk` and forward signal to `_streamAIChat`.
+       - Add `onAIStop` to abort the controller, cancel SSE reader, clear loading/busy flags, and append `_[Generation stopped by user.]_`.
+       - Expose inline Stop button in loading indicator bubble and primary Stop button in footer toolbar during busy/streaming state.
+       - Add `onAIRetry` to retrieve failed question from error card context or `lastQuestion` and re-run.
+- **Evidence & Results:**
+  - Files modified:
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Added localized strings for `aiStop`, `aiRetry`, `aiLoadingRetrieving`, `aiLoadingGenerating`, `aiStopped`, `aiFollowUpsTitle`, `aiQueryErrorTitle`, `aiPresetDelivery`, and `aiPresetSpend`.
+    - `app/fiori-app/webapp/modules/mm/purchase-order/view/AskAIDialog.fragment.xml`: Rebuilt with accessible controls, empty state quick prompts, structured error card with retry button, loading state with dynamic status text & inline stop, contextual follow-ups box, and footer toolbar with stop/send toggle.
+    - `app/fiori-app/webapp/css/style.css`: Upgraded `.aiWidget` and `.aiWidgetHeader` to light theme, styled prompt grid, error card, typing row, stop buttons, follow-up pills, and enhanced responsive result tables with sticky headers, zebra striping, and cell hover effects.
+    - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`: Implemented `_initAIWidget` model defaults, `onAIClose` focus restore, `onAIClear` state reset, `onAIFollowUp`, `onAIRetry`, `onAIStop`, `_generateFollowUps`, progressive `loadingStep`, `AbortController` lifecycle, and error retry state.
+    - `test/unit/purchase-order/purchaseOrdersAskAI.test.js`: Added 8 unit tests covering all new methods, focus restoration, state management, stop/retry handling, and contextual follow-up generation.
+  - Validation:
+    - `npx jest --runInBand test/unit/purchase-order/purchaseOrdersAskAI.test.js test/unit/ai`: 56 of 56 passed (100%).
+    - `npm run lint` (root eslint): 0 errors, 8 warnings (pre-existing unrelated).
+    - `npm run lint` in `app/fiori-app` (ui5lint): Success! No findings detected.
+    - `git diff --check`: 0 issues.
+- **Exact Next Recommended Action:**
+  - Open `/mm/purchase-orders` in a browser session to visually inspect the light-theme assistant widget, verify responsive result tables on narrow viewports, test stop/retry interactions, and validate keyboard navigation and screen reader accessibility.
 
 ### 2026-10-24 09:35 IST — SAP Purchase Order AI Assistant: Structured Procurement Intent Handling across 8 Dimensions, Retrieval Plan Validation, Grounded SAP Facts, Evidence-Linked Results & PO Navigation
 
