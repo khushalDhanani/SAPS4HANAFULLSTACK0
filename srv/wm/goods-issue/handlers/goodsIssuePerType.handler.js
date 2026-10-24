@@ -14,6 +14,7 @@ const { normalizeGoodsIssue311Payload } = require('../mapping/goodsIssue311.norm
 const { validateGoodsIssue201Payload } = require('../validation/goodsIssue201.validation');
 const { validateGoodsIssue301Payload } = require('../validation/goodsIssue301.validation');
 const { validateGoodsIssue311Payload } = require('../validation/goodsIssue311.validation');
+const plantScope = require('../../../wm/handling-unit/plantScope');
 const LOG = require('../../../common/logger')('goods-issue-pertype-handler');
 const crypto = require('crypto');
 
@@ -553,6 +554,11 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue201Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue201Payload(req.data, { user: req.user?.id });
+      const allowedPlants = plantScope(req.user);
+      const targetPlant = String(normalized.Plant || '').trim().toUpperCase();
+      if (allowedPlants !== null && (!targetPlant || !allowedPlants.includes(targetPlant))) {
+        return req.error(403, `Plant ${targetPlant || '(none)'} is outside the authenticated user's plant scope`);
+      }
       const priorAttempt = await checkPendingConfirmation(req, normalized);
       if (priorAttempt !== true) return priorAttempt;
       if (!(await reservationReconcileCheck(req, normalized, { batch: true }))) return;
@@ -566,6 +572,11 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue301Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue301Payload(req.data, { user: req.user?.id });
+      const allowedPlants = plantScope(req.user);
+      const issuingPlant = String(normalized.Plant || '').trim().toUpperCase();
+      if (allowedPlants !== null && (!issuingPlant || !allowedPlants.includes(issuingPlant))) {
+        return req.error(403, `Issuing plant ${issuingPlant || '(none)'} is outside the authenticated user's plant scope`);
+      }
       const priorAttempt = await checkPendingConfirmation(req, normalized);
       if (priorAttempt !== true) return priorAttempt;
       const resvItem = await reservationReconcileCheck(req, normalized, { receiving: true });
@@ -597,6 +608,11 @@ const PerTypeGoodsIssueHandler = {
       const v = validateGoodsIssue311Payload(req.data);
       if (!v.isValid) return req.error(400, v.message);
       const normalized = normalizeGoodsIssue311Payload(req.data, { user: req.user?.id });
+      const allowedPlants = plantScope(req.user);
+      const targetPlant = String(normalized.Plant || '').trim().toUpperCase();
+      if (allowedPlants !== null && (!targetPlant || !allowedPlants.includes(targetPlant))) {
+        return req.error(403, `Plant ${targetPlant || '(none)'} is outside the authenticated user's plant scope`);
+      }
       const priorAttempt = await checkPendingConfirmation(req, normalized);
       if (priorAttempt !== true) return priorAttempt;
       if (!(await reservationReconcileCheck(req, normalized, { receiving: true }))) return;

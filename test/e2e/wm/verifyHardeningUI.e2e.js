@@ -10,7 +10,15 @@
  */
 const { chromium } = require('../playwrightLoader');
 
-async function runHardeningE2E() {
+async function runHardeningE2E(options = {}) {
+  const baseUrl = (options.baseUrl || process.env.TARGET_URL || process.env.APP_URL || 'http://localhost:4004').replace(/\/+$/, '');
+  const report = {
+    suite: 'UI Hardening & Rapid Submission',
+    status: 'NOT_RUN',
+    errors: [],
+    details: {}
+  };
+
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     extraHTTPHeaders: {
@@ -67,7 +75,7 @@ async function runHardeningE2E() {
   try {
     // 1. Test Detail View with rapid refresh
     console.log('[Test 1] Navigating to Detail View for Movement 241 (0000525279)...');
-    await page.goto('http://localhost:4004/fiori-app/webapp/index.html#/wm/reservation-entry/0000525279/0001', {
+    await page.goto(`${baseUrl}/fiori-app/webapp/index.html#/wm/reservation-entry/0000525279/0001`, {
       waitUntil: 'domcontentloaded',
       timeout: 30000
     });
@@ -100,7 +108,7 @@ async function runHardeningE2E() {
 
     // 2. Test Create Page rapid submit guard
     console.log('[Test 3] Navigating to Create Page...');
-    await page.goto('http://localhost:4004/fiori-app/webapp/index.html#/wm/reservation-entry/create', {
+    await page.goto(`${baseUrl}/fiori-app/webapp/index.html#/wm/reservation-entry/create`, {
       waitUntil: 'domcontentloaded',
       timeout: 30000
     });
@@ -141,9 +149,22 @@ async function runHardeningE2E() {
     console.log('\n================================================================');
     console.log(' PLAYWRIGHT UI HARDENING VERIFICATION: PASS');
     console.log('================================================================\n');
+
+    report.status = 'PASS';
+    report.details = {
+      skeletonCount,
+      consoleErrorsCount: consoleErrors.length,
+      networkErrorsCount: networkErrors.length
+    };
+  } catch (err) {
+    report.status = 'FAIL';
+    report.errors.push(err.message);
+    throw err;
   } finally {
     await browser.close();
   }
+
+  return report;
 }
 
 if (require.main === module) {

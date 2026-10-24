@@ -165,6 +165,16 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
     });
 
     // GoodsIssueAdapter spies
+    jest.spyOn(GoodsIssueAdapter, 'getOpenReservations').mockResolvedValue([{
+      ReservationNo: '520001',
+      MovementType: '201',
+      MovementTypeName: 'GI for cost center',
+      SampleMaterial: '8000000023',
+      SampleMaterialDesc: 'Test Material',
+      Plant: '1120',
+      StorageLocation: 'HS01'
+    }]);
+
     jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockImplementation(async (resNo, itemNo) => ({
       ReservationNo: resNo,
       ReservationItem: itemNo,
@@ -207,21 +217,29 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
     });
 
     // Mvt261Adapter spies
-    _mvt261CycleSpy = jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue({
-      Reservation: '528780',
-      ReservationItem: '1',
-      Material: 'M',
-      Plant: '1120',
-      StorageLocation: 'CS01',
-      Unit: 'NOS',
-      OpenQuantity: 10,
-      History: [{
-        MaterialDocument: '5000000261',
-        MaterialDocumentYear: '2026',
-        MaterialDocumentItem: '0001',
-        MovementType: '261',
-        IsReversed: false
-      }]
+    _mvt261CycleSpy = jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockImplementation(async (input = {}) => {
+      const allowed = input.allowedPlants;
+      if (allowed !== undefined && allowed !== null && !allowed.includes('1120')) {
+        const err = new Error('Not authorized for plant 1120');
+        err.status = 403;
+        throw err;
+      }
+      return {
+        Reservation: '528780',
+        ReservationItem: '1',
+        Material: 'M',
+        Plant: '1120',
+        StorageLocation: 'CS01',
+        Unit: 'NOS',
+        OpenQuantity: 10,
+        History: [{
+          MaterialDocument: '5000000261',
+          MaterialDocumentYear: '2026',
+          MaterialDocumentItem: '0001',
+          MovementType: '261',
+          IsReversed: false
+        }]
+      };
     });
 
     mvt261PostSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockResolvedValue({
@@ -282,6 +300,18 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
         const res = await POST(url, defaultResvPayload, { auth: { username: 'carol', password: '' } });
         expect(res.status).toBe(200);
         expect(resvSpy).toHaveBeenCalledTimes(1);
+      });
+
+      it('rejects out-of-scope clerk (dave, plant 1130) creating reservation for plant 1120 with 403', async () => {
+        await expect(POST(url, defaultResvPayload, { auth: { username: 'dave', password: '' } }))
+          .rejects.toMatchObject({ response: { status: 403 } });
+        expect(resvSpy).not.toHaveBeenCalled();
+      });
+
+      it('rejects unassigned plant user (eve, no plant attribute) with 403', async () => {
+        await expect(POST(url, defaultResvPayload, { auth: { username: 'eve', password: '' } }))
+          .rejects.toMatchObject({ response: { status: 403 } });
+        expect(resvSpy).not.toHaveBeenCalled();
       });
     });
 
@@ -367,6 +397,16 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
         expect(res.status).not.toBe(401);
         expect(res.status).not.toBe(403);
       });
+
+      it('rejects out-of-scope clerk (dave, plant 1130) creating reservation entry for plant 1120 with 403', async () => {
+        await expect(POST(url, defaultResvPayload, { auth: { username: 'dave', password: '' } }))
+          .rejects.toMatchObject({ response: { status: 403 } });
+      });
+
+      it('rejects unassigned plant user (eve, no plant attribute) creating entry with 403', async () => {
+        await expect(POST(url, defaultResvPayload, { auth: { username: 'eve', password: '' } }))
+          .rejects.toMatchObject({ response: { status: 403 } });
+      });
     });
 
     describe('postMigoGoodsMovement action', () => {
@@ -400,6 +440,18 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
         expect(res.status).not.toBe(401);
         expect(res.status).not.toBe(403);
       });
+
+      it('rejects out-of-scope clerk (dave, plant 1130) posting MIGO for plant 1120 with 403', async () => {
+        await expect(POST(url, payload, { auth: { username: 'dave', password: '' } }))
+          .rejects.toMatchObject({ response: { status: 403 } });
+        expect(postMigoSpy).not.toHaveBeenCalled();
+      });
+
+      it('rejects unassigned plant user (eve) with 403', async () => {
+        await expect(POST(url, payload, { auth: { username: 'eve', password: '' } }))
+          .rejects.toMatchObject({ response: { status: 403 } });
+        expect(postMigoSpy).not.toHaveBeenCalled();
+      });
     });
 
     describe('executeReservationWarehouseFlow action', () => {
@@ -430,6 +482,38 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
         const res = await POST(url, flowPayload, { auth: { username: 'carol', password: '' } });
         expect(res.status).toBe(200);
         expect(flowSpy).toHaveBeenCalledTimes(1);
+      });
+
+      it('rejects out-of-scope clerk (dave, plant 1130) executing flow for plant 1120 with 403', async () => {
+        await expect(POST(url, flowPayload, { auth: { username: 'dave', password: '' } }))
+          .rejects.toMatchObject({ response: { status: 403 } });
+        expect(flowSpy).not.toHaveBeenCalled();
+      });
+
+      it('rejects unassigned plant user (eve, no plant attribute) executing flow with 403', async () => {
+        await expect(POST(url, flowPayload, { auth: { username: 'eve', password: '' } }))
+          .rejects.toMatchObject({ response: { status: 403 } });
+        expect(flowSpy).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('getOpenReservations function (plant scope)', () => {
+      const url = "/odata/v4/reservation-entry/getOpenReservations(plant='1120',movementType='')";
+
+      it('rejects out-of-scope user (dave, plant 1130) querying plant 1120 with 403', async () => {
+        await expect(GET(url, { auth: { username: 'dave', password: '' } }))
+          .rejects.toMatchObject({ response: { status: 403 } });
+      });
+
+      it('rejects unassigned plant user (eve) querying plant 1120 with 403', async () => {
+        await expect(GET(url, { auth: { username: 'eve', password: '' } }))
+          .rejects.toMatchObject({ response: { status: 403 } });
+      });
+
+      it('permits authorized user (carol, plant 1120) querying plant 1120', async () => {
+        const res = await GET(url, { auth: { username: 'carol', password: '' } });
+        expect(res.status).toBe(200);
+        expect(res.data.value).toHaveLength(1);
       });
     });
   });
@@ -488,6 +572,20 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       expect(giPost201Spy).toHaveBeenCalledTimes(1);
     });
 
+    it('postGoodsIssue201: rejects out-of-scope clerk (dave, plant 1130) for plant 1120 with 403', async () => {
+      const url = '/odata/v4/goods-issue/postGoodsIssue201';
+      await expect(POST(url, giPayload201, { auth: { username: 'dave', password: '' } }))
+        .rejects.toMatchObject({ response: { status: 403 } });
+      expect(giPost201Spy).not.toHaveBeenCalled();
+    });
+
+    it('postGoodsIssue201: rejects unassigned plant user (eve) with 403', async () => {
+      const url = '/odata/v4/goods-issue/postGoodsIssue201';
+      await expect(POST(url, giPayload201, { auth: { username: 'eve', password: '' } }))
+        .rejects.toMatchObject({ response: { status: 403 } });
+      expect(giPost201Spy).not.toHaveBeenCalled();
+    });
+
     it('postGoodsIssue301: gates unauthenticated (401) and Viewer (403); permits carol (200)', async () => {
       const url = '/odata/v4/goods-issue/postGoodsIssue301';
       await expect(POST(url, giPayload301)).rejects.toMatchObject({ response: { status: 401 } });
@@ -500,6 +598,20 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       expect(giPost301Spy).toHaveBeenCalledTimes(1);
     });
 
+    it('postGoodsIssue301: rejects out-of-scope clerk (dave, plant 1130) issuing from plant 1120 with 403', async () => {
+      const url = '/odata/v4/goods-issue/postGoodsIssue301';
+      await expect(POST(url, giPayload301, { auth: { username: 'dave', password: '' } }))
+        .rejects.toMatchObject({ response: { status: 403 } });
+      expect(giPost301Spy).not.toHaveBeenCalled();
+    });
+
+    it('postGoodsIssue301: rejects unassigned plant user (eve) with 403', async () => {
+      const url = '/odata/v4/goods-issue/postGoodsIssue301';
+      await expect(POST(url, giPayload301, { auth: { username: 'eve', password: '' } }))
+        .rejects.toMatchObject({ response: { status: 403 } });
+      expect(giPost301Spy).not.toHaveBeenCalled();
+    });
+
     it('postGoodsIssue311: gates unauthenticated (401) and Viewer (403); permits carol (200)', async () => {
       const url = '/odata/v4/goods-issue/postGoodsIssue311';
       await expect(POST(url, giPayload311)).rejects.toMatchObject({ response: { status: 401 } });
@@ -510,6 +622,20 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       const ok = await POST(url, giPayload311, { auth: { username: 'carol', password: '' } });
       expect(ok.status).toBe(200);
       expect(giPost311Spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('postGoodsIssue311: rejects out-of-scope clerk (dave, plant 1130) transferring in plant 1120 with 403', async () => {
+      const url = '/odata/v4/goods-issue/postGoodsIssue311';
+      await expect(POST(url, giPayload311, { auth: { username: 'dave', password: '' } }))
+        .rejects.toMatchObject({ response: { status: 403 } });
+      expect(giPost311Spy).not.toHaveBeenCalled();
+    });
+
+    it('postGoodsIssue311: rejects unassigned plant user (eve) with 403', async () => {
+      const url = '/odata/v4/goods-issue/postGoodsIssue311';
+      await expect(POST(url, giPayload311, { auth: { username: 'eve', password: '' } }))
+        .rejects.toMatchObject({ response: { status: 403 } });
+      expect(giPost311Spy).not.toHaveBeenCalled();
     });
 
     describe('recheckPostingAttempts action (Manager/Admin only - privilege escalation protection)', () => {
@@ -551,6 +677,22 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       const res = await POST(url, payload, { auth: { username: 'carol', password: '' } });
       expect(res.status).toBe(200);
       expect(mvt261PostSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('postGoodsIssue: rejects out-of-scope clerk (dave, plant 1130) for plant 1120 reservation with 403', async () => {
+      const url = '/odata/v4/mvt261/postGoodsIssue';
+      const payload = { reservation: '528780', item: '1', quantity: 10 };
+      await expect(POST(url, payload, { auth: { username: 'dave', password: '' } }))
+        .rejects.toMatchObject({ response: { status: 403 } });
+      expect(mvt261PostSpy).not.toHaveBeenCalled();
+    });
+
+    it('postGoodsIssue: rejects unassigned plant user (eve) with 403', async () => {
+      const url = '/odata/v4/mvt261/postGoodsIssue';
+      const payload = { reservation: '528780', item: '1', quantity: 10 };
+      await expect(POST(url, payload, { auth: { username: 'eve', password: '' } }))
+        .rejects.toMatchObject({ response: { status: 403 } });
+      expect(mvt261PostSpy).not.toHaveBeenCalled();
     });
 
     it('reverse: rejects Clerk (carol) with 403 (privilege escalation blocked); permits alice (Admin/Manager)', async () => {

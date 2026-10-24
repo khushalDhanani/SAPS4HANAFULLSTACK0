@@ -76,8 +76,7 @@ jobs:
         run: |
           npx cds-serve &
           PID=$!
-          sleep 5
-          npm run test:smoke
+          node tools/smoke-test-deployment.js --wait=30
           kill $PID || true
 
       - name: Publish test results & coverage artifacts

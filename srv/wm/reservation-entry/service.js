@@ -68,6 +68,11 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       validateMovementType(payload, req);
       if (req.errors?.length) return;
 
+      const allowedPlants = plantScope(req.user);
+      if (allowedPlants !== null && (!payload.Plant || !isPlantAllowed(payload.Plant, allowedPlants))) {
+        return req.error(403, `Plant ${payload.Plant || '(none)'} is outside the authenticated user's plant scope`);
+      }
+
       const {
         MovementType,
         Plant,
@@ -584,6 +589,11 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
 
       const payload = req.data;
+      const allowedPlants = plantScope(req.user);
+      if (allowedPlants !== null && (!payload.Plant || !isPlantAllowed(payload.Plant, allowedPlants))) {
+        return req.error(403, `Plant ${payload.Plant || '(none)'} is outside the authenticated user's plant scope`);
+      }
+
       const effResDate = payload.ReservationDate || undefined;
 
       // Step 7.5: fail before the SAP write when the warehouse cannot be resolved or a supplied one mismatches.
@@ -1594,6 +1604,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
       if (!existing) return req.error(404, `Reservation ${sResNo}/${sResItem} not found`);
 
+      const migoPlant = existing?.Plant || data.Plant;
+      const allowedPlants = plantScope(req.user);
+      if (allowedPlants !== null && (!migoPlant || !isPlantAllowed(migoPlant, allowedPlants))) {
+        return req.error(403, `Plant ${migoPlant || '(none)'} is outside the authenticated user's plant scope`);
+      }
+
       const extId = `${sResNo}/${sResItem}`;
       const sLogHandle = existing?.LogHandle || `LOG_${Date.now().toString(36).toUpperCase()}`;
 
@@ -2017,10 +2033,10 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const mvt = String(req.data.movementType || '').trim();
       const allowedPlants = plantScope(req.user);
 
-      if (allowedPlants !== null && allowedPlants.length === 0) return [];
       if (allowedPlants !== null && plant && !isPlantAllowed(plant, allowedPlants)) {
         return req.error(403, `Plant ${plant} is outside the authenticated user's plant scope`);
       }
+      if (allowedPlants !== null && allowedPlants.length === 0) return [];
 
       if (mvt && !SUPPORTED_MOVEMENT_TYPES.includes(mvt)) {
         return [];
@@ -2063,6 +2079,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
     this.on('executeReservationWarehouseFlow', async (req) => {
       try {
+        const flowPlant = req.data?.Plant || req.data?.plant;
+        const allowedPlants = plantScope(req.user);
+        if (allowedPlants !== null && (!flowPlant || !isPlantAllowed(flowPlant, allowedPlants))) {
+          return req.error(403, `Plant ${flowPlant || '(none)'} is outside the authenticated user's plant scope`);
+        }
+
         const persistStatus = async (status, extra = {}) => {
           const resNo = extra.reservationNumber || extra.reservationNo;
           const resItem = extra.reservationItem || '0001';

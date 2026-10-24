@@ -29,9 +29,55 @@ const userArg = process.argv.find(a => a.startsWith('--user='))?.split('=')[1]
   || process.env.SMOKE_AUTH_USER
   || (process.env.NODE_ENV === 'production' ? '' : 'alice:');
 
+const waitArg = process.argv.find(a => a.startsWith('--wait=') || a === '--wait');
+const waitSecs = waitArg ? (waitArg.includes('=') ? parseInt(waitArg.split('=')[1], 10) : 30) : 0;
+
+/**
+ * Polls the server health endpoint with bounded backoff until ready or timeout expires.
+ */
+async function waitForServer(baseUrl, timeoutMs = 30000, intervalMs = 1000) {
+  const target = (baseUrl || 'http://localhost:4004').replace(/\/+$/, '');
+  const healthUrl = `${target}/health`;
+  const startTime = Date.now();
+  let lastError = null;
+
+  console.log(`[Readiness Probe] Waiting up to ${timeoutMs / 1000}s for server at ${target} to become ready...`);
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const res = await fetch(healthUrl, { method: 'GET', signal: AbortSignal.timeout(3000) });
+      if (res.status === 200) {
+        const body = await res.text();
+        let json = null;
+        try { json = JSON.parse(body); } catch (_) {}
+        if (json && json.status === 'UP') {
+          const elapsed = Date.now() - startTime;
+          console.log(`[Readiness Probe] Server is ready at ${target} (${elapsed}ms).`);
+          return true;
+        }
+      }
+    } catch (err) {
+      lastError = err;
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+
+  throw new Error(
+    `Bounded readiness timeout exceeded: Server at ${target} failed to report status 'UP' within ${timeoutMs}ms${
+      lastError ? ' (last error: ' + lastError.message + ')' : ''
+    }`
+  );
+}
+
 async function executeSmokeTests(options = {}) {
   const baseUrl = (options.baseUrl || urlArg).replace(/\/+$/, '');
   const authUser = options.authUser !== undefined ? options.authUser : userArg;
+  const shouldWait = options.wait || options.waitTimeoutMs != null || waitSecs > 0;
+  const timeoutMs = options.waitTimeoutMs || (options.wait === true ? 30000 : (typeof options.wait === 'number' ? options.wait : waitSecs * 1000));
+
+  if (shouldWait && timeoutMs > 0) {
+    await waitForServer(baseUrl, timeoutMs, options.waitIntervalMs || 1000);
+  }
 
   console.log('='.repeat(72));
   console.log('   POST-DEPLOYMENT SMOKE TEST RUNNER');
@@ -171,8 +217,13 @@ async function executeSmokeTests(options = {}) {
       headers: { 'Content-Type': 'application/json', ...authHeader },
       body: JSON.stringify({}),
       validate: (res) => {
-        // We expect either 400 Bad Request (empty payload) or 401/403 or 200, but NEVER 404
+        // Must return 200 (if ready/streaming), 400 (if client sent empty body), or 401/403 (if auth guard triggered)
+        // Must NEVER return 404 (route missing) or 5xx (server exception / unhandled error)
         if (res.status === 404) return 'Route /ai/chat/stream is missing (HTTP 404)';
+        if (res.status >= 500) return `Expected 200/400/401/403, got server error HTTP ${res.status}`;
+        if (![200, 400, 401, 403].includes(res.status)) {
+          return `Unexpected status code HTTP ${res.status} on /ai/chat/stream`;
+        }
         return null;
       }
     }
@@ -235,4 +286,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { executeSmokeTests };
+module.exports = { executeSmokeTests, waitForServer };

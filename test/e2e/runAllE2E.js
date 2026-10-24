@@ -11,15 +11,24 @@ const { verifyMvt261 } = require('./wm/verifyMvt261.e2e');
 const { verifyMvt301 } = require('./wm/verifyMvt301.e2e');
 const { verifyMvt311 } = require('./wm/verifyMvt311.e2e');
 
-async function checkServerHealth(urlStr = 'http://localhost:4004/fiori-app/webapp/index.html') {
+const targetUrlArg = process.argv.find(a => a.startsWith('--url='))?.split('=')[1]
+  || process.argv.find(a => a.startsWith('--target-url='))?.split('=')[1]
+  || process.env.TARGET_URL
+  || process.env.APP_URL
+  || 'http://localhost:4004';
+
+async function checkServerHealth(urlStr) {
+  const target = (urlStr || targetUrlArg).replace(/\/+$/, '');
+  const checkUrl = `${target}/fiori-app/webapp/index.html`;
+
   return new Promise((resolve) => {
     try {
-      const u = new URL(urlStr);
+      const u = new URL(checkUrl);
       const req = http.get({
         hostname: u.hostname,
-        port: u.port || 80,
-        path: u.pathname,
-        timeout: 3000
+        port: u.port || (u.protocol === 'https:' ? 443 : 80),
+        path: u.pathname + (u.search || ''),
+        timeout: 5000
       }, (res) => {
         resolve(res.statusCode >= 200 && res.statusCode < 400);
       });
@@ -34,14 +43,19 @@ async function checkServerHealth(urlStr = 'http://localhost:4004/fiori-app/webap
   });
 }
 
-async function runAll() {
+async function runAll(options = {}) {
+  const baseUrl = (options.baseUrl || targetUrlArg).replace(/\/+$/, '');
+
   console.log('================================================================');
   console.log(' RUNNING PLAYWRIGHT E2E TEST SUITE RUNNER');
+  console.log('================================================================');
+  console.log(`Target URL:  ${baseUrl}`);
+  console.log(`Timestamp:   ${new Date().toISOString()}`);
   console.log('================================================================\n');
 
-  const isServerUp = await checkServerHealth();
+  const isServerUp = await checkServerHealth(baseUrl);
   if (!isServerUp) {
-    console.error('ERROR: Local development server is not running or not responding at http://localhost:4004.');
+    console.error(`ERROR: Server is not running or not responding at ${baseUrl}.`);
     console.error('Please start the server before running Playwright E2E tests (e.g. npm start or cds watch).');
     process.exit(1);
   }
@@ -56,16 +70,17 @@ async function runAll() {
     {
       name: 'UI Hardening & Rapid Submission',
       file: 'verifyHardeningUI.e2e.js',
-      fn: async () => {
-        await runHardeningE2E();
-        return { status: 'PASS', errors: [] };
+      fn: async (opts) => {
+        const res = await runHardeningE2E(opts);
+        const pass = res && res.status === 'PASS' && (!res.errors || res.errors.length === 0);
+        return { status: pass ? 'PASS' : 'FAIL', errors: res?.errors || [], details: res?.details };
       }
     },
     {
       name: 'Movement 201 (GI to Cost Center)',
       file: 'verifyMvt201.e2e.js',
-      fn: async () => {
-        const res = await verifyMvt201();
+      fn: async (opts) => {
+        const res = await verifyMvt201(opts);
         const pass = res.ui === 'PASS' && res.playwright === 'PASS' && res.network === 'PASS' && res.console === 'PASS' && (!res.errors || res.errors.length === 0);
         return { status: pass ? 'PASS' : 'FAIL', errors: res.errors || [], details: res.details };
       }
@@ -73,8 +88,8 @@ async function runAll() {
     {
       name: 'Movement 241 (GI to Asset)',
       file: 'verifyMvt241.e2e.js',
-      fn: async () => {
-        const res = await verifyMvt241();
+      fn: async (opts) => {
+        const res = await verifyMvt241(opts);
         const pass = res.ui === 'PASS' && res.playwright === 'PASS' && res.network === 'PASS' && res.console === 'PASS' && (!res.errors || res.errors.length === 0);
         return { status: pass ? 'PASS' : 'FAIL', errors: res.errors || [], details: res.details };
       }
@@ -82,8 +97,8 @@ async function runAll() {
     {
       name: 'Movement 261 (GI to Internal Order)',
       file: 'verifyMvt261.e2e.js',
-      fn: async () => {
-        const res = await verifyMvt261();
+      fn: async (opts) => {
+        const res = await verifyMvt261(opts);
         const pass = res.ui === 'PASS' && res.playwright === 'PASS' && res.network === 'PASS' && res.console === 'PASS' && (!res.errors || res.errors.length === 0);
         return { status: pass ? 'PASS' : 'FAIL', errors: res.errors || [], details: res.details };
       }
@@ -91,8 +106,8 @@ async function runAll() {
     {
       name: 'Movement 301 (Plant-to-Plant Transfer)',
       file: 'verifyMvt301.e2e.js',
-      fn: async () => {
-        const res = await verifyMvt301();
+      fn: async (opts) => {
+        const res = await verifyMvt301(opts);
         const pass = res.ui === 'PASS' && res.playwright === 'PASS' && res.network === 'PASS' && res.console === 'PASS' && (!res.errors || res.errors.length === 0);
         return { status: pass ? 'PASS' : 'FAIL', errors: res.errors || [], details: res.details };
       }
@@ -100,8 +115,8 @@ async function runAll() {
     {
       name: 'Movement 311 (SLoc-to-SLoc Transfer)',
       file: 'verifyMvt311.e2e.js',
-      fn: async () => {
-        const res = await verifyMvt311();
+      fn: async (opts) => {
+        const res = await verifyMvt311(opts);
         const pass = res.ui === 'PASS' && res.playwright === 'PASS' && res.network === 'PASS' && res.console === 'PASS' && (!res.errors || res.errors.length === 0);
         return { status: pass ? 'PASS' : 'FAIL', errors: res.errors || [], details: res.details };
       }
@@ -115,7 +130,7 @@ async function runAll() {
     const startTime = Date.now();
     console.log(`\n>>> STARTING: ${suite.name} (${suite.file})`);
     try {
-      const outcome = await suite.fn();
+      const outcome = await suite.fn({ baseUrl });
       const durationMs = Date.now() - startTime;
       if (outcome.status === 'PASS') {
         totalPassed++;
@@ -147,6 +162,7 @@ async function runAll() {
 
   const summary = {
     timestamp: new Date().toISOString(),
+    baseUrl,
     totalSuites: suites.length,
     passed: totalPassed,
     failed: totalFailed,
@@ -164,7 +180,11 @@ async function runAll() {
   console.log(`Report written to: ${summaryPath}`);
   console.log('================================================================\n');
 
-  process.exit(totalFailed === 0 ? 0 : 1);
+  if (require.main === module) {
+    process.exit(totalFailed === 0 ? 0 : 1);
+  }
+
+  return summary;
 }
 
 if (require.main === module) {

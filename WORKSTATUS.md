@@ -7,6 +7,32 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **P1 · Enforce Quality Gates: Smoke-Test Status Validation, Bounded Startup Readiness, Portable E2E Runners with Live Assertions, and Plant-Level Negative Test Expansion (2026-10-24 14:15 IST) — COMPLETED:**
+  - Scope Delivered:
+    1. Smoke-Test Status Validation & Bounded Startup Readiness (`tools/smoke-test-deployment.js`, `.github/workflows/ci.yml`, `test/smoke/postDeploymentSmoke.test.js`):
+       - Implemented `waitForServer(baseUrl, timeoutMs, intervalMs)` readiness probe with bounded exponential backoff in `tools/smoke-test-deployment.js`.
+       - Added CLI flags `--wait` and `--wait=<seconds>` plus options support (`options.waitTimeoutMs`).
+       - Tightened `/ai/chat/stream` validator to strictly reject 404 and 5xx errors while allowing expected authenticated streaming responses (200, 400, 401, 403).
+       - Updated `.github/workflows/ci.yml` replacing fragile fixed `sleep 5` with `node tools/smoke-test-deployment.js --wait=30`.
+       - Added unit tests in `test/smoke/postDeploymentSmoke.test.js` asserting healthy server readiness detection and bounded timeout rejection; 4/4 passed.
+    2. Portable E2E Runners & Elimination of Pre-Filled PASS Results (`test/e2e/runAllE2E.js`, `test/e2e/wm/*.e2e.js`):
+       - Made all WM Playwright E2E suites portable via dynamic URL resolution (`options.baseUrl || process.env.TARGET_URL || process.env.APP_URL || 'http://localhost:4004'`).
+       - Initialized all verification report properties to `'NOT_RUN'`; fields transition to `'PASS'` strictly upon passing live DOM assertions, network audit, and conservation checks.
+       - Removed pre-filled `{ status: 'PASS', errors: [] }` stubs from all E2E scripts.
+       - Updated `test/e2e/runAllE2E.js` with `--url=` / `--target-url=` CLI options, health checks, and summary JSON output (`test-results/e2e-summary.json`).
+       - Validated: `node test/e2e/runAllE2E.js` -> 6/6 suites passed dynamically (Hardening, Mvt 201, 241, 261, 301, 311).
+    3. Expanded Authorization and Plant-Level Negative Tests (`srv/wm/reservation-entry/service.js`, `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`, `test/unit/wm/criticalTransactionAuth.test.js`, `test/unit/wm/plantScope.test.js`):
+       - Added server-side `plantScope(req.user)` enforcement to `createReservation`, `createReservationEntry`, `postMigoGoodsMovement`, `executeReservationWarehouseFlow`, and `getOpenReservations` in `ReservationEntryService`.
+       - Added server-side `plantScope(req.user)` enforcement to `postGoodsIssue201`, `postGoodsIssue301`, and `postGoodsIssue311` in `GoodsIssueService`.
+       - Expanded `test/unit/wm/plantScope.test.js` with null/undefined user, missing method, numeric coercion, and admin precedence edge cases (9/9 passed).
+       - Expanded `test/unit/wm/criticalTransactionAuth.test.js` with 19 plant-level negative test cases covering clerk `dave` (Plant 1130 targeting Plant 1120) and unassigned user `eve` across Reservation Entry, Goods Issue, and Mvt 261 services (56/56 passed).
+  - Validation:
+    - `npx jest test/unit/wm/plantScope.test.js test/unit/wm/criticalTransactionAuth.test.js test/smoke/postDeploymentSmoke.test.js`: 69/69 passed (100% green).
+    - `node tools/smoke-test-deployment.js --wait=10`: 10 passed, 0 failed in 11ms.
+    - `node test/e2e/runAllE2E.js`: 6 passed, 0 failed in 43s.
+    - `npm run lint` & `npm run scan:secrets`: 0 errors, 0 warnings, 0 secrets detected.
+    - `git diff --check`: 0 issues.
+
 - **P0 · Unblock CI: Fixed Secret-Scanner Test Fixtures, Triaged Production Dependencies, Resolved Pre-existing WM/Auth Test Suite Blockers, and Verified Complete CI Pipeline (2026-10-24 13:45 IST) — COMPLETED:**
   - Scope Delivered:
     1. Secret-Scanner Test Fixtures Hardened (`test/unit/tools/scanSecrets.test.js`):
@@ -1536,6 +1562,11 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Exact Next Recommended Action (P1 · Enforce Quality Gates Delivered & Fully Verified — 2026-10-24 14:15 IST):** All P1 quality gates requested by the user are complete and verified:
+  1. Smoke test status validation and bounded startup readiness: `waitForServer` probe with exponential backoff replaces fragile CI `sleep 5`, `/ai/chat/stream` validator tightened to strictly fail on 404/5xx, and unit tests verify bounded readiness timeouts.
+  2. Portable E2E checks and elimination of pre-filled PASS results: all 6 WM Playwright E2E suites dynamically resolve target baseUrl, initialize reports to `'NOT_RUN'`, transition strictly on live DOM/network/conservation assertions, and record telemetry to `test-results/e2e-summary.json`.
+  3. Authorization and plant-level negative tests: `plantScope` enforced server-side across Reservation Entry (`createReservation`, `createReservationEntry`, `postMigoGoodsMovement`, `executeReservationWarehouseFlow`, `getOpenReservations`) and Goods Issue (`postGoodsIssue201`, `postGoodsIssue301`, `postGoodsIssue311`), with 19 comprehensive negative tests covering out-of-scope clerk `dave` (Plant 1130) and unassigned user `eve` (56/56 passed in `criticalTransactionAuth.test.js` and 9/9 in `plantScope.test.js`).
+  Branch `feature01` is fully hardened, passing all smoke, E2E, auth, plant-scope, lint, and security checks. Ready for PR review.
 - **Exact Next Recommended Action (P0 · Unblock CI Delivered & Fully Verified — 2026-10-24 13:45 IST):** All CI pipeline blockers are resolved: secret scanner fixtures hardened dynamically without regex weakening, root and Fiori production dependencies triaged to 0 critical vulnerabilities, all 184 active unit test suites passing (3,426 tests passed with 0 failures), and every CI stage verified locally and passing cleanly (secrets, dependencies, ESLint, UI5 lint, test coverage, performance, a11y, monitoring, smoke, UI5 build, and MTA validation). Branch `feature01` is 100% unblocked and ready for PR merge.
 - **Exact Next Recommended Action (Code Cleanliness & Zero-Warning Lint Pass Complete — 2026-10-24 13:05 IST):** All 8 ESLint warnings resolved across adapters and test files (`PurchaseOrderAdapter.js`, `HuStockTransferAdapter.js`, `autoMigoPosting.test.js`, `executeDeliveryPgi.test.js`, `huStockTransferAdapter.test.js`). Root ESLint passes with **0 errors, 0 warnings (100% clean)**. UI5 linter passes with 0 findings; MTA descriptor validation passes with 0 errors. All 141 tests in affected test suites pass. Branch `feature01` is fully hardened, documented, and ready for merge / PR review.
 - **Exact Next Recommended Action (Phase 4 Deployment & Production Assurance Delivered & Fully Verified — 2026-10-24 13:00 IST):** All Phase 4 Deployment and Production Assurance deliverables requested by the user are 100% completed, tested, and integrated:
@@ -1547,6 +1578,34 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is completely validated, passing all smoke, connectivity, monitoring, security, a11y, performance, lint, and MTA checks. Ready for PR / merge review.
 
 ## Changes Log
+
+### 2026-10-24 14:15 IST — P1 · Enforce Quality Gates: Smoke-Test Status Validation, Bounded Startup Readiness, Portable E2E Runners & Plant-Level Negative Tests
+
+- **Plan:**
+  - Enhance `tools/smoke-test-deployment.js` with bounded server readiness polling (`waitForServer`) and strict validation on AI streaming endpoint.
+  - Update `.github/workflows/ci.yml` replacing fragile `sleep 5` with `node tools/smoke-test-deployment.js --wait=30`.
+  - Convert all WM Playwright E2E suites (`verifyHardeningUI.e2e.js`, `verifyMvt201.e2e.js`, `verifyMvt241.e2e.js`, `verifyMvt261.e2e.js`, `verifyMvt301.e2e.js`, `verifyMvt311.e2e.js`) to support dynamic baseUrl target and remove pre-filled PASS status stubs.
+  - Update `test/e2e/runAllE2E.js` with CLI options (`--url=`, `--target-url=`) and summary output.
+  - Enforce server-side `plantScope(req.user)` checks in `ReservationEntryService` (`createReservation`, `createReservationEntry`, `postMigoGoodsMovement`, `executeReservationWarehouseFlow`, `getOpenReservations`) and `GoodsIssueService` (`postGoodsIssue201`, `postGoodsIssue301`, `postGoodsIssue311`).
+  - Expand unit tests with negative plant scope cases in `test/unit/wm/plantScope.test.js` and `test/unit/wm/criticalTransactionAuth.test.js`.
+- **Evidence & Results:**
+  - Files modified:
+    - `tools/smoke-test-deployment.js`: Added `waitForServer(baseUrl, timeoutMs, intervalMs)` with bounded exponential backoff; added CLI `--wait` flags; tightened `/ai/chat/stream` check to require 200/400/401/403 and fail on 404 or 5xx.
+    - `.github/workflows/ci.yml`: Replaced `sleep 5` with `node tools/smoke-test-deployment.js --wait=30`.
+    - `test/smoke/postDeploymentSmoke.test.js`: Added tests for bounded readiness probe (healthy server vs. unreachable host timeout); 4/4 passed.
+    - `test/e2e/wm/*.e2e.js`: Refactored all 6 E2E suites to accept `options.baseUrl`, initialized all telemetry properties to `'NOT_RUN'`, removed hardcoded PASS stubs, and transitioned results strictly based on live DOM/network assertions.
+    - `test/e2e/runAllE2E.js`: Added `--url=` / `--target-url=` CLI options, health probe, and structured JSON output to `test-results/e2e-summary.json`. Verified all 6 suites pass against localhost:4004.
+    - `srv/wm/reservation-entry/service.js`: Hardened `createReservation`, `createReservationEntry`, `postMigoGoodsMovement`, `executeReservationWarehouseFlow`, and `getOpenReservations` with strict server-side `plantScope(req.user)` enforcement.
+    - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`: Enforced plantScope on `postGoodsIssue201`, `postGoodsIssue301`, and `postGoodsIssue311`.
+    - `test/unit/wm/plantScope.test.js`: Added unit tests for null/undefined user, missing method, numeric plant coercion, and admin precedence; 9/9 passed.
+    - `test/unit/wm/criticalTransactionAuth.test.js`: Added 19 negative plant scope tests covering clerk `dave` (Plant 1130 targeting Plant 1120) and unassigned user `eve` across Reservation Entry, Goods Issue, and Mvt 261 services; 56/56 passed.
+  - Validation commands executed:
+    - `npx jest test/unit/wm/plantScope.test.js test/unit/wm/criticalTransactionAuth.test.js test/smoke/postDeploymentSmoke.test.js`: 69/69 passed (100% green).
+    - `node tools/smoke-test-deployment.js --wait=10`: 10 passed, 0 failed in 11ms.
+    - `node test/e2e/runAllE2E.js`: 6 passed, 0 failed in 43s.
+    - `npm run lint`: 0 errors, 0 warnings.
+    - `npm run scan:secrets`: 0 secrets detected across 833 files.
+    - `git diff --check`: 0 issues.
 
 ### 2026-10-24 13:45 IST — P0 · Unblock CI: Secret-Scanner Test Fixtures, Production Dependency Audits, Test Suite Pre-Existing Blocker Resolutions & Full CI Pipeline Verification
 
