@@ -7,6 +7,7 @@ module.exports = {
     '**/test/integration/**/*.test.js',
     '**/test/performance/**/*.test.js',
     '**/test/a11y/**/*.test.js',
+    '**/test/smoke/**/*.test.js',
     '**/test/e2e/**/*.test.js'
   ],
   setupFiles: ['<rootDir>/test/setupEnv.js'],

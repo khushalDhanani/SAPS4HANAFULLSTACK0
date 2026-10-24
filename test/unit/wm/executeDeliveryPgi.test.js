@@ -107,7 +107,7 @@ describe('execute-delivery-pgi CLI & Guard Unit Tests', () => {
     test('executes BAPI once and reads back all verification items', async () => {
       const mockCalls = [];
       const mockRfc = {
-        readTable: jest.fn(async (tab, fields, where) => {
+        readTable: jest.fn(async (tab, _fields, _where) => {
           if (tab === 'T319A') {
             return [{ LGNUM: 'W01', VHART: 'Z007', LETYP: 'E10' }];
           }

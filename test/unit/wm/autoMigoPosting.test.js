@@ -656,7 +656,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       test('not picked, no serials on the delivery: L_TO_CREATE_DN (I_SQUIT), serial assignment + COMMIT, then PGI + COMMIT', async () => {
         const state = { wbstk: 'A', kostk: 'A', serialsAssigned: false, posted: false };
         mockRfc.readTable = mkRead(state);
-        mockRfc.call.mockImplementation(async (fm, params) => {
+        mockRfc.call.mockImplementation(async (fm, _params) => {
           if (fm === 'L_TO_CREATE_DN') { state.kostk = 'C'; return { E_TANUM: '0001037400' }; }
           if (fm === 'BAPI_OUTB_DELIVERY_CHANGE') { state.serialsAssigned = true; return { RETURN: [] }; }
           if (fm === 'BAPI_OUTB_DELIVERY_CONFIRM_DEC') { state.posted = true; return { RETURN: [] }; }

@@ -1324,7 +1324,7 @@ class HuStockTransferAdapter {
       ReservationItem,
       UnitNumber,
       TransferQty,
-      IsFullUnit = true,
+      _IsFullUnit = true,
       ClientAttemptId
     } = payload;
 

@@ -1,10 +1,23 @@
 'use strict';
 
 const HuStockTransferAdapter = require('../../../srv/integration/s4hana/wm/HuStockTransferAdapter');
+const BusinessConfigResolver = require('../../../srv/common/BusinessConfigResolver');
 
 describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
   let adapter;
   let mockRfc;
+
+  beforeAll(() => {
+    BusinessConfigResolver.registerWarehouseStorageTypes('W01', {
+      pickableStorageTypes: ['EN1'],
+      holdStorageTypes: ['OH1'],
+      interimStorageTypes: ['921']
+    });
+  });
+
+  afterAll(() => {
+    BusinessConfigResolver.unregisterWarehouseStorageTypes('W01');
+  });
 
   beforeEach(() => {
     mockRfc = {
@@ -390,6 +403,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
         ClientAttemptId: 'idempotent-key-42'
       });
 
+      expect(res1.MaterialDocument).toBe('4900012345');
       expect(mockRfc.call).toHaveBeenCalledTimes(2); // BAPI + COMMIT
 
       // Re-submit with same attempt ID
@@ -611,7 +625,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
     });
 
     it('places non-rack bin 921/TRANSFER into separate NonRackBins list and not in Cells', async () => {
-      mockRfc.readTable.mockImplementation((table, fields, where) => {
+      mockRfc.readTable.mockImplementation((table, _fields, _where) => {
         if (table === 'LAGP') {
           return Promise.resolve([
             { LGNUM: 'W01', LGTYP: 'EN1', LGPLA: '1-L0001-04', LGBER: 'IT1', LPTYP: '04' }

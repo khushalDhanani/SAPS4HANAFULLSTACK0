@@ -303,7 +303,7 @@ class PurchaseOrderAdapter {
       };
 
       // Plain-text /$count responses.
-      const fetchRawCount = async (serviceRelPath) => {
+      const _fetchRawCount = async (serviceRelPath) => {
         if (authFailed) return null;
         try {
           const res = await executeFn(dest, {
