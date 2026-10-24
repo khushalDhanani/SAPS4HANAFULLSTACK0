@@ -6,9 +6,8 @@ const { formatDateToYMD } = require('../../../common/dateUtils');
 const { RfcClient } = require('../RfcClient');
 const businessConfigResolver = require('../../../common/BusinessConfigResolver');
 const { parseSapNumber } = require('../sapFacts');
-const { buildBaseItem, buildHeaderEnvelope } = require('./goods-issue/s4common');
 const GoodsIssuePostingClient = require('./goods-issue/GoodsIssuePostingClient');
-const { calculateMovement261StockEligibility, getGmCode } = require('../../../common/movementConfig');
+const { calculateMovement261StockEligibility, validateMovement261Payload } = require('../../../common/movementConfig');
 const { sapKey } = require('../sapKey');
 
 /**
@@ -131,6 +130,7 @@ class Mvt261Adapter {
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
     this.rfc = options.rfc || new RfcClient();
+    this.postingClient = options.postingClient || new GoodsIssuePostingClient({ client: this.client, rfc: this.rfc });
     this._plant           = options.plant           || '';
     this._warehouseNumber = options.warehouseNumber || '';
     this._resolver        = options.resolver        || businessConfigResolver;
@@ -1078,12 +1078,21 @@ class Mvt261Adapter {
    *   storage location, and batch to A_MaterialDocumentHeader.
    */
   async postGoodsIssue(input = {}) {
-    const quantity = Number(input.quantity);
-    if (!(quantity > 0)) throw httpError(400, 'Quantity must be greater than zero');
+    const validation = validateMovement261Payload(input);
+    if (!validation.isValid) throw httpError(400, validation.errors[0]?.message || validation.message);
+    const quantity = Number(input.quantity !== undefined ? input.quantity : input.IssueQty);
 
     // Fresh live SAP revalidation immediately before SAP POST (protects against stock changes between scan and posting)
     const reval = await this.revalidateStock(input);
     const c = reval.freshCycle;
+    const requestedOrder = String(input.orderId ?? input.OrderID ?? '').trim();
+    const requestedOrderType = String(input.orderType ?? input.OrderType ?? '').trim();
+    if (!/^\d{1,12}$/.test(requestedOrder) || strip(requestedOrder) !== strip(c.ProductionOrder)) {
+      throw httpError(400, 'Order number does not match the verified production order on the reservation');
+    }
+    if (!requestedOrderType || requestedOrderType !== String(c.OrderType || '').trim()) {
+      throw httpError(400, 'OrderType does not match the verified production order on the reservation');
+    }
     const batch = clean(input.batch, 'Batch', /^[A-Z0-9]{1,10}$/);
 
     // Entry unit in external format, from the same service the list reads.
@@ -1095,39 +1104,23 @@ class Mvt261Adapter {
     const unit = d.results?.[0]?.BaseUnit;
     if (!unit) throw httpError(422, 'Goods issue not possible: unit of the reservation item could not be read');
 
-    // Option A: payload posts validated reservation quantity, batch, plant, and storage location.
-    // LENUM / storage units are physical validation inputs and are NOT sent in MM-IM item payload.
-    const payload = buildHeaderEnvelope({
-      gmCode: getGmCode('261') || '03',
-      headerText: `GI Resv ${c.Reservation}`,
-      referenceDocument: input.referenceDocument,
-      item: buildBaseItem({
-        Material: c.Material, Unit: unit, IssueQty: quantity, Plant: c.Plant, StorageLocation: c.StorageLocation,
-        ReservationNo: c.Reservation, ReservationItem: c.ReservationItem, Batch: batch, OrderNo: c.ProductionOrder
-      }, '261')
+    // Scanned storage units remain physical-validation inputs. The shared posting client and the
+    // movement-specific mapper own the SAP payload and strict BWART read-back verification.
+    const result = await this.postingClient.post261({
+      MovementType: '261', ValidatedMovementType: '261', ReservationNo: c.Reservation, ReservationItem: c.ReservationItem,
+      Material: c.Material, Plant: c.Plant, StorageLocation: c.StorageLocation, Batch: batch,
+      IssueQty: quantity, Unit: unit, OrderNo: c.ProductionOrder, OrderType: requestedOrderType, ReferenceDocument: input.referenceDocument
     });
-    const { body, sapMessage, headers } = await this._post(`${MATDOC_API}/A_MaterialDocumentHeader`, payload, `Post goods issue 261 for reservation ${c.Reservation}/${c.ReservationItem}`);
-    if (!body.MaterialDocument) {
-      // WM-managed location: SAP answers 201 with an empty MaterialDocument and turns the goods
-      // movement into an outbound delivery (sap-message L9/514). That is a definite SAP outcome, not a
-      // failure - but the stock is issued only when PGI is posted for that delivery in SAP.
-      const deliveryNo = GoodsIssuePostingClient.deliveryFromSapMessage(GoodsIssuePostingClient.parseSapMessage(headers));
-      if (deliveryNo) {
-        LOG.warn(`Goods issue 261 for reservation ${c.Reservation}/${c.ReservationItem}: SAP created outbound delivery ${deliveryNo} (L9/514) instead of a material document; PGI still required.`);
-        return {
-          MaterialDocument: '', MaterialDocumentYear: '', DeliveryNumber: deliveryNo, Pending: true, SapMessage: sapMessage,
-          Message: `WM-managed location: SAP created outbound delivery ${deliveryNo}. No material document yet - the goods issue completes only when PGI is posted for that delivery. Do not post again.`,
-          StorageUnitPostingSemantics: 'OPTION_A_VALIDATION'
-        };
-      }
-      throw httpError(502, `SAP did not return a material document for the goods issue. sap-message: ${sapMessage || '(none)'}`);
+    if (result.PostingStatus === 'DELIVERY_CREATED') {
+      return { ...result, Pending: true, MaterialDocumentYear: result.MaterialDocYear || '', SapMessage: result.Message,
+        StorageUnitPostingSemantics: 'OPTION_A_VALIDATION' };
     }
     return {
-      MaterialDocument: body.MaterialDocument,
-      MaterialDocumentYear: body.MaterialDocumentYear,
+      MaterialDocument: result.MaterialDocument,
+      MaterialDocumentYear: result.MaterialDocYear,
       DeliveryNumber: '',
       Pending: false,
-      SapMessage: sapMessage,
+      SapMessage: '',
       StorageUnitPostingSemantics: 'OPTION_A_VALIDATION'
     };
   }
@@ -1208,13 +1201,16 @@ class Mvt261Adapter {
    * and expands to_MaterialDocumentItem to confirm GoodsMovementType matches.
    *
    * @param {string} referenceDocument
-   * @param {string} [movementType='261']
+   * @param {string} movementType
    * @param {string|Date} [postingDate]
    * @returns {Promise<{ MaterialDocument: string, MaterialDocumentYear: string, ReferenceDocument: string }|null>}
    */
-  async findPostedGoodsIssueByReference(referenceDocument, movementType = '261', postingDate) {
+  async findPostedGoodsIssueByReference(referenceDocument, movementType, postingDate) {
     const ref = String(referenceDocument || '').trim().replace(/'/g, '');
     if (!ref) return null;
+    if (String(movementType || '').trim() !== '261') {
+      throw httpError(400, "MovementType must be exactly '261' for this reference lookup");
+    }
     let filter = `ReferenceDocument eq '${ref}'`;
     if (postingDate) {
       const day = formatDateToYMD(postingDate);
@@ -1227,7 +1223,8 @@ class Mvt261Adapter {
       const { data } = await this.client.get(`${MATDOC_API}/A_MaterialDocumentHeader`, { query });
       const hits = data?.d?.results || (Array.isArray(data?.d) ? data.d : (Array.isArray(data) ? data : []));
       const originals = hits.filter((h) =>
-        (h.to_MaterialDocumentItem?.results || []).some((i) => i.GoodsMovementType === movementType)
+        (h.to_MaterialDocumentItem?.results || []).length > 0 &&
+        h.to_MaterialDocumentItem.results.every((i) => String(i.GoodsMovementType || '').trim() === movementType)
       ).sort((a, b) => String(a.MaterialDocument).localeCompare(String(b.MaterialDocument)));
       if (!originals.length) return null;
       return {

@@ -230,9 +230,12 @@ sap.ui.define([
             }
             oModel.setProperty("/busy", true);
             var oPayload = {
+                movementType: "261",
                 reservation: String(oCtx.Reservation),
                 item: String(oCtx.ReservationItem),
                 quantity: nTotal,
+                orderId: String(oCtx.ProductionOrder || ""),
+                orderType: String(oCtx.OrderType || ""),
                 batch: sBatch || undefined
             };
             if (aStorageUnits.length > 0) {

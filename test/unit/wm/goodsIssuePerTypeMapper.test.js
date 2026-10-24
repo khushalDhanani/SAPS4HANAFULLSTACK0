@@ -4,10 +4,11 @@
  */
 
 const M201 = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssue201Mapper');
+const M261 = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssue261Mapper');
 const M301 = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssue301Mapper');
 const M311 = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssue311Mapper');
 
-const base = { IssueQty: 1, Unit: 'KG', Plant: '1130', StorageLocation: 'CS02', PostingDate: '2026-09-29', DocumentDate: '2026-09-29' };
+const base = { IssueQty: 1, Unit: 'KG', Plant: '1130', StorageLocation: 'CS02', PostingDate: '2026-09-29', DocumentDate: '2026-09-29', OrderType: 'ZP01' };
 const item = (p) => p.to_MaterialDocumentItem.results[0];
 
 describe('201 mapper', () => {
@@ -20,6 +21,34 @@ describe('201 mapper', () => {
     expect(item(p).CostCenter).toBe('1011202902');
     expect(item(p).GLAccount).toBeUndefined();
     expect(item(p).IssuingOrReceivingPlant).toBeUndefined();
+  });
+});
+
+describe('261 mapper', () => {
+  const p = M261.mapToMaterialDocumentPayload({
+    ...base, MovementType: '261', Material: '1000001001', ReservationNo: '512851',
+    ReservationItem: '3', OrderNo: '1002707', ReferenceDocument: 'GI261TEST'
+  });
+  test('emits exactly movement 261 with its reservation and manufacturing order', () => {
+    expect(p.GoodsMovementCode).toBe('03');
+    expect(p.ReferenceDocument).toBe('GI261TEST');
+    expect(item(p)).toMatchObject({
+      GoodsMovementType: '261', Reservation: '512851', ReservationItem: '0003', ManufacturingOrder: '000001002707'
+    });
+    expect(item(p).CostCenter).toBeUndefined();
+    expect(item(p).IssuingOrReceivingPlant).toBeUndefined();
+  });
+
+  test.each([undefined, '', '201', '241', '301', '311'])('rejects movement type %s before producing a SAP payload', (MovementType) => {
+    expect(() => M261.mapToMaterialDocumentPayload({
+      ...base, MovementType, Material: 'M1', ReservationNo: '1', ReservationItem: '1', OrderNo: '123'
+    })).toThrow();
+  });
+
+  test('rejects a 201 cost-center field', () => {
+    expect(() => M261.mapToMaterialDocumentPayload({
+      ...base, MovementType: '261', Material: 'M1', ReservationNo: '1', ReservationItem: '1', OrderNo: '123', CostCenter: 'CC1'
+    })).toThrow(/Cost Center is not allowed/);
   });
 });
 

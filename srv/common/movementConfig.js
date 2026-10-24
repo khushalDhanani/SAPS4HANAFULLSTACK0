@@ -34,12 +34,10 @@ const MOVEMENT_CONFIG = Object.freeze({
     movementType: '201',
     inventoryMovement: '201',
     configuredWmMovement: '201',
-    stagingWmMovement: '311',
-    // Live 241 audit 2026-10-19 (D21): goods issues use the WM movement SAP is configured for (T333 W01/201: BETYP K,
-    // dynamic bin in 911); staging through 311/921 pooled stock across reservations and dropped the account assignment.
+    // Confirmed in the D21 live audit: WM uses the same movement number as the inventory movement.
     useRealWmMovement: true,
     get wmMovement() {
-      return this.useRealWmMovement ? this.configuredWmMovement : this.stagingWmMovement;
+      return this.configuredWmMovement;
     },
     requirementType: 'K',
     interimStorageType: '911',
@@ -104,12 +102,10 @@ const MOVEMENT_CONFIG = Object.freeze({
     movementType: '241',
     inventoryMovement: '241',
     configuredWmMovement: '241',
-    stagingWmMovement: '311',
-    // Live 241 audit 2026-10-19 (D21): goods issues use the WM movement SAP is configured for (T333 W01/241: BETYP A,
-    // dynamic bin in 913); staging through 311/921 pooled stock across reservations and dropped the account assignment.
+    // Confirmed in the D21 live audit: WM uses the same movement number as the inventory movement.
     useRealWmMovement: true,
     get wmMovement() {
-      return this.useRealWmMovement ? this.configuredWmMovement : this.stagingWmMovement;
+      return this.configuredWmMovement;
     },
     requirementType: 'A',
     interimStorageType: '913',
@@ -175,7 +171,6 @@ const MOVEMENT_CONFIG = Object.freeze({
     movementType: '311',
     inventoryMovement: '311',
     configuredWmMovement: '311',
-    stagingWmMovement: '311',
     wmMovement: '311',
     requirementType: '',
     interimStorageType: '921',
@@ -237,7 +232,6 @@ const MOVEMENT_CONFIG = Object.freeze({
     movementType: '301',
     inventoryMovement: '301',
     configuredWmMovement: '301',
-    stagingWmMovement: '301',
     wmMovement: '301',
     requirementType: '',
     interimStorageType: '920',
@@ -298,7 +292,6 @@ const MOVEMENT_CONFIG = Object.freeze({
     movementType: '261',
     inventoryMovement: '261',
     configuredWmMovement: '261',
-    stagingWmMovement: '261',
     wmMovement: '261',
     requirementType: 'F',
     interimStorageType: '914',
@@ -721,7 +714,7 @@ function validateMovement311Destination(plant, storageLocation, receivingPlant, 
  *
  * @param {object} rfc - SAP RFC client (must have readTable method)
  * @param {object} params
- * @param {string} [params.movementType='301'] - '301' or '311'
+ * @param {string} params.movementType - '301' or '311'
  * @param {string} [params.plant] - Issuing Plant (required for 311; used as receivingPlant for 311 if receivingPlant omitted)
  * @param {string} [params.storageLocation] - Issuing Storage Location (used for 311 T320 comparison and intra-plant check)
  * @param {string} [params.receivingPlant] - Receiving Plant (mandatory for 301; for 311 must match plant if supplied)
@@ -735,7 +728,7 @@ function validateMovement311Destination(plant, storageLocation, receivingPlant, 
  * @returns {Promise<{ valid: boolean, error?: string, initialDestStock?: number }>}
  */
 async function verifyReceivingLocationInSap(rfc, {
-  movementType = '301',
+  movementType,
   receivingPlant,
   receivingStorageLocation,
   plant,
@@ -747,11 +740,13 @@ async function verifyReceivingLocationInSap(rfc, {
   checkMarc = true,
   checkMard = true
 } = {}) {
+  const sMvt = String(movementType || '').trim();
+  if (!['301', '311'].includes(sMvt)) {
+    return { valid: false, error: 'MovementType is required and must be 301 or 311' };
+  }
   if (!rfc || typeof rfc.readTable !== 'function') {
     return { valid: true };
   }
-
-  const sMvt = String(movementType || '').trim();
   const sPlant = String(plant || '').trim().toUpperCase();
   const sRecPlant = String(receivingPlant || (sMvt === '311' ? plant : '') || '').trim().toUpperCase();
   const sSLoc = String(storageLocation || '').trim().toUpperCase();
@@ -1143,6 +1138,13 @@ function validateMovementPostingPayload(movementType, data, options = {}) {
   const errors = [];
   const push = (e) => { if (e) errors.push(e); };
 
+  const movementTypeAliases = ['MovementType', 'movementType']
+    .filter((key) => data[key] !== undefined && data[key] !== null)
+    .map((key) => String(data[key]).trim());
+  if (!movementTypeAliases.length || movementTypeAliases.some((value) => value !== mvt)) {
+    push({ field: 'MovementType', message: `MovementType must be explicitly supplied and exactly '${mvt}'` });
+  }
+
   // 1. Reservation check
   const resRules = cfg.reservationRules || {};
   let hasReservation = false;
@@ -1367,6 +1369,25 @@ function validateMovementAccountAssignment(movementType, data = {}) {
     }
   }
 
+  const fieldAliases = {
+    CostCenter: ['CostCenter', 'costCenter'],
+    AssetNo: ['AssetNo', 'assetNo'],
+    SubNumber: ['SubNumber', 'subNumber'],
+    ReceivingPlant: ['ReceivingPlant', 'receivingPlant'],
+    ReceivingStorageLocation: ['ReceivingStorageLocation', 'receivingStorageLocation'],
+    GLAccount: ['GLAccount', 'glAccount'],
+    OrderID: ['OrderID', 'OrderId', 'orderId'],
+    OrderNo: ['OrderNo', 'orderNo'],
+    OrderType: ['OrderType', 'orderType']
+  };
+  for (const field of cfg.forbiddenFields || []) {
+    const aliases = fieldAliases[field] || [field, field.charAt(0).toLowerCase() + field.slice(1)];
+    const supplied = aliases.some((key) => data[key] !== undefined && data[key] !== null && String(data[key]).trim() !== '');
+    if (supplied && !errors.some((error) => error.field === field)) {
+      errors.push({ field, message: `${field} is not allowed for Movement Type ${cfg.movementType}` });
+    }
+  }
+
   return {
     isValid: errors.length === 0,
     errors
@@ -1392,12 +1413,40 @@ function validateMovement261Payload(data) {
 
   const reservation = String(data.reservation || data.ReservationNo || '').trim();
   const item = String(data.item || data.ReservationItem || '').trim();
+  const movementTypeAliases = ['movementType', 'MovementType']
+    .filter((key) => data[key] !== undefined && data[key] !== null)
+    .map((key) => String(data[key]).trim());
+  const movementType = String(data.movementType ?? data.MovementType ?? '').trim();
+  const orderAliases = ['orderId', 'OrderID', 'orderNo', 'OrderNo']
+    .filter((key) => data[key] !== undefined && data[key] !== null && String(data[key]).trim() !== '')
+    .map((key) => String(data[key]).trim());
+  const orderId = String(data.orderId ?? data.OrderID ?? data.orderNo ?? data.OrderNo ?? '').trim();
+  const canonicalOrderAliases = new Set(orderAliases.map((value) => value.replace(/^0+/, '') || '0'));
+  const orderTypeAliases = ['orderType', 'OrderType']
+    .filter((key) => data[key] !== undefined && data[key] !== null)
+    .map((key) => String(data[key]).trim());
+  const orderType = String(data.orderType ?? data.OrderType ?? '').trim();
   const rawQty = data.quantity !== undefined ? data.quantity : data.IssueQty;
   const quantity = Number(rawQty);
 
   const errors = [];
   if (!reservation || !item) {
     errors.push({ field: 'reservation', message: 'Reservation and item are required' });
+  }
+  if (movementType !== '261') {
+    errors.push({ field: 'movementType', message: "MovementType must be exactly '261' for this action" });
+  }
+  if (movementTypeAliases.some((value) => value !== '261')) {
+    errors.push({ field: 'movementType', message: "Every supplied MovementType alias must be exactly '261'" });
+  }
+  if (!/^\d{1,12}$/.test(orderId)) {
+    errors.push({ field: 'orderId', message: 'A valid production Order number (1 to 12 digits) is required for Movement Type 261' });
+  }
+  if (canonicalOrderAliases.size > 1) {
+    errors.push({ field: 'orderId', message: 'Supplied Order ID fields must all refer to the same production order' });
+  }
+  if (!orderType || orderType.length > 4 || orderTypeAliases.some((value) => value !== orderType)) {
+    errors.push({ field: 'orderType', message: 'A single explicit OrderType of at most 4 characters is required for Movement Type 261' });
   }
   if (rawQty === undefined || rawQty === null || rawQty === '' || isNaN(quantity) || quantity <= 0) {
     errors.push({ field: 'quantity', message: 'Quantity must be greater than zero' });
@@ -1407,6 +1456,7 @@ function validateMovement261Payload(data) {
   const cfg = MOVEMENT_CONFIG['261'];
   const costCenter = data.CostCenter || data.costCenter;
   const assetNo = data.AssetNo || data.assetNo;
+  const subNumber = data.SubNumber || data.subNumber;
   const recPlant = data.ReceivingPlant || data.receivingPlant;
   const recSLoc = data.ReceivingStorageLocation || data.receivingStorageLocation;
   const glAccount = data.GLAccount || data.glAccount;
@@ -1416,6 +1466,9 @@ function validateMovement261Payload(data) {
   }
   if (assetNo && cfg.forbiddenFields.includes('AssetNo')) {
     errors.push({ field: 'AssetNo', message: 'Asset number is not allowed for Movement Type 261 (GI to Order)' });
+  }
+  if (subNumber && cfg.forbiddenFields.includes('SubNumber')) {
+    errors.push({ field: 'SubNumber', message: 'Asset sub-number is not allowed for Movement Type 261 (GI to Order)' });
   }
   if (recPlant && cfg.forbiddenFields.includes('ReceivingPlant')) {
     errors.push({ field: 'ReceivingPlant', message: 'Receiving Plant is not allowed for Movement Type 261 (GI to Order)' });

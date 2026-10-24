@@ -194,9 +194,18 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
     // material document envelope issues the validated reservation quantity and batch.
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action postGoodsIssue(
+        movementType : String(3),
         reservation  : String(10),
         item         : String(4),
         quantity     : Decimal(13, 3),
+        orderId      : String(12),
+        orderType    : String(4),
+        costCenter   : String(10),
+        assetNo      : String(12),
+        subNumber    : String(4),
+        receivingPlant : String(4),
+        receivingStorageLocation : String(4),
+        glAccount    : String(10),
         batch        : String(10),
         storageUnits : array of String(20)
     ) returns MaterialDocumentResult;

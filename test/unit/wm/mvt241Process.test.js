@@ -88,10 +88,16 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
           const tanum = match ? match[1] : '0001014000';
           return [{ LGNUM: 'W01', TANUM: tanum, TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000008977', NSOLA: '1.000', ALTME: 'KG', PQUIT: '' }];
         }
+        if (table === 'MATDOC' && (where || []).some((w) => String(w).includes('MBLNR'))) return [{ BWART: '241' }];
         return [];
       })
     };
     resAdapter = new ReservationProcessAdapter({ rfc: mockRfc, checkAssetExistence: true });
+    resAdapter.verifyMaterialDocument = jest.fn(async (params) => ({
+      success: true, materialDocument: String(params.materialDocument || ''),
+      materialDocumentYear: String(params.materialDocYear || params.materialDocumentYear || ''),
+      movementType: String(params.movementType || '')
+    }));
     trAdapter = new TrToAdapter({ rfc: mockRfc });
   });
 
@@ -686,7 +692,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
       // Retry: found already posted in MATDOC
       mockRfc.readTable.mockImplementation(async (table) => {
         if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
-        if (table === 'MATDOC') return [{ MBLNR: '4900050149', MJAHR: '2026' }];
+        if (table === 'MATDOC') return [{ MBLNR: '4900050149', MJAHR: '2026', BWART: '241' }];
         return [];
       });
 

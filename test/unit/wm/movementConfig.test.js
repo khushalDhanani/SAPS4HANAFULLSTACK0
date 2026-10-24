@@ -36,7 +36,7 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
       const cfg = MOVEMENT_CONFIG['261'];
       expect(cfg.inventoryMovement).toBe('261');
       expect(cfg.configuredWmMovement).toBe('261');
-      expect(cfg.stagingWmMovement).toBe('261');
+      expect(cfg.wmMovement).toBe('261');
       expect(cfg.requiresCostCenter).toBe(false);
       expect(cfg.requiresAsset).toBe(false);
       expect(cfg.requiresReceivingPlant).toBe(false);
@@ -52,7 +52,7 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
       const cfg = MOVEMENT_CONFIG['201'];
       expect(cfg.inventoryMovement).toBe('201');
       expect(cfg.configuredWmMovement).toBe('201');
-      expect(cfg.stagingWmMovement).toBe('311');
+      expect(cfg.wmMovement).toBe('201');
       expect(cfg.requiresCostCenter).toBe(true);
       expect(cfg.requiresAsset).toBe(false);
       expect(cfg.requiresReceivingPlant).toBe(false);
@@ -66,7 +66,7 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
       const cfg = MOVEMENT_CONFIG['241'];
       expect(cfg.inventoryMovement).toBe('241');
       expect(cfg.configuredWmMovement).toBe('241');
-      expect(cfg.stagingWmMovement).toBe('311');
+      expect(cfg.wmMovement).toBe('241');
       expect(cfg.requiresCostCenter).toBe(false);
       expect(cfg.requiresAsset).toBe(true);
       expect(cfg.requiresReceivingPlant).toBe(false);
@@ -124,9 +124,10 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
       delete process.env.WM_TR_REAL_MOVEMENT;
     });
 
-    test('staging movement stays recorded for reference (stagingWmMovement 311) but is not what 201/241 send', () => {
-      expect(getMovementConfig('201').stagingWmMovement).toBe('311');
-      expect(getMovementConfig('241').stagingWmMovement).toBe('311');
+    test('WM movement type exactly equals each inventory movement type', () => {
+      for (const mvt of ['201', '241', '261', '301', '311']) {
+        expect(resolveWmMovement(mvt)).toBe(mvt);
+      }
       expect(getMovementConfig('201').wmMovement).toBe('201');
       expect(getMovementConfig('241').wmMovement).toBe('241');
     });
@@ -436,6 +437,15 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
         const res301Val = validateMovement301Destination('1120', '1130', 'CS01');
         expect(res301Val.isValid).toBe(true);
       });
+
+      test('verifyReceivingLocationInSap does not infer a movement type', async () => {
+        const readTable = jest.fn();
+        const result = await verifyReceivingLocationInSap({ readTable }, {
+          plant: '1120', receivingPlant: '1130', receivingStorageLocation: 'CS02'
+        });
+        expect(result).toMatchObject({ valid: false, error: 'MovementType is required and must be 301 or 311' });
+        expect(readTable).not.toHaveBeenCalled();
+      });
     });
   });
 
@@ -704,6 +714,7 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
 
   describe('7. Canonical Movement Posting & Destination Validation (Item 18)', () => {
     const validBase201 = {
+      MovementType: '201',
       Plant: '1130',
       StorageLocation: 'CS01',
       Material: '1000000980',
@@ -718,6 +729,12 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
       const res = validateMovementPostingPayload('201', validBase201);
       expect(res.isValid).toBe(true);
       expect(res.errors).toHaveLength(0);
+    });
+
+    test.each([undefined, '', '261', '999'])('MovementType request missing/invalid/mismatched value %s is rejected', (MovementType) => {
+      const res = validateMovementPostingPayload('201', { ...validBase201, MovementType });
+      expect(res.isValid).toBe(false);
+      expect(res.errors.some((e) => e.field === 'MovementType')).toBe(true);
     });
 
     test('validateMovementPostingPayload: 201 rejects missing CostCenter', () => {
@@ -737,6 +754,7 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
 
     test('validateMovementPostingPayload: 301 valid payload passes', () => {
       const payload = {
+        MovementType: '301',
         ReservationNo: '519944',
         ReservationItem: '0001',
         Plant: '1120',
@@ -752,6 +770,7 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
 
     test('validateMovementPostingPayload: 301 rejects same plant or missing receiving sloc', () => {
       const payload = {
+        MovementType: '301',
         ReservationNo: '519944',
         ReservationItem: '0001',
         Plant: '1120',
@@ -768,6 +787,7 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
 
     test('validateMovementPostingPayload: 311 valid payload passes', () => {
       const payload = {
+        MovementType: '311',
         ReservationNo: '519944',
         ReservationItem: '0001',
         Plant: '1120',
@@ -783,6 +803,7 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
 
     test('validateMovementPostingPayload: 311 rejects same sloc or different plant', () => {
       const payload = {
+        MovementType: '311',
         ReservationNo: '519944',
         ReservationItem: '0001',
         Plant: '1120',
@@ -829,38 +850,39 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
   });
 
   describe('8. Canonical Movement 261 Payload Validation (Item 18)', () => {
+    const valid261 = { movementType: '261', orderId: '1002707', orderType: 'ZP01' };
     test('accepts valid 261 payload with reservation, item, quantity', () => {
-      const res = validateMovement261Payload({ reservation: '512851', item: '3', quantity: 200 });
+      const res = validateMovement261Payload({ ...valid261, reservation: '512851', item: '3', quantity: 200 });
       expect(res.isValid).toBe(true);
       expect(res.errors).toHaveLength(0);
     });
 
     test('accepts PascalCase 261 payload (ReservationNo, ReservationItem, IssueQty)', () => {
-      const res = validateMovement261Payload({ ReservationNo: '512851', ReservationItem: '0003', IssueQty: 200 });
+      const res = validateMovement261Payload({ ...valid261, ReservationNo: '512851', ReservationItem: '0003', IssueQty: 200 });
       expect(res.isValid).toBe(true);
       expect(res.errors).toHaveLength(0);
     });
 
     test('rejects missing reservation or item', () => {
-      const resNoRes = validateMovement261Payload({ reservation: '', item: '1', quantity: 10 });
+      const resNoRes = validateMovement261Payload({ ...valid261, reservation: '', item: '1', quantity: 10 });
       expect(resNoRes.isValid).toBe(false);
       expect(resNoRes.errors[0].message).toBe('Reservation and item are required');
 
-      const resNoItem = validateMovement261Payload({ reservation: '512851', item: '', quantity: 10 });
+      const resNoItem = validateMovement261Payload({ ...valid261, reservation: '512851', item: '', quantity: 10 });
       expect(resNoItem.isValid).toBe(false);
       expect(resNoItem.errors[0].message).toBe('Reservation and item are required');
     });
 
     test('rejects zero, negative, or invalid quantity', () => {
-      const resZero = validateMovement261Payload({ reservation: '512851', item: '1', quantity: 0 });
+      const resZero = validateMovement261Payload({ ...valid261, reservation: '512851', item: '1', quantity: 0 });
       expect(resZero.isValid).toBe(false);
       expect(resZero.errors[0].message).toBe('Quantity must be greater than zero');
 
-      const resNeg = validateMovement261Payload({ reservation: '512851', item: '1', quantity: -5 });
+      const resNeg = validateMovement261Payload({ ...valid261, reservation: '512851', item: '1', quantity: -5 });
       expect(resNeg.isValid).toBe(false);
       expect(resNeg.errors[0].message).toBe('Quantity must be greater than zero');
 
-      const resNan = validateMovement261Payload({ reservation: '512851', item: '1', quantity: 'abc' });
+      const resNan = validateMovement261Payload({ ...valid261, reservation: '512851', item: '1', quantity: 'abc' });
       expect(resNan.isValid).toBe(false);
       expect(resNan.errors[0].message).toBe('Quantity must be greater than zero');
     });
@@ -871,8 +893,20 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
       expect(resNull.message).toBe('Request body must be a valid JSON object');
     });
 
+    test('rejects missing or non-261 movement type and invalid Order number before posting', () => {
+      expect(validateMovement261Payload({ orderId: '1002707', reservation: '512851', item: '1', quantity: 10 }).errors[0].field).toBe('movementType');
+      expect(validateMovement261Payload({ ...valid261, movementType: '201', reservation: '512851', item: '1', quantity: 10 }).errors[0].field).toBe('movementType');
+      expect(validateMovement261Payload({ ...valid261, orderId: '12X', reservation: '512851', item: '1', quantity: 10 }).errors[0].field).toBe('orderId');
+    });
+
+    test('requires one explicit OrderType for 261 and rejects conflicting aliases', () => {
+      expect(validateMovement261Payload({ ...valid261, orderType: '', reservation: '512851', item: '1', quantity: 10 }).errors[0].field).toBe('orderType');
+      expect(validateMovement261Payload({ ...valid261, OrderType: 'ZEMP', reservation: '512851', item: '1', quantity: 10 }).errors[0].field).toBe('orderType');
+    });
+
     test('rejects forbidden fields for 261 (CostCenter, AssetNo, ReceivingPlant, GLAccount)', () => {
       const res = validateMovement261Payload({
+        ...valid261,
         reservation: '512851',
         item: '1',
         quantity: 10,

@@ -46,6 +46,8 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
       if (!validation.isValid) {
         return req.error(400, validation.errors[0]?.message || validation.message);
       }
+      const orderId = String(data.orderId ?? data.OrderID ?? '').trim();
+      const orderType = String(data.orderType ?? data.OrderType ?? '').trim();
       const reservation = String(data.reservation || data.ReservationNo || '').trim();
       const item = String(data.item || data.ReservationItem || '').trim();
       const quantity = Number(data.quantity !== undefined ? data.quantity : data.IssueQty);
@@ -78,6 +80,13 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
         return req.error(err.status || 500, err.message || 'SAP S/4HANA request failed');
       }
 
+      if (String(orderId).replace(/^0+/, '') !== String(c.ProductionOrder || '').replace(/^0+/, '')) {
+        return req.error(400, 'Order number does not match the verified production order on the reservation');
+      }
+      if (orderType !== String(c.OrderType || '').trim()) {
+        return req.error(400, 'OrderType does not match the verified production order on the reservation');
+      }
+
       // F9: a batch-specific reservation may only issue its own batch. Force it; reject a mismatch.
       const reservedBatch = c.Batch ? String(c.Batch).trim().toUpperCase() : '';
       if (reservedBatch && batch && batch !== reservedBatch) {
@@ -93,7 +102,7 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
       // ('sending'/'unconfirmed'/'posted'/'delivery_created'/'needs-attention') still blocks (409). The
       // old row is kept and a new generation is suffixed to the base reference (audit trail).
       const openQty = Number(c.OpenQuantity) || 0;
-      const requestHash = crypto.createHash('sha1').update(`${strip(reservation)}|${strip(item)}|${quantity}|${effBatch}|${openQty}`).digest('hex');
+      const requestHash = crypto.createHash('sha1').update(`261|${orderId}|${orderType}|${strip(reservation)}|${strip(item)}|${quantity}|${effBatch}|${openQty}`).digest('hex');
       const baseRef = `GI${requestHash.slice(0, 12)}`.toUpperCase(); // base (14 chars); createOrGet adds the generation suffix
 
       let claim;
@@ -130,9 +139,12 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
 
       try {
         const result = await adapter.postGoodsIssue({
+          movementType: '261',
           reservation,
           item,
           quantity,
+          orderId,
+          orderType,
           batch: effBatch || undefined,
           storageUnits: data.storageUnits || data.units,
           referenceDocument: refDoc,

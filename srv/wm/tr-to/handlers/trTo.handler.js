@@ -69,7 +69,13 @@ class TrToHandler {
 
       const sResNoIn = sapKeyOpt(data.ReservationNo || data.reservationNumber || data.reservationNo, 'rsnum');
       const sTanumIn = sapKeyOpt(data.TransferOrder || data.transferOrder, 'tanum');
-      let sMvt = data.ReservationMovementType || data.reservationMovementType || data.MovementType || data.movementType;
+      const movementAliases = ['MovementType', 'movementType', 'ReservationMovementType', 'reservationMovementType']
+        .filter((key) => data[key] !== undefined && data[key] !== null)
+        .map((key) => String(data[key]).trim());
+      const sMvt = movementAliases[0] || '';
+      if (!sMvt || movementAliases.some((mvt) => mvt !== sMvt) || !['201', '241', '261', '301', '311'].includes(sMvt)) {
+        throw httpError(400, 'MovementType is required and aliases must exactly match one supported type (201, 241, 261, 301, 311)');
+      }
       if (!sResNoIn && !sTanumIn && sMvt !== '311' && sMvt !== '301') {
         throw httpError(400, 'ReservationNo or TransferOrder is required');
       }
@@ -91,7 +97,9 @@ class TrToHandler {
 
       const sResNo = sResNoIn || existingTrack?.ReservationNo || '';
       const sResItem = sResItemIn || existingTrack?.ReservationItem || '0001';
-      if (!sMvt) sMvt = existingTrack?.MovementType;
+      if (existingTrack?.MovementType && String(existingTrack.MovementType).trim() !== sMvt) {
+        throw httpError(400, `Requested MovementType ${sMvt} does not match reservation MovementType ${existingTrack.MovementType}; Goods Issue was not posted.`);
+      }
       let sMat = data.Material || data.material || existingTrack?.Material;
       let sPlant = data.Plant || data.plant || data.sourcePlant || data.SourcePlant || existingTrack?.Plant;
       let sSLoc = data.StorageLocation || data.storageLocation || data.sourceStorageLocation || data.SourceStorageLocation || existingTrack?.StorageLocation;
@@ -131,13 +139,15 @@ class TrToHandler {
             }
             const rsnumRaw = ltakRows[0].RSNUM?.trim();
             const rsnum = rsnumRaw ? sapKey(rsnumRaw, 'rsnum').padStart(10, '0') : '';
-            if (!sMvt && ltakRows[0].BWLVS?.trim()) sMvt = ltakRows[0].BWLVS.trim();
+            if (ltakRows[0].BWLVS?.trim() && ltakRows[0].BWLVS.trim() !== sMvt) {
+              throw httpError(400, `Transfer Order WM movement ${ltakRows[0].BWLVS.trim()} does not exactly equal requested MovementType ${sMvt}; Goods Issue was not posted.`);
+            }
             if (rsnum && rsnum !== '0000000000') {
               const resbRows = await resProcessAdapter.rfc.readTable('RESB', ['BWART', 'UMWRK', 'UMLGO', 'CHARG'], [`RSNUM = '${rsnum}'`], 1);
               if (resbRows?.[0]) {
                 const resbMvt = resbRows[0].BWART?.trim();
                 if (resbMvt && resbMvt !== sMvt) {
-                  sMvt = resbMvt;
+                  throw httpError(400, `Reservation BWART ${resbMvt} does not exactly equal requested MovementType ${sMvt}; Goods Issue was not posted.`);
                 }
                 if (!sRecPlant && resbRows[0].UMWRK?.trim()) sRecPlant = resbRows[0].UMWRK.trim();
                 if (!sRecSLoc && resbRows[0].UMLGO?.trim()) sRecSLoc = resbRows[0].UMLGO.trim();
@@ -431,6 +441,13 @@ class TrToHandler {
     const handleCreateTOFromTR = async (req) => {
       const data = req.data || {};
       const { ReservationTrack, ReservationLog } = entities();
+      const autoPostMovementAliases = ['MovementType', 'movementType', 'ReservationMovementType', 'reservationMovementType']
+        .filter((key) => data[key] !== undefined && data[key] !== null)
+        .map((key) => String(data[key]).trim());
+      const requestedAutoPostMovementType = autoPostMovementAliases[0] || '';
+      if (data.autoPostMigo && (!requestedAutoPostMovementType || autoPostMovementAliases.some((mvt) => mvt !== requestedAutoPostMovementType) || !['201', '241', '261', '301', '311'].includes(requestedAutoPostMovementType))) {
+        throw httpError(400, 'MovementType is required for autoPostMigo and aliases must exactly match one supported type (201, 241, 261, 301, 311)');
+      }
       let existing = null;
       const wh = sapKeyOpt(data.lgnum || data.WarehouseNumber || data.warehouseNumber, 'lgnum');
 
@@ -444,6 +461,10 @@ class TrToHandler {
               existing = await lockTrack(ReservationTrack, { TransferRequirement: alphaOut(tbnum), WarehouseNumber: wh });
             }
           }
+
+      if (data.autoPostMigo && existing?.MovementType && String(existing.MovementType).trim() !== requestedAutoPostMovementType) {
+        throw httpError(400, `Requested MovementType ${requestedAutoPostMovementType} does not match reservation MovementType ${existing.MovementType}; Goods Issue was not posted.`);
+      }
           if (!existing && rsnum) {
             existing = await lockTrack(ReservationTrack, { ReservationNo: rsnum, WarehouseNumber: wh });
             if (!existing) {
@@ -531,13 +552,13 @@ class TrToHandler {
         if (data.autoConfirm !== false && data.autoPostMigo && result.Confirmed && result.success !== false && !result.GoodsMovementPosted) {
           try {
             const confirmedQty = Number(result.ConfirmedQuantity != null && result.ConfirmedQuantity > 0 ? result.ConfirmedQuantity : result.Quantity);
-            const effMvt = result.ReservationMovementType || data.ReservationMovementType || data.reservationMovementType || existing?.MovementType || result.MovementType || data.MovementType || data.movementType;
+            const effMvt = requestedAutoPostMovementType;
             const migoResult = await handlePostMigoGoodsMovement({
               user: req.user,
               data: {
                 ReservationNo: (result.ReservationNo && result.ReservationNo !== '0' ? result.ReservationNo : '') || (existing?.ReservationNo && existing?.ReservationNo !== '0' ? existing.ReservationNo : '') || (data.ReservationNo && data.ReservationNo !== '0' ? data.ReservationNo : '') || data.reservationNo,
                 ReservationItem: (result.ReservationItem && result.ReservationItem !== '0' ? result.ReservationItem : '') || existing?.ReservationItem || data.ReservationItem || data.reservationItem || '1',
-                ReservationMovementType: result.ReservationMovementType || data.ReservationMovementType || data.reservationMovementType || '',
+                ReservationMovementType: requestedAutoPostMovementType,
                 TransferOrder: result.TransferOrder,
                 Quantity: confirmedQty,
                 confMenge: confirmedQty,

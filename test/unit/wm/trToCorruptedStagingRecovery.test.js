@@ -106,7 +106,7 @@ describe('Corrupted Staging TR Auto-Recovery & Statistical Order KI 248 Handling
             mockRfc.readTable.mockResolvedValueOnce([{ TBNUM: '0001000854', STATU: '' }]);
             // getTR for candidate 0001000854 (called twice: in scan loop and in return)
             mockRfc.call.mockResolvedValue({
-                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000854', BWLVS: '311', STATU: '', RSNUM: '' }],
+                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000854', BWLVS: '261', STATU: '', RSNUM: '' }],
                 ET_TR_ITEMS: [{
                     LGNUM: 'W01', TBNUM: '0001000854', TBPOS: '0001',
                     MATNR: '000000008000009754', WERKS: '1120', LGORT: 'HS01',
@@ -145,7 +145,7 @@ describe('Corrupted Staging TR Auto-Recovery & Statistical Order KI 248 Handling
             });
             // getTR for new TR
             mockRfc.call.mockResolvedValueOnce({
-                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000855', BWLVS: '311', STATU: '', RSNUM: '' }],
+                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000855', BWLVS: '261', STATU: '', RSNUM: '' }],
                 ET_TR_ITEMS: [{
                     LGNUM: 'W01', TBNUM: '0001000855', TBPOS: '0001',
                     MATNR: '000000008000009754', WERKS: '1120', LGORT: 'HS01',
@@ -157,10 +157,17 @@ describe('Corrupted Staging TR Auto-Recovery & Statistical Order KI 248 Handling
             const recovered = await adapter._recoverCorruptedStagingTR(tr, track, 'W01');
             expect(recovered.Tbnum).toBe('0001000855');
             expect(mockRfc.call).toHaveBeenCalledWith('Z_WM_TR_CREATE', expect.objectContaining({
-                IV_BWLVS: '311',
+                IV_BWLVS: '261',
                 IV_RSNUM: '',
                 IV_RSPOS: ''
             }));
+        });
+
+        it('refuses recovery without a pinned movement type and performs no SAP write', async () => {
+            const tr = { Tbnum: '0001000849', Statu: 'E', Lgnum: 'W01', Bwlvs: '311' };
+            const track = { ReservationNo: '528771', Material: '8000009754', Plant: '1120', StorageLocation: 'HS01', Quantity: 1, Unit: 'NOS' };
+            await expect(adapter._recoverCorruptedStagingTR(tr, track, 'W01')).rejects.toMatchObject({ status: 409 });
+            expect(mockRfc.call).not.toHaveBeenCalled();
         });
     });
 
@@ -238,9 +245,14 @@ describe('Corrupted Staging TR Auto-Recovery & Statistical Order KI 248 Handling
         const fmSequence = () => mockRfc.call.mock.calls.map(([fm]) => fm);
 
         it('retries MIGO with the AUFK-KOSTV cost center after KI 248, keeps the reservation reference, and rolls back the failed attempt first', async () => {
+            let materialDocumentReads = 0;
             mockRfc.readTable.mockImplementation(async (table) => {
                 if (table === 'AUFK') return [{ AUFNR: '000000001011', OBJNR: 'OR000000001011', AUART: 'ZEMP', LOEKZ: '', ASTKZ: 'X', KOSTV: '1011201301' }];
                 if (table === 'JEST') return [{ OBJNR: 'OR000000001011', STAT: 'I0002', INACT: '' }];
+                if (table === 'MATDOC') {
+                    materialDocumentReads += 1;
+                    return materialDocumentReads >= 2 ? [{ MBLNR: '4900050253', MJAHR: '2026', ZEILE: '0001', BWART: '261', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', MEINS: 'NOS', RSNUM: '0000528771', RSPOS: '0001' }] : [];
+                }
                 return [];
             });
             mockRfc.call.mockImplementation(async (fm, params) => {

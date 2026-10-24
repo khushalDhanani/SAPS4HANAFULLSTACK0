@@ -575,10 +575,23 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(result).toHaveLength(1);
       expect(result[0].ReservationNo).toBe('18025');
       expect(spy).toHaveBeenCalledWith(
-        '201',
+        '201,241,261,301,311',
         '',
         expect.objectContaining({ reservationNo: '18025', orderNo: '1000040' })
       );
+      spy.mockRestore();
+    });
+
+    it('rejects an invalid movement filter instead of substituting 201', async () => {
+      const spy = jest.spyOn(GoodsIssueAdapter, 'getOpenReservations');
+      const req = {
+        data: {},
+        query: { SELECT: { where: [{ ref: ['MovementType'] }, '=', { val: '999' }] } },
+        error: jest.fn((code, message) => ({ code, message }))
+      };
+      await handlers['READ:OpenReservations'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('MovementType filter'));
+      expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
     });
 

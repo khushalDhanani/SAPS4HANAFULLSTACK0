@@ -76,10 +76,17 @@ function cleanSerials(data) {
  * @returns {Object}
  */
 function baseNormalized(data, context, movementType) {
+  const requestedMovementType = String(data.MovementType ?? data.movementType ?? '').trim();
+  if (!requestedMovementType || requestedMovementType !== movementType) {
+    const err = new Error(`MovementType must be explicitly '${movementType}' before Goods Issue normalization`);
+    err.status = 400;
+    throw err;
+  }
   const serials = cleanSerials(data);
   const rawItem = data.ReservationItem != null ? String(data.ReservationItem).trim() : '';
   return {
-    MovementType: movementType,
+    MovementType: requestedMovementType,
+    ValidatedMovementType: requestedMovementType,
     ReservationNo: String(data.ReservationNo || '').trim(),
     ReservationItem: rawItem ? rawItem.padStart(4, '0') : '',
     Material: String(data.Material || '').trim(),

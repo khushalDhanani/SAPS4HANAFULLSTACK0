@@ -47,7 +47,7 @@ sap.ui.define([
         // CostCenterVH, OrderTypeVH, InternalOrderVH). MovementType is the first entry of the select.
         _getDefaultCreateData: function () {
             return {
-                MovementType: "311",
+                MovementType: "",
                 Plant: "",
                 StorageLocation: "",
                 WarehouseNumber: "",

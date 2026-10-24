@@ -359,7 +359,7 @@ describe('Mvt261Service postGoodsIssue action', () => {
   let svc;
   let handlers;
   const req = (data) => ({
-    data,
+    data: { movementType: '261', orderId: '1002707', orderType: 'ZP01', ...data },
     user: { id: 'test-user' },
     error: jest.fn((status, msg) => {
       const err = new Error(msg);
@@ -369,7 +369,7 @@ describe('Mvt261Service postGoodsIssue action', () => {
     warn: jest.fn()
   });
 
-  const cycleOf = (over = {}) => ({ Material: '1000001001', Plant: '1130', StorageLocation: 'CS02', Unit: 'KG', Batch: '', OpenQuantity: 800, ...over });
+  const cycleOf = (over = {}) => ({ ProductionOrder: '1002707', OrderType: 'ZP01', Material: '1000001001', Plant: '1130', StorageLocation: 'CS02', Unit: 'KG', Batch: '', OpenQuantity: 800, ...over });
 
   beforeEach(() => {
     handlers = {};
@@ -390,6 +390,31 @@ describe('Mvt261Service postGoodsIssue action', () => {
     await handlers.postGoodsIssue(r2);
     expect(r2.error).toHaveBeenCalledWith(400, 'Quantity must be greater than zero');
     expect(cycleSpy).not.toHaveBeenCalled();
+  });
+
+  it('requires requested movement 261 exactly and rejects a mismatched Order before the attempt claim or post', async () => {
+    await svc.init();
+    const revalidateSpy = jest.spyOn(Mvt261Adapter.prototype, 'revalidateStock').mockResolvedValue({ freshCycle: cycleOf() });
+    const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue');
+    const claimSpy = jest.spyOn(GoodsIssueAttemptStore, 'createOrGet');
+
+    for (const movementType of [undefined, '201']) {
+      const invalid = req({ movementType, reservation: '512851', item: '3', quantity: 10 });
+      await handlers.postGoodsIssue(invalid);
+      expect(invalid.error).toHaveBeenCalledWith(400, expect.stringContaining('MovementType'));
+    }
+    const wrongOrder = req({ orderId: '1002708', reservation: '512851', item: '3', quantity: 10 });
+    await handlers.postGoodsIssue(wrongOrder);
+    expect(wrongOrder.error).toHaveBeenCalledWith(400, expect.stringContaining('Order number'));
+    const wrongOrderType = req({ orderType: 'ZEMP', reservation: '512851', item: '3', quantity: 10 });
+    await handlers.postGoodsIssue(wrongOrderType);
+    expect(wrongOrderType.error).toHaveBeenCalledWith(400, expect.stringContaining('OrderType'));
+    const missingOrderType = req({ orderType: '', reservation: '512851', item: '3', quantity: 10 });
+    await handlers.postGoodsIssue(missingOrderType);
+    expect(missingOrderType.error).toHaveBeenCalledWith(400, expect.stringContaining('OrderType'));
+    expect(revalidateSpy).toHaveBeenCalledTimes(2);
+    expect(claimSpy).not.toHaveBeenCalled();
+    expect(postSpy).not.toHaveBeenCalled();
   });
 
   it('F3: two concurrent posts - exactly one reaches the adapter, the other gets 409', async () => {

@@ -57,7 +57,7 @@ describe('Item 16: Movement Type 201 WM Routing Verification [mock only, not SAP
       const cfg = getMovementConfig('201');
       expect(cfg.useRealWmMovement).toBe(true);
       expect(cfg.wmMovement).toBe('201');
-      expect(cfg.stagingWmMovement).toBe('311');
+      expect(cfg.wmMovement).toBe('201');
     });
 
     test('env flags no longer change the routing (true or false): still 201', () => {

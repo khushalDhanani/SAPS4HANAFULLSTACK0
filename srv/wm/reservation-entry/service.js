@@ -1006,7 +1006,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         toResult = await adapter.createTransferOrderFromTR({
           warehouseNumber: targetWh,
           trNumber: targetTr,
-          movementType: track?.MovementType || verifiedTR.movement || '311',
+          movementType: track?.MovementType || verifiedTR.movement || '',
           autoConfirm: bAutoConfirm
         });
       } catch (err) {
@@ -1485,7 +1485,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const sResNo = track.ReservationNo;
       const sResItem = track.ReservationItem;
       const key = { ReservationNo: sResNo, ReservationItem: sResItem };
-      const sMvt = data.movementType || data.MovementType || track.MovementType;
+      const sMvt = String(data.MovementType ?? data.movementType ?? '').trim();
+      if (!sMvt || String(track.MovementType || '').trim() !== sMvt) {
+        const e = new Error(`Requested MovementType '${sMvt || '(missing)'}' does not match reservation MovementType '${track.MovementType || '(missing)'}'; Goods Issue was not posted.`);
+        e.status = 400;
+        throw e;
+      }
       const sPlant = data.plant || data.Plant || data.sourcePlant || data.SourcePlant || track.Plant;
       // PROCESS_ID of this GI step; persisted before posting so a retry finds an already posted document.
       // After a posted document the next issue on this item is a new step: a fresh id, so the SGTXT lookup cannot return the earlier document.
@@ -1519,6 +1524,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         assetNo: data.assetNo || data.AssetNo || track.AssetNo,
         subNumber: data.subNumber || data.SubNumber || track.SubNumber,
         orderId: data.orderId || data.OrderId || data.OrderID || track.OrderID || '',
+        orderType: data.orderType || data.OrderType || track.OrderType || '',
         transferOrder: track.TransferOrder || '',
         batch: data.batch || data.Batch || track.Batch || '',
         serials: data.serials || data.Serials || (data.SerialNo ? [data.SerialNo] : (track.SerialNo ? [track.SerialNo] : [])),
@@ -1572,6 +1578,13 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
     // Action handler for MIGO Goods Movement posting
     this.on('postMigoGoodsMovement', async (req) => {
       const data = req.data || {};
+      const requestedMovementTypes = ['MovementType', 'movementType', 'ReservationMovementType', 'reservationMovementType']
+        .filter((key) => data[key] !== undefined && data[key] !== null)
+        .map((key) => String(data[key]).trim());
+      const requestedMovementType = requestedMovementTypes[0] || '';
+      if (!requestedMovementType || requestedMovementTypes.some((mvt) => mvt !== requestedMovementType) || !SUPPORTED_MOVEMENT_TYPES.includes(requestedMovementType)) {
+        return req.error(400, 'MovementType is required and every supplied movement type must exactly match one supported type (201, 241, 261, 301, 311). Goods Issue was not posted.');
+      }
       const sResNo = reservationNoKey(data.ReservationNo);
       const sResItem = reservationItemKey(data.ReservationItem);
 
@@ -1595,7 +1608,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             existing = {
               ReservationNo: sResNo,
               ReservationItem: sResItem,
-              MovementType: rkpfRows?.[0]?.BWART || data.MovementType || '',
+              MovementType: String(rkpfRows?.[0]?.BWART || '').trim(),
               CostCenter: rkpfRows?.[0]?.KOSTL || data.CostCenter || '',
               AssetNo: rkpfRows?.[0]?.ANLN1 || data.AssetNo || '',
               SubNumber: rkpfRows?.[0]?.ANLN2 || data.SubNumber || '',
@@ -1608,6 +1621,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
               WarehouseNumber: await warehouseFor(resbRows[0].WERKS, resbRows[0].LGORT, data.WarehouseNumber),
               Status_code: STATUS.TO_CONFIRMED
             };
+            if (existing.MovementType !== requestedMovementType) {
+              return req.error(400, `Requested MovementType ${requestedMovementType} does not match SAP reservation MovementType ${existing.MovementType || '(missing)'}. Goods Issue was not posted.`);
+            }
             await INSERT.into(ReservationEntries).entries(existing);
           }
         } catch (_fetchErr) {
@@ -1615,6 +1631,37 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         }
       }
       if (!existing) return req.error(404, `Reservation ${sResNo}/${sResItem} not found`);
+      if (String(existing.MovementType || '').trim() !== requestedMovementType) {
+        return req.error(400, `Requested MovementType ${requestedMovementType} does not match reservation MovementType ${existing.MovementType || '(missing)'}. Goods Issue was not posted.`);
+      }
+      if (requestedMovementType === '261') {
+        const requestedOrderIds = ['OrderID', 'OrderId', 'orderId', 'OrderNo', 'orderNo']
+          .filter((field) => data[field] !== undefined && data[field] !== null)
+          .map((field) => String(data[field]).trim());
+        const requestedOrderId = requestedOrderIds[0] || '';
+        if (!/^\d{1,12}$/.test(requestedOrderId)) {
+          return req.error(400, 'A numeric OrderID (1 to 12 digits) is required for MovementType 261. Goods Issue was not posted.');
+        }
+        const orderIdValues = new Set(requestedOrderIds.map((value) => value.replace(/^0+/, '') || '0'));
+        if (orderIdValues.size !== 1) {
+          return req.error(400, 'Supplied OrderID aliases must all refer to the same production order. Goods Issue was not posted.');
+        }
+        const trackedOrderId = String(existing.OrderID || '').trim().replace(/^0+/, '') || '0';
+        if (requestedOrderId.replace(/^0+/, '') !== trackedOrderId) {
+          return req.error(400, 'Requested OrderID does not match the reservation OrderID for MovementType 261. Goods Issue was not posted.');
+        }
+        const requestedOrderTypes = ['OrderType', 'orderType']
+          .filter((field) => data[field] !== undefined && data[field] !== null)
+          .map((field) => String(data[field]).trim());
+        const requestedOrderType = requestedOrderTypes[0] || '';
+        const trackedOrderType = String(existing.OrderType || '').trim();
+        if (!requestedOrderType || requestedOrderType.length > 4 || requestedOrderTypes.some((type) => type !== requestedOrderType)) {
+          return req.error(400, 'A single explicit OrderType of at most 4 characters is required for MovementType 261. Goods Issue was not posted.');
+        }
+        if (trackedOrderType && requestedOrderType !== trackedOrderType) {
+          return req.error(400, 'Requested OrderType does not match the reservation OrderType for MovementType 261. Goods Issue was not posted.');
+        }
+      }
 
       const migoPlant = existing?.Plant || data.Plant;
       const allowedPlants = plantScope(req.user);
@@ -2091,6 +2138,10 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
     this.on('executeReservationWarehouseFlow', async (req) => {
       try {
+        const flowMovementType = String(req.data?.MovementType || req.data?.movementType || '').trim();
+        if (!SUPPORTED_MOVEMENT_TYPES.includes(flowMovementType)) {
+          return req.error(400, 'MovementType is required and must be one of 201, 241, 261, 301, or 311');
+        }
         const flowPlant = req.data?.Plant || req.data?.plant;
         const allowedPlants = plantScope(req.user);
         if (allowedPlants !== null && (!flowPlant || !isPlantAllowed(flowPlant, allowedPlants))) {
@@ -2122,7 +2173,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           } else {
             await INSERT.into(ReservationEntries).entries({
               ...key,
-              MovementType: req.data?.MovementType || req.data?.movementType || '201',
+              MovementType: flowMovementType,
               Plant: req.data?.Plant || req.data?.plant || '',
               StorageLocation: req.data?.StorageLocation || req.data?.storageLocation || '',
               Material: req.data?.Material || req.data?.material || '',
@@ -2136,6 +2187,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
         const result = await adapter.executeReservationWarehouseFlow({
           ...req.data,
+          MovementType: flowMovementType,
+          movementType: flowMovementType,
           persistStatus
         });
         return {

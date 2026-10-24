@@ -345,15 +345,22 @@ describe('Mvt261Adapter.postGoodsIssue / reverse', () => {
   const adapter = (over, postResult = { status: 201, headers: {}, data: { d: { MaterialDocument: '4900050046', MaterialDocumentYear: '2026' } } }) => {
     posts = [];
     const t = tables(over);
-    return new Mvt261Adapter({
-      rfc: { readTable: async (table) => t[table] || [] },
+    const instance = new Mvt261Adapter({
+      rfc: { readTable: async (table, _fields, where = []) => table === 'MATDOC' && where.some((w) => String(w).includes("MBLNR ="))
+        ? ['4900050046', '4900050047'].map((MBLNR) => ({ MBLNR, MJAHR: '2026', BWART: '261' }))
+        : (t[table] || []) },
       client: {
-        get: async () => ({ data: { d: { results: [{ BaseUnit: 'NOS' }] } } }),
+        resolveDestination: async () => ({ name: 'TEST_DEST' }),
+        get: async (path) => path.includes('A_MaterialDocumentHeader')
+          ? ({ data: { d: { MaterialDocument: '4900050046', MaterialDocumentYear: '2026', to_MaterialDocumentItem: { results: [{ GoodsMovementType: '261' }] } } } })
+          : ({ data: { d: { results: [{ BaseUnit: 'NOS' }] } } }),
         post: async (path, options) => { posts.push({ path, data: options.data }); return postResult; }
       }
     });
+    instance.postingClient._getDestination = jest.fn().mockResolvedValue({ name: 'TEST_DEST' });
+    return instance;
   };
-  const input = { reservation: '278650', item: '1', quantity: 1 };
+  const input = { movementType: '261', orderId: '4000033120', orderType: 'ZBDN', reservation: '278650', item: '1', quantity: 1 };
 
   it('posts one 261 referencing reservation, item and order and returns the SAP document', async () => {
     await expect(adapter().postGoodsIssue(input)).resolves.toMatchObject({ MaterialDocument: '4900050046', MaterialDocumentYear: '2026' });
@@ -364,6 +371,19 @@ describe('Mvt261Adapter.postGoodsIssue / reverse', () => {
       Material: '8000001948', GoodsMovementType: '261', EntryUnit: 'NOS', QuantityInEntryUnit: '1', Plant: '1120', StorageLocation: 'HS01',
       Reservation: '278650', ReservationItem: '0001', ManufacturingOrder: '004000033120'
     }]);
+  });
+
+  it('rejects a missing or changed movement type before any SAP request', async () => {
+    const a = adapter();
+    await expect(a.postGoodsIssue({ ...input, movementType: undefined })).rejects.toMatchObject({ status: 400 });
+    await expect(a.postGoodsIssue({ ...input, movementType: '201' })).rejects.toMatchObject({ status: 400 });
+    expect(posts).toHaveLength(0);
+  });
+
+  it('rejects an OrderType that differs from freshly verified SAP AUART before SAP POST', async () => {
+    const a = adapter();
+    await expect(a.postGoodsIssue({ ...input, orderType: 'ZP01' })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('OrderType') });
+    expect(posts).toHaveLength(0);
   });
 
   it('refuses without any SAP call: over-issue, locked or unreleased order, already issued, no stock, missing batch, bad quantity, warehouse mismatch, staging shortfall', async () => {
@@ -392,7 +412,7 @@ describe('Mvt261Adapter.postGoodsIssue / reverse', () => {
 
   it('treats a response with neither a material document nor a delivery, and a SAP error, as failures', async () => {
     await expect(adapter(undefined, { status: 201, headers: {}, data: { d: { MaterialDocument: '' } } }).postGoodsIssue(input))
-      .rejects.toMatchObject({ status: 502, message: expect.stringContaining('did not return a material document') });
+      .rejects.toMatchObject({ status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' });
     const failing = adapter();
     failing.client.post = async () => { throw Object.assign(new Error('HTTP 403 - No authorization for movement type 261'), { status: 403 }); };
     await expect(failing.postGoodsIssue(input)).rejects.toMatchObject({ status: 403 });
@@ -407,7 +427,7 @@ describe('Mvt261Adapter.postGoodsIssue / reverse', () => {
       PVBE: [{ PRVBE: 'IP05', LGORT: 'CS01' }],
       LQUA: [{ LGNUM: 'W01', LGTYP: 'RM1', LGPLA: 'B1', LGORT: 'CS01', CHARG: '', BESTQ: '', VERME: '25.000', EINME: '0.000', AUSME: '0.000', MEINS: 'KG', LENUM: '1000048321' }]
     });
-    await expect(a.postGoodsIssue({ reservation: '518006', item: '3', quantity: 25 }))
+    await expect(a.postGoodsIssue({ movementType: '261', orderId: '1002747', orderType: 'ZP01', reservation: '518006', item: '3', quantity: 25 }))
       .rejects.toMatchObject({ status: 422, message: expect.stringContaining('in supply area CS01; issue location PT01 is empty') });
     expect(posts).toHaveLength(0);
   });
@@ -758,7 +778,7 @@ describe('Mvt261Adapter backflush indicator (F5, hard block)', () => {
   });
 
   it('postGoodsIssue refuses a backflush item with 422 and does not post', async () => {
-    await expect(rfcAdapter().postGoodsIssue({ reservation: '20808', item: '8', quantity: 100 }))
+    await expect(rfcAdapter().postGoodsIssue({ movementType: '261', orderId: '1000086', orderType: 'ZP01', reservation: '20808', item: '8', quantity: 100 }))
       .rejects.toMatchObject({ status: 422, message: expect.stringContaining('backflushed') });
   });
 
@@ -832,9 +852,14 @@ describe('Mvt261 unified stock availability calculation across Scan, List, and P
       LQUA: lquaRows
     };
     return new Mvt261Adapter({
-      rfc: { readTable: async (table) => t[table] || [] },
+      rfc: { readTable: async (table, _fields, where = []) => table === 'MATDOC' && where.some((w) => String(w).includes("MBLNR ="))
+        ? [{ MBLNR: '4900055001', MJAHR: '2026', BWART: '261' }]
+        : (t[table] || []) },
       client: {
-        get: async () => ({
+        resolveDestination: async () => ({ name: 'TEST_DEST' }),
+        get: async (path) => path.includes('A_MaterialDocumentHeader')
+          ? ({ data: { d: { MaterialDocument: '4900055001', MaterialDocumentYear: '2026', to_MaterialDocumentItem: { results: [{ GoodsMovementType: '261' }] } } } })
+          : ({
           data: {
             d: {
               __count: '1',
@@ -879,7 +904,7 @@ describe('Mvt261 unified stock availability calculation across Scan, List, and P
     });
 
     // 3. postGoodsIssue
-    await expect(adapter.postGoodsIssue({ reservation: '555001', item: '1', quantity: 100 })).rejects.toMatchObject({
+    await expect(adapter.postGoodsIssue({ movementType: '261', orderId: '1002800', orderType: 'ZP01', reservation: '555001', item: '1', quantity: 100 })).rejects.toMatchObject({
       status: 422,
       message: expect.stringContaining('no unrestricted stock in CS01')
     });
@@ -918,7 +943,7 @@ describe('Mvt261 unified stock availability calculation across Scan, List, and P
     expect(openRes.Items[0].ReadyQuantity).toBe(scanCtx.IssuableQuantity);
 
     // 4. postGoodsIssue passes stock gate
-    const postRes = await adapter.postGoodsIssue({ reservation: '555001', item: '1', quantity: 200 });
+    const postRes = await adapter.postGoodsIssue({ movementType: '261', orderId: '1002800', orderType: 'ZP01', reservation: '555001', item: '1', quantity: 200 });
     expect(postRes).toMatchObject({ MaterialDocument: '4900055001' });
   });
 
@@ -950,7 +975,7 @@ describe('Mvt261 unified stock availability calculation across Scan, List, and P
     });
 
     // 3. postGoodsIssue
-    await expect(adapter.postGoodsIssue({ reservation: '555001', item: '1', quantity: 100, batch: 'BREQ' })).rejects.toMatchObject({
+    await expect(adapter.postGoodsIssue({ movementType: '261', orderId: '1002800', orderType: 'ZP01', reservation: '555001', item: '1', quantity: 100, batch: 'BREQ' })).rejects.toMatchObject({
       status: 422,
       message: expect.stringContaining('no unrestricted stock in CS01 for batch BREQ')
     });
@@ -971,9 +996,14 @@ describe('Mvt261 unified stock availability calculation across Scan, List, and P
         }]
       };
       const adapter = new Mvt261Adapter({
-        rfc: { readTable: async (table) => t[table] || [] },
+        rfc: { readTable: async (table, _fields, where = []) => table === 'MATDOC' && where.some((w) => String(w).includes("MBLNR ="))
+          ? [{ MBLNR: '4900050047', MJAHR: '2026', BWART: '261' }]
+          : (t[table] || []) },
         client: {
-          get: async () => ({ data: { d: { results: [{ BaseUnit: 'KG' }] } } }),
+          resolveDestination: async () => ({ name: 'TEST_DEST' }),
+          get: async (path) => path.includes('A_MaterialDocumentHeader')
+            ? ({ data: { d: { MaterialDocument: '4900050047', MaterialDocumentYear: '2026', to_MaterialDocumentItem: { results: [{ GoodsMovementType: '261' }] } } } })
+            : ({ data: { d: { results: [{ BaseUnit: 'KG' }] } } }),
           post: async (path, options) => {
             postedPayload = options.data;
             return {
@@ -986,6 +1016,9 @@ describe('Mvt261 unified stock availability calculation across Scan, List, and P
       });
 
       const res = await adapter.postGoodsIssue({
+        movementType: '261',
+        orderId: '4000033120',
+        orderType: 'ZBDN',
         reservation: '555002',
         item: '1',
         quantity: 200,

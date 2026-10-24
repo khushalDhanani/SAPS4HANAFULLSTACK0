@@ -9,6 +9,7 @@ const {
   getMovementConfig,
   resolveWmMovement,
   validateReservationInput,
+  validateMovementAccountAssignment,
   validateMovement301Destination,
   validateMovement311Destination,
   verifyReceivingLocationInSap
@@ -127,6 +128,7 @@ class ReservationProcessAdapter {
       if (this.rfc && String(movementType).trim() === '301' && receivingPlant) {
         if (!this.rfc.readTable?.mock || this._checkMarcExistence) {
           const sapCheck = await verifyReceivingLocationInSap(this.rfc, {
+            movementType: '301',
             plant,
             receivingPlant,
             receivingStorageLocation,
@@ -554,13 +556,21 @@ class ReservationProcessAdapter {
       throwError = true
     } = params;
     const reqOrderId = reqOrderIdRaw || params.orderId || params.OrderId || params.OrderID || params.orderNo || params.OrderNo || params.aufnr || params.Aufnr || params.AUFNR;
-    const effMvt = wmMovementType || movementType || params.MovementType;
+    const requestedMovementTypes = ['movementType', 'MovementType']
+      .filter((key) => params[key] !== undefined && params[key] !== null)
+      .map((key) => String(params[key]).trim());
+    const requestedMovementType = requestedMovementTypes[0] || '';
+    const requestedWmMovementType = String(params.wmMovementType ?? '').trim();
+    const effMvt = requestedMovementType || requestedWmMovementType;
 
     try {
       if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
       if (!material) throw httpError(400, 'Material is mandatory');
       if (!reservationNo) throw httpError(400, 'ReservationNo is mandatory');
-      if (!effMvt) throw httpError(400, 'MovementType is mandatory');
+      if (!effMvt || requestedMovementTypes.some((type) => type !== effMvt) || (requestedWmMovementType && requestedWmMovementType !== effMvt)) {
+        throw httpError(400, 'MovementType and WM movement type must be explicitly supplied and exactly equal; transfer requirement was not created.');
+      }
+      if (!['201', '241', '261', '301', '311'].includes(effMvt)) throw httpError(400, `Unsupported MovementType ${effMvt}`);
       if (!(Number(quantity) > 0)) throw httpError(400, 'Valid Quantity is mandatory');
       if (!unit) throw httpError(400, 'Unit is mandatory');
 
@@ -969,7 +979,7 @@ class ReservationProcessAdapter {
         trNumber: alphaOut(s4Tr),
         trNumberRaw: s4Tr,
         warehouse: wh,
-        movement: params.movement || params.movementType || '311',
+        movement: params.movement || params.movementType || '',
         status: 'O',
         source: 'MOCK'
       };
@@ -1065,7 +1075,7 @@ class ReservationProcessAdapter {
    * TR -> Validate TR -> Create TO -> Receive TO number -> Verify TO -> Return TO
    */
   async createTOFromTR(params = {}) {
-    const { warehouseNumber = '', trNumber = '', TRNumber = '', movementType = '311', commitWork = true, autoConfirm = false } = params;
+    const { warehouseNumber = '', trNumber = '', TRNumber = '', movementType, commitWork = true, autoConfirm = false } = params;
     return await this.createTransferOrderFromTR({
       warehouseNumber,
       trNumber: trNumber || TRNumber,
@@ -1118,7 +1128,10 @@ class ReservationProcessAdapter {
 
     const s4Mblnr = sapKey(docNum, 'mblnr').padStart(10, '0');
     const s4Mjahr = String(docYr).trim();
-    const sMvt = movementType ? sapKey(movementType, 'mvt') : '';
+    const sMvt = String(movementType || '').trim();
+    if (!['201', '241', '261', '301', '311'].includes(sMvt)) {
+      throw httpError(400, 'MovementType is required and must exactly identify the requested 201, 241, 261, 301, or 311 posting.');
+    }
     const sMat = material ? padMat(sapKey(material, 'matnr')) : '';
     const sPlant = plant ? sapKey(plant, 'plant') : '';
     const sSLoc = storageLocation ? sapKeyOpt(storageLocation, 'lgort') : '';
@@ -1126,10 +1139,9 @@ class ReservationProcessAdapter {
     const sResNo = rawRes && rawRes !== '0' && rawRes !== '0000000000'
       ? sapKey(rawRes, 'rsnum').padStart(10, '0') : '';
 
-    let verifiedDoc = null;
     if (this.rfc) {
       try {
-        const where = [`MBLNR = '${s4Mblnr}'`, `AND MJAHR = '${s4Mjahr}'`];
+        const where = [`MBLNR = '${s4Mblnr}'`, `AND MJAHR = '${s4Mjahr}'`, `AND BWART = '${sMvt}'`];
         let rows = await this.rfc.readTable('MATDOC', [
           'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'MENGE', 'MEINS', 'RSNUM', 'RSPOS'
         ], where, 10);
@@ -1143,14 +1155,14 @@ class ReservationProcessAdapter {
         }
 
         if (rows && rows.length > 0) {
-          const row = rows[0];
-
-          // 1. Movement type matches
-          if (sMvt && row.BWART && row.BWART.trim() !== sMvt) {
-            const err = httpError(400, `Material document ${alphaOut(s4Mblnr)} verification failed: Movement type mismatch (SAP: ${row.BWART.trim()}, expected: ${sMvt})`);
+          const mismatchedRows = rows.filter((row) => String(row.BWART || '').trim() !== sMvt);
+          if (mismatchedRows.length) {
+            const observed = mismatchedRows.map((row) => String(row.BWART || '').trim() || '(missing)').join(', ');
+            const err = httpError(400, `Material document ${alphaOut(s4Mblnr)} verification failed: SAP BWART ${observed} does not exactly equal requested MovementType ${sMvt}`);
             err.stage = 'MIGO';
             throw err;
           }
+          const row = rows[0];
 
           // 2. Material matches
           if (sMat && row.MATNR && padMat(row.MATNR.trim()) !== sMat) {
@@ -1192,8 +1204,7 @@ class ReservationProcessAdapter {
             }
           }
 
-          verifiedDoc = row;
-        } else if (!this.rfc.readTable?.mock || this._checkMatdocPersistence) {
+        } else {
           const err = httpError(500, `Material Document ${alphaOut(s4Mblnr)} was created by SAP BAPI but cannot be verified in SAP MATDOC/MSEG (persistence check failed)`);
           err.stage = 'MIGO';
           throw err;
@@ -1213,7 +1224,7 @@ class ReservationProcessAdapter {
       stage: 'MIGO',
       materialDocument: alphaOut(s4Mblnr),
       materialDocumentYear: s4Mjahr,
-      movementType: sMvt || (verifiedDoc?.BWART ? verifiedDoc.BWART.trim() : '')
+      movementType: sMvt
     };
   }
 
@@ -1290,6 +1301,9 @@ class ReservationProcessAdapter {
     const s4Mjahr = docYr ? String(docYr).trim() : '';
 
     let sMvt = movementType ? sapKey(movementType, 'mvt') : '';
+    if (!['201', '241', '261', '301', '311'].includes(sMvt)) {
+      throw httpError(400, 'MovementType is required and must identify the requested posting before stock verification.');
+    }
     let sMat = material ? padMat(sapKey(material, 'matnr')) : '';
     let sPlant = plant || sourcePlant ? sapKey(plant || sourcePlant, 'plant') : '';
     let sSLoc = storageLocation || sourceStorageLocation ? sapKeyOpt(storageLocation || sourceStorageLocation, 'lgort') : '';
@@ -1326,7 +1340,11 @@ class ReservationProcessAdapter {
 
     const primaryDoc = matdocRows?.[0] || null;
     if (primaryDoc) {
-      if (!sMvt && primaryDoc.BWART) sMvt = primaryDoc.BWART.trim();
+      const mismatchedRows = matdocRows.filter((row) => String(row.BWART || '').trim() !== sMvt);
+      if (mismatchedRows.length) {
+        const observed = mismatchedRows.map((row) => String(row.BWART || '').trim() || '(missing)').join(', ');
+        throw httpError(400, `Stock verification failed: SAP BWART ${observed} does not exactly equal requested MovementType ${sMvt}.`);
+      }
       if (!sMat && primaryDoc.MATNR) sMat = padMat(primaryDoc.MATNR.trim());
       if (!sPlant && primaryDoc.WERKS) sPlant = primaryDoc.WERKS.trim();
       if (!sSLoc && primaryDoc.LGORT) sSLoc = primaryDoc.LGORT.trim();
@@ -1734,11 +1752,12 @@ class ReservationProcessAdapter {
    * Verifies the created TO actually exists in SAP LTAK before reporting success.
    */
   async createTransferOrderFromTR(params = {}) {
-    const { warehouseNumber, trNumber, TRNumber, commitWork = true, movementType = '311', skipTrValidation = false, autoConfirm = false } = params;
+    const { warehouseNumber, trNumber, TRNumber, commitWork = true, movementType, skipTrValidation = false, autoConfirm = false } = params;
 
     const effTrNumber = trNumber || TRNumber;
     if (!warehouseNumber) throw httpError(400, 'WarehouseNumber is mandatory');
     if (!effTrNumber) throw httpError(400, 'TRNumber is mandatory');
+    if (!movementType) throw httpError(400, 'WM MovementType is mandatory for Transfer Order creation');
 
     const s4Tr = sapKey(effTrNumber, 'tbnum').padStart(10, '0');
     const wh = sapKey(warehouseNumber, 'lgnum');
@@ -2574,7 +2593,13 @@ class ReservationProcessAdapter {
       receivingStorageLocation: params.receivingStorageLocation || params.ReceivingStorageLocation || params.destinationStorageLocation || params.DestinationStorageLocation || '',
       transferOrder: params.transferOrder || params.TransferOrder || '',
       batch: params.batch || params.Batch || '',
-      serials: params.serials || params.Serials || []
+      serials: params.serials || params.Serials || [],
+      costCenter: params.costCenter || params.CostCenter || '',
+      assetNo: params.assetNo || params.AssetNo || '',
+      subNumber: params.subNumber || params.SubNumber || '',
+      orderId: params.orderId || params.OrderID || params.OrderId || params.OrderNo || '',
+      orderType: params.orderType || params.OrderType || '',
+      gmCode: params.gmCode || ''
     });
     const key = String(attemptId).trim();
     if (!key) return this._postGoodsMovement(params);
@@ -2599,7 +2624,10 @@ class ReservationProcessAdapter {
   async _postGoodsMovement(params = {}) {
     const rawResNo = params.reservationNumber || params.reservationNo || params.ReservationNo || '';
     const rawResItem = params.reservationItem || params.ReservationItem || '0001';
-    const movementType = params.movementType || params.MovementType || '';
+    const movementAliases = ['movementType', 'MovementType']
+      .filter((key) => params[key] !== undefined && params[key] !== null)
+      .map((key) => String(params[key]).trim());
+    const movementType = movementAliases[0] || '';
     let material = params.material || params.Material || '';
     const plant = params.plant || params.Plant || params.sourcePlant || params.SourcePlant || '';
     const storageLocation = params.storageLocation || params.StorageLocation || params.sourceStorageLocation || params.SourceStorageLocation || '';
@@ -2618,12 +2646,21 @@ class ReservationProcessAdapter {
     const testrun = params.testrun || false;
     const directDeliveryParam = params.deliveryNumber || params.DeliveryNumber || null;
 
-    if (!movementType) throw httpError(400, 'MovementType is mandatory');
+    if (!movementType || movementAliases.some((mvt) => mvt !== movementType) || !['201', '241', '261', '301', '311'].includes(movementType)) {
+      throw httpError(400, 'MovementType is mandatory and must be exactly one supported type (201, 241, 261, 301, 311)');
+    }
     if (!plant) throw httpError(400, 'Plant is mandatory');
 
-    const sMvt = sapKey(movementType, 'mvt');
-    const sGmCode = params.gmCode || GM_CODE[sMvt];
+    const sMvt = movementType;
+    const sGmCode = GM_CODE[sMvt];
     if (!sGmCode) throw httpError(400, `Unsupported movement type for goods movement: ${sMvt} (supported: 201, 241, 311, 301, 261)`);
+    if (params.gmCode !== undefined && String(params.gmCode).trim() !== sGmCode) {
+      throw httpError(400, `GM_CODE does not match MovementType ${sMvt}; Goods Issue was not posted.`);
+    }
+    const validatedMovementType = sMvt;
+    if (sMvt === '261' && !/^\d{1,12}$/.test(String(orderId || '').trim())) {
+      throw httpError(400, 'A numeric OrderID (1 to 12 digits) is mandatory for MovementType 261; Goods Issue was not posted.');
+    }
 
     const sResNo = rawResNo && rawResNo !== '0' && rawResNo !== '0000000000' ? sapKey(rawResNo, 'rsnum').padStart(10, '0') : '';
     const sResItem = sapKey(rawResItem || '0001', 'rspos').padStart(4, '0');
@@ -2638,7 +2675,7 @@ class ReservationProcessAdapter {
           if (!material && resbRows[0].MATNR?.trim()) material = resbRows[0].MATNR.trim();
           if (!quantity && resbRows[0].BDMNG) quantity = Number(resbRows[0].BDMNG);
           if (!unit && resbRows[0].MEINS?.trim()) unit = resbRows[0].MEINS.trim();
-          if (!orderId && resbRows[0].AUFNR?.trim()) orderId = resbRows[0].AUFNR.trim();
+          if (sMvt !== '261' && !orderId && resbRows[0].AUFNR?.trim()) orderId = resbRows[0].AUFNR.trim();
           if (sMvt === '261' && resbRows[0].RGEKZ && String(resbRows[0].RGEKZ).trim() !== '' && String(resbRows[0].RGEKZ).trim() !== '0') {
             throw httpError(400, 'Component is backflushed at order confirmation (CO11N); manual 261 goods issue is prohibited (RESB-RGEKZ)');
           }
@@ -2668,6 +2705,13 @@ class ReservationProcessAdapter {
     if (!quantity || Number(quantity) <= 0) throw httpError(400, 'Valid Quantity is mandatory');
     if (!unit) throw httpError(400, 'Unit is mandatory');
 
+    if (sMvt === '261') {
+      const expectedOrderType = String(params.orderType || params.OrderType || '').trim();
+      if (this.rfc && typeof this.validateOrder === 'function') {
+        await this.validateOrder(orderId, plant, expectedOrderType);
+      }
+    }
+
     let sRecPlant = sapKeyOpt(receivingPlant, 'plant');
     let sRecSLoc = sapKeyOpt(receivingStorageLocation, 'lgort');
     const s4Mat = padMat(sapKey(material, 'matnr'));
@@ -2679,6 +2723,19 @@ class ReservationProcessAdapter {
     let sAssetNo = assetNo ? String(assetNo).trim() : '';
     let sSubNumber = subNumber ? String(subNumber).trim() : '';
     const today = this._sapDate();
+
+    // Reject movement-specific destination errors before idempotency/SAP reads can
+    // obscure the caller's invalid request with an unrelated connectivity error.
+    if (sMvt === '311') {
+      const destVal = validateMovement311Destination(sPlant, sSLoc, sRecPlant, sRecSLoc);
+      if (!destVal.isValid) throw httpError(400, destVal.errors[0].message);
+    }
+    if (sMvt === '301') {
+      const destVal = validateMovement301Destination(sPlant, sRecPlant, sRecSLoc, {
+        requireSLoc: Boolean(sRecSLoc)
+      });
+      if (!destVal.isValid) throw httpError(400, destVal.errors[0].message);
+    }
 
     if (!hasRes && !sTanum && !params.allowDirectMovement && sMvt !== '311' && sMvt !== '301') {
       throw httpError(400, 'ReservationNo is mandatory');
@@ -2938,31 +2995,17 @@ class ReservationProcessAdapter {
     }
 
     if (sMvt === '261') {
-      if (!orderId && sTanum && this.rfc) {
-        try {
-          const toRows = await this.rfc.readTable('LTAK', ['TBNUM'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
-          const tbnum = toRows?.[0]?.TBNUM?.trim();
-          if (tbnum) {
-            const trRows = await this.rfc.readTable('LTBK', ['BETYP', 'BENUM'], [`TBNUM = '${tbnum}'`], 1);
-            if (trRows?.[0]?.BETYP === 'F' && trRows[0].BENUM?.trim()) {
-              orderId = trRows[0].BENUM.trim();
-            }
-          }
-        } catch (_e) { /* tolerate */ }
-      }
-      if (!orderId && sResNo && this.rfc) {
-        try {
-          const resbRows = await this.rfc.readTable('RESB', ['AUFNR'], [`RSNUM = '${sResNo.padStart(10, '0')}'`], 1);
-          if (resbRows?.[0]?.AUFNR?.trim()) {
-            orderId = resbRows[0].AUFNR.trim();
-          }
-        } catch (_e) { /* tolerate */ }
-      }
-      if (!orderId) {
-        throw httpError(400, 'Order number is mandatory for Movement Type 261 (GI to Order)');
-      }
-      await this.validateOrder(orderId, sPlant);
+      await this.validateOrder(orderId, sPlant, String(params.orderType || params.OrderType || '').trim());
     }
+
+    const accountAssignment = validateMovementAccountAssignment(sMvt, {
+      ...params,
+      CostCenter: sCostCenter,
+      AssetNo: sAssetNo,
+      SubNumber: sSubNumber,
+      OrderID: orderId
+    });
+    if (!accountAssignment.isValid) throw httpError(400, accountAssignment.errors[0].message);
 
     initialSourceStock = null;
     initialDestStock = null;
@@ -3026,6 +3069,7 @@ class ReservationProcessAdapter {
       if (this.rfc && (!this.rfc.readTable?.mock || this._checkMarcExistence)) {
         try {
           const sapCheck = await verifyReceivingLocationInSap(this.rfc, {
+            movementType: '301',
             plant: sPlant,
             receivingPlant: sRecPlant,
             receivingStorageLocation: sRecSLoc,
@@ -3117,6 +3161,21 @@ class ReservationProcessAdapter {
       ...(orderId ? { ORDERID: pad12(orderId) } : {})
     };
 
+    const assertPreWriteMovementType = (sapItem, stage) => {
+      const requested = movementType;
+      const dispatched = sMvt;
+      const payloadType = String(sapItem?.MOVE_TYPE ?? '').trim();
+      if (requested !== validatedMovementType || validatedMovementType !== dispatched || dispatched !== payloadType) {
+        LOG.error(`[postGoodsMovement] ${stage} movement type integrity failure; SAP write aborted`, {
+          requestedMovementType: requested,
+          validatedMovementType,
+          dispatchedMovementType: dispatched,
+          sapPayloadMovementType: payloadType
+        });
+        throw httpError(400, 'MovementType integrity check failed before SAP write; Goods Issue was not posted.');
+      }
+    };
+
     const serialItems = (Array.isArray(serials) ? serials : [serials]).filter(Boolean).map((s) => ({
       MATDOC_ITM: '0001',
       SERIALNO: sapKey(s, 'serial')
@@ -3149,6 +3208,7 @@ class ReservationProcessAdapter {
         docYear = pgiRes.materialDocYear;
         resMessages = pgiRes.messages || [];
       } else {
+        assertPreWriteMovementType(item, 'initial');
         const res = await call('BAPI_GOODSMVT_CREATE', {
           GOODSMVT_HEADER: header,
           GOODSMVT_CODE: { GM_CODE: sGmCode },
@@ -3177,6 +3237,7 @@ class ReservationProcessAdapter {
           // The reservation reference stays on the item so RESB is consumed by the retry.
           if (isKi248 && sMvt === '261' && orderId && ccFallback) {
             const retryItem = { ...item, COSTCENTER: pad10(ccFallback) };
+            assertPreWriteMovementType(retryItem, '261 account-assignment retry');
             if (!testrun) {
               try { await call('BAPI_TRANSACTION_ROLLBACK', {}); } catch (_rbErr) { /* nothing committed yet */ }
             }
@@ -3593,8 +3654,8 @@ class ReservationProcessAdapter {
         [`AUFNR = '${s4Aufnr}'`],
         1
       );
-    } catch (_aufkErr) {
-      return;
+    } catch (aufkErr) {
+      throw Object.assign(httpError(502, `Order ${alphaOut(s4Aufnr)} could not be validated in SAP (AUFK): ${aufkErr.message}`), { cause: aufkErr });
     }
 
     if (!aufkRows || !aufkRows.length) {
@@ -3883,9 +3944,24 @@ class ReservationProcessAdapter {
    *      COMPLETED (or PARTIALLY_PROCESSED)
    */
   async executeReservationWarehouseFlow(input = {}) {
+    const requestedAliases = ['movementType', 'MovementType']
+      .filter((key) => input[key] !== undefined && input[key] !== null)
+      .map((key) => String(input[key]).trim());
+    const requestedMovementType = requestedAliases[0] || '';
+    if (!['201', '241', '261', '301', '311'].includes(requestedMovementType)) {
+      throw httpError(400, 'MovementType is required and must be one of 201, 241, 261, 301, or 311');
+    }
+    if (requestedAliases.some((type) => type !== requestedMovementType)) {
+      throw httpError(400, 'MovementType aliases do not match; reservation warehouse flow was not started.');
+    }
+    const requestedWmMovementType = String(input.wmMovementType ?? '').trim();
+    const resolvedWmMovementType = resolveWmMovement(requestedMovementType);
+    if (resolvedWmMovementType !== requestedMovementType || (requestedWmMovementType && requestedWmMovementType !== requestedMovementType)) {
+      throw httpError(400, `WM movement type must exactly equal requested MovementType ${requestedMovementType}; reservation warehouse flow was not started.`);
+    }
     const normInput = {
-      movementType: input.movementType || input.MovementType,
-      wmMovementType: input.wmMovementType || input.movementType || input.MovementType,
+      movementType: requestedMovementType,
+      wmMovementType: requestedMovementType,
       plant: input.plant || input.Plant || input.sourcePlant || input.SourcePlant,
       storageLocation: input.storageLocation || input.StorageLocation || input.sourceStorageLocation || input.SourceStorageLocation,
       material: input.material || input.Material,
@@ -3976,7 +4052,7 @@ class ReservationProcessAdapter {
       if (this.rfc && (!normInput.material || !normInput.plant || !normInput.orderId)) {
         try {
           const s4Res = sapKey(existingResNo, 'rsnum').padStart(10, '0');
-          const resbRows = await this.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS', 'BWART', 'UMWRK', 'UMLGO', 'CHARG', 'AUFNR'], [`RSNUM = '${s4Res}'`], 1);
+          const resbRows = await this.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'MEINS', 'UMWRK', 'UMLGO', 'CHARG', 'AUFNR'], [`RSNUM = '${s4Res}'`], 1);
           if (resbRows?.[0]) {
             const r = resbRows[0];
             if (!normInput.material && r.MATNR?.trim()) normInput.material = r.MATNR.trim();
@@ -3984,16 +4060,14 @@ class ReservationProcessAdapter {
             if (!normInput.storageLocation && r.LGORT?.trim()) normInput.storageLocation = r.LGORT.trim();
             if (!normInput.quantity && r.BDMNG) normInput.quantity = Number(r.BDMNG);
             if (!normInput.unit && r.MEINS?.trim()) normInput.unit = r.MEINS.trim();
-            if (!normInput.movementType && r.BWART?.trim()) normInput.movementType = r.BWART.trim();
             if (!normInput.receivingPlant && r.UMWRK?.trim()) normInput.receivingPlant = r.UMWRK.trim();
             if (!normInput.receivingStorageLocation && r.UMLGO?.trim()) normInput.receivingStorageLocation = r.UMLGO.trim();
             if (!normInput.batch && r.CHARG?.trim()) normInput.batch = r.CHARG.trim();
             if (!normInput.orderId && r.AUFNR?.trim()) normInput.orderId = r.AUFNR.trim();
           }
-          const rkpfRows = await this.rfc.readTable('RKPF', ['BWART', 'KOSTL', 'ANLN1', 'AUFNR'], [`RSNUM = '${s4Res}'`], 1);
+          const rkpfRows = await this.rfc.readTable('RKPF', ['KOSTL', 'ANLN1', 'AUFNR'], [`RSNUM = '${s4Res}'`], 1);
           if (rkpfRows?.[0]) {
             const k = rkpfRows[0];
-            if (!normInput.movementType && k.BWART?.trim()) normInput.movementType = k.BWART.trim();
             if (!normInput.costCenter && k.KOSTL?.trim()) normInput.costCenter = k.KOSTL.trim();
             if (!normInput.assetNo && k.ANLN1?.trim()) normInput.assetNo = k.ANLN1.trim();
             if (!normInput.orderId && k.AUFNR?.trim()) normInput.orderId = k.AUFNR.trim();

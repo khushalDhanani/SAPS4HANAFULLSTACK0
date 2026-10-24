@@ -6,8 +6,7 @@ const LOG = require('../../../common/logger')('goods-issue-handler');
 const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
 
 const _extractFilterParam = extractFilterParam;
-const GI_MOVEMENT_TYPE = '201';
-const LIST_MOVEMENT_TYPES = ['201', '301', '311'];
+const LIST_MOVEMENT_TYPES = ['201', '241', '261', '301', '311'];
 
 class GoodsIssueHandler {
   static init(srv) {
@@ -27,8 +26,12 @@ class GoodsIssueHandler {
     // READ OpenReservations: query distinct open reservations for Goods Issue
     srv.on('READ', 'OpenReservations', async (req) => {
       const plant = _extractFilterParam(req, 'Plant') || '';
-      const mvtParam = _extractFilterParam(req, 'MovementType') || GI_MOVEMENT_TYPE;
-      const mvtType = mvtParam.split(',').every((m) => LIST_MOVEMENT_TYPES.includes(m.trim())) ? mvtParam : GI_MOVEMENT_TYPE;
+      const mvtParam = _extractFilterParam(req, 'MovementType');
+      const requestedTypes = mvtParam ? mvtParam.split(',').map((m) => m.trim()) : LIST_MOVEMENT_TYPES;
+      if (!requestedTypes.length || requestedTypes.some((m) => !LIST_MOVEMENT_TYPES.includes(m))) {
+        return req.error(400, 'MovementType filter must contain only supported types: 201, 241, 261, 301, 311');
+      }
+      const mvtType = requestedTypes.join(',');
       const reservNo = _extractFilterParam(req, 'ReservationNo');
       const orderNo = _extractFilterParam(req, 'OrderNo');
 

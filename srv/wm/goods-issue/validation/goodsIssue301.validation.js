@@ -30,6 +30,7 @@ function validateGoodsIssue301Payload(data) {
  */
 async function verifyGoodsIssue301InSap(rfc, data = {}) {
   return verifyReceivingLocationInSap(rfc, {
+    movementType: '301',
     receivingPlant: data.ReceivingPlant || data.receivingPlant,
     receivingStorageLocation: data.ReceivingStorageLocation || data.receivingStorageLocation,
     plant: data.Plant || data.plant,

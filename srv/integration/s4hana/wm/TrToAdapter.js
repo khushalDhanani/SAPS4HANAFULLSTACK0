@@ -169,7 +169,7 @@ class TrToAdapter {
             StorageLocation: directResb.LGORT,
             Quantity: sapNum(directResb.BDMNG),
             Unit: directResb.MEINS || 'NOS',
-            MovementType: directResb.BWART || rkpfMvt || '261',
+            MovementType: directResb.BWART || rkpfMvt || '',
             OrderID: directResb.AUFNR ? alphaOut(directResb.AUFNR) : '',
             Status_code: '02'
           };
@@ -215,6 +215,10 @@ class TrToAdapter {
    */
   async _recoverCorruptedStagingTR(tr, track, wh) {
     const cds = require('@sap/cds');
+    const movementType = String(track?.MovementType || '').trim();
+    if (!['201', '241', '261', '301', '311'].includes(movementType)) {
+      throw httpError(409, `Cannot recover Transfer Requirement ${alphaOut(tr?.Tbnum)} without a supported movement type on its reservation track; no SAP write was made.`);
+    }
     const s4Mat = alphaIn(sapKey(track.Material, 'matnr'), 18);
     const s4Werks = sapKey(track.Plant, 'plant');
     const s4Lgort = sapKey(track.StorageLocation, 'lgort');
@@ -228,7 +232,7 @@ class TrToAdapter {
       const ltbkRows = await this._rfc(
         () => this.rfc.readTable('LTBK', ['TBNUM', 'STATU'], [
           `LGNUM = '${wh}'`,
-          "AND BWLVS = '311'",
+          `AND BWLVS = '${movementType}'`,
           "AND STATU = ''"
         ], 20),
         `Find open staging TRs in warehouse ${wh}`
@@ -258,7 +262,7 @@ class TrToAdapter {
         const resZ = await this._rfc(
           () => this.rfc.call('Z_WM_TR_CREATE', {
             IV_LGNUM: wh,
-            IV_BWLVS: '311',
+            IV_BWLVS: movementType,
             IV_MATNR: s4Mat,
             IV_WERKS: s4Werks,
             IV_LGORT: s4Lgort,
@@ -310,7 +314,7 @@ class TrToAdapter {
             cds.ql.INSERT.into('saps4hana.wm.ReservationTrack').entries({
               ReservationNo: sPad,
               ReservationItem: sItem,
-              MovementType: track.MovementType || '261',
+              MovementType: track.MovementType || '',
               WarehouseNumber: wh,
               Plant: track.Plant,
               StorageLocation: track.StorageLocation,
@@ -1512,6 +1516,19 @@ class TrToAdapter {
       warning = warning ? `${recMsg}; ${warning}` : recMsg;
     }
 
+    let orderType = String(trackedReservation?.OrderType || '').trim();
+    if (!orderType && reservationMovementType === '261' && /^\d{1,12}$/.test(String(orderId || '').trim()) && this.rfc) {
+      try {
+        const orderRows = await this._rfc(
+          () => this.rfc.readTable('AUFK', ['AUFNR', 'AUART'], [`AUFNR = '${String(orderId).trim().padStart(12, '0')}'`], 1),
+          `Read OrderType for production order ${orderId}`
+        );
+        orderType = String(orderRows?.[0]?.AUART || '').trim();
+      } catch (orderTypeErr) {
+        LOG.warn(`Could not resolve OrderType for movement 261 order ${orderId}: ${orderTypeErr.message}`);
+      }
+    }
+
     return {
       TransferRequirement: alphaOut(tr.Tbnum),
       TRNumber: alphaOut(tr.Tbnum),
@@ -1549,6 +1566,7 @@ class TrToAdapter {
       AssetNo: assetNo,
       SubNumber: subNumber,
       OrderID: orderId,
+      OrderType: orderType,
       Backflush: backflush,
       RequiredQuantity: sel.RequiredQty || 0,
       TargetQty: sel.RequiredQty || 0,

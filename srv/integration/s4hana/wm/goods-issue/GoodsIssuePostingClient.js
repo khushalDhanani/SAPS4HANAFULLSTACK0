@@ -5,6 +5,7 @@ const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
 const { RfcClient } = require('../../RfcClient');
 const GoodsIssueMapper = require('./GoodsIssueMapper');
 const GoodsIssue201Mapper = require('./GoodsIssue201Mapper');
+const GoodsIssue261Mapper = require('./GoodsIssue261Mapper');
 const GoodsIssue301Mapper = require('./GoodsIssue301Mapper');
 const GoodsIssue311Mapper = require('./GoodsIssue311Mapper');
 
@@ -13,7 +14,7 @@ const GoodsIssue311Mapper = require('./GoodsIssue311Mapper');
  * Enforces AGENTS.md rules: no mock persistence, transparent failure when SAP posting service is unavailable.
  */
 // Movement types this screen may post against a reservation (trust boundary for the posting action).
-const POSTABLE_MOVEMENT_TYPES = ['201', '301', '311'];
+const POSTABLE_MOVEMENT_TYPES = ['201', '261', '301', '311'];
 
 class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   /**
@@ -205,12 +206,14 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
    * @deprecated Legacy positional signature retained only for the internal queue-replay path and
    * back-compat callers/tests. Contains NO movement-type business logic - it normalizes the
    * positional arguments into a domain object and delegates to the isolated per-type dispatcher
-   * (`postByMovementType`), which routes to post201/301/311. New code calls the per-type
+   * (`postByMovementType`), which routes to post201/261/301/311. New code calls the per-type
    * methods (or `postByMovementType`) directly.
    */
   async postGoodsIssue(reservationNo, reservationItem, material, issueQty, unit, batch, differenceQty, differenceReason, differenceStorageType, finalIssue, plant, storageLocation, options = {}) {
     const data = {
-      MovementType: String(options.movementType || '201').trim(),
+      MovementType: options.movementType === undefined ? '' : String(options.movementType).trim(),
+      ValidatedMovementType: options.validatedMovementType === undefined && options.ValidatedMovementType === undefined
+        ? '' : String(options.validatedMovementType ?? options.ValidatedMovementType).trim(),
       ReservationNo: reservationNo || '',
       ReservationItem: reservationItem || '',
       Material: material || '',
@@ -223,6 +226,8 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       GLAccount: options.glAccount || options.GLAccount || '',
       ReceivingPlant: options.receivingPlant || '',
       ReceivingStorageLocation: options.receivingStorageLocation || '',
+      OrderNo: options.orderNo || options.OrderNo || options.orderId || options.OrderID || '',
+      OrderType: options.orderType || options.OrderType || '',
       PostingDate: options.postingDate || options.PostingDate,
       DocumentDate: options.documentDate || options.DocumentDate,
       SerialNumbers: Array.isArray(options.serialNumbers) && options.serialNumbers.length > 0
@@ -252,6 +257,44 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     if (!String(data.Unit || '').trim()) {
       const err = new Error('Unit of measure (EntryUnit) is required for Goods Issue');
       err.status = 400;
+      throw err;
+    }
+  }
+
+  _assertMovementType(data, expected) {
+    const requested = String(data?.MovementType ?? data?.movementType ?? '').trim();
+    const validated = String(data?.ValidatedMovementType ?? '').trim();
+    if (requested !== expected || !validated || validated !== requested) {
+      LOG.error('Goods Issue movement type integrity failure before SAP posting', {
+        requestedMovementType: requested,
+        validatedMovementType: validated,
+        dispatchedMovementType: expected
+      });
+      const err = new Error(`MovementType integrity check failed: requested '${requested || '(missing)'}', validated '${validated || '(missing)'}', dispatched '${expected}'`);
+      err.status = 400;
+      throw err;
+    }
+    // ValidatedMovementType must have been produced by the upstream request validator. Never
+    // manufacture it here: doing so would erase a missing validation boundary before SAP POST.
+  }
+
+  _assertPrePostMovementIntegrity(data, dispatchedMovementType, payload) {
+    const requested = String(data?.MovementType ?? '').trim();
+    const validated = String(data?.ValidatedMovementType ?? '').trim();
+    const items = payload?.to_MaterialDocumentItem?.results;
+    const payloadMovementTypes = Array.isArray(items) ? items.map((item) => String(item?.GoodsMovementType ?? '').trim()) : [];
+    const valid = requested === validated && validated === dispatchedMovementType &&
+      payloadMovementTypes.length === 1 && payloadMovementTypes[0] === dispatchedMovementType;
+    if (!valid) {
+      LOG.error('Goods Issue pre-POST integrity assertion failed; SAP write aborted', {
+        requestedMovementType: requested,
+        validatedMovementType: validated,
+        dispatchedMovementType,
+        sapPayloadGoodsMovementTypes: payloadMovementTypes
+      });
+      const err = new Error('Goods Issue movement type integrity check failed before SAP POST; no SAP write was made.');
+      err.status = 400;
+      err.code = 'GI_MOVEMENT_TYPE_INTEGRITY';
       throw err;
     }
   }
@@ -309,6 +352,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
   /** @private POST an A_MaterialDocumentHeader payload and normalize the result. Transport only. */
   /** @private POST an A_MaterialDocumentHeader payload and normalize the result. Transport only. */
   async _submitMaterialDocument(v2Payload, meta) {
+    this._assertPrePostMovementIntegrity(meta.data, meta.mvt, v2Payload);
     const v2Path = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader`;
     const v2Res = await this._post(v2Path, v2Payload);
     const sapMsg = GoodsIssuePostingClient.parseSapMessage(v2Res && v2Res._headers);
@@ -363,12 +407,20 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     }
     let verified;
     try {
-      verified = await this.readBackDocument(rawMatDoc, rawMatYear);
+      verified = await this.readBackDocument(rawMatDoc, rawMatYear, { expectedMovementType: meta.mvt });
     } catch (rbErr) {
       LOG.warn(`readBackDocument error in _submitMaterialDocument for ${rawMatDoc}: ${rbErr.message}`);
       verified = { MaterialDocument: rawMatDoc, MaterialDocYear: rawMatYear, Confirmed: false, Status: 'posted, confirmation pending' };
     }
-    const matDoc = verified?.MaterialDocument || String(rawMatDoc).trim();
+    if (!verified?.Confirmed) {
+      const err = new Error(verified?.Status === 'movement type mismatch'
+        ? `SAP read-back GoodsMovementType did not exactly match requested MovementType ${meta.mvt}`
+        : `SAP read-back could not verify GoodsMovementType ${meta.mvt} for material document ${rawMatDoc}/${rawMatYear}`);
+      err.status = 504;
+      err.code = 'GI_POSTING_OUTCOME_UNKNOWN';
+      throw err;
+    }
+    const matDoc = verified.MaterialDocument || String(rawMatDoc).trim();
     const matYear = verified?.MaterialDocYear || String(rawMatYear).trim();
     const isConfirmed = Boolean(verified?.Confirmed);
     const confirmationText = isConfirmed ? '' : ' (posted, confirmation pending)';
@@ -459,6 +511,13 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
             if (!confirmedYear && docRow.BUDAT) {
               confirmedYear = String(docRow.BUDAT).trim().slice(0, 4);
             }
+            const movementTypes = rows.map((row) => String(row.BWART || '').trim());
+            if (options.expectedMovementType && (movementTypes.length === 0 || movementTypes.some((value) => value !== options.expectedMovementType))) {
+              return {
+                MaterialDocument: sDoc, MaterialDocYear: sYear, Confirmed: false,
+                Status: 'movement type mismatch', Tier: 'MATDOC', Items: rows
+              };
+            }
             return {
               MaterialDocument: String(docRow.MBLNR).trim(),
               MaterialDocYear: confirmedYear || sYear,
@@ -472,28 +531,29 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
           LOG.warn(`RFC readTable MATDOC readback for ${sDoc}/${sYear} failed: ${err.message}. Trying MKPF fallback...`);
         }
 
-        // 2. Fallback 1: RFC readTable on MKPF
-        try {
-          const where = [`MBLNR = '${sDoc}'`];
-          if (sYear) where.push(`AND MJAHR = '${sYear}'`);
-          const rows = await this.rfc.readTable('MKPF', ['MBLNR', 'MJAHR', 'BLDAT', 'BUDAT', 'CPUDT', 'CPUTM'], where, 1);
-          if (Array.isArray(rows) && rows.length > 0) {
-            const mkpfRow = rows[0];
-            // Prefer MJAHR from SAP over BUDAT-derived year
-            let confirmedYear = String(mkpfRow.MJAHR || '').trim();
-            if (!confirmedYear && mkpfRow.BUDAT) {
-              confirmedYear = String(mkpfRow.BUDAT).trim().slice(0, 4);
+        // MKPF has no movement type. It can prove document-header persistence only, so do not
+        // use it when the caller requires strict GoodsMovementType confirmation.
+        if (!options.expectedMovementType) {
+          // 2. Fallback 1: RFC readTable on MKPF
+          try {
+            const where = [`MBLNR = '${sDoc}'`];
+            if (sYear) where.push(`AND MJAHR = '${sYear}'`);
+            const rows = await this.rfc.readTable('MKPF', ['MBLNR', 'MJAHR', 'BLDAT', 'BUDAT', 'CPUDT', 'CPUTM'], where, 1);
+            if (Array.isArray(rows) && rows.length > 0) {
+              const mkpfRow = rows[0];
+              let confirmedYear = String(mkpfRow.MJAHR || '').trim();
+              if (!confirmedYear && mkpfRow.BUDAT) confirmedYear = String(mkpfRow.BUDAT).trim().slice(0, 4);
+              return {
+                MaterialDocument: String(mkpfRow.MBLNR).trim(),
+                MaterialDocYear: confirmedYear || sYear,
+                Confirmed: true,
+                Status: 'confirmed',
+                Tier: 'MKPF'
+              };
             }
-            return {
-              MaterialDocument: String(mkpfRow.MBLNR).trim(),
-              MaterialDocYear: confirmedYear || sYear,
-              Confirmed: true,
-              Status: 'confirmed',
-              Tier: 'MKPF'
-            };
+          } catch (mkpfErr) {
+            LOG.warn(`RFC readTable MKPF readback failed: ${mkpfErr.message}. Trying OData fallback...`);
           }
-        } catch (mkpfErr) {
-          LOG.warn(`RFC readTable MKPF readback failed: ${mkpfErr.message}. Trying OData fallback...`);
         }
       }
 
@@ -501,13 +561,20 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       try {
         let docPath;
         if (sYear) {
-          docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader(MaterialDocumentYear='${sYear}',MaterialDocument='${sDoc}')`;
+          docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader(MaterialDocumentYear='${sYear}',MaterialDocument='${sDoc}')${options.expectedMovementType ? '?$expand=to_MaterialDocumentItem' : ''}`;
         } else {
-          docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader?$filter=MaterialDocument eq '${sDoc}'&$top=1&$format=json`;
+          docPath = `/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader?$filter=MaterialDocument eq '${sDoc}'&$top=1&$format=json${options.expectedMovementType ? '&$expand=to_MaterialDocumentItem' : ''}`;
         }
         const res = await this._get(docPath, '$format=json', { signal });
         const header = Array.isArray(res) ? res[0] : (res?.d || res);
         if (header && (header.MaterialDocument || header.MaterialDocumentYear)) {
+          const items = header.to_MaterialDocumentItem?.results || [];
+          if (options.expectedMovementType && (items.length === 0 || items.some((item) => String(item.GoodsMovementType || '').trim() !== options.expectedMovementType))) {
+            return {
+              MaterialDocument: sDoc, MaterialDocYear: sYear, Confirmed: false,
+              Status: 'movement type mismatch', Tier: 'OData', Items: items
+            };
+          }
           let confirmedYear = String(header.MaterialDocumentYear || '').trim();
           if (!confirmedYear && header.PostingDate) {
             const m = String(header.PostingDate).match(/\d{4}/);
@@ -579,7 +646,10 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       `$format=json&$expand=to_MaterialDocumentItem&$filter=${encodeURIComponent(filter)}`
     );
     const originals = (Array.isArray(hits) ? hits : [])
-      .filter((h) => (h.to_MaterialDocumentItem?.results || []).some((i) => i.GoodsMovementType === mvt))
+      .filter((h) => {
+        const items = h.to_MaterialDocumentItem?.results || [];
+        return items.length > 0 && items.every((i) => String(i.GoodsMovementType || '').trim() === mvt);
+      })
       .sort((a, b) => String(a.MaterialDocument).localeCompare(String(b.MaterialDocument)));
     if (originals.length > 1) {
       LOG.warn(`Reference ${ref} matches ${originals.length} movement ${mvt} documents (${originals.map((h) => h.MaterialDocument).join(', ')}); using the first.`);
@@ -605,6 +675,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
 
   /** Movement 201 (Goods Issue to Cost Center) - standard API only. */
   async post201(data) {
+    this._assertMovementType(data, '201');
     this._assertPostable(data);
     if (!String(data.CostCenter || '').trim()) {
       const err = new Error('Property CostCenter is mandatory for GoodsMovementType 201');
@@ -616,6 +687,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     try {
       return await this._submitMaterialDocument(payload, {
         mvt: '201', label: 'Goods Issue to Cost Center',
+        data,
         reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
       });
     } catch (v2Err) {
@@ -644,14 +716,49 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
     }
   }
 
+  /** Movement 261 (Goods Issue to Order) - standard API only. */
+  async post261(data) {
+    this._assertMovementType(data, '261');
+    this._assertPostable(data);
+    const orderNo = String(data.OrderNo || data.OrderID || data.orderId || '').trim();
+    if (!orderNo) {
+      const err = new Error('Order number is mandatory for GoodsMovementType 261');
+      err.status = 400;
+      throw err;
+    }
+    await this._preflightPosting(data);
+    const payload = GoodsIssue261Mapper.mapToMaterialDocumentPayload(data);
+    try {
+      return await this._submitMaterialDocument(payload, {
+        mvt: '261', label: 'Goods Issue to Order',
+        data,
+        reservationNo: data.ReservationNo || data.reservation,
+        reservationItem: data.ReservationItem || data.item,
+        orderNo
+      });
+    } catch (v2Err) {
+      const err = this._reclassifyPostingError(new Error('movement 261 posts via API_MATERIAL_DOCUMENT_SRV directly'), v2Err, 'single-item movement 261');
+      if (err.code !== 'GI_POSTING_OUTCOME_UNKNOWN' || !data.ReferenceDocument) throw err;
+      const delays = GoodsIssuePostingClient.referenceLookupDelaysMs();
+      for (const delayMs of delays) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        const doc = await this.findPostedByReference(data.ReferenceDocument, '261', data.PostingDate);
+        if (doc) return GoodsIssuePostingClient._resultFromReference(doc, data, '261', 'Goods Issue to Order');
+      }
+      throw err;
+    }
+  }
+
   /** Movement 301 (Plant-to-Plant Transfer) - standard API only. */
   async post301(data) {
+    this._assertMovementType(data, '301');
     this._assertPostable(data);
     await this._preflightPosting(data);
     const payload = GoodsIssue301Mapper.mapToMaterialDocumentPayload(data);
     try {
       return await this._submitMaterialDocument(payload, {
         mvt: '301', label: 'Transfer posting',
+        data,
         reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
       });
     } catch (v2Err) {
@@ -661,12 +768,14 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
 
   /** Movement 311 (Storage Location Transfer) - standard API only. */
   async post311(data) {
+    this._assertMovementType(data, '311');
     this._assertPostable(data);
     await this._preflightPosting(data);
     const payload = GoodsIssue311Mapper.mapToMaterialDocumentPayload(data);
     try {
       return await this._submitMaterialDocument(payload, {
         mvt: '311', label: 'Transfer posting',
+        data,
         reservationNo: data.ReservationNo, reservationItem: data.ReservationItem
       });
     } catch (v2Err) {
@@ -679,7 +788,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
    * This is routing, not movement-type business logic.
    */
   async postByMovementType(data) {
-    const mvt = String(data.MovementType || '201').trim();
+    const mvt = String(data?.MovementType ?? '').trim();
     switch (mvt) {
       case '201': {
         // Never post if reference already exists in SAP.
@@ -687,6 +796,7 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
         if (prior) return GoodsIssuePostingClient._resultFromReference(prior, data, '201', 'Goods Issue to Cost Center');
         return this.post201(data);
       }
+      case '261': return this.post261(data);
       case '301': return this.post301(data);
       case '311': return this.post311(data);
       default: {
@@ -737,6 +847,10 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
    */
   _reclassifyPostingError(v4Err, v2Err, operationName) {
     const UNAVAILABLE_STATUSES = [403, 404, 502, 503];
+
+    // _submitMaterialDocument raises this only after SAP returned a document number but strict
+    // movement-type read-back failed. Preserve the unknown outcome classification verbatim.
+    if (v2Err?.code === 'GI_POSTING_OUTCOME_UNKNOWN') return v2Err;
 
     // An error that already carries an explicit, non-"unavailable" HTTP status was already
     // correctly classified by the code that raised it (our own pre-flight validation, the

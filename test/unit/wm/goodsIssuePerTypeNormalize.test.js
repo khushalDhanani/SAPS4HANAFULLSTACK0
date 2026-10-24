@@ -10,6 +10,7 @@ const { normalizeGoodsIssue311Payload } = require('../../../srv/wm/goods-issue/m
 // A payload deliberately carrying EVERY type's exclusive fields, to prove each normalizer keeps
 // only its own and zeroes the rest.
 const kitchenSink = {
+  MovementType: '201',
   CostCenter: ' cc100 ', GLAccount: ' 400000 ', OrderNo: ' 1002743 ',
   ReceivingPlant: ' 1600 ', ReceivingStorageLocation: ' cs02 ',
   ReservationNo: ' 519658 ', ReservationItem: ' 1 ',
@@ -36,12 +37,20 @@ test('201 normalize: keeps CostCenter; drops GLAccount/OrderNo/receiving', () =>
   expect(n.User).toBe('U');
 });
 
+test.each([
+  [normalizeGoodsIssue201Payload, '261'],
+  [normalizeGoodsIssue301Payload, '201'],
+  [normalizeGoodsIssue311Payload, undefined]
+])('normalizer rejects missing or mismatched request movement type', (normalize, MovementType) => {
+  expect(() => normalize({ ...kitchenSink, MovementType })).toThrow(/MovementType must be explicitly/);
+});
+
 
 test.each([
   ['301', normalizeGoodsIssue301Payload],
   ['311', normalizeGoodsIssue311Payload]
 ])('%s normalize: keeps receiving; drops CostCenter/GLAccount/OrderNo', (type, fn) => {
-  const n = fn(kitchenSink, { user: 'U' });
+  const n = fn({ ...kitchenSink, MovementType: type }, { user: 'U' });
   expect(n.MovementType).toBe(type);
   expect(n.ReceivingPlant).toBe('1600');
   expect(n.ReceivingStorageLocation).toBe('CS02');

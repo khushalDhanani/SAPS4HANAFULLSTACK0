@@ -180,6 +180,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action postGoodsIssue201(
+        MovementType    : String(3),
         CostCenter      : String(10),
         Material        : String(40),
         IssueQty        : Decimal(13, 3),
@@ -199,6 +200,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action postGoodsIssue301(
+        MovementType              : String(3),
         ReservationNo            : String(10),
         ReservationItem          : String(4),
         Material                 : String(40),
@@ -219,6 +221,7 @@ service GoodsIssueService @(path: '/odata/v4/goods-issue') {
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
     action postGoodsIssue311(
+        MovementType              : String(3),
         ReservationNo            : String(10),
         ReservationItem          : String(4),
         Material                 : String(40),

@@ -1244,6 +1244,8 @@ sap.ui.define([
                 SubNumber: sSubNo,
                 orderId: sOrderId,
                 OrderID: sOrderId,
+                orderType: oResult.OrderType || "",
+                OrderType: oResult.OrderType || "",
                 CompleteReservation: oModel.getProperty("/completeReservation") === true,
                 ProcessId: oResult.ProcessId || ""
             };

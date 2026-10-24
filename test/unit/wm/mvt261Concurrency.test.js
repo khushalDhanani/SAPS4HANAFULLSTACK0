@@ -73,7 +73,7 @@ describe('Movement 261 Concurrency and Edge Case Regression Tests', () => {
   let handlers;
 
   const req = (data, userId = 'user-a') => ({
-    data,
+    data: { movementType: '261', orderId: '1002707', orderType: 'ZP01', ...data },
     user: { id: userId, is: (r) => r === 'WarehouseClerk' || r === 'Admin' },
     error: jest.fn((status, msg) => {
       const err = new Error(msg);
@@ -87,6 +87,7 @@ describe('Movement 261 Concurrency and Edge Case Regression Tests', () => {
     Reservation: '512851',
     ReservationItem: '3',
     ProductionOrder: '1002707',
+    OrderType: 'ZP01',
     Material: '1000001001',
     Plant: '1130',
     StorageLocation: 'CS02',

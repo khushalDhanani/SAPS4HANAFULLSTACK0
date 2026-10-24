@@ -38,7 +38,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
         }
         return {};
       }),
-      readTable: jest.fn(async (table, _fields, _where) => {
+      readTable: jest.fn(async (table, _fields, where) => {
         if (table === 'T320') {
           return [
             { LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' },
@@ -58,10 +58,16 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
         if (table === 'T333') {
           return [{ LGNUM: 'W01', BWLVS: '311', NLTYP: '921', NLPLA: 'TRANSFER' }];
         }
+        if (table === 'MATDOC' && (where || []).some((w) => String(w).includes('MBLNR'))) return [{ BWART: '311' }];
         return [];
       })
     };
     resAdapter = new ReservationProcessAdapter({ rfc: mockRfc });
+    resAdapter.verifyMaterialDocument = jest.fn(async (params) => ({
+      success: true, materialDocument: String(params.materialDocument || ''),
+      materialDocumentYear: String(params.materialDocYear || params.materialDocumentYear || ''),
+      movementType: String(params.movementType || '')
+    }));
     trAdapter = new TrToAdapter({ rfc: mockRfc });
   });
 
@@ -758,7 +764,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
 
       // Attempt 3: Double-MIGO guard check - MATDOC query finds the document, skips BAPI and returns alreadyPosted: true
       mockRfc.readTable.mockImplementation(async (table) => {
-        if (table === 'MATDOC') return [{ MBLNR: '4900050210', MJAHR: '2026' }];
+        if (table === 'MATDOC') return [{ MBLNR: '4900050210', MJAHR: '2026', BWART: '311' }];
         return [];
       });
 

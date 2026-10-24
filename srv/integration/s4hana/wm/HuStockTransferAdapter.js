@@ -28,6 +28,7 @@ const {
   resolveHuStorageTypeRules
 } = require('./transferPathHelper');
 const businessConfigResolver = require('../../../common/BusinessConfigResolver');
+const HU_STOCK_TRANSFER_MOVEMENT_TYPE = '311';
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -269,7 +270,7 @@ class HuStockTransferAdapter {
       return {
         ReservationNo: this._unpad(row.RSNUM),
         ReservationItem: this._unpad(row.RSPOS),
-        MovementType: row.BWART || header.BWART || '311',
+        MovementType: row.BWART || header.BWART || '',
         RequirementDate: row.BDTER || null,
         Requester: usnam,
         RequesterName: contact.nameText,
@@ -449,7 +450,7 @@ class HuStockTransferAdapter {
     return {
       ReservationNo: this._unpad(row.RSNUM),
       ReservationItem: this._unpad(row.RSPOS),
-      MovementType: row.BWART || '311',
+      MovementType: row.BWART || '',
       Requester: usnam,
       RequesterName: requesterName,
       RequesterPhone: requesterPhone,
@@ -1404,7 +1405,7 @@ class HuStockTransferAdapter {
             HUWBEVENT: '0006',
             WERKS: cockpit.Plant,
             LGORT: destSLoc,
-            BWART: cockpit.MovementType || '311'
+            BWART: HU_STOCK_TRANSFER_MOVEMENT_TYPE
           }]
         });
 
@@ -1447,7 +1448,7 @@ class HuStockTransferAdapter {
         PLANT: cockpit.Plant,
         STGE_LOC: sourceSLoc,
         BATCH: v.Batch || cockpit.Batch || '',
-        MOVE_TYPE: cockpit.MovementType || '311',
+        MOVE_TYPE: HU_STOCK_TRANSFER_MOVEMENT_TYPE,
         ENTRY_QNT: transferQtyNum,
         ENTRY_UOM: cockpit.BaseUnit,
         MOVE_PLANT: cockpit.Plant,

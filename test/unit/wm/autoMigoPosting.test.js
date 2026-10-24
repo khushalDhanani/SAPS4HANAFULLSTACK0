@@ -38,6 +38,13 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       }) // RESB / LTAP / MARC reads: nothing found, material not batch-managed
     };
     adapter = new ReservationProcessAdapter({ rfc: mockRfc });
+    adapter.verifyMaterialDocument = jest.fn(async (params) => ({
+      success: true,
+      stage: 'MIGO',
+      materialDocument: String(params.materialDocument || ''),
+      materialDocumentYear: String(params.materialDocYear || params.materialDocumentYear || ''),
+      movementType: String(params.movementType || '')
+    }));
   });
 
   const setupDefaultReadTable = (overrides = {}) => {
@@ -103,6 +110,10 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           SHKZG: 'H'
         }];
       }
+      if (table === 'MATDOC' && whereStr.includes('MBLNR')) {
+        const expectedBwart = whereStr.match(/BWART\s*=\s*'([^']+)'/)?.[1];
+        return expectedBwart ? [{ BWART: expectedBwart }] : [];
+      }
       if (table === 'MATDOC') return [];
       if (table === 'RESB') {
         return [{
@@ -136,7 +147,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
             WERKS: '1120',
             LGORT: 'HS01',
             LGNUM: 'W01',
-            BWLVS: params?.T_LTBA?.[0]?.BWLVS || '311' // echo the movement sent (D21: 201 sends 201)
+            BWLVS: params?.T_LTBA?.[0]?.BWLVS // echo only the movement actually sent
           }]
         };
       }
@@ -149,12 +160,13 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           WERKS: '1120',
           LGORT: 'HS01',
           LGNUM: 'W01',
-          BWLVS: params?.IV_BWLVS || '311'
+          BWLVS: params?.IV_BWLVS
         };
       }
       if (fm === 'L_TO_CREATE_TR' || fm === 'ZWM_TO_CREATE_FROM_TR') return { E_TANUM: '0001037299' };
       if (fm === 'L_TO_CONFIRM') return {};
       if (fm === 'BAPI_GOODSMVT_CREATE') {
+        mockRfc.lastPostedMovementType = params?.GOODSMVT_ITEM?.[0]?.MOVE_TYPE;
         return {
           MATERIALDOCUMENT: '5000999999',
           MATDOCUMENTYEAR: '2026',
@@ -167,6 +179,99 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
   };
 
   describe('1. Movement Type to GM_CODE and Item Field Mappings', () => {
+    test.each([undefined, '', '201'])('MIGO read-back rejects missing or mismatched SAP BWART %s', async (bwart) => {
+      mockRfc.readTable.mockImplementation(async (table) => table === 'MATDOC'
+        ? [{ BWART: bwart }]
+        : []);
+      await expect(ReservationProcessAdapter.prototype.verifyMaterialDocument.call(adapter, {
+        materialDocument: '4900050261', materialDocYear: '2026', movementType: '261',
+        material: '8000000023', quantity: 1, plant: '1120', storageLocation: 'HS01'
+      })).rejects.toMatchObject({ status: 400 });
+    });
+
+    test('same ProcessId cannot be replayed concurrently with a different MovementType', async () => {
+      const calls = [];
+      adapter._postGoodsMovement = jest.fn(async (params) => {
+        calls.push(params.MovementType || params.movementType);
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        return { success: true, materialDocument: '4900059999' };
+      });
+      const baseRequest = { processId: 'MVT-IMMUTABLE-1', reservationNo: '524980', reservationItem: '0001' };
+      const first = adapter.postGoodsMovement({ ...baseRequest, movementType: '201' });
+      await expect(adapter.postGoodsMovement({ ...baseRequest, movementType: '261' }))
+        .rejects.toMatchObject({ status: 409, code: 'ATTEMPT_ID_CONFLICT' });
+      await first;
+      expect(calls).toEqual(['201']);
+    });
+
+    test.each([
+      [{ movementType: '201', MovementType: '261' }, 'conflicting aliases'],
+      [{ MovementType: '261', orderId: '1002707' }, 'wrong GM_CODE']
+    ])('rejects %s before any SAP write', async (input, label) => {
+      const request = {
+        reservationNo: '524980', reservationItem: '0001', material: '8000000023', plant: '1120',
+        storageLocation: 'HS01', quantity: 1, unit: 'NOS', ...input
+      };
+      if (label === 'wrong GM_CODE') request.gmCode = '04';
+      await expect(adapter.postGoodsMovement(request)).rejects.toMatchObject({ status: 400 });
+      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
+    });
+
+    test('Movement 261: posts the requested type with its OrderID and rejects 201 account fields', async () => {
+      setupDefaultReadTable({
+        AUFK: () => [{ AUFNR: '000001002707', AUART: 'ZP01', WERKS: '1120' }],
+        JEST: () => [{ STAT: 'I0002', INACT: '' }]
+      });
+      setupDefaultFmCalls();
+      await adapter.postGoodsMovement({
+        reservationNo: '524981', reservationItem: '0001', movementType: '261', orderId: '1002707', orderType: 'ZP01',
+        material: '8000000023', plant: '1120', storageLocation: 'HS01', quantity: 1, unit: 'NOS', testrun: true
+      });
+      const call = mockRfc.call.mock.calls.find(([fm]) => fm === 'BAPI_GOODSMVT_CREATE');
+      expect(call[1].GOODSMVT_CODE).toEqual({ GM_CODE: '03' });
+      expect(call[1].GOODSMVT_ITEM[0]).toMatchObject({ MOVE_TYPE: '261', ORDERID: '000001002707' });
+      expect(call[1].GOODSMVT_ITEM[0].COSTCENTER).toBeUndefined();
+
+      mockRfc.call.mockClear();
+      await expect(adapter.postGoodsMovement({
+        reservationNo: '524981', reservationItem: '0001', movementType: '261', orderId: '1002707',
+        material: '8000000023', plant: '1120', storageLocation: 'HS01', quantity: 1, unit: 'NOS', costCenter: '1011201301'
+      })).rejects.toMatchObject({ status: 400 });
+      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
+    });
+
+    test('TR movement aliases cannot convert 261 into WM movement 201', async () => {
+      await expect(adapter.createTransferRequirement({
+        warehouseNumber: 'W01', movementType: '261', wmMovementType: '201',
+        material: '8000000023', plant: '1120', storageLocation: 'HS01', quantity: 1, unit: 'NOS',
+        reservationNo: '524981', reservationItem: '0001', orderId: '1002707'
+      })).rejects.toMatchObject({ status: 400 });
+      expect(mockRfc.call).not.toHaveBeenCalled();
+    });
+
+    test('261 KI 248 retry retains MOVE_TYPE 261 and uses only SAP-resolved cost center', async () => {
+      setupDefaultReadTable({
+        AUFK: () => [{ AUFNR: '000001002707', AUART: 'ZP01', KOSTV: '1011201301' }],
+        JEST: () => [{ STAT: 'I0002', INACT: '' }]
+      });
+      const invocations = [];
+      mockRfc.call.mockImplementation(async (fm, params) => {
+        if (fm === 'BAPI_GOODSMVT_CREATE') {
+          invocations.push(params);
+          if (invocations.length === 1) return { RETURN: [{ TYPE: 'E', ID: 'KI', NUMBER: '248', MESSAGE: 'requires a true account assignment' }] };
+          return { RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Test run successful' }] };
+        }
+        return {};
+      });
+      await adapter.postGoodsMovement({
+        reservationNo: '524981', reservationItem: '0001', movementType: '261', orderId: '1002707', orderType: 'ZP01',
+        material: '8000000023', plant: '1120', storageLocation: 'HS01', quantity: 1, unit: 'NOS', testrun: true
+      });
+      expect(invocations).toHaveLength(2);
+      expect(invocations.map((call) => call.GOODSMVT_ITEM[0].MOVE_TYPE)).toEqual(['261', '261']);
+      expect(invocations[1].GOODSMVT_ITEM[0].COSTCENTER).toBe('1011201301');
+    });
+
     test('Movement 201: maps GM_CODE 03, COSTCENTER, and closes reservation with NO_MORE_GR = X', async () => {
       mockRfc.call
         .mockResolvedValueOnce({
@@ -1049,6 +1154,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           tbnum: '0001001839',
           qty: 5,
           batch: 'INJW260001',
+          MovementType: '311',
           autoConfirm: true,
           autoPostMigo: true
         },
@@ -1095,6 +1201,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         data: {
           tbnum: '0001001839',
           qty: 5,
+          MovementType: '311',
           autoConfirm: true,
           autoPostMigo: true
         },
@@ -1401,7 +1508,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
     });
 
     test('Pipeline Check 1: Fails if Material document number is missing or empty', async () => {
-      await expect(adapter.verifyMaterialDocument({
+      await expect(ReservationProcessAdapter.prototype.verifyMaterialDocument.call(adapter, {
         materialDocument: '',
         materialDocumentYear: '2026'
       })).rejects.toMatchObject({
@@ -1412,7 +1519,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
     });
 
     test('Pipeline Check 2: Fails if Material document year is missing or empty', async () => {
-      await expect(adapter.verifyMaterialDocument({
+      await expect(ReservationProcessAdapter.prototype.verifyMaterialDocument.call(adapter, {
         materialDocument: '5000123456',
         materialDocumentYear: ''
       })).rejects.toMatchObject({
@@ -1438,14 +1545,14 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         return [];
       });
 
-      await expect(adapter.verifyMaterialDocument({
+      await expect(ReservationProcessAdapter.prototype.verifyMaterialDocument.call(adapter, {
         materialDocument: '5000123456',
         materialDocumentYear: '2026',
         movementType: '201'
       })).rejects.toMatchObject({
         status: 400,
         stage: 'MIGO',
-        message: expect.stringContaining('Movement type mismatch (SAP: 311, expected: 201)')
+        message: expect.stringContaining('SAP BWART 311 does not exactly equal requested MovementType 201')
       });
     });
 
@@ -1465,7 +1572,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         return [];
       });
 
-      await expect(adapter.verifyMaterialDocument({
+      await expect(ReservationProcessAdapter.prototype.verifyMaterialDocument.call(adapter, {
         materialDocument: '5000123456',
         materialDocumentYear: '2026',
         movementType: '201',
@@ -1493,7 +1600,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         return [];
       });
 
-      await expect(adapter.verifyMaterialDocument({
+      await expect(ReservationProcessAdapter.prototype.verifyMaterialDocument.call(adapter, {
         materialDocument: '5000123456',
         materialDocumentYear: '2026',
         movementType: '201',
@@ -1522,7 +1629,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         return [];
       });
 
-      await expect(adapter.verifyMaterialDocument({
+      await expect(ReservationProcessAdapter.prototype.verifyMaterialDocument.call(adapter, {
         materialDocument: '5000123456',
         materialDocumentYear: '2026',
         movementType: '201',
@@ -1550,7 +1657,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         return [];
       });
 
-      await expect(adapter.verifyMaterialDocument({
+      await expect(ReservationProcessAdapter.prototype.verifyMaterialDocument.call(adapter, {
         materialDocument: '5000123456',
         materialDocumentYear: '2026',
         movementType: '201',
@@ -1580,7 +1687,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         return [];
       });
 
-      await expect(adapter.verifyMaterialDocument({
+      await expect(ReservationProcessAdapter.prototype.verifyMaterialDocument.call(adapter, {
         materialDocument: '5000123456',
         materialDocumentYear: '2026',
         movementType: '201',
@@ -1596,7 +1703,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       adapter._checkMatdocPersistence = true;
       mockRfc.readTable.mockResolvedValue([]); // not found
 
-      await expect(adapter.verifyMaterialDocument({
+      await expect(ReservationProcessAdapter.prototype.verifyMaterialDocument.call(adapter, {
         materialDocument: '5000123456',
         materialDocumentYear: '2026',
         movementType: '201'
@@ -1652,6 +1759,20 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
   });
 
   describe('8. Step 11: Add Final Stock Verification (Expected vs Actual per Movement Type)', () => {
+    test('stock verification requires the original requested movement type', async () => {
+      await expect(adapter.verifyStock({ materialDocument: '5000123456', materialDocumentYear: '2026' }))
+        .rejects.toMatchObject({ status: 400 });
+      expect(mockRfc.readTable).not.toHaveBeenCalled();
+    });
+
+    test('stock verification rejects a SAP BWART that differs from the requested type', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => table === 'MATDOC' ? [{ BWART: '201' }] : []);
+      await expect(adapter.verifyStock({
+        materialDocument: '5000123456', materialDocumentYear: '2026', movementType: '261'
+      })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('does not exactly equal requested MovementType 261') });
+      expect(mockRfc.readTable).toHaveBeenCalledTimes(1);
+    });
+
     test('Movement 201: Verifies source stock decreases and consumed quantity equals posted quantity', async () => {
       mockRfc.readTable.mockImplementation(async (table, _fields, _where) => {
         if (table === 'MATDOC' || table === 'MSEG') {

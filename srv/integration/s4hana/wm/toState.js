@@ -170,7 +170,7 @@ function mapStorageTypeSearchError(rawMsg, lgnum, mvt = '') {
   if (tokens[3]) extra.push(`Special Stock: '${tokens[3]}'`);
   const extraStr = extra.length ? `, ${extra.join(', ')}` : '';
 
-  return `Data for storage type search is not defined in warehouse ${wh} for WM movement type ${mvt || '311'}: missing customizing key in table T334T (Warehouse: ${wh}, Operation: ${op} [${opText}], Storage Type Indicator: '${indicator}'${extraStr}). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > ${sproStrategy} > Determine Storage Type Search.`;
+  return `Data for storage type search is not defined in warehouse ${wh} for WM movement type ${mvt || '(unknown)'}: missing customizing key in table T334T (Warehouse: ${wh}, Operation: ${op} [${opText}], Storage Type Indicator: '${indicator}'${extraStr}). Maintain search sequence in SPRO: Logistics Execution > Warehouse Management > Strategies > ${sproStrategy} > Determine Storage Type Search.`;
 }
 
 module.exports = { isToFullyConfirmed, findUnconfirmedToItems, isTrClosedWithoutTo, trCompletedWithoutTo, stagedStockCoveringTr, getHuConfirmationItems, mapStorageTypeSearchError };

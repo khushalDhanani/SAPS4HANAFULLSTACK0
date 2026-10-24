@@ -117,10 +117,16 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
           const tanum = match ? match[1] : '0001015000';
           return [{ LGNUM: 'W01', TANUM: tanum, TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000001648', NSOLA: '2.000', ALTME: 'NOS', PQUIT: '' }];
         }
+        if (table === 'MATDOC' && (where || []).some((w) => String(w).includes('MBLNR'))) return [{ BWART: '301' }];
         return [];
       })
     };
     resAdapter = new ReservationProcessAdapter({ rfc: mockRfc, checkMarcExistence: true });
+    resAdapter.verifyMaterialDocument = jest.fn(async (params) => ({
+      success: true, materialDocument: String(params.materialDocument || ''),
+      materialDocumentYear: String(params.materialDocYear || params.materialDocumentYear || ''),
+      movementType: String(params.movementType || '')
+    }));
     trAdapter = new TrToAdapter({ rfc: mockRfc });
   });
 

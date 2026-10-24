@@ -7,6 +7,13 @@ const {
 } = require('../../../srv/integration/s4hana/wm/goods-issue');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 
+function mockStrictReadBack(client, movementType) {
+  client.readBackDocument = jest.fn(async (document, year) => ({
+    MaterialDocument: document, MaterialDocYear: year, Confirmed: true,
+    Items: [{ GoodsMovementType: movementType }]
+  }));
+}
+
 describe('Goods Issue Domain Clients Unit Tests', () => {
   describe('BaseGoodsIssueClient', () => {
     it('should correctly detect backend outages and network errors in _isOutage', () => {
@@ -835,7 +842,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
       let caught;
       try {
-        await postingClient.postGoodsIssue('', '1', 'MAT01', 10, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter });
+        await postingClient.postGoodsIssue('', '1', 'MAT01', 10, 'KG', '', 0, '', '', false, '1120', 'HS01', { movementType: '201', validatedMovementType: '201', costCenter });
       } catch (err) {
         caught = err;
       }
@@ -852,9 +859,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       };
       const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
 
-      await expect(postingClient.postGoodsIssue('10001', '1', 'MAT01', 0, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' }))
+      await expect(postingClient.postGoodsIssue('10001', '1', 'MAT01', 0, 'KG', '', 0, '', '', false, '1120', 'HS01', { movementType: '201', validatedMovementType: '201', costCenter: 'CC1' }))
         .rejects.toThrow('IssueQty must be a positive decimal number');
-      await expect(postingClient.postGoodsIssue('10001', '1', 'MAT01', -5, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' }))
+      await expect(postingClient.postGoodsIssue('10001', '1', 'MAT01', -5, 'KG', '', 0, '', '', false, '1120', 'HS01', { movementType: '201', validatedMovementType: '201', costCenter: 'CC1' }))
         .rejects.toThrow('IssueQty must be a positive decimal number');
       expect(mockAdapter._post).not.toHaveBeenCalled();
     });
@@ -866,7 +873,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
 
       await expect(
-        postingClient.postGoodsIssue('10001', '1', 'MAT01', 10, 'KG', 'EXPIRED01', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' })
+        postingClient.postGoodsIssue('10001', '1', 'MAT01', 10, 'KG', 'EXPIRED01', 0, '', '', false, '1120', 'HS01', { movementType: '201', validatedMovementType: '201', costCenter: 'CC1' })
       ).rejects.toThrow('Batch EXPIRED01 has expired.');
     });
 
@@ -882,7 +889,8 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       };
 
       const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
-      const res = await postingClient.postGoodsIssue('10001', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { costCenter: '1011101301' });
+      mockStrictReadBack(postingClient, '201');
+      const res = await postingClient.postGoodsIssue('10001', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { movementType: '201', validatedMovementType: '201', costCenter: '1011101301' });
 
       expect(res.Success).toBe(true);
       expect(res.MaterialDocument).toBe('4900009999');
@@ -897,9 +905,11 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
         _post: jest.fn().mockResolvedValue({ MaterialDocument: '4900012345', MaterialDocumentYear: '2026' })
       };
-      const res = await new GoodsIssuePostingClient({ adapter: mockAdapter }).postGoodsIssue(
+      const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
+      mockStrictReadBack(postingClient, '311');
+      const res = await postingClient.postGoodsIssue(
         '519366', '1', '8000001648', 21, 'EA', '', 0, '', '', false, '1120', 'HS01',
-        { movementType: '311', receivingPlant: '1120', receivingStorageLocation: 'CS02' }
+        { movementType: '311', validatedMovementType: '311', receivingPlant: '1120', receivingStorageLocation: 'CS02' }
       );
       expect(mockAdapter._post).toHaveBeenCalledTimes(1);
       const [path, body] = mockAdapter._post.mock.calls[0];
@@ -918,9 +928,11 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
         _post: jest.fn().mockResolvedValue({ MaterialDocument: '4900012346', MaterialDocumentYear: '2026' })
       };
-      const res = await new GoodsIssuePostingClient({ adapter: mockAdapter }).postGoodsIssue(
+      const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
+      mockStrictReadBack(postingClient, '201');
+      const res = await postingClient.postGoodsIssue(
         '519658', '1', '8000009753', 1, 'EA', '', 0, '', '', false, '1120', 'RD01',
-        { movementType: '201', costCenter: '1011103001' }
+        { movementType: '201', validatedMovementType: '201', costCenter: '1011103001' }
       );
       expect(mockAdapter._post).toHaveBeenCalledTimes(1);
       const [path, body] = mockAdapter._post.mock.calls[0];
@@ -940,14 +952,24 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
         .rejects.toMatchObject({ status: 400 });
     });
 
+    it('rejects missing movement type on the legacy replay signature before SAP POST', async () => {
+      const mockAdapter = { _post: jest.fn() };
+      await expect(new GoodsIssuePostingClient({ adapter: mockAdapter }).postGoodsIssue(
+        '1', '1', 'M', 1, 'KG', '', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' }
+      )).rejects.toMatchObject({ status: 400 });
+      expect(mockAdapter._post).not.toHaveBeenCalled();
+    });
+
     it('posts goods issue with serial numbers mapped to to_SerialNumbers in API_MATERIAL_DOCUMENT_SRV', async () => {
       const mockAdapter = {
         _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
         _post: jest.fn().mockResolvedValue({ MaterialDocument: '4900012350', MaterialDocumentYear: '2026' })
       };
-      const res = await new GoodsIssuePostingClient({ adapter: mockAdapter }).postGoodsIssue(
+      const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
+      mockStrictReadBack(postingClient, '201');
+      const res = await postingClient.postGoodsIssue(
         '519658', '1', '8000009753', 1, 'EA', '', 0, '', '', false, '1120', 'HS01',
-        { movementType: '201', costCenter: '1011101301', serialNumbers: ['MACBOOK-004'] }
+        { movementType: '201', validatedMovementType: '201', costCenter: '1011101301', serialNumbers: ['MACBOOK-004'] }
       );
       expect(mockAdapter._post).toHaveBeenCalledTimes(1);
       const [path, body] = mockAdapter._post.mock.calls[0];
@@ -968,7 +990,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
 
     it('should throw validation error when an item is missing Unit in postGoodsIssue', async () => {
       const postingClient = new GoodsIssuePostingClient();
-      await expect(postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, '', '', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' }))
+      await expect(postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, '', '', 0, '', '', false, '1120', 'HS01', { movementType: '201', validatedMovementType: '201', costCenter: 'CC1' }))
         .rejects.toThrow(/Unit of measure \(EntryUnit\) is required for Goods Issue/);
     });
 
@@ -986,7 +1008,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
 
       try {
-        await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' });
+        await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { movementType: '201', validatedMovementType: '201', costCenter: 'CC1' });
         throw new Error('Expected postGoodsIssue to throw');
       } catch (err) {
         // A plain 403 (no /IWFND/MED/170) is an authorization/CSRF refusal: surfaced, never queued.
@@ -1012,7 +1034,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
 
       try {
-        await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' });
+        await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { movementType: '201', validatedMovementType: '201', costCenter: 'CC1' });
         throw new Error('Expected postGoodsIssue to throw');
       } catch (err) {
         expect(err.status).toBe(501);
@@ -1043,7 +1065,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       });
 
       try {
-        await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { costCenter: 'CC1' });
+        await postingClient.postGoodsIssue('18025', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { movementType: '201', validatedMovementType: '201', costCenter: 'CC1' });
         throw new Error('Expected postGoodsIssue to throw');
       } catch (err) {
         // No response at all: SAP may have posted, so this is an unknown outcome, never queued.

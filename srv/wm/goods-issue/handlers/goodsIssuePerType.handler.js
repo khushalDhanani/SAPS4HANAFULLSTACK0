@@ -523,6 +523,13 @@ async function postDirect(req, normalized, postFn, onOutcome = async () => {}) {
  * @returns {Promise<Object>}
  */
 async function executeMovementPost(req, normalized, postFn, preCheckFn = null) {
+  if (!normalized?.MovementType || normalized.MovementType !== normalized.ValidatedMovementType) {
+    LOG.error('Movement type integrity failure before attempt claim; posting blocked', {
+      requestedMovementType: normalized?.MovementType || '',
+      validatedMovementType: normalized?.ValidatedMovementType || ''
+    });
+    return req.error(400, 'MovementType integrity check failed; Goods Issue was not posted.');
+  }
   ensureIdempotencyKey(normalized);
   normalized.ReferenceDocument = normalized.ReferenceDocument || newPostingReference();
   try {
@@ -589,6 +596,7 @@ const PerTypeGoodsIssueHandler = {
       }
       if (typeof GoodsIssueAdapter.verifyReceivingLocation === 'function') {
         const sapCheck = await GoodsIssueAdapter.verifyReceivingLocation({
+          movementType: '301',
           receivingPlant: normalized.ReceivingPlant,
           receivingStorageLocation: normalized.ReceivingStorageLocation,
           plant: normalized.Plant,

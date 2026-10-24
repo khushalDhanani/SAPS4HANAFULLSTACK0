@@ -16,7 +16,7 @@ const {
 } = require('../../../srv/wm/goods-issue/validation/goodsIssue311.validation');
 const { validateGoodsIssue261Payload } = require('../../../srv/wm/goods-issue/validation/goodsIssue261.validation');
 
-const base = { IssueQty: 1, Unit: 'EA', PostingDate: '2026-09-29', DocumentDate: '2026-09-29' };
+const base = { MovementType: '201', IssueQty: 1, Unit: 'EA', PostingDate: '2026-09-29', DocumentDate: '2026-09-29' };
 const valid301Destination = { ReceivingPlant: '1110', ReceivingStorageLocation: 'CS01' };
 
 describe('201 validation (Cost Center)', () => {
@@ -38,86 +38,96 @@ describe('201 validation (Cost Center)', () => {
     const r = validateGoodsIssue201Payload({ ...base, CostCenter: 'CC1', Material: 'M1', Plant: '1130', StorageLocation: 'CS01' });
     expect(r.errors.some(e => e.field === 'ReservationNo')).toBe(false);
   });
+  test.each([undefined, '', '261', '999'])('requires the exact request MovementType (%s)', (MovementType) => {
+    const r = validateGoodsIssue201Payload({ ...base, MovementType, CostCenter: 'CC1', Material: 'M1', Plant: '1130', StorageLocation: 'CS01' });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some((e) => e.field === 'MovementType')).toBe(true);
+  });
 });
 
 describe('301 validation (Plant-to-Plant Transfer)', () => {
   const resv = { ReservationNo: '519944', ReservationItem: '0001', Plant: '1120', StorageLocation: 'CS01' };
 
   test('valid 301 payload with reservation, receiving plant and receiving SLoc passes', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...resv, ...valid301Destination });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...resv, ...valid301Destination });
     expect(r.isValid).toBe(true);
+  });
+  test('rejects a request movement type that differs from the 301 action', () => {
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '201', ...resv, ...valid301Destination });
+    expect(r.isValid).toBe(false);
+    expect(r.errors.some((e) => e.field === 'MovementType')).toBe(true);
   });
 
   test('301 requires a reservation', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...valid301Destination });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...valid301Destination });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReservationNo')).toBe(true);
   });
 
   // Requirement 2: Receiving Plant = REQUIRED (missing, empty, whitespace, invalid plant, same as issuing plant)
   test('301 rejects missing ReceivingPlant', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...resv, ReceivingStorageLocation: 'CS01' });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...resv, ReceivingStorageLocation: 'CS01' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingPlant' && /mandatory|required/i.test(e.message))).toBe(true);
   });
 
   test('301 rejects empty ReceivingPlant', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...resv, ReceivingPlant: '', ReceivingStorageLocation: 'CS01' });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...resv, ReceivingPlant: '', ReceivingStorageLocation: 'CS01' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingPlant' && /mandatory|required/i.test(e.message))).toBe(true);
   });
 
   test('301 rejects whitespace ReceivingPlant', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...resv, ReceivingPlant: '   ', ReceivingStorageLocation: 'CS01' });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...resv, ReceivingPlant: '   ', ReceivingStorageLocation: 'CS01' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingPlant' && /mandatory|required/i.test(e.message))).toBe(true);
   });
 
   test('301 rejects invalid plant format (< 4 chars)', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...resv, ReceivingPlant: 'XX', ReceivingStorageLocation: 'CS01' });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...resv, ReceivingPlant: 'XX', ReceivingStorageLocation: 'CS01' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingPlant' && /4 alphanumeric characters/i.test(e.message))).toBe(true);
   });
 
   test('301 rejects invalid plant format (> 4 chars or symbols)', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...resv, ReceivingPlant: '11200', ReceivingStorageLocation: 'CS01' });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...resv, ReceivingPlant: '11200', ReceivingStorageLocation: 'CS01' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingPlant' && /4 alphanumeric characters/i.test(e.message))).toBe(true);
   });
 
   test('301 rejects receiving plant same as issuing plant', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...resv, ReceivingPlant: '1120', ReceivingStorageLocation: 'CS01' });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...resv, ReceivingPlant: '1120', ReceivingStorageLocation: 'CS01' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingPlant' && /must be different|must differ/i.test(e.message))).toBe(true);
   });
 
   // Requirement 3: Receiving Storage Location = REQUIRED (missing, empty, whitespace, invalid storage location)
   test('301 rejects missing ReceivingStorageLocation', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...resv, ReceivingPlant: '1110' });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...resv, ReceivingPlant: '1110' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingStorageLocation' && /mandatory|required/i.test(e.message))).toBe(true);
   });
 
   test('301 rejects empty ReceivingStorageLocation', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...resv, ReceivingPlant: '1110', ReceivingStorageLocation: '' });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...resv, ReceivingPlant: '1110', ReceivingStorageLocation: '' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingStorageLocation' && /mandatory|required/i.test(e.message))).toBe(true);
   });
 
   test('301 rejects whitespace ReceivingStorageLocation', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...resv, ReceivingPlant: '1110', ReceivingStorageLocation: '   ' });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...resv, ReceivingPlant: '1110', ReceivingStorageLocation: '   ' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingStorageLocation' && /mandatory|required/i.test(e.message))).toBe(true);
   });
 
   test('301 rejects invalid ReceivingStorageLocation format', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...resv, ReceivingPlant: '1110', ReceivingStorageLocation: 'SL' });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...resv, ReceivingPlant: '1110', ReceivingStorageLocation: 'SL' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingStorageLocation' && /4 alphanumeric characters/i.test(e.message))).toBe(true);
   });
 
   test('301 does NOT enforce a Cost Center rule (isolation)', () => {
-    const r = validateGoodsIssue301Payload({ ...base, ...resv, ...valid301Destination });
+    const r = validateGoodsIssue301Payload({ ...base, MovementType: '301', ...resv, ...valid301Destination });
     expect(r.errors.some(e => e.field === 'CostCenter')).toBe(false);
   });
 });
@@ -203,6 +213,7 @@ describe('301 SAP verification (ReceivingPlant + ReceivingStorageLocation in SAP
       readTable: jest.fn().mockResolvedValue([{ WERKS: '1110', LGORT: 'CS01' }])
     };
     const res = await verifyReceivingLocationInSap(mockRfc, {
+      movementType: '301',
       receivingPlant: '1110',
       receivingStorageLocation: 'CS01'
     });
@@ -212,51 +223,51 @@ describe('301 SAP verification (ReceivingPlant + ReceivingStorageLocation in SAP
 
 describe('311 validation (Transfer)', () => {
   test('valid 311 payload with reservation and receiving storage location passes', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02' });
     expect(r.isValid).toBe(true);
   });
   test('311 requires a reservation', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReceivingStorageLocation: 'CS02' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReceivingStorageLocation: 'CS02' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReservationNo')).toBe(true);
   });
   test('311 rejects missing ReceivingStorageLocation', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReservationNo: '519944', ReservationItem: '0001' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
   });
   test('311 rejects empty ReceivingStorageLocation', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: '' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: '' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
   });
   test('311 rejects whitespace ReceivingStorageLocation', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: '   ' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: '   ' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
   });
   test('311 rejects invalid ReceivingStorageLocation format (< 4 chars)', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'C1' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'C1' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
   });
   test('311 rejects invalid ReceivingStorageLocation format (> 4 chars or symbols)', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS-01' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS-01' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
   });
   test('311 receiving plant is optional (absent is valid)', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02' });
     expect(r.isValid).toBe(true);
     expect(r.errors.some(e => e.field === 'ReceivingPlant')).toBe(false);
   });
   test('311 malformed receiving plant is rejected', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02', ReceivingPlant: 'XX' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02', ReceivingPlant: 'XX' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingPlant')).toBe(true);
   });
   test('311 does NOT enforce a Cost Center rule (isolation)', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02' });
     expect(r.errors.some(e => e.field === 'CostCenter')).toBe(false);
   });
 });
@@ -264,17 +275,17 @@ describe('311 validation (Transfer)', () => {
 describe('311 destination invariant (intra-plant storage-location transfer)', () => {
   const resv = { ReservationNo: '519944', ReservationItem: '0001', Plant: '1120', StorageLocation: 'CS01' };
   test('rejects a receiving plant different from the issuing plant', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ...resv, ReceivingPlant: '1130', ReceivingStorageLocation: 'CS02' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ...resv, ReceivingPlant: '1130', ReceivingStorageLocation: 'CS02' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingPlant' && /must match|must equal/i.test(e.message))).toBe(true);
   });
   test('rejects a receiving storage location equal to the issuing one', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ...resv, ReceivingStorageLocation: 'CS01' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ...resv, ReceivingStorageLocation: 'CS01' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
   });
   test('accepts same-plant, different storage location', () => {
-    const r = validateGoodsIssue311Payload({ ...base, ...resv, ReceivingPlant: '1120', ReceivingStorageLocation: 'CS02' });
+    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ...resv, ReceivingPlant: '1120', ReceivingStorageLocation: 'CS02' });
     expect(r.isValid).toBe(true);
   });
 });
@@ -373,32 +384,45 @@ describe('311 SAP destination verification (T320, T001L, MARD)', () => {
 });
 
 describe('261 validation (Goods Issue to Order)', () => {
+  const required261 = { movementType: '261', orderId: '1002707', orderType: 'ZP01' };
+
   test('valid 261 payload passes', () => {
-    const r = validateGoodsIssue261Payload({ reservation: '512851', item: '1', quantity: 50 });
+    const r = validateGoodsIssue261Payload({ ...required261, reservation: '512851', item: '1', quantity: 50 });
     expect(r.isValid).toBe(true);
   });
 
   test('valid 261 PascalCase payload passes', () => {
-    const r = validateGoodsIssue261Payload({ ReservationNo: '512851', ReservationItem: '0001', IssueQty: 50 });
+    const r = validateGoodsIssue261Payload({ MovementType: '261', OrderID: '1002707', OrderType: 'ZP01', ReservationNo: '512851', ReservationItem: '0001', IssueQty: 50 });
     expect(r.isValid).toBe(true);
   });
 
   test('missing reservation or item fails', () => {
-    const r = validateGoodsIssue261Payload({ reservation: '', item: '1', quantity: 50 });
+    const r = validateGoodsIssue261Payload({ ...required261, reservation: '', item: '1', quantity: 50 });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'reservation')).toBe(true);
   });
 
   test('quantity <= 0 fails', () => {
-    const r = validateGoodsIssue261Payload({ reservation: '512851', item: '1', quantity: 0 });
+    const r = validateGoodsIssue261Payload({ ...required261, reservation: '512851', item: '1', quantity: 0 });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'quantity')).toBe(true);
   });
 
   test('supplied CostCenter or ReceivingPlant is rejected', () => {
-    const r = validateGoodsIssue261Payload({ reservation: '512851', item: '1', quantity: 50, CostCenter: 'CC1', ReceivingPlant: '1110' });
+    const r = validateGoodsIssue261Payload({ ...required261, reservation: '512851', item: '1', quantity: 50, CostCenter: 'CC1', ReceivingPlant: '1110' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'CostCenter')).toBe(true);
     expect(r.errors.some(e => e.field === 'ReceivingPlant')).toBe(true);
+  });
+
+  test.each([
+    {},
+    { ...required261, movementType: '201' },
+    { ...required261, orderId: 'ABC' },
+    { ...required261, OrderNo: '1002708' },
+    { ...required261, MovementType: '201' }
+  ])('missing or incompatible movement/order data fails: %j', (data) => {
+    const r = validateGoodsIssue261Payload({ ...data, reservation: '512851', item: '1', quantity: 50 });
+    expect(r.isValid).toBe(false);
   });
 });

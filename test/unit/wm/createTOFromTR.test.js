@@ -1441,6 +1441,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             const res = await resAdapter.createTransferOrderFromTR({
                 warehouseNumber: 'W01',
                 trNumber: '123456',
+                movementType: '311',
                 autoConfirm: true
             });
 

@@ -139,8 +139,8 @@ function createReaders(rfc) {
 
     /** A5d: recent reservations per movement type with their WM / MM document chain. */
     recentReservations: (mvt, days = 30, max = 5) => rfc.readTable('RKPF', ['RSNUM', 'BWART', 'RSDAT', 'USNAM', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO'], [`BWART = '${mvt}'`, `AND RSDAT >= '${daysAgo(days)}'`], max),
-    /** WM movement type the app itself puts on a staging TR (ReservationProcessAdapter.createTransferRequirement). */
-    appTrMovementType: (mvt) => (mvt === '201' || mvt === '241' ? '311' : mvt),
+    /** WM movement type used by the app's TR flow is exactly the requested inventory movement type. */
+    appTrMovementType: (mvt) => mvt,
     chain: async (wh, rsnum, rsdat = '', expectedBwlvs = '') => {
       const rs = String(rsnum).padStart(10, '0');
       const resb = await rfc.readTable('RESB', ['RSPOS', 'MATNR', 'WERKS', 'LGORT', 'CHARG', 'BDMNG', 'ENMNG', 'KZEAR', 'XLOEK'], [`RSNUM = '${rs}'`]);

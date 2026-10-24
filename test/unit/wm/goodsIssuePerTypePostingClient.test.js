@@ -9,6 +9,10 @@ const GoodsIssuePostingClient = require('../../../srv/integration/s4hana/wm/good
 function makeClient() {
   const client = new GoodsIssuePostingClient({});
   client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
+  client.readBackDocument = jest.fn(async (doc, year, options = {}) => ({
+    MaterialDocument: doc, MaterialDocYear: year, Confirmed: true, Status: 'confirmed',
+    Items: [{ BWART: options.expectedMovementType }]
+  }));
   const calls = [];
   client._post = jest.fn(async (path, body) => {
     calls.push({ path, body });
@@ -17,12 +21,12 @@ function makeClient() {
   return { client, calls };
 }
 
-const base = { IssueQty: 1, Unit: 'KG', Plant: '1130', StorageLocation: 'CS02', PostingDate: '2026-09-29', DocumentDate: '2026-09-29' };
+const base = { IssueQty: 1, Unit: 'KG', Plant: '1130', StorageLocation: 'CS02', PostingDate: '2026-09-29', DocumentDate: '2026-09-29', OrderType: 'ZP01' };
 
 test('post201 → standard API with CostCenter, movement 201', async () => {
   const { client, calls } = makeClient();
   // Feed other types' exclusive fields too, to prove they never leak into a 201 payload.
-  const res = await client.post201({ ...base, MovementType: '201', CostCenter: '1011202902', Material: '1000000980', GLAccount: '400000', ReceivingPlant: '1600', ReceivingStorageLocation: 'CS02' });
+  const res = await client.post201({ ...base, MovementType: '201', ValidatedMovementType: '201', CostCenter: '1011202902', Material: '1000000980', GLAccount: '400000', ReceivingPlant: '1600', ReceivingStorageLocation: 'CS02' });
   expect(res.Success).toBe(true);
   expect(res.MaterialDocument).toBe('4900099999');
   expect(calls[0].path).toContain('API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader');
@@ -40,7 +44,7 @@ test('post201 → standard API with CostCenter, movement 201', async () => {
 test.each([['301', '04'], ['311', '04']])('post%s → standard API with receiving, movement %s', async (type, gm) => {
   const { client, calls } = makeClient();
   // Feed 201/261 exclusive fields too, to prove they never leak into a transfer payload.
-  const res = await client[`post${type}`]({ ...base, MovementType: type, Material: 'M1', ReservationNo: '519944', ReservationItem: '0001', ReceivingPlant: '1600', ReceivingStorageLocation: 'CS02', CostCenter: 'CC1', GLAccount: '400000' });
+  const res = await client[`post${type}`]({ ...base, MovementType: type, ValidatedMovementType: type, Material: 'M1', ReservationNo: '519944', ReservationItem: '0001', ReceivingPlant: '1600', ReceivingStorageLocation: 'CS02', CostCenter: 'CC1', GLAccount: '400000' });
   expect(res.Success).toBe(true);
   expect(calls[0].path).toContain('A_MaterialDocumentHeader');
   const item = calls[0].body.to_MaterialDocumentItem.results[0];
@@ -52,12 +56,93 @@ test.each([['301', '04'], ['311', '04']])('post%s → standard API with receivin
   expect(item.GLAccount).toBeUndefined();
 });
 
+test('post261 maps and submits exactly the requested movement type and Order', async () => {
+  const { client, calls } = makeClient();
+  const result = await client.post261({
+    ...base, MovementType: '261', ValidatedMovementType: '261', Material: '1000001001', ReservationNo: '512851',
+    ReservationItem: '3', OrderNo: '1002707', ReferenceDocument: 'GI261TEST'
+  });
+  const sapItem = calls[0].body.to_MaterialDocumentItem.results[0];
+  expect(result.Success).toBe(true);
+  expect(client.readBackDocument).toHaveBeenCalledWith('4900099999', '2026', { expectedMovementType: '261' });
+  expect(sapItem).toMatchObject({ GoodsMovementType: '261', ManufacturingOrder: '000001002707', Reservation: '512851', ReservationItem: '0003' });
+  expect(sapItem.CostCenter).toBeUndefined();
+  expect(sapItem.IssuingOrReceivingPlant).toBeUndefined();
+});
+
+test.each([undefined, '', '241', '999'])('rejects absent or unsupported movement type %s before POST', async (movementType) => {
+  const { client, calls } = makeClient();
+  await expect(client.postByMovementType({ ...base, MovementType: movementType })).rejects.toMatchObject({ status: 400 });
+  expect(calls).toHaveLength(0);
+});
+
+test('rejects a missing upstream validated movement type before POST', async () => {
+  const { client, calls } = makeClient();
+  await expect(client.post261({ ...base, MovementType: '261', Material: 'M1', ReservationNo: '1', ReservationItem: '1', OrderNo: '123' }))
+    .rejects.toMatchObject({ status: 400 });
+  expect(calls).toHaveLength(0);
+});
+
+test('261 refuses an incompatible 201 account field before POST', async () => {
+  const { client, calls } = makeClient();
+  await expect(client.post261({ ...base, MovementType: '261', ValidatedMovementType: '261', Material: 'M1', ReservationNo: '1', ReservationItem: '1', OrderNo: '123', CostCenter: 'CC1' }))
+    .rejects.toMatchObject({ status: 400 });
+  expect(calls).toHaveLength(0);
+});
+
+test('post261 fails closed when SAP read-back reports BWART 201', async () => {
+  const { client, calls } = makeClient();
+  client.readBackDocument.mockResolvedValue({ MaterialDocument: '4900099999', MaterialDocYear: '2026', Confirmed: false, Status: 'movement type mismatch', Items: [{ BWART: '201' }] });
+  await expect(client.post261({ ...base, MovementType: '261', ValidatedMovementType: '261', Material: 'M1', ReservationNo: '1', ReservationItem: '1', OrderNo: '123' }))
+    .rejects.toMatchObject({ status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' });
+  expect(calls[0].body.to_MaterialDocumentItem.results[0].GoodsMovementType).toBe('261');
+});
+
+test.each([
+  ['201', '261', () => ({ MovementType: '261', Material: 'M1', CostCenter: 'CC1' })],
+  ['261', '201', () => ({ MovementType: '261', Material: 'M1', ReservationNo: '1', ReservationItem: '1', OrderNo: '123' })]
+])('aborts before POST if mapper changes requested movement %s to %s', async (requested, mutated, payloadFactory) => {
+  const { client, calls } = makeClient();
+  const originalSubmit = client._submitMaterialDocument.bind(client);
+  client._submitMaterialDocument = (payload, meta) => {
+    payload.to_MaterialDocumentItem.results[0].GoodsMovementType = mutated;
+    return originalSubmit(payload, meta);
+  };
+  const data = { ...base, ...payloadFactory() };
+  data.ValidatedMovementType = data.MovementType;
+  await expect(requested === '201' ? client.post201(data) : client.post261(data))
+    .rejects.toMatchObject({ status: 400 });
+  expect(calls).toHaveLength(0);
+});
+
 test('postByMovementType routes to the isolated method', async () => {
   const { client } = makeClient();
   client.post301 = jest.fn().mockResolvedValue({ Success: true, mvt: '301' });
   const res = await client.postByMovementType({ ...base, MovementType: '301' });
   expect(client.post301).toHaveBeenCalled();
   expect(res.mvt).toBe('301');
+});
+
+test('postByMovementType routes 261 to post261 and preserves the requested Order', async () => {
+  const { client } = makeClient();
+  client.post261 = jest.fn().mockResolvedValue({ Success: true, mvt: '261' });
+  const payload = { ...base, MovementType: '261', OrderNo: '1002707' };
+  const res = await client.postByMovementType(payload);
+  expect(client.post261).toHaveBeenCalledWith(payload);
+  expect(res.mvt).toBe('261');
+});
+
+test('legacy queue replay requires explicit validated type and preserves 261 Order fields', async () => {
+  const { client, calls } = makeClient();
+  const result = await client.postGoodsIssue(
+    '512851', '3', '1000001001', 1, 'KG', '', 0, '', '', false, '1130', 'CS02',
+    { movementType: '261', validatedMovementType: '261', orderNo: '1002707', orderType: 'ZP01' }
+  );
+  const item = calls[0].body.to_MaterialDocumentItem.results[0];
+  expect(result.Success).toBe(true);
+  expect(item).toMatchObject({ GoodsMovementType: '261', ManufacturingOrder: '000001002707' });
+  expect(item.CostCenter).toBeUndefined();
+  expect(client.readBackDocument).toHaveBeenCalledWith('4900099999', '2026', { expectedMovementType: '261' });
 });
 
 test('postByMovementType routes 311 to post311 (not 301)', async () => {
@@ -72,7 +157,7 @@ test('postByMovementType routes 311 to post311 (not 301)', async () => {
 
 
 describe('readBackDocument & commit-lag handling', () => {
-  test('returns SAP document marked "posted, confirmation pending" when readBackDocument finds nothing due to commit lag', async () => {
+  test('does not report a posting confirmed when read-back cannot prove its requested movement type', async () => {
     const client = new GoodsIssuePostingClient({});
     client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
     client._post = jest.fn().mockResolvedValue({ MaterialDocument: '4900099999', MaterialDocumentYear: '2026' });
@@ -84,12 +169,8 @@ describe('readBackDocument & commit-lag handling', () => {
       Status: 'posted, confirmation pending'
     });
 
-    const res = await client.post201({ ...base, MovementType: '201', CostCenter: '1011202902', Material: '1000000980' });
-    expect(res.Success).toBe(true);
-    expect(res.MaterialDocument).toBe('4900099999');
-    expect(res.Confirmed).toBe(false);
-    expect(res.ConfirmationStatus).toBe('POSTED_CONFIRMATION_PENDING');
-    expect(res.Message).toContain('(posted, confirmation pending)');
+    await expect(client.post201({ ...base, MovementType: '201', ValidatedMovementType: '201', CostCenter: '1011202902', Material: '1000000980' }))
+      .rejects.toMatchObject({ status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' });
   });
 
   test('returns SAP document marked "posted, confirmation pending" when readBackDocument errors', async () => {
@@ -193,7 +274,7 @@ describe('readBackDocument & commit-lag handling', () => {
     }
   });
 
-  test('hanging readBackDocument in post201 returns unconfirmed document and never produces 504', async () => {
+  test('hanging readBackDocument in post201 fails closed with an unknown outcome', async () => {
     const client = new GoodsIssuePostingClient({ readBackTimeoutMs: 50 });
     client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
     client._post = jest.fn().mockResolvedValue({ MaterialDocument: '4900099999', MaterialDocumentYear: '2026' });
@@ -201,12 +282,8 @@ describe('readBackDocument & commit-lag handling', () => {
       return { MaterialDocument: doc, MaterialDocYear: yr, Confirmed: false, Status: 'posted, confirmation pending' };
     });
 
-    const res = await client.post201({ ...base, MovementType: '201', CostCenter: '1011202902', Material: '1000000980' });
-    expect(res.Success).toBe(true);
-    expect(res.MaterialDocument).toBe('4900099999');
-    expect(res.Confirmed).toBe(false);
-    expect(res.ConfirmationStatus).toBe('POSTED_CONFIRMATION_PENDING');
-    expect(res.Message).toContain('(posted, confirmation pending)');
+    await expect(client.post201({ ...base, MovementType: '201', ValidatedMovementType: '201', CostCenter: '1011202902', Material: '1000000980' }))
+      .rejects.toMatchObject({ status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' });
   });
 
 

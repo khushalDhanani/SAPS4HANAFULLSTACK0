@@ -7,6 +7,14 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **P1 · Movement-Type Fidelity — IMPLEMENTED; non-prod SAP proof and CAP-hosted queue suite pending (2026-10-24 15:41 IST) — IN PROGRESS:**
+  - Enforced required, exact movement type at the 261 Fiori, CAP, adapter, posting-client, mapper, outgoing payload, and read-back boundaries. 261 requests now require a numeric Order ID matching the freshly verified reservation order and reject incompatible account/destination fields before any SAP write.
+  - Added `GoodsIssue261Mapper`, `GoodsIssuePostingClient.post261`, and dispatcher routing for 261. Removed the 201 fallback and enforced exact BWART on SAP MATDOC/OData read-back; header-only MKPF evidence cannot confirm a movement. A mismatch or unconfirmed read-back fails closed as an unknown outcome.
+  - Repo-wide scan removed movement defaults that could silently supply 201, 261, 301, or 311 in reservation tracking, TR recovery, destination validation, TO creation, and UI create state. HU stock transfer now sends its explicit 311 operation. The explicit 201/241→WM 311 staging mapping in `tools/sandbox-discovery.js` remains a WM staging comparison, not an SAP inventory movement payload conversion.
+  - Follow-up audit: the posting client no longer manufactures `ValidatedMovementType`; an absent or differing upstream validation marker fails before POST. The legacy queue/replay signature carries only explicit requested/validated movement type and now preserves 261 OrderNo/OrderType. `verifyStock` requires the requested movement type and checks every SAP MATDOC/MSEG BWART exactly before continuing.
+  - Validation: 20 focused unit/integration suites, 643/643 tests passed; root ESLint passed; `npx cds compile srv --to json > /dev/null` passed; UI5 lint passed with no findings; `git diff --check` passed. The targeted CAP listener suites for reservation-entry/attempt replay remain blocked in this environment by `listen EPERM 127.0.0.1`.
+  - Limitations: `npm run validate:sap:sandbox` was READ-ONLY and failed at RFC connectivity with `CPIC ERRNO 1 Operation not permitted`; no SAP write was attempted. `test/unit/wm/sapReadBackEvidence.test.js` could not bind its local CAP listener (`listen EPERM 127.0.0.1`). Repo evidence in `docs/creatable_services_report.md` records `API_MATERIAL_DOCUMENT_SRV` as not registered (`/IWFND/MED/170`), and `ZMMIM_MATDOC_SRV` as HTTP 501. Actual non-prod 261 persistence and SAP BWART read-back remain unverified.
+
 - **P1 · Protect SAP Writes: Fail-Closed Transaction Logging, Duplicate/Concurrent & Timeout Recovery, and Controlled SAP Read-Back Evidence (2026-10-24 14:55 IST) — COMPLETED:**
   - Scope Delivered:
     1. Fail-Closed if Production Transaction Logging Is Unavailable (`srv/wm/reservation-entry/service.js`, `srv/wm/hu-stock-transfer/handlers/huStockTransfer.handler.js`):
@@ -1592,6 +1600,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Exact Next Recommended Action (Movement-Type Fidelity — 2026-10-24 15:41 IST):** In an environment where local CAP listener binding and SAP RFC are available, rerun the CAP-hosted reservation-entry/attempt replay suites and the READ-ONLY Client 220 connectivity/metadata checks. Resolve the Gateway registration for `API_MATERIAL_DOCUMENT_SRV`; then obtain explicit authorization for one scoped non-production 261 post and read-back. Verify the SAP document’s `BWART` is exactly `261`. No live write has been made by this change.
+
 - **Exact Next Recommended Action (Cross-Agent MCP Configuration — 2026-10-24 14:51 IST):** Open the repo in each target agent (especially Gemini CLI, OpenCode, Antigravity, and Cursor), restart/reload its MCP integration, and confirm both `cds-mcp` and `ui5-mcp` appear connected. Only Codex CLI is installed here; the others could not be discovery-tested in this environment.
 
 - **Exact Next Recommended Action (P1 · Enforce Quality Gates Delivered & Fully Verified — 2026-10-24 14:15 IST):** All P1 quality gates requested by the user are complete and verified:
@@ -1616,6 +1626,45 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-24 15:41 IST — Close Movement-Type Integrity Gaps in Posting, Replay, and Read-Back
+
+- **Plan:** Continue the end-to-end movement-type audit across posting-client dispatch, the deprecated queue/replay signature, and warehouse SAP read-back verification. Ensure each boundary preserves caller type and does not fill missing values.
+- **Changes:**
+  - `GoodsIssuePostingClient._assertMovementType` now requires `MovementType === ValidatedMovementType === dispatchedMovementType`; it no longer self-creates a validation marker. The 261 adapter supplies validated `261` only after `validateMovement261Payload` succeeds.
+  - Legacy positional posting/replay now accepts a separate explicit validated type, carries 261 OrderNo/OrderType through to mapping, and rejects missing movement type. Added 261 replay and missing-type regressions; corrected older legacy test fixtures to include explicit type and strict SAP read-back evidence.
+  - `ReservationProcessAdapter.verifyStock` now rejects missing movement type before SAP reads and rejects every MATDOC/MSEG row whose BWART differs from the original requested movement type. Added missing-type and 261-request/201-BWART regressions.
+- **Files changed:** `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`, `srv/integration/s4hana/wm/Mvt261Adapter.js`, `srv/integration/s4hana/wm/ReservationProcessAdapter.js`, `srv/integration/s4hana/wm/TrToAdapter.js`, `test/unit/wm/goodsIssuePerTypePostingClient.test.js`, `test/unit/wm/goodsIssueClients.test.js`, `test/unit/wm/autoMigoPosting.test.js`, and `WORKSTATUS.md`.
+- **Validation:** 20 focused suites (movement-specific validators/mappers, 201/241/261/301/311 process paths, retries/concurrency/reconciliation, legacy replay, and 261 adapter-to-client integration): **PASS, 643/643**. `npm run lint`: **PASS**. `npm --prefix app/fiori-app run lint`: **PASS**, no findings (UI5 updater could not access local config store). `npx cds compile srv --to json > /dev/null`: **PASS**. `git diff --check`: **PASS**.
+- **Blocked validation:** CAP-hosted `reservationEntryService`, attempt/replay, and SAP read-back evidence suites fail to bind their local test server in this environment (`listen EPERM 127.0.0.1`); the earlier READ-ONLY SAP sandbox check failed RFC connectivity (`CPIC ERRNO 1 Operation not permitted`). No live SAP write was attempted.
+- **SAP evidence / remaining work:** Existing repo evidence records `API_MATERIAL_DOCUMENT_SRV` as unregistered (`/IWFND/MED/170`) and `ZMMIM_MATDOC_SRV` returning HTTP 501. Live non-prod 261 post and direct SAP read-back with exact BWART remain unverified; no specific live-write authorization was provided.
+- **Next recommended action:** Rerun the blocked CAP-hosted suites in an environment that permits loopback binding, restore read-only SAP RFC/metadata access, and obtain explicit authorization for a scoped non-prod 261 write plus read-back.
+- **Assumptions:** None. Live SAP contract availability and persistence remain unknown.
+- **Done / Not done / Still unknown / Assumptions:** Done: additional movement integrity and replay/read-back safeguards plus focused tests. Not done: CAP-hosted blocked suites and live non-prod SAP posting/read-back proof. Still unknown: actual SAP persistence and exact BWART for a live 261 document. Assumptions: none.
+
+### 2026-10-24 15:12 IST — Movement-Type Fidelity: Explicit 261 Posting, Strict BWART Proof, and Fallback Audit
+
+- **Plan:** Trace 261 from Fiori to CAP, adapter, posting client, mapper, SAP payload, and read-back. Require exact request type and verified production Order; audit other movement defaults and preserve the explicit WM/SAP boundary.
+- **Changes:**
+  - Added `srv/integration/s4hana/wm/goods-issue/GoodsIssue261Mapper.js`, exported it from the goods-issue package, added `post261`, and routed 261 through `postByMovementType`. Posting client entry points reject missing or changed movement types; the legacy positional method no longer supplies 201.
+  - Updated `srv/integration/s4hana/wm/Mvt261Adapter.js`, `srv/wm/mvt261/service.js`, `srv/wm/mvt261/service.cds`, and `Scan261.controller.js`: request movement type is explicitly 261; production Order ID is required, checked against fresh reservation data, included in the SAP mapping, and included in the idempotency identity; invalid fields fail before posting.
+  - Tightened `GoodsIssuePostingClient.readBackDocument` and `_submitMaterialDocument`: every returned item BWART must exactly match the requested movement type; MKPF header-only read-back cannot confirm a movement; mismatches or unavailable proof fail closed as `GI_POSTING_OUTCOME_UNKNOWN`. Reference lookup also requires every item to match.
+  - Audited movement defaults across services/adapters/UI/tests. Removed 201 reservation-status fallback, 261 TR recovery fallback, default 301 receiving-location validation, and default 311 TO movement. Updated 301 callers to pass 301 explicitly. HU transfer uses its declared 311 operation explicitly. Removed the 311 default from test RFC echo mocks. Kept `tools/sandbox-discovery.js`'s explicit 201/241→311 mapping because it compares a WM staging TR movement, not the SAP inventory movement being posted.
+  - Updated unit/regression tests and added `test/integration/wm/mvt261ExplicitMovementType.test.js` covering adapter→posting client→mapper→payload→strict read-back, invalid types before write, exact 261 payload, and rejection of BWART 201.
+- **Files changed:** Fiori 261 and reservation-entry controllers; `srv/common/movementConfig.js`; Goods Issue and WM adapters/validators/services; new 261 mapper and integration test; 261 mapper/client/config, reservation lifecycle, and validation tests; `WORKSTATUS.md`.
+- **Validation:**
+  - `npx jest` on 15 focused suites (mapper/client/validation, 261 adapter/scan/concurrency/reconciliation, movement config, 201/241/301/311 lifecycle, and new adapter/client integration): **PASS, 624/624**.
+  - `npm run lint`: **PASS**.
+  - `npx cds compile srv --to json > /dev/null`: **PASS**.
+  - `cd app/fiori-app && npm run lint`: **PASS**, no findings; UI5 updater could not access local config store.
+  - `cd app/fiori-app && npm run build`: **PASS**; warning: missing jsPDF source map; updater could not access local config store.
+  - `git diff --check`: **PASS**.
+  - `npm run validate:sap:sandbox` (READ-ONLY): **FAIL** at RFC connectivity, `CPIC ERRNO 1 Operation not permitted`; no write was sent.
+  - The wider targeted Jest invocation that included `test/unit/wm/sapReadBackEvidence.test.js` was **BLOCKED/FAIL** for that suite because its CAP server could not bind `127.0.0.1` (`EPERM`); the 15 passing focused suites are the separate command listed above.
+- **SAP evidence and limitations:** Local metadata shows material document header/item fields used by the mapper; `docs/creatable_services_report.md` records `API_MATERIAL_DOCUMENT_SRV` not registered (`/IWFND/MED/170`) and `ZMMIM_MATDOC_SRV` returning 501. Non-prod SAP create/read-back proof was not completed. No explicit go for a specific live SAP write was provided, so none was attempted.
+- **Next recommended action:** Resolve Client 220 Gateway registration and sandbox connectivity; then obtain written authorization for a scoped non-prod 261 post and verify the SAP-generated document and exact BWART through SAP read-back.
+- **Assumptions:** None. Runtime SAP availability and persistence remain unknown.
+- **Done / Not done / Still unknown / Assumptions:** Done: implementation, default audit, and 624 automated checks. Not done: live non-prod SAP posting/read-back proof. Still unknown: SAP `BWART` persistence for a real non-prod 261 post. Assumptions: none.
 
 ### 2026-10-24 14:55 IST — P1 · Protect SAP Writes: Fail-Closed Logging, Duplicate/Concurrent & Timeout Recovery, Controlled Read-Back Evidence
 

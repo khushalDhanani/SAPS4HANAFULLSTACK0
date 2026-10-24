@@ -112,7 +112,7 @@ describe('TrToHandler', () => {
   describe('autoConfirm × autoPostMigo MIGO gate [mock only, not SAP verification]', () => {
     let resProcessAdapter;
     const mkReq = (flags) => ({
-      data: { tbnum: '1001839', qty: 3, unit: 'KG', ...flags },
+      data: { tbnum: '1001839', qty: 3, unit: 'KG', MovementType: '311', ...flags },
       user: { id: 'tester' },
       error: jest.fn()
     });
@@ -176,7 +176,7 @@ describe('TrToHandler', () => {
       const pgiErr = Object.assign(new Error('PGI failed for Outbound Delivery 0080000134: [E] Delivery has not yet been picked (completely); [E] Item 000010 requires exactly 1 serial numbers'), { status: 400, stage: 'PGI', deliveryNumber: '0080000134' });
       resProcessAdapter.postGoodsMovement = jest.fn().mockRejectedValue(pgiErr);
 
-      const result = await handlers.createTOFromTR(mkReq({ autoConfirm: true, autoPostMigo: true }));
+      const result = await handlers.createTOFromTR(mkReq({ autoConfirm: true, autoPostMigo: true, MovementType: '241' }));
 
       expect(result.DeliveryNumber).toBe('0080000134');
       expect(result.Status).toBe('90');
@@ -229,6 +229,7 @@ describe('TrToHandler', () => {
       await handlers.createTOFromTR(mkReq({
         autoConfirm: true,
         autoPostMigo: true,
+        MovementType: '201',
         ReservationMovementType: '201'
       }));
 
@@ -247,7 +248,7 @@ describe('TrToHandler', () => {
     const h = {};
     const a = { createTOFromTR: jest.fn().mockResolvedValue({ success: true, Confirmed: true, TransferOrder: '0001037400', MovementType: '301', GoodsMovementPosted: true, MaterialDocument: '4900047610', Message: 'Transfer Order 0001037400 confirmed.' }) };
     TrToHandler.init({ on: (e, fn) => { h[e] = fn; } }, { adapter: a, resProcessAdapter: { checkAuthorization: jest.fn(), postGoodsMovement } });
-    const result = await h.createTOFromTR(req({ lgnum: 'W12', tbnum: '1000891', autoConfirm: true, autoPostMigo: true }));
+    const result = await h.createTOFromTR(req({ lgnum: 'W12', tbnum: '1000891', MovementType: '301', autoConfirm: true, autoPostMigo: true }));
     expect(postGoodsMovement).not.toHaveBeenCalled();
     expect(result.MigoSkipped).toBe(true);
     expect(result.Message).toContain('material document 4900047610');
