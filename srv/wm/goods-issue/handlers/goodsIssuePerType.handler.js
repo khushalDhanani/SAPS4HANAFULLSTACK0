@@ -628,5 +628,6 @@ PerTypeGoodsIssueHandler.classifyPostingError = classifyPostingError;
 PerTypeGoodsIssueHandler.isDefinitiveRejection = isDefinitiveRejection;
 PerTypeGoodsIssueHandler.postDirect = postDirect;
 PerTypeGoodsIssueHandler.attemptResponse = attemptResponse;
+PerTypeGoodsIssueHandler.checkPendingConfirmation = checkPendingConfirmation;
 
 module.exports = PerTypeGoodsIssueHandler;

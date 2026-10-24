@@ -7,6 +7,71 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Phase 3 — Operational Resiliency, Observability & Error Recovery: Background Re-Checks, Audit Traceability, Dead-Letter Resolution & Queue Gating (2026-10-24 12:05 IST) — COMPLETED:**
+  - Scope Delivered:
+    1. Automated Background Re-Check & Orphan Transaction Reconciliation:
+       - Tested and verified `GoodsIssueAttemptStore.recheck` temporal age thresholds: ignores attempts younger than 3 minutes (< 3 min); rechecks attempts between 3 and 15 minutes keeping status open if still absent; transitions attempts absent in SAP after 15 minutes to definitive `not_posted`.
+       - Verified reconciliation with SAP outbound deliveries: converts delivery creation (SAP message L9/514) to `delivery_created` and captures `DeliveryNumber`.
+       - Verified candidate delivery ambiguity: keeps attempt status open (`StillOpen`) if multiple matching deliveries are found in SAP without unambiguous mapping.
+       - Verified resilience against network errors: preserves attempt status on network blips or temporary query failures.
+       - Verified `GoodsIssueAttemptStore.reconfirmUnconfirmed`: promotes `unconfirmed` attempts to `posted` when read-back confirms SAP persistence; transitions stale unconfirmed attempts older than 30 minutes to `needs-attention` for manual supervisor review.
+       - Test suite: `test/unit/wm/attemptRecheckLifecycle.test.js` (9 tests, 100% passing).
+    2. End-to-End Audit Traceability, Correlation ID Tracking & Secret Redaction:
+       - Verified CAP request correlation ID propagation (`x-correlation-id` / `cds.context.id`) across application logs (`[label] [correlation-id] - message`).
+       - Verified sensitive header stripping in `S4HttpClient`: completely strips `Authorization`, `Cookie`, and `x-csrf-token` before logging or returning client diagnostics.
+       - Verified Gateway error sanitization via `S4HttpClient.toS4HttpError`: extracts clean SAP error messages (`code`, `message`, `details`) without leaking internal Gateway stack traces, URLs, or hostnames.
+       - Verified production guardrails in `srv/common/productionGuard.js`: `assertDevFlagsOff` throws `ProductionGuardError` in production on any active dev/mock flag (`USE_MOCK_DATA`, `ALLOW_INSECURE_CERTS`, `ALLOW_DEV_SHORTCIRCUIT`); `assertS4ConnectionConfig` enforces BTP managed destinations and strictly forbids raw credentials (`S4_USERNAME`, `S4_PASSWORD`) in production.
+       - Verified RFC client production enforcement in `srv/common/rfc/RfcClient.js`: `resolveConnectionParams` forbids direct user/pass configurations in production and mandates BTP RFC destination.
+       - Test suite: `test/unit/wm/auditTraceability.test.js` (15 tests, 100% passing).
+    3. Operational Error Classification, Pending-State Gating & Response States:
+       - Verified operational error taxonomy in `classifyPostingError`:
+         - `never_reached`: HTTP 503, connection refused, DNS lookup failure, and Gateway inactive (`/IWFND/MED/170`) classified as definitive non-execution (safe to retry immediately).
+         - `auth_error`: HTTP 401/403 classified as configuration/credential errors pointing to SAP SU53 authorization traces.
+         - `unknown_outcome`: HTTP 504 gateway timeout, socket timeout, and connection resets mid-call classified as indeterminate outcomes (safe to NOT re-post; triggers background re-check / manual verification).
+         - `rejected_by_sap`: HTTP 400/422 business validation rejections mapped directly to SAP business diagnostics.
+       - Verified concurrency and pending confirmation gating via `PerTypeGoodsIssueHandler.checkPendingConfirmation`: blocks concurrent duplicate submissions with HTTP 409 Conflict when a reservation item has an in-flight or unconfirmed attempt; returns cached attempt response when identical `ClientAttemptId` is resent.
+       - Verified clear, honest client payloads via `attemptResponse`: maps `POSTED`, `QUEUED`, `DELIVERY_CREATED`, `FAILED`, and `UNKNOWN` (unconfirmed) to client responses with zero synthetic document generation or fake states.
+       - Exported `checkPendingConfirmation` on `PerTypeGoodsIssueHandler` for testability.
+       - Test suite: `test/unit/wm/queueReplayResiliency.test.js` (15 tests, 100% passing).
+  - Validation:
+    - `npx jest test/unit/wm/movementMatrixLifecycle.test.js test/unit/wm/movement261MatrixLifecycle.test.js test/unit/wm/criticalTransactionAuth.test.js test/unit/wm/transactionPersistenceAndRetry.test.js test/unit/wm/attemptRecheckLifecycle.test.js test/unit/wm/auditTraceability.test.js test/unit/wm/queueReplayResiliency.test.js`: 220 of 220 tests passed (100% GREEN, 0 failures, 2.7s).
+    - `npm run test:playwright`: 6 of 6 suites passed (100% GREEN, total time ~48s).
+    - `npm run lint` (root ESLint): 0 errors, 8 pre-existing baseline warnings in unrelated files.
+    - `cd app/fiori-app && npm run lint` (ui5lint): Success! 0 findings.
+    - `npm run validate:mta`: 0 errors.
+    - `npx cds compile srv --to csn`: clean pass.
+    - `git diff --check`: 0 issues.
+
+- **Phase 2 — Gate Critical SAP Transactions: Movement-by-Movement Test Matrix, Authorization-Negative Gating, Document Persistence & Safe Retries (2026-10-24 11:55 IST) — COMPLETED:**
+  - Scope Delivered:
+    1. Movement-by-Movement Test Matrix (100% across all 5 movements):
+       - Built comprehensive lifecycle test matrices covering all 5 warehouse movement types (201 Cost Center, 241 Asset, 261 Internal Order, 301 Plant-to-Plant, 311 SLoc-to-SLoc).
+       - Validated complete state progressions: Reservation Create -> TR -> TO -> TO Confirmation -> MIGO / Material Document Posting -> Stock Verification.
+       - Validated negative failure paths across all movement types: stock deficit (422), invalid/closed reservation (404), unreleased/closed order (400), backflush component protection (blocking duplicate manual issue), missing storage location, cross-plant configuration issues, and RFC failures.
+       - Validated failure-first rollbacks and fix-and-retry workflows.
+       - Test suites: `test/unit/wm/movementMatrixLifecycle.test.js` (104 tests) and `test/unit/wm/movement261MatrixLifecycle.test.js` (23 tests) -> 127/127 tests passing.
+    2. Authorization-Negative & Privilege Escalation Gating:
+       - Created dedicated test suite `test/unit/wm/criticalTransactionAuth.test.js` (37 tests) gating all critical write transactions:
+         - `ReservationEntryService` (7 write actions: `createReservation`, `createTransferRequirement`, `createTOFromTR`, `confirmTransferOrder`, `createReservationEntry`, `postMigoGoodsMovement`, `executeReservationWarehouseFlow`): rejects unauthenticated requests (401), rejects read-only Viewer `bob` (403), permits authorized WarehouseClerk `carol`.
+         - `GoodsIssueService` (`postGoodsIssue201`, `postGoodsIssue301`, `postGoodsIssue311`): gates unauthenticated (401) and Viewer (403); permits clerk `carol`.
+         - Privilege Escalation Protection: `GoodsIssueService.recheckPostingAttempts` and `Mvt261Service.reverse` reject WarehouseClerk `carol` with 403 Forbidden (preventing privilege escalation); permits Manager/Admin `alice`.
+         - Plant Scope Enforcement: `Mvt261Service` verifies plant scope; rejects out-of-scope clerk `dave` (plant 1130 scope accessing plant 1120) with 403, and rejects user without plant scope (`eve`) with 403.
+         - Backend RFC Auth Failure & Leak Prevention: Verified safe handling of `USER_NOT_AUTHORIZED` and `BAPI_GOODSMVT_CREATE` authorization failure without leaking passwords, tokens, or system credentials.
+    3. Document Persistence & Safe Retry Handling:
+       - Created dedicated test suite `test/unit/wm/transactionPersistenceAndRetry.test.js` (17 tests):
+         - Genuine SAP Document Number Enforcement: Confirms genuine 10-digit SAP numbers; rejects empty, whitespace, and placeholder inputs (`___`, `xxxxx`, `0000000000`); throws 504 `GI_POSTING_OUTCOME_UNKNOWN` on HTTP 2xx without material document numbers.
+         - Document Persistence Verification: Verifies MATDOC / MSEG read-back in `ReservationProcessAdapter`; fails closed (500) when document cannot be found in SAP tables; fails closed (400) on field mismatch (plant, sloc, movement type, material). Verifies LTAK/LTAP TO persistence.
+         - Multi-Tier Persistence Read-Back: `GoodsIssuePostingClient.readBackDocument` verifies MATDOC (Tier 1) -> MKPF (Tier 2) -> OData -> pending confirmation. `Mvt261Adapter.readBackDocument` verifies MATDOC via RFC.
+         - Safe Retries & Idempotency: `GoodsIssueAttemptStore` verifies identical request returns existing attempt without calling SAP; detects reference collisions with 409 Conflict; enables generation-suffix safe re-claims (`GI...0` -> `GI...1`) after rejected/failed attempts while preserving audit trail. `HuStockTransferAdapter` verifies idempotency caching on `ClientAttemptId` and BAPI rollback on rejection. `ReservationProcessAdapter` verifies multi-stage transition tracking and safe retry from failed stages.
+  - Validation:
+    - `npx jest test/unit/wm/movementMatrixLifecycle.test.js test/unit/wm/movement261MatrixLifecycle.test.js test/unit/wm/criticalTransactionAuth.test.js test/unit/wm/transactionPersistenceAndRetry.test.js`: 181 of 181 tests passed (100% GREEN, 0 failures).
+    - `npm run test:playwright`: 6 of 6 suites passed (100% GREEN).
+    - `npm run lint` (root ESLint): 0 errors.
+    - `cd app/fiori-app && npm run lint` (ui5lint): 0 findings.
+    - `npm run validate:mta`: 0 errors.
+    - `npx cds compile srv --to csn`: clean pass.
+    - `git diff --check`: 0 issues.
+
 - **Phase 1 — Fix the Testing Foundation: Portable Playwright, Strict Pass/Fail Logic, CI Branch Coverage & Build Test Artifacts (2026-10-24 11:25 IST) — COMPLETED:**
   - Scope Delivered:
     1. Portable Playwright Resolution: Removed hardcoded user-specific cache paths (`/Users/khushaldhanani/Library/Caches/ms-playwright-go/...`) across all E2E test suites. Added `playwright@1.57.0` to project `devDependencies` and created `test/e2e/playwrightLoader.js` supporting standard `require('playwright')`, `playwright-core`, `PLAYWRIGHT_PATH` environment overrides, and user-cache fallback paths.
@@ -1249,7 +1314,78 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Exact Next Recommended Action (Phase 3 Operational Resiliency, Observability & Error Recovery Complete — 2026-10-24 12:05 IST):** Phase 3 requirements delivered and validated: automated background re-check job & orphan transaction reconciliation (`test/unit/wm/attemptRecheckLifecycle.test.js`), end-to-end audit traceability, correlation ID tracking, and secret redaction (`test/unit/wm/auditTraceability.test.js`), and operational error taxonomy, pending confirmation gating, and response states (`test/unit/wm/queueReplayResiliency.test.js`). 220 of 220 combined unit and lifecycle tests passing (100% GREEN), 6 of 6 Playwright E2E suites passing cleanly. Await user instructions for next objectives or PR review.
+- **Exact Next Recommended Action (Phase 2 Critical SAP Transactions Gated — 2026-10-24 11:55 IST):** Phase 2 deliverables complete: 181/181 unit & integration tests passing across all 5 movement types (201, 241, 261, 301, 311), authorization-negative gates (401, 403, privilege escalation, plant scope, credential leak prevention), document persistence verification (MATDOC, MSEG, LTAK), and safe retry / idempotency mechanisms (GoodsIssueAttemptStore generation re-claims, HuStockTransfer idempotency, multi-stage retry). All 6 Playwright E2E suites passing cleanly. Await user instructions for Phase 3.
 - **Exact Next Recommended Action (Phase 1 Testing Foundation Complete — 2026-10-24 11:25 IST):** Phase 1 requirements delivered and validated: Playwright portability established (`test/e2e/playwrightLoader.js`, `devDependencies`), strict exit code and failure assertion logic enforced across all 6 suites, CI updated for `feature01` branch pushes/PRs, test results and screenshots published as build artifacts, and 6/6 Playwright E2E suites passing cleanly. Await user instructions for Phase 2.
+
+## Changes Log
+
+### 2026-10-24 12:05 IST — Phase 3: Operational Resiliency, Observability & Error Recovery (Background Re-Checks, Audit Traceability, Dead-Letter Resolution & Queue Gating)
+
+- **Plan:**
+  - Execute Phase 3 requirements:
+    1. Background re-check and orphan transaction reconciliation:
+       - Validate age thresholds (< 3 min ignored, 3-15 min kept open, > 15 min marked `not_posted`).
+       - Validate outbound delivery conversion (SAP message L9/514 -> `delivery_created`, `DeliveryNumber` extraction).
+       - Validate ambiguous candidate deliveries handling (status kept open).
+       - Validate `reconfirmUnconfirmed` job promoting `unconfirmed` attempts to `posted` upon read-back confirmation, or `needs-attention` after 30 minutes.
+    2. Audit traceability, correlation ID propagation and secret redaction:
+       - Propagate CAP correlation ID (`cds.context.id`) across application logs (`[label] [correlation-id] - message`).
+       - Enforce header sanitization in `S4HttpClient` stripping `Authorization`, `Cookie`, and `x-csrf-token`.
+       - Enforce error sanitization via `S4HttpClient.toS4HttpError` without leaking Gateway stack traces.
+       - Enforce production guardrails in `srv/common/productionGuard.js` (forbidding dev flags and raw credentials in production).
+       - Enforce RFC client production destination resolution in `srv/common/rfc/RfcClient.js`.
+    3. Operational error classification, pending-state gating & response states:
+       - Taxonomy verification in `classifyPostingError` (`never_reached` -> 503, `auth_error` -> 403, `unknown_outcome` -> 504/500, `rejected_by_sap` -> 400/422).
+       - Concurrency & pending confirmation gating via `PerTypeGoodsIssueHandler.checkPendingConfirmation` (409 Conflict on in-flight/unconfirmed attempt, cached attempt response on duplicate `ClientAttemptId`).
+       - Clean client payload mapping via `attemptResponse` (`POSTED`, `QUEUED`, `DELIVERY_CREATED`, `FAILED`, `UNKNOWN`).
+  - Read-only SAP discipline; zero live SAP mutations.
+- **Evidence & Results:**
+  - Files modified / created:
+    - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`: Exported `checkPendingConfirmation` on `PerTypeGoodsIssueHandler`.
+    - `test/unit/wm/attemptRecheckLifecycle.test.js`: 9 unit tests covering age thresholds, outbound delivery conversion, ambiguous candidate delivery handling, network error tolerance, and unconfirmed promotion/escalation.
+    - `test/unit/wm/auditTraceability.test.js`: 15 unit tests covering correlation ID logging, HTTP header stripping, error sanitization, production guardrails, and RFC destination resolution.
+    - `test/unit/wm/queueReplayResiliency.test.js`: 15 unit tests covering error classification, pending confirmation 409 gating, duplicate request caching, and honest attempt response mappings.
+  - Verification Commands Run:
+    - `npx jest test/unit/wm/movementMatrixLifecycle.test.js test/unit/wm/movement261MatrixLifecycle.test.js test/unit/wm/criticalTransactionAuth.test.js test/unit/wm/transactionPersistenceAndRetry.test.js test/unit/wm/attemptRecheckLifecycle.test.js test/unit/wm/auditTraceability.test.js test/unit/wm/queueReplayResiliency.test.js`: 220 passed, 220 total (100% GREEN, 0 failures, 2.7s).
+    - `npx jest test/unit/wm/attemptRecheckLifecycle.test.js test/unit/wm/auditTraceability.test.js test/unit/wm/queueReplayResiliency.test.js`: 39 passed, 39 total (100% GREEN, 0 failures, 2.1s).
+    - `npm run test:playwright`: 6 passed, 6 total (100% GREEN, total time ~48s).
+    - `npm run lint` (root ESLint): 0 errors, 8 pre-existing baseline warnings in unrelated files.
+    - `cd app/fiori-app && npm run lint` (ui5lint): Success! 0 findings.
+    - `npm run validate:mta`: 0 errors.
+    - `npx cds compile srv --to csn`: clean pass.
+    - `git diff --check`: 0 issues.
+- **Errors / Blockers:**
+  - None. All 39 Phase 3 tests, 220 combined tests, and 6 Playwright E2E suites passing cleanly.
+- **Exact Next Recommended Action:**
+  - Phase 3 complete. Await user instructions for next steps or PR review.
+
+### 2026-10-24 11:55 IST — Phase 2: Gate Critical SAP Transactions (Movement Matrix, Authorization-Negative Tests, Document Persistence & Safe Retries)
+
+- **Plan:**
+  - Execute Phase 2 requirements:
+    1. Movement-by-movement test matrix covering all 5 movement types (201, 241, 261, 301, 311), validating complete happy paths, negative/failure paths, and retry flows.
+    2. Authorization-negative and privilege escalation gating tests covering all write transactions across CAP services (`ReservationEntryService`, `GoodsIssueService`, `Mvt261Service`, `HuStockTransferService`), verifying 401 unauthenticated, 403 viewer, 403 privilege escalation blocks, out-of-scope plant blocks, and backend RFC error sanitization without secret leaks.
+    3. Document persistence verification and safe retry handling: genuine document number enforcement, rejection of placeholders (`___`, `xxxxx`, `0000000000`), persistence read-back verification against SAP tables (`MATDOC`, `MSEG`, `LTAK`), and idempotent replay / collision / generation re-claim logic in `GoodsIssueAttemptStore` and `HuStockTransferAdapter`.
+  - Zero live SAP writes or mutations; mock-only verification.
+- **Evidence & Results:**
+  - Files created / modified:
+    - `test/unit/wm/movementMatrixLifecycle.test.js`: 104 tests covering complete movement lifecycle across 201 (Cost Center), 241 (Asset), 301 (Plant-to-Plant), and 311 (SLoc-to-SLoc).
+    - `test/unit/wm/movement261MatrixLifecycle.test.js`: 23 tests covering Movement 261 lifecycle: happy path, 15 failure paths (unreleased order, locked order, deleted reservation, backflushed component, stock deficit, blocked quant), failure-first rollback, and 6 fixes/retries.
+    - `test/unit/wm/criticalTransactionAuth.test.js`: 37 tests gating all critical write operations across `ReservationEntryService` (7 write actions), `GoodsIssueService` (3 posting actions + `recheckPostingAttempts` privilege escalation gate), `Mvt261Service` (post, reverse privilege escalation, plant scoping for `dave` and `eve`), `HuStockTransferService`, and RFC backend authorization error handling (`USER_NOT_AUTHORIZED` and `BAPI_GOODSMVT_CREATE` auth failures) preventing credential leaks.
+    - `test/unit/wm/transactionPersistenceAndRetry.test.js`: 17 tests enforcing genuine document numbers, placeholder rejection, 504 `GI_POSTING_OUTCOME_UNKNOWN` on empty 2xx, MATDOC/MSEG persistence checks, multi-tier read-back (MATDOC -> MKPF -> OData), idempotent replays, 409 collision errors, generation re-claims (`GI...0` -> `GI...1`), multi-stage process recovery, and BAPI rollback on failed transfers.
+  - Verification Commands Run:
+    - `npx jest test/unit/wm/movementMatrixLifecycle.test.js test/unit/wm/movement261MatrixLifecycle.test.js test/unit/wm/criticalTransactionAuth.test.js test/unit/wm/transactionPersistenceAndRetry.test.js`: 181 passed, 181 total (100% GREEN, 0 failures, execution time 2.4s).
+    - `npm run test:playwright`: 6 passed, 6 total (100% GREEN, execution time ~47s).
+    - `npm run lint` (root ESLint): 0 errors, 8 pre-existing baseline warnings in unrelated files.
+    - `cd app/fiori-app && npm run lint` (ui5lint): Success! No findings detected.
+    - `npm run validate:mta`: 0 errors.
+    - `npx cds compile srv --to csn`: clean pass.
+    - `git diff --check`: 0 issues.
+- **Errors / Blockers:**
+  - None. All 181 Phase 2 unit/integration tests and all 6 Playwright E2E suites passing cleanly.
+- **Exact Next Recommended Action:**
+  - Phase 2 complete. Await user instructions for Phase 3.
 - **Exact Next Recommended Action (T319A decision and Path A execution gate — 2026-10-23 14:25 IST):** Await the SAP functional consultant's decision on warehouse W01 customizing (`V_T319A`: `E10` vs `E1`) and CTS transport release to QA/PRD. Pre-requisite code for Path A (shared shipping classification, NO_T319A_ROW as warning, BusinessConfigResolver storage rules, competing reservation comparator) is fully tested. Do NOT run tools/simulate-res-311-bapi.js or complete delivery 0080000134 without explicit written user "GO".
 - **Exact Next Recommended Action (rack test-data discovery and follow-up plan — 2026-10-23 11:31 IST):** Before implementing `rackLayout()`, verify whether SAP has an authoritative planned-position source for the “no bin maintained” state. LAGP can enumerate maintained bins, but its absence alone cannot distinguish an unmaintained physical slot from a position that does not exist. Confirm the actual RFC_READ_TABLE row-limit/paging capability before choosing pagination. Keep the XHUPF-blank banner/standard 311 route as a plan until requested for implementation.
 - **Exact Next Recommended Action (rack diagnostic for reservation 527868/1 — 2026-10-23 11:22 IST):** Treat reservation `527868/1` as transfer-bin stock; choose a reservation item whose read returns verified rack-pattern bins to see populated rack positions. Triage the existing full Jest failures separately before treating the repository regression suite as green. Do not infer empty bins or change SAP logic based on this diagnostic.
