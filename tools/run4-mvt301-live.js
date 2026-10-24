@@ -45,6 +45,7 @@ async function run4() {
     // ------------------------------------------------------------------
     console.log('--- Step 1: POST /odata/v4/reservation-entry/createReservationEntry (Mvt 301) ---');
     const resPayload = {
+      ClientAttemptId: 'RUN4-' + Date.now(),
       MovementType: '301',
       Plant: '1120',
       StorageLocation: 'CS01',
@@ -129,19 +130,23 @@ async function run4() {
     console.log(`\n==> SAP Transfer Order Number: ${tanum} | Status: ${toStatus} | Confirmed: ${toConfirmed}`);
 
     // Read back TO directly from SAP LTAK / LTAP via RFC
-    console.log('\n--- Reading back TO directly from SAP via RFC (LTAK / LTAP) ---');
-    const s4Tanum = tanum.padStart(10, '0');
-    const ltakRows = await rfc.readTable('LTAK', ['LGNUM', 'TANUM', 'BWLVS', 'TBNUM', 'KQUIT', 'BNAME', 'BDATU'], [
-      "LGNUM = 'W01'",
-      `AND TANUM = '${s4Tanum}'`
-    ]);
-    console.log('SAP LTAK (Header):', ltakRows[0]);
+    if (tanum && tanum !== 'NONE') {
+      console.log('\n--- Reading back TO directly from SAP via RFC (LTAK / LTAP) ---');
+      const s4Tanum = tanum.padStart(10, '0');
+      const ltakRows = await rfc.readTable('LTAK', ['LGNUM', 'TANUM', 'BWLVS', 'TBNUM', 'KQUIT', 'BNAME', 'BDATU'], [
+        "LGNUM = 'W01'",
+        `AND TANUM = '${s4Tanum}'`
+      ]);
+      console.log('SAP LTAK (Header):', ltakRows[0]);
 
-    const ltapRows = await rfc.readTable('LTAP', ['LGNUM', 'TANUM', 'TAPOS', 'MATNR', 'VLTYP', 'VLPLA', 'NLTYP', 'NLPLA', 'PQUIT', 'NSOLA'], [
-      "LGNUM = 'W01'",
-      `AND TANUM = '${s4Tanum}'`
-    ]);
-    console.log('SAP LTAP (Item):', ltapRows[0]);
+      const ltapRows = await rfc.readTable('LTAP', ['LGNUM', 'TANUM', 'TAPOS', 'MATNR', 'VLTYP', 'VLPLA', 'NLTYP', 'NLPLA', 'PQUIT', 'NSOLA'], [
+        "LGNUM = 'W01'",
+        `AND TANUM = '${s4Tanum}'`
+      ]);
+      console.log('SAP LTAP (Item):', ltapRows[0]);
+    } else {
+      console.log('\n--- Stock already staged; TR completed by SAP without a TO (PP-WM quantity reduction) ---');
+    }
 
     // ------------------------------------------------------------------
     // STEP 3: MIGO GOODS MOVEMENT (TRANSFER POSTING 301 PLANT TO PLANT)

@@ -10,6 +10,7 @@ yarn-error.log*
 # Environment & Secrets
 .env
 .env.*
+.env.local
 !.env.example
 default-env.json
 default-services.json

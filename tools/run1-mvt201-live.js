@@ -90,6 +90,45 @@ async function run1() {
           `AND TANUM = '${tanum}'`
         ]);
         console.log('SAP LTAP (Item):', ltapRows[0]);
+      } else {
+        console.log('No TO found in LTAK yet for TR ' + tbnum + '. Proceeding to Step 2...');
+        console.log('\n--- Step 2: POST /odata/v4/tr-to/createTOFromTR (Chained Create + Confirm) ---');
+        const toPayload = {
+          lgnum: 'W01',
+          tbnum: tbnum.padStart(10, '0'),
+          tbpos: '0001',
+          qty: 1,
+          unit: 'NOS',
+          autoConfirm: true,
+          serials: ['ABS1234567']
+        };
+        console.log('Request Payload:', JSON.stringify(toPayload, null, 2));
+
+        const toResponse = await postJson(
+          `${CAP_BASE}/odata/v4/tr-to/createTOFromTR`,
+          toPayload
+        );
+        console.log('\n[CAP Response - Step 2]:', JSON.stringify(toResponse, null, 2));
+
+        tanum = toResponse.TransferOrder;
+        const toStatus = toResponse.Status;
+        const toConfirmed = toResponse.Confirmed;
+        console.log(`\n==> SAP Transfer Order Number: ${tanum} | Status: ${toStatus} | Confirmed: ${toConfirmed}`);
+
+        // Read back TO directly from SAP LTAK / LTAP via RFC
+        console.log('\n--- Reading back TO directly from SAP via RFC (LTAK / LTAP) ---');
+        const s4Tanum = tanum.padStart(10, '0');
+        const ltakPostRows = await rfc.readTable('LTAK', ['LGNUM', 'TANUM', 'BWLVS', 'TBNUM', 'KQUIT', 'BNAME', 'BDATU'], [
+          "LGNUM = 'W01'",
+          `AND TANUM = '${s4Tanum}'`
+        ]);
+        console.log('SAP LTAK (Header):', ltakPostRows[0]);
+
+        const ltapPostRows = await rfc.readTable('LTAP', ['LGNUM', 'TANUM', 'TAPOS', 'MATNR', 'VLTYP', 'VLPLA', 'NLTYP', 'NLPLA', 'PQUIT', 'NSOLA'], [
+          "LGNUM = 'W01'",
+          `AND TANUM = '${s4Tanum}'`
+        ]);
+        console.log('SAP LTAP (Item):', ltapPostRows[0]);
       }
     }
   } else {
@@ -180,7 +219,8 @@ async function run1() {
       tbpos: '0001',
       qty: 1,
       unit: 'NOS',
-      autoConfirm: true
+      autoConfirm: true,
+      serials: ['ABS1234567']
     };
     console.log('Request Payload:', JSON.stringify(toPayload, null, 2));
 

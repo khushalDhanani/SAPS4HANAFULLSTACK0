@@ -6,7 +6,8 @@ const { sapKey, sapKeyOpt, httpError } = require('../sapKey');
 const { resolveWarehouse } = require('./warehouseResolver');
 const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
 const { isMismatchOverrideEnabled } = require('../../../common/wmMismatchOverrideGuard');
-const { isToFullyConfirmed, findUnconfirmedToItems, getHuConfirmationItems } = require('./toState');
+const crypto = require('crypto');
+const { isToFullyConfirmed, findUnconfirmedToItems, getHuConfirmationItems, trCompletedWithoutTo } = require('./toState');
 const { checkAuthorization } = require('./authCheck');
 const plantScope = require('../../../wm/handling-unit/plantScope');
 
@@ -2198,6 +2199,57 @@ class TrToAdapter {
       }
 
       if (res?.EV_SUCCESS !== 'S' || !res.EV_TANUM) {
+        if (this.rfc && (res?.EV_MESSAGE?.includes('XFELD_WRONG') || res?.EV_MESSAGE?.includes('already completed'))) {
+          const done = await trCompletedWithoutTo(this.rfc, wh, tr.Tbnum);
+          if (done) {
+            LOG.info(`TR ${tr.Tbnum} was completed by SAP without a TO (PP-WM quantity reduction, stock already in ${done.nltyp}/${done.nlpla}).`);
+            return {
+              success: true,
+              trNumber: alphaOut(tr.Tbnum),
+              toNumber: 'NONE',
+              toItem: '0000',
+              confirmed: true,
+              TransferOrder: 'NONE',
+              TransferRequirement: alphaOut(tr.Tbnum),
+              TRItem: item?.Tbpos || '0001',
+              ReservationNo: alphaOut(tr.Rsnum || ''),
+              ReservationItem: '1',
+              ReservationMovementType: tr.Bwlvs,
+              MovementType: tr.Bwlvs,
+              MaterialDocument: '',
+              MaterialDocYear: '0000',
+              GoodsMovementPosted: false,
+              CostCenter: tr.Betyp === 'K' ? alphaOut(tr.Benum || '') : '',
+              AssetNo: tr.Betyp === 'A' ? alphaOut(tr.Benum || '') : '',
+              SubNumber: '',
+              OrderID: tr.Betyp === 'F' ? alphaOut(tr.Benum || '') : '',
+              ReceivingPlant: '',
+              ReceivingStorageLocation: '',
+              Betyp: tr.Betyp || '',
+              Benum: tr.Benum || '',
+              Status: STATUS.TO_CONFIRMED,
+              StatusText: 'Stock Already Staged (TR Complete)',
+              Confirmed: true,
+              IsConfirmed: true,
+              ConfirmationNumber: 'NONE',
+              ConfirmedBy: 'SAP',
+              ErrorStep: '',
+              ErrorMessage: '',
+              Material: item.Material,
+              MaterialName: '',
+              Plant: item.Plant,
+              StorageLocation: item.StorageLocation,
+              Quantity: quantity,
+              ConfirmedQuantity: quantity,
+              Unit: unit || item.Unit,
+              Batch: selectedBatch,
+              Serials: serialList,
+              Success: true,
+              Message: `Transfer Requirement ${alphaOut(tr.Tbnum)} was completed by SAP (stock already staged in ${done.nltyp}/${done.nlpla}).`,
+              ProcessId: crypto.randomUUID()
+            };
+          }
+        }
         let errMsg = res?.EV_MESSAGE;
         if (!errMsg && Array.isArray(res?.ET_MESSAGES) && res.ET_MESSAGES.length > 0) {
           errMsg = res.ET_MESSAGES.map((m) => m.MESSAGE).filter(Boolean).join('; ');

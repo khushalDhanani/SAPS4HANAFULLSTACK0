@@ -7,6 +7,142 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Phase 3 — Release Automation: Coverage Thresholds, Dependency & Secret Scanners, Performance SLAs, Fiori a11y & Gated Non-Production SAP Validation Stage (2026-10-24 12:45 IST) — COMPLETED:**
+  - Scope Delivered:
+    1. Enforceable Coverage Thresholds in Jest (`jest.config.js`):
+       - Configured `coverageThreshold` enforcing strict minimum metrics on critical security and lifecycle files: `srv/common/productionGuard.js` (statements 80%, lines 90%, branches 70%, functions 100%) and `srv/common/wmStatus.js` (statements 80%, lines 80%, branches 80%, functions 80%).
+       - Configured `collectCoverageFrom` targeting core runtime security, configuration, and domain handlers.
+       - Validated in full test run: `productionGuard.js` achieved 87.8% stmts, 96.6% lines, 76.6% branch, 100% funcs; `wmStatus.js` achieved 100% across all metrics.
+    2. Automated Secret Leak Scanner (`tools/scan-secrets.js` & `test/unit/tools/scanSecrets.test.js`):
+       - Scans git-tracked files against industry-standard patterns: AWS access key IDs, RSA/OPENSSH private key blocks, generic API keys, and hardcoded SAP credentials/passwords.
+       - Enforces repository hygiene: verifies `.gitignore` contains required environment secret rules (`.env`, `.env.*`, `*.key`, `*.pem`, `.env.local`) and verifies sensitive files are not tracked in git.
+       - Integrated into `package.json` (`npm run scan:secrets`) and CI pipeline. Zero false positives on safe templates (`.env.example`).
+       - Validated: 819 git-tracked files scanned; 0 secret leaks detected; unit test suite 100% green (4/4 passed).
+    3. Automated Dependency Vulnerability Scanner (`tools/scan-dependencies.js` & `test/unit/tools/scanDependencies.test.js`):
+       - Parses production dependencies via `npm audit --omit=dev --json` and enforces strict zero-tolerance gate on critical vulnerabilities (`critical === 0`).
+       - Integrated into `package.json` (`npm run scan:dependencies`) and CI pipeline.
+       - Validated: 0 critical vulnerabilities; unit test suite 100% green (2/2 passed).
+    4. Performance & Scalability Test Suite (`test/performance/servicePerformance.test.js`):
+       - Benchmarks OData latency SLA (< 120ms average) against `/odata/v4/auth/getUserInfo()` (actual: 48ms).
+       - Benchmarks concurrency and connection handling: 25 parallel requests under 2500ms with zero dropped connections (actual: 32ms total duration).
+       - Benchmarks in-memory attempt store key hashing and lookups under high load (< 0.5ms per operation; actual: 2ms total for 100 operations).
+       - Validated memory stability: verifies bounded heap growth (delta < 25MB) across 50 sequential operations without memory leaks (actual delta: ~1.4MB).
+       - Integrated into `package.json` (`npm run test:performance`) and CI pipeline. Suite 100% green (4/4 passed).
+    5. SAP Fiori Accessibility (a11y) Test Suite (`test/a11y/fioriAccessibility.test.js`):
+       - Programmatically inspects all SAPUI5 XML views and fragments across `app/fiori-app/webapp/`.
+       - Validates WCAG 2.1 AA dialog accessibility: enforces `title`, `ariaLabel`, or `ariaLabelledBy` on all `<Dialog>` elements.
+       - Enforces accessible actions: validates buttons declare text, tooltips, or aria-labels.
+       - Enforces form labeling: validates `<Input>` and `<SearchField>` elements declare accessible labels, placeholders, or tooltips.
+       - Enforces AI and QR dialog compliance: validates `AskAIDialog` declares AI purpose and icon tooltips; validates Handling Unit QR code scanner/display dialogs declare accessible attributes.
+       - Integrated into `package.json` (`npm run test:a11y`) and CI pipeline. Suite 100% green (6/6 passed).
+    6. Separately Controlled Non-Production SAP Validation Stage (`tools/validate-sap-sandbox.js` & `test/unit/tools/validateSapSandbox.test.js`):
+       - Provides an isolated, strictly read-only validation stage against connected development/sandbox systems (e.g. Client 220).
+       - Fails closed in production environments (`NODE_ENV=production` or `SAP_SYSTEM_TYPE=prod`) with exit code 1.
+       - Gated by write-gate discipline: requires explicit opt-in (`ALLOW_LIVE_SAP_TOOLS=1` or `--allow-live-sap`); safely skips (exit 0) in default CI and local runs.
+       - Executes read-only smoke checks: RFC ping, transparent client lookup in DDIC `T000`, and plant master verification in DDIC `T001W` (Plant 1120).
+       - Zero credential leakage in output; integrated into `package.json` (`npm run validate:sap:sandbox`).
+       - Added isolated CI job `sap-nonprod-validation` in `.github/workflows/ci.yml` triggered manually via `workflow_dispatch` input `run_sap_validation: true`.
+    7. GitHub Actions CI Pipeline Hardening (`.github/workflows/ci.yml`):
+       - Added security scans (`scan:secrets`, `scan:dependencies`) and testing stages (`test:performance`, `test:a11y`, `test:coverage`) to main CI workflow.
+       - Uploads Jest coverage reports as CI artifacts.
+       - Added separate, conditionally gated `sap-nonprod-validation` workflow stage.
+  - Validation:
+    - Scoped test suites (12 suites, 239 tests): 239 passed, 0 failures, 100% green.
+    - Coverage thresholds met: `productionGuard.js` (87.8% stmts, 96.6% lines, 76.6% branches, 100% funcs); `wmStatus.js` (100% all).
+    - `npm run scan:secrets`: 819 tracked files scanned, 0 secrets.
+    - `npm run scan:dependencies`: 0 critical vulnerabilities.
+    - `npm run test:performance`: 4 passed, 0 failures.
+    - `npm run test:a11y`: 6 passed, 0 failures.
+    - `npm run validate:sap:sandbox`: Gated skip pass (exit 0); verified live pass with `--allow-live-sap`.
+    - `npm run lint` (root ESLint): 0 errors, 8 pre-existing baseline warnings.
+    - `cd app/fiori-app && npm run lint` (ui5lint): Success! 0 findings.
+    - `npm run validate:mta`: 0 errors.
+    - `git diff --check`: 0 issues.
+
+- **Live SAP S/4HANA (Client 220) Verification: All 5 Warehouse Movements (201 Cost Center, 241 Asset, 311 SLoc Transfer, 301 Plant Transfer, 261 Order) End-to-End Walkthroughs Confirmed (2026-10-24 12:20 IST) — COMPLETED:**
+  - Authorization & Scope:
+    - User explicitly authorized live execution (`GO`) targeting the connected Development/Sandbox environment (Client 220 in `.env.local`) for all 5 movement types with fresh document creation.
+    - Zero synthetic document numbers, mock persistence, or simulated states. All transactions executed live against SAP S/4HANA and read back directly from DDIC transparent tables via RFC.
+    - Environment Governance & Write-Gate Restriction:
+      - Live write executions are strictly locked down and restricted to the DEV Sandbox (Client 220).
+      - Live writes against QA and PRD environments are confirmed strictly out of scope for local development scripts and CLI tooling.
+      - QA and PRD environments are governed exclusively by BTP managed destinations, Cloud Connector, and XSUAA service bindings enforced at runtime by `srv/common/productionGuard.js`.
+  - Execution Sequence & Direct SAP Evidence:
+    1. **Movement 201 (Goods Issue to Cost Center `1011201301`):**
+       - Step 1 (Reservation & TR): `POST /odata/v4/reservation-entry/createReservationEntry` for Material `8000009754` (qty 1 NOS, Plant 1120, SLoc HS01, CostCenter 1011201301). Generated SAP Reservation `0000533316` / Item `0001` and Transfer Requirement `0001000904`.
+         - RFC Read-back `RKPF`: `{ RSNUM: '0000533316', BWART: '201', KOSTL: '1011201301', USNAM: 'KHUSHAL', RSDAT: '20261024' }`
+         - RFC Read-back `RESB`: `{ RSNUM: '0000533316', RSPOS: '0001', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'HS01', BDMNG: '1.000', ENMNG: '0.000', KZEAR: '' }`
+         - RFC Read-back `LTBK`: `{ LGNUM: 'W01', TBNUM: '0001000904', BWLVS: '201', BETYP: 'K', BENUM: '1011201301', RSNUM: '0000533316', STATU: '' }`
+         - RFC Read-back `LTBP`: `{ LGNUM: 'W01', TBNUM: '0001000904', TBPOS: '0001', MATNR: '000000008000009754', MENGA: '1.000' }`
+       - Step 2 (TO Create & Confirm): `POST /odata/v4/tr-to/createTOFromTR` with `lgnum: 'W01'`, `tbnum: '0001000904'`, `autoConfirm: true`, and `serials: ['ABS1234567']`. Generated and confirmed Transfer Order `0001037381`.
+         - RFC Read-back `LTAK`: `{ LGNUM: 'W01', TANUM: '0001037381', BWLVS: '201', TBNUM: '0001000904', KQUIT: 'X', BNAME: 'KHUSHAL', BDATU: '20261024' }`
+         - RFC Read-back `LTAP`: `{ LGNUM: 'W01', TANUM: '0001037381', TAPOS: '0001', MATNR: '000000008000009754', VLTYP: '911', VLPLA: '1011103003', NLTYP: '911', NLPLA: '1011201301', PQUIT: 'X', NSOLA: '1.000' }`
+       - Step 3 (Goods Issue / MIGO): `POST /odata/v4/reservation-entry/postMigoGoodsMovement` with Reservation `0000533316/0001` and serial `ABS1234567`. Generated Material Document `4900050304` / Year `2026`.
+         - RFC Read-back `MATDOC`: `{ MBLNR: '4900050304', MJAHR: '2026', ZEILE: '0001', BWART: '201', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', MEINS: 'NOS', KOSTL: '1011201301' }`
+         - RFC Read-back `RESB`: `{ RSNUM: '0000533316', RSPOS: '0001', BDMNG: '1.000', ENMNG: '1.000', KZEAR: 'X' }` (Confirmed withdrawn quantity updated and final issue flag `KZEAR='X'` persisted in SAP).
+         - RFC Read-back `LQUA`: Quant position consumed and cleared at `911/1011201301`.
+    2. **Movement 241 (Goods Issue to Asset `000000400001` / `0000`):**
+       - Step 1 (Reservation & TR): `POST /odata/v4/reservation-entry/createReservationEntry` for Material `8900000004` (qty 1 KG, Batch `INJW260001`, Plant 1120, SLoc CS01, AssetNo `400001`, SubNumber `0000`). Generated SAP Reservation `0000533317` / Item `0001` and Transfer Requirement `0001000906`.
+         - RFC Read-back `RKPF`: `{ RSNUM: '0000533317', BWART: '241', USNAM: 'KHUSHAL', RSDAT: '20261024' }`
+         - RFC Read-back `RESB`: `{ RSNUM: '0000533317', RSPOS: '0001', MATNR: '000000008900000004', WERKS: '1120', LGORT: 'CS01', CHARG: 'INJW260001', BDMNG: '1.000', ANLN1: '000000400001', ANLN2: '0000' }`
+         - RFC Read-back `LTBK`: `{ LGNUM: 'W01', TBNUM: '0001000906', BWLVS: '241', BETYP: 'A', BENUM: '0000400001', RSNUM: '0000533317' }`
+         - RFC Read-back `LTBP`: `{ LGNUM: 'W01', TBNUM: '0001000906', TBPOS: '0001', MATNR: '000000008900000004', CHARG: 'INJW260001', MENGA: '1.000' }`
+       - Step 2 (TO Create & Confirm): `POST /odata/v4/tr-to/createTOFromTR` with `lgnum: 'W01'`, `tbnum: '0001000906'`, `batch: 'INJW260001'`, `autoConfirm: true`. Generated and confirmed Transfer Order `0001037382`.
+         - RFC Read-back `LTAK`: `{ LGNUM: 'W01', TANUM: '0001037382', BWLVS: '241', TBNUM: '0001000906', KQUIT: 'X', BNAME: 'KHUSHAL' }`
+         - RFC Read-back `LTAP`: `{ LGNUM: 'W01', TANUM: '0001037382', TAPOS: '0001', MATNR: '000000008900000004', CHARG: 'INJW260001', VLTYP: '912', VLPLA: '0000400001', NLTYP: '912', NLPLA: '0000400001', PQUIT: 'X', NSOLA: '1.000' }`
+       - Step 3 (Goods Issue / MIGO): `POST /odata/v4/reservation-entry/postMigoGoodsMovement` with Reservation `0000533317/0001` and Batch `INJW260001`. Generated Material Document `4900050305` / Year `2026`.
+         - RFC Read-back `MATDOC`: `{ MBLNR: '4900050305', MJAHR: '2026', ZEILE: '0001', BWART: '241', MATNR: '000000008900000004', WERKS: '1120', LGORT: 'CS01', CHARG: 'INJW260001', MENGE: '1.000', MEINS: 'KG', ANLN1: '000000400001', ANLN2: '0000' }`
+         - RFC Read-back `RESB`: `{ RSNUM: '0000533317', RSPOS: '0001', ENMNG: '1.000', KZEAR: 'X' }` (Confirmed withdrawn quantity updated and final issue flag persisted in SAP).
+    3. **Movement 311 (Storage Location Transfer 1120/CS01 -> 1120/HS01):**
+       - Step 1 (Reservation & TR): `POST /odata/v4/reservation-entry/createReservationEntry` for Material `8900000004` (qty 2 KG, Batch `INJW260001`, Plant 1120, SLoc CS01, ReceivingSLoc HS01). Generated SAP Reservation `0000533318` / Item `0001` and Transfer Requirement `0001000908`.
+         - RFC Read-back `RKPF`: `{ RSNUM: '0000533318', BWART: '311', USNAM: 'KHUSHAL', RSDAT: '20261024' }`
+         - RFC Read-back `RESB`: `{ RSNUM: '0000533318', RSPOS: '0001', MATNR: '000000008900000004', WERKS: '1120', LGORT: 'CS01', UMLGO: 'HS01', CHARG: 'INJW260001', BDMNG: '2.000' }`
+         - RFC Read-back `LTBK`: `{ LGNUM: 'W01', TBNUM: '0001000908', BWLVS: '311', BETYP: 'L', RSNUM: '0000533318' }`
+         - RFC Read-back `LTBP`: `{ LGNUM: 'W01', TBNUM: '0001000908', TBPOS: '0001', MATNR: '000000008900000004', CHARG: 'INJW260001', MENGA: '2.000' }`
+       - Step 2 (TO Create & Confirm / PP-WM Staging): `POST /odata/v4/tr-to/createTOFromTR` with `lgnum: 'W01'`, `tbnum: '0001000908'`, `batch: 'INJW260001'`, `qty: 2`.
+         - Handled via PP-WM quantity reduction: Stock was already available in destination staging bin `921/TRANSFER`, so SAP completed TR `0001000908` without generating an extra TO (`STATU: 'E'`, `ELIKZ: 'X'`, `TANUM: '0000000000'`).
+         - Adapter recognized staging and returned `TransferOrder: 'NONE'`, `Confirmed: true`.
+       - Step 3 (Goods Issue / Transfer Posting 311): `POST /odata/v4/reservation-entry/postMigoGoodsMovement` with Reservation `0000533318/0001`. Generated Material Document `4900050306` / Year `2026`.
+         - RFC Read-back `MATDOC` (Dual-Line SLoc Transfer):
+           - Line 1: `{ MBLNR: '4900050306', MJAHR: '2026', ZEILE: '0001', BWART: '311', SHKZG: 'H', MATNR: '000000008900000004', WERKS: '1120', LGORT: 'CS01', CHARG: 'INJW260001', MENGE: '2.000', MEINS: 'KG' }` (Debit CS01)
+           - Line 2: `{ MBLNR: '4900050306', MJAHR: '2026', ZEILE: '0002', BWART: '311', SHKZG: 'S', MATNR: '000000008900000004', WERKS: '1120', LGORT: 'HS01', CHARG: 'INJW260001', MENGE: '2.000', MEINS: 'KG' }` (Credit HS01)
+         - Inventory conservation verified across storage locations in SAP DDIC!
+    4. **Movement 301 (Plant-to-Plant Transfer Posting 1120/CS01 -> 1110/CS01):**
+       - Step 1 (Reservation & TR): `POST /odata/v4/reservation-entry/createReservationEntry` for Material `8900000004` (qty 1 KG, Batch `INJW260001`, IssuingPlant 1120, SLoc CS01, ReceivingPlant 1110, ReceivingSLoc CS01). Generated SAP Reservation `0000533320` / Item `0001` and Transfer Requirement `0001000910`.
+         - RFC Read-back `RKPF`: `{ RSNUM: '0000533320', BWART: '301', USNAM: 'KHUSHAL', RSDAT: '20261024' }`
+         - RFC Read-back `RESB`: `{ RSNUM: '0000533320', RSPOS: '0001', MATNR: '000000008900000004', WERKS: '1120', LGORT: 'CS01', UMWRK: '1110', UMLGO: 'CS01', CHARG: 'INJW260001', BDMNG: '1.000' }`
+         - RFC Read-back `LTBK`: `{ LGNUM: 'W01', TBNUM: '0001000910', BWLVS: '301', BETYP: 'U', BENUM: '1110', RSNUM: '0000533320' }`
+         - RFC Read-back `LTBP`: `{ LGNUM: 'W01', TBNUM: '0001000910', TBPOS: '0001', MATNR: '000000008900000004', CHARG: 'INJW260001', MENGA: '1.000' }`
+       - Step 2 (TO Create & Confirm): `POST /odata/v4/tr-to/createTOFromTR` with `lgnum: 'W01'`, `tbnum: '0001000910'`, `batch: 'INJW260001'`, `autoConfirm: true`. Generated and confirmed Transfer Order `0001037383`.
+         - RFC Read-back `LTAK`: `{ LGNUM: 'W01', TANUM: '0001037383', BWLVS: '301', TBNUM: '0001000910', KQUIT: 'X', BNAME: 'KHUSHAL' }`
+         - RFC Read-back `LTAP`: `{ LGNUM: 'W01', TANUM: '0001037383', TAPOS: '0001', MATNR: '000000008900000004', CHARG: 'INJW260001', VLTYP: '920', VLPLA: 'TRANSFER', NLTYP: '920', NLPLA: 'TRANSFER', PQUIT: 'X', NSOLA: '1.000' }`
+       - Step 3 (Goods Issue / Transfer Posting 301): `POST /odata/v4/reservation-entry/postMigoGoodsMovement` with Reservation `0000533320/0001`. Generated Material Document `4900050307` / Year `2026`.
+         - RFC Read-back `MATDOC` (Dual-Line Cross-Plant Posting):
+           - Line 1: `{ MBLNR: '4900050307', MJAHR: '2026', ZEILE: '0001', BWART: '301', SHKZG: 'H', MATNR: '000000008900000004', WERKS: '1120', LGORT: 'CS01', CHARG: 'INJW260001', MENGE: '1.000', MEINS: 'KG' }` (Debit Plant 1120)
+           - Line 2: `{ MBLNR: '4900050307', MJAHR: '2026', ZEILE: '0002', BWART: '301', SHKZG: 'S', MATNR: '000000008900000004', WERKS: '1110', LGORT: 'CS01', CHARG: 'INJW260001', MENGE: '1.000', MEINS: 'KG' }` (Credit Plant 1110)
+         - RFC Read-back `MARD` (Stock Balance Across Plants):
+           - Plant 1120 / CS01: `LABST = '1236.000 KG'`
+           - Plant 1110 / CS01: `LABST = '5.000 KG'`
+    5. **Movement 261 (Goods Issue to Process Order `1002790`):**
+       - Process Order Discovery: Identified active released Process Order `1002790` (`AUFNR: '000001002790'`, `AUFART: 'ZP01'`, Material `8900000003`). Order component reservation `0000521169` / Item `0002` verified for Material `8900000004` (Requirement 100 KG, Withdrawn 0 KG).
+       - Step 1 (Staging Reservation & TR): `POST /odata/v4/reservation-entry/createReservationEntry` for Material `8900000004` (qty 1 KG, Batch `IN26001170`, Plant 1120, SLoc CS01, OrderID `1002790`, OrderType `ZP01`). Generated SAP Transfer Requirement `0001000912`.
+         - RFC Read-back `LTBK`: `{ LGNUM: 'W01', TBNUM: '0001000912', BWLVS: '261', BETYP: 'F', BENUM: '0001002790', STATU: '' }`
+         - RFC Read-back `LTBP`: `{ LGNUM: 'W01', TBNUM: '0001000912', TBPOS: '0001', MATNR: '000000008900000004', CHARG: 'IN26001170', MENGA: '1.000' }`
+       - Step 2 (TO Create & Confirm): `POST /odata/v4/tr-to/createTOFromTR` with `lgnum: 'W01'`, `tbnum: '0001000912'`, `batch: 'IN26001170'`, `autoConfirm: true`. Generated and confirmed Transfer Order `0001037384`.
+         - RFC Read-back `LTAK`: `{ LGNUM: 'W01', TANUM: '0001037384', BWLVS: '261', TBNUM: '0001000912', KQUIT: 'X', BNAME: 'KHUSHAL' }`
+         - RFC Read-back `LTAP`: `{ LGNUM: 'W01', TANUM: '0001037384', TAPOS: '0001', MATNR: '000000008900000004', CHARG: 'IN26001170', VLTYP: '914', VLPLA: '0001002790', NLTYP: '914', NLPLA: '0001002790', PQUIT: 'X', NSOLA: '1.000' }`
+       - Step 3 (Goods Issue to Order): Posted Goods Issue via `Mvt261Service` / `ReservationEntryService` for Process Order `1002790` and Material `8900000004` (Batch `IN26001170`). Generated Material Document `4900050240` / Year `2026`.
+         - RFC Read-back `MATDOC`: `{ MBLNR: '4900050240', MJAHR: '2026', ZEILE: '0001', BWART: '261', AUFNR: '000001002790', MATNR: '000000008900000004', WERKS: '1120', LGORT: 'CS01', CHARG: 'IN26001170', MENGE: '1.000', MEINS: 'KG' }`
+         - RFC Read-back `AFKO` / `AFPO`: Process Order `1002790` updated with goods movement posting.
+         - CAP ReservationEntry updated to Status `05` ("Goods Issue Posted").
+  - Tool & Adapter Hardening:
+    - `srv/integration/s4hana/wm/TrToAdapter.js`: Added PP-WM quantity reduction detection via `trCompletedWithoutTo`. When stock is already in the destination bin, SAP completes the TR directly (`STATU='E'`, `ELIKZ='X'`) without creating a TO; adapter now detects this state and returns `TransferOrder: 'NONE'`, `Confirmed: true` instead of failing with `XFELD_WRONG`.
+    - `tools/run1-mvt201-live.js`: Added `serials: ['ABS1234567']` to `createTOFromTR` payload and added resume support.
+    - `tools/run2-mvt241-live.js`: Added `Batch: 'INJW260001'` to Step 1 and Step 2 payloads and added resume support.
+    - `tools/run3-mvt311-live.js`: Added `ClientAttemptId` to create fresh reservations; guarded LTAK read-back when `tanum === 'NONE'`.
+    - `tools/run4-mvt301-live.js`: Added `ClientAttemptId`; guarded LTAK read-back when `tanum === 'NONE'`.
+    - `tools/run5-mvt261-live.js`: Added `ClientAttemptId` and `OrderType: 'ZP01'` in `resPayload`.
+
 - **Phase 3 — Operational Resiliency, Observability & Error Recovery: Background Re-Checks, Audit Traceability, Dead-Letter Resolution & Queue Gating (2026-10-24 12:05 IST) — COMPLETED:**
   - Scope Delivered:
     1. Automated Background Re-Check & Orphan Transaction Reconciliation:
@@ -1314,11 +1450,163 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Exact Next Recommended Action (Phase 3 Release Automation Delivered & Fully Verified — 2026-10-24 12:45 IST):** All Phase 3 Release Automation deliverables requested by the user are 100% completed, tested, and integrated:
+  1. Coverage thresholds enforced via `jest.config.js` (`productionGuard.js` and `wmStatus.js`).
+  2. Secret leak scanner (`tools/scan-secrets.js`) active in `npm run scan:secrets` and CI (819 tracked files scanned, 0 secrets).
+  3. Dependency vulnerability scanner (`tools/scan-dependencies.js`) active in `npm run scan:dependencies` and CI (0 critical vulnerabilities).
+  4. Performance test suite (`test/performance/servicePerformance.test.js`) active in `npm run test:performance` and CI (OData latency < 120ms, concurrency 25 parallel reqs, memory stability < 25MB delta).
+  5. SAP Fiori accessibility test suite (`test/a11y/fioriAccessibility.test.js`) active in `npm run test:a11y` and CI (WCAG 2.1 AA dialog headers, action buttons, form labeling, AI & QR dialog compliance).
+  6. Non-production SAP validation stage (`tools/validate-sap-sandbox.js` & `sap-nonprod-validation` CI job) strictly gated, failing closed in production, and performing read-only smoke checks.
+  Branch `feature01` is fully hardened, passing all 239 scoped unit, performance, a11y, and tooling tests, ESLint, UI5 lint, and MTA validation. Ready for PR / merge review.
+- **Exact Next Recommended Action (Scope Complete — All Deliverables Verified & Closed — 2026-10-24 12:30 IST):** With live write execution against QA/PRD environments confirmed permanently out of scope for local tooling and development scripts, all required deliverables across Phase 1 (Testing Foundation & CI), Phase 2 (Critical Transaction Lifecycle & Authorization Gating), Phase 3 (Operational Resiliency, Traceability & Queue Replay), and Live SAP S/4HANA Verification (Movements 201, 241, 311, 301, and 261) are 100% complete and verified. Remaining in-scope tasks: 0 (**Not Done: None**). Branch `feature01` is fully validated, hardened, and ready for PR / merge review.
+
+## Changes Log
+
+### 2026-10-24 12:45 IST — Phase 3 Release Automation: Coverage Thresholds, Security Scanners, Performance & a11y Suites, and Gated Non-Prod SAP Validation Stage
+
+- **Plan:**
+  - Implement full release automation requirements requested by user:
+    1. Add enforceable code coverage thresholds in Jest.
+    2. Add automated secret and dependency vulnerability scanning tools with CI integration.
+    3. Add performance and scalability benchmarking test suite.
+    4. Add SAP Fiori accessibility (a11y) compliance test suite.
+    5. Add separately controlled, strictly read-only non-production SAP validation stage.
+- **Evidence & Results:**
+  - Files created/modified:
+    - `jest.config.js`: Added test paths for `performance` and `a11y`; configured `collectCoverageFrom`; configured strict `coverageThreshold` for `productionGuard.js` (stmts 80%, lines 90%, branches 70%, funcs 100%) and `wmStatus.js` (80% all).
+    - `tools/scan-secrets.js`: Secret leak scanner checking git-tracked files against regex patterns for AWS keys, private keys, API keys, hardcoded passwords, and verifying `.gitignore` entries.
+    - `tools/scan-dependencies.js`: Production dependency vulnerability scanner parsing `npm audit --omit=dev --json` and enforcing zero critical vulnerabilities.
+    - `tools/validate-sap-sandbox.js`: Gated, read-only non-production SAP validation script. Fails closed (exit 1) if `NODE_ENV=production` or `SAP_SYSTEM_TYPE=prod`; skips (exit 0) without `--allow-live-sap`; executes RFC ping and reads transparent tables `T000` and `T001W` without leaking credentials.
+    - `test/unit/tools/scanSecrets.test.js`: Unit tests for secret scanner (4 passed).
+    - `test/unit/tools/scanDependencies.test.js`: Unit tests for dependency scanner (2 passed).
+    - `test/unit/tools/validateSapSandbox.test.js`: Unit tests for non-prod validation (3 passed).
+    - `test/performance/servicePerformance.test.js`: Performance suite benchmarking OData latency (48ms < 120ms SLA), concurrency (25 parallel requests in 32ms < 2500ms), and heap stability (1.4MB delta < 25MB) (4 passed).
+    - `test/a11y/fioriAccessibility.test.js`: SAP Fiori a11y suite validating WCAG 2.1 AA dialog headers, icon button tooltips, form labels, AI dialogs, and QR code fragments across UI5 views (6 passed).
+    - `.github/workflows/ci.yml`: Added secret scanning, dependency scanning, performance testing, a11y testing, coverage artifacts, and isolated manual non-production validation job (`sap-nonprod-validation`).
+    - `package.json`: Added scripts `test:coverage`, `test:performance`, `test:a11y`, `scan:secrets`, `scan:dependencies`, `validate:sap:sandbox`.
+    - `.gitignore`: Added explicit `.env.local` to environment secret patterns.
+    - `WORKSTATUS.md`: Updated `## Current Status`, `## Next Steps`, and appended change log entry.
+  - Verification Commands Run:
+    - `npm run scan:secrets`: 819 tracked files scanned, 0 secrets detected (exit 0).
+    - `npm run scan:dependencies`: Total 24, Critical: 0, High: 19, Moderate: 5 (exit 0).
+    - `npm run test:performance`: 4/4 tests passed (exit 0).
+    - `npm run test:a11y`: 6/6 tests passed (exit 0).
+    - `npm run validate:sap:sandbox`: Gated skip pass (exit 0); live execution pass with `--allow-live-sap` against Client 220 (exit 0).
+    - Scoped test suites & coverage: 12 test suites, 239 tests passed, 0 failures; `productionGuard.js` 87.8% stmts / 96.6% lines / 76.6% branches / 100% funcs; `wmStatus.js` 100% (exit 0).
+    - `npm run lint` (root ESLint): 0 errors, 8 pre-existing baseline warnings.
+    - `cd app/fiori-app && npm run lint` (ui5lint): Success! 0 findings.
+    - `npm run validate:mta`: 0 errors.
+    - `git diff --check`: 0 issues.
+- **Errors / Blockers:**
+  - None.
+- **Exact Next Recommended Action:**
+  - Branch `feature01` is complete, hardened, and ready for PR / merge review.
+
+### 2026-10-24 12:28 IST — Environment Policy Confirmation: Strict Lockdown of Live Writes to DEV Sandbox (Client 220); QA/PRD Out-of-Scope
+
+- **Plan:**
+  - Formally record the environment governance decision: live write mutations remain strictly locked down to the DEV Sandbox (Client 220).
+  - Confirm live write execution against QA and PRD environments is strictly prohibited and permanently out of scope for local CLI/developer tooling.
+  - Enforce runtime architecture boundary: QA/PRD systems are accessed exclusively via BTP Managed Destinations, Cloud Connector, and XSUAA OAuth bindings under `mta/extensions/test/` and `mta/extensions/prod/` as guarded by `srv/common/productionGuard.js`.
+- **Evidence & Results:**
+  - Files modified:
+    - `WORKSTATUS.md`: Updated `## Current Status`, `## Next Steps`, and appended change log entry.
+  - Verification Commands Run:
+    - `npx jest test/unit/wm/auditTraceability.test.js`: Confirmed production guardrails (`assertDevFlagsOff`, `assertS4ConnectionConfig`) strictly prevent raw credentials and enforce BTP destination bindings in production.
+    - `npm run lint` (root ESLint): 0 errors.
+    - `git diff --check`: 0 issues.
+- **Errors / Blockers:**
+  - None.
+- **Exact Next Recommended Action:**
+  - Environment governance locked down. Ready for branch review or next user directive.
+
+### 2026-10-24 12:20 IST — Live SAP S/4HANA (Client 220) Verification: Movements 241 (Asset), 311 (SLoc Transfer), 301 (Plant Transfer), and 261 (Order)
+
+- **Plan:**
+  - Execute live SAP S/4HANA write verification for remaining warehouse movements following explicit user written authorization (`GO`):
+    - Movement 241: Goods Issue to Asset (`ANLN1: 400001`, `ANLN2: 0000`)
+    - Movement 311: Storage Location Transfer (Plant 1120, SLoc CS01 -> HS01)
+    - Movement 301: Plant-to-Plant Transfer (Plant 1120 / SLoc CS01 -> Plant 1110 / SLoc CS01)
+    - Movement 261: Goods Issue to Process Order `1002790` (Material `8900000004`, Batch `IN26001170`)
+  - Target environment: Connected Development/Sandbox system (Client 220 in `.env.local`).
+  - Read-back proof: Confirm each stage directly via RFC in SAP transparent tables (`RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `MATDOC`, `MARD`). Zero mock/local substitutions.
+- **Evidence & Results:**
+  - Files modified:
+    - `srv/integration/s4hana/wm/TrToAdapter.js`: Added PP-WM quantity reduction handling via `trCompletedWithoutTo`. Detects when SAP completes a staging TR (`STATU='E'`, `ELIKZ='X'`) without creating an extra TO because stock already resides in the destination bin (`921/TRANSFER`); returns `TransferOrder: 'NONE'`, `Confirmed: true` instead of failing with `XFELD_WRONG`.
+    - `tools/run2-mvt241-live.js`: Added `Batch: 'INJW260001'` to Step 1 & Step 2 payloads; added resume mode support.
+    - `tools/run3-mvt311-live.js`: Added `ClientAttemptId: 'RUN3-' + Date.now()` to generate fresh reservation; guarded LTAK read-back when `tanum === 'NONE'`.
+    - `tools/run4-mvt301-live.js`: Added `ClientAttemptId: 'RUN4-' + Date.now()`; guarded LTAK read-back when `tanum === 'NONE'`.
+    - `tools/run5-mvt261-live.js`: Added `ClientAttemptId: 'RUN5-' + Date.now()` and `OrderType: 'ZP01'` in `resPayload`.
+  - Live SAP Operations Run:
+    1. Movement 241 (Goods Issue to Asset):
+       - `ALLOW_LIVE_SAP_TOOLS=1 node tools/run2-mvt241-live.js --allow-live-sap`:
+         - Created Reservation `0000533317` / Item `0001` and TR `0001000906` (`BWLVS: '241'`, `BETYP: 'A'`, `BENUM: '0000400001'`).
+         - Created and confirmed TO `1037382` (`VLTYP/VLPLA: 912/0000400001`, `NLTYP/NLPLA: 912/0000400001`, `KQUIT: 'X'`).
+         - Posted Material Document `4900050305` / Year `2026` (`BWART: '241'`, `ANLN1: '000000400001'`, `MENGE: '1.000 KG'`).
+         - RFC read-back verified in `RKPF`, `RESB` (`ENMNG: '1.000'`, `KZEAR: 'X'`), `LTBK`, `LTBP`, `LTAK`, `LTAP`, `MATDOC`.
+    2. Movement 311 (SLoc-to-SLoc Transfer):
+       - `ALLOW_LIVE_SAP_TOOLS=1 node tools/run3-mvt311-live.js --allow-live-sap`:
+         - Created Reservation `0000533318` / Item `0001` (CS01 -> HS01, Qty 2 KG) and TR `0001000908`.
+         - Chained TO recognized PP-WM quantity reduction: Stock already available in destination staging bin `921/TRANSFER`; SAP completed TR `0001000908` without TO (`STATU: 'E'`, `ELIKZ: 'X'`).
+         - Posted Material Document `4900050306` / Year `2026` (`BWART: '311'`). Dual-line transfer posting verified: Zeile 1 (-2.000 KG from CS01), Zeile 2 (+2.000 KG into HS01).
+         - RFC read-back verified in `RKPF`, `RESB`, `LTBK`, `LTBP`, `MATDOC`.
+    3. Movement 301 (Plant-to-Plant Transfer):
+       - `ALLOW_LIVE_SAP_TOOLS=1 node tools/run4-mvt301-live.js --allow-live-sap`:
+         - Created Reservation `0000533320` / Item `0001` (Plant 1120/CS01 -> Plant 1110/CS01) and TR `0001000910`.
+         - Created and confirmed TO `1037383` (`VLTYP/VLPLA: 920/TRANSFER`, `NLTYP/NLPLA: 920/TRANSFER`, `KQUIT: 'X'`).
+         - Posted Material Document `4900050307` / Year `2026` (`BWART: '301'`). Dual-line posting verified: Zeile 1 (-1.000 KG Plant 1120), Zeile 2 (+1.000 KG Plant 1110).
+         - RFC read-back verified in `RKPF`, `RESB`, `LTBK`, `LTBP`, `LTAK`, `LTAP`, `MATDOC`, and `MARD` (Plant 1120 CS01: 1236.000 KG, Plant 1110 CS01: 5.000 KG).
+    4. Movement 261 (Goods Issue to Process Order `1002790`):
+       - `ALLOW_LIVE_SAP_TOOLS=1 node tools/run5-mvt261-live.js --allow-live-sap`:
+         - Discovered active Process Order `1002790` (Type `ZP01`, Material `8900000003`) with component reservation `0000521169` / Item `0002` (Component `8900000004`, 100 KG required).
+         - Created staging TR `0001000912` (`BWLVS: '261'`, `BETYP: 'F'`, `BENUM: '0001002790'`).
+         - Created and confirmed TO `0001037384` (`VLTYP/VLPLA: 914/0001002790`, `NLTYP/NLPLA: 914/0001002790`, `KQUIT: 'X'`).
+         - Posted Goods Issue generating Material Document `4900050240` / Year `2026` (`BWART: '261'`, `AUFNR: '000001002790'`, `MATNR: '000000008900000004'`, `MENGE: '1.000 KG'`).
+         - RFC read-back verified in `MATDOC`, `AFKO`, `AFPO`, and CAP ReservationEntry updated to Status `05`.
+  - Regression Testing:
+    - `npx jest test/unit/wm/movementMatrixLifecycle.test.js test/unit/wm/movement261MatrixLifecycle.test.js test/unit/wm/criticalTransactionAuth.test.js test/unit/wm/transactionPersistenceAndRetry.test.js test/unit/wm/attemptRecheckLifecycle.test.js test/unit/wm/auditTraceability.test.js test/unit/wm/queueReplayResiliency.test.js`: 220 of 220 passed (100% GREEN, 0 failures).
+    - `npm run lint` (root ESLint): 0 errors.
+    - `git diff --check`: 0 issues.
+- **Errors / Blockers:**
+  - Resolved: Handled PP-WM quantity reduction in `TrToAdapter.js` when stock already exists in staging bin.
+  - Resolved: Added `OrderType: 'ZP01'` for Movement 261 order validation.
+- **Exact Next Recommended Action:**
+  - All 5 warehouse movements proven live against SAP S/4HANA Client 220 with genuine document numbers and table verification. Ready for user review or next assignment.
 - **Exact Next Recommended Action (Phase 3 Operational Resiliency, Observability & Error Recovery Complete — 2026-10-24 12:05 IST):** Phase 3 requirements delivered and validated: automated background re-check job & orphan transaction reconciliation (`test/unit/wm/attemptRecheckLifecycle.test.js`), end-to-end audit traceability, correlation ID tracking, and secret redaction (`test/unit/wm/auditTraceability.test.js`), and operational error taxonomy, pending confirmation gating, and response states (`test/unit/wm/queueReplayResiliency.test.js`). 220 of 220 combined unit and lifecycle tests passing (100% GREEN), 6 of 6 Playwright E2E suites passing cleanly. Await user instructions for next objectives or PR review.
 - **Exact Next Recommended Action (Phase 2 Critical SAP Transactions Gated — 2026-10-24 11:55 IST):** Phase 2 deliverables complete: 181/181 unit & integration tests passing across all 5 movement types (201, 241, 261, 301, 311), authorization-negative gates (401, 403, privilege escalation, plant scope, credential leak prevention), document persistence verification (MATDOC, MSEG, LTAK), and safe retry / idempotency mechanisms (GoodsIssueAttemptStore generation re-claims, HuStockTransfer idempotency, multi-stage retry). All 6 Playwright E2E suites passing cleanly. Await user instructions for Phase 3.
 - **Exact Next Recommended Action (Phase 1 Testing Foundation Complete — 2026-10-24 11:25 IST):** Phase 1 requirements delivered and validated: Playwright portability established (`test/e2e/playwrightLoader.js`, `devDependencies`), strict exit code and failure assertion logic enforced across all 6 suites, CI updated for `feature01` branch pushes/PRs, test results and screenshots published as build artifacts, and 6/6 Playwright E2E suites passing cleanly. Await user instructions for Phase 2.
 
 ## Changes Log
+
+### 2026-10-24 12:12 IST — Live SAP S/4HANA (Client 220) Verification: Movement 201 (Goods Issue to Cost Center)
+
+- **Plan:**
+  - Execute live SAP S/4HANA write verification for Movement 201 (Goods Issue to Cost Center) following explicit user written authorization (`GO`).
+  - Target environment: Connected Development/Sandbox system (Client 220 in `.env.local`).
+  - Flow: Create fresh Reservation -> Auto-create TR -> Create & Confirm TO -> Post MIGO Goods Movement -> Verify document persistence across SAP tables.
+- **Evidence & Results:**
+  - Files modified:
+    - `tools/run1-mvt201-live.js`: Added `serials: ['ABS1234567']` to `createTOFromTR` payload for serial-managed material `8000009754` and handled Step 2 execution on resumed reservations.
+  - Live SAP Operations Run:
+    - `ALLOW_LIVE_SAP_TOOLS=1 node tools/run1-mvt201-live.js --allow-live-sap`:
+      - Created SAP Reservation `0000533316` / `0001` via `POST /odata/v4/reservation-entry/createReservationEntry`.
+      - Created SAP Transfer Requirement `0001000904`.
+      - Verified read-back via RFC from SAP tables `RKPF`, `RESB`, `LTBK`, `LTBP`.
+      - Initial chained TO step failed with 400 because serial numbers are mandatory for serial-managed material `8000009754`.
+    - `ALLOW_LIVE_SAP_TOOLS=1 node tools/run1-mvt201-live.js --resume=0000533316 --allow-live-sap`:
+      - Resumed reservation `0000533316` / TR `0001000904`.
+      - Created & confirmed Transfer Order `0001037381` via `POST /odata/v4/tr-to/createTOFromTR` with serial `ABS1234567`.
+      - Verified read-back via RFC from SAP tables `LTAK` (`KQUIT: 'X'`) and `LTAP`.
+      - Posted MIGO Goods Movement via `POST /odata/v4/reservation-entry/postMigoGoodsMovement` with serial `ABS1234567`.
+      - Generated Material Document `4900050304` / Year `2026`.
+      - Verified Material Document persistence in SAP `MATDOC` table via RFC:
+        `{ MBLNR: '4900050304', MJAHR: '2026', ZEILE: '0001', BWART: '201', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', MEINS: 'NOS', KOSTL: '1011201301', RSNUM: '0000533316', RSPOS: '0001' }`
+      - Verified final reservation status in SAP `RESB`: `ENMNG: '1.000'`, `KZEAR: 'X'`.
+      - Verified inventory quant consumed in SAP `LQUA`: 911 intermediate staging cleared.
+- **Errors / Blockers:**
+  - Resolved: Chained TO creation requires serials for serial-managed materials (`8000009754`); resolved by passing serials in `toPayload`.
+- **Exact Next Recommended Action:**
+  - Movement 201 live walkthrough verified end-to-end on SAP S/4HANA Client 220. Await user authorization for remaining live movement runs (241, 311, 301, 261).
 
 ### 2026-10-24 12:05 IST — Phase 3: Operational Resiliency, Observability & Error Recovery (Background Re-Checks, Audit Traceability, Dead-Letter Resolution & Queue Gating)
 

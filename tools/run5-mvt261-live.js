@@ -90,6 +90,7 @@ async function run261() {
     // ------------------------------------------------------------------
     console.log('\n--- Step 1: POST /odata/v4/reservation-entry/createReservationEntry (Mvt 261) ---');
     const resPayload = {
+      ClientAttemptId: 'RUN5-' + Date.now(),
       MovementType: '261',
       Plant: '1120',
       StorageLocation: 'CS01',
@@ -98,6 +99,7 @@ async function run261() {
       Unit: 'KG',
       Batch: 'IN26001170',
       OrderID: '1002790',
+      OrderType: 'ZP01',
       WarehouseNumber: 'W01'
     };
     console.log('Request Payload:', JSON.stringify(resPayload, null, 2));
