@@ -43,6 +43,8 @@
         <!-- Scrollable Conversation Area -->
         <ScrollContainer
             id="aiChatScroll"
+            height="100%"
+            width="100%"
             vertical="true"
             horizontal="false"
             class="aiChatScroll"
