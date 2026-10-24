@@ -7,6 +7,23 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Phase 1 — Fix the Testing Foundation: Portable Playwright, Strict Pass/Fail Logic, CI Branch Coverage & Build Test Artifacts (2026-10-24 11:25 IST) — COMPLETED:**
+  - Scope Delivered:
+    1. Portable Playwright Resolution: Removed hardcoded user-specific cache paths (`/Users/khushaldhanani/Library/Caches/ms-playwright-go/...`) across all E2E test suites. Added `playwright@1.57.0` to project `devDependencies` and created `test/e2e/playwrightLoader.js` supporting standard `require('playwright')`, `playwright-core`, `PLAYWRIGHT_PATH` environment overrides, and user-cache fallback paths.
+    2. Strict E2E Pass/Fail Logic: Updated all 6 Playwright E2E suites (`verifyHardeningUI.e2e.js`, `verifyMvt201.e2e.js`, `verifyMvt241.e2e.js`, `verifyMvt261.e2e.js`, `verifyMvt301.e2e.js`, `verifyMvt311.e2e.js`). Enforced throwing assertions on missing SAP document numbers, status text, and route transitions. Propagated unexpected console and network errors into suite reports and enforced explicit `process.exit(isSuccess ? 0 : 1)` across all suites.
+    3. Unified E2E Test Runner: Created `test/e2e/runAllE2E.js` and added npm script `"test:playwright": "node test/e2e/runAllE2E.js"`. Runner checks port 4004 server availability, executes all 6 suites sequentially with per-suite timing, displays a clear summary table, writes structured JSON results to `test-results/e2e-summary.json`, and exits with code 0 or 1.
+    4. CI Pipeline Coverage: Updated `.github/workflows/ci.yml` so branch pushes and PRs on `feature01` trigger automated CI runs.
+    5. Test Results & Build Artifacts: Configured CI to export Jest test results with `--json --outputFile=test-results/jest-results.json` and added `actions/upload-artifact@v4` steps with `if: always()` publishing `test-results/` (Jest and Playwright summary reports) and `test/e2e/wm/screenshots/` (E2E run verification screenshots), plus `app/fiori-app/dist/` build artifact on success.
+    6. SPA Route Transition Hardening: Scoped scan-to page assertions to the active view `[id$="warehouseScanToDetail"]` to eliminate hash-navigation timing races between reservation detail and scan routes.
+  - Validation:
+    - `npm run test:playwright`: 6/6 suites passed (100% GREEN, total time ~47s).
+    - `test-results/e2e-summary.json`: verified valid JSON report (`status: "PASS"`, `passed: 6`, `failed: 0`).
+    - `npm run lint` (root ESLint): 0 errors, 8 pre-existing warnings in unrelated files.
+    - `cd app/fiori-app && npm run lint` (ui5lint): 0 findings.
+    - `npm run validate:mta`: 0 errors.
+    - `npx cds compile srv --to csn`: clean pass.
+    - `git diff --check`: 0 issues.
+
 - **SAP Purchase Order AI Assistant: UI Layout Polish, Suggestion Button Text Clipping Fix, ScrollContainer Bounding & Footer Alignment (2026-10-24 10:25 IST) — COMPLETED:**
   - Issue: The user reported "UI is not a proper" with screenshot showing:
     1. Text vertically truncated/clipped in all 5 preset suggestion buttons inside the AI assistant panel.
@@ -1232,6 +1249,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Exact Next Recommended Action (Phase 1 Testing Foundation Complete — 2026-10-24 11:25 IST):** Phase 1 requirements delivered and validated: Playwright portability established (`test/e2e/playwrightLoader.js`, `devDependencies`), strict exit code and failure assertion logic enforced across all 6 suites, CI updated for `feature01` branch pushes/PRs, test results and screenshots published as build artifacts, and 6/6 Playwright E2E suites passing cleanly. Await user instructions for Phase 2.
 - **Exact Next Recommended Action (T319A decision and Path A execution gate — 2026-10-23 14:25 IST):** Await the SAP functional consultant's decision on warehouse W01 customizing (`V_T319A`: `E10` vs `E1`) and CTS transport release to QA/PRD. Pre-requisite code for Path A (shared shipping classification, NO_T319A_ROW as warning, BusinessConfigResolver storage rules, competing reservation comparator) is fully tested. Do NOT run tools/simulate-res-311-bapi.js or complete delivery 0080000134 without explicit written user "GO".
 - **Exact Next Recommended Action (rack test-data discovery and follow-up plan — 2026-10-23 11:31 IST):** Before implementing `rackLayout()`, verify whether SAP has an authoritative planned-position source for the “no bin maintained” state. LAGP can enumerate maintained bins, but its absence alone cannot distinguish an unmaintained physical slot from a position that does not exist. Confirm the actual RFC_READ_TABLE row-limit/paging capability before choosing pagination. Keep the XHUPF-blank banner/standard 311 route as a plan until requested for implementation.
 - **Exact Next Recommended Action (rack diagnostic for reservation 527868/1 — 2026-10-23 11:22 IST):** Treat reservation `527868/1` as transfer-bin stock; choose a reservation item whose read returns verified rack-pattern bins to see populated rack positions. Triage the existing full Jest failures separately before treating the repository regression suite as green. Do not infer empty bins or change SAP logic based on this diagnostic.
@@ -1246,6 +1264,46 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Exact Next Recommended Action (HU stock transfer rack demo — 2026-10-23 10:24 IST):** Rerun full Jest in an environment that permits loopback binds and after the unrelated missing FI/goods-issue test paths are resolved; inspect a wide touch-display viewport when available. No SAP writes or live data are needed for the demo.
 
 ## Changes Log
+
+### 2026-10-24 11:25 IST — Phase 1: Fix the Testing Foundation (Portable Playwright, Strict Pass/Fail Logic, CI Coverage & Test Artifacts)
+
+- **Plan:**
+  - Execute Phase 1 requirements:
+    1. Make Playwright portable across local and CI environments without hardcoded user-specific cache paths.
+    2. Correct E2E pass/fail logic: ensure test suites fail (exit code 1) when elements are missing, console errors occur, or network calls fail, rather than passing silently.
+    3. Cover `feature01` in CI (`.github/workflows/ci.yml`) for push and pull request triggers.
+    4. Publish test results (`test-results/`) and screenshots (`test/e2e/wm/screenshots/`) as downloadable build artifacts in CI.
+  - Zero live SAP writes or mutations.
+- **Evidence & Results:**
+  - Files modified / created:
+    - `package.json`: Added `playwright@1.57.0` to `devDependencies`; added script `"test:playwright": "node test/e2e/runAllE2E.js"`.
+    - `package-lock.json`: Synced package-lock for `playwright@1.57.0`.
+    - `test/e2e/playwrightLoader.js` (NEW): Portable loader resolving Playwright via `require('playwright')`, `playwright-core`, `process.env.PLAYWRIGHT_PATH`, or standard user cache directories with clear diagnostic fallback messages.
+    - `test/e2e/runAllE2E.js` (NEW): Unified E2E test runner that validates dev server connectivity on port 4004, runs all 6 Playwright E2E suites sequentially, measures per-suite execution time, outputs summary table, saves structured JSON report to `test-results/e2e-summary.json`, and exits with code 0 or 1.
+    - `.github/workflows/ci.yml`: Added `feature01` to `push.branches` and `pull_request.branches`; added Jest JSON report generation (`--json --outputFile=test-results/jest-results.json`); added `Publish test results artifact` step uploading `test-results/` and `test/e2e/wm/screenshots/` with `if: always()`; added `Publish UI5 build artifact` step with `if: success()`.
+    - `test/e2e/wm/verifyHardeningUI.e2e.js`: Replaced user-specific Playwright path with `playwrightLoader`; optimized navigation from `networkidle` (30s delay) to `domcontentloaded` with selector waiting; enforced exit code 1 on failure.
+    - `test/e2e/wm/verifyMvt201.e2e.js`: Replaced user-specific path with `playwrightLoader`; scoped scan view wait to `[id$="warehouseScanToDetail"]`; propagated console/network errors to report and enforced `isSuccess ? 0 : 1` exit code.
+    - `test/e2e/wm/verifyMvt241.e2e.js`: Replaced user-specific path with `playwrightLoader`; scoped scan view wait to `[id$="warehouseScanToDetail"]`; filtered expected 409/lookupTR dialog trigger; propagated console/network errors to report and enforced exit code.
+    - `test/e2e/wm/verifyMvt261.e2e.js`: Replaced user-specific path with `playwrightLoader`; added strict throwing assertions for reservation number (`0000528780`), order (`1011`), status (`Goods Issue Posted`), and scan movement rendering; enforced exit code.
+    - `test/e2e/wm/verifyMvt301.e2e.js`: Replaced user-specific path with `playwrightLoader`; scoped scan view wait to `[id$="warehouseScanToDetail"]`; added 409/lookupTR filter; propagated console/network errors to report and enforced exit code.
+    - `test/e2e/wm/verifyMvt311.e2e.js`: Replaced user-specific path with `playwrightLoader`; scoped scan view wait to `[id$="warehouseScanToDetail"]`; added 409/lookupTR filter; propagated console/network errors to report and enforced exit code.
+- **Validation:**
+  - `npm run test:playwright`: 6/6 suites passed (100% GREEN, 0 failures):
+    * UI Hardening & Rapid Submission: PASS (5230ms)
+    * Movement 201 (GI to Cost Center): PASS (6427ms)
+    * Movement 241 (GI to Asset): PASS (9413ms)
+    * Movement 261 (GI to Internal Order): PASS (9144ms)
+    * Movement 301 (Plant-to-Plant Transfer): PASS (8132ms)
+    * Movement 311 (SLoc-to-SLoc Transfer): PASS (8864ms)
+  - `test-results/e2e-summary.json`: generated, validated JSON structure (`status: "PASS"`, `passed: 6`, `failed: 0`).
+  - `test-results/jest-results.json`: generated, validated JSON structure.
+  - `npm run lint` (root ESLint): 0 errors, 8 pre-existing warnings in unrelated files.
+  - `cd app/fiori-app && npm run lint` (ui5lint): 0 findings.
+  - `npm run validate:mta`: 0 errors.
+  - `npx cds compile srv --to csn`: clean pass.
+  - `git diff --check`: 0 issues.
+- **Assumptions:** None.
+- **SAP Mutations:** 0 writes, 0 BAPI calls, 0 live mutations.
 
 ### 2026-10-24 10:25 IST — SAP Purchase Order AI Assistant: UI Layout Polish, Suggestion Button Text Clipping Fix, ScrollContainer Bounding & Footer Alignment
 

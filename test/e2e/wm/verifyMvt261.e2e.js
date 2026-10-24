@@ -2,7 +2,7 @@
 
 
 const path = require('path');
-const { chromium } = require('/Users/khushaldhanani/Library/Caches/ms-playwright-go/1.57.0/package');
+const { chromium } = require('../playwrightLoader');
 
 async function verifyMvt261() {
   console.log('================================================================');
@@ -95,15 +95,23 @@ async function verifyMvt261() {
 
     const pageContent = await page.content();
     console.log('Checking Reservation Detail content...');
-    if (pageContent.includes('0000528780') || pageContent.includes('528780')) {
-      console.log('-> Confirmed Reservation Number displayed');
+    const hasResNo = pageContent.includes('0000528780') || pageContent.includes('528780');
+    if (!hasResNo) {
+      throw new Error('Expected Reservation Number 0000528780 not displayed on detail page');
     }
-    if (pageContent.includes('1011')) {
-      console.log('-> Confirmed Order 1011 displayed');
+    console.log('-> Confirmed Reservation Number displayed');
+
+    const hasOrder = pageContent.includes('1011');
+    if (!hasOrder) {
+      throw new Error('Expected Order 1011 not displayed on detail page');
     }
-    if (pageContent.includes('Goods Issue Posted')) {
-      console.log('-> Confirmed Status "Goods Issue Posted" displayed');
+    console.log('-> Confirmed Order 1011 displayed');
+
+    const hasStatus = pageContent.includes('Goods Issue Posted');
+    if (!hasStatus) {
+      throw new Error('Expected Status "Goods Issue Posted" not displayed on detail page');
     }
+    console.log('-> Confirmed Status "Goods Issue Posted" displayed');
 
     // -------------------------------------------------------------------------
     // 2. VERIFY SCAN-TO PAGE FOR STAGING TR (0001000858)
@@ -118,9 +126,11 @@ async function verifyMvt261() {
     console.log(`Saved screenshot: ${scanScreenshotPath}`);
 
     const scanContent = await page.content();
-    if (scanContent.includes('261') || scanContent.includes('Order Assignment')) {
-      console.log('-> Confirmed Movement 261 / Order Assignment rendered in Scan-To view');
+    const hasScanMvt = scanContent.includes('261') || scanContent.includes('Order Assignment');
+    if (!hasScanMvt) {
+      throw new Error('Movement 261 / Order Assignment not rendered in Scan-To view');
     }
+    console.log('-> Confirmed Movement 261 / Order Assignment rendered in Scan-To view');
 
     // -------------------------------------------------------------------------
     // 3. VERIFY RESERVATION ENTRY CREATE VIEW & ZEMP ORDER TYPE GATING
@@ -141,14 +151,36 @@ async function verifyMvt261() {
     console.log(`Unexpected Network Errors (${networkErrors.length}):`, networkErrors);
 
     if (consoleErrors.length > 0) {
-      report.console = 'WARN';
-    }
-    if (networkErrors.length > 0) {
-      report.network = 'WARN';
+      report.console = 'FAIL';
+      report.playwright = 'FAIL';
+      report.ui = 'FAIL';
+      report.errors.push(`Console errors detected: ${consoleErrors.join('; ')}`);
+    } else {
+      report.console = 'PASS';
     }
 
+    if (networkErrors.length > 0) {
+      report.network = 'FAIL';
+      report.playwright = 'FAIL';
+      report.ui = 'FAIL';
+      report.errors.push(`Unexpected network errors: ${networkErrors.map(e => `${e.status} ${e.url}`).join(', ')}`);
+    } else {
+      report.network = 'PASS';
+    }
+
+    const isOverallPass = report.ui === 'PASS' &&
+      report.playwright === 'PASS' &&
+      report.network === 'PASS' &&
+      report.console === 'PASS' &&
+      report.errors.length === 0;
+
     console.log('\n================================================================');
-    console.log(' ALL PLAYWRIGHT E2E CHECKS COMPLETED SUCCESSFULLY!');
+    if (isOverallPass) {
+      console.log(' ALL PLAYWRIGHT E2E CHECKS COMPLETED SUCCESSFULLY!');
+    } else {
+      console.log(' PLAYWRIGHT E2E VERIFICATION RESULT: FAIL');
+      console.log(' ERRORS:', report.errors);
+    }
     console.log('================================================================');
   } catch (err) {
     console.error('Playwright E2E failed:', err);
@@ -161,10 +193,19 @@ async function verifyMvt261() {
   return report;
 }
 
-verifyMvt261().then(r => {
-  console.log('Final E2E Report:', JSON.stringify(r, null, 2));
-  process.exit(r.playwright === 'PASS' ? 0 : 1);
-}).catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+if (require.main === module) {
+  verifyMvt261().then(r => {
+    console.log('Final E2E Report:', JSON.stringify(r, null, 2));
+    const isSuccess = r.ui === 'PASS' &&
+      r.playwright === 'PASS' &&
+      r.network === 'PASS' &&
+      r.console === 'PASS' &&
+      (!r.errors || r.errors.length === 0);
+    process.exit(isSuccess ? 0 : 1);
+  }).catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
+module.exports = { verifyMvt261 };

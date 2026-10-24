@@ -8,8 +8,7 @@
  * 4. Zero console errors & zero failed network requests
  * 5. Page refresh persistence across movements
  */
-
-const { chromium } = require('/Users/khushaldhanani/Library/Caches/ms-playwright-go/1.57.0/package');
+const { chromium } = require('../playwrightLoader');
 
 async function runHardeningE2E() {
   const browser = await chromium.launch({ headless: true });
@@ -69,10 +68,11 @@ async function runHardeningE2E() {
     // 1. Test Detail View with rapid refresh
     console.log('[Test 1] Navigating to Detail View for Movement 241 (0000525279)...');
     await page.goto('http://localhost:4004/fiori-app/webapp/index.html#/wm/reservation-entry/0000525279/0001', {
-      waitUntil: 'networkidle',
+      waitUntil: 'domcontentloaded',
       timeout: 30000
     });
-    await page.waitForTimeout(2000);
+    await page.waitForSelector('.sapMTitle, .sapUxAPObjectPageHeaderTitleText', { timeout: 15000 });
+    await page.waitForTimeout(1500);
 
     const detailHeader = await page.textContent('body');
     const hasHeader = detailHeader.includes('Reservation 0000525279');
@@ -101,10 +101,11 @@ async function runHardeningE2E() {
     // 2. Test Create Page rapid submit guard
     console.log('[Test 3] Navigating to Create Page...');
     await page.goto('http://localhost:4004/fiori-app/webapp/index.html#/wm/reservation-entry/create', {
-      waitUntil: 'networkidle',
+      waitUntil: 'domcontentloaded',
       timeout: 30000
     });
-    await page.waitForTimeout(2000);
+    await page.waitForSelector('.sapMTitle, .sapUiForm', { timeout: 15000 });
+    await page.waitForTimeout(1500);
 
     const saveBtn = page.locator('#application-fiori-app-component---wmReservationEntryDetail--btnSaveReservation');
     if (await saveBtn.isVisible()) {
@@ -145,7 +146,11 @@ async function runHardeningE2E() {
   }
 }
 
-runHardeningE2E().catch((err) => {
-  console.error('E2E HARDENING FAILURE:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  runHardeningE2E().catch((err) => {
+    console.error('E2E HARDENING FAILURE:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = { runHardeningE2E };

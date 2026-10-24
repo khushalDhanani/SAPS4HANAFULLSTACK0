@@ -13,6 +13,7 @@
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration --runInBand",
     "test:e2e": "jest test/e2e --runInBand",
+    "test:playwright": "node test/e2e/runAllE2E.js",
     "lint": "eslint .",
     "generate:rules": "node tools/generate-po-rules.js",
     "validate:mta": "mbt validate -x paths",
@@ -38,7 +39,8 @@
     "eslint": "^10.10.0",
     "globals": "^17.12.0",
     "jest": "^30.5.1",
-    "mbt": "^1.2.49"
+    "mbt": "^1.2.49",
+    "playwright": "^1.57.0"
   },
   "overrides": {
     "@sigstore/core": "^4.0.1"
@@ -48,10 +50,14 @@
       "db": {
         "[development]": {
           "kind": "sqlite",
-          "credentials": { "url": "db.sqlite" }
+          "credentials": {
+            "url": "db.sqlite"
+          }
         },
         "[test]": {
-          "credentials": { "url": ":memory:" }
+          "credentials": {
+            "url": ":memory:"
+          }
         }
       },
       "auth": {
@@ -74,7 +80,9 @@
                 "Viewer"
               ],
               "attr": {
-                "Plant": ["1120"]
+                "Plant": [
+                  "1120"
+                ]
               }
             },
             "dave": {
@@ -82,7 +90,9 @@
                 "Viewer"
               ],
               "attr": {
-                "Plant": ["1130"]
+                "Plant": [
+                  "1130"
+                ]
               }
             },
             "eve": {
@@ -96,7 +106,9 @@
                 "WarehouseClerk"
               ],
               "attr": {
-                "Plant": ["1120"]
+                "Plant": [
+                  "1120"
+                ]
               }
             },
             "khushal": {
@@ -131,7 +143,9 @@
                 "Viewer"
               ],
               "attr": {
-                "Plant": ["1120"]
+                "Plant": [
+                  "1120"
+                ]
               }
             },
             "dave": {
@@ -139,7 +153,9 @@
                 "Viewer"
               ],
               "attr": {
-                "Plant": ["1130"]
+                "Plant": [
+                  "1130"
+                ]
               }
             },
             "eve": {
@@ -153,7 +169,9 @@
                 "WarehouseClerk"
               ],
               "attr": {
-                "Plant": ["1120"]
+                "Plant": [
+                  "1120"
+                ]
               }
             },
             "khushal": {

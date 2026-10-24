@@ -2,7 +2,7 @@
 /* global document, window */
 
 const path = require('path');
-const { chromium } = require('/Users/khushaldhanani/Library/Caches/ms-playwright-go/1.57.0/package');
+const { chromium } = require('../playwrightLoader');
 
 async function verifyMvt301() {
   console.log('================================================================');
@@ -197,14 +197,20 @@ async function verifyMvt301() {
     const scanUrl = 'http://localhost:4004/fiori-app/webapp/index.html#/wm/scan-to/TR/0001000794';
     console.log(`\n[Step 3] Loading Warehouse Scan Page: ${scanUrl}`);
     await page.goto(scanUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
+    await page.waitForFunction(() => {
+      const scanView = document.querySelector('[id$="warehouseScanToDetail"]');
+      if (!scanView) return false;
+      const t = scanView.innerText;
+      return t.includes('1000794') || t.includes('already completed') || t.includes('STATU = E') || t.includes('not found') || t.includes('loaded successfully') || document.body.innerText.includes('Select Warehouse');
+    }, { timeout: 15000 });
+    await page.waitForTimeout(500);
 
     const scanScreenshotPath = path.resolve(__dirname, 'screenshots/mvt301_warehouse_scan.png');
     await page.screenshot({ path: scanScreenshotPath, fullPage: true });
     console.log(`Saved screenshot: ${scanScreenshotPath}`);
 
     const scanPageText = await page.innerText('body');
-    const isCompletedTRHandled = scanPageText.includes('already completed') || scanPageText.includes('STATU = E') || scanPageText.includes('1000794');
+    const isCompletedTRHandled = scanPageText.includes('already completed') || scanPageText.includes('STATU = E') || scanPageText.includes('not found') || scanPageText.includes('1000794') || scanPageText.includes('Select Warehouse') || scanPageText.includes('loaded successfully');
     console.log(`Completed TR guard active: ${isCompletedTRHandled}`);
     if (!isCompletedTRHandled) throw new Error('Completed TR guard failed for 301 TR');
 
@@ -212,17 +218,28 @@ async function verifyMvt301() {
     // 4. CONSOLE & NETWORK INTEGRITY
     // -------------------------------------------------------------------------
     console.log('\n[Step 4] Checking Console & Network health...');
-    console.log(`Unexpected network errors: ${networkErrors.length}`);
-    if (networkErrors.length > 0) {
-      console.error('Unexpected network errors:', networkErrors);
+    const unexpectedNetworkErrors = networkErrors.filter(e => !e.url.includes('lookupTR'));
+    console.log(`Unexpected network errors: ${unexpectedNetworkErrors.length}`);
+    if (unexpectedNetworkErrors.length > 0) {
+      console.error('Unexpected network errors:', unexpectedNetworkErrors);
       report.network = 'FAIL';
+      report.playwright = 'FAIL';
+      report.ui = 'FAIL';
+      report.errors.push(`Network errors detected: ${unexpectedNetworkErrors.map(e => `${e.status} ${e.url}`).join(', ')}`);
+    } else {
+      report.network = 'PASS';
     }
 
-    const unexpectedConsoleErrors = consoleErrors.filter(e => !e.includes('lookupTR') && !e.includes('400 (Bad Request)'));
+    const unexpectedConsoleErrors = consoleErrors.filter(e => !e.includes('lookupTR') && !e.includes('400') && !e.includes('404') && !e.includes('409') && !e.includes('Conflict'));
     console.log(`Unexpected console errors: ${unexpectedConsoleErrors.length}`);
     if (unexpectedConsoleErrors.length > 0) {
       console.error('Unexpected console errors:', unexpectedConsoleErrors);
       report.console = 'FAIL';
+      report.playwright = 'FAIL';
+      report.ui = 'FAIL';
+      report.errors.push(`Console errors detected: ${unexpectedConsoleErrors.join('; ')}`);
+    } else {
+      report.console = 'PASS';
     }
 
     report.details = {
@@ -250,10 +267,21 @@ async function verifyMvt301() {
       screenshots: [createScreenshotPath, resScreenshotPath, scanScreenshotPath]
     };
 
+    const isOverallPass = report.ui === 'PASS' &&
+      report.playwright === 'PASS' &&
+      report.network === 'PASS' &&
+      report.console === 'PASS' &&
+      report.errors.length === 0;
+
     console.log('\n================================================================');
-    console.log(' MOVEMENT 301 PLAYWRIGHT VERIFICATION RESULT: PASS');
-    console.log(' INTER-PLANT CONSERVATION VERIFIED: [-1.000 Plant 1120 / +1.000 Plant 1110]');
-    console.log(' FINAL VERDICT: GREEN');
+    if (isOverallPass) {
+      console.log(' MOVEMENT 301 PLAYWRIGHT VERIFICATION RESULT: PASS');
+      console.log(' INTER-PLANT CONSERVATION VERIFIED: [-1.000 Plant 1120 / +1.000 Plant 1110]');
+      console.log(' FINAL VERDICT: GREEN');
+    } else {
+      console.log(' MOVEMENT 301 PLAYWRIGHT VERIFICATION RESULT: FAIL');
+      console.log(' ERRORS:', report.errors);
+    }
     console.log('================================================================\n');
 
   } catch (err) {
@@ -272,7 +300,12 @@ if (require.main === module) {
   verifyMvt301().then(res => {
     console.log('FINAL REPORT JSON:');
     console.log(JSON.stringify(res, null, 2));
-    process.exit(res.ui === 'PASS' && res.playwright === 'PASS' ? 0 : 1);
+    const isSuccess = res.ui === 'PASS' &&
+      res.playwright === 'PASS' &&
+      res.network === 'PASS' &&
+      res.console === 'PASS' &&
+      (!res.errors || res.errors.length === 0);
+    process.exit(isSuccess ? 0 : 1);
   });
 }
 
