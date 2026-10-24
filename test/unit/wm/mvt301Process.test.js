@@ -585,6 +585,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
 
     test('Fails 400 when serial numbers are missing for serial-managed material (Class C) [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS02' }];
         if (table === 'MARC') return [{ WERKS: '1120', XCHPF: '', SERNP: 'ZSN2' }, { WERKS: '1110', XCHPF: '', SERNP: 'ZSN1' }];
         if (table === 'MARD') return [{ LGORT: 'CS02', LABST: '4.000' }];
         return [];
@@ -610,6 +611,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
 
     test('Fails 400 when serial count does not match quantity [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS02' }];
         if (table === 'MARC') return [{ WERKS: '1120', XCHPF: '', SERNP: 'ZSN2' }, { WERKS: '1110', XCHPF: '', SERNP: 'ZSN1' }];
         if (table === 'MARD') return [{ LGORT: 'CS02', LABST: '4.000' }];
         return [];
@@ -657,6 +659,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
 
     test('Fails 400 when stock in issuing storage location is insufficient in MARD-LABST [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
         if (table === 'MARC') return [{ WERKS: '1120', XCHPF: '', SERNP: '' }, { WERKS: '1110', XCHPF: '', SERNP: '' }];
         if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '3.000' }]; // only 3 available
         return [];
@@ -681,6 +684,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
 
     test('GI failure performs rollback, allows retry, and preserves idempotency [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
         if (table === 'MARC') return [{ WERKS: '1120', XCHPF: '', SERNP: '' }, { WERKS: '1110', XCHPF: '', SERNP: '' }];
         if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
         return [];
@@ -783,6 +787,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
 
     test('Scopes confirmed TO quantity (CONF_MENGE) from LTAP when posting MIGO for Movement 301 [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
         if (table === 'MARC') return [{ WERKS: '1120', XCHPF: '', SERNP: '' }, { WERKS: '1110', XCHPF: '', SERNP: '' }];
         if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
         if (table === 'LTAP') return [{ VSOLM: '5.000', NISTM: '4.000' }]; // confirmed 4 out of 5
@@ -824,6 +829,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
 
     test('NO_MORE_GR indicator is passed only when completeReservation is true [mock only, not SAP verification]', async () => {
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
         if (table === 'MARC') return [{ WERKS: '1120', XCHPF: '', SERNP: '' }, { WERKS: '1110', XCHPF: '', SERNP: '' }];
         if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
         return [];
@@ -897,6 +903,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
     test('Fails 400 when receiving plant has no valuation/accounting data (MBEW) [mock only, not SAP verification]', async () => {
       const mbewAdapter = new ReservationProcessAdapter({ rfc: mockRfc, checkMarcExistence: true, checkMbewExistence: true });
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
         if (table === 'MARC') return [{ WERKS: '1110', XCHPF: '', SERNP: '' }, { WERKS: '1120', XCHPF: '', SERNP: '' }];
         if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
         if (table === 'MBEW') return []; // Empty MBEW in receiving plant
@@ -923,6 +930,7 @@ describe('Movement Type 301 (Plant to Plant Transfer) Process Tests [mock only, 
     test('Fails 400 when serial-managed material has no serial profile in receiving plant [mock only, not SAP verification]', async () => {
       const sernpAdapter = new ReservationProcessAdapter({ rfc: mockRfc, checkMarcExistence: true, checkSernpMatch: true });
       mockRfc.readTable.mockImplementation(async (table, fields, where) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
         if (table === 'MARC') {
           const werksClause = (where || []).find((w) => w.includes('WERKS'));
           if (werksClause && werksClause.includes('1110')) {

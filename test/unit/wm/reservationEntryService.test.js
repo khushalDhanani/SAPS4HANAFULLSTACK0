@@ -27,8 +27,13 @@ const LOG_ENTITY = 'saps4hana.wm.ReservationLog';
 const authClerk = { auth: { username: 'carol', password: '' } };
 const authPlant1130 = { auth: { username: 'dave', password: '' } };
 const authNoPlant = { auth: { username: 'eve', password: '' } };
+const { seedLocalWmData } = require('../../wmSeedHelper');
 
 describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservation + Auto-TR)', () => {
+  beforeAll(async () => {
+    await seedLocalWmData();
+  });
+
   let createResSpy;
   let createTrSpy;
   let authSpy;

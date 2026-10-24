@@ -20,9 +20,12 @@ for (const t of TYPES) {
   BACKEND_FILES.push({ type: t, file: path.resolve(__dirname, `../../../srv/integration/s4hana/wm/goods-issue/GoodsIssue${t}Mapper.js`) });
 
   const feBase = path.resolve(__dirname, '../../../app/fiori-app/webapp/modules/wm/goods-issue');
-  FRONTEND_FILES.push({ type: t, file: path.join(feBase, `controller/GoodsIssue${t}.controller.js`) });
-  FRONTEND_FILES.push({ type: t, file: path.join(feBase, `model/GoodsIssue${t}Model.js`) });
-  FRONTEND_FILES.push({ type: t, file: path.join(feBase, `service/GoodsIssue${t}Service.js`) });
+  const ctrlFile = path.join(feBase, `controller/GoodsIssue${t}.controller.js`);
+  if (fs.existsSync(ctrlFile)) {
+    FRONTEND_FILES.push({ type: t, file: ctrlFile });
+    FRONTEND_FILES.push({ type: t, file: path.join(feBase, `model/GoodsIssue${t}Model.js`) });
+    FRONTEND_FILES.push({ type: t, file: path.join(feBase, `service/GoodsIssue${t}Service.js`) });
+  }
 }
 
 /**

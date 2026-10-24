@@ -28,6 +28,13 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             }),
             readTable: jest.fn((table, fields, options) => {
                 const optStr = JSON.stringify(options || []);
+                if (table === 'LTBK') {
+                    return Promise.resolve([{
+                        LGNUM: 'W01',
+                        TBNUM: adapter?._lastTr || currentTr,
+                        BWLVS: '311'
+                    }]);
+                }
                 if (table === 'LTAK' && optStr.includes('TANUM')) {
                     const match = optStr.match(/TANUM\s*=\s*'(\d+)'/);
                     const tanum = match ? match[1] : '0001012966';
@@ -158,11 +165,13 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
 
         it('rejects zero or negative quantity with 400', async () => {
             await expect(adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839',
                 qty: 0
             })).rejects.toThrow('Quantity must be greater than zero');
 
             await expect(adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839',
                 qty: -2
             })).rejects.toThrow('Quantity must be greater than zero');
@@ -170,6 +179,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
 
         it('rejects quantity exceeding open TR quantity with 400', async () => {
             await expect(adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839',
                 qty: 6 // Open is 5
             })).rejects.toThrow(/Requested quantity \(6\) exceeds open TR quantity \(5 KG\)/);
@@ -193,6 +203,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             mockRfc.readTable.mockResolvedValueOnce([{ MATNR: '000000001000000045', XCHPF: 'X', SERNP: '' }]);
 
             await expect(adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839',
                 qty: 2,
                 batch: '' // Missing batch
@@ -216,6 +227,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
 
             // Missing serials
             await expect(adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839',
                 qty: 2,
                 serials: []
@@ -234,6 +246,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             mockRfc.readTable.mockResolvedValueOnce([{ MATNR: '000000008000000001', XCHPF: '', SERNP: 'Z001' }]);
 
             await expect(adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839',
                 qty: 2,
                 serials: ['SER001'] // Only 1 serial for qty 2
@@ -291,6 +304,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             });
 
             const result = await adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839',
                 qty: 5,
                 autoConfirm: true
@@ -328,6 +342,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             mockRfc.readTable.mockResolvedValueOnce([{ TAPOS: '0001', PQUIT: '' }]);
 
             const result = await adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839',
                 qty: 5,
                 autoConfirm: true
@@ -352,6 +367,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             });
 
             const result = await adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839',
                 qty: 5,
                 autoConfirm: true,
@@ -384,6 +400,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             mockRfc.call.mockResolvedValueOnce({ E_SUBRC: 0 });
 
             const result = await adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839',
                 qty: 5,
                 autoConfirm: true,
@@ -406,7 +423,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             mockRfc.readTable.mockResolvedValueOnce([{ TANUM: '0001012966', KQUIT: '' }]); // LTAK: TO header for the TR, not confirmed
             mockRfc.readTable.mockResolvedValueOnce([{ TAPOS: '0001', TBPOS: '0001' }]);   // LTAP: its item with PQUIT blank
 
-            await expect(adapter.createTOFromTR({ tbnum: '0001001839', qty: 5, autoConfirm: true }))
+            await expect(adapter.createTOFromTR({ lgnum: 'W01', tbnum: '0001001839', qty: 5, autoConfirm: true }))
                 .rejects.toThrow(/Unconfirmed Transfer Order 1012966 exists for TR 1001839 item 0001/);
 
             expect(mockRfc.readTable).toHaveBeenCalledWith('LTAK', ['TANUM', 'KQUIT'], ["LGNUM = 'W01'", "AND TBNUM = '0001001839'"]);
@@ -426,6 +443,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             });
 
             const result = await adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839',
                 qty: 5,
                 autoConfirm: false // No auto confirm
@@ -501,6 +519,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             mockRfc.call.mockResolvedValueOnce({});             // L_TO_CONFIRM succeeds
 
             const res = await adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839', qty: 3,
                 autoConfirm: true,
                 autoPostMigo: true   // adapter ignores this; handler uses it for MIGO
@@ -518,6 +537,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             mockRfc.call.mockResolvedValueOnce({});             // L_TO_CONFIRM
 
             const res = await adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839', qty: 3,
                 autoConfirm: true,
                 autoPostMigo: false
@@ -533,6 +553,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             mockRfc.call.mockResolvedValueOnce(toCreated);  // Z_WM_TO_CREATE_FROM_TR
 
             const res = await adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839', qty: 3,
                 autoConfirm: false,
                 autoPostMigo: true
@@ -548,6 +569,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             mockRfc.call.mockResolvedValueOnce(toCreated);  // Z_WM_TO_CREATE_FROM_TR
 
             const res = await adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839', qty: 3,
                 autoConfirm: false,
                 autoPostMigo: false
@@ -591,7 +613,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             setupTr();
             mockRfc.call.mockResolvedValueOnce(toCreated); // Z_WM_TO_CREATE_FROM_TR
 
-            await adapter.createTOFromTR({ tbnum: '0001001839', qty: 3, autoConfirm: false });
+            await adapter.createTOFromTR({ lgnum: 'W01', tbnum: '0001001839', qty: 3, autoConfirm: false });
 
             expect(mockRfc.call).toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.objectContaining({
                 IT_ITEMS: [expect.objectContaining({ VLTYP: '', VLPLA: '', VLENR: '' })]
@@ -619,7 +641,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             // 4. Z_WM_TO_CREATE_FROM_TR call
             mockRfc.call.mockResolvedValueOnce(toCreated);
 
-            await adapter.createTOFromTR({ tbnum: '0001001839', qty: 1, autoConfirm: false });
+            await adapter.createTOFromTR({ lgnum: 'W01', tbnum: '0001001839', qty: 1, autoConfirm: false });
 
             expect(mockRfc.call).toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.objectContaining({
                 IT_ITEMS: [expect.objectContaining({
@@ -644,7 +666,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 { LGTYP: 'EN1', STAUS: 'F', VOLLE: 'X' }
             ]);
 
-            await expect(adapter.createTOFromTR({ tbnum: '0001001839', qty: 2, autoConfirm: false }))
+            await expect(adapter.createTOFromTR({ lgnum: 'W01', tbnum: '0001001839', qty: 2, autoConfirm: false }))
                 .rejects.toMatchObject({
                     status: 400,
                     message: expect.stringContaining('Storage unit 1000057774 in storage type EN1 requires complete stock removal')
@@ -668,7 +690,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             // 4. Z_WM_TO_CREATE_FROM_TR call
             mockRfc.call.mockResolvedValueOnce(toCreated);
 
-            await adapter.createTOFromTR({ tbnum: '0001001839', qty: 2, autoConfirm: false });
+            await adapter.createTOFromTR({ lgnum: 'W01', tbnum: '0001001839', qty: 2, autoConfirm: false });
 
             // Must choose SU 1000057775 (qty 2) without splitting SU 1000057774 (qty 5)
             expect(mockRfc.call).toHaveBeenCalledWith('Z_WM_TO_CREATE_FROM_TR', expect.objectContaining({
@@ -695,7 +717,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 { LGTYP: 'EN1', STAUS: 'F', VOLLE: 'X' }
             ]);
 
-            await expect(adapter.createTOFromTR({ tbnum: '0001001839', qty: 3, autoConfirm: false }))
+            await expect(adapter.createTOFromTR({ lgnum: 'W01', tbnum: '0001001839', qty: 3, autoConfirm: false }))
                 .rejects.toMatchObject({
                     status: 400,
                     message: expect.stringMatching(/1000057774 \(qty: 5\).*1000057775 \(qty: 10\)/)
@@ -708,6 +730,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             mockRfc.call.mockResolvedValueOnce(toCreated);
 
             await adapter.createTOFromTR({
+                lgnum: 'W01',
                 tbnum: '0001001839', qty: 1, autoConfirm: false,
                 sourceStorageType: 'RM1', sourceStorageBin: 'BIN-RM'
             });
@@ -730,7 +753,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 { LQNUM: '102', LGTYP: '921', LGPLA: 'TRANSFER', LENUM: '', CHARG: '', VERME: '5.000' }
             ]);
 
-            await expect(adapter.createTOFromTR({ tbnum: '0001001839', qty: 1, autoConfirm: false }))
+            await expect(adapter.createTOFromTR({ lgnum: 'W01', tbnum: '0001001839', qty: 1, autoConfirm: false }))
                 .rejects.toMatchObject({
                     status: 400,
                     message: expect.stringContaining('No matching stock found')
@@ -751,7 +774,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 { LGTYP: 'ST1', STAUS: 'L' }
             ]);
 
-            await expect(adapter.createTOFromTR({ tbnum: '0001001839', qty: 1, autoConfirm: false }))
+            await expect(adapter.createTOFromTR({ lgnum: 'W01', tbnum: '0001001839', qty: 1, autoConfirm: false }))
                 .rejects.toMatchObject({
                     status: 400,
                     message: expect.stringContaining("only FIFO ('F') is supported")
@@ -772,7 +795,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                 { LGTYP: 'OH1', STAUS: 'H' }
             ]);
 
-            await expect(adapter.createTOFromTR({ tbnum: '0001001839', qty: 1, autoConfirm: false }))
+            await expect(adapter.createTOFromTR({ lgnum: 'W01', tbnum: '0001001839', qty: 1, autoConfirm: false }))
                 .rejects.toMatchObject({
                     status: 400,
                     message: expect.stringContaining("Storage type OH1 has stock removal strategy 'H'; only FIFO ('F') is supported under WM_PICK_SOURCE_FROM_LQUA")

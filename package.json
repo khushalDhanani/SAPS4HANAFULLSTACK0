@@ -96,7 +96,8 @@
             },
             "dave": {
               "roles": [
-                "Viewer"
+                "Viewer",
+                "WarehouseClerk"
               ],
               "attr": {
                 "Plant": [
@@ -159,7 +160,8 @@
             },
             "dave": {
               "roles": [
-                "Viewer"
+                "Viewer",
+                "WarehouseClerk"
               ],
               "attr": {
                 "Plant": [

@@ -18,8 +18,13 @@ const LOG_ENTITY = 'saps4hana.wm.ReservationLog';
 
 const authClerk = { auth: { username: 'carol', password: '' } };
 const authViewer = { auth: { username: 'bob', password: '' } };
+const { seedLocalWmData } = require('../../wmSeedHelper');
 
 describe('Chunk 1: Data Model — ZRES_TRACK & ZRES_LOG', () => {
+  beforeAll(async () => {
+    await seedLocalWmData();
+  });
+
   describe('1. Tables Active & Code List Resolution', () => {
     test('ReservationStatus code list contains all 6 valid statuses with criticality', async () => {
       const statuses = await cds.db.run(SELECT.from(STATUS_ENTITY));

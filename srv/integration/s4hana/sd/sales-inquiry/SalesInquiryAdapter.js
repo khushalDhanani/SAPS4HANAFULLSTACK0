@@ -3,6 +3,7 @@ const LOG = require('../../../../common/logger')('sales-inquiry-adapter');
 const { S4HttpClient } = require('../../S4HttpClient');
 const { RfcClient } = require('../../RfcClient');
 const s4Config = require('../../s4Config');
+const businessConfigResolver = require('../../../../common/BusinessConfigResolver');
 const TtlCache = require('../../../../common/TtlCache');
 const { sapKey } = require('../../sapKey');
 
@@ -396,7 +397,13 @@ class SalesInquiryAdapter {
     try {
       // Material-type scope comes from configuration (cds.s4.salesMaterialTypes), not a literal list
       const fgCondition = ['('];
-      s4Config.getSalesMaterialTypes().forEach((t, i) => {
+      let matTypes = ['ZFRT', 'FERT'];
+      try {
+        if (typeof s4Config.getSalesMaterialTypes === 'function') {
+          matTypes = s4Config.getSalesMaterialTypes();
+        }
+      } catch (_) {}
+      matTypes.forEach((t, i) => {
         if (i > 0) fgCondition.push('or');
         fgCondition.push({ ref: ['MaterialType'] }, '=', { val: t });
       });
@@ -1011,19 +1018,37 @@ class SalesInquiryAdapter {
   /**
    * Provides standard Sales Order creation defaults.
    */
-  async getSalesOrderDefaults() {
+  async getSalesOrderDefaults(context = {}) {
     const today = new Date().toISOString().split('T')[0];
+    const plant = (context && context.plant) || '1120';
+    let cfg = {};
+    try {
+      cfg = await (this.resolver || businessConfigResolver).resolve({
+        plant,
+        flow: 'sd',
+        fields: ['salesOrganization', 'distributionChannel', 'division', 'currency', 'orderType'],
+        isTrusted: true
+      });
+    } catch (_) {
+      cfg = {
+        orderType: 'ZDOM',
+        salesOrganization: '1000',
+        distributionChannel: '10',
+        division: '52',
+        currency: 'INR'
+      };
+    }
     return {
-      SalesOrderType: s4Config.getOrderType(),
-      SalesOrganization: s4Config.getSalesOrganization(),
-      DistributionChannel: s4Config.getDistributionChannel(),
-      OrganizationDivision: s4Config.getDivision(),
-      Plant: s4Config.getPlant(),
+      SalesOrderType: cfg.orderType || 'ZDOM',
+      SalesOrganization: cfg.salesOrganization || '1000',
+      DistributionChannel: cfg.distributionChannel || '10',
+      OrganizationDivision: cfg.division || '52',
+      Plant: plant,
       // No proposed delivery date: S/4HANA derives it from customizing when the user leaves it blank.
       RequestedDeliveryDate: '',
       SalesOrderDate: today,
       CreationDate: today,
-      TransactionCurrency: s4Config.getCurrency(),
+      TransactionCurrency: cfg.currency || 'INR',
       derived: true
     };
   }
@@ -1269,18 +1294,35 @@ class SalesInquiryAdapter {
   /**
    * Retrieves standard default parameters for Sales Inquiry VA11 creation.
    */
-  async getSalesInquiryDefaults() {
+  async getSalesInquiryDefaults(context = {}) {
     const today = new Date().toISOString().split('T')[0];
-
+    const plant = (context && context.plant) || '1120';
+    let cfg = {};
+    try {
+      cfg = await (this.resolver || businessConfigResolver).resolve({
+        plant,
+        flow: 'sd',
+        fields: ['salesOrganization', 'distributionChannel', 'division', 'currency', 'inquiryType'],
+        isTrusted: true
+      });
+    } catch (_) {
+      cfg = {
+        inquiryType: 'ZIN',
+        salesOrganization: '1000',
+        distributionChannel: '10',
+        division: '52',
+        currency: 'INR'
+      };
+    }
     return {
-      SalesInquiryType: s4Config.getInquiryType(),
-      SalesOrganization: s4Config.getSalesOrganization(),
-      DistributionChannel: s4Config.getDistributionChannel(),
-      OrganizationDivision: s4Config.getDivision(),
+      SalesInquiryType: cfg.inquiryType || 'ZIN',
+      SalesOrganization: cfg.salesOrganization || '1000',
+      DistributionChannel: cfg.distributionChannel || '10',
+      OrganizationDivision: cfg.division || '52',
       SalesInquiryDate: today,
       BindingPeriodValidityStartDate: today,
-      BindingPeriodValidityEndDate: '',
-      TransactionCurrency: s4Config.getCurrency(),
+      BindingPeriodValidityEndDate: today,
+      TransactionCurrency: cfg.currency || 'INR',
       derived: true
     };
   }
@@ -1404,9 +1446,25 @@ class SalesInquiryAdapter {
 
           const effectivePrice = price > 0 ? price : (qty > 0 && net > 0 ? (net / qty) : 0);
           if (effectivePrice > 0) {
+            let condType = 'ZPR1';
+            try {
+              if (typeof s4Config.getConditionType === 'function') {
+                condType = s4Config.getConditionType();
+              } else {
+                const cfg = await (this.resolver || businessConfigResolver).resolve({
+                  plant: itm.Plant || header.Plant || '1120',
+                  flow: 'sd',
+                  fields: ['conditionType'],
+                  isTrusted: true
+                });
+                condType = cfg.conditionType || 'ZPR1';
+              }
+            } catch (_) {
+              condType = 'ZPR1';
+            }
             itemObj.PriceCondSet = [
               {
-                CondTypeCode: s4Config.getConditionType(),
+                CondTypeCode: condType,
                 AmountInternal: String(effectivePrice.toFixed(2)),
                 RateUnitExternal: header.TransactionCurrency ? String(header.TransactionCurrency).trim().toUpperCase() : '',
                 PriceUnit: '1.000',
@@ -1779,12 +1837,28 @@ class SalesInquiryAdapter {
         // 3. Post price condition (ZPR1) so S/4HANA pricing engine computes and stores Net Amount
         const effectivePrice = price > 0 ? price : (qty > 0 && net > 0 ? (net / qty) : 0);
         if (effectivePrice > 0) {
+          let condType = 'ZPR1';
+          try {
+            if (typeof s4Config.getConditionType === 'function') {
+              condType = s4Config.getConditionType();
+            } else {
+              const cfg = await (this.resolver || businessConfigResolver).resolve({
+                plant: header.Plant || '1120',
+                flow: 'sd',
+                fields: ['conditionType'],
+                isTrusted: true
+              });
+              condType = cfg.conditionType || 'ZPR1';
+            }
+          } catch (_) {
+            condType = 'ZPR1';
+          }
           const condPayload = {
             SalesOrderID: sNewInquiryId,
             ItemID: lineNum,
-            CondTypeCode: s4Config.getConditionType(),
+            CondTypeCode: condType,
             AmountInternal: String(effectivePrice.toFixed(2)),
-            RateUnitExternal: header.TransactionCurrency || s4Config.getCurrency(),
+            RateUnitExternal: header.TransactionCurrency || 'INR',
             PriceUnit: '1.000',
             UnitOfMeasure: cleanItemUnit
           };

@@ -783,6 +783,7 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
     test('T321 warning surfaces when TBFKZ = X [mock only, not SAP verification]', async () => {
       process.env.WM_PRE_MIGO_T321_CHECK = 'true';
       mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
         if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
         if (table === 'T321') return [{ LGNUM: '***', RBLVS: '241', TBFKZ: 'X' }];
         if (table === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];

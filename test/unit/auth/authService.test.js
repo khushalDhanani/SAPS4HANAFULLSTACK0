@@ -159,6 +159,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             process.env.S4_USERNAME = 'custom_dev_user';
             process.env.S4_PASSWORD = 'devPassword123';
             process.env.LOCAL_DEV_PASSWORD = 'khushal';
+            process.env.S4_CLIENT = '220';
 
             const req1 = {
                 data: { username: 'KHUSHAL', password: 'khushal' }

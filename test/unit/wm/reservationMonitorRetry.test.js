@@ -12,8 +12,13 @@ const { POST, GET } = cds.test(__dirname + '/../../../');
 const { INSERT, DELETE } = cds.ql;
 
 const authClerk = { auth: { username: 'carol', password: '' } };
+const { seedLocalWmData } = require('../../wmSeedHelper');
 
 describe('Chunk 6: Monitor App, Retry Handling & SLG1 Integration', () => {
+  beforeAll(async () => {
+    await seedLocalWmData();
+  });
+
   let adapter;
 
   beforeEach(() => {
@@ -266,6 +271,7 @@ describe('Chunk 6: Monitor App, Retry Handling & SLG1 Integration', () => {
         ReservationNo: testResNo,
         ReservationItem: testResItem,
         MovementType: '311',
+        Plant: '1120',
         Status_code: '02'
       });
 

@@ -8,7 +8,8 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
 
     beforeEach(() => {
         delete process.env.S4_SYSTEM_NAME;
-        delete process.env.S4_CLIENT;
+        process.env.S4_CLIENT = '220';
+        authAdapter.client.destinationName = '';
     });
 
     afterEach(() => {
@@ -219,6 +220,7 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
 
         it('should resolve base URL from BTP Destination Service when env is unset', async () => {
             delete process.env.S4_DESTINATION_URL;
+            authAdapter.client.destinationName = 'S4HANA_DEST';
             jest.spyOn(connectivity, 'getDestination').mockResolvedValueOnce({
                 url: 'https://my-btp-destination.corp:443/'
             });
@@ -229,6 +231,7 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
 
         it('should prioritize BTP Destination Service over local environment variables', async () => {
             process.env.S4_DESTINATION_URL = 'http://local-env:8000';
+            authAdapter.client.destinationName = 'S4HANA_DEST';
             jest.spyOn(connectivity, 'getDestination').mockResolvedValueOnce({
                 url: 'https://btp-managed-destination.corp:443/'
             });

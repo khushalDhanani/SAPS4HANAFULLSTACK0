@@ -405,6 +405,7 @@ describe('TrToAdapter (RFC)', () => {
         throw new Error(`unexpected ${fm}`);
       }),
       readTable: jest.fn(async (table) => {
+        if (table === 'LTBK') return [{ LGNUM: 'W01' }];
         if (table === 'LTAP') return [];
         if (table === 'MARC') return [];
         return [];
