@@ -7,6 +7,78 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **SAP Purchase Order AI Assistant: Data Completeness, Deterministic Dataset Totals & Rankings, & Fallback/Partial/Exact/Empty Classification (2026-10-23 18:15 IST) — COMPLETED:**
+  - Requirement: Correct data completeness. Distinguish exact totals, partial results, empty results, and failed queries. Never present capped context or fallback table rows as complete dataset analysis. Calculate totals and rankings deterministically against the appropriate SAP dataset.
+  - Implementation:
+    - In `PurchaseOrders.controller.js`:
+      - Implemented static classifier `PurchaseOrdersController._classifyCompleteness(iShown, iTotal, bFallback, bQueryFailed)` returning:
+        1. `FAILED_QUERY_FALLBACK`: When server query fails or UI fallback visible rows are loaded.
+        2. `EMPTY_RESULT`: When total matching records in SAP is 0 (or 0 shown and total null/0).
+        3. `EXACT_TOTAL`: When total is confirmed and all matching records are present in context (`shown >= total`).
+        4. `PARTIAL_RESULT`: When context is capped (`shown < total` or total is unconfirmed).
+      - Updated `_fetchAIContextRows` to tag `aRows.isFallback` and `aRows.queryFailed` so fallback rows are never mistaken for live server data.
+      - Updated `_fetchMentionedPurchaseOrders` to propagate `isFallback` and `queryFailed` flags.
+      - Updated `_getAIScope` to compute `completeness` using `_classifyCompleteness`.
+      - Enhanced `_buildAISystemPrompt`:
+        - Injected **DATA COMPLETENESS STATUS** directives tailored to each state:
+          - `FAILED_QUERY_FALLBACK`: Live server query failed; visible fallback UI rows only. AI is strictly prohibited from presenting fallback rows as complete analysis or extrapolating company totals/rankings; must emit `[Data Scope: Fallback Table Rows (Query Failed)]` and `[Retrieval Status: FAILED_QUERY_FALLBACK]`.
+          - `PARTIAL_RESULT`: Capped context (e.g. 40 or 300 POs out of total matching SAP records). AI is prohibited from presenting capped rows as complete dataset analysis or computing company spend/rankings from them; must emit `[Data Scope: Capped Context (X of Y POs)]`.
+          - `EXACT_TOTAL`: Confirmed complete matching dataset in context; emits `[Data Scope: Complete Dataset (X POs)]`.
+          - `EMPTY_RESULT`: 0 matching records in SAP; emits `[Data Scope: Empty Result (0 POs)]`.
+        - Enforced **DETERMINISTIC DATASET CALCULATION PROTOCOL**:
+          1. Dataset totals must be taken deterministically from `SCOPE.total` or `STATUS COUNTS` (server-calculated), never by manual counting in `PURCHASE_ORDERS`.
+          2. Rankings and Top-N by Net Amount must be taken from `TOP_PURCHASE_ORDERS_BY_NET_AMOUNT` (server-sorted across the entire filtered dataset).
+          3. Status breakdown must use `STATUS COUNTS` (server-calculated across all SAP status codes).
+          4. Row aggregates in `AGGREGATES` are explicitly labeled `(PARTIAL, computed ONLY over the [N] included purchase orders...)` when partial, and `(exact, computed by the application - use these for counts, sums, rankings and top-N...)` when exact.
+      - Updated `_aiMetaText`: Displays `aiMetaFallback` ("Fallback rows (server query failed)") when fallback/query failed.
+      - Updated `_aiMetaTooltip`: Clearly details whether result is exact totals, partial capped context with partial aggregates, empty result, or fallback rows.
+      - Enhanced `_toHtml`: Maps semantic completeness states to appropriate badges:
+        - `[Data Scope: Capped Context ...]` / `[Data Scope: Partial ...]` -> `<span class="aiBadge aiBadgePartial">`
+        - `[Data Scope: Fallback Table Rows ...]` / `[Retrieval Status: FAILED_QUERY_FALLBACK]` / `[Retrieval Status: NOT_FOUND_IN_SAP]` -> `<span class="aiBadge aiBadgeFailed">`
+        - `[Data Scope: Empty Result ...]` -> `<span class="aiBadge aiBadgeEmpty">`
+        - `[Data Scope: Complete Dataset ...]` -> `<span class="aiBadge aiBadgeScope">`
+        - `[Retrieval Status: VERIFIED_LIVE_SAP]` -> `<span class="aiBadge aiBadgeRetrieval">`
+    - In `app/fiori-app/webapp/css/style.css`:
+      - Added `.aiBadgePartial` (amber warning), `.aiBadgeFailed` (red error), and `.aiBadgeEmpty` (neutral gray) badge styling.
+    - In `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+      - Added `aiMetaFallback=Fallback rows (server query failed)`.
+    - In `test/unit/purchase-order/purchaseOrdersAskAI.test.js`:
+      - Added 4 dedicated unit test suites covering `_classifyCompleteness` for all 4 states, `_buildAISystemPrompt` data completeness directives and deterministic rules, `_aiMetaText` & `_aiMetaTooltip` formatting, and `_toHtml` badge CSS mapping.
+  - Validation:
+    - `npx jest --runInBand test/unit/purchase-order/purchaseOrdersAskAI.test.js`: 33 of 33 tests passed (100%).
+    - `npx jest --runInBand test/unit/ai`: 9 of 9 tests passed (100%).
+    - `npm run lint` (root eslint): 0 errors.
+    - `npm run lint` in `app/fiori-app` (ui5lint): Success! No findings detected.
+    - `git diff --check`: 0 issues.
+
+- **SAP Purchase Order AI Assistant: Evidence-Backed Answers from SAP Data, Technical Field Traceability, & Fact/Interpretation Separation (2026-10-23 17:55 IST) — COMPLETED:**
+  - Requirement: Make every business answer traceable to the relevant SAP records; provide purchase-order numbers, supplier, relevant item, source fields, data scope, and retrieval status; distinguish verified SAP facts from AI-generated interpretations (e.g. "PO 4500001234 has 3 items due on 30 October" must include the supporting records rather than just a confident sentence).
+  - Implementation:
+    - Updated `PurchaseOrders.controller.js`:
+      - Extended `_asksAboutItems` regex to recognize due dates, schedules, and overdue inquiries (`due\b|schedul|overdue`), ensuring line-item delivery dates (`FirstDeliveryDate`) are automatically pulled into AI context.
+      - Updated `_fetchMentionedPurchaseOrders` to stamp `retrievalStatus = "VERIFIED_LIVE_SAP"` and `dataScope = "Single Document Expand (/PurchaseOrders('<po>')?$expand=to_PurchaseOrderItem)"` on looked-up POs.
+      - Enhanced `_buildAISystemPrompt` with the **Evidence-Backed Traceability Protocol (Critical Requirement)**:
+        1. Mandates every business answer be traceable to underlying SAP records.
+        2. Requires citing PO number (`EBELN`), Supplier ID & Name (`LIFNR`, `NAME1`), Item number (`EBELP`), Material (`MATNR`), Description (`TXZ01`), Quantity & Unit (`MENGE`, `MEINS`), Due Date (`EINDT`), and Net Amount (`NETWR`).
+        3. Requires explicit technical source fields (`EBELN`, `EBELP`, `LIFNR`, `NAME1`, `MATNR`, `TXZ01`, `MENGE`, `MEINS`, `EINDT`, `NETWR`, `STATU`).
+        4. Requires Data Scope and Retrieval Status badges (`[Retrieval Status: VERIFIED_LIVE_SAP]` or `[Retrieval Status: NOT_FOUND_IN_SAP]`).
+        5. Enforces strict structural separation into `### Verified SAP Records` (bullet lists / markdown table) and `### AI Interpretation` (business inference, calculations, recommendations).
+        6. Embedded `SAP_FIELD_CATALOG` mapping JSON property names to SAP backend fields and few-shot example for PO 4500001234 due date traceability.
+      - Enhanced `_toHtml` markdown renderer to support blockquotes (`>` and escaped `&gt;`) and render styled badge spans for `[Verified SAP Record]`, `[AI Interpretation]`, `[Retrieval Status: ...]`, and `[Data Scope: ...]`.
+    - Updated `app/fiori-app/webapp/css/style.css`:
+      - Added Fiori-compliant styles for `.aiBadge`, `.aiBadgeVerified`, `.aiBadgeInterpretation`, `.aiBadgeRetrieval`, `.aiBadgeScope`, and `.aiMd blockquote`.
+      - Added `overflow-x: auto` and `white-space: nowrap` for `.aiMd table` for clean rendering in chat panels.
+    - Updated `i18n.properties` & `i18n_en.properties`:
+      - Updated `aiDialogHint` to highlight evidence-backed answers from live SAP data.
+    - Added unit test coverage in `test/unit/purchase-order/purchaseOrdersAskAI.test.js` verifying prompt protocol, catalog, due date queries, retrieval status tagging, and badge/blockquote rendering.
+  - Validation:
+    - `npx jest --runInBand test/unit/purchase-order/purchaseOrdersAskAI.test.js`: 29 of 29 passed.
+    - `npx jest --runInBand test/unit/ai`: 9 of 9 passed.
+    - Live end-to-end model test via NVIDIA NIM: Verified model generated `### Verified SAP Records` with itemized source fields (`EBELN`, `LIFNR`, `NAME1`, `MATNR`, `TXZ01`, `MENGE`, `MEINS`, `EINDT`, `NETWR`) and cleanly separated `### AI Interpretation`.
+    - `npm run lint` (root eslint): 0 errors (8 baseline warnings in unrelated files).
+    - `npm run lint` in `app/fiori-app` (ui5lint): Success! No findings detected.
+    - `git diff --check`: 0 issues.
+
 - **AI Provider 404 Resolution: NVIDIA NIM Model Transition & Deprecation Fallback Guard (2026-10-23 17:33 IST) — COMPLETED:**
   - Root cause diagnosed: The configured default model `nvidia/nemotron-3-super-120b-a12b` on NVIDIA NIM API endpoint `https://integrate.api.nvidia.com/v1` threw HTTP 404 with `Function 'ac74040f-9fc9-4c5e-ac74-279ba5161d69': Not found for account 'fIWkWKTWdBIGmaqnq4NoCnDVQKlDOc_aI13zaY7d0O4'`, because the function ID mapping for this model was unmapped/retired for the user account.
   - Active model discovery: Live API scan across 84 catalog models on NVIDIA NIM verified that `meta/llama-3.2-11b-vision-instruct` is fully active, responds in ~1.7–3s with high accuracy on SAP procurement questions, streams text deltas cleanly, and avoids worker exhaustion issues present in experimental reasoning models.
@@ -1021,6 +1093,80 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Exact Next Recommended Action (HU stock transfer rack demo — 2026-10-23 10:24 IST):** Rerun full Jest in an environment that permits loopback binds and after the unrelated missing FI/goods-issue test paths are resolved; inspect a wide touch-display viewport when available. No SAP writes or live data are needed for the demo.
 
 ## Changes Log
+
+### 2026-10-23 18:15 IST — SAP Purchase Order AI Assistant: Data Completeness, Deterministic Dataset Totals & Rankings, & Fallback/Partial/Exact/Empty Classification
+
+- **Plan:**
+  - Address user requirement: "Correct data completeness. Distinguish exact totals, partial results, empty results and failed queries. Never present capped context or fallback table rows as complete dataset analysis. Calculate totals and rankings deterministically against the appropriate SAP dataset."
+  - Identify gaps in current implementation:
+    1. The AI prompt treated row sets homogeneously and lacked explicit directives distinguishing `EXACT_TOTAL`, `PARTIAL_RESULT`, `EMPTY_RESULT`, and `FAILED_QUERY_FALLBACK`.
+    2. Fallback table rows loaded when the server read failed were not flagged, risking that visible UI rows might be hallucinated or presented as complete dataset figures.
+    3. Capped context rows (e.g. 40 or 300 POs) could be scanned or summed by the model and erroneously presented as whole-dataset company spend or rankings.
+    4. Deterministic server-calculated figures (`SCOPE.total`, `STATUS COUNTS`, and `TOP_PURCHASE_ORDERS_BY_NET_AMOUNT`) were present in prompt but lacked explicit calculation rules prohibiting manual row scanning/summing.
+    5. UI badges did not distinguish partial/capped, failed/fallback, or empty results with appropriate visual semantics.
+  - Implement static completeness classifier, fallback tagging, prompt completeness directives, deterministic calculation protocol, metadata text/tooltips, and badge CSS classes.
+  - Validate with automated unit tests, linting, and diff checks.
+- **Evidence & Results:**
+  - Files modified:
+    - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`:
+      - Defined `PurchaseOrdersController._classifyCompleteness(iShown, iTotal, bFallback, bQueryFailed)`.
+      - Tagged `isFallback` and `queryFailed` on `_fetchAIContextRows` and propagated in `_fetchMentionedPurchaseOrders` and `_getAIScope`.
+      - Enhanced `_buildAISystemPrompt` with `DATA COMPLETENESS STATUS` (`FAILED_QUERY_FALLBACK`, `PARTIAL_RESULT`, `EXACT_TOTAL`, `EMPTY_RESULT`) and `DETERMINISTIC DATASET CALCULATION PROTOCOL`.
+      - Labeled `AGGREGATES over the included purchase orders` with `(PARTIAL, computed ONLY over the [N] included purchase orders...)` when partial and `(exact...)` when exact.
+      - Updated `_aiMetaText` to show `aiMetaFallback` for fallback queries.
+      - Updated `_aiMetaTooltip` to explain exact totals, partial capped context, empty results, or fallback rows.
+      - Updated `_toHtml` to map `aiBadgePartial`, `aiBadgeFailed`, and `aiBadgeEmpty`.
+    - `app/fiori-app/webapp/css/style.css`:
+      - Added CSS for `.aiBadgePartial`, `.aiBadgeFailed`, and `.aiBadgeEmpty`.
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+      - Added `aiMetaFallback=Fallback rows (server query failed)`.
+    - `test/unit/purchase-order/purchaseOrdersAskAI.test.js`:
+      - Added unit tests for classification, prompt directives, deterministic rules, meta text/tooltips, and badge mapping.
+  - Validation:
+    - `npx jest --runInBand test/unit/purchase-order/purchaseOrdersAskAI.test.js`: 33 of 33 passed.
+    - `npx jest --runInBand test/unit/ai`: 9 of 9 passed.
+    - `npm run lint` (root eslint): 0 errors.
+    - `npm run lint` in `app/fiori-app` (ui5lint): 0 findings.
+    - `git diff --check`: 0 issues.
+- **Errors/Warnings/Blockers:** None.
+- **Exact Next Recommended Action:** Test the AI Assistant directly in the browser by opening `#/purchase-orders`, applying filters, and checking the AI chat window's responses for both capped and small datasets to observe the completeness badges, meta text, and deterministic totals.
+
+### 2026-10-23 17:55 IST — SAP Purchase Order AI Assistant: Evidence-Backed Answers from SAP Data, Technical Field Traceability, & Fact/Interpretation Separation
+
+- **Plan:**
+  - Address user requirement: "1. Evidence-backed answers from SAP data (Critical) — Make every business answer traceable to the relevant SAP records. Provide purchase-order numbers, supplier, relevant item, source fields, data scope and retrieval status. Distinguish verified SAP facts from AI-generated interpretations. Example: 'PO 4500001234 has 3 items due on 30 October' should include the records supporting that statement, rather than just a confident sentence."
+  - Identify gaps in current AI prompt & frontend:
+    1. Previous system prompt instructed the model to never enumerate rows and keep answers very short, causing it to produce confident summary sentences without citing the underlying SAP records.
+    2. Missing explicit protocol requiring citation of PO number (`EBELN`), Supplier (`LIFNR`, `NAME1`), Item (`EBELP`), Material (`MATNR`), Description (`TXZ01`), Quantity & Unit (`MENGE`, `MEINS`), Delivery/Due Date (`EINDT`), Net Amount (`NETWR`), Data Scope, and Retrieval Status.
+    3. Missing structured distinction between confirmed SAP facts (`### Verified SAP Records`) and deductions (`### AI Interpretation`).
+    4. `_asksAboutItems` omitted due date / schedule keywords (`due`, `schedule`, `overdue`), so due date queries didn't load line items.
+    5. Looked-up POs lacked explicit `retrievalStatus: "VERIFIED_LIVE_SAP"` and `dataScope` metadata.
+    6. UI markdown renderer `_toHtml` and CSS lacked evidence badge and blockquote styling.
+  - Implement full traceability protocol, field catalog, due date recognition, and badge rendering.
+  - Validate with comprehensive unit tests (`purchaseOrdersAskAI.test.js`, `aiClient.test.js`), live NVIDIA NIM execution, `ui5lint`, `eslint`, and `git diff --check`.
+- **Evidence & Results:**
+  - Files modified:
+    - `app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller.js`:
+      - Added `due\b|schedul|overdue` to `_asksAboutItems` regex.
+      - Attached `retrievalStatus = "VERIFIED_LIVE_SAP"` and `dataScope = "Single Document Expand (/PurchaseOrders('<po>')?$expand=to_PurchaseOrderItem)"` to `_fetchMentionedPurchaseOrders`.
+      - Built comprehensive `EVIDENCE-BACKED TRACEABILITY PROTOCOL` and `SAP_FIELD_CATALOG` in `_buildAISystemPrompt`.
+      - Enhanced `_toHtml` with `<blockquote>` support and badge conversion for `[Verified SAP Record]`, `[AI Interpretation]`, `[Retrieval Status: ...]`, and `[Data Scope: ...]`.
+    - `app/fiori-app/webapp/css/style.css`:
+      - Added `.aiBadge`, `.aiBadgeVerified`, `.aiBadgeInterpretation`, `.aiBadgeRetrieval`, `.aiBadgeScope`, and `.aiMd blockquote` styles.
+      - Enabled `overflow-x: auto` on `.aiMd table` for clean rendering in chat panel.
+    - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+      - Updated `aiDialogHint` to highlight evidence-backed answers from live SAP data.
+    - `test/unit/purchase-order/purchaseOrdersAskAI.test.js`:
+      - Added 4 test suites covering protocol embedding, catalog presence, due date query handling, retrieval status tagging, and badge rendering.
+  - Validation:
+    - `npx jest --runInBand test/unit/purchase-order/purchaseOrdersAskAI.test.js`: 29 of 29 passed (100%).
+    - `npx jest --runInBand test/unit/ai`: 9 of 9 passed (100%).
+    - Live end-to-end model verification: Sent "Tell me about PO 4500001234 and its items due date" to `meta/llama-3.2-11b-vision-instruct` on NVIDIA NIM. Output verified to produce itemized records with SAP technical fields (`EBELN`, `LIFNR`, `NAME1`, `MATNR`, `TXZ01`, `MENGE`, `MEINS`, `EINDT`, `NETWR`) under `### Verified SAP Records` and clearly separated `### AI Interpretation`.
+    - `npm run lint` (root eslint): 0 errors.
+    - `npm run lint` in `app/fiori-app` (ui5lint): Success! No findings detected.
+    - `git diff --check`: 0 issues.
+- **Errors/Warnings/Blockers:** None.
+- **Exact Next Recommended Action:** Test the AI Assistant directly in the browser by clicking the floating AI launcher on the Purchase Orders list report (`#/purchase-orders`) and asking queries like "PO 4500001234 items due date" or "which items are due this month".
 
 ### 2026-10-23 17:33 IST — AI Provider 404 Fix: Inactive NVIDIA NIM Nemotron-3 Super Model Replaced with meta/llama-3.2-11b-vision-instruct & Deprecation Fallback Guard
 

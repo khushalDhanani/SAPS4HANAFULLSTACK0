@@ -497,17 +497,28 @@ sap.ui.define([
             var that = this;
             var oTable = this.byId("purchaseOrdersTable");
             var oModel = oTable && typeof oTable.getModel === "function" ? oTable.getModel() : null;
-            if (!oModel || typeof oModel.bindList !== "function") { return Promise.resolve(this._getLoadedPurchaseOrders()); }
+            if (!oModel || typeof oModel.bindList !== "function") {
+                var aFallback = this._getLoadedPurchaseOrders();
+                aFallback.isFallback = true;
+                aFallback.queryFailed = true;
+                return Promise.resolve(aFallback);
+            }
             var oBinding = oModel.bindList("/PurchaseOrders", undefined,
                 [new Sorter(this._sCurrentSortProperty || "CreationDate", this._bCurrentSortDescending !== false)],
                 this._buildFilterCriteria(), { $count: true });
             return oBinding.requestContexts(0, PurchaseOrdersController.AI_CONTEXT_ROWS).then(function (aCtx) {
                 var aRows = aCtx.map(function (oCtx) { return PurchaseOrdersController._toAIRow(oCtx.getObject()); });
+                aRows.isFallback = false;
+                aRows.queryFailed = false;
                 oBinding.destroy();
                 return aRows;
-            }).catch(function () {
+            }).catch(function (oErr) {
                 oBinding.destroy();
-                return that._getLoadedPurchaseOrders();
+                var aFallback = that._getLoadedPurchaseOrders();
+                aFallback.isFallback = true;
+                aFallback.queryFailed = true;
+                aFallback.error = (oErr && oErr.message) || String(oErr);
+                return aFallback;
             });
         },
 
@@ -614,12 +625,16 @@ sap.ui.define([
             var aNumbers = PurchaseOrdersController._extractPONumbers(sQuestion);
             var aNotFound = [];
             var aOut = aRows.slice();
+            aOut.isFallback = aRows.isFallback || false;
+            aOut.queryFailed = aRows.queryFailed || false;
             return Promise.all(aNumbers.map(function (sPo) {
                 return ODataClient.get("/odata/v4/purchase-order/PurchaseOrders('" + encodeURIComponent(sPo) + "')" +
                     "?$expand=to_PurchaseOrderItem($select=PurchaseOrderItem,Material,PurchaseOrderItemText,Plant,OrderQuantity," +
                     "PurchaseOrderQuantityUnit,NetPriceAmount,NetAmount,FirstDeliveryDate,PurchaseOrderItemStatus)")
                     .then(function (oPo) {
                         var oRow = PurchaseOrdersController._toAIRow(oPo);
+                        oRow.retrievalStatus = "VERIFIED_LIVE_SAP";
+                        oRow.dataScope = "Single Document Expand (/PurchaseOrders('" + sPo + "')?$expand=to_PurchaseOrderItem)";
                         oRow.items = (oPo.to_PurchaseOrderItem || []).map(function (it) {
                             return { item: it.PurchaseOrderItem, material: it.Material, text: it.PurchaseOrderItemText, plant: it.Plant,
                                 qty: it.OrderQuantity, unit: it.PurchaseOrderQuantityUnit, price: it.NetPriceAmount, net: it.NetAmount,
@@ -629,11 +644,18 @@ sap.ui.define([
                         aOut.push(oRow);
                     })
                     .catch(function () { aNotFound.push(sPo); });
-            })).then(function () { return { rows: aOut, notFound: aNotFound }; });
+            })).then(function () {
+                return {
+                    rows: aOut,
+                    notFound: aNotFound,
+                    isFallback: aOut.isFallback,
+                    queryFailed: aOut.queryFailed
+                };
+            });
         },
 
         /** Real totals for the current filter (server $count / KPI), so the model does not count the loaded page. */
-        _getAIScope: function (iShown) {
+        _getAIScope: function (iShown, bFallback, bQueryFailed) {
             var oTable = this.byId("purchaseOrdersTable");
             var oBinding = oTable && oTable.getBinding("items");
             var iTotal = null;
@@ -643,11 +665,15 @@ sap.ui.define([
             var vKpi = oVM ? oVM.getProperty("/totalCount") : null;
             if (iTotal == null && vKpi != null && vKpi !== "-" && !isNaN(Number(vKpi))) { iTotal = Number(vKpi); }
             var vSuppliers = oVM ? oVM.getProperty("/supplierCount") : null;
+            var sCompleteness = PurchaseOrdersController._classifyCompleteness(iShown, iTotal, bFallback, bQueryFailed);
             return {
                 shown: iShown,
                 total: iTotal,
                 supplierTotal: (vSuppliers != null && vSuppliers !== "-" && !isNaN(Number(vSuppliers))) ? Number(vSuppliers) : null,
-                filtered: !!(oBinding && typeof oBinding.getFilters === "function" && (oBinding.getFilters("Application") || []).length)
+                filtered: !!(oBinding && typeof oBinding.getFilters === "function" && (oBinding.getFilters("Application") || []).length),
+                isFallback: !!bFallback,
+                queryFailed: !!bQueryFailed,
+                completeness: sCompleteness
             };
         },
 
@@ -709,7 +735,7 @@ sap.ui.define([
                 this._searchItems(sQuestion)
             ]).then(function (aRes) {
                 var oCtx = aRes[0];
-                oScope = that._getAIScope(oCtx.rows.length);
+                oScope = that._getAIScope(oCtx.rows.length, oCtx.isFallback, oCtx.queryFailed);
                 oScope.statusCounts = aRes[1];
                 oScope.topPOsByNet = aRes[2];
                 oScope.items = oCtx.items || null;
@@ -721,6 +747,9 @@ sap.ui.define([
                     oScope.search.headers.forEach(function (r) { if (!mSeen[r.po]) { oCtx.rows.push(r); mSeen[r.po] = true; } });
                 }
                 oScope.shown = oCtx.rows.length;
+                if (!oScope.queryFailed && !oScope.isFallback) {
+                    oScope.completeness = PurchaseOrdersController._classifyCompleteness(oScope.shown, oScope.total, false, false);
+                }
                 that._oLastAIScope = oScope;
                 oPayload = {
                     messages: aMessages.filter(function (m) { return !m.error; }).map(function (m) { return { role: m.role, content: m.content }; }),
@@ -814,7 +843,26 @@ sap.ui.define([
         }
     });
 
-    /** Static helpers (pure, unit-tested). */
+    /**
+     * Classifies data completeness for deterministic AI reasoning and UI representation:
+     * - FAILED_QUERY_FALLBACK: Server read failed; context fell back to UI table rows.
+     * - EMPTY_RESULT: 0 matching records in SAP.
+     * - EXACT_TOTAL: All matching records are loaded into context (shown >= total).
+     * - PARTIAL_RESULT: Context is capped or total is unconfirmed (shown < total).
+     */
+    PurchaseOrdersController._classifyCompleteness = function (iShown, iTotal, bFallback, bQueryFailed) {
+        if (bQueryFailed || bFallback) {
+            return "FAILED_QUERY_FALLBACK";
+        }
+        if (iTotal === 0 || (iShown === 0 && (iTotal == null || iTotal === 0))) {
+            return "EMPTY_RESULT";
+        }
+        if (iTotal != null && !isNaN(Number(iTotal)) && iShown >= Number(iTotal)) {
+            return "EXACT_TOTAL";
+        }
+        return "PARTIAL_RESULT";
+    };
+
     PurchaseOrdersController._toAIRow = function (o) {
         o = o || {};
         return {
@@ -857,7 +905,7 @@ sap.ui.define([
     };
 
     PurchaseOrdersController._asksAboutItems = function (sText) {
-        return /\b(item|line|material|product|qty|quantit|plant|storage|deliver|price|unit\b|kg\b|requisition|tax|mat(erial)? ?group)/i.test(String(sText || ""));
+        return /\b(item|line|material|product|qty|quantit|plant|storage|deliver|due\b|schedul|overdue|price|unit\b|kg\b|requisition|tax|mat(erial)? ?group)/i.test(String(sText || ""));
     };
 
     PurchaseOrdersController._toAIItem = function (it) {
@@ -924,7 +972,11 @@ sap.ui.define([
     PurchaseOrdersController._aiMetaText = function (oCtl, oScope, sModel) {
         oScope = oScope || {};
         var aParts = [];
-        if (oScope.total != null) { aParts.push(oCtl.getText("aiMetaTotal", [oScope.total])); }
+        if (oScope.isFallback || oScope.queryFailed) {
+            aParts.push(oCtl.getText("aiMetaFallback"));
+        } else if (oScope.total != null) {
+            aParts.push(oCtl.getText("aiMetaTotal", [oScope.total]));
+        }
         if (oScope.statusCounts && oScope.statusCounts.byStatus) { aParts.push(oCtl.getText("aiMetaStatus")); }
         aParts.push(oCtl.getText("aiMetaRows", [oScope.shown != null ? oScope.shown : 0]));
         aParts.push(oCtl.getText("aiMetaModel", [sModel || "-"]));
@@ -935,7 +987,18 @@ sap.ui.define([
     PurchaseOrdersController._aiMetaTooltip = function (oScope) {
         oScope = oScope || {};
         var a = [];
-        if (oScope.total != null) { a.push(oScope.total + " purchase orders in the " + (oScope.filtered ? "filtered " : "") + "list (server count)"); }
+        if (oScope.isFallback || oScope.queryFailed) {
+            a.push("Fallback table rows only (server query failed; incomplete context)");
+        } else if (oScope.total != null) {
+            a.push(oScope.total + " purchase orders in the " + (oScope.filtered ? "filtered " : "") + "list (server count)");
+        }
+        if (oScope.completeness === "EXACT_TOTAL") {
+            a.push("Exact totals: all " + (oScope.total != null ? oScope.total : oScope.shown) + " matching purchase orders analyzed.");
+        } else if (oScope.completeness === "PARTIAL_RESULT") {
+            a.push("Partial result: " + (oScope.shown || 0) + " of " + (oScope.total != null ? oScope.total : "unknown") + " purchase orders loaded (capped context; row aggregates are partial).");
+        } else if (oScope.completeness === "EMPTY_RESULT") {
+            a.push("Empty result: 0 purchase orders match.");
+        }
         a.push((oScope.shown || 0) + " most recent purchase orders sent to the model with exact aggregates (supplier, status, company, type, month)");
         if (oScope.statusCounts && oScope.statusCounts.byStatus) {
             a.push("Status counts (server): " + Object.keys(oScope.statusCounts.byStatus).map(function (k) { return k + " " + oScope.statusCounts.byStatus[k]; }).join(", "));
@@ -997,7 +1060,13 @@ sap.ui.define([
 
     PurchaseOrdersController._buildAISystemPrompt = function (aRows, aNotFound, oScope) {
         oScope = oScope || {};
-        var bAll = oScope.total != null && oScope.shown >= oScope.total;
+        var bAll = oScope.total != null && oScope.shown >= oScope.total && !oScope.isFallback && !oScope.queryFailed;
+        var sCompleteness = oScope.completeness || PurchaseOrdersController._classifyCompleteness(
+            oScope.shown != null ? oScope.shown : aRows.length,
+            oScope.total,
+            oScope.isFallback,
+            oScope.queryFailed
+        );
         var sScope = oScope.total != null
             ? "SCOPE: the list " + (oScope.filtered ? "with the user's current filters " : "") + "contains " + oScope.total + " purchase orders in total" +
               (oScope.supplierTotal != null ? " from " + oScope.supplierTotal + " suppliers" : "") +
@@ -1010,15 +1079,57 @@ sap.ui.define([
               (bAll ? "" : "For any count or total across all purchase orders use the SCOPE figures, never count the rows below; " +
               "when a question needs data beyond the included rows, say the answer is based on the " + oScope.shown + " most recent purchase orders only. ")
             : "SCOPE: " + (oScope.shown != null ? oScope.shown : aRows.length) + " purchase orders are included below; the full list may be larger. ";
+
+        var sCompletenessDirective = "";
+        if (sCompleteness === "FAILED_QUERY_FALLBACK") {
+            sCompletenessDirective = "\n\nDATA COMPLETENESS STATUS: FAILED_QUERY_FALLBACK\n" +
+                "The live server query failed, so context contains visible fallback UI table rows only. NEVER present fallback table rows as complete dataset analysis or complete business totals. Explicitly inform the user with badge [Data Scope: Fallback Table Rows (Query Failed)] and [Retrieval Status: FAILED_QUERY_FALLBACK] that results are from fallback UI rows only and may be incomplete. Do not extrapolate company-wide totals, spend, or rankings from fallback rows.";
+        } else if (sCompleteness === "PARTIAL_RESULT") {
+            sCompletenessDirective = "\n\nDATA COMPLETENESS STATUS: PARTIAL_RESULT\n" +
+                "The context is capped at " + (oScope.shown != null ? oScope.shown : aRows.length) + " purchase orders out of " + (oScope.total != null ? oScope.total : "unknown") + " total matching records in SAP. NEVER present capped context rows as complete dataset analysis. Clearly state with badge [Data Scope: Capped Context (" + (oScope.shown != null ? oScope.shown : aRows.length) + " of " + (oScope.total != null ? oScope.total : "unknown") + " POs)] that row aggregates reflect ONLY the included subset. For whole-dataset counts, spend, or rankings, rely strictly on deterministic server metrics (SCOPE.total, STATUS COUNTS, TOP_PURCHASE_ORDERS_BY_NET_AMOUNT) and never sum or scan capped rows.";
+        } else if (sCompleteness === "EMPTY_RESULT") {
+            sCompletenessDirective = "\n\nDATA COMPLETENESS STATUS: EMPTY_RESULT\n" +
+                "0 purchase orders matched in SAP. Explicitly inform the user with badge [Data Scope: Empty Result (0 POs)] that no purchase orders were found in SAP matching the active criteria. Do not speculate or invent records.";
+        } else {
+            sCompletenessDirective = "\n\nDATA COMPLETENESS STATUS: EXACT_TOTAL\n" +
+                "All " + (oScope.total != null ? oScope.total : aRows.length) + " matching purchase orders are included below. Totals, aggregates, and rankings over this dataset are exact for the active filters [Data Scope: Complete Dataset (" + (oScope.total != null ? oScope.total : aRows.length) + " POs)].";
+        }
+
+        var sDeterministicRules = "\n\nDETERMINISTIC DATASET CALCULATION PROTOCOL:\n" +
+            "1. TOTAL COUNTS & METRICS: For total counts across the list, use SCOPE.total or STATUS COUNTS (exact, server-calculated). Never count rows manually in PURCHASE_ORDERS.\n" +
+            "2. RANKINGS & TOP-N: For 'largest / top purchase orders by net amount across the list', use TOP_PURCHASE_ORDERS_BY_NET_AMOUNT (exact, server-sorted across the entire filtered dataset). Do NOT rank or compute top-N by scanning capped rows.\n" +
+            "3. STATUS COUNTS: For status breakdowns, use STATUS COUNTS (exact, server-calculated for every SAP status code).\n" +
+            "4. AGGREGATES OVER INCLUDED ROWS: AGGREGATES provides exact sums/counts over the included rows only. When completeness is PARTIAL_RESULT or FAILED_QUERY_FALLBACK, explicitly label any aggregate as partial (e.g. 'Among the " + (oScope.shown != null ? oScope.shown : aRows.length) + " most recent POs analyzed...'). Never present capped context or fallback table rows as complete dataset analysis.";
+
         return "You are an SAP MM procurement assistant for Aether Industries. " +
             sScope +
-            "Answer only from the purchase order data below (JSON, one object per PO; POs the user asked about by number include their items). " +
+            sCompletenessDirective +
+            sDeterministicRules +
+            "\n\nAnswer only from the purchase order data below (JSON, one object per PO; POs the user asked about by number include their items). " +
             "If the data does not contain the answer, say so. Be concise; use short bullet lists where useful. " +
             "Amounts are in the row currency." +
-            (aNotFound && aNotFound.length ? " These PO numbers were looked up in SAP and do NOT exist or are not accessible: " + aNotFound.join(", ") + "." : "") +
+            (aNotFound && aNotFound.length ? " These PO numbers were looked up in SAP and do NOT exist or are not accessible: " + aNotFound.join(", ") + " [Retrieval Status: NOT_FOUND_IN_SAP]." : "") +
+            "\n\nEVIDENCE-BACKED TRACEABILITY PROTOCOL (CRITICAL REQUIREMENT):\n" +
+            "1. Make every business answer traceable to the relevant SAP records. Never provide an unverified assertion or a confident sentence without the supporting records.\n" +
+            "2. For every factual statement about purchase orders, provide:\n" +
+            "   - Purchase-order numbers (po / EBELN)\n" +
+            "   - Supplier ID and Supplier Name (supplier / LIFNR, supplierName / NAME1)\n" +
+            "   - Relevant item: Item number (item / EBELP), Material (material / MATNR), Description (text / TXZ01), Quantity & Unit (qty / MENGE, unit / MEINS), Delivery/Due Date (delivery / EINDT), Net Amount (net / NETWR)\n" +
+            "   - Source fields: Explicitly cite the technical SAP field names confirming the data (e.g. EBELN, EBELP, LIFNR, NAME1, MATNR, TXZ01, MENGE, MEINS, EINDT, NETWR, STATU)\n" +
+            "   - Data scope: State the evidence scope (e.g. 'Single Document Expand via OData', 'Filtered View of " + (oScope.shown != null ? oScope.shown : aRows.length) + " POs', 'Item Search over whole dataset', 'Server-side Status Aggregates')\n" +
+            "   - Retrieval status: Explicitly state '[Retrieval Status: VERIFIED_LIVE_SAP]' for retrieved records, or '[Retrieval Status: NOT_FOUND_IN_SAP]' if not found.\n" +
+            "3. DISTINGUISH VERIFIED SAP FACTS FROM AI-GENERATED INTERPRETATIONS:\n" +
+            "   - Structure your response into clear sections:\n" +
+            "     - Direct Answer / Summary: High-level factual answer.\n" +
+            "     - '### Verified SAP Records' (or '### Verified SAP Facts'): Always include '[Data Scope: ...]' and '[Retrieval Status: ...]' badges here (e.g. '[Data Scope: Single Document Expand] [Retrieval Status: VERIFIED_LIVE_SAP]'), followed by the supporting records presented in structured bullet lists or a markdown table with PO (EBELN), Supplier (LIFNR, NAME1), Item (EBELP), Material (MATNR), Quantity (MENGE, MEINS), Delivery/Due Date (EINDT), and Net Amount (NETWR).\n" +
+            "     - '### AI Interpretation' (or '[AI Interpretation]'): Any business inferences, summaries, calculations, risk observations, or recommendations based on the facts, clearly demarcated as AI interpretation.\n" +
+            "4. EXAMPLE: If asked about 'PO 4500001234 has 3 items due on 30 October', state the concise summary, then under '### Verified SAP Records' list PO 4500001234, Supplier, each item (00010, 00020, etc.) with material, quantity, delivery date (2026-10-30), cite source fields (EBELN, EBELP, EINDT, MENGE, LIFNR), Data Scope ('Single Document Expand'), and Retrieval Status ('[Retrieval Status: VERIFIED_LIVE_SAP]'), followed by '### AI Interpretation' explaining the business context.\n" +
+            "\nSAP_FIELD_CATALOG: po=PurchaseOrder (EBELN), item=PurchaseOrderItem (EBELP), supplier=Supplier (LIFNR), supplierName=SupplierName (NAME1), material=Material (MATNR), text=PurchaseOrderItemText (TXZ01), qty=OrderQuantity (MENGE), unit=PurchaseOrderQuantityUnit (MEINS), delivery=FirstDeliveryDate (EINDT), netAmount/net=NetAmount (NETWR), currency/cur=DocumentCurrency (WAERS), status=PurchasingDocumentStatusName (STATU), company=CompanyCode (BUKRS), purchOrg=PurchasingOrganization (EKORG), purchGroup=PurchasingGroup (EKGRP), plant=Plant (WERKS), sloc=StorageLocation (LGORT), created=CreationDate (AEDAT), createdBy=CreatedByUser (ERNAM)." +
             (oScope.topPOsByNet && oScope.topPOsByNet.length ? "\n\nTOP_PURCHASE_ORDERS_BY_NET_AMOUNT across the WHOLE list" + (oScope.filtered ? " (current filters)" : "") +
                 ", sorted by the server (exact; use this for any 'largest / top N purchase orders' question) = " + JSON.stringify(oScope.topPOsByNet) : "") +
-            "\n\nAGGREGATES over the included purchase orders (exact, computed by the application - use these for counts, sums, rankings and top-N instead of adding up rows yourself) = " +
+            "\n\nAGGREGATES over the included purchase orders " +
+            (bAll ? "(exact, computed by the application - use these for counts, sums, rankings and top-N instead of adding up rows yourself) = "
+                  : "(PARTIAL, computed ONLY over the " + (oScope.shown != null ? oScope.shown : aRows.length) + " included purchase orders; do not present as entire dataset totals) = ") +
             JSON.stringify(PurchaseOrdersController._aggregateRows(aRows)) +
             (oScope.search ? "\n\nITEM_SEARCH: a server-side search over ALL purchase order items (whole list, item text and material) for " +
                 (oScope.search.mode === "any" ? "ANY of the terms " : "ALL the terms ") + JSON.stringify(oScope.search.terms) + " found " + oScope.search.count + " matching line items" +
@@ -1032,7 +1143,7 @@ sap.ui.define([
                 JSON.stringify(PurchaseOrdersController._aggregateItems(oScope.items)) +
                 "\n\nPURCHASE_ORDER_ITEMS (line items of the " + PurchaseOrdersController._aggregateItems(oScope.items).purchaseOrders + " most recent included purchase orders) = " + JSON.stringify(oScope.items) : "") +
             "\n\nAGGREGATES contains, for the included rows, count and net-by-currency per supplier, status, company, type (byType), purchasing organisation (byPurchOrg), purchasing group (byPurchGroup), creator (byCreatedBy), currency and month. " +
-            "NEVER enumerate or scan the rows one by one in your answer; if a question needs a ranking or figure that is not in TOP_PURCHASE_ORDERS_BY_NET_AMOUNT, AGGREGATES or SCOPE, say briefly that it is not available and suggest a filter. Keep answers short." +
+            "For totals or rankings across all purchase orders, use TOP_PURCHASE_ORDERS_BY_NET_AMOUNT, AGGREGATES or SCOPE; NEVER enumerate or scan the rows one by one in your answer; if a question needs a ranking or figure that is not in TOP_PURCHASE_ORDERS_BY_NET_AMOUNT, AGGREGATES or SCOPE, say briefly that it is not available and suggest a filter. For questions about specific documents, items, delivery dates, or suppliers, always provide the exact supporting records with source fields and retrieval status per the EVIDENCE-BACKED TRACEABILITY PROTOCOL." +
             "\n\nPURCHASE_ORDERS = " + JSON.stringify(aRows);
     };
 
@@ -1049,6 +1160,26 @@ sap.ui.define([
                 .replace(/`([^`]+)`/g, function (m, c) { return "<code>" + c + "</code>"; })
                 .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
                 .replace(/(^|[^*\w])\*(?!\s)([^*]+?)\*(?!\w)/g, "$1<em>$2</em>")
+                .replace(/\[(Verified SAP (?:Fact|Record)s?)\]/gi, "<span class=\"aiBadge aiBadgeVerified\">$1</span>")
+                .replace(/\[(AI Interpretation|AI-generated interpretation)\]/gi, "<span class=\"aiBadge aiBadgeInterpretation\">$1</span>")
+                .replace(/\[(Retrieval Status:[^\]]+)\]/gi, function (m, text) {
+                    if (/FAILED|FALLBACK|ERROR|NOT_FOUND/i.test(text)) {
+                        return "<span class=\"aiBadge aiBadgeFailed\">" + text + "</span>";
+                    }
+                    return "<span class=\"aiBadge aiBadgeRetrieval\">" + text + "</span>";
+                })
+                .replace(/\[(Data Scope:[^\]]+)\]/gi, function (m, text) {
+                    if (/FAILED|FALLBACK|ERROR/i.test(text)) {
+                        return "<span class=\"aiBadge aiBadgeFailed\">" + text + "</span>";
+                    }
+                    if (/PARTIAL|CAPPED/i.test(text)) {
+                        return "<span class=\"aiBadge aiBadgePartial\">" + text + "</span>";
+                    }
+                    if (/EMPTY/i.test(text)) {
+                        return "<span class=\"aiBadge aiBadgeEmpty\">" + text + "</span>";
+                    }
+                    return "<span class=\"aiBadge aiBadgeScope\">" + text + "</span>";
+                })
                 .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "<a href=\"$2\" target=\"_blank\" rel=\"noopener\">$1</a>");
         };
         var aLines = esc(sText).replace(/\r\n?/g, "\n").split("\n");
@@ -1091,6 +1222,10 @@ sap.ui.define([
                 closePara();
                 if (sList !== "ol") { closeList(); aOut.push("<ol>"); sList = "ol"; }
                 aOut.push("<li>" + inline(m[1]) + "</li>"); return;
+            }
+            if ((m = /^\s*(?:>|&gt;)\s*(.*)$/.exec(l))) {
+                closePara(); closeList();
+                aOut.push("<blockquote>" + inline(m[1]) + "</blockquote>"); return;
             }
             if (!l.trim()) { closePara(); closeList(); return; }
             closeList();

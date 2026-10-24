@@ -391,4 +391,150 @@ describe('PurchaseOrders Ask AI helpers', () => {
         expect(data.messages).toEqual([]);
         expect(data.question).toBe('');
     });
+
+    test('_buildAISystemPrompt embeds evidence-backed traceability protocol and SAP field catalog', () => {
+        const p = ControllerClass._buildAISystemPrompt([{ po: '4500001234' }], ['9999999999'], { shown: 1, total: 1 });
+        expect(p).toContain('EVIDENCE-BACKED TRACEABILITY PROTOCOL (CRITICAL REQUIREMENT)');
+        expect(p).toContain('Make every business answer traceable to the relevant SAP records');
+        expect(p).toContain('SAP_FIELD_CATALOG: po=PurchaseOrder (EBELN), item=PurchaseOrderItem (EBELP)');
+        expect(p).toContain('supplier=Supplier (LIFNR)');
+        expect(p).toContain('delivery=FirstDeliveryDate (EINDT)');
+        expect(p).toContain('### Verified SAP Records');
+        expect(p).toContain('### AI Interpretation');
+        expect(p).toContain('PO 4500001234 has 3 items due on 30 October');
+        expect(p).toContain('[Retrieval Status: VERIFIED_LIVE_SAP]');
+        expect(p).toContain('[Retrieval Status: NOT_FOUND_IN_SAP]');
+    });
+
+    test('_asksAboutItems detects due date, schedule and overdue queries', () => {
+        expect(ControllerClass._asksAboutItems('which POs are due on 30 October?')).toBe(true);
+        expect(ControllerClass._asksAboutItems('when is the scheduled delivery date?')).toBe(true);
+        expect(ControllerClass._asksAboutItems('any overdue orders?')).toBe(true);
+    });
+
+    test('_fetchMentionedPurchaseOrders tags verified live SAP retrieval status and scope', async () => {
+        const { c } = mkController('what about 4500001234?');
+        mockGet.mockResolvedValue({
+            PurchaseOrder: '4500001234', Supplier: '100001', SupplierName: 'ACME', PurchasingDocumentStatusName: 'Released',
+            to_PurchaseOrderItem: [
+                { PurchaseOrderItem: '00010', Material: 'M100', PurchaseOrderItemText: 'Valve', OrderQuantity: '10', PurchaseOrderQuantityUnit: 'EA', NetAmount: '1200', FirstDeliveryDate: '2026-10-30T00:00:00Z' }
+            ]
+        });
+        mockPost.mockResolvedValue({ answer: 'ok', model: 'm' });
+        await c.onAIAsk();
+        const sys = mockPost.mock.calls[0][1].system;
+        expect(sys).toContain('"retrievalStatus":"VERIFIED_LIVE_SAP"');
+        expect(sys).toContain('"dataScope":"Single Document Expand (/PurchaseOrders(\'4500001234\')?$expand=to_PurchaseOrderItem)"');
+        expect(sys).toContain('"delivery":"2026-10-30"');
+    });
+
+    test('_toHtml renders evidence badges and blockquotes alongside markdown tables', () => {
+        const md = '### Summary\nPO **4500001234** verified.\n\n> Source confirmed via EKKO/EKPO\n\n' +
+            '[Verified SAP Record] [Retrieval Status: VERIFIED_LIVE_SAP] [Data Scope: Single Document Expand]\n\n' +
+            '| Item | Due Date |\n|---|---|\n| 00010 | 2026-10-30 |\n\n' +
+            '### AI Interpretation\n[AI Interpretation] Supplier will deliver on schedule.';
+        const html = ControllerClass._toHtml(md);
+        expect(html).toContain('<h5>Summary</h5>');
+        expect(html).toContain('<blockquote>Source confirmed via EKKO/EKPO</blockquote>');
+        expect(html).toContain('<span class="aiBadge aiBadgeVerified">Verified SAP Record</span>');
+        expect(html).toContain('<span class="aiBadge aiBadgeRetrieval">Retrieval Status: VERIFIED_LIVE_SAP</span>');
+        expect(html).toContain('<span class="aiBadge aiBadgeScope">Data Scope: Single Document Expand</span>');
+        expect(html).toContain('<span class="aiBadge aiBadgeInterpretation">AI Interpretation</span>');
+        expect(html).toContain('<table><thead><tr><th>Item</th><th>Due Date</th></tr></thead>');
+    });
+
+    test('_classifyCompleteness accurately categorizes exact totals, partial results, empty results and fallback/failed queries', () => {
+        // EXACT_TOTAL: all matching records in context
+        expect(ControllerClass._classifyCompleteness(10, 10, false, false)).toBe('EXACT_TOTAL');
+        expect(ControllerClass._classifyCompleteness(15, 10, false, false)).toBe('EXACT_TOTAL');
+
+        // PARTIAL_RESULT: subset / capped context or unknown server count
+        expect(ControllerClass._classifyCompleteness(5, 20, false, false)).toBe('PARTIAL_RESULT');
+        expect(ControllerClass._classifyCompleteness(10, null, false, false)).toBe('PARTIAL_RESULT');
+        expect(ControllerClass._classifyCompleteness(300, 1500, false, false)).toBe('PARTIAL_RESULT');
+
+        // EMPTY_RESULT: 0 records match in SAP
+        expect(ControllerClass._classifyCompleteness(0, 0, false, false)).toBe('EMPTY_RESULT');
+        expect(ControllerClass._classifyCompleteness(0, null, false, false)).toBe('EMPTY_RESULT');
+
+        // FAILED_QUERY_FALLBACK: server query failed or visible fallback rows used
+        expect(ControllerClass._classifyCompleteness(10, 10, true, false)).toBe('FAILED_QUERY_FALLBACK');
+        expect(ControllerClass._classifyCompleteness(10, 10, false, true)).toBe('FAILED_QUERY_FALLBACK');
+        expect(ControllerClass._classifyCompleteness(0, 0, true, true)).toBe('FAILED_QUERY_FALLBACK');
+        expect(ControllerClass._classifyCompleteness(5, 20, true, false)).toBe('FAILED_QUERY_FALLBACK');
+    });
+
+    test('_buildAISystemPrompt instructs model on data completeness and never presents capped context as complete dataset', () => {
+        // Partial result prompt
+        const pPartial = ControllerClass._buildAISystemPrompt([{ po: '1' }], [], { shown: 40, total: 1000, filtered: false });
+        expect(pPartial).toContain('DATA COMPLETENESS STATUS: PARTIAL_RESULT');
+        expect(pPartial).toContain('NEVER present capped context rows as complete dataset analysis');
+        expect(pPartial).toContain('The context is capped at 40 purchase orders out of 1000 total matching records in SAP');
+        expect(pPartial).toContain('AGGREGATES over the included purchase orders (PARTIAL, computed ONLY over the 40 included purchase orders; do not present as entire dataset totals)');
+        expect(pPartial).toContain('DETERMINISTIC DATASET CALCULATION PROTOCOL:');
+        expect(pPartial).toContain('For total counts across the list, use SCOPE.total or STATUS COUNTS (exact, server-calculated)');
+        expect(pPartial).toContain('use TOP_PURCHASE_ORDERS_BY_NET_AMOUNT (exact, server-sorted across the entire filtered dataset)');
+
+        // Failed query / fallback prompt
+        const pFallback = ControllerClass._buildAISystemPrompt([{ po: '1' }], [], { shown: 5, total: 50, isFallback: true, queryFailed: true });
+        expect(pFallback).toContain('DATA COMPLETENESS STATUS: FAILED_QUERY_FALLBACK');
+        expect(pFallback).toContain('NEVER present fallback table rows as complete dataset analysis');
+        expect(pFallback).toContain('[Data Scope: Fallback Table Rows (Query Failed)]');
+        expect(pFallback).toContain('[Retrieval Status: FAILED_QUERY_FALLBACK]');
+
+        // Exact total prompt
+        const pExact = ControllerClass._buildAISystemPrompt([{ po: '1' }, { po: '2' }], [], { shown: 2, total: 2 });
+        expect(pExact).toContain('DATA COMPLETENESS STATUS: EXACT_TOTAL');
+        expect(pExact).toContain('[Data Scope: Complete Dataset (2 POs)]');
+
+        // Empty result prompt
+        const pEmpty = ControllerClass._buildAISystemPrompt([], [], { shown: 0, total: 0 });
+        expect(pEmpty).toContain('DATA COMPLETENESS STATUS: EMPTY_RESULT');
+        expect(pEmpty).toContain('[Data Scope: Empty Result (0 POs)]');
+    });
+
+    test('_aiMetaText and _aiMetaTooltip distinguish exact, partial, empty, and fallback states', () => {
+        const ctl = { getText: (k, a) => a ? `${k}:${a.join(",")}` : k };
+
+        // Normal query with partial result
+        const metaPartial = ControllerClass._aiMetaText(ctl, { shown: 40, total: 1000, completeness: 'PARTIAL_RESULT' }, 'gemini-1.5');
+        expect(metaPartial).toBe('aiMetaTotal:1000 · aiMetaRows:40 · aiMetaModel:gemini-1.5');
+
+        const tipPartial = ControllerClass._aiMetaTooltip({ shown: 40, total: 1000, filtered: true, completeness: 'PARTIAL_RESULT' });
+        expect(tipPartial).toContain('1000 purchase orders in the filtered list (server count)');
+        expect(tipPartial).toContain('Partial result: 40 of 1000 purchase orders loaded (capped context; row aggregates are partial).');
+
+        // Fallback query
+        const metaFallback = ControllerClass._aiMetaText(ctl, { shown: 5, total: 1000, isFallback: true, queryFailed: true }, 'gemini-1.5');
+        expect(metaFallback).toBe('aiMetaFallback · aiMetaRows:5 · aiMetaModel:gemini-1.5');
+
+        const tipFallback = ControllerClass._aiMetaTooltip({ shown: 5, total: 1000, isFallback: true, queryFailed: true, completeness: 'FAILED_QUERY_FALLBACK' });
+        expect(tipFallback).toContain('Fallback table rows only (server query failed; incomplete context)');
+
+        // Exact totals tooltip
+        const tipExact = ControllerClass._aiMetaTooltip({ shown: 10, total: 10, completeness: 'EXACT_TOTAL' });
+        expect(tipExact).toContain('Exact totals: all 10 matching purchase orders analyzed.');
+
+        // Empty result tooltip
+        const tipEmpty = ControllerClass._aiMetaTooltip({ shown: 0, total: 0, completeness: 'EMPTY_RESULT' });
+        expect(tipEmpty).toContain('Empty result: 0 purchase orders match.');
+    });
+
+    test('_toHtml maps semantic completeness states to appropriate badge CSS classes', () => {
+        const md = '[Data Scope: Capped Context (40 of 1234 POs)]\n' +
+            '[Data Scope: Fallback Table Rows (Query Failed)]\n' +
+            '[Retrieval Status: FAILED_QUERY_FALLBACK]\n' +
+            '[Retrieval Status: NOT_FOUND_IN_SAP]\n' +
+            '[Data Scope: Empty Result (0 POs)]\n' +
+            '[Data Scope: Complete Dataset (20 POs)]\n' +
+            '[Retrieval Status: VERIFIED_LIVE_SAP]';
+        const html = ControllerClass._toHtml(md);
+        expect(html).toContain('<span class="aiBadge aiBadgePartial">Data Scope: Capped Context (40 of 1234 POs)</span>');
+        expect(html).toContain('<span class="aiBadge aiBadgeFailed">Data Scope: Fallback Table Rows (Query Failed)</span>');
+        expect(html).toContain('<span class="aiBadge aiBadgeFailed">Retrieval Status: FAILED_QUERY_FALLBACK</span>');
+        expect(html).toContain('<span class="aiBadge aiBadgeFailed">Retrieval Status: NOT_FOUND_IN_SAP</span>');
+        expect(html).toContain('<span class="aiBadge aiBadgeEmpty">Data Scope: Empty Result (0 POs)</span>');
+        expect(html).toContain('<span class="aiBadge aiBadgeScope">Data Scope: Complete Dataset (20 POs)</span>');
+        expect(html).toContain('<span class="aiBadge aiBadgeRetrieval">Retrieval Status: VERIFIED_LIVE_SAP</span>');
+    });
 });
