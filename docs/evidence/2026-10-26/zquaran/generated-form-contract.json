@@ -1,0 +1,72 @@
+{
+  "mapping": [
+    {
+      "NAME": "ZMM_AF_017",
+      "STATE": "A",
+      "FMNUMBER": "00000137"
+    }
+  ],
+  "functions": [
+    {
+      "FUNCNAME": "/1BCDWB/SM00000137",
+      "FMODE": "",
+      "PNAME": "/1BCDWB/SAPLSM00000137"
+    }
+  ],
+  "interface": [
+    {
+      "PARAMCLASS": "E",
+      "PARAMETER": "/1BCDWB/FORMOUTPUT",
+      "TABNAME": "FPFORMOUTPUT",
+      "FIELDNAME": "",
+      "EXID": "v",
+      "OPTIONAL": "",
+      "PARAMTEXT": ""
+    },
+    {
+      "PARAMCLASS": "I",
+      "PARAMETER": "/1BCDWB/DOCPARAMS",
+      "TABNAME": "SFPDOCPARAMS",
+      "FIELDNAME": "",
+      "EXID": "v",
+      "OPTIONAL": "X",
+      "PARAMTEXT": ""
+    },
+    {
+      "PARAMCLASS": "I",
+      "PARAMETER": "GT_FINAL",
+      "TABNAME": "ZMM_TT_026",
+      "FIELDNAME": "",
+      "EXID": "h",
+      "OPTIONAL": "",
+      "PARAMTEXT": ""
+    },
+    {
+      "PARAMCLASS": "X",
+      "PARAMETER": "INTERNAL_ERROR",
+      "TABNAME": "",
+      "FIELDNAME": "",
+      "EXID": "",
+      "OPTIONAL": "",
+      "PARAMTEXT": ""
+    },
+    {
+      "PARAMCLASS": "X",
+      "PARAMETER": "SYSTEM_ERROR",
+      "TABNAME": "",
+      "FIELDNAME": "",
+      "EXID": "",
+      "OPTIONAL": "",
+      "PARAMTEXT": ""
+    },
+    {
+      "PARAMCLASS": "X",
+      "PARAMETER": "USAGE_ERROR",
+      "TABNAME": "",
+      "FIELDNAME": "",
+      "EXID": "",
+      "OPTIONAL": "",
+      "PARAMTEXT": ""
+    }
+  ]
+}

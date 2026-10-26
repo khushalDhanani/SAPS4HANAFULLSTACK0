@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **ZQUARAN PDF wrapper (2026-10-26 18:25 IST) — PROPOSAL READY FOR REVIEW, UNCOMMITTED:** `docs/abap/z_mm_quar_label.fugr.abap` + `docs/zquaran-pdf-wrapper.md`; all dictionary names and the display activity CONFIRMED by READ-ONLY read; only rendering side effects remain for the proof run. Activation and proof run are separate gates. See Changes Log 18:25 IST.
+
 - **Remaining E2E-found defects fixed (2026-10-26 18:04 IST) — DONE, UNCOMMITTED:** sales inquiry Plant, customer return value helps, sales order search/ShippingPoint, Orders Due search/canBill/_text, value-help language filter. Jest 3,841 PASS; affected E2E PASS. Only HU 1120/W01 config remains (business data). See Changes Log 18:04 IST.
 
 - **ZQUARAN Fiori plan (2026-10-26 18:03 IST) — PASS for planning only:** `docs/zquaran-fiori-implementation-plan.md` defines SAP contract discovery, CAP/adapter boundaries, Fiori preview/download/browser printing, test coverage and acceptance gates. No feature code or SAP mutation. Implementation remains dependent on PDF contract, document-year policy, roles/plant scope and print side effects.
@@ -1733,6 +1735,32 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 18:25 IST — ZQUARAN wrapper: READ-ONLY dictionary verification (user-approved)
+
+- **Request:** user approved the READ-ONLY dictionary read declined earlier: DD03L for SFPOUTPUTPARAMS and FPFORMOUTPUT, TACTZ for M_MSEG_WMB.
+- **READ-ONLY executed:** scratch script using `tools/live-sap-gate.js` (`ALLOW_LIVE_SAP_TOOLS=1 … --allow-live-sap`), local env files loaded without printing values, `RfcClient.readTable` = RFC_READ_TABLE on DD03L (`TABNAME = …`, `AS4LOCAL = 'A'`) and TACTZ (`BROBJ = 'M_MSEG_WMB'`). Dictionary metadata only; no business data, no write.
+- **Results (CONFIRMED):** SFPOUTPUTPARAMS has 58 fields incl. `NODIALOG` CHAR1 and `GETPDF` CHAR1 (also PREVIEW, NOPRINT, DEVICE, DEST, REQNEW, REQIMM…); FPFORMOUTPUT = `PDL` RSTR, `XML` RSTR, `PDF` RSTR, `PAGES` INT4, `LANGU` LANG; TACTZ M_MSEG_WMB permitted activities `01, 02, 03, 04, 06, 69, F4` (03 display permitted). Saved: `docs/evidence/2026-10-26/zquaran/dictionary-sfp-fpformoutput-tactz.json` (no credential strings).
+- **Change:** `docs/abap/z_mm_quar_label.fugr.abap` — the three `[NOT VERIFIED]` markers replaced by the confirmed facts (no logic change; no extra output flags added without evidence). `docs/zquaran-pdf-wrapper.md` — evidence table rows set to CONFIRMED with citation; gate 2 marked done.
+- **Still Not verified:** rendering side effects (spool / output records) with `NODIALOG` + `GETPDF` and no device/destination — only the proof run can show it.
+- **TEST DECISION:** TEST NOT POSSIBLE — unactivated ABAP proposal; validation is the gated proof run.
+- **Validation:** read returned rows for all three tables; `git diff --check` — PASS. No activation, transport or rendering. No commit.
+- **Next:** ABAP-owner review of source and deviations (§5); then activation in DEV (separate written go) and the proof run with an approved reference document (written go per call).
+
+### 2026-10-26 18:18 IST — ZQUARAN SAP-side PDF wrapper source prepared for review (no SAP change)
+
+- **Context:** continuation of the ZQUARAN plan (`docs/zquaran-fiori-implementation-plan.md`, Phase 1 step 4). User-confirmed decisions: the new interface requires the document year; roles WarehouseClerk, WarehouseManager, Admin; non-admin users restricted to their plants. The previous session's READ-ONLY RFC dictionary read (DD03L for ZMM_S_013/SFPOUTPUTPARAMS/FPFORMOUTPUT/SFPDOCPARAMS, TOBJ M_MSEG_WMB) was **declined by the permission auto-review**; it was not retried. No SAP call was made in this session.
+- **Change (local files only):**
+  - `docs/abap/z_mm_quar_label.fugr.abap`: proposed function group ZMM_QUAR_LABEL (package ZAMM, the package of ZQUARAN per `docs/wm-discovery/tran_Z.xml`): `Z_MM_QUAR_LABEL_DATA` (1:1 port of `ZMM_R_062_F01` label assembly, MSEG restricted by `MJAHR`, BREAKs removed) and RFC-enabled `Z_MM_QUAR_LABEL_PDF` (required MBLNR + MJAHR, optional CHAR50 text; plants from MATDOC; `AUTHORITY-CHECK M_MSEG_WMB` per plant; renders `ZMM_AF_017` via `FP_FUNCTION_MODULE_NAME` + generated interface; `FP_JOB_CLOSE` always; returns `EV_RESULT`/`EV_MESSAGE`/`EV_PDF`/`EV_LABEL_COUNT`; no DB update, no COMMIT, no printer dispatch).
+  - `docs/zquaran-pdf-wrapper.md`: interface, flow, evidence table (CONFIRMED vs Not verified with citations), deviations from the report, gates before CAP/Fiori.
+  - `docs/evidence/2026-10-26/zquaran/`: the reviewed evidence copied from `/private/tmp` (report source includes, program identity, form/interface/generated-function contracts, FP function metadata, empty wrapper discovery); scanned for credential strings — none.
+- **CONFIRMED (from evidence):** ZQUARAN → ZMM_R_062; ZMM_S_013 fields used by the compiled report; MSEG-MJAHR; ZMM_AF_017 → ZMM_FI_017 → `/1BCDWB/SM00000137` interface (GT_FINAL ZMM_TT_026, /1BCDWB/DOCPARAMS SFPDOCPARAMS, /1BCDWB/FORMOUTPUT FPFORMOUTPUT, three exceptions); FP_JOB_OPEN/FP_FUNCTION_MODULE_NAME/FP_JOB_CLOSE and their exceptions; MATDOC MBLNR/MJAHR/WERKS (`TrToAdapter.js:1458`); M_MSEG_WMB fields ACTVT, WERKS (`261-auth-objects.raw.json`).
+- **Not verified (flagged `[NOT VERIFIED]` in source):** `SFPOUTPUTPARAMS-NODIALOG/GETPDF`, `FPFORMOUTPUT-PDF`, `ACTVT '03'` permitted for M_MSEG_WMB, rendering without spool/output side effects. These need the declined READ-ONLY dictionary read (user approval) and a proof run (written go).
+- **Deviations from the report for review:** year predicate on MSEG (LTAP still matched by WENUM = MBLNR as in the report); `lv_name` cleared per row (the report keeps the previous row's name when characteristics 0818/0828 are missing); BREAK statements removed; empty result returns NO_LABEL_ROWS instead of rendering an empty form.
+- **Finding (report only):** `docs/abap/z_hu_goods_movement.fugr.abap:119-121` checks `M_MSEG_WMB` with an `LGORT` field, but live TOBJ defines only ACTVT and WERKS for that object.
+- **TEST DECISION:** TEST NOT POSSIBLE — ABAP source proposal, not activated; no ABAP syntax check or unit test can run locally. Validation is the gated proof run in `docs/zquaran-pdf-wrapper.md` §6.
+- **Validation:** `git diff --check` — PASS. No SAP call, no activation, no transport, no CAP/Fiori change. No commit.
+- **Next:** review the source and §5 deviations with the ABAP owner; approve the READ-ONLY dictionary read; then activation (separate go) and the proof run (written go per call) before any CAP/Fiori wiring.
 
 ### 2026-10-26 18:04 IST — Fix the remaining app defects found by the E2E suites
 

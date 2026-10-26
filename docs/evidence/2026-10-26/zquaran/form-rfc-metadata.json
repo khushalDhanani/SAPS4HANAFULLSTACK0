@@ -1,0 +1,57 @@
+{
+  "schema": [
+    {
+      "FIELDNAME": "VERSION",
+      "DATATYPE": "NUMC",
+      "LENG": "000005",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "FMNUMBER",
+      "DATATYPE": "NUMC",
+      "LENG": "000008",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "INTERFACE_DATE",
+      "DATATYPE": "DATS",
+      "LENG": "000008",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "INTERFACE_TIME",
+      "DATATYPE": "TIMS",
+      "LENG": "000006",
+      "KEYFLAG": ""
+    },
+    {
+      "FIELDNAME": "STATE",
+      "DATATYPE": "CHAR",
+      "LENG": "000001",
+      "KEYFLAG": "X"
+    },
+    {
+      "FIELDNAME": "NAME",
+      "DATATYPE": "CHAR",
+      "LENG": "000030",
+      "KEYFLAG": "X"
+    }
+  ],
+  "functions": [
+    {
+      "FUNCNAME": "FP_JOB_OPEN",
+      "FMODE": "",
+      "PNAME": "SAPLFPCALL"
+    },
+    {
+      "FUNCNAME": "FP_FUNCTION_MODULE_NAME",
+      "FMODE": "",
+      "PNAME": "SAPLFPGEN"
+    },
+    {
+      "FUNCNAME": "FP_JOB_CLOSE",
+      "FMODE": "",
+      "PNAME": "SAPLFPCALL"
+    }
+  ]
+}
