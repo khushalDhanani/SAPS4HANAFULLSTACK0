@@ -15,7 +15,8 @@ function fixture({ mode = 'R', missing = [], exists = true, direction = 'T', row
       { PARAMETER: 'IT_EXTERNAL_ID', PARAMTYPE: direction, STRUCTURE: 'HUM_EXIDV_T', OPTIONAL: '' },
       { PARAMETER: 'IT_OTHER', PARAMTYPE: direction, STRUCTURE: 'HUM_EXIDV_T', OPTIONAL: 'X' }
     ],
-    DD40L: [{ TYPENAME: 'HUM_EXIDV_T', ROWTYPE: 'EXIDV', ROWKIND: rowKind }]
+    DD40L: [{ TYPENAME: 'HUM_EXIDV_T', ROWTYPE: 'EXIDV', ROWKIND: rowKind }],
+    ROW_FIELDS: { EXIDV: [{ FIELDNAME: 'EXIDV', POSITION: '0001', ROLLNAME: 'EXIDV', DATATYPE: 'CHAR', LENG: '000020' }] }
   };
   const client = {
     readTable: RfcClient.prototype.readTable,
@@ -25,7 +26,9 @@ function fixture({ mode = 'R', missing = [], exists = true, direction = 'T', row
       const table = params.QUERY_TABLE;
       const tableName = params.OPTIONS[0].TEXT.match(/'([^']+)'/)[1];
       const data = table === 'DD03L'
-        ? WANTED[tableName].filter((field) => !missing.includes(field)).map((FIELDNAME) => ({ TABNAME: tableName, FIELDNAME }))
+        ? (WANTED[tableName]
+          ? WANTED[tableName].filter((field) => !missing.includes(field)).map((FIELDNAME) => ({ TABNAME: tableName, FIELDNAME }))
+          : (rows.ROW_FIELDS[tableName] || []))
         : rows[table];
       return { DATA: data.map((r) => ({ WA: selected.map((f) => r[f] || '').join('|') })) };
     })
@@ -47,8 +50,12 @@ describe('HUM READ-ONLY function probe (mocked SAP)', () => {
   it.each(['I', 'E', 'C'])('discovers table types passed as %s parameters, once per distinct type', async (direction) => {
     const { rfc, queries } = fixture({ direction, rowKind: 'S' });
     const evidence = await createProbe({ rfc }).run();
-    expect(evidence.result.tableTypes).toEqual([{ typeName: 'HUM_EXIDV_T', rowType: 'EXIDV', rowKind: 'S', found: true }]);
+    expect(evidence.result.tableTypes).toEqual([{
+      typeName: 'HUM_EXIDV_T', rowType: 'EXIDV', rowKind: 'S', found: true,
+      rowFields: [{ name: 'EXIDV', rollname: 'EXIDV', datatype: 'CHAR', length: '000020' }]
+    }]);
     expect(queries.filter((q) => q.QUERY_TABLE === 'DD40L')).toHaveLength(1);
+    expect(queries.filter((q) => q.QUERY_TABLE === 'DD03L' && q.OPTIONS[0].TEXT.includes("'EXIDV'"))).toHaveLength(1);
     expect(rfc.getCalledFunctions()).toEqual(['RFC_READ_TABLE']);
   });
 

@@ -1508,13 +1508,18 @@ class HuStockTransferAdapter {
         throw httpError(422, `Storage location ${sourceSLoc} is HU-managed (T001L-XHUPF = X); only a handling unit can be transferred from it, not ${v.UnitType}.`);
       }
       LOG.info(`Executing HUM goods movement for HU ${UnitNumber} from ${sourceSLoc} to ${destSLoc}`);
+      // TFDIR-FMODE 'R' is the only proof the function can be called remotely. READ-ONLY evidence
+      // 2026-10-26 (docs/evidence/2026-10-26/hu-fm-rfc-probe.json): FMODE is blank on this system.
+      await this._assertRfcEnabled('HU_CREATE_GOODS_MOVEMENT', sourceSLoc);
 
       let humRes;
       try {
         humRes = await this.rfc.call('HU_CREATE_GOODS_MOVEMENT', {
           IF_EVENT: '0006',
           IF_COMMIT: 'X',
-          IT_EXTERNAL_ID: [s4UnitAlpha],
+          // Row structures CONFIRMED by DD40L/DD03L (docs/evidence/2026-10-26/hu-fm-rfc-probe.20261026T071633.json):
+          // HUM_EXIDV_T -> HUM_EXIDV { EXIDV CHAR 20 }; HUM_DATA_MOVE_TO_T -> HUM_DATA_MOVE_TO { HUWBEVENT, WERKS, LGORT, BWART, ... }.
+          IT_EXTERNAL_ID: [{ EXIDV: s4UnitAlpha }],
           IT_MOVE_TO: [{
             HUWBEVENT: '0006',
             WERKS: cockpit.Plant,
@@ -1630,6 +1635,24 @@ class HuStockTransferAdapter {
     this._attemptCache.set(attemptKey, result);
 
     return result;
+  }
+
+  /** Refuses (501) before any call when TFDIR does not mark the function remote-enabled (FMODE 'R'); nothing is posted. */
+  async _assertRfcEnabled(functionName, sourceSLoc) {
+    this._rfcEnabled = this._rfcEnabled || new Map();
+    if (!this._rfcEnabled.has(functionName)) {
+      let rows;
+      try {
+        rows = await this.rfc.readTable('TFDIR', ['FUNCNAME', 'FMODE'], [`FUNCNAME = '${functionName}'`], 1);
+      } catch (e) {
+        throw httpError(503, `Cannot verify in SAP (TFDIR) whether ${functionName} is RFC-enabled: ${e.message}. Nothing was posted.`);
+      }
+      this._rfcEnabled.set(functionName, rows.length ? String(rows[0].FMODE || '').trim() : null);
+    }
+    const fmode = this._rfcEnabled.get(functionName);
+    if (fmode !== 'R') {
+      throw httpError(501, `${functionName} is ${fmode === null ? 'not found' : `not RFC-enabled (TFDIR FMODE '${fmode}')`} on this system; the HU-managed storage location ${sourceSLoc} cannot be posted by this service. Nothing was posted. See tools/check-hu-fm-rfc.js (READ-ONLY).`);
+    }
   }
 
   /** Error for a write whose SAP outcome is unknown; the handler records it as 'unconfirmed', not 'rejected'. */

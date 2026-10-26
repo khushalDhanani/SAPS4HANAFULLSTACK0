@@ -6,7 +6,8 @@
  * Reads only through RFC_READ_TABLE (allow-listed guard): DD03L confirms every field first, then
  *   TFDIR     -> FMODE ('R' = remote-enabled) for the function,
  *   FUPARAREF -> its parameters (name, kind, type),
- *   DD40L     -> the row types of its table parameters (e.g. HUM_EXIDV_T: elementary or structured).
+ *   DD40L     -> the row type of every declared parameter type that is a table type (e.g. HUM_EXIDV_T),
+ *   DD03L     -> the fields of each structured row type (e.g. HUM_EXIDV), so a payload can be shaped from evidence.
  * Writes docs/evidence/<IST date>/hu-fm-rfc-probe[.<utc>].json after the sensitive-value scan.
  * Closed unless RUN_LIVE_SAP=1 and SAP_SYSTEM_TYPE is non-production (same gate as the HU collector).
  */
@@ -55,7 +56,16 @@ function createProbe({ rfc, functionName = FUNCTION_NAME }) {
     evidence.result.tableTypes = [];
     for (const typeName of tableTypes) {
       const dd40l = await read('DD40L', [`TYPENAME = '${typeName}'`], 1);
-      evidence.result.tableTypes.push({ typeName, rowType: dd40l[0]?.ROWTYPE ?? null, rowKind: dd40l[0]?.ROWKIND ?? null, found: dd40l.length > 0 });
+      const entry = { typeName, rowType: dd40l[0]?.ROWTYPE ?? null, rowKind: dd40l[0]?.ROWKIND ?? null, found: dd40l.length > 0 };
+      // A structured row (ROWKIND S) needs its DD03L fields before any payload can be shaped after it.
+      if (entry.rowKind === 'S' && entry.rowType) {
+        const fieldRows = await rfc.readTable('DD03L', ['FIELDNAME', 'POSITION', 'ROLLNAME', 'DATATYPE', 'LENG'], [`TABNAME = '${entry.rowType}'`], 200);
+        evidence.queries.push({ table: 'DD03L', fields: ['FIELDNAME', 'POSITION', 'ROLLNAME', 'DATATYPE', 'LENG'], where: [`TABNAME = '${entry.rowType}'`], rowCount: fieldRows.length, rows: fieldRows });
+        entry.rowFields = fieldRows
+          .sort((a, b) => String(a.POSITION).localeCompare(String(b.POSITION)))
+          .map((f) => ({ name: f.FIELDNAME, rollname: f.ROLLNAME, datatype: f.DATATYPE, length: f.LENG }));
+      }
+      evidence.result.tableTypes.push(entry);
     }
     return evidence;
   }

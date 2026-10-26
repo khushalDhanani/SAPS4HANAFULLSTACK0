@@ -621,7 +621,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
     });
 
     it('does not fall back to BAPI_GOODSMVT_CREATE when HU_CREATE_GOODS_MOVEMENT fails for a reason other than FU_NOT_FOUND', async () => {
-      mockRfc.readTable.mockResolvedValue([{ XHUPF: 'X' }]);
+      mockRfc.readTable.mockImplementation(async (table) => (table === 'TFDIR' ? [{ FUNCNAME: 'HU_CREATE_GOODS_MOVEMENT', FMODE: 'R' }] : [{ XHUPF: 'X' }]));
       mockRfc.call.mockImplementation((fm) => fm === 'HU_CREATE_GOODS_MOVEMENT' ? Promise.reject(new Error('timeout')) : Promise.resolve({}));
       await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status: 502, sapWriteAttempted: true });
       expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
@@ -634,7 +634,51 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
     beforeEach(() => {
       jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({ OpenQty: 5, Plant: '1150', Material: '8000009803', StorageLocation: 'CS02', ReceivingStorageLocation: 'CIS1' });
       jest.spyOn(adapter, 'validateUnit').mockResolvedValue({ Valid: true, UnitType: 'Handling Unit (HU)', AvailableQuantity: 5 });
-      mockRfc.readTable.mockResolvedValue([{ XHUPF: 'X' }]);
+      // T001L: HU-managed; TFDIR: function remote-enabled (the live system has FMODE blank, see the gate tests below)
+      mockRfc.readTable.mockImplementation(async (table) => (table === 'TFDIR' ? [{ FUNCNAME: 'HU_CREATE_GOODS_MOVEMENT', FMODE: 'R' }] : [{ XHUPF: 'X' }]));
+    });
+
+    it.each([
+      ['FMODE blank (live 2026-10-26 evidence)', [{ FUNCNAME: 'HU_CREATE_GOODS_MOVEMENT', FMODE: '' }], 501, /not RFC-enabled \(TFDIR FMODE ''\)/],
+      ['function missing from TFDIR', [], 501, /not found/],
+      ['TFDIR read failure', new Error('read unavailable'), 503, /Cannot verify in SAP \(TFDIR\)/]
+    ])('refuses the HU-managed posting before any function call when %s', async (_label, tfdir, status, message) => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'TFDIR') { if (tfdir instanceof Error) throw tfdir; return tfdir; }
+        return [{ XHUPF: 'X' }];
+      });
+      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status, message });
+      expect(mockRfc.call).not.toHaveBeenCalled();
+      expect(mockRfc.session).not.toHaveBeenCalled();
+      expect(adapter._attemptCache.size).toBe(0);
+    });
+
+    it('sends HUM_EXIDV / HUM_DATA_MOVE_TO rows with the DD03L-confirmed field names', async () => {
+      mockRfc.call.mockResolvedValue({ ES_EMKPF: { MBLNR: '4900000001', MJAHR: '2026' } });
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'TFDIR') return [{ FUNCNAME: 'HU_CREATE_GOODS_MOVEMENT', FMODE: 'R' }];
+        if (table === 'MATDOC') return [{ MBLNR: '4900000001', MJAHR: '2026', BWART: '311' }];
+        return [{ XHUPF: 'X' }];
+      });
+      await adapter.executeHuStockTransfer(payload);
+      expect(mockRfc.call).toHaveBeenCalledWith('HU_CREATE_GOODS_MOVEMENT', {
+        IF_EVENT: '0006', IF_COMMIT: 'X',
+        IT_EXTERNAL_ID: [{ EXIDV: '00000000002000019371' }],
+        IT_MOVE_TO: [{ HUWBEVENT: '0006', WERKS: '1150', LGORT: 'CIS1', BWART: '311' }]
+      });
+    });
+
+    it('reads TFDIR once per adapter instance', async () => {
+      mockRfc.call.mockResolvedValue({ ES_EMKPF: { MBLNR: '4900000001', MJAHR: '2026' } });
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'TFDIR') return [{ FUNCNAME: 'HU_CREATE_GOODS_MOVEMENT', FMODE: 'R' }];
+        if (table === 'MATDOC') return [{ MBLNR: '4900000001', MJAHR: '2026', BWART: '311' }];
+        return [{ XHUPF: 'X' }];
+      });
+      await adapter.executeHuStockTransfer({ ...payload, ClientAttemptId: 'a1' });
+      await adapter.executeHuStockTransfer({ ...payload, ClientAttemptId: 'a2' });
+      expect(mockRfc.readTable.mock.calls.filter(([t]) => t === 'TFDIR')).toHaveLength(1);
+      expect(mockRfc.call.mock.calls.map(([fm]) => fm)).toEqual(['HU_CREATE_GOODS_MOVEMENT', 'HU_CREATE_GOODS_MOVEMENT']);
     });
 
     it.each([
