@@ -64,7 +64,16 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         SutMode                  : String(30);
         IsHuManaged              : Boolean;
         Xhupf                    : String(1);
+        TransferPath             : String(10); // 'A' | 'B' | 'standard' (T001L classification)
         OversizeHuSelectionBehavior : String(5);
+    };
+
+    type PrecheckDetail {
+        code     : String(40);
+        ![key]   : String(60);   // i18n key
+        severity : String(10);
+        message  : String(300);
+        params   : array of String(60);
     };
 
     type UnitValidationResult {
@@ -88,6 +97,10 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         StatusState         : String(10); // 'Success' | 'Warning' | 'Information' | 'Error'
         StatusMessage       : String(255);
         DefaultTransferQty  : Decimal(13, 3);
+        Blockers            : array of String(300);
+        BlockerDetails      : array of PrecheckDetail;
+        Warnings            : array of String(300);
+        WarningDetails      : array of PrecheckDetail;
     };
 
     type StorageBinItem {
@@ -218,6 +231,7 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         UpdatedOpenQty    : Decimal(13, 3);
         UpdatedStatus     : String(20);
         IsFinalIssue      : Boolean;
+        ReadBackVerified  : Boolean; // document was read back from MATDOC/MSEG with BWART 311
         RequesterAlertSent: Boolean;
         Message           : String(500);
     };
@@ -304,6 +318,26 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         Selections      : array of HuSelection
     ) returns HuStockTransferSelectionValidation;
 
+    type HuSelectionPostingItem {
+        UnitNumber       : String(20);
+        TransferQty      : Decimal(13, 3);
+        Success          : Boolean;
+        MaterialDocument : String(10);
+        MaterialDocYear  : String(4);
+        Message          : String(500);
+    };
+
+    type HuStockTransferSelectionResult {
+        Success         : Boolean;   // every selected HU was posted and read back
+        ReservationNo   : String(10);
+        ReservationItem : String(4);
+        PostedCount     : Integer;
+        FailedCount     : Integer;
+        SkippedCount    : Integer;   // HUs after the first failure, never sent to SAP
+        Items           : array of HuSelectionPostingItem;
+        Message         : String(500);
+    };
+
     // ── Goods Transfer Action ───────────────────────────────────────────
 
     @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -315,4 +349,13 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         IsFullUnit      : Boolean,
         ClientAttemptId : String(36)
     ) returns HuStockTransferResult;
+
+    // Posts one 311 document per selected HU in order (read-only validation first; stops at the first failure).
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action executeHuStockTransferSelection(
+        ReservationNo   : String(10),
+        ReservationItem : String(4),
+        Selections      : array of HuSelection,
+        ClientAttemptId : String(36)
+    ) returns HuStockTransferSelectionResult;
 }

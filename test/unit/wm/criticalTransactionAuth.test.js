@@ -252,6 +252,8 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       MaterialDocument: '5000000262', MaterialDocumentYear: '2026', SapMessage: 'Reversed'
     });
 
+    // plant-scope pre-read of the reservation (carol/dave are plant-scoped users)
+    jest.spyOn(HuStockTransferAdapter.prototype, 'getCockpitDetail').mockResolvedValue({ ReservationNo: '520001', ReservationItem: '1', Plant: '1120', OpenQty: 10 });
     // HuStockTransferAdapter spy
     huTransferSpy = jest.spyOn(HuStockTransferAdapter.prototype, 'executeHuStockTransfer').mockResolvedValue({
       Success: true,

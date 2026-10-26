@@ -73,7 +73,7 @@ async function precheckPathA(reservation = {}, item = {}, hu = {}, context = {})
   const plant = String(reservation.WERKS || reservation.Plant || hu.Plant || hu.plant || '').trim();
   const sloc = String(reservation.LGORT || reservation.StorageLocation || hu.StorageLocation || hu.sloc || '').trim();
   const huId = String(hu.unitNumber || hu.EXIDV || hu.lenum || hu.huId || (typeof hu === 'string' ? hu : '')).trim();
-  const warehouse = String(reservation.warehouse || reservation.Warehouse || hu.warehouse || hu.Warehouse || 'W01').trim();
+  const warehouse = String(reservation.warehouse || reservation.Warehouse || hu.warehouse || hu.Warehouse || '').trim();
   const packagingType = String(hu.packagingType || hu.vhart || hu.VHART || '').trim();
 
   // 1. Blocker: Open delivery exists for this reservation item

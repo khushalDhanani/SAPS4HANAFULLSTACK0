@@ -147,7 +147,7 @@
                     </f:SimpleForm>
                 </Panel>
 
-                <!-- Read-only multi-HU quantity validation; this panel never posts a goods movement. -->
+                <!-- Multi-HU selection: validate read-only first, then post one 311 document per HU (stops at the first failure). -->
                 <Panel id="panelMultiHuSelection" headerText="{i18n>huSelectionPanelTitle}" expandable="false">
                     <VBox class="sapUiSmallMargin">
                         <Text text="{i18n>huSelectionReadOnlyNote}" class="sapUiTinyMarginBottom" />
@@ -188,13 +188,23 @@
                             visible="{= !!${cockpitView>/selectionValidation} }"
                             showIcon="true"
                             class="sapUiTinyMarginTop" />
-                        <Button
-                            id="btnValidateHuSelection"
-                            text="{i18n>huSelectionValidateButton}"
-                            icon="sap-icon://validate"
-                            press=".onValidateSelectedHus"
-                            enabled="{= ${cockpitView>/selectedHus}.length > 0 }"
-                            class="sapUiSmallMarginTop" />
+                        <HBox class="sapUiSmallMarginTop" wrap="Wrap">
+                            <Button
+                                id="btnValidateHuSelection"
+                                text="{i18n>huSelectionValidateButton}"
+                                icon="sap-icon://validate"
+                                press=".onValidateSelectedHus"
+                                enabled="{= ${cockpitView>/selectedHus}.length > 0 }"
+                                class="sapUiTinyMarginEnd sapUiTinyMarginBottom" />
+                            <Button
+                                id="btnPostHuSelection"
+                                text="{i18n>huSelectionPostButton}"
+                                icon="sap-icon://paper-plane"
+                                type="Emphasized"
+                                press=".onPostSelectedHus"
+                                enabled="{= !!${cockpitView>/selectionValidation/Valid} &amp;&amp; ${cockpitView>/selectedHus}.length > 0 }"
+                                class="sapUiTinyMarginBottom" />
+                        </HBox>
                     </VBox>
                 </Panel>
 

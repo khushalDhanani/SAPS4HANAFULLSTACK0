@@ -508,6 +508,7 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
       const mockRfc = {
         readTable: jest.fn().mockImplementation(async (table) => {
           if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'HS01', XHUPF: '' }];
+          if (table === 'MATDOC') return [{ MBLNR: '5000000311', MJAHR: '2026', BWART: '311' }];
           return [];
         }),
         call: jest.fn().mockImplementation(async (fm) => {
@@ -520,6 +521,7 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
           return {};
         })
       };
+      mockRfc.session = (fn) => fn(mockRfc.call);
 
       const adapter = new HuStockTransferAdapter({ rfcClient: mockRfc });
 
@@ -569,6 +571,7 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
       const mockRfc = {
         readTable: jest.fn().mockImplementation(async (table) => {
           if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'HS01', XHUPF: '' }];
+          if (table === 'MATDOC') return [{ MBLNR: '5000000311', MJAHR: '2026', BWART: '311' }];
           return [];
         }),
         call: jest.fn().mockImplementation(async (fm) => {
@@ -582,6 +585,7 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
           return {};
         })
       };
+      mockRfc.session = (fn) => fn(mockRfc.call);
 
       const adapter = new HuStockTransferAdapter({ rfcClient: mockRfc });
 

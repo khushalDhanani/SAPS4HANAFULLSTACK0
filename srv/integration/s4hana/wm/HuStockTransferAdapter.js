@@ -10,8 +10,9 @@
  * - Serial number mapping (SER06 -> OBJK) and SUT mapping (T307T).
    * - Storage bin stock with strict floor/rack/position parsing and SAP bin-master sections.
  * - Dual posting engine:
- *     * Path A (HU-Managed source SLoc: T001L-XHUPF = 'X'): HU_CREATE_GOODS_MOVEMENT (Event 0006, Mvt 311) + RESB updates.
- *     * Path B (Non-HUM source SLoc / Storage Unit): BAPI_GOODSMVT_CREATE (GM_CODE 06, Mvt 311, reservation ref, commit).
+ *     * Path A (HU-Managed source SLoc: T001L-XHUPF = 'X'): HU_CREATE_GOODS_MOVEMENT (Event 0006, Mvt 311); no BAPI fallback.
+ *     * Path B (Non-HUM source SLoc / Storage Unit): BAPI_GOODSMVT_CREATE (GM_CODE 06, Mvt 311, reservation ref, commit) in one LUW.
+ * - Every posting is read back from MATDOC/MSEG (BWART 311) before success is reported.
  * - Idempotency protection to prevent duplicate postings.
  */
 
@@ -29,6 +30,7 @@ const {
 } = require('./transferPathHelper');
 const businessConfigResolver = require('../../../common/BusinessConfigResolver');
 const HU_STOCK_TRANSFER_MOVEMENT_TYPE = '311';
+const NO_STORAGE_RULES = Object.freeze({ isPickable: () => false, isOnHold: () => false, isInterim: () => false });
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -36,11 +38,17 @@ function httpError(status, message) {
   return err;
 }
 
+/** RFC_READ_TABLE OPTIONS are raw Open SQL text; a quote in a caller value would change the query. */
+function assertSapOptionValue(name, value) {
+  if (/['\\]/.test(String(value ?? ''))) throw httpError(400, `${name} contains an unsupported character.`);
+}
+
 class HuStockTransferAdapter {
   constructor({ rfcClient = null, businessConfigResolver: bcr = null, storageTypeRules = null } = {}) {
     this.rfc = rfcClient || new RfcClient();
     this.businessConfigResolver = bcr || businessConfigResolver;
-    this._storageTypeRules = storageTypeRules || null;
+    this._injectedStorageTypeRules = storageTypeRules || null;
+    this._storageTypeRules = new Map(); // plant|warehouse -> resolved rules
     this._attemptCache = new Map(); // In-memory idempotency cache
   }
 
@@ -68,7 +76,7 @@ class HuStockTransferAdapter {
    */
   async getOpenReservations(filters = {}) {
     const {
-      plant = '1120',
+      plant,
       storageLocation,
       movementType,
       requester,
@@ -77,6 +85,9 @@ class HuStockTransferAdapter {
       status = 'open',
       includeDeleted = false
     } = filters;
+    Object.entries({ plant, storageLocation, movementType, requester, reservation, material })
+      .forEach(([name, value]) => assertSapOptionValue(name, value));
+    if (!plant) throw httpError(400, 'plant is required');
 
     const conditions = [];
     if (plant) conditions.push(`WERKS = '${plant}'`);
@@ -223,7 +234,7 @@ class HuStockTransferAdapter {
                   userContactMap.set(u.BNAME, {
                     nameText: adrpMap.get(u.PERSNUMBER) || u.BNAME,
                     phone: '',
-                    email: `${u.BNAME.toLowerCase()}@aether.co.in`
+                    email: '' // only ADR6 (cockpit read) is a real address; nothing is derived from the user name
                   });
                 }
               } catch (e) {
@@ -312,6 +323,8 @@ class HuStockTransferAdapter {
    */
   async getCockpitDetail(reservationNo, reservationItem) {
     if (!reservationNo) throw httpError(400, 'Reservation number is required');
+    assertSapOptionValue('reservation', reservationNo);
+    assertSapOptionValue('item', reservationItem);
     const s4Rsnum = this._pad(reservationNo, 10);
     const s4Rspos = this._pad(reservationItem || '1', 4);
 
@@ -356,7 +369,7 @@ class HuStockTransferAdapter {
 
     // Contact info
     let requesterName = usnam;
-    let requesterEmail = usnam ? `${usnam.toLowerCase()}@aether.co.in` : '';
+    let requesterEmail = '';
     let requesterPhone = '';
     if (usnam) {
       try {
@@ -381,7 +394,7 @@ class HuStockTransferAdapter {
       LOG.warn('Could not read T320:', e.message);
     }
 
-    let prefStorageType = 'EN1'; // Standard default
+    let prefStorageType = ''; // only MLGN/T334T decide; blank means no picking strategy was found
     if (warehouse && row.MATNR) {
       try {
         const mlgn = await this.rfc.readTable('MLGN', ['LTKZA', 'LTKZE'], [`MATNR = '${row.MATNR}'`, `AND LGNUM = '${warehouse}'`], 1);
@@ -405,8 +418,9 @@ class HuStockTransferAdapter {
       ];
       if (row.CHARG) vepoWhere.push(`AND CHARG = '${row.CHARG}'`);
       const vepoRows = await this.rfc.readTable('VEPO', ['VENUM', 'VEMNG'], vepoWhere, 200);
-      availCount = vepoRows.length;
-      availStock = vepoRows.reduce((acc, v) => acc + parseFloat(v.VEMNG || 0), 0);
+      const inStockRows = await this._excludeGoodsIssuedHus(vepoRows);
+      availCount = new Set(inStockRows.map((v) => v.VENUM)).size;
+      availStock = inStockRows.reduce((acc, v) => acc + parseFloat(v.VEMNG || 0), 0);
 
       // If no HUs, check LQUA Storage Units
       if (availCount === 0 && warehouse) {
@@ -486,6 +500,7 @@ class HuStockTransferAdapter {
    */
   async validateUnit(reservationNo, reservationItem, unitNumber) {
     if (!unitNumber) throw httpError(400, 'Unit number (HU or SU) is required');
+    assertSapOptionValue('unitNumber', unitNumber);
 
     // Retrieve reservation context
     const cockpit = await this.getCockpitDetail(reservationNo, reservationItem);
@@ -511,14 +526,14 @@ class HuStockTransferAdapter {
     try {
       vekpRows = await this.rfc.readTable(
         'VEKP',
-        ['VENUM', 'STATUS', 'WERKS', 'LGORT', 'EXIDV'],
+        ['VENUM', 'STATUS', 'WERKS', 'LGORT', 'EXIDV', 'VHART', 'VHILM'],
         [`EXIDV = '${s4UnitAlpha}'`],
         1
       );
       if (!vekpRows.length) {
         vekpRows = await this.rfc.readTable(
           'VEKP',
-          ['VENUM', 'STATUS', 'WERKS', 'LGORT', 'EXIDV'],
+          ['VENUM', 'STATUS', 'WERKS', 'LGORT', 'EXIDV', 'VHART', 'VHILM'],
           [`EXIDV = '${s4Unit}'`],
           1
         );
@@ -725,11 +740,8 @@ class HuStockTransferAdapter {
     const defaultTransferQty = Math.min(qty, cockpit.OpenQty);
 
     // Rule E: Evaluate Storage Type status via BusinessConfigResolver (no hardcoded literals)
-    const storageRules = await this.getStorageTypeRules({
-      plant: werks,
-      warehouse: lgnum,
-      isTrusted: true
-    });
+    // Without a WM warehouse there is no storage type to classify; no rules are resolved (no default warehouse).
+    const storageRules = lgnum ? await this.getStorageTypeRules({ plant: werks, warehouse: lgnum, isTrusted: true }) : NO_STORAGE_RULES;
     const isOnHold = storageRules.isOnHold(lgtyp, lgpla);
     const isInProcess = storageRules.isInterim(lgtyp);
     const isPreferred = storageRules.isPickable(lgtyp) || (cockpit.PreferredStorageType && lgtyp === cockpit.PreferredStorageType);
@@ -882,6 +894,18 @@ class HuStockTransferAdapter {
     };
   }
 
+  /** Drops VEPO rows whose VEKP status is 0050 (goods issued); other statuses are kept (semantics Not verified). */
+  async _excludeGoodsIssuedHus(vepoRows) {
+    const venums = [...new Set(vepoRows.map((v) => v.VENUM).filter(Boolean))];
+    const issued = new Set();
+    for (let i = 0; i < venums.length; i += 8) {
+      const where = venums.slice(i, i + 8).map((v, idx) => `${idx === 0 ? '( ' : 'OR '}VENUM = '${v}'`).concat(')');
+      const vekpRows = await this.rfc.readTable('VEKP', ['VENUM', 'STATUS'], where, 100);
+      for (const h of vekpRows) if (h.STATUS === '0050') issued.add(h.VENUM);
+    }
+    return vepoRows.filter((v) => !issued.has(v.VENUM));
+  }
+
   _parseSapQty(val) {
     if (!val) return 0;
     const s = String(val).trim();
@@ -967,13 +991,14 @@ class HuStockTransferAdapter {
       LOG.warn('Could not read T307T:', e.message);
     }
 
-    const storageRules = await this.getStorageTypeRules({
-      plant: cockpit.Plant,
-      warehouse: cockpit.WarehouseNumber || 'W01',
-      isTrusted: true
-    });
+    // Rules per quant warehouse (LQUA-LGNUM); no default warehouse.
+    const rulesByWarehouse = new Map();
+    for (const wh of new Set(nonZeroLqua.map((q) => q.LGNUM).filter(Boolean))) {
+      rulesByWarehouse.set(wh, await this.getStorageTypeRules({ plant: cockpit.Plant, warehouse: wh, isTrusted: true }));
+    }
 
     return nonZeroLqua.map((q) => {
+      const storageRules = rulesByWarehouse.get(q.LGNUM) || NO_STORAGE_RULES;
       const location = lagpMap.get(`${q.LGNUM}|${q.LGTYP}|${q.LGPLA}`);
       const rackParts = parseRackBinName(q.LGPLA);
       const sectionCode = location && location.LGBER || '';
@@ -1151,6 +1176,7 @@ class HuStockTransferAdapter {
       pageSize = 100
     } = params;
 
+    Object.entries({ warehouse, storageType, rackPrefix }).forEach(([name, value]) => assertSapOptionValue(name, value));
     let cockpit = null;
     let plant = '';
     let sloc = '';
@@ -1159,14 +1185,13 @@ class HuStockTransferAdapter {
     if (reservation) {
       cockpit = await this.getCockpitDetail(reservation, item);
       warehouse = warehouse || cockpit.Warehouse;
-      storageType = storageType || cockpit.PreferredStorageType || 'EN1';
+      storageType = storageType || cockpit.PreferredStorageType || '';
       plant = cockpit.Plant;
       sloc = cockpit.StorageLocation;
       material = cockpit.Material;
     }
 
-    warehouse = warehouse || 'W01';
-    storageType = storageType || 'EN1';
+    if (!warehouse) throw httpError(400, 'Warehouse could not be determined (no T320 mapping for the reservation plant/storage location, and none was given).');
 
     // 1. Inspect T001L for HUM flag (XHUPF)
     let isHuManaged = false;
@@ -1218,17 +1243,21 @@ class HuStockTransferAdapter {
     // Exclude negative and zero quants
     const nonZeroLqua = lquaRows.filter((q) => this._parseSapQty(q.GESME) > 0);
 
-    // If rackPrefix was not supplied, see if any quant gives a rack prefix
-    if (!rackPrefix && nonZeroLqua.length > 0) {
+    // If rackPrefix / storage type were not supplied, the first rack quant of the material scopes the grid
+    if ((!rackPrefix || !storageType) && nonZeroLqua.length > 0) {
       const rackQuant = nonZeroLqua.find((q) => parseRackBinName(q.LGPLA).IsRackBin);
       if (rackQuant) {
         const p = parseRackBinName(rackQuant.LGPLA);
-        rackPrefix = `${p.Floor}-${p.Rack}`;
+        rackPrefix = rackPrefix || `${p.Floor}-${p.Rack}`;
+        storageType = storageType || rackQuant.LGTYP;
       }
     }
 
-    // 3. Enumerate maintained bins from LAGP as the bin universe
-    const lagpRows = await this._readLagpPaged(warehouse, storageType, rackPrefix, pageSize);
+    // 3. Enumerate maintained bins from LAGP as the bin universe; an unscoped grid (no storage type, no
+    //    rack) would page the whole warehouse, so it is not enumerated and only quant-based rows are returned.
+    const lagpRows = (storageType || rackPrefix)
+      ? await this._readLagpPaged(warehouse, storageType, rackPrefix, pageSize)
+      : [];
 
     // 4. Section descriptions from T302T
     const sectionNameMap = new Map();
@@ -1236,7 +1265,7 @@ class HuStockTransferAdapter {
       const sectionRows = await this.rfc.readTable(
         'T302T',
         ['LGNUM', 'LGTYP', 'LGBER', 'SPRAS', 'LBERT'],
-        [`LGNUM = '${warehouse}'`, `AND LGTYP = '${storageType}'`, "AND SPRAS = 'E'"],
+        [`LGNUM = '${warehouse}'`, ...(storageType ? [`AND LGTYP = '${storageType}'`] : []), "AND SPRAS = 'E'"],
         100
       );
       for (const row of sectionRows) {
@@ -1463,18 +1492,23 @@ class HuStockTransferAdapter {
     let matDocYear = String(new Date().getFullYear());
     let postingPath = '';
 
-    if (isHuManaged && v.UnitType.includes('HU')) {
+    if (isHuManaged) {
       // ─────────────────────────────────────────────────────────────
-      // PATH A: HU-Managed Storage Location (HU_CREATE_GOODS_MOVEMENT)
+      // PATH A: HU-Managed Storage Location (HU_CREATE_GOODS_MOVEMENT, Event 0006, IF_COMMIT X)
+      // An HU-managed source is posted only through the HUM function. BAPI_GOODSMVT_CREATE carries no
+      // handling-unit data, and posting it on an HU-managed storage location is not a verified capability,
+      // so a missing HUM document fails closed instead of falling back (the ABAP program's fallback runs
+      // inside SAP and has never been proven for this case).
       // ─────────────────────────────────────────────────────────────
       postingPath = 'HU_MANAGED_0006';
+      if (!v.UnitType.includes('HU')) {
+        throw httpError(422, `Storage location ${sourceSLoc} is HU-managed (T001L-XHUPF = X); only a handling unit can be transferred from it, not ${v.UnitType}.`);
+      }
       LOG.info(`Executing HUM goods movement for HU ${UnitNumber} from ${sourceSLoc} to ${destSLoc}`);
 
-      // When running against live SAP, HU_CREATE_GOODS_MOVEMENT is called locally or wrapped.
-      // If direct call fails or is not remote-enabled, the ABAP program itself has fallback to BAPI_GOODSMVT_CREATE!
-      let humPosted = false;
+      let humRes;
       try {
-        const humRes = await this.rfc.call('HU_CREATE_GOODS_MOVEMENT', {
+        humRes = await this.rfc.call('HU_CREATE_GOODS_MOVEMENT', {
           IF_EVENT: '0006',
           IF_COMMIT: 'X',
           IT_EXTERNAL_ID: [s4UnitAlpha],
@@ -1485,19 +1519,23 @@ class HuStockTransferAdapter {
             BWART: HU_STOCK_TRANSFER_MOVEMENT_TYPE
           }]
         });
-
-        if (humRes && humRes.ES_EMKPF && humRes.ES_EMKPF.MBLNR) {
-          matDoc = humRes.ES_EMKPF.MBLNR;
-          matDocYear = humRes.ES_EMKPF.MJAHR || matDocYear;
-          humPosted = true;
-        }
       } catch (humErr) {
-        LOG.warn(`HUM FM not directly available via RFC (${humErr.message}); engaging verified BAPI fallback path.`);
+        // FU_NOT_FOUND: SAP could not invoke the function, so nothing was posted (fail closed, not unconfirmed).
+        // Any other RFC failure after IF_COMMIT = 'X' may already have posted: report it as unconfirmed.
+        if (/FU_NOT_FOUND/i.test(`${humErr.key || ''} ${humErr.message || ''}`)) {
+          throw httpError(501, `HU_CREATE_GOODS_MOVEMENT is not callable via RFC on this system (FU_NOT_FOUND); the HU-managed storage location ${sourceSLoc} cannot be posted by this service. Nothing was posted. Run tools/check-hu-fm-rfc.js (READ-ONLY) to record the function's RFC status.`);
+        }
+        throw this._unconfirmedError(`HU_CREATE_GOODS_MOVEMENT failed after the call was sent: ${humErr.message}`);
       }
 
-      if (!humPosted) {
-        // Verified fallback from line 5602 of ZRF_RES_HU_TRANSFER_DNR.abap
-        postingPath = 'HU_FALLBACK_BAPI_06';
+      if (humRes && humRes.ES_EMKPF && humRes.ES_EMKPF.MBLNR) {
+        matDoc = humRes.ES_EMKPF.MBLNR;
+        matDocYear = humRes.ES_EMKPF.MJAHR || matDocYear;
+      } else {
+        const msgs = [humRes?.ES_MESSAGE, ...(humRes?.ET_MESSAGES || [])]
+          .filter((m) => m && /[EA]/.test(String(m.MSGTY || '')))
+          .map((m) => `${m.MSGID || ''}-${m.MSGNO || ''} ${[m.MSGV1, m.MSGV2, m.MSGV3, m.MSGV4].filter(Boolean).join(' ')}`.trim());
+        throw httpError(422, `SAP did not post the HU movement for ${UnitNumber}: ${msgs.length ? msgs.join('; ') : 'HU_CREATE_GOODS_MOVEMENT returned no material document'}. Nothing was posted.`);
       }
     } else {
       // ─────────────────────────────────────────────────────────────
@@ -1537,28 +1575,32 @@ class HuStockTransferAdapter {
       };
 
       try {
-        const bapiRes = await this.rfc.call('BAPI_GOODSMVT_CREATE', {
-          GOODSMVT_HEADER: gmHeader,
-          GOODSMVT_CODE: gmCode,
-          GOODSMVT_ITEM: [gmItem]
-        });
-
-        const headret = bapiRes?.GOODSMVT_HEADRET || {};
-        if (headret.MAT_DOC) {
-          matDoc = headret.MAT_DOC;
-          matDocYear = headret.DOC_YEAR || matDocYear;
-          await this.rfc.call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
-        } else {
-          await this.rfc.call('BAPI_TRANSACTION_ROLLBACK', {});
-          const ret = bapiRes?.RETURN || [];
-          const errMsgs = ret.filter((r) => r.TYPE === 'E' || r.TYPE === 'A').map((r) => `[${r.ID}-${r.NUMBER}] ${r.MESSAGE}`).join('; ');
+        // BAPI and COMMIT must share one connection (one LUW); rfc.call() opens a new connection per call.
+        const headret = await this.rfc.session(async (call) => {
+          const bapiRes = await call('BAPI_GOODSMVT_CREATE', {
+            GOODSMVT_HEADER: gmHeader,
+            GOODSMVT_CODE: gmCode,
+            GOODSMVT_ITEM: [gmItem]
+          });
+          const ret = bapiRes?.GOODSMVT_HEADRET || {};
+          if (ret.MAT_DOC) {
+            await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
+            return ret;
+          }
+          await call('BAPI_TRANSACTION_ROLLBACK', {});
+          const messages = bapiRes?.RETURN || [];
+          const errMsgs = messages.filter((r) => r.TYPE === 'E' || r.TYPE === 'A').map((r) => `[${r.ID}-${r.NUMBER}] ${r.MESSAGE}`).join('; ');
           throw httpError(422, `SAP rejected stock transfer: ${errMsgs || 'Material Document not generated'}`);
-        }
+        });
+        matDoc = headret.MAT_DOC;
+        matDocYear = headret.DOC_YEAR || matDocYear;
       } catch (bapiErr) {
         if (bapiErr.status) throw bapiErr;
-        throw httpError(502, `SAP BAPI communication error: ${bapiErr.message}`);
+        throw this._unconfirmedError(`SAP BAPI communication error: ${bapiErr.message}`);
       }
     }
+
+    await this._readBackMaterialDocument(matDoc, matDocYear);
 
     const updatedOpenQty = Math.max(0, cockpit.OpenQty - transferQtyNum);
     const isFinal = updatedOpenQty === 0;
@@ -1576,14 +1618,49 @@ class HuStockTransferAdapter {
       UpdatedOpenQty: updatedOpenQty,
       UpdatedStatus: isFinal ? 'Completed' : 'Partially Open',
       IsFinalIssue: isFinal,
-      RequesterAlertSent: true, // Backend email / transfer slip simulated
-      Message: `Success! Stock Transfer Posted. Material Document: ${matDoc} / ${matDocYear} (Alerts sent to ${cockpit.Requester})`
+      ReadBackVerified: true,
+      RequesterAlertSent: false, // no notification is sent by this service
+      Message: `Stock transfer posted and read back from SAP. Material Document: ${matDoc} / ${matDocYear}.`
     };
 
     // Store in idempotency cache
     this._attemptCache.set(attemptKey, result);
 
     return result;
+  }
+
+  /** Error for a write whose SAP outcome is unknown; the handler records it as 'unconfirmed', not 'rejected'. */
+  _unconfirmedError(detail, matDoc = '', matDocYear = '') {
+    const err = httpError(502, `Stock transfer outcome is unconfirmed in SAP (${detail}). Do not post again; check the material document list first.`);
+    err.sapWriteAttempted = true;
+    if (matDoc) {
+      err.materialDocument = matDoc;
+      err.materialDocYear = matDocYear;
+    }
+    return err;
+  }
+
+  /** Reads the posted document back from MATDOC (MSEG fallback) and requires every row to be a 311. */
+  async _readBackMaterialDocument(matDoc, matDocYear) {
+    const where = [`MBLNR = '${this._pad(matDoc, 10)}'`, `AND MJAHR = '${matDocYear}'`];
+    let rows = [];
+    let readError = '';
+    for (const table of ['MATDOC', 'MSEG']) {
+      try {
+        rows = await this.rfc.readTable(table, ['MBLNR', 'MJAHR', 'BWART'], where, 10);
+      } catch (e) {
+        readError = e.message;
+        rows = [];
+      }
+      if (rows.length) break;
+    }
+    if (!rows.length) {
+      throw this._unconfirmedError(`material document ${matDoc}/${matDocYear} was returned by SAP but could not be read back from MATDOC/MSEG${readError ? `: ${readError}` : ''}`, matDoc, matDocYear);
+    }
+    const wrong = rows.filter((r) => String(r.BWART || '').trim() !== HU_STOCK_TRANSFER_MOVEMENT_TYPE);
+    if (wrong.length) {
+      throw this._unconfirmedError(`material document ${matDoc}/${matDocYear} carries movement type ${wrong.map((r) => r.BWART || '(blank)').join(', ')} instead of ${HU_STOCK_TRANSFER_MOVEMENT_TYPE}`, matDoc, matDocYear);
+    }
   }
 
   /**
@@ -1604,17 +1681,20 @@ class HuStockTransferAdapter {
    * Resolves storage type rules dynamically via BusinessConfigResolver (fail closed, no literals).
    */
   async getStorageTypeRules(context = {}) {
-    if (this._storageTypeRules && !context.refreshRules) {
-      return this._storageTypeRules;
+    if (this._injectedStorageTypeRules && !context.refreshRules) {
+      return this._injectedStorageTypeRules;
+    }
+    const plant = context.plant || context.WERKS || '';
+    const warehouse = context.warehouse || context.LGNUM || '';
+    if (!warehouse) throw httpError(400, 'Warehouse number is required to resolve storage type rules.');
+    const cacheKey = `${plant}|${warehouse}`;
+    if (!context.refreshRules && this._storageTypeRules.has(cacheKey)) {
+      return this._storageTypeRules.get(cacheKey);
     }
     const resolver = this.businessConfigResolver || businessConfigResolver;
-    this._storageTypeRules = await resolveHuStorageTypeRules({
-      plant: context.plant || context.WERKS || '1120',
-      warehouse: context.warehouse || context.LGNUM || 'W01',
-      isTrusted: true,
-      ...context
-    }, resolver);
-    return this._storageTypeRules;
+    const rules = await resolveHuStorageTypeRules({ isTrusted: true, ...context, plant, warehouse }, resolver);
+    this._storageTypeRules.set(cacheKey, rules);
+    return rules;
   }
 
   /**

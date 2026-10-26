@@ -472,6 +472,64 @@ sap.ui.define([
             });
         },
 
+        onPostSelectedHus: function () {
+            var oViewModel = this.getModel("cockpitView");
+            var aSelected = oViewModel.getProperty("/selectedHus") || [];
+            var oValidation = oViewModel.getProperty("/selectionValidation");
+            var oCockpit = oViewModel.getProperty("/cockpit") || {};
+            var that = this;
+
+            // Only a selection that the server validated read-only (and unchanged since) can be posted.
+            if (!aSelected.length || !oValidation || !oValidation.Valid) {
+                MessageBox.error(this.getText("huSelectionValidateBeforePost", null, "Validate the selection before posting."));
+                return;
+            }
+            var nTotal = aSelected.reduce(function (sum, item) { return sum + Number(item.TransferQty || 0); }, 0);
+            MessageBox.confirm(this.getText("huSelectionConfirmPost", [aSelected.length, nTotal, oCockpit.BaseUnit || "", oCockpit.StorageLocation || "", oCockpit.ReceivingStorageLocation || ""],
+                "Post one SAP 311 document per handling unit ({0} HUs, {1} {2}, SLoc {3} → {4})? Posting stops at the first failure."), {
+                title: this.getText("confirmPostTitle", null, "Confirm SAP Stock Transfer"),
+                actions: [MessageBox.Action.OK, MessageBox.Action.CANCEL],
+                emphasizedAction: MessageBox.Action.OK,
+                onClose: function (sAction) {
+                    if (sAction === MessageBox.Action.OK) {
+                        that._executePostSelection(aSelected);
+                    }
+                }
+            });
+        },
+
+        _executePostSelection: function (aSelected) {
+            var oViewModel = this.getModel("cockpitView");
+            var that = this;
+            oViewModel.setProperty("/busy", true);
+            ODataClient.post("/odata/v4/hu-stock-transfer/executeHuStockTransferSelection", {
+                ReservationNo: oViewModel.getProperty("/reservationNo"),
+                ReservationItem: oViewModel.getProperty("/reservationItem"),
+                Selections: aSelected.map(function (item) { return { UnitNumber: item.UnitNumber, TransferQty: Number(item.TransferQty) }; }),
+                ClientAttemptId: "mvt311s-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8)
+            }).then(function (data) {
+                oViewModel.setProperty("/busy", false);
+                var oResult = (data && data.value) || data || {};
+                var sLines = (oResult.Items || []).map(function (it) {
+                    return it.UnitNumber + ": " + (it.Success ? (it.MaterialDocument + " / " + it.MaterialDocYear) : it.Message);
+                }).join("\n");
+                oViewModel.setProperty("/selectionValidation", null);
+                if (oResult.Success) {
+                    MessageBox.success((oResult.Message || "") + "\n" + sLines, {
+                        title: that.getText("huSelectionPostedTitle", null, "Stock Transfers Posted"),
+                        onClose: function () { that.getRouter().navTo("wmHuStockTransfer"); }
+                    });
+                } else {
+                    // Documents listed with a number are real SAP documents; do not post those HUs again.
+                    MessageBox.error((oResult.Message || "") + "\n" + sLines, { title: that.getText("huSelectionPostFailedTitle", null, "Posting stopped") });
+                    that.loadCockpitDetail(oViewModel.getProperty("/reservationNo"), oViewModel.getProperty("/reservationItem"));
+                }
+            }).catch(function (err) {
+                oViewModel.setProperty("/busy", false);
+                MessageBox.error("Goods Movement Posting Failed:\n" + (err && err.message ? err.message : String(err)));
+            });
+        },
+
         onPostTransfer: function () {
             var oViewModel = this.getModel("cockpitView");
             var sRes = oViewModel.getProperty("/reservationNo");
@@ -480,12 +538,15 @@ sap.ui.define([
             var nQty = parseFloat(oViewModel.getProperty("/transferQty") || 0);
             var bFull = oViewModel.getProperty("/isFullUnit");
             var oCockpit = oViewModel.getProperty("/cockpit") || {};
+            var oValidated = oViewModel.getProperty("/validatedUnit");
             var that = this;
 
-            if (!sUnit) {
+            // Post only the unit that was validated; a re-typed input must be validated again first.
+            if (!sUnit || !oValidated || !oValidated.Valid || String(sUnit).trim() !== String(oValidated.UnitNumber)) {
                 MessageBox.error("Please scan and validate a unit first");
                 return;
             }
+            sUnit = oValidated.UnitNumber;
             if (nQty <= 0) {
                 MessageBox.error("Please enter a valid transfer quantity greater than 0");
                 return;
@@ -539,7 +600,7 @@ sap.ui.define([
                     var sDoc = (oData && oData.MaterialDocument) || "";
                     var sYear = (oData && oData.MaterialDocYear) || "";
 
-                    MessageBox.success("Success! Stock Transfer Posted.\nMaterial Document: " + sDoc + " / " + sYear + "\nAlerts dispatched to requester.", {
+                    MessageBox.success("Stock transfer posted and read back from SAP.\nMaterial Document: " + sDoc + " / " + sYear, {
                         title: "Stock Transfer Posted",
                         onClose: function () {
                             that.getRouter().navTo("wmHuStockTransfer");

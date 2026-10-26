@@ -24,6 +24,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
       readTable: jest.fn(),
       call: jest.fn()
     };
+    mockRfc.session = jest.fn((fn) => fn(mockRfc.call)); // one LUW: BAPI + COMMIT on the same connection
     adapter = new HuStockTransferAdapter({ rfcClient: mockRfc });
   });
 
@@ -188,6 +189,26 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
     });
   });
 
+  describe('getCockpitDetail requester contact', () => {
+    it('leaves the e-mail blank when ADR6 has no address instead of deriving one from the user name', async () => {
+      mockRfc.readTable.mockImplementation((table) => {
+        if (table === 'RESB') return Promise.resolve([{ RSNUM: '0000010042', RSPOS: '0001', BWART: '311', MATNR: '000000008000009754', BDMNG: '10.000', ENMNG: '0.000', MEINS: 'NOS', WERKS: '1120', LGORT: 'CS02', UMLGO: 'CS01' }]);
+        if (table === 'RKPF') return Promise.resolve([{ USNAM: 'DIPAK', BWART: '311' }]);
+        if (table === 'USR21') return Promise.resolve([{ PERSNUMBER: '0000000123', ADDRNUMBER: '0000000456' }]);
+        if (table === 'ADRP') return Promise.resolve([{ NAME_TEXT: 'Dipak Patel' }]);
+        return Promise.resolve([]);
+      });
+      const res = await adapter.getCockpitDetail('10042', '1');
+      expect(res.RequesterName).toBe('Dipak Patel');
+      expect(res.RequesterEmail).toBe('');
+    });
+
+    it('rejects a reservation value containing a quote before any SAP read', async () => {
+      await expect(adapter.getCockpitDetail("1' OR RSNUM LIKE '%", '1')).rejects.toMatchObject({ status: 400 });
+      expect(mockRfc.readTable).not.toHaveBeenCalled();
+    });
+  });
+
   describe('validateUnit', () => {
     beforeEach(() => {
       // Mock cockpit base data
@@ -326,6 +347,38 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
     });
   });
 
+  describe('validateUnit input guard and packaging type', () => {
+    beforeEach(() => {
+      jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({
+        ReservationNo: '10042', ReservationItem: '1', Material: '8000009754', Batch: '', OpenQty: 80, BaseUnit: 'NOS',
+        Plant: '1120', StorageLocation: 'CS02', ReceivingStorageLocation: 'CS01', Warehouse: 'W01', PreferredStorageType: 'EN1', TransferPath: 'A'
+      });
+    });
+
+    it('rejects a unit number containing a quote before any SAP read', async () => {
+      await expect(adapter.validateUnit('10042', '1', "X' OR MATNR LIKE '%")).rejects.toMatchObject({ status: 400 });
+      expect(mockRfc.readTable).not.toHaveBeenCalled();
+    });
+
+    it('reads VHART/VHILM from VEKP so the T319A packaging warning can fire on Path A', async () => {
+      mockRfc.readTable.mockImplementation((table, fields) => {
+        if (table === 'VEKP') {
+          expect(fields).toEqual(expect.arrayContaining(['VHART', 'VHILM']));
+          return Promise.resolve([{ VENUM: '0000012345', STATUS: '0020', WERKS: '1120', LGORT: 'CS02', EXIDV: '00000000002000019372', VHART: 'Z007', VHILM: '000000002000000340' }]);
+        }
+        if (table === 'VEPO') return Promise.resolve([{ MATNR: '000000008000009754', CHARG: '', VEMNG: '1.000', VEMEH: 'NOS', WERKS: '1120', LGORT: 'CS02' }]);
+        if (table === 'LQUA') return Promise.resolve([{ LGNUM: 'W01', LGTYP: 'EN1', LGPLA: '1-L0001-04', LETYP: 'E10' }]);
+        if (table === 'T319A') return Promise.resolve([{ LGNUM: 'W01', VHART: '0001', LETYP: 'E1' }]); // no Z007 row (live W01 evidence)
+        return Promise.resolve([]);
+      });
+      const res = await adapter.validateUnit('10042', '1', '2000019372');
+      expect(res.Valid).toBe(true);
+      expect(res.WarningDetails.map((w) => w.code)).toEqual(['NO_T319A_ROW']);
+      expect(res.WarningDetails[0].params).toEqual(['Z007', 'W01']);
+      expect(res.StatusState).toBe('Warning');
+    });
+  });
+
   describe('validateHuStockTransferSelection (read-only)', () => {
     const baseCockpit = {
       ReservationNo: '10042', ReservationItem: '1', OpenQty: 5,
@@ -434,6 +487,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
     it('executes Path B (BAPI_GOODSMVT_CREATE) for standard / fallback location and commits', async () => {
       mockRfc.readTable.mockImplementation((table) => {
         if (table === 'T001L') return Promise.resolve([{ WERKS: '1120', LGORT: 'CS02', XHUPF: '' }]);
+        if (table === 'MATDOC') return Promise.resolve([{ MBLNR: '4900012345', MJAHR: '2026', BWART: '311' }]);
         return Promise.resolve([]);
       });
 
@@ -465,10 +519,18 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
       expect(res.IsFinalIssue).toBe(true);
       expect(res.UpdatedOpenQty).toBe(0);
       expect(res.UpdatedStatus).toBe('Completed');
+      expect(res.ReadBackVerified).toBe(true);
+      expect(res.RequesterAlertSent).toBe(false);
+      expect(res.Message).not.toMatch(/alert/i);
+      expect(mockRfc.session).toHaveBeenCalledTimes(1);
+      expect(mockRfc.readTable).toHaveBeenCalledWith('MATDOC', ['MBLNR', 'MJAHR', 'BWART'], ["MBLNR = '4900012345'", "AND MJAHR = '2026'"], 10);
     });
 
     it('returns cached result on idempotent retry without re-calling SAP', async () => {
-      mockRfc.readTable.mockResolvedValue([{ WERKS: '1120', LGORT: 'CS02', XHUPF: '' }]);
+      mockRfc.readTable.mockImplementation((table) => {
+        if (table === 'MATDOC') return Promise.resolve([{ MBLNR: '4900012345', MJAHR: '2026', BWART: '311' }]);
+        return Promise.resolve([{ WERKS: '1120', LGORT: 'CS02', XHUPF: '' }]);
+      });
       mockRfc.call.mockResolvedValue({ GOODSMVT_HEADRET: { MAT_DOC: '4900012345', DOC_YEAR: '2026' } });
 
       const res1 = await adapter.executeHuStockTransfer({
@@ -516,6 +578,54 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
         TransferQty: 50,
         ClientAttemptId: 'attempt-fail'
       })).rejects.toThrow('Deficit of BA Unrestricted-use stock');
+    });
+  });
+
+  describe('executeHuStockTransfer outcome classification', () => {
+    const payload = { ReservationNo: '10042', ReservationItem: '1', UnitNumber: '2000019371', TransferQty: 50, ClientAttemptId: 'rb-1' };
+    beforeEach(() => {
+      jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({
+        OpenQty: 50, BaseUnit: 'NOS', Plant: '1120', Material: '8000009754', Batch: '',
+        StorageLocation: 'CS02', ReceivingStorageLocation: 'CS01', Requester: 'DIPAK'
+      });
+      jest.spyOn(adapter, 'validateUnit').mockResolvedValue({ Valid: true, UnitType: 'Handling Unit (HU)', AvailableQuantity: 50, StorageLocation: 'CS02' });
+    });
+
+    it('reports an unconfirmed outcome (not a rejection) when the document cannot be read back', async () => {
+      mockRfc.readTable.mockImplementation((table) => Promise.resolve(table === 'T001L' ? [{ XHUPF: '' }] : []));
+      mockRfc.call.mockResolvedValue({ GOODSMVT_HEADRET: { MAT_DOC: '4900012345', DOC_YEAR: '2026' } });
+      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({
+        status: 502, sapWriteAttempted: true, materialDocument: '4900012345', message: expect.stringMatching(/could not be read back/)
+      });
+      expect(mockRfc.readTable).toHaveBeenCalledWith('MSEG', expect.any(Array), expect.any(Array), 10);
+      expect(adapter._attemptCache.size).toBe(0);
+    });
+
+    it('reports an unconfirmed outcome when the read-back shows a different movement type', async () => {
+      mockRfc.readTable.mockImplementation((table) => Promise.resolve(
+        table === 'T001L' ? [{ XHUPF: '' }] : table === 'MATDOC' ? [{ MBLNR: '4900012345', MJAHR: '2026', BWART: '301' }] : []));
+      mockRfc.call.mockResolvedValue({ GOODSMVT_HEADRET: { MAT_DOC: '4900012345', DOC_YEAR: '2026' } });
+      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status: 502, sapWriteAttempted: true, message: expect.stringMatching(/301 instead of 311/) });
+    });
+
+    it('marks an RFC failure during the BAPI session as unconfirmed, and a SAP rejection as definitive', async () => {
+      mockRfc.readTable.mockResolvedValue([{ XHUPF: '' }]);
+      mockRfc.call.mockRejectedValue(new Error('connection reset'));
+      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status: 502, sapWriteAttempted: true });
+
+      mockRfc.call.mockImplementation((fm) => Promise.resolve(fm === 'BAPI_GOODSMVT_CREATE'
+        ? { GOODSMVT_HEADRET: {}, RETURN: [{ TYPE: 'E', ID: 'M7', NUMBER: '021', MESSAGE: 'Deficit' }] } : {}));
+      const rejected = await adapter.executeHuStockTransfer({ ...payload, ClientAttemptId: 'rb-2' }).catch((e) => e);
+      expect(rejected.status).toBe(422);
+      expect(rejected.sapWriteAttempted).toBeUndefined();
+    });
+
+    it('does not fall back to BAPI_GOODSMVT_CREATE when HU_CREATE_GOODS_MOVEMENT fails for a reason other than FU_NOT_FOUND', async () => {
+      mockRfc.readTable.mockResolvedValue([{ XHUPF: 'X' }]);
+      mockRfc.call.mockImplementation((fm) => fm === 'HU_CREATE_GOODS_MOVEMENT' ? Promise.reject(new Error('timeout')) : Promise.resolve({}));
+      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status: 502, sapWriteAttempted: true });
+      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
+      expect(mockRfc.session).not.toHaveBeenCalled();
     });
   });
 
@@ -591,6 +701,36 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
       expect(rack.length).toBe(2);
       expect(rack[0]).toMatchObject({ FloorId: '1', RackNumber: 'L0001', Position: '04', LevelCode: '', LevelNumber: null, ShelfLevelDesc: '' });
       expect(rack[1].IsRackBin).toBe(false);
+    });
+  });
+
+  describe('storage type rules per warehouse', () => {
+    beforeAll(() => BusinessConfigResolver.registerWarehouseStorageTypes('W15', {
+      pickableStorageTypes: ['OH9'], holdStorageTypes: ['EN1'], interimStorageTypes: ['921']
+    }));
+    afterAll(() => BusinessConfigResolver.unregisterWarehouseStorageTypes('W15'));
+
+    it('caches resolved rules per plant|warehouse instead of reusing the first warehouse', async () => {
+      const w01 = await adapter.getStorageTypeRules({ plant: '1120', warehouse: 'W01' });
+      const w15 = await adapter.getStorageTypeRules({ plant: '1150', warehouse: 'W15' });
+      expect(w01.isPickable('EN1')).toBe(true);
+      expect(w15.isPickable('EN1')).toBe(false);
+      expect(w15.isOnHold('EN1')).toBe(true);
+      expect(await adapter.getStorageTypeRules({ plant: '1120', warehouse: 'W01' })).toBe(w01);
+    });
+
+    it('getStorageBins evaluates bins with the rules of the reservation warehouse (W15), not W01', async () => {
+      jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({
+        Material: '8000009803', Plant: '1150', StorageLocation: 'CS02', Warehouse: 'W15', PreferredStorageType: ''
+      });
+      mockRfc.readTable.mockImplementation((table) => {
+        if (table === 'LQUA') return Promise.resolve([{ LGNUM: 'W15', LGTYP: 'EN1', LGPLA: '1-L0002-01', LGORT: 'CS02', LENUM: '00000000002000019900', CHARG: '', GESME: '4.000', MEINS: 'NOS', LETYP: 'E10', KZHUQ: 'X' }]);
+        return Promise.resolve([]);
+      });
+      const bins = await adapter.getStorageBins('520235', '1');
+      expect(bins).toHaveLength(1);
+      expect(bins[0].StorageStatus).toBe('On-Hold');
+      expect(bins[0].Warehouse).toBe('W15');
     });
   });
 

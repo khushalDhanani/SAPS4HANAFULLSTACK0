@@ -162,6 +162,8 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
       MaterialDocumentYear: '2026'
     });
 
+    // plant-scope pre-read of the reservation (carol/dave are plant-scoped users)
+    jest.spyOn(HuStockTransferAdapter.prototype, 'getCockpitDetail').mockResolvedValue({ ReservationNo: '520001', ReservationItem: '1', Plant: '1120', OpenQty: 10 });
     huTransferSpy = jest.spyOn(HuStockTransferAdapter.prototype, 'executeHuStockTransfer').mockResolvedValue({
       success: true,
       huNumber: '1122334455',
