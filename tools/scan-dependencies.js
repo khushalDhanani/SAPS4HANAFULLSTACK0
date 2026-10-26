@@ -5,7 +5,8 @@
  * tools/scan-dependencies.js
  *
  * Dependency Vulnerability Scanner for Release Automation.
- * Audits production dependencies, parses advisories, and asserts zero critical/unhandled vulnerabilities.
+ * Audits production dependencies, parses advisories, and asserts zero critical and zero
+ * un-allowlisted high vulnerabilities (allowlist: tools/dependency-audit-allowlist.json).
  */
 
 const { execSync } = require('child_process');
@@ -33,7 +34,24 @@ function auditDependencies(cwd = PROJECT_ROOT, targetLabel = 'Root') {
   }
 }
 
-function analyzeAuditReport(report, targetLabel = 'Root') {
+const ALLOWLIST_PATH = path.join(__dirname, 'dependency-audit-allowlist.json');
+
+function loadAllowlist(file = ALLOWLIST_PATH) {
+  const fs = require('fs');
+  if (!fs.existsSync(file)) return [];
+  return JSON.parse(fs.readFileSync(file, 'utf8')).entries || [];
+}
+
+// An entry counts only for high severity, with a reason and an unexpired YYYY-MM-DD date.
+function isActiveEntry(entry, today) {
+  return entry.severity === 'high' && !!entry.reason &&
+    /^\d{4}-\d{2}-\d{2}$/.test(entry.expires || '') && entry.expires >= today;
+}
+
+function analyzeAuditReport(report, targetLabel = 'Root', {
+  allowlist = loadAllowlist(),
+  today = new Date().toISOString().slice(0, 10)
+} = {}) {
   const metadata = report.metadata || {};
   const vulnerabilities = metadata.vulnerabilities || {};
   const total = vulnerabilities.total || 0;
@@ -52,6 +70,25 @@ function analyzeAuditReport(report, targetLabel = 'Root') {
     };
   }
 
+  // High findings fail unless each vulnerable package has an active allowlist entry.
+  const highPackages = Object.entries(report.vulnerabilities || {})
+    .filter(([, v]) => v && v.severity === 'high')
+    .map(([name]) => name);
+  if (high > 0 && highPackages.length === 0) {
+    return {
+      ok: false,
+      error: `Blocked by release gate: ${high} high vulnerability/vulnerabilities reported without package details; allowlist cannot be checked.`
+    };
+  }
+  const allowed = new Set(allowlist.filter((e) => isActiveEntry(e, today)).map((e) => e.package));
+  const blocked = highPackages.filter((name) => !allowed.has(name));
+  if (blocked.length > 0) {
+    return {
+      ok: false,
+      error: `Blocked by release gate: ${blocked.length} high vulnerability/vulnerabilities not allowlisted or allowlist entry expired: ${blocked.join(', ')}.`
+    };
+  }
+
   return {
     ok: true,
     total,
@@ -59,7 +96,8 @@ function analyzeAuditReport(report, targetLabel = 'Root') {
     high,
     moderate,
     low,
-    message: `${targetLabel} production dependency audit passed critical severity release gate.`
+    allowlisted: highPackages,
+    message: `${targetLabel} production dependency audit passed critical/high severity release gate (${highPackages.length} high allowlisted).`
   };
 }
 
@@ -85,4 +123,4 @@ if (require.main === module) {
   run();
 }
 
-module.exports = { auditDependencies, analyzeAuditReport };
+module.exports = { auditDependencies, analyzeAuditReport, loadAllowlist };

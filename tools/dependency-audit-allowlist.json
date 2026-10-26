@@ -1,0 +1,24 @@
+{
+  "description": "Reviewed exceptions for the high-severity dependency gate in tools/scan-dependencies.js. Critical findings can never be allowlisted. An expired entry blocks the gate again. Reviewed 2026-10-26 against `npm audit --omit=dev` (root); exploitability in this app NOT VERIFIED.",
+  "entries": [
+    { "package": "node-forge", "severity": "high", "expires": "2027-01-24", "reason": "GHSA-86w9-cpqp-85rv (RSA PKCS#1 v1.5 signature verification). Vulnerable range is *, no patched release; pulled in via jks-js <- @sap-cloud-sdk/connectivity." },
+    { "package": "jks-js", "severity": "high", "expires": "2027-01-24", "reason": "Inherits node-forge advisory; no patched node-forge release." },
+    { "package": "@sap-cloud-sdk/connectivity", "severity": "high", "expires": "2027-01-24", "reason": "Inherits node-forge via jks-js. npm's suggested fix (@sap-ai-sdk/orchestration@2.4.0) is a downgrade from installed 2.16.0." },
+    { "package": "@sap-cloud-sdk/http-client", "severity": "high", "expires": "2027-01-24", "reason": "Inherits node-forge via @sap-cloud-sdk/connectivity; no non-downgrade fix." },
+    { "package": "@sap-cloud-sdk/openapi", "severity": "high", "expires": "2027-01-24", "reason": "Inherits node-forge via @sap-cloud-sdk/connectivity; no non-downgrade fix." },
+    { "package": "@sap-ai-sdk/core", "severity": "high", "expires": "2027-01-24", "reason": "Inherits node-forge via @sap-cloud-sdk/*; npm's suggested fix is a downgrade to 2.4.0." },
+    { "package": "@sap-ai-sdk/ai-api", "severity": "high", "expires": "2027-01-24", "reason": "Inherits node-forge via @sap-ai-sdk/core; npm's suggested fix is a downgrade to 2.4.0." },
+    { "package": "@sap-ai-sdk/prompt-registry", "severity": "high", "expires": "2027-01-24", "reason": "Inherits node-forge via @sap-ai-sdk/core; npm's suggested fix is a downgrade to 2.4.0." },
+    { "package": "@sap-ai-sdk/orchestration", "severity": "high", "expires": "2027-01-24", "reason": "Direct dependency (2.16.0); inherits node-forge via @sap-ai-sdk/core. npm's suggested fix is a downgrade to 2.4.0." },
+    { "package": "sigstore", "severity": "high", "expires": "2027-01-24", "reason": "GHSA-52v5-jr5w-gjxr (certificateOIDs not enforced); via pacote <- @ui5/project <- @ui5/cli 4.0.69. npm's suggested fix is @ui5/cli@2.14.20 (major downgrade)." },
+    { "package": "pacote", "severity": "high", "expires": "2027-01-24", "reason": "GHSA-w4pp-8pjf-rmxw (DoS via addGitSha); via @ui5/project <- @ui5/cli. Fix requires @ui5/cli major change." },
+    { "package": "@ui5/project", "severity": "high", "expires": "2027-01-24", "reason": "Inherits pacote/sigstore; fix requires @ui5/cli major change." },
+    { "package": "@ui5/cli", "severity": "high", "expires": "2027-01-24", "reason": "Direct dependency (4.0.69); inherits pacote/sigstore. npm's suggested fix is 2.14.20 (major downgrade)." },
+    { "package": "body-parser", "severity": "high", "expires": "2026-11-25", "reason": "GHSA-27r3-jxmh-p828 (DoS via trailing bytes after compressed body); via express <- @sap/cds and @ui5/server. Non-major fix available; upgrade pending." },
+    { "package": "follow-redirects", "severity": "high", "expires": "2026-11-25", "reason": "GHSA-q3jh-wrc6-jgq8, GHSA-8r9p-f939-6h3c (credential header stripping); via axios <- @sap-cloud-sdk/connectivity. Non-major fix available; upgrade pending." },
+    { "package": "http-cache-semantics", "severity": "high", "expires": "2026-11-25", "reason": "GHSA-ch52-4w7c-c8xp (max-stale cross-user disclosure); via make-fetch-happen <- @ui5/project. Non-major fix available; upgrade pending." },
+    { "package": "markdown-it", "severity": "high", "expires": "2026-11-25", "reason": "GHSA-gfr2-rv44-r23c (quadratic rendering); via jsdoc <- @ui5/builder. Non-major fix available; upgrade pending." },
+    { "package": "undici", "severity": "high", "expires": "2026-11-25", "reason": "GHSA-xjj6-f33q-929c (DoS via excessive content-encodings); via cheerio <- @ui5/builder and openai. Non-major fix available; upgrade pending." },
+    { "package": "zod", "severity": "high", "expires": "2026-11-25", "reason": "GHSA-mrhx-c7xc-m3w5 (memory exhaustion on oversized collections); via openai and @sap-ai-sdk/prompt-registry. Non-major fix available; upgrade pending." }
+  ]
+}

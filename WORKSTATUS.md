@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Dependency gate high-severity enforcement (2026-10-26 13:42 IST) — DONE, UNCOMMITTED:** Gate now fails on high unless allowlisted with reason and unexpired date; 19 current highs allowlisted; tests 8/8 PASS; live scan exit 0. See Changes Log 13:42 IST.
+
 - **Live SAP tool double-gate fix (2026-10-26 13:39 IST) — DONE, UNCOMMITTED:** Removed duplicate gate call in `tools/test-delivery-phase0.js` and `tools/test-sales-order-phase0.js`; regression test added; gate tests 3/3 PASS. Scripts not run live. See Changes Log 13:39 IST.
 
 - **Dead/duplicate fixes — PASS for six prioritized findings:** Removed overwritten definitions and superseded list retry handlers/state; shared date/validation functions and six UI entity readers; retained compatibility exports and active detail retry. Full regression/coverage PASS 196 suites / 3,699 tests / 59 skipped, including 10 integration suites. Root/UI5 lint and UI5 build PASS with non-fatal warnings recorded below. No SAP call/deployment; additional unproven public-member candidates retained.
@@ -1645,6 +1647,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Dependency gate next action (2026-10-26 13:42 IST):** Before 2026-11-25, apply the non-major fixes for `body-parser`, `follow-redirects`, `http-cache-semantics`, `markdown-it`, `undici`, `zod` and drop their allowlist entries, or CI will block. Before 2027-01-24, re-review the SAP SDK / `@ui5/cli` chain for upstream fixes.
+
 - **Live SAP tools next action (2026-10-26 13:39 IST):** Review/commit the double-gate fix. Decide what proves a non-production SAP target (e.g. `SAP_SYSTEM_TYPE` or an SAP client allowlist) before adding a target assertion to `tools/live-sap-gate.js`; until then, write scripts rely only on the shared opt-in.
 
 - **Dead/duplicate cleanup next action:** Review the validated six-finding cleanup diff. All six prioritized findings are addressed; retain compatibility exports and unproven public-member candidates. Browser/live SAP verification and external-consumer investigation are separate follow-up work; no commit/deployment performed.
@@ -1687,6 +1691,13 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 13:42 IST — Dependency gate: fail on high as well as critical, with reviewed expiring allowlist
+
+- **Change:** `tools/scan-dependencies.js` previously failed only on critical findings; high findings passed (P2 review finding, confirmed: root `npm audit --omit=dev` = 19 high / 0 critical, CI step `.github/workflows/ci.yml:51` passed). Now: critical always blocks (cannot be allowlisted); each high-severity package blocks unless it has an active entry in the new `tools/dependency-audit-allowlist.json` (`package`, `severity: high`, `reason`, `expires` YYYY-MM-DD, active through the expiry date); high counts without per-package details block. Allowlist holds today's 19 highs with advisory IDs and dependency paths. Expiry policy chosen: 2026-11-25 (30 days) for the 6 with non-major fixes (`body-parser`, `follow-redirects`, `http-cache-semantics`, `markdown-it`, `undici`, `zod`); 2027-01-24 (90 days) for 13 needing a major change or with no upstream fix (`node-forge` range `*`; npm's suggested `@sap-ai-sdk/orchestration@2.4.0` and `@ui5/cli@2.14.20` are downgrades from installed 2.16.0 / 4.0.69). No dependency added.
+- **TEST DECISION:** TEST UPDATED — `test/unit/tools/scanDependencies.test.js`: the old "3 high passes" case replaced; added not-allowlisted, allowlisted, expired, invalid-entry, missing-package-details, and shipped-allowlist-shape cases.
+- **Validation:** `npx jest test/unit/tools/scanDependencies.test.js` — PASS 8/8. `npm run -s scan:dependencies` — exit 0, Root 19 high allowlisted, Fiori 0. Expiry simulation with `today: '2026-11-26'` — blocked exactly the 6 fix-available packages. `npx eslint` on both changed JS files — PASS. `git diff --check` — PASS.
+- **Not verified:** CI run of the new gate (not pushed); whether any advisory is exploitable in this app; the 5 moderate findings are not gated (unchanged scope). Full regression suite not rerun. No commit. **Assumptions:** expiry periods (30/90 days) are a policy choice made here, not a project rule.
 
 ### 2026-10-26 13:39 IST — Live SAP tools: remove duplicate gate call that made two phase0 scripts unrunnable
 
