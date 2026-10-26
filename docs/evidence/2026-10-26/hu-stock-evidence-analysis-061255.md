@@ -84,3 +84,36 @@ Serials were read for all 33 HUs in the LQUA results (RAW2 `serials`, one SER06 
 ## 7. Sensitive-value scan of RAW2
 
 Exact JSON-string matches against `.env.local`: SAP user 0, destination hostname 0, client 0, password 0, system number 0. Substring hits: client (3 digits) 8, all inside longer numbers. No forbidden connection-metadata field names. File mode `0600`, **untracked** (not committed).
+
+## 8. 1150/CS02 reservations — preconditions from the evidence (2026-10-26 12:05 IST; files only; no candidate recommended)
+
+Source: RAW2 unless stated. Plant 1150 / storage location CS02 → warehouse **W15** (T320, q7); T001L `XHUPF X`, `VSTEL 1150` (q8). `VKORG` was not selected in this run → **Not verified**.
+
+| Reservation/item | Material | Open qty | HUs in W15 by storage type (LETYP) | Packaging / T319A W15 | Open deliveries |
+|---|---|---|---|---|---|
+| `0000520235/0001` | `000000008000009802` | 1 NOS | `OH1`/`ONHOLD`: 2000019885, 2000019886, 2000019887 (`E10`) — q18 | all three HUs `VHART Z007`, `VHILM 000000002000000340`, VEKP `STATUS 0020`, `VPOBJ 12`, `VPOBJKEY 0180000093`; T319A W15 `Z007 → E1` (q144) | none (q161, q162) |
+| `0000520235/0002` | `000000008000009803` | 1 NOS | `EN1`/`CISBIN`: 2000019888, 2000019890, 2000019891, 2000019892 (`E10`); `OH1`/`ONHOLD`: 2000020112, 2000020113, 2000020114, 2000020245–2000020249, 2000020160 (`E1`; 20160 qty 2); `902`: the same nine storage units with **negative** quants (`E1`) — q19 | EN1 HUs: `Z007`/`…340`, `STATUS 0020`, `VPOBJ 12`, `VPOBJKEY 0180000093`; 902/OH1 HUs: `Z007`/`…340`, **`STATUS 0010`, `VPOBJ 03`**, `VPOBJKEY 0180000112 / 0180000119 / 0180000122`; T319A W15 `Z007 → E1` | none (q163, q164) |
+| `0000520236/0001` | `000000008000009802` | 1 NOS | as 520235/1 (same material pool) | as above | none (q165, q166) |
+| `0000520236/0002` | `000000008000009803` | 1 NOS | as 520235/2 | as above | none (q167, q168) |
+
+MARA (q141): `000000002000000340 → VHART Z007`. Serials exist for all 16 W15 HUs (RAW2 `serials`, one SER06/OBJK row each). Shipping point for 1150/CS02: `1150` (q8). The meaning of VEKP `STATUS 0010` / `VPOBJ 03` is **Not verified** (not read from domain texts).
+
+**Plant scope in the app.** There is no app-wide plant allow-list. Scope is the authenticated user's `Plant` attribute (`srv/wm/handling-unit/plantScope.js:12-16`; Admin → unrestricted). In the mocked `[development]`/`[test]` users (`package.json:87-186`) `bob`/`carol` carry `Plant ["1120"]`, `dave` `["1130"]`, `eve` none, `alice`/`khushal` are Admin. **Plant 1150 is not configured for any non-admin mocked user**; an Admin user is not restricted. The live SAP technical user's plant authorizations for 1150 are **Not verified**.
+
+**Preconditions (holds / fails / Not verified) — no candidate recommended**
+
+| Precondition | 520235/1, 520236/1 (9802) | 520235/2, 520236/2 (9803) |
+|---|---|---|
+| Reservation open (RESB, KZEAR/XLOEK blank) | holds (q2) | holds (q2) |
+| Warehouse derived (T320) | holds — W15 | holds — W15 |
+| Source SLoc HU-managed / shipping-managed (XHUPF, VSTEL) | holds — `X`, `1150` (q8) | holds |
+| Stock of the material in W15 | holds — 3 units, all in `OH1` (pickability of OH1: **PENDING user decision**) | holds — 4 units in `EN1`, 10 in `OH1` (PENDING), 9 negative `902` quants flagged |
+| HU packaging type row in T319A for W15 | holds — `Z007 → E1` (unlike W01) | holds |
+| LETYP of HU quants vs T319A | **Not verified / mismatch to check**: HU quants are `E10` while T319A W15 maps `Z007 → E1` | EN1 HUs `E10` vs T319A `E1` (same open question); 902/OH1 HUs `E1` |
+| No open delivery for the item | holds (0 LIPS rows) | holds |
+| Serials present on HUs | holds (one per HU) | holds |
+| Serial-number profile of the material (MARC-SERNP) | **Not verified** — MARC not read in this run (added to the collector, not run) | **Not verified** |
+| VKORG of 1150/CS02 | **Not verified** (added to the collector, not run) | **Not verified** |
+| Plant 1150 within the acting user's plant scope | **Not verified** (not in any mocked non-admin user; live technical user unknown) | **Not verified** |
+| BusinessConfig storage-type lists for W15 | fails — unseeded (`db/data/saps4hana.wm-BusinessConfig.csv`); the resolver fails closed | fails |
+| VEKP status/object meaning for the 902/OH1 HUs (`0010`/`03`) | n/a | **Not verified** |
