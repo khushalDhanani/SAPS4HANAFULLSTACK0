@@ -4,9 +4,9 @@
 
 Source abbreviations: **RAW** = `docs/evidence/2026-10-26/hu-stock-evidence.raw.json` (05:31Z); **RAW2** = `hu-stock-evidence.20261026T061255.raw.json` (06:12Z, supersedes RAW where they differ); `q<n>` = `queries[<n>]`.
 
-## 0. Candidate reservation (selection PENDING)
+## 0. Reservation and warehouse: NOT SELECTED (PENDING)
 
-The candidate below is the item WORKSTATUS Current Status already names for a report-only 311 plan ("A 311 live-proof plan for reservation 529960/1 is report-only", `WORKSTATUS.md` line 28). **Choosing it for live proof is the user's decision — PENDING.** The other same-material open items (`523654/1`, `529959/1`) are equally valid candidates on the evidence.
+**No candidate reservation and no warehouse is selected in this document** (user instruction 2026-10-26: "do not select a candidate or a warehouse"). The value table below is filled for `0000529960/0001` **only as a worked illustration**, because an earlier report-only plan named it (`WORKSTATUS.md` line 28); it carries no preference. All ten open 311 items (six in 1120/CS02 → W01, four in 1150/CS02 → W15; see `hu-stock-evidence-analysis-061255.md` §2) remain equally open until the user chooses. Note that `524283/1` already has two open deliveries (RAW2 q148).
 
 | Value | Content | Source |
 |---|---|---|

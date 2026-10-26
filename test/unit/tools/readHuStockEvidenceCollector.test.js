@@ -32,7 +32,8 @@ function buildTables({ lipsFields = FIELDS.LIPS, lips = [] } = {}) {
       { RSNUM: '0000520235', RSPOS: '0001', BWART: '311', MATNR: MAT(8000009802), WERKS: '1150', LGORT: 'CS02', UMLGO: 'CIS1', BDMNG: '1.000', ENMNG: '0.000', MEINS: 'NOS', KZEAR: '', XLOEK: '', AUFNR: '' }
     ],
     T320: [{ WERKS: '1120', LGORT: 'CS02', LGNUM: 'WZ9' }],
-    T001L: [{ WERKS: '1120', LGORT: 'CS02', XHUPF: 'X', VSTEL: '1105' }, { WERKS: '1150', LGORT: 'CS02', XHUPF: '', VSTEL: '' }],
+    T001L: [{ WERKS: '1120', LGORT: 'CS02', XHUPF: 'X', VSTEL: '1105', VKORG: '1000' }, { WERKS: '1150', LGORT: 'CS02', XHUPF: '', VSTEL: '', VKORG: '' }],
+    MARC: [{ MATNR: MAT(8000009754), WERKS: '1120', SERNP: 'ZSN2' }],
     T301: ['902', 'OH1', 'EN1', '913'].map((LGTYP) => ({ LGNUM: 'WZ9', LGTYP })),
     T301T: [{ SPRAS: 'E', LGNUM: 'WZ9', LGTYP: 'OH1', LTYPT: 'Gr On-Hold Material' }, { SPRAS: 'E', LGNUM: 'WZ9', LGTYP: 'EN1', LTYPT: 'High rack' }],
     LQUA: [
@@ -52,7 +53,7 @@ function buildTables({ lipsFields = FIELDS.LIPS, lips = [] } = {}) {
     MARA: [{ MATNR: MAT(2000000340), VHART: 'Z007' }],
     T319A: [{ LGNUM: 'W15', VHART: 'Z007', LETYP: 'E1' }],
     LIPS: lips,
-    LIKP: [{ VBELN: '0080000999', LFART: 'LF', VSTEL: '1105', WBSTK: 'A', KOSTK: 'C', LVSTK: 'C' }]
+    LIKP: [{ VBELN: '0080000999', LFART: 'LF', VSTEL: '1105', WBSTK: 'A', KOSTK: 'C', LVSTK: 'C', ERDAT: '20261026', ERNAM: 'MUST_NEVER_BE_SELECTED' }]
   };
 }
 
@@ -68,7 +69,7 @@ function fakeRfc(tables) {
   const calls = [];
   const client = {
     call: jest.fn(async (functionName, params) => {
-      calls.push({ functionName, table: params.QUERY_TABLE, where: params.OPTIONS.map((o) => o.TEXT).join(' ') });
+      calls.push({ functionName, table: params.QUERY_TABLE, where: params.OPTIONS.map((o) => o.TEXT).join(' '), fields: params.FIELDS.map((f) => f.FIELDNAME) });
       const fields = params.FIELDS.map((f) => f.FIELDNAME);
       const rows = (tables[params.QUERY_TABLE] || []).filter((row) => matches(row, calls[calls.length - 1].where));
       return { DATA: rows.map((row) => ({ WA: fields.map((f) => row[f] ?? '').join('|') })) };
@@ -96,7 +97,7 @@ describe('read-only HU evidence collector', () => {
       expect(schemaRead).toBeLessThan(firstRead);
     }
 
-    expect(evidence.locations['1120/CS02']).toMatchObject({ warehouse: 'WZ9', warehouseStatus: 'DERIVED', XHUPF: 'X', VSTEL: '1105' });
+    expect(evidence.locations['1120/CS02']).toMatchObject({ warehouse: 'WZ9', warehouseStatus: 'DERIVED', XHUPF: 'X', VSTEL: '1105', VKORG: '1000' });
     expect(evidence.locations['1150/CS02']).toMatchObject({ warehouse: null, warehouseStatus: 'T320_ROWS_0' });
     expect(evidence.open311Reservations).toHaveLength(3);
     expect(evidence.open311Reservations[0]).toMatchObject({ RSNUM: '0000529960', OpenQty: 1, Warehouse: 'WZ9', VSTEL: '1105' });
@@ -183,7 +184,15 @@ describe('read-only HU evidence collector', () => {
     expect(delivery.status).toBe('READ');
     expect(delivery.LIPS_byReservation).toHaveLength(1);
     expect(delivery.LIPS_byReference).toHaveLength(1);
-    expect(delivery.LIKP).toEqual([{ VBELN: '0080000999', LFART: 'LF', VSTEL: '1105', WBSTK: 'A', KOSTK: 'C', LVSTK: 'C' }]);
+    expect(delivery.LIKP).toEqual([{ VBELN: '0080000999', LFART: 'LF', VSTEL: '1105', WBSTK: 'A', KOSTK: 'C', LVSTK: 'C', ERDAT: '20261026' }]);
+    expect(evidence.serialProfiles).toEqual(expect.arrayContaining([
+      { material: MAT(8000009754), plant: '1120', status: 'READ', MARC: [{ MATNR: MAT(8000009754), WERKS: '1120', SERNP: 'ZSN2' }] },
+      { material: MAT(8000006485), plant: '1120', status: 'READ', MARC: [] }
+    ]));
+    // No user-name field is ever selected or serialized.
+    const selected = calls.flatMap((c) => c.fields || []);
+    expect(selected.some((f) => /^(ERNAM|AENAM|USNAM|QNAME|ANAME|UNAME|BNAME|AS4USER|USERNAME)$/.test(f))).toBe(false);
+    expect(JSON.stringify(evidence)).not.toMatch(/MUST_NEVER_BE_SELECTED|"(ERNAM|AENAM|USNAM|QNAME|ANAME)"/);
     expect(calls.filter((c) => c.table === 'LIPS' && /VGBEL = '0000529960'/.test(c.where))).toHaveLength(1);
     const ltap = evidence.queries.find((q) => q.query.table === 'LTAP');
     expect(ltap.openTransferOrders).toEqual([]);

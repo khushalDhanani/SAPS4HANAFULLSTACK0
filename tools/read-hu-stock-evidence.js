@@ -36,7 +36,8 @@ const FIELDS = Object.freeze({
   RESB: ['RSNUM', 'RSPOS', 'BWART', 'MATNR', 'WERKS', 'LGORT', 'UMLGO', 'BDMNG', 'ENMNG', 'MEINS', 'KZEAR', 'XLOEK', 'AUFNR'],
   RKPF: ['RSNUM', 'BWART'],
   T320: ['WERKS', 'LGORT', 'LGNUM'],
-  T001L: ['WERKS', 'LGORT', 'XHUPF', 'VSTEL'],
+  T001L: ['WERKS', 'LGORT', 'XHUPF', 'VSTEL', 'VKORG'],
+  MARC: ['MATNR', 'WERKS', 'SERNP'],
   T301: ['LGNUM', 'LGTYP'],
   T301T: ['SPRAS', 'LGNUM', 'LGTYP', 'LTYPT'],
   LQUA: ['LENUM', 'LGTYP', 'LGPLA', 'GESME', 'VERME', 'LETYP', 'MEINS'],
@@ -49,7 +50,8 @@ const FIELDS = Object.freeze({
   MARA: ['MATNR', 'VHART'],
   T319A: ['LGNUM', 'VHART', 'LETYP'],
   LIPS: ['VBELN', 'POSNR', 'MATNR', 'WERKS', 'LGORT', 'LFIMG', 'VRKME', 'VGBEL', 'VGPOS', 'RSNUM', 'RSPOS'],
-  LIKP: ['VBELN', 'LFART', 'VSTEL', 'WBSTK', 'KOSTK', 'LVSTK']
+  // No user-name fields (ERNAM etc.) are ever selected.
+  LIKP: ['VBELN', 'LFART', 'VSTEL', 'WBSTK', 'KOSTK', 'LVSTK', 'ERDAT']
 });
 
 // RFC_READ_TABLE OPTIONS are 72-character lines; longer text is truncated by SAP
@@ -77,7 +79,8 @@ function createCollector({ rfc, scope = DEFAULT_SCOPE, now = () => new Date() })
     serials: [],
     packaging: { vekpVhilm: [], mara: [] },
     t319a: {},
-    deliveries: []
+    deliveries: [],
+    serialProfiles: []
   };
 
   async function read(table, fields, where, rowCount = 9999) {
@@ -157,7 +160,8 @@ function createCollector({ rfc, scope = DEFAULT_SCOPE, now = () => new Date() })
         warehouse: warehouse || null,
         warehouseStatus: !t320 ? 'NOT_READ' : t320.length === 1 && warehouse ? 'DERIVED' : `T320_ROWS_${t320.length}`,
         XHUPF: t001l && t001l.length === 1 ? t001l[0].XHUPF : null,
-        VSTEL: t001l && t001l.length === 1 ? t001l[0].VSTEL : null
+        VSTEL: t001l && t001l.length === 1 ? t001l[0].VSTEL : null,
+        VKORG: t001l && t001l.length === 1 ? t001l[0].VKORG : null
       };
     }
     for (const row of evidence.open311Reservations) {
@@ -265,6 +269,15 @@ function createCollector({ rfc, scope = DEFAULT_SCOPE, now = () => new Date() })
     }
   }
 
+  // MARC serial-number profile per open-reservation material/plant (raw rows only).
+  async function collectSerialProfiles() {
+    for (const key of uniq(evidence.open311Reservations.map((row) => `${row.MATNR}|${row.WERKS}`))) {
+      const [matnr, plant] = key.split('|');
+      const rows = await readChecked('MARC', [`MATNR = '${matnr}'`, `AND WERKS = '${plant}'`], 2);
+      evidence.serialProfiles.push({ material: matnr, plant, status: rows === null ? 'NOT_READ_SCHEMA_FIELDS_UNCONFIRMED' : 'READ', MARC: rows || [] });
+    }
+  }
+
   async function collectDeliveries() {
     for (const row of evidence.open311Reservations) {
       const rsnum = padded(row.RSNUM, 10);
@@ -286,6 +299,7 @@ function createCollector({ rfc, scope = DEFAULT_SCOPE, now = () => new Date() })
     const lenums = await collectStock();
     await collectHandlingUnits(lenums);
     await collectT319a(warehouses);
+    await collectSerialProfiles();
     await collectDeliveries();
     return evidence;
   }
