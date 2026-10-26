@@ -117,3 +117,19 @@ MARA (q141): `000000002000000340 → VHART Z007`. Serials exist for all 16 W15 H
 | Plant 1150 within the acting user's plant scope | **Not verified** (not in any mocked non-admin user; live technical user unknown) | **Not verified** |
 | BusinessConfig storage-type lists for W15 | fails — unseeded (`db/data/saps4hana.wm-BusinessConfig.csv`); the resolver fails closed | fails |
 | VEKP status/object meaning for the 902/OH1 HUs (`0010`/`03`) | n/a | **Not verified** |
+
+## 9. Addendum — 06:25Z run (`hu-stock-evidence.20261026T062527.raw.json`, RAW3; 2026-10-26 12:10 IST)
+
+RAW3: `capturedAt` `2026-10-26T06:25:00.795Z`, 174 queries, 0 skipped, RFC_READ_TABLE only; sensitive-value exact matches 0; no user-name field value present. Everything read in RAW2 is **unchanged** in RAW3 (open 311 rows, stock per storage type, serials, T319A, T301 codes, HU summaries, LIPS rows). RAW3 adds:
+
+| Item | Value | RAW3 source |
+|---|---|---|
+| MARC-SERNP `8000009754` / 1120 | `ZSN2` | q146 |
+| MARC-SERNP `8000006485` / 1120 | `ZSN2` | q147 |
+| MARC-SERNP `8000009802` / 1150 | `ZSN2` | q148 |
+| MARC-SERNP `8000009803` / 1150 | `ZSN2` | q149 |
+| T001L VKORG 1120/CS02 | `1000` (VSTEL `1105`, XHUPF `X`) | q6 |
+| T001L VKORG 1150/CS02 | `1000` (VSTEL `1150`, XHUPF `X`) | q8 |
+| LIKP ERDAT `0080000097` / `0080000098` | `20261009` both (`HOD`, VSTEL `1105`, WBSTK/KOSTK/LVSTK `A`) | q156, q157 |
+
+§8 updates: the rows "Serial-number profile (MARC-SERNP) — Not verified" and "VKORG — Not verified" are resolved for all four 1150 items: SERNP `ZSN2` (serial profile present; what `ZSN2` requires at goods issue is **Not verified** — profile customizing not read) and VKORG `1000`. Still Not verified: the live technical user's plant scope for 1150, VEKP `STATUS 0010`/`VPOBJ 03` meaning, and the `E10` vs T319A W15 `E1` consequence. No candidate recommended.
