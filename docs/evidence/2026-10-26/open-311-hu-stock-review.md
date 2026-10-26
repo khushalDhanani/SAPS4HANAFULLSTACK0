@@ -31,8 +31,12 @@ The 9754 and 6485 rows are targeted reads, not a complete LQUA scan by material/
 
 The table above was built from selective saved reads. `hu-stock-evidence.raw.json` (captured `2026-10-26T05:31:12Z`, READ-ONLY) now contains complete LQUA reads by material for W01 / plant / CS02 (`queries[2]`–`queries[5]`). It supersedes the "Saved stock observations" column:
 
-- Material 8000009754, 1120/CS02: 20 LQUA rows, 15 distinct LENUM, total quantity 10 NOS by storage type: 902 −5, OH1 +5, 911 3, 913 5, EN1 1 (HU `2000019372` at bin `1-L0001-04`), 921 1. Open demand 3 (523654/1, 529960/1, 529959/1).
-- Material 8000006485, 1120/CS02: unchanged, 2 × OH1/ONHOLD (HUs 2000020150/151), total 2 NOS. Open demand 11; pool shortfall 9.
+- Material 8000009754, 1120/CS02: 20 LQUA rows, 15 distinct LENUM; per storage type: 902 −5 (**five negative quants**), OH1 +5, 911 3, 913 5, EN1 1 (HU `2000019372` at bin `1-L0001-04`), 921 1. Open demand 1 each on 523654/1, 529960/1, 529959/1. No total or shortfall is stated (user instruction 2026-10-26, pending the OH1 decision).
+- Material 8000006485, 1120/CS02: unchanged, 2 × OH1/ONHOLD (HUs 2000020150/151). Open demand 1 / 2 / 8 on 524283/1, 527591/1, 527588/1. No total or shortfall is stated.
 - Materials 8000009802/9803 at 1150/CS02: queried in W01, 0 rows each. Open demand 1 each. Whether 1150/CS02 belongs to W01 is Not verified (no T320 evidence).
 
 Reservation numbers in this file were checked against `queries[25]`/`queries[26]` and are correct (`520235/1`, `520235/2`, `520236/1`, `520236/2`). Full analysis: `hu-stock-evidence-analysis.md`. No pickability judgement is made here.
+
+## Correction 2026-10-26 11:50 IST
+
+1150/CS02 belongs to warehouse **W15** (T320, `hu-stock-evidence.20261026T061255.raw.json` q7), not W01. Material 8000009802: 3 × OH1/ONHOLD (HUs 2000019885–87). Material 8000009803: 22 LQUA rows — 902 −10 (nine negative quants, bins 0300002084/0300002090, LETYP E1), OH1 10 (same storage units), EN1 4 (bin CISBIN, LETYP E10). No total or shortfall stated. Reservation 524283/1 has two open deliveries (0080000097, 0080000098, LFART HOD, status A/A/A). Details: `hu-stock-evidence-analysis-061255.md`.

@@ -69,6 +69,10 @@ function sensitiveEnvironmentValues(env = process.env) {
     // Short numeric system numbers are checked by schema/key exclusion below;
     // substring matching them would collide with ordinary quantities in rows.
     if (key.toUpperCase().includes('SYSNR') && /^\d{1,4}$/.test(value)) continue;
+    // Low-entropy values (booleans, tiny numbers, 1-3 chars) collide with ordinary
+    // JSON (e.g. ENABLE_DEV_TOKEN_ISSUER=true vs. a boolean field) and cannot be
+    // substring-scanned; forbidden-key checks below still cover such fields.
+    if (/^(?:true|false|yes|no|on|off)$/i.test(value) || /^\d{1,4}$/.test(value) || value.length < 4) continue;
     if (value) found.push({ key, value });
 
     if (/DESTINATION_URL/i.test(key)) {
@@ -98,7 +102,8 @@ function assertNoSensitiveEnvironmentValues(content, env = process.env) {
   if (leaked.length) {
     const keys = [...new Set(leaked.map(({ key }) => key))].join(', ');
     throw Object.assign(new Error(`Evidence output contains a sensitive environment value (${keys}).`), {
-      code: 'EVIDENCE_REDACTION_FAILED'
+      code: 'EVIDENCE_REDACTION_FAILED',
+      keys: [...new Set(leaked.map(({ key }) => key))]
     });
   }
 
@@ -116,7 +121,8 @@ function assertNoSensitiveEnvironmentValues(content, env = process.env) {
     for (const [key, child] of Object.entries(value)) {
       if (forbiddenKey(key)) {
         throw Object.assign(new Error(`Evidence output contains forbidden connection metadata field '${key}'.`), {
-          code: 'EVIDENCE_REDACTION_FAILED'
+          code: 'EVIDENCE_REDACTION_FAILED',
+          keys: [`field:${key}`]
         });
       }
       visit(child);

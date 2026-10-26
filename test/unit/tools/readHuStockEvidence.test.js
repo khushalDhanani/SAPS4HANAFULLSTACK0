@@ -66,6 +66,15 @@ describe('read-only HU evidence collector guards', () => {
 
       fs.writeFileSync(filePath, JSON.stringify({ connection: { sysnr: 'hidden' } }));
       expect(() => assertNoSensitiveEnvironmentValuesInFile(filePath, env)).toThrow(/forbidden connection metadata/);
+      expect(() => assertNoSensitiveEnvironmentValuesInFile(filePath, env)).toThrow(expect.objectContaining({ code: 'EVIDENCE_REDACTION_FAILED', keys: ['field:sysnr'] }));
+
+      // Live failure 2026-10-26: ENABLE_DEV_TOKEN_ISSUER=true matched a boolean field. Low-entropy
+      // values are not substring-scanned; a real leaked value still names its env key.
+      const lowEntropy = { ...env, ENABLE_DEV_TOKEN_ISSUER: 'true', CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH: '1', SHORT_TOKEN: 'ab' };
+      fs.writeFileSync(filePath, JSON.stringify({ hasNegativeQuants: true, rowCount: 1, status: 'ab' }));
+      expect(() => assertNoSensitiveEnvironmentValuesInFile(filePath, lowEntropy)).not.toThrow();
+      fs.writeFileSync(filePath, JSON.stringify({ rawValue: env.S4_USERNAME }));
+      expect(() => assertNoSensitiveEnvironmentValuesInFile(filePath, lowEntropy)).toThrow(expect.objectContaining({ keys: ['S4_USERNAME'] }));
     } finally {
       fs.rmSync(directory, { recursive: true, force: true });
     }
