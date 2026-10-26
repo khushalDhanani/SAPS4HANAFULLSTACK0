@@ -10,6 +10,14 @@ sap.ui.define([
 
     var _oModel = null;
 
+    /** Rows of a function that returns `array of`: OData V4 delivers them as { value: [...] }, not as an array. */
+    function _rows(oResult) {
+        if (Array.isArray(oResult)) {
+            return oResult;
+        }
+        return oResult && Array.isArray(oResult.value) ? oResult.value : [];
+    }
+
     /**
      * Read entity set via OData V4 list binding or ODataClient fallback.
      */
@@ -56,7 +64,7 @@ sap.ui.define([
                 var oContextBinding = oTargetModel.bindContext("/getReturnReasons(...)");
                 return oContextBinding.execute().then(function () {
                     var oCtx = oContextBinding.getBoundContext();
-                    return oCtx ? oCtx.getObject() : [];
+                    return _rows(oCtx && oCtx.getObject());
                 });
             }
             return ODataClient.get(SERVICE_BASE + "/getReturnReasons()").then(function (res) {
@@ -107,7 +115,7 @@ sap.ui.define([
                 oContextBinding.setParameter("top", iTopVal);
                 return oContextBinding.execute().then(function () {
                     var oCtx = oContextBinding.getBoundContext();
-                    return oCtx ? oCtx.getObject() : [];
+                    return _rows(oCtx && oCtx.getObject());
                 });
             }
 

@@ -39,8 +39,10 @@ class MockJSONModel {
 }
 
 class MockFilter {
-    constructor(config) {
+    constructor(config, operator, value) {
         this.config = config;
+        this.operator = operator;
+        this.value = value;
     }
 }
 
@@ -290,6 +292,18 @@ describe("SalesOrders Controller", () => {
         expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
     });
 
+    test.each([
+        ["10135", ["SalesOrder", "SoldToParty", "PurchaseOrderByCustomer"]],
+        ["ZDOM", ["SalesOrder", "SoldToParty", "PurchaseOrderByCustomer", "SalesOrderType"]]
+    ])("onSearch '%s' searches only fields SAP can filter (no SoldToPartyName; SalesOrderType only up to 4 chars)", (query, fields) => {
+        controller.byId = jest.fn((id) => (id === "salesOrdersTable" ? mockTable : null));
+        controller.onSearch({ getParameter: (p) => (p === "query" ? query : "") });
+        const aFilters = mockBinding.filter.mock.calls.slice(-1)[0][0];
+        const oOr = aFilters.find((f) => f.config && f.config.filters);
+        expect(oOr.config.filters.map((f) => f.config)).toEqual(fields);
+        expect(oOr.config.filters.every((f) => f.operator === "Contains" && f.value === query)).toBe(true);
+    });
+
     test("onRefresh refreshes table items binding", () => {
         controller.onRefresh();
         expect(mockBinding.refresh).toHaveBeenCalled();
@@ -306,7 +320,6 @@ describe("SalesOrders Controller", () => {
                         return {
                             getProperty: (prop) => {
                                 if (prop === "SalesOrder") return "5000104";
-                                if (prop === "ShippingPoint") return "1120";
                                 return null;
                             }
                         };
@@ -320,7 +333,8 @@ describe("SalesOrders Controller", () => {
 
         const dialogModel = mockView.getModel("deliveryDialog");
         expect(dialogModel.getProperty("/salesOrder")).toBe("5000104");
-        expect(dialogModel.getProperty("/shippingPoint")).toBe("1120");
+        // The worklist entity has no ShippingPoint; the user enters it in the dialog
+        expect(dialogModel.getProperty("/shippingPoint")).toBe("");
         expect(dialogModel.getProperty("/deliveryDate")).toBeDefined();
         expect(controller._openCreateDeliveryDialog).toHaveBeenCalled();
     });

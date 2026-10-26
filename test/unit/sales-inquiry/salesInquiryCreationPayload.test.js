@@ -157,4 +157,12 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
         mockODataClient.get.mockRejectedValueOnce(new Error('Backend error'));
         await expect(SalesInquiryService.getSalesInquiryDefaults()).rejects.toThrow('Backend error');
     });
+
+    test('SalesInquiryService._sanitizePayload keeps the item Plant SAP requires', () => {
+        const sanitized = SalesInquiryService._sanitizePayload({
+            header: { SalesInquiryType: 'ZIN' },
+            items: [{ Material: 'TG11', OrderQuantity: 1, OrderQuantityUnit: 'EA', Plant: '1110', errors: {} }]
+        });
+        expect(sanitized.items[0]).toEqual({ Material: 'TG11', OrderQuantity: 1, OrderQuantityUnit: 'EA', Plant: '1110' });
+    });
 });

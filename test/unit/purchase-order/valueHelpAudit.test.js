@@ -122,6 +122,46 @@ describe('Unit: Value Help Deduplication and Context Scoping', () => {
         });
     });
 
+    describe('1b. Projection where is forwarded to the remote read (CAP does not forward it itself)', () => {
+        const register = (read) => {
+            const handlers = {};
+            registerValueHelpHandlers({ on: (event, entities, handler) => entities.forEach((e) => { handlers[e] = handler; }) }, [{ entities: ['ItemCategoryVH', 'DocumentTypeVH'], read }]);
+            return handlers;
+        };
+        const target = (name, where, elements) => ({ name: `PurchaseOrderService.${name}`, projection: { where }, elements });
+        const EN = [{ ref: ['Language'] }, '=', { val: 'EN' }];
+
+        it('adds the projection where when the client sends none', async () => {
+            const read = jest.fn().mockResolvedValue([]);
+            const query = { SELECT: {} };
+            await register(read).ItemCategoryVH({ target: target('ItemCategoryVH', EN, { Language: {}, PurchasingDocumentItemCategory: {} }), query });
+            expect(read.mock.calls[0][0].SELECT.where).toEqual(EN);
+        });
+
+        it('ANDs the projection where with the client filter', async () => {
+            const read = jest.fn().mockResolvedValue([]);
+            const client = [{ ref: ['PurchasingDocumentItemCategory'] }, '=', { val: '0' }];
+            const query = { SELECT: { where: client } };
+            await register(read).ItemCategoryVH({ target: target('ItemCategoryVH', EN, { Language: {}, PurchasingDocumentItemCategory: {} }), query });
+            expect(read.mock.calls[0][0].SELECT.where).toEqual([{ xpr: client }, 'and', { xpr: EN }]);
+        });
+
+        it('restricts DocumentTypeVH to category F from its own projection (no hard-coded special case)', async () => {
+            const F = [{ ref: ['PurchasingDocumentCategory'] }, '=', { val: 'F' }];
+            const read = jest.fn().mockResolvedValue([{ PurchasingDocumentType: 'ZDOM', PurchasingDocumentCategory: 'F' }]);
+            const query = { SELECT: {} };
+            await register(read).DocumentTypeVH({ target: target('DocumentTypeVH', F, { PurchasingDocumentCategory: {}, PurchasingDocumentType: {} }), query });
+            expect(read.mock.calls[0][0].SELECT.where).toEqual(F);
+        });
+
+        it('leaves the query alone when the projection where names a field the entity does not have', async () => {
+            const read = jest.fn().mockResolvedValue([]);
+            const query = { SELECT: {} };
+            await register(read).ItemCategoryVH({ target: target('ItemCategoryVH', [{ ref: ['Lang'] }, '=', { val: 'EN' }], { Language: {} }), query });
+            expect(read.mock.calls[0][0].SELECT.where).toBeUndefined();
+        });
+    });
+
     describe('2. poValueHelpConfig and sdValueHelpConfig Registration', () => {
         it('poValueHelpConfig should configure deduplication for CurrencyVH, TaxCodeVH, and PaymentTermsVH', () => {
             expect(poValueHelpConfig).toBeDefined();

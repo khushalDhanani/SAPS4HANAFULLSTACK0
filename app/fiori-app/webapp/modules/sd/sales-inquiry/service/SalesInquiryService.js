@@ -111,7 +111,9 @@ sap.ui.define([
                 "OrderQuantityUnit",
                 "NetPriceAmount",
                 "NetAmount",
-                "TransactionCurrency"
+                "TransactionCurrency",
+                // Required by SAP (incompletion procedure Z1); srv/sd/sales-inquiry/service.cds POItem.Plant
+                "Plant"
             ];
 
             var cleanHeader = {};

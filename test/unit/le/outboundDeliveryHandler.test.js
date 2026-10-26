@@ -319,4 +319,36 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       expect(req.error).toHaveBeenCalledWith(400, 'No plant resolved');
     });
   });
+
+  describe('READ OrdersDueForDelivery text search (computed rows: the handler applies contains itself)', () => {
+    const rows = [
+      { SalesOrder: '5000287', ShipToParty: '10135', ShippingPoint: '1112' },
+      { SalesOrder: '6000028', ShipToParty: '20077', ShippingPoint: '1104' }
+    ];
+    const contains = (field, val) => ({ func: 'contains', args: [{ ref: [field] }, { val }] });
+
+    test('keeps rows matching any searched field (OR group, case-insensitive)', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(rows);
+      const where = [{ ref: ['Plant'] }, '=', { val: '1120' }, 'and', { xpr: [contains('SalesOrder', '0135'), 'or', contains('ShipToParty', '0135'), 'or', contains('ShippingPoint', '0135')] }];
+      const result = await handlers['READ_OrdersDueForDelivery']({ query: { SELECT: { where } } });
+      expect(result.map(r => r.SalesOrder)).toEqual(['5000287']);
+    });
+
+    test('matches the sales order number', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(rows);
+      const result = await handlers['READ_OrdersDueForDelivery']({ query: { SELECT: { where: [contains('SalesOrder', '6000028')] } } });
+      expect(result.map(r => r.SalesOrder)).toEqual(['6000028']);
+    });
+
+    test('without a search returns all rows', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockResolvedValue(rows);
+      const result = await handlers['READ_OrdersDueForDelivery']({ query: { SELECT: {} } });
+      expect(result).toHaveLength(2);
+    });
+
+    test('searchTerms ignores fields the rows do not carry', () => {
+      const { searchTerms } = require('../../../srv/le/outbound-delivery/handlers/outboundDelivery.handler');
+      expect(searchTerms([contains('Material', 'X'), 'or', contains('SalesOrder', 'ab')])).toEqual([{ field: 'SalesOrder', term: 'AB' }]);
+    });
+  });
 });

@@ -1,6 +1,19 @@
 const { applyPaging, applyWhere } = require('../common/filterUtils');
 
 /**
+ * The projection's own `where` (e.g. `where Language = 'EN'`) of a value help entity. CAP does not forward it when
+ * req.query is handed to the remote S/4 service, so it is added to the query here — only when every field it
+ * references exists on the entity (a renamed field would make the remote query invalid).
+ */
+function projectionWhere(target) {
+    const where = target && ((target.projection && target.projection.where) || (target.query && target.query.SELECT && target.query.SELECT.where));
+    if (!Array.isArray(where) || where.length === 0) return null;
+    const refs = JSON.stringify(where).match(/"ref":\["([^"]+)"/g) || [];
+    const elements = (target && target.elements) || {};
+    return refs.every((r) => elements[r.slice(8, -1)]) ? where : null;
+}
+
+/**
  * Generic Value Help Handler Registration
  *
  * Provides shared CAP infrastructure for registering READ handlers for value help entity sets
@@ -23,9 +36,10 @@ function registerValueHelpHandlers(srv, groups) {
         srv.on('READ', entities, async (req) => {
             const entityName = req.target ? req.target.name.split('.').pop() : '';
 
-            // For Purchase Order DocumentTypeVH, restrict query at source to category 'F' (Purchase Orders)
-            if (entityName === 'DocumentTypeVH' && req.query) {
-                req.query.where({ PurchasingDocumentCategory: 'F' });
+            const pWhere = projectionWhere(req.target);
+            if (pWhere && req.query && req.query.SELECT) {
+                const where = req.query.SELECT.where;
+                req.query.SELECT.where = where && where.length ? [{ xpr: where }, 'and', { xpr: pWhere }] : [...pWhere];
             }
 
             let results;
@@ -67,3 +81,4 @@ function registerValueHelpHandlers(srv, groups) {
 }
 
 module.exports = registerValueHelpHandlers;
+module.exports.projectionWhere = projectionWhere;

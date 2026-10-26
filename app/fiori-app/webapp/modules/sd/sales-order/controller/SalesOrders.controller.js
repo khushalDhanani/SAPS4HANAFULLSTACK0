@@ -212,16 +212,17 @@ sap.ui.define([
             var aFilters = [];
             if (sQuery && sQuery.trim() !== "") {
                 var sTrimmed = sQuery.trim();
-                aFilters.push(new Filter({
-                    filters: [
-                        new Filter("SalesOrder", FilterOperator.Contains, sTrimmed),
-                        new Filter("SoldToParty", FilterOperator.Contains, sTrimmed),
-                        new Filter("SoldToPartyName", FilterOperator.Contains, sTrimmed),
-                        new Filter("PurchaseOrderByCustomer", FilterOperator.Contains, sTrimmed),
-                        new Filter("SalesOrderType", FilterOperator.Contains, sTrimmed)
-                    ],
-                    and: false
-                }));
+                // SAP rejects any filter on SoldToPartyName (HTTP 501) and contains() longer than the 4-character
+                // SalesOrderType (HTTP 400); either would fail the whole OR, so neither is sent.
+                var aSearch = [
+                    new Filter("SalesOrder", FilterOperator.Contains, sTrimmed),
+                    new Filter("SoldToParty", FilterOperator.Contains, sTrimmed),
+                    new Filter("PurchaseOrderByCustomer", FilterOperator.Contains, sTrimmed)
+                ];
+                if (sTrimmed.length <= 4) {
+                    aSearch.push(new Filter("SalesOrderType", FilterOperator.Contains, sTrimmed));
+                }
+                aFilters.push(new Filter({ filters: aSearch, and: false }));
             }
 
             oBinding.filter(aFilters, FilterType.Application);
@@ -279,10 +280,10 @@ sap.ui.define([
             }
 
             var oDialogModel = this.getView().getModel("deliveryDialog");
-            var sShippingPoint = oCtx.getProperty("ShippingPoint") || "";
             if (oDialogModel) {
                 oDialogModel.setProperty("/salesOrder", sSalesOrder);
-                oDialogModel.setProperty("/shippingPoint", sShippingPoint);
+                // The sales order worklist has no ShippingPoint; the user enters it in the dialog
+                oDialogModel.setProperty("/shippingPoint", "");
                 oDialogModel.setProperty("/deliveryDate", this._getTodayDateString());
             }
 

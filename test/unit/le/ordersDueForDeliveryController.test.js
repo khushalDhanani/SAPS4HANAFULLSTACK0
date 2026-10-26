@@ -700,4 +700,35 @@ describe("OrdersDueForDelivery Controller", () => {
             expect(MockOutboundDeliveryService.getOrdersDueMetrics).not.toHaveBeenCalled();
         });
     });
+
+    describe("_text fills message arguments", () => {
+        test("uses the default text with {0} replaced when no i18n bundle is available", () => {
+            expect(controller._text("missingKey", "Sales Order {0} has a delivery block ({1}).", ["5000287", "Z1"]))
+                .toBe("Sales Order 5000287 has a delivery block (Z1).");
+        });
+
+        test("passes the arguments to the i18n bundle", () => {
+            const getText = jest.fn().mockReturnValue("from bundle");
+            controller.getOwnerComponent = () => ({ getModel: () => ({ getResourceBundle: () => ({ hasText: () => true, getText }) }) });
+            expect(controller._text("msgOrderRejected", "x", ["5000287"])).toBe("from bundle");
+            expect(getText).toHaveBeenCalledWith("msgOrderRejected", ["5000287"]);
+        });
+    });
+
+    describe("billing is offered only for billing status A or B", () => {
+        test.each([["A", true], ["B", true], ["C", false], ["", false]])("billing status '%s' -> canBill %s", async (status, expected) => {
+            controller.onInit();
+            await flush();
+            MockOutboundDeliveryService.getDeliveryStatus.mockResolvedValueOnce({
+                DeliveryDocument: "80000085", DeliveryDocumentType: "ZLF", SoldToParty: "10135",
+                OverallPickingStatus: "C", OverallGoodsMovementStatus: "C", OverallDelivReltdBillgStatus: status
+            });
+            const fu = mockView.getModel("deliveryFollowUp");
+            fu.setProperty("/delivery", "80000085");
+            controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
+            await controller.onLoadDeliveryStatus();
+            await flush();
+            expect(fu.getProperty("/canBill")).toBe(expected);
+        });
+    });
 });

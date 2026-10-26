@@ -289,12 +289,11 @@ sap.ui.define([
             if (sQuery && sQuery.trim()) {
                 var q = sQuery.trim();
                 aFilters.push(new Filter({
+                    // Only fields the worklist rows carry; the server applies these itself (computed rows)
                     filters: [
                         new Filter("SalesOrder", FilterOperator.Contains, q),
-                        new Filter("SoldToParty", FilterOperator.Contains, q),
-                        new Filter("SoldToPartyName", FilterOperator.Contains, q),
-                        new Filter("ShippingPoint", FilterOperator.Contains, q),
-                        new Filter("Material", FilterOperator.Contains, q)
+                        new Filter("ShipToParty", FilterOperator.Contains, q),
+                        new Filter("ShippingPoint", FilterOperator.Contains, q)
                     ],
                     and: false
                 }));
@@ -650,7 +649,8 @@ sap.ui.define([
                         .replace("{3}", that._statusLabel(o.OverallGoodsMovementStatus)).replace("{4}", that._statusLabel(o.OverallDelivReltdBillgStatus)));
                     // Gate on SAP's own statuses: PGI needs picking complete and no goods movement yet; billing needs goods movement complete and billing not complete.
                     oFU.setProperty("/canPgi", o.OverallPickingStatus === "C" && o.OverallGoodsMovementStatus !== "C");
-                    oFU.setProperty("/canBill", o.OverallGoodsMovementStatus === "C" && o.OverallDelivReltdBillgStatus !== "C");
+                    // Billing status "" means billing is not relevant for the delivery (see _statusLabel), so only A/B are billable
+                    oFU.setProperty("/canBill", o.OverallGoodsMovementStatus === "C" && ["A", "B"].indexOf(o.OverallDelivReltdBillgStatus) !== -1);
                 })
                 .catch(function (err) {
                     oFU.setProperty("/statusText", (err && (err.message || err.statusText)) || "Delivery status could not be read from SAP.");
@@ -736,18 +736,19 @@ sap.ui.define([
             }
         },
 
-        _text: function (sKey, sDefault) {
+        /** i18n text for sKey with {0}, {1}… filled from aArgs; sDefault (same placeholders) when the bundle has no such key. */
+        _text: function (sKey, sDefault, aArgs) {
             try {
                 var oComp = this.getOwnerComponent();
                 var oI18n = oComp && oComp.getModel ? oComp.getModel("i18n") : null;
                 var oBundle = oI18n && oI18n.getResourceBundle ? oI18n.getResourceBundle() : null;
                 if (oBundle && oBundle.hasText && oBundle.hasText(sKey)) {
-                    return oBundle.getText(sKey);
+                    return oBundle.getText(sKey, aArgs);
                 }
             } catch (e) {
                 // i18n bundle not available (e.g. unit tests): fall through to the English default.
             }
-            return sDefault;
+            return (aArgs || []).reduce(function (s, v, i) { return s.split("{" + i + "}").join(String(v)); }, sDefault);
         }
     });
 });

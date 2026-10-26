@@ -4,6 +4,21 @@ const deliveryNoRefAdapter = require('../../../integration/s4hana/le/delivery-no
 const { applyPaging, extractFilterParam } = require('../../../common/filterUtils');
 const { plantScope, isPlantAllowed } = require('../../../wm/reservation-entry/readScope');
 
+// Fields of the computed worklist rows a text search may match (OrdersDueForDelivery has no SoldToParty/Material).
+const SEARCH_FIELDS = ['SalesOrder', 'ShipToParty', 'ShippingPoint'];
+
+/** contains(field, 'term') clauses on SEARCH_FIELDS anywhere in the CQN where (the UI sends them as one OR group). */
+function searchTerms(where, out = []) {
+  for (const t of where || []) {
+    if (t && t.func === 'contains' && t.args && t.args[0] && t.args[0].ref && SEARCH_FIELDS.includes(t.args[0].ref[0]) && t.args[1] && t.args[1].val != null) {
+      out.push({ field: t.args[0].ref[0], term: String(t.args[1].val).toUpperCase() });
+    } else if (t && Array.isArray(t.xpr)) {
+      searchTerms(t.xpr, out);
+    }
+  }
+  return out;
+}
+
 /**
  * Registers Outbound Delivery business handlers on the CAP service.
  *
@@ -24,6 +39,11 @@ function registerOutboundDeliveryHandlers(srv) {
       }
       if (approvalStatusParam !== null) {
         filtered = filtered.filter(o => String(o.SalesDocApprovalStatus || '') === String(approvalStatusParam));
+      }
+      // The rows are computed here, so CAP does not apply $filter to them: apply the text search ourselves
+      const terms = searchTerms(req.query && req.query.SELECT && req.query.SELECT.where);
+      if (terms.length) {
+        filtered = filtered.filter(o => terms.some(({ field, term }) => String(o[field] || '').toUpperCase().includes(term)));
       }
 
       return applyPaging(filtered, req);
@@ -226,3 +246,4 @@ function registerOutboundDeliveryHandlers(srv) {
 }
 
 module.exports = registerOutboundDeliveryHandlers;
+module.exports.searchTerms = searchTerms;
