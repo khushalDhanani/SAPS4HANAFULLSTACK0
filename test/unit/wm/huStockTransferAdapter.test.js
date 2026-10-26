@@ -629,6 +629,71 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
     });
   });
 
+  describe('HU follow-up regressions (mock SAP only)', () => {
+    const payload = { ReservationNo: '10042', ReservationItem: '1', UnitNumber: '2000019371', TransferQty: 1 };
+    beforeEach(() => {
+      jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({ OpenQty: 5, Plant: '1150', Material: '8000009803', StorageLocation: 'CS02', ReceivingStorageLocation: 'CIS1' });
+      jest.spyOn(adapter, 'validateUnit').mockResolvedValue({ Valid: true, UnitType: 'Handling Unit (HU)', AvailableQuantity: 5 });
+      mockRfc.readTable.mockResolvedValue([{ XHUPF: 'X' }]);
+    });
+
+    it.each([
+      [{}, 422, /returned no material document/],
+      [{ ES_MESSAGE: { MSGTY: 'E', MSGID: 'M7', MSGNO: '021', MSGV1: 'stock rejected' } }, 422, /stock rejected/],
+      [Object.assign(new Error('missing'), { key: 'FU_NOT_FOUND' }), 501, /not callable via RFC/]
+    ])('blocks HUM failure without a BAPI fallback (%j)', async (response, status, message) => {
+      if (response instanceof Error) mockRfc.call.mockRejectedValue(response);
+      else mockRfc.call.mockResolvedValue(response);
+      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status, message });
+      expect(mockRfc.call.mock.calls.map(([fm]) => fm)).toEqual(['HU_CREATE_GOODS_MOVEMENT']);
+      expect(mockRfc.session).not.toHaveBeenCalled();
+      expect(adapter._attemptCache.size).toBe(0);
+    });
+
+    it('rejects a storage unit on an HU-managed location before any posting call', async () => {
+      adapter.validateUnit.mockResolvedValue({ Valid: true, UnitType: 'Storage Unit (SU)', AvailableQuantity: 5 });
+      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status: 422, message: expect.stringContaining('only a handling unit') });
+      expect(mockRfc.call).not.toHaveBeenCalled();
+      expect(mockRfc.session).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['read failure', new Error('read unavailable')],
+      ['missing location', []],
+      ['missing HU flag', [{}]],
+      ['unknown HU flag', [{ XHUPF: '?' }]],
+      ['ambiguous location', [{ XHUPF: '' }, { XHUPF: 'X' }]]
+    ])('blocks posting on %s without invoking either write path', async (_label, response) => {
+      if (response instanceof Error) mockRfc.readTable.mockRejectedValue(response);
+      else mockRfc.readTable.mockResolvedValue(response);
+      await expect(adapter.executeHuStockTransfer(payload)).rejects.toMatchObject({ status: 503, message: expect.stringContaining('Nothing was posted') });
+      expect(mockRfc.call).not.toHaveBeenCalled();
+      expect(mockRfc.session).not.toHaveBeenCalled();
+      expect(adapter._attemptCache.size).toBe(0);
+    });
+
+    it('requires explicit plant and warehouse without querying default locations', async () => {
+      await expect(adapter.getOpenReservations()).rejects.toMatchObject({ status: 400 });
+      await expect(adapter.getStorageTypeRules({ plant: '1150' })).rejects.toMatchObject({ status: 400 });
+      await expect(adapter.rackLayout()).rejects.toMatchObject({ status: 400 });
+      expect(mockRfc.readTable).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('cockpit status-aware stock regression', () => {
+    it('counts distinct retained HUs and excludes every item of a goods-issued HU', async () => {
+      mockRfc.readTable.mockImplementation(async (table) => {
+        if (table === 'RESB') return [{ RSNUM: '0000010042', RSPOS: '0001', BWART: '311', WERKS: '1150', LGORT: 'CS02', MATNR: '000000008000009803', BDMNG: '5', ENMNG: '0' }];
+        if (table === 'VEPO') return [{ VENUM: '1', VEMNG: '2' }, { VENUM: '1', VEMNG: '1' }, { VENUM: '2', VEMNG: '7' }];
+        if (table === 'VEKP') return [{ VENUM: '1', STATUS: '0020' }, { VENUM: '2', STATUS: '0050' }];
+        return [];
+      });
+      const cockpit = await adapter.getCockpitDetail('10042', '1');
+      expect(cockpit).toMatchObject({ AvailableUnitCount: 1, TotalAvailableStock: 3, Warehouse: '', PreferredStorageType: '' });
+      expect(mockRfc.readTable).not.toHaveBeenCalledWith('LQUA', expect.anything(), expect.anything(), expect.anything());
+    });
+  });
+
   describe('getStorageBins & getVisualRack', () => {
     beforeEach(() => {
       jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({

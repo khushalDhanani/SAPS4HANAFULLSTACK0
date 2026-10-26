@@ -75,3 +75,64 @@ describe('HuStockTransferService contract, plant scope and attempt status', () =
     expect(exec).toHaveBeenCalledTimes(2);
   });
 });
+
+// HTTP posts below target only the local CAP test server; all SAP posting is mocked.
+describe('multi-HU posting HTTP regressions', () => {
+  const body = { ReservationNo: '529960', ReservationItem: '1', ClientAttemptId: 'selection-regression', Selections: [
+    { UnitNumber: 'HU1', TransferQty: 1 }, { UnitNumber: 'HU2', TransferQty: 1 }, { UnitNumber: 'HU3', TransferQty: 1 }
+  ] };
+  let validate, execute, claim, status;
+  beforeEach(() => {
+    jest.spyOn(HuStockTransferAdapter.prototype, 'getCockpitDetail').mockResolvedValue({ Plant: '1120' });
+    validate = jest.spyOn(HuStockTransferAdapter.prototype, 'validateHuStockTransferSelection').mockResolvedValue({ Valid: true });
+    execute = jest.spyOn(HuStockTransferAdapter.prototype, 'executeHuStockTransfer').mockResolvedValue({ MaterialDocument: '4900012345', MaterialDocYear: '2026', Success: true });
+    claim = jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockResolvedValue({ created: true });
+    status = jest.spyOn(GoodsIssueAttemptStore, 'setStatus').mockResolvedValue();
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it.each(['dave', 'bob'])('denies out-of-scope/role user %s before validation or claims', async (user) => {
+    await expect(POST(`${base}/executeHuStockTransferSelection`, body, as(user))).rejects.toMatchObject({ response: { status: 403 } });
+    expect(validate).not.toHaveBeenCalled();
+    expect(claim).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing attempt ID and failed selection prevalidation before claims', async () => {
+    await expect(POST(`${base}/executeHuStockTransferSelection`, { ...body, ClientAttemptId: '' }, as('alice'))).rejects.toMatchObject({ response: { status: 400 } });
+    validate.mockRejectedValue(Object.assign(new Error('selection exceeds open quantity'), { status: 422 }));
+    await expect(POST(`${base}/executeHuStockTransferSelection`, body, as('carol'))).rejects.toMatchObject({ response: { status: 422 } });
+    expect(claim).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('posts sequentially after validation and uses a distinct claim per HU', async () => {
+    const { data } = await POST(`${base}/executeHuStockTransferSelection`, body, as('carol'));
+    expect(data).toMatchObject({ Success: true, PostedCount: 3, FailedCount: 0, SkippedCount: 0 });
+    expect(data.Items.map((item) => item.UnitNumber)).toEqual(['HU1', 'HU2', 'HU3']);
+    expect(execute.mock.calls.map(([payload]) => payload.ClientAttemptId)).toEqual(['selection-regression-1', 'selection-regression-2', 'selection-regression-3']);
+    expect(validate.mock.invocationCallOrder[0]).toBeLessThan(claim.mock.invocationCallOrder[0]);
+    expect(status.mock.invocationCallOrder[0]).toBeLessThan(execute.mock.invocationCallOrder[1]);
+    expect(new Set(claim.mock.calls.map(([row]) => row.ReferenceDocument)).size).toBe(3);
+  });
+
+  it('keeps posted results, records unknown outcome, and leaves later HUs untouched', async () => {
+    execute.mockResolvedValueOnce({ MaterialDocument: '4900012345', MaterialDocYear: '2026' }).mockRejectedValueOnce(Object.assign(new Error('read-back unavailable'), { sapWriteAttempted: true, status: 502 }));
+    const { data } = await POST(`${base}/executeHuStockTransferSelection`, body, as('alice'));
+    expect(data).toMatchObject({ Success: false, PostedCount: 1, FailedCount: 1, SkippedCount: 1 });
+    expect(data.Items).toEqual([
+      expect.objectContaining({ UnitNumber: 'HU1', Success: true, MaterialDocument: '4900012345' }),
+      expect.objectContaining({ UnitNumber: 'HU2', Success: false, Message: 'read-back unavailable' })
+    ]);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(claim).toHaveBeenCalledTimes(2);
+    expect(status.mock.calls.map((call) => call[1])).toEqual(['posted', 'unconfirmed']);
+  });
+
+  it('blocks posting when attempt logging is unavailable', async () => {
+    claim.mockRejectedValue(new Error('database unavailable'));
+    const { data } = await POST(`${base}/executeHuStockTransferSelection`, body, as('alice'));
+    expect(data).toMatchObject({ Success: false, PostedCount: 0, FailedCount: 1, SkippedCount: 2 });
+    expect(execute).not.toHaveBeenCalled();
+  });
+});

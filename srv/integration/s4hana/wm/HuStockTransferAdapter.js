@@ -1468,20 +1468,23 @@ class HuStockTransferAdapter {
     }
 
     // 3. Inspect T001L for Source Storage Location HUM Flag (XHUPF)
-    let isHuManaged = false;
+    let t001lRows;
     try {
-      const t001lRows = await this.rfc.readTable(
+      t001lRows = await this.rfc.readTable(
         'T001L',
         ['WERKS', 'LGORT', 'XHUPF'],
         [`WERKS = '${cockpit.Plant}'`, `AND LGORT = '${sourceSLoc}'`],
-        1
+        2
       );
-      if (t001lRows.length && t001lRows[0].XHUPF === 'X') {
-        isHuManaged = true;
-      }
-    } catch (e) {
-      LOG.warn('Could not read T001L XHUPF; defaulting to standard BAPI path:', e.message);
+    } catch (_e) {
+      throw httpError(503, 'Could not verify the source storage location HU-management flag from SAP. Nothing was posted. Retry after the read is available.');
     }
+    // A blank flag is a verified non-HUM location only when SAP returned exactly one row.
+    // Missing, ambiguous or malformed metadata must never select a posting path.
+    if (!Array.isArray(t001lRows) || t001lRows.length !== 1 || !['', 'X'].includes(t001lRows[0]?.XHUPF)) {
+      throw httpError(503, 'SAP did not return one source storage location with a recognized HU-management flag. Nothing was posted.');
+    }
+    const isHuManaged = t001lRows[0].XHUPF === 'X';
 
     const s4Rsnum = this._pad(ReservationNo, 10);
     const s4Rspos = this._pad(ReservationItem || '1', 4);

@@ -48,7 +48,10 @@ function createProbe({ rfc, functionName = FUNCTION_NAME }) {
     evidence.result.rfcEnabled = tfdir.length ? tfdir[0].FMODE === 'R' : null; // FMODE 'R' = remote-enabled (TFDIR)
     const params = await read('FUPARAREF', [`FUNCNAME = '${functionName}'`], 200);
     evidence.result.parameters = params.map((p) => ({ name: p.PARAMETER, kind: p.PARAMTYPE, type: p.STRUCTURE, optional: p.OPTIONAL }));
-    const tableTypes = [...new Set(params.filter((p) => p.PARAMTYPE === 'T' && p.STRUCTURE).map((p) => p.STRUCTURE))];
+    // Parameter direction does not determine its type: IMPORT/EXPORT/CHANGING can
+    // also use DDIC table types. Look up every declared type; absent DD40L rows
+    // remain explicit found:false results, without guessing from a name/suffix.
+    const tableTypes = [...new Set(params.filter((p) => p.STRUCTURE).map((p) => p.STRUCTURE))];
     evidence.result.tableTypes = [];
     for (const typeName of tableTypes) {
       const dd40l = await read('DD40L', [`TYPENAME = '${typeName}'`], 1);
