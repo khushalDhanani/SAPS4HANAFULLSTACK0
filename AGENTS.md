@@ -5,6 +5,7 @@ These instructions apply to every agent and every change in this repository.
 ## Evidence, uncertainty, and approval
 
 - Treat a fact as **CONFIRMED** only when it comes from the user, this file, or evidence you inspected or verified. Mark conclusions based on incomplete evidence **INFERRED**; mark missing information **UNKNOWN**. Never present either as confirmed.
+- Explicitly identify every business, SAP, API, configuration, or integration assumption before implementation; never silently turn UNKNOWN or INFERRED information into code. If critical evidence remains unavailable after investigation, mark it **UNKNOWN/BLOCKED** and stop the dependent change.
 - Never invent SAP configuration, T-codes, tables, BAPI parameters, service contracts, or messages. Label unverified SAP details **Not verified**.
 - **Stop rule**: When an unknown could change business behavior, security/privacy, an SAP contract or payload, production configuration, or cause a destructive/external side effect, **first try to find the information using any agent** (inspect repository files, configuration, code, tests, SAP metadata, safe read-only queries, tools/MCP servers, subagents, or documentation). **Only after trying to find and not getting the information ("after not get"), then stop** before taking the action and ask a concise question with **Context, Doubt, Options and consequences, Recommendation** (maximum five questions).
 - For clear, reversible work directly requested by the user, use established project patterns and proceed. State any material assumption in the plan or report; do not ask about inconsequential implementation details.
@@ -13,7 +14,7 @@ These instructions apply to every agent and every change in this repository.
 - Never proceed past an unanswered BLOCKER. Never put a message number, field name, table, or storage type in a table unless it appears in this repo (cite file:line) or user answers. Otherwise write **Not verified**. "Assumptions made: None" is only allowed if every row is proven.
 - Reject placeholder input. If a value looks like a sample (`___`, `xxxxx`, `"exact message"`, `"text"`), treat it as **NOT PROVIDED**, stop, and ask. Never analyze a template or example as if it were a live result.
 - Never run any live write (BAPI, RFC, POST, DB write) without the user's explicit written "go" for that specific call. A choice between options is not a "go". Default is read-only. State "READ-ONLY" or "WRITE" before every SAP call.
-- Before reporting, check for unresolved assumptions and list them accurately; say **Assumptions: none** only when there are none. Close with **Done / Not done / Still unknown / Assumptions**.
+- Before reporting, check for unresolved assumptions and list them accurately; say **Assumptions: none** only when there are none. Use the final report format below.
 
 ## Non-negotiable workflow
 
@@ -23,7 +24,7 @@ Follow this sequence for every task:
 Inspect → Plan → Change → Test → Validate → Review → Report
 ```
 
-No implementation change is complete until its applicable tests and validation commands pass. Do not skip a step because a change appears small.
+Completion requires evidence: **PASS** = implementation + applicable tests + integration verification + verified business result; **PARTIAL** = implementation exists but validation is incomplete; **BLOCKED** = required evidence, environment, service, credential, or dependency is unavailable. **FAIL** records an observed failure; **NOT VERIFIED** records an untested claim. A successful command alone does not prove business behavior.
 
 ## WORKSTATUS.md is mandatory
 
@@ -58,8 +59,8 @@ Before modifying anything:
 
 - Read the request completely and inspect all relevant files, configuration, tests, documentation, and call sites.
 - Check `git status` and preserve unrelated user changes. Never overwrite, revert, or reformat unrelated work.
-- Trace the affected flow end to end through the layers that exist and are relevant: Fiori/UI5 → CAP service → persistence/domain logic → S/4HANA integration → BTP services.
-- Verify what is already implemented. Reuse established project patterns and installed dependencies where they fit.
+- Identify affected flows and existing tests before editing. Trace and verify the complete affected round trip through applicable layers: UI → Controller → CAP → Backend → S/4 → SAP Result → Backend Response → UI, including persistence/domain logic and BTP services where involved.
+- Before adding any file, service, helper, controller, fragment, model, API client, validator, dependency, or abstraction, search the repository. Reuse existing implementations and installed dependencies; create new code only when they cannot satisfy the requirement.
 - Do not guess about APIs, package versions, configuration, service contracts, authentication, or runtime behavior. Obtain evidence from source, metadata, documentation, commands, or controlled tests.
 
 ### 2. Plan
@@ -227,14 +228,16 @@ If the agent cannot prove the SAP backend capability, STOP implementation and re
 ## Change and test rules
 
 - Prefer a focused, reviewable diff. Avoid unnecessary renames, formatting churn, generated files, and unrelated refactors.
-- Add or update tests before or with behavior changes. Test the affected behavior and likely regression paths.
+- Add or update tests before or with behavior changes. For every meaningful change, run applicable static validation, unit, integration, regression, negative/error-path and E2E tests, plus real SAP verification for SAP functionality. Protect existing READ/list/detail flows when adding CREATE/UPDATE behavior; report each untested required layer without claiming PASS.
 - Unit tests cover isolated domain, handler, formatter, adapter, and validation behavior.
 - Integration tests cover CAP-to-S/4 boundaries with controlled fixtures/mocks; never depend on mutable production data.
-- E2E tests cover the applicable Fiori → CAP → backend flow.
+- E2E tests verify the applicable complete round trip and actual business result. A working UI, passing build/unit test, HTTP 200, or successful mock is insufficient. Mocks/demo data are allowed only in explicitly appropriate test/demo environments and must never masquerade as real SAP functionality or persistence.
 - Read errors, warnings, and stack traces completely. Investigate the failing boundary and root cause before changing implementation.
 - If a prerequisite tool, service, credential, or environment is unavailable, do not claim success. Report the exact unavailable validation and its reason.
 
 ## Dead-code and unused-code review
+
+Check the affected scope for duplicate services, helpers, controllers, fragments, models, dependencies, mocks, debug code, and unreachable code. Do not leave a superseded implementation behind when replacing it: prove safe removal or report unresolved use as a blocker to replacement.
 
 Treat dead-code findings as **candidates** until reachability and runtime use are checked. Before removing code, trace static references and relevant dynamic entry points, including CAP service/handler registration, CDS definitions, UI5 routes and manifests, fragments, configuration/environment keys, scripts/jobs, dependency injection or reflection, generated files, extension points, and tests. Check whether the code is intentionally dormant behind a feature flag or used by an external SAP/platform integration.
 
@@ -260,14 +263,10 @@ The current project may not yet define every command or provision every service.
 
 Before finishing:
 
-1. Re-read the diff and verify it meets the request without changing unrelated behavior.
-2. Confirm architecture boundaries, configuration compatibility, secret handling, and dependency necessity.
-3. Run the complete applicable validation/build/test pass.
-4. Report exactly:
-   - files changed and the behavior delivered;
-   - tests and validation commands run, with pass/fail results;
-   - S/4/BTP checks performed, without leaking secrets;
-   - known limitations, skipped checks, unresolved failures, and required follow-up.
+1. Inspect `git diff`, `git diff --check`, and `git status`; confirm scope, architecture boundaries, configuration compatibility, secret handling, and dependency necessity.
+2. Review dead-code/duplicates and run applicable tests, build/lint/type checks, integration and regression validation. Verify the business result, including SAP persistence/read-back where required; never bypass the SAP write-gate.
+3. Verify `WORKSTATUS.md` records only executed validation and actual outcomes; implementation alone never warrants completion.
+4. Report **CHANGED**, **TESTED**, **VERIFIED**, **NOT VERIFIED**, **BLOCKED**, **ASSUMPTIONS**, **REGRESSION**, and **FINAL STATUS** (PASS/PARTIAL/BLOCKED/FAIL). Include affected files/behavior, exact commands and outcomes, S/4/BTP checks without secrets, skipped checks and reasons, unresolved failures, and next action. Explain non-applicable checks; every result must match inspected evidence or actual execution.
 
 Never describe a change as complete, working, deployed, secure, or production-ready when relevant validation has not passed.
 
