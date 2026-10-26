@@ -39,9 +39,9 @@ describe('reservation items carry the receiving plant / storage location of the 
 describe('server posts the reservation values, not the client values', () => {
   const handlers = {};
   PerTypeGoodsIssueHandler.init({ on: (event, handler) => { handlers[event] = handler; } });
-  const req = (data) => ({ data, user: { id: 'TESTER' }, error: jest.fn() });
+  const req = (data) => ({ data, user: { id: 'TESTER', attr: { Plant: ['1120', '1130'] } }, error: jest.fn() });
   const resv = { Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', Batch: '', MovementType: '311', OpenQty: 2 };
-  const body = { ReservationNo: '519367', ReservationItem: '0001', Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', IssueQty: 2, Unit: 'NOS' };
+  const body = { MovementType: '311', ReservationNo: '519367', ReservationItem: '0001', Material: '8000000001', Plant: '1120', StorageLocation: 'HS01', ReceivingPlant: '1120', ReceivingStorageLocation: 'CIS1', IssueQty: 2, Unit: 'NOS' };
   let post;
 
   beforeEach(() => {
@@ -78,11 +78,11 @@ describe('server posts the reservation values, not the client values', () => {
   });
 
   test.each([
-    ['postGoodsIssue301', { ReceivingPlant: '1130', ReceivingStorageLocation: 'CS01' }],
-    ['postGoodsIssue201', { CostCenter: '1011101301' }]
-  ])('%s: tampered material against its reservation -> 400 before anything is posted', async (action, extra) => {
+    ['postGoodsIssue301', '301', { ReceivingPlant: '1130', ReceivingStorageLocation: 'CS01' }],
+    ['postGoodsIssue201', '201', { CostCenter: '1011101301' }]
+  ])('%s: tampered material against its reservation -> 400 before anything is posted', async (action, mvt, extra) => {
     const posts = ['postGoodsIssue201', 'postGoodsIssue301'].map((m) => jest.spyOn(GoodsIssueAdapter, m).mockResolvedValue({}));
-    const r = req({ ReservationNo: '519367', ReservationItem: '0001', Material: '8000002951', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS', ...extra });
+    const r = req({ MovementType: mvt, ReservationNo: '519367', ReservationItem: '0001', Material: '8000002951', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS', ...extra });
     await handlers[action](r);
     expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('do not match reservation'));
     posts.forEach((p) => expect(p).not.toHaveBeenCalled());
@@ -94,7 +94,7 @@ describe('server posts the reservation values, not the client values', () => {
       ...resv, MovementType: '301', ReceivingPlant: '1130', ReceivingStorageLocation: 'CS01'
     });
     const post301 = jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue301').mockResolvedValue({});
-    const r = req({ ...body, ReceivingPlant: '1130', ReceivingStorageLocation: 'CS01', SerialNumbers: ['110'] });
+    const r = req({ ...body, MovementType: '301', ReceivingPlant: '1130', ReceivingStorageLocation: 'CS01', SerialNumbers: ['110'] });
     await handlers.postGoodsIssue301(r);
     expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('serial-managed'));
     expect(post301).not.toHaveBeenCalled();

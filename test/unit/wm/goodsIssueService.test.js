@@ -195,8 +195,10 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
           IssueQty: 10.0,
           Unit: 'KG',
           ReceivingStorageLocation: 'CS02',
-          Batch: 'B240101' // Expired batch
+          Batch: 'B240101', // Expired batch
+          MovementType: '311'
         },
+        user: { attr: { Plant: ['1120'] } },
         error: jest.fn((code, msg) => ({ code, message: msg }))
       };
 

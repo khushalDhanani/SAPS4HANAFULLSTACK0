@@ -25,27 +25,27 @@ function fakeService() {
 }
 
 function req(data) {
-  return { data, user: { id: 'TESTER' }, error: jest.fn((code, msg) => ({ code, message: msg })) };
+  return { data, user: { id: 'TESTER', attr: { Plant: ['1120', '1130'] } }, error: jest.fn((code, msg) => ({ code, message: msg })) };
 }
 
 describe('Phase 5 #3 - handler routing (no cross-type fall-through)', () => {
   const handlers = fakeService();
 
   test('postGoodsIssue201 rejects a payload with reservation and no CostCenter via 201 validation', async () => {
-    const r = req({ ReservationNo: '518023', ReservationItem: '0001', Material: 'M1', Plant: '1130', StorageLocation: 'CS02', IssueQty: 1, Unit: 'EA' });
+    const r = req({ MovementType: '201', ReservationNo: '518023', ReservationItem: '0001', Material: 'M1', Plant: '1130', StorageLocation: 'CS02', IssueQty: 1, Unit: 'EA' });
     await handlers['postGoodsIssue201'](r);
     expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('Cost Center'));
   });
 
   test('postGoodsIssue301 rejects a payload with no reservation via 301 validation', async () => {
-    const r = req({ Material: 'M1', Plant: '1130', StorageLocation: 'CS02', IssueQty: 1, Unit: 'EA', ReceivingPlant: '1600' });
+    const r = req({ MovementType: '301', Material: 'M1', Plant: '1130', StorageLocation: 'CS02', IssueQty: 1, Unit: 'EA', ReceivingPlant: '1600' });
     await handlers['postGoodsIssue301'](r);
     expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('ReservationNo'));
   });
 
   describe('postGoodsIssue301 against a reservation with no storage location / receiving plant', () => {
     const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
-    const body = { ReservationNo: '519144', ReservationItem: '0001', Material: 'M1', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS' };
+    const body = { MovementType: '301', ReservationNo: '519144', ReservationItem: '0001', Material: 'M1', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS' };
     let post;
     beforeEach(() => {
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: 'M1', Plant: '1120', StorageLocation: '', ReceivingPlant: '', ReceivingStorageLocation: '', OpenQty: 1 });
@@ -71,7 +71,7 @@ describe('Phase 5 #3 - handler routing (no cross-type fall-through)', () => {
 
   describe('postGoodsIssue311 destination validation against WM configuration (T320/T001L)', () => {
     const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
-    const body311 = { ReservationNo: '519145', ReservationItem: '0001', Material: 'M1', Plant: '1120', StorageLocation: 'HS01', ReceivingStorageLocation: 'CS02', IssueQty: 1, Unit: 'NOS' };
+    const body311 = { MovementType: '311', ReservationNo: '519145', ReservationItem: '0001', Material: 'M1', Plant: '1120', StorageLocation: 'HS01', ReceivingStorageLocation: 'CS02', IssueQty: 1, Unit: 'NOS' };
     let post;
     beforeEach(() => {
       jest.spyOn(GoodsIssueAdapter, 'getReservationItemAuthoritative').mockResolvedValue({ Material: 'M1', Plant: '1120', StorageLocation: 'HS01', ReceivingStorageLocation: 'CS02', OpenQty: 1 });
@@ -126,7 +126,7 @@ describe('postGoodsIssue201 direct posting and error classification', () => {
   const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
   const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
   const handlers = fakeService();
-  const payload = { CostCenter: '1011101301', Material: '8000009753', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS' };
+  const payload = { MovementType: '201', CostCenter: '1011101301', Material: '8000009753', Plant: '1120', StorageLocation: 'HS01', IssueQty: 1, Unit: 'NOS' };
   let setStatus;
 
   beforeEach(() => {

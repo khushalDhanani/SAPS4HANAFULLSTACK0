@@ -24,6 +24,23 @@ const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/Re
 const TrToAdapter = require('../../../srv/integration/s4hana/wm/TrToAdapter');
 const { STATUS } = require('../../../srv/common/wmStatus');
 
+const matdocHelper = (table, where) => {
+  if (table === 'MATDOC' || table === 'MSEG') {
+    const optStr = Array.isArray(where) ? where.join(' ') : String(where || '');
+    const mblnrMatch = optStr.match(/MBLNR\s*=\s*'(\d+)'/);
+    if (mblnrMatch) {
+      const bwartMatch = optStr.match(/BWART\s*=\s*'(\d+)'/);
+      return [{
+        MBLNR: mblnrMatch[1],
+        MJAHR: '2026',
+        ZEILE: '0001',
+        BWART: bwartMatch ? bwartMatch[1] : '201'
+      }];
+    }
+  }
+  return null;
+};
+
 describe('Movement Type 201 (GI to Cost Center) Process Tests [mock only, not SAP verification]', () => {
   let mockRfc;
   let resAdapter;
@@ -81,6 +98,23 @@ describe('Movement Type 201 (GI to Cost Center) Process Tests [mock only, not SA
           const match = optStr.match(/TANUM\s*=\s*'(\d+)'/);
           const tanum = match ? match[1] : '0001013000';
           return [{ LGNUM: 'W01', TANUM: tanum, TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000008977', NSOLA: '1.000', ALTME: 'KG', PQUIT: '' }];
+        }
+        if (table === 'MATDOC' || table === 'MSEG') {
+          const match = optStr.match(/MBLNR\s*=\s*'(\d+)'/);
+          if (match) {
+            return [{
+              MBLNR: match[1],
+              MJAHR: '2026',
+              ZEILE: '0001',
+              BWART: '201',
+              MATNR: '000000008000008977',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              MENGE: '1.000',
+              MEINS: 'KG'
+            }];
+          }
+          return [];
         }
         return [];
       })
@@ -142,6 +176,8 @@ describe('Movement Type 201 (GI to Cost Center) Process Tests [mock only, not SA
 
       // Step 3: TO creation
       mockRfc.readTable.mockImplementation(async (tbl, flds, where) => {
+        const md = matdocHelper(tbl, where);
+        if (md) return md;
         if (tbl === 'MARC') return [{ XCHPF: '', SERNP: '' }];
         if (tbl === 'MAKT') return [{ MAKTX: 'Plain Material' }];
         if (tbl === 'T331') return [{ VOLLE: '' }];
@@ -210,7 +246,9 @@ describe('Movement Type 201 (GI to Cost Center) Process Tests [mock only, not SA
     });
 
     test('Class B: Batch material completes 201 goods movement with valid batch [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (tbl) => {
+      mockRfc.readTable.mockImplementation(async (tbl, flds, where) => {
+        const md = matdocHelper(tbl, where);
+        if (md) return md;
         if (tbl === 'MARC') return [{ XCHPF: 'X', SERNP: '' }];
         if (tbl === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011202701', DATAB: '20230401', DATBI: '99991231', BKZKP: '' }];
         if (tbl === 'MARD') return [{ LGORT: 'CS01', LABST: '100.000' }];
@@ -245,7 +283,9 @@ describe('Movement Type 201 (GI to Cost Center) Process Tests [mock only, not SA
     });
 
     test('Class C: Serial material completes 201 goods movement with valid serials [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (tbl) => {
+      mockRfc.readTable.mockImplementation(async (tbl, flds, where) => {
+        const md = matdocHelper(tbl, where);
+        if (md) return md;
         if (tbl === 'MARC') return [{ XCHPF: '', SERNP: 'ZSN2' }];
         if (tbl === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011202701', DATAB: '20230401', DATBI: '99991231', BKZKP: '' }];
         if (tbl === 'MARD') return [{ LGORT: 'CS02', LABST: '10.000' }];
@@ -508,7 +548,9 @@ describe('Movement Type 201 (GI to Cost Center) Process Tests [mock only, not SA
     });
 
     test('GI failure marks status 90 and subsequent retry succeeds with status 05 [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (tbl) => {
+      mockRfc.readTable.mockImplementation(async (tbl, flds, where) => {
+        const md = matdocHelper(tbl, where);
+        if (md) return md;
         if (tbl === 'MARC') return [{ XCHPF: '', SERNP: '' }];
         if (tbl === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011202701', DATAB: '20230401', DATBI: '99991231', BKZKP: '' }];
         if (tbl === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
@@ -565,7 +607,9 @@ describe('Movement Type 201 (GI to Cost Center) Process Tests [mock only, not SA
       const origFlag = process.env.WM_PRE_MIGO_T321_CHECK;
       process.env.WM_PRE_MIGO_T321_CHECK = 'true';
 
-      mockRfc.readTable.mockImplementation(async (tbl) => {
+      mockRfc.readTable.mockImplementation(async (tbl, flds, where) => {
+        const md = matdocHelper(tbl, where);
+        if (md) return md;
         if (tbl === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
         if (tbl === 'T321') return [{ LGNUM: '***', RBLVS: '201', TBFKZ: 'X' }];
         if (tbl === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011202701', DATAB: '20230401', DATBI: '99991231', BKZKP: '' }];

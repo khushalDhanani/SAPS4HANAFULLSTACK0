@@ -1279,7 +1279,8 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
                     tbnum: '0000123456',
                     qty: 10,
                     autoConfirm: true,
-                    autoPostMigo: true
+                    autoPostMigo: true,
+                    MovementType: '201'
                 },
                 error: jest.fn()
             };

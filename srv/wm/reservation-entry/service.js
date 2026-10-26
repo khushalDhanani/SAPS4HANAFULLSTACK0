@@ -2011,7 +2011,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         if (requestedStep === 'MIGO') {
           // postMigoForTrack takes its own lock (same flag); it must not run inside the step lock above.
           try {
-            await postMigoForTrack(track, data, req, { sLogHandle, extId, subObject: 'PROCESS' });
+            await postMigoForTrack(track, { ...data, MovementType: data.MovementType || data.movementType || track.MovementType }, req, { sLogHandle, extId, subObject: 'PROCESS' });
           } catch (migoErr) {
             if (isLockConflict(migoErr)) throw migoErr;
             await fail(STATUS.GI_ERROR, 'MIGO', `Goods movement failed: ${migoErr.message}`);

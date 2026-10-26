@@ -93,7 +93,7 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
         it('D7: the create form carries no master-data defaults (only the first movement type of the select)', () => {
             const subject = createDetailSubject();
             const defaults = subject._getDefaultCreateData();
-            expect(defaults.MovementType).toBe('311');
+            expect(defaults.MovementType).toBe('');
             for (const f of BUSINESS_FIELDS) expect(`${f}=${defaults[f]}`).toBe(`${f}=`);
             expect(Object.keys(defaults).sort()).toEqual(['MovementType', ...BUSINESS_FIELDS].sort());
         });

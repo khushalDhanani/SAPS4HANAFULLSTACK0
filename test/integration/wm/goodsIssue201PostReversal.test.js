@@ -52,6 +52,7 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     // OBYC/GBB-VBR and the server now rejects any caller-supplied value (see goodsIssueValidation
     // and goodsIssueMapper tests for the rejection/stripping behavior itself).
     const postRes = await POST(`${BASE}/postGoodsIssue201`, {
+      MovementType: '201',
       CostCenter: '1011101301',
       Material: '8000009753',
       Plant: '1120',
@@ -107,6 +108,7 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     const res = await axios.post(
       `${BASE}/postGoodsIssue201`,
       {
+        MovementType: '201',
         CostCenter: '1011101301',
         GLAccount: '0000400000',
         Material: '8000009753',
@@ -133,6 +135,7 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     const res = await axios.post(
       `${BASE}/postGoodsIssue201`,
       {
+        MovementType: '201',
         CostCenter: '1011101301',
         Material: '8000009753',
         Plant: '1120',
@@ -165,6 +168,7 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     const res = await axios.post(
       `${BASE}/postGoodsIssue201`,
       {
+        MovementType: '201',
         CostCenter: '1011101301',
         Material: '8000009753',
         Plant: '1120',

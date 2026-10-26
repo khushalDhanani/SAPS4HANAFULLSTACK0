@@ -29,7 +29,18 @@ function fakeRfc(lockResult = { EV_SUCCESS: 'S', EV_MESSAGE: 'locked' }) {
     if (fm === 'RFC_READ_TABLE') return { DATA: [] };
     return {};
   });
-  const rfc = { calls, call, session: jest.fn(async (fn) => fn(call)), readTable: jest.fn(async () => []) };
+  const rfc = {
+    calls,
+    call,
+    session: jest.fn(async (fn) => fn(call)),
+    readTable: jest.fn(async (table, fields, options = {}) => {
+      const allArgs = [fields, options].map((a) => (Array.isArray(a) ? a.join(' ') : (typeof a === 'object' && a !== null ? JSON.stringify(a) : String(a || '')))).join(' ');
+      if ((table === 'MATDOC' || table === 'MSEG') && /4900000050/.test(allArgs)) {
+        return [{ MBLNR: '4900000050', MJAHR: '2026', ZEILE: '0001', BWART: '201', MATNR: '8000000023', WERKS: '1120', MENGE: '1.000', MEINS: 'KG' }];
+      }
+      return [];
+    }),
+  };
   return rfc;
 }
 

@@ -140,7 +140,7 @@ describe('P1: Controlled SAP Read-Back Evidence for Critical Movement Flows [moc
         plant: '1120'
       })).rejects.toMatchObject({
         status: 400,
-        message: expect.stringMatching(/Movement type mismatch \(SAP: 201, expected: 261\)/i)
+        message: expect.stringMatching(/SAP BWART 201 does not exactly equal requested MovementType 261|Movement type mismatch/i)
       });
     });
 

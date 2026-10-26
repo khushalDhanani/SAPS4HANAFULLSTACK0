@@ -42,6 +42,25 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         if (table === 'LTAP') {
           return Promise.resolve([{ LGNUM: 'W01', TANUM: '0001012966', TAPOS: '0001', TBPOS: '0001', NSOLA: '1.000', ALTME: 'NOS', PQUIT: '' }]);
         }
+        if (table === 'MATDOC' || table === 'MSEG') {
+          const optStr = JSON.stringify(options || []);
+          if (optStr.includes('004900050128') || optStr.includes('4900050128')) {
+            return Promise.resolve([{
+              MBLNR: '004900050128',
+              MJAHR: '2026',
+              ZEILE: '0001',
+              BWART: '311',
+              MATNR: '000000008000000023',
+              WERKS: '1120',
+              LGORT: 'HS01',
+              MENGE: '1.000',
+              MEINS: 'NOS',
+              RSNUM: '0000524979',
+              RSPOS: '0001'
+            }]);
+          }
+          return Promise.resolve([]);
+        }
         return Promise.resolve([]);
       })
     };
@@ -982,7 +1001,8 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
 
       const result = await adapter.createTransferOrderFromTR({
         warehouseNumber: 'W01',
-        trNumber: '1001839'
+        trNumber: '1001839',
+        movementType: '311'
       });
 
       expect(result.success).toBe(true);
@@ -1008,7 +1028,8 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
 
       const result = await adapter.createTransferOrderFromTR({
         warehouseNumber: 'W01',
-        trNumber: '1001839'
+        trNumber: '1001839',
+        movementType: '311'
       });
 
       expect(result.success).toBe(true);
@@ -1021,7 +1042,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       mockRfc.call
         .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
         .mockRejectedValueOnce(new Error('No quants available for removal'));
-      await expect(adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' }))
+      await expect(adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839', movementType: '311' }))
         .rejects.toThrow('No quants available for removal');
       expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TO_CREATE_TR', 'Z_WM_TO_CREATE_FROM_TR']);
     });
@@ -1031,7 +1052,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       mockRfc.call
         .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
         .mockRejectedValueOnce(Object.assign(new Error('XFELD_WRONG: Invalid indicator value passed.'), { key: 'XFELD_WRONG', abapMsgClass: 'L3', abapMsgNumber: '045', abapMsgV1: '000' }));
-      await expect(adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' })).rejects.toThrow('XFELD_WRONG');
+      await expect(adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839', movementType: '311' })).rejects.toThrow('XFELD_WRONG');
       expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('Z_WM_TO_CREATE_FROM_TR failed for TR W01/0001001839: XFELD_WRONG'), expect.objectContaining({ key: 'XFELD_WRONG', abapMsgClass: 'L3', abapMsgNumber: '045', abapMsgV1: '000' }));
       errSpy.mockRestore();
     });
@@ -1041,7 +1062,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       mockRfc.call
         .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
         .mockResolvedValueOnce({ EV_TANUM: '0000000000', EV_SUCCESS: 'E', EV_MESSAGE: 'No TO created', ET_MESSAGES: [{ TYPE: 'E', ID: 'L3', NUMBER: '007', MESSAGE: 'Data for storage type search is not defined (A 001)' }] });
-      await expect(adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' })).rejects.toThrow('No TO created');
+      await expect(adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839', movementType: '311' })).rejects.toThrow('No TO created');
       expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('no TO created for TR W01/0001001839: No TO created'), { EV_SUCCESS: 'E', ET_MESSAGES: ['E L3 007 Data for storage type search is not defined (A 001)'] });
       errSpy.mockRestore();
     });
@@ -1057,7 +1078,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       mockRfc.call
         .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
         .mockResolvedValueOnce({ EV_TANUM: '0000000000', EV_SUCCESS: 'E', EV_MESSAGE: 'XFELD_WRONG: Invalid indicator value passed.' });
-      const p = adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' });
+      const p = adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839', movementType: '311' });
       await expect(p).rejects.toThrow('SAP completed Transfer Requirement 1001839 without a Transfer Order: the requested quantity is already available in destination bin 921/TRANSFER (L3 361/362, PP-WM quantity reduction)');
       await expect(p).rejects.toMatchObject({ sapTrCompletedWithoutTo: true });
       expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TO_CREATE_TR', 'Z_WM_TO_CREATE_FROM_TR']); // no further FM, no write
@@ -1070,7 +1091,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       mockRfc.call
         .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
         .mockResolvedValueOnce({ EV_TANUM: '0000000000', EV_SUCCESS: 'E', EV_MESSAGE: 'XFELD_WRONG: Invalid indicator value passed.' });
-      await expect(adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' })).rejects.toThrow('XFELD_WRONG: Invalid indicator value passed.');
+      await expect(adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839', movementType: '311' })).rejects.toThrow('XFELD_WRONG: Invalid indicator value passed.');
       console.error.mockRestore();
     });
 
@@ -1114,7 +1135,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         mockRfc.call
           .mockRejectedValueOnce(new Error("Function module \"L_TO_CREATE_TR\" cannot be called 'remotely'."))
           .mockResolvedValueOnce({ EV_TANUM: '0001012966', EV_SUCCESS: 'S' });
-        const r = await adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' });
+        const r = await adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839', movementType: '311' });
         expect(r.toNumber).toBe('1012966');
         expect(mockRfc.call).toHaveBeenCalledTimes(2);
       };
@@ -1129,7 +1150,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
         .mockRejectedValueOnce(new Error('UCON blocked'))
         .mockRejectedValueOnce(new Error('FU_NOT_FOUND: Z_WM_TO_CREATE_FROM_TR'))
         .mockResolvedValueOnce({ EV_TANUM: '0001012966', EV_SUCCESS: 'S' });
-      const result = await adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839' });
+      const result = await adapter.createTransferOrderFromTR({ warehouseNumber: 'W01', trNumber: '1001839', movementType: '311' });
       expect(result.toNumber).toBe('1012966');
       expect(mockRfc.call.mock.calls.map((c) => c[0])).toEqual(['L_TO_CREATE_TR', 'Z_WM_TO_CREATE_FROM_TR', 'ZWM_TO_CREATE_FROM_TR']);
     });
@@ -1155,7 +1176,8 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       await expect(
         adapter.createTransferOrderFromTR({
           warehouseNumber: 'W01',
-          trNumber: '9999999'
+          trNumber: '9999999',
+          movementType: '311'
         })
       ).rejects.toThrow(/Created TR 9999999 cannot be verified in SAP before TO creation/);
     });
@@ -1281,7 +1303,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       const origEnv = process.env.WM_PRE_MIGO_T321_CHECK;
       process.env.WM_PRE_MIGO_T321_CHECK = 'true';
       try {
-        mockRfc.readTable.mockImplementation(async (table) => {
+        mockRfc.readTable.mockImplementation(async (table, fields, options) => {
           if (table === 'T321') {
             return [{ LGNUM: '***', RBLVS: '311', TBFKZ: 'X' }];
           }
@@ -1290,6 +1312,9 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
           }
           if (table === 'MARD') {
             return [{ LGORT: 'CS01' }, { LGORT: 'HS01' }];
+          }
+          if ((table === 'MATDOC' || table === 'MSEG') && JSON.stringify(options || []).includes('4900050128')) {
+            return [{ MBLNR: '004900050128', MJAHR: '2026', ZEILE: '0001', BWART: '311', MATNR: '000000008000000023', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', MEINS: 'NOS', RSNUM: '0000524979', RSPOS: '0001' }];
           }
           return [];
         });
@@ -1326,7 +1351,7 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       const origEnv = process.env.WM_PRE_MIGO_T321_CHECK;
       process.env.WM_PRE_MIGO_T321_CHECK = 'true';
       try {
-        mockRfc.readTable.mockImplementation(async (table) => {
+        mockRfc.readTable.mockImplementation(async (table, fields, options) => {
           if (table === 'T321') {
             return [{ LGNUM: '***', RBLVS: '311', TBFKZ: '' }];
           }
@@ -1335,6 +1360,9 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
           }
           if (table === 'MARD') {
             return [{ LGORT: 'CS01' }, { LGORT: 'HS01' }];
+          }
+          if ((table === 'MATDOC' || table === 'MSEG') && JSON.stringify(options || []).includes('4900050128')) {
+            return [{ MBLNR: '004900050128', MJAHR: '2026', ZEILE: '0001', BWART: '311', MATNR: '000000008000000023', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', MEINS: 'NOS', RSNUM: '0000524979', RSPOS: '0001' }];
           }
           return [];
         });

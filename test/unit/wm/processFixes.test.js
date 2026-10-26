@@ -60,6 +60,21 @@ function fakeRfc({ fm = {}, tables = {} } = {}) {
         const tanum = match ? match[1] : '0001012966';
         return [{ LGNUM: 'W01', TANUM: tanum, TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000000023', NSOLA: '1.000', ALTME: 'KG', PQUIT: '' }];
       }
+      if (table === 'MATDOC' || table === 'MSEG') {
+        const match = optStr.match(/MBLNR\s*=\s*'(\d+)'/);
+        if (match) {
+          const docNum = match[1].replace(/^0+/, '');
+          const bwartMatch = optStr.match(/BWART\s*=\s*'(\d+)'/);
+          const docMap = { '4900000001': '201', '4900000002': '301', '4900000003': '301', '4900000009': '201', '4900050148': '201' };
+          const bwart = (bwartMatch && bwartMatch[1]) || docMap[docNum] || docMap[match[1]] || '201';
+          return [{
+            MBLNR: match[1],
+            MJAHR: '2026',
+            ZEILE: '0001',
+            BWART: bwart
+          }];
+        }
+      }
       return typeof h === 'function' ? h(where, fields) : (h || []);
     })
   };
@@ -268,13 +283,13 @@ describe('Fix 9: goods-movement retry guard by PROCESS_ID [mock only, not SAP ve
     const handlers = {};
     TrToHandler.init({ on: (e, fn) => { handlers[e] = fn; } }, { adapter: {}, resProcessAdapter: { checkAuthorization: jest.fn(), postGoodsMovement } });
     const track = { ReservationNo: '524979', ReservationItem: '0001', MovementType: '201', Material: '8000000023', Plant: '1120', Quantity: 1, Unit: 'KG', ProcessId: null };
-    const { res, updates } = await withFakeDb(track, async (updates) => ({ res: await handlers.postMigoGoodsMovement({ data: { ReservationNo: '524979' } }), updates }));
+    const { res, updates } = await withFakeDb(track, async (updates) => ({ res: await handlers.postMigoGoodsMovement({ data: { ReservationNo: '524979', MovementType: '201' } }), updates }));
     expect(updates[0]).toEqual({ ProcessId: res.ProcessId });
     expect(postGoodsMovement).toHaveBeenCalledWith(expect.objectContaining({ processId: res.ProcessId }));
     expect(updates[1]).toMatchObject({ Status_code: '05', MaterialDocument: '4900000010' });
 
     postGoodsMovement.mockClear();
-    await withFakeDb({ ...track, ProcessId: res.ProcessId }, () => handlers.postMigoGoodsMovement({ data: { ReservationNo: '524979' } }));
+    await withFakeDb({ ...track, ProcessId: res.ProcessId }, () => handlers.postMigoGoodsMovement({ data: { ReservationNo: '524979', MovementType: '201' } }));
     expect(postGoodsMovement).toHaveBeenCalledWith(expect.objectContaining({ processId: res.ProcessId }));
   });
 });

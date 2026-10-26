@@ -103,8 +103,17 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
 
       await expect(
         postingClient._submitMaterialDocument(
-          { Material: '8000000023', Plant: '1120', StorageLocation: 'HS01', IssueQty: 5 },
-          { mvt: '201', reservationNo: '520001', reservationItem: '0001' }
+          {
+            to_MaterialDocumentItem: {
+              results: [{ GoodsMovementType: '201', Material: '8000000023', Plant: '1120', StorageLocation: 'HS01', EntryUnit: 'KG' }]
+            }
+          },
+          {
+            mvt: '201',
+            reservationNo: '520001',
+            reservationItem: '0001',
+            data: { MovementType: '201', ValidatedMovementType: '201', Material: '8000000023', Plant: '1120', StorageLocation: 'HS01', IssueQty: 5 }
+          }
         )
       ).rejects.toMatchObject({
         status: 504,

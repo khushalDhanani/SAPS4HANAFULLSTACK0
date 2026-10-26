@@ -258,6 +258,21 @@ describe('Final SAP WM Production Hardening Audit Suite [mock only, not SAP veri
         }
 
         if (table === 'MATDOC' || table === 'MSEG') {
+          if (whereStr.includes(`5000000${mvt}`)) {
+            return [{
+              MBLNR: `005000000${mvt}`,
+              MJAHR: '2026',
+              ZEILE: '0001',
+              BWART: mvt,
+              MATNR: '000000008000000023',
+              WERKS: '1120',
+              LGORT: 'CS01',
+              MENGE: '10.000',
+              MEINS: 'EA',
+              RSNUM: `000052${mvt}`,
+              RSPOS: '0001'
+            }];
+          }
           return [];
         }
 
