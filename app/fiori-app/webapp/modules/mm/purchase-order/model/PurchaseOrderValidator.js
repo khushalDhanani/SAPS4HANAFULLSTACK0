@@ -44,14 +44,14 @@
     };
 
     var DEFAULT_ITEM_FIELD_CONFIG = {
-        Plant: { cellIndex: 1, label: "Plant", example: "1010" },
-        StorageLocation: { cellIndex: 2, label: "Storage Location", example: "101A" },
-        Material: { cellIndex: 3, label: "Material", example: "TG11" },
-        PurchaseOrderItemText: { cellIndex: 4, label: "Description", example: "Polypropylene Resin" },
-        OrderQuantity: { cellIndex: 5, label: "Quantity", example: "10" },
-        UnitOfMeasure: { cellIndex: 6, label: "Unit of Measure", example: "PC" },
-        NetPriceAmount: { cellIndex: 7, label: "Net Price", example: "100.00" },
-        TaxCode: { cellIndex: 8, label: "Tax Code", example: "V1" }
+        Plant: { cellIndex: 3, label: "Plant", example: "1010" },
+        StorageLocation: { cellIndex: 4, label: "Storage Location", example: "101A" },
+        Material: { cellIndex: 5, label: "Material", example: "TG11" },
+        PurchaseOrderItemText: { cellIndex: 6, label: "Description", example: "Polypropylene Resin" },
+        OrderQuantity: { cellIndex: 7, label: "Quantity", example: "10" },
+        UnitOfMeasure: { cellIndex: 8, label: "Unit of Measure", example: "PC" },
+        NetPriceAmount: { cellIndex: 9, label: "Net Price", example: "100.00" },
+        TaxCode: { cellIndex: 10, label: "Tax Code", example: "V1" }
     };
 
     var PurchaseOrderValidator = {
@@ -636,7 +636,7 @@
                             field: sItemNo + " / Material",
                             description: "Select a valid material master number (e.g. TG11).",
                             itemIndex: idx,
-                            cellIndex: 3,
+                            cellIndex: 5,
                             controlId: "poItemsTable"
                         });
                     } else if (!bMaterialRequired && !item.Material && (!item.PurchaseOrderItemText || !String(item.PurchaseOrderItemText).trim())) {
@@ -647,7 +647,7 @@
                             field: sItemNo + " / Description",
                             description: "Enter a descriptive short text for this service/blanket line item.",
                             itemIndex: idx,
-                            cellIndex: 4,
+                            cellIndex: 6,
                             controlId: "poItemsTable"
                         });
                     }
@@ -660,7 +660,7 @@
                             field: sItemNo + " / Plant",
                             description: "Specify an authorized plant (e.g. 1010).",
                             itemIndex: idx,
-                            cellIndex: 1,
+                            cellIndex: 3,
                             controlId: "poItemsTable"
                         });
                     } else if (oPoRule && oPoRule.allowedPlantPrefix && !String(item.Plant).trim().startsWith(oPoRule.allowedPlantPrefix)) {
@@ -672,7 +672,7 @@
                             field: sItemNo + " / Plant",
                             description: "Select a plant matching the company code / plant prefix for " + sCleanDocType + ".",
                             itemIndex: idx,
-                            cellIndex: 1,
+                            cellIndex: 3,
                             controlId: "poItemsTable"
                         });
                     }
@@ -685,7 +685,7 @@
                             field: sItemNo + " / Storage Location",
                             description: "Specify the receiving storage location within the plant (e.g. 101A).",
                             itemIndex: idx,
-                            cellIndex: 2,
+                            cellIndex: 4,
                             controlId: "poItemsTable"
                         });
                     }
@@ -697,7 +697,7 @@
                             field: sItemNo + " / Unit of Measure",
                             description: "Specify the order unit of measure (e.g. PC, KG).",
                             itemIndex: idx,
-                            cellIndex: 5,
+                            cellIndex: 8,
                             controlId: "poItemsTable"
                         });
                     }
@@ -710,7 +710,7 @@
                             field: sItemNo + " / Quantity",
                             description: "Enter a positive numeric quantity.",
                             itemIndex: idx,
-                            cellIndex: 4,
+                            cellIndex: 7,
                             controlId: "poItemsTable"
                         });
                     }
@@ -724,7 +724,7 @@
                                 field: sItemNo + " / Net Price",
                                 description: "Enter 0.00 or a positive net price.",
                                 itemIndex: idx,
-                                cellIndex: 6,
+                                cellIndex: 9,
                                 controlId: "poItemsTable"
                             });
                         }
@@ -737,7 +737,7 @@
                             field: sItemNo + " / Tax Code",
                             description: "Enter a " + TAX_CODE_MAX_LEN + "-character SAP tax code (e.g. V1, I0).",
                             itemIndex: idx,
-                            cellIndex: 7,
+                            cellIndex: 10,
                             controlId: "poItemsTable"
                         });
                     }

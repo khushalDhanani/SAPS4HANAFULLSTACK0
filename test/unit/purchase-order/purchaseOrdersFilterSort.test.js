@@ -31,6 +31,7 @@ class MockFilter {
 const FilterOperator = {
     Contains: "Contains",
     EQ: "EQ",
+    NE: "NE",
     BT: "BT",
     GE: "GE",
     LE: "LE"
@@ -334,56 +335,36 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             expect(aFilters[0].oValue1).toBe("2026-09-01");
         });
 
-        it('should filter by Display Status Approved', () => {
-            mockControls.fbStatus.getSelectedKey.mockReturnValue("Approved");
+        it('should filter by SAP status code, excluding POs marked for deletion (as the Status column shows)', () => {
+            mockControls.fbStatus.getSelectedKey.mockReturnValue("04");
             const aFilters = controller._buildFilterCriteria();
 
             expect(aFilters.length).toBe(1);
-            expect(aFilters[0].bAnd).toBe(false);
-            expect(aFilters[0].aFilters.length).toBe(3);
-            expect(aFilters[0].aFilters[0].sPath).toBe("PurchasingDocumentStatus");
-            expect(aFilters[0].aFilters[0].oValue1).toBe("04");
-            expect(aFilters[0].aFilters[1].sPath).toBe("PurchasingDocumentStatus");
-            expect(aFilters[0].aFilters[1].oValue1).toBe("05");
-            expect(aFilters[0].aFilters[2].sPath).toBe("PurchasingCompletenessStatus");
-            expect(aFilters[0].aFilters[2].oValue1).toBe(true);
-        });
-
-        it('should filter by Display Status Draft', () => {
-            mockControls.fbStatus.getSelectedKey.mockReturnValue("Draft");
-            const aFilters = controller._buildFilterCriteria();
-
-            expect(aFilters.length).toBe(1);
-            expect(aFilters[0].bAnd).toBe(false);
+            expect(aFilters[0].bAnd).toBe(true);
             expect(aFilters[0].aFilters.length).toBe(2);
             expect(aFilters[0].aFilters[0].sPath).toBe("PurchasingDocumentStatus");
-            expect(aFilters[0].aFilters[0].oValue1).toBe("01");
-            expect(aFilters[0].aFilters[1].sPath).toBe("PurchasingCompletenessStatus");
-            expect(aFilters[0].aFilters[1].oValue1).toBe(false);
-        });
-
-        it('should filter by Display Status In Approval', () => {
-            mockControls.fbStatus.getSelectedKey.mockReturnValue("In Approval");
-            const aFilters = controller._buildFilterCriteria();
-
-            expect(aFilters.length).toBe(1);
-            expect(aFilters[0].bAnd).toBe(false);
-            expect(aFilters[0].aFilters[0].sPath).toBe("PurchasingDocumentStatus");
-            expect(aFilters[0].aFilters[0].oValue1).toBe("02");
-            expect(aFilters[0].aFilters[1].sPath).toBe("ReleaseIsNotCompleted");
-            expect(aFilters[0].aFilters[1].oValue1).toBe(true);
-        });
-
-        it('should filter by Display Status Rejected', () => {
-            mockControls.fbStatus.getSelectedKey.mockReturnValue("Rejected");
-            const aFilters = controller._buildFilterCriteria();
-
-            expect(aFilters.length).toBe(1);
-            expect(aFilters[0].bAnd).toBe(false);
-            expect(aFilters[0].aFilters[0].sPath).toBe("PurchasingDocumentStatus");
-            expect(aFilters[0].aFilters[0].oValue1).toBe("38");
+            expect(aFilters[0].aFilters[0].sOperator).toBe(FilterOperator.EQ);
+            expect(aFilters[0].aFilters[0].oValue1).toBe("04");
             expect(aFilters[0].aFilters[1].sPath).toBe("PurchasingDocumentDeletionCode");
+            expect(aFilters[0].aFilters[1].sOperator).toBe(FilterOperator.NE);
             expect(aFilters[0].aFilters[1].oValue1).toBe("L");
+        });
+
+        it('should filter by Deleted as deletion code L', () => {
+            mockControls.fbStatus.getSelectedKey.mockReturnValue("Deleted");
+            const aFilters = controller._buildFilterCriteria();
+
+            expect(aFilters.length).toBe(1);
+            expect(aFilters[0].sPath).toBe("PurchasingDocumentDeletionCode");
+            expect(aFilters[0].sOperator).toBe(FilterOperator.EQ);
+            expect(aFilters[0].oValue1).toBe("L");
+        });
+
+        it('should ignore the retired display-status keys', () => {
+            ["Approved", "Draft", "In Approval", "Rejected", "true", "false"].forEach((sKey) => {
+                mockControls.fbStatus.getSelectedKey.mockReturnValue(sKey);
+                expect(controller._buildFilterCriteria().length).toBe(0);
+            });
         });
 
         it('should filter by CreatedByUser (matching user ID or full name)', () => {
@@ -422,7 +403,7 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             mockControls.searchField.getValue.mockReturnValue("SAP");
             mockControls.fbPO.getValue.mockReturnValue("4500000001");
             mockControls.fbCompanyCode.getValue.mockReturnValue("1010");
-            mockControls.fbStatus.getSelectedKey.mockReturnValue("true");
+            mockControls.fbStatus.getSelectedKey.mockReturnValue("04");
 
             const aFilters = controller._buildFilterCriteria();
             expect(aFilters.length).toBe(4);

@@ -152,8 +152,14 @@ sap.ui.define([
             var sUrl = SERVICE_BASE + "/createPurchaseOrder";
             var oCleanPayload = this._sanitizePayload(oPayload);
             return ODataClient.post(sUrl, oCleanPayload).then(function (result) {
-                if (!result) return "";
-                return result.value || result.PurchaseOrder || result;
+                // Action returns String: never report success without an SAP-generated PO number
+                var sPO = result && (result.value || result.PurchaseOrder);
+                if (typeof sPO !== "string" || !sPO.trim()) {
+                    var oErr = new Error("Purchase Order creation returned no Purchase Order number from SAP.");
+                    oErr.status = 502;
+                    throw oErr;
+                }
+                return sPO.trim();
             });
         },
 

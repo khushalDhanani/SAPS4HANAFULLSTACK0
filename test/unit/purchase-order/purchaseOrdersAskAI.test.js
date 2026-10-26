@@ -15,7 +15,7 @@ global.sap = {
                 Object.assign(Controller.prototype, oMembers);
                 return Controller;
             };
-            ControllerClass = factory(Base, function JSONModel(d) { this.d = d; }, MockFilter, { EQ: 'EQ' }, function Sorter(p, d) { this.p = p; this.d = d; }, { SortOrder: {} },
+            ControllerClass = factory(Base, function JSONModel(d) { this.d = d; }, MockFilter, { EQ: 'EQ', NE: 'NE' }, function Sorter(p, d) { this.p = p; this.d = d; }, { SortOrder: {} },
                 { error: jest.fn() }, {}, { post: mockPost, get: mockGet, authHeaders: () => ({ Authorization: 'Bearer t' }) }, { load: mockFragmentLoad }, { statusCodeName: c => ({ '01': 'Draft', '02': 'In Approval', '03': 'Not Yet Sent', '04': 'Sent', '05': 'Follow-On Documents', '08': 'Released', '38': 'Rejected' })[c] });
         }
     }
@@ -258,12 +258,13 @@ describe('PurchaseOrders Ask AI helpers', () => {
         expect(data.open).toBe(false);
     });
 
-    test('_statusFilter mirrors the filter bar rules and _asksAboutStatus detects status questions', () => {
-        const f = ControllerClass._statusFilter('Approved');
-        expect(f.and).toBe(false);
-        expect(f.filters.map(x => [x.path, x.v])).toEqual([['PurchasingDocumentStatus', '04'], ['PurchasingDocumentStatus', '05'], ['PurchasingCompletenessStatus', true]]);
-        expect(ControllerClass._statusFilter('true').filters.length).toBe(3);
-        expect(ControllerClass._statusFilter('')).toBeNull();
+    test('_statusFilter matches the Status column (SAP code, not deleted / Deleted) and _asksAboutStatus detects status questions', () => {
+        const f = ControllerClass._statusFilter('04');
+        expect(f.and).toBe(true);
+        expect(f.filters.map(x => [x.path, x.op, x.v])).toEqual([['PurchasingDocumentStatus', 'EQ', '04'], ['PurchasingDocumentDeletionCode', 'NE', 'L']]);
+        const d = ControllerClass._statusFilter('Deleted');
+        expect([d.path, d.op, d.v]).toEqual(['PurchasingDocumentDeletionCode', 'EQ', 'L']);
+        ['', 'Approved', 'Draft', 'true', '4', '004', undefined].forEach(k => expect(ControllerClass._statusFilter(k)).toBeNull());
         expect(ControllerClass._asksAboutStatus('How many open POs?')).toBe(true);
         expect(ControllerClass._asksAboutStatus('Which supplier appears most often?')).toBe(false);
     });

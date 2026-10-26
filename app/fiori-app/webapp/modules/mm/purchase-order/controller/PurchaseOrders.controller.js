@@ -365,7 +365,7 @@ sap.ui.define([
                 }));
             }
 
-            // 10. FilterBar: Display Status (Approved, Draft, In Approval, Rejected)
+            // 10. FilterBar: SAP status code or Deleted, as shown in the Status column
             var oFbStatus = this.byId("fbStatus");
             var oStatusFilter = oFbStatus ? PurchaseOrdersController._statusFilter(oFbStatus.getSelectedKey()) : null;
             if (oStatusFilter) { aFilters.push(oStatusFilter); }
@@ -1381,21 +1381,22 @@ sap.ui.define([
     /** SAP PurchasingDocumentStatus codes counted for the AI (server-side $count each). */
     PurchaseOrdersController.AI_STATUS_CODES = ["01", "02", "03", "04", "05", "08", "38"];
 
-    /** OData filter for one display status of the list (same rules as the Status filter bar field). */
+    /**
+     * OData filter for one Status filter bar key, matching what the Status column shows (formatter.formatStatus):
+     * "Deleted" = deletion code L; a SAP status code = that code on a PO not marked for deletion.
+     */
     PurchaseOrdersController._statusFilter = function (sKey) {
-        var m = {
-            "Approved": [["PurchasingDocumentStatus", "04"], ["PurchasingDocumentStatus", "05"], ["PurchasingCompletenessStatus", true]],
-            "true": "Approved",
-            "Draft": [["PurchasingDocumentStatus", "01"], ["PurchasingCompletenessStatus", false]],
-            "false": "Draft",
-            "In Approval": [["PurchasingDocumentStatus", "02"], ["ReleaseIsNotCompleted", true]],
-            "Rejected": [["PurchasingDocumentStatus", "38"], ["PurchasingDocumentDeletionCode", "L"]]
-        };
-        var a = typeof m[sKey] === "string" ? m[m[sKey]] : m[sKey];
-        if (!a) { return null; }
-        var oF = new Filter({ filters: a.map(function (p) { return new Filter(p[0], FilterOperator.EQ, p[1]); }), and: false });
-        oF.__aiStatus = true;
-        return oF;
+        if (sKey === "Deleted") {
+            return new Filter("PurchasingDocumentDeletionCode", FilterOperator.EQ, "L");
+        }
+        if (!/^\d{2}$/.test(sKey || "")) { return null; }
+        return new Filter({
+            filters: [
+                new Filter("PurchasingDocumentStatus", FilterOperator.EQ, sKey),
+                new Filter("PurchasingDocumentDeletionCode", FilterOperator.NE, "L")
+            ],
+            and: true
+        });
     };
 
     /** Footer under an answer: what the model actually had (list total, status counts, loaded rows) and which model. */

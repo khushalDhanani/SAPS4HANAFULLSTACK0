@@ -130,4 +130,21 @@ describe('Unit: Purchase Order Creation Payload Sanitization', () => {
         expect(sentPayload.header.PurchaseOrderType).toBe('NB');
         expect(sentPayload.header).not.toHaveProperty('PurchaseOrderTypeText');
     });
+
+    it.each([
+        ['null response', null],
+        ['empty object', {}],
+        ['empty value', { value: '' }],
+        ['blank value', { value: '   ' }],
+        ['non-string value', { value: { PurchaseOrder: '4500001009' } }]
+    ])('PurchaseOrderService.createPurchaseOrder rejects when SAP returned no PO number (%s)', async (_label, response) => {
+        mockODataClient.post.mockResolvedValueOnce(response);
+        await expect(PurchaseOrderService.createPurchaseOrder({ header: {}, items: [] }))
+            .rejects.toMatchObject({ status: 502, message: expect.stringContaining('no Purchase Order number') });
+    });
+
+    it('PurchaseOrderService.createPurchaseOrder trims and returns the PO number', async () => {
+        mockODataClient.post.mockResolvedValueOnce({ value: ' 4500001010 ' });
+        await expect(PurchaseOrderService.createPurchaseOrder({ header: {}, items: [] })).resolves.toBe('4500001010');
+    });
 });

@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **PO frontend HIGH fixes (2026-10-26 13:56 IST) — DONE, UNCOMMITTED:** Create rejects when SAP returns no PO number; item error focus `cellIndex` matches the view; Status filter keyed by SAP code/Deleted as the column shows. 41 suites / 581 tests PASS (3 pre-existing skips); ui5lint clean. Browser/live SAP not verified. See Changes Log 13:56 IST.
+
 - **Secret scanner fail-closed fix (2026-10-26 13:44 IST) — DONE, UNCOMMITTED:** Scan now exits 1 when `git ls-files` fails or yields no files (was a false SUCCESS); tests 7/7 PASS. Rule coverage gaps remain open. See Changes Log 13:44 IST.
 
 - **Dependency gate high-severity enforcement (2026-10-26 13:42 IST) — DONE, UNCOMMITTED:** Gate now fails on high unless allowlisted with reason and unexpired date; 19 current highs allowlisted; tests 8/8 PASS; live scan exit 0. See Changes Log 13:42 IST.
@@ -1649,6 +1651,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **PO review next action (2026-10-26 13:56 IST):** Review/commit the three frontend fixes; then check the Status filter and an item-error focus in the browser against SAP (read-only). Remaining HIGH items need an approved plan: server must ignore client `system` prompts (`srv/ai/service.js`) and enforce plant prefix / doc type prefix / supplier account group in `srv/mm/purchase-order/validation/purchaseOrder.validation.js`.
+
 - **Secret scanner next action (2026-10-26 13:44 IST):** Review/commit the fail-closed fix. Decide whether to adopt a maintained scanner (e.g. gitleaks, including git history) in CI or extend the custom rules (BTP `clientsecret`, unquoted `S4_PASSWORD=`, Basic auth, URL credentials, JWT); a passing custom scan is not proof secrets are absent.
 
 - **Dependency gate next action (2026-10-26 13:42 IST):** Before 2026-11-25, apply the non-major fixes for `body-parser`, `follow-redirects`, `http-cache-semantics`, `markdown-it`, `undici`, `zod` and drop their allowlist entries, or CI will block. Before 2027-01-24, re-review the SAP SDK / `@ui5/cli` chain for upstream fixes.
@@ -1695,6 +1699,17 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 13:56 IST — PO frontend: reject create without PO number, correct item error cellIndex, status filter matches Status column
+
+- **Change (three HIGH findings from the read-only PO/shared controller review, same session):**
+  1. `modules/mm/purchase-order/service/PurchaseOrderService.js` `createPurchaseOrder`: resolved `""` or the raw object when SAP returned no PO number, and the controller then toasted "Purchase Order Created" and navigated back. It now rejects (`status 502`, "returned no Purchase Order number from SAP") unless `value`/`PurchaseOrder` is a non-empty string, and returns it trimmed. The existing controller `.catch` (busy reset, message popover, 502 MessageBox) handles it. CAP action already 502s on a missing number (`srv/mm/purchase-order/handlers/purchaseOrder.handler.js:61-63`; action `returns String`, `service.cds:135`).
+  2. `model/PurchaseOrderValidator.js` and `model/PurchaseOrderModel.js`: item `cellIndex` values pointed at the wrong cells after Item Category (cell 1) and Account Assignment (cell 2) were added to `CreatePurchaseOrder.view.xml`. Set from the view's actual order: Plant 3, Storage Location 4, Material 5, Description 6, Quantity 7, UoM 8, Net Price 9, Tax Code 10 (config maps and 9 literal error entries; several literals were already inconsistent, e.g. UoM 5, Quantity 4).
+  3. `controller/PurchaseOrders.controller.js` `_statusFilter` + `view/PurchaseOrders.view.xml` `fbStatus`: the filter used retired display rules (Approved = 04/05/complete, Draft = 01/incomplete, Rejected incl. deletion code L) while the column (`formatter.displayStatus`) shows SAP's status name and "Deleted" for code L. Filter keys are now SAP codes `01,02,03,04,05,08,38` (status EQ code AND deletion code NE `L`) plus `Deleted` (deletion code EQ `L`). Added i18n keys `statusNotYetSent`, `statusSent`, `statusFollowOnDocuments`, `statusReleased`, `statusDeleted` to `i18n.properties` and `i18n_en.properties`. Removed the unread `__aiStatus` marker and the `"true"`/`"false"` aliases (only caller: filter bar, `PurchaseOrders.controller.js:370`).
+- **TEST DECISION:** TEST ADDED + TEST UPDATED — new `test/unit/purchase-order/viewContractConsistency.test.js` (parses the real views: every config/literal `cellIndex` matches its bound cell; `validateForm` Plant error focuses cell 3; each Status option label equals what `formatter.displayStatus` shows); `purchaseOrderPayloadSanitization.test.js` (+5 rejection cases, +trim); `purchaseOrdersAskAI.test.js` and `purchaseOrdersFilterSort.test.js` (old Approved/Draft/In Approval/Rejected assertions replaced with code/Deleted/retired-key cases; `NE` added to FilterOperator mocks).
+- **Validation:** Red check — new/updated tests against the original sources: 11 failed / 53 passed; with fix all pass. `npx jest test/unit/purchase-order test/unit/controller test/unit/dashboard test/integration/purchase-order test/e2e/purchase-order` — 41 suites, 581 passed, 3 skipped (pre-existing FI-formatter `fs.existsSync` guard), 0 failed. `cd app/fiori-app && npx ui5lint` — no findings. Root `npx eslint` on changed test files — PASS (app files are ignored by root ESLint config; covered by ui5lint). `git diff --check` — PASS.
+- **Not verified:** browser/UI run (PO list/create read and write live SAP via CAP; no go for a create, and no live read performed); that SAP's `PurchasingDocumentStatusName` text equals the formatter map for these codes (INFERRED from the formatter's documented source, `formatter.js:6-8`); that S/4 accepts `PurchasingDocumentDeletionCode ne 'L'` through the CAP adapter (INFERRED; field exists in `srv/mm/purchase-order/service.cds:33`). No commit.
+- **Open from the same review (not changed):** client-supplied AI system prompt accepted by `srv/ai/service.js:41`; plant prefix / `^Z` doc type / supplier account group enforced only in the browser; MEDIUM/LOW items (AI Stop/Ask race, ZSER material error, per-keystroke material lookup, hard-coded doc-type rules, UTC document date, login double submit and token storage, duplicate helpers). **Assumptions:** status filter options limited to the 7 codes the AI already counts (`AI_STATUS_CODES`) plus Deleted.
 
 ### 2026-10-26 13:44 IST — Secret scanner: fail closed when git ls-files fails or yields no files
 

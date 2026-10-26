@@ -134,14 +134,14 @@ sap.ui.define([
         },
 
         ITEM_FIELD_CONFIG: {
-            Plant: { cellIndex: 1, label: "Plant", example: "1010" },
-            StorageLocation: { cellIndex: 2, label: "Storage Location", example: "101A" },
-            Material: { cellIndex: 3, label: "Material", example: "TG11" },
-            PurchaseOrderItemText: { cellIndex: 4, label: "Description", example: "Polypropylene Resin" },
-            OrderQuantity: { cellIndex: 5, label: "Quantity", example: "10" },
-            UnitOfMeasure: { cellIndex: 6, label: "Unit of Measure", example: "PC" },
-            NetPriceAmount: { cellIndex: 7, label: "Net Price", example: "100.00" },
-            TaxCode: { cellIndex: 8, label: "Tax Code", example: "V1" }
+            Plant: { cellIndex: 3, label: "Plant", example: "1010" },
+            StorageLocation: { cellIndex: 4, label: "Storage Location", example: "101A" },
+            Material: { cellIndex: 5, label: "Material", example: "TG11" },
+            PurchaseOrderItemText: { cellIndex: 6, label: "Description", example: "Polypropylene Resin" },
+            OrderQuantity: { cellIndex: 7, label: "Quantity", example: "10" },
+            UnitOfMeasure: { cellIndex: 8, label: "Unit of Measure", example: "PC" },
+            NetPriceAmount: { cellIndex: 9, label: "Net Price", example: "100.00" },
+            TaxCode: { cellIndex: 10, label: "Tax Code", example: "V1" }
         },
 
         /**
