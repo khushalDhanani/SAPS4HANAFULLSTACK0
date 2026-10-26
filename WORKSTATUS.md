@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Skill link validation test (2026-10-26 14:28 IST) — DONE, UNCOMMITTED:** `test/unit/tools/skillLinks.test.js` enforces all 21 discovery links; 25/25 PASS with three red checks. Live SAP proof for code changed since 2026-10-24 12:20 IST remains NOT VERIFIED. See Changes Log 14:28 IST.
+
 - **PO frontend HIGH fixes (2026-10-26 13:56 IST) — DONE, UNCOMMITTED:** Create rejects when SAP returns no PO number; item error focus `cellIndex` matches the view; Status filter keyed by SAP code/Deleted as the column shows. 41 suites / 581 tests PASS (3 pre-existing skips); ui5lint clean. Browser/live SAP not verified. See Changes Log 13:56 IST.
 
 - **Secret scanner fail-closed fix (2026-10-26 13:44 IST) — DONE, UNCOMMITTED:** Scan now exits 1 when `git ls-files` fails or yields no files (was a false SUCCESS); tests 7/7 PASS. Rule coverage gaps remain open. See Changes Log 13:44 IST.
@@ -1651,6 +1653,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Live SAP re-proof next action (2026-10-26 14:28 IST):** Before claiming SAP behavior for the current branch, re-run live write + read-back for movements 201/241/311/301/261, a PO create (SAP-returned number) and an HU stock transfer on DEV client 220 — each needs the user's written go per call.
+
 - **PO review next action (2026-10-26 13:56 IST):** Review/commit the three frontend fixes; then check the Status filter and an item-error focus in the browser against SAP (read-only). Remaining HIGH items need an approved plan: server must ignore client `system` prompts (`srv/ai/service.js`) and enforce plant prefix / doc type prefix / supplier account group in `srv/mm/purchase-order/validation/purchaseOrder.validation.js`.
 
 - **Secret scanner next action (2026-10-26 13:44 IST):** Review/commit the fail-closed fix. Decide whether to adopt a maintained scanner (e.g. gitleaks, including git history) in CI or extend the custom rules (BTP `clientsecret`, unquoted `S4_PASSWORD=`, Basic auth, URL credentials, JWT); a passing custom scan is not proof secrets are absent.
@@ -1699,6 +1703,14 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 14:28 IST — Skill discovery links: automated validation test
+
+- **Change:** New `test/unit/tools/skillLinks.test.js`. For every canonical `skills/<name>/SKILL.md` and each discovery dir (`.agents/skills`, `.claude/skills`, `.opencode/skills`) it asserts the entry is a symlink, `readlink` is exactly `../../skills/<name>` (per `skills/README.md` "Adding a skill" step 2), it resolves to the canonical directory and `SKILL.md`, and each discovery dir contains no orphaned/extra entries. No skill or link changed. Reason: P2 review finding "skill links need validation" — read-only check found all 21 links correct (git mode 120000, frontmatter `name` matches dir, all 7 in README catalog), but nothing enforced them.
+- **TEST DECISION:** TEST ADDED — `skill discovery links` (25 tests).
+- **Validation:** `npx jest test/unit/tools/skillLinks.test.js` — PASS 25/25. Red checks (each restored; `readlink` re-confirmed): removed `.claude/skills/sap-cap` → 2 failed; pointed `.agents/skills/sap-ui5` at `sap-cap` → 1 failed; added orphan `.opencode/skills/old-skill` → 1 failed. `npx eslint` on the test — PASS. `git diff --check` — PASS.
+- **Not verified:** CI run (not pushed). Checkouts with `core.symlinks=false` (e.g. some Windows setups) would fail this test by design. No commit. **Assumptions:** none.
+- **Related finding (report only):** "No live SAP transaction proof" — CONFIRMED. Last recorded live writes 2026-10-24 12:12–12:20 IST (client 220, movements 201/241/311/301/261, read back); since then 17 commits changed 31 `srv/` files (+1,683/−369), incl. `GoodsIssuePostingClient.js`, mappers, 261 preflight, MIGO retry, HU stock transfer, `TrToAdapter.js`, `PurchaseOrderAdapter.js`. No recorded live PO create or HU posting found. Re-proof requires per-call written go; none given, none run.
 
 ### 2026-10-26 13:56 IST — PO frontend: reject create without PO number, correct item error cellIndex, status filter matches Status column
 
