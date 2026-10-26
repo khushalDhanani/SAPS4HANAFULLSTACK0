@@ -69,5 +69,100 @@
     "reservationItem": "NOT PROVIDED",
     "unitNumber": "NOT PROVIDED",
     "transferQty": "NOT PROVIDED"
+  },
+  "customerReturn": {
+    "ReferenceSDDocument": "NOT PROVIDED",
+    "SoldToParty": "NOT PROVIDED",
+    "SalesOrganization": "NOT PROVIDED",
+    "DistributionChannel": "NOT PROVIDED",
+    "OrganizationDivision": "NOT PROVIDED",
+    "ReturnsOrderReason": "NOT PROVIDED",
+    "Material": "NOT PROVIDED",
+    "OrderQuantity": "NOT PROVIDED",
+    "OrderQuantityUnit": "NOT PROVIDED",
+    "ProductionPlant": "NOT PROVIDED",
+    "StorageLocation": "NOT PROVIDED"
+  },
+  "customerInvoice": {
+    "releaseBillingDocument": "NOT PROVIDED",
+    "cancelBillingDocument": "NOT PROVIDED"
+  },
+  "salesOrderDelivery": {
+    "salesOrder": "NOT PROVIDED",
+    "shippingPoint": "NOT PROVIDED"
+  },
+  "ordersDue": {
+    "plant": "NOT PROVIDED",
+    "salesOrder": "NOT PROVIDED",
+    "pgiDelivery": "NOT PROVIDED",
+    "billingDelivery": "NOT PROVIDED",
+    "noRef": {
+      "shippingPoint": "NOT PROVIDED",
+      "deliveryType": "NOT PROVIDED",
+      "shipToParty": "NOT PROVIDED",
+      "plant": "NOT PROVIDED",
+      "storageLocation": "NOT PROVIDED",
+      "salesOrg": "NOT PROVIDED",
+      "distChannel": "NOT PROVIDED",
+      "division": "NOT PROVIDED",
+      "material": "NOT PROVIDED",
+      "quantity": "NOT PROVIDED",
+      "uom": "NOT PROVIDED"
+    }
+  },
+  "scanTo": {
+    "lgnum": "NOT PROVIDED",
+    "tbnum": "NOT PROVIDED",
+    "quantity": "NOT PROVIDED"
+  },
+  "mvt261": {
+    "scan": {
+      "reservation": "NOT PROVIDED",
+      "item": "NOT PROVIDED",
+      "storageUnits": "NOT PROVIDED"
+    },
+    "reverse": {
+      "reservation": "NOT PROVIDED",
+      "item": "NOT PROVIDED",
+      "materialDocument": "NOT PROVIDED",
+      "materialDocumentYear": "NOT PROVIDED",
+      "materialDocumentItem": "NOT PROVIDED"
+    }
+  },
+  "handlingUnit": {
+    "create": {
+      "packagingMaterial": "NOT PROVIDED",
+      "plant": "NOT PROVIDED",
+      "storageLocation": "NOT PROVIDED",
+      "content": "NOT PROVIDED"
+    },
+    "pack": {
+      "handlingUnitExternalID": "NOT PROVIDED",
+      "material": "NOT PROVIDED",
+      "quantity": "NOT PROVIDED",
+      "unit": "NOT PROVIDED",
+      "batch": "NOT PROVIDED"
+    },
+    "unpack": {
+      "handlingUnitExternalID": "NOT PROVIDED",
+      "item": "NOT PROVIDED"
+    },
+    "remove": {
+      "handlingUnitExternalID": "NOT PROVIDED"
+    }
+  },
+  "packingInstruction": {
+    "externalName": "NOT PROVIDED",
+    "weightUnit": "NOT PROVIDED",
+    "packagingMaterial": "NOT PROVIDED",
+    "packagingQty": "NOT PROVIDED",
+    "packagingUnit": "NOT PROVIDED",
+    "material": "NOT PROVIDED",
+    "quantity": "NOT PROVIDED",
+    "unit": "NOT PROVIDED"
+  },
+  "reservationRetry": {
+    "reservationNo": "NOT PROVIDED",
+    "reservationItem": "NOT PROVIDED"
   }
 }

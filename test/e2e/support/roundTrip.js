@@ -203,4 +203,4 @@ async function runRoundTrip(spec, options = {}) {
     return result(gate.mode);
 }
 
-module.exports = { runRoundTrip, capReader, DRY_RUN_DOC };
+module.exports = { runRoundTrip, capReader, formUi, DRY_RUN_DOC };

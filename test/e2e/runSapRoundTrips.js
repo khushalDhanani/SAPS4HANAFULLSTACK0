@@ -14,6 +14,15 @@ const { roundTripSalesOrder } = require('./sd/roundTripSalesOrder.e2e');
 const { roundTripGoodsReceipt } = require('./wm/roundTripGoodsReceipt.e2e');
 const { roundTripGoodsIssue } = require('./wm/roundTripGoodsIssue.e2e');
 const { roundTripHuTransfer } = require('./wm/roundTripHuTransfer.e2e');
+const { roundTripCustomerReturn } = require('./sd/roundTripCustomerReturn.e2e');
+const { roundTripCustomerInvoice } = require('./sd/roundTripCustomerInvoice.e2e');
+const { roundTripSalesOrderDelivery } = require('./sd/roundTripSalesOrderDelivery.e2e');
+const { roundTripOrdersDue } = require('./le/roundTripOrdersDue.e2e');
+const { roundTripScanTo } = require('./wm/roundTripScanTo.e2e');
+const { roundTripMvt261 } = require('./wm/roundTripMvt261.e2e');
+const { roundTripHandlingUnit } = require('./wm/roundTripHandlingUnit.e2e');
+const { roundTripPackingInstruction } = require('./wm/roundTripPackingInstruction.e2e');
+const { roundTripReservationRetry } = require('./wm/roundTripReservationRetry.e2e');
 
 const SUITES = [
     { flow: 'po', name: 'Purchase order create', fn: roundTripPurchaseOrder },
@@ -21,7 +30,16 @@ const SUITES = [
     { flow: 'salesOrder', name: 'Sales order create', fn: roundTripSalesOrder },
     { flow: 'goodsReceipt', name: 'Goods receipt post', fn: roundTripGoodsReceipt },
     { flow: 'goodsIssue', name: 'Goods issue 201 (reservation entry)', fn: roundTripGoodsIssue },
-    { flow: 'huTransfer', name: 'HU stock transfer 311', fn: roundTripHuTransfer }
+    { flow: 'huTransfer', name: 'HU stock transfer 311', fn: roundTripHuTransfer },
+    { flow: 'customerReturn', name: 'Customer return create', fn: roundTripCustomerReturn },
+    { flow: 'customerInvoice', name: 'Invoice release / cancel', fn: roundTripCustomerInvoice },
+    { flow: 'salesOrderDelivery', name: 'Delivery from sales order list', fn: roundTripSalesOrderDelivery },
+    { flow: 'ordersDue', name: 'Orders due: delivery, no-ref delivery, PGI, billing', fn: roundTripOrdersDue },
+    { flow: 'scanTo', name: 'Scan-to: TO from TR, MIGO retry', fn: roundTripScanTo },
+    { flow: 'mvt261', name: 'Movement 261 post / reverse', fn: roundTripMvt261 },
+    { flow: 'handlingUnit', name: 'HU create / pack / unpack / remove', fn: roundTripHandlingUnit },
+    { flow: 'packingInstruction', name: 'Packing instruction create', fn: roundTripPackingInstruction },
+    { flow: 'reservationRetry', name: 'Reservation entry retry', fn: roundTripReservationRetry }
 ];
 
 async function runSapRoundTrips(options = {}) {

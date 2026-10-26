@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **P0 items 7–8 (2026-10-26 17:50 IST) — DONE (dry-run), UNCOMMITTED:** every SAP write route has a Tier C dry-run suite; submit-failure negatives 6/6; `npm run test:e2e` 15/15 PASS. Live SAP round trips still need test data + written go. See Changes Log 17:50 IST.
+
 - **Plant-scope gaps closed (2026-10-26 16:34 IST) — DONE, UNCOMMITTED:** GR posting (both actions) and delivery without reference now return 403 outside the user's plants; write-authorization E2E 7/7 PASS; Jest 3,816 PASS. See Changes Log 16:34 IST.
 
 - **P0 E2E list (2026-10-26 16:29 IST) — PARTIAL, UNCOMMITTED:** Tier C suites for PO/SI/SO/GR/GI/HU written and gated (dry-run 4/6 PASS; live never run); plant isolation 5/5 PASS; write authorization: roles 49/49 PASS, **2 plant gaps (GR post, delivery without ref)**; CI coverage gate active. See Changes Log 16:29 IST.
@@ -1719,6 +1721,18 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 17:50 IST — P0 items 7 and 8: Tier C dry-run suites for every SAP write route; submit-failure negative E2E
+
+- **Change ("Go" = no-write work only; no live SAP write, sales inquiry fix NOT applied):**
+  - 9 Tier C dry-run suites (2 delegated agents): `sd/roundTripCustomerReturn`, `sd/roundTripCustomerInvoice`, `sd/roundTripSalesOrderDelivery`, `le/roundTripOrdersDue`, `wm/roundTripScanTo`, `wm/roundTripMvt261`, `wm/roundTripHandlingUnit`, `wm/roundTripPackingInstruction`, `wm/roundTripReservationRetry` (+ helpers `support/actionRoundTrip.js`, `wm/wmRoundTripKit.js`). Registered in `runSapRoundTrips.js`; sections added to `testData.example.json` (15 flows, 109 placeholders).
+  - Safety hardening after review: `actionRoundTrip.interceptAction` re-checks `resolveMode(flow)` before live forwarding (its `route.fetch` path bypasses the context guard) — unit test `test/unit/tools/e2eActionRoundTrip.test.js`; `wmRoundTripKit.postReadOnlyAction` (Node POST outside the guard) restricted to `verifyMaterialDocument|verifyStock|verifyReservation`.
+  - Item 8: `test/e2e/negative/verifySubmitFailures.e2e.js` (PO create, action mocked per case): 400 SAP error, 503, timeout, 401 shown with busy cleared/no navigation/no false success; double click while pending → one create; reload while pending → no resubmit. Registered in `runAllE2E.js`. `roundTrip.js` exports `formUi`.
+  - Matrix: all 20 SAP write routes now cite a Tier C suite (no "Tier C pending" left); Tier C table extended; negative section rewritten.
+- **TEST DECISION:** TEST ADDED (10 Playwright suites, 1 Jest unit test).
+- **Validation:** submit-failure suite 6/6 PASS; red check (case 1 mocked as success) → FAIL as intended. Final READ-ONLY `npm run test:e2e` (~17:47 IST): **15/15 suites PASS, exit 0**. Final READ-ONLY `npm run test:e2e:sap` (dry-run, partial at time of writing): GR PASS, GI PASS, invoices PASS, orders due PARTIAL, HU transfer FAIL (config), customer return FAIL (defect), sales-order delivery FAIL (defect); PO/SI/SO reported "server not reachable" (cds watch restart during the run — environmental; earlier runs: PO PASS, SO PASS, SI FAIL defect); remaining WM flows passed in the agents' runs (scanTo PARTIAL, mvt261/HU/packing/retry PASS). `npx jest --runInBand --ci` — 204 suites passed, 1 skipped; 3,818 passed, 0 failed. `npx eslint test/e2e test/unit/tools` — PASS. Matrix gate 8/8.
+- **Defects found (report only):** customer return reference-document value help always empty (`getReferenceDocuments` result object vs `Array.isArray`, `CreateCustomerReturn.controller.js:275`; same pattern `CustomerReturns.controller.js:516,120`); sales-order list search uses `Contains` on SoldToPartyName/SalesOrderType (S/4 501/400, agent-observed); `SalesOrders.controller.js:282` reads undeclared `ShippingPoint`; Orders Due `canBill` treats billing status "" as billable and `_text` ignores its args (literal `{0}`) — agent-reported, not re-verified.
+- **Not verified:** every SAP persistence/read-back (no live run); billing dry-run; scan-to MIGO retry; the PO/SI/SO Tier C results of the final run (server restart). No commit.
 
 ### 2026-10-26 16:34 IST — Close plant-scope gaps: goods receipt posting and delivery without reference
 
