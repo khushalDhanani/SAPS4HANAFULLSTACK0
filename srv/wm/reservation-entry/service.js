@@ -583,6 +583,65 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
     };
 
+    // Retry MIGO is allowed only when the persisted SAP reservation confirms the
+    // same movement type as both the request and CAP's stored tracking row.
+    // Validate normalized keys before embedding them in RFC_READ_TABLE WHERE text.
+    const readSapReservationMovementType = async (resNo, resItem) => {
+      const rsnum = reservationNoKey(resNo);
+      const rspos = reservationItemKey(resItem);
+      if (!/^\d{10}$/.test(rsnum) || !/^\d{4}$/.test(rspos)) {
+        const error = new Error('Reservation number or item is invalid');
+        error.status = 400;
+        throw error;
+      }
+      if (!adapter.rfc || typeof adapter.rfc.readTable !== 'function') {
+        const error = new Error('SAP reservation movement type could not be read; retry is blocked');
+        error.status = 503;
+        throw error;
+      }
+
+      let rows;
+      try {
+        rows = await adapter.rfc.readTable(
+          'RESB', ['BWART'], [`RSNUM = '${rsnum}'`, `AND RSPOS = '${rspos}'`], 2
+        );
+      } catch (cause) {
+        const error = new Error(`SAP RESB movement type is unreadable; retry is blocked (${cause.message})`);
+        error.status = 503;
+        throw error;
+      }
+      if (!Array.isArray(rows) || rows.length !== 1) {
+        const error = new Error(`SAP RESB reservation ${rsnum}/${rspos} returned ${Array.isArray(rows) ? rows.length : 0} rows; exactly one is required`);
+        error.status = 503;
+        throw error;
+      }
+
+      let movementType = String(rows[0].BWART || '').trim();
+      if (!movementType) {
+        let headerRows;
+        try {
+          headerRows = await adapter.rfc.readTable('RKPF', ['BWART'], [`RSNUM = '${rsnum}'`], 2);
+        } catch (cause) {
+          const error = new Error(`SAP RKPF fallback movement type is unreadable; retry is blocked (${cause.message})`);
+          error.status = 503;
+          throw error;
+        }
+        if (!Array.isArray(headerRows) || headerRows.length !== 1) {
+          const error = new Error(`SAP RKPF reservation ${rsnum} returned ${Array.isArray(headerRows) ? headerRows.length : 0} rows; exactly one is required for movement-type fallback`);
+          error.status = 503;
+          throw error;
+        }
+        movementType = String(headerRows[0].BWART || '').trim();
+      }
+
+      if (!SUPPORTED_MOVEMENT_TYPES.includes(movementType)) {
+        const error = new Error(`SAP reservation movement type is blank or unsupported for ${rsnum}/${rspos}; retry is blocked`);
+        error.status = 503;
+        throw error;
+      }
+      return movementType;
+    };
+
     // Standalone MB21 reservation creation action (independent from TR creation)
     this.on('createReservation', async (req) => {
       validateMovementType(req.data, req);
@@ -1846,6 +1905,17 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         const reservationMovementType = String(track.MovementType || '').trim();
         if (requestedMovementType !== reservationMovementType) {
           return req.error(400, `Requested MovementType ${requestedMovementType} does not match reservation MovementType ${reservationMovementType || '(missing)'}. Goods Issue was not posted.`);
+        }
+        let sapMovementType;
+        try {
+          sapMovementType = await readSapReservationMovementType(sResNo, sResItem);
+        } catch (readError) {
+          LOG.error(`[retryStep] SAP movement-type verification blocked reservation ${sResNo}/${sResItem}: ${readError.message}`);
+          return req.error(readError.status || 503, readError.message);
+        }
+        if (requestedMovementType !== sapMovementType || reservationMovementType !== sapMovementType) {
+          LOG.error(`[retryStep] movement-type mismatch for ${sResNo}/${sResItem}: requested=${requestedMovementType}, SAP=${sapMovementType}, stored=${reservationMovementType}`);
+          return req.error(400, `MovementType mismatch for reservation ${sResNo}/${sResItem}: request ${requestedMovementType}, SAP ${sapMovementType}, stored ${reservationMovementType}. Goods Issue was not posted.`);
         }
       }
       if (requestedStep === 'LB01' && track.TransferRequirement && !trClosedWithoutTo) {

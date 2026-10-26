@@ -200,6 +200,7 @@ describe('Chunk 6: Monitor App, Retry Handling & SLG1 Integration', () => {
         Status_code: '90',
         ErrorMessage: 'Deficit of BA St.Loc. unrestricted-use stock'
       });
+      RfcClient.prototype.readTable.mockImplementation(async (table) => table === 'RESB' ? [{ BWART: '311' }] : []);
 
       const spyMigo = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement')
         .mockResolvedValueOnce({
@@ -228,6 +229,127 @@ describe('Chunk 6: Monitor App, Retry Handling & SLG1 Integration', () => {
       expect(res.data.ErrorMessage).toBe('');
 
       spyMigo.mockRestore();
+    });
+
+    describe('MIGO retry movement type is pinned to SAP RESB/RKPF', () => {
+      const addFailedMigoTrack = async () => {
+        const { ReservationTrack } = cds.entities('saps4hana.wm');
+        await INSERT.into(ReservationTrack).entries({
+          ReservationNo: testResNo,
+          ReservationItem: testResItem,
+          MovementType: '311',
+          Plant: '1120',
+          StorageLocation: 'HS01',
+          Material: '1000000045',
+          Quantity: 1,
+          Unit: 'EA',
+          WarehouseNumber: 'W01',
+          TransferRequirement: '0000010001',
+          TransferOrder: '0000020001',
+          Status_code: '90'
+        });
+      };
+
+      const retry = (overrides = {}) => POST('/odata/v4/reservation-entry/retryStep', {
+        ReservationNo: testResNo,
+        ReservationItem: testResItem,
+        Step: 'MIGO',
+        MovementType: '311',
+        ...overrides
+      }, authClerk);
+
+      test('posts only when requested, SAP RESB, and stored movement types all match', async () => {
+        await addFailedMigoTrack();
+        RfcClient.prototype.readTable.mockImplementation(async (table) => table === 'RESB' ? [{ BWART: '311' }] : []);
+        const post = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement').mockResolvedValue({
+          success: true, materialDocument: '5000000199', materialDocYear: '2026', status: '05', quantity: 1
+        });
+
+        const response = await retry();
+        expect(response.status).toBe(200);
+        expect(RfcClient.prototype.readTable).toHaveBeenCalledWith('RESB', ['BWART'], expect.any(Array), 2);
+        expect(RfcClient.prototype.readTable).not.toHaveBeenCalledWith('RKPF', expect.anything(), expect.anything(), expect.anything());
+        expect(post).toHaveBeenCalledWith(expect.objectContaining({ movementType: '311' }));
+        post.mockRestore();
+      });
+
+      test('uses RKPF only when RESB-BWART is blank', async () => {
+        await addFailedMigoTrack();
+        RfcClient.prototype.readTable.mockImplementation(async (table) => {
+          if (table === 'RESB') return [{ BWART: '' }];
+          if (table === 'RKPF') return [{ BWART: '311' }];
+          return [];
+        });
+        const post = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement').mockResolvedValue({
+          success: true, materialDocument: '5000000200', materialDocYear: '2026', status: '05', quantity: 1
+        });
+
+        const response = await retry();
+        expect(response.status).toBe(200);
+        expect(RfcClient.prototype.readTable).toHaveBeenCalledWith('RKPF', ['BWART'], expect.any(Array), 2);
+        expect(post).toHaveBeenCalledTimes(1);
+        post.mockRestore();
+      });
+
+      test.each([
+        ['SAP BWART mismatch', async () => [{ BWART: '201' }], 400],
+        ['missing RESB row', async () => [], 503],
+        ['duplicate RESB rows', async () => [{ BWART: '311' }, { BWART: '311' }], 503]
+      ])('%s aborts before posting', async (_name, rows, status) => {
+        await addFailedMigoTrack();
+        RfcClient.prototype.readTable.mockImplementation(async (table) => table === 'RESB' ? rows() : []);
+        const post = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement');
+        await expect(retry()).rejects.toMatchObject({ response: { status } });
+        expect(post).not.toHaveBeenCalled();
+        post.mockRestore();
+      });
+
+      test.each([
+        ['blank RKPF fallback', async () => [{ BWART: '' }], 503],
+        ['missing RKPF row', async () => [], 503],
+        ['duplicate RKPF rows', async () => [{ BWART: '311' }, { BWART: '311' }], 503],
+        ['unreadable RESB', async () => { throw new Error('RFC unavailable'); }, 503]
+      ])('%s fails closed before posting', async (_name, resbResult, status) => {
+        await addFailedMigoTrack();
+        RfcClient.prototype.readTable.mockImplementation(async (table) => {
+          if (table === 'RESB') return resbResult();
+          if (table === 'RKPF') return [{ BWART: '' }];
+          return [];
+        });
+        const post = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement');
+        await expect(retry()).rejects.toMatchObject({ response: { status } });
+        expect(post).not.toHaveBeenCalled();
+        post.mockRestore();
+      });
+
+      test.each([
+        ['RKPF fallback mismatch', async () => [{ BWART: '201' }], 400],
+        ['unreadable RKPF fallback', async () => { throw new Error('RFC unavailable'); }, 503]
+      ])('%s aborts before posting', async (_name, rkpfResult, status) => {
+        await addFailedMigoTrack();
+        RfcClient.prototype.readTable.mockImplementation(async (table) => {
+          if (table === 'RESB') return [{ BWART: '' }];
+          if (table === 'RKPF') return rkpfResult();
+          return [];
+        });
+        const post = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement');
+        await expect(retry()).rejects.toMatchObject({ response: { status } });
+        expect(post).not.toHaveBeenCalled();
+        post.mockRestore();
+      });
+
+      test.each([
+        ['reservation number', { ReservationNo: "0000999001' OR '1'='1" }],
+        ['reservation item', { ReservationItem: "0001' OR '1'='1" }]
+      ])('rejects injection-style %s before an RFC read or post', async (_name, input) => {
+        await addFailedMigoTrack();
+        const read = RfcClient.prototype.readTable;
+        const post = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement');
+        await expect(retry(input)).rejects.toMatchObject({ response: { status: 400 } });
+        expect(read).not.toHaveBeenCalled();
+        expect(post).not.toHaveBeenCalled();
+        post.mockRestore();
+      });
     });
 
     test('Handles retry error cleanly by setting status 99 and logging failure', async () => {
