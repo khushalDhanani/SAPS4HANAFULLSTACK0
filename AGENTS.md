@@ -260,6 +260,15 @@ If the agent cannot prove the SAP backend capability, STOP implementation and re
 - Read errors, warnings, and stack traces completely. Investigate the failing boundary and root cause before changing implementation.
 - If a prerequisite tool, service, credential, or environment is unavailable, do not claim success. Report the exact unavailable validation and its reason.
 
+### Business E2E coverage
+
+- `docs/e2e-coverage-matrix.md` maps every UI5 route in `app/fiori-app/webapp/manifest.json` to its CAP service, browser E2E status, and SAP round-trip status. `test/unit/tools/e2eCoverageMatrix.test.js` enforces it; adding, renaming, or removing a route requires updating the matrix in the same change.
+- Playwright under `test/e2e/` (`*.e2e.js`, run by `npm run test:e2e`) is the only browser E2E framework. Jest stays for unit, integration, CAP/API, adapter, and domain tests and must not be placed under `test/e2e/`.
+- Every user-facing feature change identifies its E2E flow in the plan: existing suite sufficient → run it; otherwise add or update the suite, run it, and record the result in `WORKSTATUS.md`. Without an executed E2E run, a user-facing feature is at most **PARTIAL**, unless its matrix row is **N/A** with a stated reason.
+- A transactional SAP flow's E2E proves Browser → route → controller → CAP → S/4 → SAP result → UI, including reading the SAP result back. Displaying a previously posted document does not count as a round trip. Running it is a live SAP write and needs the user's written "go" per call.
+- When a write flow gets its E2E suite, cover the applicable negative paths: unauthorized user, invalid input, missing mandatory SAP data, SAP 4xx/5xx surfaced in the UI, duplicate submission, timeout/backend failure, stale data, reload/navigation during submit, and session expiry.
+- Update the matrix status whenever E2E evidence changes; never mark 🟢/🟡 without citing an existing suite.
+
 ## Dead-code and unused-code review
 
 Check the affected scope for duplicate services, helpers, controllers, fragments, models, dependencies, mocks, debug code, and unreachable code. Do not leave a superseded implementation behind when replacing it: prove safe removal or report unresolved use as a blocker to replacement.
@@ -281,7 +290,7 @@ Run applicable commands after each meaningful layer and again before completion.
 | --- | --- |
 | All changes | `git diff --check`, targeted tests, relevant regression tests, `git status` |
 | CAP model/service/handlers | `cds --version`, CDS compile/serve/test commands defined by the project, CAP unit and integration tests |
-| UI5/Fiori | `cd app/fiori-app && npm install`, configured UI5 lint/test/build commands, relevant UI5 unit/integration tests |
+| UI5/Fiori | `cd app/fiori-app && npm install`, configured UI5 lint/test/build commands, relevant UI5 unit/integration tests, the affected Playwright E2E flow (`npm run test:e2e`) and its row in `docs/e2e-coverage-matrix.md` |
 | S/4 integration | Safe connectivity/authentication/metadata checks, adapter and service integration tests with controlled inputs |
 | MTA or BTP resources | `mbt validate`, validate module/resource references and the relevant environment extension |
 | Dependencies | lockfile consistency, package compatibility, build and affected tests |

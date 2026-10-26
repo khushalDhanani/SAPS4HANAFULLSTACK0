@@ -91,7 +91,7 @@ Use the scripts defined in `package.json` and `app/fiori-app/package.json`:
 | `npm test` | Full Jest suite |
 | `npm run test:unit` | Unit tests |
 | `npm run test:integration` | Integration tests |
-| `npm run test:e2e` | End-to-end tests |
+| `npm run test:e2e` | Playwright browser E2E suites (needs a running server; coverage in `docs/e2e-coverage-matrix.md`) |
 | `npm run lint` | Root ESLint |
 | `npm --prefix app/fiori-app run lint` | UI5 lint |
 | `npm --prefix app/fiori-app run build` | UI5 production build |

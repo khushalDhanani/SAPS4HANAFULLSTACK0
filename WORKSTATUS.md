@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Business E2E coverage governance (2026-10-26 14:38 IST) — DONE, UNCOMMITTED:** Route matrix (33 routes) enforced by unit test; AGENTS.md E2E rule; mocked PO flow test moved to `test/integration`; `test:e2e` is the Playwright runner. Full Jest PASS (3,751). Playwright run (read-only, existing server): 5 PASS, **mvt 311 FAIL**. See Changes Log 14:38 IST.
+
 - **Skill link validation test (2026-10-26 14:28 IST) — DONE, UNCOMMITTED:** `test/unit/tools/skillLinks.test.js` enforces all 21 discovery links; 25/25 PASS with three red checks. Live SAP proof for code changed since 2026-10-24 12:20 IST remains NOT VERIFIED. See Changes Log 14:28 IST.
 
 - **PO frontend HIGH fixes (2026-10-26 13:56 IST) — DONE, UNCOMMITTED:** Create rejects when SAP returns no PO number; item error focus `cellIndex` matches the view; Status filter keyed by SAP code/Deleted as the column shows. 41 suites / 581 tests PASS (3 pre-existing skips); ui5lint clean. Browser/live SAP not verified. See Changes Log 13:56 IST.
@@ -1653,6 +1655,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **E2E next action (2026-10-26 14:38 IST):** Investigate `test/e2e/wm/verifyMvt311.e2e.js` failure ("Receiving SLoc input not found on create page") — UI regression vs. stale selector. Then decide where browser E2E with SAP round trips runs (DEV client 220 with per-call go vs. stubbed mode that is not SAP proof) before writing suites for the 🔴 rows in `docs/e2e-coverage-matrix.md`.
+
 - **Live SAP re-proof next action (2026-10-26 14:28 IST):** Before claiming SAP behavior for the current branch, re-run live write + read-back for movements 201/241/311/301/261, a PO create (SAP-returned number) and an HU stock transfer on DEV client 220 — each needs the user's written go per call.
 
 - **PO review next action (2026-10-26 13:56 IST):** Review/commit the three frontend fixes; then check the Status filter and an item-error focus in the browser against SAP (read-only). Remaining HIGH items need an approved plan: server must ignore client `system` prompts (`srv/ai/service.js`) and enforce plant prefix / doc type prefix / supplier account group in `srv/mm/purchase-order/validation/purchaseOrder.validation.js`.
@@ -1703,6 +1707,18 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 14:38 IST — Business E2E coverage governance: route matrix + enforcing test, AGENTS.md rule, mocked PO test moved out of test/e2e
+
+- **Change:** (P1 review finding "E2E coverage not mapped to business capabilities", confirmed read-only: only 3 of 33 manifest routes are opened by a browser suite; no suite runs a transaction through the UI; CI ran only the mocked PO Jest test from `test/e2e`.)
+  1. New `docs/e2e-coverage-matrix.md`: one row per manifest route (33) with CAP service, browser E2E and SAP round-trip status (🟢/🟡/🔴/N/A) and evidence; service-level table of declared CAP actions from `srv/**/service.cds`. Current state: 0 🟢; 🟡 browser only for `wmReservationEntryCreate`, `wmReservationEntryDetail`, `wmWarehouseScanToDetail`; SAP round trip 🔴 everywhere except N/A for `default`, `login`, `dashboard`, `purchaseOrderDetail`, `wmHuStockTransferRackDemo` (read-only; detail and rack-demo controllers make no service calls; `getDashboardMetrics` is a `function`, `srv/mm/purchase-order/service.cds:150`).
+  2. New `test/unit/tools/e2eCoverageMatrix.test.js`: rows == manifest routes (no missing/duplicate/stale), valid statuses, reason for every N/A/🟡, every 🟢/🟡 cites an existing `test/e2e/**/*.e2e.js`, every Playwright suite appears in the matrix, no Jest `*.test.js` under `test/e2e`.
+  3. `AGENTS.md`: new *Business E2E coverage* subsection under *Change and test rules* (matrix maintained with route changes; Playwright is the only browser E2E framework; user-facing change without an executed E2E run is at most PARTIAL unless N/A with reason; SAP round trip must read the result back and needs per-call go; required negative paths); *Required validation* UI5 row now names the affected Playwright flow and matrix row.
+  4. Moved `test/e2e/purchase-order/createPurchaseOrderFlow.test.js` → `test/integration/purchase-order/` (`git mv`; same depth, requires unchanged; describe renamed "Integration (mocked SAP)…"). `package.json`: `test:e2e` = `node test/e2e/runAllE2E.js`, duplicate `test:playwright` removed. `jest.config.js`: dropped `**/test/e2e/**/*.test.js`. `README.md` script row updated.
+- **TEST DECISION:** TEST ADDED — `business E2E coverage matrix` (6 tests). Moved test unchanged in behavior.
+- **Validation:** `npx jest test/unit/tools/e2eCoverageMatrix.test.js test/integration/purchase-order/createPurchaseOrderFlow.test.js` — PASS 13/13. Red checks: before the move the "no Jest under test/e2e" test failed (1); deleting the `wmScan261` row → 1 failed; 🟢 without a cited suite → 1 failed; restored → 6/6. `npx jest --listTests` — 0 files under `test/e2e`. Full `npx jest --runInBand --ci` — 199 suites passed, 1 skipped; 3,751 passed, 59 skipped, 0 failed. `npx eslint` on new/moved test + `jest.config.js` — PASS. `git diff --check` — PASS.
+- **Unplanned READ-ONLY live run (disclosed):** `npm run test:e2e` was run to confirm it fails without a server, but a server was already listening on :4004 (PID 42910, not started by this session), so all six Playwright suites ran against it. They only navigate/inspect and call `verifyMaterialDocument` read-back; no create/post is submitted (verified in suite source). Result: exit 1 — hardening, 201, 241, 261, 301 PASSED; **`verifyMvt311.e2e.js` FAILED: "Receiving SLoc input not found on create page"** (not investigated; recorded in the matrix). No SAP write occurred. READ-ONLY was not announced before the run — process miss.
+- **Not verified / open:** cause of the mvt 311 E2E failure (UI regression vs. stale selector); CI on these changes (not pushed); no new E2E suites written (step 4 of the proposal, needs a decision on where browser E2E with SAP can run). No commit. **Assumptions:** route→action mapping kept at service level (per-screen mapping Not verified).
 
 ### 2026-10-26 14:28 IST — Skill discovery links: automated validation test
 

@@ -6,7 +6,7 @@ const cdsTest = cds.test(__dirname + '/../../../');
 cdsTest.defaults.auth = { username: 'alice', password: '' };
 const { POST, GET } = cdsTest;
 
-describe('E2E: Create Purchase Order Full User Journey', () => {
+describe('Integration (mocked SAP): Create Purchase Order flow through CAP', () => {
 
     let readFsSpy;
     let readMaintSpy;
