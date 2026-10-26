@@ -822,6 +822,7 @@ class HuStockTransferAdapter {
     }
 
     const cockpit = await this.getCockpitDetail(reservationNo, reservationItem);
+    // Oversize-HU setting: “default BLOCK, pending the user's confirmation”.
     const behavior = String(cockpit.OversizeHuSelectionBehavior || 'BLOCK').trim().toUpperCase();
     if (!['BLOCK', 'WARN'].includes(behavior)) throw httpError(503, 'Oversize HU selection policy is invalid.');
     const seen = new Set();

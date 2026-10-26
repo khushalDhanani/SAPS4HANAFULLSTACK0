@@ -1,0 +1,2331 @@
+{
+  "capturedAt": "2026-10-26T05:31:12.378Z",
+  "mode": "READ-ONLY",
+  "queries": [
+    {
+      "query": {
+        "table": "DD03L",
+        "fields": [
+          "TABNAME",
+          "FIELDNAME",
+          "POSITION",
+          "KEYFLAG",
+          "ROLLNAME",
+          "DATATYPE",
+          "LENG"
+        ],
+        "where": [
+          "TABNAME = 'T301'"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:12.379Z",
+      "completedAt": "2026-10-26T05:31:12.906Z",
+      "rowCount": 5,
+      "rows": [
+        {
+          "TABNAME": "T301",
+          "FIELDNAME": "LGTYP",
+          "POSITION": "0003",
+          "KEYFLAG": "X",
+          "ROLLNAME": "LGTYP",
+          "DATATYPE": "CHAR",
+          "LENG": "000003"
+        },
+        {
+          "TABNAME": "T301",
+          "FIELDNAME": "MANDT",
+          "POSITION": "0001",
+          "KEYFLAG": "X",
+          "ROLLNAME": "MANDT",
+          "DATATYPE": "CLNT",
+          "LENG": "000003"
+        },
+        {
+          "TABNAME": "T301",
+          "FIELDNAME": "LGNUM",
+          "POSITION": "0002",
+          "KEYFLAG": "X",
+          "ROLLNAME": "LGNUM",
+          "DATATYPE": "CHAR",
+          "LENG": "000003"
+        },
+        {
+          "TABNAME": "T301",
+          "FIELDNAME": "GLCGR",
+          "POSITION": "0005",
+          "KEYFLAG": "",
+          "ROLLNAME": "LXYRD_GLCGR",
+          "DATATYPE": "CHAR",
+          "LENG": "000003"
+        },
+        {
+          "TABNAME": "T301",
+          "FIELDNAME": ".INCLU--AP",
+          "POSITION": "0004",
+          "KEYFLAG": "",
+          "ROLLNAME": "",
+          "DATATYPE": "",
+          "LENG": "000000"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "T301",
+        "fields": [
+          "LGNUM",
+          "LGTYP"
+        ],
+        "where": [
+          "LGNUM = 'W01'"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:12.906Z",
+      "completedAt": "2026-10-26T05:31:13.130Z",
+      "rowCount": 49,
+      "rows": [
+        {
+          "LGNUM": "W01",
+          "LGTYP": "001"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "002"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "003"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "004"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "005"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "150"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "1FL"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "200"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "2FL"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "3FL"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "4FL"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "5FL"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "901"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "902"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "904"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "910"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "911"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "912"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "913"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "914"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "915"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "916"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "917"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "918"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "920"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "921"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "922"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "923"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "980"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "998"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "999"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "COR"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "EN1"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "FG1"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "FLM"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "GFL"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "GS1"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "IP1"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "IP2"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "IP3"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "IP4"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "IP5"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "OH1"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "OXD"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "POW"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "QC1"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "RM1"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "TOX"
+        },
+        {
+          "LGNUM": "W01",
+          "LGTYP": "WRA"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LQUA",
+        "fields": [
+          "LENUM",
+          "LGTYP",
+          "LGPLA",
+          "GESME",
+          "VERME",
+          "LETYP",
+          "MEINS"
+        ],
+        "where": [
+          "LGNUM = 'W01'",
+          "AND WERKS = '1120'",
+          "AND LGORT = 'CS02'",
+          "AND MATNR = '000000008000009754'"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:13.130Z",
+      "completedAt": "2026-10-26T05:31:13.281Z",
+      "rowCount": 20,
+      "rows": [
+        {
+          "LENUM": "00000000002000019363",
+          "LGTYP": "902",
+          "LGPLA": "0180000067",
+          "GESME": "1.000-",
+          "VERME": "1.000-",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019363",
+          "LGTYP": "OH1",
+          "LGPLA": "ONHOLD",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019364",
+          "LGTYP": "902",
+          "LGPLA": "0180000067",
+          "GESME": "1.000-",
+          "VERME": "1.000-",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019364",
+          "LGTYP": "OH1",
+          "LGPLA": "ONHOLD",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019365",
+          "LGTYP": "902",
+          "LGPLA": "0180000067",
+          "GESME": "1.000-",
+          "VERME": "1.000-",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019365",
+          "LGTYP": "OH1",
+          "LGPLA": "ONHOLD",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019366",
+          "LGTYP": "902",
+          "LGPLA": "0180000067",
+          "GESME": "1.000-",
+          "VERME": "1.000-",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019366",
+          "LGTYP": "OH1",
+          "LGPLA": "ONHOLD",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019367",
+          "LGTYP": "902",
+          "LGPLA": "0180000067",
+          "GESME": "1.000-",
+          "VERME": "1.000-",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019367",
+          "LGTYP": "OH1",
+          "LGPLA": "ONHOLD",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019348",
+          "LGTYP": "911",
+          "LGPLA": "1011201301",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019349",
+          "LGTYP": "911",
+          "LGPLA": "1010001301",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019350",
+          "LGTYP": "913",
+          "LGPLA": "0080000094",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019351",
+          "LGTYP": "913",
+          "LGPLA": "0080000094",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019352",
+          "LGTYP": "911",
+          "LGPLA": "1010001301",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019372",
+          "LGTYP": "EN1",
+          "LGPLA": "1-L0001-04",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019368",
+          "LGTYP": "921",
+          "LGPLA": "TRANSFER",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019369",
+          "LGTYP": "913",
+          "LGPLA": "0000400001",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019370",
+          "LGTYP": "913",
+          "LGPLA": "0000400001",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000019371",
+          "LGTYP": "913",
+          "LGPLA": "0080000134",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LQUA",
+        "fields": [
+          "LENUM",
+          "LGTYP",
+          "LGPLA",
+          "GESME",
+          "VERME",
+          "LETYP",
+          "MEINS"
+        ],
+        "where": [
+          "LGNUM = 'W01'",
+          "AND WERKS = '1120'",
+          "AND LGORT = 'CS02'",
+          "AND MATNR = '000000008000006485'"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:13.281Z",
+      "completedAt": "2026-10-26T05:31:13.419Z",
+      "rowCount": 2,
+      "rows": [
+        {
+          "LENUM": "00000000002000020150",
+          "LGTYP": "OH1",
+          "LGPLA": "ONHOLD",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        },
+        {
+          "LENUM": "00000000002000020151",
+          "LGTYP": "OH1",
+          "LGPLA": "ONHOLD",
+          "GESME": "1.000",
+          "VERME": "1.000",
+          "LETYP": "E10",
+          "MEINS": "NOS"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LQUA",
+        "fields": [
+          "LENUM",
+          "LGTYP",
+          "LGPLA",
+          "GESME",
+          "VERME",
+          "LETYP",
+          "MEINS"
+        ],
+        "where": [
+          "LGNUM = 'W01'",
+          "AND WERKS = '1150'",
+          "AND LGORT = 'CS02'",
+          "AND MATNR = '000000008000009802'"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:13.419Z",
+      "completedAt": "2026-10-26T05:31:13.623Z",
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "query": {
+        "table": "LQUA",
+        "fields": [
+          "LENUM",
+          "LGTYP",
+          "LGPLA",
+          "GESME",
+          "VERME",
+          "LETYP",
+          "MEINS"
+        ],
+        "where": [
+          "LGNUM = 'W01'",
+          "AND WERKS = '1150'",
+          "AND LGORT = 'CS02'",
+          "AND MATNR = '000000008000009803'"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:13.623Z",
+      "completedAt": "2026-10-26T05:31:13.749Z",
+      "rowCount": 0,
+      "rows": []
+    },
+    {
+      "query": {
+        "table": "VEKP",
+        "fields": [
+          "VENUM",
+          "EXIDV",
+          "STATUS",
+          "WERKS",
+          "LGORT",
+          "LGNUM",
+          "VPOBJ",
+          "VPOBJKEY",
+          "VHART"
+        ],
+        "where": [
+          "EXIDV = '00000000002000019372'"
+        ],
+        "rowCount": 2
+      },
+      "timestamp": "2026-10-26T05:31:13.749Z",
+      "completedAt": "2026-10-26T05:31:13.903Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "VENUM": "0000020535",
+          "EXIDV": "00000000002000019372",
+          "STATUS": "0020",
+          "WERKS": "",
+          "LGORT": "",
+          "LGNUM": "W01",
+          "VPOBJ": "12",
+          "VPOBJKEY": "0180000068",
+          "VHART": "Z007"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "VEPO",
+        "fields": [
+          "VENUM",
+          "VEPOS",
+          "MATNR",
+          "WERKS",
+          "LGORT",
+          "CHARG",
+          "VEMNG",
+          "VEMEH"
+        ],
+        "where": [
+          "VENUM = '0000020535'"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:13.903Z",
+      "completedAt": "2026-10-26T05:31:14.151Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "VENUM": "0000020535",
+          "VEPOS": "000005",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "CHARG": "",
+          "VEMNG": "1.000",
+          "VEMEH": "NOS"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LTAP",
+        "fields": [
+          "TANUM",
+          "TAPOS",
+          "PQUIT",
+          "VLENR",
+          "NLENR",
+          "MATNR",
+          "WERKS",
+          "LGORT",
+          "VLTYP",
+          "VLPLA",
+          "NLTYP",
+          "NLPLA",
+          "LETYP",
+          "VSOLM",
+          "VISTM",
+          "MEINS"
+        ],
+        "where": [
+          "( VLENR = '00000000002000019372' OR NLENR = '00000000002000019372' )"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:14.151Z",
+      "completedAt": "2026-10-26T05:31:14.311Z",
+      "rowCount": 2,
+      "rows": [
+        {
+          "TANUM": "0001036666",
+          "TAPOS": "0001",
+          "PQUIT": "X",
+          "VLENR": "00000000002000019372",
+          "NLENR": "00000000002000019372",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "VLTYP": "902",
+          "VLPLA": "0180000068",
+          "NLTYP": "OH1",
+          "NLPLA": "ONHOLD",
+          "LETYP": "E10",
+          "VSOLM": "1.000",
+          "VISTM": "1.000",
+          "MEINS": "NOS"
+        },
+        {
+          "TANUM": "0001037361",
+          "TAPOS": "0001",
+          "PQUIT": "X",
+          "VLENR": "00000000002000019372",
+          "NLENR": "00000000002000019372",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "VLTYP": "OH1",
+          "VLPLA": "ONHOLD",
+          "NLTYP": "EN1",
+          "NLPLA": "1-L0001-04",
+          "LETYP": "E10",
+          "VSOLM": "1.000",
+          "VISTM": "1.000",
+          "MEINS": "NOS"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LTAK",
+        "fields": [
+          "TANUM",
+          "LGNUM",
+          "KQUIT"
+        ],
+        "where": [
+          "TANUM = '0001036666'"
+        ],
+        "rowCount": 2
+      },
+      "timestamp": "2026-10-26T05:31:14.311Z",
+      "completedAt": "2026-10-26T05:31:14.467Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "TANUM": "0001036666",
+          "LGNUM": "W01",
+          "KQUIT": "X"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LTAK",
+        "fields": [
+          "TANUM",
+          "LGNUM",
+          "KQUIT"
+        ],
+        "where": [
+          "TANUM = '0001037361'"
+        ],
+        "rowCount": 2
+      },
+      "timestamp": "2026-10-26T05:31:14.467Z",
+      "completedAt": "2026-10-26T05:31:14.673Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "TANUM": "0001037361",
+          "LGNUM": "W01",
+          "KQUIT": "X"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "VEKP",
+        "fields": [
+          "VENUM",
+          "EXIDV",
+          "STATUS",
+          "WERKS",
+          "LGORT",
+          "LGNUM",
+          "VPOBJ",
+          "VPOBJKEY",
+          "VHART"
+        ],
+        "where": [
+          "EXIDV = '00000000002000019371'"
+        ],
+        "rowCount": 2
+      },
+      "timestamp": "2026-10-26T05:31:14.673Z",
+      "completedAt": "2026-10-26T05:31:14.807Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "VENUM": "0000020534",
+          "EXIDV": "00000000002000019371",
+          "STATUS": "0020",
+          "WERKS": "",
+          "LGORT": "",
+          "LGNUM": "W01",
+          "VPOBJ": "01",
+          "VPOBJKEY": "0080000134",
+          "VHART": "Z007"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "VEPO",
+        "fields": [
+          "VENUM",
+          "VEPOS",
+          "MATNR",
+          "WERKS",
+          "LGORT",
+          "CHARG",
+          "VEMNG",
+          "VEMEH"
+        ],
+        "where": [
+          "VENUM = '0000020534'"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:14.807Z",
+      "completedAt": "2026-10-26T05:31:14.924Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "VENUM": "0000020534",
+          "VEPOS": "000004",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "CHARG": "",
+          "VEMNG": "1.000",
+          "VEMEH": "NOS"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LTAP",
+        "fields": [
+          "TANUM",
+          "TAPOS",
+          "PQUIT",
+          "VLENR",
+          "NLENR",
+          "MATNR",
+          "WERKS",
+          "LGORT",
+          "VLTYP",
+          "VLPLA",
+          "NLTYP",
+          "NLPLA",
+          "LETYP",
+          "VSOLM",
+          "VISTM",
+          "MEINS"
+        ],
+        "where": [
+          "( VLENR = '00000000002000019371' OR NLENR = '00000000002000019371' )"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:14.924Z",
+      "completedAt": "2026-10-26T05:31:15.138Z",
+      "rowCount": 3,
+      "rows": [
+        {
+          "TANUM": "0001036665",
+          "TAPOS": "0001",
+          "PQUIT": "X",
+          "VLENR": "00000000002000019371",
+          "NLENR": "00000000002000019371",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "VLTYP": "902",
+          "VLPLA": "0180000068",
+          "NLTYP": "OH1",
+          "NLPLA": "ONHOLD",
+          "LETYP": "E10",
+          "VSOLM": "1.000",
+          "VISTM": "1.000",
+          "MEINS": "NOS"
+        },
+        {
+          "TANUM": "0001037360",
+          "TAPOS": "0001",
+          "PQUIT": "X",
+          "VLENR": "00000000002000019371",
+          "NLENR": "00000000002000019371",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "VLTYP": "OH1",
+          "VLPLA": "ONHOLD",
+          "NLTYP": "EN1",
+          "NLPLA": "1-L0001-04",
+          "LETYP": "E10",
+          "VSOLM": "1.000",
+          "VISTM": "1.000",
+          "MEINS": "NOS"
+        },
+        {
+          "TANUM": "0001037372",
+          "TAPOS": "0001",
+          "PQUIT": "X",
+          "VLENR": "00000000002000019371",
+          "NLENR": "00000000002000019371",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "VLTYP": "EN1",
+          "VLPLA": "1-L0001-04",
+          "NLTYP": "913",
+          "NLPLA": "0080000134",
+          "LETYP": "E10",
+          "VSOLM": "1.000",
+          "VISTM": "1.000",
+          "MEINS": "NOS"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LTAK",
+        "fields": [
+          "TANUM",
+          "LGNUM",
+          "KQUIT"
+        ],
+        "where": [
+          "TANUM = '0001036665'"
+        ],
+        "rowCount": 2
+      },
+      "timestamp": "2026-10-26T05:31:15.138Z",
+      "completedAt": "2026-10-26T05:31:15.274Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "TANUM": "0001036665",
+          "LGNUM": "W01",
+          "KQUIT": "X"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LTAK",
+        "fields": [
+          "TANUM",
+          "LGNUM",
+          "KQUIT"
+        ],
+        "where": [
+          "TANUM = '0001037360'"
+        ],
+        "rowCount": 2
+      },
+      "timestamp": "2026-10-26T05:31:15.274Z",
+      "completedAt": "2026-10-26T05:31:15.391Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "TANUM": "0001037360",
+          "LGNUM": "W01",
+          "KQUIT": "X"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LTAK",
+        "fields": [
+          "TANUM",
+          "LGNUM",
+          "KQUIT"
+        ],
+        "where": [
+          "TANUM = '0001037372'"
+        ],
+        "rowCount": 2
+      },
+      "timestamp": "2026-10-26T05:31:15.391Z",
+      "completedAt": "2026-10-26T05:31:15.510Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "TANUM": "0001037372",
+          "LGNUM": "W01",
+          "KQUIT": "X"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "VEKP",
+        "fields": [
+          "VENUM",
+          "EXIDV",
+          "STATUS",
+          "WERKS",
+          "LGORT",
+          "LGNUM",
+          "VPOBJ",
+          "VPOBJKEY",
+          "VHART"
+        ],
+        "where": [
+          "EXIDV = '00000000002000020150'"
+        ],
+        "rowCount": 2
+      },
+      "timestamp": "2026-10-26T05:31:15.510Z",
+      "completedAt": "2026-10-26T05:31:15.714Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "VENUM": "0000021384",
+          "EXIDV": "00000000002000020150",
+          "STATUS": "0020",
+          "WERKS": "",
+          "LGORT": "",
+          "LGNUM": "W01",
+          "VPOBJ": "12",
+          "VPOBJKEY": "0180000117",
+          "VHART": "Z007"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "VEPO",
+        "fields": [
+          "VENUM",
+          "VEPOS",
+          "MATNR",
+          "WERKS",
+          "LGORT",
+          "CHARG",
+          "VEMNG",
+          "VEMEH"
+        ],
+        "where": [
+          "VENUM = '0000021384'"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:15.714Z",
+      "completedAt": "2026-10-26T05:31:15.829Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "VENUM": "0000021384",
+          "VEPOS": "000004",
+          "MATNR": "000000008000006485",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "CHARG": "",
+          "VEMNG": "1.000",
+          "VEMEH": "NOS"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LTAP",
+        "fields": [
+          "TANUM",
+          "TAPOS",
+          "PQUIT",
+          "VLENR",
+          "NLENR",
+          "MATNR",
+          "WERKS",
+          "LGORT",
+          "VLTYP",
+          "VLPLA",
+          "NLTYP",
+          "NLPLA",
+          "LETYP",
+          "VSOLM",
+          "VISTM",
+          "MEINS"
+        ],
+        "where": [
+          "( VLENR = '00000000002000020150' OR NLENR = '00000000002000020150' )"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:15.829Z",
+      "completedAt": "2026-10-26T05:31:15.952Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "TANUM": "0001037198",
+          "TAPOS": "0001",
+          "PQUIT": "X",
+          "VLENR": "00000000002000020150",
+          "NLENR": "00000000002000020150",
+          "MATNR": "000000008000006485",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "VLTYP": "902",
+          "VLPLA": "0180000117",
+          "NLTYP": "OH1",
+          "NLPLA": "ONHOLD",
+          "LETYP": "E10",
+          "VSOLM": "1.000",
+          "VISTM": "1.000",
+          "MEINS": "NOS"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LTAK",
+        "fields": [
+          "TANUM",
+          "LGNUM",
+          "KQUIT"
+        ],
+        "where": [
+          "TANUM = '0001037198'"
+        ],
+        "rowCount": 2
+      },
+      "timestamp": "2026-10-26T05:31:15.952Z",
+      "completedAt": "2026-10-26T05:31:16.155Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "TANUM": "0001037198",
+          "LGNUM": "W01",
+          "KQUIT": "X"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "VEKP",
+        "fields": [
+          "VENUM",
+          "EXIDV",
+          "STATUS",
+          "WERKS",
+          "LGORT",
+          "LGNUM",
+          "VPOBJ",
+          "VPOBJKEY",
+          "VHART"
+        ],
+        "where": [
+          "EXIDV = '00000000002000020151'"
+        ],
+        "rowCount": 2
+      },
+      "timestamp": "2026-10-26T05:31:16.155Z",
+      "completedAt": "2026-10-26T05:31:16.276Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "VENUM": "0000021385",
+          "EXIDV": "00000000002000020151",
+          "STATUS": "0020",
+          "WERKS": "",
+          "LGORT": "",
+          "LGNUM": "W01",
+          "VPOBJ": "12",
+          "VPOBJKEY": "0180000117",
+          "VHART": "Z007"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "VEPO",
+        "fields": [
+          "VENUM",
+          "VEPOS",
+          "MATNR",
+          "WERKS",
+          "LGORT",
+          "CHARG",
+          "VEMNG",
+          "VEMEH"
+        ],
+        "where": [
+          "VENUM = '0000021385'"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:16.276Z",
+      "completedAt": "2026-10-26T05:31:16.409Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "VENUM": "0000021385",
+          "VEPOS": "000005",
+          "MATNR": "000000008000006485",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "CHARG": "",
+          "VEMNG": "1.000",
+          "VEMEH": "NOS"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LTAP",
+        "fields": [
+          "TANUM",
+          "TAPOS",
+          "PQUIT",
+          "VLENR",
+          "NLENR",
+          "MATNR",
+          "WERKS",
+          "LGORT",
+          "VLTYP",
+          "VLPLA",
+          "NLTYP",
+          "NLPLA",
+          "LETYP",
+          "VSOLM",
+          "VISTM",
+          "MEINS"
+        ],
+        "where": [
+          "( VLENR = '00000000002000020151' OR NLENR = '00000000002000020151' )"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:16.409Z",
+      "completedAt": "2026-10-26T05:31:16.544Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "TANUM": "0001037199",
+          "TAPOS": "0001",
+          "PQUIT": "X",
+          "VLENR": "00000000002000020151",
+          "NLENR": "00000000002000020151",
+          "MATNR": "000000008000006485",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "VLTYP": "902",
+          "VLPLA": "0180000117",
+          "NLTYP": "OH1",
+          "NLPLA": "ONHOLD",
+          "LETYP": "E10",
+          "VSOLM": "1.000",
+          "VISTM": "1.000",
+          "MEINS": "NOS"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "LTAK",
+        "fields": [
+          "TANUM",
+          "LGNUM",
+          "KQUIT"
+        ],
+        "where": [
+          "TANUM = '0001037199'"
+        ],
+        "rowCount": 2
+      },
+      "timestamp": "2026-10-26T05:31:16.544Z",
+      "completedAt": "2026-10-26T05:31:16.760Z",
+      "rowCount": 1,
+      "rows": [
+        {
+          "TANUM": "0001037199",
+          "LGNUM": "W01",
+          "KQUIT": "X"
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "RESB",
+        "fields": [
+          "RSNUM",
+          "RSPOS",
+          "BWART",
+          "MATNR",
+          "WERKS",
+          "LGORT",
+          "UMLGO",
+          "BDMNG",
+          "ENMNG",
+          "MEINS",
+          "KZEAR",
+          "XLOEK",
+          "AUFNR"
+        ],
+        "where": [
+          "WERKS = '1120'",
+          "AND LGORT = 'CS02'",
+          "AND BWART = '311'"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:16.760Z",
+      "completedAt": "2026-10-26T05:31:16.931Z",
+      "rowCount": 18,
+      "rows": [
+        {
+          "RSNUM": "0000523654",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "CIS1",
+          "BDMNG": "1.000",
+          "ENMNG": "0.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000523656",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000007113",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "CS02",
+          "BDMNG": "2.000",
+          "ENMNG": "0.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "X",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000523657",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000007113",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "CI01",
+          "BDMNG": "2.000",
+          "ENMNG": "2.000",
+          "MEINS": "NOS",
+          "KZEAR": "X",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000523957",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000007113",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "CI01",
+          "BDMNG": "1.000",
+          "ENMNG": "1.000",
+          "MEINS": "NOS",
+          "KZEAR": "X",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000523957",
+          "RSPOS": "0002",
+          "BWART": "311",
+          "MATNR": "000000008000007114",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "CI01",
+          "BDMNG": "1.000",
+          "ENMNG": "1.000",
+          "MEINS": "NOS",
+          "KZEAR": "X",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000523960",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000007113",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "CI01",
+          "BDMNG": "1.000",
+          "ENMNG": "1.000",
+          "MEINS": "NOS",
+          "KZEAR": "X",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000524282",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000006485",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "MT01",
+          "BDMNG": "1.000",
+          "ENMNG": "0.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "X",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000524283",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000006485",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "HU01",
+          "BDMNG": "1.000",
+          "ENMNG": "0.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000527591",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000006485",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "HU01",
+          "BDMNG": "2.000",
+          "ENMNG": "0.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000529960",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "CIS1",
+          "BDMNG": "1.000",
+          "ENMNG": "0.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000529959",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "CIS1",
+          "BDMNG": "1.000",
+          "ENMNG": "0.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000529961",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "HU01",
+          "BDMNG": "1.000",
+          "ENMNG": "1.000",
+          "MEINS": "NOS",
+          "KZEAR": "X",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000529962",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "FG01",
+          "BDMNG": "1.000",
+          "ENMNG": "1.000",
+          "MEINS": "NOS",
+          "KZEAR": "X",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000529963",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "FG01",
+          "BDMNG": "1.000",
+          "ENMNG": "1.000",
+          "MEINS": "NOS",
+          "KZEAR": "X",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000527588",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000006485",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "HU01",
+          "BDMNG": "10.000",
+          "ENMNG": "2.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000529964",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "FG01",
+          "BDMNG": "1.000",
+          "ENMNG": "1.000",
+          "MEINS": "NOS",
+          "KZEAR": "X",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000523656",
+          "RSPOS": "0002",
+          "BWART": "311",
+          "MATNR": "000000008000007114",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "CS02",
+          "BDMNG": "2.000",
+          "ENMNG": "0.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "X",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000523657",
+          "RSPOS": "0002",
+          "BWART": "311",
+          "MATNR": "000000008000007114",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "UMLGO": "CI01",
+          "BDMNG": "2.000",
+          "ENMNG": "2.000",
+          "MEINS": "NOS",
+          "KZEAR": "X",
+          "XLOEK": "",
+          "AUFNR": ""
+        }
+      ]
+    },
+    {
+      "query": {
+        "table": "RESB",
+        "fields": [
+          "RSNUM",
+          "RSPOS",
+          "BWART",
+          "MATNR",
+          "WERKS",
+          "LGORT",
+          "UMLGO",
+          "BDMNG",
+          "ENMNG",
+          "MEINS",
+          "KZEAR",
+          "XLOEK",
+          "AUFNR"
+        ],
+        "where": [
+          "WERKS = '1150'",
+          "AND LGORT = 'CS02'",
+          "AND BWART = '311'"
+        ],
+        "rowCount": 9999
+      },
+      "timestamp": "2026-10-26T05:31:16.932Z",
+      "completedAt": "2026-10-26T05:31:17.070Z",
+      "rowCount": 5,
+      "rows": [
+        {
+          "RSNUM": "0000520235",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000009802",
+          "WERKS": "1150",
+          "LGORT": "CS02",
+          "UMLGO": "CIS1",
+          "BDMNG": "1.000",
+          "ENMNG": "0.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000520235",
+          "RSPOS": "0002",
+          "BWART": "311",
+          "MATNR": "000000008000009803",
+          "WERKS": "1150",
+          "LGORT": "CS02",
+          "UMLGO": "CIS1",
+          "BDMNG": "1.000",
+          "ENMNG": "0.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000520236",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000009802",
+          "WERKS": "1150",
+          "LGORT": "CS02",
+          "UMLGO": "CIS1",
+          "BDMNG": "1.000",
+          "ENMNG": "0.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000520236",
+          "RSPOS": "0002",
+          "BWART": "311",
+          "MATNR": "000000008000009803",
+          "WERKS": "1150",
+          "LGORT": "CS02",
+          "UMLGO": "CIS1",
+          "BDMNG": "1.000",
+          "ENMNG": "0.000",
+          "MEINS": "NOS",
+          "KZEAR": "",
+          "XLOEK": "",
+          "AUFNR": ""
+        },
+        {
+          "RSNUM": "0000520237",
+          "RSPOS": "0001",
+          "BWART": "311",
+          "MATNR": "000000008000009802",
+          "WERKS": "1150",
+          "LGORT": "CS02",
+          "UMLGO": "CIS1",
+          "BDMNG": "1.000",
+          "ENMNG": "1.000",
+          "MEINS": "NOS",
+          "KZEAR": "X",
+          "XLOEK": "",
+          "AUFNR": ""
+        }
+      ]
+    }
+  ],
+  "t301": {
+    "dd03lRows": [
+      {
+        "TABNAME": "T301",
+        "FIELDNAME": "LGTYP",
+        "POSITION": "0003",
+        "KEYFLAG": "X",
+        "ROLLNAME": "LGTYP",
+        "DATATYPE": "CHAR",
+        "LENG": "000003"
+      },
+      {
+        "TABNAME": "T301",
+        "FIELDNAME": "MANDT",
+        "POSITION": "0001",
+        "KEYFLAG": "X",
+        "ROLLNAME": "MANDT",
+        "DATATYPE": "CLNT",
+        "LENG": "000003"
+      },
+      {
+        "TABNAME": "T301",
+        "FIELDNAME": "LGNUM",
+        "POSITION": "0002",
+        "KEYFLAG": "X",
+        "ROLLNAME": "LGNUM",
+        "DATATYPE": "CHAR",
+        "LENG": "000003"
+      },
+      {
+        "TABNAME": "T301",
+        "FIELDNAME": "GLCGR",
+        "POSITION": "0005",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_GLCGR",
+        "DATATYPE": "CHAR",
+        "LENG": "000003"
+      },
+      {
+        "TABNAME": "T301",
+        "FIELDNAME": ".INCLU--AP",
+        "POSITION": "0004",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": "",
+        "LENG": "000000"
+      }
+    ],
+    "keyFields": [
+      {
+        "TABNAME": "T301",
+        "FIELDNAME": "MANDT",
+        "POSITION": "0001",
+        "KEYFLAG": "X",
+        "ROLLNAME": "MANDT",
+        "DATATYPE": "CLNT",
+        "LENG": "000003"
+      },
+      {
+        "TABNAME": "T301",
+        "FIELDNAME": "LGNUM",
+        "POSITION": "0002",
+        "KEYFLAG": "X",
+        "ROLLNAME": "LGNUM",
+        "DATATYPE": "CHAR",
+        "LENG": "000003"
+      },
+      {
+        "TABNAME": "T301",
+        "FIELDNAME": "LGTYP",
+        "POSITION": "0003",
+        "KEYFLAG": "X",
+        "ROLLNAME": "LGTYP",
+        "DATATYPE": "CHAR",
+        "LENG": "000003"
+      }
+    ],
+    "storageTypesW01": [
+      {
+        "LGNUM": "W01",
+        "LGTYP": "001"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "002"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "003"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "004"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "005"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "150"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "1FL"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "200"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "2FL"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "3FL"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "4FL"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "5FL"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "901"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "902"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "904"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "910"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "911"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "912"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "913"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "914"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "915"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "916"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "917"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "918"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "920"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "921"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "922"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "923"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "980"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "998"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "999"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "COR"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "EN1"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "FG1"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "FLM"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "GFL"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "GS1"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "IP1"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "IP2"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "IP3"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "IP4"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "IP5"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "OH1"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "OXD"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "POW"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "QC1"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "RM1"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "TOX"
+      },
+      {
+        "LGNUM": "W01",
+        "LGTYP": "WRA"
+      }
+    ],
+    "storageTypeCodesW01": [
+      "001",
+      "002",
+      "003",
+      "004",
+      "005",
+      "150",
+      "1FL",
+      "200",
+      "2FL",
+      "3FL",
+      "4FL",
+      "5FL",
+      "901",
+      "902",
+      "904",
+      "910",
+      "911",
+      "912",
+      "913",
+      "914",
+      "915",
+      "916",
+      "917",
+      "918",
+      "920",
+      "921",
+      "922",
+      "923",
+      "980",
+      "998",
+      "999",
+      "COR",
+      "EN1",
+      "FG1",
+      "FLM",
+      "GFL",
+      "GS1",
+      "IP1",
+      "IP2",
+      "IP3",
+      "IP4",
+      "IP5",
+      "OH1",
+      "OXD",
+      "POW",
+      "QC1",
+      "RM1",
+      "TOX",
+      "WRA"
+    ],
+    "storageTypesQueryStatus": "READ"
+  },
+  "huSummaries": [
+    {
+      "HU": "2000019372",
+      "VEKP": [
+        {
+          "VENUM": "0000020535",
+          "EXIDV": "00000000002000019372",
+          "STATUS": "0020",
+          "WERKS": "",
+          "LGORT": "",
+          "LGNUM": "W01",
+          "VPOBJ": "12",
+          "VPOBJKEY": "0180000068",
+          "VHART": "Z007"
+        }
+      ],
+      "VEPO": [
+        {
+          "VENUM": "0000020535",
+          "VEPOS": "000005",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "CHARG": "",
+          "VEMNG": "1.000",
+          "VEMEH": "NOS"
+        }
+      ]
+    },
+    {
+      "HU": "2000019371",
+      "VEKP": [
+        {
+          "VENUM": "0000020534",
+          "EXIDV": "00000000002000019371",
+          "STATUS": "0020",
+          "WERKS": "",
+          "LGORT": "",
+          "LGNUM": "W01",
+          "VPOBJ": "01",
+          "VPOBJKEY": "0080000134",
+          "VHART": "Z007"
+        }
+      ],
+      "VEPO": [
+        {
+          "VENUM": "0000020534",
+          "VEPOS": "000004",
+          "MATNR": "000000008000009754",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "CHARG": "",
+          "VEMNG": "1.000",
+          "VEMEH": "NOS"
+        }
+      ]
+    },
+    {
+      "HU": "2000020150",
+      "VEKP": [
+        {
+          "VENUM": "0000021384",
+          "EXIDV": "00000000002000020150",
+          "STATUS": "0020",
+          "WERKS": "",
+          "LGORT": "",
+          "LGNUM": "W01",
+          "VPOBJ": "12",
+          "VPOBJKEY": "0180000117",
+          "VHART": "Z007"
+        }
+      ],
+      "VEPO": [
+        {
+          "VENUM": "0000021384",
+          "VEPOS": "000004",
+          "MATNR": "000000008000006485",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "CHARG": "",
+          "VEMNG": "1.000",
+          "VEMEH": "NOS"
+        }
+      ]
+    },
+    {
+      "HU": "2000020151",
+      "VEKP": [
+        {
+          "VENUM": "0000021385",
+          "EXIDV": "00000000002000020151",
+          "STATUS": "0020",
+          "WERKS": "",
+          "LGORT": "",
+          "LGNUM": "W01",
+          "VPOBJ": "12",
+          "VPOBJKEY": "0180000117",
+          "VHART": "Z007"
+        }
+      ],
+      "VEPO": [
+        {
+          "VENUM": "0000021385",
+          "VEPOS": "000005",
+          "MATNR": "000000008000006485",
+          "WERKS": "1120",
+          "LGORT": "CS02",
+          "CHARG": "",
+          "VEMNG": "1.000",
+          "VEMEH": "NOS"
+        }
+      ]
+    }
+  ],
+  "open311Reservations": [
+    {
+      "RSNUM": "0000523654",
+      "RSPOS": "0001",
+      "BWART": "311",
+      "MATNR": "000000008000009754",
+      "WERKS": "1120",
+      "LGORT": "CS02",
+      "UMLGO": "CIS1",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "KZEAR": "",
+      "XLOEK": "",
+      "AUFNR": "",
+      "OpenQty": 1,
+      "ResolvedBWART": "311",
+      "BWARTSource": "RESB",
+      "RKPF": []
+    },
+    {
+      "RSNUM": "0000524283",
+      "RSPOS": "0001",
+      "BWART": "311",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "CS02",
+      "UMLGO": "HU01",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "KZEAR": "",
+      "XLOEK": "",
+      "AUFNR": "",
+      "OpenQty": 1,
+      "ResolvedBWART": "311",
+      "BWARTSource": "RESB",
+      "RKPF": []
+    },
+    {
+      "RSNUM": "0000527591",
+      "RSPOS": "0001",
+      "BWART": "311",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "CS02",
+      "UMLGO": "HU01",
+      "BDMNG": "2.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "KZEAR": "",
+      "XLOEK": "",
+      "AUFNR": "",
+      "OpenQty": 2,
+      "ResolvedBWART": "311",
+      "BWARTSource": "RESB",
+      "RKPF": []
+    },
+    {
+      "RSNUM": "0000529960",
+      "RSPOS": "0001",
+      "BWART": "311",
+      "MATNR": "000000008000009754",
+      "WERKS": "1120",
+      "LGORT": "CS02",
+      "UMLGO": "CIS1",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "KZEAR": "",
+      "XLOEK": "",
+      "AUFNR": "",
+      "OpenQty": 1,
+      "ResolvedBWART": "311",
+      "BWARTSource": "RESB",
+      "RKPF": []
+    },
+    {
+      "RSNUM": "0000529959",
+      "RSPOS": "0001",
+      "BWART": "311",
+      "MATNR": "000000008000009754",
+      "WERKS": "1120",
+      "LGORT": "CS02",
+      "UMLGO": "CIS1",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "KZEAR": "",
+      "XLOEK": "",
+      "AUFNR": "",
+      "OpenQty": 1,
+      "ResolvedBWART": "311",
+      "BWARTSource": "RESB",
+      "RKPF": []
+    },
+    {
+      "RSNUM": "0000527588",
+      "RSPOS": "0001",
+      "BWART": "311",
+      "MATNR": "000000008000006485",
+      "WERKS": "1120",
+      "LGORT": "CS02",
+      "UMLGO": "HU01",
+      "BDMNG": "10.000",
+      "ENMNG": "2.000",
+      "MEINS": "NOS",
+      "KZEAR": "",
+      "XLOEK": "",
+      "AUFNR": "",
+      "OpenQty": 8,
+      "ResolvedBWART": "311",
+      "BWARTSource": "RESB",
+      "RKPF": []
+    },
+    {
+      "RSNUM": "0000520235",
+      "RSPOS": "0001",
+      "BWART": "311",
+      "MATNR": "000000008000009802",
+      "WERKS": "1150",
+      "LGORT": "CS02",
+      "UMLGO": "CIS1",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "KZEAR": "",
+      "XLOEK": "",
+      "AUFNR": "",
+      "OpenQty": 1,
+      "ResolvedBWART": "311",
+      "BWARTSource": "RESB",
+      "RKPF": []
+    },
+    {
+      "RSNUM": "0000520235",
+      "RSPOS": "0002",
+      "BWART": "311",
+      "MATNR": "000000008000009803",
+      "WERKS": "1150",
+      "LGORT": "CS02",
+      "UMLGO": "CIS1",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "KZEAR": "",
+      "XLOEK": "",
+      "AUFNR": "",
+      "OpenQty": 1,
+      "ResolvedBWART": "311",
+      "BWARTSource": "RESB",
+      "RKPF": []
+    },
+    {
+      "RSNUM": "0000520236",
+      "RSPOS": "0001",
+      "BWART": "311",
+      "MATNR": "000000008000009802",
+      "WERKS": "1150",
+      "LGORT": "CS02",
+      "UMLGO": "CIS1",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "KZEAR": "",
+      "XLOEK": "",
+      "AUFNR": "",
+      "OpenQty": 1,
+      "ResolvedBWART": "311",
+      "BWARTSource": "RESB",
+      "RKPF": []
+    },
+    {
+      "RSNUM": "0000520236",
+      "RSPOS": "0002",
+      "BWART": "311",
+      "MATNR": "000000008000009803",
+      "WERKS": "1150",
+      "LGORT": "CS02",
+      "UMLGO": "CIS1",
+      "BDMNG": "1.000",
+      "ENMNG": "0.000",
+      "MEINS": "NOS",
+      "KZEAR": "",
+      "XLOEK": "",
+      "AUFNR": "",
+      "OpenQty": 1,
+      "ResolvedBWART": "311",
+      "BWARTSource": "RESB",
+      "RKPF": []
+    }
+  ]
+}

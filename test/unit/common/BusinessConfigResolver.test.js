@@ -102,6 +102,9 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       service.before = jest.fn().mockImplementation((events, entity, fn) => {
         if (events.includes('CREATE')) beforeHandler = fn;
       });
+      service.storageTypeConfigAdapter = {
+        validateStorageTypeListsForWarehouse: jest.fn().mockResolvedValue({ warehouse: 'W01' })
+      };
       Object.defineProperty(service, 'entities', {
         value: { BusinessConfigs: 'BusinessConfigs' },
         configurable: true
@@ -111,21 +114,51 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       expect(beforeHandler).toEqual(expect.any(Function));
 
       const validReq = { data: {
+        WarehouseNumber: 'W01',
         PickableStorageTypes: 'en1,EN2', HoldStorageTypes: 'OH1', InterimStorageTypes: '911',
         OversizeHuSelectionBehavior: 'block'
       }, error: jest.fn() };
-      beforeHandler(validReq);
+      await beforeHandler(validReq);
       expect(validReq.data).toMatchObject({
         PickableStorageTypes: 'EN1,EN2', HoldStorageTypes: 'OH1',
         InterimStorageTypes: '911', OversizeHuSelectionBehavior: 'BLOCK'
       });
       expect(validReq.error).not.toHaveBeenCalled();
+      expect(service.storageTypeConfigAdapter.validateStorageTypeListsForWarehouse).toHaveBeenCalledWith('W01', {
+        pickableStorageTypes: ['EN1', 'EN2'], holdStorageTypes: ['OH1'], interimStorageTypes: ['911']
+      });
 
       const invalidReq = { data: {
         PickableStorageTypes: 'EN1', HoldStorageTypes: '', InterimStorageTypes: 'EN1'
       }, error: jest.fn() };
-      beforeHandler(invalidReq);
+      await beforeHandler(invalidReq);
       expect(invalidReq.error).toHaveBeenCalledWith(400, expect.stringMatching(/must be non-empty|overlaps/));
+    });
+
+    test('BusinessConfig admin API rejects storage-type updates when T301 is unreadable', async () => {
+      const BusinessConfigService = require('../../../srv/wm/business-config/service');
+      const service = new BusinessConfigService();
+      let beforeHandler = null;
+      service.before = jest.fn().mockImplementation((events, entity, fn) => {
+        if (events.includes('CREATE')) beforeHandler = fn;
+      });
+      service.storageTypeConfigAdapter = {
+        validateStorageTypeListsForWarehouse: jest.fn().mockRejectedValue(
+          Object.assign(new Error('SAP T301 storage types are unreadable; BusinessConfig update is blocked.'), { status: 503 })
+        )
+      };
+      Object.defineProperty(service, 'entities', {
+        value: { BusinessConfigs: 'BusinessConfigs' },
+        configurable: true
+      });
+      jest.spyOn(cds.ApplicationService.prototype, 'init').mockResolvedValue(service);
+      await service.init();
+
+      const req = { data: {
+        WarehouseNumber: 'W01', PickableStorageTypes: 'EN1', HoldStorageTypes: 'OH1', InterimStorageTypes: '911'
+      }, error: jest.fn() };
+      await beforeHandler(req);
+      expect(req.error).toHaveBeenCalledWith(503, expect.stringContaining('T301 storage types are unreadable'));
     });
   });
 

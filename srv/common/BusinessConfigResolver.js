@@ -210,7 +210,7 @@ class BusinessConfigResolver {
     return this._cache.get(key) || null;
   }
 
-  /** Resolve the oversize-HU selector policy; missing configuration safely defaults to BLOCK. */
+  /** Oversize-HU setting: “default BLOCK, pending the user's confirmation”. */
   async resolveOversizeHuSelectionBehavior(context = {}) {
     const row = await this._queryDb(
       String(context.plant || '').trim().toUpperCase(),

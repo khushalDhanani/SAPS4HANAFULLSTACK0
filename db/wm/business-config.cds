@@ -50,7 +50,7 @@ entity BusinessConfig : managed {
     PickableStorageTypes   : String(200);
     HoldStorageTypes       : String(200);
     InterimStorageTypes    : String(200);
-    // BLOCK is the safe default until the business approves WARN for a warehouse.
+    // Oversize-HU setting: “default BLOCK, pending the user's confirmation”.
     OversizeHuSelectionBehavior : String(5) default 'BLOCK';
 
     // ─── Descriptive ──────────────────────────────────────────────────────────

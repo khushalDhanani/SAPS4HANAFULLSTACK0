@@ -328,6 +328,7 @@ sap.ui.define([
             var nOpenQty = Number(oViewModel.getProperty("/maxAllowedQty"));
             var nSelected = aSelected.reduce(function (sum, item) { return sum + Number(item.TransferQty || 0); }, 0);
             var nRemaining = nOpenQty - nSelected;
+            // Oversize-HU setting: “default BLOCK, pending the user's confirmation”.
             var sBehavior = String((oViewModel.getProperty("/cockpit") || {}).OversizeHuSelectionBehavior || "BLOCK").toUpperCase();
 
             if (!oUnit || !oUnit.Valid || !String(oUnit.UnitType || "").includes("HU")) {
@@ -417,6 +418,7 @@ sap.ui.define([
             var nOpenQty = Number(oViewModel.getProperty("/maxAllowedQty"));
             var nTotal = 0;
             var nRemaining = nOpenQty;
+            // Oversize-HU setting: “default BLOCK, pending the user's confirmation”.
             var sBehavior = String((oViewModel.getProperty("/cockpit") || {}).OversizeHuSelectionBehavior || "BLOCK").toUpperCase();
             var mSeen = Object.create(null);
 

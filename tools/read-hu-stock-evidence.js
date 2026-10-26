@@ -3,7 +3,8 @@
 
 /**
  * READ-ONLY evidence collection for a small, explicit HU/311 scope.
- * Calls RFC_READ_TABLE only. This script contains no RFC function call or SAP write path.
+ * RFC allow-list: RFC_READ_TABLE only. DD03L metadata is read through the same
+ * function; no additional metadata function or SAP write path is used.
  * It is closed unless RUN_LIVE_SAP=1 and SAP_SYSTEM_TYPE is explicitly non-production.
  */
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.local'), quiet: true });
@@ -11,13 +12,16 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env.loc
 const fs = require('fs');
 const path = require('path');
 const { shouldRunLiveSapTests } = require('../test/liveSapGate');
-
-if (!shouldRunLiveSapTests()) {
-  throw new Error('READ-ONLY SAP gate closed: set RUN_LIVE_SAP=1 and SAP_SYSTEM_TYPE to a non-production value.');
-}
+const {
+  createReadOnlyRfcClient,
+  assertNoSensitiveEnvironmentValues,
+  assertNoSensitiveEnvironmentValuesInFile
+} = require('./lib/readOnlyRfcGuard');
 
 const { RfcClient } = require('../srv/integration/s4hana/RfcClient');
-const rfc = new RfcClient();
+const rfc = createReadOnlyRfcClient(new RfcClient(), {
+  onCall: (functionName) => console.log(`READ-ONLY RFC call: ${functionName}`)
+});
 const targetHus = ['2000019372', '2000019371', '2000020150', '2000020151'];
 const targetMaterials = [
   { material: '8000009754', plant: '1120' },
@@ -28,8 +32,8 @@ const targetMaterials = [
 const evidence = {
   capturedAt: new Date().toISOString(),
   mode: 'READ-ONLY',
-  systemType: String(process.env.SAP_SYSTEM_TYPE || '').trim(),
   queries: [],
+  t301: null,
   huSummaries: [],
   open311Reservations: []
 };
@@ -53,6 +57,29 @@ async function read(table, fields, where, rowCount = 9999) {
 }
 
 async function collect() {
+  // DD03L columns below are taken from saved DD03L schema evidence in
+  // docs/evidence/2026-10-26/261-dd03l-fields.raw.json. T301 fields are never
+  // presumed: the T301 read is issued only if DD03L reports both query fields.
+  const t301Dd03lRows = await read('DD03L', [
+    'TABNAME', 'FIELDNAME', 'POSITION', 'KEYFLAG', 'ROLLNAME', 'DATATYPE', 'LENG'
+  ], ["TABNAME = 'T301'"], 9999);
+  const t301FieldNames = new Set(t301Dd03lRows.map((row) => row.FIELDNAME).filter(Boolean));
+  const t301KeyFields = t301Dd03lRows
+    .filter((row) => String(row.KEYFLAG || '').trim().toUpperCase() === 'X')
+    .sort((a, b) => Number(a.POSITION || 0) - Number(b.POSITION || 0));
+  evidence.t301 = {
+    dd03lRows: t301Dd03lRows,
+    keyFields: t301KeyFields,
+    storageTypesW01: [],
+    storageTypeCodesW01: [],
+    storageTypesQueryStatus: 'NOT_READ_SCHEMA_FIELDS_UNAVAILABLE'
+  };
+  if (t301FieldNames.has('LGNUM') && t301FieldNames.has('LGTYP')) {
+    evidence.t301.storageTypesW01 = await read('T301', ['LGNUM', 'LGTYP'], ["LGNUM = 'W01'"], 9999);
+    evidence.t301.storageTypeCodesW01 = [...new Set(evidence.t301.storageTypesW01.map((row) => row.LGTYP).filter(Boolean))].sort();
+    evidence.t301.storageTypesQueryStatus = 'READ';
+  }
+
   // LQUA fields were checked in the saved DD03L evidence. Keep rows raw; do not
   // infer pickability or stock eligibility in this evidence collector.
   for (const entry of targetMaterials) {
@@ -144,16 +171,35 @@ async function collect() {
   }
 }
 
-collect().then(() => {
-  const now = new Date();
-  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(now);
-  const outDir = path.resolve(__dirname, `../docs/evidence/${date}`);
-  fs.mkdirSync(outDir, { recursive: true });
-  const outFile = path.join(outDir, 'hu-stock-evidence.raw.json');
-  fs.writeFileSync(outFile, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
-  console.log(`READ-ONLY evidence saved: ${path.relative(process.cwd(), outFile)}`);
-  console.log(`Captured ${evidence.queries.length} query results and ${evidence.open311Reservations.length} open 311 reservations.`);
-}).catch((error) => {
-  console.error(`READ-ONLY HU evidence collection failed: ${error.message}`);
-  process.exitCode = 1;
-});
+async function runCollector() {
+  try {
+    if (!shouldRunLiveSapTests()) {
+      throw Object.assign(new Error('READ-ONLY SAP gate is closed.'), { code: 'SAP_READ_ONLY_GATE_CLOSED' });
+    }
+    await collect();
+    const now = new Date();
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(now);
+    const outDir = path.resolve(__dirname, `../docs/evidence/${date}`);
+    fs.mkdirSync(outDir, { recursive: true });
+    const outFile = path.join(outDir, 'hu-stock-evidence.raw.json');
+    const serialized = `${JSON.stringify(evidence, null, 2)}\n`;
+    assertNoSensitiveEnvironmentValues(serialized, process.env);
+    fs.writeFileSync(outFile, serialized, { mode: 0o600 });
+    try {
+      assertNoSensitiveEnvironmentValuesInFile(outFile, process.env);
+    } catch (error) {
+      fs.unlinkSync(outFile);
+      throw error;
+    }
+    console.log(`READ-ONLY evidence saved: ${path.relative(process.cwd(), outFile)}`);
+    console.log(`Captured ${evidence.queries.length} query results and ${evidence.open311Reservations.length} open 311 reservations.`);
+  } catch (error) {
+    const safeCode = /^[A-Z0-9_]{1,48}$/.test(String(error.code || '')) ? error.code : 'COLLECTION_FAILED';
+    console.error(`READ-ONLY HU evidence collection failed (${safeCode}).`);
+    process.exitCode = 1;
+  } finally {
+    console.log(`RFC functions called: ${JSON.stringify(rfc.getCalledFunctions())}`);
+  }
+}
+
+runCollector();

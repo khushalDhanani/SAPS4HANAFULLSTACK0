@@ -2,6 +2,7 @@
 -- Run once against an existing db.sqlite after backup:
 --   sqlite3 db.sqlite < db-migrate-20261026-business-config-hu-storage-types.sql
 -- HU storage-type list columns are intentionally blank; no policy values are seeded.
+-- Oversize-HU setting: “default BLOCK, pending the user's confirmation”.
 BEGIN;
 ALTER TABLE saps4hana_wm_BusinessConfig ADD COLUMN PickableStorageTypes NVARCHAR(200);
 ALTER TABLE saps4hana_wm_BusinessConfig ADD COLUMN HoldStorageTypes NVARCHAR(200);
