@@ -268,6 +268,8 @@ If the agent cannot prove the SAP backend capability, STOP implementation and re
 - A transactional SAP flow's E2E proves Browser → route → controller → CAP → S/4 → SAP result → UI, including reading the SAP result back. Displaying a previously posted document does not count as a round trip. Running it is a live SAP write and needs the user's written "go" per call.
 - When a write flow gets its E2E suite, cover the applicable negative paths: unauthorized user, invalid input, missing mandatory SAP data, SAP 4xx/5xx surfaced in the UI, duplicate submission, timeout/backend failure, stale data, reload/navigation during submit, and session expiry.
 - Update the matrix status whenever E2E evidence changes; never mark 🟢/🟡 without citing an existing suite.
+- CI enforces the matrix: no route may lose browser E2E (🔴), and every route with an SAP write cites a `roundTrip*.e2e.js` Tier C suite or a dated `Tier C pending (YYYY-MM-DD): reason`.
+- Browser suites run behind the write guard (`test/e2e/support/writeGuard.js`). Tier C suites run via `npm run test:e2e:sap`, in dry-run by default (write action stubbed — UI proof only, never SAP proof); live mode is refused unless `test/e2e/support/liveWriteGate.js` is satisfied, and still needs the user's written go per run.
 
 ## Dead-code and unused-code review
 

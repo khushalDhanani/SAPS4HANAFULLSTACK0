@@ -5,6 +5,13 @@ const { extractFilterParam, extractFilterParams, applyPaging } = require('../../
 // Reuse the type-agnostic WM field-format primitives (plant/sloc/material/batch are the same
 // across Goods Issue and Goods Receipt) rather than duplicating the regexes here.
 const { checkMaterial, checkPlant, checkStorageLocation, checkBatch } = require('../../goods-issue/validation/common');
+const { plantScope, isPlantAllowed } = require('../../reservation-entry/readScope');
+
+/** 403 message when the posting plant is outside the authenticated user's plant scope (Admin: unrestricted), else null. */
+function plantScopeError(req, plant) {
+    const allowedPlants = plantScope(req.user);
+    return isPlantAllowed(plant, allowedPlants) ? null : `Plant ${plant || '(none)'} is outside the authenticated user's plant scope`;
+}
 
 const init = (srv) => {
     /**
@@ -127,6 +134,10 @@ const init = (srv) => {
         if (formatErr) {
             return req.reject(400, `${formatErr.field}: ${formatErr.message}`);
         }
+        const scopeErr = plantScopeError(req, Plant);
+        if (scopeErr) {
+            return req.reject(403, scopeErr);
+        }
 
         try {
             return await GoodsReceiptAdapter.postGoodsReceipt({
@@ -199,6 +210,10 @@ const init = (srv) => {
             || checkBatch(Batch);
         if (formatErr) {
             return req.reject(400, `${formatErr.field}: ${formatErr.message}`);
+        }
+        const scopeErr = plantScopeError(req, Plant);
+        if (scopeErr) {
+            return req.reject(403, scopeErr);
         }
 
         try {

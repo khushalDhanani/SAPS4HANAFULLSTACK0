@@ -87,7 +87,7 @@ Totals: Browser E2E 🟢 33 / 🟡 0 / 🔴 0. SAP round trip: 0 🟢 (no live r
 ## Authorization E2E
 
 - `test/e2e/negative/verifyPlantIsolation.e2e.js` (READ-ONLY, write guard on, mock user `bob` = Viewer, Plant 1120): scoped lists show only plant 1120; deep links to another plant's reservation / 261 item are refused (403/404) without showing data; an out-of-scope plant on Orders Due is refused.
-- `test/e2e/negative/verifyWriteAuthorization.e2e.js` (private CAP server started with `NODE_ENV=test` and no S4_* variables, S/4 at a dead endpoint — no SAP write possible): every write action that does not grant Viewer (49, generated from the CDS model) answers 401 signed out and 403 for Viewer-only users; a WarehouseClerk of plant 1130 is refused on plant 1120 for reservation create/entry and HU pack, **but not for `postGoodsReceipt` and `createDeliveryWithoutRef`** (requests pass authorization and reach the S/4 client) — open authorization gaps, suite FAILS until fixed.
+- `test/e2e/negative/verifyWriteAuthorization.e2e.js` (private CAP server started with `NODE_ENV=test` and no S4_* variables, S/4 at a dead endpoint — no SAP write possible): every write action that does not grant Viewer (49, generated from the CDS model) answers 401 signed out and 403 for Viewer-only users; a WarehouseClerk of plant 1130 is refused (403, before any S/4 call) on plant 1120 for reservation create/entry, HU pack, `postGoodsReceipt`, `postGoodsReceiptWithStorageUnit` and `createDeliveryWithoutRef` (the last three were open gaps until the 2026-10-26 16:3x plant-scope fix). Plant scope of `createOutboundDelivery` / `postGoodsIssue` / billing is not covered: their plant comes from SAP documents, so it cannot be proven without SAP.
 
 ## Negative E2E cases
 

@@ -7,6 +7,10 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Plant-scope gaps closed (2026-10-26 16:34 IST) — DONE, UNCOMMITTED:** GR posting (both actions) and delivery without reference now return 403 outside the user's plants; write-authorization E2E 7/7 PASS; Jest 3,816 PASS. See Changes Log 16:34 IST.
+
+- **P0 E2E list (2026-10-26 16:29 IST) — PARTIAL, UNCOMMITTED:** Tier C suites for PO/SI/SO/GR/GI/HU written and gated (dry-run 4/6 PASS; live never run); plant isolation 5/5 PASS; write authorization: roles 49/49 PASS, **2 plant gaps (GR post, delivery without ref)**; CI coverage gate active. See Changes Log 16:29 IST.
+
 - **Orders Due plant selector + 400 fix (2026-10-26 15:44 IST) — DONE, UNCOMMITTED:** Required/prefilled plant selector, backend still fail-closed, adapter 4xx no longer mapped to 500. Full READ-ONLY E2E 12/12 PASS; Jest 3,788 PASS. Supersedes the 15:26 BLOCKED item. See Changes Log 15:44 IST.
 
 - **E2E defect fixes (2026-10-26 15:26 IST) — 2 DONE, 1 BLOCKED, UNCOMMITTED:** PO create value-help text bindings and HU list toolbar priority fixed (E2E 11/12 suites PASS). Orders Due: fails only for users without a `Plant` attribute; fix BLOCKED on a business/security decision. See Changes Log 15:26 IST.
@@ -1661,7 +1665,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
-- **E2E next action (2026-10-26 15:44 IST, supersedes 15:26):** Orders Due decision implemented; all 12 E2E suites pass read-only. Open: Orders Due search on undeclared properties (400), VH DE/EN duplicates, Tier C SAP round trips (written go per call).
+- **E2E next action (2026-10-26 16:34 IST, supersedes 16:29):** Plant-scope gaps closed. Fix the sales inquiry `Plant` allowlist; supply 1120/W01 storage-type rules; then fill `test/e2e/live/testData.json` and give a written go per Tier C flow for live round trips. Still open: Orders Due search (400), VH DE/EN duplicates.
 
 - **E2E next action (2026-10-26 14:41 IST, supersedes 14:38):** The `verifyMvt311.e2e.js` failure was a stale test (fixed, not re-run); re-run it READ-ONLY against a running server when approved. Then decide where browser E2E with SAP round trips runs (DEV client 220 with per-call go vs. stubbed mode that is not SAP proof) before writing suites for the 🔴 rows in `docs/e2e-coverage-matrix.md`.
 
@@ -1715,6 +1719,38 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 16:34 IST — Close plant-scope gaps: goods receipt posting and delivery without reference
+
+- **Change (user-approved fix of the 16:29 authorization gaps):**
+  - `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`: `postGoodsReceipt` and `postGoodsReceiptWithStorageUnit` reject with **403** "Plant X is outside the authenticated user's plant scope" when the payload `Plant` is outside `plantScope(req.user)`, after the existing 400 presence/format checks and before any adapter call. Uses `plantScope` / `isPlantAllowed` from `srv/wm/reservation-entry/readScope.js` (same helper and message as reservation-entry); Admin stays unrestricted; no user or no plants → refused (fail-closed).
+  - `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`: same check at the start of `createDeliveryWithoutRef` (`req.error(403, …)`, matching the handler's error style); import switched to `readScope` (`plantScope` + `isPlantAllowed`).
+  - Why the payload plant is the right check point: both adapters post with it (`GoodsReceiptAdapter.js:1091,1115` `Plant`; `DeliveryNoRefAdapter.js:156` `Plant: payload.plant`). Whether S/4 also rejects a payload plant that differs from the delivery item's plant is UNKNOWN and no longer relevant to authorization.
+  - `test/e2e/negative/verifyWriteAuthorization.e2e.js`: + `postGoodsReceiptWithStorageUnit` case (the action the GR screen calls). `docs/e2e-coverage-matrix.md` Authorization section updated.
+- **TEST DECISION:** TEST ADDED + TEST UPDATED — new `test/unit/wm/goodsReceiptPlantScope.test.js` (both actions: clerk of another plant / user without plants / no user context → 403 and adapter not called; own-plant clerk and Admin → posted; missing plant still 400); `test/unit/le/deliveryNoRefHandler.test.js` (+4: three 403 cases, own plant case-insensitive; existing fixtures given a user, since requests without user context are now refused).
+- **Validation:** Red check — new/updated tests against the original handlers: 9 failed / 16 passed; with fix 25/25. Isolated-server write-authorization suite (no SAP reachable, SAP-backed read 502): **exit 0, 7/7 PASS** — roles 49/49; plant refusal for reservation create/entry, HU pack, `postGoodsReceipt`, `postGoodsReceiptWithStorageUnit`, `createDeliveryWithoutRef`. `npx jest --runInBand --ci` — 203 suites passed, 1 skipped; 3,816 passed, 59 skipped, 0 failed. `npx eslint` on changed srv/test files — PASS. `git diff --check` — PASS.
+- **Not verified:** full `npm run test:e2e` not rerun (Tier A/B suites never call these write actions); no live SAP call. Plant scope of `createOutboundDelivery` / `postGoodsIssue` / billing still unproven (plant comes from SAP documents). No commit. **Assumptions:** none.
+
+### 2026-10-26 16:29 IST — P0 E2E list: Tier C round-trip suites (gated, dry-run), authorization/plant-isolation E2E, CI coverage gate
+
+- **Context:** user-pasted P0 list (items 1–10). Status before: 1 done; 2–7 browser-only; 8 partial; 9 none at E2E level; 10 partial. User decisions (16:0x): Tier C "write now, run later"; auth E2E "read-only + safe write denial"; CI "coverage gate".
+- **Change:**
+  - **Infra:** `test/e2e/support/liveWriteGate.js` (dry-run default; live only with `ALLOW_LIVE_SAP_TOOLS=1` + `--allow-live-sap` + flow in `E2E_SAP_WRITE_FLOWS` + `test/e2e/live/testData.json` without placeholders); `writeGuard.js` `allowWrites` allowlist (live only); `screenCheck.openSession({ allowWrites })`; `support/isolatedServer.js` (private CAP server, `NODE_ENV=test` → no `.env`, cds `[test]` profile points S/4 at `http://127.0.0.1:1`, every `S4_*`/`SAP_*`/`AI_*`/`NVIDIA_*`/`VCAP_*` var stripped; `assertSapUnreachable` before any write). `.gitignore` `/test/e2e/live/testData.json`; committed `testData.example.json` (46 `NOT PROVIDED` placeholders).
+  - **Items 2–7 (Tier C, via 2 delegated agents + integration):** `test/e2e/mm/roundTripPurchaseOrder.e2e.js`, `sd/roundTripSalesInquiry.e2e.js`, `sd/roundTripSalesOrder.e2e.js`, `wm/roundTripGoodsReceipt.e2e.js`, `wm/roundTripGoodsIssue.e2e.js` (movement 201), `wm/roundTripHuTransfer.e2e.js` (311), shared `support/roundTrip.js`; four duplicated live-session setups consolidated into `openSession({ allowWrites })`. Runner `test/e2e/runSapRoundTrips.js` + `npm run test:e2e:sap` (separate from `test:e2e`).
+  - **Item 9:** `test/e2e/negative/verifyPlantIsolation.e2e.js` (READ-ONLY, `bob`); `negative/verifyWriteAuthorization.e2e.js` (isolated server; role matrix generated from CDS `@requires`; plant cases with `dave`). Both registered in `runAllE2E.js`. Plant-isolation run exposed a defect in the 15:44 plant selector (after a refused out-of-scope plant the table kept the previous plant's rows): `OrdersDueForDelivery.controller.js` now refuses a plant outside a restricted user's `getPlantContext()` scope before any request and keeps the loaded plant; i18n `ordersDuePlantOutOfScope`; +2 controller tests.
+  - **Item 10:** `test/unit/tools/e2eCoverageMatrix.test.js` +2 CI rules (no 🔴 browser row; every SAP write route cites an existing `roundTrip*.e2e.js` or `Tier C pending (YYYY-MM-DD): reason`). `docs/e2e-coverage-matrix.md`: SAP column re-derived from controller evidence (13 N/A with cited read-only controllers, 7 routes with Tier C suites, 13 dated pending reasons), new "Tier C SAP round trips" and "Authorization E2E" sections. `AGENTS.md` Business E2E coverage +2 bullets (CI rules, write guard / Tier C modes).
+- **TEST DECISION:** TEST ADDED — `e2eLiveWriteGate.test.js` (8, CI), matrix gate (+2, CI), controller (+2), 6 Tier C suites, 2 authorization suites.
+- **Validation:**
+  - Isolated server probe: no `S4_*` vars, SAP-backed read → HTTP 502 `connect ECONNREFUSED 127.0.0.1:1`.
+  - READ-ONLY Tier C dry-run (`npm run test:e2e:sap`, no live flags, after consolidation): **PO PASS, SO PASS, GR PASS, GI 201 PASS; Sales inquiry FAIL** (`payload items[0].Plant = undefined`), **HU transfer FAIL** (`validateUnit` HTTP 500, storage-type rules 1120/W01 unconfigured). No live write; `testData.json` not created.
+  - READ-ONLY `npm run test:e2e` (~16:2x IST): 13/14 suites PASS (incl. Plant isolation 5/5); **Write authorization FAIL**: 49/49 write actions refuse signed-out (401) and Viewer-only users (403); plant refusal proven for `createReservation`, `createReservationEntry`, HU `pack`; **`postGoodsReceipt` (HTTP 500 at the S/4 client config) and `createDeliveryWithoutRef` (HTTP 503 `ECONNREFUSED` on `LE_SHP_QC_DLVNOREF_SRV`) accept a plant-1130 clerk acting on plant 1120.**
+  - Gate red checks: Browser 🔴 row and a write route without suite/pending note → 2 failed; restored → 8/8. `npx jest --runInBand --ci` — 202 suites passed, 1 skipped; 3,800 passed, 59 skipped, 0 failed. `npx ui5lint` — no findings. `npx eslint test/e2e test/unit/tools test/unit/le` — PASS. `git diff --check` — PASS.
+- **Defects / gaps found (report only, not fixed — need decisions):**
+  1. **Authorization gap:** `GoodsReceiptService.postGoodsReceipt` and `OutboundDeliveryService.createDeliveryWithoutRef` have no plant-scope check (no `plantScope` use in `srv/wm/goods-receipt` or the delivery-no-ref path). On the real server such requests would go on to SAP.
+  2. **Sales inquiry create:** `SalesInquiryService.js:106-115` `ALLOWED_ITEM_FIELDS` lacks `Plant`, so the item plant the model adds (`SalesInquiryModel.js:658-660`) and SAP requires (`srv/sd/sales-inquiry/service.cds:120`) is dropped.
+  3. **HU transfer:** storage-type rules for 1120/W01 still unconfigured (`db/data/saps4hana.wm-BusinessConfig.csv`), known since 12:52 IST.
+  4. Orders Due worklist search on undeclared properties (400) — still open (15:44).
+- **Not verified:** any SAP persistence/read-back (no live Tier C run); whether SAP would accept the dry-run's derived data (e.g. PO picked material `0000000000DRAFT-15`); suggestion-list clicks (fields typed + Enter); multi-HU selection path; GR 101 document read-back (no read-only CAP API); plant scope of `createOutboundDelivery`/`postGoodsIssue`/billing (plant comes from SAP documents — not provable without SAP). Playwright suites still not in CI (no SAP). No commit.
 
 ### 2026-10-26 15:44 IST — Orders Due: plant selector for users without a Plant attribute; fail-closed 400 no longer becomes 500
 

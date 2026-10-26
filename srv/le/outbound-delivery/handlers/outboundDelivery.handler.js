@@ -2,7 +2,7 @@ const LOG = require('../../../common/logger')('outbound-delivery');
 const outboundDeliveryAdapter = require('../../../integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
 const deliveryNoRefAdapter = require('../../../integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter');
 const { applyPaging, extractFilterParam } = require('../../../common/filterUtils');
-const plantScope = require('../../../wm/handling-unit/plantScope');
+const { plantScope, isPlantAllowed } = require('../../../wm/reservation-entry/readScope');
 
 /**
  * Registers Outbound Delivery business handlers on the CAP service.
@@ -189,6 +189,10 @@ function registerOutboundDeliveryHandlers(srv) {
 
   srv.on('createDeliveryWithoutRef', async (req) => {
     const data = req.data || {};
+    // Server-side plant scope: only plants the user is authorized for (Admin: unrestricted)
+    if (!isPlantAllowed(data.Plant, plantScope(req.user))) {
+      return req.error(403, `Plant ${data.Plant || '(none)'} is outside the authenticated user's plant scope`);
+    }
     try {
       const result = await deliveryNoRefAdapter.createDeliveryWithoutRef({
         shippingPoint: data.ShippingPoint,

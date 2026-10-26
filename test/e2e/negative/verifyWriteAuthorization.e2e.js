@@ -25,6 +25,8 @@ const PLANT_CASES = [
         body: { handlingUnitExternalID: 'E2E', material: 'E2E', quantity: 1, unit: 'EA', plant: '1120', storageLocation: 'HS01' } },
     { name: 'postGoodsReceipt for plant 1120', path: '/odata/v4/goods-receipt/postGoodsReceipt',
         body: { Plant: '1120', StorageLocation: 'HS01', Material: 'E2E', Quantity: 1, Unit: 'EA', DeliveryDocument: '1', DeliveryDocumentItem: '10' } },
+    { name: 'postGoodsReceiptWithStorageUnit (the action the GR screen calls) for plant 1120', path: '/odata/v4/goods-receipt/postGoodsReceiptWithStorageUnit',
+        body: { StorageUnit: '180000003', DeliveryDocument: '180000003', DeliveryDocumentItem: '10', Plant: '1120', StorageLocation: 'HS01', Material: 'E2E', Quantity: 1, Unit: 'KG' } },
     { name: 'createDeliveryWithoutRef for plant 1120', path: '/odata/v4/outbound-delivery/createDeliveryWithoutRef',
         body: { ShippingPoint: '1104', DeliveryDocumentType: 'LO2', SalesOrganization: '1000', DistributionChannel: '10', Division: '52', ShipToParty: '1',
             Plant: '1120', StorageLocation: 'FG01', PlannedGoodsIssueDate: '2026-10-27', Items: [{ Material: 'E2E', ActualDeliveryQuantity: 1, DeliveryQuantityUnit: 'KG' }] } }
