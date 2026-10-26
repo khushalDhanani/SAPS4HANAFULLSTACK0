@@ -770,6 +770,43 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
       });
     });
 
+    it('shows unclassified inventory when policy is missing while the strict rules API still rejects', async () => {
+      const error = new BusinessConfigResolver.BusinessConfigError('storage policy is missing');
+      adapter.businessConfigResolver = { resolveHuStorageTypeRules: jest.fn().mockRejectedValue(error) };
+      const bins = await adapter.getStorageBins('10042', '1');
+      expect(bins).toHaveLength(2);
+      expect(bins.map((bin) => [bin.StorageStatus, bin.SortPriority])).toEqual([
+        ['Unclassified', 5], ['Unclassified', 5]
+      ]);
+      expect(bins[0]).toMatchObject({ StorageType: 'EN1', StorageBin: '1-L0001-04', AvailableStock: 50, Warehouse: 'W01' });
+      expect(bins[1]).toMatchObject({ StorageType: 'OH1', StorageBin: 'HOLD-01', AvailableStock: 10 });
+      expect(adapter._storageTypeRules.size).toBe(0);
+      await expect(adapter.getStorageTypeRules({ plant: '1120', warehouse: 'W01' })).rejects.toBe(error);
+      expect(mockRfc.call).not.toHaveBeenCalled();
+    });
+
+    it('does not hide database/system errors as a missing inventory policy', async () => {
+      const error = new Error('database unavailable');
+      jest.spyOn(adapter, 'getStorageTypeRules').mockRejectedValue(error);
+      await expect(adapter.getStorageBins('10042', '1')).rejects.toBe(error);
+    });
+
+    it('keeps configured warehouse classification when another warehouse has no policy', async () => {
+      const read = mockRfc.readTable.getMockImplementation();
+      mockRfc.readTable.mockImplementation(async (table, ...args) => {
+        if (table !== 'LQUA') return read(table, ...args);
+        return [ ...(await read(table, ...args)), { LGNUM: 'W15', LGTYP: 'EN1', LGPLA: '2-L0001-01', GESME: '3', MEINS: 'NOS' } ];
+      });
+      const configured = await adapter.getStorageTypeRules({ plant: '1120', warehouse: 'W01' });
+      jest.spyOn(adapter, 'getStorageTypeRules').mockImplementation(async ({ warehouse }) => {
+        if (warehouse === 'W01') return configured;
+        throw new BusinessConfigResolver.BusinessConfigError('policy missing');
+      });
+      const bins = await adapter.getStorageBins('10042', '1');
+      expect(bins.find((bin) => bin.Warehouse === 'W01' && bin.StorageType === 'EN1').StorageStatus).toBe('Available (EN1)');
+      expect(bins.find((bin) => bin.Warehouse === 'W15')).toMatchObject({ StorageStatus: 'Unclassified', SortPriority: 5, AvailableStock: 3 });
+    });
+
     it('retrieves sorted storage bins with status priorities', async () => {
       const bins = await adapter.getStorageBins('10042', '1');
       expect(bins.length).toBe(2);

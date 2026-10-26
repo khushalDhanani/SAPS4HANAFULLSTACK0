@@ -994,10 +994,19 @@ class HuStockTransferAdapter {
     // Rules per quant warehouse (LQUA-LGNUM); no default warehouse.
     const rulesByWarehouse = new Map();
     for (const wh of new Set(nonZeroLqua.map((q) => q.LGNUM).filter(Boolean))) {
-      rulesByWarehouse.set(wh, await this.getStorageTypeRules({ plant: cockpit.Plant, warehouse: wh, isTrusted: true }));
+      try {
+        rulesByWarehouse.set(wh, await this.getStorageTypeRules({ plant: cockpit.Plant, warehouse: wh, isTrusted: true }));
+      } catch (error) {
+        if (!(error instanceof businessConfigResolver.BusinessConfigError)) throw error;
+        // Inventory facts remain readable without a classification policy. Do not
+        // infer availability from storage names or the material's preferred type.
+        // Validation/posting callers still use the strict rules API unchanged.
+        LOG.warn(`Storage-type policy unavailable for plant ${cockpit.Plant}, warehouse ${wh}; displaying unclassified stock.`);
+      }
     }
 
     return nonZeroLqua.map((q) => {
+      const policyKnown = rulesByWarehouse.has(q.LGNUM);
       const storageRules = rulesByWarehouse.get(q.LGNUM) || NO_STORAGE_RULES;
       const location = lagpMap.get(`${q.LGNUM}|${q.LGTYP}|${q.LGPLA}`);
       const rackParts = parseRackBinName(q.LGPLA);
@@ -1007,10 +1016,10 @@ class HuStockTransferAdapter {
         : '';
       const isOnHold = storageRules.isOnHold(q.LGTYP, q.LGPLA);
       const isInProcess = storageRules.isInterim(q.LGTYP);
-      const isPref = storageRules.isPickable(q.LGTYP) || (cockpit.PreferredStorageType && q.LGTYP === cockpit.PreferredStorageType);
+      const isPref = policyKnown && (storageRules.isPickable(q.LGTYP) || (cockpit.PreferredStorageType && q.LGTYP === cockpit.PreferredStorageType));
 
-      let stgStatus = 'Available';
-      let sortPrio = 2;
+      let stgStatus = policyKnown ? 'Available' : 'Unclassified';
+      let sortPrio = policyKnown ? 2 : 5;
       if (isPref) {
         stgStatus = `Available (${q.LGTYP})`;
         sortPrio = 1;
