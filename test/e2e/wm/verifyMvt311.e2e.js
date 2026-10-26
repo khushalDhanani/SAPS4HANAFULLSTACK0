@@ -1,5 +1,5 @@
 'use strict';
-/* global document */
+/* global document, window */
 
 const path = require('path');
 const { chromium } = require('../playwrightLoader');
@@ -88,12 +88,36 @@ async function verifyMvt311(options = {}) {
     await page.waitForSelector('.sapMTitle', { timeout: 10000 });
     await page.waitForTimeout(1000);
 
+    // Visibility of the Receiving SLoc control; null when the control does not exist at all
+    const recSLocVisible = () => page.evaluate(() => {
+      const core = window.sap && window.sap.ui && window.sap.ui.getCore();
+      const recSLoc = core && core.byId('__component0---reservationEntryDetail--inputRecSLoc');
+      return recSLoc ? recSLoc.getVisible() : null;
+    });
+
+    // The create form has no default movement type, so Receiving SLoc starts hidden
+    const visibleBefore = await recSLocVisible();
+    if (visibleBefore === null) throw new Error('Receiving SLoc control not found on create page');
+    if (visibleBefore) throw new Error('Receiving SLoc input visible before a movement type was selected');
+
+    // Switch to Movement Type 311 to verify dynamic Receiving SLoc field
+    await page.evaluate(() => {
+      const core = window.sap && window.sap.ui && window.sap.ui.getCore();
+      if (core) {
+        const select = core.byId('__component0---reservationEntryDetail--selectMovementType');
+        if (select) {
+          select.setSelectedKey('311');
+          select.fireChange({ selectedItem: select.getItemByKey('311') });
+        }
+      }
+    });
+    await page.waitForTimeout(500);
+
     const createScreenshotPath = path.resolve(__dirname, 'screenshots/mvt311_create_page.png');
     await page.screenshot({ path: createScreenshotPath, fullPage: true });
     console.log(`Saved screenshot: ${createScreenshotPath}`);
 
-    const recSLocInput = await page.$('input[id*="inputRecSLoc"]');
-    if (!recSLocInput) throw new Error('Receiving SLoc input not found on create page');
+    if (!(await recSLocVisible())) throw new Error('Receiving SLoc input not visible on create page after selecting Movement 311');
     report.ui = 'PASS';
 
     // -------------------------------------------------------------------------

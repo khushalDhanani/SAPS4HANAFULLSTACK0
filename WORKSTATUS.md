@@ -1655,7 +1655,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
-- **E2E next action (2026-10-26 14:38 IST):** Investigate `test/e2e/wm/verifyMvt311.e2e.js` failure ("Receiving SLoc input not found on create page") — UI regression vs. stale selector. Then decide where browser E2E with SAP round trips runs (DEV client 220 with per-call go vs. stubbed mode that is not SAP proof) before writing suites for the 🔴 rows in `docs/e2e-coverage-matrix.md`.
+- **E2E next action (2026-10-26 14:41 IST, supersedes 14:38):** The `verifyMvt311.e2e.js` failure was a stale test (fixed, not re-run); re-run it READ-ONLY against a running server when approved. Then decide where browser E2E with SAP round trips runs (DEV client 220 with per-call go vs. stubbed mode that is not SAP proof) before writing suites for the 🔴 rows in `docs/e2e-coverage-matrix.md`.
 
 - **Live SAP re-proof next action (2026-10-26 14:28 IST):** Before claiming SAP behavior for the current branch, re-run live write + read-back for movements 201/241/311/301/261, a PO create (SAP-returned number) and an HU stock transfer on DEV client 220 — each needs the user's written go per call.
 
@@ -1707,6 +1707,14 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 14:41 IST — Fix stale verifyMvt311 Playwright suite (create page relied on removed default movement 311)
+
+- **Root cause (read-only investigation, no SAP call):** `test/e2e/wm/verifyMvt311.e2e.js` looked for `input[id*="inputRecSLoc"]` right after opening `#/wm/reservation-entry/create` without selecting a movement type. The control still exists (`ReservationEntryDetail.view.xml:437`) but is `visible` only for 311/301 (`:448`), and UI5 does not render invisible controls. Commit `feff094` (2026-10-24 16:40) deliberately changed the create default `MovementType` from `"311"` to `""` (`ReservationEntryDetail.controller.js:50`) as part of the 2026-10-24 15:12 IST *Movement-Type Fidelity* audit ("no silent defaults"); the unit test `reservationEntryUi.test.js` was updated then, this Playwright suite was not (Playwright is not run in CI). Classification: **stale test**, not a UI regression.
+- **Change:** `test/e2e/wm/verifyMvt311.e2e.js` Step 1 now mirrors `verifyMvt301.e2e.js`: reads `inputRecSLoc` visibility via `sap.ui.getCore().byId('__component0---reservationEntryDetail--inputRecSLoc')`, fails if the control is missing or visible before selection, selects `311` on `selectMovementType` (`setSelectedKey` + `fireChange`), then fails unless it is visible; screenshot taken after selection. Added `window` to the file's `/* global */` comment (same as the 301 suite). `docs/e2e-coverage-matrix.md` `wmReservationEntryCreate` row notes cause and fix.
+- **TEST DECISION:** TEST UPDATED — `verifyMvt311.e2e.js` (Step 1 create-page check).
+- **Validation:** `node --check test/e2e/wm/verifyMvt311.e2e.js` — PASS; `npx eslint test/e2e/wm/verifyMvt311.e2e.js` — PASS (first attempt failed 6× `no-undef window`, fixed via `/* global */`); module loads and exports `verifyMvt311`. Select item `key="311"` confirmed in the view.
+- **Not verified:** the suite was **not run** (user instruction: no Playwright run against SAP), so the fixed check is unproven in a browser; that Receiving SLoc becomes visible after selecting 311 is INFERRED from the view binding. Hard-coded component ID `__component0---…` (shared with the 301 suite) is fragile — reported only. No commit. **Assumptions:** none.
 
 ### 2026-10-26 14:38 IST — Business E2E coverage governance: route matrix + enforcing test, AGENTS.md rule, mocked PO test moved out of test/e2e
 
