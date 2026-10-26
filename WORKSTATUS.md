@@ -7,6 +7,10 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **AGENTS.md enforcement upgrade (2026-10-26 13:15 IST) — DONE, UNCOMMITTED:** Pre-flight gate, mandatory test-impact decision, dependency cleanup, scope protection and universal root-cause rules added; diff check PASS. See Changes Log 13:15 IST.
+
+- **Repository artifact cleanup (2026-10-26 13:04 IST) — IN PROGRESS:** Scanned 915 tracked files and ignored artifacts. Plan: archive generated E2E screenshots, stale coverage/build/test output and inactive logs outside the repo; ignore future generated screenshots. Preserve application code, SAP evidence, databases/backups, dependencies and production UI dist. Validation pending.
+
 - **getStorageBins 109527/1 — FIXED; READ-ONLY GET VERIFIED (2026-10-26 12:57 IST):** Bin inventory browsing no longer fails on a missing/invalid classification policy: only BusinessConfigError yields explicit Unclassified status (priority 5), including material-preferred types; all other system errors propagate. Strict policy validation/posting remains unchanged; no inferred or seeded categories. Exact GET returns HTTP 200 with one Unclassified W01 bin. Full Jest/coverage PASS 195 suites, 3,657 tests passed/59 skipped/0 failed; focused 3 suites/120 tests, ESLint and diff PASS. Source/test/log changes uncommitted; no config/SAP write.
 
 - **Rack-layout 109527/1 — FIXED AND LIVE GET VERIFIED (2026-10-26 12:50 IST):** User Go authorized the backed-up local SQLite bootstrap. Created only missing BusinessConfig table and projection; all 18 existing tables/data unchanged, zero rows seeded, integrity and compiler-DDL parity PASS. Exact READ-ONLY GET returns HTTP 200, no error, Cells 0 / NonRackBins 1. Resolver+adapter tests PASS 2 suites/92 tests; diff check PASS. Backup db.sqlite-pre-business-config-20261026T071958Z (0600, Git ignored). No restart, SAP write, commit, push or deployment.
@@ -1635,6 +1639,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Repository cleanup:** Complete artifact archive, validate tracked scope/ignore rules, run lint and regression tests, then record actual outcomes.
+
 - **Storage bins exact next action (2026-10-26 12:57 IST):** Refresh/reopen View Storage Bins; exact GET now returns 200 with truthful Unclassified status. Approved pickable/hold/interim lists are still required for policy-based validation/posting, separately from inventory visibility. No seed defaults introduced; any future live config write needs a specific go.
 
 - **Rack-layout 109527/1 exact next action (2026-10-26 12:50 IST):** Refresh/retry the rack view; the exact endpoint now returns HTTP 200 after the approved schema bootstrap. Keep the local backup; do not rerun the bootstrap or older column migration. Further business policy/customizing changes remain separate from this repair.
@@ -1671,6 +1677,13 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 13:15 IST — AGENTS.md: mechanical enforcement rules (pre-flight gate, test decision, dependency cleanup, scope protection, universal root cause)
+
+- **Change:** `AGENTS.md` only. Added (1) a hard pre-flight gate block at the top of `### 1. Inspect`; (2) "No test = no completion" with the mandatory `TEST ADDED / UPDATED / EXISTING SUFFICIENT / NOT POSSIBLE — reason` decision under *Change and test rules*, and a **TEST DECISION** field in the final report list; (3) dependency cleanup rules (prove a new dependency; check removed code's dependencies) under *Dead-code and unused-code review*; (4) scope protection ("do not fix unrelated issues; report separately") in the first section; (5) universal root-cause rule (never patch a symptom when a boundary/contract is the failure) under `### 2. Plan`. Reason: user-supplied review of AGENTS.md asking for mechanical enforcement.
+- **TEST DECISION:** TEST NOT POSSIBLE — documentation-only change; no code path or test harness is affected.
+- **Validation:** `git diff --check AGENTS.md WORKSTATUS.md` — PASS (13:16 IST). No tests, builds or SAP calls apply to a documentation-only change; none were run.
+- **Not done:** no commit (not requested). The other session's in-progress artifact-cleanup entry and `.gitignore`/screenshot deletions were left untouched. **Assumptions:** none.
 
 ### 2026-10-26 12:48 IST — Probe re-run (07:16Z): HUM row structures CONFIRMED; HUM payload aligned to HUM_EXIDV rows
 
@@ -4108,3 +4121,12 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Still unknown:** Approved 1120/W01 storage-type categories/pickability (including OH1). Inventory display explicitly reports Unclassified rather than inventing values; strict policy-dependent posting validation still rejects missing policy.
 - **Assumptions:** User's renewed instruction to investigate and fix is taken as authorization for the recommended reversible read-only display change, not authority to select business rules or mutate config. Live GET tested with local mocked Admin identity; browser identity uninspected.
 - **Exact next recommended action:** Refresh/reopen View Storage Bins. Separately have the business owner supply approved category lists before policy-dependent posting.
+
+### 2026-10-26 13:04 IST — Repository generated-artifact cleanup — IN PROGRESS
+
+- **Inspect:** Read AGENTS/WORKSTATUS and sap-test-validation skill, clean git status, package scripts, CI, UI5 build config, MTA generator paths and E2E screenshot writers. Inventory: 915 tracked files; exact hashes found no duplicate application source files. Matching MCP configurations and SAP snapshots/metadata retained because distinct clients/evidence records remain relevant.
+- **Plan/change scope:** Recoverably archive only 14 generated test/e2e/wm/screenshots PNGs plus ignored coverage, gen, test-results, tools Python bytecode and inactive root logs; add a scoped PNG ignore rule. Keep test/screenshots historical evidence, production UI dist, all dependencies, DB/WAL/SHM/backups, seeds, secrets, migrations and SAP evidence. No SAP calls or application source edits. Record archive manifest with hashes; validate preservation, ignore behavior and applicable lint/regression tests.
+
+- **Change executed:** Archived 364 files / 29,360,422 bytes (28.0 MiB) to `/private/tmp/saps4-cleanup-xu1n33vs` (directory mode 0700), preserving relative paths and a SHA-256 manifest; all archive hashes verified. Includes 14 tracked generated PNGs (1,534,201 bytes), coverage (185 files), gen (160), test-results (2), Python bytecode (1), inactive root logs (2; lsof reported no open handles). Added `/test/e2e/wm/screenshots/*.png` to .gitignore. Installed Playwright screenshot writer creates parent directories; CI already uploads that output directory.
+- **Initial validation:** `npm run lint` PASS (exit 0); `git diff --check` PASS. Python tracked-file hash comparison confirms exactly 14 generated PNGs removed and every other tracked file unchanged except .gitignore/WORKSTATUS; scoped `git check-ignore --no-index` assertions PASS. Initial preservation scan had a missing optional Playwright utility path; inspected installed client/page.js directly and confirmed mkdirIfNeeded/writeFile, no implementation change needed.
+- **Regression attempt 1:** `env -u RUN_LIVE_SAP -u SAP_SYSTEM_TYPE -u ALLOW_LIVE_SAP_TOOLS npx jest --runInBand --ci --json --outputFile=/tmp/repo-cleanup-jest.json > /tmp/repo-cleanup-jest.log 2>&1` FAIL (exit 1): 168 suites passed / 27 failed / 1 skipped; 3,240 tests passed / 417 failed / 59 skipped. Local test servers fail with listen EPERM; localhost smoke requests fail. Do not classify this run as PASS. Approved sandbox escalation rerun with the same flags and `/tmp/repo-cleanup-jest-unrestricted.{json,log}` is in progress.

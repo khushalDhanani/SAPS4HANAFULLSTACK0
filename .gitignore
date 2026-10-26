@@ -44,6 +44,8 @@ dist/
 coverage/
 .nyc_output/
 test-results/
+# E2E screenshots are generated and uploaded as CI artifacts.
+/test/e2e/wm/screenshots/*.png
 .jest/
 
 # Code Quality & Linters

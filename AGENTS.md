@@ -10,7 +10,7 @@ These instructions apply to every agent and every change in this repository.
 - **Stop rule**: When an unknown could change business behavior, security/privacy, an SAP contract or payload, production configuration, or cause a destructive/external side effect, **first try to find the information using any agent** (inspect repository files, configuration, code, tests, SAP metadata, safe read-only queries, tools/MCP servers, subagents, or documentation). **Only after trying to find and not getting the information ("after not get"), then stop** before taking the action and ask a concise question with **Context, Doubt, Options and consequences, Recommendation** (maximum five questions).
 - For clear, reversible work directly requested by the user, use established project patterns and proceed. State any material assumption in the plan or report; do not ask about inconsequential implementation details.
 - Give a brief plan before non-trivial changes. Wait for approval when scope is ambiguous, the change is destructive, or it causes an external side effect. A request to edit code or documentation does not authorize a live SAP write, deployment, or other external mutation.
-- Do only the requested work. Report additional findings without acting on them.
+- Do only the requested work. Do not fix, clean up, or refactor unrelated issues during the task, even when they are obvious; report them separately as findings without acting on them.
 - Never proceed past an unanswered BLOCKER. Never put a message number, field name, table, or storage type in a table unless it appears in this repo (cite file:line) or user answers. Otherwise write **Not verified**. "Assumptions made: None" is only allowed if every row is proven.
 - Reject placeholder input. If a value looks like a sample (`___`, `xxxxx`, `"exact message"`, `"text"`), treat it as **NOT PROVIDED**, stop, and ask. Never analyze a template or example as if it were a live result.
 - Never run any live write (BAPI, RFC, POST, DB write) without the user's explicit written "go" for that specific call. A choice between options is not a "go". Default is read-only. State "READ-ONLY" or "WRITE" before every SAP call.
@@ -55,6 +55,20 @@ After every change, update `WORKSTATUS.md` in the same work session. Record the 
 
 ### 1. Inspect
 
+Hard pre-flight gate. No code is written until every step below is done and its result is stated in the plan:
+
+```text
+BEFORE CODE:
+  Read AGENTS.md
+  Read WORKSTATUS.md
+  Check git status
+  Search existing implementation
+  Identify affected flow
+  Identify tests
+  Identify unknowns
+THEN code
+```
+
 Before modifying anything:
 
 - Read the request completely and inspect all relevant files, configuration, tests, documentation, and call sites.
@@ -69,6 +83,7 @@ Before modifying anything:
 - Make the smallest coherent change that satisfies the request. Do not add speculative abstractions, files, dependencies, frameworks, services, or architecture.
 - Confirm dependency and configuration compatibility with the installed versions and current runtime architecture before adding or upgrading a package.
 - For a bug, reproduce it and identify the root cause before proposing a fix. Fix the source of the problem, not a symptom or a single caller.
+- Root-cause fixing is universal, not bug-only: never patch a symptom (a caller, a retry, a default, a try/catch, a UI guard) when the underlying boundary or contract is the actual failure. Fix the boundary once in the shared code, or report why that is out of scope.
 - Do not modify a working configuration blindly. Compare it with the current project state and validate every assumption.
 
 ### 3. Preserve architecture boundaries
@@ -228,6 +243,16 @@ If the agent cannot prove the SAP backend capability, STOP implementation and re
 ## Change and test rules
 
 - Prefer a focused, reviewable diff. Avoid unnecessary renames, formatting churn, generated files, and unrelated refactors.
+- **No test = no completion.** Missing tests are never silently treated as not applicable. Every meaningful change states exactly one test impact decision in the plan and in the report:
+
+  ```text
+  TEST ADDED
+  TEST UPDATED
+  EXISTING TEST SUFFICIENT — name the test
+  TEST NOT POSSIBLE — reason
+  ```
+
+  Without a stated decision the change is **PARTIAL** at best; `TEST NOT POSSIBLE` must give the concrete missing prerequisite and the change cannot be reported as **PASS**.
 - Add or update tests before or with behavior changes. For every meaningful change, run applicable static validation, unit, integration, regression, negative/error-path and E2E tests, plus real SAP verification for SAP functionality. Protect existing READ/list/detail flows when adding CREATE/UPDATE behavior; report each untested required layer without claiming PASS.
 - Unit tests cover isolated domain, handler, formatter, adapter, and validation behavior.
 - Integration tests cover CAP-to-S/4 boundaries with controlled fixtures/mocks; never depend on mutable production data.
@@ -240,6 +265,11 @@ If the agent cannot prove the SAP backend capability, STOP implementation and re
 Check the affected scope for duplicate services, helpers, controllers, fragments, models, dependencies, mocks, debug code, and unreachable code. Do not leave a superseded implementation behind when replacing it: prove safe removal or report unresolved use as a blocker to replacement.
 
 Treat dead-code findings as **candidates** until reachability and runtime use are checked. Before removing code, trace static references and relevant dynamic entry points, including CAP service/handler registration, CDS definitions, UI5 routes and manifests, fragments, configuration/environment keys, scripts/jobs, dependency injection or reflection, generated files, extension points, and tests. Check whether the code is intentionally dormant behind a feature flag or used by an external SAP/platform integration.
+
+Dependency cleanup is part of this review:
+
+- If a dependency is added, prove why it is required: name the requirement no installed dependency or existing code satisfies, and record that evidence in the plan and `WORKSTATUS.md`.
+- If code is removed, check whether its dependencies (packages, config keys, scripts, fixtures, mocks) are now unused and can also be removed under the same reachability rules; report any that remain and why.
 
 Lint warnings or a text search alone do not prove code is safe to remove. Use existing project tooling; do not add a dead-code package unless the user asks. Remove code only when evidence shows it is unreachable, removal is within the requested scope, and focused tests plus relevant lint/build validation pass. If dynamic or external use cannot be ruled out, leave the candidate in place and report the evidence and uncertainty.
 
@@ -266,7 +296,7 @@ Before finishing:
 1. Inspect `git diff`, `git diff --check`, and `git status`; confirm scope, architecture boundaries, configuration compatibility, secret handling, and dependency necessity.
 2. Review dead-code/duplicates and run applicable tests, build/lint/type checks, integration and regression validation. Verify the business result, including SAP persistence/read-back where required; never bypass the SAP write-gate.
 3. Verify `WORKSTATUS.md` records only executed validation and actual outcomes; implementation alone never warrants completion.
-4. Report **CHANGED**, **TESTED**, **VERIFIED**, **NOT VERIFIED**, **BLOCKED**, **ASSUMPTIONS**, **REGRESSION**, and **FINAL STATUS** (PASS/PARTIAL/BLOCKED/FAIL). Include affected files/behavior, exact commands and outcomes, S/4/BTP checks without secrets, skipped checks and reasons, unresolved failures, and next action. Explain non-applicable checks; every result must match inspected evidence or actual execution.
+4. Report **CHANGED**, **TEST DECISION** (ADDED / UPDATED / EXISTING SUFFICIENT / NOT POSSIBLE with reason), **TESTED**, **VERIFIED**, **NOT VERIFIED**, **BLOCKED**, **ASSUMPTIONS**, **REGRESSION**, and **FINAL STATUS** (PASS/PARTIAL/BLOCKED/FAIL). Include affected files/behavior, exact commands and outcomes, S/4/BTP checks without secrets, skipped checks and reasons, unresolved failures, and next action. Explain non-applicable checks; every result must match inspected evidence or actual execution.
 
 Never describe a change as complete, working, deployed, secure, or production-ready when relevant validation has not passed.
 
