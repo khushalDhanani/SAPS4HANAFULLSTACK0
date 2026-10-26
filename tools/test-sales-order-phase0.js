@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 require('./live-sap-gate')();
-require('./live-sap-gate')();
 /**
  * test-sales-order-phase0.js
  * Phase 0 S/4HANA live proof-of-concept for Sales Order creation using LORD_ODATA_ORDER_SRV.

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 require('./live-sap-gate')();
-require('./live-sap-gate')();
 /**
  * test-delivery-phase0.js
  * Phase 0 S/4HANA live proof-of-concept for Outbound Delivery creation using LE_SHP_QC_DLVREF_SRV.

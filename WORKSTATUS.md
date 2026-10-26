@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Live SAP tool double-gate fix (2026-10-26 13:39 IST) — DONE, UNCOMMITTED:** Removed duplicate gate call in `tools/test-delivery-phase0.js` and `tools/test-sales-order-phase0.js`; regression test added; gate tests 3/3 PASS. Scripts not run live. See Changes Log 13:39 IST.
+
 - **Dead/duplicate fixes — PASS for six prioritized findings:** Removed overwritten definitions and superseded list retry handlers/state; shared date/validation functions and six UI entity readers; retained compatibility exports and active detail retry. Full regression/coverage PASS 196 suites / 3,699 tests / 59 skipped, including 10 integration suites. Root/UI5 lint and UI5 build PASS with non-fatal warnings recorded below. No SAP call/deployment; additional unproven public-member candidates retained.
 
 - **Deep dead/duplicate implementation audit — PASS for scoped static audit:** 178 application JS files scanned; six prioritized findings documented in the latest Changes Log, including two proven overwritten implementations. Nine focused suites / 250 tests, root lint, offline assertions and diff check PASS. No application code changed or removed; external/dynamic reachability and browser/live SAP behavior NOT VERIFIED.
@@ -1643,6 +1645,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Live SAP tools next action (2026-10-26 13:39 IST):** Review/commit the double-gate fix. Decide what proves a non-production SAP target (e.g. `SAP_SYSTEM_TYPE` or an SAP client allowlist) before adding a target assertion to `tools/live-sap-gate.js`; until then, write scripts rely only on the shared opt-in.
+
 - **Dead/duplicate cleanup next action:** Review the validated six-finding cleanup diff. All six prioritized findings are addressed; retain compatibility exports and unproven public-member candidates. Browser/live SAP verification and external-consumer investigation are separate follow-up work; no commit/deployment performed.
 
 - **Repository cleanup next action:** Review .gitignore, generated screenshot deletions and this log. Preserve `/private/tmp/saps4-cleanup-xu1n33vs` until review; files can be restored by their relative paths. A separate source reachability review is needed before removing suspected services/helpers or historical SAP evidence. No further generated-artifact cleanup is required for this scope.
@@ -1683,6 +1687,14 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 13:39 IST — Live SAP tools: remove duplicate gate call that made two phase0 scripts unrunnable
+
+- **Change:** `tools/test-delivery-phase0.js` and `tools/test-sales-order-phase0.js` each called `require('./live-sap-gate')()` twice (lines 2–3, introduced in `ead7348`). The first call removes `--allow-live-sap` from `process.argv`, so the second always threw `Blocked: ...`; neither script could run even with the correct opt-in (fail-closed, but broken). Removed the duplicate line in both. `tools/live-sap-gate.js` unchanged. Added a regression test in `test/unit/liveSapToolGate.test.js` asserting no `tools/*.js` calls the gate more than once. Reason: finding from the read-only SAP write-surface audit (same session).
+- **TEST DECISION:** TEST ADDED — `live SAP tool opt-in gate › no tool calls the gate twice`.
+- **Validation:** `npx jest test/unit/liveSapToolGate.test.js` — PASS 3/3. Red check: temporarily re-inserted the duplicate → new test FAILED naming `test-delivery-phase0.js`; file restored. `node --check` on both scripts — PASS. Running `tools/test-sales-order-phase0.js` without the opt-in still prints `Blocked: ...` (no SAP call). `git diff --check` — PASS.
+- **Not verified:** the scripts were NOT run with the opt-in (would perform live SAP calls; no go given). Full regression suite not rerun (change limited to two tool scripts and one unit test). No commit.
+- **Open from the same audit (report only, not changed):** no write script asserts a non-production SAP target; 17 of 21 write-capable scripts have no per-run execute/go flag beyond the shared opt-in; five write scripts show no read-back (keyword scan, INFERRED). **Assumptions:** none.
 
 ### 2026-10-26 13:15 IST — AGENTS.md: mechanical enforcement rules (pre-flight gate, test decision, dependency cleanup, scope protection, universal root cause)
 

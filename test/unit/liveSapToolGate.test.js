@@ -24,4 +24,14 @@ describe('live SAP tool opt-in gate', () => {
     requireLiveSapTool();
     expect(process.argv).toEqual(['node', 'tool.js', '--read-only']);
   });
+
+  test('no tool calls the gate twice (the first call consumes the flag, so a second always blocks)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const toolsDir = path.join(__dirname, '../../tools');
+    const repeated = fs.readdirSync(toolsDir)
+      .filter((f) => f.endsWith('.js'))
+      .filter((f) => (fs.readFileSync(path.join(toolsDir, f), 'utf8').match(/require\(['"]\.\/live-sap-gate['"]\)\(\)/g) || []).length > 1);
+    expect(repeated).toEqual([]);
+  });
 });
