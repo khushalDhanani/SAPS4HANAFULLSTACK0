@@ -7,15 +7,16 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
-- **P1 · Movement-Type Fidelity / SAP 261 Readiness — FULL CODE & REGRESSION SUITES VERIFIED GREEN (175/175 unit, 10/10 integration); zero live SAP writes performed (2026-10-24 17:55 IST) — CODE VERIFIED:**
+- **P1 · Movement-Type Fidelity / SAP 261 Readiness — CODE & READ-ONLY ENVIRONMENT VERIFIED; LIVE WRITE PROOF NOT PERFORMED (2026-10-26 09:35 IST) — IN PROGRESS:**
   - Enforced required, exact movement type at the 261 Fiori, CAP, adapter, posting-client, mapper, outgoing payload, and read-back boundaries. 261 requests require numeric Order ID matching verified reservation order and reject incompatible fields before any SAP write.
   - Fail-closed 261 preflight chain strictly enforced and proven: `requested=261 → validated=261 → dispatched=261 → GoodsMovementType=261`. Pre-post integrity check `_assertPrePostMovementIntegrity` aborts before SAP write if any movement type mismatch or missing validation marker is detected. Post-MIGO verification checks `MATDOC` (and `MSEG` fallback) and fails closed if rows are missing or if `BWART !== '261'`.
-  - Production regression resolved: In `srv/wm/reservation-entry/service.js` line 2014, `retryStep` for MIGO now supplies `MovementType: data.MovementType || data.movementType || track.MovementType` to `postMigoForTrack`, preserving exact movement type across retry/recovery cycles.
+  - MIGO retry now requires an explicit request MovementType and rejects missing or reservation-mismatched values with HTTP 400. The Fiori list/detail retry callers send the selected reservation MovementType through the CAP action; no track-based fallback remains.
   - Complete repository unit and integration regression suites are 100% green:
-    - Unit regression (`npx jest test/unit --runInBand`): **175 passed, 1 skipped, 0 failed (3,487 tests passed)**.
-    - Integration regression (`npx jest test/integration --runInBand`): **10 passed, 0 failed (50 tests passed)**.
+    - Unit regression (`npm run test:unit -- --runInBand`): **175 passed, 1 skipped, 0 failed (3,488 tests passed)**.
+    - Integration regression (`npm run test:integration`): **10 passed, 0 failed (50 tests passed)**.
     - Authorization tests (`test/unit/wm/mvt261Auth.test.js`, `test/unit/wm/criticalTransactionAuth.test.js`, `test/unit/wm/reservationEntryReadScope.test.js`): 70/70 passed, plant/order/role scopes remain strictly enforced.
-    - Quality gates: `npm run lint` (0 errors, 0 warnings), `npx cds compile srv --to json > /dev/null` (exit 0), `git diff --check` (exit 0).
+    - Quality gates: `npm run lint` passed; `npm --prefix app/fiori-app run lint` passed with no findings (the tool's optional update-check emitted a local config-store permissions warning); UI5 MCP linter returned no findings; `npx cds compile srv --to json > /dev/null` passed; `git diff --check` passed.
+  - Live READ-ONLY capability preflight on 2026-10-26 passed against `API_MATERIAL_DOCUMENT_SRV` Client 220 and the RFC MATDOC verification path. Repo connectivity/guardrail check also passed. These checks do not establish SAP create authorization or persisted-document BWART.
   - Environment / Catalog blocker: `catalog-audit.csv` is an uncommitted generated artifact required by `tools/find-creatable.py`. Per `AGENTS.md`, no catalog evidence is invented. It is explicitly classified as an environment prerequisite blocker for rebuilding `creatable-services.xlsx`.
   - Strict write-gate enforced: Zero live SAP writes performed during code validation. Live non-production 261 POST and read-back proof await explicit written authorization with verified non-production test data.
 
@@ -3541,6 +3542,18 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Validation:** `npx jest --runInBand test/unit/wm/goodsIssue261CapabilityPreflight.test.js test/unit/wm/goodsIssuePerTypePostingClient.test.js test/unit/wm/mvt261Adapter.test.js test/unit/wm/mvt261ScanController.test.js test/integration/wm/mvt261ExplicitMovementType.test.js` — PASS, 125/125. `npm run lint` — PASS. `npx cds compile srv --to json > /dev/null` — PASS. `git diff --check` — PASS. Full unit suite — FAIL, 20 suites failed / 155 passed / 1 skipped; 96 failed / 3,391 passed / 60 skipped. Full integration suite — FAIL, 1 suite failed / 9 passed; 3 failed / 47 passed. Failure output is in `/tmp/gi261-unit-escalated.log` and `/tmp/gi261-integration-escalated.log` for this session. `ALLOW_LIVE_SAP_TOOLS=1 python3 tools/find-creatable.py --allow-live-sap` — BLOCKED before SAP calls because `catalog-audit.csv` is absent.
 - **Warnings/blockers:** No live create authorization was tested; the user explicitly prohibited SAP writes. Therefore no SAP document number or `BWART=261` read-back is proven. Full-suite failures remain to triage. The 23 September creatable-services workbook/report could not be refreshed without its missing catalog input.
 - **Next recommended action:** Triage and resolve all full-suite unit/integration failures; restore the generated `catalog-audit.csv` input and rerun the approved GET-only catalog workflow. For actual 261 persistence verification, require explicit written authorization specifying non-production SAP target and test data scope, then POST only after that authorization and read the resulting SAP document back with exact `BWART=261`.
+- **Assumptions:** None.
+
+---
+
+## Change Entry — 2026-10-26 09:35 IST — Close Regression Failures and Pin MIGO Retry Type
+
+- **Request:** Resolve the reported 96 unit and 3 integration failures; ensure retry/replay does not infer or substitute a movement type when the request omits it.
+- **Change:** Corrected stale regression fixtures to send explicit movement types and valid plant/order scope. Removed MIGO retry's fallback to the stored reservation movement type: retry now requires the explicit request type and compares it to the reservation before calling the posting adapter. Added `MovementType` to the CAP `retryStep` action and passed the loaded reservation movement type from both Fiori retry controls. Added missing/mismatched MIGO retry regressions.
+- **Files changed:** `srv/wm/reservation-entry/service.cds`, `srv/wm/reservation-entry/service.js`, `app/fiori-app/webapp/modules/wm/reservation-entry/service/ReservationEntryService.js`, `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryList.controller.js`, `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`, and related reservation retry unit tests; read-only SAP evidence added to `docs/creatable_services_report.md`.
+- **Validation:** `npm run test:unit -- --runInBand` — PASS, 175 suites passed, 1 skipped, 3,488 tests passed, 60 skipped. `npm run test:integration` — PASS, 10 suites and 50 tests passed. Retry-targeted tests — PASS, 176/176. `npm run lint` — PASS. `npx cds compile srv --to json > /dev/null` — PASS. `npm --prefix app/fiori-app run lint` — PASS with no UI5 findings; optional update check warned that its local config store is not writable. UI5 MCP linter — no findings. `git diff --check` — PASS. `ALLOW_LIVE_SAP_TOOLS=1 npm run check:connectivity` — PASS (guardrails/configuration/read-only RFC). Direct 261 preflight — PASS (metadata GET and MATDOC RFC read). No SAP write was executed.
+- **Status:** The reported code regression failures are cleared. Code and read-only environment readiness are verified. SAP create authorization and persisted material-document `BWART=261` remain unverified because this task's active instruction prohibits POST/write.
+- **Next recommended action:** Obtain explicit written authorization naming the non-production target and test-data scope, and SAP authorization for material-document CREATE. Then perform one controlled 261 POST and verify the returned document directly from SAP with exact `BWART=261`; do not claim SAP verification before that succeeds. Rebuild the creatable-services catalog separately after restoring `catalog-audit.csv`.
 - **Assumptions:** None.
 
 ---

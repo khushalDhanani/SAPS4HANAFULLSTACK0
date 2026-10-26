@@ -315,6 +315,7 @@ service ReservationEntryService {
         ReservationNo   : String(10),
         ReservationItem : String(4),
         Step            : String(10),
+        MovementType    : String(3),
         Batch           : String(10),
         SerialNo        : String(18),
         Serials         : array of String(18),

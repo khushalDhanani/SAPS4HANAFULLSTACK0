@@ -218,7 +218,7 @@ sap.ui.define([
             }
 
             this._oViewModel.setProperty("/busy", true);
-            return this._oService.retryStep(oSelected.ReservationNo, oSelected.ReservationItem, "AUTO").then(function (oUpdated) {
+            return this._oService.retryStep(oSelected.ReservationNo, oSelected.ReservationItem, "AUTO", oSelected.MovementType).then(function (oUpdated) {
                 that._oViewModel.setProperty("/busy", false);
                 const sStatus = oUpdated.Status_code;
                 if (["11", "12", "13", "90", "99"].indexOf(sStatus) >= 0) {

@@ -215,7 +215,8 @@ describe('Chunk 6: Monitor App, Retry Handling & SLG1 Integration', () => {
         {
           ReservationNo: testResNo,
           ReservationItem: testResItem,
-          Step: 'MIGO'
+          Step: 'MIGO',
+          MovementType: '311'
         },
         authClerk
       );

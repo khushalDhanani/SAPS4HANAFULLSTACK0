@@ -210,3 +210,9 @@ This is a later, focused probe; it does not rewrite the dated 23 September catal
 - **Alternate service:** a READ-ONLY GET of `/sap/opu/odata/sap/ZMMIM_MATDOC_SRV/$metadata` now returns HTTP 403 with Gateway message `/IWFND/MED/170` (service not registered). The historical report row describing HTTP 501 `CREATE_ENTITY not implemented` records an earlier observation; this probe did not issue CREATE and does not establish its current POST behavior.
 - **Write authorization and persistence:** Not verified. No POST/BAPI/write was sent. OData metadata and successful RFC reads establish readiness only; they do not prove create authorization, a generated material document, or SAP `BWART=261` read-back.
 - **Full workbook refresh:** Not run. `tools/find-creatable.py` could not start its catalog scan because the required `catalog-audit.csv` is absent in this checkout; the committed workbook remains the 23 September snapshot. Re-run the mandated catalog scan and workbook build after restoring that input file.
+
+## READ-ONLY Readiness Recheck — 2026-10-26 09:35 IST
+
+- The automated 261 capability preflight passed again against the current local non-production configuration: exact `API_MATERIAL_DOCUMENT_SRV` metadata GET and read-only RFC access to `MATDOC` fields `MBLNR`, `MJAHR`, and `BWART`; SAP client 220 resolved.
+- `ALLOW_LIVE_SAP_TOOLS=1 npm run check:connectivity` passed the production guardrails, S/4 configuration, and live RFC client check for Client 220.
+- No SAP POST or other write was performed. Create authorization, generated document persistence, and exact post-write `BWART=261` remain unverified.

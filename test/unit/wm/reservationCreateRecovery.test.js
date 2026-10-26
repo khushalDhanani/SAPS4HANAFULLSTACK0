@@ -281,7 +281,7 @@ describe('Step 7.7: reservation-create partial failure and recovery', () => {
       const trSpy = spy('createTransferRequirement');
       const { data } = await POST(`${URL}/postMigoGoodsMovement`, { ReservationNo: RES, ReservationItem: '0001', MovementType: '311' }, auth);
       expect(data).toMatchObject({ Status_code: '90', ErrorMessage: expect.stringMatching(/Posting period closed/), TransferOrder: '0001012977' });
-      const { data: retried } = await POST(`${URL}/retryStep`, { ReservationNo: RES, ReservationItem: '0001', Step: 'AUTO' }, auth);
+      const { data: retried } = await POST(`${URL}/retryStep`, { ReservationNo: RES, ReservationItem: '0001', Step: 'AUTO', MovementType: '311' }, auth);
       expect(retried).toMatchObject({ Status_code: '05', MaterialDocument: '4900059977' });
       expect(migoSpy).toHaveBeenCalledTimes(2);
       expect(toSpy).not.toHaveBeenCalled();

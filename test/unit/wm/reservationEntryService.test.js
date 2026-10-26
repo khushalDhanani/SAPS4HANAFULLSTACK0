@@ -1548,6 +1548,25 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       postGoodsMvtSpy?.mockRestore();
     });
 
+    test('MIGO retry requires an explicit movement type and rejects a type differing from the reservation', async () => {
+      postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement');
+
+      await expect(POST('/odata/v4/reservation-entry/retryStep', {
+        ReservationNo: testMigoResNo,
+        ReservationItem: '0001',
+        Step: 'MIGO'
+      }, authClerk)).rejects.toMatchObject({ response: { status: 400 } });
+
+      await expect(POST('/odata/v4/reservation-entry/retryStep', {
+        ReservationNo: testMigoResNo,
+        ReservationItem: '0001',
+        Step: 'MIGO',
+        MovementType: '201'
+      }, authClerk)).rejects.toMatchObject({ response: { status: 400 } });
+
+      expect(postGoodsMvtSpy).not.toHaveBeenCalled();
+    });
+
     test('POST /odata/v4/reservation-entry/postMigoGoodsMovement updates status to 05 and logs MIGO step', async () => {
       postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement').mockResolvedValueOnce({
         success: true,

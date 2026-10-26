@@ -1837,6 +1837,17 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       if (!STEP_ERROR[requestedStep]) {
         return req.error(400, `Unsupported retry step: '${requestedStep}'. Supported: LB01, LT04, LT12, MIGO`);
       }
+      let requestedMovementType = '';
+      if (requestedStep === 'MIGO') {
+        requestedMovementType = String(data.MovementType ?? data.movementType ?? '').trim();
+        if (!SUPPORTED_MOVEMENT_TYPES.includes(requestedMovementType)) {
+          return req.error(400, 'MovementType is required and must be one of 201, 241, 261, 301, or 311 for MIGO retry');
+        }
+        const reservationMovementType = String(track.MovementType || '').trim();
+        if (requestedMovementType !== reservationMovementType) {
+          return req.error(400, `Requested MovementType ${requestedMovementType} does not match reservation MovementType ${reservationMovementType || '(missing)'}. Goods Issue was not posted.`);
+        }
+      }
       if (requestedStep === 'LB01' && track.TransferRequirement && !trClosedWithoutTo) {
         return req.error(400, `Transfer Requirement ${alphaOut(track.TransferRequirement)} already exists for reservation ${sResNo}/${sResItem}; retry LT04 (TO creation) instead`);
       }
@@ -2011,7 +2022,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         if (requestedStep === 'MIGO') {
           // postMigoForTrack takes its own lock (same flag); it must not run inside the step lock above.
           try {
-            await postMigoForTrack(track, { ...data, MovementType: data.MovementType || data.movementType || track.MovementType }, req, { sLogHandle, extId, subObject: 'PROCESS' });
+            await postMigoForTrack(track, { ...data, MovementType: requestedMovementType }, req, { sLogHandle, extId, subObject: 'PROCESS' });
           } catch (migoErr) {
             if (isLockConflict(migoErr)) throw migoErr;
             await fail(STATUS.GI_ERROR, 'MIGO', `Goods movement failed: ${migoErr.message}`);

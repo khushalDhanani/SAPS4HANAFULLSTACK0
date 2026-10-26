@@ -116,12 +116,13 @@ sap.ui.define([
             return ODataClient.post(sUrl, oPayload);
         },
 
-        retryStep: function (sResNo, sItem, sStep) {
+        retryStep: function (sResNo, sItem, sStep, sMovementType) {
             const sUrl = SERVICE_URL + "/retryStep";
             return ODataClient.post(sUrl, {
                 ReservationNo: sResNo,
                 ReservationItem: sItem || "0001",
-                Step: sStep || "AUTO"
+                Step: sStep || "AUTO",
+                MovementType: sMovementType || ""
             });
         },
 

@@ -731,7 +731,7 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
                 getEntries: jest.fn().mockResolvedValue([])
             };
             const viewModel = new FakeJSONModel({
-                selectedEntry: { ReservationNo: '0000001001', ReservationItem: '0001', Status_code: '01' },
+                selectedEntry: { ReservationNo: '0000001001', ReservationItem: '0001', MovementType: '311', Status_code: '01' },
                 hasRetryableSelection: true,
                 busy: false
             });
@@ -742,7 +742,7 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             });
 
             listSubject.onRetryPress();
-            expect(serviceMock.retryStep).toHaveBeenCalledWith('0000001001', '0001', 'AUTO');
+            expect(serviceMock.retryStep).toHaveBeenCalledWith('0000001001', '0001', 'AUTO', '311');
             await Promise.resolve();
             expect(listSubject.loadData).toHaveBeenCalled();
         });
@@ -757,10 +757,11 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             const detailSubject = createDetailSubject(serviceMock);
             detailSubject._sCurrentResNo = '0000001001';
             detailSubject._sCurrentResItem = '0001';
+            detailSubject._oDetailModel.setData({ MovementType: '261' });
             detailSubject._loadDetail = jest.fn();
 
             detailSubject.onRetryStepPress();
-            expect(serviceMock.retryStep).toHaveBeenCalledWith('0000001001', '0001', 'AUTO');
+            expect(serviceMock.retryStep).toHaveBeenCalledWith('0000001001', '0001', 'AUTO', '261');
             await Promise.resolve();
             expect(detailSubject._loadDetail).toHaveBeenCalledWith('0000001001', '0001');
         });
@@ -1235,7 +1236,7 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             // Select the item and trigger retry
             listSubject._oViewModel.setProperty('/selectedEntry', viewModel.getProperty('/entries')[0]);
             await listSubject.onRetryPress();
-            expect(serviceMock.retryStep).toHaveBeenCalledWith('0000525870', '0001', 'AUTO');
+            expect(serviceMock.retryStep).toHaveBeenCalledWith('0000525870', '0001', 'AUTO', '311');
 
             // List is refreshed with updated TR
             expect(viewModel.getProperty('/entries')[0].ReservationNo).toBe('0000525870');

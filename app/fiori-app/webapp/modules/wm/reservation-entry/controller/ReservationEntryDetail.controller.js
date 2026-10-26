@@ -170,7 +170,8 @@ sap.ui.define([
             this._oViewModel.setProperty("/busy", true);
             this._oViewModel.setProperty("/errorMessage", "");
 
-            this._oService.retryStep(this._sCurrentResNo, this._sCurrentResItem || "0001", "AUTO").then(function (oUpdated) {
+            const oEntry = this._oDetailModel.getData() || {};
+            this._oService.retryStep(this._sCurrentResNo, this._sCurrentResItem || "0001", "AUTO", oEntry.MovementType).then(function (oUpdated) {
                 that._oViewModel.setProperty("/busy", false);
                 const sStatus = oUpdated.Status_code;
                 if (["11", "12", "13", "90", "99"].indexOf(sStatus) >= 0) {
