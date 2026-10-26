@@ -1,0 +1,128 @@
+{
+  "capturedAt": "2026-10-26T04:13:33.234Z",
+  "mode": "READ-ONLY",
+  "selectedByAgent": false,
+  "candidates": [
+    {
+      "order": "000001002318",
+      "material": "000000001000000716",
+      "plant": "1120",
+      "storageLocation": "CS01",
+      "openComponentQuantity": 1000,
+      "unit": "KG",
+      "orderType": "ZP01",
+      "orderStatusCodes": [
+        "I0002",
+        "I0016",
+        "I0028",
+        "I0215",
+        "I0278",
+        "I0361",
+        "I0369",
+        "I0370",
+        "I0420"
+      ],
+      "statusSummary": "REL; no LKD/TECO/CLSD/DLFL status in current active status read",
+      "unrestrictedStockAtIssueSLoc": 2301,
+      "stockType": "MARD-LABST unrestricted-use stock",
+      "otherOpenDemand": {
+        "componentRows": 2,
+        "quantity": 500,
+        "unit": "KG",
+        "orders": [
+          "000001002704",
+          "000001002702"
+        ]
+      },
+      "createdBy": "ADAPHALE",
+      "createdDate": "20260812",
+      "existingMatdocRowsByOrder": 0,
+      "reversal": {
+        "possibleNow": false,
+        "reason": "No existing MATDOC row for this order was returned; there is no 261 material document to reverse today.",
+        "afterFuturePost": "Not verified; depends on SAP posting-period status, current document state, and effective cancellation authorization."
+      }
+    },
+    {
+      "order": "000002000585",
+      "material": "000000008400000034",
+      "plant": "1600",
+      "storageLocation": "CS01",
+      "openComponentQuantity": 500,
+      "unit": "KG",
+      "orderType": "ZP02",
+      "orderStatusCodes": [
+        "I0016",
+        "I0028",
+        "I0215",
+        "I0278",
+        "I0291",
+        "I0361",
+        "I0369",
+        "I0370",
+        "I0420",
+        "I0115",
+        "I0002"
+      ],
+      "statusSummary": "REL; no LKD/TECO/CLSD/DLFL status in current active status read",
+      "unrestrictedStockAtIssueSLoc": 1720,
+      "stockType": "MARD-LABST unrestricted-use stock",
+      "otherOpenDemand": {
+        "componentRows": 2,
+        "quantity": 820,
+        "unit": "KG",
+        "orders": [
+          "000002000589",
+          "000002000588"
+        ]
+      },
+      "createdBy": "NAGRAJ",
+      "createdDate": "20260820",
+      "existingMatdocRowsByOrder": 0,
+      "reversal": {
+        "possibleNow": false,
+        "reason": "No existing MATDOC row for this order was returned; there is no 261 material document to reverse today.",
+        "afterFuturePost": "Not verified; depends on SAP posting-period status, current document state, and effective cancellation authorization."
+      }
+    },
+    {
+      "order": "000002000540",
+      "material": "000000004000000002",
+      "plant": "1120",
+      "storageLocation": "CS01",
+      "openComponentQuantity": 15000,
+      "unit": "KG",
+      "orderType": "ZP02",
+      "orderStatusCodes": [
+        "I0002",
+        "I0016",
+        "I0028",
+        "I0215",
+        "I0249",
+        "I0278",
+        "I0291",
+        "I0361",
+        "I0369",
+        "I0370",
+        "I0420"
+      ],
+      "statusSummary": "REL; no LKD/TECO/CLSD/DLFL status in current active status read",
+      "unrestrictedStockAtIssueSLoc": 99950,
+      "stockType": "MARD-LABST unrestricted-use stock",
+      "otherOpenDemand": {
+        "componentRows": 0,
+        "quantity": 0,
+        "unit": "KG",
+        "orders": []
+      },
+      "createdBy": "NAGRAJ",
+      "createdDate": "20260808",
+      "existingMatdocRowsByOrder": 0,
+      "reversal": {
+        "possibleNow": false,
+        "reason": "No existing MATDOC row for this order was returned; there is no 261 material document to reverse today.",
+        "afterFuturePost": "Not verified; depends on SAP posting-period status, current document state, and effective cancellation authorization."
+      }
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "capturedAt": "2026-10-26T04:29:22.053Z",
+  "mode": "READ-ONLY",
+  "purpose": "English status descriptions for active candidate-order JEST codes",
+  "rows": [
+    {
+      "ISTAT": "I0002",
+      "SPRAS": "E",
+      "TXT04": "REL",
+      "TXT30": "Released"
+    },
+    {
+      "ISTAT": "I0016",
+      "SPRAS": "E",
+      "TXT04": "PRC",
+      "TXT30": "Pre-costed"
+    },
+    {
+      "ISTAT": "I0028",
+      "SPRAS": "E",
+      "TXT04": "SETC",
+      "TXT30": "Settlement rule created"
+    },
+    {
+      "ISTAT": "I0215",
+      "SPRAS": "E",
+      "TXT04": "SSAP",
+      "TXT30": "Object created"
+    },
+    {
+      "ISTAT": "I0278",
+      "SPRAS": "E",
+      "TXT04": "ORRQ",
+      "TXT30": "Order record required"
+    },
+    {
+      "ISTAT": "I0361",
+      "SPRAS": "E",
+      "TXT04": "NEWQ",
+      "TXT30": "New quantity calculation"
+    },
+    {
+      "ISTAT": "I0369",
+      "SPRAS": "E",
+      "TXT04": "BCRQ",
+      "TXT30": "Order to be handled in batches"
+    },
+    {
+      "ISTAT": "I0370",
+      "SPRAS": "E",
+      "TXT04": "BASC",
+      "TXT30": "Batch assignment complete"
+    },
+    {
+      "ISTAT": "I0420",
+      "SPRAS": "E",
+      "TXT04": "MANC",
+      "TXT30": "Mat.availability not checked"
+    },
+    {
+      "ISTAT": "I0291",
+      "SPRAS": "E",
+      "TXT04": "CUGT",
+      "TXT30": "Copy attribute analysis"
+    },
+    {
+      "ISTAT": "I0115",
+      "SPRAS": "E",
+      "TXT04": "CSER",
+      "TXT30": "Error in cost calculation"
+    },
+    {
+      "ISTAT": "I0249",
+      "SPRAS": "E",
+      "TXT04": "ERTR",
+      "TXT30": "Error creating transfer reqmnt"
+    },
+    {
+      "ISTAT": "I0340",
+      "SPRAS": "E",
+      "TXT04": "MACM",
+      "TXT30": "Material committed"
+    },
+    {
+      "ISTAT": "I0046",
+      "SPRAS": "E",
+      "TXT04": "CLSD",
+      "TXT30": "Closed"
+    }
+  ]
+}

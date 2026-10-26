@@ -1,0 +1,421 @@
+{
+  "capturedAt": "2026-10-26T04:28:51.731Z",
+  "mode": "READ-ONLY",
+  "scope": {
+    "orders": [
+      "000001002318",
+      "000002000585",
+      "000002000540"
+    ],
+    "plants": [
+      "1120",
+      "1600"
+    ]
+  },
+  "tables": {
+    "T001W": [
+      {
+        "WERKS": "1120",
+        "BWKEY": "1120"
+      },
+      {
+        "WERKS": "1600",
+        "BWKEY": "1600"
+      }
+    ],
+    "T001K": [
+      {
+        "BWKEY": "1120",
+        "BUKRS": "1000"
+      },
+      {
+        "BWKEY": "1600",
+        "BUKRS": "1000"
+      }
+    ],
+    "MARV": [
+      {
+        "BUKRS": "1000",
+        "LFGJA": "2026",
+        "LFMON": "07",
+        "VMMON": "06",
+        "VJMON": "12",
+        "VVMMO": "05",
+        "VVJMO": "12",
+        "VMGJA": "2026",
+        "VJGJA": "2025",
+        "VVMGJ": "2026",
+        "VVJGJ": "2024",
+        "XRUEM": "X",
+        "XRUEV": "",
+        "KZINV": ""
+      }
+    ],
+    "T001B": [
+      {
+        "BUKRS": "1000",
+        "VKONT": "",
+        "RRCTY": "0",
+        "BKONT": "",
+        "MKOAR": "+",
+        "FRYE1": "2025",
+        "TOYE1": "2026",
+        "FRYE2": "0000",
+        "TOYE2": "0000",
+        "FRYE3": "0000",
+        "TOYE3": "0000",
+        "FRPE1": "002",
+        "TOPE1": "012",
+        "FRPE2": "000",
+        "TOPE2": "000",
+        "FRPE3": "000",
+        "TOPE3": "000",
+        "BRGRU": ""
+      },
+      {
+        "BUKRS": "1000",
+        "VKONT": "",
+        "RRCTY": "0",
+        "BKONT": "ZZZZZZZZZZ",
+        "MKOAR": "A",
+        "FRYE1": "2025",
+        "TOYE1": "2026",
+        "FRYE2": "0000",
+        "TOYE2": "0000",
+        "FRYE3": "0000",
+        "TOYE3": "0000",
+        "FRPE1": "002",
+        "TOPE1": "012",
+        "FRPE2": "000",
+        "TOPE2": "000",
+        "FRPE3": "000",
+        "TOPE3": "000",
+        "BRGRU": ""
+      },
+      {
+        "BUKRS": "1000",
+        "VKONT": "",
+        "RRCTY": "0",
+        "BKONT": "ZZZZZZZZZZ",
+        "MKOAR": "D",
+        "FRYE1": "2025",
+        "TOYE1": "2026",
+        "FRYE2": "0000",
+        "TOYE2": "0000",
+        "FRYE3": "0000",
+        "TOYE3": "0000",
+        "FRPE1": "002",
+        "TOPE1": "012",
+        "FRPE2": "000",
+        "TOPE2": "000",
+        "FRPE3": "000",
+        "TOPE3": "000",
+        "BRGRU": ""
+      },
+      {
+        "BUKRS": "1000",
+        "VKONT": "",
+        "RRCTY": "0",
+        "BKONT": "ZZZZZZZZZZ",
+        "MKOAR": "K",
+        "FRYE1": "2025",
+        "TOYE1": "2026",
+        "FRYE2": "0000",
+        "TOYE2": "0000",
+        "FRYE3": "0000",
+        "TOYE3": "0000",
+        "FRPE1": "002",
+        "TOPE1": "012",
+        "FRPE2": "000",
+        "TOPE2": "000",
+        "FRPE3": "000",
+        "TOPE3": "000",
+        "BRGRU": ""
+      },
+      {
+        "BUKRS": "1000",
+        "VKONT": "",
+        "RRCTY": "0",
+        "BKONT": "ZZZZZZZZZZ",
+        "MKOAR": "M",
+        "FRYE1": "2025",
+        "TOYE1": "2026",
+        "FRYE2": "0000",
+        "TOYE2": "0000",
+        "FRYE3": "0000",
+        "TOYE3": "0000",
+        "FRPE1": "002",
+        "TOPE1": "012",
+        "FRPE2": "000",
+        "TOPE2": "000",
+        "FRPE3": "000",
+        "TOPE3": "000",
+        "BRGRU": ""
+      },
+      {
+        "BUKRS": "1000",
+        "VKONT": "",
+        "RRCTY": "0",
+        "BKONT": "ZZZZZZZZZZ",
+        "MKOAR": "S",
+        "FRYE1": "2025",
+        "TOYE1": "2026",
+        "FRYE2": "0000",
+        "TOYE2": "0000",
+        "FRYE3": "0000",
+        "TOYE3": "0000",
+        "FRPE1": "002",
+        "TOPE1": "012",
+        "FRPE2": "000",
+        "TOPE2": "000",
+        "FRPE3": "000",
+        "TOPE3": "000",
+        "BRGRU": ""
+      }
+    ],
+    "AUFK": [
+      {
+        "AUFNR": "000001002318",
+        "OBJNR": "OR000001002318",
+        "WERKS": "1120",
+        "BUKRS": "1000",
+        "AUART": "ZP01",
+        "LOEKZ": "",
+        "ERNAM": "ADAPHALE",
+        "ERDAT": "20260812"
+      },
+      {
+        "AUFNR": "000002000585",
+        "OBJNR": "OR000002000585",
+        "WERKS": "1600",
+        "BUKRS": "1000",
+        "AUART": "ZP02",
+        "LOEKZ": "",
+        "ERNAM": "NAGRAJ",
+        "ERDAT": "20260820"
+      },
+      {
+        "AUFNR": "000002000540",
+        "OBJNR": "OR000002000540",
+        "WERKS": "1120",
+        "BUKRS": "1000",
+        "AUART": "ZP02",
+        "LOEKZ": "",
+        "ERNAM": "NAGRAJ",
+        "ERDAT": "20260808"
+      }
+    ],
+    "JEST": [
+      {
+        "OBJNR": "OR000001002318",
+        "STAT": "I0001",
+        "INACT": "X"
+      },
+      {
+        "OBJNR": "OR000001002318",
+        "STAT": "I0002",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000001002318",
+        "STAT": "I0016",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000001002318",
+        "STAT": "I0028",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000001002318",
+        "STAT": "I0118",
+        "INACT": "X"
+      },
+      {
+        "OBJNR": "OR000001002318",
+        "STAT": "I0215",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000001002318",
+        "STAT": "I0278",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000001002318",
+        "STAT": "I0361",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000001002318",
+        "STAT": "I0369",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000001002318",
+        "STAT": "I0370",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000001002318",
+        "STAT": "I0340",
+        "INACT": "X"
+      },
+      {
+        "OBJNR": "OR000001002318",
+        "STAT": "I0420",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0001",
+        "INACT": "X"
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0016",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0028",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0118",
+        "INACT": "X"
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0215",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0278",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0291",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0340",
+        "INACT": "X"
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0361",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0369",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0370",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0420",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0115",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0249",
+        "INACT": "X"
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0002",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000585",
+        "STAT": "I0046",
+        "INACT": "X"
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0001",
+        "INACT": "X"
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0002",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0016",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0028",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0118",
+        "INACT": "X"
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0215",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0249",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0278",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0291",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0361",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0369",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0370",
+        "INACT": ""
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0340",
+        "INACT": "X"
+      },
+      {
+        "OBJNR": "OR000002000540",
+        "STAT": "I0420",
+        "INACT": ""
+      }
+    ]
+  }
+}

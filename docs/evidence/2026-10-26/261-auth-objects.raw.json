@@ -1,0 +1,62 @@
+{
+  "capturedAt": "2026-10-26T04:20:43.119Z",
+  "mode": "READ-ONLY",
+  "TOBJ": [
+    {
+      "OBJCT": "M_MSEG_BWA",
+      "FIEL1": "ACTVT",
+      "FIEL2": "BWART",
+      "FIEL3": "",
+      "FIEL4": "",
+      "FIEL5": "",
+      "FIEL6": "",
+      "FIEL7": "",
+      "FIEL8": "",
+      "FIEL9": "",
+      "FIEL0": ""
+    },
+    {
+      "OBJCT": "M_MSEG_WMB",
+      "FIEL1": "ACTVT",
+      "FIEL2": "WERKS",
+      "FIEL3": "",
+      "FIEL4": "",
+      "FIEL5": "",
+      "FIEL6": "",
+      "FIEL7": "",
+      "FIEL8": "",
+      "FIEL9": "",
+      "FIEL0": ""
+    },
+    {
+      "OBJCT": "M_MSEG_WWA",
+      "FIEL1": "ACTVT",
+      "FIEL2": "WERKS",
+      "FIEL3": "",
+      "FIEL4": "",
+      "FIEL5": "",
+      "FIEL6": "",
+      "FIEL7": "",
+      "FIEL8": "",
+      "FIEL9": "",
+      "FIEL0": ""
+    }
+  ],
+  "TOBJT": [
+    {
+      "OBJECT": "M_MSEG_BWA",
+      "LANGU": "E",
+      "TTEXT": "Goods Movements: Movement Type"
+    },
+    {
+      "OBJECT": "M_MSEG_WMB",
+      "LANGU": "E",
+      "TTEXT": "Material Documents: Plant"
+    },
+    {
+      "OBJECT": "M_MSEG_WWA",
+      "LANGU": "E",
+      "TTEXT": "Goods Movements: Plant"
+    }
+  ]
+}

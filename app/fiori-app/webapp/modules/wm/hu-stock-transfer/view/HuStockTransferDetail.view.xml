@@ -115,6 +115,12 @@
                                     <Text text="SN: {cockpitView>/validatedUnit/SerialNumber}" visible="{= !!${cockpitView>/validatedUnit/SerialNumber} }" />
                                 </VBox>
                             </HBox>
+                            <Button
+                                id="btnAddHuToSelection"
+                                text="{i18n>huSelectionAddButton}"
+                                icon="sap-icon://add"
+                                press=".onAddUnitToSelection"
+                                class="sapUiSmallMarginTop" />
                         </VBox>
                     </VBox>
                 </Panel>
@@ -139,6 +145,57 @@
                             <Text text="{cockpitView>/cockpit/BaseUnit}" class="sapUiTinyMarginBegin" />
                         </f:content>
                     </f:SimpleForm>
+                </Panel>
+
+                <!-- Read-only multi-HU quantity validation; this panel never posts a goods movement. -->
+                <Panel id="panelMultiHuSelection" headerText="{i18n>huSelectionPanelTitle}" expandable="false">
+                    <VBox class="sapUiSmallMargin">
+                        <Text text="{i18n>huSelectionReadOnlyNote}" class="sapUiTinyMarginBottom" />
+                        <Table
+                            id="selectedHuTable"
+                            items="{path: 'cockpitView>/selectedHus'}"
+                            mode="Delete"
+                            delete=".onRemoveSelectedHu"
+                            noDataText="{i18n>huSelectionNoData}">
+                            <columns>
+                                <Column><Text text="{i18n>huSelectionUnitColumn}" /></Column>
+                                <Column hAlign="End"><Text text="{i18n>huSelectionQtyColumn}" /></Column>
+                                <Column hAlign="End"><Text text="{i18n>huSelectionStockColumn}" /></Column>
+                                <Column><Text text="{i18n>huSelectionBinColumn}" /></Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <ObjectIdentifier title="{cockpitView>UnitNumber}" text="{cockpitView>StorageType}" />
+                                        <Input value="{cockpitView>TransferQty}" type="Number" change=".onHuSelectionQuantityChange" />
+                                        <ObjectNumber number="{cockpitView>AvailableQuantity}" unit="{cockpitView>BaseUnit}" />
+                                        <Text text="{cockpitView>StorageBin}" />
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                        <ObjectStatus
+                            text="{cockpitView>/selectionSummary}"
+                            state="Information"
+                            class="sapUiTinyMarginTop" />
+                        <HBox alignItems="Center" class="sapUiTinyMarginTop">
+                            <Label text="{i18n>huSelectionPolicy}" class="sapUiTinyMarginEnd" />
+                            <ObjectStatus text="{cockpitView>/cockpit/OversizeHuSelectionBehavior}" state="Information" />
+                        </HBox>
+                        <MessageStrip
+                            text="{cockpitView>/statusMessage}"
+                            type="{cockpitView>/statusStateType}"
+                            visible="{= !!${cockpitView>/selectionValidation} }"
+                            showIcon="true"
+                            class="sapUiTinyMarginTop" />
+                        <Button
+                            id="btnValidateHuSelection"
+                            text="{i18n>huSelectionValidateButton}"
+                            icon="sap-icon://validate"
+                            press=".onValidateSelectedHus"
+                            enabled="{= ${cockpitView>/selectedHus}.length > 0 }"
+                            class="sapUiSmallMarginTop" />
+                    </VBox>
                 </Panel>
 
             </VBox>

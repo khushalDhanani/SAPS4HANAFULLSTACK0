@@ -447,6 +447,11 @@ class HuStockTransferAdapter {
       }
     }
 
+    const oversizeHuSelectionBehavior = await this.businessConfigResolver.resolveOversizeHuSelectionBehavior({
+      plant: row.WERKS,
+      warehouse
+    });
+
     return {
       ReservationNo: this._unpad(row.RSNUM),
       ReservationItem: this._unpad(row.RSPOS),
@@ -470,7 +475,8 @@ class HuStockTransferAdapter {
       SutMode: 'Standard Item',
       IsHuManaged: isHuManaged,
       Xhupf: xhupf,
-      TransferPath: transferPath
+      TransferPath: transferPath,
+      OversizeHuSelectionBehavior: oversizeHuSelectionBehavior
     };
   }
 
@@ -802,6 +808,76 @@ class HuStockTransferAdapter {
       DefaultTransferQty: defaultTransferQty,
       Warnings: (precheckResult && precheckResult.warnings) ? precheckResult.warnings : [],
       WarningDetails: (precheckResult && precheckResult.warningDetails) ? precheckResult.warningDetails : []
+    };
+  }
+
+  /** Read-only validation for a multi-HU reservation selection. No posting method is called. */
+  async validateHuStockTransferSelection(payload = {}) {
+    const reservationNo = String(payload.ReservationNo || '').trim();
+    const reservationItem = String(payload.ReservationItem || '0001').trim();
+    const selections = payload.Selections;
+    if (!reservationNo || !reservationItem) throw httpError(400, 'Reservation number and item are required');
+    if (!Array.isArray(selections) || selections.length === 0 || selections.length > 50) {
+      throw httpError(400, 'Select between 1 and 50 handling units.');
+    }
+
+    const cockpit = await this.getCockpitDetail(reservationNo, reservationItem);
+    const behavior = String(cockpit.OversizeHuSelectionBehavior || 'BLOCK').trim().toUpperCase();
+    if (!['BLOCK', 'WARN'].includes(behavior)) throw httpError(503, 'Oversize HU selection policy is invalid.');
+    const seen = new Set();
+    const items = [];
+    const warnings = [];
+    let selectedTotal = 0;
+    let remaining = Number(cockpit.OpenQty);
+    if (!Number.isFinite(remaining) || remaining < 0) throw httpError(503, 'Open reservation quantity is unavailable.');
+
+    for (const selected of selections) {
+      const unitNumber = String(selected?.UnitNumber || '').trim();
+      const transferQty = Number(selected?.TransferQty);
+      if (!/^[A-Z0-9._/-]{1,20}$/i.test(unitNumber)) throw httpError(400, 'Handling unit number is missing or invalid.');
+      if (seen.has(unitNumber.toUpperCase())) throw httpError(400, `Handling unit ${unitNumber} is selected more than once.`);
+      seen.add(unitNumber.toUpperCase());
+      if (!Number.isFinite(transferQty) || transferQty <= 0) throw httpError(400, `Transfer quantity for HU ${unitNumber} must be greater than zero.`);
+
+      const validation = await this.validateUnit(reservationNo, reservationItem, unitNumber);
+      if (!validation.Valid || !String(validation.UnitType || '').includes('HU')) {
+        throw httpError(422, validation.StatusMessage || `Unit ${unitNumber} is not a valid in-stock handling unit.`);
+      }
+      const available = Number(validation.AvailableQuantity);
+      if (!Number.isFinite(available) || available <= 0 || transferQty > available) {
+        throw httpError(422, `Transfer quantity for HU ${unitNumber} exceeds its available stock (${available || 0}).`);
+      }
+      if (available > remaining) {
+        const warning = `HU ${unitNumber} has ${available} ${validation.BaseUnit || ''} available, above the remaining reservation quantity ${remaining}.`;
+        if (behavior === 'BLOCK') throw httpError(422, `${warning} Selection is blocked by the current warehouse policy.`);
+        warnings.push(warning);
+      }
+      if (transferQty > remaining) {
+        throw httpError(422, `Selected HU quantities exceed the remaining reservation quantity (${remaining}).`);
+      }
+
+      items.push({
+        UnitNumber: unitNumber,
+        TransferQty: transferQty,
+        AvailableQuantity: available,
+        BaseUnit: validation.BaseUnit,
+        StorageType: validation.StorageType,
+        StorageBin: validation.StorageBin
+      });
+      selectedTotal += transferQty;
+      remaining -= transferQty;
+    }
+
+    return {
+      Valid: true,
+      ReservationNo: cockpit.ReservationNo,
+      ReservationItem: cockpit.ReservationItem,
+      OpenQuantity: Number(cockpit.OpenQty),
+      SelectedQuantity: selectedTotal,
+      RemainingQuantity: remaining,
+      OversizeHuSelectionBehavior: behavior,
+      Items: items,
+      Warnings: warnings
     };
   }
 

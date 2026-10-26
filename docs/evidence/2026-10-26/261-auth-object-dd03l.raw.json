@@ -1,0 +1,154 @@
+{
+  "capturedAt": "2026-10-26T04:20:35.135Z",
+  "mode": "READ-ONLY",
+  "tables": {
+    "TOBJ": [
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "OBJCT",
+        "POSITION": "0001",
+        "ROLLNAME": "XUOBJECT",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "CONVERSION",
+        "POSITION": "0015",
+        "ROLLNAME": "CONVFLAG",
+        "DATATYPE": "CHAR",
+        "LENG": "000001"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "FIEL1",
+        "POSITION": "0002",
+        "ROLLNAME": "XUFIELD",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "FIEL2",
+        "POSITION": "0003",
+        "ROLLNAME": "XUFIELD",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "FIEL3",
+        "POSITION": "0004",
+        "ROLLNAME": "XUFIELD",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "FIEL4",
+        "POSITION": "0005",
+        "ROLLNAME": "XUFIELD",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "FIEL5",
+        "POSITION": "0006",
+        "ROLLNAME": "XUFIELD",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "FIEL6",
+        "POSITION": "0007",
+        "ROLLNAME": "XUFIELD",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "FIEL7",
+        "POSITION": "0008",
+        "ROLLNAME": "XUFIELD",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "FIEL8",
+        "POSITION": "0009",
+        "ROLLNAME": "XUFIELD",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "FIEL9",
+        "POSITION": "0010",
+        "ROLLNAME": "XUFIELD",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "FIEL0",
+        "POSITION": "0011",
+        "ROLLNAME": "XUFIELD",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "BNAME",
+        "POSITION": "0013",
+        "ROLLNAME": "XUSER",
+        "DATATYPE": "CHAR",
+        "LENG": "000012"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "FBLOCK",
+        "POSITION": "0014",
+        "ROLLNAME": "XUFBLOCK",
+        "DATATYPE": "CHAR",
+        "LENG": "000008"
+      },
+      {
+        "TABNAME": "TOBJ",
+        "FIELDNAME": "OCLSS",
+        "POSITION": "0012",
+        "ROLLNAME": "XUOBJCLASS",
+        "DATATYPE": "CHAR",
+        "LENG": "000004"
+      }
+    ],
+    "TOBJT": [
+      {
+        "TABNAME": "TOBJT",
+        "FIELDNAME": "TTEXT",
+        "POSITION": "0003",
+        "ROLLNAME": "XUTEXT",
+        "DATATYPE": "CHAR",
+        "LENG": "000060"
+      },
+      {
+        "TABNAME": "TOBJT",
+        "FIELDNAME": "LANGU",
+        "POSITION": "0001",
+        "ROLLNAME": "SPRAS",
+        "DATATYPE": "LANG",
+        "LENG": "000001"
+      },
+      {
+        "TABNAME": "TOBJT",
+        "FIELDNAME": "OBJECT",
+        "POSITION": "0002",
+        "ROLLNAME": "XUOBJECT",
+        "DATATYPE": "CHAR",
+        "LENG": "000010"
+      }
+    ]
+  }
+}

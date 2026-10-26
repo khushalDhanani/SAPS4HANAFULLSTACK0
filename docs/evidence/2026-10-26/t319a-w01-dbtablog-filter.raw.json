@@ -1,0 +1,72 @@
+{
+  "mode": "READ-ONLY; derived locally from saved SAP result, no new SAP call",
+  "source": "hu-t319a-dbtablog.raw.json",
+  "filter": "LOGKEY contains W01 (client-prefix not interpreted)",
+  "count": 7,
+  "rows": [
+    {
+      "TABNAME": "T319A",
+      "LOGDATE": "20260129",
+      "LOGTIME": "123305",
+      "USERNAME": "SANDHLE",
+      "LOGKEY": "110W010001",
+      "OPTYPE": "I",
+      "TCODE": "SCC1"
+    },
+    {
+      "TABNAME": "T319A",
+      "LOGDATE": "20260129",
+      "LOGTIME": "124819",
+      "USERNAME": "SANDHLE",
+      "LOGKEY": "220W010001",
+      "OPTYPE": "I",
+      "TCODE": "SCC1"
+    },
+    {
+      "TABNAME": "T319A",
+      "LOGDATE": "20260129",
+      "LOGTIME": "123250",
+      "USERNAME": "SANDHLE",
+      "LOGKEY": "100W010001",
+      "OPTYPE": "I",
+      "TCODE": "SIMG"
+    },
+    {
+      "TABNAME": "T319A",
+      "LOGDATE": "20260819",
+      "LOGTIME": "173257",
+      "USERNAME": "SANDHLE",
+      "LOGKEY": "100W01Z001",
+      "OPTYPE": "I",
+      "TCODE": "SIMG"
+    },
+    {
+      "TABNAME": "T319A",
+      "LOGDATE": "20260819",
+      "LOGTIME": "201105",
+      "USERNAME": "SANDHLE",
+      "LOGKEY": "100W01Z001",
+      "OPTYPE": "D",
+      "TCODE": "SIMG"
+    },
+    {
+      "TABNAME": "T319A",
+      "LOGDATE": "20260928",
+      "LOGTIME": "162251",
+      "USERNAME": "SANDHLE",
+      "LOGKEY": "100W01Z003",
+      "OPTYPE": "I",
+      "TCODE": "SIMG"
+    },
+    {
+      "TABNAME": "T319A",
+      "LOGDATE": "20260928",
+      "LOGTIME": "162309",
+      "USERNAME": "SANDHLE",
+      "LOGKEY": "220W01Z003",
+      "OPTYPE": "I",
+      "TCODE": "SCC1"
+    }
+  ],
+  "note": "LOGDATA old/new values were not returned by the saved RFC_READ_TABLE query."
+}

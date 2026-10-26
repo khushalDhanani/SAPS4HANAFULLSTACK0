@@ -37,6 +37,16 @@ const HuStockTransferHandler = {
       }
     });
 
+    srv.on('validateHuStockTransferSelection', async (req) => {
+      try {
+        // Adapter method is read-only; deliberately do not route to executeHuStockTransfer.
+        return await adapter.validateHuStockTransferSelection(req.data || {});
+      } catch (err) {
+        LOG.error('validateHuStockTransferSelection failed:', err.message);
+        return req.error(err.status || 500, err.message);
+      }
+    });
+
     srv.on('getStorageBins', async (req) => {
       try {
         const { reservation, item } = req.data;

@@ -140,7 +140,7 @@ describe('P1: Controlled SAP Read-Back Evidence for Critical Movement Flows [moc
         plant: '1120'
       })).rejects.toMatchObject({
         status: 400,
-        message: expect.stringMatching(/SAP BWART 201 does not exactly equal requested MovementType 261|Movement type mismatch/i)
+        message: 'Material document 4900050142 verification failed: SAP BWART 201 does not exactly equal requested MovementType 261'
       });
     });
 

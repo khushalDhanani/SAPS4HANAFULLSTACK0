@@ -1,0 +1,163 @@
+{
+  "capturedAt": "2026-10-26T04:16:00.130Z",
+  "mode": "READ-ONLY",
+  "identity": {
+    "configuredODataAndRfcPrincipalSame": true,
+    "authentication": "BasicAuthentication",
+    "rfcSource": "local S4_USERNAME env",
+    "exactUsername": "REDACTED per AGENTS.md secret handling; both resolve from the same local configured principal"
+  },
+  "authorizationEvidence": {
+    "rfcProfiles": [
+      "T-D4740162",
+      "T-D4740164",
+      "SAP_ALL",
+      "T-D4740014",
+      "T-D4740015",
+      "T-D4740016",
+      "T-D4740018",
+      "T-D4740019",
+      "T-D4740027",
+      "T-D4740028",
+      "T-D47400281",
+      "T-D4740029",
+      "T-D4740030",
+      "T-D4740031",
+      "T-D4740032",
+      "T-D47400321",
+      "T-D4740033",
+      "T-D47400331",
+      "T-D47400332",
+      "T-D4740034",
+      "T-D4740035",
+      "T-D47400351",
+      "T-D4740036",
+      "T-D47400361",
+      "T-D4740037",
+      "T-D4740038",
+      "T-D47400381",
+      "T-D47400382",
+      "T-D47400383",
+      "T-D47400384",
+      "T-D4740039",
+      "T-D4740040",
+      "T-D4740041",
+      "T-D4740042",
+      "T-D4740043",
+      "T-D4740044",
+      "T-D4740045",
+      "T-D47400451",
+      "T-D47400452",
+      "T-D4740046",
+      "T-D47400461",
+      "T-D4740047",
+      "T-D4740048",
+      "T-D4740049",
+      "T-D47400491",
+      "T-D4740050",
+      "T-D4740051",
+      "T-D4740052",
+      "T-D4740053",
+      "T-D4740054",
+      "T-D4740055",
+      "T-D47400551",
+      "T-D4740056",
+      "T-D47400561",
+      "T-D47400562",
+      "T-D4740057",
+      "T-D4740058",
+      "T-D4740059",
+      "T-D4740060",
+      "T-D4740061",
+      "T-D4740062",
+      "T-D4740063",
+      "T-D4740064",
+      "T-D47400641",
+      "T-D47400642",
+      "T-D4740065",
+      "T-D4740066",
+      "T-D4740067",
+      "T-D4740068",
+      "T-D4740069",
+      "T-D4740071",
+      "T-D4740072",
+      "T-D4740073",
+      "T-D4740074",
+      "T-D4740075",
+      "T-D4740076",
+      "T-D4740077",
+      "T-D4740078",
+      "T-D4740079",
+      "T-D4740080",
+      "T-D4740081",
+      "T-D47400811",
+      "T-D4740083",
+      "T-D4740084",
+      "T-D4740085",
+      "T-D4740086",
+      "T-D4740130",
+      "T-D47401301",
+      "T-D4740131",
+      "T-D4740132",
+      "T-D4740133",
+      "T-D4740134",
+      "T-D47401341",
+      "T-D4740135",
+      "T-D47401351",
+      "T-D47401352",
+      "T-D47401353",
+      "T-D4740136",
+      "T-D47401361",
+      "T-D4740137"
+    ],
+    "hasSapAll": true,
+    "mMsegBwaRoleDefinitions": 62,
+    "mMsegWmbRoleDefinitions": 104,
+    "effectiveChecks": [
+      {
+        "object": "M_MSEG_BWA",
+        "fields": {
+          "ACTVT": "01",
+          "BWART": "261"
+        },
+        "result": "AUTHORIZED"
+      },
+      {
+        "object": "M_MSEG_WMB",
+        "fields": {
+          "ACTVT": "01",
+          "WERKS": "1120"
+        },
+        "result": "AUTHORIZED"
+      },
+      {
+        "object": "M_MSEG_WWA",
+        "fields": {
+          "ACTVT": "01",
+          "WERKS": "1120"
+        },
+        "result": "AUTHORIZED"
+      },
+      {
+        "object": "M_MSEG_WMB",
+        "fields": {
+          "ACTVT": "01",
+          "WERKS": "1600"
+        },
+        "result": "AUTHORIZED"
+      },
+      {
+        "object": "M_MSEG_WWA",
+        "fields": {
+          "ACTVT": "01",
+          "WERKS": "1600"
+        },
+        "result": "AUTHORIZED"
+      }
+    ]
+  },
+  "decision": {
+    "rfc261Authorization": "READ-ONLY AUTHORITY_CHECK returned AUTHORIZED for M_MSEG_BWA ACTVT=01/BWART=261 and M_MSEG_WMB ACTVT=01/WERKS=1120 and 1600; M_MSEG_WWA also passed for both plants, matching the current posting code. This proves those object checks for the RFC principal, not successful OData CREATE or SAP posting.",
+    "odata261Authorization": "The OData BasicAuthentication destination and RFC resolve to the same configured principal; exact user is redacted. Object authorization checks pass for the RFC principal. The 261 metadata/readiness GET passed, but material-document CREATE authorization and persistence remain unproven because no POST was performed."
+  }
+}

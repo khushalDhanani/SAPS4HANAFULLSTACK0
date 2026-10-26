@@ -46,6 +46,12 @@ entity BusinessConfig : managed {
     // JSON array of { storageType, bin, reason } — stock-not-ready bin rules for mvt 261 (R4).
     // Empty string or null means the R4 rule is switched off for this warehouse.
     Mvt261NotReadyBinsJson : String(2000);           // JSON, parsed to array on read
+    // Comma-separated, warehouse-specific HU storage-type policy; intentionally unseeded.
+    PickableStorageTypes   : String(200);
+    HoldStorageTypes       : String(200);
+    InterimStorageTypes    : String(200);
+    // BLOCK is the safe default until the business approves WARN for a warehouse.
+    OversizeHuSelectionBehavior : String(5) default 'BLOCK';
 
     // ─── Descriptive ──────────────────────────────────────────────────────────
     Description            : String(100);            // Free-text note for admins

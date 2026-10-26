@@ -326,6 +326,82 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
     });
   });
 
+  describe('validateHuStockTransferSelection (read-only)', () => {
+    const baseCockpit = {
+      ReservationNo: '10042', ReservationItem: '1', OpenQty: 5,
+      Plant: '1120', Warehouse: 'W01', BaseUnit: 'NOS',
+      OversizeHuSelectionBehavior: 'BLOCK'
+    };
+    const validUnit = (unitNumber, available) => ({
+      Valid: true,
+      UnitNumber: unitNumber,
+      UnitType: 'Handling Unit (HU)',
+      AvailableQuantity: available,
+      BaseUnit: 'NOS',
+      StorageType: 'EN1',
+      StorageBin: '1-L0001-01'
+    });
+
+    beforeEach(() => {
+      jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({ ...baseCockpit });
+      jest.spyOn(adapter, 'validateUnit').mockImplementation(async (_res, _item, unit) => validUnit(unit, 3));
+    });
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('accepts several HU quantities whose sum is within the open quantity and performs no RFC write', async () => {
+      const result = await adapter.validateHuStockTransferSelection({
+        ReservationNo: '10042', ReservationItem: '1',
+        Selections: [{ UnitNumber: 'HU1', TransferQty: 2 }, { UnitNumber: 'HU2', TransferQty: 3 }]
+      });
+      expect(result).toMatchObject({ Valid: true, OpenQuantity: 5, SelectedQuantity: 5, RemainingQuantity: 0 });
+      expect(result.Items).toHaveLength(2);
+      expect(mockRfc.call).not.toHaveBeenCalled();
+    });
+
+    it('rejects totals above the open quantity', async () => {
+      await expect(adapter.validateHuStockTransferSelection({
+        ReservationNo: '10042', ReservationItem: '1',
+        Selections: [{ UnitNumber: 'HU1', TransferQty: 3 }, { UnitNumber: 'HU2', TransferQty: 3 }]
+      })).rejects.toMatchObject({ status: 422, message: expect.stringContaining('remaining reservation quantity') });
+      expect(mockRfc.call).not.toHaveBeenCalled();
+    });
+
+    it('rejects an item quantity above that HU stock', async () => {
+      await expect(adapter.validateHuStockTransferSelection({
+        ReservationNo: '10042', ReservationItem: '1',
+        Selections: [{ UnitNumber: 'HU1', TransferQty: 4 }]
+      })).rejects.toMatchObject({ status: 422, message: expect.stringContaining('available stock') });
+    });
+
+    it('blocks an HU whose stock exceeds the remaining open quantity by default', async () => {
+      jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({ ...baseCockpit, OpenQty: 2 });
+      jest.spyOn(adapter, 'validateUnit').mockResolvedValue(validUnit('HU1', 3));
+      await expect(adapter.validateHuStockTransferSelection({
+        ReservationNo: '10042', ReservationItem: '1', Selections: [{ UnitNumber: 'HU1', TransferQty: 1 }]
+      })).rejects.toMatchObject({ status: 422, message: expect.stringContaining('blocked by the current warehouse policy') });
+    });
+
+    it('honors WARN policy while still limiting selected quantity to the open amount', async () => {
+      jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({ ...baseCockpit, OpenQty: 2, OversizeHuSelectionBehavior: 'WARN' });
+      jest.spyOn(adapter, 'validateUnit').mockResolvedValue(validUnit('HU1', 3));
+      const result = await adapter.validateHuStockTransferSelection({
+        ReservationNo: '10042', ReservationItem: '1', Selections: [{ UnitNumber: 'HU1', TransferQty: 2 }]
+      });
+      expect(result.OversizeHuSelectionBehavior).toBe('WARN');
+      expect(result.SelectedQuantity).toBe(2);
+      expect(result.Warnings).toHaveLength(1);
+      expect(mockRfc.call).not.toHaveBeenCalled();
+    });
+
+    it('rejects duplicate HU selection', async () => {
+      await expect(adapter.validateHuStockTransferSelection({
+        ReservationNo: '10042', ReservationItem: '1',
+        Selections: [{ UnitNumber: 'HU1', TransferQty: 1 }, { UnitNumber: 'hu1', TransferQty: 1 }]
+      })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('selected more than once') });
+    });
+  });
+
   describe('executeHuStockTransfer', () => {
     beforeEach(() => {
       jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({

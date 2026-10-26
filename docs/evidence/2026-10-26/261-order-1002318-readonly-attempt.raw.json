@@ -1,0 +1,25 @@
+{
+  "attemptedAt": "2026-10-26T04:40:06Z",
+  "mode": "READ-ONLY",
+  "operation": "RFC_READ_TABLE AUFK for AUFNR 000001002318",
+  "fields": [
+    "AUFNR",
+    "ERNAM",
+    "ERDAT",
+    "KTEXT",
+    "LTEXT",
+    "AUART",
+    "WERKS",
+    "BUKRS",
+    "LOEKZ"
+  ],
+  "result": "BLOCKED_BEFORE_SAP_RESPONSE",
+  "error": {
+    "component": "NI network interface",
+    "systemCall": "connect",
+    "errno": 1,
+    "errnoText": "Operation not permitted"
+  },
+  "writesPerformed": false,
+  "note": "Local RFC connection failed before SAP returned rows. Earlier saved candidate evidence contains ERNAM/ERDAT but no order text; test purpose remains unknown."
+}

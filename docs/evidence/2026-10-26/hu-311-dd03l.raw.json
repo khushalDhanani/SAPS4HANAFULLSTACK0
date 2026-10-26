@@ -1,0 +1,6896 @@
+{
+  "capturedAt": "2026-10-26T04:35:58.780Z",
+  "mode": "READ-ONLY",
+  "tables": {
+    "DD03L": [
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "UUID",
+        "KEYFLAG": "",
+        "ROLLNAME": "LO_HU_UUID_RAW16",
+        "DATATYPE": "RAW"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_LOGPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/DE_LOGPOS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "MSR_INSP_GUID",
+        "KEYFLAG": "",
+        "ROLLNAME": "MSR_INSP_GUID",
+        "DATATYPE": "RAW"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "DIFF_INSP_GUID",
+        "KEYFLAG": "",
+        "ROLLNAME": "MSR_INSP_GUID",
+        "DATATYPE": "RAW"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "FROM_INSP_GUID",
+        "KEYFLAG": "",
+        "ROLLNAME": "MSR_INSP_GUID",
+        "DATATYPE": "RAW"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RETURN_INSP_GUID",
+        "KEYFLAG": "",
+        "ROLLNAME": "MSR_INSP_GUID",
+        "DATATYPE": "RAW"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "TO_INSP_GUID",
+        "KEYFLAG": "",
+        "ROLLNAME": "MSR_INSP_GUID",
+        "DATATYPE": "RAW"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "DUMMY_RDI_PS",
+        "KEYFLAG": "",
+        "ROLLNAME": "CFD_DUMMY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "TM_DOC_TCO",
+        "KEYFLAG": "",
+        "ROLLNAME": "TMS_BTD_TYPE_CODE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "SPE_IDPLATE",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/DE_IDPLATE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_IDENT_01",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/DE_IDENT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_IDENT_02",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/DE_IDENT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_IDENT_03",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/DE_IDENT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_IDENT_04",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/DE_IDENT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "OBJFUNC",
+        "KEYFLAG": "",
+        "ROLLNAME": "UPDID",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SLOT_NUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LOHUM_SLOT_NUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "MANDT",
+        "KEYFLAG": "X",
+        "ROLLNAME": "MANDT",
+        "DATATYPE": "CLNT"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "MANDT",
+        "KEYFLAG": "X",
+        "ROLLNAME": "MANDT",
+        "DATATYPE": "CLNT"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "MANDT",
+        "KEYFLAG": "X",
+        "ROLLNAME": "MANDT",
+        "DATATYPE": "CLNT"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "STATUS",
+        "KEYFLAG": "",
+        "ROLLNAME": "HU_STATUS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "PERNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_PERNR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "LANGUAGE",
+        "KEYFLAG": "",
+        "ROLLNAME": "SYLANGU",
+        "DATATYPE": "LANG"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ERNAM",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFERFNAM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "ERNAM",
+        "KEYFLAG": "",
+        "ROLLNAME": "ERNAM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "SEQNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFSEQNR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ERDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFERFDAT",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "ERDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "ERDAT",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "AEDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFAEDAT",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "AEDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "AEDAT",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "AENAM",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFAENAM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "AENAM",
+        "KEYFLAG": "",
+        "ROLLNAME": "AENAM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "POSNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "POSNR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "POSNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "POSNR_VL",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "POSNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "POSNR_VL",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "POSNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "APOSN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "OBJID",
+        "KEYFLAG": "",
+        "ROLLNAME": "CCOBJID",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "FIELDNAME",
+        "KEYFLAG": "X",
+        "ROLLNAME": "FIELDNAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "VBELN",
+        "KEYFLAG": "",
+        "ROLLNAME": "VBELN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "VBELN",
+        "KEYFLAG": "",
+        "ROLLNAME": "VBELN_VL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "VBELN",
+        "KEYFLAG": "",
+        "ROLLNAME": "VBELN_VL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VBELN",
+        "KEYFLAG": "",
+        "ROLLNAME": "VBELN_VL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "GRANT_NBR",
+        "KEYFLAG": "",
+        "ROLLNAME": "GM_GRANT_NBR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "_DATAAGING",
+        "KEYFLAG": "",
+        "ROLLNAME": "DATA_TEMPERATURE",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "_DATAAGING",
+        "KEYFLAG": "",
+        "ROLLNAME": "DATA_TEMPERATURE",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "_DATAAGING",
+        "KEYFLAG": "",
+        "ROLLNAME": "DATA_TEMPERATURE",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "E071",
+        "FIELDNAME": "OBJECT",
+        "KEYFLAG": "",
+        "ROLLNAME": "TROBJTYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "OBJECT",
+        "KEYFLAG": "X",
+        "ROLLNAME": "TROBJTYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "LTEXT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_TEXT_DE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "LTEXT",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFLTEXT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "TABNAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "TABNAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "MEINS",
+        "KEYFLAG": "",
+        "ROLLNAME": "MEINS",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "VORNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "VORNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "KTEXT",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFTEXT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "MAKTX",
+        "KEYFLAG": "",
+        "ROLLNAME": "MAKTX",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "AUFNR",
+        "KEYFLAG": "X",
+        "ROLLNAME": "AUFNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SGTXT",
+        "KEYFLAG": "",
+        "ROLLNAME": "SGTXT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SHKZG",
+        "KEYFLAG": "",
+        "ROLLNAME": "SHKZG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VKORG",
+        "KEYFLAG": "",
+        "ROLLNAME": "VKORG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "OWNER",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_OWNER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "USERNAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "XUBNAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "LOEKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFLOEKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VTWEG",
+        "KEYFLAG": "",
+        "ROLLNAME": "VTWKU",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KDPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "KDPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "KDPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "KDPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "OBJTYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "OCM_OBJ_TYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "CHARG",
+        "KEYFLAG": "",
+        "ROLLNAME": "CHARG_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "CHARG",
+        "KEYFLAG": "",
+        "ROLLNAME": "CHARG_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "CHARG",
+        "KEYFLAG": "",
+        "ROLLNAME": "CHARG_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "CHARG",
+        "KEYFLAG": "",
+        "ROLLNAME": "CHARG_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "AUFPL",
+        "KEYFLAG": "",
+        "ROLLNAME": "CO_AUFPL",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "CUOBJ",
+        "KEYFLAG": "",
+        "ROLLNAME": "CUOBJ",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "CUOBJ",
+        "KEYFLAG": "",
+        "ROLLNAME": "CUOBJ",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "OTYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "JV_OTYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ADRNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "CADNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PEINH",
+        "KEYFLAG": "",
+        "ROLLNAME": "PEINH",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "TCODE",
+        "KEYFLAG": "",
+        "ROLLNAME": "TCODE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "HANDLE",
+        "KEYFLAG": "",
+        "ROLLNAME": "GUID_VEKP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "STARTDATE",
+        "KEYFLAG": "",
+        "ROLLNAME": "MMPUR_SERVPROC_PERIOD_START",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "ENAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_ENAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "KSCHL",
+        "KEYFLAG": "",
+        "ROLLNAME": "NA_KSCHL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ENDDATE",
+        "KEYFLAG": "",
+        "ROLLNAME": "MMPUR_SERVPROC_PERIOD_END",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "VBTYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "VBTYPL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "VBTYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "VBTYPL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "KDAUF",
+        "KEYFLAG": "",
+        "ROLLNAME": "KDAUF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KDAUF",
+        "KEYFLAG": "",
+        "ROLLNAME": "KDAUF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BUDGET_PD",
+        "KEYFLAG": "",
+        "ROLLNAME": "FM_BUDGET_PERIOD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KNUMH",
+        "KEYFLAG": "",
+        "ROLLNAME": "KNUMH_CH",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071",
+        "FIELDNAME": "OBJ_NAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "TROBJ_NAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "STLNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "STNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "DECIMALS",
+        "KEYFLAG": "",
+        "ROLLNAME": "DECIMALS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FKBER",
+        "KEYFLAG": "",
+        "ROLLNAME": "FKBER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "UMREN",
+        "KEYFLAG": "",
+        "ROLLNAME": "UMREN",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "UMREZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "UMREZ",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "UMREN",
+        "KEYFLAG": "",
+        "ROLLNAME": "UMREN",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "UMREZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "UMREZ",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "E071",
+        "FIELDNAME": "PGMID",
+        "KEYFLAG": "",
+        "ROLLNAME": "PGMID",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "PGMID",
+        "KEYFLAG": "X",
+        "ROLLNAME": "PGMID",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "EDATU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_EDATU",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "EDATU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_EDATU",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KBLNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "KBLNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "AUFPS",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFPS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KBLPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "KBLPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "STDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_STDAT",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "STDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFSTDAT",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PSPEL",
+        "KEYFLAG": "",
+        "ROLLNAME": "PS_POSNR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "BDART",
+        "KEYFLAG": "",
+        "ROLLNAME": "BDART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BDART",
+        "KEYFLAG": "",
+        "ROLLNAME": "BDART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "BDATU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_BDATU",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "BDATU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_BDATU",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "EWAHR",
+        "KEYFLAG": "",
+        "ROLLNAME": "EWAHR",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "WDATU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_WDATU",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "WDATU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_WDATU",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "WDATU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_WDATU",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "BESTQ",
+        "KEYFLAG": "",
+        "ROLLNAME": "BESTQ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "BESTQ",
+        "KEYFLAG": "",
+        "ROLLNAME": "BESTQ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "BESTQ",
+        "KEYFLAG": "",
+        "ROLLNAME": "BESTQ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PRVBE",
+        "KEYFLAG": "",
+        "ROLLNAME": "PRVBE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "HKMAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "HKMAT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ALPGR",
+        "KEYFLAG": "",
+        "ROLLNAME": "CS_ALPGR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BDTER",
+        "KEYFLAG": "",
+        "ROLLNAME": "BDTER",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KZAUS",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUSLF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "CHOBJ",
+        "KEYFLAG": "",
+        "ROLLNAME": "CUOBJ_CH",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "CH_PROC",
+        "KEYFLAG": "",
+        "ROLLNAME": "OCM_CH_PROC",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FLDLOGSDELIVISHELDONSHORE",
+        "KEYFLAG": "",
+        "ROLLNAME": "FLOG_HOLD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "AS4VERS",
+        "KEYFLAG": "X",
+        "ROLLNAME": "AS4VERS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "QNAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_QNAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "ADATU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_ADATU",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "VORAB",
+        "KEYFLAG": "",
+        "ROLLNAME": "VORABKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KZEAR",
+        "KEYFLAG": "",
+        "ROLLNAME": "KZEAR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ALPRF",
+        "KEYFLAG": "",
+        "ROLLNAME": "CS_ALPRF",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NO_DISP",
+        "KEYFLAG": "",
+        "ROLLNAME": "NO_DISP_PLUS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "BLIND",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_BLOCK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "SONUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_SONUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "SONUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_SONUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "SONUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_SONUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "EXIDV",
+        "KEYFLAG": "",
+        "ROLLNAME": "EXIDV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ALPST",
+        "KEYFLAG": "",
+        "ROLLNAME": "CS_ALPST",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "EZEIT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_EZEIT",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "EZEIT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_EZEIT",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZECH",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KZECH",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KZECH",
+        "KEYFLAG": "",
+        "ROLLNAME": "KZECH",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "DEPTH",
+        "KEYFLAG": "",
+        "ROLLNAME": "TYPEDEPTH",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "CPD_UPDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CPD/PFP_SC_TSTMP",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "POTX1",
+        "KEYFLAG": "",
+        "ROLLNAME": "POTX1",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "COMPTYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "COMPTYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KBNKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "KBNKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "SOBKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "SOBKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "STLAL",
+        "KEYFLAG": "",
+        "ROLLNAME": "STALT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "DATATYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "DATATYPE_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "STLTY",
+        "KEYFLAG": "",
+        "ROLLNAME": "STLTY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "ABLAD",
+        "KEYFLAG": "",
+        "ROLLNAME": "ABLAD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ABLAD",
+        "KEYFLAG": "",
+        "ROLLNAME": "ABLAD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FISTL",
+        "KEYFLAG": "",
+        "ROLLNAME": "FISTL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "SGT_SCAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "SGT_SCAT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "SGT_SCAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "SGT_SCAT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "SGT_SCAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "SGT_SCAT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SGT_SCAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "SGT_SCAT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "GEBER",
+        "KEYFLAG": "",
+        "ROLLNAME": "BP_GEBER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "APLZL",
+        "KEYFLAG": "",
+        "ROLLNAME": "CIM_COUNT",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PLNFL",
+        "KEYFLAG": "",
+        "ROLLNAME": "PLNFOLGE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "MBLNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "MBLNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "AUTYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFTYP",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KZBWS",
+        "KEYFLAG": "",
+        "ROLLNAME": "KZBWS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "SCOPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "SCOPE_CV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "MJAHR",
+        "KEYFLAG": "",
+        "ROLLNAME": "MJAHR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SAKNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "SAKNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "LENG",
+        "KEYFLAG": "",
+        "ROLLNAME": "DDLENG",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KZVBR",
+        "KEYFLAG": "",
+        "ROLLNAME": "KZVBR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BANFN",
+        "KEYFLAG": "",
+        "ROLLNAME": "BANFN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "MANDATORY",
+        "KEYFLAG": "",
+        "ROLLNAME": "MANDATORY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "POSITION",
+        "KEYFLAG": "X",
+        "ROLLNAME": "TABFDPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "AEZEIT",
+        "KEYFLAG": "",
+        "ROLLNAME": "CO_CHG_TIME",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "REVLV",
+        "KEYFLAG": "",
+        "ROLLNAME": "REVLV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SGT_RCAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "SGT_RCAT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "WEBAZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "WEBAZ",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SAPRL",
+        "KEYFLAG": "",
+        "ROLLNAME": "SAPRL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "GEWEI",
+        "KEYFLAG": "",
+        "ROLLNAME": "GEWEI",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "GEWEI",
+        "KEYFLAG": "",
+        "ROLLNAME": "GEWEI",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RSPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "RSPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "RSPOS",
+        "KEYFLAG": "X",
+        "ROLLNAME": "RSPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "TECHS",
+        "KEYFLAG": "",
+        "ROLLNAME": "TECHS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SERVICE_DOC_ID",
+        "KEYFLAG": "",
+        "ROLLNAME": "FCO_SRVDOC_ID",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SERVICE_DOC_ITEM_ID",
+        "KEYFLAG": "",
+        "ROLLNAME": "FCO_SRVDOC_ITEM_ID",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "FLAG",
+        "KEYFLAG": "",
+        "ROLLNAME": "FLAG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "KALSM",
+        "KEYFLAG": "",
+        "ROLLNAME": "KALSMB",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FIPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "FIPOS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "BNAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_BNAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "UVORN",
+        "KEYFLAG": "",
+        "ROLLNAME": "UVORN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "STLKN",
+        "KEYFLAG": "",
+        "ROLLNAME": "STLKN",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SORTL",
+        "KEYFLAG": "",
+        "ROLLNAME": "SORTL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "VFDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "VFDAT",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VFDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "VFDAT",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "VFDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "VFDAT",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "AS4LOCAL",
+        "KEYFLAG": "X",
+        "ROLLNAME": "AS4LOCAL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SERVICE_DOC_TYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "FCO_SRVDOC_TYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KBNKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "KBNKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FXPRU",
+        "KEYFLAG": "",
+        "ROLLNAME": "CK_FIXPRKU",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "REFTYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "DDREFTYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "WTY_IND",
+        "KEYFLAG": "",
+        "ROLLNAME": "WTYSC_WTY_INDICATOR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NETAU",
+        "KEYFLAG": "",
+        "ROLLNAME": "NETAU",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PLINT",
+        "KEYFLAG": "",
+        "ROLLNAME": "PLINT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "AUSCH",
+        "KEYFLAG": "",
+        "ROLLNAME": "KAUSF",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ALPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "ALTPS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "XLOEK",
+        "KEYFLAG": "",
+        "ROLLNAME": "XLOEK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SCACD",
+        "KEYFLAG": "",
+        "ROLLNAME": "LEINT_SCACD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "REFFIELD",
+        "KEYFLAG": "",
+        "ROLLNAME": "REFFIELD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FIPEX",
+        "KEYFLAG": "",
+        "ROLLNAME": "FM_FIPEX",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "KAPPL",
+        "KEYFLAG": "",
+        "ROLLNAME": "NA_KAPPL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "INTTYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "INTTYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "WEMPF",
+        "KEYFLAG": "",
+        "ROLLNAME": "WEMPF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "WEMPF",
+        "KEYFLAG": "",
+        "ROLLNAME": "WEMPF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "INTLEN",
+        "KEYFLAG": "",
+        "ROLLNAME": "INTLEN",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "RSNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "RSNUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "RSNUM",
+        "KEYFLAG": "X",
+        "ROLLNAME": "RSNUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FMFGUS_KEY",
+        "KEYFLAG": "",
+        "ROLLNAME": "FMFG_US_KEY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "LFDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LFDAT_V",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "PROGNAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "PROGRAMM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VOLEH",
+        "KEYFLAG": "",
+        "ROLLNAME": "VOLEH",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "WRF_CHARSTC1",
+        "KEYFLAG": "",
+        "ROLLNAME": "WRF_CHARSTC1",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "WRF_CHARSTC2",
+        "KEYFLAG": "",
+        "ROLLNAME": "WRF_CHARSTC2",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "WRF_CHARSTC3",
+        "KEYFLAG": "",
+        "ROLLNAME": "WRF_CHARSTC3",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "KEYFLAG",
+        "KEYFLAG": "",
+        "ROLLNAME": "KEYFLAG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "ERLKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "VOLLS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "SDATE",
+        "KEYFLAG": "",
+        "ROLLNAME": "SDATE",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BOM_VERSN",
+        "KEYFLAG": "",
+        "ROLLNAME": "CS_VERSN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "REFER",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_DOCRF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "STVKN",
+        "KEYFLAG": "",
+        "ROLLNAME": "STVKN",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RSART",
+        "KEYFLAG": "",
+        "ROLLNAME": "RSART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "RSART",
+        "KEYFLAG": "X",
+        "ROLLNAME": "RSART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "TABKEY",
+        "KEYFLAG": "",
+        "ROLLNAME": "TROBJ_NAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ASTKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFSTKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SERVICEPERFORMER",
+        "KEYFLAG": "",
+        "ROLLNAME": "SERVICEPERFORMER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "STPOZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "CIM_COUNT",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "RGEKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "RGEKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E070",
+        "FIELDNAME": "AS4USER",
+        "KEYFLAG": "",
+        "ROLLNAME": "TR_AS4USER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FMENG",
+        "KEYFLAG": "",
+        "ROLLNAME": "FMENG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KDEIN",
+        "KEYFLAG": "",
+        "ROLLNAME": "KDEIN",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "E070",
+        "FIELDNAME": "AS4DATE",
+        "KEYFLAG": "",
+        "ROLLNAME": "AS4DATE",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "ANZSN",
+        "KEYFLAG": "",
+        "ROLLNAME": "ANZSN",
+        "DATATYPE": "INT4"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "TANUM",
+        "KEYFLAG": "X",
+        "ROLLNAME": "TANUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "TANUM",
+        "KEYFLAG": "X",
+        "ROLLNAME": "TANUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "HRKFT",
+        "KEYFLAG": "",
+        "ROLLNAME": "HRKFT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SORTF",
+        "KEYFLAG": "",
+        "ROLLNAME": "SORTP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "WEPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_WEPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "WEPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_WEPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "STATS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_OBSTS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "XCHAR",
+        "KEYFLAG": "",
+        "ROLLNAME": "HUM_RES",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KZKUP",
+        "KEYFLAG": "",
+        "ROLLNAME": "KZKUP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SCHGT",
+        "KEYFLAG": "",
+        "ROLLNAME": "SCHGT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ZSCHL",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFZSCHL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PROJN",
+        "KEYFLAG": "",
+        "ROLLNAME": "PROJN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E070",
+        "FIELDNAME": "TRKORR",
+        "KEYFLAG": "X",
+        "ROLLNAME": "TRKORR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E070",
+        "FIELDNAME": "AS4TIME",
+        "KEYFLAG": "",
+        "ROLLNAME": "AS4TIME",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZFME",
+        "KEYFLAG": "",
+        "ROLLNAME": "KZFME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "AEZET",
+        "KEYFLAG": "",
+        "ROLLNAME": "AEZET",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SBTER",
+        "KEYFLAG": "",
+        "ROLLNAME": "SBTER",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "XFEHL",
+        "KEYFLAG": "",
+        "ROLLNAME": "XFEHL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "IDAT2",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFIDAT2",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "PS_ID",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SCWM/DE_PSID",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "USER2",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFUSER2",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "FLG_MLTPS",
+        "KEYFLAG": "",
+        "ROLLNAME": "CO_MLTPS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NLPLA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NLPLA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PLPLA",
+        "KEYFLAG": "",
+        "ROLLNAME": "PLPLA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "PLDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_PLDAT",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "ENDAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_ENDAT",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "AUFST",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFST",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VORGA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VORGA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "AFPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "CO_POSNR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FRUNV",
+        "KEYFLAG": "",
+        "ROLLNAME": "FRUNV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "/CUM/CMNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CUM/CMNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E070",
+        "FIELDNAME": "TRFUNCTION",
+        "KEYFLAG": "",
+        "ROLLNAME": "TRFUNCTION",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071",
+        "FIELDNAME": "OBJFUNC",
+        "KEYFLAG": "",
+        "ROLLNAME": "OBJFUNC",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "TBPRI",
+        "KEYFLAG": "",
+        "ROLLNAME": "TBPRI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "RSSTA",
+        "KEYFLAG": "",
+        "ROLLNAME": "RSSTA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071",
+        "FIELDNAME": "LOCKFLAG",
+        "KEYFLAG": "",
+        "ROLLNAME": "LOCKFLAG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "EXIDA",
+        "KEYFLAG": "",
+        "ROLLNAME": "EXIDA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "VELIN",
+        "KEYFLAG": "",
+        "ROLLNAME": "VELIN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "XWAOK",
+        "KEYFLAG": "",
+        "ROLLNAME": "XWAOK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "ADMINFIELD",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADMINFIELD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "OPTYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "OPTYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "SKZUE",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_SKZUE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "SKZUA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_SKZUA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "KZBEI",
+        "KEYFLAG": "",
+        "ROLLNAME": "KZBEI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "KQUIT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_KQUIT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "SKZSE",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_SKZSE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "SKZSA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_SKZSA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "SKZSI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_SKZSI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "NOTNULL",
+        "KEYFLAG": "",
+        "ROLLNAME": "NOTNULL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZFEH",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_KZFEH",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZQUI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_KZQUI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZNKO",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KZNKO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "DRUCK",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_DRUCK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "SHLPORIGIN",
+        "KEYFLAG": "",
+        "ROLLNAME": "SHLPORIGIN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "TEILK",
+        "KEYFLAG": "",
+        "ROLLNAME": "LSAM_TEILK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "TABLETYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "DDTABTYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "KR2SO",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_KR2SO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "KR2KU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_KR2KU",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PHAS0",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFPHAS0",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "KZPLA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KZPLA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PHAS2",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFPHAS2",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "LANGUFLAG",
+        "KEYFLAG": "",
+        "ROLLNAME": "DDLANGUFLG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "PQUIT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_PQUIT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "KDISO",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_KDISO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PHAS1",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFPHAS1",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "DUMPS",
+        "KEYFLAG": "",
+        "ROLLNAME": "DUMPS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "POTX2",
+        "KEYFLAG": "",
+        "ROLLNAME": "POTX2",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "AVOAU",
+        "KEYFLAG": "",
+        "ROLLNAME": "AVOAU",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NFEAG",
+        "KEYFLAG": "",
+        "ROLLNAME": "CS_NFEAG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NFGRP",
+        "KEYFLAG": "",
+        "ROLLNAME": "CS_NFGRP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "LFUHR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LFUHR",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BERKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "BERKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "LIFZT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LIFZT",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "BRGEW",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_BRGEW",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "TAPOS",
+        "KEYFLAG": "X",
+        "ROLLNAME": "TAPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "L2SKR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_2SKREL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "ZEUGN",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_ZEUGN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "ZEUGN",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_ZEUGN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "QUEUE",
+        "KEYFLAG": "",
+        "ROLLNAME": "LRF_QUEUE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "LOGID",
+        "KEYFLAG": "X",
+        "ROLLNAME": "LOGID",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "/CWM/XCWMAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/XCWMAT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NLFZV",
+        "KEYFLAG": "",
+        "ROLLNAME": "CS_NLFZV",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "UMSOK",
+        "KEYFLAG": "",
+        "ROLLNAME": "UMSOK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NLFZT",
+        "KEYFLAG": "",
+        "ROLLNAME": "NLFZT",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "UPSKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "UPSKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PBDNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "PBDNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "JV_OCO",
+        "KEYFLAG": "",
+        "ROLLNAME": "JV_OR_CO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "VAPLZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "GEWRK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FLDLOGSSUPPLYPROCESS",
+        "KEYFLAG": "",
+        "ROLLNAME": "FLOG_SPROC",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "VERSNO",
+        "KEYFLAG": "",
+        "ROLLNAME": "CHAR2",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "LGBZO",
+        "KEYFLAG": "",
+        "ROLLNAME": "LGBZO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "GEWTO",
+        "KEYFLAG": "",
+        "ROLLNAME": "GEWTO",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "CCKEY",
+        "KEYFLAG": "",
+        "ROLLNAME": "CCKEY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VOLTO",
+        "KEYFLAG": "",
+        "ROLLNAME": "VOLTO",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "DBSKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "DBSKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "HOSTNAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "MSHOST",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071",
+        "FIELDNAME": "AS4POS",
+        "KEYFLAG": "X",
+        "ROLLNAME": "DDPOSITION",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "AS4POS",
+        "KEYFLAG": "X",
+        "ROLLNAME": "DDPOSITION",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "KZGVH",
+        "KEYFLAG": "",
+        "ROLLNAME": "KZGVH",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "VRPLA",
+        "KEYFLAG": "",
+        "ROLLNAME": "VRPLA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NPTXTKY",
+        "KEYFLAG": "",
+        "ROLLNAME": "TXTKY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "RSORD",
+        "KEYFLAG": "",
+        "ROLLNAME": "RSORD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "CHECKTABLE",
+        "KEYFLAG": "",
+        "ROLLNAME": "CHECKTABLE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PHAS3",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFPHAS3",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "ANONYMOUS",
+        "KEYFLAG": "",
+        "ROLLNAME": "DDANONYM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "HU_LGORT",
+        "KEYFLAG": "",
+        "ROLLNAME": "HU_LGORT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "KZLEI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KZLEI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "KISTZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KISTZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "KISTP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KISTP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PLGKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "PLGKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "HRSTS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_HRSTS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NAFKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "NAFKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "BETYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_BETYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VKDYN",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KZDYN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VANBR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VANBR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "L2SKA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_L2SKA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "MINWM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_MINWM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "VIRGO",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_VIRGO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "KZVEP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KZVEP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "KZHUQ",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_KZHUQ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "SPEZI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_SPEZI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ROHPS",
+        "KEYFLAG": "",
+        "ROLLNAME": "ROHPS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VAPPC",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VAPPC",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "KGVNQ",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KGVNQ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NKDYN",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KZDYN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "KVQUI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_KVQUI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NANBR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NANBR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "KZTRM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_KZTRM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "GEWFX",
+        "KEYFLAG": "",
+        "ROLLNAME": "GEWFX",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "HUCON",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_HUCON",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "USER9",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFUSER9",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VELTP",
+        "KEYFLAG": "",
+        "ROLLNAME": "VELTP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "LATER",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_LATER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "PASSD",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_PASSD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "EB_POST",
+        "KEYFLAG": "",
+        "ROLLNAME": "FCO_EB_POST",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "MULTL",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_MULTL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "EB_POST_TYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "FCO_EBW_POST_TYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NAPPC",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NAPPC",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "WMSTA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_WMSTA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "ADGE_DG",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADGE_DG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "PACKVORSCHR_ST",
+        "KEYFLAG": "",
+        "ROLLNAME": "PL_PACKSTATUS_LOCAL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "ADGE_DGPR",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADGE_DGPR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "LABELTYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "PL_SHIPLABEL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RAPPC",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_RAPPC",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "TXTPS",
+        "KEYFLAG": "",
+        "ROLLNAME": "TXTPS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_HDALL",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/INB_HDALL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_DELDEC",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/INB_DELDEC",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "HU_LGORT",
+        "KEYFLAG": "",
+        "ROLLNAME": "HU_LGORT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "HU_SYSTEM",
+        "KEYFLAG": "",
+        "ROLLNAME": "HUMSYS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "KSTEMPF",
+        "KEYFLAG": "",
+        "ROLLNAME": "CO_KSTEMPF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_VLSTK",
+        "KEYFLAG": "",
+        "ROLLNAME": "VLSTK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "DRUCK",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_DRUCK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_IDART_01",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/DE_HUIDART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_IDART_02",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/DE_HUIDART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VLEST",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VLEST",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "HOMVE",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_HOMVE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_IDART_03",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/DE_HUIDART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "LELAS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_LELAS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NLEST",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NLEST",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_IDART_04",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/DE_HUIDART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "POSTY",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_POSTY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ORDER_PROC_MODE",
+        "KEYFLAG": "",
+        "ROLLNAME": "ORDERPROCMODE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NSUMM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NSUMM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "OBA_ACTIVE",
+        "KEYFLAG": "",
+        "ROLLNAME": "PS_OBA_ACTIVE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VSUMM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VSUMM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VBLCH",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VBLCH",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NBLCH",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NBLCH",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VKAPA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VKAPA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "EEW_AUFK_PS_DUMMY",
+        "KEYFLAG": "",
+        "ROLLNAME": "DUMMY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RKAPA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_RKAPA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "HUDHR_INCL_EEW_PS",
+        "KEYFLAG": "",
+        "ROLLNAME": "DUMMY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NKAPA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NKAPA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZSUB",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_KZSUB",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "JIT_RELEVANT_IND",
+        "KEYFLAG": "",
+        "ROLLNAME": "LOHUM_JIT_RELEVANT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZSTI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_KZSTI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "/CUM/INDCU",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CUM/INDCU",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KFPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "KFPOS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NPLEI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_NPLEI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "/CUM/AUEST",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CUM/AUEST",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "IMREL",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_IMREL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZBEF",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KZBEF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "STOAN",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_STOAN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "FLG_DG_PACKAGE",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADGE_FLG_DG_PACKAGE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "PVQUI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_PVQUI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KGVNQ",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KGVNQ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "MAT_DAMAGED_CL7",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADGE_MAT_DAMAGED_CL7",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "QUSUB",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_QUSUB",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VDUMM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VDUMM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "UPDATE_NEEDED",
+        "KEYFLAG": "",
+        "ROLLNAME": "WTYSC_UPDATE_NEEDED",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "FHUTA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_FHUTA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VSERI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VSERI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NFPKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "CS_KZNFP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SPLKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "CHSPLIT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NDUMM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NDUMM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VNEST",
+        "KEYFLAG": "",
+        "ROLLNAME": "VLEIN_NEST",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "HUPIK",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_HUPIK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "PIPAR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_PIPAR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "PCKPF",
+        "KEYFLAG": "",
+        "ROLLNAME": "PCKPF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NPIPO",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NPIPO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NOLIS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NOLIS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "PASSD",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_PASSD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "FWAGN",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_FWAGN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SEALN3",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_SEALN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SEALN4",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_SEALN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SC_OBJECT_ID",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SRMERP/OBJECT_ID",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "CRM_HEADER_ID",
+        "KEYFLAG": "",
+        "ROLLNAME": "CRMT_OBJECT_ID_CO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "HEADER_BUS_TYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "SWO_OBJTYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SEALN1",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_SEALN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SEALN2",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_SEALN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "YSTGA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LEINT_LGBZO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "LQNUM",
+        "KEYFLAG": "X",
+        "ROLLNAME": "LVS_LQNUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "TBNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "TBNUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "UBNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "UBNUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "BTANR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_BTANR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "INT_CALL_NUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LOHUM_INT_CALL_NUM_NJIT",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ORIGINAL_RSNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "MPE_ORIGINAL_RSNUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "TBNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "TBNUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "DLQNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_DLQNR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NLQNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_LQNUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RLQNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_LQNUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VLQNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_LQNUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "CRM_ITEM_ID",
+        "KEYFLAG": "",
+        "ROLLNAME": "CRMT_ITEM_NO_CO",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "E071",
+        "FIELDNAME": "GENNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "TRGENNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "LGTOR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LGTOR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "KOBER",
+        "KEYFLAG": "",
+        "ROLLNAME": "KOBER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "DLTYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_DLTYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KOBER",
+        "KEYFLAG": "",
+        "ROLLNAME": "KOBER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "LYARD",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_YARD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FLDLOGSVERSION",
+        "KEYFLAG": "",
+        "ROLLNAME": "FLOG_VERSION",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "YDOOR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LEINT_LGTOR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "STRUC_CLASSTYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "KLASSENART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "LANUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "T310_LANUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "PKPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "PKPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "/CWM/ALTME",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/ALTME",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "ZEIEI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_ZEIEI",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "/CWM/VEMEH",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/VEMEH",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "/CWM/ERFME",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/ERFME",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "MGEWI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_MGEWI",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "QKAPV",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_QKAPV",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VKAPV",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VKAPV",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "E070",
+        "FIELDNAME": "TRSTATUS",
+        "KEYFLAG": "",
+        "ROLLNAME": "TRSTATUS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "SORTFLAG",
+        "KEYFLAG": "",
+        "ROLLNAME": "FLAG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "STOFF",
+        "KEYFLAG": "",
+        "ROLLNAME": "STOFF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "INHALT",
+        "KEYFLAG": "",
+        "ROLLNAME": "INHALT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VHILM",
+        "KEYFLAG": "",
+        "ROLLNAME": "VHILM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "STRUC_CODE",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADMPN_RBA_STRUC_CODE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "REFTABLE",
+        "KEYFLAG": "",
+        "ROLLNAME": "REFTABLE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "PRECFIELD",
+        "KEYFLAG": "",
+        "ROLLNAME": "PRECFIELD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "BZEIT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_BZEIT",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "BZEIT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_BZEIT",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZTRM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_KZTRM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZXDK",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_KZXDK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "CLAKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "CLAKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZVAS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_KZVAS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "INPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "INPOS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FLGEX",
+        "KEYFLAG": "",
+        "ROLLNAME": "FLGEX",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "URGFL",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_URGFL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "/CWM/IND_CATCH",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/IND_CATCH",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "ZRSTG",
+        "KEYFLAG": "",
+        "ROLLNAME": "FLAG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "PRFLG",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_PRFLG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SLFLG",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_SLFLG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KZMPF",
+        "KEYFLAG": "",
+        "ROLLNAME": "KZMPF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "TOVAS",
+        "KEYFLAG": "",
+        "ROLLNAME": "FLAG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "/CWM/IND_DELUPD",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/IND_DELUPD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KTOMA",
+        "KEYFLAG": "",
+        "ROLLNAME": "KTOMA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "VORAB_SM",
+        "KEYFLAG": "",
+        "ROLLNAME": "VORAB_SM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "CHECKLIST",
+        "KEYFLAG": "",
+        "ROLLNAME": "EAM_CL_MATCOMP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "OPERATIONWORKCENTERALIGNMENT",
+        "KEYFLAG": "",
+        "ROLLNAME": "OPERATIONWORKCENTERALIGNMENT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "MAINTORDCOMPCMTDQTYISKEPT",
+        "KEYFLAG": "",
+        "ROLLNAME": "MAINTORDCOMPCMTDQTYISKEPT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "R_PART_INDICATOR",
+        "KEYFLAG": "",
+        "ROLLNAME": "WTYSC_RETURN_PART_INDICATOR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FSH_CRITICAL_COMP",
+        "KEYFLAG": "",
+        "ROLLNAME": "FSH_CRITICAL_COMP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "MILL_UCDET",
+        "KEYFLAG": "",
+        "ROLLNAME": "MILL_UCDET",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NULKO",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NULKO",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "DATALN",
+        "KEYFLAG": "",
+        "ROLLNAME": "DATALN",
+        "DATATYPE": "INT2"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FSH_CRITICAL_LEVEL",
+        "KEYFLAG": "",
+        "ROLLNAME": "FSH_CRITICAL_LEVEL",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "QDATU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_QDATU",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "QDATU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_QDATU",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PDAT1",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFPDAT1",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "LOGDATE",
+        "KEYFLAG": "X",
+        "ROLLNAME": "SYDATS",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "ZDATU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_ZDATU",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PDAT2",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFPDAT2",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PDAT3",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFPDAT3",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "IDAT1",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFIDAT1",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "IDAT3",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFIDAT3",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "USER5",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFUSER5",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "IDATU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_IDATU",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "USER8",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFUSER8",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "USER7",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFUSER7",
+        "DATATYPE": "DATS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PROTY",
+        "KEYFLAG": "",
+        "ROLLNAME": "CKML_PROZESS_TYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "CSTG_VRNT",
+        "KEYFLAG": "",
+        "ROLLNAME": "CK_KLVAR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "PTMST",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_PTMST",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "ATMST",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_ATMSF",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "TBPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "TBPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "BTAPS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_BTAPS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "DBPOSITION",
+        "KEYFLAG": "",
+        "ROLLNAME": "TABFDPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "MBPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "MBLPO",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "IVPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_IVPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "SWABW",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_SWABW",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "NOITM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_CNTPS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "ORPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_ORPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ORIGINAL_RSPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "MPE_ORIGINAL_RSPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SPLRV",
+        "KEYFLAG": "",
+        "ROLLNAME": "RSPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ESMNG",
+        "KEYFLAG": "",
+        "ROLLNAME": "ESMNG",
+        "DATATYPE": "FLTP"
+      },
+      {
+        "TABNAME": "E070",
+        "FIELDNAME": "KORRDEV",
+        "KEYFLAG": "",
+        "ROLLNAME": "TRCATEG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "MASTERTYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "TROBJTYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "PLPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_PLPOS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZINV",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_KZINV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VPPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VPPOS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NPPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NPPOS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VPOBJ",
+        "KEYFLAG": "",
+        "ROLLNAME": "VPOBJ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RPPOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_RPPOS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "DATA_MODEL_VERSION",
+        "KEYFLAG": "",
+        "ROLLNAME": "PS_DATA_MODEL_VERSION",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "PS_LEVEL_SEQ",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SCWM/DE_PS_LEVEL_SEQ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "PB_ENGINE",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SCMB/PB_ENGINE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "YLCCL",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRDM_YLCCL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "PRRTY",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_PRRTY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "RFTYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_RFDTY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "VEANZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "VEANZ",
+        "DATATYPE": "INT4"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "ANZGL",
+        "KEYFLAG": "",
+        "ROLLNAME": "ANZGL",
+        "DATATYPE": "INT4"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "SRS_ID",
+        "KEYFLAG": "",
+        "ROLLNAME": "SRS_ID",
+        "DATATYPE": "INT4"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SC_ITM_NO",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SRMERP/SC_ITM_NO",
+        "DATATYPE": "INT4"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ASTNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFASTNR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "OUTPUTSTYLE",
+        "KEYFLAG": "",
+        "ROLLNAME": "OUTPUTSTYLE",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "TAPRI",
+        "KEYFLAG": "",
+        "ROLLNAME": "TAPRI",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "AUFWG",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFWG",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BAUWG",
+        "KEYFLAG": "",
+        "ROLLNAME": "BAUWG",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BAUST",
+        "KEYFLAG": "",
+        "ROLLNAME": "BAUST",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "TRANSP_INDEX",
+        "KEYFLAG": "",
+        "ROLLNAME": "EHS_ADGE_TRANSP_INDEX",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "CRIT_SAF_INDEX",
+        "KEYFLAG": "",
+        "ROLLNAME": "EHS_ADGE_CRIT_SAF_INDEX",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VENUM",
+        "KEYFLAG": "X",
+        "ROLLNAME": "VENUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "UNVEL",
+        "KEYFLAG": "",
+        "ROLLNAME": "UNVEL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "CONROUT",
+        "KEYFLAG": "",
+        "ROLLNAME": "CONROUT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "BENUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_BENUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "IVNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_IVNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "WENUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_WENUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "WENUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_WENUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VBELN_GEN",
+        "KEYFLAG": "",
+        "ROLLNAME": "VBELN_GEN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "IVNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_IVNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "BENUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_BENUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VLPLA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VLPLA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RLPLA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_RLPLA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "UEVEL",
+        "KEYFLAG": "",
+        "ROLLNAME": "UEVEL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "DLPLA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_DLPLA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ADRNRA",
+        "KEYFLAG": "",
+        "ROLLNAME": "AD_ADDRNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "TM_DOC_ITEM_ID",
+        "KEYFLAG": "",
+        "ROLLNAME": "TMS_TM_ITEM_ID",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SUPPLYAREA",
+        "KEYFLAG": "",
+        "ROLLNAME": "PRVBE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "YLOCT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_YLOCT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SEALN5",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_SEALN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NANZL",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NANZL",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "HANDLE_VEPO",
+        "KEYFLAG": "",
+        "ROLLNAME": "GUID_VEPO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "PACKVORSCHR",
+        "KEYFLAG": "",
+        "ROLLNAME": "PL_PACKNR_CONV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "STRUC_CLASS",
+        "KEYFLAG": "",
+        "ROLLNAME": "KLASSE_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "PKNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "PKNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "DCNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXDCK_DCNUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "T301T",
+        "FIELDNAME": "LTYPT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_LTYPT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "LOGKEY",
+        "KEYFLAG": "",
+        "ROLLNAME": "LOGKEY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "LOGDATA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LOGDATA",
+        "DATATYPE": "LRAW"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "EPC1",
+        "KEYFLAG": "",
+        "ROLLNAME": "ABI_EPC1",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "EPC2",
+        "KEYFLAG": "",
+        "ROLLNAME": "ABI_EPC2",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "MANDT",
+        "KEYFLAG": "X",
+        "ROLLNAME": "MANDT",
+        "DATATYPE": "CLNT"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "MANDT",
+        "KEYFLAG": "X",
+        "ROLLNAME": "MANDT",
+        "DATATYPE": "CLNT"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "MANDT",
+        "KEYFLAG": "X",
+        "ROLLNAME": "MANDT",
+        "DATATYPE": "CLNT"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "MANDT",
+        "KEYFLAG": "X",
+        "ROLLNAME": "MANDT",
+        "DATATYPE": "CLNT"
+      },
+      {
+        "TABNAME": "T301T",
+        "FIELDNAME": "MANDT",
+        "KEYFLAG": "X",
+        "ROLLNAME": "MANDT",
+        "DATATYPE": "CLNT"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "BUKRS",
+        "KEYFLAG": "",
+        "ROLLNAME": "BUKRS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T301T",
+        "FIELDNAME": "SPRAS",
+        "KEYFLAG": "X",
+        "ROLLNAME": "SPRAS",
+        "DATATYPE": "LANG"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "WERKS",
+        "KEYFLAG": "",
+        "ROLLNAME": "WERKS_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "WERKS",
+        "KEYFLAG": "",
+        "ROLLNAME": "WERKS_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "WERKS",
+        "KEYFLAG": "",
+        "ROLLNAME": "WERKS_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "WERKS",
+        "KEYFLAG": "",
+        "ROLLNAME": "WERKS_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "WERKS",
+        "KEYFLAG": "",
+        "ROLLNAME": "HUM_WERKS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "WERKS",
+        "KEYFLAG": "",
+        "ROLLNAME": "WERKS_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "WAERS",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFWAERS",
+        "DATATYPE": "CUKY"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "WAERS",
+        "KEYFLAG": "",
+        "ROLLNAME": "WAERS",
+        "DATATYPE": "CUKY"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "MATNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "MATNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "MATNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "MATNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "MATNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "MATNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "MATNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "MATNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "OBJNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "J_OBJNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "OBJNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "J_OBJNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "GSBER",
+        "KEYFLAG": "",
+        "ROLLNAME": "GSBER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "GSBER",
+        "KEYFLAG": "",
+        "ROLLNAME": "GSBER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "KOKRS",
+        "KEYFLAG": "",
+        "ROLLNAME": "KOKRS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "MEINS",
+        "KEYFLAG": "",
+        "ROLLNAME": "MEINS",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "MEINS",
+        "KEYFLAG": "",
+        "ROLLNAME": "MEINS",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "MEINS",
+        "KEYFLAG": "",
+        "ROLLNAME": "MEINS",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "AUFNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "KOSTL",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFKOSTL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "TABNAME",
+        "KEYFLAG": "X",
+        "ROLLNAME": "TABNAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "LIFNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LIFNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "LGORT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LGORT_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "LGORT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LGORT_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "LGORT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LGORT_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "LGORT",
+        "KEYFLAG": "",
+        "ROLLNAME": "HUM_LGORT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "LGORT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LGORT_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "AENNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "AENNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "KAPPL",
+        "KEYFLAG": "",
+        "ROLLNAME": "KAPPL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "ERUHR",
+        "KEYFLAG": "",
+        "ROLLNAME": "ERZET",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "QZEIT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_QZEIT",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "AZEIT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_AZEIT",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "DBTABLOG",
+        "FIELDNAME": "LOGTIME",
+        "KEYFLAG": "X",
+        "ROLLNAME": "SYTIME",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "STUZT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_STUZT",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "ENUZT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_ENUZT",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ERFZEIT",
+        "KEYFLAG": "",
+        "ROLLNAME": "CO_INS_TIME",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BDZTP",
+        "KEYFLAG": "",
+        "ROLLNAME": "BDZTP",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PERFORMANCEPERIODSTARTTIME",
+        "KEYFLAG": "",
+        "ROLLNAME": "PERFORMANCEPERIODSTARTTIME",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PERFORMANCEPERIODENDTIME",
+        "KEYFLAG": "",
+        "ROLLNAME": "PERFORMANCEPERIODENDTIME",
+        "DATATYPE": "TIMS"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "VEPOS",
+        "KEYFLAG": "X",
+        "ROLLNAME": "VEPOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "POSNR_GEN",
+        "KEYFLAG": "",
+        "ROLLNAME": "POSNR_GEN",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "POSNR_GEN",
+        "KEYFLAG": "",
+        "ROLLNAME": "POSNR_GEN",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "COMPGROUP_ITEM_NUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LOHUM_CGRP_ITEM_NUMBER_NJIT",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "CRMS4_ITEM_ID",
+        "KEYFLAG": "",
+        "ROLLNAME": "CRMS4_NUMBER_INT",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "MASTERNAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "SOBJ_NAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "LZNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_LZNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "USER3",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFUSER3",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "USER0",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFUSER0",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "USER1",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFUSER1",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "EXIDV2",
+        "KEYFLAG": "",
+        "ROLLNAME": "EXIDV2",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VPOBJKEY",
+        "KEYFLAG": "",
+        "ROLLNAME": "VPOBJKEY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "AUFEX",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFEX",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NXIDV",
+        "KEYFLAG": "",
+        "ROLLNAME": "EXIDV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "TM_DOC_ID",
+        "KEYFLAG": "",
+        "ROLLNAME": "TMS_TM_DOC_ID",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "TRNPD",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_TRNPD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SIGNI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LEINT_SIGNI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E070",
+        "FIELDNAME": "TARSYSTEM",
+        "KEYFLAG": "",
+        "ROLLNAME": "TR_TARGET",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "SPE_CHK_COUNTER",
+        "KEYFLAG": "",
+        "ROLLNAME": "/SPE/DE_CHK_CTR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ZUDIV",
+        "KEYFLAG": "",
+        "ROLLNAME": "DZUDIV",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "SETNM",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFSETNM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PKOSA",
+        "KEYFLAG": "",
+        "ROLLNAME": "PKOSA_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "COSTESTNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "CK_KALNR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "QPLOA",
+        "KEYFLAG": "",
+        "ROLLNAME": "QPLOA",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "QPLOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "QPLOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "QPLOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "QPLOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "QPLOS",
+        "KEYFLAG": "",
+        "ROLLNAME": "QPLOS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PROCNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "CKML_F_PROCNR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NFUML",
+        "KEYFLAG": "",
+        "ROLLNAME": "NFUML",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PEINH_2",
+        "KEYFLAG": "",
+        "ROLLNAME": "PEINH",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "USER6",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFUSER6",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "PACKAGE_CAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "EHS_ADGE_PACKAGE_CAT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "RECIPIENT_LOCATION_CODE",
+        "KEYFLAG": "",
+        "ROLLNAME": "RECIPIENT_LOCATION_CODE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "WTYSC_CLMITEM",
+        "KEYFLAG": "",
+        "ROLLNAME": "WTYSC_CLMITEM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "P_MATERIAL",
+        "KEYFLAG": "",
+        "ROLLNAME": "HU_P_MAT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "NAMEF",
+        "KEYFLAG": "",
+        "ROLLNAME": "NAMEF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "NAMBE",
+        "KEYFLAG": "",
+        "ROLLNAME": "NAMBE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VHILM_KU",
+        "KEYFLAG": "",
+        "ROLLNAME": "VHILM_KU",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VANZL",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VANZL",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VOLUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "VOLUM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "BRGEW",
+        "KEYFLAG": "",
+        "ROLLNAME": "BRGEW_VEKP",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "NTGEW",
+        "KEYFLAG": "",
+        "ROLLNAME": "NTGEW_VEKP",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ERFMG",
+        "KEYFLAG": "",
+        "ROLLNAME": "ERFMG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "HOEHE",
+        "KEYFLAG": "",
+        "ROLLNAME": "HOEHE",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "LAENG",
+        "KEYFLAG": "",
+        "ROLLNAME": "LAENG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "BREIT",
+        "KEYFLAG": "",
+        "ROLLNAME": "BREIT",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BDMNG",
+        "KEYFLAG": "",
+        "ROLLNAME": "BDMNG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ROMS1",
+        "KEYFLAG": "",
+        "ROLLNAME": "ROMS1",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ROMS2",
+        "KEYFLAG": "",
+        "ROLLNAME": "ROMS2",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ROMS3",
+        "KEYFLAG": "",
+        "ROLLNAME": "ROMS3",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ROMEN",
+        "KEYFLAG": "",
+        "ROLLNAME": "ROMEN",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ROANZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "ROANZ",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "/CWM/ERFMG",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/ERFMG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ENMNG",
+        "KEYFLAG": "",
+        "ROLLNAME": "ENMNG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "VMENG",
+        "KEYFLAG": "",
+        "ROLLNAME": "VMENG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "EINME",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_EINME",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "LMENG",
+        "KEYFLAG": "",
+        "ROLLNAME": "LMENG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SERVICEDURATION",
+        "KEYFLAG": "",
+        "ROLLNAME": "SERVICEDURATION",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "USER4",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFUSER4",
+        "DATATYPE": "CURR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FSH_RALLOC_QTY",
+        "KEYFLAG": "",
+        "ROLLNAME": "FSH_RALLOC_QTY",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "TRAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_TRAME",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "GPREIS",
+        "KEYFLAG": "",
+        "ROLLNAME": "PPCOMP",
+        "DATATYPE": "CURR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "GESME",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_GESME",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "VERME",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_VERME",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "AUSME",
+        "KEYFLAG": "",
+        "ROLLNAME": "LQUA_AUSME",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "SOLWM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_SOLWM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "TRKORR",
+        "KEYFLAG": "X",
+        "ROLLNAME": "TRKORR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "DOMNAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "DOMNAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071",
+        "FIELDNAME": "LANG",
+        "KEYFLAG": "",
+        "ROLLNAME": "SPRAS",
+        "DATATYPE": "LANG"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "LANG",
+        "KEYFLAG": "",
+        "ROLLNAME": "SPRAS",
+        "DATATYPE": "LANG"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SERNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "SERNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ERFME",
+        "KEYFLAG": "",
+        "ROLLNAME": "ERFME",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RLTYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_RLTYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ABGSL",
+        "KEYFLAG": "",
+        "ROLLNAME": "ABGR_SCHL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PSPEL",
+        "KEYFLAG": "",
+        "ROLLNAME": "PS_PSP_ELE",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "POSTP",
+        "KEYFLAG": "",
+        "ROLLNAME": "POSTP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "MEABM",
+        "KEYFLAG": "",
+        "ROLLNAME": "MEABM",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "MAGRV",
+        "KEYFLAG": "",
+        "ROLLNAME": "MAGRV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "AWSLS",
+        "KEYFLAG": "",
+        "ROLLNAME": "AWSLS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VHART",
+        "KEYFLAG": "",
+        "ROLLNAME": "VHIART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "JV_JIBCL",
+        "KEYFLAG": "",
+        "ROLLNAME": "JV_JIBCL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "JV_JIBSA",
+        "KEYFLAG": "",
+        "ROLLNAME": "JV_JIBSA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "UMWRK",
+        "KEYFLAG": "",
+        "ROLLNAME": "UMWRK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "FERC_IND",
+        "KEYFLAG": "",
+        "ROLLNAME": "FE_IND",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "RFORM",
+        "KEYFLAG": "",
+        "ROLLNAME": "RFORM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ROMEI",
+        "KEYFLAG": "",
+        "ROLLNAME": "ROMEI",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PRIO_URG",
+        "KEYFLAG": "",
+        "ROLLNAME": "PRIO_URG",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NLTYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NLTYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VLTYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VLTYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PRIO_REQ",
+        "KEYFLAG": "",
+        "ROLLNAME": "PRIO_REQ",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "LTXSP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTXSP",
+        "DATATYPE": "LANG"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "UMLGO",
+        "KEYFLAG": "",
+        "ROLLNAME": "UMLGO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "BWLVS",
+        "KEYFLAG": "",
+        "ROLLNAME": "BWLVS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "LSTEL",
+        "KEYFLAG": "",
+        "ROLLNAME": "LSTEL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "REFNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_REFNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "REFNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFREFNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "IZWEK",
+        "KEYFLAG": "",
+        "ROLLNAME": "IZWEK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "LETYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_LETYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "LETYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_LETYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BEIKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "BEIKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "ALTME",
+        "KEYFLAG": "",
+        "ROLLNAME": "LRMEI",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "ALTME",
+        "KEYFLAG": "",
+        "ROLLNAME": "VV_ALTME",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "VIEWNAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "VIEWNAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "VENUM",
+        "KEYFLAG": "X",
+        "ROLLNAME": "VENUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ADVCODE",
+        "KEYFLAG": "",
+        "ROLLNAME": "/ISDFPS/ADVCODE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "KOSTV",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFKOSTV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SANKA",
+        "KEYFLAG": "",
+        "ROLLNAME": "CK_SELKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PRREG",
+        "KEYFLAG": "",
+        "ROLLNAME": "PRREG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FLGAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "FOLGENART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ERSKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "ERSKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ABUKR",
+        "KEYFLAG": "",
+        "ROLLNAME": "IM_ABUKRS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PLNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "PLNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "/CWM/MEINS",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/MEINS",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "AKSTL",
+        "KEYFLAG": "",
+        "ROLLNAME": "PS_AKSTL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "VERTI",
+        "KEYFLAG": "",
+        "ROLLNAME": "SA_VERTL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "DOSE_RATE_PACK",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADGE_DOSE_RATE_PACKAGED",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "MAX_GROSS_WEIGHT",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADGE_MAX_GROSS_WEIGHT",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "LADLG",
+        "KEYFLAG": "",
+        "ROLLNAME": "LADLG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "ENTFE",
+        "KEYFLAG": "",
+        "ROLLNAME": "ENTFE",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "FARZT",
+        "KEYFLAG": "",
+        "ROLLNAME": "FARZT",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "LGNUM",
+        "KEYFLAG": "X",
+        "ROLLNAME": "LGNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "LGNUM",
+        "KEYFLAG": "X",
+        "ROLLNAME": "LGNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "LGNUM",
+        "KEYFLAG": "X",
+        "ROLLNAME": "LGNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T301T",
+        "FIELDNAME": "LGNUM",
+        "KEYFLAG": "X",
+        "ROLLNAME": "LGNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "LGNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "HUM_LGNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "LGNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LGNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "CHARG",
+        "KEYFLAG": "",
+        "ROLLNAME": "CHARG_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "EBELP",
+        "KEYFLAG": "",
+        "ROLLNAME": "EBELP",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "MATKL",
+        "KEYFLAG": "",
+        "ROLLNAME": "MATKL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "VNAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "JV_NAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "TXJCD",
+        "KEYFLAG": "",
+        "ROLLNAME": "TXJCD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "PRCTR",
+        "KEYFLAG": "",
+        "ROLLNAME": "PRCTR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "EBELN",
+        "KEYFLAG": "",
+        "ROLLNAME": "EBELN",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "EKGRP",
+        "KEYFLAG": "",
+        "ROLLNAME": "EKGRP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "SOBKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "SOBKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "SOBKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "SOBKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SOBKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "SOBKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "AUART",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "KALSM",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFKALSM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "GEWEI",
+        "KEYFLAG": "",
+        "ROLLNAME": "GEWEI",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ABKRS",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFABKRS",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "KSTAR",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFKSTAR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "KVEWE",
+        "KEYFLAG": "",
+        "ROLLNAME": "KVEWE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VOLEH",
+        "KEYFLAG": "",
+        "ROLLNAME": "VOLEH",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "BWART",
+        "KEYFLAG": "",
+        "ROLLNAME": "BWART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BWART",
+        "KEYFLAG": "",
+        "ROLLNAME": "BWART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "RECID",
+        "KEYFLAG": "",
+        "ROLLNAME": "JV_RECIND",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "SAKNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFSAKNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "KNTTP",
+        "KEYFLAG": "",
+        "ROLLNAME": "KNTTP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VSTEL",
+        "KEYFLAG": "",
+        "ROLLNAME": "VSTEL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "LGTYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LGTYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T301T",
+        "FIELDNAME": "LGTYP",
+        "KEYFLAG": "X",
+        "ROLLNAME": "LGTYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "LGTYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LGTYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ETYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "JV_ETYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "DD03L",
+        "FIELDNAME": "ROLLNAME",
+        "KEYFLAG": "",
+        "ROLLNAME": "ROLLNAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "BEMOT",
+        "KEYFLAG": "",
+        "ROLLNAME": "BEMOT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "PRODUCTTYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "PRODUCT_TYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "INFNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "INFNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "FUNC_AREA",
+        "KEYFLAG": "",
+        "ROLLNAME": "FKBER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "LGPLA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LGPLA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "LGPLA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LGPLA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "LOGSYSTEM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LOGSYSTEM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "STORT",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFSTORT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "PSTYV",
+        "KEYFLAG": "",
+        "ROLLNAME": "PSTYV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "PSTYV",
+        "KEYFLAG": "",
+        "ROLLNAME": "PSTYV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BNFPO",
+        "KEYFLAG": "",
+        "ROLLNAME": "BNFPO",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "E071",
+        "FIELDNAME": "ACTIVITY",
+        "KEYFLAG": "",
+        "ROLLNAME": "TRACTIVITY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "ACTIVITY",
+        "KEYFLAG": "",
+        "ROLLNAME": "TRACTIVITY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071",
+        "FIELDNAME": "TRKORR",
+        "KEYFLAG": "X",
+        "ROLLNAME": "TRKORR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "SOLEX",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_SOLEX",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "ISTWM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAK_ISTWM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NOMNG",
+        "KEYFLAG": "",
+        "ROLLNAME": "NOMNG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VSOLM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VSOLM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VISTM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VISTM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VSOLA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VSOLA",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VDIFM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VDIFM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VISTA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VISTA",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VDIFA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VDIFA",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NSOLA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NSOLA",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FLMNG",
+        "KEYFLAG": "",
+        "ROLLNAME": "FLMNG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NISTM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NISTM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NDIFM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NDIFM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NSOLM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NSOLM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NISTA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NISTA",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RISTM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_RISTM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RSOLM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_RSOLM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NDIFA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NDIFA",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RSOLA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_RSOLA",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RDIFA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_RDIFA",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RISTA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_RISTA",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RDIFM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_RDIFM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "DMENA",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_DMENA",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "DMENG",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_DMENG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ZUMS3",
+        "KEYFLAG": "",
+        "ROLLNAME": "DZUMS3",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NWIRM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NWIRM",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "SOLPO",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_SOLPO",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ZUMS1",
+        "KEYFLAG": "",
+        "ROLLNAME": "DZUMS1",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ZUMS2",
+        "KEYFLAG": "",
+        "ROLLNAME": "DZUMS2",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "TBMNG",
+        "KEYFLAG": "",
+        "ROLLNAME": "TBMNG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "/CWM/ACT_QTY",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/ACT_QTY",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "/CWM/HU_NEW_QTY",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/HU_NEW_QTY",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "/CWM/HU_OLD_QTY",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/HU_OLD_QTY",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "/CWM/TGT_QTY",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/TGT_QTY",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ENWRT",
+        "KEYFLAG": "",
+        "ROLLNAME": "ENWRT",
+        "DATATYPE": "CURR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FPREIS",
+        "KEYFLAG": "",
+        "ROLLNAME": "OPREIFX",
+        "DATATYPE": "CURR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "GPREIS_2",
+        "KEYFLAG": "",
+        "ROLLNAME": "PPGXXX",
+        "DATATYPE": "CURR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FPREIS_2",
+        "KEYFLAG": "",
+        "ROLLNAME": "PPFXXX",
+        "DATATYPE": "CURR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "TARAG",
+        "KEYFLAG": "",
+        "ROLLNAME": "TARAG_VEKP",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "BTVOL",
+        "KEYFLAG": "",
+        "ROLLNAME": "BTVOL_VEKP",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "MAGEW",
+        "KEYFLAG": "",
+        "ROLLNAME": "MAGEW_VEKP",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "TAVOL",
+        "KEYFLAG": "",
+        "ROLLNAME": "TAVOL_VEKP",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "VEMNG",
+        "KEYFLAG": "",
+        "ROLLNAME": "VEMNG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "NTVOL",
+        "KEYFLAG": "",
+        "ROLLNAME": "NTVOL_VEKP",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "MAVOL",
+        "KEYFLAG": "",
+        "ROLLNAME": "MAVOL_VEKP",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "/CWM/VEMNG",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/VEMNG",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "ZUL_AUFL",
+        "KEYFLAG": "",
+        "ROLLNAME": "PL_MAXSTWE",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "VEMNG_FLO",
+        "KEYFLAG": "",
+        "ROLLNAME": "LGMNG_FLO",
+        "DATATYPE": "FLTP"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "DOSE_RATE_BULK",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADGE_DOSE_RATE",
+        "DATATYPE": "QUAN"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VHILM",
+        "KEYFLAG": "",
+        "ROLLNAME": "VHILM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "PACKCODE",
+        "KEYFLAG": "",
+        "ROLLNAME": "CBDUE_PACOD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ZSCHM",
+        "KEYFLAG": "",
+        "ROLLNAME": "PS_ZSCHM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "CYCLE",
+        "KEYFLAG": "",
+        "ROLLNAME": "ST_KOSTL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NLBER",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NLBER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ROKME",
+        "KEYFLAG": "",
+        "ROLLNAME": "ROKME",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "BAUGR",
+        "KEYFLAG": "",
+        "ROLLNAME": "BAUGR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "SOWRK",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFSOWRK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "SERAIL",
+        "KEYFLAG": "",
+        "ROLLNAME": "SERAIL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "VOGRP",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFSPSET",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "LDEST",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_LDEST",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "AUSFB",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_AUSFB",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "WAWRK",
+        "KEYFLAG": "",
+        "ROLLNAME": "WERGW",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "EBELE",
+        "KEYFLAG": "",
+        "ROLLNAME": "EETEN",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VLBER",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VLBER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "RLBER",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_RLBER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "LANDF",
+        "KEYFLAG": "",
+        "ROLLNAME": "LANDF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "LANDT",
+        "KEYFLAG": "",
+        "ROLLNAME": "LANDT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "DG_PACKAGE_LEVEL",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADGE_DG_PACKAGE_LEVEL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "FUNCT",
+        "KEYFLAG": "",
+        "ROLLNAME": "CY_FUNCT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": "VEMEH",
+        "KEYFLAG": "",
+        "ROLLNAME": "VEMEH",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "GEWEI_MAX",
+        "KEYFLAG": "",
+        "ROLLNAME": "GEWEI",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VOLEH_MAX",
+        "KEYFLAG": "",
+        "ROLLNAME": "VOLEH",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "FAREH",
+        "KEYFLAG": "",
+        "ROLLNAME": "FAREH",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "LADEH",
+        "KEYFLAG": "",
+        "ROLLNAME": "LADEH",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "EHENT",
+        "KEYFLAG": "",
+        "ROLLNAME": "EHENT",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "/CWM/VEMEH",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/VEMEH",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "/CWM/ACT_UOM",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/ACT_UOM",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "/CWM/TGT_UOM",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CWM/TGT_UOM",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "SERVICEDURATIONUNIT",
+        "KEYFLAG": "",
+        "ROLLNAME": "SERVICEDURATIONUNIT",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "DOSE_RATE_BULK_U",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADGE_DOSE_RATE_U",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "U_MAX_GROSS_WGHT",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADGE_U_MAX_GROSS_WGHT",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "U_DOSE_RATE_PACK",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADGE_DOSE_RATE_PACKAGED_U",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "ZEIEI",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_ZEIEI",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "ZUMEI",
+        "KEYFLAG": "",
+        "ROLLNAME": "DZUMEI",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "WIRME",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_WIRME",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NLFMV",
+        "KEYFLAG": "",
+        "ROLLNAME": "CS_NLFMV",
+        "DATATYPE": "UNIT"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "DRUKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_DRUKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "SIZECL",
+        "KEYFLAG": "",
+        "ROLLNAME": "IM_SIZECL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "RSNCD",
+        "KEYFLAG": "",
+        "ROLLNAME": "LXYRD_RSNCD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ESTNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFESTNR",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "E070",
+        "FIELDNAME": "STRKORR",
+        "KEYFLAG": "",
+        "ROLLNAME": "STRKORR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ZTRNO",
+        "KEYFLAG": "",
+        "ROLLNAME": "TBNUM",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VEGR5",
+        "KEYFLAG": "",
+        "ROLLNAME": "VEGR5",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VEGR1",
+        "KEYFLAG": "",
+        "ROLLNAME": "VEGR1",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VEGR2",
+        "KEYFLAG": "",
+        "ROLLNAME": "VEGR2",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VEGR3",
+        "KEYFLAG": "",
+        "ROLLNAME": "VEGR3",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "VEGR4",
+        "KEYFLAG": "",
+        "ROLLNAME": "VEGR4",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "UMWKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "AM_UMWKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "TRART",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_TRART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAK",
+        "FIELDNAME": "BETYP",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_BETYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "SPGRU",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_SPGRU",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "KZDIF",
+        "KEYFLAG": "",
+        "ROLLNAME": "LVS_KZDIF",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "CLAIM_CONTROL",
+        "KEYFLAG": "",
+        "ROLLNAME": "WTYSC_CLAIM_CONTROL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "UPDATE_CONTROL",
+        "KEYFLAG": "",
+        "ROLLNAME": "WTYSC_UPDATE_CONTROL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "EBW_KEY",
+        "KEYFLAG": "",
+        "ROLLNAME": "FCO_EBW_KEY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "IVPRO",
+        "KEYFLAG": "",
+        "ROLLNAME": "IM_PROFIL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "AD01PROFNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "AD01PROFNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "/CUM/DESNUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "/CUM/DESNUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "LEADING_LWDG",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADGE_LEADING_LWDG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "ANFAUFNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "AUFANFNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "VERAA_USER",
+        "KEYFLAG": "",
+        "ROLLNAME": "VERAA_USER",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "E071K",
+        "FIELDNAME": "OBJNAME",
+        "KEYFLAG": "X",
+        "ROLLNAME": "TABNAME",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": "INSTR_ENCL_CAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "CBUNE_INSTR_ENCL_CAT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LQUA",
+        "FIELDNAME": "LENUM",
+        "KEYFLAG": "",
+        "ROLLNAME": "LENUM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "DLENR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_DLENR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "NLENR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_NLENR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": "VLENR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LTAP_VLENR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": "NOMAT",
+        "KEYFLAG": "",
+        "ROLLNAME": "NOMAT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": "AUFK_STATUS",
+        "KEYFLAG": "",
+        "ROLLNAME": "ACTCMB_DELE",
+        "DATATYPE": "INT1"
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEPO",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "AUFK",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "LTAP",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "VEKP",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "RESB",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      }
+    ]
+  }
+}

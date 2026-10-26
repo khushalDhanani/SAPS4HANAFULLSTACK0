@@ -21,6 +21,9 @@ sap.ui.define([
                 isFullUnit: true,
                 transferQty: 0,
                 maxAllowedQty: 0,
+                selectedHus: [],
+                selectionValidation: null,
+                selectionSummary: "",
                 statusMessage: "",
                 statusStateType: "None",
                 storageBins: [],
@@ -42,6 +45,9 @@ sap.ui.define([
             oViewModel.setProperty("/scanUnitNumber", "");
             oViewModel.setProperty("/validatedUnit", null);
             oViewModel.setProperty("/transferQty", 0);
+            oViewModel.setProperty("/selectedHus", []);
+            oViewModel.setProperty("/selectionValidation", null);
+            oViewModel.setProperty("/selectionSummary", "");
             oViewModel.setProperty("/statusMessage", "");
             oViewModel.setProperty("/statusStateType", "None");
 
@@ -75,12 +81,14 @@ sap.ui.define([
             var sUrl = "/odata/v4/hu-stock-transfer/getCockpitDetail(" +
                 "reservation='" + encodeURIComponent(sRes) + "'," +
                 "item='" + encodeURIComponent(sItem) + "')";
+            var that = this;
 
             ODataClient.get(sUrl)
                 .then(function (data) {
                     var oData = (data && data.value) ? data.value : (data || {});
                     oViewModel.setProperty("/cockpit", oData);
                     oViewModel.setProperty("/maxAllowedQty", (oData && oData.OpenQty) || 0);
+                    that._updateHuSelectionSummary();
                     oViewModel.setProperty("/busy", false);
                 })
                 .catch(function (err) {
@@ -142,10 +150,14 @@ sap.ui.define([
 
                     // Auto set transfer qty
                     var bFull = oViewModel.getProperty("/isFullUnit");
+                    var aSelected = oViewModel.getProperty("/selectedHus") || [];
+                    var nRemaining = Number(oViewModel.getProperty("/maxAllowedQty") || 0) - aSelected.reduce(function (sum, item) {
+                        return sum + Number(item.TransferQty || 0);
+                    }, 0);
                     if (bFull) {
-                        oViewModel.setProperty("/transferQty", oData.DefaultTransferQty);
+                        oViewModel.setProperty("/transferQty", Math.max(0, Math.min(Number(oData.AvailableQuantity || 0), nRemaining)));
                     } else if (oViewModel.getProperty("/transferQty") <= 0) {
-                        oViewModel.setProperty("/transferQty", oData.DefaultTransferQty);
+                        oViewModel.setProperty("/transferQty", Math.max(0, Math.min(Number(oData.AvailableQuantity || 0), nRemaining)));
                     }
 
                     MessageToast.show((oData.UnitType || "Unit") + " validated successfully!");
@@ -162,7 +174,11 @@ sap.ui.define([
             var oUnit = oViewModel.getProperty("/validatedUnit");
 
             if (bState && oUnit && oUnit.DefaultTransferQty) {
-                oViewModel.setProperty("/transferQty", oUnit.DefaultTransferQty);
+                var aSelected = oViewModel.getProperty("/selectedHus") || [];
+                var nRemaining = Number(oViewModel.getProperty("/maxAllowedQty") || 0) - aSelected.reduce(function (sum, item) {
+                    return sum + Number(item.TransferQty || 0);
+                }, 0);
+                oViewModel.setProperty("/transferQty", Math.max(0, Math.min(Number(oUnit.AvailableQuantity || 0), nRemaining)));
             }
         },
 
@@ -302,6 +318,156 @@ sap.ui.define([
                 var sBin = oCtx.getProperty("ActualStorageBin");
                 MessageToast.show("Selected bin " + sBin + " has no specific HU/SU or Bin number.");
             }
+        },
+
+        onAddUnitToSelection: function () {
+            var oViewModel = this.getModel("cockpitView");
+            var oUnit = oViewModel.getProperty("/validatedUnit");
+            var nQty = Number(oViewModel.getProperty("/transferQty"));
+            var aSelected = (oViewModel.getProperty("/selectedHus") || []).slice();
+            var nOpenQty = Number(oViewModel.getProperty("/maxAllowedQty"));
+            var nSelected = aSelected.reduce(function (sum, item) { return sum + Number(item.TransferQty || 0); }, 0);
+            var nRemaining = nOpenQty - nSelected;
+            var sBehavior = String((oViewModel.getProperty("/cockpit") || {}).OversizeHuSelectionBehavior || "BLOCK").toUpperCase();
+
+            if (!oUnit || !oUnit.Valid || !String(oUnit.UnitType || "").includes("HU")) {
+                MessageBox.error(this.getText("huSelectionRequireValidatedHu", null, "Validate a handling unit before adding it."));
+                return;
+            }
+            if (!Number.isFinite(nQty) || nQty <= 0 || nQty > Number(oUnit.AvailableQuantity)) {
+                MessageBox.error(this.getText("huSelectionQtyWithinStock", [oUnit.AvailableQuantity], "Quantity must be positive and within HU stock ({0})."));
+                return;
+            }
+            if (aSelected.some(function (item) { return String(item.UnitNumber).toUpperCase() === String(oUnit.UnitNumber).toUpperCase(); })) {
+                MessageBox.error(this.getText("huSelectionDuplicateHu", null, "This handling unit is already selected."));
+                return;
+            }
+            if (Number(oUnit.AvailableQuantity) > nRemaining && sBehavior !== "WARN") {
+                MessageBox.error(this.getText("huSelectionOversizeBlocked", [nRemaining], "This HU exceeds the remaining reservation quantity ({0}); selection is blocked."));
+                return;
+            }
+            if (nQty > nRemaining) {
+                MessageBox.error(this.getText("huSelectionSumOverOpenQty", [nRemaining], "Selected quantities cannot exceed the remaining reservation quantity ({0})."));
+                return;
+            }
+
+            aSelected.push({
+                UnitNumber: oUnit.UnitNumber,
+                UnitType: oUnit.UnitType,
+                TransferQty: nQty,
+                AvailableQuantity: Number(oUnit.AvailableQuantity),
+                BaseUnit: oUnit.BaseUnit,
+                StorageType: oUnit.StorageType,
+                StorageBin: oUnit.StorageBin
+            });
+            oViewModel.setProperty("/selectedHus", aSelected);
+            oViewModel.setProperty("/selectionValidation", null);
+            this._updateHuSelectionSummary();
+            oViewModel.setProperty("/scanUnitNumber", "");
+            oViewModel.setProperty("/validatedUnit", null);
+            oViewModel.setProperty("/transferQty", 0);
+        },
+
+        onRemoveSelectedHu: function (oEvent) {
+            var oItem = oEvent && oEvent.getParameter && oEvent.getParameter("listItem");
+            var oContext = oItem && oItem.getBindingContext && oItem.getBindingContext("cockpitView");
+            if (!oContext) return;
+            var iIndex = Number(oContext.getPath().split("/").pop());
+            var oViewModel = this.getModel("cockpitView");
+            var aSelected = (oViewModel.getProperty("/selectedHus") || []).slice();
+            if (!Number.isInteger(iIndex) || iIndex < 0 || iIndex >= aSelected.length) return;
+            aSelected.splice(iIndex, 1);
+            oViewModel.setProperty("/selectedHus", aSelected);
+            oViewModel.setProperty("/selectionValidation", null);
+            this._updateHuSelectionSummary();
+        },
+
+        onHuSelectionQuantityChange: function (oEvent) {
+            var oSource = oEvent && oEvent.getSource && oEvent.getSource();
+            var oContext = oSource && oSource.getBindingContext && oSource.getBindingContext("cockpitView");
+            if (!oContext) return;
+            var nQty = Number(oSource.getValue());
+            var nAvailable = Number(oContext.getProperty("AvailableQuantity"));
+            var nTotal = (this.getModel("cockpitView").getProperty("/selectedHus") || []).reduce(function (sum, item) {
+                return sum + Number(item.TransferQty || 0);
+            }, 0);
+            var nOpen = Number(this.getModel("cockpitView").getProperty("/maxAllowedQty") || 0);
+            if (!Number.isFinite(nQty) || nQty <= 0 || nQty > nAvailable || nTotal > nOpen) {
+                MessageBox.error(this.getText("huSelectionClientValidation", null, "Each selected HU must be unique and its quantity must be within available stock and the open reservation quantity."));
+            }
+            this.getModel("cockpitView").setProperty("/selectionValidation", null);
+            this._updateHuSelectionSummary();
+        },
+
+        _updateHuSelectionSummary: function () {
+            var oViewModel = this.getModel("cockpitView");
+            var aSelected = oViewModel.getProperty("/selectedHus") || [];
+            var nTotal = aSelected.reduce(function (sum, item) { return sum + Number(item.TransferQty || 0); }, 0);
+            var nOpen = Number(oViewModel.getProperty("/maxAllowedQty") || 0);
+            var sUnit = (oViewModel.getProperty("/cockpit") || {}).BaseUnit || "";
+            oViewModel.setProperty("/selectionSummary", this.getText(
+                "huSelectionTotalSummary", [nTotal.toFixed(3), nOpen.toFixed(3), sUnit],
+                "Selected: {0} / open: {1} {2}"
+            ));
+        },
+
+        onValidateSelectedHus: function () {
+            var oViewModel = this.getModel("cockpitView");
+            var aSelected = oViewModel.getProperty("/selectedHus") || [];
+            var nOpenQty = Number(oViewModel.getProperty("/maxAllowedQty"));
+            var nTotal = 0;
+            var nRemaining = nOpenQty;
+            var sBehavior = String((oViewModel.getProperty("/cockpit") || {}).OversizeHuSelectionBehavior || "BLOCK").toUpperCase();
+            var mSeen = Object.create(null);
+
+            if (!aSelected.length) {
+                MessageBox.error(this.getText("huSelectionEmpty", null, "Add at least one handling unit."));
+                return;
+            }
+            for (var i = 0; i < aSelected.length; i++) {
+                var item = aSelected[i];
+                var sKey = String(item.UnitNumber || "").toUpperCase();
+                var nQty = Number(item.TransferQty);
+                var nAvailable = Number(item.AvailableQuantity);
+                if (!sKey || mSeen[sKey] || !Number.isFinite(nQty) || nQty <= 0 || nQty > nAvailable) {
+                    MessageBox.error(this.getText("huSelectionClientValidation", null, "Each selected HU must be unique and its quantity must be within available stock."));
+                    return;
+                }
+                if (nAvailable > nRemaining && sBehavior !== "WARN") {
+                    MessageBox.error(this.getText("huSelectionOversizeBlocked", [nRemaining], "This HU exceeds the remaining reservation quantity ({0}); selection is blocked."));
+                    return;
+                }
+                if (nQty > nRemaining) {
+                    MessageBox.error(this.getText("huSelectionSumOverOpenQty", [nRemaining], "Selected quantities cannot exceed the remaining reservation quantity ({0})."));
+                    return;
+                }
+                mSeen[sKey] = true;
+                nTotal += nQty;
+                nRemaining -= nQty;
+            }
+            this._updateHuSelectionSummary();
+
+            oViewModel.setProperty("/busy", true);
+            var that = this;
+            ODataClient.post("/odata/v4/hu-stock-transfer/validateHuStockTransferSelection", {
+                ReservationNo: oViewModel.getProperty("/reservationNo"),
+                ReservationItem: oViewModel.getProperty("/reservationItem"),
+                Selections: aSelected.map(function (item) {
+                    return { UnitNumber: item.UnitNumber, TransferQty: Number(item.TransferQty) };
+                })
+            }).then(function (data) {
+                var result = (data && data.value) || data || {};
+                oViewModel.setProperty("/selectionValidation", result);
+                oViewModel.setProperty("/busy", false);
+                var msg = result.Warnings && result.Warnings.length
+                    ? result.Warnings.join("; ")
+                    : that.getText("huSelectionValidated", [nTotal, nOpenQty], "Selection validated read-only: {0} of {1} {2}. No transfer was posted.");
+                oViewModel.setProperty("/statusMessage", msg);
+                oViewModel.setProperty("/statusStateType", result.Warnings && result.Warnings.length ? "Warning" : "Success");
+            }).catch(function (error) {
+                oViewModel.setProperty("/busy", false);
+                MessageBox.error(that.getText("huSelectionValidationFailed", [error && error.message ? error.message : ""], "Selection validation failed: {0}"));
+            });
         },
 
         onPostTransfer: function () {

@@ -224,6 +224,18 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
       expect(empty.StatusState).toBe('None');
       expect(empty.StatusText).toBe('NO SLED');
     });
+
+    it('rejects an invalid movement filter instead of substituting 201', async () => {
+      const spy = jest.spyOn(GoodsIssueAdapter, 'getOpenReservations');
+      const req = {
+        data: {},
+        query: { SELECT: { where: [{ ref: ['MovementType'] }, '=', { val: '999' }] } },
+        error: jest.fn((code, message) => ({ code, message }))
+      };
+      await handlers['READ:OpenReservations'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('MovementType filter'));
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   (shouldRunLiveSapTests() ? describe : describe.skip)('Verified Real SAP S/4HANA Integration Tests (Client 220)', () => {
@@ -581,19 +593,6 @@ describe('GoodsIssueService & GoodsIssueAdapter Unit & Integration Tests', () =>
         '',
         expect.objectContaining({ reservationNo: '18025', orderNo: '1000040' })
       );
-      spy.mockRestore();
-    });
-
-    it('rejects an invalid movement filter instead of substituting 201', async () => {
-      const spy = jest.spyOn(GoodsIssueAdapter, 'getOpenReservations');
-      const req = {
-        data: {},
-        query: { SELECT: { where: [{ ref: ['MovementType'] }, '=', { val: '999' }] } },
-        error: jest.fn((code, message) => ({ code, message }))
-      };
-      await handlers['READ:OpenReservations'](req);
-      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('MovementType filter'));
-      expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
     });
 

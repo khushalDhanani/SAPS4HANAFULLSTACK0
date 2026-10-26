@@ -1,0 +1,37 @@
+{
+  "capturedAt": "2026-10-26T04:29:06.010Z",
+  "mode": "READ-ONLY",
+  "function": "RFC_SYSTEM_INFO",
+  "result": {
+    "CURRENT_RESOURCES": 30,
+    "FAST_SER_VERS": 3,
+    "FQHN": "vheudds4ap01.sap.aether.co.in",
+    "INSTANCE_NUMBER": "00",
+    "MAXIMAL_RESOURCES": 32,
+    "RECOMMENDED_DELAY": 0,
+    "RFCSI_EXPORT": {
+      "RFCPROTO": "011",
+      "RFCCHARTYP": "4103",
+      "RFCINTTYP": "LIT",
+      "RFCFLOTYP": "IE3",
+      "RFCDEST": "vheudds4ap01_DS4_00",
+      "RFCHOST": "vheudds4",
+      "RFCSYSID": "DS4",
+      "RFCDATABS": "DS4",
+      "RFCDBHOST": "vheudhd4db01",
+      "RFCDBSYS": "HDB",
+      "RFCSAPRL": "816",
+      "RFCMACH": "  390",
+      "RFCOPSYS": "Linux",
+      "RFCTZONE": " 19800",
+      "RFCDAYST": "",
+      "RFCIPADDR": "172.27.100.32",
+      "RFCKERNRL": "916",
+      "RFCHOST2": "vheudds4ap01",
+      "RFCSI_RESV": "",
+      "RFCIPV6ADDR": "172.27.100.32"
+    },
+    "S4_HANA": "X",
+    "SCCSTATE": "N"
+  }
+}

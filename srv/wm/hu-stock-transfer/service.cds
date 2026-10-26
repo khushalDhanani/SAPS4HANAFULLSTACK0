@@ -64,6 +64,7 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         SutMode                  : String(30);
         IsHuManaged              : Boolean;
         Xhupf                    : String(1);
+        OversizeHuSelectionBehavior : String(5);
     };
 
     type UnitValidationResult {
@@ -221,6 +222,32 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         Message           : String(500);
     };
 
+    type HuSelection {
+        UnitNumber  : String(20);
+        TransferQty : Decimal(13, 3);
+    };
+
+    type HuSelectionResultItem {
+        UnitNumber        : String(20);
+        TransferQty       : Decimal(13, 3);
+        AvailableQuantity : Decimal(13, 3);
+        BaseUnit          : String(3);
+        StorageType       : String(3);
+        StorageBin        : String(10);
+    };
+
+    type HuStockTransferSelectionValidation {
+        Valid                       : Boolean;
+        ReservationNo               : String(10);
+        ReservationItem             : String(4);
+        OpenQuantity                : Decimal(13, 3);
+        SelectedQuantity            : Decimal(13, 3);
+        RemainingQuantity           : Decimal(13, 3);
+        OversizeHuSelectionBehavior : String(5);
+        Items                       : array of HuSelectionResultItem;
+        Warnings                    : array of String(300);
+    };
+
     // ── Queries & Value Helps ───────────────────────────────────────────
 
     @(requires: ['Viewer', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
@@ -268,6 +295,14 @@ service HuStockTransferService @(path: '/odata/v4/hu-stock-transfer') {
         reservation     : String(10),
         item            : String(4)
     ) returns RackLayoutResult;
+
+    // Read-only validation: this action reads reservation/HU stock and never posts a movement.
+    @(requires: ['WarehouseClerk', 'WarehouseManager', 'Admin'])
+    action validateHuStockTransferSelection(
+        ReservationNo   : String(10),
+        ReservationItem : String(4),
+        Selections      : array of HuSelection
+    ) returns HuStockTransferSelectionValidation;
 
     // ── Goods Transfer Action ───────────────────────────────────────────
 

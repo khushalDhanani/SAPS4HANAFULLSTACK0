@@ -1,0 +1,697 @@
+{
+  "capturedAt": "2026-10-26T04:28:30.387Z",
+  "mode": "READ-ONLY",
+  "purpose": "DD03L validation for plant to valuation-area/company-code mapping",
+  "tables": {
+    "T001W": [
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "WERKS",
+        "KEYFLAG": "X",
+        "ROLLNAME": "WERKS_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "NAME1",
+        "KEYFLAG": "",
+        "ROLLNAME": "NAME1",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "NAME2",
+        "KEYFLAG": "",
+        "ROLLNAME": "NAME2",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "ORT01",
+        "KEYFLAG": "",
+        "ROLLNAME": "ORT01",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "STRAS",
+        "KEYFLAG": "",
+        "ROLLNAME": "STRAS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "PSTLZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "PSTLZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "PFACH",
+        "KEYFLAG": "",
+        "ROLLNAME": "PFACH",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "VLFKZ",
+        "KEYFLAG": "",
+        "ROLLNAME": "VLFKZ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "FSH_SEAIM",
+        "KEYFLAG": "",
+        "ROLLNAME": "FSH_SEAIM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "KORDB",
+        "KEYFLAG": "",
+        "ROLLNAME": "KORDB",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "FSH_MG_ARUN_REQ",
+        "KEYFLAG": "",
+        "ROLLNAME": "ARUN_REQ",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "CHAZV",
+        "KEYFLAG": "",
+        "ROLLNAME": "CHAZV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "KKOWK",
+        "KEYFLAG": "",
+        "ROLLNAME": "KKOWK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "BEDPL",
+        "KEYFLAG": "",
+        "ROLLNAME": "BEDPL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "WKSOP",
+        "KEYFLAG": "",
+        "ROLLNAME": "WKSOP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "CHAZV_OLD",
+        "KEYFLAG": "",
+        "ROLLNAME": "CHAZV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "BZQHL",
+        "KEYFLAG": "",
+        "ROLLNAME": "BZQHL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "DVSART",
+        "KEYFLAG": "",
+        "ROLLNAME": "DVSART",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "ACHVM",
+        "KEYFLAG": "",
+        "ROLLNAME": "ACHVM_X",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "PKOSA",
+        "KEYFLAG": "",
+        "ROLLNAME": "CKML_FLG_PKOSA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "MISCH",
+        "KEYFLAG": "",
+        "ROLLNAME": "CKML_FLG_MISCH",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "MGVUPD",
+        "KEYFLAG": "",
+        "ROLLNAME": "CKML_FLG_MGVUPD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "MGVLAREVAL",
+        "KEYFLAG": "",
+        "ROLLNAME": "CKML_MGVLAREVAL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "MGVLAUPD",
+        "KEYFLAG": "",
+        "ROLLNAME": "CKML_MGVLAUPD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "SOURCING",
+        "KEYFLAG": "",
+        "ROLLNAME": "MMPUR_SOURCING",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "NO_DEFAULT_BATCH_MANAGEMENT",
+        "KEYFLAG": "",
+        "ROLLNAME": "NO_DEFAULT_BATCH_MANAGEMENT",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "FSH_BOM_MAINTENANCE",
+        "KEYFLAG": "",
+        "ROLLNAME": "FSH_BOM_MAINTENANCE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "FSH_GROUP_PR",
+        "KEYFLAG": "",
+        "ROLLNAME": "FSH_GROUP_PR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "OILIVAL",
+        "KEYFLAG": "",
+        "ROLLNAME": "OIA_VALFLG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "ARUN_FIX_BATCH",
+        "KEYFLAG": "",
+        "ROLLNAME": "ARUN_FIXBATCH",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "OIHVTYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "OIH_J1B_VTYP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "OIHCREDIPI",
+        "KEYFLAG": "",
+        "ROLLNAME": "OIH_J1B_TXCREDIP",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "STORETYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "WRF_STORETYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "LET01",
+        "KEYFLAG": "",
+        "ROLLNAME": "MAHN1",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "LET02",
+        "KEYFLAG": "",
+        "ROLLNAME": "MAHN2",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "LET03",
+        "KEYFLAG": "",
+        "ROLLNAME": "MAHN3",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "DEP_STORE",
+        "KEYFLAG": "",
+        "ROLLNAME": "WRF_DEP_STORE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "VTBFI",
+        "KEYFLAG": "",
+        "ROLLNAME": "VTBFI",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "BETOL",
+        "KEYFLAG": "",
+        "ROLLNAME": "BETOL",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "TXNAM_MA2",
+        "KEYFLAG": "",
+        "ROLLNAME": "TXNAM_MA2",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "TXNAM_MA3",
+        "KEYFLAG": "",
+        "ROLLNAME": "TXNAM_MA3",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "TXNAM_MA1",
+        "KEYFLAG": "",
+        "ROLLNAME": "TXNAM_MA1",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "MANDT",
+        "KEYFLAG": "X",
+        "ROLLNAME": "MANDT",
+        "DATATYPE": "CLNT"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "SPRAS",
+        "KEYFLAG": "",
+        "ROLLNAME": "SPRAS",
+        "DATATYPE": "LANG"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "LAND1",
+        "KEYFLAG": "",
+        "ROLLNAME": "LAND1",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "KUNNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "KUNNR_WK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "VKORG",
+        "KEYFLAG": "",
+        "ROLLNAME": "VKOIV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "LIFNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "LIFNR_WK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "VTWEG",
+        "KEYFLAG": "",
+        "ROLLNAME": "VTWIV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "SPART",
+        "KEYFLAG": "",
+        "ROLLNAME": "SPAIV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "EKORG",
+        "KEYFLAG": "",
+        "ROLLNAME": "EKORG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "TXJCD",
+        "KEYFLAG": "",
+        "ROLLNAME": "TXJCD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "REGIO",
+        "KEYFLAG": "",
+        "ROLLNAME": "REGIO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "ADRNR",
+        "KEYFLAG": "",
+        "ROLLNAME": "ADRNR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "BWKEY",
+        "KEYFLAG": "",
+        "ROLLNAME": "BWKEY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "IWERK",
+        "KEYFLAG": "",
+        "ROLLNAME": "IWERK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "VSTEL",
+        "KEYFLAG": "",
+        "ROLLNAME": "VSTEL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "BZIRK",
+        "KEYFLAG": "",
+        "ROLLNAME": "BZIRK",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "COUNC",
+        "KEYFLAG": "",
+        "ROLLNAME": "COUNC",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "CITYC",
+        "KEYFLAG": "",
+        "ROLLNAME": "CITYC",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "AWSLS",
+        "KEYFLAG": "",
+        "ROLLNAME": "AWSLS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "FABKL",
+        "KEYFLAG": "",
+        "ROLLNAME": "FABKL",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "J_1BBRANCH",
+        "KEYFLAG": "",
+        "ROLLNAME": "J_1BBRANC_",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "NSCHEMA",
+        "KEYFLAG": "",
+        "ROLLNAME": "CKML_NSCHEMA",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "NODETYPE",
+        "KEYFLAG": "",
+        "ROLLNAME": "NODETYPE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "FPRFW",
+        "KEYFLAG": "",
+        "ROLLNAME": "FPRFW",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "ZONE1",
+        "KEYFLAG": "",
+        "ROLLNAME": "LFREG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": "TAXIW",
+        "KEYFLAG": "",
+        "ROLLNAME": "TAXIW1",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "T001W",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      }
+    ],
+    "T001K": [
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "BWKEY",
+        "KEYFLAG": "X",
+        "ROLLNAME": "BWKEY",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "MLAST",
+        "KEYFLAG": "",
+        "ROLLNAME": "CK_ML_ABST",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "BWMOD",
+        "KEYFLAG": "",
+        "ROLLNAME": "BWMOD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "XBKNG",
+        "KEYFLAG": "",
+        "ROLLNAME": "XBKNG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "MLBWA",
+        "KEYFLAG": "",
+        "ROLLNAME": "CK_ML_BWAC",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "MLBWV",
+        "KEYFLAG": "",
+        "ROLLNAME": "CK_ML_BWAV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "XVKBW",
+        "KEYFLAG": "",
+        "ROLLNAME": "XVKBW",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "ERKLAERKOM",
+        "KEYFLAG": "",
+        "ROLLNAME": "ERKLAERKOM",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "MLASV",
+        "KEYFLAG": "",
+        "ROLLNAME": "CK_ML_ABSV",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "XLBPD",
+        "KEYFLAG": "",
+        "ROLLNAME": "XLBPD",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "XEWRX",
+        "KEYFLAG": "",
+        "ROLLNAME": "XEWRX",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "X2FDO",
+        "KEYFLAG": "",
+        "ROLLNAME": "X2FDO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "PRSFR",
+        "KEYFLAG": "",
+        "ROLLNAME": "PRSFRG",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "MLCCS",
+        "KEYFLAG": "",
+        "ROLLNAME": "CK_MLCCS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "XEFRE",
+        "KEYFLAG": "",
+        "ROLLNAME": "XEFRE",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "/FMP/PRSFR",
+        "KEYFLAG": "",
+        "ROLLNAME": "/FMP/MP_PRSFRG_N",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "EFREJ",
+        "KEYFLAG": "",
+        "ROLLNAME": "EFREJ",
+        "DATATYPE": "NUMC"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "BDIFP",
+        "KEYFLAG": "",
+        "ROLLNAME": "BDIFP",
+        "DATATYPE": "DEC"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "MANDT",
+        "KEYFLAG": "X",
+        "ROLLNAME": "MANDT",
+        "DATATYPE": "CLNT"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "BUKRS",
+        "KEYFLAG": "",
+        "ROLLNAME": "BUKRS",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "UPROF",
+        "KEYFLAG": "",
+        "ROLLNAME": "UPROF_D",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "WBPRO",
+        "KEYFLAG": "",
+        "ROLLNAME": "WBPRO",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": "/FMP/PRFRGR",
+        "KEYFLAG": "",
+        "ROLLNAME": "/FMP/MP_PRRGR",
+        "DATATYPE": "CHAR"
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": ".INCLUDE",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      },
+      {
+        "TABNAME": "T001K",
+        "FIELDNAME": ".INCLU--AP",
+        "KEYFLAG": "",
+        "ROLLNAME": "",
+        "DATATYPE": ""
+      }
+    ]
+  }
+}

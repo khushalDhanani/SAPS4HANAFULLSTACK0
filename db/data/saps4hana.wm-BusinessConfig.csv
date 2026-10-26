@@ -1,2 +1,2 @@
-Plant;WarehouseNumber;SalesOrganization;DistributionChannel;Division;Currency;InquiryType;OrderType;ConditionType;ShippingPoints;SalesMaterialTypes;DifferenceStorageType;Mvt261NotReadyBinsJson;Description;Active
-1120;W01;1000;14;00;INR;;;;1112,WAVG;;;;Plant 1120 / Warehouse W01 SAP Customizing;true
+Plant;WarehouseNumber;SalesOrganization;DistributionChannel;Division;Currency;InquiryType;OrderType;ConditionType;ShippingPoints;SalesMaterialTypes;DifferenceStorageType;Mvt261NotReadyBinsJson;Description;Active;PickableStorageTypes;HoldStorageTypes;InterimStorageTypes;OversizeHuSelectionBehavior
+1120;W01;1000;14;00;INR;;;;1112,WAVG;;;;Plant 1120 / Warehouse W01 SAP Customizing;true;;;;

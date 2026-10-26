@@ -75,6 +75,36 @@ function parseJsonArray(json, fieldName) {
   return parsed;
 }
 
+function validateHuStorageTypeLists(values = {}) {
+  const fields = ['pickableStorageTypes', 'holdStorageTypes', 'interimStorageTypes'];
+  const result = {};
+  for (const field of fields) {
+    const raw = values[field] ?? values[field[0].toUpperCase() + field.slice(1)];
+    const list = Array.isArray(raw) ? raw : parseCsv(raw);
+    if (!list.length) throw new BusinessConfigError(`BusinessConfig.${field} must be non-empty.`);
+    let normalized;
+    try {
+      normalized = list.map((item) => sapKey(item, 'lgtyp'));
+    } catch (error) {
+      throw new BusinessConfigError(`BusinessConfig.${field} contains an invalid storage type: ${error.message}`);
+    }
+    if (new Set(normalized).size !== normalized.length) {
+      throw new BusinessConfigError(`BusinessConfig.${field} contains duplicate storage types.`);
+    }
+    result[field] = normalized;
+  }
+  const seen = new Map();
+  for (const field of fields) {
+    for (const code of result[field]) {
+      if (seen.has(code)) {
+        throw new BusinessConfigError(`Storage type ${code} overlaps ${seen.get(code)} and ${field}.`);
+      }
+      seen.set(code, field);
+    }
+  }
+  return result;
+}
+
 /**
  * Flow-specific required fields mappings.
  * Each flow specifies only the business config fields it actually needs:
@@ -178,6 +208,19 @@ class BusinessConfigResolver {
   getCacheEntry(plant, warehouse, fields, flow = '') {
     const key = this._getCacheKey(plant, warehouse, fields, flow);
     return this._cache.get(key) || null;
+  }
+
+  /** Resolve the oversize-HU selector policy; missing configuration safely defaults to BLOCK. */
+  async resolveOversizeHuSelectionBehavior(context = {}) {
+    const row = await this._queryDb(
+      String(context.plant || '').trim().toUpperCase(),
+      String(context.warehouse || context.warehouseNumber || '').trim().toUpperCase()
+    );
+    const value = String(row?.OversizeHuSelectionBehavior || 'BLOCK').trim().toUpperCase();
+    if (!['BLOCK', 'WARN'].includes(value)) {
+      throw new BusinessConfigError('BusinessConfig.OversizeHuSelectionBehavior must be BLOCK or WARN.');
+    }
+    return value;
   }
 
   /**
@@ -650,15 +693,15 @@ class BusinessConfigResolver {
       } : {})
     });
 
-    const pickable = (res.pickableStorageTypes || []).map(s => String(s).trim().toUpperCase()).filter(Boolean);
-    const hold = (res.holdStorageTypes || []).map(s => String(s).trim().toUpperCase()).filter(Boolean);
-    const interim = (res.interimStorageTypes || []).map(s => String(s).trim().toUpperCase()).filter(Boolean);
-
-    if (pickable.length === 0 || hold.length === 0 || interim.length === 0) {
+    let validatedLists;
+    try {
+      validatedLists = validateHuStorageTypeLists(res);
+    } catch (error) {
       throw new BusinessConfigError(
-        `BusinessConfigResolver could not resolve storage type rules [pickableStorageTypes, holdStorageTypes, interimStorageTypes] for ${context.warehouse || context.plant || 'warehouse'}. Storage types must be supplied by business configuration; fail-closed without hardcoded defaults.`
+        `BusinessConfigResolver could not resolve valid storage type rules for ${context.warehouse || context.plant || 'warehouse'}: ${error.message}`
       );
     }
+    const { pickableStorageTypes: pickable, holdStorageTypes: hold, interimStorageTypes: interim } = validatedLists;
 
     return {
       pickableStorageTypes: pickable,
@@ -688,6 +731,7 @@ const instance = new BusinessConfigResolver();
 instance.BusinessConfigResolver = BusinessConfigResolver;
 instance.BusinessConfigError = BusinessConfigError;
 instance.parseCsv = parseCsv;
+instance.validateHuStorageTypeLists = validateHuStorageTypeLists;
 instance.parseJsonArray = parseJsonArray;
 instance.registerWarehouseStorageTypes = BusinessConfigResolver.registerWarehouseStorageTypes;
 instance.unregisterWarehouseStorageTypes = BusinessConfigResolver.unregisterWarehouseStorageTypes;

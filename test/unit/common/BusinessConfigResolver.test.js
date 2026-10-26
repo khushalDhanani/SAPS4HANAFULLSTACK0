@@ -67,6 +67,68 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
     businessConfigResolver.clearCache();
   });
 
+  describe('HU storage-type config shape and oversize policy', () => {
+    test('requires non-empty, disjoint storage-type lists and normalizes codes', () => {
+      expect(businessConfigResolver.validateHuStorageTypeLists({
+        PickableStorageTypes: ' en1, EN2 ',
+        HoldStorageTypes: 'OH1',
+        InterimStorageTypes: ['911', '913']
+      })).toEqual({
+        pickableStorageTypes: ['EN1', 'EN2'],
+        holdStorageTypes: ['OH1'],
+        interimStorageTypes: ['911', '913']
+      });
+      expect(() => businessConfigResolver.validateHuStorageTypeLists({
+        PickableStorageTypes: 'EN1', HoldStorageTypes: '', InterimStorageTypes: '921'
+      })).toThrow(/must be non-empty/);
+      expect(() => businessConfigResolver.validateHuStorageTypeLists({
+        PickableStorageTypes: 'EN1', HoldStorageTypes: 'EN1', InterimStorageTypes: '921'
+      })).toThrow(/overlaps/);
+    });
+
+    test('defaults missing oversize behavior to BLOCK and accepts a configured WARN policy', async () => {
+      const defaultResolver = new BusinessConfigResolver({ dbQuery: async () => null, ttlMs: 0 });
+      const warnResolver = new BusinessConfigResolver({
+        dbQuery: async () => ({ OversizeHuSelectionBehavior: 'warn' }), ttlMs: 0
+      });
+      expect(await defaultResolver.resolveOversizeHuSelectionBehavior({ plant: '1120', warehouse: 'W01' })).toBe('BLOCK');
+      expect(await warnResolver.resolveOversizeHuSelectionBehavior({ plant: '1120', warehouse: 'W01' })).toBe('WARN');
+    });
+
+    test('BusinessConfig admin API normalizes valid lists and rejects empty or overlapping lists', async () => {
+      const BusinessConfigService = require('../../../srv/wm/business-config/service');
+      const service = new BusinessConfigService();
+      let beforeHandler = null;
+      service.before = jest.fn().mockImplementation((events, entity, fn) => {
+        if (events.includes('CREATE')) beforeHandler = fn;
+      });
+      Object.defineProperty(service, 'entities', {
+        value: { BusinessConfigs: 'BusinessConfigs' },
+        configurable: true
+      });
+      jest.spyOn(cds.ApplicationService.prototype, 'init').mockResolvedValue(service);
+      await service.init();
+      expect(beforeHandler).toEqual(expect.any(Function));
+
+      const validReq = { data: {
+        PickableStorageTypes: 'en1,EN2', HoldStorageTypes: 'OH1', InterimStorageTypes: '911',
+        OversizeHuSelectionBehavior: 'block'
+      }, error: jest.fn() };
+      beforeHandler(validReq);
+      expect(validReq.data).toMatchObject({
+        PickableStorageTypes: 'EN1,EN2', HoldStorageTypes: 'OH1',
+        InterimStorageTypes: '911', OversizeHuSelectionBehavior: 'BLOCK'
+      });
+      expect(validReq.error).not.toHaveBeenCalled();
+
+      const invalidReq = { data: {
+        PickableStorageTypes: 'EN1', HoldStorageTypes: '', InterimStorageTypes: 'EN1'
+      }, error: jest.fn() };
+      beforeHandler(invalidReq);
+      expect(invalidReq.error).toHaveBeenCalledWith(400, expect.stringMatching(/must be non-empty|overlaps/));
+    });
+  });
+
   // ─── (1) Tamper Protection: Trusted Server-Side Overrides Only ────────────
 
   describe('(1) Tamper Protection: Trusted server-side overrides only', () => {
@@ -186,6 +248,10 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       expect(writeRule).toBeDefined();
       expect(writeRule.grant).toEqual(expect.arrayContaining(['CREATE', 'UPDATE', 'DELETE', 'WRITE']));
       expect(writeRule.to).toEqual(['WarehouseManager', 'Admin']);
+      expect(entity.elements.PickableStorageTypes).toBeDefined();
+      expect(entity.elements.HoldStorageTypes).toBeDefined();
+      expect(entity.elements.InterimStorageTypes).toBeDefined();
+      expect(entity.elements.OversizeHuSelectionBehavior.default.val).toBe('BLOCK');
     });
 
     test('srv/wm/business-config/service.cds annotates BusinessConfigs projection with WarehouseManager and Admin write restrictions', async () => {

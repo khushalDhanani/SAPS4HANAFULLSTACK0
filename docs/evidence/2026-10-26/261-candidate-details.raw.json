@@ -1,0 +1,1628 @@
+{
+  "capturedAt": "2026-10-26T04:13:33.234Z",
+  "mode": "READ-ONLY",
+  "candidates": [
+    {
+      "header": {
+        "AUFNR": "000001002318",
+        "AUART": "ZP01",
+        "WERKS": "1120",
+        "ERNAM": "ADAPHALE",
+        "ERDAT": "20260812",
+        "OBJNR": "OR000001002318",
+        "LOEKZ": ""
+      },
+      "item": {
+        "AUFNR": "000001002318",
+        "BWART": "261",
+        "RSNUM": "0000461343",
+        "RSPOS": "0001",
+        "MATNR": "000000001000000716",
+        "WERKS": "1120",
+        "LGORT": "CS01",
+        "BDMNG": "1000.000",
+        "ENMNG": "0.000",
+        "MEINS": "KG",
+        "XLOEK": "",
+        "KZEAR": "",
+        "XWAOK": "X",
+        "RGEKZ": "",
+        "LGNUM": ""
+      },
+      "stock": [
+        {
+          "MATNR": "000000001000000716",
+          "WERKS": "1120",
+          "LGORT": "CS01",
+          "LABST": "2301.000",
+          "INSME": "0.000",
+          "SPEME": "0.000"
+        }
+      ],
+      "demandQueryRows": [
+        {
+          "AUFNR": "000001002319",
+          "BWART": "261",
+          "RSNUM": "0000461350",
+          "RSPOS": "0002",
+          "MATNR": "000000001000000716",
+          "WERKS": "1120",
+          "LGORT": "HU01",
+          "BDMNG": "600.000",
+          "ENMNG": "600.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "X",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        },
+        {
+          "AUFNR": "000001002318",
+          "BWART": "261",
+          "RSNUM": "0000461343",
+          "RSPOS": "0001",
+          "MATNR": "000000001000000716",
+          "WERKS": "1120",
+          "LGORT": "CS01",
+          "BDMNG": "1000.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        },
+        {
+          "AUFNR": "000001002319",
+          "BWART": "261",
+          "RSNUM": "0000461350",
+          "RSPOS": "0001",
+          "MATNR": "000000001000000716",
+          "WERKS": "1120",
+          "LGORT": "HU01",
+          "BDMNG": "0.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "X",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        },
+        {
+          "AUFNR": "000001002704",
+          "BWART": "261",
+          "RSNUM": "0000512832",
+          "RSPOS": "0001",
+          "MATNR": "000000001000000716",
+          "WERKS": "1120",
+          "LGORT": "FG01",
+          "BDMNG": "100.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        },
+        {
+          "AUFNR": "000001002702",
+          "BWART": "261",
+          "RSNUM": "0000512830",
+          "RSPOS": "0001",
+          "MATNR": "000000001000000716",
+          "WERKS": "1120",
+          "LGORT": "CS01",
+          "BDMNG": "400.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        }
+      ],
+      "openDemandRows": [
+        {
+          "AUFNR": "000001002318",
+          "BWART": "261",
+          "RSNUM": "0000461343",
+          "RSPOS": "0001",
+          "MATNR": "000000001000000716",
+          "WERKS": "1120",
+          "LGORT": "CS01",
+          "BDMNG": "1000.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        },
+        {
+          "AUFNR": "000001002704",
+          "BWART": "261",
+          "RSNUM": "0000512832",
+          "RSPOS": "0001",
+          "MATNR": "000000001000000716",
+          "WERKS": "1120",
+          "LGORT": "FG01",
+          "BDMNG": "100.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        },
+        {
+          "AUFNR": "000001002702",
+          "BWART": "261",
+          "RSNUM": "0000512830",
+          "RSPOS": "0001",
+          "MATNR": "000000001000000716",
+          "WERKS": "1120",
+          "LGORT": "CS01",
+          "BDMNG": "400.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        }
+      ],
+      "openDemandTotal": 1500
+    },
+    {
+      "header": {
+        "AUFNR": "000002000585",
+        "AUART": "ZP02",
+        "WERKS": "1600",
+        "ERNAM": "NAGRAJ",
+        "ERDAT": "20260820",
+        "OBJNR": "OR000002000585",
+        "LOEKZ": ""
+      },
+      "item": {
+        "AUFNR": "000002000585",
+        "BWART": "261",
+        "RSNUM": "0000471326",
+        "RSPOS": "0001",
+        "MATNR": "000000008400000034",
+        "WERKS": "1600",
+        "LGORT": "CS01",
+        "BDMNG": "500.000",
+        "ENMNG": "0.000",
+        "MEINS": "KG",
+        "XLOEK": "",
+        "KZEAR": "",
+        "XWAOK": "X",
+        "RGEKZ": "",
+        "LGNUM": "W01"
+      },
+      "stock": [
+        {
+          "MATNR": "000000008400000034",
+          "WERKS": "1600",
+          "LGORT": "CS01",
+          "LABST": "1720.000",
+          "INSME": "0.000",
+          "SPEME": "0.000"
+        }
+      ],
+      "demandQueryRows": [
+        {
+          "AUFNR": "000002000585",
+          "BWART": "261",
+          "RSNUM": "0000471326",
+          "RSPOS": "0001",
+          "MATNR": "000000008400000034",
+          "WERKS": "1600",
+          "LGORT": "CS01",
+          "BDMNG": "500.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        },
+        {
+          "AUFNR": "000002000589",
+          "BWART": "261",
+          "RSNUM": "0000471327",
+          "RSPOS": "0001",
+          "MATNR": "000000008400000034",
+          "WERKS": "1600",
+          "LGORT": "CS01",
+          "BDMNG": "500.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        },
+        {
+          "AUFNR": "000002000588",
+          "BWART": "261",
+          "RSNUM": "0000474786",
+          "RSPOS": "0001",
+          "MATNR": "000000008400000034",
+          "WERKS": "1600",
+          "LGORT": "CS01",
+          "BDMNG": "320.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        }
+      ],
+      "openDemandRows": [
+        {
+          "AUFNR": "000002000585",
+          "BWART": "261",
+          "RSNUM": "0000471326",
+          "RSPOS": "0001",
+          "MATNR": "000000008400000034",
+          "WERKS": "1600",
+          "LGORT": "CS01",
+          "BDMNG": "500.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        },
+        {
+          "AUFNR": "000002000589",
+          "BWART": "261",
+          "RSNUM": "0000471327",
+          "RSPOS": "0001",
+          "MATNR": "000000008400000034",
+          "WERKS": "1600",
+          "LGORT": "CS01",
+          "BDMNG": "500.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        },
+        {
+          "AUFNR": "000002000588",
+          "BWART": "261",
+          "RSNUM": "0000474786",
+          "RSPOS": "0001",
+          "MATNR": "000000008400000034",
+          "WERKS": "1600",
+          "LGORT": "CS01",
+          "BDMNG": "320.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        }
+      ],
+      "openDemandTotal": 1320
+    },
+    {
+      "header": {
+        "AUFNR": "000002000540",
+        "AUART": "ZP02",
+        "WERKS": "1120",
+        "ERNAM": "NAGRAJ",
+        "ERDAT": "20260808",
+        "OBJNR": "OR000002000540",
+        "LOEKZ": ""
+      },
+      "item": {
+        "AUFNR": "000002000540",
+        "BWART": "261",
+        "RSNUM": "0000456657",
+        "RSPOS": "0004",
+        "MATNR": "000000004000000002",
+        "WERKS": "1120",
+        "LGORT": "CS01",
+        "BDMNG": "15000.000",
+        "ENMNG": "0.000",
+        "MEINS": "KG",
+        "XLOEK": "",
+        "KZEAR": "",
+        "XWAOK": "X",
+        "RGEKZ": "",
+        "LGNUM": ""
+      },
+      "stock": [
+        {
+          "MATNR": "000000004000000002",
+          "WERKS": "1120",
+          "LGORT": "CS01",
+          "LABST": "99950.000",
+          "INSME": "0.000",
+          "SPEME": "0.000"
+        }
+      ],
+      "demandQueryRows": [
+        {
+          "AUFNR": "000002000540",
+          "BWART": "261",
+          "RSNUM": "0000456657",
+          "RSPOS": "0003",
+          "MATNR": "000000004000000002",
+          "WERKS": "1120",
+          "LGORT": "CS01",
+          "BDMNG": "0.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "X",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        },
+        {
+          "AUFNR": "000002000541",
+          "BWART": "261",
+          "RSNUM": "0000456659",
+          "RSPOS": "0002",
+          "MATNR": "000000004000000002",
+          "WERKS": "1120",
+          "LGORT": "CS01",
+          "BDMNG": "0.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "X",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        },
+        {
+          "AUFNR": "000002000540",
+          "BWART": "261",
+          "RSNUM": "0000456657",
+          "RSPOS": "0004",
+          "MATNR": "000000004000000002",
+          "WERKS": "1120",
+          "LGORT": "CS01",
+          "BDMNG": "15000.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        }
+      ],
+      "openDemandRows": [
+        {
+          "AUFNR": "000002000540",
+          "BWART": "261",
+          "RSNUM": "0000456657",
+          "RSPOS": "0004",
+          "MATNR": "000000004000000002",
+          "WERKS": "1120",
+          "LGORT": "CS01",
+          "BDMNG": "15000.000",
+          "ENMNG": "0.000",
+          "MEINS": "KG",
+          "XLOEK": "",
+          "KZEAR": "",
+          "XWAOK": "X",
+          "RGEKZ": ""
+        }
+      ],
+      "openDemandTotal": 15000
+    }
+  ],
+  "notes": [
+    "RESB base query returned 9999 rows; demand totals are limited to this returned slice unless direct query below covers material."
+  ],
+  "statusTexts": {
+    "IPP01": {
+      "ISTAT": "IPP01",
+      "SPRAS": "E",
+      "TXT04": "IP01",
+      "TXT30": "In Process"
+    },
+    "I7F01": {
+      "ISTAT": "I7F01",
+      "SPRAS": "E",
+      "TXT04": "F701",
+      "TXT30": "Draft"
+    },
+    "I0007": {
+      "ISTAT": "I0007",
+      "SPRAS": "E",
+      "TXT04": "PRT",
+      "TXT30": "Printed"
+    },
+    "I0008": {
+      "ISTAT": "I0008",
+      "SPRAS": "E",
+      "TXT04": "PPRT",
+      "TXT30": "Part printed"
+    },
+    "IPP02": {
+      "ISTAT": "IPP02",
+      "SPRAS": "E",
+      "TXT04": "IP02",
+      "TXT30": "Released for Approval"
+    },
+    "IPP03": {
+      "ISTAT": "IPP03",
+      "SPRAS": "E",
+      "TXT04": "IP03",
+      "TXT30": "Obsolete"
+    },
+    "I7F02": {
+      "ISTAT": "I7F02",
+      "SPRAS": "E",
+      "TXT04": "F702",
+      "TXT30": "Inactive"
+    },
+    "IPP04": {
+      "ISTAT": "IPP04",
+      "SPRAS": "E",
+      "TXT04": "IP04",
+      "TXT30": "Approved"
+    },
+    "I0016": {
+      "ISTAT": "I0016",
+      "SPRAS": "E",
+      "TXT04": "PRC",
+      "TXT30": "Pre-costed"
+    },
+    "I0018": {
+      "ISTAT": "I0018",
+      "SPRAS": "E",
+      "TXT04": "NHFD",
+      "TXT30": "Ntwk header: final delivery"
+    },
+    "I0019": {
+      "ISTAT": "I0019",
+      "SPRAS": "E",
+      "TXT04": "GEN1",
+      "TXT30": "General list 1 printed"
+    },
+    "I0020": {
+      "ISTAT": "I0020",
+      "SPRAS": "E",
+      "TXT04": "GEN2",
+      "TXT30": "General list 2 printed"
+    },
+    "I0021": {
+      "ISTAT": "I0021",
+      "SPRAS": "E",
+      "TXT04": "GEN3",
+      "TXT30": "General list 3 printed"
+    },
+    "I0022": {
+      "ISTAT": "I0022",
+      "SPRAS": "E",
+      "TXT04": "GEN4",
+      "TXT30": "General list 4 printed"
+    },
+    "I0023": {
+      "ISTAT": "I0023",
+      "SPRAS": "E",
+      "TXT04": "OPL1",
+      "TXT30": "Activity list 1 printed"
+    },
+    "I0024": {
+      "ISTAT": "I0024",
+      "SPRAS": "E",
+      "TXT04": "OPL2",
+      "TXT30": "Activity list 2 printed"
+    },
+    "I0025": {
+      "ISTAT": "I0025",
+      "SPRAS": "E",
+      "TXT04": "OPL3",
+      "TXT30": "Activity list 3 printed"
+    },
+    "I0026": {
+      "ISTAT": "I0026",
+      "SPRAS": "E",
+      "TXT04": "OPL4",
+      "TXT30": "Activity list 4 printed"
+    },
+    "I0027": {
+      "ISTAT": "I0027",
+      "SPRAS": "E",
+      "TXT04": "SFMT",
+      "TXT30": "Settlement fields maintained"
+    },
+    "I0028": {
+      "ISTAT": "I0028",
+      "SPRAS": "E",
+      "TXT04": "SETC",
+      "TXT30": "Settlement rule created"
+    },
+    "I0029": {
+      "ISTAT": "I0029",
+      "SPRAS": "E",
+      "TXT04": "DSEX",
+      "TXT30": "Date set by external system"
+    },
+    "I0030": {
+      "ISTAT": "I0030",
+      "SPRAS": "E",
+      "TXT04": "MLTL",
+      "TXT30": "Multi-level: Top level"
+    },
+    "I0031": {
+      "ISTAT": "I0031",
+      "SPRAS": "E",
+      "TXT04": "MLBL",
+      "TXT30": "Multi-level: Bottom level"
+    },
+    "I0032": {
+      "ISTAT": "I0032",
+      "SPRAS": "E",
+      "TXT04": "MLDI",
+      "TXT30": "Multi-level: Dummy info record"
+    },
+    "I0033": {
+      "ISTAT": "I0033",
+      "SPRAS": "E",
+      "TXT04": "CNC",
+      "TXT30": "Costs not current"
+    },
+    "I0034": {
+      "ISTAT": "I0034",
+      "SPRAS": "E",
+      "TXT04": "SORL",
+      "TXT30": "Subordinate order released"
+    },
+    "I0035": {
+      "ISTAT": "I0035",
+      "SPRAS": "E",
+      "TXT04": "SOPR",
+      "TXT30": "Subordinate order printed"
+    },
+    "I0036": {
+      "ISTAT": "I0036",
+      "SPRAS": "E",
+      "TXT04": "SOCF",
+      "TXT30": "Subordinate order confirmed"
+    },
+    "I0037": {
+      "ISTAT": "I0037",
+      "SPRAS": "E",
+      "TXT04": "UMGP",
+      "TXT30": "Rescheduled"
+    },
+    "I0038": {
+      "ISTAT": "I0038",
+      "SPRAS": "E",
+      "TXT04": "CONI",
+      "TXT30": "Configuration incomplete"
+    },
+    "IPP06": {
+      "ISTAT": "IPP06",
+      "SPRAS": "E",
+      "TXT04": "IP06",
+      "TXT30": "Completely Posted"
+    },
+    "I7F03": {
+      "ISTAT": "I7F03",
+      "SPRAS": "E",
+      "TXT04": "F703",
+      "TXT30": "Active"
+    },
+    "IPP07": {
+      "ISTAT": "IPP07",
+      "SPRAS": "E",
+      "TXT04": "IP07",
+      "TXT30": "Completely Reversed"
+    },
+    "IPP05": {
+      "ISTAT": "IPP05",
+      "SPRAS": "E",
+      "TXT04": "IP05",
+      "TXT30": "Rejected"
+    },
+    "IDF12": {
+      "ISTAT": "IDF12",
+      "SPRAS": "E",
+      "TXT04": "DF12",
+      "TXT30": "Ready for Initial Load"
+    },
+    "I0670": {
+      "ISTAT": "I0670",
+      "SPRAS": "E",
+      "TXT04": "BCPE",
+      "TXT30": "Baseline Cost Posting Error"
+    },
+    "I0671": {
+      "ISTAT": "I0671",
+      "SPRAS": "E",
+      "TXT04": "BCPS",
+      "TXT30": "Baseline Cost Posting Success"
+    },
+    "I0049": {
+      "ISTAT": "I0049",
+      "SPRAS": "E",
+      "TXT04": "ORSP",
+      "TXT30": "Open reservations posted"
+    },
+    "I0050": {
+      "ISTAT": "I0050",
+      "SPRAS": "E",
+      "TXT04": "STND",
+      "TXT30": "Standard confirmation"
+    },
+    "I0051": {
+      "ISTAT": "I0051",
+      "SPRAS": "E",
+      "TXT04": "MILE",
+      "TXT30": "Milestone confirmation"
+    },
+    "I0052": {
+      "ISTAT": "I0052",
+      "SPRAS": "E",
+      "TXT04": "MCNF",
+      "TXT30": "Manually confirmed"
+    },
+    "I0053": {
+      "ISTAT": "I0053",
+      "SPRAS": "E",
+      "TXT04": "ACAS",
+      "TXT30": "Activity account assignment"
+    },
+    "I0054": {
+      "ISTAT": "I0054",
+      "SPRAS": "E",
+      "TXT04": "MSCP",
+      "TXT30": "Capacity shortage"
+    },
+    "I0055": {
+      "ISTAT": "I0055",
+      "SPRAS": "E",
+      "TXT04": "RELR",
+      "TXT30": "Release rejected"
+    },
+    "I0056": {
+      "ISTAT": "I0056",
+      "SPRAS": "E",
+      "TXT04": "VCAL",
+      "TXT30": "Variances calculated"
+    },
+    "I0057": {
+      "ISTAT": "I0057",
+      "SPRAS": "E",
+      "TXT04": "NDAT",
+      "TXT30": "Rescheduling (Actl.) required"
+    },
+    "I0058": {
+      "ISTAT": "I0058",
+      "SPRAS": "E",
+      "TXT04": "CSPS",
+      "TXT30": "Costs posted"
+    },
+    "I0059": {
+      "ISTAT": "I0059",
+      "SPRAS": "E",
+      "TXT04": "SKKP",
+      "TXT30": "Copied Estimated Costs"
+    },
+    "I0060": {
+      "ISTAT": "I0060",
+      "SPRAS": "E",
+      "TXT04": "PLCS",
+      "TXT30": "Planned costs"
+    },
+    "IPP09": {
+      "ISTAT": "IPP09",
+      "SPRAS": "E",
+      "TXT04": "IP09",
+      "TXT30": "Posting Error"
+    },
+    "I0062": {
+      "ISTAT": "I0062",
+      "SPRAS": "E",
+      "TXT04": "DDLK",
+      "TXT30": "Date definition locked"
+    },
+    "I0063": {
+      "ISTAT": "I0063",
+      "SPRAS": "E",
+      "TXT04": "BMLK",
+      "TXT30": "Budget management locked"
+    },
+    "IPP10": {
+      "ISTAT": "IPP10",
+      "SPRAS": "E",
+      "TXT04": "IP10",
+      "TXT30": "To be Posted"
+    },
+    "I0065": {
+      "ISTAT": "I0065",
+      "SPRAS": "E",
+      "TXT04": "MDLK",
+      "TXT30": "Master data locked"
+    },
+    "I0066": {
+      "ISTAT": "I0066",
+      "SPRAS": "E",
+      "TXT04": "APPR",
+      "TXT30": "Approved"
+    },
+    "I0067": {
+      "ISTAT": "I0067",
+      "SPRAS": "E",
+      "TXT04": "BUDG",
+      "TXT30": "Budgeted"
+    },
+    "I0069": {
+      "ISTAT": "I0069",
+      "SPRAS": "E",
+      "TXT04": "NOPO",
+      "TXT30": "Notification postponed"
+    },
+    "I0070": {
+      "ISTAT": "I0070",
+      "SPRAS": "E",
+      "TXT04": "NOPR",
+      "TXT30": "Notification in process"
+    },
+    "I0071": {
+      "ISTAT": "I0071",
+      "SPRAS": "E",
+      "TXT04": "ORAS",
+      "TXT30": "Order assigned"
+    },
+    "I0073": {
+      "ISTAT": "I0073",
+      "SPRAS": "E",
+      "TXT04": "NOPT",
+      "TXT30": "Notification printed"
+    },
+    "I0074": {
+      "ISTAT": "I0074",
+      "SPRAS": "E",
+      "TXT04": "PDLV",
+      "TXT30": "Partially delivered"
+    },
+    "I0075": {
+      "ISTAT": "I0075",
+      "SPRAS": "E",
+      "TXT04": "WDFL",
+      "TXT30": "Withdrawal failed"
+    },
+    "IPP11": {
+      "ISTAT": "IPP11",
+      "SPRAS": "E",
+      "TXT04": "IP11",
+      "TXT30": "Reversal Error"
+    },
+    "I0077": {
+      "ISTAT": "I0077",
+      "SPRAS": "E",
+      "TXT04": "NOLV",
+      "TXT30": "Transaction LVMS not permitted"
+    },
+    "I0078": {
+      "ISTAT": "I0078",
+      "SPRAS": "E",
+      "TXT04": "COL1",
+      "TXT30": "Component list 1 printed"
+    },
+    "I0079": {
+      "ISTAT": "I0079",
+      "SPRAS": "E",
+      "TXT04": "COL2",
+      "TXT30": "Component list 2 printed"
+    },
+    "I0080": {
+      "ISTAT": "I0080",
+      "SPRAS": "E",
+      "TXT04": "COL3",
+      "TXT30": "Component list 3 printed"
+    },
+    "I0081": {
+      "ISTAT": "I0081",
+      "SPRAS": "E",
+      "TXT04": "COL4",
+      "TXT30": "Component list 4 printed"
+    },
+    "I0082": {
+      "ISTAT": "I0082",
+      "SPRAS": "E",
+      "TXT04": "RESA",
+      "TXT30": "Results analysis carried out"
+    },
+    "I0083": {
+      "ISTAT": "I0083",
+      "SPRAS": "E",
+      "TXT04": "PRL1",
+      "TXT30": "PRT list 1 printed"
+    },
+    "I0084": {
+      "ISTAT": "I0084",
+      "SPRAS": "E",
+      "TXT04": "PRL2",
+      "TXT30": "PRT list 2 printed"
+    },
+    "I0085": {
+      "ISTAT": "I0085",
+      "SPRAS": "E",
+      "TXT04": "PRL3",
+      "TXT30": "PRT list 3 printed"
+    },
+    "I0086": {
+      "ISTAT": "I0086",
+      "SPRAS": "E",
+      "TXT04": "PRL4",
+      "TXT30": "PRT list 4 printed"
+    },
+    "I0087": {
+      "ISTAT": "I0087",
+      "SPRAS": "E",
+      "TXT04": "NBDT",
+      "TXT30": "Rescheduling required (Basic)"
+    },
+    "I0088": {
+      "ISTAT": "I0088",
+      "SPRAS": "E",
+      "TXT04": "NFDT",
+      "TXT30": "Rescheduling required (Frcst)"
+    },
+    "I008B": {
+      "ISTAT": "I008B",
+      "SPRAS": "E",
+      "TXT04": "PRTB",
+      "TXT30": "Preprinted (Before Release)"
+    },
+    "I008T": {
+      "ISTAT": "I008T",
+      "SPRAS": "E",
+      "TXT04": "PRTT",
+      "TXT30": "Reprinted (After Completion)"
+    },
+    "I0089": {
+      "ISTAT": "I0089",
+      "SPRAS": "E",
+      "TXT04": "GMCO",
+      "TXT30": "Goods Movement in Coll. Order"
+    },
+    "I0091": {
+      "ISTAT": "I0091",
+      "SPRAS": "E",
+      "TXT04": "SPCF",
+      "TXT30": "Sub-operation partially conf."
+    },
+    "I0092": {
+      "ISTAT": "I0092",
+      "SPRAS": "E",
+      "TXT04": "SCNF",
+      "TXT30": "Sub-operation finally conf."
+    },
+    "I0093": {
+      "ISTAT": "I0093",
+      "SPRAS": "E",
+      "TXT04": "ISBD",
+      "TXT30": "Insufficient budgeting"
+    },
+    "I0094": {
+      "ISTAT": "I0094",
+      "SPRAS": "E",
+      "TXT04": "RVPS",
+      "TXT30": "Revenue posted"
+    },
+    "I0095": {
+      "ISTAT": "I0095",
+      "SPRAS": "E",
+      "TXT04": "MSPR",
+      "TXT30": "Non-Availability of PRT"
+    },
+    "I0096": {
+      "ISTAT": "I0096",
+      "SPRAS": "E",
+      "TXT04": "RVPL",
+      "TXT30": "Revenue planned"
+    },
+    "I0097": {
+      "ISTAT": "I0097",
+      "SPRAS": "E",
+      "TXT04": "FNBL",
+      "TXT30": "Final billing"
+    },
+    "I0101": {
+      "ISTAT": "I0101",
+      "SPRAS": "E",
+      "TXT04": "EHIS",
+      "TXT30": "Entered historically"
+    },
+    "I0102": {
+      "ISTAT": "I0102",
+      "SPRAS": "E",
+      "TXT04": "SETM",
+      "TXT30": "Settlemt rule created manually"
+    },
+    "I0103": {
+      "ISTAT": "I0103",
+      "SPRAS": "E",
+      "TXT04": "SCNF",
+      "TXT30": "Summary confirm. carried out"
+    },
+    "I0104": {
+      "ISTAT": "I0104",
+      "SPRAS": "E",
+      "TXT04": "SUST",
+      "TXT30": "Setup started"
+    },
+    "I0105": {
+      "ISTAT": "I0105",
+      "SPRAS": "E",
+      "TXT04": "SUIR",
+      "TXT30": "Setup interrupted"
+    },
+    "I0106": {
+      "ISTAT": "I0106",
+      "SPRAS": "E",
+      "TXT04": "SUFN",
+      "TXT30": "Setup Finish"
+    },
+    "I0107": {
+      "ISTAT": "I0107",
+      "SPRAS": "E",
+      "TXT04": "PRST",
+      "TXT30": "Processing started"
+    },
+    "I0108": {
+      "ISTAT": "I0108",
+      "SPRAS": "E",
+      "TXT04": "PRIR",
+      "TXT30": "Processing interrupted"
+    },
+    "I0109": {
+      "ISTAT": "I0109",
+      "SPRAS": "E",
+      "TXT04": "PRFN",
+      "TXT30": "Processing finished"
+    },
+    "I0110": {
+      "ISTAT": "I0110",
+      "SPRAS": "E",
+      "TXT04": "TDST",
+      "TXT30": "Start of Teardown"
+    },
+    "I0111": {
+      "ISTAT": "I0111",
+      "SPRAS": "E",
+      "TXT04": "TDIR",
+      "TXT30": "Teardown interrupted"
+    },
+    "I0112": {
+      "ISTAT": "I0112",
+      "SPRAS": "E",
+      "TXT04": "TDFN",
+      "TXT30": "Teardown Finish"
+    },
+    "I0113": {
+      "ISTAT": "I0113",
+      "SPRAS": "E",
+      "TXT04": "COMO",
+      "TXT30": "Components for object"
+    },
+    "I0114": {
+      "ISTAT": "I0114",
+      "SPRAS": "E",
+      "TXT04": "PRTO",
+      "TXT30": "PRTs for object"
+    },
+    "I0115": {
+      "ISTAT": "I0115",
+      "SPRAS": "E",
+      "TXT04": "CSER",
+      "TXT30": "Error in cost calculation"
+    },
+    "I0117": {
+      "ISTAT": "I0117",
+      "SPRAS": "E",
+      "TXT04": "DSPT",
+      "TXT30": "Scheduled"
+    },
+    "I0118": {
+      "ISTAT": "I0118",
+      "SPRAS": "E",
+      "TXT04": "NTUP",
+      "TXT30": "Dates are not updated"
+    },
+    "I0119": {
+      "ISTAT": "I0119",
+      "SPRAS": "E",
+      "TXT04": "ACTV",
+      "TXT30": "Active"
+    },
+    "I0120": {
+      "ISTAT": "I0120",
+      "SPRAS": "E",
+      "TXT04": "RACR",
+      "TXT30": "Rental agreements created"
+    },
+    "I0121": {
+      "ISTAT": "I0121",
+      "SPRAS": "E",
+      "TXT04": "ACLO",
+      "TXT30": "Active lease-outs"
+    },
+    "I0122": {
+      "ISTAT": "I0122",
+      "SPRAS": "E",
+      "TXT04": "NOLO",
+      "TXT30": "No lease-outs"
+    },
+    "I0123": {
+      "ISTAT": "I0123",
+      "SPRAS": "E",
+      "TXT04": "RESI",
+      "TXT30": "Residential Rental Agrmt"
+    },
+    "I0124": {
+      "ISTAT": "I0124",
+      "SPRAS": "E",
+      "TXT04": "COMM",
+      "TXT30": "Commercial Contract"
+    },
+    "I0125": {
+      "ISTAT": "I0125",
+      "SPRAS": "E",
+      "TXT04": "COPA",
+      "TXT30": "Comm. provisional agrmnt"
+    },
+    "I0126": {
+      "ISTAT": "I0126",
+      "SPRAS": "E",
+      "TXT04": "CANC",
+      "TXT30": "Canceled"
+    },
+    "I0127": {
+      "ISTAT": "I0127",
+      "SPRAS": "E",
+      "TXT04": "RTAP",
+      "TXT30": "Rent adjustments planned"
+    },
+    "I0128": {
+      "ISTAT": "I0128",
+      "SPRAS": "E",
+      "TXT04": "THRD",
+      "TXT30": "Utilized by third parties"
+    },
+    "I0129": {
+      "ISTAT": "I0129",
+      "SPRAS": "E",
+      "TXT04": "GRLO",
+      "TXT30": "Used by group with LO"
+    },
+    "I0130": {
+      "ISTAT": "I0130",
+      "SPRAS": "E",
+      "TXT04": "PROP",
+      "TXT30": "For own use"
+    },
+    "I0131": {
+      "ISTAT": "I0131",
+      "SPRAS": "E",
+      "TXT04": "UNOC",
+      "TXT30": "Unoccupied"
+    },
+    "I0132": {
+      "ISTAT": "I0132",
+      "SPRAS": "E",
+      "TXT04": "RENT",
+      "TXT30": "Intended for rent"
+    },
+    "I0133": {
+      "ISTAT": "I0133",
+      "SPRAS": "E",
+      "TXT04": "CRES",
+      "TXT30": "Created (Standard WBS)"
+    },
+    "I0134": {
+      "ISTAT": "I0134",
+      "SPRAS": "E",
+      "TXT04": "RELS",
+      "TXT30": "Released (Standard WBS)"
+    },
+    "I0135": {
+      "ISTAT": "I0135",
+      "SPRAS": "E",
+      "TXT04": "CLOS",
+      "TXT30": "Closed (Standard WBS)"
+    },
+    "I0136": {
+      "ISTAT": "I0136",
+      "SPRAS": "E",
+      "TXT04": "GRFL",
+      "TXT30": "Goods receipt failed"
+    },
+    "I0137": {
+      "ISTAT": "I0137",
+      "SPRAS": "E",
+      "TXT04": "IFSL",
+      "TXT30": "Intended for sale"
+    },
+    "I0139": {
+      "ISTAT": "I0139",
+      "SPRAS": "E",
+      "TXT04": "PURI",
+      "TXT30": "Intended for purchase"
+    },
+    "I0140": {
+      "ISTAT": "I0140",
+      "SPRAS": "E",
+      "TXT04": "PURC",
+      "TXT30": "Purchased"
+    },
+    "I0141": {
+      "ISTAT": "I0141",
+      "SPRAS": "E",
+      "TXT04": "PSLD",
+      "TXT30": "Partially sold"
+    },
+    "I0142": {
+      "ISTAT": "I0142",
+      "SPRAS": "E",
+      "TXT04": "DEMO",
+      "TXT30": "Demolition"
+    },
+    "I0143": {
+      "ISTAT": "I0143",
+      "SPRAS": "E",
+      "TXT04": "PDEM",
+      "TXT30": "Partially demolished"
+    },
+    "I0144": {
+      "ISTAT": "I0144",
+      "SPRAS": "E",
+      "TXT04": "ERUI",
+      "TXT30": "Economic ruin"
+    },
+    "I0145": {
+      "ISTAT": "I0145",
+      "SPRAS": "E",
+      "TXT04": "PECR",
+      "TXT30": "Partial economic ruin"
+    },
+    "I0146": {
+      "ISTAT": "I0146",
+      "SPRAS": "E",
+      "TXT04": "POCR",
+      "TXT30": "Printout of changes required"
+    },
+    "I0147": {
+      "ISTAT": "I0147",
+      "SPRAS": "E",
+      "TXT04": "BTRD",
+      "TXT30": "Block transaction data"
+    },
+    "I0148": {
+      "ISTAT": "I0148",
+      "SPRAS": "E",
+      "TXT04": "DIVI",
+      "TXT30": "Division declaration"
+    },
+    "I0149": {
+      "ISTAT": "I0149",
+      "SPRAS": "E",
+      "TXT04": "PDIV",
+      "TXT30": "Partial division declaration"
+    },
+    "I0150": {
+      "ISTAT": "I0150",
+      "SPRAS": "E",
+      "TXT04": "INMD",
+      "TXT30": "Inspection made"
+    },
+    "I0151": {
+      "ISTAT": "I0151",
+      "SPRAS": "E",
+      "TXT04": "SECD",
+      "TXT30": "Security deposit paid out"
+    },
+    "I0152": {
+      "ISTAT": "I0152",
+      "SPRAS": "E",
+      "TXT04": "IFPF",
+      "TXT30": "Intended for portfolio"
+    },
+    "I0153": {
+      "ISTAT": "I0153",
+      "SPRAS": "E",
+      "TXT04": "PORT",
+      "TXT30": "In portfolio"
+    },
+    "IDFS6": {
+      "ISTAT": "IDFS6",
+      "SPRAS": "E",
+      "TXT04": "DFS6",
+      "TXT30": "Planned"
+    },
+    "I0155": {
+      "ISTAT": "I0155",
+      "SPRAS": "E",
+      "TXT04": "TSRL",
+      "TXT30": "Task Released"
+    },
+    "I0157": {
+      "ISTAT": "I0157",
+      "SPRAS": "E",
+      "TXT04": "TSSC",
+      "TXT30": "Task successful"
+    },
+    "I0158": {
+      "ISTAT": "I0158",
+      "SPRAS": "E",
+      "TXT04": "OSTS",
+      "TXT30": "Outstanding task(s) exist(s)"
+    },
+    "I0159": {
+      "ISTAT": "I0159",
+      "SPRAS": "E",
+      "TXT04": "ATCO",
+      "TXT30": "All Tasks Completed"
+    },
+    "I0160": {
+      "ISTAT": "I0160",
+      "SPRAS": "E",
+      "TXT04": "NOTI",
+      "TXT30": "Notification (internal)"
+    },
+    "I0161": {
+      "ISTAT": "I0161",
+      "SPRAS": "E",
+      "TXT04": "NOTE",
+      "TXT30": "Notification (external)"
+    },
+    "I0162": {
+      "ISTAT": "I0162",
+      "SPRAS": "E",
+      "TXT04": "DEFR",
+      "TXT30": "Defects Recording"
+    },
+    "I0163": {
+      "ISTAT": "I0163",
+      "SPRAS": "E",
+      "TXT04": "AUC",
+      "TXT30": "Asset in construction exists"
+    },
+    "I0164": {
+      "ISTAT": "I0164",
+      "SPRAS": "E",
+      "TXT04": "Cost",
+      "TXT30": "To be costed"
+    },
+    "I0165": {
+      "ISTAT": "I0165",
+      "SPRAS": "E",
+      "TXT04": "Cstd",
+      "TXT30": "Costed"
+    },
+    "I0166": {
+      "ISTAT": "I0166",
+      "SPRAS": "E",
+      "TXT04": "FUAC",
+      "TXT30": "Follow-up action completed"
+    },
+    "I0167": {
+      "ISTAT": "I0167",
+      "SPRAS": "E",
+      "TXT04": "ARNB",
+      "TXT30": "Notif. blocked by archiving"
+    },
+    "I0170": {
+      "ISTAT": "I0170",
+      "SPRAS": "E",
+      "TXT04": "ORD",
+      "TXT30": "Created from sales order"
+    },
+    "I0171": {
+      "ISTAT": "I0171",
+      "SPRAS": "E",
+      "TXT04": "SHPT",
+      "TXT30": "Created from shipment doc."
+    },
+    "I0175": {
+      "ISTAT": "I0175",
+      "SPRAS": "E",
+      "TXT04": "PREP",
+      "TXT30": "Prepared"
+    },
+    "I0176": {
+      "ISTAT": "I0176",
+      "SPRAS": "E",
+      "TXT04": "REJC",
+      "TXT30": "Rejected"
+    },
+    "I0177": {
+      "ISTAT": "I0177",
+      "SPRAS": "E",
+      "TXT04": "NTWP",
+      "TXT30": "Workcenter Data not considered"
+    },
+    "I0181": {
+      "ISTAT": "I0181",
+      "SPRAS": "E",
+      "TXT04": "CRAB",
+      "TXT30": "Control Recipe Discarded"
+    },
+    "I0182": {
+      "ISTAT": "I0182",
+      "SPRAS": "E",
+      "TXT04": "ILNC",
+      "TXT30": "Inspection lot not created"
+    },
+    "I0183": {
+      "ISTAT": "I0183",
+      "SPRAS": "E",
+      "TXT04": "AUSS",
+      "TXT30": "Scrap determined"
+    },
+    "I0185": {
+      "ISTAT": "I0185",
+      "SPRAS": "E",
+      "TXT04": "SLOR",
+      "TXT30": "Assigned in sales order"
+    },
+    "I0187": {
+      "ISTAT": "I0187",
+      "SPRAS": "E",
+      "TXT04": "ESER",
+      "TXT30": "Assigned in service contract"
+    },
+    "I0189": {
+      "ISTAT": "I0189",
+      "SPRAS": "E",
+      "TXT04": "EINS",
+      "TXT30": "In Review"
+    },
+    "I0191": {
+      "ISTAT": "I0191",
+      "SPRAS": "E",
+      "TXT04": "ETRA",
+      "TXT30": "In transport"
+    },
+    "I0192": {
+      "ISTAT": "I0192",
+      "SPRAS": "E",
+      "TXT04": "EAUS",
+      "TXT30": "From warehouse"
+    },
+    "I0195": {
+      "ISTAT": "I0195",
+      "SPRAS": "E",
+      "TXT04": "KPBE",
+      "TXT30": "In Process"
+    },
+    "I0196": {
+      "ISTAT": "I0196",
+      "SPRAS": "E",
+      "TXT04": "KPFR",
+      "TXT30": "Released"
+    },
+    "I0197": {
+      "ISTAT": "I0197",
+      "SPRAS": "E",
+      "TXT04": "KPAB",
+      "TXT30": "Completed"
+    },
+    "I0198": {
+      "ISTAT": "I0198",
+      "SPRAS": "E",
+      "TXT04": "KPST",
+      "TXT30": "Canceled"
+    },
+    "I0199": {
+      "ISTAT": "I0199",
+      "SPRAS": "E",
+      "TXT04": "KPLK",
+      "TXT30": "Deletion Flag"
+    },
+    "I0200": {
+      "ISTAT": "I0200",
+      "SPRAS": "E",
+      "TXT04": "PAOR",
+      "TXT30": "Insp. completion w/o confirm."
+    },
+    "I0201": {
+      "ISTAT": "I0201",
+      "SPRAS": "E",
+      "TXT04": "PREQ",
+      "TXT30": "Plan/specific. required"
+    },
+    "I0202": {
+      "ISTAT": "I0202",
+      "SPRAS": "E",
+      "TXT04": "CHCR",
+      "TXT30": "Characterist. must be created"
+    },
+    "I0203": {
+      "ISTAT": "I0203",
+      "SPRAS": "E",
+      "TXT04": "SPRQ",
+      "TXT30": "Quantity posting required"
+    },
+    "I0204": {
+      "ISTAT": "I0204",
+      "SPRAS": "E",
+      "TXT04": "LTIN",
+      "TXT30": "Long-term inspection"
+    },
+    "I0205": {
+      "ISTAT": "I0205",
+      "SPRAS": "E",
+      "TXT04": "PASG",
+      "TXT30": "Plan/specification assigned"
+    },
+    "I0206": {
+      "ISTAT": "I0206",
+      "SPRAS": "E",
+      "TXT04": "CCTD",
+      "TXT30": "Insp. characteristics created"
+    },
+    "I0207": {
+      "ISTAT": "I0207",
+      "SPRAS": "E",
+      "TXT04": "CALC",
+      "TXT30": "Sample calculated"
+    },
+    "I0208": {
+      "ISTAT": "I0208",
+      "SPRAS": "E",
+      "TXT04": "QLCH",
+      "TXT30": "Quality level relevant"
+    },
+    "I0209": {
+      "ISTAT": "I0209",
+      "SPRAS": "E",
+      "TXT04": "SKIP",
+      "TXT30": "Skip lot"
+    },
+    "I0210": {
+      "ISTAT": "I0210",
+      "SPRAS": "E",
+      "TXT04": "PRSI",
+      "TXT30": "Sample drawing instr. printed"
+    },
+    "I0211": {
+      "ISTAT": "I0211",
+      "SPRAS": "E",
+      "TXT04": "PRII",
+      "TXT30": "Inspection instruction printed"
+    },
+    "I0212": {
+      "ISTAT": "I0212",
+      "SPRAS": "E",
+      "TXT04": "INSP",
+      "TXT30": "Inspection active"
+    },
+    "I0213": {
+      "ISTAT": "I0213",
+      "SPRAS": "E",
+      "TXT04": "RREC",
+      "TXT30": "Results confirmed"
+    },
+    "I0214": {
+      "ISTAT": "I0214",
+      "SPRAS": "E",
+      "TXT04": "DEF",
+      "TXT30": "Defects were recorded"
+    },
+    "I0215": {
+      "ISTAT": "I0215",
+      "SPRAS": "E",
+      "TXT04": "SSAP",
+      "TXT30": "Object created"
+    },
+    "I0216": {
+      "ISTAT": "I0216",
+      "SPRAS": "E",
+      "TXT04": "STIC",
+      "TXT30": "Short-term insp. completed"
+    },
+    "I0217": {
+      "ISTAT": "I0217",
+      "SPRAS": "E",
+      "TXT04": "ICCO",
+      "TXT30": "All inspections completed"
+    },
+    "I0218": {
+      "ISTAT": "I0218",
+      "SPRAS": "E",
+      "TXT04": "UD",
+      "TXT30": "Usage decision has been made"
+    },
+    "I0219": {
+      "ISTAT": "I0219",
+      "SPRAS": "E",
+      "TXT04": "SPST",
+      "TXT30": "Stock posting started"
+    },
+    "I0220": {
+      "ISTAT": "I0220",
+      "SPRAS": "E",
+      "TXT04": "SPCO",
+      "TXT30": "Stock posting completed"
+    },
+    "I0221": {
+      "ISTAT": "I0221",
+      "SPRAS": "E",
+      "TXT04": "STUP",
+      "TXT30": "Statistics updated"
+    },
+    "I0222": {
+      "ISTAT": "I0222",
+      "SPRAS": "E",
+      "TXT04": "QLUP",
+      "TXT30": "Quality level updated"
+    },
+    "I0223": {
+      "ISTAT": "I0223",
+      "SPRAS": "E",
+      "TXT04": "IRUP",
+      "TXT30": "Quality info record updated"
+    },
+    "I0224": {
+      "ISTAT": "I0224",
+      "SPRAS": "E",
+      "TXT04": "LTCA",
+      "TXT30": "Lot canceled"
+    },
+    "I0225": {
+      "ISTAT": "I0225",
+      "SPRAS": "E",
+      "TXT04": "ARBL",
+      "TXT30": "Blocked for Archiving"
+    },
+    "I0226": {
+      "ISTAT": "I0226",
+      "SPRAS": "E",
+      "TXT04": "ARCH",
+      "TXT30": "Lot archived"
+    },
+    "I0227": {
+      "ISTAT": "I0227",
+      "SPRAS": "E",
+      "TXT04": "REO3",
+      "TXT30": "Lot detail data deleted"
+    },
+    "I0228": {
+      "ISTAT": "I0228",
+      "SPRAS": "E",
+      "TXT04": "REO2",
+      "TXT30": "Lot sample data deleted"
+    },
+    "I0229": {
+      "ISTAT": "I0229",
+      "SPRAS": "E",
+      "TXT04": "REO1",
+      "TXT30": "Charact. + operations deleted"
+    },
+    "I0230": {
+      "ISTAT": "I0230",
+      "SPRAS": "E",
+      "TXT04": "SUB",
+      "TXT30": "Transmit to subsystem"
+    },
+    "I0231": {
+      "ISTAT": "I0231",
+      "SPRAS": "E",
+      "TXT04": "IRCH",
+      "TXT30": "Q-info record changed"
+    },
+    "I0232": {
+      "ISTAT": "I0232",
+      "SPRAS": "E",
+      "TXT04": "MCAN",
+      "TXT30": "Lot marked for cancellation"
+    }
+  }
+}

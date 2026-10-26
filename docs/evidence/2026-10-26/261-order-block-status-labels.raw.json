@@ -1,0 +1,37 @@
+{
+  "capturedAt": "2026-10-26T04:29:37.957Z",
+  "mode": "READ-ONLY",
+  "purpose": "Verify standard order lock/closure/deletion status labels",
+  "rows": [
+    {
+      "ISTAT": "I0043",
+      "SPRAS": "E",
+      "TXT04": "LKD",
+      "TXT30": "Locked"
+    },
+    {
+      "ISTAT": "I0045",
+      "SPRAS": "E",
+      "TXT04": "TECO",
+      "TXT30": "Technically completed"
+    },
+    {
+      "ISTAT": "I0046",
+      "SPRAS": "E",
+      "TXT04": "CLSD",
+      "TXT30": "Closed"
+    },
+    {
+      "ISTAT": "I0076",
+      "SPRAS": "E",
+      "TXT04": "DLFL",
+      "TXT30": "Deletion Flag"
+    },
+    {
+      "ISTAT": "I0002",
+      "SPRAS": "E",
+      "TXT04": "REL",
+      "TXT30": "Released"
+    }
+  ]
+}

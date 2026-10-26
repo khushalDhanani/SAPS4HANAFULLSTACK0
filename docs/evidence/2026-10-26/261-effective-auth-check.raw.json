@@ -1,0 +1,47 @@
+{
+  "capturedAt": "2026-10-26T04:20:58.358Z",
+  "mode": "READ-ONLY",
+  "function": "AUTHORITY_CHECK",
+  "results": [
+    {
+      "object": "M_MSEG_BWA",
+      "fields": {
+        "ACTVT": "01",
+        "BWART": "261"
+      },
+      "result": "AUTHORIZED"
+    },
+    {
+      "object": "M_MSEG_WMB",
+      "fields": {
+        "ACTVT": "01",
+        "WERKS": "1120"
+      },
+      "result": "AUTHORIZED"
+    },
+    {
+      "object": "M_MSEG_WWA",
+      "fields": {
+        "ACTVT": "01",
+        "WERKS": "1120"
+      },
+      "result": "AUTHORIZED"
+    },
+    {
+      "object": "M_MSEG_WMB",
+      "fields": {
+        "ACTVT": "01",
+        "WERKS": "1600"
+      },
+      "result": "AUTHORIZED"
+    },
+    {
+      "object": "M_MSEG_WWA",
+      "fields": {
+        "ACTVT": "01",
+        "WERKS": "1600"
+      },
+      "result": "AUTHORIZED"
+    }
+  ]
+}

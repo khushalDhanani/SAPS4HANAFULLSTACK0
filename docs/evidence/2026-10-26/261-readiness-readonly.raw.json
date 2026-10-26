@@ -1,0 +1,12 @@
+{
+  "capturedAt": "2026-10-26T04:16:38.478Z",
+  "mode": "READ-ONLY",
+  "result": {
+    "ready": true,
+    "movementType": "261",
+    "service": "API_MATERIAL_DOCUMENT_SRV",
+    "sapClient": "220",
+    "createEntitySet": "A_MaterialDocumentHeader",
+    "readbackTable": "MATDOC"
+  }
+}

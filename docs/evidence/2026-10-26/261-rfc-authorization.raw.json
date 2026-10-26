@@ -1,0 +1,2289 @@
+{
+  "capturedAt": "2026-10-26T04:16:00.130Z",
+  "mode": "READ-ONLY",
+  "identity": {
+    "rfcUserConfigured": true,
+    "rfcUserSource": "local S4_USERNAME env",
+    "odataAuthMode": "BasicAuthentication",
+    "odataUserConfigured": true,
+    "odataPrincipalPropagation": false,
+    "sameConfiguredPrincipal": true
+  },
+  "profiles": [
+    {
+      "PROFILE": "T-D4740162"
+    },
+    {
+      "PROFILE": "T-D4740164"
+    },
+    {
+      "PROFILE": "SAP_ALL"
+    },
+    {
+      "PROFILE": "T-D4740014"
+    },
+    {
+      "PROFILE": "T-D4740015"
+    },
+    {
+      "PROFILE": "T-D4740016"
+    },
+    {
+      "PROFILE": "T-D4740018"
+    },
+    {
+      "PROFILE": "T-D4740019"
+    },
+    {
+      "PROFILE": "T-D4740027"
+    },
+    {
+      "PROFILE": "T-D4740028"
+    },
+    {
+      "PROFILE": "T-D47400281"
+    },
+    {
+      "PROFILE": "T-D4740029"
+    },
+    {
+      "PROFILE": "T-D4740030"
+    },
+    {
+      "PROFILE": "T-D4740031"
+    },
+    {
+      "PROFILE": "T-D4740032"
+    },
+    {
+      "PROFILE": "T-D47400321"
+    },
+    {
+      "PROFILE": "T-D4740033"
+    },
+    {
+      "PROFILE": "T-D47400331"
+    },
+    {
+      "PROFILE": "T-D47400332"
+    },
+    {
+      "PROFILE": "T-D4740034"
+    },
+    {
+      "PROFILE": "T-D4740035"
+    },
+    {
+      "PROFILE": "T-D47400351"
+    },
+    {
+      "PROFILE": "T-D4740036"
+    },
+    {
+      "PROFILE": "T-D47400361"
+    },
+    {
+      "PROFILE": "T-D4740037"
+    },
+    {
+      "PROFILE": "T-D4740038"
+    },
+    {
+      "PROFILE": "T-D47400381"
+    },
+    {
+      "PROFILE": "T-D47400382"
+    },
+    {
+      "PROFILE": "T-D47400383"
+    },
+    {
+      "PROFILE": "T-D47400384"
+    },
+    {
+      "PROFILE": "T-D4740039"
+    },
+    {
+      "PROFILE": "T-D4740040"
+    },
+    {
+      "PROFILE": "T-D4740041"
+    },
+    {
+      "PROFILE": "T-D4740042"
+    },
+    {
+      "PROFILE": "T-D4740043"
+    },
+    {
+      "PROFILE": "T-D4740044"
+    },
+    {
+      "PROFILE": "T-D4740045"
+    },
+    {
+      "PROFILE": "T-D47400451"
+    },
+    {
+      "PROFILE": "T-D47400452"
+    },
+    {
+      "PROFILE": "T-D4740046"
+    },
+    {
+      "PROFILE": "T-D47400461"
+    },
+    {
+      "PROFILE": "T-D4740047"
+    },
+    {
+      "PROFILE": "T-D4740048"
+    },
+    {
+      "PROFILE": "T-D4740049"
+    },
+    {
+      "PROFILE": "T-D47400491"
+    },
+    {
+      "PROFILE": "T-D4740050"
+    },
+    {
+      "PROFILE": "T-D4740051"
+    },
+    {
+      "PROFILE": "T-D4740052"
+    },
+    {
+      "PROFILE": "T-D4740053"
+    },
+    {
+      "PROFILE": "T-D4740054"
+    },
+    {
+      "PROFILE": "T-D4740055"
+    },
+    {
+      "PROFILE": "T-D47400551"
+    },
+    {
+      "PROFILE": "T-D4740056"
+    },
+    {
+      "PROFILE": "T-D47400561"
+    },
+    {
+      "PROFILE": "T-D47400562"
+    },
+    {
+      "PROFILE": "T-D4740057"
+    },
+    {
+      "PROFILE": "T-D4740058"
+    },
+    {
+      "PROFILE": "T-D4740059"
+    },
+    {
+      "PROFILE": "T-D4740060"
+    },
+    {
+      "PROFILE": "T-D4740061"
+    },
+    {
+      "PROFILE": "T-D4740062"
+    },
+    {
+      "PROFILE": "T-D4740063"
+    },
+    {
+      "PROFILE": "T-D4740064"
+    },
+    {
+      "PROFILE": "T-D47400641"
+    },
+    {
+      "PROFILE": "T-D47400642"
+    },
+    {
+      "PROFILE": "T-D4740065"
+    },
+    {
+      "PROFILE": "T-D4740066"
+    },
+    {
+      "PROFILE": "T-D4740067"
+    },
+    {
+      "PROFILE": "T-D4740068"
+    },
+    {
+      "PROFILE": "T-D4740069"
+    },
+    {
+      "PROFILE": "T-D4740071"
+    },
+    {
+      "PROFILE": "T-D4740072"
+    },
+    {
+      "PROFILE": "T-D4740073"
+    },
+    {
+      "PROFILE": "T-D4740074"
+    },
+    {
+      "PROFILE": "T-D4740075"
+    },
+    {
+      "PROFILE": "T-D4740076"
+    },
+    {
+      "PROFILE": "T-D4740077"
+    },
+    {
+      "PROFILE": "T-D4740078"
+    },
+    {
+      "PROFILE": "T-D4740079"
+    },
+    {
+      "PROFILE": "T-D4740080"
+    },
+    {
+      "PROFILE": "T-D4740081"
+    },
+    {
+      "PROFILE": "T-D47400811"
+    },
+    {
+      "PROFILE": "T-D4740083"
+    },
+    {
+      "PROFILE": "T-D4740084"
+    },
+    {
+      "PROFILE": "T-D4740085"
+    },
+    {
+      "PROFILE": "T-D4740086"
+    },
+    {
+      "PROFILE": "T-D4740130"
+    },
+    {
+      "PROFILE": "T-D47401301"
+    },
+    {
+      "PROFILE": "T-D4740131"
+    },
+    {
+      "PROFILE": "T-D4740132"
+    },
+    {
+      "PROFILE": "T-D4740133"
+    },
+    {
+      "PROFILE": "T-D4740134"
+    },
+    {
+      "PROFILE": "T-D47401341"
+    },
+    {
+      "PROFILE": "T-D4740135"
+    },
+    {
+      "PROFILE": "T-D47401351"
+    },
+    {
+      "PROFILE": "T-D47401352"
+    },
+    {
+      "PROFILE": "T-D47401353"
+    },
+    {
+      "PROFILE": "T-D4740136"
+    },
+    {
+      "PROFILE": "T-D47401361"
+    },
+    {
+      "PROFILE": "T-D4740137"
+    }
+  ],
+  "assignedRoles": [
+    {
+      "AGR_NAME": "Z_WM_STOCK_ENGG",
+      "FROM_DAT": "20261022",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_PROJECT_SYSTEM_L1",
+      "FROM_DAT": "20260501",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_PROJECT_SYSTEM_L3",
+      "FROM_DAT": "20260501",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZMIGO_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZMIRO_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZSD_F2187A",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZVA01_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZVF01_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZVL02N_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F0029A",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F0106A",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F0763A",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F0842A",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F0843",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F0850A",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F0859",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F0869A",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F1048",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F1250",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F1481",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F1511A",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F1600A",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F1705",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F1982",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F1990",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2049",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2071",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2139",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2173",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2174",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2175",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2331",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2332",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2370",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2412",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2462",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2518",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2601",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2721",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2769",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2918",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2941",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2948",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F3014",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F3098",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F3130",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F3144",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F3163",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F3302",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F3408",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F3893",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F4072",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F4513",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F4596",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F4763",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F5044",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F5133",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F5601",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F5630",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_MANAGE_BANK",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_MANAGE_WORKFLOWS",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_MIGRATE_YOUR_DATA",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_MM01_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_MM02_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_MM03_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_NOTIFICATION_BELL",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_TERP_QUOCR_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_VA11_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_VA15_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_VA25_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_VA45_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_ZTE_YEINV_EWAY",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZBASIS_ADMIN",
+      "FROM_DAT": "20260815",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZFI_CKMLCP_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZFI_F4383",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZMM_POWL_EASY",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZRFQ_AP_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZSAPUI_FLEX_KEY_USER",
+      "FROM_DAT": "20260206",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "ZSD_F4274",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F1443A",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F1602",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F1711",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2023",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2072",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F2812",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F3567",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F3871",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F4603",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F4604",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_F6065",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_MASS_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_PERSONASADMIN",
+      "FROM_DAT": "20260211",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_ZRFQ_FIORI",
+      "FROM_DAT": "20250911",
+      "TO_DAT": "99991231"
+    },
+    {
+      "AGR_NAME": "Z_UI_KHUSHAL",
+      "FROM_DAT": "20261015",
+      "TO_DAT": "99991231"
+    }
+  ],
+  "bwaRoles": [
+    {
+      "AGR_NAME": "Z_MANAGE_WORKFLOWS",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMIGO_FIORI",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0842A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0843",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0850A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0850A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "02",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0850A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0859",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0859",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0869A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0869A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "02",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0869A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2139",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2462",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2769",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2948",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F3302",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F3302",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZSD_F2187A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZSD_F2187A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "02",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZSD_F2187A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZVL02N_FIORI",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "02",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1443A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2071",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2072",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2072",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2175",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2175",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMM_POWL_EASY",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMM_POWL_EASY",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "02",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMM_POWL_EASY",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_PROJECT_SYSTEM_L1",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0850A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________01",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________01",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0850A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________01",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________01",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMM_POWL_EASY",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________01",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMM_POWL_EASY",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________01",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMIGO_FIORI",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0842A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0843",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0850A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0859",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0869A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2139",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2462",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2769",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2948",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F3302",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZSD_F2187A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZVL02N_FIORI",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1443A",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2071",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2072",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2175",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_MANAGE_WORKFLOWS",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMM_POWL_EASY",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_PROJECT_SYSTEM_L1",
+      "OBJECT": "M_MSEG_BWA",
+      "AUTH": "__________00",
+      "FIELD": "BWART",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    }
+  ],
+  "wmbRoles": [
+    {
+      "AGR_NAME": "Z_MANAGE_WORKFLOWS",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_MANAGE_WORKFLOWS",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMIGO_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0842A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0843",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0850A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0859",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1048",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1600A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1602",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1982",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2049",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2139",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2462",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2769",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2948",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F3163",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F3302",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZVL02N_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_ZTE_YEINV_EWAY",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1443A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2072",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2175",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "03",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMIGO_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "02",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMIGO_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "04",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0842A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0843",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "02",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0843",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "04",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0843",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0859",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "04",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0859",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1602",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "02",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1982",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2049",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2139",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "04",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2139",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2769",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "04",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2769",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F3302",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "04",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F3302",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZVL02N_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "02",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2175",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "04",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0869A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1602",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1602",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1990",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F3163",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_ZTE_YEINV_EWAY",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "01",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_ZTE_YEINV_EWAY",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2071",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2072",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2173",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2174",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2175",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "F4",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F3567",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F4603",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F4604",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMM_POWL_EASY",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMIGO_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0842A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0843",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0850A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0859",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0869A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1048",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1600A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1602",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1982",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1990",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2049",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2139",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2462",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2769",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2948",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F3163",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F3302",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZVL02N_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_ZTE_YEINV_EWAY",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "1110",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_ZTE_YEINV_EWAY",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "1120",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F1443A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2071",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2072",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2173",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2174",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2175",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F3567",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F4603",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F4604",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_MANAGE_WORKFLOWS",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "ZMM_POWL_EASY",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________00",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0850A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________01",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2462",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________01",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________01",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F0850A",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________01",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2462",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________01",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_LO_OIF_MAIN_APP_FIORI",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________01",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2072",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________01",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2072",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________01",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2175",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________01",
+      "FIELD": "ACTVT",
+      "LOW": "",
+      "HIGH": "",
+      "DELETED": ""
+    },
+    {
+      "AGR_NAME": "Z_F2175",
+      "OBJECT": "M_MSEG_WMB",
+      "AUTH": "__________01",
+      "FIELD": "WERKS",
+      "LOW": "$WERKS",
+      "HIGH": "",
+      "DELETED": ""
+    }
+  ]
+}
