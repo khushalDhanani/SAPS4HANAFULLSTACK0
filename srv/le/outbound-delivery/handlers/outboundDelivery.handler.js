@@ -2,6 +2,7 @@ const LOG = require('../../../common/logger')('outbound-delivery');
 const outboundDeliveryAdapter = require('../../../integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
 const deliveryNoRefAdapter = require('../../../integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter');
 const { applyPaging, extractFilterParam } = require('../../../common/filterUtils');
+const plantScope = require('../../../wm/handling-unit/plantScope');
 
 /**
  * Registers Outbound Delivery business handlers on the CAP service.
@@ -116,6 +117,14 @@ function registerOutboundDeliveryHandlers(srv) {
       LOG.error(`createBillingDocument failed: ${err.message}`);
       return req.error(err.status || 502, err.message);
     }
+  });
+
+  // Function getPlantContext: the user's plants for the worklist plant selector. Same scope the adapter enforces;
+  // an Admin (unrestricted) may still have a Plant attribute, which pre-selects it.
+  srv.on('getPlantContext', (req) => {
+    const scope = plantScope(req.user);
+    const own = [].concat(req.user?.attr?.Plant || []).map((p) => String(p).trim().toUpperCase()).filter(Boolean);
+    return { plants: scope === null ? own : scope, unrestricted: scope === null };
   });
 
   // 6. Function getOrdersDueMetrics: counts over the full due set (same SAP read as the worklist, unpaged)

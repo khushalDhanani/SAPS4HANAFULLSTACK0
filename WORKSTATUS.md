@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Orders Due plant selector + 400 fix (2026-10-26 15:44 IST) — DONE, UNCOMMITTED:** Required/prefilled plant selector, backend still fail-closed, adapter 4xx no longer mapped to 500. Full READ-ONLY E2E 12/12 PASS; Jest 3,788 PASS. Supersedes the 15:26 BLOCKED item. See Changes Log 15:44 IST.
+
 - **E2E defect fixes (2026-10-26 15:26 IST) — 2 DONE, 1 BLOCKED, UNCOMMITTED:** PO create value-help text bindings and HU list toolbar priority fixed (E2E 11/12 suites PASS). Orders Due: fails only for users without a `Plant` attribute; fix BLOCKED on a business/security decision. See Changes Log 15:26 IST.
 
 - **E2E Tier 0/A/B (2026-10-26 15:14 IST) — DONE, UNCOMMITTED:** Write guard + 6 Playwright suites; every route now has browser E2E (🟢 30 / 🟡 3). Last run 9/12 suites PASS; 3 fail on app defects (PO create value-help `_Text` paths, Orders Due 500 without plant, HU list enum). SAP round trips still 0. See Changes Log 15:14 IST.
@@ -1659,7 +1661,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
-- **E2E next action (2026-10-26 15:26 IST, supersedes 15:14):** Decide Orders Due behaviour for users without a plant (plant selector vs. mock-user `Plant` attribute vs. admin all-plants) — BLOCKED until decided. Tier C SAP round trips: pick flows and give a written go per call.
+- **E2E next action (2026-10-26 15:44 IST, supersedes 15:26):** Orders Due decision implemented; all 12 E2E suites pass read-only. Open: Orders Due search on undeclared properties (400), VH DE/EN duplicates, Tier C SAP round trips (written go per call).
 
 - **E2E next action (2026-10-26 14:41 IST, supersedes 14:38):** The `verifyMvt311.e2e.js` failure was a stale test (fixed, not re-run); re-run it READ-ONLY against a running server when approved. Then decide where browser E2E with SAP round trips runs (DEV client 220 with per-call go vs. stubbed mode that is not SAP proof) before writing suites for the 🔴 rows in `docs/e2e-coverage-matrix.md`.
 
@@ -1713,6 +1715,19 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 15:44 IST — Orders Due: plant selector for users without a Plant attribute; fail-closed 400 no longer becomes 500
+
+- **Decision (user, 15:2x):** add a plant selector (required without a `Plant` attribute, prefilled otherwise), keep the backend fail-closed, return 400 instead of 500.
+- **Root causes:** (a) the worklist had no way to send a plant, so an Admin without a `Plant` attribute could never load it; (b) `OutboundDeliveryAdapter.getOrdersDueForDelivery` throws its fail-closed error inside its `try`, the `catch` runs it through `mapS4Error`, and `mapS4Error` derived status only from `error.response.status` → every adapter-raised 4xx became 500 (shared boundary, 36 call sites); (c) `OrdersDueForDelivery` had no `Plant` element, so CAP rejected `$filter=Plant eq …` with 400 (READ-ONLY verified).
+- **Change:**
+  - `srv/integration/s4hana/S4ErrorMapper.js`: an error with an explicit 4xx `status` and no S/4 `response` keeps its status/message/code/details; S/4 responses and non-4xx errors are classified as before.
+  - `srv/le/outbound-delivery/service.cds`: `OrdersDueForDelivery.Plant : String(4)` (selection parameter only, documented; rows are not given a plant); `getOrdersDueMetrics(Plant : String(4))`; new read-only `getPlantContext() returns { plants; unrestricted }`. `handlers/outboundDelivery.handler.js`: `getPlantContext` from the same `plantScope` the adapter enforces (Admin → own `Plant` attribute if any, `unrestricted: true`). Adapter plant rules unchanged (it already reads `Plant` from `$filter`/`req.data`).
+  - UI (`modules/le/outbound-delivery`): required `inputPlant` in the table toolbar; table binding `suspended: true`; `_initPlant` pre-selects the first plant from `getPlantContext()`, then `_applyCombinedFilters` (now adds `Plant EQ`) runs before `resume()` so the first request carries the plant (UI5 1.136.22 allows `filter` on a suspended root binding — `ODataListBinding-dbg.js:2448-2449`); metrics called with the plant; route-matched refresh and `onRefresh` do nothing without a plant; error value state when the plant is empty or the lookup fails. `OutboundDeliveryService.getOrdersDueMetrics(sPlant)` (quote-escaped) and `getPlantContext()`. i18n `ordersDuePlantPlaceholder`, `ordersDuePlantRequired`, `ordersDuePlantLoadFailed` in both bundles.
+  - `test/e2e/support/screenCheck.js`: step options `fill` (type into an input + Enter) and `expectRows`; `test/e2e/le/verifyLeScreens.e2e.js` now checks the no-plant user (no request until a plant; entered 1120 loads rows) and the plant-scoped user (pre-selected, loaded).
+- **TEST DECISION:** TEST ADDED + TEST UPDATED — `errorMapping.test.js` (+3: pre-classified 4xx kept; non-4xx and S/4 responses unchanged); `outboundDeliveryAdapter.test.js` (existing fail-closed tests now assert `status` 400/403 — they only checked messages, which is how the 500 slipped through; +3 Admin cases); `outboundDeliveryHandler.test.js` (+5: `getPlantContext` ×4, metrics 400 passthrough); `outboundDeliveryService.test.js` (+3); `ordersDueForDeliveryController.test.js` (+6 plant-selector cases; harness `getPlantContext` mock, `MockFilter` keeps operator/value; `onRefresh` test now waits for the plant); LE Playwright suite rewritten.
+- **Validation:** READ-ONLY backend contract on :4004 — alice: list without plant 400 (was 500), with `Plant eq '1120'` 200, metrics without plant 400 / with `Plant='1120'` 200, `getPlantContext` `{plants:[],unrestricted:true}`; bob: list 200, `Plant eq '1110'` 403, `getPlantContext` `{plants:['1120'],unrestricted:false}`. Red check — new/updated unit tests against the original controller, service client, handler and mapper: 17 failed / 135 passed; with changes 152/152. READ-ONLY `npm run test:e2e` (~15:40 IST, write guard on): **exit 0 — 12/12 suites PASS** (LE: alice no request until plant, then 169 rows; bob pre-selected, 169 rows). `npx jest --runInBand --ci` — 201 suites passed, 1 skipped; 3,788 passed, 59 skipped, 0 failed. `npx ui5lint` — no findings. `npx cds compile srv` — PASS. `npx eslint` on changed srv/test files — PASS (the controller shows the same 1 `sap` no-undef + 3 unused-catch warnings as before the change; app code is ignored by root ESLint, covered by ui5lint). `git diff --check` — PASS. Matrix: Browser E2E 🟢 33 / 🟡 0 / 🔴 0.
+- **Not verified / open (report only):** `cds-mcp` unavailable this session (disconnected), so CAP guidance was not queried; CDS changes follow existing patterns in the file and compile. The worklist search (`SoldToParty`, `SoldToPartyName`, `Material` filters) fails with 400 because those properties are not declared on `OrdersDueForDelivery` — pre-existing, not fixed. `mapS4Error` now preserves adapter-raised 4xx across all 36 call sites (full suite green; behaviour change is intentional). No SAP write; no commit. **Assumptions:** the first plant of a multi-plant user is pre-selected.
 
 ### 2026-10-26 15:26 IST — Fix PO create value-help text bindings and HU list toolbar priority; Orders Due investigated (decision pending)
 

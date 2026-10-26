@@ -108,13 +108,19 @@ function inspectScreen(page) {
  * Opens #/<hash>, waits for the screen to settle and returns the checks for it.
  * expect: { route, needsList }. Failures are collected, not thrown, so one suite reports every screen.
  */
-async function checkScreen(session, { hash, route, needsList = false }) {
+async function checkScreen(session, { hash, route, needsList = false, expectRows = false, fill }) {
     const { page } = session;
     const before = { console: session.consoleErrors.length, network: session.networkErrors.length, blocked: session.blocked.length };
     await page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/${hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
     await session.settle();
-    return evaluate(session, { route, needsList }, before);
+    if (fill) {
+        // Types into an sap.m.Input (its inner <input>) and confirms with Enter, as a user would
+        await page.fill(`[id$="--${fill.id}-inner"]`, fill.value);
+        await page.press(`[id$="--${fill.id}-inner"]`, 'Enter');
+        await session.settle();
+    }
+    return evaluate(session, { route, needsList, expectRows }, before);
 }
 
 /** Clicks the first row of the first visible bound list that has data, then checks the screen it leads to. */
@@ -136,12 +142,13 @@ async function openFirstRow(session, { route, needsList = false, fromFirstRow })
     return evaluate(session, { route, needsList }, before);
 }
 
-async function evaluate(session, { route, needsList }, before) {
+async function evaluate(session, { route, needsList, expectRows }, before) {
     const screen = await inspectScreen(session.page);
     const errors = [];
     if (screen.route !== route) errors.push(`expected route ${route}, got ${screen.route || '(none)'} (hash "${screen.hash}")`);
     if (!screen.title) errors.push('no visible page title');
     if (needsList && !screen.lists.some((l) => l.bound)) errors.push('no visible bound list/table');
+    if (expectRows && !screen.lists.some((l) => l.bound && l.length > 0)) errors.push('no bound list/table returned rows');
     screen.lists.filter((l) => /could not be loaded/i.test(l.noDataText)).forEach((l) => errors.push(`list ${l.id}: ${l.noDataText}`));
     screen.errorUi.forEach((t) => errors.push(`error UI shown: ${t}`));
     session.consoleErrors.slice(before.console).forEach((e) => errors.push(`console: ${e}`));
@@ -157,6 +164,7 @@ async function evaluate(session, { route, needsList }, before) {
  * step: { name, route, needsList?, hash } to open a route, { name, route, fromFirstRow: true } to click the
  * first row of the screen opened by the previous step (or of the list with that local id when a string),
  * { name, route, hashFrom: (previousHash) => hash }, or { name, route, skip: 'reason' } when no data allows it.
+ * Optional on an opened route: fill: { id, value } types into that input and presses Enter; expectRows: true.
  */
 async function runScreens({ baseUrl, user, title, steps }) {
     console.log(`\n=== ${title} (user ${user === null ? '(signed out)' : user || 'alice'}, READ-ONLY, write guard on) ===`);

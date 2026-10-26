@@ -218,4 +218,22 @@ describe('Unit: Error Mapping', () => {
         });
     });
 
+    describe('mapS4Error with errors raised by an adapter (no S/4 response)', () => {
+        it('keeps an explicit 4xx status and message, e.g. a fail-closed check', () => {
+            const err = Object.assign(new Error('No plant resolved for orders due for delivery. Query failed closed.'), { status: 400 });
+            expect(mapS4Error(err)).toMatchObject({ status: 400, message: err.message });
+            const denied = Object.assign(new Error('Access denied.'), { status: 403, code: 'FORBIDDEN' });
+            expect(mapS4Error(denied)).toMatchObject({ status: 403, code: 'FORBIDDEN' });
+        });
+
+        it('still classifies errors without a 4xx status as before', () => {
+            expect(mapS4Error(new Error('boom')).status).toBe(500);
+            expect(mapS4Error(Object.assign(new Error('upstream'), { status: 502 })).status).not.toBe(400);
+        });
+
+        it('still classifies S/4 responses by their HTTP status, not by an error.status', () => {
+            const err = Object.assign(new Error('Request failed'), { status: 400, response: { status: 503, data: {} } });
+            expect(mapS4Error(err).status).not.toBe(400);
+        });
+    });
 });

@@ -2,7 +2,7 @@
 
 One row per UI5 route in `app/fiori-app/webapp/manifest.json`. `test/unit/tools/e2eCoverageMatrix.test.js` fails when a route is missing, a row names a route that no longer exists, a status is invalid, or a 🟢/🟡 row cites no existing E2E suite. Governance rule: `AGENTS.md` → *Change and test rules* → *Business E2E coverage*.
 
-Statuses (updated 2026-10-26 ~15:25 IST from a READ-ONLY run of `npm run test:e2e` against the local server on :4004; no SAP write):
+Statuses (updated 2026-10-26 ~15:40 IST from a READ-ONLY run of `npm run test:e2e` against the local server on :4004; no SAP write):
 
 - **Browser E2E** — a Playwright suite under `test/e2e/` opens the route in a browser and checks: the router matched the route, a page title rendered, bound lists loaded without a load error, no error dialog/strip, no console errors, no HTTP >= 400, and no write request (Tier 0 write guard, `test/e2e/support/writeGuard.js`).
 - **SAP round trip** — that suite performs the business action through the UI and reads the SAP result back (Browser → route → controller → CAP → S/4 → SAP result → UI). Requires a per-call written go.
@@ -48,7 +48,7 @@ From each `srv/**/service.cds`; which screen calls which action is **Not verifie
 | `createSalesOrder` | `sd/sales-orders/create` | SD · order create | `/odata/v4/sales-order` | 🟢 | 🔴 | `test/e2e/sd/verifySdScreens.e2e.js`; `test/e2e/negative/verifyNegativeUi.e2e.js` B2: empty double submit shows a validation message, no write attempted. |
 | `wmGoodsReceipt` | `wm/goods-receipt` | WM · goods receipt list | `/odata/v4/goods-receipt` | 🟢 | 🔴 | `test/e2e/wm/verifyWmScreens.e2e.js`. |
 | `wmGoodsReceiptDetail` | `wm/goods-receipt/{delivery}` | WM · goods receipt post | `/odata/v4/goods-receipt` | 🟢 | 🔴 | `test/e2e/wm/verifyWmScreens.e2e.js` (first open delivery). Posting not exercised. |
-| `ordersDueForDelivery` | `le/orders-due` | LE · deliveries, PGI, billing | `/odata/v4/outbound-delivery` | 🟡 | 🔴 | `test/e2e/le/verifyLeScreens.e2e.js` FAILS for mock user `alice` (Admin, no `Plant` attribute): `OutboundDeliveryAdapter` fails closed ("No plant resolved") and the screen has no plant selector, so the worklist cannot load for such users; the 400 also surfaces as HTTP 500. The same screen passes for plant-scoped user `bob` (169 rows, 15:2x IST). Fix pending a decision on admin/no-plant behaviour. |
+| `ordersDueForDelivery` | `le/orders-due` | LE · deliveries, PGI, billing | `/odata/v4/outbound-delivery` | 🟢 | 🔴 | `test/e2e/le/verifyLeScreens.e2e.js`: user without a `Plant` attribute (`alice`) sees the required Plant selector and no request is sent until a plant is entered, then plant 1120 loads 169 rows; plant-scoped user (`bob`) opens pre-selected and loaded. Backend stays fail-closed (no plant → 400, out-of-scope plant → 403). Search on SoldToParty/Material still fails with 400 (undeclared properties; not fixed). Delivery/PGI/billing actions not exercised. |
 | `customerInvoices` | `sd/invoices` | SD · invoices | `/odata/v4/customer-invoice` | 🟢 | 🔴 | `test/e2e/sd/verifySdScreens.e2e.js`. Release/cancel actions not exercised. |
 | `customerReturns` | `sd/returns` | SD · return list | `/odata/v4/customer-return` | 🟢 | 🔴 | `test/e2e/sd/verifySdScreens.e2e.js`. |
 | `createCustomerReturn` | `sd/returns/create` | SD · return create | `/odata/v4/customer-return` | 🟢 | 🔴 | `test/e2e/sd/verifySdScreens.e2e.js`; `test/e2e/negative/verifyNegativeUi.e2e.js` B2: empty double submit shows the validation MessageBox, no write attempted. |
@@ -69,7 +69,7 @@ From each `srv/**/service.cds`; which screen calls which action is **Not verifie
 | `wmHuStockTransferRack` | `wm/hu-stock-transfer/{reservation}/{item}/rack` | WM · HU rack selection | `/odata/v4/hu-stock-transfer` | 🟢 | 🔴 | `test/e2e/wm/verifyWmScreens.e2e.js` (first list row opens the rack by design). |
 | `wmHuStockTransferDetail` | `wm/hu-stock-transfer/{reservation}/{item}` | WM · HU stock transfer post | `/odata/v4/hu-stock-transfer` | 🟢 | 🔴 | `test/e2e/wm/verifyWmScreens.e2e.js` (same reservation as the rack step). Posting not exercised. |
 
-Totals: Browser E2E 🟢 32 / 🟡 1 / 🔴 0. SAP round trip: 0 🟢, 28 🔴, 5 N/A.
+Totals: Browser E2E 🟢 33 / 🟡 0 / 🔴 0. SAP round trip: 0 🟢, 28 🔴, 5 N/A.
 
 ## Negative E2E cases
 

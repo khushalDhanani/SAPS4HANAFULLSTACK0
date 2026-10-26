@@ -124,6 +124,7 @@
                     id="ordersDueTable"
                     items="{
                         path: 'outboundDelivery>/OrdersDueForDelivery',
+                        suspended: true,
                         parameters: {
                             $count: true
                         },
@@ -151,6 +152,17 @@
                                     <SegmentedButtonItem id="segBtnAll" key="all" text="{i18n>ordersDueTabAll}" />
                                 </items>
                             </SegmentedButton>
+                            <Input
+                                id="inputPlant"
+                                width="8rem"
+                                maxLength="4"
+                                required="true"
+                                value="{ordersDueView>/plant}"
+                                placeholder="{i18n>ordersDuePlantPlaceholder}"
+                                tooltip="{i18n>ordersDuePlantPlaceholder}"
+                                valueState="{ordersDueView>/plantValueState}"
+                                valueStateText="{ordersDueView>/plantValueStateText}"
+                                change=".onPlantChange" />
                             <ComboBox
                                 id="comboFilterShippingPoint"
                                 width="13rem"

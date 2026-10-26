@@ -38,7 +38,10 @@ sap.ui.define([
                 inApprovalOrdersCount: "-",
                 displayCount: "-",
                 selectedTab: "ready",
-                canCreateDelivery: bCanCreateDelivery
+                canCreateDelivery: bCanCreateDelivery,
+                plant: "",
+                plantValueState: "None",
+                plantValueStateText: ""
             });
             this.getView().setModel(oViewModel, "ordersDueView");
 
@@ -87,7 +90,53 @@ sap.ui.define([
                 oRouter.getRoute("ordersDueForDelivery").attachPatternMatched(this._onRouteMatched, this);
             }
 
+            this._initPlant();
+        },
+
+        _getPlant: function () {
+            var oVm = this.getView().getModel("ordersDueView");
+            return String((oVm && oVm.getProperty("/plant")) || "").trim().toUpperCase();
+        },
+
+        /** The worklist table starts suspended: the server fails closed without a plant, so nothing loads until one is set. */
+        _initPlant: function () {
+            var that = this;
+            return OutboundDeliveryService.getPlantContext().then(function (oCtx) {
+                var sOwn = oCtx.plants[0] || "";
+                if (!that._getPlant() && sOwn) {
+                    that.getView().getModel("ordersDueView").setProperty("/plant", sOwn);
+                }
+                that._loadForPlant();
+            }).catch(function (oError) {
+                that._setPlantState("Error", that._text("ordersDuePlantLoadFailed", "Your plants could not be determined: {0}")
+                    .replace("{0}", (oError && oError.message) || ""));
+            });
+        },
+
+        _setPlantState: function (sState, sText) {
+            var oVm = this.getView().getModel("ordersDueView");
+            oVm.setProperty("/plantValueState", sState);
+            oVm.setProperty("/plantValueStateText", sText || "");
+        },
+
+        onPlantChange: function () {
+            this.getView().getModel("ordersDueView").setProperty("/plant", this._getPlant());
+            this._loadForPlant();
+        },
+
+        /** Applies the filters (incl. Plant) first, then resumes the table so its first request already carries the plant. */
+        _loadForPlant: function () {
+            if (!this._getPlant()) {
+                this._setPlantState("Error", this._text("ordersDuePlantRequired", "Enter a plant to load the orders due for delivery."));
+                return;
+            }
+            this._setPlantState("None", "");
             this._applyCombinedFilters();
+            var oTable = this.byId("ordersDueTable");
+            var oBinding = oTable ? oTable.getBinding("items") : null;
+            if (oBinding && typeof oBinding.isSuspended === "function" && oBinding.isSuspended()) {
+                oBinding.resume();
+            }
             this._loadServerMetrics();
         },
 
@@ -100,6 +149,9 @@ sap.ui.define([
                 if (oVm) {
                     oVm.setProperty("/canCreateDelivery", AuthService.canCreateDelivery());
                 }
+            }
+            if (!this._getPlant()) {
+                return;
             }
             this._applyCombinedFilters();
             var oTable = this.byId("ordersDueTable");
@@ -123,10 +175,10 @@ sap.ui.define([
 
         _loadServerMetrics: function () {
             var oViewModel = this.getView().getModel("ordersDueView");
-            if (!oViewModel) {
+            if (!oViewModel || !this._getPlant()) {
                 return Promise.resolve();
             }
-            return OutboundDeliveryService.getOrdersDueMetrics()
+            return OutboundDeliveryService.getOrdersDueMetrics(this._getPlant())
                 .then(function (oMetrics) {
                     var bOk = oMetrics && typeof oMetrics.scheduleLineCount === "number" && typeof oMetrics.shippingPointCount === "number";
                     var nTotal = bOk ? oMetrics.scheduleLineCount : "-";
@@ -201,6 +253,11 @@ sap.ui.define([
             var oViewModel = this.getView && typeof this.getView().getModel === "function" ? this.getView().getModel("ordersDueView") : null;
             var sTab = (oViewModel && typeof oViewModel.getProperty === "function" && oViewModel.getProperty("/selectedTab")) || "ready";
 
+            var sPlant = String((oViewModel && typeof oViewModel.getProperty === "function" && oViewModel.getProperty("/plant")) || "").trim();
+            if (sPlant) {
+                aFilters.push(new Filter("Plant", FilterOperator.EQ, sPlant.toUpperCase()));
+            }
+
             if (sTab === "ready") {
                 aFilters.push(new Filter("IsDeliverable", FilterOperator.EQ, true));
             } else if (sTab === "inApproval") {
@@ -234,6 +291,10 @@ sap.ui.define([
         },
 
         onRefresh: function () {
+            if (!this._getPlant()) {
+                this._loadForPlant();
+                return;
+            }
             var oTable = this.byId("ordersDueTable");
             if (oTable) {
                 var oBinding = oTable.getBinding("items");

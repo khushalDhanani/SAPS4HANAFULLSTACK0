@@ -218,13 +218,36 @@ describe('Unit: OutboundDeliveryAdapter', () => {
     test('fails closed (HTTP 400) when no plant resolves from query, options, or user context', async () => {
       mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
 
-      await expect(adapter.getOrdersDueForDelivery({})).rejects.toThrow('No plant resolved for orders due for delivery. Query failed closed.');
+      await expect(adapter.getOrdersDueForDelivery({})).rejects.toMatchObject({
+        status: 400,
+        message: 'No plant resolved for orders due for delivery. Query failed closed.'
+      });
       expect(mockClient.get).not.toHaveBeenCalled();
+    });
+
+    test('fails closed (HTTP 400) for an Admin without a Plant attribute and without a Plant filter', async () => {
+      const user = { attr: {}, is: (r) => r === 'Admin' };
+      await expect(adapter.getOrdersDueForDelivery({ query: { SELECT: {} } }, { user })).rejects.toMatchObject({ status: 400 });
+      expect(mockClient.get).not.toHaveBeenCalled();
+    });
+
+    test('an Admin without a Plant attribute reads with the $filter Plant the worklist sends', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+      const user = { attr: {}, is: (r) => r === 'Admin' };
+      const req = { query: { SELECT: { where: [{ ref: ['Plant'] }, '=', { val: '1120' }] } } };
+      await expect(adapter.getOrdersDueForDelivery(req, { user })).resolves.toEqual([]);
+      expect(mockClient.get).toHaveBeenCalled();
+    });
+
+    test('reads the metrics function parameter Plant from req.data', async () => {
+      mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+      const user = { attr: {}, is: (r) => r === 'Admin' };
+      await expect(adapter.getOrdersDueForDelivery({ data: { Plant: '1120' } }, { user })).resolves.toEqual([]);
     });
 
     test('fails closed (HTTP 403) when authenticated non-admin user has no authorized plants', async () => {
       const user = { attr: { Plant: [] }, is: () => false };
-      await expect(adapter.getOrdersDueForDelivery({}, { user })).rejects.toThrow('User has no authorized plants. Access denied.');
+      await expect(adapter.getOrdersDueForDelivery({}, { user })).rejects.toMatchObject({ status: 403, message: 'User has no authorized plants. Access denied.' });
       expect(mockClient.get).not.toHaveBeenCalled();
     });
 

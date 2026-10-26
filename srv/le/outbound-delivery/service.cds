@@ -19,6 +19,8 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
             DelivBlockReasonForSchedLine: String(2);
             SalesDocApprovalStatus      : String(10);
             IsDeliverable               : Boolean;
+            // Selection parameter only ($filter=Plant eq '...'): the plant's shipping points select the rows; not returned per row
+            Plant                       : String(4);
     };
 
     @readonly
@@ -79,7 +81,7 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
     };
 
     @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
-    function getOrdersDueMetrics() returns {
+    function getOrdersDueMetrics(Plant : String(4)) returns {
         scheduleLineCount     : Integer;
         readyToDeliverCount   : Integer;
         inApprovalCount       : Integer;
@@ -87,6 +89,13 @@ service OutboundDeliveryService @(path: '/odata/v4/outbound-delivery') {
         distinctOrdersCount   : Integer;
         readyOrdersCount      : Integer;
         inApprovalOrdersCount : Integer;
+    };
+
+    // Plants of the current user for the worklist plant selector (server-side scope; unrestricted = Admin)
+    @(requires: ['Viewer', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager', 'Admin'])
+    function getPlantContext() returns {
+        plants       : array of String;
+        unrestricted : Boolean;
     };
 
     @readonly

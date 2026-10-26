@@ -94,10 +94,12 @@ sap.ui.define([
          * KPI figures computed by the server over the full due-for-delivery set (not the loaded page).
          * Rejects on failure so the caller can show "-" instead of a number.
          *
+         * @param {string} sPlant plant whose shipping points select the due orders (the server fails closed without one)
          * @returns {Promise<{scheduleLineCount: number, shippingPointCount: number}>}
          */
-        getOrdersDueMetrics: function () {
-            return ODataClient.get(SERVICE_BASE + "/getOrdersDueMetrics()").then(function (result) {
+        getOrdersDueMetrics: function (sPlant) {
+            var sUrl = SERVICE_BASE + "/getOrdersDueMetrics(Plant='" + encodeURIComponent(String(sPlant || "").replace(/'/g, "''")) + "')";
+            return ODataClient.get(sUrl).then(function (result) {
                 var oData = (result && result.value) || result;
                 if (!oData || typeof oData.scheduleLineCount !== "number" || typeof oData.shippingPointCount !== "number") {
                     throw new Error("getOrdersDueMetrics returned no figures");
@@ -110,6 +112,21 @@ sap.ui.define([
                     distinctOrdersCount: typeof oData.distinctOrdersCount === "number" ? oData.distinctOrdersCount : 0,
                     readyOrdersCount: typeof oData.readyOrdersCount === "number" ? oData.readyOrdersCount : 0,
                     inApprovalOrdersCount: typeof oData.inApprovalOrdersCount === "number" ? oData.inApprovalOrdersCount : 0
+                };
+            });
+        },
+
+        /**
+         * The current user's plants for the worklist plant selector (server-side scope).
+         *
+         * @returns {Promise<{plants: string[], unrestricted: boolean}>}
+         */
+        getPlantContext: function () {
+            return ODataClient.get(SERVICE_BASE + "/getPlantContext()").then(function (result) {
+                var oData = (result && result.value) || result || {};
+                return {
+                    plants: Array.isArray(oData.plants) ? oData.plants : [],
+                    unrestricted: oData.unrestricted === true
                 };
             });
         },

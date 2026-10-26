@@ -4,6 +4,7 @@
  */
 
 let ControllerClass;
+const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 class MockJSONModel {
     constructor(data) {
@@ -35,8 +36,10 @@ class MockJSONModel {
 }
 
 class MockFilter {
-    constructor(config) {
+    constructor(config, operator, value) {
         this.config = config;
+        this.operator = operator;
+        this.value = value;
     }
 }
 
@@ -88,6 +91,7 @@ const MockOutboundDeliveryService = {
     createOutboundDelivery: jest.fn().mockResolvedValue("13000526"),
     createDeliveryWithoutRef: jest.fn().mockResolvedValue({ OutboundDelivery: "80000059" }),
     getDeliveryStatus: jest.fn().mockResolvedValue({ DeliveryDocument: "13000526", DeliveryDocumentType: "ZLF", SoldToParty: "10082", OverallPickingStatus: "A", OverallGoodsMovementStatus: "A", OverallDelivReltdBillgStatus: "A" }),
+    getPlantContext: jest.fn().mockResolvedValue({ plants: ["1120"], unrestricted: false }),
     getOrdersDueMetrics: jest.fn().mockResolvedValue({
         scheduleLineCount: 0,
         readyToDeliverCount: 0,
@@ -143,7 +147,9 @@ describe("OrdersDueForDelivery Controller", () => {
 
         mockBinding = {
             refresh: jest.fn(),
-            filter: jest.fn()
+            filter: jest.fn(),
+            isSuspended: jest.fn().mockReturnValue(true),
+            resume: jest.fn(() => { mockBinding.isSuspended.mockReturnValue(false); })
         };
 
         mockTable = {
@@ -264,8 +270,9 @@ describe("OrdersDueForDelivery Controller", () => {
         expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
     });
 
-    test("onRefresh refreshes table items binding and reloads server metrics", () => {
+    test("onRefresh refreshes table items binding and reloads server metrics", async () => {
         controller.onInit();
+        await flush();
         MockOutboundDeliveryService.getOrdersDueMetrics.mockClear();
         controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
         controller.onRefresh();
@@ -589,6 +596,81 @@ describe("OrdersDueForDelivery Controller", () => {
                 expect.stringContaining("80000059"),
                 expect.any(Object)
             );
+        });
+    });
+
+    describe("plant selector (the server fails closed without a plant)", () => {
+        const plantFilter = () => {
+            const aFilters = mockBinding.filter.mock.calls.length ? mockBinding.filter.mock.calls.slice(-1)[0][0] : [];
+            return aFilters.find((f) => f.config === "Plant");
+        };
+
+        test("pre-selects the user's plant, filters by it, then resumes the table and loads metrics for it", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: ["1120"], unrestricted: false });
+            controller.onInit();
+            await flush();
+            const vm = mockView.getModel("ordersDueView");
+            expect(vm.getProperty("/plant")).toBe("1120");
+            expect(plantFilter()).toMatchObject({ operator: "EQ", value: "1120" });
+            expect(mockBinding.resume).toHaveBeenCalledTimes(1);
+            expect(mockBinding.filter.mock.invocationCallOrder[0]).toBeLessThan(mockBinding.resume.mock.invocationCallOrder[0]);
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).toHaveBeenCalledWith("1120");
+            expect(vm.getProperty("/plantValueState")).toBe("None");
+        });
+
+        test("without a Plant attribute the plant is required and nothing is requested", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: [], unrestricted: true });
+            controller.onInit();
+            await flush();
+            const vm = mockView.getModel("ordersDueView");
+            expect(vm.getProperty("/plantValueState")).toBe("Error");
+            expect(vm.getProperty("/plantValueStateText")).toMatch(/plant/i);
+            expect(mockBinding.resume).not.toHaveBeenCalled();
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).not.toHaveBeenCalled();
+        });
+
+        test("an entered plant is normalized, filtered on, and loads the worklist", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: [], unrestricted: true });
+            controller.onInit();
+            await flush();
+            const vm = mockView.getModel("ordersDueView");
+            vm.setProperty("/plant", " 1110 ");
+            controller.onPlantChange();
+            expect(vm.getProperty("/plant")).toBe("1110");
+            expect(plantFilter()).toMatchObject({ value: "1110" });
+            expect(mockBinding.resume).toHaveBeenCalledTimes(1);
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).toHaveBeenCalledWith("1110");
+            expect(vm.getProperty("/plantValueState")).toBe("None");
+        });
+
+        test("clearing the plant again shows the required state and requests nothing new", async () => {
+            controller.onInit();
+            await flush();
+            MockOutboundDeliveryService.getOrdersDueMetrics.mockClear();
+            const vm = mockView.getModel("ordersDueView");
+            vm.setProperty("/plant", "");
+            controller.onPlantChange();
+            expect(vm.getProperty("/plantValueState")).toBe("Error");
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).not.toHaveBeenCalled();
+        });
+
+        test("a failed plant lookup leaves the table suspended and shows why", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockRejectedValueOnce(new Error("HTTP 403"));
+            controller.onInit();
+            await flush();
+            const vm = mockView.getModel("ordersDueView");
+            expect(vm.getProperty("/plantValueState")).toBe("Error");
+            expect(vm.getProperty("/plantValueStateText")).toContain("HTTP 403");
+            expect(mockBinding.resume).not.toHaveBeenCalled();
+        });
+
+        test("onRefresh without a plant asks for one instead of refreshing", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: [], unrestricted: true });
+            controller.onInit();
+            await flush();
+            controller.onRefresh();
+            expect(mockBinding.refresh).not.toHaveBeenCalled();
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).not.toHaveBeenCalled();
         });
     });
 });

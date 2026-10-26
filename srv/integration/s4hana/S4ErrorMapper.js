@@ -157,6 +157,17 @@ function mapS4Error(error) {
             details: [{ code, message: period[0], severity: 'error' }]
         };
     }
+    // A client error the adapter raised itself (explicit 4xx status, no S/4 response) keeps its status,
+    // e.g. a fail-closed authorization or missing-parameter check; only S/4 responses are classified below.
+    if (!error.response && Number.isInteger(error.status) && error.status >= 400 && error.status < 500) {
+        return {
+            status: error.status,
+            message: error.message || message,
+            code: error.code || code,
+            details: Array.isArray(error.details) ? error.details : []
+        };
+    }
+
     const sMessageLower = message.toLowerCase();
     const sCodeUpper = String(code).toUpperCase();
     const httpStatus = error.response?.status;

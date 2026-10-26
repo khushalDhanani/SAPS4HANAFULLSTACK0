@@ -288,4 +288,35 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('ErrorInGoodsIssue'));
     });
   });
+
+  describe('getPlantContext', () => {
+    test('Admin without a Plant attribute: unrestricted, no plant to pre-select', () => {
+      const req = { user: { is: (r) => r === 'Admin', attr: {} } };
+      expect(handlers['getPlantContext'](req)).toEqual({ plants: [], unrestricted: true });
+    });
+
+    test('Admin with a Plant attribute: unrestricted, plant pre-selected', () => {
+      const req = { user: { is: (r) => r === 'Admin', attr: { Plant: [' 1120 '] } } };
+      expect(handlers['getPlantContext'](req)).toEqual({ plants: ['1120'], unrestricted: true });
+    });
+
+    test('non-Admin: exactly the authorized plants', () => {
+      const req = { user: { is: () => false, attr: { Plant: ['1120', 'x1'] } } };
+      expect(handlers['getPlantContext'](req)).toEqual({ plants: ['1120', 'X1'], unrestricted: false });
+    });
+
+    test('non-Admin without plants: none (the worklist read then fails closed with 403)', () => {
+      const req = { user: { is: () => false, attr: {} } };
+      expect(handlers['getPlantContext'](req)).toEqual({ plants: [], unrestricted: false });
+    });
+  });
+
+  describe('getOrdersDueMetrics', () => {
+    test('passes the adapter 400 (no plant) through as 400', async () => {
+      outboundDeliveryAdapter.getOrdersDueForDelivery.mockRejectedValue(Object.assign(new Error('No plant resolved'), { status: 400 }));
+      const req = { data: {}, error: jest.fn() };
+      await handlers['getOrdersDueMetrics'](req);
+      expect(req.error).toHaveBeenCalledWith(400, 'No plant resolved');
+    });
+  });
 });

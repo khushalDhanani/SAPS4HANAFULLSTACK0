@@ -138,4 +138,23 @@ describe('Frontend OutboundDeliveryService Unit Tests', () => {
     });
     expect(res).toBe('13000527');
   });
+
+  it('getOrdersDueMetrics sends the plant as the function parameter', async () => {
+    mockODataClient.get.mockResolvedValueOnce({ scheduleLineCount: 3, shippingPointCount: 1 });
+    await FrontendOutboundDeliveryService.getOrdersDueMetrics('1120');
+    expect(mockODataClient.get).toHaveBeenCalledWith("/odata/v4/outbound-delivery/getOrdersDueMetrics(Plant='1120')");
+  });
+
+  it('getOrdersDueMetrics escapes quotes in the plant', async () => {
+    mockODataClient.get.mockResolvedValueOnce({ scheduleLineCount: 0, shippingPointCount: 0 });
+    await FrontendOutboundDeliveryService.getOrdersDueMetrics("1'2");
+    expect(mockODataClient.get).toHaveBeenCalledWith("/odata/v4/outbound-delivery/getOrdersDueMetrics(Plant='1''2')");
+  });
+
+  it('getPlantContext returns plants and unrestricted, defaulting safely', async () => {
+    mockODataClient.get.mockResolvedValueOnce({ plants: ['1120'], unrestricted: false });
+    await expect(FrontendOutboundDeliveryService.getPlantContext()).resolves.toEqual({ plants: ['1120'], unrestricted: false });
+    mockODataClient.get.mockResolvedValueOnce({});
+    await expect(FrontendOutboundDeliveryService.getPlantContext()).resolves.toEqual({ plants: [], unrestricted: false });
+  });
 });
