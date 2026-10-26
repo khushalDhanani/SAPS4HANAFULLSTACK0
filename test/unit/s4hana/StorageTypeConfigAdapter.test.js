@@ -89,4 +89,30 @@ describe('StorageTypeConfigAdapter', () => {
       .rejects.toMatchObject({ status: 400 });
     expect(readTable).not.toHaveBeenCalled();
   });
+
+  test('discovers LGNUM/LGTYP from the real DD03L T301 rows captured on 2026-10-26 and validates against real W01 codes', async () => {
+    // Rows quoted from docs/evidence/2026-10-26/hu-stock-evidence.raw.json, queries[0].rows (DD03L, TABNAME = 'T301').
+    const realDd03l = [
+      { TABNAME: 'T301', FIELDNAME: 'LGTYP', POSITION: '0003', KEYFLAG: 'X', ROLLNAME: 'LGTYP', DATATYPE: 'CHAR', LENG: '000003' },
+      { TABNAME: 'T301', FIELDNAME: 'MANDT', POSITION: '0001', KEYFLAG: 'X', ROLLNAME: 'MANDT', DATATYPE: 'CLNT', LENG: '000003' },
+      { TABNAME: 'T301', FIELDNAME: 'LGNUM', POSITION: '0002', KEYFLAG: 'X', ROLLNAME: 'LGNUM', DATATYPE: 'CHAR', LENG: '000003' },
+      { TABNAME: 'T301', FIELDNAME: 'GLCGR', POSITION: '0005', KEYFLAG: '', ROLLNAME: 'LXYRD_GLCGR', DATATYPE: 'CHAR', LENG: '000003' },
+      { TABNAME: 'T301', FIELDNAME: '.INCLU--AP', POSITION: '0004', KEYFLAG: '', ROLLNAME: '', DATATYPE: '', LENG: '000000' }
+    ];
+    // Subset of queries[1].rows (T301, LGNUM = 'W01', 49 rows); OXD/WRA are the two codes new since the 2026-10-23 T301T read.
+    const realW01 = ['902', '911', '913', '921', 'EN1', 'OH1', 'OXD', 'WRA'].map((LGTYP) => ({ LGNUM: 'W01', LGTYP }));
+    const readTable = jest.fn(async (table) => (table === 'DD03L' ? realDd03l : realW01));
+    const adapter = new StorageTypeConfigAdapter({ rfcClient: { readTable } });
+
+    await expect(adapter.validateStorageTypeListsForWarehouse('W01', {
+      pickableStorageTypes: ['EN1'],
+      holdStorageTypes: ['OH1'],
+      interimStorageTypes: ['911', '913', '921', '902']
+    })).resolves.toEqual({ warehouse: 'W01', verifiedStorageTypes: ['EN1', 'OH1', '911', '913', '921', '902'] });
+    expect(readTable).toHaveBeenNthCalledWith(2, 'T301', ['LGNUM', 'LGTYP'], ["LGNUM = 'W01'"], 9999);
+
+    await expect(adapter.validateStorageTypeListsForWarehouse('W01', {
+      pickableStorageTypes: ['EN1'], holdStorageTypes: ['OH1'], interimStorageTypes: ['ZZ9']
+    })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('ZZ9') });
+  });
 });

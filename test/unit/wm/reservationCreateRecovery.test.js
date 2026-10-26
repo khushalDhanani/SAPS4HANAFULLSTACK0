@@ -275,6 +275,13 @@ describe('Step 7.7: reservation-create partial failure and recovery', () => {
 
     test('MIGO failure: status 90 with the error, TR/TO kept; retry resumes at MIGO only', async () => {
       await seed({ TransferRequirement: '0001007077', TransferOrder: '0001012977', Status_code: '04' });
+      // retryStep reads RESB-BWART before MIGO (fail-closed movement-type check); give it exactly one 311 row
+      spies.push(jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(async (table) => {
+        if (table === 'RESB') return [{ BWART: '311' }];
+        if (table === 'T320') return [{ LGNUM: 'W01' }];
+        if (table === 'LTAK' || table === 'LTAP' || table === 'LTBK') return [];
+        throw Object.assign(new Error('node-rfc is not available (test stub)'), { status: 503 });
+      }));
       const migoSpy = spy('postGoodsMovement').mockRejectedValueOnce(new Error('Posting period closed')).mockResolvedValue({ success: true, materialDocument: '4900059977', materialDocumentYear: '2026', withdrawnQuantity: 3, remainingQuantity: 0, completelyProcessed: true });
       spy('writeApplicationLog').mockResolvedValue({ logHandle: '' });
       const toSpy = spy('createTransferOrderFromTR');

@@ -26,3 +26,13 @@ RESB rows are from 2026-10-23 files `resb-open-311-1120-cs02.json` and `resb-ope
 - Materials 8000009802/9803 at 1150/CS02: no LQUA query/rows in the saved evidence.
 
 The 9754 and 6485 rows are targeted reads, not a complete LQUA scan by material/plant/SLoc. Same-material units are shared across multiple open reservation items, and no reservation-to-HU allocation rule was queried. Therefore a numeric per-reservation shortage cannot be derived safely. A complete fresh stock picture and business allocation rule are required; no pickability judgement is made here.
+
+## Addendum 2026-10-26 11:10 IST — superseded by the collector run
+
+The table above was built from selective saved reads. `hu-stock-evidence.raw.json` (captured `2026-10-26T05:31:12Z`, READ-ONLY) now contains complete LQUA reads by material for W01 / plant / CS02 (`queries[2]`–`queries[5]`). It supersedes the "Saved stock observations" column:
+
+- Material 8000009754, 1120/CS02: 20 LQUA rows, 15 distinct LENUM, total quantity 10 NOS by storage type: 902 −5, OH1 +5, 911 3, 913 5, EN1 1 (HU `2000019372` at bin `1-L0001-04`), 921 1. Open demand 3 (523654/1, 529960/1, 529959/1).
+- Material 8000006485, 1120/CS02: unchanged, 2 × OH1/ONHOLD (HUs 2000020150/151), total 2 NOS. Open demand 11; pool shortfall 9.
+- Materials 8000009802/9803 at 1150/CS02: queried in W01, 0 rows each. Open demand 1 each. Whether 1150/CS02 belongs to W01 is Not verified (no T320 evidence).
+
+Reservation numbers in this file were checked against `queries[25]`/`queries[26]` and are correct (`520235/1`, `520235/2`, `520236/1`, `520236/2`). Full analysis: `hu-stock-evidence-analysis.md`. No pickability judgement is made here.
