@@ -92,7 +92,7 @@
                                 <layoutData><OverflowToolbarLayoutData priority="Low" /></layoutData>
                             </Button>
                             <Button id="huQrDownloadSelected" icon="sap-icon://qr-code" text="{= ${i18n>huQrDownloadSelected} + (${huView>/selectedCount} > 0 ? ' (' + ${huView>/selectedCount} + ')' : '') }" tooltip="{i18n>huQrDownloadSelectedTip}" press=".onDownloadQrSelected" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/selectedCount} > 0 }">
-                                <layoutData><OverflowToolbarLayoutData priority="Medium" /></layoutData>
+                                <layoutData><OverflowToolbarLayoutData priority="Low" /></layoutData>
                             </Button>
                             <Button id="huQrDownloadAll" icon="sap-icon://qr-code" text="{i18n>huQrDownloadAll}" tooltip="{i18n>huQrDownloadAllTip}" press=".onDownloadQrAll" enabled="{= !${huView>/busy} &amp;&amp; !${huView>/printing} &amp;&amp; ${huView>/items}.length > 0 }">
                                 <layoutData><OverflowToolbarLayoutData priority="Low" /></layoutData>

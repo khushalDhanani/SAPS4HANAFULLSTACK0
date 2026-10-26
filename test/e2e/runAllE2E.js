@@ -10,6 +10,12 @@ const { verifyMvt241 } = require('./wm/verifyMvt241.e2e');
 const { verifyMvt261 } = require('./wm/verifyMvt261.e2e');
 const { verifyMvt301 } = require('./wm/verifyMvt301.e2e');
 const { verifyMvt311 } = require('./wm/verifyMvt311.e2e');
+const { verifyShellScreens } = require('./shell/verifyShellScreens.e2e');
+const { verifyMmScreens } = require('./mm/verifyMmScreens.e2e');
+const { verifySdScreens } = require('./sd/verifySdScreens.e2e');
+const { verifyLeScreens } = require('./le/verifyLeScreens.e2e');
+const { verifyWmScreens } = require('./wm/verifyWmScreens.e2e');
+const { verifyNegativeUi } = require('./negative/verifyNegativeUi.e2e');
 
 const targetUrlArg = process.argv.find(a => a.startsWith('--url='))?.split('=')[1]
   || process.argv.find(a => a.startsWith('--target-url='))?.split('=')[1]
@@ -120,7 +126,15 @@ async function runAll(options = {}) {
         const pass = res.ui === 'PASS' && res.playwright === 'PASS' && res.network === 'PASS' && res.console === 'PASS' && (!res.errors || res.errors.length === 0);
         return { status: pass ? 'PASS' : 'FAIL', errors: res.errors || [], details: res.details };
       }
-    }
+    },
+    // Tier A read-only screen suites (write guard on); they already return { status, errors, details }
+    { name: 'Shell screens', file: 'shell/verifyShellScreens.e2e.js', fn: verifyShellScreens },
+    { name: 'MM screens', file: 'mm/verifyMmScreens.e2e.js', fn: verifyMmScreens },
+    { name: 'SD screens', file: 'sd/verifySdScreens.e2e.js', fn: verifySdScreens },
+    { name: 'LE screens', file: 'le/verifyLeScreens.e2e.js', fn: verifyLeScreens },
+    { name: 'WM screens', file: 'wm/verifyWmScreens.e2e.js', fn: verifyWmScreens },
+    // Tier B negative paths (write guard on; list failures use a mocked 500, not SAP)
+    { name: 'Negative UI paths', file: 'negative/verifyNegativeUi.e2e.js', fn: verifyNegativeUi }
   ];
 
   let totalPassed = 0;

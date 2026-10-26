@@ -7,6 +7,10 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **E2E defect fixes (2026-10-26 15:26 IST) — 2 DONE, 1 BLOCKED, UNCOMMITTED:** PO create value-help text bindings and HU list toolbar priority fixed (E2E 11/12 suites PASS). Orders Due: fails only for users without a `Plant` attribute; fix BLOCKED on a business/security decision. See Changes Log 15:26 IST.
+
+- **E2E Tier 0/A/B (2026-10-26 15:14 IST) — DONE, UNCOMMITTED:** Write guard + 6 Playwright suites; every route now has browser E2E (🟢 30 / 🟡 3). Last run 9/12 suites PASS; 3 fail on app defects (PO create value-help `_Text` paths, Orders Due 500 without plant, HU list enum). SAP round trips still 0. See Changes Log 15:14 IST.
+
 - **Business E2E coverage governance (2026-10-26 14:38 IST) — DONE, UNCOMMITTED:** Route matrix (33 routes) enforced by unit test; AGENTS.md E2E rule; mocked PO flow test moved to `test/integration`; `test:e2e` is the Playwright runner. Full Jest PASS (3,751). Playwright run (read-only, existing server): 5 PASS, **mvt 311 FAIL**. See Changes Log 14:38 IST.
 
 - **Skill link validation test (2026-10-26 14:28 IST) — DONE, UNCOMMITTED:** `test/unit/tools/skillLinks.test.js` enforces all 21 discovery links; 25/25 PASS with three red checks. Live SAP proof for code changed since 2026-10-24 12:20 IST remains NOT VERIFIED. See Changes Log 14:28 IST.
@@ -1655,6 +1659,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **E2E next action (2026-10-26 15:26 IST, supersedes 15:14):** Decide Orders Due behaviour for users without a plant (plant selector vs. mock-user `Plant` attribute vs. admin all-plants) — BLOCKED until decided. Tier C SAP round trips: pick flows and give a written go per call.
+
 - **E2E next action (2026-10-26 14:41 IST, supersedes 14:38):** The `verifyMvt311.e2e.js` failure was a stale test (fixed, not re-run); re-run it READ-ONLY against a running server when approved. Then decide where browser E2E with SAP round trips runs (DEV client 220 with per-call go vs. stubbed mode that is not SAP proof) before writing suites for the 🔴 rows in `docs/e2e-coverage-matrix.md`.
 
 - **Live SAP re-proof next action (2026-10-26 14:28 IST):** Before claiming SAP behavior for the current branch, re-run live write + read-back for movements 201/241/311/301/261, a PO create (SAP-returned number) and an HU stock transfer on DEV client 220 — each needs the user's written go per call.
@@ -1707,6 +1713,37 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 15:26 IST — Fix PO create value-help text bindings and HU list toolbar priority; Orders Due investigated (decision pending)
+
+- **Change:**
+  1. **PO create value helps** — root cause: `CreatePurchaseOrder.view.xml:254,263` and `service/ValueHelpService.js:41-42` bound `PurchasingDocumentItemCat_Text` / `AccountAssignmentCategory_Text`, which do not exist; the CAP projections (`srv/mm/purchase-order/service.cds:100-101`) expose the S/4 fields `PurgDocItemCategoryName` / `AcctAssignmentCategoryName` (`srv/external/C_PURCHASEORDER_FS_SRV.cds`, I_PurgDocumentItemCategoryText / I_AcctAssignmentCategoryText; confirmed by READ-ONLY GET). Bindings renamed in all 4 places. This also removes the shared-`$batch` failure that broke the CompanyCode/Supplier/PurchasingOrg value helps.
+  2. **HU list** — `HandlingUnits.view.xml:95` `OverflowToolbarLayoutData priority="Medium"` (invalid; UI5 1.136.22 `sap.m.OverflowToolbarPriority` = NeverOverflow, Never, High, Low, Disappear, AlwaysOverflow, Always, read from `resources/sap/m/library-dbg.js`) → `"Low"`, same as the sibling "download selected" button.
+  3. New `test/unit/frontend/viewModelContracts.test.js` (compiled CDS model): every `ValueHelpService` dialog config matches a service entity with its key + desc; every simple suggestion-item binding on the PO create view exists on its `PurchaseOrderService` entity; every `OverflowToolbarLayoutData` priority in the app views is a valid enum value. `docs/e2e-coverage-matrix.md` rows updated.
+- **Orders Due investigation (no code change — BLOCKED on decision):** `OutboundDeliveryAdapter.getOrdersDueForDelivery` (`srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js:~190-236`) deliberately fails closed: non-admins use their `Plant` attribute (403 if none); Admins may pass a `Plant` filter or use their `Plant` attribute, else throw 400 "No plant resolved". The worklist view has no plant selector, so an Admin without a `Plant` attribute (mock `alice`) can never load it. READ-ONLY: `bob` (Viewer, Plant 1120) → HTTP 200 and the Playwright screen check PASSES (169 rows); `alice` → HTTP 500 (the adapter's 400 is lost before `outboundDelivery.handler.js:31` `req.error(err.status || 500, …)`; where it is lost is UNKNOWN). Options need a business/security decision: add a plant selector to the worklist, give the local admin mock user a `Plant` attribute (test setup only), or let admins without a plant see all plants (changes the fail-closed rule).
+- **TEST DECISION:** TEST ADDED — `UI view/model contracts` (3 tests); existing Playwright suites re-run.
+- **Validation:** Red check — new tests against the original 3 files: 3/3 failed naming exactly the two `_Text` fields (config + view) and `Medium`; restored → 3/3 pass. READ-ONLY full `npm run test:e2e` (~15:2x IST, write guard on): **11/12 suites PASS** (MM screens now pass; WM screens now pass), LE screens FAIL (Orders Due, pending decision above). `npx jest --runInBand --ci` — 201 suites passed, 1 skipped; 3,768 passed, 59 skipped, 0 failed. `npx ui5lint` — no findings. `npx eslint` on the new test — PASS. `git diff --check` — PASS. Matrix: Browser E2E 🟢 32 / 🟡 1.
+- **Found, not fixed (report only):** (a) `ItemCategoryVH` / `AcctAssignmentCategoryVH` return DE and EN rows (26/36 instead of 13/18) although the projections say `where Language = 'EN'`; `DocumentTypeVH`'s `where` does apply (33 rows, all category F). Cause UNKNOWN (CAP vs. S/4 `$filter` on `Language`) — duplicate suggestion entries. (b) `ValueHelpService` `/InternalOrderVH` config (`OrderID`/`OrderDescription`) matches `ReservationEntryService` only; `PurchaseOrderService.InternalOrderVH` has `InternalOrder`/`InternalOrderDescription` but no PO view uses it today. No commit. **Assumptions:** none.
+
+### 2026-10-26 15:14 IST — E2E Tier 0/A/B: write guard, read-only screen suites for all routes, negative UI paths
+
+- **Change (user-approved plan: Tier 0 → A → B; Tier C live writes not started):**
+  - **Tier 0** `test/e2e/support/writeGuard.js`: routes every Playwright request; allows GET/HEAD/OPTIONS and `$batch` whose inner requests are all GET (UI5 OData V4 `$auto` reads); aborts and records everything else (actions, PATCH/PUT/DELETE/MERGE, `$batch` with a change, `/ai/chat/stream`). Unit test `test/unit/tools/e2eWriteGuard.test.js` (14 cases, runs in CI).
+  - **Shared helper** `test/e2e/support/screenCheck.js`: CAP mock-user sessions (`alice`, `bob`, or signed out) with seeded UI session; per screen asserts matched UI5 route, page title, bound lists without load error, no error dialog/strip, no console errors, no HTTP >= 400, no guard-blocked request; first-row navigation, hash derived from the previous screen, health pre-check, error de-duplication.
+  - **Tier A suites** (READ-ONLY): `test/e2e/shell/verifyShellScreens.e2e.js`, `mm/verifyMmScreens.e2e.js`, `sd/verifySdScreens.e2e.js`, `le/verifyLeScreens.e2e.js`, `wm/verifyWmScreens.e2e.js` (261 steps take the first item from the read-only `openItems()` function).
+  - **Tier B** `test/e2e/negative/verifyNegativeUi.e2e.js`: B1 signed-out deep link → login; B2 empty-form double submit on 5 create screens → validation feedback and no write attempted; B3 mocked HTTP 500 on PO/SO list reads → load-error text, no crash (mock, not SAP).
+  - `test/e2e/runAllE2E.js` registers the 6 new suites; `docs/e2e-coverage-matrix.md` legend now defines 🟢 as "suite exists and passed on last recorded run", all 33 rows updated with evidence, negative-case section split into covered/still required.
+- **TEST DECISION:** TEST ADDED — write guard unit test (CI) + 6 Playwright suites (local, not CI).
+- **Validation:**
+  - READ-ONLY runs against `cds watch` on :4004 (each announced; guard on; no submit). Helper red checks: wrong expected route, missing list, unknown hash → all FAIL as intended.
+  - Helper defect found and fixed during runs: visibility used `offsetParent`, which is null for `position:fixed` dialogs, so error MessageBoxes were invisible to the checks; switched to `getClientRects()` and re-ran everything. B2 initially timed out on customer return (harness double-click raced the validation MessageBox); now `click({ clickCount: 2 })`.
+  - Final `npm run test:e2e` (~15:05 IST): exit 1 — 9/12 suites PASS (hardening, mvt 201/241/261/301/**311 — confirms the 14:41 fix**, Shell, SD, Negative UI); 3 FAIL on **application defects** (below). Matrix: Browser E2E 🟢 30 / 🟡 3 / 🔴 0 (was 0/3/30); SAP round trip 🔴 28, N/A 5.
+  - `npx jest --runInBand --ci` — 200 suites passed, 1 skipped; 3,765 passed, 59 skipped, 0 failed. `npx eslint test/e2e test/unit/tools/e2eWriteGuard.test.js` — PASS. `git diff --check` — PASS.
+- **Application defects found (report only, not fixed):**
+  1. **PO create** (`createPurchaseOrder`): Item Category / Account Assignment value helps read `ItemCategoryVH(...)/PurchasingDocumentItemCat_Text` and `AcctAssignmentCategoryVH(...)/AccountAssignmentCategory_Text` — "Invalid resource path"; plus `FormatException in property 'additionalText'` on item suggestion list items; the failing `$batch` also fails the CompanyCodeVH / SupplierVH / PurchasingOrgVH reads ("previous request failed").
+  2. **Orders due for delivery** (`ordersDueForDelivery`): `OrdersDueForDelivery` and `getOrdersDueMetrics()` return HTTP 500 "No plant resolved for orders due for delivery. Query failed closed." for mock user `alice` (no `Plant` attribute). Not triaged: test-user setup vs. app handling.
+  3. **HU list** (`wmHandlingUnits`): `[FUTURE FATAL] Value 'Medium' is not valid for type 'sap.m.OverflowToolbarPriority'` from `HandlingUnits.view.xml:95`.
+- **Not verified / open:** no SAP round trip (Tier C needs per-call go); Ask AI, posting/release/cancel actions and HU posting not exercised; no UI role gating found for read-only users (server-side only, not tested through UI); Playwright suites not in CI. No commit. **Assumptions:** Tier A treats any console error as a failure (UI5 `FUTURE FATAL` included).
 
 ### 2026-10-26 14:41 IST — Fix stale verifyMvt311 Playwright suite (create page relied on removed default movement 311)
 

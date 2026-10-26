@@ -251,7 +251,7 @@
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"
                                         showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/ItemCategoryVH', templateShareable: false}">
                                         <suggestionItems>
-                                            <core:ListItem key="{PurchasingDocumentItemCategory}" text="{PurchasingDocumentItemCategory}" additionalText="{PurchasingDocumentItemCat_Text}" />
+                                            <core:ListItem key="{PurchasingDocumentItemCategory}" text="{PurchasingDocumentItemCategory}" additionalText="{PurgDocItemCategoryName}" />
                                         </suggestionItems>
                                     </Input>
                                     <Input app:field="AccountAssignmentCategory" value="{newPO>AccountAssignmentCategory}" placeholder="{i18n>poPlaceholderAcctAssgt}" maxLength="1"
@@ -260,7 +260,7 @@
                                         change=".onItemFieldChange" liveChange=".onItemFieldChange"
                                         showValueHelp="true" showSuggestion="true" filterSuggests="false" suggest=".onSuggest" valueHelpRequest=".onValueHelpRequest" suggestionItems="{path: '/AcctAssignmentCategoryVH', templateShareable: false}">
                                         <suggestionItems>
-                                            <core:ListItem key="{AccountAssignmentCategory}" text="{AccountAssignmentCategory}" additionalText="{AccountAssignmentCategory_Text}" />
+                                            <core:ListItem key="{AccountAssignmentCategory}" text="{AccountAssignmentCategory}" additionalText="{AcctAssignmentCategoryName}" />
                                         </suggestionItems>
                                     </Input>
                                     <Input app:field="Plant" value="{newPO>Plant}" placeholder="{i18n>poPlaceholderPlant}" required="true"
