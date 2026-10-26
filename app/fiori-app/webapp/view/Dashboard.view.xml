@@ -333,6 +333,11 @@
                                             <NumericContent icon="sap-icon://product" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
+                                    <GenericTile id="tileQuarantineLabels" header="{i18n>qlTitle}" subheader="{i18n>qlTileSub}" press=".onNavigateToQuarantineLabels" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
+                                        <TileContent unit="{i18n>qlTileUnit}">
+                                            <NumericContent icon="sap-icon://print" valueColor="Neutral" />
+                                        </TileContent>
+                                    </GenericTile>
                                     <GenericTile id="tileReservationEntry" header="{i18n>dashReservationEntryTitle}" subheader="{i18n>dashReservationEntrySub}" press=".onNavigateToReservationEntry" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                         <TileContent unit="{i18n>dashReservationEntryUnit}">
                                             <NumericContent icon="sap-icon://create" valueColor="Neutral" />

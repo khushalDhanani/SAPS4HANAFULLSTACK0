@@ -1,0 +1,50 @@
+<mvc:View
+    controllerName="saps4hana.fiori.modules.wm.quarantine-label.controller.QuarantineLabels"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:form="sap.ui.layout.form"
+    displayBlock="true">
+
+    <Page id="qlPage" class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiResponsiveMargin" width="auto" busy="{qlView>/busy}" busyIndicatorDelay="0">
+
+                <form:SimpleForm id="qlForm" editable="true" layout="ResponsiveGridLayout" columnsM="2" columnsL="2" columnsXL="2">
+                    <form:content>
+                        <core:Title text="{i18n>qlFormTitle}" />
+                        <Label text="{i18n>qlMaterialDocument}" labelFor="qlDoc" required="true" />
+                        <Input id="qlDoc" value="{qlView>/materialDocument}" maxLength="10" placeholder="4900050304"
+                            valueState="{qlView>/docState}" valueStateText="{qlView>/docStateText}"
+                            liveChange=".onInputChange" submit=".onPreview" />
+                        <Label text="{i18n>qlYear}" labelFor="qlYear" required="true" />
+                        <Input id="qlYear" value="{qlView>/year}" maxLength="4" width="8rem"
+                            valueState="{qlView>/yearState}" valueStateText="{qlView>/yearStateText}"
+                            liveChange=".onInputChange" submit=".onPreview" />
+                        <Label text="{i18n>qlText}" labelFor="qlText" />
+                        <Input id="qlText" value="{qlView>/text}" maxLength="50" placeholder="{i18n>qlTextPlaceholder}"
+                            valueState="{qlView>/textState}" valueStateText="{qlView>/textStateText}"
+                            liveChange=".onInputChange" submit=".onPreview" />
+                        <Label />
+                        <Button id="qlPreview" text="{i18n>qlPreview}" type="Emphasized" icon="sap-icon://pdf-attachment"
+                            press=".onPreview" enabled="{= !${qlView>/busy} }" />
+                    </form:content>
+                </form:SimpleForm>
+
+                <MessageStrip id="qlMessage" visible="{= !!${qlView>/message} }" text="{qlView>/message}"
+                    type="{qlView>/messageType}" showIcon="true" class="sapUiSmallMarginTop" />
+
+                <OverflowToolbar id="qlActions" visible="{= !!${qlView>/pdfUrl} }" class="sapUiSmallMarginTop">
+                    <Title id="qlResultTitle" text="{i18n>qlResultTitle}" level="H3" />
+                    <ToolbarSpacer />
+                    <Button id="qlPrint" text="{i18n>qlPrint}" icon="sap-icon://print" press=".onPrint" />
+                    <Button id="qlDownload" text="{i18n>qlDownload}" icon="sap-icon://download" press=".onDownload" />
+                </OverflowToolbar>
+
+                <!-- isTrustedSource: the PDF is rendered by SAP and served by this app's own backend -->
+                <PDFViewer id="qlPdfViewer" source="{qlView>/pdfUrl}" isTrustedSource="true" showDownloadButton="false"
+                    title="{qlView>/fileName}" height="70vh" visible="{= !!${qlView>/pdfUrl} }" />
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>

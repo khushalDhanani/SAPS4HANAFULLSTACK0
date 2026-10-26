@@ -353,6 +353,11 @@
           "target": "TargetPackingInstructions"
         },
         {
+          "name": "wmQuarantineLabels",
+          "pattern": "wm/quarantine-labels",
+          "target": "TargetQuarantineLabels"
+        },
+        {
           "name": "wmReservationEntryList",
           "pattern": "wm/reservation-entry",
           "target": "TargetReservationEntryList"
@@ -503,6 +508,11 @@
           "id": "packingInstructions",
           "name": "PackingInstructions",
           "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
+        },
+        "TargetQuarantineLabels": {
+          "id": "quarantineLabels",
+          "name": "QuarantineLabels",
+          "path": "saps4hana.fiori.modules.wm.quarantine-label.view"
         },
         "TargetPackingInstructionDetail": {
           "id": "packingInstructionDetail",

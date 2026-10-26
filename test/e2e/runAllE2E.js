@@ -19,6 +19,7 @@ const { verifyNegativeUi } = require('./negative/verifyNegativeUi.e2e');
 const { verifyPlantIsolation } = require('./negative/verifyPlantIsolation.e2e');
 const { verifyWriteAuthorization } = require('./negative/verifyWriteAuthorization.e2e');
 const { verifySubmitFailures } = require('./negative/verifySubmitFailures.e2e');
+const { verifyQuarantineLabels } = require('./wm/verifyQuarantineLabels.e2e');
 
 const targetUrlArg = process.argv.find(a => a.startsWith('--url='))?.split('=')[1]
   || process.argv.find(a => a.startsWith('--target-url='))?.split('=')[1]
@@ -142,7 +143,9 @@ async function runAll(options = {}) {
     { name: 'Plant isolation', file: 'negative/verifyPlantIsolation.e2e.js', fn: verifyPlantIsolation },
     { name: 'Write authorization (isolated server)', file: 'negative/verifyWriteAuthorization.e2e.js', fn: verifyWriteAuthorization },
     // Submit-time failures on PO create with the write action mocked per case (UI handling, not SAP)
-    { name: 'Submit failures (mocked)', file: 'negative/verifySubmitFailures.e2e.js', fn: verifySubmitFailures }
+    { name: 'Submit failures (mocked)', file: 'negative/verifySubmitFailures.e2e.js', fn: verifySubmitFailures },
+    // Quarantine labels screen; the label action is mocked in every case (SAP wrapper not yet activated)
+    { name: 'Quarantine labels (mocked)', file: 'wm/verifyQuarantineLabels.e2e.js', fn: verifyQuarantineLabels }
   ];
 
   let totalPassed = 0;

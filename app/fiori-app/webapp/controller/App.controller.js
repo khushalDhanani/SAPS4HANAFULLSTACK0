@@ -66,6 +66,8 @@ sap.ui.define([
                 this._updateShell("wmPackingInstructionDetail");
             } else if (sHash.indexOf("wm/packing-instruction") === 0) {
                 this._updateShell("wmPackingInstructions");
+            } else if (sHash.indexOf("wm/quarantine-labels") === 0) {
+                this._updateShell("wmQuarantineLabels");
             } else if (sHash.indexOf("wm/reservation-entry/create") === 0) {
                 this._updateShell("wmReservationEntryCreate");
             } else if (sHash.indexOf("wm/reservation-entry/") === 0) {
@@ -248,6 +250,10 @@ sap.ui.define([
                     break;
                 case "wmPackingInstructions":
                     sTitle = oBundle ? oBundle.getText("piTitle") : "Packing Instructions";
+                    bShowNav = true;
+                    break;
+                case "wmQuarantineLabels":
+                    sTitle = oBundle ? oBundle.getText("qlTitle") : "Quarantine Labels";
                     bShowNav = true;
                     break;
                 case "wmPackingInstructionDetail":

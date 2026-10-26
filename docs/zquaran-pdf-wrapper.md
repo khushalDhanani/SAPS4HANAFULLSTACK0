@@ -78,4 +78,7 @@ DD03L and TACTZ). Still open before CAP/Fiori: rendering side effects, which onl
 4. Proof run with an approved reference document (READ-ONLY by design, but it executes rendering — **written go per
    call**): `EV_RESULT = 'OK'`, PDF bytes start with `%PDF`, label count and content match the report's printed output
    for the same document; check spool (`TSP01`) and output records before/after to confirm no side effects.
-5. Only then: CAP service + adapter (`srv/integration/s4hana/mm/`), plant/role checks, Fiori screen, tests, E2E.
+5. CAP/Fiori: **built ahead of the SAP proof by user decision (26 Oct 2026), failing closed** — `srv/wm/quarantine-label/`,
+   `srv/integration/s4hana/wm/QuarantineLabelAdapter.js`, Fiori route `wm/quarantine-labels`. Until TFDIR shows
+   `Z_MM_QUAR_LABEL_PDF` as remote-enabled, the action answers 503 and calls nothing. After gate 4, re-run the screen
+   against SAP (written go) and compare the PDF with the report's output.

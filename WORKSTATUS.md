@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Quarantine Labels screen (2026-10-26 18:50 IST) — PARTIAL, UNCOMMITTED:** Fiori route `wm/quarantine-labels` + CAP `generateLabels` + adapter built and tested; fails closed (503) until `Z_MM_QUAR_LABEL_PDF` is activated and proven in SAP. See Changes Log 18:50 IST.
+
 - **ZQUARAN PDF wrapper (2026-10-26 18:25 IST) — PROPOSAL READY FOR REVIEW, UNCOMMITTED:** `docs/abap/z_mm_quar_label.fugr.abap` + `docs/zquaran-pdf-wrapper.md`; all dictionary names and the display activity CONFIRMED by READ-ONLY read; only rendering side effects remain for the proof run. Activation and proof run are separate gates. See Changes Log 18:25 IST.
 
 - **Remaining E2E-found defects fixed (2026-10-26 18:04 IST) — DONE, UNCOMMITTED:** sales inquiry Plant, customer return value helps, sales order search/ShippingPoint, Orders Due search/canBill/_text, value-help language filter. Jest 3,841 PASS; affected E2E PASS. Only HU 1120/W01 config remains (business data). See Changes Log 18:04 IST.
@@ -1735,6 +1737,18 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 18:50 IST — Quarantine Labels in the Fiori app (built ahead of the SAP wrapper, fails closed)
+
+- **User decisions (18:3x):** build now and fail closed until the SAP wrapper exists; in-app PDF preview + browser print/download (no SAP printer); WM section, route `wm/quarantine-labels`. Roles WarehouseClerk/WarehouseManager/Admin; non-admin users only their plants; document year required.
+- **Change:**
+  - **CAP:** `srv/wm/quarantine-label/service.cds` — `QuarantineLabelService` at `/odata/v4/quarantine-label`, action `generateLabels(MaterialDocument, MaterialDocumentYear, Text) returns { MaterialDocument, MaterialDocumentYear, LabelCount, FileName, PdfBase64 }`, `@requires` WarehouseClerk/WarehouseManager/Admin (POST: uncached, inputs out of URLs). `service.js` thin binding passing `plantScope(req.user)`; registered in `srv/service.cds`.
+  - **S/4 adapter:** `srv/integration/s4hana/wm/QuarantineLabelAdapter.js` — validates/normalizes (≤10 digits, left-padded to 10 [INFERRED: ALPHA-style padding as other material documents in this app]; 4-digit year; text ≤50, no control characters); TFDIR check that `Z_MM_QUAR_LABEL_PDF` exists with FMODE 'R', else **503 and nothing called** (pattern of `HuStockTransferAdapter._assertRfcEnabled`); MATDOC plants of MBLNR+MJAHR (404 none; 403 any plant outside a non-admin's scope) before rendering; one RFC call (never retried); EV_RESULT → HTTP (INVALID_INPUT 400, NOT_FOUND/NO_LABEL_ROWS 404, NOT_AUTHORIZED 403, FORM_ERROR/EMPTY_PDF/unknown 502); output accepted only if it starts with `%PDF-`.
+  - **Fiori:** `modules/wm/quarantine-label/` (view, controller, service client with `maxRetries: 0`): material document, year (default current year), optional text; local validation mirroring the server; one request at a time; stale answers ignored and preview dropped on any input change; `sap.m.PDFViewer` (`isTrustedSource`, verified in UI5 1.136.22 source) on a Blob URL; Print (hidden iframe → browser print dialog) and Download (same Blob); object URL revoked on change/exit/route match; 503 shown as warning. Wiring: manifest route `wmQuarantineLabels` + target, App shell title/hash mapping, Dashboard WM tile `tileQuarantineLabels`, 20 i18n keys in `i18n.properties` and `i18n_en.properties`.
+  - **E2E/matrix:** `test/e2e/wm/verifyQuarantineLabels.e2e.js` (guard on, action MOCKED in every case — an unmocked case was removed because after activation it would render in SAP on every run), registered in `runAllE2E.js`; matrix row `wmQuarantineLabels` (Browser 🟢; SAP 🔴 "Tier C pending (2026-10-26)") and CAP service row; `docs/zquaran-pdf-wrapper.md` gate 5 updated.
+- **TEST DECISION:** TEST ADDED — `test/unit/wm/quarantineLabelAdapter.test.js` (24: validation, fail-closed 503 paths, plant 404/403 before rendering, result mapping, non-PDF rejection, TFDIR cached) and `test/unit/wm/quarantineLabelsController.test.js` (10: validation, success, single request, stale answer, preview invalidation, 503/403/404 display, empty PDF); E2E suite (4 cases).
+- **Validation:** READ-ONLY live: alice → HTTP 503 "Z_MM_QUAR_LABEL_PDF is not installed on this system" (only TFDIR read); bob (Viewer) → 403. Quarantine E2E 4/4 PASS (mocked); shell/dashboard E2E PASS; isolated-server write authorization 7/7 PASS (role matrix now 50 actions incl. generateLabels). `npx jest --runInBand --ci` — 207 suites passed, 1 skipped; 3,875 passed, 0 failed. `npx ui5lint` — no findings; `ui5 build --all` — succeeded. `npx cds compile srv` — PASS. `npx eslint` on new files — PASS. Matrix gate 8/8. `git diff --check` — PASS.
+- **Not verified / open:** no real PDF exists yet — `Z_MM_QUAR_LABEL_PDF` is not in SAP (ABAP-owner review → activation with written go → proof run with written go). Rendering side effects, label content parity with the report, base64 transport size for large documents, PDFViewer embedded display on all target browsers, physical printing. Plant 403 for a foreign-plant clerk is unit-tested only (isolated server stops at the 503 availability check). No commit. **Assumptions:** MBLNR left-padding to 10 digits (INFERRED).
 
 ### 2026-10-26 18:25 IST — ZQUARAN wrapper: READ-ONLY dictionary verification (user-approved)
 
