@@ -1,0 +1,73 @@
+{
+  "_readme": "Copy to testData.json (gitignored) and replace every NOT PROVIDED with DEV test data before a live Tier C run. Live mode also needs ALLOW_LIVE_SAP_TOOLS=1, --allow-live-sap, E2E_SAP_WRITE_FLOWS=<flow> and the user's written go per run (AGENTS.md). See test/e2e/support/liveWriteGate.js.",
+  "po": {
+    "header": {
+      "PurchaseOrderType": "NOT PROVIDED",
+      "CompanyCode": "NOT PROVIDED",
+      "PurchasingOrganization": "NOT PROVIDED",
+      "PurchasingGroup": "NOT PROVIDED",
+      "Supplier": "NOT PROVIDED",
+      "Currency": "NOT PROVIDED"
+    },
+    "item": {
+      "Plant": "NOT PROVIDED",
+      "StorageLocation": "NOT PROVIDED",
+      "Material": "NOT PROVIDED",
+      "OrderQuantity": "NOT PROVIDED",
+      "UnitOfMeasure": "NOT PROVIDED"
+    }
+  },
+  "salesInquiry": {
+    "header": {
+      "SalesInquiryType": "NOT PROVIDED",
+      "SalesOrganization": "NOT PROVIDED",
+      "DistributionChannel": "NOT PROVIDED",
+      "OrganizationDivision": "NOT PROVIDED",
+      "SoldToParty": "NOT PROVIDED",
+      "TransactionCurrency": "NOT PROVIDED"
+    },
+    "item": {
+      "Material": "NOT PROVIDED",
+      "OrderQuantity": "NOT PROVIDED",
+      "OrderQuantityUnit": "NOT PROVIDED",
+      "Plant": "NOT PROVIDED"
+    }
+  },
+  "salesOrder": {
+    "header": {
+      "SalesOrderType": "NOT PROVIDED",
+      "SalesOrganization": "NOT PROVIDED",
+      "DistributionChannel": "NOT PROVIDED",
+      "OrganizationDivision": "NOT PROVIDED",
+      "SoldToParty": "NOT PROVIDED",
+      "TransactionCurrency": "NOT PROVIDED",
+      "PaymentTerms": "NOT PROVIDED",
+      "ContactPerson": "NOT PROVIDED"
+    },
+    "item": {
+      "Material": "NOT PROVIDED",
+      "OrderQuantity": "NOT PROVIDED",
+      "OrderQuantityUnit": "NOT PROVIDED",
+      "Plant": "NOT PROVIDED"
+    }
+  },
+  "goodsReceipt": {
+    "deliveryDocument": "NOT PROVIDED",
+    "quantity": "NOT PROVIDED"
+  },
+  "goodsIssue": {
+    "plant": "NOT PROVIDED",
+    "storageLocation": "NOT PROVIDED",
+    "warehouseNumber": "NOT PROVIDED",
+    "material": "NOT PROVIDED",
+    "quantity": "NOT PROVIDED",
+    "unit": "NOT PROVIDED",
+    "costCenter": "NOT PROVIDED"
+  },
+  "huTransfer": {
+    "reservationNo": "NOT PROVIDED",
+    "reservationItem": "NOT PROVIDED",
+    "unitNumber": "NOT PROVIDED",
+    "transferQty": "NOT PROVIDED"
+  }
+}

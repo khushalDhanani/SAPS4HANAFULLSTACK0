@@ -664,6 +664,33 @@ describe("OrdersDueForDelivery Controller", () => {
             expect(mockBinding.resume).not.toHaveBeenCalled();
         });
 
+        test("a plant outside a restricted user's scope is refused without a request and the loaded plant is kept", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: ["1120"], unrestricted: false });
+            controller.onInit();
+            await flush();
+            mockBinding.filter.mockClear();
+            MockOutboundDeliveryService.getOrdersDueMetrics.mockClear();
+            const vm = mockView.getModel("ordersDueView");
+            vm.setProperty("/plant", "1110");
+            controller.onPlantChange();
+            expect(vm.getProperty("/plant")).toBe("1120");
+            expect(vm.getProperty("/plantValueState")).toBe("Error");
+            expect(vm.getProperty("/plantValueStateText")).toContain("1110");
+            expect(mockBinding.filter).not.toHaveBeenCalled();
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).not.toHaveBeenCalled();
+        });
+
+        test("an unrestricted user may choose any plant (the server decides)", async () => {
+            MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: [], unrestricted: true });
+            controller.onInit();
+            await flush();
+            const vm = mockView.getModel("ordersDueView");
+            vm.setProperty("/plant", "1110");
+            controller.onPlantChange();
+            expect(vm.getProperty("/plant")).toBe("1110");
+            expect(MockOutboundDeliveryService.getOrdersDueMetrics).toHaveBeenCalledWith("1110");
+        });
+
         test("onRefresh without a plant asks for one instead of refreshing", async () => {
             MockOutboundDeliveryService.getPlantContext.mockResolvedValueOnce({ plants: [], unrestricted: true });
             controller.onInit();

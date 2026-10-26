@@ -102,6 +102,7 @@ sap.ui.define([
         _initPlant: function () {
             var that = this;
             return OutboundDeliveryService.getPlantContext().then(function (oCtx) {
+                that._oPlantScope = oCtx;
                 var sOwn = oCtx.plants[0] || "";
                 if (!that._getPlant() && sOwn) {
                     that.getView().getModel("ordersDueView").setProperty("/plant", sOwn);
@@ -120,7 +121,18 @@ sap.ui.define([
         },
 
         onPlantChange: function () {
-            this.getView().getModel("ordersDueView").setProperty("/plant", this._getPlant());
+            var oVm = this.getView().getModel("ordersDueView");
+            var sPlant = this._getPlant();
+            var oScope = this._oPlantScope;
+            // A plant outside the user's scope is refused here too (the server refuses it with 403), keeping the
+            // last loaded plant so the input never disagrees with the rows on screen.
+            if (sPlant && oScope && !oScope.unrestricted && oScope.plants.indexOf(sPlant) === -1) {
+                oVm.setProperty("/plant", this._sLoadedPlant || "");
+                this._setPlantState("Error", this._text("ordersDuePlantOutOfScope", "Plant {0} is not one of your plants ({1}).")
+                    .replace("{0}", sPlant).replace("{1}", oScope.plants.join(", ")));
+                return;
+            }
+            oVm.setProperty("/plant", sPlant);
             this._loadForPlant();
         },
 
@@ -131,6 +143,7 @@ sap.ui.define([
                 return;
             }
             this._setPlantState("None", "");
+            this._sLoadedPlant = this._getPlant();
             this._applyCombinedFilters();
             var oTable = this.byId("ordersDueTable");
             var oBinding = oTable ? oTable.getBinding("items") : null;

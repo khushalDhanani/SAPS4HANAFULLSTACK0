@@ -16,6 +16,8 @@ const { verifySdScreens } = require('./sd/verifySdScreens.e2e');
 const { verifyLeScreens } = require('./le/verifyLeScreens.e2e');
 const { verifyWmScreens } = require('./wm/verifyWmScreens.e2e');
 const { verifyNegativeUi } = require('./negative/verifyNegativeUi.e2e');
+const { verifyPlantIsolation } = require('./negative/verifyPlantIsolation.e2e');
+const { verifyWriteAuthorization } = require('./negative/verifyWriteAuthorization.e2e');
 
 const targetUrlArg = process.argv.find(a => a.startsWith('--url='))?.split('=')[1]
   || process.argv.find(a => a.startsWith('--target-url='))?.split('=')[1]
@@ -134,7 +136,10 @@ async function runAll(options = {}) {
     { name: 'LE screens', file: 'le/verifyLeScreens.e2e.js', fn: verifyLeScreens },
     { name: 'WM screens', file: 'wm/verifyWmScreens.e2e.js', fn: verifyWmScreens },
     // Tier B negative paths (write guard on; list failures use a mocked 500, not SAP)
-    { name: 'Negative UI paths', file: 'negative/verifyNegativeUi.e2e.js', fn: verifyNegativeUi }
+    { name: 'Negative UI paths', file: 'negative/verifyNegativeUi.e2e.js', fn: verifyNegativeUi },
+    // Authorization: plant isolation as a plant-scoped Viewer (READ-ONLY) and write denial on an isolated server without SAP
+    { name: 'Plant isolation', file: 'negative/verifyPlantIsolation.e2e.js', fn: verifyPlantIsolation },
+    { name: 'Write authorization (isolated server)', file: 'negative/verifyWriteAuthorization.e2e.js', fn: verifyWriteAuthorization }
   ];
 
   let totalPassed = 0;

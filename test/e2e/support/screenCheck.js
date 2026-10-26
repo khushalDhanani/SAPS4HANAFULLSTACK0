@@ -17,14 +17,17 @@ const USERS = {
 
 const IGNORED = /i18n_en_US\.properties|favicon|livereload/;
 
-/** user: a CAP mock user name, or null for a signed-out browser (no Basic header, no stored UI session). */
-async function openSession({ baseUrl, user = 'alice' }) {
+/**
+ * user: a CAP mock user name, or null for a signed-out browser (no Basic header, no stored UI session).
+ * allowWrites: only for gated live Tier C runs (support/liveWriteGate.js) — exact action paths the guard lets through.
+ */
+async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
     const browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({
         extraHTTPHeaders: user ? { Authorization: 'Basic ' + Buffer.from(`${user}:`).toString('base64') } : {},
         viewport: { width: 1440, height: 900 }
     });
-    const blocked = await installWriteGuard(context);
+    const blocked = await installWriteGuard(context, { allowWrites });
     const page = await context.newPage();
     const consoleErrors = [];
     const networkErrors = [];

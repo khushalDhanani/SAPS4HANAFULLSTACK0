@@ -68,6 +68,25 @@ describe('business E2E coverage matrix', () => {
         e2eSuites().filter((f) => f.endsWith('.e2e.js')).forEach((f) => expect([f, md.includes(f)]).toEqual([f, true]));
     });
 
+    // CI coverage gate (AGENTS.md › Business E2E coverage): browser coverage may not regress, and every SAP write route
+    // either has a Tier C round-trip suite or an explicit, dated reason why it is still pending.
+    it('has no route without browser E2E', () => {
+        expect(rows.filter((r) => r.browser === '🔴').map((r) => r.route)).toEqual([]);
+    });
+
+    it('gives every SAP write route a Tier C suite or a dated pending reason', () => {
+        const suites = (notes) => [...notes.matchAll(/`(test\/e2e\/[^`]*roundTrip[^`]*\.e2e\.js)`/g)].map((m) => m[1]);
+        const problems = rows.filter((r) => r.sap !== 'N/A').flatMap((r) => {
+            const cited = suites(r.notes);
+            const missing = cited.filter((f) => !fs.existsSync(path.join(ROOT, f)));
+            if (missing.length) return [`${r.route}: cited suite missing ${missing.join(', ')}`];
+            if (r.sap === '🟢' && cited.length === 0) return [`${r.route}: SAP round trip 🟢 without a cited roundTrip suite`];
+            if (cited.length === 0 && !/Tier C pending \(\d{4}-\d{2}-\d{2}\): \S/.test(r.notes)) return [`${r.route}: no roundTrip suite and no "Tier C pending (YYYY-MM-DD): reason"`];
+            return [];
+        });
+        expect(problems).toEqual([]);
+    });
+
     it('keeps Jest tests out of test/e2e', () => {
         expect(e2eSuites().filter((f) => f.endsWith('.test.js'))).toEqual([]);
     });

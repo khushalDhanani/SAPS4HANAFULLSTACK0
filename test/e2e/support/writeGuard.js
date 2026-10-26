@@ -12,13 +12,17 @@
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const BATCH_LINE = /^(GET|POST|PUT|PATCH|DELETE|MERGE)\s+\S+\s+HTTP\/1\.[01]\s*$/gm;
 
-/** @returns {{ allow: boolean, reason: string }} */
-function classifyRequest({ method, url, postData }) {
+/**
+ * allowWrites: RegExps of paths a gated live Tier C suite may POST to (only ever passed by liveWriteGate users).
+ * @returns {{ allow: boolean, reason: string }}
+ */
+function classifyRequest({ method, url, postData }, allowWrites = []) {
     const m = String(method || '').toUpperCase();
     if (READ_METHODS.has(m)) return { allow: true, reason: 'read method' };
 
     let pathname = '';
     try { pathname = new URL(url).pathname; } catch (_) { pathname = String(url || ''); }
+    if (m === 'POST' && allowWrites.some((re) => re.test(pathname))) return { allow: true, reason: `allowed live write ${pathname}` };
 
     if (m === 'POST' && /\/\$batch$/.test(pathname)) {
         const inner = [...String(postData || '').matchAll(BATCH_LINE)].map((x) => x[1]);
@@ -35,11 +39,11 @@ function classifyRequest({ method, url, postData }) {
  * Routes every request of a Playwright context through classifyRequest.
  * @returns {Array<{ method: string, url: string, reason: string }>} live list of blocked requests
  */
-async function installWriteGuard(context) {
+async function installWriteGuard(context, { allowWrites = [] } = {}) {
     const blocked = [];
     await context.route('**/*', (route) => {
         const req = route.request();
-        const verdict = classifyRequest({ method: req.method(), url: req.url(), postData: req.postData() });
+        const verdict = classifyRequest({ method: req.method(), url: req.url(), postData: req.postData() }, allowWrites);
         if (verdict.allow) return route.continue();
         blocked.push({ method: req.method(), url: req.url(), reason: verdict.reason });
         return route.abort('blockedbyclient');

@@ -46,6 +46,8 @@ coverage/
 test-results/
 # E2E screenshots are generated and uploaded as CI artifacts.
 /test/e2e/wm/screenshots/*.png
+# Tier C live E2E test data is environment-specific (DEV master data); commit only testData.example.json
+/test/e2e/live/testData.json
 .jest/
 
 # Code Quality & Linters
