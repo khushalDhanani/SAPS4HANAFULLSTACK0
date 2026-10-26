@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Secret scanner fail-closed fix (2026-10-26 13:44 IST) — DONE, UNCOMMITTED:** Scan now exits 1 when `git ls-files` fails or yields no files (was a false SUCCESS); tests 7/7 PASS. Rule coverage gaps remain open. See Changes Log 13:44 IST.
+
 - **Dependency gate high-severity enforcement (2026-10-26 13:42 IST) — DONE, UNCOMMITTED:** Gate now fails on high unless allowlisted with reason and unexpired date; 19 current highs allowlisted; tests 8/8 PASS; live scan exit 0. See Changes Log 13:42 IST.
 
 - **Live SAP tool double-gate fix (2026-10-26 13:39 IST) — DONE, UNCOMMITTED:** Removed duplicate gate call in `tools/test-delivery-phase0.js` and `tools/test-sales-order-phase0.js`; regression test added; gate tests 3/3 PASS. Scripts not run live. See Changes Log 13:39 IST.
@@ -1647,6 +1649,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **Secret scanner next action (2026-10-26 13:44 IST):** Review/commit the fail-closed fix. Decide whether to adopt a maintained scanner (e.g. gitleaks, including git history) in CI or extend the custom rules (BTP `clientsecret`, unquoted `S4_PASSWORD=`, Basic auth, URL credentials, JWT); a passing custom scan is not proof secrets are absent.
+
 - **Dependency gate next action (2026-10-26 13:42 IST):** Before 2026-11-25, apply the non-major fixes for `body-parser`, `follow-redirects`, `http-cache-semantics`, `markdown-it`, `undici`, `zod` and drop their allowlist entries, or CI will block. Before 2027-01-24, re-review the SAP SDK / `@ui5/cli` chain for upstream fixes.
 
 - **Live SAP tools next action (2026-10-26 13:39 IST):** Review/commit the double-gate fix. Decide what proves a non-production SAP target (e.g. `SAP_SYSTEM_TYPE` or an SAP client allowlist) before adding a target assertion to `tools/live-sap-gate.js`; until then, write scripts rely only on the shared opt-in.
@@ -1691,6 +1695,13 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-26 13:44 IST — Secret scanner: fail closed when git ls-files fails or yields no files
+
+- **Change:** `tools/scan-secrets.js` `getTrackedFiles()` caught any `git ls-files` error and returned `[]`, so the scan reported `SUCCESS: 0 secrets` and exited 0 after inspecting 0 files (reproduced with `git` removed from PATH). It now throws when `git ls-files` fails or when no scannable files remain after exclusions; `run()` reports `[SECRET SCAN] FAILED: ...` and exits 1. `getTrackedFiles` takes an injectable `exec` (default `execSync`) and is exported for tests. Detection rules and exclusions unchanged. Reason: P2 review finding "custom secret scanner is not comprehensive" — this fixes only the fail-open; coverage gaps remain (below).
+- **TEST DECISION:** TEST ADDED — `test/unit/tools/scanSecrets.test.js`: fails closed when git ls-files fails; fails closed on empty / all-ignored output; returns tracked files minus ignored paths.
+- **Validation:** `npx jest test/unit/tools/scanSecrets.test.js` — PASS 7/7. Red check: new tests against the previous `getTrackedFiles` — 3 failed; file restored. `git`-less run (`PATH=/nonexistent`) — `FAILED: Cannot list tracked files (git ls-files failed)`, exit 1 (was exit 0). `npm run -s scan:secrets` — SUCCESS, exit 0. `npx eslint` on both files — PASS. `git diff --check` — PASS.
+- **Open (report only, not changed):** read-only probe of the 6 rules caught 3 of 14 fake secret formats; missed encrypted private keys, unquoted `S4_PASSWORD=` (.env style), `"SAP_PASSWORD"` in JSON, BTP service-key `clientsecret`, generic `password:`, URL `user:pass@`, Basic auth header, JWT, Slack, Google, GitHub fine-grained tokens. 225 test/fixture files are exempt from 4 of 6 rules; `docs/archive` skipped; git history not scanned. A maintained scanner (e.g. gitleaks) would need explicit approval as a new tool. Not verified in CI (not pushed). No commit. **Assumptions:** none.
 
 ### 2026-10-26 13:42 IST — Dependency gate: fail on high as well as critical, with reviewed expiring allowlist
 

@@ -58,18 +58,23 @@ const IGNORED_PATHS = [
   'tools/scan-secrets.js'
 ];
 
-function getTrackedFiles() {
+// Fails closed: an empty file list would otherwise report "0 secrets" without scanning anything.
+function getTrackedFiles(exec = execSync) {
+  let stdout;
   try {
-    const stdout = execSync('git ls-files', { cwd: PROJECT_ROOT, encoding: 'utf8' });
-    return stdout
-      .split('\n')
-      .map((f) => f.trim())
-      .filter(Boolean)
-      .filter((f) => !IGNORED_PATHS.some((ignored) => f.startsWith(ignored)));
-  } catch (_) {
-    // Fallback: simple recursive directory walk if git is unavailable
-    return [];
+    stdout = exec('git ls-files', { cwd: PROJECT_ROOT, encoding: 'utf8' });
+  } catch (err) {
+    throw new Error(`Cannot list tracked files (git ls-files failed): ${err.message}`);
   }
+  const files = String(stdout)
+    .split('\n')
+    .map((f) => f.trim())
+    .filter(Boolean)
+    .filter((f) => !IGNORED_PATHS.some((ignored) => f.startsWith(ignored)));
+  if (files.length === 0) {
+    throw new Error('git ls-files returned no files to scan');
+  }
+  return files;
 }
 
 function verifyGitignore() {
@@ -151,7 +156,13 @@ function run() {
     process.exit(1);
   }
 
-  const trackedFiles = getTrackedFiles();
+  let trackedFiles;
+  try {
+    trackedFiles = getTrackedFiles();
+  } catch (err) {
+    console.error(`[SECRET SCAN] FAILED: ${err.message}`);
+    process.exit(1);
+  }
   console.log(`[SECRET SCAN] Inspecting ${trackedFiles.length} tracked files against ${SECRET_RULES.length} detection rules...`);
 
   let allFindings = [];
@@ -179,4 +190,4 @@ if (require.main === module) {
   run();
 }
 
-module.exports = { scanFile, verifyGitignore, SECRET_RULES };
+module.exports = { scanFile, verifyGitignore, getTrackedFiles, SECRET_RULES };

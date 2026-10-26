@@ -1,6 +1,21 @@
-const { verifyGitignore, SECRET_RULES } = require('../../../tools/scan-secrets');
+const { verifyGitignore, getTrackedFiles, SECRET_RULES } = require('../../../tools/scan-secrets');
 
 describe('Release Automation: Secret Scanner Unit Tests', () => {
+  it('fails closed when git ls-files fails', () => {
+    const exec = () => { throw new Error('git: command not found'); };
+    expect(() => getTrackedFiles(exec)).toThrow(/git ls-files failed.*git: command not found/);
+  });
+
+  it('fails closed when git ls-files returns no scannable files', () => {
+    expect(() => getTrackedFiles(() => '')).toThrow(/returned no files to scan/);
+    expect(() => getTrackedFiles(() => 'node_modules/x.js\npackage-lock.json\n')).toThrow(/returned no files to scan/);
+  });
+
+  it('returns tracked files minus ignored paths', () => {
+    expect(getTrackedFiles(() => 'srv/a.js\nnode_modules/b.js\n\ntools/c.js\n')).toEqual(['srv/a.js', 'tools/c.js']);
+    expect(getTrackedFiles().length).toBeGreaterThan(0);
+  });
+
   it('validates that .gitignore contains necessary environment secret rules', () => {
     const res = verifyGitignore();
     expect(res.ok).toBe(true);
