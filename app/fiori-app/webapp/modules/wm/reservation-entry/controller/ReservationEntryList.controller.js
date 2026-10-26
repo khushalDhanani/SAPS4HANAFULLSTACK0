@@ -17,8 +17,6 @@ sap.ui.define([
                 filterPlant: "",
                 filterDateFrom: null,
                 filterDateTo: null,
-                hasRetryableSelection: false,
-                selectedEntry: null,
                 busy: false
             });
             this.getView().setModel(this._oViewModel, "view");
@@ -29,15 +27,6 @@ sap.ui.define([
 
         _onRouteMatched: function () {
             this.loadData();
-        },
-
-        _formatDateIso: function (d) {
-            if (!d) return "";
-            if (typeof d === "string") return d.split("T")[0];
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, "0");
-            const day = String(d.getDate()).padStart(2, "0");
-            return y + "-" + m + "-" + day;
         },
 
         loadData: function () {
@@ -155,8 +144,6 @@ sap.ui.define([
 
                 that._oViewModel.setProperty("/entries", aCombined);
                 that._oViewModel.setProperty("/allEntries", aCombined);
-                that._oViewModel.setProperty("/hasRetryableSelection", false);
-                that._oViewModel.setProperty("/selectedEntry", null);
                 that._oViewModel.setProperty("/busy", false);
                 return aCombined;
             }).catch(function (err) {
@@ -185,52 +172,6 @@ sap.ui.define([
             this._oViewModel.setProperty("/filterDateFrom", null);
             this._oViewModel.setProperty("/filterDateTo", null);
             this.loadData();
-        },
-
-        onSelectionChange: function (oEvent) {
-            const oItem = oEvent.getParameter("listItem");
-            if (!oItem) {
-                this._oViewModel.setProperty("/hasRetryableSelection", false);
-                this._oViewModel.setProperty("/selectedEntry", null);
-                return;
-            }
-
-            const oCtx = oItem.getBindingContext("view");
-            const oEntry = oCtx ? oCtx.getObject() : null;
-
-            if (oEntry) {
-                this._oViewModel.setProperty("/selectedEntry", oEntry);
-                // Retryable if status is not completed ('05')
-                const bRetryable = oEntry.Status_code !== "05";
-                this._oViewModel.setProperty("/hasRetryableSelection", bRetryable);
-            } else {
-                this._oViewModel.setProperty("/hasRetryableSelection", false);
-                this._oViewModel.setProperty("/selectedEntry", null);
-            }
-        },
-
-        onRetryPress: function () {
-            const that = this;
-            const oSelected = this._oViewModel.getProperty("/selectedEntry");
-            if (!oSelected) {
-                MessageToast.show("Please select a reservation entry to retry");
-                return Promise.resolve();
-            }
-
-            this._oViewModel.setProperty("/busy", true);
-            return this._oService.retryStep(oSelected.ReservationNo, oSelected.ReservationItem, "AUTO", oSelected.MovementType).then(function (oUpdated) {
-                that._oViewModel.setProperty("/busy", false);
-                const sStatus = oUpdated.Status_code;
-                if (["11", "12", "13", "90", "99"].indexOf(sStatus) >= 0) {
-                    MessageToast.show("Retry completed with error: " + (oUpdated.ErrorMessage || "Failed"));
-                } else {
-                    MessageToast.show("Step retried successfully. Current Status: " + sStatus);
-                }
-                return that.loadData();
-            }).catch(function (err) {
-                that._oViewModel.setProperty("/busy", false);
-                MessageToast.show("Retry failed: " + err.message);
-            });
         },
 
         onSearchFieldSearch: function (oEvent) {

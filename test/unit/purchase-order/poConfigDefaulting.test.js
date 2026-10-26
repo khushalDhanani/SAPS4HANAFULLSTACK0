@@ -48,6 +48,13 @@ const mockODataClient = {
 const originalSap = global.sap;
 
 beforeAll(() => {
+    // Exercise the shared reader with mocked transport, rather than duplicating its logic.
+    require('vm').runInNewContext(require('fs').readFileSync(
+        require('path').resolve(__dirname, '../../../app/fiori-app/webapp/service/ODataClient.js'), 'utf8'), {
+        sap: { ui: { define: (_deps, factory) => {
+            mockODataClient.readEntitySet = factory({}).readEntitySet;
+        } } }
+    });
     global.sap = {
         ui: {
             define: function (deps, factory) {

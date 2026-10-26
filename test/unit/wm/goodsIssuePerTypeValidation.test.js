@@ -14,7 +14,7 @@ const {
   validateGoodsIssue311Payload,
   verifyGoodsIssue311InSap
 } = require('../../../srv/wm/goods-issue/validation/goodsIssue311.validation');
-const { validateGoodsIssue261Payload } = require('../../../srv/wm/goods-issue/validation/goodsIssue261.validation');
+const { validateMovement261Payload: validateGoodsIssue261Payload } = require('../../../srv/common/movementConfig');
 
 const base = { MovementType: '201', IssueQty: 1, Unit: 'EA', PostingDate: '2026-09-29', DocumentDate: '2026-09-29' };
 const valid301Destination = { ReceivingPlant: '1110', ReceivingStorageLocation: 'CS01' };
@@ -425,4 +425,10 @@ describe('261 validation (Goods Issue to Order)', () => {
     const r = validateGoodsIssue261Payload({ ...data, reservation: '512851', item: '1', quantity: 50 });
     expect(r.isValid).toBe(false);
   });
+});
+
+// Compatibility imports must execute the same validator as the live 261 service.
+test('legacy 261 validator export is the canonical validator', () => {
+  const legacy = require('../../../srv/wm/goods-issue/validation/goodsIssue261.validation');
+  expect(legacy.validateGoodsIssue261Payload).toBe(validateGoodsIssue261Payload);
 });

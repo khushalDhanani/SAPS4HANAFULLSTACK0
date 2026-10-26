@@ -47,37 +47,8 @@ sap.ui.define([
      * @returns {Promise<Array>}
      */
     function _readEntitySet(oModel, sEntitySet, aFilters, mParameters) {
-        if (!oModel || typeof oModel.bindList !== "function") {
-            var sUrl = SERVICE_BASE + sEntitySet;
-            var aParts = [];
-            if (aFilters && aFilters.length > 0) {
-                var aFilterParts = aFilters.map(function (f) {
-                    return f.sPath + " eq '" + encodeURIComponent(f.oValue1) + "'";
-                });
-                aParts.push("$filter=" + aFilterParts.join(" and "));
-            }
-            if (mParameters && mParameters.$top) {
-                aParts.push("$top=" + mParameters.$top);
-            }
-            if (aParts.length > 0) {
-                sUrl += "?" + aParts.join("&");
-            }
-            return ODataClient.get(sUrl).then(function (result) {
-                if (!result) return [];
-                return result.value || (result.d && result.d.results) || [];
-            });
-        }
-
-        // $top is not a V4 list-binding parameter (UI5 throws "System query option $top is not supported");
-        // it is the number of contexts requested instead.
-        var iLength = (mParameters && mParameters.$top) ? Number(mParameters.$top) : Infinity;
-        var mBindingParameters = Object.assign({}, mParameters);
-        delete mBindingParameters.$top;
-        var oListBinding = oModel.bindList(sEntitySet, undefined, undefined, aFilters,
-            Object.keys(mBindingParameters).length ? mBindingParameters : undefined);
-        return oListBinding.requestContexts(0, iLength).then(function (aContexts) {
-            return aContexts.map(function (oCtx) { return oCtx.getObject(); });
-        });
+        return ODataClient.readEntitySet(SERVICE_BASE, oModel, sEntitySet, aFilters, mParameters,
+            { useContextLength: true });
     }
 
     /**

@@ -12,6 +12,63 @@ sap.ui.define(["sap/base/Log"], function (Log) {
      */
     var ODataClient = {
         /**
+         * Read a CAP entity set using a V4 list binding or the shared HTTP client.
+         * Callers resolve their own service base and stored model. Options preserve
+         * the existing services' context-length and filter-accessor contracts.
+         * @param {string} sServiceBase Service-relative URL
+         * @param {object} oModel Optional OData V4 model
+         * @param {string} sEntitySet Entity-set path including leading slash
+         * @param {object[]} aFilters List filters
+         * @param {object} mParameters Binding/query parameters
+         * @param {object} mOptions useContextLength maps $top to requestContexts;
+         *   useFilterGetters accepts filters exposing getPath/getValue1.
+         * @returns {Promise<object[]>} Entity objects
+         */
+        readEntitySet: function (sServiceBase, oModel, sEntitySet, aFilters, mParameters, mOptions) {
+            var oOptions = mOptions || {};
+            if (!oModel || typeof oModel.bindList !== "function") {
+                var sUrl = sServiceBase + sEntitySet;
+                var aParts = [];
+                if (aFilters && aFilters.length > 0) {
+                    var aFilterParts = aFilters.map(function (f) {
+                        var sValue = f.oValue1;
+                        var sPath = f.sPath;
+                        if (oOptions.useFilterGetters) {
+                            sValue = sValue !== undefined ? sValue : (f.getValue1 ? f.getValue1() : "");
+                            sPath = sPath || (f.getPath ? f.getPath() : "");
+                        }
+                        return sPath + " eq '" + encodeURIComponent(sValue) + "'";
+                    });
+                    aParts.push("$filter=" + aFilterParts.join(" and "));
+                }
+                if (mParameters && mParameters.$top) {
+                    aParts.push("$top=" + mParameters.$top);
+                }
+                if (aParts.length > 0) {
+                    sUrl += "?" + aParts.join("&");
+                }
+                return this.get(sUrl).then(function (result) {
+                    if (!result) return [];
+                    return result.value || (result.d && result.d.results) || [];
+                });
+            }
+
+            var iLength = Infinity;
+            var mBindingParameters = mParameters;
+            if (oOptions.useContextLength) {
+                // $top is a context count, not a V4 list-binding parameter.
+                iLength = (mParameters && mParameters.$top) ? Number(mParameters.$top) : Infinity;
+                mBindingParameters = Object.assign({}, mParameters);
+                delete mBindingParameters.$top;
+                if (!Object.keys(mBindingParameters).length) mBindingParameters = undefined;
+            }
+            var oListBinding = oModel.bindList(sEntitySet, undefined, undefined, aFilters, mBindingParameters);
+            return oListBinding.requestContexts(0, iLength).then(function (aContexts) {
+                return aContexts.map(function (oContext) { return oContext.getObject(); });
+            });
+        },
+
+        /**
          * Fetches or returns a cached CSRF token.
          *
          * @param {boolean} [bForceRefresh=false]

@@ -9,39 +9,7 @@
 
 const { odataString } = require('../../../../common/filterUtils');
 
-/**
- * Converts a date string or Date object to SAP OData V2 JSON timestamp '/Date(epoch_ms)/'.
- * Evaluates at UTC midnight to avoid local timezone drift.
- *
- * @param {string|Date} dateInput
- * @returns {string}
- */
-function formatDateToODataV2(dateInput) {
-  if (!dateInput) {
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    return `/Date(${today.getTime()})/`;
-  }
-  if (dateInput instanceof Date) {
-    const d = new Date(dateInput.getTime());
-    d.setUTCHours(0, 0, 0, 0);
-    return `/Date(${d.getTime()})/`;
-  }
-  const s = String(dateInput).trim();
-  const match = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (match) {
-    const utcDate = new Date(Date.UTC(parseInt(match[1], 10), parseInt(match[2], 10) - 1, parseInt(match[3], 10)));
-    return `/Date(${utcDate.getTime()})/`;
-  }
-  const parsed = new Date(s);
-  if (!isNaN(parsed.getTime())) {
-    parsed.setUTCHours(0, 0, 0, 0);
-    return `/Date(${parsed.getTime()})/`;
-  }
-  const fallback = new Date();
-  fallback.setUTCHours(0, 0, 0, 0);
-  return `/Date(${fallback.getTime()})/`;
-}
+const { formatDateToODataV2 } = require('./s4common');
 
 /**
  * Builds FunctionImport URL for CancelHeader on API_MATERIAL_DOCUMENT_SRV.

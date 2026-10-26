@@ -55,3 +55,9 @@ describe('Goods Issue Mappers (Domain & S/4 Technical)', () => {
     });
   });
 });
+
+test('legacy date formatter shares the posting formatter implementation', () => {
+  const legacy = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssueMapper');
+  const posting = require('../../../srv/integration/s4hana/wm/goods-issue/s4common');
+  expect(legacy.formatDateToODataV2).toBe(posting.formatDateToODataV2);
+});

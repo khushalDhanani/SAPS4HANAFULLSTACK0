@@ -9,31 +9,7 @@
 
 const POSTABLE_MOVEMENT_TYPES = ['201', '301', '311'];
 
-/**
- * Validates a calendar date string (YYYY-MM-DD or ISO) or Date, rejecting impossible dates.
- * @param {string|Date} dateInput
- * @returns {boolean}
- */
-function isValidCalendarDate(dateInput) {
-  if (!dateInput) return false;
-  if (dateInput instanceof Date) {
-    return !isNaN(dateInput.getTime());
-  }
-  const s = String(dateInput).trim();
-  const match = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!match) return false;
-
-  const year = parseInt(match[1], 10);
-  const month = parseInt(match[2], 10);
-  const day = parseInt(match[3], 10);
-
-  if (month < 1 || month > 12) return false;
-  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  if (day < 1 || day > daysInMonth) return false;
-
-  const d = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00Z`);
-  return !isNaN(d.getTime());
-}
+const { isValidCalendarDate } = require('./common');
 
 /**
  * Validates Material Document Reversal request payload (type-agnostic: document + year).

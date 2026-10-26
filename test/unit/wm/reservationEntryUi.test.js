@@ -692,59 +692,19 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(listSubject._formatDateIso(d)).toBe('2026-10-10');
         });
 
-        it('handles onSelectionChange: enables retry for status != 05, disables for 05', () => {
-            const viewModel = new FakeJSONModel({ hasRetryableSelection: false, selectedEntry: null });
+        it('keeps retry on the detail page and navigates there from the list', () => {
+            const navTo = jest.fn();
             const listSubject = Object.assign(Object.create(listCtrl), {
-                _oViewModel: viewModel
+                getOwnerComponent: () => ({ getRouter: () => ({ navTo }) })
             });
-
-            // Select item with status 02 (in progress / retryable)
-            listSubject.onSelectionChange({
-                getParameter: () => ({
-                    getBindingContext: () => ({
-                        getObject: () => ({ ReservationNo: '0000001001', ReservationItem: '0001', Status_code: '02' })
-                    })
-                })
+            listSubject.onRowPress({ getParameter: () => ({
+                getBindingContext: () => ({ getObject: () => ({
+                    ReservationNo: '0000001001', ReservationItem: '0001'
+                }) })
+            }) });
+            expect(navTo).toHaveBeenCalledWith('wmReservationEntryDetail', {
+                ReservationNo: '0000001001', ReservationItem: '0001'
             });
-            expect(viewModel.getProperty('/hasRetryableSelection')).toBe(true);
-            expect(viewModel.getProperty('/selectedEntry').ReservationNo).toBe('0000001001');
-
-            // Select item with status 05 (completed / not retryable)
-            listSubject.onSelectionChange({
-                getParameter: () => ({
-                    getBindingContext: () => ({
-                        getObject: () => ({ ReservationNo: '0000001002', ReservationItem: '0001', Status_code: '05' })
-                    })
-                })
-            });
-            expect(viewModel.getProperty('/hasRetryableSelection')).toBe(false);
-
-            // Deselect / null item
-            listSubject.onSelectionChange({ getParameter: () => null });
-            expect(viewModel.getProperty('/hasRetryableSelection')).toBe(false);
-            expect(viewModel.getProperty('/selectedEntry')).toBeNull();
-        });
-
-        it('triggers retryStep on onRetryPress and reloads data', async () => {
-            const serviceMock = {
-                retryStep: jest.fn().mockResolvedValue({ Status_code: '02', ErrorMessage: '' }),
-                getEntries: jest.fn().mockResolvedValue([])
-            };
-            const viewModel = new FakeJSONModel({
-                selectedEntry: { ReservationNo: '0000001001', ReservationItem: '0001', MovementType: '311', Status_code: '01' },
-                hasRetryableSelection: true,
-                busy: false
-            });
-            const listSubject = Object.assign(Object.create(listCtrl), {
-                _oService: serviceMock,
-                _oViewModel: viewModel,
-                loadData: jest.fn()
-            });
-
-            listSubject.onRetryPress();
-            expect(serviceMock.retryStep).toHaveBeenCalledWith('0000001001', '0001', 'AUTO', '311');
-            await Promise.resolve();
-            expect(listSubject.loadData).toHaveBeenCalled();
         });
     });
 
@@ -1218,8 +1178,6 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
                 allEntries: [],
                 filterMvtType: '',
                 filterPlant: '',
-                selectedEntry: initialRecord,
-                hasRetryableSelection: true,
                 busy: false
             });
             const listSubject = Object.assign(Object.create(listCtrl), {
@@ -1233,10 +1191,17 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(viewModel.getProperty('/entries')[0].TransferRequirement).toBe('');
             expect(viewModel.getProperty('/entries')[0].Status_code).toBe('11');
 
-            // Select the item and trigger retry
-            listSubject._oViewModel.setProperty('/selectedEntry', viewModel.getProperty('/entries')[0]);
-            await listSubject.onRetryPress();
+            // Retry through the active detail page, then refresh the list.
+            const detailSubject = createDetailSubject(serviceMock);
+            detailSubject._sCurrentResNo = initialRecord.ReservationNo;
+            detailSubject._sCurrentResItem = initialRecord.ReservationItem;
+            detailSubject._oDetailModel.setData(initialRecord);
+            detailSubject._loadDetail = jest.fn();
+            detailSubject.onRetryStepPress();
+            await Promise.resolve();
             expect(serviceMock.retryStep).toHaveBeenCalledWith('0000525870', '0001', 'AUTO', '311');
+            expect(detailSubject._loadDetail).toHaveBeenCalled();
+            await listSubject.loadData();
 
             // List is refreshed with updated TR
             expect(viewModel.getProperty('/entries')[0].ReservationNo).toBe('0000525870');

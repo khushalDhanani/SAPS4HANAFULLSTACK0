@@ -1345,8 +1345,5 @@ class Mvt261Adapter {
 }
 
 Mvt261Adapter.calculateMovement261StockEligibility = calculateMovement261StockEligibility;
-Mvt261Adapter.revalidateStock = function (adapterInstance, params) {
-  return adapterInstance.revalidateStock(params);
-};
 
 module.exports = Mvt261Adapter;
