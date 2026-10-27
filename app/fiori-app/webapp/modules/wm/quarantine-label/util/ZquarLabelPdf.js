@@ -7,14 +7,10 @@ sap.ui.define([
 
     /** Plays one label's draw list (pt, top-left origin) onto the current jsPDF page (unit pt). */
     function drawItems(doc, aItems) {
-        doc.setDrawColor(0, 0, 0);
         doc.setFillColor(0, 0, 0);
         doc.setTextColor(0, 0, 0);
         aItems.forEach(function (it) {
-            if (it.kind === "line") {
-                doc.setLineWidth(it.w);
-                doc.line(it.x1, it.y1, it.x2, it.y2);
-            } else if (it.kind === "bar") {
+            if (it.kind === "bar" || it.kind === "rule") {
                 doc.rect(it.x, it.y, it.w, it.h, "F");
             } else {
                 doc.setFont("helvetica", it.bold ? "bold" : "normal").setFontSize(it.pt);
@@ -67,10 +63,7 @@ sap.ui.define([
     function svgPage(L, aItems) {
         var esc = HuLabelPrinter.esc;
         var out = aItems.map(function (it) {
-            if (it.kind === "line") {
-                return '<line x1="' + it.x1 + '" y1="' + it.y1 + '" x2="' + it.x2 + '" y2="' + it.y2 + '" stroke="#000" stroke-width="' + it.w + '"/>';
-            }
-            if (it.kind === "bar") {
+            if (it.kind === "bar" || it.kind === "rule") {
                 return '<rect x="' + it.x + '" y="' + it.y + '" width="' + it.w + '" height="' + it.h + '" fill="#000" shape-rendering="crispEdges"/>';
             }
             // jsPDF angle 90 = counter-clockwise about the baseline start; hScale stretches along the text direction
