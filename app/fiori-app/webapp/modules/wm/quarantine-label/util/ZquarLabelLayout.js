@@ -35,6 +35,8 @@ sap.ui.define([
     var DESIGN_PAGE = { w: 288, h: 432 };
     var TYPE = { caption: 9, value: 11, title: 18, quarantine: 14, formNumber: 9, humanReadable: 14 };
     var MIN_PT = 9;
+    var MAX_LINES = 40;      // wrap limit for one value; far beyond what a label can hold (the label check fails first)
+    var MIN_ROW_GAP = 2;     // white space between rows below which a label is refused instead of overlapping
     var LH = 1.15;           // line height of wrapped values
     var ASCENT = 0.79;       // text-box top -> baseline, measured in the sample (title, GRN No., barcode text: 0.789)
     var EM = 0.925;          // Helvetica ascender + descender: band of a rotated strip text
@@ -161,17 +163,21 @@ sap.ui.define([
         };
     }
 
-    /** Wrap first, then shrink to MIN_PT, then cut with "…". Width in pt. Returns {pt, lines, truncated}. */
+    /**
+     * Fits a text without ever cutting it (user decision 2026-10-27: every detail must print in full): wrap at pt
+     * within maxLines; if more lines are needed, shrink toward MIN_PT; if still more, keep MIN_PT and use as many
+     * lines as the text needs. Width in pt. Returns {pt, lines, truncated} (truncated only past MAX_LINES).
+     */
     function fitText(s, wPt, pt, maxLines, bold) {
         var wMm = wPt / MM2PT;
         var floor = Math.min(MIN_PT, pt);
         for (var p = pt; p >= floor; p = half(p - 0.5)) {
             var r = HuLayout.wrap(s, wMm, p, maxLines, bold);
             if (!r.truncated) { return { pt: p, lines: r.lines, truncated: false }; }
-            if (p === floor) { return { pt: p, lines: r.lines, truncated: true }; }
+            if (p === floor) { break; }
         }
-        var last = HuLayout.wrap(s, wMm, floor, maxLines, bold);
-        return { pt: floor, lines: last.lines, truncated: last.truncated };
+        var all = HuLayout.wrap(s, wMm, floor, MAX_LINES, bold);
+        return { pt: floor, lines: all.lines, truncated: all.truncated };
     }
 
     /**
@@ -195,6 +201,11 @@ sap.ui.define([
         throw Object.assign(new Error("Barcode value '" + sValue + "' is too long for the label: " + g.total + " modules need "
             + (g.total * minDots * L.dotPt).toFixed(1) + " pt at the minimum module (" + BARCODE.minModuleMm + " mm), "
             + avail.toFixed(1) + " pt available."), { code: "barcodeTooLong" });
+    }
+
+    function tooFull(sField) {
+        return Object.assign(new Error("The label details do not fit on one label" + (sField ? " (" + sField + ")" : "") + "."),
+            { code: "labelTooFull", field: sField });
     }
 
     /**
@@ -238,12 +249,12 @@ sap.ui.define([
             }
             var sCaption = (row.captions && row.captions[d.key]) || texts[d.key];
             var c = fitText(sCaption, cEnd - cx, capPt, 1, true);
-            if (c.truncated) { warnings.push({ code: "truncated", field: d.key + ".caption" }); }
             var v = null;
             if (!d.noValue) {
                 var s = row[d.key] == null ? "" : String(row[d.key]).trim();
+                // Every value may wrap (never cut); d.lines = lines allowed before shrinking
                 var r = s ? fitText(s, vEnd - vx, valPt, d.lines || 1, false) : { pt: valPt, lines: [], truncated: false };
-                if (r.truncated) { warnings.push({ code: "truncated", field: d.key }); }
+                if (r.truncated) { throw tooFull(d.key); }
                 v = { x: vx, end: vEnd, pt: r.pt, lines: r.lines };
             }
             if (d.center) { cx = L.axis; } // centred caption (no value): drawn with align center
@@ -255,7 +266,8 @@ sap.ui.define([
         for (var i = 0; i < ROW_COUNT; i++) { extra.push(0); }
         fields.forEach(function (f) {
             if (f.col !== undefined) {
-                extra[f.row] = Math.max(extra[f.row], capPt * LH + L.rows.dateGap);
+                var dateLines = Math.max(1, f.value.lines.length);
+                extra[f.row] = Math.max(extra[f.row], capPt * LH + L.rows.dateGap + (dateLines - 1) * f.value.pt * LH);
             } else if (f.value && f.value.lines.length > 1) {
                 extra[f.row] = Math.max(extra[f.row], (f.value.lines.length - 1) * f.value.pt * LH);
             }
@@ -263,6 +275,8 @@ sap.ui.define([
         var first = L.rows.firstTop + valPt * ASCENT;
         var total = extra.reduce(function (a, b) { return a + b; }, 0) - extra[ROW_COUNT - 1];
         var pitch = (L.rows.lastBaseline - first - total) / (ROW_COUNT - 1);
+        // Too much text for one label: refuse it (named by ZquarLabelPdf) rather than overlap or cut anything
+        if (pitch < L.type.value * LH + MIN_ROW_GAP) { throw tooFull(); }
         var base = [first];
         for (var j = 1; j < ROW_COUNT; j++) { base.push(base[j - 1] + extra[j - 1] + pitch); }
 

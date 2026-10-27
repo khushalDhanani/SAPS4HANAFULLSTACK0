@@ -202,13 +202,22 @@ describe('ZQUAR 4 x 6 label', () => {
         expect(box(q).x1).toBeLessThan(box(f).x0); // QUARANTINE first, then the form number
     });
 
+    // Worst realistic row: values at SAP field lengths (MAKTX 40, two BUT000 name lines, AUSP ATWRT 70, P_TEXT 50,
+    // LICHA 15), long quantities and a 3-digit container count. Every value must print in full.
+    const LONGEST = {
+        ...DEMO,
+        materialName: 'SODIUM HYDROXIDE PELLETS EXTRA PURE 99%', // 40
+        manufacturer: 'DYNAMIC CHEMICALS MANUFACTURING PRIVATE LIMITED UNIT II GUJARAT INDIA', // 70
+        supplier: 'DYNAMIC MERCANTILE PRIVATE LIMITED INDIA TRADING AND DISTRIBUTION DIVISION',
+        inwNo: 'INWARD 2026/10/27 GATE 3 VEHICLE GJ06AB1234 LOT 7', // 50
+        batchNo: 'SUPBATCH-123456', qtyReceived: '123456.789 KG', containerNo: '100 OF 140', netWeight: '12345.67KG',
+        grnDate: '27/10/2026', mfgDate: '01/10/2026', expiryDate: '30/09/2028'
+    };
+    const textOf = (f) => f.value.lines.join(' ');
+
     it('nothing overflows: every item inside the page, text 4 mm from the edges, text and barcode at least 10 pt from the bottom', () => {
-        const long = {
-            ...DEMO, materialName: 'W'.repeat(120), manufacturer: 'W '.repeat(80), supplier: 'DEMO '.repeat(30),
-            qtyReceived: 'W'.repeat(40), containerNo: '14 OF 14', grnNo: 'W'.repeat(20), netWeight: 'W'.repeat(20)
-        };
         const L = L4x6();
-        Layout.render(L, long, TEXTS).items.forEach((it) => {
+        Layout.render(L, LONGEST, TEXTS).items.forEach((it) => {
             const b = box(it);
             expect(b.x0).toBeGreaterThanOrEqual(-EPS);
             expect(b.y0).toBeGreaterThanOrEqual(-0.25 - EPS);
@@ -222,16 +231,21 @@ describe('ZQUAR 4 x 6 label', () => {
         });
     });
 
-    it('values stay inside their own column (no overlap with the next caption)', () => {
-        const long = Object.fromEntries(Object.keys(DEMO).map((k) => [k, 'W'.repeat(60)]));
-        const r = Layout.render(L4x6(), { ...long, barcode: DEMO.barcode }, TEXTS);
+    it('values stay inside their own column and rows never overlap, even with the longest values', () => {
+        const r = Layout.render(L4x6(), LONGEST, TEXTS);
         r.fields.filter((f) => f.value).forEach((f) => {
             f.value.lines.forEach((line) => expect(f.value.x + Layout.widthPt(line, f.value.pt, false)).toBeLessThanOrEqual(f.value.end + EPS));
         });
+        // last line of each row stays above the next row's baseline by at least one line
+        const rows = [...new Set(r.fields.map((f) => f.row))];
+        rows.slice(1).forEach((row, i) => {
+            const prevBottom = Math.max(...r.fields.filter((f) => f.row === rows[i] && f.value && f.value.lines.length)
+                .map((f) => f.value.y + (f.value.lines.length - 1) * f.value.pt * Layout.LH)), next = r.fields.find((f) => f.row === row).caption.y;
+            if (Number.isFinite(prevBottom)) expect(next - prevBottom).toBeGreaterThanOrEqual(11 * Layout.LH);
+        });
     });
 
-    describe('long values: wrap to 2 lines, then shrink to 9 pt, then "…"', () => {
-        const L = L4x6();
+    describe('long values are never cut: wrap, then shrink to 9 pt, then more lines', () => {
         const f = fld(fieldsOf(), 'materialName');
         const w = f.value.end - f.value.x;
         it('wraps at 11 pt when two lines are enough', () => {
@@ -239,17 +253,33 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(r).toMatchObject({ pt: 11, truncated: false });
             expect(r.lines).toHaveLength(2);
         });
-        it('shrinks between 11 and 9 pt before cutting', () => {
+        it('shrinks between 11 and 9 pt before adding lines', () => {
             const r = Layout.fitText('DEMO '.repeat(10).trim(), w, 11, 2, false);
             expect(r.truncated).toBe(false);
             expect(r.pt).toBeLessThan(11);
             expect(r.pt).toBeGreaterThanOrEqual(9);
+            expect(r.lines.join(' ')).toBe('DEMO '.repeat(10).trim());
         });
-        it('cuts with "…" at 9 pt and reports it', () => {
-            const r = Layout.fitText('W'.repeat(200), w, 11, 2, false);
-            expect(r).toMatchObject({ pt: 9, truncated: true });
-            expect(r.lines[1].endsWith('…')).toBe(true);
-            expect(Layout.render(L, { ...DEMO, materialName: 'W'.repeat(200) }, TEXTS).warnings).toContainEqual({ code: 'truncated', field: 'materialName' });
+        it('at 9 pt uses more lines instead of "…"', () => {
+            const s = 'DEMO MATERIAL '.repeat(8).trim();
+            const r = Layout.fitText(s, w, 11, 2, false);
+            expect(r).toMatchObject({ pt: 9, truncated: false });
+            expect(r.lines.length).toBeGreaterThan(2);
+            expect(r.lines.join(' ')).toBe(s);
+        });
+        it('every field of the longest realistic row prints in full: no "…", no warning', () => {
+            const r = Layout.render(L4x6(), LONGEST, TEXTS);
+            ['materialName', 'manufacturer', 'supplier', 'inwNo', 'batchNo', 'qtyReceived', 'containerNo', 'netWeight', 'grnNo', 'grnDate']
+                .forEach((k) => expect(textOf(fld(r.fields, k))).toBe(LONGEST[k]));
+            textItems(r).forEach((i) => expect(i.text).not.toContain('…'));
+            expect(r.warnings).toEqual([]);
+        });
+        it('a label that cannot hold all its text is refused with a coded error, never printed cut', () => {
+            const absurd = Object.fromEntries(Object.keys(DEMO).map((k) => [k, 'WWWW '.repeat(40).trim()]));
+            expect(() => Layout.render(L4x6(), { ...absurd, barcode: DEMO.barcode }, TEXTS))
+                .toThrow(expect.objectContaining({ code: 'labelTooFull' }));
+            expect(() => Pdf.buildHtml([DEMO, { ...absurd, barcode: DEMO.barcode }], TEXTS, {}))
+                .toThrow(expect.objectContaining({ code: 'labelTooFull', label: 2 }));
         });
     });
 

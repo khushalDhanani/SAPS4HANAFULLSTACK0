@@ -136,9 +136,9 @@ describe('QuarantineLabels controller', () => {
             await s.on4x6Labels();
             expect(Pdf.toBlob.mock.calls[0][2]).toEqual({ size: '4x6' });
         });
-        it('shows render warnings (e.g. a shortened value) as a warning, the PDF stays available', async () => {
+        it('shows render warnings (e.g. no barcode) as a warning, the PDF stays available', async () => {
             Service.labelRows.mockResolvedValue(rows);
-            Pdf.toBlob.mockResolvedValue({ blob: {}, warnings: [{ label: 2, code: 'truncated', field: 'Text' }] });
+            Pdf.toBlob.mockResolvedValue({ blob: {}, warnings: [{ label: 2, code: 'barcodeMissing', field: 'barcode' }] });
             const { s, d } = subject();
             await s.on4x6Labels();
             expect(d.messageType).toBe('Warning');
