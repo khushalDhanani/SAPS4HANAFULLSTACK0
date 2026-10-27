@@ -1,8 +1,10 @@
 sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
-    "saps4hana/fiori/modules/wm/quarantine-label/service/QuarantineLabelService"
-], function (BaseController, JSONModel, QuarantineLabelService) {
+    "saps4hana/fiori/modules/wm/quarantine-label/service/QuarantineLabelService",
+    "saps4hana/fiori/modules/wm/quarantine-label/util/QuarLabelLayout",
+    "saps4hana/fiori/modules/wm/quarantine-label/util/QuarLabelPdf"
+], function (BaseController, JSONModel, QuarantineLabelService, QuarLabelLayout, QuarLabelPdf) {
     "use strict";
 
     /** Same rules as the server (QuarantineLabelAdapter.normalizeInput); the server stays authoritative. */
@@ -117,6 +119,76 @@ sap.ui.define([
                     oVm.setProperty("/busy", false);
                 }
             });
+        },
+
+        /** App-drawn 4 x 6 labels: SAP label rows -> jsPDF in the browser; shown, printed and downloaded like the SAP PDF. */
+        on4x6Labels: function () {
+            var oVm = this.getModel("qlView");
+            if (oVm.getProperty("/busy")) {
+                return;
+            }
+            var oData = oVm.getData();
+            var mErrors = validate(oData);
+            this._setState("doc", mErrors.materialDocument);
+            this._setState("year", mErrors.year);
+            this._setState("text", mErrors.text);
+            if (Object.keys(mErrors).length) {
+                oVm.setProperty("/message", this.getText("qlFixInput", null, "Please correct the highlighted fields."));
+                oVm.setProperty("/messageType", "Error");
+                return;
+            }
+
+            this._clearPreview();
+            var iRequest = ++this._iRequest;
+            var that = this;
+            oVm.setProperty("/busy", true);
+            oVm.setProperty("/message", "");
+            return QuarantineLabelService.labelRows({
+                materialDocument: String(oData.materialDocument).trim(),
+                year: String(oData.year).trim(),
+                text: String(oData.text || "").trim()
+            }).then(function (oResult) {
+                if (iRequest !== that._iRequest) {
+                    return null;
+                }
+                if (!oResult || !oResult.Rows || !oResult.Rows.length) {
+                    throw new Error(that.getText("qlFailed", null, "Quarantine labels could not be generated."));
+                }
+                // Size from the plant's BusinessConfig; the layout's default (4x6) when none is configured
+                return QuarLabelPdf.toBlob(oResult.Rows, that._labelTexts(), { size: oResult.LabelSize || QuarLabelLayout.DEFAULT_SIZE })
+                    .then(function (oPdf) {
+                        if (iRequest !== that._iRequest) {
+                            return;
+                        }
+                        oVm.setProperty("/pdfUrl", URL.createObjectURL(oPdf.blob));
+                        oVm.setProperty("/fileName", "QuarantineLabels4x6_" + oResult.MaterialDocument + "_" + oResult.MaterialDocumentYear + ".pdf");
+                        oVm.setProperty("/labelCount", oResult.Rows.length);
+                        var sReady = that.getText("ql4x6Ready", [oResult.Rows.length]);
+                        var aWarn = oPdf.warnings.map(function (w) { return that.getText("qlLabelWarn_" + w.code, [w.label]); });
+                        oVm.setProperty("/message", aWarn.length ? sReady + " " + that.getText("ql4x6Warnings", [aWarn.join("; ")]) : sReady);
+                        oVm.setProperty("/messageType", aWarn.length ? "Warning" : "Success");
+                    });
+            }).catch(function (oError) {
+                if (iRequest !== that._iRequest) {
+                    return;
+                }
+                oVm.setProperty("/message", (oError && oError.message) || that.getText("qlFailed", null, "Quarantine labels could not be generated."));
+                oVm.setProperty("/messageType", oError && oError.status === 503 ? "Warning" : "Error");
+            }).finally(function () {
+                if (iRequest === that._iRequest) {
+                    oVm.setProperty("/busy", false);
+                }
+            });
+        },
+
+        /** Captions of the 4 x 6 label, resolved from i18n by the layout's caption keys. */
+        _labelTexts: function () {
+            var that = this;
+            var mTexts = {};
+            Object.keys(QuarLabelLayout.CAPTION_KEYS).forEach(function (k) {
+                mTexts[k] = that.getText(QuarLabelLayout.CAPTION_KEYS[k]);
+            });
+            return mTexts;
         },
 
         onDownload: function () {

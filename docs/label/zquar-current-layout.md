@@ -4,6 +4,8 @@ Purpose: the baseline for "SAME label as today, only the size changes" (4 x 6 in
 
 Source rule: files in this repo only, no SAP calls. Anything not proven by a cited file is **NOT DETERMINED**.
 
+> **Update 2026-10-27:** the user then chose a new design instead of a copy: "I need Fully Customised. understand." So this baseline no longer blocks the build. It remains the record of what is unknown about the SAP label. The new label: `docs/label/zquar-4x6-design.md`.
+
 ## Result
 
 **The current layout cannot be determined from the repo, so the build is stopped.**

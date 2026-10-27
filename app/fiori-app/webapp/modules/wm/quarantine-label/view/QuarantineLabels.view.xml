@@ -26,8 +26,13 @@
                             valueState="{qlView>/textState}" valueStateText="{qlView>/textStateText}"
                             liveChange=".onInputChange" submit=".onPreview" />
                         <Label />
-                        <Button id="qlPreview" text="{i18n>qlPreview}" type="Emphasized" icon="sap-icon://pdf-attachment"
-                            press=".onPreview" enabled="{= !${qlView>/busy} }" />
+                        <HBox id="qlButtons" wrap="Wrap">
+                            <Button id="qlPreview" text="{i18n>qlPreview}" type="Emphasized" icon="sap-icon://pdf-attachment"
+                                press=".onPreview" enabled="{= !${qlView>/busy} }" class="sapUiTinyMarginEnd" />
+                            <!-- App-drawn 4 x 6 label from SAP label data; the SAP PDF action above is unchanged -->
+                            <Button id="ql4x6" text="{i18n>ql4x6Labels}" icon="sap-icon://bar-code"
+                                press=".on4x6Labels" enabled="{= !${qlView>/busy} }" />
+                        </HBox>
                     </form:content>
                 </form:SimpleForm>
 

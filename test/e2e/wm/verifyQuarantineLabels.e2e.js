@@ -11,7 +11,7 @@
 
 const { openSession, inspectScreen } = require('../support/screenCheck');
 
-const ACTION_RE = /\/odata\/v4\/quarantine-label\/generateLabels$/;
+const ACTION_RE = /\/odata\/v4\/quarantine-label\/(generateLabels|labelRows)$/;
 const PDF_B64 = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF').toString('base64');
 const json = (status, body) => ({ status, contentType: 'application/json;odata.metadata=minimal', headers: { 'OData-Version': '4.0' }, body: JSON.stringify(body) });
 
@@ -106,6 +106,43 @@ const CASES = [
             if (st.messageType !== 'Warning') errs.push(`message type ${st.messageType}`);
             if (!/595\.28 x 841\.89 pt/.test(st.message) || !/4x6/.test(st.message)) errs.push(`message "${st.message}"`);
             if (!st.pdfShown || !st.actionsShown) errs.push('preview/print not shown with the size warning');
+            return errs;
+        }
+    },
+    {
+        name: 'App-drawn 4x6 labels: SAP rows (mocked, DEMO) become a 288 x 432 pt PDF with print/download',
+        respond: (route) => route.fulfill(/labelRows$/.test(route.request().url())
+            ? json(200, {
+                MaterialDocument: '9900000001', MaterialDocumentYear: '2026', LabelSize: null,
+                Rows: [1, 2].map((n) => ({
+                    MaterialDescription: 'DEMO MATERIAL', MaterialDocument: '9900000001', PostingDate: '2026-10-27', Batch: 'DEMO-BATCH-01',
+                    SupplierBatch: 'DEMO-SB-01', SupplierName: 'DEMO SUPPLIER', BatchCharacteristics: 'DEMO-CHAR', ManufacturingDate: '2026-10-01',
+                    DateKind: 'RETEST', DateValue: '2027-04-01', PostedQuantity: '120 KG', ContainerQuantity: '40', Unit: 'KG',
+                    Container: `${n} OF 2`, StorageUnit: `0000000000990000000${n}`, Text: 'DEMO'
+                }))
+            })
+            : json(500, { error: { message: 'unexpected SAP PDF call' } })),
+        run: async (s, calls) => {
+            await fill(s.page, '9900000001', '2026');
+            await s.page.click('[id$="--ql4x6"]');
+            await s.page.waitForFunction(() => {
+                const E = window.sap.ui.require('sap/ui/core/Element');
+                const v = E.registry.filter((c) => c.getId().endsWith('--qlPdfViewer'))[0];
+                return v && /^blob:/.test(v.getSource());
+            }, null, { timeout: 15000 });
+            const st = await state(s.page);
+            const pdf = await s.page.evaluate(async () => {
+                const E = window.sap.ui.require('sap/ui/core/Element');
+                const src = E.registry.filter((c) => c.getId().endsWith('--qlPdfViewer'))[0].getSource();
+                const t = await (await fetch(src)).text();
+                return { boxes: t.match(/\/MediaBox\s*\[[^\]]*\]/g) || [], head: t.slice(0, 5) };
+            });
+            const errs = [];
+            if (calls.length !== 1) errs.push(`action called ${calls.length} times`);
+            if (st.messageType !== 'Success' || !/2 label/.test(st.message)) errs.push(`message ${st.messageType} "${st.message}"`);
+            if (!st.pdfShown || !st.actionsShown) errs.push('PDF or print/download not shown');
+            if (pdf.head !== '%PDF-') errs.push('not a PDF');
+            if (pdf.boxes.length !== 2 || pdf.boxes.some((b) => !/\[0 0 288\.? 432\.?\]/.test(b))) errs.push(`MediaBox ${pdf.boxes.join(' ')}`);
             return errs;
         }
     },

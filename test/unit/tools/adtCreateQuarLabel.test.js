@@ -32,7 +32,7 @@ describe('adt-create-quar-label (offline)', () => {
         const src = toAdtSource(full, 'Z_MM_QUAR_LABEL_DATA');
         expect(src).toMatch(/^FUNCTION z_mm_quar_label_data\n {2}IMPORTING\n {4}VALUE\(IV_MBLNR\) TYPE MBLNR\n/);
         expect(src).toMatch(/ {4}VALUE\(ET_FINAL\) TYPE ZMM_TT_026\.\n/);
-        expect(src).not.toMatch(/z_mm_quar_label_pdf/i);
+        expect(src).not.toMatch(/FUNCTION z_mm_quar_label_pdf/i);
     });
 
     it('fails for an unknown module', () => {

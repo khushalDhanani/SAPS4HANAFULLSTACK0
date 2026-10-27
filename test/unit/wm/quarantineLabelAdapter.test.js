@@ -82,6 +82,105 @@ describe('QuarantineLabelAdapter', () => {
         });
     });
 
+    describe('labelRows (rebuilt from read-only table reads; synthetic DEMO data)', () => {
+        // Minimal RFC_READ_TABLE fake: every "FIELD = 'v'" in WHERE must match; repeated fields are OR'ed
+        const DB = {
+            MATDOC: [{ MBLNR: '4900050304', MJAHR: '2026', WERKS: 'DM01' }],
+            MSEG: [
+                { MBLNR: '4900050304', MJAHR: '2026', ZEILE: '0002', MATNR: 'DEMO-MAT-1', CHARG: 'DEMOB1', MENGE: '999.000', MEINS: 'KG', BUDAT_MKPF: '20261028', VBELN_IM: '', LIFNR: 'DEMOSUP02', HSDAT: '' },
+                { MBLNR: '4900050304', MJAHR: '2026', ZEILE: '0001', MATNR: 'DEMO-MAT-1', CHARG: 'DEMOB1', MENGE: '120.005', MEINS: 'KG', BUDAT_MKPF: '20261027', VBELN_IM: '', LIFNR: 'DEMOSUP01', HSDAT: '20261001' },
+                { MBLNR: '4900050304', MJAHR: '2026', ZEILE: '0003', MATNR: 'DEMO-MAT-2', CHARG: 'DEMOB2', MENGE: '5.000', MEINS: 'ST', BUDAT_MKPF: '20261027', VBELN_IM: '', LIFNR: '', HSDAT: '00000000' },
+                { MBLNR: '4900050304', MJAHR: '2025', ZEILE: '0001', MATNR: 'DEMO-MAT-9', CHARG: 'DEMOB9', MENGE: '1.000', MEINS: 'KG', BUDAT_MKPF: '20251027', VBELN_IM: '', LIFNR: '', HSDAT: '' }
+            ],
+            LTAP: [
+                { LGNUM: 'DM1', TANUM: '0000000012', TAPOS: '0001', MATNR: 'DEMO-MAT-1', CHARG: 'DEMOB1', VSOLM: '40.000', MEINS: 'KG', NLENR: 'DEMO-SU-0002', WENUM: '4900050304', VBELN: '', VLTYP: '920' },
+                { LGNUM: 'DM1', TANUM: '0000000011', TAPOS: '0002', MATNR: 'DEMO-MAT-1', CHARG: 'DEMOB1', VSOLM: '80.000', MEINS: 'KG', NLENR: 'DEMO-SU-0001', WENUM: '4900050304', VBELN: '', VLTYP: '902' },
+                { LGNUM: 'DM1', TANUM: '0000000013', TAPOS: '0001', MATNR: 'DEMO-MAT-1', CHARG: 'DEMOB1', VSOLM: '1.000', MEINS: 'KG', NLENR: 'DEMO-SU-NOTQ', WENUM: '4900050304', VBELN: '', VLTYP: '001' },
+                { LGNUM: 'DM1', TANUM: '0000000014', TAPOS: '0001', MATNR: 'DEMO-MAT-2', CHARG: 'DEMOB2', VSOLM: '5.000', MEINS: 'ST', NLENR: 'DEMO-SU-0003', WENUM: '4900050304', VBELN: '', VLTYP: '920' }
+            ],
+            MCH1: [{ MATNR: 'DEMO-MAT-1', CHARG: 'DEMOB1', CUOBJ_BM: '123', LICHA: 'DEMO-SB-1' }],
+            MAKT: [{ MATNR: 'DEMO-MAT-1', SPRAS: 'E', MAKTX: 'DEMO MATERIAL 1' }, { MATNR: 'DEMO-MAT-1', SPRAS: 'D', MAKTX: 'DEMO MATERIAL DE' }],
+            BUT000: [{ PARTNER: 'DEMOSUP01', NAME_ORG1: 'DEMO SUPPLIER' }, { PARTNER: 'DEMOSUP02', NAME_ORG1: 'DEMO OTHER' }],
+            AUSP: [
+                { OBJEK: '000000000000000123', ATINN: '0000000818', ATWRT: 'DEMO-A', DATE_FROM: '00000000' },
+                { OBJEK: '000000000000000123', ATINN: '0000000828', ATWRT: 'DEMO-B', DATE_FROM: '00000000' },
+                { OBJEK: '000000000000000123', ATINN: '9999999400', ATWRT: '', DATE_FROM: '20270401' },
+                { OBJEK: '000000000000000123', ATINN: '0000000999', ATWRT: 'DEMO-NOT-READ', DATE_FROM: '' }
+            ]
+        };
+        function tableFake(db = DB) {
+            const rfc = {
+                where: [],
+                readTable: jest.fn(async (table, fields, where = []) => {
+                    rfc.where.push(...where);
+                    const cond = {};
+                    where.join(' ').replace(/(\w+) = '([^']*)'/g, (_, f, v) => { (cond[f] = cond[f] || []).push(v); });
+                    return (db[table] || []).filter((r) => Object.entries(cond).every(([f, vs]) => vs.includes(r[f])))
+                        .map((r) => Object.fromEntries(fields.map((f) => [f, r[f] ?? ''])));
+                }),
+                call: jest.fn()
+            };
+            return rfc;
+        }
+        const run = (rfc, extra = {}) => new QuarantineLabelAdapter(rfc).labelRows({ ...input, Text: 'DEMO TEXT', allowedPlants: ['DM01'], ...extra });
+
+        it('one label per quarantine TO item, sorted and counted per material/batch, like ZMM_R_062', async () => {
+            const res = await run(tableFake(), { resolveOutput: async () => ({ formName: null, labelSize: '4x6' }) });
+            expect(res).toMatchObject({ MaterialDocument: '4900050304', MaterialDocumentYear: '2026', LabelSize: '4x6' });
+            expect(res.Rows.map((r) => [r.StorageUnit, r.Container])).toEqual([
+                ['DEMO-SU-0001', '1 OF 2'], ['DEMO-SU-0002', '2 OF 2'], ['DEMO-SU-0003', '1 OF 1']
+            ]);
+            expect(res.Rows[0]).toEqual({
+                MaterialDescription: 'DEMO MATERIAL 1', MaterialDocument: '4900050304', PostingDate: '2026-10-27',
+                Batch: 'DEMOB1', SupplierBatch: 'DEMO-SB-1', SupplierName: 'DEMO SUPPLIER', BatchCharacteristics: 'DEMO-A DEMO-B',
+                ManufacturingDate: '2026-10-01', DateKind: 'EXPIRY', DateValue: '2027-04-01', PostedQuantity: '120.01 KG',
+                ContainerQuantity: '80', Unit: 'KG', Container: '1 OF 2', StorageUnit: 'DEMO-SU-0001', Text: 'DEMO TEXT'
+            });
+            // no batch master / classification / supplier: empty, not invented
+            expect(res.Rows[2]).toMatchObject({ Batch: '', SupplierBatch: '', SupplierName: '', BatchCharacteristics: '', DateKind: 'EXPIRY', DateValue: '', ManufacturingDate: '', PostedQuantity: '5.00 ST' });
+        });
+        it('prefers the retest date and labels it RETEST', async () => {
+            const db = { ...DB, AUSP: [...DB.AUSP, { OBJEK: '000000000000000123', ATINN: '0000000820', ATWRT: '', DATE_FROM: '20270101' }] };
+            const res = await run(tableFake(db));
+            expect(res.Rows[0]).toMatchObject({ DateKind: 'RETEST', DateValue: '2027-01-01' });
+        });
+        it('matches LTAP by inbound delivery when the first MSEG item has one, else by document number', async () => {
+            const byDoc = tableFake();
+            await run(byDoc);
+            expect(byDoc.where).toContain("AND WENUM = '4900050304'");
+            const db = { ...DB, MSEG: DB.MSEG.map((m) => ({ ...m, VBELN_IM: 'DEMODLV01' })), LTAP: DB.LTAP.map((l) => ({ ...l, VBELN: 'DEMODLV01', WENUM: '' })) };
+            const byDelivery = tableFake(db);
+            const res = await run(byDelivery);
+            expect(byDelivery.where).toContain("AND VBELN = 'DEMODLV01'");
+            expect(byDelivery.where).not.toContain("AND WENUM = '4900050304'");
+            expect(res.Rows).toHaveLength(3);
+        });
+        it('reads only, within the year, with RFC_READ_TABLE WHERE lines of at most 72 characters', async () => {
+            const rfc = tableFake();
+            await run(rfc);
+            expect(rfc.call).not.toHaveBeenCalled();
+            expect([...new Set(rfc.readTable.mock.calls.map((c) => c[0]))].sort()).toEqual(['AUSP', 'BUT000', 'LTAP', 'MAKT', 'MATDOC', 'MCH1', 'MSEG']);
+            expect(rfc.where).toContain("AND MJAHR = '2026'");
+            expect(rfc.where).toContain("AND SPRAS = 'E'");
+            expect(rfc.where).toContain("AND ( VLTYP = '920' OR VLTYP = '902' )");
+            rfc.where.forEach((w) => expect(w.length).toBeLessThanOrEqual(72));
+        });
+        it('403 before any label table is read when a plant is outside the user scope', async () => {
+            const rfc = tableFake();
+            await expect(run(rfc, { allowedPlants: ['DM02'] })).rejects.toMatchObject({ status: 403 });
+            expect(rfc.readTable.mock.calls.map((c) => c[0])).toEqual(['MATDOC']);
+        });
+        it('404 when the document has no quarantine TO items', async () => {
+            const db = { ...DB, LTAP: DB.LTAP.filter((l) => l.VLTYP === '001') };
+            await expect(run(tableFake(db))).rejects.toMatchObject({ status: 404, message: /No quarantine label rows/ });
+        });
+        it('400 for invalid input before any SAP read', async () => {
+            const rfc = tableFake();
+            await expect(new QuarantineLabelAdapter(rfc).labelRows({ MaterialDocument: 'x', MaterialDocumentYear: '2026', allowedPlants: null })).rejects.toMatchObject({ status: 400 });
+            expect(rfc.readTable).not.toHaveBeenCalled();
+        });
+    });
+
     describe('rendering', () => {
         it('returns the PDF base64-encoded with count and file name (Admin, unrestricted)', async () => {
             const rfc = rfcFake();

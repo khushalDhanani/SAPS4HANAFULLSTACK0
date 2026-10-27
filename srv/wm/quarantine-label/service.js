@@ -21,6 +21,17 @@ module.exports = class QuarantineLabelService extends cds.ApplicationService {
         return req.error(err.status || 500, err.message || 'Quarantine labels could not be generated');
       }
     });
+    this.on('labelRows', async (req) => {
+      try {
+        return await adapter.labelRows({
+          ...(req.data || {}),
+          allowedPlants: plantScope(req.user),
+          resolveOutput: (plants) => resolveOutputForPlants(plants, businessConfigResolver)
+        });
+      } catch (err) {
+        return req.error(err.status || 500, err.message || 'Quarantine label data could not be read');
+      }
+    });
     return super.init();
   }
 };

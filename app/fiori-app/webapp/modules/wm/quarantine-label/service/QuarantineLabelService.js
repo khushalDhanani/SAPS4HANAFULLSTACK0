@@ -20,6 +20,20 @@ sap.ui.define([
                 MaterialDocumentYear: oInput.year,
                 Text: oInput.text || ""
             }, null, { maxRetries: 0 });
+        },
+
+        /**
+         * Label rows for the app's own 4 x 6 label (read only in SAP).
+         *
+         * @param {{materialDocument: string, year: string, text: string}} oInput
+         * @returns {Promise<{MaterialDocument: string, MaterialDocumentYear: string, LabelSize: ?string, Rows: object[]}>}
+         */
+        labelRows: function (oInput) {
+            return ODataClient.post(SERVICE_BASE + "/labelRows", {
+                MaterialDocument: oInput.materialDocument,
+                MaterialDocumentYear: oInput.year,
+                Text: oInput.text || ""
+            }, null, { maxRetries: 0 });
         }
     };
 });

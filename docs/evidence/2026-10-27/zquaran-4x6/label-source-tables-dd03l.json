@@ -1,0 +1,72 @@
+{
+  "capturedAt": "2026-10-27T04:44:48.674Z",
+  "mode": "READ-ONLY",
+  "method": "RFC_READ_TABLE on DD02L/DD03L only; no business data read",
+  "tables": {
+    "MSEG": {
+      "tabclass": "TRANSP",
+      "fields": {
+        "MBLNR": "CHAR(10) MBLNR",
+        "MJAHR": "NUMC(4) MJAHR",
+        "ZEILE": "NUMC(4) MBLPO",
+        "MATNR": "CHAR(40) MATNR",
+        "CHARG": "CHAR(10) CHARG_D",
+        "MENGE": "QUAN(13,3) MENGE_D",
+        "MEINS": "UNIT(3) MEINS",
+        "BUDAT_MKPF": "DATS(8) BUDAT",
+        "VBELN_IM": "CHAR(10) VBELN_VL",
+        "LIFNR": "CHAR(10) ELIFN",
+        "HSDAT": "DATS(8) HSDAT"
+      }
+    },
+    "MAKT": {
+      "tabclass": "TRANSP",
+      "fields": {
+        "MATNR": "CHAR(40) MATNR",
+        "SPRAS": "LANG(1) SPRAS",
+        "MAKTX": "CHAR(40) MAKTX"
+      }
+    },
+    "BUT000": {
+      "tabclass": "TRANSP",
+      "fields": {
+        "PARTNER": "CHAR(10) BU_PARTNER",
+        "NAME_ORG1": "CHAR(40) BU_NAMEOR1"
+      }
+    },
+    "MCH1": {
+      "tabclass": "TRANSP",
+      "fields": {
+        "MATNR": "CHAR(40) MATNR",
+        "CHARG": "CHAR(10) CHARG_D",
+        "CUOBJ_BM": "NUMC(18) CUOBJ_BM",
+        "LICHA": "CHAR(15) LICHN"
+      }
+    },
+    "LTAP": {
+      "tabclass": "TRANSP",
+      "fields": {
+        "LGNUM": "CHAR(3) LGNUM",
+        "TANUM": "NUMC(10) TANUM",
+        "TAPOS": "NUMC(4) TAPOS",
+        "MATNR": "CHAR(40) MATNR",
+        "CHARG": "CHAR(10) CHARG_D",
+        "VSOLM": "QUAN(13,3) LTAP_VSOLM",
+        "MEINS": "UNIT(3) MEINS",
+        "NLENR": "CHAR(20) LTAP_NLENR",
+        "WENUM": "CHAR(10) LVS_WENUM",
+        "VBELN": "CHAR(10) VBELN_VL",
+        "VLTYP": "CHAR(3) LTAP_VLTYP"
+      }
+    },
+    "AUSP": {
+      "tabclass": "TRANSP",
+      "fields": {
+        "OBJEK": "CHAR(90) CUOBN",
+        "ATINN": "NUMC(10) ATINN",
+        "ATWRT": "CHAR(70) ATWRT",
+        "DATE_FROM": "DATS(8) AUSPEXT_DATE_FROM"
+      }
+    }
+  }
+}

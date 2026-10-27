@@ -2,14 +2,17 @@
 
 /** QuarantineLabels controller without a UI5 runtime: validation, one request at a time, stale answers, errors. */
 let ctrl;
-const Service = { generateLabels: jest.fn() };
+const Service = { generateLabels: jest.fn(), labelRows: jest.fn() };
+const Layout = { DEFAULT_SIZE: '4x6', CAPTION_KEYS: { title: 'qlLabelTitle', empty: 'qlLabelEmpty' } };
+const Pdf = { toBlob: jest.fn() };
 const BaseController = { extend: (name, obj) => { ctrl = obj; return obj; } };
-global.sap = { ui: { define: (deps, f) => f(BaseController, function () {}, Service) } };
+global.sap = { ui: { define: (deps, f) => f(BaseController, function () {}, Service, Layout, Pdf) } };
 require('../../../app/fiori-app/webapp/modules/wm/quarantine-label/controller/QuarantineLabels.controller.js');
 
 const PDF_B64 = Buffer.from('%PDF-1.7').toString('base64');
 global.window = { atob: (s) => Buffer.from(s, 'base64').toString('latin1') };
 global.URL.createObjectURL = jest.fn(() => 'blob:pdf-1');
+global.Blob = global.Blob || class {};
 global.URL.revokeObjectURL = jest.fn();
 
 function subject(data) {
@@ -105,5 +108,65 @@ describe('QuarantineLabels controller', () => {
         await s.onPreview();
         expect(d.pdfUrl).toBe('');
         expect(d.messageType).toBe('Error');
+    });
+
+    describe('4x6 labels (app-drawn from SAP label rows)', () => {
+        const rows = { MaterialDocument: '9900000001', MaterialDocumentYear: '2026', LabelSize: null, Rows: [{ StorageUnit: 'DEMO' }, { StorageUnit: 'DEMO2' }] };
+
+        it('renders the rows at the default size with resolved captions and shows the PDF', async () => {
+            Service.labelRows.mockResolvedValue(rows);
+            Pdf.toBlob.mockResolvedValue({ blob: {}, warnings: [] });
+            const { s, d } = subject();
+            await s.on4x6Labels();
+            expect(Service.labelRows).toHaveBeenCalledWith({ materialDocument: '4900050304', year: '2026', text: '' });
+            expect(Pdf.toBlob).toHaveBeenCalledWith(rows.Rows, { title: 'qlLabelTitle', empty: 'qlLabelEmpty' }, { size: '4x6' });
+            expect(d.pdfUrl).toBe('blob:pdf-1');
+            expect(d.fileName).toBe('QuarantineLabels4x6_9900000001_2026.pdf');
+            expect(d.messageType).toBe('Success');
+            expect(d.message).toBe('ql4x6Ready');
+            expect(Service.generateLabels).not.toHaveBeenCalled(); // the SAP PDF action is separate
+        });
+        it('uses the configured label size of the plant', async () => {
+            Service.labelRows.mockResolvedValue({ ...rows, LabelSize: '4x6' });
+            Pdf.toBlob.mockResolvedValue({ blob: {}, warnings: [] });
+            const { s } = subject();
+            await s.on4x6Labels();
+            expect(Pdf.toBlob.mock.calls[0][2]).toEqual({ size: '4x6' });
+        });
+        it('shows render warnings (e.g. a shortened value) as a warning, the PDF stays available', async () => {
+            Service.labelRows.mockResolvedValue(rows);
+            Pdf.toBlob.mockResolvedValue({ blob: {}, warnings: [{ label: 2, code: 'truncated', field: 'Text' }] });
+            const { s, d } = subject();
+            await s.on4x6Labels();
+            expect(d.messageType).toBe('Warning');
+            expect(d.message).toBe('ql4x6Ready ql4x6Warnings');
+            expect(d.pdfUrl).toBe('blob:pdf-1');
+        });
+        it('503 (SAP data interface not yet remote-enabled) is a warning and nothing is rendered', async () => {
+            Service.labelRows.mockRejectedValue(Object.assign(new Error('not available yet'), { status: 503 }));
+            const { s, d } = subject();
+            await s.on4x6Labels();
+            expect(Pdf.toBlob).not.toHaveBeenCalled();
+            expect(d.messageType).toBe('Warning');
+            expect(d.pdfUrl).toBe('');
+            expect(d.busy).toBe(false);
+        });
+        it('validates locally before calling the service', () => {
+            const { s, d } = subject({ year: '26' });
+            s.on4x6Labels();
+            expect(Service.labelRows).not.toHaveBeenCalled();
+            expect(d.yearState).toBe('Error');
+        });
+        it('never shows labels for inputs that changed meanwhile', async () => {
+            let resolve;
+            Service.labelRows.mockReturnValue(new Promise((r) => { resolve = r; }));
+            const { s, d } = subject();
+            const p = s.on4x6Labels();
+            s.onInputChange();
+            resolve(rows);
+            await p;
+            expect(Pdf.toBlob).not.toHaveBeenCalled();
+            expect(d.pdfUrl).toBe('');
+        });
     });
 });
