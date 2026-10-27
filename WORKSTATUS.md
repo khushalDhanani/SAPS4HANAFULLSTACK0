@@ -7,7 +7,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
-- **HU label PDF border (2026-10-27 IST) — DONE, UNCOMMITTED:** `HuLabelPdf.js` draws a 0.5 px (0.1323 mm) solid black border on every page of the label PDF (all 5 sizes). Unit 56/56 PASS; page rendered and inspected. HU print (HTML) and the QR-label PDF are unchanged. See Changes Log (HU label PDF border).
+- **HU label PDF border (2026-10-27 IST) — DONE, UNCOMMITTED:** `HuLabelPdf.js` draws a 0.5 px (0.1323 mm) solid black border 1 mm inside the page edge on every page of the label PDF (all 5 sizes; moved inward after "Not visible"). Unit 56/56 PASS; page rendered and inspected. HU print (HTML) and the QR-label PDF are unchanged. See Changes Log (HU label PDF border).
 
 - **E2E P1 items 16–17 (2026-10-27 IST) — DONE, UNCOMMITTED:** suite registration enforced by `test/unit/tools/e2eRunner.test.js`; runner keeps trace + screenshot of failed suites under `test-results/e2e-evidence/`; `isolatedServer` retries on EADDRINUSE (fixed a flaky `Write authorization` failure in the post-fix full run). Post-fix full run: 15/16, the 1 failure was that port race; suite re-run alone PASS. Full run NOT repeated after the retry fix. Plan for P1 12–15 given in chat only. See Changes Log (P1 16–17).
 
@@ -5010,3 +5010,9 @@ Single source of truth for work history, current status, validation, unresolved 
 - **ASSUMPTION (stated, not asked):** "generate PDF" = the HU label PDF download (`HuLabelPdf.generate`/`download`), border around each page; 0.5 px read as CSS px = 0.5 × 25.4/96 = 0.1323 mm, black, drawn inset by half the line width so the stroke is not clipped by the page edge. Not changed: the browser print path (`HuLabelPrinter` HTML, so print and PDF now differ by this border) and the QR-label PDF `HuQrPdf.js` (own thin grey cut lines for grids only).
 - **Changed:** `app/fiori-app/webapp/modules/wm/handling-unit/util/HuLabelPdf.js` (`BORDER_MM`, stroke rect at the start of `drawLabel`); test `test/unit/wm/handlingUnitLabel.test.js` (TEST ADDED: border width, colour, inset geometry for sizes A/B/E/C/D).
 - **Executed:** `npx jest test/unit/wm/handlingUnitLabel.test.js test/unit/wm/handlingUnitsController.test.js` 56/56 PASS; `git diff --check` clean; ESLint ignores the webapp file (warning only); a size-B PDF generated with real jsPDF and rendered to PNG (`sips`): border visible, content not overlapped. Browser E2E for `wmHandlingUnits` NOT re-run; the in-app Download PDF button NOT clicked; physical print NOT checked.
+
+### 2026-10-27 IST — HU label PDF border moved 1 mm inside the page edge (user: "Not visible") — DONE, UNCOMMITTED
+
+- **Cause (INFERRED, not confirmed by the user):** the border sat exactly on the page edge at 0.375 pt; viewers/printers drop or fade a line there. The served code was verified current (server file and the page-loaded `HuLabelPdf` both contain the border).
+- **Changed:** `HuLabelPdf.js` — border rect now `BORDER_INSET_MM = 1` inside the page edge (still 0.5 CSS px, solid black); `test/unit/wm/handlingUnitLabel.test.js` updated (geometry [1,1,W-2,H-2], content starts inside the frame). TEST UPDATED.
+- **Executed:** `npx jest test/unit/wm/handlingUnitLabel.test.js test/unit/wm/handlingUnitsController.test.js` 56/56 PASS; sizes A and B rendered with real jsPDF + `sips` to PNG and inspected: frame visible, content not overlapped. NOT checked: the in-app Download PDF in a browser PDF viewer, a physical print, sizes C/D/E rendered.

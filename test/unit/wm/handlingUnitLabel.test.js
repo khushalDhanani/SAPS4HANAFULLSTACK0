@@ -224,7 +224,7 @@ describe('HuLabelPdf.generate (size-aware mm PDF, one page per label)', () => {
             expect(() => doc.output('arraybuffer')).not.toThrow();
         });
     });
-    it('draws a 0.5px solid black border on every page, inside the page edge (every size)', () => {
+    it('draws a 0.5px solid black border 1 mm inside the page edge (every size)', () => {
         const px = 0.5 * 25.4 / 96;
         [['A', 50, 25], ['B', 100, 50], ['E', 100, 100], ['C', 150, 100], ['D', 200, 100]].forEach(([k, w, h]) => {
             const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [w, h] });
@@ -235,9 +235,10 @@ describe('HuLabelPdf.generate (size-aware mm PDF, one page per label)', () => {
             expect(width).toHaveBeenCalledWith(px);
             expect(color).toHaveBeenCalledWith(0, 0, 0);
             const [x, y, rw, rh, style] = rect.mock.calls.find((c) => c[4] === 'S');
-            expect([x, y]).toEqual([px / 2, px / 2]);
-            expect(rw).toBeCloseTo(w - px, 6);
-            expect(rh).toBeCloseTo(h - px, 6);
+            expect([x, y]).toEqual([1, 1]);
+            expect(rw).toBeCloseTo(w - 2, 6);
+            expect(rh).toBeCloseTo(h - 2, 6);
+            expect(Layout.layout(k).material.x).toBeGreaterThan(1 + px); // content stays inside the frame
             expect(style).toBe('S'); // stroke only, no fill over the content
             // border is stroked at the start of the page, so no later fill (bars) is affected by its line width
             expect(rect.mock.calls.findIndex((c) => c[4] === 'S')).toBe(0);
