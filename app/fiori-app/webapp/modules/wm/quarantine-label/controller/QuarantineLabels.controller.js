@@ -102,8 +102,10 @@ sap.ui.define([
                 oVm.setProperty("/pdfUrl", toObjectUrl(oResult.PdfBase64));
                 oVm.setProperty("/fileName", oResult.FileName || "QuarantineLabels.pdf");
                 oVm.setProperty("/labelCount", oResult.LabelCount || 0);
-                oVm.setProperty("/message", that.getText("qlReady", [oResult.LabelCount || 0], "{0} label(s) ready."));
-                oVm.setProperty("/messageType", "Success");
+                var sReady = that.getText("qlReady", [oResult.LabelCount || 0], "{0} label(s) ready.");
+                var sSizeWarning = that._pageSizeWarning(oResult);
+                oVm.setProperty("/message", sSizeWarning ? sReady + " " + sSizeWarning : sReady);
+                oVm.setProperty("/messageType", sSizeWarning ? "Warning" : "Success");
             }).catch(function (oError) {
                 if (iRequest !== that._iRequest) {
                     return;
@@ -146,6 +148,17 @@ sap.ui.define([
                 setTimeout(function () { document.body.removeChild(oFrame); }, 60000);
             };
             document.body.appendChild(oFrame);
+        },
+
+        /** The server decides whether the size matches (PageSizeOk); this only words the warning. */
+        _pageSizeWarning: function (oResult) {
+            if (oResult.PageSizeOk !== false) {
+                return "";
+            }
+            if (oResult.PageWidthPt === null || oResult.PageWidthPt === undefined) {
+                return this.getText("qlPageSizeUnknown", [oResult.LabelSize]);
+            }
+            return this.getText("qlPageSizeMismatch", [oResult.PageWidthPt, oResult.PageHeightPt, oResult.LabelSize]);
         },
 
         _setState: function (sPrefix, sErrorKey) {

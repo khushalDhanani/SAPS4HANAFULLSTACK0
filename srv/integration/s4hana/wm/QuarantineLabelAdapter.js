@@ -70,9 +70,11 @@ class QuarantineLabelAdapter {
 
   /**
    * allowedPlants: plantScope(user) — null for Admin (unrestricted), otherwise the user's plants; every plant of the
-   * document must be in it before anything is rendered.
+   * document must be in it before anything is rendered. resolveOutput(plants) -> { formName, labelSize } comes from the
+   * CAP layer (per-plant BusinessConfig); IV_FORM is sent only when a form is configured, so without configuration the
+   * call is the one the activated wrapper already accepts.
    */
-  async generate({ MaterialDocument, MaterialDocumentYear, Text, allowedPlants }) {
+  async generate({ MaterialDocument, MaterialDocumentYear, Text, allowedPlants, resolveOutput }) {
     const { mblnr, mjahr, text } = normalizeInput({ MaterialDocument, MaterialDocumentYear, Text });
     await this.assertAvailable();
 
@@ -83,7 +85,10 @@ class QuarantineLabelAdapter {
       if (outside.length) throw httpError(403, `Material document ${mblnr}/${mjahr} includes plant(s) outside your authorization: ${outside.join(', ')}.`);
     }
 
-    const res = await this.rfc.call(FUNCTION_NAME, { IV_MBLNR: mblnr, IV_MJAHR: mjahr, IV_TEXT: text });
+    const output = resolveOutput ? await resolveOutput(plants) : { formName: null, labelSize: null };
+    const params = { IV_MBLNR: mblnr, IV_MJAHR: mjahr, IV_TEXT: text };
+    if (output.formName) params.IV_FORM = output.formName;
+    const res = await this.rfc.call(FUNCTION_NAME, params);
     const result = String(res.EV_RESULT || '').trim();
     const message = String(res.EV_MESSAGE || '').trim();
     if (result !== 'OK') {
@@ -99,6 +104,7 @@ class QuarantineLabelAdapter {
       MaterialDocumentYear: mjahr,
       LabelCount: Number(res.EV_LABEL_COUNT) || 0,
       FileName: `QuarantineLabels_${mblnr}_${mjahr}.pdf`,
+      LabelSize: output.labelSize,
       PdfBase64: pdf.toString('base64')
     };
   }

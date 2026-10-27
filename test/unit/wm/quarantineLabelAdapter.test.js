@@ -89,8 +89,27 @@ describe('QuarantineLabelAdapter', () => {
             expect(rfc.call).toHaveBeenCalledWith(FUNCTION_NAME, { IV_MBLNR: '4900050304', IV_MJAHR: '2026', IV_TEXT: 'Hold' });
             expect(res).toEqual({
                 MaterialDocument: '4900050304', MaterialDocumentYear: '2026', LabelCount: 3,
-                FileName: 'QuarantineLabels_4900050304_2026.pdf', PdfBase64: PDF.toString('base64')
+                FileName: 'QuarantineLabels_4900050304_2026.pdf', LabelSize: null, PdfBase64: PDF.toString('base64')
             });
+        });
+        it('sends IV_FORM only when a form is configured for the plants', async () => {
+            const rfc = rfcFake({ plants: ['DM01'] });
+            const resolveOutput = jest.fn(async () => ({ formName: 'ZDEMO_4X6', labelSize: '4x6' }));
+            const res = await new QuarantineLabelAdapter(rfc).generate({ ...input, allowedPlants: null, resolveOutput });
+            expect(resolveOutput).toHaveBeenCalledWith(['DM01']);
+            expect(rfc.call).toHaveBeenCalledWith(FUNCTION_NAME, { IV_MBLNR: '4900050304', IV_MJAHR: '2026', IV_TEXT: 'Hold', IV_FORM: 'ZDEMO_4X6' });
+            expect(res.LabelSize).toBe('4x6');
+        });
+        it('without configuration the call has no IV_FORM (accepted by the activated wrapper)', async () => {
+            const rfc = rfcFake();
+            await new QuarantineLabelAdapter(rfc).generate({ ...input, allowedPlants: null, resolveOutput: async () => ({ formName: null, labelSize: null }) });
+            expect(rfc.call.mock.calls[0][1]).not.toHaveProperty('IV_FORM');
+        });
+        it('a settings conflict stops before rendering', async () => {
+            const rfc = rfcFake();
+            const resolveOutput = async () => { throw Object.assign(new Error('different settings'), { status: 409 }); };
+            await expect(new QuarantineLabelAdapter(rfc).generate({ ...input, allowedPlants: null, resolveOutput })).rejects.toMatchObject({ status: 409 });
+            expect(rfc.call).not.toHaveBeenCalled();
         });
         it.each([
             ['NOT_FOUND', 404], ['NOT_AUTHORIZED', 403], ['NO_LABEL_ROWS', 404], ['INVALID_INPUT', 400],

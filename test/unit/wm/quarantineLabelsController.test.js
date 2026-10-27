@@ -85,6 +85,20 @@ describe('QuarantineLabels controller', () => {
         expect(d.busy).toBe(false);
     });
 
+    it.each([
+        [{ PageSizeOk: true, LabelSize: '4x6', PageWidthPt: 288, PageHeightPt: 432 }, 'Success', '2 label(s) ready.'],
+        [{ PageSizeOk: null, LabelSize: null, PageWidthPt: 595.28, PageHeightPt: 841.89 }, 'Success', '2 label(s) ready.'],
+        [{ PageSizeOk: false, LabelSize: '4x6', PageWidthPt: 595.28, PageHeightPt: 841.89 }, 'Warning', '2 label(s) ready. qlPageSizeMismatch'],
+        [{ PageSizeOk: false, LabelSize: '4x6', PageWidthPt: null, PageHeightPt: null }, 'Warning', '2 label(s) ready. qlPageSizeUnknown']
+    ])('page size %p -> %s', async (size, type, message) => {
+        Service.generateLabels.mockResolvedValue({ ...ok, ...size });
+        const { s, d } = subject();
+        await s.onPreview();
+        expect(d.messageType).toBe(type);
+        expect(d.message).toBe(message);
+        expect(d.pdfUrl).toBe('blob:pdf-1'); // the PDF is still shown; the warning does not block printing
+    });
+
     it('rejects a success answer without PDF content', async () => {
         Service.generateLabels.mockResolvedValue({ ...ok, PdfBase64: '' });
         const { s, d } = subject();

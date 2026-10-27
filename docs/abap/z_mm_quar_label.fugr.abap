@@ -4,6 +4,9 @@
 *& Function Modules Z_MM_QUAR_LABEL_DATA  (normal)
 *&                  Z_MM_QUAR_LABEL_PDF   (Remote-Enabled Module (RFC))
 *&---------------------------------------------------------------------*
+*& 2026-10-27: Z_MM_QUAR_LABEL_PDF in this file has an extra optional IV_FORM
+*&   (DRAFT). The version active in DEV client 220 (created 2026-10-26) does
+*&   not have it yet; activating this change needs a separate written go.
 *& STATUS: PROPOSAL FOR REVIEW — not activated, not transported, never
 *&   executed. Activation, and proof that Z_MM_QUAR_LABEL_PDF returns the
 *&   approved PDF without spool/printer side effects, are separate gates
@@ -277,6 +280,7 @@ FUNCTION z_mm_quar_label_pdf.
 *"     VALUE(IV_MBLNR)       TYPE MBLNR
 *"     VALUE(IV_MJAHR)       TYPE MJAHR
 *"     VALUE(IV_TEXT)        TYPE CHAR50 OPTIONAL
+*"     VALUE(IV_FORM)        TYPE FPNAME DEFAULT 'ZMM_AF_017'
 *"  EXPORTING
 *"     VALUE(EV_RESULT)      TYPE CHAR20   " OK | INVALID_INPUT | NOT_FOUND | NOT_AUTHORIZED | NO_LABEL_ROWS | FORM_ERROR | EMPTY_PDF
 *"     VALUE(EV_MESSAGE)     TYPE STRING
@@ -303,6 +307,20 @@ FUNCTION z_mm_quar_label_pdf.
   IF iv_mblnr IS INITIAL OR iv_mjahr IS INITIAL.
     ev_result  = 'INVALID_INPUT'.
     ev_message = 'Material document number and year are required.'.
+    RETURN.
+  ENDIF.
+
+  " DRAFT 2026-10-27 (not activated): IV_FORM selects a layout variant such as a
+  " 4 x 6 in copy (docs/abap/zmm_af_017_4x6-spec.md). Omitted -> ZMM_AF_017, so
+  " existing callers are unchanged. Only active forms on the same interface
+  " ZMM_FI_017 (FPCONTEXT-INTERFACE, confirmed READ-ONLY 2026-10-27) are accepted,
+  " so a caller cannot render an unrelated form with label data.
+  SELECT SINGLE interface FROM fpcontext
+    WHERE name = @iv_form AND state = 'A'
+    INTO @DATA(lv_interface).
+  IF sy-subrc <> 0 OR lv_interface <> 'ZMM_FI_017'.
+    ev_result  = 'INVALID_INPUT'.
+    ev_message = |Form { iv_form } is not an active form on interface ZMM_FI_017.|.
     RETURN.
   ENDIF.
 
@@ -346,7 +364,7 @@ FUNCTION z_mm_quar_label_pdf.
   TRY.
       CALL FUNCTION 'FP_FUNCTION_MODULE_NAME'
         EXPORTING
-          i_name     = 'ZMM_AF_017'
+          i_name     = iv_form
         IMPORTING
           e_funcname = lv_fm_name.
     CATCH cx_fp_api_repository cx_fp_api_usage cx_fp_api_internal INTO DATA(lx_fp).
@@ -395,14 +413,14 @@ FUNCTION z_mm_quar_label_pdf.
       OTHERS         = 4.
 
   IF lv_form_rc <> 0.
-    ev_message = |Form ZMM_AF_017 could not be rendered (rc { lv_form_rc }).|.
+    ev_message = |Form { iv_form } could not be rendered (rc { lv_form_rc }).|.
     RETURN.
   ENDIF.
 
   " FPFORMOUTPUT-PDF is RSTR (raw string), returned as XSTRING.
   IF ls_formoutput-pdf IS INITIAL.
     ev_result  = 'EMPTY_PDF'.
-    ev_message = 'Form ZMM_AF_017 returned no PDF content.'.
+    ev_message = |Form { iv_form } returned no PDF content.|.
     RETURN.
   ENDIF.
 

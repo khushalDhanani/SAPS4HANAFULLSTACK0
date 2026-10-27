@@ -215,20 +215,5 @@ cds.middlewares.add((req, res, next) => {
     next();
 }, { before: 'auth' });
 
-// Startup warning when mvt261NotReadyBins is empty
-cds.on('listening', async () => {
-    try {
-        const BusinessConfigResolver = require('./srv/common/BusinessConfigResolver');
-        const cfg = await BusinessConfigResolver.resolve({ flow: '261', fields: ['mvt261NotReadyBins'] });
-        if (!cfg.mvt261NotReadyBins || cfg.mvt261NotReadyBins.length === 0) {
-            const LOG = require('./srv/common/logger')('server');
-            LOG.warn('[STARTUP WARNING] mvt261NotReadyBins is empty. Blocked/staging bins (such as on-hold or quality inspection bins) are not configured for Movement 261.');
-        }
-    } catch (_) {
-        const LOG = require('./srv/common/logger')('server');
-        LOG.warn('[STARTUP WARNING] mvt261NotReadyBins is empty. Blocked/staging bins (such as on-hold or quality inspection bins) are not configured for Movement 261.');
-    }
-});
-
 // Delegate to default CAP server bootstrap
 module.exports = cds.server;

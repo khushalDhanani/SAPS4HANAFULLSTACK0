@@ -35,6 +35,7 @@ try {
 }
 
 const { sapKey } = require('../integration/s4hana/sapKey');
+const { normalizeQuarantineLabelOutput } = require('../wm/quarantine-label/labelOutput');
 
 class BusinessConfigError extends Error {
   constructor(message) {
@@ -221,6 +222,12 @@ class BusinessConfigResolver {
       throw new BusinessConfigError('BusinessConfig.OversizeHuSelectionBehavior must be BLOCK or WARN.');
     }
     return value;
+  }
+
+  /** Quarantine label form/size of a plant; no row or empty fields = the wrapper's default form, no size check. */
+  async resolveQuarantineLabelOutput(context = {}) {
+    const row = await this._queryDb(String(context.plant || '').trim().toUpperCase(), '');
+    return normalizeQuarantineLabelOutput(row);
   }
 
   /**

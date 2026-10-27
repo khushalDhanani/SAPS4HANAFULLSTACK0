@@ -52,6 +52,10 @@ entity BusinessConfig : managed {
     InterimStorageTypes    : String(200);
     // Oversize-HU setting: “default BLOCK, pending the user's confirmation”.
     OversizeHuSelectionBehavior : String(5) default 'BLOCK';
+    // Quarantine labels (ZQUARAN): Adobe form variant passed to Z_MM_QUAR_LABEL_PDF; empty = the wrapper's default form.
+    QuarantineLabelForm    : String(30);
+    // Expected label size of that form ('4x6'); empty = no page size check.
+    QuarantineLabelSize    : String(10);
 
     // ─── Descriptive ──────────────────────────────────────────────────────────
     Description            : String(100);            // Free-text note for admins

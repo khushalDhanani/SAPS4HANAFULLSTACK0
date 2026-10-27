@@ -11,6 +11,13 @@ service QuarantineLabelService @(path: '/odata/v4/quarantine-label') {
         MaterialDocumentYear : String(4);
         LabelCount           : Integer;
         FileName             : String(80);
+        // Configured label size of the document's plant ('4x6'), null when none is configured
+        LabelSize            : String(10);
+        // First page size of the PDF in points (1/72 in), null when unreadable
+        PageWidthPt          : Double;
+        PageHeightPt         : Double;
+        // null: no size configured; false: the PDF does not have the configured size
+        PageSizeOk           : Boolean;
         // The SAP-rendered PDF, base64-encoded
         PdfBase64            : LargeString;
     }

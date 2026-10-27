@@ -2,6 +2,7 @@
 
 const cds = require('@sap/cds');
 const businessConfigResolver = require('../../common/BusinessConfigResolver');
+const { normalizeQuarantineLabelOutput } = require('../quarantine-label/labelOutput');
 const StorageTypeConfigAdapter = require('../../integration/s4hana/wm/StorageTypeConfigAdapter');
 
 const storageTypeConfigAdapter = new StorageTypeConfigAdapter();
@@ -41,6 +42,15 @@ module.exports = class BusinessConfigService extends cds.ApplicationService {
           return req.error(400, 'OversizeHuSelectionBehavior must be BLOCK or WARN.');
         }
         data.OversizeHuSelectionBehavior = policy;
+      }
+      if (data.QuarantineLabelForm !== undefined || data.QuarantineLabelSize !== undefined) {
+        try {
+          const { formName, labelSize } = normalizeQuarantineLabelOutput(data);
+          if (data.QuarantineLabelForm !== undefined) data.QuarantineLabelForm = formName;
+          if (data.QuarantineLabelSize !== undefined) data.QuarantineLabelSize = labelSize;
+        } catch (error) {
+          return req.error(400, error.message);
+        }
       }
     });
 

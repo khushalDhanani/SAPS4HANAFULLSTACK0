@@ -82,3 +82,7 @@ DD03L and TACTZ). Still open before CAP/Fiori: rendering side effects, which onl
    `srv/integration/s4hana/wm/QuarantineLabelAdapter.js`, Fiori route `wm/quarantine-labels`. Until TFDIR shows
    `Z_MM_QUAR_LABEL_PDF` as remote-enabled, the action answers 503 and calls nothing. After gate 4, re-run the screen
    against SAP (written go) and compare the PDF with the report's output.
+
+## Addendum 2026-10-27 — optional form name (draft)
+
+`Z_MM_QUAR_LABEL_PDF` in `docs/abap/z_mm_quar_label.fugr.abap` now has an optional `IV_FORM TYPE FPNAME DEFAULT 'ZMM_AF_017'`, accepted only for active forms on interface `ZMM_FI_017`. Backward compatible; draft only — the function active in DEV client 220 does not have it yet. Purpose and the 4 x 6 in layout copy: `docs/abap/zmm_af_017_4x6-spec.md`.

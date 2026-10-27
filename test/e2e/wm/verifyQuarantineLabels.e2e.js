@@ -92,6 +92,24 @@ const CASES = [
         }
     },
     {
+        name: 'A PDF that is not the configured 4x6 size shows a warning but stays printable (mocked)',
+        respond: (route) => route.fulfill(json(200, {
+            MaterialDocument: '9900000001', MaterialDocumentYear: '2026', LabelCount: 1, FileName: 'QuarantineLabels_DEMO.pdf',
+            LabelSize: '4x6', PageWidthPt: 595.28, PageHeightPt: 841.89, PageSizeOk: false, PdfBase64: PDF_B64
+        })),
+        run: async (s) => {
+            await fill(s.page, '9900000001', '2026');
+            await s.page.click('[id$="--qlPreview"]');
+            await s.settle();
+            const st = await state(s.page);
+            const errs = [];
+            if (st.messageType !== 'Warning') errs.push(`message type ${st.messageType}`);
+            if (!/595\.28 x 841\.89 pt/.test(st.message) || !/4x6/.test(st.message)) errs.push(`message "${st.message}"`);
+            if (!st.pdfShown || !st.actionsShown) errs.push('preview/print not shown with the size warning');
+            return errs;
+        }
+    },
+    {
         name: 'SAP interface not available (503) is shown as a warning (mocked)',
         respond: (route) => route.fulfill(json(503, { error: { code: '503', message: 'Quarantine labels are not available yet: the SAP interface Z_MM_QUAR_LABEL_PDF is not installed on this system.' } })),
         run: async (s) => {

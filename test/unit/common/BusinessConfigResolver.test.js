@@ -95,6 +95,15 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       expect(await warnResolver.resolveOversizeHuSelectionBehavior({ plant: '1120', warehouse: 'W01' })).toBe('WARN');
     });
 
+    test('resolves the quarantine label form and size per plant; missing config means the default form', async () => {
+      const rows = { DM01: { QuarantineLabelForm: 'zdemo_4x6', QuarantineLabelSize: '4X6' } };
+      const queried = [];
+      const resolver = new BusinessConfigResolver({ dbQuery: async (plant, wh) => { queried.push([plant, wh]); return rows[plant] || null; }, ttlMs: 0 });
+      expect(await resolver.resolveQuarantineLabelOutput({ plant: 'dm01' })).toEqual({ formName: 'ZDEMO_4X6', labelSize: '4x6' });
+      expect(await resolver.resolveQuarantineLabelOutput({ plant: 'DM02' })).toEqual({ formName: null, labelSize: null });
+      expect(queried).toEqual([['DM01', ''], ['DM02', '']]);
+    });
+
     test('BusinessConfig admin API normalizes valid lists and rejects empty or overlapping lists', async () => {
       const BusinessConfigService = require('../../../srv/wm/business-config/service');
       const service = new BusinessConfigService();
@@ -159,6 +168,27 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       }, error: jest.fn() };
       await beforeHandler(req);
       expect(req.error).toHaveBeenCalledWith(503, expect.stringContaining('T301 storage types are unreadable'));
+    });
+
+    test('BusinessConfig admin API normalizes the quarantine label form/size and rejects invalid values', async () => {
+      const BusinessConfigService = require('../../../srv/wm/business-config/service');
+      const service = new BusinessConfigService();
+      let beforeHandler = null;
+      service.before = jest.fn().mockImplementation((events, entity, fn) => {
+        if (events.includes('CREATE')) beforeHandler = fn;
+      });
+      Object.defineProperty(service, 'entities', { value: { BusinessConfigs: 'BusinessConfigs' }, configurable: true });
+      jest.spyOn(cds.ApplicationService.prototype, 'init').mockResolvedValue(service);
+      await service.init();
+
+      const valid = { data: { QuarantineLabelForm: ' zdemo_4x6 ', QuarantineLabelSize: '4X6' }, error: jest.fn() };
+      await beforeHandler(valid);
+      expect(valid.data).toEqual({ QuarantineLabelForm: 'ZDEMO_4X6', QuarantineLabelSize: '4x6' });
+      expect(valid.error).not.toHaveBeenCalled();
+
+      const invalid = { data: { QuarantineLabelSize: 'A6' }, error: jest.fn() };
+      await beforeHandler(invalid);
+      expect(invalid.error).toHaveBeenCalledWith(400, expect.stringContaining('QuarantineLabelSize'));
     });
   });
 

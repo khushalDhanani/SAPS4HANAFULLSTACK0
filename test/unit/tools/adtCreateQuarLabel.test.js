@@ -9,12 +9,13 @@ const full = fs.readFileSync(path.join(__dirname, '../../../docs/abap/z_mm_quar_
 describe('adt-create-quar-label (offline)', () => {
     it('turns the SE37 signature of Z_MM_QUAR_LABEL_PDF into the inline ADT signature', () => {
         const src = toAdtSource(full, 'Z_MM_QUAR_LABEL_PDF');
-        expect(src.split('\n').slice(0, 11).join('\n')).toBe([
+        expect(src.split('\n').slice(0, 12).join('\n')).toBe([
             'FUNCTION z_mm_quar_label_pdf',
             '  IMPORTING',
             '    VALUE(IV_MBLNR) TYPE MBLNR',
             '    VALUE(IV_MJAHR) TYPE MJAHR',
             '    VALUE(IV_TEXT) TYPE CHAR50 OPTIONAL',
+            "    VALUE(IV_FORM) TYPE FPNAME DEFAULT 'ZMM_AF_017'",
             '  EXPORTING',
             '    VALUE(EV_RESULT) TYPE CHAR20',
             '    VALUE(EV_MESSAGE) TYPE STRING',

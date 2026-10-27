@@ -140,19 +140,63 @@ describe('Mvt261Service 518006/3 empty-issue-location, end-to-end through the se
   });
 });
 
-describe('Mvt261Service startup warning', () => {
-  it('logs a warning on startup when mvt261NotReadyBins is empty', async () => {
-    const Mvt261Service = require('../../../srv/wm/mvt261/service');
-    const LOG = require('../../../srv/common/logger')('mvt261-service');
-    const warnSpy = jest.spyOn(LOG, 'warn').mockImplementation(() => {});
+describe('Mvt261Service startup configuration audit', () => {
+  const Mvt261Service = require('../../../srv/wm/mvt261/service');
+  const resolver = require('../../../srv/common/BusinessConfigResolver');
+  const LOG = require('../../../srv/common/logger')('mvt261-service');
+  let warnSpy;
+  beforeEach(() => { warnSpy = jest.spyOn(LOG, 'warn').mockImplementation(() => {}); });
+  afterEach(() => { jest.restoreAllMocks(); });
 
+  it('does not resolve global policy or register another listener during service init', async () => {
+    const resolve = jest.spyOn(resolver, 'resolve');
+    const once = jest.spyOn(cds, 'once').mockImplementation(() => cds);
     const srv = new Mvt261Service();
     srv.on = jest.fn();
+    const audit = jest.spyOn(Mvt261Service, 'checkBinConfiguration').mockResolvedValue();
     await srv.init();
+    expect(resolve).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+    expect(once).not.toHaveBeenCalledWith('listening', expect.any(Function));
+  });
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[STARTUP WARNING] mvt261NotReadyBins is empty')
-    );
-    warnSpy.mockRestore();
+  it('reports absent active rows and queries only the policy columns', async () => {
+    const run = jest.fn().mockResolvedValue([]);
+    await Mvt261Service.checkBinConfiguration({ run });
+    const query = run.mock.calls[0][0].SELECT;
+    expect(query.from.ref).toEqual(['saps4hana.wm.BusinessConfig']);
+    expect(query.columns.map(c => c.ref[0])).toEqual(['Plant', 'WarehouseNumber', 'Mvt261NotReadyBinsJson']);
+    expect(query.where).toEqual([{ ref: ['Active'] }, '=', { val: true }]);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('no active BusinessConfig rows exist'));
+  });
+
+  it.each(['', null, '[]'])('reports an empty rule list with its scope (%s)', async (value) => {
+    await Mvt261Service.checkBinConfiguration({ run: jest.fn().mockResolvedValue([
+      { Plant: '1120', WarehouseNumber: 'W01', Mvt261NotReadyBinsJson: value }
+    ]) });
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Plant=1120, Warehouse=W01: Mvt261NotReadyBinsJson is empty'));
+  });
+
+  it.each(['invalid-json', '{}'])('distinguishes invalid configuration from empty (%s)', async (value) => {
+    await Mvt261Service.checkBinConfiguration({ run: jest.fn().mockResolvedValue([
+      { Plant: '1120', WarehouseNumber: 'W01', Mvt261NotReadyBinsJson: value }
+    ]) });
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('must contain a valid JSON array'));
+    expect(warnSpy.mock.calls.flat().join(' ')).not.toContain(value);
+  });
+
+  it('checks each configured scope independently', async () => {
+    await Mvt261Service.checkBinConfiguration({ run: jest.fn().mockResolvedValue([
+      { Plant: '1120', WarehouseNumber: 'W01', Mvt261NotReadyBinsJson: '[{"storageType":"T01","bin":"TEST","reason":"test"}]' },
+      { Plant: '1150', WarehouseNumber: 'W15', Mvt261NotReadyBinsJson: '' }
+    ]) });
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Plant=1150, Warehouse=W15'));
+  });
+
+  it('reports a database failure without claiming the policy is empty or leaking error details', async () => {
+    await Mvt261Service.checkBinConfiguration({ run: jest.fn().mockRejectedValue(new Error('private-db-details')) });
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('audit failed'));
+    expect(warnSpy.mock.calls.flat().join(' ')).not.toMatch(/private-db-details|is empty/);
   });
 });

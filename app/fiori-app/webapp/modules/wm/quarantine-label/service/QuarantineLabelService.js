@@ -11,7 +11,8 @@ sap.ui.define([
          * Never retried automatically: rendering side effects in SAP are not yet proven.
          *
          * @param {{materialDocument: string, year: string, text: string}} oInput
-         * @returns {Promise<{MaterialDocument: string, MaterialDocumentYear: string, LabelCount: number, FileName: string, PdfBase64: string}>}
+         * @returns {Promise<{MaterialDocument: string, MaterialDocumentYear: string, LabelCount: number, FileName: string,
+         *     LabelSize: ?string, PageWidthPt: ?number, PageHeightPt: ?number, PageSizeOk: ?boolean, PdfBase64: string}>}
          */
         generateLabels: function (oInput) {
             return ODataClient.post(SERVICE_BASE + "/generateLabels", {
