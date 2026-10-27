@@ -2,9 +2,10 @@ sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/modules/wm/quarantine-label/service/QuarantineLabelService",
-    "saps4hana/fiori/modules/wm/quarantine-label/util/QuarLabelLayout",
-    "saps4hana/fiori/modules/wm/quarantine-label/util/QuarLabelPdf"
-], function (BaseController, JSONModel, QuarantineLabelService, QuarLabelLayout, QuarLabelPdf) {
+    "saps4hana/fiori/modules/wm/quarantine-label/util/ZquarLabelLayout",
+    "saps4hana/fiori/modules/wm/quarantine-label/util/ZquarLabelPdf",
+    "saps4hana/fiori/modules/wm/quarantine-label/util/ZquarLabelRows"
+], function (BaseController, JSONModel, QuarantineLabelService, ZquarLabelLayout, ZquarLabelPdf, ZquarLabelRows) {
     "use strict";
 
     /** Same rules as the server (QuarantineLabelAdapter.normalizeInput); the server stays authoritative. */
@@ -121,7 +122,10 @@ sap.ui.define([
             });
         },
 
-        /** App-drawn 4 x 6 labels: SAP label rows -> jsPDF in the browser; shown, printed and downloaded like the SAP PDF. */
+        /**
+         * App-drawn 4 x 6 ZQUAR labels (same layout as the SAP label, bigger barcode): SAP label rows -> label fields ->
+         * jsPDF in the browser; shown, printed and downloaded like the SAP PDF. Printer dpi: the layout's 203 default.
+         */
         on4x6Labels: function () {
             var oVm = this.getModel("qlView");
             if (oVm.getProperty("/busy")) {
@@ -155,7 +159,8 @@ sap.ui.define([
                     throw new Error(that.getText("qlFailed", null, "Quarantine labels could not be generated."));
                 }
                 // Size from the plant's BusinessConfig; the layout's default (4x6) when none is configured
-                return QuarLabelPdf.toBlob(oResult.Rows, that._labelTexts(), { size: oResult.LabelSize || QuarLabelLayout.DEFAULT_SIZE })
+                var mTexts = that._labelTexts();
+                return ZquarLabelPdf.toBlob(ZquarLabelRows.toLabels(oResult.Rows, mTexts), mTexts, { size: oResult.LabelSize || ZquarLabelLayout.DEFAULT_SIZE })
                     .then(function (oPdf) {
                         if (iRequest !== that._iRequest) {
                             return;
@@ -172,7 +177,9 @@ sap.ui.define([
                 if (iRequest !== that._iRequest) {
                     return;
                 }
-                oVm.setProperty("/message", (oError && oError.message) || that.getText("qlFailed", null, "Quarantine labels could not be generated."));
+                // A render error names the label (e.g. a storage unit too long for the barcode); nothing is shown
+                var sRenderError = oError && oError.code && oError.label ? that.getText("ql4x6Error_" + oError.code, [oError.label]) : "";
+                oVm.setProperty("/message", sRenderError || (oError && oError.message) || that.getText("qlFailed", null, "Quarantine labels could not be generated."));
                 oVm.setProperty("/messageType", oError && oError.status === 503 ? "Warning" : "Error");
             }).finally(function () {
                 if (iRequest === that._iRequest) {
@@ -181,12 +188,13 @@ sap.ui.define([
             });
         },
 
-        /** Captions of the 4 x 6 label, resolved from i18n by the layout's caption keys. */
+        /** Static texts and captions of the 4 x 6 label, resolved from i18n by the layout's keys. */
         _labelTexts: function () {
             var that = this;
+            var mKeys = Object.assign({}, ZquarLabelLayout.STATIC_KEYS, ZquarLabelLayout.CAPTION_KEYS, ZquarLabelLayout.EXTRA_KEYS);
             var mTexts = {};
-            Object.keys(QuarLabelLayout.CAPTION_KEYS).forEach(function (k) {
-                mTexts[k] = that.getText(QuarLabelLayout.CAPTION_KEYS[k]);
+            Object.keys(mKeys).forEach(function (k) {
+                mTexts[k] = that.getText(mKeys[k]);
             });
             return mTexts;
         },

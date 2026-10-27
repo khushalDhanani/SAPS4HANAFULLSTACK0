@@ -4,11 +4,11 @@ Purpose: the baseline for "SAME label as today, only the size changes" (4 x 6 in
 
 Source rule: files in this repo only, no SAP calls. Anything not proven by a cited file is **NOT DETERMINED**.
 
-> **Update 2026-10-27:** the user then chose a new design instead of a copy: "I need Fully Customised. understand." So this baseline no longer blocks the build. It remains the record of what is unknown about the SAP label. The new label: `docs/label/zquar-4x6-design.md`.
+> **Update 2026-10-27:** the user first chose a new design ("I need Fully Customised. understand."), then asked for the SAME label at 4 x 6 with a bigger barcode, measured from their sample. The measured layout is below; the earlier "NOT DETERMINED" rows are replaced by it.
 
-## Result
+## Result (before the sample)
 
-**The current layout cannot be determined from the repo, so the build is stopped.**
+**From the repo alone, the current layout could not be determined.**
 - The label is drawn by the Adobe form `ZMM_AF_017` in SAP.
 - Its layout (`FPLAYOUT-LAYOUT`), context (`FPCONTEXT-CONTEXT`) and interface (`FPINTERFACE-INTERFACE`) are raw-string (RSTR) fields, which RFC_READ_TABLE cannot read (`docs/evidence/2026-10-27/zquaran-4x6/form-header-interface.json`).
 - The repo has no sample PDF, screenshot or photo of the label.
@@ -29,20 +29,43 @@ Source rule: files in this repo only, no SAP calls. Anything not proven by a cit
 
 Fields of `ZMM_S_013` and which the report fills: see `docs/abap/zmm_af_017_4x6-spec.md`, section 1. MENGE, LIFNR, VEMNG and ERFME are never filled; MENGE's assignment is commented out (`ZMM_R_062_F01.abap:248`).
 
-## What the requested baseline needs, and its status
+## Current layout — MEASURED (2026-10-27)
 
-| Required for "same label" | Status |
-| --- | --- |
-| Page size of the current label | NOT DETERMINED |
-| Which of the 22 fields are printed | NOT DETERMINED |
-| Caption text of each printed field | NOT DETERMINED (only ZDATE's caption comes as data) |
-| Position, font, size, weight, alignment of each field | NOT DETERMINED |
-| Order / reading flow | NOT DETERMINED |
-| Barcode type, encoded field, size | NOT DETERMINED |
-| Logo, lines, boxes, frames | NOT DETERMINED |
-| Labels per page | NOT DETERMINED (one row = one label is INFERRED from the data, not seen) |
-| Static wording (titles, e.g. "QUARANTINE") | NOT DETERMINED |
-| Language of captions | NOT DETERMINED (English layout exists; other languages not checked) |
+Source: the user's sample label PDF, measured by the user and given in their task (the "MEASURED" column). The sample is **not** in the repo and must not be committed: it holds real business data. I spot-checked it locally without copying or printing its values ("Checked" column).
+- **Units and origin:** pt; origin top-left; y = top of the text box.
+- **Fonts:** Helvetica and Helvetica-Bold only (checked).
+- **Pages:** the file checked (`14_6ZQuran0SAPS4HANAFiori.pdf`, 2,132 bytes) has **1 page** (`/Count 1`). The task describes 10 pages, so the 10-page file was not checked.
+
+| Item | MEASURED (user) | Checked in the sample |
+| --- | --- | --- |
+| Page | 288 x 288 pt; content area x 36..274; left strip x 0..36 | MediaBox `0 0 288 288` |
+| Vertical rule | x 36.7, y -0.2..227.1, 0.5 pt | x 36.72, y -0.25..227.05, 0.5 pt |
+| Horizontal rule | y 34.5, x 35.8..273.9, 0.5 pt | y 34.51, x 35.75..273.85, 0.5 pt |
+| Title "Aether Industries Limited" | Helvetica-Bold 16, centred over x 36..274, top 13.2 | 16 pt bold, starts x 58.3 |
+| Strip: "QUARANTINE" | bold ~14 pt, rotated 90° counter-clockwise, x 5..19, y 66..160, static | 14 pt bold, rotated |
+| Strip: form number "F-06-00-SOP-WH-002-01/09/2016" | Helvetica ~7 pt, rotated, x 23..31, y 52..170, static | **8 pt** regular, rotated |
+| Captions | Helvetica-Bold 9.5 at x 38.8 | 9.5 pt bold, x 38.8 |
+| Values | Helvetica 9.5 at x 102.9 (9.0 for the GRN values) | 9.5 pt at x 102.9; GRN values 9 pt |
+| Material Name | top 38.8 | — |
+| GRN No. | top 67.6 | — |
+| GRN Date | caption x 173.8 top 68.4, value x 226.2 | caption x 173.8, value x 226.2 (9 pt) |
+| INW. No | top 83.4 | — |
+| Qty. Received | top 100.8 | — |
+| Container No | caption x 169.9, value x 230.7 = "n OF total", top 100.8 | value x 230.7 |
+| Manufacturer | top 117.5; value may be empty; 26.5 pt reserved | — |
+| Supplier | top 144.0, up to 2 lines | — |
+| Batch No | top 166.2 | — |
+| Date columns, captions top 181 | "Mfg. Date" x 38.8, "Expiry Date" x 114.4, "Net Weight" x 208.4 (9.0) | x 38.8 / – / 208.4 (9 pt) |
+| Date columns, values top 193.9 | x 38.8, 119.8, 214.4 (9.0) | x 38.8, 119.8, 214.4 (9 pt) |
+| Prepared by | caption top 212.5; value area blank (handwriting) | caption x 38.8 |
+| Barcode | x 37.2..157.9, y 234..261 (27 pt), 40 bars, 1–4 modules, module 0.844 pt | 40 bars, 145 modules, module 0.844 pt, bars y 234..261; **bar edges x 36.36..158.74** |
+| Barcode symbology | INFERRED: Code 128 B, 10 characters | **Decoded:** start code B, 10 data characters (all digits), valid checksum, valid stop pattern |
+| Barcode content | INFERRED: same number as printed below | **Decoded value equals the printed number**; that number appears nowhere else on the label, so the data field it comes from is UNKNOWN |
+| Human-readable number | Helvetica 11, x 47.8, top 263.5 | 11 pt regular, x 47.8 |
+| Known defects (user) | "Qty. Received" touches its value; "Container No" touches "1 OF 14" | confirmed by width: Qty. Received ends x 101.6 (value 102.9); Container No ends x 229.5 (value 230.7) |
+| Further defects found | — | "Material Name" at 9.5 pt ends x 103.2, **overlapping** its value at 102.9; "Manufacturer" ends x 99.0, gap 3.9 pt; the barcode has **no left quiet zone** (first bar at x 36.36, left of the vertical rule) |
+
+Caption widths are Helvetica-Bold AFM widths (the metrics the renderer uses). The barcode was decoded with the Code 128 table in `app/fiori-app/webapp/modules/wm/handling-unit/util/Barcode.js`; the decoded value was never printed or stored.
 
 ## What would determine it (any one is enough to start)
 

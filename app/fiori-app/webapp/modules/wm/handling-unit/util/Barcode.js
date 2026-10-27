@@ -21,15 +21,16 @@ sap.ui.define([], function () {
      * Code 128 symbol values for a text: start, data, checksum, stop.
      * All-digit strings use subset C (two digits per symbol, ~half the modules → wider bars); an odd trailing
      * digit switches to Code B for that one digit. Any non-digit content uses subset B throughout.
+     * sSubset "B" forces subset B for every text (labels that must keep an existing Code 128 B symbology).
      */
-    function encode(sText) {
+    function encode(sText, sSubset) {
         var s = String(sText === undefined || sText === null ? "" : sText);
         if (!s) {
             throw new Error("Barcode text is empty");
         }
         var aValues = [];
         var nStart;
-        if (/^\d+$/.test(s) && s.length >= 2) {
+        if (sSubset !== "B" && /^\d+$/.test(s) && s.length >= 2) {
             nStart = START_C;
             var nEven = s.length - (s.length % 2); // digits encoded as Code C pairs
             for (var i = 0; i < nEven; i += 2) {
@@ -55,8 +56,8 @@ sap.ui.define([], function () {
     }
 
     /** Bar geometry in module units: { total, bars:[{x,w}] } with 10-module quiet zones. Shared by toSvg and the PDF renderer. */
-    function bars(sText) {
-        var aSymbols = encode(sText);
+    function bars(sText, sSubset) {
+        var aSymbols = encode(sText, sSubset);
         var aBars = [];
         var x = QUIET;
         aSymbols.forEach(function (v) {

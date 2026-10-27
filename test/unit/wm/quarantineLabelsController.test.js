@@ -3,10 +3,11 @@
 /** QuarantineLabels controller without a UI5 runtime: validation, one request at a time, stale answers, errors. */
 let ctrl;
 const Service = { generateLabels: jest.fn(), labelRows: jest.fn() };
-const Layout = { DEFAULT_SIZE: '4x6', CAPTION_KEYS: { title: 'qlLabelTitle', empty: 'qlLabelEmpty' } };
+const Layout = { DEFAULT_SIZE: '4x6', STATIC_KEYS: { title: 'zqTitle' }, CAPTION_KEYS: { grnNo: 'zqGrnNo' }, EXTRA_KEYS: { retestDate: 'zqRetestDate' } };
 const Pdf = { toBlob: jest.fn() };
+const Rows = { toLabels: jest.fn((rows) => rows.map((r) => ({ barcode: r.StorageUnit }))) };
 const BaseController = { extend: (name, obj) => { ctrl = obj; return obj; } };
-global.sap = { ui: { define: (deps, f) => f(BaseController, function () {}, Service, Layout, Pdf) } };
+global.sap = { ui: { define: (deps, f) => f(BaseController, function () {}, Service, Layout, Pdf, Rows) } };
 require('../../../app/fiori-app/webapp/modules/wm/quarantine-label/controller/QuarantineLabels.controller.js');
 
 const PDF_B64 = Buffer.from('%PDF-1.7').toString('base64');
@@ -119,7 +120,9 @@ describe('QuarantineLabels controller', () => {
             const { s, d } = subject();
             await s.on4x6Labels();
             expect(Service.labelRows).toHaveBeenCalledWith({ materialDocument: '4900050304', year: '2026', text: '' });
-            expect(Pdf.toBlob).toHaveBeenCalledWith(rows.Rows, { title: 'qlLabelTitle', empty: 'qlLabelEmpty' }, { size: '4x6' });
+            const texts = { title: 'zqTitle', grnNo: 'zqGrnNo', retestDate: 'zqRetestDate' };
+            expect(Rows.toLabels).toHaveBeenCalledWith(rows.Rows, texts);
+            expect(Pdf.toBlob).toHaveBeenCalledWith([{ barcode: 'DEMO' }, { barcode: 'DEMO2' }], texts, { size: '4x6' });
             expect(d.pdfUrl).toBe('blob:pdf-1');
             expect(d.fileName).toBe('QuarantineLabels4x6_9900000001_2026.pdf');
             expect(d.messageType).toBe('Success');
@@ -150,6 +153,19 @@ describe('QuarantineLabels controller', () => {
             expect(d.messageType).toBe('Warning');
             expect(d.pdfUrl).toBe('');
             expect(d.busy).toBe(false);
+        });
+        it('a label that cannot be drawn names the label, shows nothing and keeps the SAP PDF action separate', async () => {
+            Service.labelRows.mockResolvedValue(rows);
+            Pdf.toBlob.mockRejectedValue(Object.assign(new Error('too long'), { code: 'barcodeTooLong', label: 2 }));
+            const { s, d } = subject({ getTextArgs: true });
+            const texts = [];
+            s.getText = (k, a) => { texts.push([k, a]); return k; };
+            await s.on4x6Labels();
+            expect(texts).toContainEqual(['ql4x6Error_barcodeTooLong', [2]]);
+            expect(d.message).toBe('ql4x6Error_barcodeTooLong');
+            expect(d.messageType).toBe('Error');
+            expect(d.pdfUrl).toBe('');
+            expect(Service.generateLabels).not.toHaveBeenCalled();
         });
         it('validates locally before calling the service', () => {
             const { s, d } = subject({ year: '26' });

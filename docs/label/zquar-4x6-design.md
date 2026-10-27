@@ -1,5 +1,7 @@
 # App-drawn 4 x 6 in quarantine label: design and comparison
 
+> **Superseded 2026-10-27:** the fully customised renderer described here was replaced by the same-label 4 x 6 renderer (`docs/label/zquar-4x6-same-label.md`); its modules, test, sample and tool were removed. The section **How CAP rebuilds the rows** (option 2 data path) is still current.
+
 Status 2026-10-27: built and tested in the app with synthetic data. The label data is rebuilt in CAP from read-only SAP table reads (no ABAP change). A live read against SAP data has not been run yet.
 
 ## User decisions (quoted)
