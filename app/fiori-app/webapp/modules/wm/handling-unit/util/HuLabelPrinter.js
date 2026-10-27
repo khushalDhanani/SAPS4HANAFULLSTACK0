@@ -174,22 +174,9 @@ sap.ui.define([
         return "";
     }
 
-    /**
-     * Prints clean labels via a hidden iframe (no popup blocker). Resolves once print() is invoked.
-     * Rejects on an empty set or a failed integrity check (nothing is printed).
-     */
-    function print(aLabels, oTexts, sizeOrKey) {
+    /** Prints an HTML document via a hidden iframe (no popup blocker). Resolves once print() is invoked. */
+    function printHtml(sHtml) {
         return new Promise(function (resolve, reject) {
-            if (!aLabels || !aLabels.length) {
-                reject(new Error("No labels to print"));
-                return;
-            }
-            var sHtml = buildHtml(aLabels, oTexts, sizeOrKey);
-            var sErr = integrity(sHtml, aLabels.length);
-            if (sErr) {
-                reject(new Error(sErr));
-                return;
-            }
             var oFrame = document.createElement("iframe");
             oFrame.setAttribute("aria-hidden", "true");
             oFrame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
@@ -210,6 +197,27 @@ sap.ui.define([
         });
     }
 
+    /**
+     * Prints clean labels via a hidden iframe (no popup blocker). Resolves once print() is invoked.
+     * Rejects on an empty set or a failed integrity check (nothing is printed).
+     */
+    function print(aLabels, oTexts, sizeOrKey) {
+        if (!aLabels || !aLabels.length) {
+            return Promise.reject(new Error("No labels to print"));
+        }
+        var sHtml;
+        try {
+            sHtml = buildHtml(aLabels, oTexts, sizeOrKey);
+        } catch (e) {
+            return Promise.reject(e);
+        }
+        var sErr = integrity(sHtml, aLabels.length);
+        if (sErr) {
+            return Promise.reject(new Error(sErr));
+        }
+        return printHtml(sHtml);
+    }
+
     /** Convenience: detail records (+serials) -> validate -> print at the given size. Resolves with the print summary. */
     function printRecords(aRecords, oTexts, sizeOrKey) {
         var oPrep = prepare((aRecords || []).map(toRecord));
@@ -227,6 +235,7 @@ sap.ui.define([
         buildHtml: buildHtml,
         integrity: integrity,
         print: print,
+        printHtml: printHtml,
         printRecords: printRecords
     };
 });

@@ -134,7 +134,7 @@ sap.ui.define([
         if (last.top + last.pt > ruleEnd - GAP * k) { throw new Error("Label size too small for the quarantine label layout"); }
 
         // Left strip: QUARANTINE then the form number, rotated 90 degrees counter-clockwise (read bottom to top),
-        // glyph height as designed, stretched along the strip by the page's height ratio (user decision).
+        // normal width (user decision 2026-10-27: x1.5 stretch removed); shrunk only if longer than the strip.
         var qPt = pt(TYPE.quarantine);
         var fPt = pt(TYPE.formNumber);
         var qBand = edge;
@@ -148,7 +148,7 @@ sap.ui.define([
             ruleH: { y: BASE.ruleH.y * sy, x0: X(BASE.ruleH.x0), x1: X(BASE.ruleH.x1) },
             title: { x0: X(BASE.content.x0), x1: X(274), top: BASE.titleTop * sy, pt: pt(TYPE.title) },
             strip: {
-                center: ruleEnd / 2, length: ruleEnd - 2 * edge, hScale: sy,
+                center: ruleEnd / 2, length: ruleEnd - 2 * edge, hScale: 1,
                 quarantine: { band: qBand, pt: qPt },
                 formNumber: { band: fBand, pt: fPt }
             },

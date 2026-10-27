@@ -110,7 +110,7 @@ const CASES = [
         }
     },
     {
-        name: 'App-drawn 4x6 labels: SAP rows (mocked, DEMO) become a 288 x 432 pt PDF with print/download',
+        name: 'App-drawn 4x6 labels: SAP rows (mocked, DEMO) become a 288 x 432 pt PDF; Print sends an exact 4x6 page',
         respond: (route) => route.fulfill(/labelRows$/.test(route.request().url())
             ? json(200, {
                 MaterialDocument: '9900000001', MaterialDocumentYear: '2026', LabelSize: null,
@@ -137,7 +137,23 @@ const CASES = [
                 const t = await (await fetch(src)).text();
                 return { boxes: t.match(/\/MediaBox\s*\[[^\]]*\]/g) || [], head: t.slice(0, 5) };
             });
+            // Print: the browser gets an HTML page sized exactly to the label (not the PDF fitted to the default paper)
+            await s.page.evaluate(() => {
+                window.__qlPrintDocs = [];
+                new window.MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => {
+                    if (n.tagName === 'IFRAME') window.__qlPrintDocs.push(n.srcdoc || n.src || '');
+                }))).observe(window.document.body, { childList: true });
+            });
+            await s.page.click('[id$="--qlPrint"]');
+            await s.page.waitForFunction(() => window.__qlPrintDocs.length > 0, null, { timeout: 5000 }).catch(() => {});
+            const printed = await s.page.evaluate(() => window.__qlPrintDocs);
             const errs = [];
+            if (printed.length !== 1) errs.push(`${printed.length} print frames`);
+            else {
+                if (!printed[0].includes('@page{size:288pt 432pt;margin:0}')) errs.push('print document not sized 288 x 432 pt with no margin');
+                const svgs = printed[0].match(/<svg [^>]*width="288pt" height="432pt"/g) || [];
+                if (svgs.length !== 2) errs.push(`${svgs.length} label pages in the print document`);
+            }
             if (calls.length !== 1) errs.push(`action called ${calls.length} times`);
             if (st.messageType !== 'Success' || !/2 label/.test(st.message)) errs.push(`message ${st.messageType} "${st.message}"`);
             if (!st.pdfShown || !st.actionsShown) errs.push('PDF or print/download not shown');

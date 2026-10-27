@@ -4,7 +4,7 @@
 let ctrl;
 const Service = { generateLabels: jest.fn(), labelRows: jest.fn() };
 const Layout = { DEFAULT_SIZE: '4x6', STATIC_KEYS: { title: 'zqTitle' }, CAPTION_KEYS: { grnNo: 'zqGrnNo' }, EXTRA_KEYS: { retestDate: 'zqRetestDate' } };
-const Pdf = { toBlob: jest.fn() };
+const Pdf = { toBlob: jest.fn(), print: jest.fn() };
 const Rows = { toLabels: jest.fn((rows) => rows.map((r) => ({ barcode: r.StorageUnit }))) };
 const BaseController = { extend: (name, obj) => { ctrl = obj; return obj; } };
 global.sap = { ui: { define: (deps, f) => f(BaseController, function () {}, Service, Layout, Pdf, Rows) } };
@@ -183,6 +183,40 @@ describe('QuarantineLabels controller', () => {
             await p;
             expect(Pdf.toBlob).not.toHaveBeenCalled();
             expect(d.pdfUrl).toBe('');
+        });
+        it('prints the app-drawn labels from the exact-size print document, not the PDF', async () => {
+            Service.labelRows.mockResolvedValue(rows);
+            Pdf.toBlob.mockResolvedValue({ blob: {}, warnings: [] });
+            Pdf.print.mockResolvedValue();
+            const { s } = subject();
+            await s.on4x6Labels();
+            await s.onPrint();
+            const texts = { title: 'zqTitle', grnNo: 'zqGrnNo', retestDate: 'zqRetestDate' };
+            expect(Pdf.print).toHaveBeenCalledWith([{ barcode: 'DEMO' }, { barcode: 'DEMO2' }], texts, { size: '4x6' });
+        });
+        it('a print failure is shown as an error', async () => {
+            Service.labelRows.mockResolvedValue(rows);
+            Pdf.toBlob.mockResolvedValue({ blob: {}, warnings: [] });
+            Pdf.print.mockRejectedValue(new Error('print blocked'));
+            const { s, d } = subject();
+            await s.on4x6Labels();
+            await s.onPrint();
+            expect(d.message).toBe('print blocked');
+            expect(d.messageType).toBe('Error');
+        });
+        it('the SAP PDF afterwards prints as the PDF again (print job cleared)', async () => {
+            Service.labelRows.mockResolvedValue(rows);
+            Pdf.toBlob.mockResolvedValue({ blob: {}, warnings: [] });
+            Service.generateLabels.mockResolvedValue(ok);
+            const { s } = subject();
+            await s.on4x6Labels();
+            await s.onPreview();
+            const frame = { style: {} };
+            global.document = { createElement: jest.fn(() => frame), body: { appendChild: jest.fn() } };
+            s.onPrint();
+            expect(Pdf.print).not.toHaveBeenCalled();
+            expect(frame.src).toBe('blob:pdf-1');
+            delete global.document;
         });
     });
 });

@@ -13,9 +13,12 @@ global.sap.ui.define = (d, f) => { Hu = f(Barcode); };
 require(R + 'wm/handling-unit/util/HuLabelLayout.js');
 global.sap.ui.define = (d, f) => { HuPdf = f(Barcode, Hu); };
 require(R + 'wm/handling-unit/util/HuLabelPdf.js');
+let Printer;
+global.sap.ui.define = (d, f) => { Printer = f(Barcode, Hu); };
+require(R + 'wm/handling-unit/util/HuLabelPrinter.js');
 global.sap.ui.define = (d, f) => { Layout = f(Barcode, Hu); };
 require(R + 'wm/quarantine-label/util/ZquarLabelLayout.js');
-global.sap.ui.define = (d, f) => { Pdf = f(Layout, HuPdf); };
+global.sap.ui.define = (d, f) => { Pdf = f(Layout, HuPdf, Printer); };
 require(R + 'wm/quarantine-label/util/ZquarLabelPdf.js');
 let Rows;
 global.sap.ui.define = (d, f) => { Rows = f(); };
@@ -112,13 +115,13 @@ describe('ZQUAR 4 x 6 label', () => {
         expect(t.filter((s) => s === DEMO.barcode)).toHaveLength(2); // GRN No. and human-readable (same DEMO value)
     });
 
-    it('strip texts: rotated 90 degrees, stretched x1.5 along the strip, inside the 4 mm margin and left of the rule', () => {
+    it('strip texts: rotated 90 degrees at normal width (no stretch), inside the 4 mm margin and left of the rule', () => {
         const L = L4x6();
         const r = Layout.render(L, DEMO, TEXTS);
         const q = find(r, TEXTS.quarantine);
         const f = find(r, TEXTS.formNumber);
         [q, f].forEach((it) => {
-            expect(it).toMatchObject({ angle: 90, hScale: 1.5 });
+            expect(it).toMatchObject({ angle: 90, hScale: 1 });
             const b = box(it);
             expect(b.x0).toBeGreaterThanOrEqual(4 * MM - EPS);
             expect(b.x1).toBeLessThan(L.ruleV.x);
@@ -322,6 +325,49 @@ describe('ZQUAR 4 x 6 label', () => {
         it('a storage unit too long for the barcode fails with a coded error naming the label', () => {
             const rows = Rows.toLabels([capRow, { ...capRow, StorageUnit: 'DEMO-STORAGE-UNIT-20' }], TEXTS);
             expect(() => Pdf.generate(jsPDF, rows, TEXTS, {})).toThrow(expect.objectContaining({ code: 'barcodeTooLong', label: 2 }));
+        });
+    });
+    describe('print document (exact label size, no fit-to-page)', () => {
+        const rows = [DEMO, { ...DEMO, supplier: 'A & B <Ltd>', containerNo: '2 OF 14', barcode: '9900000002' }];
+        const html = () => Pdf.buildHtml(rows, TEXTS, {});
+
+        it('@page is exactly the label (288 x 432 pt) with no margin; one SVG page of that size per label', () => {
+            const h = html();
+            expect(h).toContain('@page{size:288pt 432pt;margin:0}');
+            const svgs = h.match(/<svg [^>]*>/g);
+            expect(svgs).toHaveLength(2);
+            svgs.forEach((t) => expect(t).toContain('width="288pt" height="432pt" viewBox="0 0 288 432"'));
+            expect(h).toMatch(/\.zq\{display:block;break-after:page/);
+        });
+
+        it('draws exactly the PDF draw list: same bars, rules and texts at the same coordinates', () => {
+            const page = html().split('<svg ')[1];
+            const r = Layout.render(L4x6(), DEMO, TEXTS);
+            const bars = r.items.filter((i) => i.kind === 'bar');
+            expect(page.match(/<rect /g)).toHaveLength(bars.length);
+            expect(page).toContain(`<rect x="${bars[0].x}" y="${bars[0].y}" width="${bars[0].w}" height="${bars[0].h}"`);
+            expect(page.match(/<line /g)).toHaveLength(2);
+            textItems(r).forEach((t) => expect(page).toContain(`translate(${t.x} ${t.y})`));
+            const q = find(r, TEXTS.quarantine);
+            expect(page).toContain(`translate(${q.x} ${q.y}) rotate(-90)" font-size="${q.pt}" font-weight="bold">${TEXTS.quarantine}<`);
+            expect(page).toContain('text-anchor="middle">' + TEXTS.title + '<');
+        });
+
+        it('escapes values and refuses an undrawable label by number', () => {
+            expect(html()).toContain('A &amp; B &lt;Ltd&gt;');
+            expect(() => Pdf.buildHtml([DEMO, { ...DEMO, barcode: '9'.repeat(40) }], TEXTS, {}))
+                .toThrow(expect.objectContaining({ code: 'barcodeTooLong', label: 2 }));
+            expect(() => Pdf.buildHtml([], TEXTS, {})).toThrow('No labels');
+        });
+
+        it('print() hands the document to the shared HU iframe printer; errors reject without printing', async () => {
+            const spy = jest.spyOn(Printer, 'printHtml').mockResolvedValue();
+            await Pdf.print(rows, TEXTS, {});
+            expect(spy).toHaveBeenCalledWith(html());
+            spy.mockClear();
+            await expect(Pdf.print([], TEXTS, {})).rejects.toThrow('No labels');
+            expect(spy).not.toHaveBeenCalled();
+            spy.mockRestore();
         });
     });
 });

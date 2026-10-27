@@ -1,7 +1,8 @@
 sap.ui.define([
     "saps4hana/fiori/modules/wm/quarantine-label/util/ZquarLabelLayout",
-    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPdf"
-], function (Layout, HuLabelPdf) {
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPdf",
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelPrinter"
+], function (Layout, HuLabelPdf, HuLabelPrinter) {
     "use strict";
 
     /** Plays one label's draw list (pt, top-left origin) onto the current jsPDF page (unit pt). */
@@ -62,5 +63,59 @@ sap.ui.define([
         });
     }
 
-    return { generate: generate, toBlob: toBlob, drawItems: drawItems };
+    /** One label's draw list as an SVG page in pt (same coordinates and baselines as the PDF). */
+    function svgPage(L, aItems) {
+        var esc = HuLabelPrinter.esc;
+        var out = aItems.map(function (it) {
+            if (it.kind === "line") {
+                return '<line x1="' + it.x1 + '" y1="' + it.y1 + '" x2="' + it.x2 + '" y2="' + it.y2 + '" stroke="#000" stroke-width="' + it.w + '"/>';
+            }
+            if (it.kind === "bar") {
+                return '<rect x="' + it.x + '" y="' + it.y + '" width="' + it.w + '" height="' + it.h + '" fill="#000" shape-rendering="crispEdges"/>';
+            }
+            // jsPDF angle 90 = counter-clockwise about the baseline start; hScale stretches along the text direction
+            var sTransform = "translate(" + it.x + " " + it.y + ")" + (it.angle ? " rotate(" + (-it.angle) + ")" : "") +
+                (it.hScale && it.hScale !== 1 ? " scale(" + it.hScale + " 1)" : "");
+            return '<text transform="' + sTransform + '" font-size="' + it.pt + '" font-weight="' + (it.bold ? "bold" : "normal") + '"' +
+                (it.align === "center" ? ' text-anchor="middle"' : "") + ">" + esc(it.text) + "</text>";
+        }).join("");
+        return '<svg class="zq" xmlns="http://www.w3.org/2000/svg" width="' + L.page.wPt + 'pt" height="' + L.page.hPt + 'pt" viewBox="0 0 ' +
+            L.page.wPt + " " + L.page.hPt + '" font-family="Helvetica, Arial, sans-serif" fill="#000">' + out + "</svg>";
+    }
+
+    /**
+     * Print document for the labels: one SVG page per row with @page = label size and no margin, so the browser
+     * prints at 100 % on the label stock (a PDF in an iframe is fitted to the printer's default paper instead).
+     */
+    function buildHtml(aRows, oTexts, oOpts) {
+        if (!aRows || !aRows.length) { throw new Error("No labels to render"); }
+        var L = Layout.layout((oOpts && oOpts.size) || Layout.DEFAULT_SIZE, { dpi: oOpts && oOpts.dpi });
+        var aPages = aRows.map(function (row, i) {
+            try {
+                return svgPage(L, Layout.render(L, row, oTexts).items);
+            } catch (e) {
+                throw Object.assign(new Error(e.message), { code: e.code || "renderFailed", label: i + 1 });
+            }
+        });
+        return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Quarantine Labels</title><style>" +
+            "@page{size:" + L.page.wPt + "pt " + L.page.hPt + "pt;margin:0}" +
+            "html,body{margin:0;padding:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
+            // No kerning/ligatures: glyphs advance by the AFM widths the layout measured, as in the PDF
+            ".zq{display:block;break-after:page;page-break-after:always;font-kerning:none;font-variant-ligatures:none;text-rendering:geometricPrecision}" +
+            ".zq:last-child{break-after:auto;page-break-after:auto}" +
+            "</style></head><body>" + aPages.join("") + "</body></html>";
+    }
+
+    /** Opens the browser print dialog for the labels at their exact size. */
+    function print(aRows, oTexts, oOpts) {
+        var sHtml;
+        try {
+            sHtml = buildHtml(aRows, oTexts, oOpts);
+        } catch (e) {
+            return Promise.reject(e);
+        }
+        return HuLabelPrinter.printHtml(sHtml);
+    }
+
+    return { generate: generate, toBlob: toBlob, drawItems: drawItems, buildHtml: buildHtml, print: print };
 });

@@ -160,11 +160,14 @@ sap.ui.define([
                 }
                 // Size from the plant's BusinessConfig; the layout's default (4x6) when none is configured
                 var mTexts = that._labelTexts();
-                return ZquarLabelPdf.toBlob(ZquarLabelRows.toLabels(oResult.Rows, mTexts), mTexts, { size: oResult.LabelSize || ZquarLabelLayout.DEFAULT_SIZE })
+                var aLabels = ZquarLabelRows.toLabels(oResult.Rows, mTexts);
+                var oOpts = { size: oResult.LabelSize || ZquarLabelLayout.DEFAULT_SIZE };
+                return ZquarLabelPdf.toBlob(aLabels, mTexts, oOpts)
                     .then(function (oPdf) {
                         if (iRequest !== that._iRequest) {
                             return;
                         }
+                        that._oPrintJob = { labels: aLabels, texts: mTexts, opts: oOpts };
                         oVm.setProperty("/pdfUrl", URL.createObjectURL(oPdf.blob));
                         oVm.setProperty("/fileName", "QuarantineLabels4x6_" + oResult.MaterialDocument + "_" + oResult.MaterialDocumentYear + ".pdf");
                         oVm.setProperty("/labelCount", oResult.Rows.length);
@@ -213,11 +216,22 @@ sap.ui.define([
             document.body.removeChild(oLink);
         },
 
-        /** Opens the browser print dialog for the same PDF; whether it is printed is up to the user and printer. */
+        /**
+         * Opens the browser print dialog; whether it is printed is up to the user and printer. App-drawn labels print
+         * from an HTML page with @page = label size (exact size, 100 %); the SAP PDF prints as the PDF itself.
+         */
         onPrint: function () {
-            var sUrl = this.getModel("qlView").getProperty("/pdfUrl");
+            var oVm = this.getModel("qlView");
+            var sUrl = oVm.getProperty("/pdfUrl");
             if (!sUrl) {
                 return;
+            }
+            if (this._oPrintJob) {
+                var that = this;
+                return ZquarLabelPdf.print(this._oPrintJob.labels, this._oPrintJob.texts, this._oPrintJob.opts).catch(function (oError) {
+                    oVm.setProperty("/message", (oError && oError.message) || that.getText("qlFailed", null, "Quarantine labels could not be generated."));
+                    oVm.setProperty("/messageType", "Error");
+                });
             }
             var oFrame = document.createElement("iframe");
             oFrame.style.display = "none";
@@ -252,6 +266,7 @@ sap.ui.define([
             if (!oVm) {
                 return;
             }
+            this._oPrintJob = null;
             var sUrl = oVm.getProperty("/pdfUrl");
             if (sUrl) {
                 URL.revokeObjectURL(sUrl);
