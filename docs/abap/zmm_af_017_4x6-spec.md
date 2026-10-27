@@ -1,178 +1,136 @@
 # 4 x 6 in quarantine label: copy of Adobe form ZMM_AF_017
 
-For the ABAP developer. Draft, 2026-10-27. Nothing below has been created or changed in SAP.
+For the ABAP developer. Draft, 2026-10-27. Nothing below has been created or changed in SAP; no SAP call was made to write it.
 
-## Decision and limits
+## Decisions and limits
 
-- The user chose this route in their own words: "ZQUAR label from ZQUARAN, option 1".
-- The user also set these limits: "Do NOT modify the original form, ZMM_R_062 or ZQUARAN. No SAP writes."
-- Result: the 4 x 6 layout is a **new copy** of `ZMM_AF_017`. The original form, report `ZMM_R_062` and transaction `ZQUARAN` stay unchanged.
+User decisions, in the user's words:
+- "Size will be my": 4 x 6 in.
+- "Increase size of barcode".
+- "get the same as from the programme": the label comes from the SAP Adobe form, not from a browser rebuild.
+- "10 pt everywhere (Recommended)": resolves a width conflict in the layout proposal (section 3).
+- "printer dpi stays 203".
+- Earlier: "ZQUAR label from ZQUARAN, option 1".
 
-| Item | Value | Source |
+Limits set by the user:
+- Do not modify `ZMM_AF_017`, `ZMM_R_062`, `ZQUARAN` or `Z_MM_QUAR_LABEL_PDF` in SAP.
+- The 4 x 6 label is a **new copy** of `ZMM_AF_017`.
+
+The mm values in section 3 are a design proposal, not user decisions. Adjust them in the Designer preview but keep the principles.
+
+| Item | Value | Status |
 | --- | --- | --- |
-| Page | 101.6 x 152.4 mm (4 x 6 in), portrait | User request ("portrait unless I say otherwise") |
-| New form name | **NOT PROVIDED** | Do not invent; the user names it |
-| Printer resolution | **PENDING** (203 or 300 dpi) | Not given |
-| Transport request | **NOT PROVIDED** | Needed only for the transportable route below |
+| Page | 101.6 x 152.4 mm (288 x 432 pt), portrait | user decision |
+| New form name | — | **NOT PROVIDED / PENDING** (user / developer; do not invent) |
+| Printer | 203 dpi | user: "printer dpi stays 203"; model **PENDING** |
+| Output device, page format in SPAD | — | **PENDING** (Basis) |
+| Transport request | — | **PENDING** (developer) |
+| Package of the copy | ZAMM proposed (transportable: TDEVC READ-ONLY 2026-10-26, DLVUNIT HOME, parent ZDS4) | **PENDING** (developer) |
 
-## 1. What is known about ZMM_AF_017 (READ-ONLY, 2026-10-27)
+## 1. What is known about the original
 
-Evidence: `docs/evidence/2026-10-27/zquaran-4x6/form-header-interface.json`. This was read with RFC_READ_TABLE only, after checking every field name in DD03L. No user, host or client values were stored.
+| Fact | Evidence |
+| --- | --- |
+| `ZMM_AF_017`: active, interface `ZMM_FI_017`, layout type `S`, English layout | `docs/evidence/2026-10-27/zquaran-4x6/form-header-interface.json` (READ-ONLY) |
+| Data: one table `GT_FINAL` (`ZMM_TT_026`, row `ZMM_S_013`); generated function `/1BCDWB/SM00000137` | `docs/evidence/2026-10-26/zquaran/generated-form-contract.json` |
+| Current layout: page, every text, the rules and the barcode, MEASURED from the user's sample PDF | `docs/label/zquar-current-layout.md` |
+| Barcode: Code 128 **subset B**, 10 digit characters, valid checksum. The printed number equals the encoded value. | MEASURED (decoded locally from the sample's 40 bars). It was INFERRED until decoded; decoding was done without printing the value. |
 
-| Object | Fact | Evidence |
-| --- | --- | --- |
-| Form | `ZMM_AF_017`, active (STATE `A`), interface `ZMM_FI_017`, last changed 2026-09-28 | FPCONTEXT, FPLAYOUT |
-| Layout | Layout type `S`; English layout exists (FPLAYOUTT LANGUAGE `E`) | FPLAYOUT, FPLAYOUTT |
-| Interface | `ZMM_FI_017`, active, last changed 2025-09-05 | FPINTERFACE |
-| Data | One table `GT_FINAL` of type `ZMM_TT_026`; its row type is structure `ZMM_S_013` | DD40L; `docs/evidence/2026-10-26/zquaran/generated-form-contract.json` |
-| Generated function | `/1BCDWB/SM00000137` | `docs/evidence/2026-10-26/zquaran/generated-form-contract.json` |
-
-**Not readable over RFC, so not verified:** page size, margins, master pages, fonts, barcode type, which value is barcoded, and which `ZMM_S_013` fields are actually placed on the label.
-- These are stored in raw-string (`RSTR`) fields: `FPLAYOUT-LAYOUT`, `FPCONTEXT-CONTEXT` and `FPINTERFACE-INTERFACE` (types confirmed in DD03L).
-- RFC_READ_TABLE cannot return raw-string fields.
-- Open the original in transaction SFP (display only) and record these before designing the copy.
-
-### Fields available to the form (`ZMM_S_013`, DD03L)
-
-"Filled by" refers to lines in `docs/abap/z_mm_quar_label.fugr.abap`, which ports the label rows of ZMM_R_062.
-
-| Field | Type, length | Filled by | Long value? |
-| --- | --- | --- | --- |
-| MAKTX | CHAR 40 | material description (line 233) | yes, wrap |
-| MBLNR | CHAR 10 | material document (224) | no |
-| BUDAT_MKPF | DATS 8 | posting date (225) | no |
-| ZZCUST_BATCH | CHAR 20 | batch `CHARG` (238) | maybe, shrink |
-| MENGE | QUAN 13,3 | not set in the port | Not verified whether printed |
-| ATWRT | CHAR 70 | characteristic value (258) | yes, wrap |
-| LIFNR | CHAR 10 | not set in the port | Not verified whether printed |
-| NAME1 | CHAR 40 | supplier name `NAME_ORG1` (244) | yes, wrap |
-| HSDAT | DATS 8 | manufacturing date (228) | no |
-| LICHA | CHAR 15 | supplier batch (239) | maybe, shrink |
-| VEMNG | QUAN 15,3 | not set in the port | Not verified whether printed |
-| LV_TEXT | QUAN 13,2 | = VSOLM (219) | no |
-| MEINS | UNIT 3 | unit (218) | no |
-| VSOLM | QUAN 13,3 | TO quantity (217) | no |
-| CONT | CHAR 20 | "n OF total" container count (214) | no |
-| TEXT | CHAR 50 | user text `IV_TEXT` (268) | yes, wrap |
-| NLENR | CHAR 20 | destination storage unit (220) | maybe, shrink |
-| DATE_FROM | DATS 8 | retest or expiry date (261, 264) | no |
-| QTY_R | CHAR 100 | quantity text "qty unit" (227) | shrink (normally short) |
-| ZDATE | CHAR 20 | caption "Retest Date" / "Expiry Date" (262, 265) | no |
-| ERFME | UNIT 3 | not set in the port | Not verified whether printed |
-
-**Rule: keep exactly the fields and captions the original prints.** Adding or removing a field needs the user's list; none has been given.
+**Which `ZMM_S_013` field the barcode is bound to is not verified.** Copying the form keeps every field binding, so the copy prints the same fields and the same barcode content without re-binding. Read the binding in SFP if needed (Object palette → Binding).
 
 ## 2. Create the copy (SFP)
 
-1. SFP → Form `ZMM_AF_017` → Copy → new name **NOT PROVIDED**. Keep interface **`ZMM_FI_017`**. The wrapper only accepts forms on that interface (section 4).
-2. In the copy's layout (Adobe LiveCycle Designer), set the master page:
-   - paper type: custom;
-   - width 101.6 mm, height 152.4 mm;
-   - orientation: portrait.
+1. **Copy the form:** SFP → Form `ZMM_AF_017` → Copy → new name (**PENDING**). Keep interface **`ZMM_FI_017`**: the wrapper only accepts forms on that interface (section 6).
+2. **Keep everything except the layout:**
+   - all fields, bindings, captions/static texts and their wording and order;
+   - the barcode's symbology and bound field.
 
-   The exact Designer menu path on this system is Not verified.
-3. Content area (safe margins): **5 mm on every side** (printable area 91.6 x 142.4 mm). This follows the HU label style (section 3a); it replaces the earlier 3 mm proposal. If the printer's stated unprintable margin is larger, use that instead (printer PENDING). No object may extend outside the content area.
-4. Place the fields from section 1 in the same order and with the same captions as the original.
-5. One label row = one page. Use the same pagination as the original: one `GT_FINAL` row per label. How the original paginates is Not verified; confirm it in SFP.
+   Only geometry changes: page, positions, font sizes, barcode size.
+3. **Master page:** custom paper 101.6 x 152.4 mm, portrait. The exact Designer menu path on this system is Not verified.
 
-## 3. Long values: wrap or shrink, never overflow
+## 3. Layout proposal (mm, origin top-left, "top" = top of the text field)
 
-| Field kind | Rule |
+**Principles (keep them when adjusting):**
+- one font size for captions and values, **10 pt** (user: "10 pt everywhere");
+- caption and value of a row on a **shared baseline**;
+- at least **4 pt (1.41 mm)** between a caption and its value;
+- the three date columns left-align header and value to the same x;
+- empty values keep their space;
+- minimum font size 9 pt;
+- 4 mm safe margin on the page edges;
+- nothing overlaps.
+
+**Why 10 pt, not 11:**
+- At 11 pt the row "Qty. Received + Container No" needs 89.0 mm of the 83.0 mm content width with 4 pt gaps (Helvetica-Bold/Helvetica metrics).
+- At 10 pt it needs 81.3 mm.
+- At 11 pt, "Material Name" (26.3 mm) also doesn't fit before a value column at x 36.3.
+
+| Element | Proposal |
 | --- | --- |
-HU style (section 3a) sets the font sizes; this section says what happens when a value is too long.
+| Strip | x 0..12.7. Texts inside the 4 mm margin, x 4.0..12.7. "QUARANTINE" bold ~14 pt and the form number "F-06-00-SOP-WH-002-01/09/2016" regular 9 pt, both rotated 90° counter-clockwise (read bottom to top), centred on the strip height (y 0..112 → centre 56). Sizes are a proposal: two bands fit in 8.7 mm only up to about 15 pt + 9 pt. |
+| Vertical rule | x 12.9, y 0..112, 0.5 pt |
+| Content | x 13.7..96.7 (83.0 mm) |
+| Title "Aether Industries Limited" | Helvetica/Arial Bold 18 pt, centred over the content, top 4.5 (width 76.6 mm of 83) |
+| Horizontal rule | y 18.0, x 13.7..96.7, 0.5 pt |
+| Left captions / values | captions x 13.7 bold 10 pt; values x **39.1** regular 10 pt (widest caption "Material Name" 23.9 mm + 1.41 mm) |
+| Right pair, GRN row | "GRN Date" caption x **60.2**, value x **78.1** (GRN No. value up to 10 digits; date ends 95.8) |
+| Right pair, Qty row | "Container No" caption x **57.6**, value x **81.2** ("99 OF 99" ends 95.9; Qty value room 17.1 mm) |
+| Row tops | Material Name 21.0 (2-line slot 11); GRN No. / GRN Date 33.0; INW. No 40.5; Qty. Received / Container No 48.0; Manufacturer 55.5 (2-line slot 11); Supplier 66.5 (2-line slot 11); Batch No 77.5; date headers 86.0, date values 91.5; Prepared by 102.0 (blank area for handwriting) |
+| Date columns | Mfg. Date x 13.7, Expiry Date x **39.1**, Net Weight x **66.0**; header and value at the same x |
+| Barcode | bars top 117, height 22; narrow bar 0.5 mm (4 dots at 203 dpi); 145 modules = 72.5 mm for 10 characters; quiet zone ≥ 5 mm (10 modules) each side, inside x 13.7..96.7; same symbology (Code 128 B) and content. A longer value must not get a module below 0.375 mm (3 dots). |
+| Human-readable number | 13 pt regular, directly below the bars, centred on the bars (top about 140, ends about 144.6; bottom margin about 7.8 mm) |
 
-| Field kind | Rule |
-| --- | --- |
-| Material description (MAKTX) | Level 2: 13 pt bold, fixed size. Wrap at word boundaries, at most 3 lines; if it still doesn't fit, the third line ends with "…". No shrinking (HU rule). |
-| Other descriptive values (NAME1, ATWRT, TEXT) | Level 3: 10 pt regular, fixed size. Wrap, at most 2 lines (ATWRT 3); then "…" on the last line. |
-| Identifiers (ZZCUST_BATCH, LICHA, NLENR, QTY_R) | Single line, never wrapped or cut with "…", because a partial batch or storage-unit number is misread. Shrink to fit, down to 7 pt. If it doesn't fit at 7 pt, the layout gives that field more width. The HU label treats its own identifier the same way (`HuLabelLayout.js:126`, `:216`). |
-| Dates, units, quantities | Level 3, fixed size; short by type. |
+**Long values:**
+- Material Name, Manufacturer and Supplier wrap to 2 lines, then shrink to 9 pt, then are cut.
+- Other values shrink to 9 pt, then are cut.
+- Adobe text fields: fixed-size field, "Allow multiple lines" for the three 2-line fields, and auto font size with a 9 pt minimum. How the installed ADS version behaves is Not verified, so check it in the SFP preview (section 7).
 
-Wrap, "…", shrink-to-fit and clipping in Adobe forms need field properties or a form script. How the installed ADS version behaves is Not verified, so the test in section 7 checks each rule with the long DEMO values.
+## 4. Barcode details (for the Designer barcode object)
 
-## 3a. Visual design: HU label style (user decision)
+- **Type:** Code 128, subset B (as decoded from today's label). Keep the original barcode object's binding.
+- **Module:** narrow bar 0.5 mm; at 203 dpi that is 4 dots (0.5005 mm). Never set a module that isn't a whole number of printer dots.
+- **Size:** 10 characters = 11 x (10 + 2) + 13 = 145 modules = 72.5 mm, plus 2 x 5 mm quiet zone = 82.5 mm. That fits the 83.0 mm content width.
+- **Human-readable text:** 13 pt below the bars, centred on them. Turn off the barcode object's built-in text if it prints a second copy.
 
-The user chose: "SAP form, HU style (Recommended)". The SAP form copy keeps the data and fields of section 1, but its visual design copies the app's Handling Unit label (`wm/handling-unit`). The app keeps rendering nothing itself: the PDF still comes from SAP.
+## 5. Optional: ZMM_R_062 and the new form (developer's decision; options only)
 
-Reference implementation (browser, jsPDF): `app/fiori-app/webapp/modules/wm/handling-unit/util/HuLabelLayout.js`, `HuLabelPdf.js`, `Barcode.js`. The HU label has no 4 x 6 size; the closest is size **E**, 100 x 100 mm, the same width class (`HuLabelLayout.js:43`). The rules below take size E's values and extend them to the taller 152.4 mm page.
+1. Leave `ZMM_R_062` / `ZQUARAN` on `ZMM_AF_017`; only the Fiori app uses the copy (through the wrapper, sections 6 and 7). No change to the report.
+2. Give `ZMM_R_062` a selection-screen parameter for the form name, default `ZMM_AF_017`. This changes the report, which the user ruled out for now.
+3. Copy `ZMM_R_062` to a new report and transaction for the 4 x 6 form. This is a new object; it leaves the original untouched.
 
-| HU rule | Value to use on the 4 x 6 form | HU source |
-| --- | --- | --- |
-| Margin (pad) | 5 mm on every side | `HuLabelLayout.js:43` (E pad 5) |
-| Colour | Pure black only, no grey (thermal printers dither grey) | `HuLabelLayout.js:23-24` comment; `HuLabelPdf.js` sets black fill/text |
-| Font | Helvetica (Arial is metric-compatible) | `HuLabelLayout.js:50` comment |
-| Level 1, main identifier under the barcode | 20 pt bold; may shrink to 70 % (not below 6.5 pt) to fit; never truncated | `HuLabelLayout.js:30` (E huNumber 20 pt), `:126` |
-| Level 2, material description (MAKTX) | 13 pt bold, line height 1.15, at most 3 lines | `HuLabelLayout.js:30`, `:43` (materialLines 3) |
-| Level 3, other values | 10 pt regular | `HuLabelLayout.js:30` |
-| Level 4, captions | 7.5 pt bold, upper case, above each value | `HuLabelLayout.js:30` |
-| Order, top to bottom | material description block → barcode → level-1 value directly under the barcode → caption/value rows | `HuLabelLayout.js:141-143` |
-| Spacing | at least 0.8 mm between blocks; level-1 value 1.0 mm under the barcode | `HuLabelLayout.js:11-12` |
-| Barcode | Code 128, height 37 mm, centred, quiet zone 10 modules each side | `HuLabelLayout.js:43` (barcodeH 37), `Barcode.js:4`, `:18` |
-| Barcode bar width | narrow bar = whole number of printer dots, at least 3 dots and at least 0.25 mm; never scaled to an in-between width | `HuLabelLayout.js:16-18`, `:43` (minBarMm 0.25), `:202` |
-| Long text | wrap at word boundaries; a single over-long word is broken by character; when lines run out, the last line ends with "…" | `HuLabelLayout.js:88` (`wrap`), `:76` (`ellipsize`) |
-| Barcode and its digits | never shrunk or truncated; if the value is too dense for the width, the layout is wrong, not the data | `HuLabelLayout.js:216` (`fits`) |
-| Values in a two-column row | each value is kept inside its half and ends with "…" if too long — **for descriptive values only**; identifiers follow section 3 and are never cut | `HuLabelPdf.js:56` comment |
+## 6. Wrapper (draft in `docs/abap/z_mm_quar_label.fugr.abap`, not activated)
 
-**Still to decide, NOT PROVIDED:**
-- **Which quarantine field is the level-1 identifier and is barcoded.** The HU label uses the HU number. For the quarantine label, the original form's barcoded field is Not verified (section 4), and the user has not named one.
-- **Which section-1 fields go in the caption/value rows, and in what order.** Keep the original's fields (section 1); only their arrangement changes.
+`Z_MM_QUAR_LABEL_PDF` gets an optional import parameter **`IV_FORM TYPE FPNAME DEFAULT 'ZMM_AF_017'`**:
+- **Backward compatible:** callers that omit it get the current form.
+- **Guard:** `IV_FORM` must be an active form whose `FPCONTEXT-INTERFACE` is `ZMM_FI_017`; otherwise `EV_RESULT = INVALID_INPUT`. A caller can't render an unrelated form with label data.
+- **Messages** name the form used.
+- **SAP status:** the version active in DEV client 220 (2026-10-26) does **not** have `IV_FORM`. Activating the draft is an SAP write by the developer (the user doesn't want `Z_MM_QUAR_LABEL_PDF` changed by this repo's tools). Transport it together with the form copy.
 
-**Not verified in Adobe forms:** automatic "…" truncation and word/character wrap like `wrap()` are not standard text-field behaviour. They need a script in the form or a fixed-size field that clips. Check this in the SFP test (section 7); if "…" isn't possible, a clipped value inside its own box is the fallback (section 3).
-
-**Finding (not changed):** the HU label's captions ("MATERIAL NAME", "CREATED DATE", "SR NO") are fixed English strings in `HuLabelPdf.js:37, 59, 64` and `HuLabelPrinter.js:121, 140, 144`, not i18n. The quarantine form takes its captions from the SAP form's own texts.
-
-## 4. Barcode
-
-- **Type and value:** HU style uses Code 128 (section 3a). The original form's barcode type and barcoded field are Not verified (they're in the layout; read them in SFP). If the original is not Code 128, or its barcoded field differs from the one the user names, the user decides which to follow.
-- **Module width:** the narrow bar must be a whole number of printer dots. Otherwise a thermal printer rounds the bars and the code can become unreadable.
-
-  | Printer | 1 dot | Narrow bar, 2 dots | Narrow bar, 3 dots |
-  | --- | --- | --- | --- |
-  | 203 dpi | 0.125 mm | 0.250 mm | 0.375 mm |
-  | 300 dpi | 0.0847 mm | 0.169 mm | 0.254 mm |
-
-  The dpi is **PENDING**, so pick the column after the user confirms the printer.
-- **Quiet zone:** at least 10 x narrow bar on both sides for a linear (Code 128 type) code. The barcode plus quiet zones must fit inside the 95.6 mm content width.
-- **Height:** at least 12.7 mm for a linear code. The human-readable text stays under the bars, and its font may shrink only down to 7 pt.
-
-## 5. Wrapper change (draft in `docs/abap/z_mm_quar_label.fugr.abap`)
-
-- `Z_MM_QUAR_LABEL_PDF` gets a new import parameter: `IV_FORM TYPE FPNAME DEFAULT 'ZMM_AF_017'` (optional by its default).
-  - Callers that omit it get the current form, so the change is backward compatible.
-  - The CAP app sends `IV_FORM` only when a form is configured for the plant.
-- **Guard:** `IV_FORM` must be an active form whose `FPCONTEXT-INTERFACE` is `ZMM_FI_017`; otherwise `EV_RESULT = INVALID_INPUT`. A caller therefore cannot render an unrelated form with label data.
-- **Messages:** they now name `IV_FORM` instead of the fixed form name.
-- **SAP status:** the version active in DEV client 220 since 2026-10-26 does **not** have `IV_FORM`. `tools/adt-create-quar-label.js` only creates objects, so the ABAP developer applies this change in SE37/ADT. Activating it is an SAP write and needs a separate written go.
-
-## 6. CAP / Fiori configuration (this repo)
+## 7. CAP / Fiori configuration (this repo)
 
 - **Per-plant settings** (BusinessConfig, admin API `/odata/v4/business-config`):
-  - `QuarantineLabelForm`: the new form name (A–Z, 0–9, `_`, `/`, at most 30 characters).
-  - `QuarantineLabelSize`: `4x6`.
-  - Both empty (the default): the current form and no size check.
-  - If a document spans plants with different settings, the request is refused (HTTP 409); the app doesn't pick one.
-- **Order matters:** configure `QuarantineLabelForm` only after the wrapper with `IV_FORM` is active. The currently active wrapper does not accept the parameter, so that call would fail.
-- **PDF and size warning:**
-  - The PDF is passed through unchanged.
-  - `srv/wm/quarantine-label/labelOutput.js` reads the first MediaBox (`pdfPageSize`).
-  - If `4x6` is configured and the page is not 288 x 432 pt (± 1 pt), the screen shows warning `qlPageSizeMismatch`, or `qlPageSizeUnknown` if the size can't be read. Preview, print and download stay available.
-- **Local dev database:** run `db-migrate-20261027-quarantine-label.sql` on `db.sqlite` (back it up first); deployed HANA gets the columns on deploy.
+  - `QuarantineLabelForm` = the new form name;
+  - `QuarantineLabelSize` = `4x6`.
+  - Both empty (default): the current form and no size check.
+- **`IV_FORM` is sent only when a form is configured.** Before sending it, CAP checks the wrapper's interface (`RFC_GET_FUNCTION_INTERFACE`). If the active wrapper has no `IV_FORM`, the request fails with a clear error and nothing is printed.
+- **The PDF is passed through unchanged.** With `4x6` configured, a PDF that isn't 288 x 432 pt (± 1 pt) shows a warning on screen (`qlPageSizeMismatch`).
 
-## 7. Test in SAP (preview only, no printing)
+## 8. Test plan
 
-1. SFP → the copy → Activate → Test, or SE37 on its generated function. Use synthetic `GT_FINAL` rows only (e.g. MAKTX `DEMO MATERIAL WITH A VERY LONG DESCRIPTION 40C`, ZZCUST_BATCH `DEMO-BATCH-0000001`, TEXT 50 x `W`). Print preview only; don't send to a printer.
-2. Check:
-   - the PDF document properties show the page size as 4.00 x 6.00 in;
-   - one label per page;
-   - nothing is clipped at the content-area edge;
-   - long values wrap or shrink as in section 3;
-   - the barcode scans.
-3. After the wrapper change is active and the plant is configured, preview in the app. The message must say the labels are ready with no size warning (PageSizeOk true).
-4. Print one test label at 100% scale ("actual size", no fit-to-page, browser headers/footers off) on the 4 x 6 printer. Measure it.
+| # | Test | Who | Status |
+| --- | --- | --- | --- |
+| 1 | SFP preview of the copy with **synthetic** data (e.g. MAKTX "DEMO MATERIAL WITH A VERY LONG DESCRIPTION 40C", supplier "DEMO SUPPLIER WITH A LONG NAME", 50 x "W" in the text field, 10-digit DEMO barcode value); print preview only | developer | PENDING |
+| 2 | `python3 tools/check-label-pdf.py <preview.pdf>` on the synthetic preview PDF: page, fonts, positions, baselines, gaps, barcode bars, module, quiet zones | developer / app team | PENDING |
+| 3 | Print test on the 4 x 6 printer at 100 % (no fit-to-page), measure the label | user / Basis | PENDING |
+| 4 | Scan test of the barcode at working distance with the warehouse scanner; the scanned value equals the printed number | user | PENDING |
+| 5 | Output device and page format (SPAD, 4 x 6 portrait, 203 dpi) | Basis | PENDING |
+| 6 | App: BusinessConfig for one DEV plant, preview via Quarantine Labels → no size warning | app team | PENDING (needs the activated wrapper and form) |
 
-## 8. Transport
+**Never commit or share a PDF with real values.** Preview and test PDFs for this repo must use synthetic data.
 
-- **Copy of the form:** create it in package **ZAMM**. ZAMM is transportable: TDEVC read READ-ONLY on 2026-10-26 shows DLVUNIT HOME, parent ZDS4. Record it on a workbench request (number **NOT PROVIDED**).
-- **Wrapper function group `ZMM_QUAR_LABEL`:** it is currently in `$TMP` (local, cannot be transported). Before QA/production it must be reassigned to ZAMM on a request (SE03 object directory entry, or re-create it in ZAMM). Which of these to use is the user's decision.
-- **Release order:** form (SFPF) and function group on the same request, or the form first. Release in SE09/SE10, import with STMS. Repeat the test in section 7 in QA.
-- **CAP side:** set the two BusinessConfig fields per plant only in each environment where the transport has been imported.
+## 9. Transport
+
+1. Create the form copy in a transportable package (ZAMM proposed, **PENDING**) on a workbench request (**PENDING**).
+2. The wrapper function group `ZMM_QUAR_LABEL` is currently in `$TMP`. Reassign it to the transportable package (SE03 object directory entry, or re-create it there) and put it on the same request.
+3. Release in SE09/SE10, import with STMS, and repeat tests 1–5 in QA.
+4. Set the BusinessConfig fields per plant only in environments where the transport is imported.

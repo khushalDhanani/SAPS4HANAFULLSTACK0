@@ -6,7 +6,8 @@ const { normalizeInput, FUNCTION_NAME } = QuarantineLabelAdapter;
 const PDF = Buffer.from('%PDF-1.7\n...');
 
 /** RFC fake: TFDIR / MATDOC rows and the wrapper's export parameters. */
-function rfcFake({ fmode = 'R', plants = ['1120'], result = { EV_RESULT: 'OK', EV_PDF: PDF, EV_LABEL_COUNT: 3 }, tfdirError } = {}) {
+const WRAPPER_WITH_FORM = ['IV_MBLNR', 'IV_MJAHR', 'IV_TEXT', 'IV_FORM'].map((p) => ({ PARAMCLASS: 'I', PARAMETER: p }));
+function rfcFake({ fmode = 'R', plants = ['1120'], result = { EV_RESULT: 'OK', EV_PDF: PDF, EV_LABEL_COUNT: 3 }, tfdirError, ifaceParams = WRAPPER_WITH_FORM } = {}) {
     return {
         readTable: jest.fn(async (table) => {
             if (table === 'TFDIR') {
@@ -16,7 +17,7 @@ function rfcFake({ fmode = 'R', plants = ['1120'], result = { EV_RESULT: 'OK', E
             if (table === 'MATDOC') return plants.flatMap((p) => [{ WERKS: p }, { WERKS: p }]);
             throw new Error(`unexpected table ${table}`);
         }),
-        call: jest.fn(async () => result)
+        call: jest.fn(async (fm) => (fm === 'RFC_GET_FUNCTION_INTERFACE' ? { PARAMS: ifaceParams } : result))
     };
 }
 const input = { MaterialDocument: '4900050304', MaterialDocumentYear: '2026', Text: 'Hold' };
@@ -198,6 +199,31 @@ describe('QuarantineLabelAdapter', () => {
             expect(resolveOutput).toHaveBeenCalledWith(['DM01']);
             expect(rfc.call).toHaveBeenCalledWith(FUNCTION_NAME, { IV_MBLNR: '4900050304', IV_MJAHR: '2026', IV_TEXT: 'Hold', IV_FORM: 'ZDEMO_4X6' });
             expect(res.LabelSize).toBe('4x6');
+        });
+        it('a configured form fails clearly, without rendering, when the active wrapper has no IV_FORM', async () => {
+            const rfc = rfcFake({ plants: ['DM01'], ifaceParams: ['IV_MBLNR', 'IV_MJAHR', 'IV_TEXT'].map((p) => ({ PARAMCLASS: 'I', PARAMETER: p })) });
+            const resolveOutput = async () => ({ formName: 'ZDEMO_4X6', labelSize: '4x6' });
+            await expect(new QuarantineLabelAdapter(rfc).generate({ ...input, allowedPlants: null, resolveOutput }))
+                .rejects.toMatchObject({ status: 409, message: expect.stringMatching(/ZDEMO_4X6.*does not accept a form name \(IV_FORM\).*Nothing was printed/) });
+            expect(rfc.call.mock.calls.map((c) => c[0])).toEqual(['RFC_GET_FUNCTION_INTERFACE']); // never rendered
+        });
+        it('an export parameter named IV_FORM does not count; an unreadable interface is 503', async () => {
+            const resolveOutput = async () => ({ formName: 'ZDEMO_4X6', labelSize: '4x6' });
+            const rfc = rfcFake({ ifaceParams: [{ PARAMCLASS: 'E', PARAMETER: 'IV_FORM' }] });
+            await expect(new QuarantineLabelAdapter(rfc).generate({ ...input, allowedPlants: null, resolveOutput })).rejects.toMatchObject({ status: 409 });
+            const down = rfcFake();
+            down.call.mockImplementation(async (fm) => { if (fm === 'RFC_GET_FUNCTION_INTERFACE') throw new Error('RFC down'); return {}; });
+            await expect(new QuarantineLabelAdapter(down).generate({ ...input, allowedPlants: null, resolveOutput })).rejects.toMatchObject({ status: 503 });
+        });
+        it('checks the wrapper interface only when a form is configured, once per adapter', async () => {
+            const rfc = rfcFake();
+            const a = new QuarantineLabelAdapter(rfc);
+            await a.generate({ ...input, allowedPlants: null, resolveOutput: async () => ({ formName: null, labelSize: null }) });
+            expect(rfc.call.mock.calls.map((c) => c[0])).not.toContain('RFC_GET_FUNCTION_INTERFACE');
+            const withForm = async () => ({ formName: 'ZDEMO_4X6', labelSize: '4x6' });
+            await a.generate({ ...input, allowedPlants: null, resolveOutput: withForm });
+            await a.generate({ ...input, allowedPlants: null, resolveOutput: withForm });
+            expect(rfc.call.mock.calls.filter((c) => c[0] === 'RFC_GET_FUNCTION_INTERFACE')).toHaveLength(1);
         });
         it('without configuration the call has no IV_FORM (accepted by the activated wrapper)', async () => {
             const rfc = rfcFake();

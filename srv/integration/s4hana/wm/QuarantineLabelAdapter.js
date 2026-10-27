@@ -105,6 +105,26 @@ class QuarantineLabelAdapter {
     return [...new Set(rows.map((r) => String(r.WERKS || '').trim().toUpperCase()).filter(Boolean))];
   }
 
+  /**
+   * A configured form needs a wrapper with IV_FORM (draft in docs/abap/z_mm_quar_label.fugr.abap; the version active
+   * since 2026-10-26 has none). Checked with RFC_GET_FUNCTION_INTERFACE before rendering; cached once accepted.
+   */
+  async assertAcceptsForm(formName) {
+    if (this._acceptsForm) return;
+    let iface;
+    try {
+      iface = await this.rfc.call('RFC_GET_FUNCTION_INTERFACE', { FUNCNAME: FUNCTION_NAME, LANGUAGE: 'E' });
+    } catch (e) {
+      throw httpError(503, `Cannot verify in SAP whether ${FUNCTION_NAME} accepts a form name: ${e.message}`);
+    }
+    const accepts = (iface.PARAMS || []).some((p) => String(p.PARAMCLASS || '').trim() === 'I' && String(p.PARAMETER || '').trim() === 'IV_FORM');
+    if (!accepts) {
+      throw httpError(409, `Form ${formName} is configured for this plant, but the SAP interface ${FUNCTION_NAME} does not accept `
+        + 'a form name (IV_FORM) yet. Nothing was printed.');
+    }
+    this._acceptsForm = true;
+  }
+
   /** Plants of the document; 404 when unknown, 403 when any is outside allowedPlants (null = Admin, unrestricted). */
   async authorizedPlants(mblnr, mjahr, allowedPlants) {
     const plants = await this.documentPlants(mblnr, mjahr);
@@ -225,7 +245,10 @@ class QuarantineLabelAdapter {
 
     const output = resolveOutput ? await resolveOutput(plants) : { formName: null, labelSize: null };
     const params = { IV_MBLNR: mblnr, IV_MJAHR: mjahr, IV_TEXT: text };
-    if (output.formName) params.IV_FORM = output.formName;
+    if (output.formName) {
+      await this.assertAcceptsForm(output.formName);
+      params.IV_FORM = output.formName;
+    }
     const res = await this.rfc.call(FUNCTION_NAME, params);
     assertResultOk(res, mblnr, mjahr);
     const pdf = Buffer.isBuffer(res.EV_PDF) ? res.EV_PDF : Buffer.from(res.EV_PDF || '');
