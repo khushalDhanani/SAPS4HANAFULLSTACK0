@@ -76,12 +76,12 @@ describe('ZQUAR 4 x 6 label', () => {
         const L = L4x6();
         expect(L.title.top).toBeCloseTo(19.8, 1);
         expect(L.ruleH.y).toBeCloseTo(51.75, 2);
-        expect(L.ruleH.x1).toBeCloseTo(288 - 4 * MM, 6); // same right edge as the values
+        expect(L.ruleH.x1).toBe(288); // the title rule runs to the right edge of the label
         expect(L.ruleV.x).toBe(36.7);
-        expect(L.ruleV.y0).toBeCloseTo(4 * MM, 9); // both rules inside the 4 mm margin
+        expect(L.ruleV.y0).toBe(0); // the side rule starts at the top edge of the label
         expect(L.ruleH.x0).toBe(L.ruleV.x);
-        expect(L.barcode.top - L.ruleV.y1).toBeCloseTo(4, 0); // the side rule runs down to the barcode
-        expect(L.ruleV.y1 - L.rows.lastBaseline).toBeGreaterThan(30); // room to sign under "Prepared by"
+        expect(L.ruleV.y1).toBe(432); // the side rule runs to the bottom edge
+        expect(L.barcode.top - (L.rows.lastBaseline + 10)).toBeCloseTo(4, 0); // "Prepared by" just above the barcode
         expect(L.barcode).toMatchObject({ hrTop: 404, hrPt: 14 });
         expect(L.barcode.h).toBeCloseTo(84, 0); // ≈ 30 mm (SAP label 62 pt; 129.5 pt was too big)
         expect(L.barcode.hrTop - (L.barcode.top + L.barcode.h)).toBeCloseTo(3, 0);
@@ -96,8 +96,11 @@ describe('ZQUAR 4 x 6 label', () => {
         expect(h.h).toBeCloseTo(2 * 72 / 203, 12);
         expect(h.x).toBe(v.x);
         expect(h.y).toBeGreaterThan(v.y);
-        expect(h.x + h.w).toBeLessThanOrEqual(288 - 4 * MM + L.dotPt);
-        expect(v.y).toBeGreaterThanOrEqual(4 * MM - L.dotPt);
+        expect(h.x + h.w).toBeCloseTo(288, 0); // to the right edge (within a dot)
+        expect(h.x + h.w).toBeLessThanOrEqual(288 + EPS);
+        expect(v.y).toBe(0); // from the top edge
+        expect(v.y + v.h).toBeCloseTo(432, 0); // to the bottom edge (within a dot)
+        expect(v.x + v.w).toBeLessThan(Layout.render(L, DEMO, TEXTS).barcode.x0); // left of the barcode quiet zone
         // barcode bars on the dot grid too
         const bars = Layout.render(L, DEMO, TEXTS).items.filter((i) => i.kind === 'bar');
         bars.forEach((b) => [b.x, b.y, b.w, b.h].forEach((n) => expect(onDot(n)).toBe(true)));
@@ -128,7 +131,8 @@ describe('ZQUAR 4 x 6 label', () => {
         const gaps = rows.slice(1).map((f, i) => f.caption.y - rows[i].caption.y - (rows[i].col !== undefined ? 9 * Layout.LH + 3 : 0));
         gaps.forEach((g) => expect(g).toBeCloseTo(fs.pitch, 9));
         expect(fld(fs, 'preparedBy').caption.y).toBeCloseTo(L4x6().rows.lastBaseline, 9);
-        expect(fs.pitch).toBeCloseTo(22, 9); // fixed row pitch (user request: less vertical space)
+        expect(fs.pitch).toBeGreaterThan(25); // rows share the height above "Prepared by" + barcode
+        expect(fs.pitch).toBeLessThan(30);
         expect(fld(fs, 'materialName').caption.y).toBeCloseTo(51.75 + 6 + 11 * Layout.ASCENT, 9);
         expect(fs.pitch).toBeGreaterThan(11 * Layout.LH);
     });
@@ -190,15 +194,15 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(b.x0).toBeGreaterThanOrEqual(4 * MM - EPS);
             expect(b.x1).toBeLessThan(L.ruleV.x);
             expect(b.y0).toBeGreaterThanOrEqual(4 * MM - EPS);
-            expect(b.y1).toBeLessThanOrEqual(L.ruleV.y1 + EPS);
-            expect((b.y0 + b.y1) / 2).toBeCloseTo((L.ruleV.y0 + L.ruleV.y1) / 2, 6); // centred on the rule
+            expect(b.y1).toBeLessThanOrEqual(432 - 4 * MM + EPS);
+            expect((b.y0 + b.y1) / 2).toBeCloseTo(216, 6); // centred on the full label height (side rule)
         });
         expect(q).toMatchObject({ pt: 14, bold: true });
         expect(f).toMatchObject({ pt: 9, bold: false });
         expect(box(q).x1).toBeLessThan(box(f).x0); // QUARANTINE first, then the form number
     });
 
-    it('nothing overflows: every item inside the page, text 4 mm from the edges, bottom at least 10 pt', () => {
+    it('nothing overflows: every item inside the page, text 4 mm from the edges, text and barcode at least 10 pt from the bottom', () => {
         const long = {
             ...DEMO, materialName: 'W'.repeat(120), manufacturer: 'W '.repeat(80), supplier: 'DEMO '.repeat(30),
             qtyReceived: 'W'.repeat(40), containerNo: '14 OF 14', grnNo: 'W'.repeat(20), netWeight: 'W'.repeat(20)
@@ -209,7 +213,7 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(b.x0).toBeGreaterThanOrEqual(-EPS);
             expect(b.y0).toBeGreaterThanOrEqual(-0.25 - EPS);
             expect(b.x1).toBeLessThanOrEqual(288 + EPS);
-            expect(b.y1).toBeLessThanOrEqual(432 - 10 + EPS);
+            if (it.kind !== 'rule') expect(b.y1).toBeLessThanOrEqual(432 - 10 + EPS); // rules run edge to edge on purpose
             if (it.kind === 'text') {
                 expect(b.x0).toBeGreaterThanOrEqual(4 * MM - EPS);
                 expect(b.x1).toBeLessThanOrEqual(288 - 4 * MM + EPS);

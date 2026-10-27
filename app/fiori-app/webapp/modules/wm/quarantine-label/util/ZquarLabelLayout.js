@@ -40,8 +40,8 @@ sap.ui.define([
     var EM = 0.925;          // Helvetica ascender + descender: band of a rotated strip text
     var CAP_ASCENT = 0.718;  // Helvetica ascender
     var GAP = 4;             // caption -> value; rules -> barcode
-    // rule -> first text top; row pitch (baseline to baseline, one-line rows); last baseline -> rule end; date caption -> value
-    var ROWS = { padTop: 6, pitch: 22, padBottom: 10, dateGap: 3 };
+    // rule -> first text top; "Prepared by" baseline -> rule end; date caption -> value
+    var ROWS = { padTop: 6, padBottom: 10, dateGap: 3 };
     var RULE_DOTS = 2;       // rule thickness in whole printer dots (crisp edges on the label printer)
     // Widest value expected in the right-hand pairs, so their caption column clears it (GRN No. is 10 digits)
     var RIGHT_RESERVE = { grnDate: "00/00/0000", containerNo: "00 OF 00" };
@@ -109,25 +109,26 @@ sap.ui.define([
         var dotPt = PT_PER_INCH / dpi;
         var snap = function (n) { return Math.round(n / dotPt) * dotPt; };
 
-        // Field rows top-down at a fixed pitch; the barcode takes the height that is left (user request 2026-10-27)
-        var capPt = pt(TYPE.caption);
-        var valPt = pt(TYPE.value);
-        var pitch = ROWS.pitch * k;
-        if (pitch < valPt * LH + GAP) { throw new Error("Label size too small for the quarantine label layout"); }
-        var firstTop = BASE.ruleH.y * sy + ROWS.padTop * k;
-        var dateExtra = capPt * LH + ROWS.dateGap * k;
-        var rows = {
-            firstTop: firstTop,                                                          // top of the first row's value text
-            lastBaseline: firstTop + valPt * ASCENT + (ROW_COUNT - 1) * pitch + dateExtra, // baseline of "Prepared by"
-            dateGap: ROWS.dateGap * k
-        };
-        // Barcode anchored at the bottom; the space between "Prepared by" and the bars is left for the signature
+        // Barcode anchored at the bottom; "Prepared by" sits just above it (user: keep the three together) and the
+        // field rows share the height above evenly
         var hrPt = pt(TYPE.humanReadable);
         var hrTop = H - BARCODE.bottomPad * k - hrPt;
         var barH = snap(BARCODE.barH * k);
         var barTop = snap(hrTop - BARCODE.hrGap * k - barH);
         var ruleEnd = snap(barTop - GAP * k);
-        if (ruleEnd < rows.lastBaseline + ROWS.padBottom * k) { throw new Error("Label size too small for the quarantine label layout"); }
+
+        var capPt = pt(TYPE.caption);
+        var valPt = pt(TYPE.value);
+        var firstTop = BASE.ruleH.y * sy + ROWS.padTop * k;
+        var dateExtra = capPt * LH + ROWS.dateGap * k;
+        var rows = {
+            firstTop: firstTop,                                  // top of the first row's value text
+            lastBaseline: ruleEnd - ROWS.padBottom * k,          // baseline of "Prepared by"
+            dateGap: ROWS.dateGap * k
+        };
+        // One-line rows need at least the line height + GAP between baselines
+        var pitch = (rows.lastBaseline - firstTop - valPt * ASCENT - dateExtra) / (ROW_COUNT - 1);
+        if (pitch < valPt * LH + GAP) { throw new Error("Label size too small for the quarantine label layout"); }
 
         // Left strip: QUARANTINE then the form number, rotated 90 degrees counter-clockwise (read bottom to top),
         // normal width (user decision 2026-10-27: x1.5 stretch removed); shrunk only if longer than the strip.
@@ -142,12 +143,14 @@ sap.ui.define([
         return {
             key: size.key, dpi: dpi, axis: axis, dotPt: dotPt, ruleW: RULE_DOTS * dotPt, edge: edge, sx: sx, sy: sy,
             page: { wPt: W, hPt: H },
-            // Both rules inside the 4 mm margin; the horizontal rule starts exactly on the vertical one
-            ruleV: { x: X(BASE.ruleV.x), y0: edge, y1: ruleEnd },
-            ruleH: { y: BASE.ruleH.y * sy, x0: X(BASE.ruleV.x), x1: W - edge },
+            // Rules run edge to edge (vertical top to bottom, horizontal to the right edge; user request 2026-10-27
+            // "lines not 100% fit"); the vertical rule passes left of the barcode quiet zone; the horizontal rule
+            // starts exactly on the vertical one
+            ruleV: { x: X(BASE.ruleV.x), y0: 0, y1: H },
+            ruleH: { y: BASE.ruleH.y * sy, x0: X(BASE.ruleV.x), x1: W },
             title: { x0: X(BASE.captionX), x1: W - edge, top: BASE.titleTop * sy, pt: pt(TYPE.title) },
             strip: {
-                center: (edge + ruleEnd) / 2, length: ruleEnd - 2 * edge, hScale: 1,
+                center: H / 2, length: H - 2 * edge, hScale: 1, // centred on the full-height side rule
                 quarantine: { band: qBand, pt: qPt },
                 formNumber: { band: fBand, pt: fPt }
             },
