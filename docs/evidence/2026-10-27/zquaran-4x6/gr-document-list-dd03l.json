@@ -1,0 +1,63 @@
+{
+  "capturedAt": "2026-10-27T06:38:22.785Z",
+  "mode": "READ-ONLY",
+  "method": "RFC_READ_TABLE on DD02L/DD03L only; no business data read",
+  "purpose": "Fields for the quarantine-labels GR document list (movement type 101)",
+  "tables": {
+    "MATDOC": {
+      "tabclass": "TRANSP",
+      "fields": {
+        "MBLNR": "CHAR(10)",
+        "MJAHR": "NUMC(4)",
+        "ZEILE": "NUMC(4)",
+        "BWART": "CHAR(3)",
+        "WERKS": "CHAR(4)",
+        "MATNR": "CHAR(40)",
+        "CHARG": "CHAR(10)",
+        "LIFNR": "CHAR(10)",
+        "BUDAT": "DATS(8)",
+        "RECORD_TYPE": "CHAR(30)",
+        "CANCELLED": "CHAR(1)",
+        "SMBLN": "CHAR(10)"
+      }
+    },
+    "MKPF": {
+      "tabclass": "TRANSP",
+      "fields": {
+        "MBLNR": "CHAR(10)",
+        "MJAHR": "NUMC(4)",
+        "BUDAT": "DATS(8)"
+      }
+    },
+    "MSEG": {
+      "tabclass": "TRANSP",
+      "fields": {
+        "MBLNR": "CHAR(10)",
+        "MJAHR": "NUMC(4)",
+        "ZEILE": "NUMC(4)",
+        "BWART": "CHAR(3)",
+        "WERKS": "CHAR(4)",
+        "MATNR": "CHAR(40)",
+        "CHARG": "CHAR(10)",
+        "LIFNR": "CHAR(10)",
+        "BUDAT_MKPF": "DATS(8)",
+        "SMBLN": "CHAR(10)"
+      }
+    },
+    "MAKT": {
+      "tabclass": "TRANSP",
+      "fields": {
+        "MATNR": "CHAR(40)",
+        "SPRAS": "LANG(1)",
+        "MAKTX": "CHAR(40)"
+      }
+    },
+    "BUT000": {
+      "tabclass": "TRANSP",
+      "fields": {
+        "PARTNER": "CHAR(10)",
+        "NAME_ORG1": "CHAR(40)"
+      }
+    }
+  }
+}

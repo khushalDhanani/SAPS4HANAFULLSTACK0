@@ -11,7 +11,7 @@
 
 const { openSession, inspectScreen } = require('../support/screenCheck');
 
-const ACTION_RE = /\/odata\/v4\/quarantine-label\/(generateLabels|labelRows)$/;
+const ACTION_RE = /\/odata\/v4\/quarantine-label\/(generateLabels|labelRows|listDocuments)$/;
 const PDF_B64 = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF').toString('base64');
 const json = (status, body) => ({ status, contentType: 'application/json;odata.metadata=minimal', headers: { 'OData-Version': '4.0' }, body: JSON.stringify(body) });
 
@@ -159,6 +159,79 @@ const CASES = [
             if (!st.pdfShown || !st.actionsShown) errs.push('PDF or print/download not shown');
             if (pdf.head !== '%PDF-') errs.push('not a PDF');
             if (pdf.boxes.length !== 2 || pdf.boxes.some((b) => !/\[0 0 288\.? 432\.?\]/.test(b))) errs.push(`MediaBox ${pdf.boxes.join(' ')}`);
+            return errs;
+        }
+    },
+    {
+        name: 'Goods-receipt list (mocked, DEMO): Go lists documents, ticked rows download as one 4x6 PDF, a row prints at 4x6',
+        respond: (route) => {
+            const url = route.request().url();
+            if (/listDocuments$/.test(url)) {
+                return route.fulfill(json(200, { Plant: 'DM01', DateFrom: '2026-10-21', DateTo: '2026-10-27', More: false, Documents: [1, 2].map((n) => ({
+                    MaterialDocument: `990000000${n}`, MaterialDocumentYear: '2026', PostingDate: '2026-10-2' + n, Plant: 'DM01',
+                    Material: `DEMO-MAT-${n}`, MaterialDescription: `DEMO MATERIAL ${n}`, Batch: `DEMOB${n}`, SupplierName: 'DEMO SUPPLIER'
+                })) }));
+            }
+            if (/labelRows$/.test(url)) {
+                const doc = route.request().postDataJSON().MaterialDocument;
+                return route.fulfill(json(200, { MaterialDocument: doc, MaterialDocumentYear: '2026', LabelSize: null, Rows: [1, 2].map((n) => ({
+                    MaterialDescription: 'DEMO MATERIAL', MaterialDocument: doc, PostingDate: '2026-10-27', Batch: 'DEMOB1', SupplierBatch: 'DEMO-SB',
+                    SupplierName: 'DEMO SUPPLIER', BatchCharacteristics: 'DEMO', ManufacturingDate: '2026-10-01', DateKind: 'EXPIRY', DateValue: '2027-04-01',
+                    PostedQuantity: '80 KG', ContainerQuantity: '40', Unit: 'KG', Container: `${n} OF 2`, StorageUnit: `${doc}${n}`, Text: ''
+                })) }));
+            }
+            return route.fulfill(json(500, { error: { message: 'unexpected SAP PDF call' } }));
+        },
+        run: async (s, calls) => {
+            const errs = [];
+            // Capture downloads (anchor clicks) and print frames instead of leaving the page
+            await s.page.evaluate(() => {
+                window.__qlSaved = [];
+                window.__qlPrintDocs = [];
+                const click = window.HTMLAnchorElement.prototype.click;
+                window.HTMLAnchorElement.prototype.click = function () {
+                    if (this.download) { window.__qlSaved.push({ name: this.download, href: this.href }); return undefined; }
+                    return click.call(this);
+                };
+                new window.MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => {
+                    if (n.tagName === 'IFRAME') window.__qlPrintDocs.push(n.srcdoc || '');
+                }))).observe(window.document.body, { childList: true });
+            });
+            await s.page.fill('[id$="--qlListPlant-inner"]', 'DM01');
+            await s.page.click('[id$="--qlListGo"]');
+            await s.page.waitForFunction(() => {
+                const E = window.sap.ui.require('sap/ui/core/Element');
+                const t = E.registry.filter((c) => c.getId().endsWith('--qlDocTable'))[0];
+                return t && t.getItems().length === 2;
+            }, null, { timeout: 15000 });
+            const list = calls.find((c) => c && c.Plant);
+            if (!list || list.Plant !== 'DM01' || !/^\d{4}-\d{2}-\d{2}$/.test(list.DateFrom || '') || !list.DateTo) errs.push(`list request ${JSON.stringify(list)}`);
+
+            await s.page.evaluate(() => {
+                const E = window.sap.ui.require('sap/ui/core/Element');
+                E.registry.filter((c) => c.getId().endsWith('--qlDocTable'))[0].selectAll(true);
+            });
+            await s.page.click('[id$="--qlDownloadSelected"]');
+            await s.page.waitForFunction(() => window.__qlSaved.length > 0, null, { timeout: 15000 }).catch(() => {});
+            const saved = await s.page.evaluate(async () => Promise.all(window.__qlSaved.map(async (f) => ({
+                name: f.name, text: await (await fetch(f.href)).text()
+            }))));
+            if (saved.length !== 1) errs.push(`${saved.length} downloads`);
+            else {
+                if (saved[0].name !== 'QuarantineLabels4x6_DM01_2docs.pdf') errs.push(`file name ${saved[0].name}`);
+                const boxes = saved[0].text.match(/\/MediaBox\s*\[[^\]]*\]/g) || [];
+                if (boxes.length !== 4 || boxes.some((b) => !/\[0 0 288\.? 432\.?\]/.test(b))) errs.push(`combined PDF pages ${boxes.join(' ')}`);
+            }
+            const labelCalls = calls.filter((c) => c && c.MaterialDocument && !c.Plant).map((c) => c.MaterialDocument);
+            if (labelCalls.join() !== '9900000001,9900000002') errs.push(`labelRows calls ${labelCalls.join()}`);
+
+            await s.page.click('[id$="--qlDocTable"] tbody tr:first-child button[title="Print 4x6 labels"]');
+            await s.page.waitForFunction(() => window.__qlPrintDocs.length > 0, null, { timeout: 15000 }).catch(() => {});
+            const printed = await s.page.evaluate(() => window.__qlPrintDocs);
+            if (printed.length !== 1 || !printed[0].includes('@page{size:288pt 432pt;margin:0}')) errs.push(`print frames ${printed.length}`);
+            else if ((printed[0].match(/<svg /g) || []).length !== 2) errs.push('row print is not 2 label pages');
+            const st = await state(s.page);
+            if (st.messageType !== 'Success') errs.push(`message ${st.messageType} "${st.message}"`);
             return errs;
         }
     },

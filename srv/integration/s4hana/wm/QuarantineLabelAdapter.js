@@ -67,6 +67,43 @@ const quantity2 = (v) => {
 const quote = (v) => `'${String(v).replace(/'/g, "''")}'`;
 const key = (...parts) => parts.join('|');
 
+// Document list of the screen (user decisions 2026-10-27): all goods receipts, movement type 101 only, one plant and a
+// posting-date range or one document. MSEG fields checked in DD03L (READ-ONLY, docs/evidence/2026-10-27/zquaran-4x6/
+// gr-document-list-dd03l.json); MSEG is already read for the labels, so no new table authorization is needed.
+const GR_MOVEMENT_TYPE = '101';
+const LIST_MAX_DAYS = 31;
+const LIST_MAX_ITEMS = 5000; // MSEG items per list read; one more is requested to tell the user the list is incomplete
+const LOOKUP_CHUNK = 50;     // keys per MAKT / BUT000 read (one OR line each, under the 72-character option limit)
+
+const isoDate = (v) => {
+  const s = String(v ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s ? s : null;
+};
+
+/** Plant and either one document (number + year) or a posting-date range of at most LIST_MAX_DAYS days. */
+function normalizeListInput({ Plant, DateFrom, DateTo, MaterialDocument, MaterialDocumentYear }) {
+  const plant = String(Plant ?? '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(plant)) throw httpError(400, 'Plant must be 4 letters or digits.');
+  if (String(MaterialDocument ?? '').trim()) {
+    const { mblnr, mjahr } = normalizeInput({ MaterialDocument, MaterialDocumentYear });
+    return { plant, mblnr, mjahr };
+  }
+  const from = isoDate(DateFrom);
+  const to = isoDate(DateTo);
+  if (!from || !to) throw httpError(400, 'Posting dates must be valid dates (yyyy-mm-dd).');
+  if (from > to) throw httpError(400, 'The posting date "from" must not be after "to".');
+  if ((Date.parse(to) - Date.parse(from)) / 86400000 + 1 > LIST_MAX_DAYS) {
+    throw httpError(400, `The posting-date range must be at most ${LIST_MAX_DAYS} days.`);
+  }
+  return { plant, from, to };
+}
+
+/** WHERE lines "FIELD = 'a'" OR'ed in groups, each line below the 72-character RFC_READ_TABLE option limit. */
+const orLines = (prefix, field, values) => values.map((v, i) => `${i ? 'OR' : `${prefix} (`} ${field} = ${quote(v)}`)
+  .concat(')');
+
 /** EV_RESULT/EV_MESSAGE of either wrapper -> HTTP error unless OK. */
 function assertResultOk(res, mblnr, mjahr) {
   const result = String(res.EV_RESULT || '').trim();
@@ -233,6 +270,60 @@ class QuarantineLabelAdapter {
   }
 
   /**
+   * Goods-receipt documents (movement type 101) of one plant, newest first: one row per document and year with the
+   * material, batch and supplier of its first item. Read only. allowedPlants as in generate(): the plant must be in it.
+   * @returns {{Plant, DateFrom, DateTo, More: boolean, Documents: object[]}}
+   */
+  async listDocuments({ allowedPlants, ...input }) {
+    const q = normalizeListInput(input);
+    if (Array.isArray(allowedPlants) && !allowedPlants.includes(q.plant)) {
+      throw httpError(403, `You are not authorized for plant ${q.plant}.`);
+    }
+    const sap = (d) => d.replace(/-/g, '');
+    const where = [`BWART = ${quote(GR_MOVEMENT_TYPE)}`, `AND WERKS = ${quote(q.plant)}`].concat(q.mblnr
+      ? [`AND MBLNR = ${quote(q.mblnr)}`, `AND MJAHR = ${quote(q.mjahr)}`]
+      : [`AND BUDAT_MKPF BETWEEN ${quote(sap(q.from))} AND ${quote(sap(q.to))}`]);
+    const items = await this.rfc.readTable('MSEG', ['MBLNR', 'MJAHR', 'ZEILE', 'MATNR', 'CHARG', 'LIFNR', 'BUDAT_MKPF'],
+      where, LIST_MAX_ITEMS + 1);
+    const more = items.length > LIST_MAX_ITEMS;
+
+    const docs = new Map();
+    items.slice(0, LIST_MAX_ITEMS).forEach((m) => {
+      const k = key(m.MBLNR, m.MJAHR);
+      const first = docs.get(k);
+      if (!first || m.ZEILE < first.ZEILE) docs.set(k, m);
+    });
+    const firsts = [...docs.values()];
+    const makt = await this.lookup('MAKT', 'MATNR', 'MAKTX', firsts.map((m) => m.MATNR), `SPRAS = ${quote(MAKT_LANGUAGE)} AND`);
+    const names = await this.lookup('BUT000', 'PARTNER', 'NAME_ORG1', firsts.map((m) => m.LIFNR), '');
+
+    const documents = firsts.map((m) => ({
+      MaterialDocument: m.MBLNR,
+      MaterialDocumentYear: m.MJAHR,
+      PostingDate: sapDate(m.BUDAT_MKPF),
+      Plant: q.plant,
+      Material: m.MATNR,
+      MaterialDescription: makt.get(m.MATNR) || '',
+      Batch: m.CHARG,
+      SupplierName: names.get(m.LIFNR) || ''
+    })).sort((a, b) => b.PostingDate.localeCompare(a.PostingDate) || b.MaterialDocument.localeCompare(a.MaterialDocument));
+    return { Plant: q.plant, DateFrom: q.from || null, DateTo: q.to || null, More: more, Documents: documents };
+  }
+
+  /** keyField -> valueField for distinct non-empty keys, read in chunks with OR lines. */
+  async lookup(table, keyField, valueField, keys, prefix) {
+    const out = new Map();
+    const distinct = [...new Set(keys.filter(Boolean))];
+    for (let i = 0; i < distinct.length; i += LOOKUP_CHUNK) {
+      const lines = orLines(prefix.trim(), keyField, distinct.slice(i, i + LOOKUP_CHUNK));
+      (await this.rfc.readTable(table, [keyField, valueField], lines)).forEach((r) => {
+        if (!out.has(r[keyField])) out.set(r[keyField], r[valueField]);
+      });
+    }
+    return out;
+  }
+
+  /**
    * allowedPlants: plantScope(user) — null for Admin (unrestricted), otherwise the user's plants; every plant of the
    * document must be in it before anything is rendered. resolveOutput(plants) -> { formName, labelSize } comes from the
    * CAP layer (per-plant BusinessConfig); IV_FORM is sent only when a form is configured, so without configuration the
@@ -269,6 +360,8 @@ class QuarantineLabelAdapter {
 
 module.exports = QuarantineLabelAdapter;
 module.exports.normalizeInput = normalizeInput;
+module.exports.normalizeListInput = normalizeListInput;
+module.exports.LIST_MAX_ITEMS = LIST_MAX_ITEMS;
 module.exports.FUNCTION_NAME = FUNCTION_NAME;
 module.exports.QUARANTINE_STORAGE_TYPES = QUARANTINE_STORAGE_TYPES;
 module.exports.ATINN = ATINN;

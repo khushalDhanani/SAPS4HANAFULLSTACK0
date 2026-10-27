@@ -2,12 +2,14 @@
 
 /** QuarantineLabels controller without a UI5 runtime: validation, one request at a time, stale answers, errors. */
 let ctrl;
-const Service = { generateLabels: jest.fn(), labelRows: jest.fn() };
+const Service = { generateLabels: jest.fn(), labelRows: jest.fn(), listDocuments: jest.fn(), getPlantContext: jest.fn() };
 const Layout = { DEFAULT_SIZE: '4x6', STATIC_KEYS: { title: 'zqTitle' }, CAPTION_KEYS: { grnNo: 'zqGrnNo' }, EXTRA_KEYS: { retestDate: 'zqRetestDate' } };
 const Pdf = { toBlob: jest.fn(), print: jest.fn() };
 const Rows = { toLabels: jest.fn((rows) => rows.map((r) => ({ barcode: r.StorageUnit }))) };
 const BaseController = { extend: (name, obj) => { ctrl = obj; return obj; } };
-global.sap = { ui: { define: (deps, f) => f(BaseController, function () {}, Service, Layout, Pdf, Rows) } };
+const MessageBox = { error: jest.fn(), warning: jest.fn() };
+const MessageToast = { show: jest.fn() };
+global.sap = { ui: { define: (deps, f) => f(BaseController, function () {}, Service, Layout, Pdf, Rows, MessageBox, MessageToast) } };
 require('../../../app/fiori-app/webapp/modules/wm/quarantine-label/controller/QuarantineLabels.controller.js');
 
 const PDF_B64 = Buffer.from('%PDF-1.7').toString('base64');
@@ -217,6 +219,144 @@ describe('QuarantineLabels controller', () => {
             expect(Pdf.print).not.toHaveBeenCalled();
             expect(frame.src).toBe('blob:pdf-1');
             delete global.document;
+        });
+    });
+});
+
+describe('QuarantineLabels controller: goods-receipt list', () => {
+    beforeEach(() => jest.clearAllMocks());
+    const DOC1 = { MaterialDocument: '5000000001', MaterialDocumentYear: '2026', Plant: 'DM01' };
+    const DOC2 = { MaterialDocument: '5000000002', MaterialDocumentYear: '2026', Plant: 'DM01' };
+    function listSubject(list = {}) {
+        const { s, d } = subject({ plant: 'dm01', dateFrom: new Date(2026, 9, 21), dateTo: new Date(2026, 9, 27), materialDocument: '', ...list });
+        s.byId = () => ({ removeSelections: jest.fn(), getSelectedItems: () => (list.selected || []).map((o) => ({ getBindingContext: () => ({ getObject: () => o }) })) });
+        s.getText = (k, a) => [k].concat(a || []).join('|');
+        return { s, d };
+    }
+    const rowEvent = (o) => ({ getSource: () => ({ getBindingContext: () => ({ getObject: () => o }) }) });
+
+    it('reads the plant\'s goods receipts for the date range and shows them', async () => {
+        Service.listDocuments.mockResolvedValue({ More: false, Documents: [DOC1, DOC2] });
+        const { s, d } = listSubject();
+        await s.onListGo();
+        expect(Service.listDocuments).toHaveBeenCalledWith({ plant: 'DM01', dateFrom: '2026-10-21', dateTo: '2026-10-27', materialDocument: '', year: '' });
+        expect(d.documents).toEqual([DOC1, DOC2]);
+        expect([d.listed, d.more, d.busy, d.message]).toEqual([true, false, false, '']);
+    });
+    it('one document by number + year instead of dates', async () => {
+        Service.listDocuments.mockResolvedValue({ More: false, Documents: [DOC1] });
+        const { s } = listSubject({ materialDocument: ' 5000000001 ', year: '2026' });
+        await s.onListGo();
+        expect(Service.listDocuments).toHaveBeenCalledWith({ plant: 'DM01', dateFrom: '', dateTo: '', materialDocument: '5000000001', year: '2026' });
+    });
+    it('says when the list is incomplete', async () => {
+        Service.listDocuments.mockResolvedValue({ More: true, Documents: [DOC1] });
+        const { s, d } = listSubject();
+        await s.onListGo();
+        expect(d.message).toBe('qlListMore|1');
+        expect(d.messageType).toBe('Warning');
+    });
+    it('validates locally before reading: plant, document/year, dates, 31 days', () => {
+        [{ plant: 'DM1' }, { materialDocument: 'X', year: '2026' }, { materialDocument: '5000000001', year: '26' }, { dateFrom: null },
+            { dateFrom: new Date(2026, 8, 1), dateTo: new Date(2026, 9, 27) }].forEach((bad) => {
+            const { s, d } = listSubject(bad);
+            s.onListGo();
+            expect(d.messageType).toBe('Error');
+        });
+        expect(Service.listDocuments).not.toHaveBeenCalled();
+    });
+    it('a read error is shown and the list emptied', async () => {
+        Service.listDocuments.mockRejectedValue(Object.assign(new Error('You are not authorized for plant DM01.'), { status: 403 }));
+        const { s, d } = listSubject({ documents: [DOC1] });
+        await s.onListGo();
+        expect([d.message, d.messageType, d.documents]).toEqual(['You are not authorized for plant DM01.', 'Error', []]);
+    });
+    it('pre-fills the plant with the user\'s first plant', async () => {
+        Service.getPlantContext.mockResolvedValue({ plants: ['1130'], unrestricted: false });
+        const { s, d } = listSubject({ plant: '' });
+        await s._initPlant();
+        expect(d.plant).toBe('1130');
+    });
+    it('row "4x6 Labels" puts the document into the form and runs the existing preview', async () => {
+        Service.labelRows.mockResolvedValue({ MaterialDocument: DOC1.MaterialDocument, MaterialDocumentYear: '2026', Rows: [{ StorageUnit: 'S1' }] });
+        Pdf.toBlob.mockResolvedValue({ blob: {}, warnings: [] });
+        const { s, d } = listSubject();
+        await s.onRowLabels(rowEvent(DOC1));
+        expect([d.materialDocument, d.year]).toEqual(['5000000001', '2026']);
+        expect(Service.labelRows).toHaveBeenCalledWith({ materialDocument: '5000000001', year: '2026', text: '' });
+        expect(d.pdfUrl).toBe('blob:pdf-1');
+        expect(MessageBox.error).not.toHaveBeenCalled();
+    });
+    it('row "4x6 Labels" for a document without labels shows the error in a dialog (the page-top strip may be out of view)', async () => {
+        Service.labelRows.mockRejectedValue(Object.assign(new Error('No quarantine label rows for material document 5000000001/2026.'), { status: 404 }));
+        const { s, d } = listSubject();
+        await s.onRowLabels(rowEvent(DOC1));
+        expect(d.pdfUrl).toBe('');
+        expect(MessageBox.error).toHaveBeenCalledWith('No quarantine label rows for material document 5000000001/2026.');
+    });
+    describe('downloads and printing from the list', () => {
+        let saved;
+        beforeEach(() => {
+            saved = [];
+            Pdf.toBlob.mockResolvedValue({ blob: { pdf: true }, warnings: [] });
+            Pdf.print.mockResolvedValue();
+        });
+        const run = async (s, fn) => { s._saveBlob = (b, n) => saved.push(n); await fn(); };
+
+        it('row download: one PDF named after the document', async () => {
+            Service.labelRows.mockResolvedValue({ Rows: [{ StorageUnit: 'S1' }, { StorageUnit: 'S2' }], LabelSize: null });
+            const { s, d } = listSubject();
+            await run(s, () => s.onRowDownload(rowEvent(DOC1)));
+            expect(Pdf.toBlob).toHaveBeenCalledWith([{ barcode: 'S1' }, { barcode: 'S2' }], expect.any(Object), { size: '4x6' });
+            expect(saved).toEqual(['QuarantineLabels4x6_5000000001_2026.pdf']);
+            expect([d.message, d.messageType, d.busy]).toEqual(['qlListLabelsReady|2|1', 'Success', false]);
+            expect(MessageToast.show).toHaveBeenCalledWith('qlListLabelsReady|2|1'); // shown where the user is, not only at the page top
+        });
+        it('row print: the exact-size print path, no download', async () => {
+            Service.labelRows.mockResolvedValue({ Rows: [{ StorageUnit: 'S1' }] });
+            const { s } = listSubject();
+            await run(s, () => s.onRowPrint(rowEvent(DOC1)));
+            expect(Pdf.print).toHaveBeenCalledWith([{ barcode: 'S1' }], expect.any(Object), { size: '4x6' });
+            expect(saved).toEqual([]);
+        });
+        it('selected documents: rows read one after the other, one combined PDF', async () => {
+            Service.labelRows.mockImplementation(async ({ materialDocument }) => ({ Rows: [{ StorageUnit: `SU-${materialDocument}` }] }));
+            const { s, d } = listSubject({ selected: [DOC1, DOC2] });
+            await run(s, () => s.onDownloadSelected());
+            expect(Service.labelRows.mock.calls.map((c) => c[0].materialDocument)).toEqual(['5000000001', '5000000002']);
+            expect(Pdf.toBlob.mock.calls[0][0]).toEqual([{ barcode: 'SU-5000000001' }, { barcode: 'SU-5000000002' }]);
+            expect(saved).toEqual(['QuarantineLabels4x6_DM01_2docs.pdf']);
+            expect(d.message).toBe('qlListLabelsReady|2|2');
+        });
+        it('a failing document stops it: nothing produced, the document is named', async () => {
+            Service.labelRows.mockResolvedValueOnce({ Rows: [{ StorageUnit: 'S1' }] })
+                .mockRejectedValueOnce(Object.assign(new Error('No quarantine label rows.'), { status: 404 }));
+            const { s, d } = listSubject({ selected: [DOC1, DOC2] });
+            await run(s, () => s.onDownloadSelected());
+            expect(Pdf.toBlob).not.toHaveBeenCalled();
+            expect(saved).toEqual([]);
+            expect([d.message, d.messageType]).toEqual(['qlDocFailed|5000000002|2026|No quarantine label rows.', 'Error']);
+            expect(MessageBox.error).toHaveBeenCalledWith('qlDocFailed|5000000002|2026|No quarantine label rows.');
+        });
+        it('different label sizes are refused; more than 20 documents are refused before any read', async () => {
+            Service.labelRows.mockResolvedValueOnce({ Rows: [{ StorageUnit: 'S1' }], LabelSize: '4x6' })
+                .mockResolvedValueOnce({ Rows: [{ StorageUnit: 'S2' }], LabelSize: '4x5' });
+            const { s, d } = listSubject({ selected: [DOC1, DOC2] });
+            await run(s, () => s.onDownloadSelected());
+            expect(d.message).toBe('qlMixedSizes');
+            Service.labelRows.mockClear();
+            const many = listSubject({ selected: Array.from({ length: 21 }, (_, i) => ({ ...DOC1, MaterialDocument: String(i) })) });
+            await run(many.s, () => many.s.onDownloadSelected());
+            expect(Service.labelRows).not.toHaveBeenCalled();
+            expect(many.d.message).toBe('qlBulkTooMany|20');
+            expect(MessageBox.error).toHaveBeenCalledWith('qlBulkTooMany|20');
+        });
+        it('a label that cannot be drawn is named (coded render error)', async () => {
+            Service.labelRows.mockResolvedValue({ Rows: [{ StorageUnit: 'S1' }] });
+            Pdf.toBlob.mockRejectedValue(Object.assign(new Error('too full'), { code: 'labelTooFull', label: 1 }));
+            const { s, d } = listSubject();
+            await run(s, () => s.onRowDownload(rowEvent(DOC1)));
+            expect([d.message, d.messageType]).toEqual(['ql4x6Error_labelTooFull|1', 'Error']);
         });
     });
 });

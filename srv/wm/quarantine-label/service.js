@@ -32,6 +32,19 @@ module.exports = class QuarantineLabelService extends cds.ApplicationService {
         return req.error(err.status || 500, err.message || 'Quarantine label data could not be read');
       }
     });
+    this.on('listDocuments', async (req) => {
+      try {
+        return await adapter.listDocuments({ ...(req.data || {}), allowedPlants: plantScope(req.user) });
+      } catch (err) {
+        return req.error(err.status || 500, err.message || 'Material documents could not be read');
+      }
+    });
+    // The user's plants for the selector; an Admin (unrestricted) may still have a Plant attribute, which pre-selects it
+    this.on('getPlantContext', (req) => {
+      const scope = plantScope(req.user);
+      const own = [].concat(req.user?.attr?.Plant || []).map((p) => String(p).trim().toUpperCase()).filter(Boolean);
+      return { plants: scope === null ? own : scope, unrestricted: scope === null };
+    });
     return super.init();
   }
 };

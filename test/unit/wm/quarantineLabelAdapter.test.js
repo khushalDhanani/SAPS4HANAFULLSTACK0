@@ -256,4 +256,95 @@ describe('QuarantineLabelAdapter', () => {
             expect(rfc.readTable.mock.calls.filter((c) => c[0] === 'TFDIR')).toHaveLength(1);
         });
     });
+    describe('listDocuments (GR documents, movement type 101; read only; synthetic DEMO data)', () => {
+        const { normalizeListInput, LIST_MAX_ITEMS } = QuarantineLabelAdapter;
+        const MSEG = [
+            { MBLNR: '5000000001', MJAHR: '2026', ZEILE: '0002', BWART: '101', WERKS: 'DM01', MATNR: 'DEMO-MAT-2', CHARG: 'B2', LIFNR: 'DEMOSUP01', BUDAT_MKPF: '20261020' },
+            { MBLNR: '5000000001', MJAHR: '2026', ZEILE: '0001', BWART: '101', WERKS: 'DM01', MATNR: 'DEMO-MAT-1', CHARG: 'B1', LIFNR: 'DEMOSUP01', BUDAT_MKPF: '20261020' },
+            { MBLNR: '5000000002', MJAHR: '2026', ZEILE: '0001', BWART: '101', WERKS: 'DM01', MATNR: 'DEMO-MAT-3', CHARG: '', LIFNR: '', BUDAT_MKPF: '20261025' },
+            { MBLNR: '5000000003', MJAHR: '2026', ZEILE: '0001', BWART: '102', WERKS: 'DM01', MATNR: 'DEMO-MAT-1', CHARG: 'B1', LIFNR: 'DEMOSUP01', BUDAT_MKPF: '20261025' },
+            { MBLNR: '5000000004', MJAHR: '2026', ZEILE: '0001', BWART: '101', WERKS: 'DM02', MATNR: 'DEMO-MAT-1', CHARG: 'B1', LIFNR: 'DEMOSUP01', BUDAT_MKPF: '20261025' },
+            { MBLNR: '5000000005', MJAHR: '2026', ZEILE: '0001', BWART: '101', WERKS: 'DM01', MATNR: 'DEMO-MAT-1', CHARG: 'B1', LIFNR: 'DEMOSUP01', BUDAT_MKPF: '20260901' }
+        ];
+        const DB = {
+            MSEG,
+            MAKT: [{ MATNR: 'DEMO-MAT-1', SPRAS: 'E', MAKTX: 'DEMO MATERIAL 1' }, { MATNR: 'DEMO-MAT-1', SPRAS: 'D', MAKTX: 'DE TEXT' }, { MATNR: 'DEMO-MAT-3', SPRAS: 'E', MAKTX: 'DEMO MATERIAL 3' }],
+            BUT000: [{ PARTNER: 'DEMOSUP01', NAME_ORG1: 'DEMO SUPPLIER' }]
+        };
+        // RFC_READ_TABLE fake for "F = 'v'" (repeated fields OR'ed) and "F BETWEEN 'a' AND 'b'"
+        function listFake(db = DB) {
+            const rfc = {
+                readTable: jest.fn(async (table, fields, where = [], rowCount = 0) => {
+                    const w = where.join(' ');
+                    const between = [...w.matchAll(/(\w+) BETWEEN '([^']*)' AND '([^']*)'/g)];
+                    const cond = {};
+                    w.replace(/(\w+) BETWEEN '[^']*' AND '[^']*'/g, '').replace(/(\w+) = '([^']*)'/g, (_, f, v) => { (cond[f] = cond[f] || []).push(v); });
+                    const rows = (db[table] || []).filter((r) => Object.entries(cond).every(([f, vs]) => vs.includes(r[f]))
+                        && between.every(([, f, a, b]) => r[f] >= a && r[f] <= b))
+                        .map((r) => Object.fromEntries(fields.map((f) => [f, r[f] ?? ''])));
+                    return rowCount ? rows.slice(0, rowCount) : rows;
+                }),
+                call: jest.fn()
+            };
+            return rfc;
+        }
+        const range = { Plant: 'dm01', DateFrom: '2026-10-01', DateTo: '2026-10-27' };
+
+        it('one row per document/year (first item), movement 101 of the plant and date range, newest first', async () => {
+            const rfc = listFake();
+            const res = await new QuarantineLabelAdapter(rfc).listDocuments({ ...range, allowedPlants: ['DM01'] });
+            expect(res).toMatchObject({ Plant: 'DM01', DateFrom: '2026-10-01', DateTo: '2026-10-27', More: false });
+            expect(res.Documents).toEqual([
+                { MaterialDocument: '5000000002', MaterialDocumentYear: '2026', PostingDate: '2026-10-25', Plant: 'DM01', Material: 'DEMO-MAT-3', MaterialDescription: 'DEMO MATERIAL 3', Batch: '', SupplierName: '' },
+                { MaterialDocument: '5000000001', MaterialDocumentYear: '2026', PostingDate: '2026-10-20', Plant: 'DM01', Material: 'DEMO-MAT-1', MaterialDescription: 'DEMO MATERIAL 1', Batch: 'B1', SupplierName: 'DEMO SUPPLIER' }
+            ]);
+            expect(rfc.readTable.mock.calls[0]).toEqual(['MSEG', ['MBLNR', 'MJAHR', 'ZEILE', 'MATNR', 'CHARG', 'LIFNR', 'BUDAT_MKPF'],
+                ["BWART = '101'", "AND WERKS = 'DM01'", "AND BUDAT_MKPF BETWEEN '20261001' AND '20261027'"], LIST_MAX_ITEMS + 1]);
+            expect(rfc.call).not.toHaveBeenCalled(); // read only: RFC_READ_TABLE through readTable, nothing else
+            rfc.readTable.mock.calls.forEach(([, , where]) => where.forEach((l) => expect(l.length).toBeLessThanOrEqual(72)));
+        });
+        it('one document by number and year instead of a date range', async () => {
+            const rfc = listFake();
+            const res = await new QuarantineLabelAdapter(rfc).listDocuments({ Plant: 'DM01', MaterialDocument: '5000000001', MaterialDocumentYear: '2026', allowedPlants: null });
+            expect(res.Documents.map((d) => d.MaterialDocument)).toEqual(['5000000001']);
+            expect(res).toMatchObject({ DateFrom: null, DateTo: null });
+            expect(rfc.readTable.mock.calls[0][2]).toEqual(["BWART = '101'", "AND WERKS = 'DM01'", "AND MBLNR = '5000000001'", "AND MJAHR = '2026'"]);
+        });
+        it('more items than the limit: says so instead of silently dropping documents', async () => {
+            const many = Array.from({ length: LIST_MAX_ITEMS + 3 }, (_, i) => ({ ...MSEG[2], MBLNR: String(6000000000 + i), ZEILE: '0001' }));
+            const res = await new QuarantineLabelAdapter(listFake({ ...DB, MSEG: many })).listDocuments({ ...range, allowedPlants: null });
+            expect(res.More).toBe(true);
+            expect(res.Documents).toHaveLength(LIST_MAX_ITEMS);
+        });
+        it('material texts and supplier names are read in chunks of OR lines under 72 characters', async () => {
+            const many = Array.from({ length: 120 }, (_, i) => ({ ...MSEG[1], MBLNR: String(7000000000 + i), MATNR: `DEMO-MATERIAL-WITH-A-LONG-NUMBER-${String(i).padStart(5, '0')}`, LIFNR: `SUP${i}` }));
+            const rfc = listFake({ ...DB, MSEG: many });
+            await new QuarantineLabelAdapter(rfc).listDocuments({ ...range, allowedPlants: null });
+            const tables = rfc.readTable.mock.calls.map((c) => c[0]);
+            expect(tables.filter((t) => t === 'MAKT')).toHaveLength(3);
+            expect(tables.filter((t) => t === 'BUT000')).toHaveLength(3);
+            rfc.readTable.mock.calls.forEach(([, , where]) => where.forEach((l) => expect(l.length).toBeLessThanOrEqual(72)));
+        });
+        it('403 for a plant outside the user\'s plants, before any SAP read', async () => {
+            const rfc = listFake();
+            await expect(new QuarantineLabelAdapter(rfc).listDocuments({ ...range, allowedPlants: ['DM02'] })).rejects.toMatchObject({ status: 403 });
+            await expect(new QuarantineLabelAdapter(rfc).listDocuments({ ...range, allowedPlants: [] })).rejects.toMatchObject({ status: 403 });
+            expect(rfc.readTable).not.toHaveBeenCalled();
+        });
+        it('validates plant, dates and the 31-day range; a document needs its year', () => {
+            expect(normalizeListInput(range)).toEqual({ plant: 'DM01', from: '2026-10-01', to: '2026-10-27' });
+            [
+                { ...range, Plant: 'DM1' }, { ...range, Plant: "DM0'" }, { ...range, DateFrom: '2026-02-30' }, { ...range, DateTo: '' },
+                { ...range, DateFrom: '2026-10-28' }, { ...range, DateFrom: '2026-09-01' },
+                { Plant: 'DM01', MaterialDocument: '5000000001' }, { Plant: 'DM01', MaterialDocument: 'X1', MaterialDocumentYear: '2026' }
+            ].forEach((bad) => expect(() => normalizeListInput(bad)).toThrow(expect.objectContaining({ status: 400 })));
+            expect(normalizeListInput({ ...range, DateFrom: '2026-09-27' })).toMatchObject({ from: '2026-09-27' }); // 31 days
+        });
+        it('no documents: empty list, no lookups', async () => {
+            const rfc = listFake({ ...DB, MSEG: [] });
+            const res = await new QuarantineLabelAdapter(rfc).listDocuments({ ...range, allowedPlants: null });
+            expect(res).toMatchObject({ More: false, Documents: [] });
+            expect(rfc.readTable).toHaveBeenCalledTimes(1);
+        });
+    });
 });
