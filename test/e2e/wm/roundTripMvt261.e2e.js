@@ -230,4 +230,4 @@ function roundTripMvt261(options = {}) {
 
 if (require.main === module) kit.main(roundTripMvt261);
 
-module.exports = { roundTripMvt261 };
+module.exports = { roundTripMvt261, SUBCASES, PATH, SERVICE, pickDryRunData };

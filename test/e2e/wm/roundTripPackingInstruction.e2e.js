@@ -71,7 +71,7 @@ async function typeInto(page, selector, value) {
 }
 
 /** Opens the create dialog, fills it like a user and presses "Create" once. */
-async function driveUi(session, data) {
+async function driveUi(session, data, waitMs = 180000) {
     const { page } = session;
     await kit.open(session, 'wm/packing-instruction');
     await page.click('[id$="--piCreateBtn"]');
@@ -94,7 +94,7 @@ async function driveUi(session, data) {
     await typeInto(page, `[id="${ids.unit}"]`, data.unit);
     const form = await kit.viewModel(page, 'piCreateBtn', 'piCreate');
     await page.click('[id$="--piCreateSubmit"]'); // exactly one submit, never retried
-    const toast = await kit.waitForToast(page, ['created'], 180000);
+    const toast = await kit.waitForToast(page, ['created'], waitMs);
     await session.settle();
     const after = await kit.viewModel(page, 'piCreateBtn', 'piCreate');
     delete form.vhPackaging;
@@ -178,4 +178,4 @@ function roundTripPackingInstruction(options = {}) {
 
 if (require.main === module) kit.main(roundTripPackingInstruction);
 
-module.exports = { roundTripPackingInstruction };
+module.exports = { roundTripPackingInstruction, driveUi, pickDryRunData, ACTION, stubResult };

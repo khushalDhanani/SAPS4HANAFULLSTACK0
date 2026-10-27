@@ -69,7 +69,7 @@ function grView(page) {
 }
 
 /** Drives the screen like a user and submits once. Returns what the UI showed. */
-async function driveUi(session, { delivery, quantity }) {
+async function driveUi(session, { delivery, quantity, waitMs = 120000 }) {
     const { page } = session;
     await open(session, 'wm/goods-receipt');
     const rows = await page.evaluate(() => {
@@ -101,7 +101,7 @@ async function driveUi(session, { delivery, quantity }) {
     await page.click('[id$="--btnPostGoodsReceipt"]');
     await page.locator('.sapMMessageBoxQuestion button', { hasText: 'Yes' }).click();
     const box = page.locator(RESULT_BOX).first();
-    await box.waitFor({ state: 'visible', timeout: 120000 });
+    await box.waitFor({ state: 'visible', timeout: waitMs });
     const cls = await box.getAttribute('class');
     return { delivery: rowId.delivery, activeSU: before, quantity: Number(qty), success: /sapMMessageBoxSuccess/.test(cls), dialog: (await box.innerText()).trim() };
 }
@@ -202,4 +202,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { roundTripGoodsReceipt };
+module.exports = { roundTripGoodsReceipt, driveUi, ACTION, stubResult };

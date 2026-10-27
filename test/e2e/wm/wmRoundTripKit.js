@@ -63,6 +63,25 @@ function currentHash(page) {
 }
 
 /**
+ * Failure mode for the submit-failure E2E (negative/verifyActionFailures): while set, every stubbed action answers the
+ * failure instead of its success stub ({ status, code, message } = OData error, 'timeout' = aborted request).
+ * capWaits(ms) caps waitForToast so a failed write is observed after ms instead of the suites' 2-3 minute success waits.
+ */
+let failure = null;
+let waitCap = Infinity;
+function setFailure(f) { failure = f; }
+function capWaits(ms) { waitCap = ms; }
+function failAction(route) {
+    if (failure === 'timeout') return route.abort('timedout');
+    return route.fulfill({
+        status: failure.status,
+        contentType: 'application/json;odata.metadata=minimal',
+        headers: { 'OData-Version': '4.0' },
+        body: JSON.stringify({ error: { code: failure.code || String(failure.status), message: failure.message } })
+    });
+}
+
+/**
  * Dry-run stub for exactly one action path, registered after the session's guard so it wins for that URL only.
  * respond(body, callIndex) returns the CAP-serialized action result. Returns the live list of recorded calls.
  */
@@ -71,6 +90,7 @@ async function stubAction(session, path, respond) {
     await session.page.route((url) => url.pathname === path, (route) => {
         const body = route.request().postDataJSON() || {};
         calls.push({ path, method: route.request().method(), body });
+        if (failure) return failAction(route);
         return route.fulfill({
             status: 200,
             contentType: 'application/json;odata.metadata=minimal;IEEE754Compatible=true',
@@ -93,6 +113,7 @@ function recordPosts(session, paths) {
 
 /** Waits for a MessageToast whose text contains every given fragment; returns its text or null. */
 async function waitForToast(page, fragments, timeout = 20000) {
+    timeout = Math.min(timeout, waitCap);
     const handle = await page.waitForFunction((f) => [...document.querySelectorAll('.sapMMessageToast')]
         .map((e) => e.textContent).find((t) => f.every((x) => t.includes(x))) || null, fragments, { timeout }).catch(() => null);
     return handle ? handle.jsonValue() : null;
@@ -173,6 +194,6 @@ function main(fn) {
 }
 
 module.exports = {
-    AUTH, waitForHealth, getJson, postReadOnlyAction, open, viewModel, currentHash, stubAction, recordPosts,
+    setFailure, capWaits, AUTH, waitForHealth, getJson, postReadOnlyAction, open, viewModel, currentHash, stubAction, recordPosts,
     waitForToast, messageBoxButton, messageBoxText, sessionErrors, expectCalls, runSuite, main
 };

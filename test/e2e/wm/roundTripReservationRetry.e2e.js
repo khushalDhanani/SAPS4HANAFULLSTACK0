@@ -57,7 +57,7 @@ async function pickDryRunData(baseUrl) {
 }
 
 /** Opens the detail like a user and presses Retry once. */
-async function driveUi(session, entry) {
+async function driveUi(session, entry, waitMs = 180000) {
     const { page } = session;
     await kit.open(session, `wm/reservation-entry/${entry.ReservationNo}/${entry.ReservationItem}`);
     const view = await kit.viewModel(page, 'btnRetryDetail', 'view');
@@ -65,7 +65,7 @@ async function driveUi(session, entry) {
     const btn = page.locator('[id$="--btnRetryDetail"]');
     if (!(await btn.isVisible())) return { retried: false, isTracked: view && view.isTracked, status: detail && detail.Status_code };
     await btn.click(); // exactly one retry, never repeated
-    const toast = await kit.waitForToast(page, ['Current Status'], 180000);
+    const toast = await kit.waitForToast(page, ['Current Status'], waitMs);
     const dialog = toast ? '' : await kit.messageBoxText(page);
     await session.settle();
     return { retried: true, statusBefore: detail && detail.Status_code, errorStepBefore: detail && detail.ErrorStep, toast, dialog };
@@ -144,4 +144,4 @@ function roundTripReservationRetry(options = {}) {
 
 if (require.main === module) kit.main(roundTripReservationRetry);
 
-module.exports = { roundTripReservationRetry };
+module.exports = { roundTripReservationRetry, driveUi, pickDryRunData, ACTION, stubResult };

@@ -297,4 +297,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { roundTripOrdersDue };
+module.exports = { roundTripOrdersDue, SUBCASES, ACTIONS, SERVICE, DRYRUN_PLANT };

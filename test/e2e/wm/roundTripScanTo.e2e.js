@@ -235,4 +235,4 @@ function roundTripScanTo(options = {}) {
 
 if (require.main === module) kit.main(roundTripScanTo);
 
-module.exports = { roundTripScanTo };
+module.exports = { roundTripScanTo, SUBCASES, candidates, CREATE, SERVICE };

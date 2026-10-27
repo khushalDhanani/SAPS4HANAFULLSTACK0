@@ -270,4 +270,4 @@ function roundTripHandlingUnit(options = {}) {
 
 if (require.main === module) kit.main(roundTripHandlingUnit);
 
-module.exports = { roundTripHandlingUnit };
+module.exports = { roundTripHandlingUnit, SUBCASES, PATH, SERVICE, pickDryRunData, dryInputs };
