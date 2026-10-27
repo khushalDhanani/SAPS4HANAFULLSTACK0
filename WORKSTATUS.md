@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **HU label PDF border (2026-10-27 IST) — DONE, UNCOMMITTED:** `HuLabelPdf.js` draws a 0.5 px (0.1323 mm) solid black border on every page of the label PDF (all 5 sizes). Unit 56/56 PASS; page rendered and inspected. HU print (HTML) and the QR-label PDF are unchanged. See Changes Log (HU label PDF border).
+
 - **E2E P1 items 16–17 (2026-10-27 IST) — DONE, UNCOMMITTED:** suite registration enforced by `test/unit/tools/e2eRunner.test.js`; runner keeps trace + screenshot of failed suites under `test-results/e2e-evidence/`; `isolatedServer` retries on EADDRINUSE (fixed a flaky `Write authorization` failure in the post-fix full run). Post-fix full run: 15/16, the 1 failure was that port race; suite re-run alone PASS. Full run NOT repeated after the retry fix. Plan for P1 12–15 given in chat only. See Changes Log (P1 16–17).
 
 - **Movement 261 scan E2E fixed (2026-10-27 IST) — DONE, UNCOMMITTED:** `verifyWmScreens.e2e.js` now opens the first `openItems()` entry with `ScanPossible` true; suite re-run alone: all steps PASS incl. 261 scan and cycle, exit 0. Full `npm run test:e2e` NOT re-run after the fix, so the 15/16 full-run result above is superseded only for this suite. Matrix `wmScan261` back to 🟢. See Changes Log (261 scan fix).
@@ -5001,3 +5003,10 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Executed:** `npx jest test/unit/tools/e2eRunner.test.js test/unit/tools/e2eCoverageMatrix.test.js` 14/14 PASS; eslint on test/e2e and the new test clean; `git diff --check` clean; scripted real-browser proof (login screen, forced failed suite) wrote `session-1.png` (118 KB) and `session-1.zip` (2.9 MB) as designed; `verifyWriteAuthorization` alone PASS. Post-fix full `npm run test:e2e` (before 16/17 and the retry fix): 15/16 — 261 scan now PASS, Write authorization FAIL (port race), Submit failures 28/28 in 1,265,380 ms.
 - **NOT VERIFIED:** a full `npm run test:e2e` with evidence recording on; its overhead (tracing runs for every session, trace of a long suite is several MB per session, pruned to the last 8); evidence from a genuinely failing suite in the runner path (only the helper path was exercised).
 - **Next:** one more full run; then P1 12–15 per the plan given in chat.
+
+### 2026-10-27 IST — /wm/handling-unit: 0.5 px solid border on the generated label PDF — DONE, UNCOMMITTED
+
+- **Request:** "in generate PDF Give Border 0.5 PX Solid" on `/wm/handling-unit`.
+- **ASSUMPTION (stated, not asked):** "generate PDF" = the HU label PDF download (`HuLabelPdf.generate`/`download`), border around each page; 0.5 px read as CSS px = 0.5 × 25.4/96 = 0.1323 mm, black, drawn inset by half the line width so the stroke is not clipped by the page edge. Not changed: the browser print path (`HuLabelPrinter` HTML, so print and PDF now differ by this border) and the QR-label PDF `HuQrPdf.js` (own thin grey cut lines for grids only).
+- **Changed:** `app/fiori-app/webapp/modules/wm/handling-unit/util/HuLabelPdf.js` (`BORDER_MM`, stroke rect at the start of `drawLabel`); test `test/unit/wm/handlingUnitLabel.test.js` (TEST ADDED: border width, colour, inset geometry for sizes A/B/E/C/D).
+- **Executed:** `npx jest test/unit/wm/handlingUnitLabel.test.js test/unit/wm/handlingUnitsController.test.js` 56/56 PASS; `git diff --check` clean; ESLint ignores the webapp file (warning only); a size-B PDF generated with real jsPDF and rendered to PNG (`sips`): border visible, content not overlapped. Browser E2E for `wmHandlingUnits` NOT re-run; the in-app Download PDF button NOT clicked; physical print NOT checked.
