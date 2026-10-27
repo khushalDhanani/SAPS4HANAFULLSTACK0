@@ -4886,3 +4886,11 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Evidence type:** user-reported physical test; not observed by the agent. Printer model, browser/OS and data source (live SAP or DEMO) not stated (UNKNOWN).
 - **CHANGED:** WORKSTATUS.md only. No code change, no tests run, no SAP call.
 - **Still NOT VERIFIED:** browsers other than Chromium; multi-label print run; live SAP rows through the "4x6 Labels" path (unless the printed label used them — not stated). **ASSUMPTIONS:** none. **FINAL STATUS:** layout and print PASS per user physical test; feature PARTIAL for the items above. All label changes UNCOMMITTED.
+
+
+### 2026-10-27 11:58 IST — Git: bdd4192 split into Adobe-form work and 4x6 print path (local history rewrite)
+
+- **User request (quoted):** "Split bdd4192 into two commits: Adobe spec/adapter/check-tool (with their tests) and the 4x6 print path. Rewrite local history only; don't push."
+- **DONE (local only, nothing pushed):** backup branch `backup/feature01-before-split` created at the old tip (00be937). Rebuilt from 9bddddb: `a84509c` Adobe spec / adapter IV_FORM check / `tools/check-label-pdf.py` + their tests + WORKSTATUS 10:55 IST entry (exactly the 18 lines that were uncommitted at session start); `3e864cd` the rest of bdd4192 (4x6 print path; tree identical to bdd4192); then `09a0775` and `4d50898` replayed (were 3040d0c, 00be937). Original author dates kept for the two split commits.
+- **Executed validation:** `git diff bdd4192 3e864cd` 0 lines; `git diff backup/feature01-before-split HEAD` 0 lines (final tree byte-identical); at a84509c `npx jest` adapter, checkLabelPdf, zquarLabel, controller suites 4/4, 96 tests PASS; at the tip `npx jest test/unit` 197 passed, 1 skipped, 3,920 passed / 59 skipped / 0 failed. `feature01` is 15 ahead of `origin/feature01`, not pushed. TEST DECISION: EXISTING TEST SUFFICIENT (no content change).
+- **Next:** delete `backup/feature01-before-split` once the user is satisfied; this entry itself is uncommitted. **ASSUMPTIONS:** none. **FINAL STATUS:** PASS.
