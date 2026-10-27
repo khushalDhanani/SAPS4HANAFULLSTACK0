@@ -36,7 +36,17 @@ function isolatedEnv(port, base = process.env) {
     return env;
 }
 
-async function startIsolatedServer({ timeoutMs = 60000 } = {}) {
+/** freePort() releases the port before the child binds it, so another process can take it in between: retry on EADDRINUSE. */
+async function startIsolatedServer(options = {}, attempts = 3) {
+    try {
+        return await startOnce(options);
+    } catch (err) {
+        if (attempts > 1 && /EADDRINUSE/.test(err.message)) return startIsolatedServer(options, attempts - 1);
+        throw err;
+    }
+}
+
+async function startOnce({ timeoutMs = 60000 } = {}) {
     const port = await freePort();
     const env = isolatedEnv(port);
     const child = spawn(process.execPath, [require.resolve('@sap/cds/bin/serve', { paths: [ROOT] }), '--port', String(port)], {

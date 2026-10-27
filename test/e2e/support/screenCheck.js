@@ -8,6 +8,7 @@
 
 const { chromium } = require('../playwrightLoader');
 const { installWriteGuard } = require('./writeGuard');
+const evidence = require('./evidence');
 
 // CAP mock users (package.json cds.requires.auth.users); the UI session mirrors their roles.
 const USERS = {
@@ -28,6 +29,7 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
         viewport: { width: 1440, height: 900 }
     });
     const blocked = await installWriteGuard(context, { allowWrites });
+    const trace = await evidence.startSession(context); // null outside the runner
     const page = await context.newPage();
     const consoleErrors = [];
     const networkErrors = [];
@@ -68,7 +70,10 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
 
     return {
         baseUrl, page, blocked, consoleErrors, networkErrors, settle,
-        close: () => browser.close()
+        close: async () => {
+            if (trace) await trace.capture(page);
+            await browser.close();
+        }
     };
 }
 

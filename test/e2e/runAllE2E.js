@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const evidence = require('./support/evidence');
 
 const { runHardeningE2E } = require('./wm/verifyHardeningUI.e2e');
 const { verifyMvt201 } = require('./wm/verifyMvt201.e2e');
@@ -154,9 +155,12 @@ async function runAll(options = {}) {
   for (const suite of suites) {
     const startTime = Date.now();
     console.log(`\n>>> STARTING: ${suite.name} (${suite.file})`);
+    evidence.beginSuite(suite.name);
     try {
       const outcome = await suite.fn({ baseUrl });
       const durationMs = Date.now() - startTime;
+      const evidenceDir = evidence.endSuite(outcome.status !== 'PASS', testResultsDir);
+      if (evidenceDir) console.error(`    evidence (trace + screenshots): ${evidenceDir}`);
       if (outcome.status === 'PASS') {
         totalPassed++;
         console.log(`<<< PASSED: ${suite.name} in ${durationMs}ms`);
@@ -169,10 +173,12 @@ async function runAll(options = {}) {
         file: suite.file,
         status: outcome.status,
         durationMs,
-        errors: outcome.errors || []
+        errors: outcome.errors || [],
+        ...(evidenceDir ? { evidence: path.relative(path.resolve(__dirname, '../..'), evidenceDir) } : {})
       });
     } catch (err) {
       const durationMs = Date.now() - startTime;
+      const evidenceDir = evidence.endSuite(true, testResultsDir);
       totalFailed++;
       console.error(`<<< EXCEPTION in ${suite.name} (${durationMs}ms):`, err.message);
       results.push({
@@ -180,7 +186,8 @@ async function runAll(options = {}) {
         file: suite.file,
         status: 'FAIL',
         durationMs,
-        errors: [err.message]
+        errors: [err.message],
+        ...(evidenceDir ? { evidence: path.relative(path.resolve(__dirname, '../..'), evidenceDir) } : {})
       });
     }
   }

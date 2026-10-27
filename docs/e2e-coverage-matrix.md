@@ -112,3 +112,5 @@ Still open: real stale-data detection is NOT VERIFIED (the create actions carry 
 ## Running
 
 `npm run test:e2e` runs the Tier A/B and authorization suites (`node test/e2e/runAllE2E.js`) against a running server (`npm start`); Tier C runs separately via `npm run test:e2e:sap`; it is not part of CI, which has no SAP connectivity. Tier A/B suites read SAP data through CAP (READ-ONLY) behind the write guard. Live SAP writes still require the user's written go per call (`AGENTS.md`).
+
+Evidence: while `npm run test:e2e` runs, every browser session records a Playwright trace plus a final screenshot; for a failed suite they are kept in `test-results/e2e-evidence/<suite>/` (`session-N.png`, `session-N.zip`; last 8 sessions), for a passed suite they are discarded. Open a trace with `npx playwright show-trace <file>.zip`; the suite's entry in `test-results/e2e-summary.json` carries an `evidence` path. Registration: `test/unit/tools/e2eRunner.test.js` fails when a `*.e2e.js` suite is in neither `runAllE2E.js` nor `runSapRoundTrips.js`.

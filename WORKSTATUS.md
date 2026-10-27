@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **E2E P1 items 16–17 (2026-10-27 IST) — DONE, UNCOMMITTED:** suite registration enforced by `test/unit/tools/e2eRunner.test.js`; runner keeps trace + screenshot of failed suites under `test-results/e2e-evidence/`; `isolatedServer` retries on EADDRINUSE (fixed a flaky `Write authorization` failure in the post-fix full run). Post-fix full run: 15/16, the 1 failure was that port race; suite re-run alone PASS. Full run NOT repeated after the retry fix. Plan for P1 12–15 given in chat only. See Changes Log (P1 16–17).
+
 - **Movement 261 scan E2E fixed (2026-10-27 IST) — DONE, UNCOMMITTED:** `verifyWmScreens.e2e.js` now opens the first `openItems()` entry with `ScanPossible` true; suite re-run alone: all steps PASS incl. 261 scan and cycle, exit 0. Full `npm run test:e2e` NOT re-run after the fix, so the 15/16 full-run result above is superseded only for this suite. Matrix `wmScan261` back to 🟢. See Changes Log (261 scan fix).
 
 - **Full `npm run test:e2e` (2026-10-27 IST) — PARTIAL: 15/16 suites PASS, 1 FAIL:** `WM screens` fails on Movement 261 scan (first open item): "Scanning is not possible: no unrestricted stock in the issue location" — cause UNKNOWN (live stock state vs. suite item choice), not investigated, not caused by this session's edits (no app code changed). Submit failures (mocked) 28/28 PASS in one uninterrupted pass (1,184,990 ms ≈ 20 min). Matrix row `wmScan261` set to 🟡. See Changes Log (full E2E run).
@@ -4990,3 +4992,12 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Executed:** `node test/e2e/wm/verifyWmScreens.e2e.js` (local :4004, READ-ONLY, write guard on): exit 0; "Movement 261 scan" and "Movement 261 cycle" PASS, all other steps PASS. The selected item is live data; the suite skips with a reason if none is scannable.
 - **Docs:** `docs/e2e-coverage-matrix.md` `wmScan261` 🟡 → 🟢, totals 🟢 34 / 🟡 0.
 - **NOT VERIFIED:** full `npm run test:e2e` after the fix; a stale/blocked item no longer exercises the blocked-item error strip (no E2E covers that display).
+
+### 2026-10-27 IST — E2E P1 16 (suite registration) and 17 (failure evidence); isolated-server port race — DONE, UNCOMMITTED
+
+- **Changed:** NEW `test/e2e/support/evidence.js`; `test/e2e/support/screenCheck.js` (session starts a trace, `close()` saves screenshot + trace when a suite is active); `test/e2e/runAllE2E.js` (begin/end evidence per suite, `evidence` path in `e2e-summary.json`); NEW `test/unit/tools/e2eRunner.test.js`; `test/e2e/support/isolatedServer.js` (retry on EADDRINUSE, root cause below); `docs/e2e-coverage-matrix.md` (Evidence/registration note). TEST ADDED. No app code, no SAP call.
+- **16:** chose enforcement over rewriting the runner: the suites have different adapters (mvt wrappers, Tier C), so a unit test asserts every `*.e2e.js` appears in `runAllE2E.js` or `runSapRoundTrips.js`. Negative check done by hand: a dummy `verifyBogus.e2e.js` made the test fail; removed.
+- **Port race (root cause):** post-fix full run `Write authorization (isolated server)` exited with `EADDRINUSE :::50620`; `freePort()` releases the port before the child binds it. Fixed once in `startIsolatedServer`.
+- **Executed:** `npx jest test/unit/tools/e2eRunner.test.js test/unit/tools/e2eCoverageMatrix.test.js` 14/14 PASS; eslint on test/e2e and the new test clean; `git diff --check` clean; scripted real-browser proof (login screen, forced failed suite) wrote `session-1.png` (118 KB) and `session-1.zip` (2.9 MB) as designed; `verifyWriteAuthorization` alone PASS. Post-fix full `npm run test:e2e` (before 16/17 and the retry fix): 15/16 — 261 scan now PASS, Write authorization FAIL (port race), Submit failures 28/28 in 1,265,380 ms.
+- **NOT VERIFIED:** a full `npm run test:e2e` with evidence recording on; its overhead (tracing runs for every session, trace of a long suite is several MB per session, pruned to the last 8); evidence from a genuinely failing suite in the runner path (only the helper path was exercised).
+- **Next:** one more full run; then P1 12–15 per the plan given in chat.
