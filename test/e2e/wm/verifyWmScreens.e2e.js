@@ -29,11 +29,12 @@ async function mvt261Steps(baseUrl) {
         const res = await fetch(`${baseUrl}/odata/v4/mvt261/openItems()`, {
             headers: { Authorization: 'Basic ' + Buffer.from('alice:').toString('base64') }
         });
-        item = res.ok ? ((await res.json()).Items || [])[0] : null;
+        // Blocked items (order not released, no unrestricted stock, ...) legitimately show an error strip, so only scannable ones qualify.
+        item = res.ok ? ((await res.json()).Items || []).find((i) => i.ScanPossible === true) : null;
     } catch (_) {
         item = null;
     }
-    const skip = item ? undefined : 'no open 261 reservation item returned by openItems()';
+    const skip = item ? undefined : 'no scannable (ScanPossible) open 261 reservation item returned by openItems()';
     const hash = item ? `wm/mvt261/open/${item.Reservation}/${item.ReservationItem}` : '';
     return [
         { name: 'Movement 261 scan (first open item)', hash, route: 'wmScan261', skip },

@@ -220,4 +220,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { roundTripCustomerReturn };
+module.exports = { roundTripCustomerReturn, deriveData, fill };
