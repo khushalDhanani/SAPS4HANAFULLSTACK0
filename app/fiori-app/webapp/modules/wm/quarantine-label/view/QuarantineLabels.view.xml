@@ -40,7 +40,7 @@
                     type="{qlView>/messageType}" showIcon="true" class="sapUiSmallMarginTop" />
 
                 <!-- Goods receipts (movement type 101) of a plant: read only; labels per row or for the ticked rows -->
-                <!-- <Panel id="qlListPanel" headerText="{i18n>qlListTitle}" class="sapUiSmallMarginTop">
+                <Panel id="qlListPanel" headerText="{i18n>qlListTitle}" class="sapUiSmallMarginTop">
                     <form:SimpleForm id="qlListForm" editable="true" layout="ResponsiveGridLayout" columnsM="2" columnsL="3" columnsXL="3">
                         <form:content>
                             <Label text="{i18n>qlListPlant}" labelFor="qlListPlant" required="true" />
@@ -112,7 +112,7 @@
                     <ToolbarSpacer />
                     <Button id="qlPrint" text="{i18n>qlPrint}" icon="sap-icon://print" press=".onPrint" />
                     <Button id="qlDownload" text="{i18n>qlDownload}" icon="sap-icon://download" press=".onDownload" />
-                </OverflowToolbar> -->
+                </OverflowToolbar>
 
                 <!-- isTrustedSource: the PDF is rendered by SAP and served by this app's own backend -->
                 <PDFViewer id="qlPdfViewer" source="{qlView>/pdfUrl}" isTrustedSource="true" showDownloadButton="false"
