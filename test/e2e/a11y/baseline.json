@@ -1,0 +1,69 @@
+{
+  "login": {},
+  "dashboard": {
+    "label-content-name-mismatch": 10
+  },
+  "purchaseOrders": {
+    "label-content-name-mismatch": 1
+  },
+  "createPurchaseOrder": {
+    "aria-input-field-name": 1,
+    "label-content-name-mismatch": 1
+  },
+  "salesInquiries": {
+    "label-content-name-mismatch": 1
+  },
+  "createSalesInquiry": {
+    "aria-input-field-name": 1,
+    "label-content-name-mismatch": 1
+  },
+  "salesOrders": {
+    "label-content-name-mismatch": 1
+  },
+  "createSalesOrder": {
+    "aria-input-field-name": 1,
+    "label-content-name-mismatch": 1
+  },
+  "wmGoodsReceipt": {
+    "label-content-name-mismatch": 1
+  },
+  "ordersDueForDelivery": {
+    "aria-input-field-name": 1,
+    "aria-valid-attr-value": 1,
+    "label-content-name-mismatch": 1
+  },
+  "customerInvoices": {
+    "label-content-name-mismatch": 1
+  },
+  "customerReturns": {
+    "label-content-name-mismatch": 5
+  },
+  "createCustomerReturn": {
+    "label-content-name-mismatch": 1
+  },
+  "wmHandlingUnits": {
+    "label-content-name-mismatch": 1
+  },
+  "wmPackingInstructions": {
+    "label-content-name-mismatch": 1
+  },
+  "wmQuarantineLabels": {
+    "label-content-name-mismatch": 1
+  },
+  "wmReservationEntryList": {
+    "label-content-name-mismatch": 1
+  },
+  "wmReservationEntryCreate": {
+    "label-content-name-mismatch": 1
+  },
+  "wmWarehouseScanTo": {
+    "label-content-name-mismatch": 1
+  },
+  "wmHuStockTransfer": {
+    "label-content-name-mismatch": 1
+  },
+  "wmHuStockTransferRackDemo": {
+    "aria-input-field-name": 3,
+    "label-content-name-mismatch": 1
+  }
+}

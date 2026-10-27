@@ -150,4 +150,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { roundTripCustomerInvoice };
+module.exports = { roundTripCustomerInvoice, CASES, SERVICE, HASH };

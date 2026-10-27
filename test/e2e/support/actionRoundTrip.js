@@ -11,6 +11,9 @@
  * - live: the call is forwarded exactly once (route.fetch, never retried); everything else stays behind the
  *   session's write guard, so a `$batch` holding anything besides that one action call is still blocked.
  * A `$batch` that mixes the action with other requests is recorded as `mixed` and left to the guard (blocked).
+ * Failure mode (dry-run only, for the submit-failure E2E): `fail` = { status, code, message } answers an OData error
+ * (4xx as the batch part's own status, 401/503 as the HTTP status of the whole request), `fail: 'timeout'` aborts the
+ * request, and `delayMs` holds the stubbed answer back so a double click can be sent while it is pending.
  */
 
 const { resolveMode } = require('./liveWriteGate');
@@ -41,10 +44,10 @@ function batchResponseJson(text) {
     return { status, json };
 }
 
-function batchFulfill(json) {
+function batchFulfill(json, status = 200) {
     const b = 'batchresponse_dryrun';
     const body = `--${b}\r\nContent-Type: application/http\r\nContent-Transfer-Encoding: binary\r\n\r\n`
-        + `HTTP/1.1 200 OK\r\nContent-Type: ${JSON_TYPE}\r\nOData-Version: 4.0\r\n\r\n${JSON.stringify(json)}\r\n--${b}--\r\n`;
+        + `HTTP/1.1 ${status} X\r\nContent-Type: ${JSON_TYPE}\r\nOData-Version: 4.0\r\n\r\n${JSON.stringify(json)}\r\n--${b}--\r\n`;
     return { status: 200, headers: { 'Content-Type': `multipart/mixed; boundary=${b}`, 'OData-Version': '4.0' }, body };
 }
 
@@ -52,7 +55,7 @@ function batchFulfill(json) {
  * Registers the page-level route for `${service}/${action}` (after the session's guard, so it wins for that call only).
  * respond(body) → stub result (dry-run). Returns the live list of calls: { via, body, status, result } or { via, mixed }.
  */
-async function interceptAction(page, { flow, service, action, live = false, respond }) {
+async function interceptAction(page, { flow, service, action, live = false, respond, fail = null, delayMs = 0 }) {
     // Live forwarding bypasses the context write guard, so the gate is re-checked here instead of trusting the caller.
     if (live && resolveMode(flow).mode !== 'live') {
         throw new Error(`Blocked: live forwarding of ${service}/${action} requires an authorized live gate for flow "${flow}"`);
@@ -78,7 +81,18 @@ async function interceptAction(page, { flow, service, action, live = false, resp
         }
         const call = { via: viaBatch ? 'batch' : 'direct', body };
         calls.push(call);
+        if (!live && fail) {
+            if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+            if (fail === 'timeout') return route.abort('timedout');
+            call.status = fail.status;
+            const error = { error: { code: fail.code || String(fail.status), message: fail.message } };
+            if (!viaBatch || fail.status === 401 || fail.status === 503) {
+                return route.fulfill({ status: fail.status, contentType: JSON_TYPE, headers: { 'OData-Version': '4.0' }, body: JSON.stringify(error) });
+            }
+            return route.fulfill(batchFulfill(error, fail.status));
+        }
         if (!live) {
+            if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
             call.status = 200;
             call.result = respond(body);
             return viaBatch

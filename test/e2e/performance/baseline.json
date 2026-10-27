@@ -1,0 +1,23 @@
+{
+  "login": 1511,
+  "dashboard": 1700,
+  "purchaseOrders": 2894,
+  "createPurchaseOrder": 25608,
+  "salesInquiries": 1896,
+  "createSalesInquiry": 3706,
+  "salesOrders": 1845,
+  "createSalesOrder": 4118,
+  "wmGoodsReceipt": 1618,
+  "ordersDueForDelivery": 1673,
+  "customerInvoices": 2708,
+  "customerReturns": 2387,
+  "createCustomerReturn": 1688,
+  "wmHandlingUnits": 2352,
+  "wmPackingInstructions": 1608,
+  "wmQuarantineLabels": 1481,
+  "wmReservationEntryList": 2297,
+  "wmReservationEntryCreate": 23011,
+  "wmWarehouseScanTo": 4403,
+  "wmHuStockTransfer": 4702,
+  "wmHuStockTransferRackDemo": 1714
+}

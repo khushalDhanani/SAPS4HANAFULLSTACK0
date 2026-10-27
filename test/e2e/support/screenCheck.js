@@ -9,12 +9,27 @@
 const { chromium } = require('../playwrightLoader');
 const { installWriteGuard } = require('./writeGuard');
 const evidence = require('./evidence');
+const { parseMetadata, checkRequest } = require('./contract');
+const { batchParts } = require('./actionRoundTrip');
 
 // CAP mock users (package.json cds.requires.auth.users); the UI session mirrors their roles.
 const USERS = {
     alice: ['Admin', 'Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager'],
     bob: ['Viewer']
 };
+
+const SERVICE_URL = /\/odata\/v4\/([^/?]+)\/([^?]*(?:\?.*)?)$/;
+const metaCache = new Map(); // `${baseUrl}|${service}` -> Promise<{ meta } | { error }>
+
+/** Service $metadata, fetched once per run with a GET (read-only). */
+function serviceMeta(baseUrl, service) {
+    const key = `${baseUrl}|${service}`;
+    if (!metaCache.has(key)) {
+        metaCache.set(key, fetch(`${baseUrl}/odata/v4/${service}/$metadata`, { headers: { Authorization: 'Basic ' + Buffer.from('alice:').toString('base64') } })
+            .then(async (r) => (r.ok ? { meta: parseMetadata(await r.text()) } : { error: `HTTP ${r.status}` }), (e) => ({ error: e.message })));
+    }
+    return metaCache.get(key);
+}
 
 const IGNORED = /i18n_en_US\.properties|favicon|livereload/;
 
@@ -44,7 +59,27 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
     page.on('response', (res) => {
         if (res.status() >= 400 && !IGNORED.test(res.url())) networkErrors.push({ status: res.status(), url: res.url() });
     });
-    page.on('request', () => { inFlight++; });
+    const contractSeen = new Set();
+    const contractPending = [];
+    /** Request-side contract (support/contract.js): the UI may only ask a CAP service for names its $metadata declares. */
+    function contractCheck(service, path) {
+        contractPending.push(serviceMeta(baseUrl, service).then((m) => {
+            const errs = m.error ? [`$metadata of ${service} unavailable (${m.error})`] : checkRequest(m.meta, path);
+            errs.forEach((e) => {
+                const msg = `CONTRACT: ${service}: ${e}`;
+                if (!contractSeen.has(msg)) { contractSeen.add(msg); consoleErrors.push(msg); }
+            });
+        }));
+    }
+    page.on('request', (req) => {
+        inFlight++;
+        const m = SERVICE_URL.exec(req.url());
+        if (!m) return;
+        if (req.method() === 'GET') contractCheck(m[1], m[2]);
+        else if (req.method() === 'POST' && m[2] === '$batch') {
+            batchParts(req.postData()).filter((p) => p.method === 'GET').forEach((p) => contractCheck(m[1], p.url.replace(/^\/+/, '')));
+        }
+    });
     page.on('requestfinished', () => { inFlight--; });
     page.on('requestfailed', () => { inFlight--; });
 
@@ -66,6 +101,7 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
             await page.waitForTimeout(100);
         }
         await page.waitForFunction(() => !document.querySelector('.sapUiLocalBusyIndicator, .sapUiBusyIndicator'), null, { timeout: 15000 }).catch(() => {});
+        await Promise.all(contractPending);
     }
 
     return {
