@@ -10,14 +10,18 @@
  */
 
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const BATCH_LINE = /^(GET|POST|PUT|PATCH|DELETE|MERGE)\s+\S+\s+HTTP\/1\.[01]\s*$/gm;
+// Fail closed: every request-shaped line counts whatever its case, indentation or verb; only an exact GET is a read.
+const BATCH_LINE = /^[ \t]*([A-Za-z]+)[ \t]+\S+[ \t]+HTTP\/\d(?:\.\d)?[ \t\r]*$/gm;
+const WRITE_VERB_LINE = /^[ \t]*(?:POST|PUT|PATCH|DELETE|MERGE)\b/im; // a write verb that is not a well-formed request line
+const METHOD_OVERRIDE = /^[ \t]*x-http-method(?:-override)?[ \t]*:/im; // tunnels a write through a GET
 
 /**
  * allowWrites: RegExps of paths a gated live Tier C suite may POST to (only ever passed by liveWriteGate users).
  * @returns {{ allow: boolean, reason: string }}
  */
-function classifyRequest({ method, url, postData }, allowWrites = []) {
+function classifyRequest({ method, url, postData, headers = {} }, allowWrites = []) {
     const m = String(method || '').toUpperCase();
+    if (Object.keys(headers).some((h) => /^x-http-method(-override)?$/i.test(h))) return { allow: false, reason: 'method override header' };
     if (READ_METHODS.has(m)) return { allow: true, reason: 'read method' };
 
     let pathname = '';
@@ -25,8 +29,11 @@ function classifyRequest({ method, url, postData }, allowWrites = []) {
     if (m === 'POST' && allowWrites.some((re) => re.test(pathname))) return { allow: true, reason: `allowed live write ${pathname}` };
 
     if (m === 'POST' && /\/\$batch$/.test(pathname)) {
-        const inner = [...String(postData || '').matchAll(BATCH_LINE)].map((x) => x[1]);
+        const body = String(postData || '');
+        const inner = [...body.matchAll(BATCH_LINE)].map((x) => x[1]);
         if (inner.length === 0) return { allow: false, reason: '$batch without readable request lines' };
+        if (METHOD_OVERRIDE.test(body)) return { allow: false, reason: '$batch contains a method override header' };
+        if (WRITE_VERB_LINE.test(body)) return { allow: false, reason: '$batch contains a write verb line' };
         const writes = inner.filter((x) => x !== 'GET');
         return writes.length === 0
             ? { allow: true, reason: `$batch of ${inner.length} GET` }
@@ -43,7 +50,7 @@ async function installWriteGuard(context, { allowWrites = [] } = {}) {
     const blocked = [];
     await context.route('**/*', (route) => {
         const req = route.request();
-        const verdict = classifyRequest({ method: req.method(), url: req.url(), postData: req.postData() }, allowWrites);
+        const verdict = classifyRequest({ method: req.method(), url: req.url(), postData: req.postData(), headers: req.headers() }, allowWrites);
         if (verdict.allow) return route.continue();
         blocked.push({ method: req.method(), url: req.url(), reason: verdict.reason });
         return route.abort('blockedbyclient');

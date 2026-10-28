@@ -1798,6 +1798,17 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-10-28 IST — Write guard: $batch classification regression tests and fail-closed hardening — PARTIAL
+
+- **Finding (external review):** `writeGuard.js` classified `$batch` by a regex over request lines; its behaviour for real UI5 V4 payloads and malformed/unrecognised ones was untested.
+- **Tests exposed real gaps (CONFIRMED by failing tests before the fix):** a write line with a lower/mixed-case method, an indented line, a line without HTTP version, or an unknown verb (e.g. `PURGE`) next to a GET was not counted, so the batch was classified read-only; `X-HTTP-Method(-Override)` tunnelling (in a part or on the request) was not looked at. No SAP mutation is known to have passed; these were classification holes, found by test.
+- **CHANGED:** `test/e2e/support/writeGuard.js`: request-shaped lines are matched whatever their case, indentation or verb and only an exact `GET` is a read; a line starting with a write verb that is not a well-formed request line, and any method-override header (in the batch or on the request, via new optional `headers` passed by `installWriteGuard`), block the request. Side effect: `HEAD`/`OPTIONS` inside a `$batch` are now blocked (UI5 V4 does not send them). `test/unit/tools/e2eWriteGuard.test.js`: 37 new cases (UI5-format CRLF and LF multipart, several GETs, absolute URL, changesets with POST/PATCH/DELETE/PUT/MERGE, Content-ID URLs, two changesets, write after reads, GET-looking line in a JSON payload, the malformed shapes above, JSON batch, empty/missing/binary/cut-off bodies, override headers, non-`$batch` URL, live-write allowlist scope).
+- **TEST DECISION:** TEST ADDED/UPDATED (`e2eWriteGuard.test.js`).
+- **TESTED:** `npx jest test/unit/tools` 16 suites, 167 tests pass; eslint clean on both files. Live READ-ONLY (port 4010) `verifyMmScreens` rc=0 with the new guard and no guard blocks on a captured real UI5 batch (sales-inquiry create, `blocked: []`).
+- **FAILED / NOT GUARD-RELATED:** `verifySdScreens`, `verifyMvt301` and `verifyActionFailures` failed with the new guard, and `verifySdScreens` and `verifyMvt301` fail the same way with the ORIGINAL guard (stashed and re-run). Server log: `503 node-rfc is not available (not installed)`; `node_modules/node-rfc` is absent in this checkout, so every RFC-backed value help (KNVK, CSKS, TR/TO) fails. These suites passed earlier today, so node-rfc was present/working then; when it disappeared is UNKNOWN. `verifyActionFailures` was not re-run against the old guard (assumed same cause, NOT VERIFIED).
+- **BLOCKED:** full E2E validation until node-rfc / the SAP NW RFC SDK is available again in this environment. No SAP write.
+- **ASSUMPTIONS:** none beyond the above. **FINAL STATUS:** PARTIAL.
+
 ### 2026-10-28 IST — settle(): report a stuck screen instead of ignoring it; full 2-worker E2E result — PARTIAL
 
 - **Finding (external review, CONFIRMED in code):** `screenCheck.js` `settle()` swallowed the 15 s busy-indicator timeout (`.catch(() => {})`) and ended the 30 s in-flight wait silently, so a screen that never finished loading was still evaluated.
