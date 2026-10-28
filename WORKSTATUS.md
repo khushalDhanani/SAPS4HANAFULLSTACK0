@@ -1798,6 +1798,14 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-10-28 IST — E2E: one Chromium per process, isolated context per session — PARTIAL
+
+- **CHANGED:** `test/e2e/support/screenCheck.js`: `openSession` now takes a lazily launched shared browser (`getBrowser`, relaunched if it disconnected) and still creates its own `newContext` (own auth header, write guard, routes, trace); `session.close()` closes the context only; new exported `closeBrowser()`. Per-suite `chromium.launch` in `verifyMvt*`/`verifyHardeningUI` left as is (one launch per suite already). No negative-test helper change was needed: all of them go through `openSession`, so user, authorization (user/null) and mocking (`page.route`) boundaries stay per-context.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT — the negative E2E suites themselves.
+- **TESTED (live READ-ONLY, port 4010):** `verifyNegativeUi` rc=0 77 s -> 73 s, `verifyPlantIsolation` rc=0 72 s -> 70 s (one run each, noisy); `npx jest test/unit/tools` and eslint on screenCheck.js pass; no leftover headless Chromium after the runs.
+- **FINDING:** gain is about 3-4 s per suite; time is dominated by SAP reads and UI settle, not browser startup. NOT VERIFIED: `verifySubmitFailures`, `verifyActionFailures`, a11y and performance suites with the shared browser; `verifyScreenPerformance` baselines were recorded with a fresh browser per run and may read slightly faster now (a warm browser). No SAP write.
+- **ASSUMPTIONS:** none. **FINAL STATUS:** PARTIAL.
+
 ### 2026-10-28 IST — Handling-unit list: first load 200 rows + Load more (user-chosen option A) — PARTIAL
 
 - **Request:** user chose "Lower HU cap" for the unpaged WM reads. Open reservations left unchanged.

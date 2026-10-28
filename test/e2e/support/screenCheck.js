@@ -33,12 +33,31 @@ function serviceMeta(baseUrl, service) {
 
 const IGNORED = /i18n_en_US\.properties|favicon|livereload/;
 
+let sharedBrowser = null; // one Chromium per process; every session still gets its own isolated context
+
+/** Launches Chromium on first use and again if it died; sessions share it, never a context. */
+function getBrowser() {
+    if (!sharedBrowser) {
+        const launched = chromium.launch({ headless: true });
+        sharedBrowser = launched;
+        launched.then((b) => b.on('disconnected', () => { if (sharedBrowser === launched) sharedBrowser = null; }), () => { sharedBrowser = null; });
+    }
+    return sharedBrowser;
+}
+
+/** Closes the shared browser (end of a process that opened sessions). Safe to call twice. */
+async function closeBrowser() {
+    const pending = sharedBrowser;
+    sharedBrowser = null;
+    if (pending) await (await pending).close().catch(() => {});
+}
+
 /**
  * user: a CAP mock user name, or null for a signed-out browser (no Basic header, no stored UI session).
  * allowWrites: only for gated live Tier C runs (support/liveWriteGate.js) — exact action paths the guard lets through.
  */
 async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
-    const browser = await chromium.launch({ headless: true });
+    const browser = await getBrowser();
     const context = await browser.newContext({
         extraHTTPHeaders: user ? { Authorization: 'Basic ' + Buffer.from(`${user}:`).toString('base64') } : {},
         viewport: { width: 1440, height: 900 }
@@ -108,7 +127,7 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
         baseUrl, page, blocked, consoleErrors, networkErrors, settle,
         close: async () => {
             if (trace) await trace.capture(page);
-            await browser.close();
+            await context.close(); // the browser stays up for the next session
         }
     };
 }
@@ -251,4 +270,4 @@ async function runScreens({ baseUrl, user, title, steps }) {
     return { status: errors.length ? 'FAIL' : 'PASS', errors, details };
 }
 
-module.exports = { openSession, checkScreen, openFirstRow, inspectScreen, runScreens, USERS };
+module.exports = { openSession, closeBrowser, checkScreen, openFirstRow, inspectScreen, runScreens, USERS };
