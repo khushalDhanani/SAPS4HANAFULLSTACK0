@@ -1,4 +1,5 @@
 'use strict';
+/* global document */
 
 
 const path = require('path');

@@ -1,4 +1,5 @@
 'use strict';
+/* global window, document */
 
 /** Resolves when UI5 is booted and no busy indicator is shown: the readiness check that replaces fixed sleeps. */
 function uiReady(page, timeout = 15000) {

@@ -1798,6 +1798,14 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-10-28 IST — Mvt E2E suites: screenshots only on failure or debug mode — PARTIAL
+
+- **CHANGED:** new `test/e2e/support/shots.js` (`evidence`, `failure`, `enabled`); `verifyMvt201/241/261/301/311.e2e.js`: the per-step `page.screenshot` calls now go through `shots.evidence` (taken only when `E2E_SCREENSHOTS=1`), a failing run saves `screenshots/mvt<N>_failure.png`, and `details.screenshots` lists files only when they were taken. `verifyHardeningUI` has no screenshots, unchanged.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT — the five Mvt suites.
+- **TESTED (live READ-ONLY, port 4010):** normal run of all five rc=0 with 0 new PNGs (before: 2–3 full-page PNGs per suite); `E2E_SCREENSHOTS=1` on 241 rc=0 wrote its 3 PNGs; 311 pointed at a dead URL rc=1 and wrote `mvt311_failure.png` (test artifact deleted). `npx jest test/unit/tools` pass; eslint initially reported `no-undef` for `window`/`document` in `uiReady.js` and `verifyMvt261.e2e.js` (from the earlier P0 edits), fixed with `/* global */` headers, now clean on the Mvt suites, `support/` and `runAllE2E.js`; 261 rerun rc=0.
+- **NOT VERIFIED / NOT DONE:** time saved (not measured; a full-page screenshot is a small share of a suite); "repeated assertions" were not touched: the suites' content assertions are the business checks and I did not judge which are redundant. No SAP write.
+- **ASSUMPTIONS:** none. **FINAL STATUS:** PARTIAL.
+
 ### 2026-10-28 IST — E2E: one Chromium per process, isolated context per session — PARTIAL
 
 - **CHANGED:** `test/e2e/support/screenCheck.js`: `openSession` now takes a lazily launched shared browser (`getBrowser`, relaunched if it disconnected) and still creates its own `newContext` (own auth header, write guard, routes, trace); `session.close()` closes the context only; new exported `closeBrowser()`. Per-suite `chromium.launch` in `verifyMvt*`/`verifyHardeningUI` left as is (one launch per suite already). No negative-test helper change was needed: all of them go through `openSession`, so user, authorization (user/null) and mocking (`page.route`) boundaries stay per-context.
