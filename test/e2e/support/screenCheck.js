@@ -110,7 +110,11 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
         }, [user, USERS[user] || []]);
     }
 
-    /** Waits until no request has been in flight for 800 ms (max 30 s), then until UI5 busy indicators are gone. */
+    /**
+     * Waits until no request has been in flight for 800 ms (max 30 s), then until no UI5 busy indicator is visible
+     * (max 15 s). A screen that never settles throws, so the suite reports it instead of asserting on a half-loaded page.
+     * A closed dialog keeps a hidden busy indicator in the DOM, so only visible ones count.
+     */
     async function settle() {
         const end = Date.now() + 30000;
         let quietSince = Date.now();
@@ -119,7 +123,11 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
             if (Date.now() - quietSince >= 800) break;
             await page.waitForTimeout(100);
         }
-        await page.waitForFunction(() => !document.querySelector('.sapUiLocalBusyIndicator, .sapUiBusyIndicator'), null, { timeout: 15000 }).catch(() => {});
+        if (inFlight > 0) throw new Error(`settle: ${inFlight} request(s) still in flight after 30 s`);
+        await page.waitForFunction(
+            () => ![...document.querySelectorAll('.sapUiLocalBusyIndicator, .sapUiBusyIndicator')].some((e) => e.getClientRects().length > 0),
+            null, { timeout: 15000 }
+        ).catch(() => { throw new Error('settle: a UI5 busy indicator was still visible after 15 s'); });
         await Promise.all(contractPending);
     }
 

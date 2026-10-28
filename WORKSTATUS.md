@@ -1798,6 +1798,16 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-10-28 IST — settle(): report a stuck screen instead of ignoring it; full 2-worker E2E result — PARTIAL
+
+- **Finding (external review, CONFIRMED in code):** `screenCheck.js` `settle()` swallowed the 15 s busy-indicator timeout (`.catch(() => {})`) and ended the 30 s in-flight wait silently, so a screen that never finished loading was still evaluated.
+- **CHANGED:** `test/e2e/support/screenCheck.js` `settle()` now throws `settle: a UI5 busy indicator was still visible after 15 s` / `settle: N request(s) still in flight after 30 s`. The busy check counts only *visible* indicators (a closed dialog keeps a hidden one in the DOM — the same cause as the earlier `verifyMvt301` failure), so it does not fail on that. Callers that throw inside a suite are reported by the existing per-case/per-suite error handling.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT — the screen/negative E2E suites exercise `settle()` 68 times; a forced check (visible `.sapUiBusyIndicator` injected into the dashboard) threw the new message.
+- **TESTED (live READ-ONLY, port 4010):** shell, MM, LE, SD, WM screens, Negative UI paths and Quarantine labels all rc=0, no `settle:` errors; eslint clean.
+- **FULL RUN (before this change, `node test/e2e/runAllE2E.js --workers=2`, same server):** 19/19 PASS. Wall clock 1922 s (start timestamp to summary timestamp) vs 3418 s sum of suite durations (about 44% less than running them back to back; durations under parallel load can be inflated, and no sequential full run was timed, so this is not a measured before/after). The performance baseline suite ran alone last (321 s, PASS). Longest suites: action failures 1367 s, submit failures 1163 s.
+- **NOT VERIFIED:** the full run with the stricter `settle()`; a11y, submit-failure and action-failure suites against it; no SAP write.
+- **ASSUMPTIONS:** none. **FINAL STATUS:** PARTIAL.
+
 ### 2026-10-28 IST — Mvt E2E suites: screenshots only on failure or debug mode — PARTIAL
 
 - **CHANGED:** new `test/e2e/support/shots.js` (`evidence`, `failure`, `enabled`); `verifyMvt201/241/261/301/311.e2e.js`: the per-step `page.screenshot` calls now go through `shots.evidence` (taken only when `E2E_SCREENSHOTS=1`), a failing run saves `screenshots/mvt<N>_failure.png`, and `details.screenshots` lists files only when they were taken. `verifyHardeningUI` has no screenshots, unchanged.
