@@ -31,6 +31,9 @@ const targetUrlArg = process.argv.find(a => a.startsWith('--url='))?.split('=')[
   || process.env.APP_URL
   || 'http://localhost:4004';
 
+// Parallel suites: --workers=N or E2E_WORKERS (default 2). 1 restores strictly sequential runs.
+const workersArg = Number(process.argv.find(a => a.startsWith('--workers='))?.split('=')[1] || process.env.E2E_WORKERS) || 2;
+
 async function checkServerHealth(urlStr) {
   const target = (urlStr || targetUrlArg).replace(/\/+$/, '');
   const checkUrl = `${target}/fiori-app/webapp/index.html`;
@@ -74,7 +77,6 @@ async function runAll(options = {}) {
     process.exit(1);
   }
 
-  const results = [];
   const testResultsDir = path.resolve(__dirname, '../../test-results');
   if (!fs.existsSync(testResultsDir)) {
     fs.mkdirSync(testResultsDir, { recursive: true });
@@ -154,13 +156,15 @@ async function runAll(options = {}) {
     { name: 'Action failures (mocked)', file: 'negative/verifyActionFailures.e2e.js', fn: verifyActionFailures },
     // P1: axe-core on every parameterless route (new serious/critical violations fail) and screen-load timings vs baseline
     { name: 'Accessibility (axe-core)', file: 'a11y/verifyA11yScreens.e2e.js', fn: verifyA11yScreens },
-    { name: 'Screen performance baseline', file: 'performance/verifyScreenPerformance.e2e.js', fn: verifyScreenPerformance }
+    // Timing suite: runs alone after the pool drains, so parallel load cannot distort its measurements
+    { name: 'Screen performance baseline', file: 'performance/verifyScreenPerformance.e2e.js', fn: verifyScreenPerformance, serial: true }
   ];
 
   let totalPassed = 0;
   let totalFailed = 0;
+  const results = new Array(suites.length);
 
-  for (const suite of suites) {
+  async function runSuite(suite, index) {
     const startTime = Date.now();
     console.log(`\n>>> STARTING: ${suite.name} (${suite.file})`);
     evidence.beginSuite(suite.name);
@@ -176,29 +180,39 @@ async function runAll(options = {}) {
         totalFailed++;
         console.error(`<<< FAILED: ${suite.name} in ${durationMs}ms — Errors: ${outcome.errors.join('; ')}`);
       }
-      results.push({
+      results[index] = {
         suite: suite.name,
         file: suite.file,
         status: outcome.status,
         durationMs,
         errors: outcome.errors || [],
         ...(evidenceDir ? { evidence: path.relative(path.resolve(__dirname, '../..'), evidenceDir) } : {})
-      });
+      };
     } catch (err) {
       const durationMs = Date.now() - startTime;
       const evidenceDir = evidence.endSuite(true, testResultsDir);
       totalFailed++;
       console.error(`<<< EXCEPTION in ${suite.name} (${durationMs}ms):`, err.message);
-      results.push({
+      results[index] = {
         suite: suite.name,
         file: suite.file,
         status: 'FAIL',
         durationMs,
         errors: [err.message],
         ...(evidenceDir ? { evidence: path.relative(path.resolve(__dirname, '../..'), evidenceDir) } : {})
-      });
+      };
     }
   }
+
+  // Bounded pool: `workers` suites at a time, each in its own async chain (evidence is per chain). All suites here
+  // are read-only or mock their write action; live SAP writes live in runSapRoundTrips.js and are never parallel.
+  const workers = Math.max(1, Math.min(options.workers || workersArg, suites.length));
+  const queue = suites.map((suite, index) => ({ suite, index })).filter((e) => !e.suite.serial);
+  console.log(`Workers:     ${workers}`);
+  await Promise.all(Array.from({ length: workers }, async () => {
+    for (let next = queue.shift(); next; next = queue.shift()) await runSuite(next.suite, next.index);
+  }));
+  for (const [index, suite] of suites.entries()) if (suite.serial) await runSuite(suite, index);
 
   const summary = {
     timestamp: new Date().toISOString(),

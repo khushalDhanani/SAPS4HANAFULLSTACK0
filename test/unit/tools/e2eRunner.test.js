@@ -67,6 +67,23 @@ describe('E2E failure evidence', () => {
         expect(fs.existsSync(path.join(results, 'e2e-evidence'))).toBe(false);
     });
 
+    it('keeps the evidence of parallel suites apart', async () => {
+        const worker = async (name, failed) => {
+            for (const i of [1, 2]) {
+                if (i === 1) evidence.beginSuite(name);
+                const s = fakeSession();
+                await new Promise((r) => setTimeout(r, 5));
+                await (await evidence.startSession(s.context)).capture(s.page);
+            }
+            return evidence.endSuite(failed, results);
+        };
+        const [a, b] = await Promise.all([worker('Suite A', true), worker('Suite B', true)]);
+        expect(a).toBe(path.join(results, 'e2e-evidence', 'suite-a'));
+        expect(b).toBe(path.join(results, 'e2e-evidence', 'suite-b'));
+        expect(fs.readdirSync(a).length).toBe(4);
+        expect(fs.readdirSync(b).length).toBe(4);
+    });
+
     it('keeps only the last 8 sessions of a long suite', async () => {
         evidence.beginSuite('Long');
         for (let i = 0; i < 10; i++) {

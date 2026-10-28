@@ -10,21 +10,24 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { AsyncLocalStorage } = require('async_hooks');
 
 const KEEP_SESSIONS = 8; // a suite with many sessions (e.g. submit failures) keeps only the last ones
-let current = null;
+// The active suite is bound to the async chain that called beginSuite, so suites can run in parallel workers
+const active = new AsyncLocalStorage();
 
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 function beginSuite(name) {
-    current = { name, dir: fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-evidence-')), n: 0 };
+    active.enterWith({ name, dir: fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-evidence-')), n: 0 });
 }
 
 /** Keeps the evidence of a failed suite under `${resultsDir}/e2e-evidence/<suite>`; returns that path or null. */
 function endSuite(failed, resultsDir) {
+    const current = active.getStore();
     if (!current) return null;
     const { name, dir } = current;
-    current = null;
+    active.enterWith(null);
     if (!failed || fs.readdirSync(dir).length === 0) {
         fs.rmSync(dir, { recursive: true, force: true });
         return null;
@@ -39,8 +42,8 @@ function endSuite(failed, resultsDir) {
 
 /** Starts tracing for one session; returns { capture(page) } or null when no suite is active. */
 async function startSession(context) {
-    if (!current) return null;
-    const suite = current;
+    const suite = active.getStore();
+    if (!suite) return null;
     await context.tracing.start({ screenshots: true, snapshots: true });
     return {
         async capture(page) {
