@@ -5,7 +5,7 @@
  * Performance baseline E2E (P1 item 15), READ-ONLY behind the write guard. For every parameterless route it measures
  * the time from navigation until the screen has settled (no request in flight for 800 ms, busy indicators gone), takes
  * the median of 3 fresh-browser runs and compares it with baseline.json: fail when median > baseline * 1.5 + 1000 ms.
- * The 800 ms quiet window is part of every figure (fixed offset, same in baseline and check). The limits are
+ * The settle quiet window (E2E_SETTLE_QUIET_MS, default 400 ms since 2026-10-28; baseline.json was recorded at 800 ms) is part of every figure (fixed offset, same in baseline and check). The limits are
  * agent-chosen (baseline + 50 %), NOT business-approved. Record the baseline on purpose with E2E_UPDATE_BASELINE=1
  * (median of 5 runs); it reflects this machine and the live SAP data of that moment, so refresh it when either changes.
  */

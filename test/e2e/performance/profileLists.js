@@ -1,5 +1,5 @@
 'use strict';
-/* global window, document, performance, MutationObserver */
+/* global window, document, MutationObserver */
 
 /**
  * List latency profile, READ-ONLY behind the write guard (diagnosis, no pass/fail limits).
@@ -42,7 +42,7 @@ async function profile(baseUrl, r) {
         const req = res.request();
         if (!/\/odata\/v4\//.test(res.url())) return;
         let size = 0;
-        try { size = (await res.body()).length; } catch (e) { /* aborted */ }
+        try { size = (await res.body()).length; } catch (_e) { /* aborted */ }
         const body = req.postData() || '';
         calls.push({ at: req.__t0, ms: Date.now() - req.__t0, status: res.status(), size,
             url: decodeURIComponent(res.url().split('/odata/v4/')[1]).slice(0, 140),

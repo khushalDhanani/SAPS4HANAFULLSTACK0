@@ -52,6 +52,8 @@ function installUi5Cache(context) {
     });
 }
 
+const QUIET_MS = Number(process.env.E2E_SETTLE_QUIET_MS) || 400; // no request in flight for this long = settled
+
 let sharedBrowser = null; // one Chromium per process; every session still gets its own isolated context
 
 /** Launches Chromium on first use and again if it died; sessions share it, never a context. */
@@ -131,7 +133,7 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
     }
 
     /**
-     * Waits until no request has been in flight for 800 ms (max 30 s), then until no UI5 busy indicator is visible
+     * Waits until no request has been in flight for QUIET_MS (default 400 ms, max 30 s), then until no UI5 busy indicator is visible
      * (max 15 s). A screen that never settles throws, so the suite reports it instead of asserting on a half-loaded page.
      * A closed dialog keeps a hidden busy indicator in the DOM, so only visible ones count.
      */
@@ -140,7 +142,7 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
         let quietSince = Date.now();
         while (Date.now() < end) {
             if (inFlight > 0) quietSince = Date.now();
-            if (Date.now() - quietSince >= 800) break;
+            if (Date.now() - quietSince >= QUIET_MS) break;
             await page.waitForTimeout(100);
         }
         if (inFlight > 0) throw new Error(`settle: ${inFlight} request(s) still in flight after 30 s`);

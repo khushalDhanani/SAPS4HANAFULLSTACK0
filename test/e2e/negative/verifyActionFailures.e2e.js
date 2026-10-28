@@ -205,8 +205,10 @@ async function failureCase(baseUrl, flow, f) {
         if (err.skip) return { skipped: err.message };
         errors.push(`${err.name}: ${err.message.split('\n')[0]}`);
     } finally {
-        kit.setFailure(null);
-        kit.capWaits(Infinity);
+        if (flow.kit) { // kit state is process-wide: a non-kit case in a parallel shard must not reset a kit case's failure mode
+            kit.setFailure(null);
+            kit.capWaits(Infinity);
+        }
         await session.close();
     }
     return errors;
