@@ -81,23 +81,25 @@ async function interceptAction(page, { flow, service, action, live = false, resp
         }
         const call = { via: viaBatch ? 'batch' : 'direct', body };
         calls.push(call);
+        // a held-back answer may arrive after the page was reloaded or closed: that is then not an error
+        const answer = (p) => (delayMs ? p.catch(() => {}) : p);
         if (!live && fail) {
             if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
-            if (fail === 'timeout') return route.abort('timedout');
+            if (fail === 'timeout') return answer(route.abort('timedout'));
             call.status = fail.status;
             const error = { error: { code: fail.code || String(fail.status), message: fail.message } };
             if (!viaBatch || fail.status === 401 || fail.status === 503) {
-                return route.fulfill({ status: fail.status, contentType: JSON_TYPE, headers: { 'OData-Version': '4.0' }, body: JSON.stringify(error) });
+                return answer(route.fulfill({ status: fail.status, contentType: JSON_TYPE, headers: { 'OData-Version': '4.0' }, body: JSON.stringify(error) }));
             }
-            return route.fulfill(batchFulfill(error, fail.status));
+            return answer(route.fulfill(batchFulfill(error, fail.status)));
         }
         if (!live) {
             if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
             call.status = 200;
             call.result = respond(body);
-            return viaBatch
+            return answer(viaBatch
                 ? route.fulfill(batchFulfill(call.result))
-                : route.fulfill({ status: 200, contentType: JSON_TYPE, headers: { 'OData-Version': '4.0' }, body: JSON.stringify(call.result) });
+                : route.fulfill({ status: 200, contentType: JSON_TYPE, headers: { 'OData-Version': '4.0' }, body: JSON.stringify(call.result) }));
         }
         // live: forwarded once; the response is read here and handed to the page unchanged
         const response = await route.fetch({ maxRetries: 0, timeout: 180000 });

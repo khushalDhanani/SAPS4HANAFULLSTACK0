@@ -1,0 +1,2247 @@
+{
+  "info": {
+    "name": "SAP S/4HANA Full-Stack Complete API Collection",
+    "description": "Complete Postman collection for all GET and POST APIs across CAP services and Express endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      {
+        "key": "username",
+        "value": "alice",
+        "type": "string"
+      },
+      {
+        "key": "password",
+        "value": "",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4004",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "00. Core & Express Endpoints",
+      "item": [
+        {
+          "name": "Health Probe (No Auth)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/health",
+            "description": "Cloud Foundry readiness and liveness check"
+          }
+        },
+        {
+          "name": "AI Chat SSE Stream (Express)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"What is the status of pending purchase orders?\"\n    }\n  ],\n  \"model\": \"gpt-4o\"\n}"
+            },
+            "url": "{{baseUrl}}/ai/chat/stream"
+          }
+        },
+        {
+          "name": "UI5 Flexibility Data",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/sap/bc/lrep/flex/data/saps4hana.fiori"
+          }
+        },
+        {
+          "name": "UI5 Flexibility Settings",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/sap/bc/lrep/flex/settings"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01. AuthService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/auth/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: getUserInfo",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/auth/getUserInfo()"
+          }
+        },
+        {
+          "name": "POST Action: login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"alice\",\n  \"password\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. AIService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/ai/$metadata"
+          }
+        },
+        {
+          "name": "POST Action: askAI",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"How many POs need approval?\",\n  \"system\": \"You are an SAP enterprise assistant.\",\n  \"model\": \"gpt-4o\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/ai/askAI"
+          }
+        },
+        {
+          "name": "POST Action: chat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"List top 5 pending orders.\"\n    }\n  ],\n  \"system\": \"You are an SAP enterprise assistant.\",\n  \"model\": \"gpt-4o\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/ai/chat"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. PurchaseOrderService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: getSupplierDefaults",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/getSupplierDefaults(Supplier='100102',CompanyCode='1000',PurchasingOrganization='AE01')"
+          }
+        },
+        {
+          "name": "GET Function: getDashboardMetrics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/getDashboardMetrics()"
+          }
+        },
+        {
+          "name": "POST Action: createPurchaseOrder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"header\": {},\n  \"items\": []\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/purchase-order/createPurchaseOrder"
+          }
+        },
+        {
+          "name": "GET EntitySet: PurchaseOrders",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/PurchaseOrders?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: PurchaseOrderItems",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/PurchaseOrderItems?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: DocumentTypeVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/DocumentTypeVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SupplierVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/SupplierVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: CompanyCodeVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/CompanyCodeVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: PurchasingOrgVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/PurchasingOrgVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: PurchasingGroupVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/PurchasingGroupVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: MaterialVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/MaterialVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: PlantVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/PlantVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: StorageLocationVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/StorageLocationVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: MaterialGroupVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/MaterialGroupVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: IncotermsClassificationVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/IncotermsClassificationVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: PaymentTermsVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/PaymentTermsVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: CurrencyVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/CurrencyVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: UnitOfMeasureVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/UnitOfMeasureVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: TaxCodeVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/TaxCodeVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: GLAccountVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/GLAccountVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: CostCenterVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/CostCenterVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: ProfitCenterVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/ProfitCenterVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: FixedAssetVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/FixedAssetVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: WBSElementVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/WBSElementVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: InternalOrderVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/InternalOrderVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: PurchaseContractVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/PurchaseContractVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: ItemCategoryVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/ItemCategoryVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: AcctAssignmentCategoryVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/purchase-order/AcctAssignmentCategoryVH?$top=5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. SalesInquiryService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: getCustomerDefaults",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/getCustomerDefaults(Customer='100001',SalesOrganization='1000',DistributionChannel='10',Division='00')"
+          }
+        },
+        {
+          "name": "GET Function: getInquiryCreationCapabilities",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/getInquiryCreationCapabilities()"
+          }
+        },
+        {
+          "name": "GET Function: getSalesInquiryDefaults",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/getSalesInquiryDefaults()"
+          }
+        },
+        {
+          "name": "GET Function: getSalesInquiryMetrics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/getSalesInquiryMetrics()"
+          }
+        },
+        {
+          "name": "GET Function: getSalesOrderMetrics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/getSalesOrderMetrics()"
+          }
+        },
+        {
+          "name": "POST Action: createSalesInquiry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"header\": {},\n  \"items\": []\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/createSalesInquiry"
+          }
+        },
+        {
+          "name": "GET EntitySet: SalesInquiries",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/SalesInquiries?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SalesInquiryItems",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/SalesInquiryItems?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SalesInquiryTypeVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/SalesInquiryTypeVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SalesOrganizationVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/SalesOrganizationVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: DistributionChannelVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/DistributionChannelVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: DivisionVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/DivisionVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SalesOfficeVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/SalesOfficeVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SalesGroupVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/SalesGroupVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SoldToPartyVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/SoldToPartyVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: CustomerVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/CustomerVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: MaterialVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/MaterialVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: CurrencyVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/CurrencyVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: UnitOfMeasureVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/UnitOfMeasureVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: PlantVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/PlantVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: ContactPersonVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-inquiry/ContactPersonVH?$top=5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. SalesOrderService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: getCustomerDefaults",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/getCustomerDefaults(Customer='100001',SalesOrganization='1000',DistributionChannel='10',Division='00')"
+          }
+        },
+        {
+          "name": "GET Function: getSalesOrderDefaults",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/getSalesOrderDefaults()"
+          }
+        },
+        {
+          "name": "GET Function: getSalesOrderMetrics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/getSalesOrderMetrics()"
+          }
+        },
+        {
+          "name": "POST Action: createSalesOrder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"header\": {},\n  \"items\": []\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/sales-order/createSalesOrder"
+          }
+        },
+        {
+          "name": "POST Action: checkATP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"SalesOrderID\": \"\",\n  \"ItemID\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/sales-order/checkATP"
+          }
+        },
+        {
+          "name": "GET EntitySet: SalesOrders",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/SalesOrders?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SalesOrderItems",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/SalesOrderItems?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SalesOrderTypeVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/SalesOrderTypeVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SalesOrganizationVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/SalesOrganizationVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: DistributionChannelVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/DistributionChannelVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: DivisionVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/DivisionVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SalesOfficeVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/SalesOfficeVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SalesGroupVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/SalesGroupVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: SoldToPartyVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/SoldToPartyVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: CustomerVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/CustomerVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: MaterialVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/MaterialVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: CurrencyVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/CurrencyVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: UnitOfMeasureVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/UnitOfMeasureVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: PlantVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/PlantVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: PaymentTermsVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/PaymentTermsVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: IncotermsClassificationVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/IncotermsClassificationVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: ContactPersonVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/sales-order/ContactPersonVH?$top=5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. GoodsIssueService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-issue/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: resolveIdentifier",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-issue/resolveIdentifier(barcode='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: resolveStockUnit",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-issue/resolveStockUnit(suBarcode='VAL',reservationNo='VAL',reservationItem='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: verifySerialNumber",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-issue/verifySerialNumber(serialNumber='VAL',reservationNo='VAL',reservationItem='VAL',storageLocation='0001')"
+          }
+        },
+        {
+          "name": "GET Function: getAvailableSerialNumbers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-issue/getAvailableSerialNumbers(reservationNo='VAL',reservationItem='VAL',material='RM-001',plant='1120',storageLocation='0001')"
+          }
+        },
+        {
+          "name": "GET Function: getStockUnitsForItem",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-issue/getStockUnitsForItem(reservationNo='VAL',reservationItem='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: revalidateStock",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-issue/revalidateStock(material='RM-001',plant='1120',storageLocation='0001',batch='VAL',requiredQty='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: getDashboardData",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-issue/getDashboardData(days='VAL',plant='1120',forceRefresh='VAL',movementType='311')"
+          }
+        },
+        {
+          "name": "POST Action: postGoodsIssue201",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MovementType\": \"201\",\n  \"CostCenter\": \"CC1000\",\n  \"Material\": \"RM-001\",\n  \"IssueQty\": \"\",\n  \"Unit\": \"\",\n  \"Batch\": \"\",\n  \"Plant\": \"1120\",\n  \"StorageLocation\": \"0001\",\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"PostingDate\": \"\",\n  \"DocumentDate\": \"\",\n  \"SerialNumbers\": \"\",\n  \"SerialNumber\": \"\",\n  \"ClientAttemptId\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/goods-issue/postGoodsIssue201"
+          }
+        },
+        {
+          "name": "POST Action: postGoodsIssue301",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MovementType\": \"201\",\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"Material\": \"RM-001\",\n  \"IssueQty\": \"\",\n  \"Unit\": \"\",\n  \"Batch\": \"\",\n  \"Plant\": \"1120\",\n  \"StorageLocation\": \"0001\",\n  \"ReceivingPlant\": \"\",\n  \"ReceivingStorageLocation\": \"\",\n  \"PostingDate\": \"\",\n  \"DocumentDate\": \"\",\n  \"SerialNumbers\": \"\",\n  \"SerialNumber\": \"\",\n  \"ClientAttemptId\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/goods-issue/postGoodsIssue301"
+          }
+        },
+        {
+          "name": "POST Action: postGoodsIssue311",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MovementType\": \"201\",\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"Material\": \"RM-001\",\n  \"IssueQty\": \"\",\n  \"Unit\": \"\",\n  \"Batch\": \"\",\n  \"Plant\": \"1120\",\n  \"StorageLocation\": \"0001\",\n  \"ReceivingPlant\": \"\",\n  \"ReceivingStorageLocation\": \"\",\n  \"PostingDate\": \"\",\n  \"DocumentDate\": \"\",\n  \"SerialNumbers\": \"\",\n  \"SerialNumber\": \"\",\n  \"ClientAttemptId\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/goods-issue/postGoodsIssue311"
+          }
+        },
+        {
+          "name": "POST Action: reverseGoodsIssue",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MaterialDocument\": \"5000000001\",\n  \"MaterialDocYear\": \"\",\n  \"PostingDate\": \"\",\n  \"DocumentDate\": \"\",\n  \"ReversalReason\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/goods-issue/reverseGoodsIssue"
+          }
+        },
+        {
+          "name": "POST Action: recheckPostingAttempts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/odata/v4/goods-issue/recheckPostingAttempts"
+          }
+        },
+        {
+          "name": "GET EntitySet: GIItems",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-issue/GIItems?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: MaterialBatches",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-issue/MaterialBatches?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: OpenReservations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-issue/OpenReservations?$top=5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. GoodsReceiptService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-receipt/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: getStorageUnitDetails",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-receipt/getStorageUnitDetails(StorageUnit='180000001')"
+          }
+        },
+        {
+          "name": "POST Action: postGoodsReceipt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"StorageUnit\": \"180000001\",\n  \"DeliveryDocument\": \"\",\n  \"Material\": \"RM-001\",\n  \"Plant\": \"1120\",\n  \"StorageLocation\": \"0001\",\n  \"Batch\": \"\",\n  \"Quantity\": 5,\n  \"ExpiryDate\": \"\",\n  \"DeliveryDocumentItem\": \"\",\n  \"PurchaseOrder\": \"\",\n  \"PurchaseOrderItem\": \"\",\n  \"Unit\": \"\",\n  \"GoodsMovementType\": \"\",\n  \"DocumentItemText\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/goods-receipt/postGoodsReceipt"
+          }
+        },
+        {
+          "name": "POST Action: postGoodsReceiptWithStorageUnit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"StorageUnit\": \"180000001\",\n  \"DeliveryDocument\": \"\",\n  \"DeliveryDocumentItem\": \"\",\n  \"PurchaseOrder\": \"\",\n  \"PurchaseOrderItem\": \"\",\n  \"Material\": \"RM-001\",\n  \"Plant\": \"1120\",\n  \"StorageLocation\": \"0001\",\n  \"Batch\": \"\",\n  \"Quantity\": 5,\n  \"Unit\": \"\",\n  \"PackagingMaterial\": \"\",\n  \"ExpiryDate\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/goods-receipt/postGoodsReceiptWithStorageUnit"
+          }
+        },
+        {
+          "name": "GET EntitySet: OpenInboundDeliveries",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-receipt/OpenInboundDeliveries?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: MaterialStorageLocations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-receipt/MaterialStorageLocations?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: MaterialBatches",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/goods-receipt/MaterialBatches?$top=5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "08. TrToService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/tr-to/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: getOpenTRs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/tr-to/getOpenTRs(lgnum='VAL',mvt='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: getTR",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/tr-to/getTR(tbnum='VAL',lgnum='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: lookupTR",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/tr-to/lookupTR(tbnum='VAL',lgnum='VAL',docType='VAL',tbpos='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: getFifoBatches",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/tr-to/getFifoBatches(material='RM-001',plant='1120',storageLocation='0001',warehouseNumber='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: getAvailableSerials",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/tr-to/getAvailableSerials(material='RM-001',plant='1120',storageLocation='0001',batch='VAL')"
+          }
+        },
+        {
+          "name": "POST Action: createTOFromTR",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lgnum\": \"\",\n  \"tbnum\": \"\",\n  \"tbpos\": \"\",\n  \"qty\": \"\",\n  \"unit\": \"KG\",\n  \"batch\": \"\",\n  \"serials\": \"\",\n  \"storageUnit\": \"\",\n  \"sourceStorageType\": \"\",\n  \"sourceStorageBin\": \"\",\n  \"receivingPlant\": \"\",\n  \"ReceivingPlant\": \"\",\n  \"receivingStorageLocation\": \"\",\n  \"ReceivingStorageLocation\": \"\",\n  \"costCenter\": \"\",\n  \"CostCenter\": \"CC1000\",\n  \"assetNo\": \"\",\n  \"AssetNo\": \"\",\n  \"subNumber\": \"\",\n  \"SubNumber\": \"\",\n  \"orderId\": \"\",\n  \"OrderId\": \"\",\n  \"OrderID\": \"\",\n  \"OrderType\": \"\",\n  \"orderType\": \"\",\n  \"autoConfirm\": \"\",\n  \"autoPostMigo\": \"\",\n  \"CompleteReservation\": \"\",\n  \"ReservationMovementType\": \"\",\n  \"reservationMovementType\": \"\",\n  \"ReservationNo\": \"\",\n  \"reservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"reservationItem\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/tr-to/createTOFromTR"
+          }
+        },
+        {
+          "name": "POST Action: CreateTOFromTR",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lgnum\": \"\",\n  \"tbnum\": \"\",\n  \"tbpos\": \"\",\n  \"qty\": \"\",\n  \"unit\": \"KG\",\n  \"batch\": \"\",\n  \"serials\": \"\",\n  \"storageUnit\": \"\",\n  \"sourceStorageType\": \"\",\n  \"sourceStorageBin\": \"\",\n  \"receivingPlant\": \"\",\n  \"ReceivingPlant\": \"\",\n  \"receivingStorageLocation\": \"\",\n  \"ReceivingStorageLocation\": \"\",\n  \"costCenter\": \"\",\n  \"CostCenter\": \"CC1000\",\n  \"assetNo\": \"\",\n  \"AssetNo\": \"\",\n  \"subNumber\": \"\",\n  \"SubNumber\": \"\",\n  \"orderId\": \"\",\n  \"OrderId\": \"\",\n  \"OrderID\": \"\",\n  \"OrderType\": \"\",\n  \"orderType\": \"\",\n  \"autoConfirm\": \"\",\n  \"autoPostMigo\": \"\",\n  \"CompleteReservation\": \"\",\n  \"ReservationMovementType\": \"\",\n  \"reservationMovementType\": \"\",\n  \"ReservationNo\": \"\",\n  \"reservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"reservationItem\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/tr-to/CreateTOFromTR"
+          }
+        },
+        {
+          "name": "POST Action: postMigoGoodsMovement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"reservationNo\": \"\",\n  \"reservationNumber\": \"\",\n  \"ReservationItem\": \"\",\n  \"reservationItem\": \"\",\n  \"MovementType\": \"201\",\n  \"movementType\": \"311\",\n  \"ReservationMovementType\": \"\",\n  \"reservationMovementType\": \"\",\n  \"Material\": \"RM-001\",\n  \"material\": \"RM-001\",\n  \"Plant\": \"1120\",\n  \"plant\": \"1120\",\n  \"sourcePlant\": \"\",\n  \"SourcePlant\": \"\",\n  \"StorageLocation\": \"0001\",\n  \"storageLocation\": \"0001\",\n  \"sourceStorageLocation\": \"\",\n  \"SourceStorageLocation\": \"\",\n  \"Quantity\": 5,\n  \"quantity\": 1,\n  \"Unit\": \"\",\n  \"unit\": \"KG\",\n  \"ReceivingPlant\": \"\",\n  \"receivingPlant\": \"\",\n  \"destinationPlant\": \"\",\n  \"DestinationPlant\": \"\",\n  \"ReceivingStorageLocation\": \"\",\n  \"receivingStorageLocation\": \"\",\n  \"destinationStorageLocation\": \"\",\n  \"DestinationStorageLocation\": \"\",\n  \"CostCenter\": \"CC1000\",\n  \"costCenter\": \"\",\n  \"AssetNo\": \"\",\n  \"assetNo\": \"\",\n  \"SubNumber\": \"\",\n  \"subNumber\": \"\",\n  \"OrderID\": \"\",\n  \"OrderId\": \"\",\n  \"orderId\": \"\",\n  \"OrderNo\": \"\",\n  \"orderNo\": \"\",\n  \"OrderType\": \"\",\n  \"orderType\": \"\",\n  \"TransferOrder\": \"500\",\n  \"transferOrder\": \"\",\n  \"Batch\": \"\",\n  \"batch\": \"\",\n  \"Serials\": \"\",\n  \"serials\": \"\",\n  \"CompleteReservation\": \"\",\n  \"completeReservation\": \"\",\n  \"ProcessId\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/tr-to/postMigoGoodsMovement"
+          }
+        },
+        {
+          "name": "POST Action: PostMigoGoodsMovement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"reservationNo\": \"\",\n  \"reservationNumber\": \"\",\n  \"ReservationItem\": \"\",\n  \"reservationItem\": \"\",\n  \"MovementType\": \"201\",\n  \"movementType\": \"311\",\n  \"ReservationMovementType\": \"\",\n  \"reservationMovementType\": \"\",\n  \"Material\": \"RM-001\",\n  \"material\": \"RM-001\",\n  \"Plant\": \"1120\",\n  \"plant\": \"1120\",\n  \"sourcePlant\": \"\",\n  \"SourcePlant\": \"\",\n  \"StorageLocation\": \"0001\",\n  \"storageLocation\": \"0001\",\n  \"sourceStorageLocation\": \"\",\n  \"SourceStorageLocation\": \"\",\n  \"Quantity\": 5,\n  \"quantity\": 1,\n  \"Unit\": \"\",\n  \"unit\": \"KG\",\n  \"ReceivingPlant\": \"\",\n  \"receivingPlant\": \"\",\n  \"destinationPlant\": \"\",\n  \"DestinationPlant\": \"\",\n  \"ReceivingStorageLocation\": \"\",\n  \"receivingStorageLocation\": \"\",\n  \"destinationStorageLocation\": \"\",\n  \"DestinationStorageLocation\": \"\",\n  \"CostCenter\": \"CC1000\",\n  \"costCenter\": \"\",\n  \"AssetNo\": \"\",\n  \"assetNo\": \"\",\n  \"SubNumber\": \"\",\n  \"subNumber\": \"\",\n  \"OrderID\": \"\",\n  \"OrderId\": \"\",\n  \"orderId\": \"\",\n  \"OrderNo\": \"\",\n  \"orderNo\": \"\",\n  \"OrderType\": \"\",\n  \"orderType\": \"\",\n  \"TransferOrder\": \"500\",\n  \"transferOrder\": \"\",\n  \"Batch\": \"\",\n  \"batch\": \"\",\n  \"Serials\": \"\",\n  \"serials\": \"\",\n  \"CompleteReservation\": \"\",\n  \"completeReservation\": \"\",\n  \"ProcessId\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/tr-to/PostMigoGoodsMovement"
+          }
+        },
+        {
+          "name": "POST Action: verifyMaterialDocument",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"materialDocument\": \"4900000001\",\n  \"materialDocumentYear\": \"2026\",\n  \"materialDocYear\": \"\",\n  \"movementType\": \"311\",\n  \"material\": \"RM-001\",\n  \"quantity\": 1,\n  \"plant\": \"1120\",\n  \"storageLocation\": \"0001\",\n  \"reservationNumber\": \"\",\n  \"reservationNo\": \"\",\n  \"reservationItem\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/tr-to/verifyMaterialDocument"
+          }
+        },
+        {
+          "name": "POST Action: verifyStock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"materialDocument\": \"4900000001\",\n  \"materialDocumentYear\": \"2026\",\n  \"materialDocYear\": \"\",\n  \"movementType\": \"311\",\n  \"material\": \"RM-001\",\n  \"quantity\": 1,\n  \"plant\": \"1120\",\n  \"sourcePlant\": \"\",\n  \"storageLocation\": \"0001\",\n  \"sourceStorageLocation\": \"\",\n  \"receivingPlant\": \"\",\n  \"destinationPlant\": \"\",\n  \"receivingStorageLocation\": \"\",\n  \"destinationStorageLocation\": \"\",\n  \"costCenter\": \"\",\n  \"assetNo\": \"\",\n  \"subNumber\": \"\",\n  \"initialSourceStock\": \"\",\n  \"initialDestStock\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/tr-to/verifyStock"
+          }
+        },
+        {
+          "name": "POST Action: verifyReservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservationNumber\": \"\",\n  \"reservationNo\": \"\",\n  \"reservationItem\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/tr-to/verifyReservation"
+          }
+        },
+        {
+          "name": "POST Action: executeReservationWarehouseFlow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MovementType\": \"201\",\n  \"movementType\": \"311\",\n  \"Material\": \"RM-001\",\n  \"material\": \"RM-001\",\n  \"Plant\": \"1120\",\n  \"plant\": \"1120\",\n  \"sourcePlant\": \"\",\n  \"SourcePlant\": \"\",\n  \"StorageLocation\": \"0001\",\n  \"storageLocation\": \"0001\",\n  \"sourceStorageLocation\": \"\",\n  \"SourceStorageLocation\": \"\",\n  \"Quantity\": 5,\n  \"quantity\": 1,\n  \"Unit\": \"\",\n  \"unit\": \"KG\",\n  \"WarehouseNumber\": \"W01\",\n  \"warehouseNumber\": \"\",\n  \"ReceivingPlant\": \"\",\n  \"receivingPlant\": \"\",\n  \"destinationPlant\": \"\",\n  \"DestinationPlant\": \"\",\n  \"ReceivingStorageLocation\": \"\",\n  \"receivingStorageLocation\": \"\",\n  \"destinationStorageLocation\": \"\",\n  \"DestinationStorageLocation\": \"\",\n  \"CostCenter\": \"CC1000\",\n  \"costCenter\": \"\",\n  \"AssetNo\": \"\",\n  \"assetNo\": \"\",\n  \"SubNumber\": \"\",\n  \"subNumber\": \"\",\n  \"OrderID\": \"\",\n  \"OrderId\": \"\",\n  \"orderId\": \"\",\n  \"OrderNo\": \"\",\n  \"orderNo\": \"\",\n  \"OrderType\": \"\",\n  \"orderType\": \"\",\n  \"Batch\": \"\",\n  \"batch\": \"\",\n  \"Serials\": \"\",\n  \"serials\": \"\",\n  \"CompleteReservation\": \"\",\n  \"completeReservation\": \"\",\n  \"ReservationDate\": \"\",\n  \"reservationDate\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/tr-to/executeReservationWarehouseFlow"
+          }
+        }
+      ]
+    },
+    {
+      "name": "09. OutboundDeliveryService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: getDefaultShippingPoint",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/getDefaultShippingPoint()"
+          }
+        },
+        {
+          "name": "GET Function: getDeliveryStatus",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/getDeliveryStatus(DeliveryDocument='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: getBillingDocumentTypes",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/getBillingDocumentTypes(DeliveryDocument='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: getOrdersDueMetrics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/getOrdersDueMetrics(Plant='1120')"
+          }
+        },
+        {
+          "name": "GET Function: getPlantContext",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/getPlantContext()"
+          }
+        },
+        {
+          "name": "GET Function: getDeliveryWithoutRef",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/getDeliveryWithoutRef(OutboundDelivery='VAL')"
+          }
+        },
+        {
+          "name": "POST Action: createOutboundDelivery",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"SalesOrder\": \"\",\n  \"ShippingPoint\": \"\",\n  \"DeliveryDate\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/createOutboundDelivery"
+          }
+        },
+        {
+          "name": "POST Action: postGoodsIssue",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"DeliveryDocument\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/postGoodsIssue"
+          }
+        },
+        {
+          "name": "POST Action: createBillingDocument",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"DeliveryDocument\": \"\",\n  \"BillingDocumentType\": \"\",\n  \"BillingDocumentDate\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/createBillingDocument"
+          }
+        },
+        {
+          "name": "POST Action: createDeliveryWithoutRef",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ShippingPoint\": \"\",\n  \"DeliveryDocumentType\": \"\",\n  \"SalesOrganization\": \"1000\",\n  \"DistributionChannel\": \"10\",\n  \"Division\": \"00\",\n  \"ShipToParty\": \"\",\n  \"Plant\": \"1120\",\n  \"StorageLocation\": \"0001\",\n  \"PlannedGoodsIssueDate\": \"\",\n  \"Items\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/createDeliveryWithoutRef"
+          }
+        },
+        {
+          "name": "GET EntitySet: OrdersDueForDelivery",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/OrdersDueForDelivery?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: ShippingPointVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/ShippingPointVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: DeliveryWithoutRefTypes",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/DeliveryWithoutRefTypes?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: DeliveryWithoutRefShipToParties",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/outbound-delivery/DeliveryWithoutRefShipToParties?$top=5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. CustomerInvoiceService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-invoice/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: getInvoiceMetrics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-invoice/getInvoiceMetrics()"
+          }
+        },
+        {
+          "name": "POST Action: releaseInvoiceToAccounting",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"BillingDocument\": \"90000001\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/customer-invoice/releaseInvoiceToAccounting"
+          }
+        },
+        {
+          "name": "POST Action: cancelBillingDocument",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"BillingDocument\": \"90000001\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/customer-invoice/cancelBillingDocument"
+          }
+        },
+        {
+          "name": "GET EntitySet: CustomerInvoices",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-invoice/CustomerInvoices?$top=5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. CustomerReturnService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-return/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: getReturnMetrics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-return/getReturnMetrics()"
+          }
+        },
+        {
+          "name": "GET Function: getReturnReasons",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-return/getReturnReasons()"
+          }
+        },
+        {
+          "name": "GET Function: getCustomers",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-return/getCustomers(search='VAL',top='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: getMaterials",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-return/getMaterials(search='VAL',top='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: getPlants",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-return/getPlants()"
+          }
+        },
+        {
+          "name": "GET Function: getDocumentTypes",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-return/getDocumentTypes()"
+          }
+        },
+        {
+          "name": "GET Function: getReferenceDocuments",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-return/getReferenceDocuments(search='VAL',top='VAL')"
+          }
+        },
+        {
+          "name": "POST Action: createCustomerReturn",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"CustomerReturnType\": \"\",\n  \"SoldToParty\": \"\",\n  \"ReturnsOrderReason\": \"\",\n  \"ReferenceSDDocument\": \"\",\n  \"ReferenceSDDocumentCategory\": \"\",\n  \"SalesOrganization\": \"1000\",\n  \"DistributionChannel\": \"10\",\n  \"OrganizationDivision\": \"\",\n  \"CustomerReturnDate\": \"\",\n  \"PurchaseOrderByCustomer\": \"\",\n  \"Items\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/customer-return/createCustomerReturn"
+          }
+        },
+        {
+          "name": "GET EntitySet: CustomerReturns",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-return/CustomerReturns?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: CustomerReturnItems",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/customer-return/CustomerReturnItems?$top=5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Mvt261Service",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/mvt261/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: openItems",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/mvt261/openItems(plant='1120',material='RM-001',productionOrder='VAL',reservation='100',dateFrom='VAL',dateTo='VAL',includeFullyWithdrawn='VAL',scanPossibleOnly='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: cycle",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/mvt261/cycle(reservation='100',item='1')"
+          }
+        },
+        {
+          "name": "GET Function: scanContext",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/mvt261/scanContext(reservation='100',item='1')"
+          }
+        },
+        {
+          "name": "GET Function: checkStorageUnit",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/mvt261/checkStorageUnit(reservation='100',item='1',storageUnit='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: revalidateStock",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/mvt261/revalidateStock(reservation='100',item='1',quantity=1,batch='VAL',storageUnits='VAL')"
+          }
+        },
+        {
+          "name": "POST Action: postGoodsIssue",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"movementType\": \"311\",\n  \"reservation\": \"100\",\n  \"item\": \"1\",\n  \"quantity\": 1,\n  \"orderId\": \"\",\n  \"orderType\": \"\",\n  \"costCenter\": \"\",\n  \"assetNo\": \"\",\n  \"subNumber\": \"\",\n  \"receivingPlant\": \"\",\n  \"receivingStorageLocation\": \"\",\n  \"glAccount\": \"\",\n  \"batch\": \"\",\n  \"storageUnits\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/mvt261/postGoodsIssue"
+          }
+        },
+        {
+          "name": "POST Action: reverse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservation\": \"100\",\n  \"item\": \"1\",\n  \"materialDocument\": \"4900000001\",\n  \"materialDocumentYear\": \"2026\",\n  \"materialDocumentItem\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/mvt261/reverse"
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. HandlingUnitService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/handling-unit/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: list",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/handling-unit/list(plant='1120',storageLocation='0001',warehouse='W01',packagingMaterial='BOX-01',handlingUnitExternalID='VAL',status='',shippingPoint='1000')"
+          }
+        },
+        {
+          "name": "GET Function: detail",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/handling-unit/detail(handlingUnitExternalID='VAL',warehouse='W01')"
+          }
+        },
+        {
+          "name": "GET Function: hierarchy",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/handling-unit/hierarchy(handlingUnitIDChar32='VAL',handlingUnitOrigin='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: valueHelp",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/handling-unit/valueHelp(kind='packaging')"
+          }
+        },
+        {
+          "name": "GET Function: statusKpis",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/handling-unit/statusKpis()"
+          }
+        },
+        {
+          "name": "GET Function: serials",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/handling-unit/serials(handlingUnitInternalNumber='VAL')"
+          }
+        },
+        {
+          "name": "POST Action: labels",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handlingUnitExternalIDs\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/handling-unit/labels"
+          }
+        },
+        {
+          "name": "POST Action: create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"packagingMaterial\": \"BOX-01\",\n  \"plant\": \"1120\",\n  \"storageLocation\": \"0001\",\n  \"content\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/handling-unit/create"
+          }
+        },
+        {
+          "name": "POST Action: pack",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handlingUnitExternalID\": \"\",\n  \"material\": \"RM-001\",\n  \"quantity\": 1,\n  \"unit\": \"KG\",\n  \"batch\": \"\",\n  \"plant\": \"1120\",\n  \"storageLocation\": \"0001\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/handling-unit/pack"
+          }
+        },
+        {
+          "name": "POST Action: unpack",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handlingUnitExternalID\": \"\",\n  \"item\": \"1\",\n  \"material\": \"RM-001\",\n  \"quantity\": 1,\n  \"unit\": \"KG\",\n  \"batch\": \"\",\n  \"plant\": \"1120\",\n  \"storageLocation\": \"0001\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/handling-unit/unpack"
+          }
+        },
+        {
+          "name": "POST Action: remove",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handlingUnitExternalID\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/handling-unit/remove"
+          }
+        }
+      ]
+    },
+    {
+      "name": "14. PackingInstructionService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/packing-instruction/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: list",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/packing-instruction/list(externalName='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: get",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/packing-instruction/get(systemUUID='VAL')"
+          }
+        },
+        {
+          "name": "POST Action: create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalName\": \"\",\n  \"weightUnit\": \"\",\n  \"components\": \"\",\n  \"texts\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/packing-instruction/create"
+          }
+        }
+      ]
+    },
+    {
+      "name": "15. ReservationTrackService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-track/$metadata"
+          }
+        },
+        {
+          "name": "POST Action: updateTrack",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"MovementType\": \"201\",\n  \"WarehouseNumber\": \"W01\",\n  \"TransferRequirement\": \"100\",\n  \"TransferOrder\": \"500\",\n  \"MaterialDocument\": \"5000000001\",\n  \"MaterialDocYear\": \"\",\n  \"Status\": \"\",\n  \"ErrorMessage\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-track/updateTrack"
+          }
+        },
+        {
+          "name": "POST Action: addLog",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"Step\": \"\",\n  \"Status\": \"\",\n  \"MessageType\": \"\",\n  \"MessageId\": \"\",\n  \"MessageNo\": \"\",\n  \"MessageText\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-track/addLog"
+          }
+        },
+        {
+          "name": "POST Action: advanceStatus",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"NextStatus\": \"\",\n  \"DocumentNo\": \"\",\n  \"Step\": \"\",\n  \"Message\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-track/advanceStatus"
+          }
+        },
+        {
+          "name": "GET EntitySet: ReservationStatuses",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-track/ReservationStatuses?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: ReservationTracks",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-track/ReservationTracks?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: ReservationLogs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-track/ReservationLogs?$top=5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "16. ReservationEntryService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: getApplicationLogs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/getApplicationLogs(ReservationNo='VAL',ReservationItem='VAL')"
+          }
+        },
+        {
+          "name": "GET Function: getOpenReservations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/getOpenReservations(plant='1120',movementType='311')"
+          }
+        },
+        {
+          "name": "GET Function: getReservationDetail",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/getReservationDetail(ReservationNo='VAL',ReservationItem='VAL')"
+          }
+        },
+        {
+          "name": "POST Action: createReservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MovementType\": \"201\",\n  \"Plant\": \"1120\",\n  \"StorageLocation\": \"0001\",\n  \"Material\": \"RM-001\",\n  \"MaterialName\": \"\",\n  \"Quantity\": 5,\n  \"Unit\": \"\",\n  \"ReservationDate\": \"\",\n  \"ReceivingPlant\": \"\",\n  \"ReceivingStorageLocation\": \"\",\n  \"CostCenter\": \"CC1000\",\n  \"AssetNo\": \"\",\n  \"SubNumber\": \"\",\n  \"OrderID\": \"\",\n  \"OrderType\": \"\",\n  \"WarehouseNumber\": \"W01\",\n  \"Batch\": \"\",\n  \"SerialNo\": \"\",\n  \"ClientAttemptId\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/createReservation"
+          }
+        },
+        {
+          "name": "POST Action: createTransferRequirement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"WarehouseNumber\": \"W01\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/createTransferRequirement"
+          }
+        },
+        {
+          "name": "POST Action: createTOFromTR",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"WarehouseNumber\": \"W01\",\n  \"TRNumber\": \"\",\n  \"autoConfirm\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/createTOFromTR"
+          }
+        },
+        {
+          "name": "POST Action: confirmTransferOrder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"WarehouseNumber\": \"W01\",\n  \"TransferOrder\": \"500\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/confirmTransferOrder"
+          }
+        },
+        {
+          "name": "POST Action: createReservationEntry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MovementType\": \"201\",\n  \"Plant\": \"1120\",\n  \"StorageLocation\": \"0001\",\n  \"Material\": \"RM-001\",\n  \"MaterialName\": \"\",\n  \"Quantity\": 5,\n  \"Unit\": \"\",\n  \"ReservationDate\": \"\",\n  \"ReceivingPlant\": \"\",\n  \"ReceivingStorageLocation\": \"\",\n  \"CostCenter\": \"CC1000\",\n  \"AssetNo\": \"\",\n  \"SubNumber\": \"\",\n  \"OrderID\": \"\",\n  \"OrderType\": \"\",\n  \"WarehouseNumber\": \"W01\",\n  \"Batch\": \"\",\n  \"SerialNo\": \"\",\n  \"Serials\": \"\",\n  \"ClientAttemptId\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/createReservationEntry"
+          }
+        },
+        {
+          "name": "POST Action: postMigoGoodsMovement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"reservationNumber\": \"\",\n  \"ReservationItem\": \"\",\n  \"reservationItem\": \"\",\n  \"MovementType\": \"201\",\n  \"movementType\": \"311\",\n  \"Material\": \"RM-001\",\n  \"material\": \"RM-001\",\n  \"Plant\": \"1120\",\n  \"plant\": \"1120\",\n  \"sourcePlant\": \"\",\n  \"StorageLocation\": \"0001\",\n  \"storageLocation\": \"0001\",\n  \"sourceStorageLocation\": \"\",\n  \"Quantity\": 5,\n  \"quantity\": 1,\n  \"Unit\": \"\",\n  \"unit\": \"KG\",\n  \"ReceivingPlant\": \"\",\n  \"receivingPlant\": \"\",\n  \"destinationPlant\": \"\",\n  \"ReceivingStorageLocation\": \"\",\n  \"receivingStorageLocation\": \"\",\n  \"destinationStorageLocation\": \"\",\n  \"CostCenter\": \"CC1000\",\n  \"costCenter\": \"\",\n  \"AssetNo\": \"\",\n  \"assetNo\": \"\",\n  \"SubNumber\": \"\",\n  \"subNumber\": \"\",\n  \"OrderID\": \"\",\n  \"orderId\": \"\",\n  \"OrderNo\": \"\",\n  \"orderNo\": \"\",\n  \"OrderType\": \"\",\n  \"orderType\": \"\",\n  \"Batch\": \"\",\n  \"batch\": \"\",\n  \"SerialNo\": \"\",\n  \"Serials\": \"\",\n  \"serials\": \"\",\n  \"CompleteReservation\": \"\",\n  \"completeReservation\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/postMigoGoodsMovement"
+          }
+        },
+        {
+          "name": "POST Action: verifyMaterialDocument",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"materialDocument\": \"4900000001\",\n  \"materialDocumentYear\": \"2026\",\n  \"materialDocYear\": \"\",\n  \"movementType\": \"311\",\n  \"material\": \"RM-001\",\n  \"quantity\": 1,\n  \"plant\": \"1120\",\n  \"storageLocation\": \"0001\",\n  \"reservationNumber\": \"\",\n  \"reservationNo\": \"\",\n  \"reservationItem\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/verifyMaterialDocument"
+          }
+        },
+        {
+          "name": "POST Action: verifyStock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"materialDocument\": \"4900000001\",\n  \"materialDocumentYear\": \"2026\",\n  \"materialDocYear\": \"\",\n  \"movementType\": \"311\",\n  \"material\": \"RM-001\",\n  \"quantity\": 1,\n  \"plant\": \"1120\",\n  \"sourcePlant\": \"\",\n  \"storageLocation\": \"0001\",\n  \"sourceStorageLocation\": \"\",\n  \"receivingPlant\": \"\",\n  \"destinationPlant\": \"\",\n  \"receivingStorageLocation\": \"\",\n  \"destinationStorageLocation\": \"\",\n  \"costCenter\": \"\",\n  \"assetNo\": \"\",\n  \"subNumber\": \"\",\n  \"initialSourceStock\": \"\",\n  \"initialDestStock\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/verifyStock"
+          }
+        },
+        {
+          "name": "POST Action: verifyReservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservationNumber\": \"\",\n  \"reservationNo\": \"\",\n  \"reservationItem\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/verifyReservation"
+          }
+        },
+        {
+          "name": "POST Action: retryStep",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"Step\": \"\",\n  \"MovementType\": \"201\",\n  \"Batch\": \"\",\n  \"SerialNo\": \"\",\n  \"Serials\": \"\",\n  \"CompleteReservation\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/retryStep"
+          }
+        },
+        {
+          "name": "POST Action: executeReservationWarehouseFlow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MovementType\": \"201\",\n  \"movementType\": \"311\",\n  \"Material\": \"RM-001\",\n  \"material\": \"RM-001\",\n  \"Plant\": \"1120\",\n  \"plant\": \"1120\",\n  \"sourcePlant\": \"\",\n  \"SourcePlant\": \"\",\n  \"StorageLocation\": \"0001\",\n  \"storageLocation\": \"0001\",\n  \"sourceStorageLocation\": \"\",\n  \"SourceStorageLocation\": \"\",\n  \"Quantity\": 5,\n  \"quantity\": 1,\n  \"Unit\": \"\",\n  \"unit\": \"KG\",\n  \"WarehouseNumber\": \"W01\",\n  \"warehouseNumber\": \"\",\n  \"ReceivingPlant\": \"\",\n  \"receivingPlant\": \"\",\n  \"destinationPlant\": \"\",\n  \"DestinationPlant\": \"\",\n  \"ReceivingStorageLocation\": \"\",\n  \"receivingStorageLocation\": \"\",\n  \"destinationStorageLocation\": \"\",\n  \"DestinationStorageLocation\": \"\",\n  \"CostCenter\": \"CC1000\",\n  \"costCenter\": \"\",\n  \"AssetNo\": \"\",\n  \"assetNo\": \"\",\n  \"SubNumber\": \"\",\n  \"subNumber\": \"\",\n  \"OrderID\": \"\",\n  \"orderId\": \"\",\n  \"OrderType\": \"\",\n  \"orderType\": \"\",\n  \"Batch\": \"\",\n  \"batch\": \"\",\n  \"Serials\": \"\",\n  \"serials\": \"\",\n  \"CompleteReservation\": \"\",\n  \"completeReservation\": \"\",\n  \"ReservationDate\": \"\",\n  \"reservationDate\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/executeReservationWarehouseFlow"
+          }
+        },
+        {
+          "name": "GET EntitySet: ReservationStatuses",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/ReservationStatuses?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: ReservationEntries",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/ReservationEntries?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: ReservationLogs",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/ReservationLogs?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: OrderTypeVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/OrderTypeVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: InternalOrderVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/InternalOrderVH?$top=5"
+          }
+        },
+        {
+          "name": "GET EntitySet: CostCenterVH",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/reservation-entry/CostCenterVH?$top=5"
+          }
+        }
+      ]
+    },
+    {
+      "name": "17. HuStockTransferService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/hu-stock-transfer/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: getOpenReservations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/hu-stock-transfer/getOpenReservations(plant='1120',storageLocation='0001',movementType='311',requester='',reservation='100',material='RM-001',status='',includeDeleted=false)"
+          }
+        },
+        {
+          "name": "GET Function: getCockpitDetail",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/hu-stock-transfer/getCockpitDetail(reservation='100',item='1')"
+          }
+        },
+        {
+          "name": "GET Function: validateUnit",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/hu-stock-transfer/validateUnit(reservation='100',item='1',unitNumber='HU01')"
+          }
+        },
+        {
+          "name": "GET Function: getStorageBins",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/hu-stock-transfer/getStorageBins(reservation='100',item='1')"
+          }
+        },
+        {
+          "name": "GET Function: getVisualRack",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/hu-stock-transfer/getVisualRack(reservation='100',item='1')"
+          }
+        },
+        {
+          "name": "GET Function: rackLayout",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/hu-stock-transfer/rackLayout(warehouse='W01',storageType='001',rackPrefix='A',reservation='100',item='1')"
+          }
+        },
+        {
+          "name": "POST Action: validateHuStockTransferSelection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"Selections\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/hu-stock-transfer/validateHuStockTransferSelection"
+          }
+        },
+        {
+          "name": "POST Action: executeHuStockTransfer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"UnitNumber\": \"\",\n  \"TransferQty\": \"\",\n  \"IsFullUnit\": \"\",\n  \"ClientAttemptId\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/hu-stock-transfer/executeHuStockTransfer"
+          }
+        },
+        {
+          "name": "POST Action: executeHuStockTransferSelection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ReservationNo\": \"\",\n  \"ReservationItem\": \"\",\n  \"Selections\": \"\",\n  \"ClientAttemptId\": \"\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/hu-stock-transfer/executeHuStockTransferSelection"
+          }
+        }
+      ]
+    },
+    {
+      "name": "18. QuarantineLabelService",
+      "item": [
+        {
+          "name": "GET Metadata ()",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/quarantine-label/$metadata"
+          }
+        },
+        {
+          "name": "GET Function: getPlantContext",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/odata/v4/quarantine-label/getPlantContext()"
+          }
+        },
+        {
+          "name": "POST Action: generateLabels",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MaterialDocument\": \"5000000001\",\n  \"MaterialDocumentYear\": \"2026\",\n  \"Text\": \"QUARANTINE\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/quarantine-label/generateLabels"
+          }
+        },
+        {
+          "name": "POST Action: listDocuments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Plant\": \"1120\",\n  \"DateFrom\": \"2026-10-01\",\n  \"DateTo\": \"2026-10-28\",\n  \"MaterialDocument\": \"5000000001\",\n  \"MaterialDocumentYear\": \"2026\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/quarantine-label/listDocuments"
+          }
+        },
+        {
+          "name": "POST Action: labelRows",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"MaterialDocument\": \"5000000001\",\n  \"MaterialDocumentYear\": \"2026\",\n  \"Text\": \"QUARANTINE\"\n}"
+            },
+            "url": "{{baseUrl}}/odata/v4/quarantine-label/labelRows"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -7,6 +7,20 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Postman API Collection export (2026-10-28 IST) — DONE, UNCOMMITTED:** Generated complete Postman Collection v2.1 `sap_s4hana_all_apis.postman_collection.json` (83.4 KB) with 219 requests covering all GET and POST endpoints across 19 modules, preconfigured with Basic Auth (`alice`), `{{baseUrl}}` variable, and typed request bodies for actions and queries. Documentation and artifact generated. No application logic changed.
+
+- **Password-update follow-up (2026-10-27 IST) — BLOCKED:** user reports password changed and environment updated. One fresh READ-ONLY metadata request loading current .env.local still returns HTTP 401. No duplicate/blank credential keys, outer whitespace or unquoted-hash issue detected. Account/target verification remains required; no credential values displayed.
+
+- **Backend 401 live diagnosis (2026-10-27 IST) — BLOCKED:** fresh shared-client READ-ONLY purchase-order metadata GET with current .env.local settings returned HTTP 401. Restart alone cannot resolve this current rejection. Account/password/target correction requires verified input; no application/configuration change. Focused regression 76/76 PASS.
+
+- **Reported SAP 401 diagnosis (2026-10-27 IST) — PARTIAL:** exact message traced to dashboard metrics backend read, not login form. Local credential keys present; validity, running-process configuration and account status UNKNOWN. Dashboard tests 41/41 PASS; no live login or configuration change.
+
+- **Login diagnostic review (2026-10-27 IST) — PARTIAL:** source review found password normalization, missing duplicate-submit guard, incomplete 401 session clearing, unvalidated session restoration, and misleading 403 feedback. Existing authentication regression: 6 suites / 64 tests PASS. No application change or live login; user-specific failure UNKNOWN. See appended login review.
+
+- **E2E P1 item 13 — PGI/billing and reload-while-pending (2026-10-27 IST) — PARTIAL, UNCOMMITTED:** Orders Due PGI and billing failure cases now run against a synthetic delivery with MOCKED status/billing-type reads (5/5 each PASS); a reload-while-pending case runs for the 9 flows on the shared action stub (all PASS). Still open: HU stock transfer (config missing), scan-to MIGO retry (no candidate), reload-while-pending for HU/261/scan-to, double click while pending. No uninterrupted run of all flows and no full `npm run test:e2e` yet. See Changes Log (P1 13 PGI/billing + reload).
+
+- **E2E P1 item 13 extended again (2026-10-27 IST) — PARTIAL, UNCOMMITTED:** `verifyActionFailures.e2e.js` now also drives handling unit (create/pack/unpack/remove), movement 261 (scan/reverse) and scan-to (create TO) × 5 mocked failures; the affected flows were run in two groups, all PASS (HU 20/20, scan-to 5/5, 261 10/10 after accepting that screen's own 409 "already in progress" dialog). Still open: HU stock transfer (dry-run fails on missing config), scan-to MIGO retry (no candidate), PGI/billing (need a named delivery), double click / reload while pending. One uninterrupted run of all 14 flows NOT done; full `npm run test:e2e` NOT re-run. See Changes Log (P1 13 handling unit/261/scan-to).
+
 - **E2E P1 item 13 extended (2026-10-27 IST) — PARTIAL, UNCOMMITTED:** `verifyActionFailures.e2e.js` now covers 7 write actions × 5 mocked failures (invoice release/cancel, Orders Due create delivery and no-ref delivery, goods receipt post, packing instruction create, reservation retry): 35/35 PASS, PGI/billing SKIPPED (need a real delivery). Not covered: handling unit, movement 261, scan-to, HU stock transfer, double click / reload while pending on action screens. Full `npm run test:e2e` NOT re-run. See Changes Log (P1 13 extended).
 
 - **E2E P1 items 13–15 (2026-10-27 IST) — PARTIAL, UNCOMMITTED:** 14 axe-core added (dev dependency, user-approved) with an a11y suite on 21 routes + baseline of existing serious/critical findings; 15 screen-load performance suite + baseline (limits agent-chosen, baseline +50% +1 s; `createPurchaseOrder` 25.6 s and `wmReservationEntryCreate` 23.0 s are slow, not investigated); 13 action-style failure suite built, only customer invoice release/cancel covered (10/10 PASS); remaining write screens NOT covered. Full `npm run test:e2e` with all new suites NOT run. See Changes Log (P1 13–15).
@@ -1713,6 +1727,10 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- Backend 401: confirm the configured SAP account status and intended target/client, correct credentials privately if needed, then perform one READ-ONLY verification. No repeated authentication attempts until that prerequisite is resolved.
+
+- Login review: obtain the actual failing login error/environment, reproduce with controlled tests, then fix the confirmed affected boundary; no live login attempted in this review.
+
 - **Movement 261 after actual discovery:** obtain an authoritative custom exclusion policy (actual SAP bin names/texts do not establish it), then fix request-scoped runtime loading with tests and prepare any configuration update for specific written go. Startup diagnostic now reports the persisted configuration accurately; full business enforcement remains NOT VERIFIED.
 
 - **Movement 261 warning:** obtain approved plant/warehouse and blocked storage-type/bin/reason list (historical W01 candidates OH1/ONHOLD and 917/QUALITY are not approval); then prepare scoped configuration and runtime-loading/startup-diagnostic fixes with tests. A live configuration DB write requires a specific written go.
@@ -1775,6 +1793,17 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-28 10:43 IST — Complete Postman API Collection Generated
+
+- **Context / Request:** User requested complete Postman Collection JSON covering all GET and POST APIs across the application.
+- **Change:**
+  - Generated `sap_s4hana_all_apis.postman_collection.json` (83.4 KB) containing 219 requests organized into 19 folders corresponding to all application services and core Express routes.
+  - Set root collection configuration: `{{baseUrl}}` variable (default `http://localhost:4004`), Basic Auth pre-configured with dev user `alice`, and headers (`Content-Type: application/json` for POST actions).
+  - Provided sample query parameters for OData functions, `$top=5` for entity set queries, and sample request payloads for all transactional actions.
+  - Saved copy to artifact directory `<appDataDir>/brain/6d949638-01bd-4fed-ba7e-9b8e391bd9e3/sap_s4hana_all_apis.postman_collection.json` with documentation artifact `api_collection_overview.md`.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT — purely tooling / documentation artifact generation; no application runtime code or test suite modified.
+- **Validation:** JSON validated for syntax and schema compatibility (`JSON.parse` check passed; 19 folders / 219 requests verified).
 
 ### 2026-10-26 18:50 IST — Quarantine Labels in the Fiori app (built ahead of the SAP wrapper, fails closed)
 
@@ -5047,3 +5076,49 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Executed:** `node test/e2e/negative/verifyActionFailures.e2e.js`: invoice release/cancel, Orders Due createDelivery/deliveryWithoutRef, goods receipt, packing instruction, reservation retry — every case PASS (7 flows × 5 = 35); PGI and billing SKIPPED (no delivery named). `npx eslint test/e2e` clean.
 - **NOT covered:** handling unit, movement 261, scan-to (drive the UI inline inside `dryRun`; need a reusable driver), HU stock transfer (its dry-run already FAILS: storage-type rules for 1120/W01 missing), PGI/billing without `E2E_DRYRUN_*_DELIVERY`, double click / reload while pending on action screens. After the small `driveUi` edits the affected round-trip suites were re-run in dry-run (`E2E_SAP_FLOWS=goodsReceipt,packingInstruction,reservationRetry,ordersDue,customerInvoice npm run test:e2e:sap`): goods receipt, packing instruction, reservation retry, invoice release/cancel PASS; Orders Due PARTIAL as before (PGI/billing skipped).
 - **Next:** the full `npm run test:e2e` (includes the new a11y/performance/failure suites); then drivers for handling unit / 261 / scan-to.
+
+### 2026-10-27 IST — E2E P1 13: handling unit, movement 261, scan-to failure cases — PARTIAL, UNCOMMITTED
+
+- **Changed:** `test/e2e/wm/wmRoundTripKit.js` (`setFailure`, `capWaits`; `stubAction` answers the failure while set, `waitForToast` honours the cap; default behaviour unchanged); exports added to `roundTripHandlingUnit` (SUBCASES, PATH, SERVICE, pickDryRunData, dryInputs), `roundTripMvt261` (SUBCASES, PATH, SERVICE, pickDryRunData), `roundTripScanTo` (SUBCASES, candidates, CREATE, SERVICE); `verifyActionFailures.e2e.js` (kit flows, memoised READ-ONLY candidate reads, SKIPPED when SAP data has no candidate, `E2E_FAILURE_FLOWS` regex filter, per-flow `stale` expectation). Matrix doc updated. TEST ADDED/UPDATED. Mocked answers only; no SAP write.
+- **Executed:** first run: the HU/261 flows FAILED because their dry-run stub is installed by each suite's own `dryRun()`, not by `SUBCASES`, so the write guard blocked the POST (my driver error); fixed by installing `kit.stubAction` in the flow. Then `E2E_FAILURE_FLOWS='handling unit|movement 261|scan-to'`: HU 20/20, scan-to 5/5 PASS; 261 scan and reverse failed only the 409 case: the screens map a 409 to an Information dialog "already in progress ... Refresh" (app behaviour, mine to accept as the stale-data UX); flow now expects that text; `E2E_FAILURE_FLOWS='movement 261'` re-run: 10/10 PASS. Round-trip dry-runs re-run after the kit change (`E2E_SAP_FLOWS=handlingUnit,mvt261,scanTo,reservationRetry,packingInstruction`): all PASS, scan-to retryMigo SKIPPED as before. `npx eslint test/e2e` clean.
+- **NOT VERIFIED / OPEN:** one uninterrupted pass over all 14 flows and the full `npm run test:e2e`; HU stock transfer; scan-to MIGO retry; PGI/billing without a named delivery; double click / reload while pending on action screens.
+
+### 2026-10-27 IST — E2E P1 13: PGI/billing failure cases and reload-while-pending — PARTIAL, UNCOMMITTED
+
+- **Changed:** `test/e2e/negative/verifyActionFailures.e2e.js` — Orders Due PGI/billing flows no longer skip: `getDeliveryStatus` and `getBillingDocumentTypes` GETs for a synthetic delivery (`DRYRUNFAIL01`) are MOCKED (status fields per `service.cds:49-60`; the UI's canPgi/canBill rule from `OrdersDueForDelivery.controller.js:651-653`), so no real delivery is needed; new `reloadWhilePending` case for every non-kit flow; `E2E_FAILURE_FLOWS` filter and per-flow `before` hook. `test/e2e/support/actionRoundTrip.js` — a held-back stub answer that arrives after a reload no longer throws (`answer()` wrapper, only when `delayMs` is set). `docs/e2e-coverage-matrix.md` updated. TEST ADDED/UPDATED. All mocked; no SAP call.
+- **Defect I introduced and fixed:** during the kit refactor `calls.push(...await interceptAction())` copied a live list (empty), so every non-kit flow reported "action called 0 times"; caught by the Orders Due run, fixed by keeping the reference.
+- **Executed:** `E2E_FAILURE_FLOWS='orders due'`: createDelivery, deliveryWithoutRef, postGoodsIssue, createBilling each 5 failures + reload PASS (24/24). `E2E_FAILURE_FLOWS='invoice|goods receipt|packing|reservation'`: reload case PASS for invoice release/cancel, GR, PI; reservation retry reload first FAILED (write not sent within 20 s: that screen reads ~25 s before the click, shown by a timeline probe) → wait window raised to 90 s → PASS; its five failure cases PASS. `npx eslint test/e2e` clean.
+- **NOT VERIFIED / OPEN:** one uninterrupted pass over all flows (the filtered groups all passed separately) and the full `npm run test:e2e`; HU stock transfer (dry-run fails on missing storage-type rules for 1120/W01 — business input); scan-to MIGO retry (no candidate TR); reload-while-pending for handling unit / movement 261 / scan-to; double click while pending; the mocked status reads prove UI handling, not that a real delivery in that status behaves the same.
+
+### 2026-10-27 IST — Login diagnostic review — PARTIAL
+
+- **CHANGED:** WORKSTATUS.md only; diagnostic request, no application/configuration changes. Preserved existing unrelated changes.
+- **VERIFIED (source):** frontend AuthService.js:194/207, backend auth-service.js:83 and AuthAdapter.js:98 trim passwords; local mock password comparisons also lowercase both inputs (auth-service.js:113/130). Login.controller.js:onLogin has no in-flight guard; Login.view.xml inputs both submit to it and the button binds busy without disabled binding. ODataClient.js:249 clears storage on 401 but does not reset AuthService's in-memory authenticated/user state. AuthService.js:34/158-180 restores stored username/session without a server check, including missing/malformed tokens. AuthAdapter.js:145 conflates 403 authorization refusal with invalid credentials. These are confirmed code behaviors; occurrence in the user's reported login is UNKNOWN.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT for baseline diagnostic regression — loginController, componentAuthGate, authService, localTokenUtil, userIdentity, authAdapter. These do not prove all identified gaps in a browser.
+- **TESTED / REGRESSION:** `npm test -- test/unit/controller/loginController.test.js test/unit/controller/componentAuthGate.test.js test/unit/auth test/unit/authAdapter.test.js` exit 0, 6 suites / 64 tests PASS. Expected negative-test logs: missing destination, ECONNREFUSED, HTTP 502; no failing tests.
+- **NOT VERIFIED:** actual user failure, browser reproduction, live SAP authentication, deployed BTP SSO. No SAP calls. Build/deployment checks not applicable to documentation-only review.
+- **BLOCKED:** identifying the user's exact failure requires its error/environment; not a blocker to this source review. **ASSUMPTIONS:** request interpreted as diagnostic review, not authorization to modify authentication. **FINAL STATUS:** PARTIAL; baseline tests pass, runtime cause unknown.
+- **Next:** obtain actual error/environment, reproduce identified paths with focused tests before a scoped fix.
+
+### 2026-10-27 IST — Reported backend 401 traced — PARTIAL
+
+- **CHANGED:** WORKSTATUS.md only. **VERIFIED:** user's exact message is generated by PurchaseOrderAdapter.js:385 for dashboard metrics authentication failure; DS4 is hardcoded in this message, so target identity is not proven by the label. server.js:4-14 loads local environment at startup; backend destination uses configured credentials independently of login input. Secret-safe presence check: .env.local contains all four S4 credential/target keys; .env absent; this diagnostic shell has none of those inherited keys. This does not inspect the running server's environment or establish credential validity.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT for message-display baseline — test/unit/dashboard/dashboardMetrics.test.js. **TESTED / REGRESSION:** `npm test -- test/unit/dashboard/dashboardMetrics.test.js` exit 0, 41/41 PASS.
+- **NOT VERIFIED / BLOCKED:** wrong/stale password versus account lock/expiry or target mismatch; SAP account and actual running-process state unknown. No SAP calls; no login retry, credential edit, restart or deployment. Build not applicable to documentation-only diagnosis.
+- **ASSUMPTIONS:** local configuration is relevant based on IDE context; running environment not confirmed. **FINAL STATUS:** PARTIAL. **Next:** user verifies configured account status/credentials for intended target through SAP administrator; if credentials were recently edited, restart the local CAP process before one controlled read-only verification. Do not share passwords in chat.
+
+### 2026-10-27 IST — Find and fix reported backend 401: live rejection reproduced — BLOCKED
+
+- **Plan/scope:** trace credential loading through server.js → shared S4HttpClient → dashboard adapter; inspect configuration shape without values; use one READ-ONLY metadata request to distinguish stale process from current credential rejection; fix only a proven cause. Applied SAP integration/API-discovery and test-validation guidance. No transaction or payload change proposed.
+- **CHANGED:** WORKSTATUS.md only. No application fix is justified until credentials/account/target cause is established; no cosmetic error-message change substituted for fixing authentication. Unrelated changes preserved.
+- **VERIFIED:** each required .env.local key appears once, nonblank, no outer whitespace or unquoted-hash parsing issue; configured client matches user-reported 220. A local process listens on 4004. Process-start inspection denied by sandbox (`ps: operation not permitted`), so age/runtime environment remains UNKNOWN. IDE-named trace file absent at repository root; no alternative RFC credential keys found in parsed local settings.
+- **READ-ONLY SAP:** initial shared-client GET `/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/$metadata` failed locally with EPERM (mapped 502). After network escalation approved, identical GET with current file settings returned HTTP 401 / ERR_BAD_REQUEST. No response body, secrets or target URL printed. No automatic retry, SAP write, account unlock or password reset. Fresh request proves current settings also fail, so stale server state alone is not the cause. Metadata unavailable due to authentication rejection.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT for boundary regression — authAdapter, s4HttpClient, dashboardMetrics. **TESTED / REGRESSION:** `npm test -- test/unit/authAdapter.test.js test/unit/s4HttpClient.test.js test/unit/dashboard/dashboardMetrics.test.js`: 3 suites / 76 tests PASS. Expected mocked negative logs: missing destination, ECONNREFUSED, HTTP 502.
+- **NOT VERIFIED / BLOCKED:** valid credentials, SAP lock/expiry state, intended target identity, successful SAP authentication and full browser recovery. No build/E2E required for this log-only change; neither would establish account validity.
+- **ASSUMPTIONS:** current local settings are the intended diagnostic target based on user's IDE context; intended target still requires confirmation. **FINAL STATUS:** BLOCKED on verified account/configuration input, not fixed. **Next:** user/admin confirms account enabled/password valid for intended system/client; update secret privately if needed, then one read-only verification and local server restart when configuration changes.
+
+### 2026-10-27 IST — User reports password updated; fresh verification still 401 — BLOCKED
+
+- **CHANGED:** WORKSTATUS.md only. User confirms password change and environment update.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT for diagnostic baseline (previous 76/76 result; not rerun this turn). **TESTED / VERIFIED:** one READ-ONLY shared-client purchase-order metadata GET from a fresh process reading current .env.local: HTTP 401 / ERR_BAD_REQUEST. Secret-safe parsing check: S4_USERNAME/S4_PASSWORD/S4_CLIENT each present once, no outer whitespace or unquoted hash; client matches user-reported 220. No retries or SAP writes.
+- **NOT VERIFIED / BLOCKED:** whether the edited buffer was saved, whether changed password belongs to configured backend account and intended target/client, SAP account lock/expiry status. Fresh process rejection means restart alone cannot resolve current on-disk configuration. **ASSUMPTIONS:** local settings remain intended target. **REGRESSION:** no application change; unit tests not rerun. **FINAL STATUS:** BLOCKED. **Next:** confirm saved S4_PASSWORD and matching S4_USERNAME, then SAP administrator verifies account status/target before another attempt.

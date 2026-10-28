@@ -6,14 +6,12 @@
  * (not a create form): SAP business error (400), stale data (409), backend unavailable (503), network timeout and
  * expired session (401), each answered by a MOCKED response (UI handling only, never SAP behaviour; the write guard
  * stays on). Every case expects: exactly one action call, a visible error MessageBox naming the problem, no success
- * result, and the user still on the same screen. Flows are added to FLOWS as drivers: prepare() opens the screen and
- * returns the function that triggers the single write.
- * Covered: customer invoice release / cancel, goods receipt post, packing instruction create, reservation retry, Orders Due create delivery / delivery without reference (PGI and billing
- * run only when a real delivery in the right SAP status is named, like their round-trip suite). NOT yet covered (open
- * list in docs/e2e-coverage-matrix.md): goods receipt post, handling unit, packing instruction, movement 261, scan-to,
- * reservation retry, HU stock transfer.
- * Not covered by this suite: double click while pending and reload while pending (the action flows close their
- * confirmation dialog on the first click).
+ * result, and the user still on the same screen. A flow is { service, action, hash, run, observe? }: run() drives the
+ * screen like the flow's round-trip suite up to and including the click that triggers the single write.
+ * Reload while pending: for the flows whose write goes through interceptAction the answer is held back, the page is
+ * reloaded, and the suite expects no second write, no success and no stuck busy indicator.
+ * Open (docs/e2e-coverage-matrix.md): HU stock transfer (its dry-run fails on missing config), the scan-to MIGO retry
+ * (no candidate), double click while pending.
  */
 
 const { openSession } = require('../support/screenCheck');
@@ -28,6 +26,7 @@ const mvt261 = require('../wm/roundTripMvt261.e2e');
 const scanTo = require('../wm/roundTripScanTo.e2e');
 const kit = require('../wm/wmRoundTripKit');
 
+const JSON_TYPE = 'application/json;odata.metadata=minimal';
 const SAP_MESSAGE = 'E2E simulated SAP error: document is blocked';
 const STALE_MESSAGE = 'E2E simulated: document was changed by another user, reload and retry';
 
@@ -59,19 +58,38 @@ const invoiceFlows = Object.values(invoice.CASES).map((c) => ({
     }
 }));
 
-/** Orders Due: the round-trip sub-cases run unchanged; the delivery numbers PGI/billing need come from the same env vars. */
+/**
+ * Orders Due: the round-trip sub-cases run unchanged. PGI and billing are enabled by the UI only for a delivery whose
+ * SAP status says so, and no CAP read lists such deliveries, so their status and billing-type READS are mocked here
+ * for a synthetic delivery number (the suite is about the failure handling of the write, which is mocked as well).
+ */
+const MOCK_DELIVERY = 'DRYRUNFAIL01';
+const MOCK_READS = [
+    [/getDeliveryStatus\(DeliveryDocument='DRYRUNFAIL01'\)$/, {
+        DeliveryDocument: MOCK_DELIVERY, DeliveryDocumentType: 'LF', ShippingPoint: '', SoldToParty: '', SalesOrganization: '', ActualGoodsMovementDate: '',
+        OverallPickingStatus: 'C', OverallGoodsMovementStatus: 'A', OverallDelivReltdBillgStatus: 'A', OverallSDProcessStatus: 'A'
+    }],
+    [/getBillingDocumentTypes\(DeliveryDocument='DRYRUNFAIL01'\)$/, { value: [{ BillingDocumentType: 'F2', BillingDocumentTypeName: 'Invoice' }] }]
+];
+/** Billing needs goods movement complete; PGI needs it open: one status per sub-case. */
+const statusFor = (name) => (name === 'createBilling' ? { OverallGoodsMovementStatus: 'C' } : {});
+const mockDeliveryReads = (page, name) => page.route((url) => MOCK_READS.some(([re]) => re.test(decodeURIComponent(url.pathname))), (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const [, body] = MOCK_READS.find(([re]) => re.test(decodeURIComponent(new URL(route.request().url()).pathname)));
+    return route.fulfill({ status: 200, contentType: JSON_TYPE, headers: { 'OData-Version': '4.0' }, body: JSON.stringify({ ...body, ...(body.DeliveryDocument ? statusFor(name) : {}) }) });
+});
+
 const ordersDueFlows = Object.keys(ordersDue.SUBCASES).map((name) => {
     const a = ordersDue.ACTIONS[name];
-    const needs = { postGoodsIssue: process.env.E2E_DRYRUN_PGI_DELIVERY, createBilling: process.env.E2E_DRYRUN_BILLING_DELIVERY };
+    const followUp = name === 'postGoodsIssue' || name === 'createBilling';
     return {
         label: `Orders due: ${name}`,
         service: ordersDue.SERVICE,
         action: a.action,
         respond: a.respond,
         hash: 'le/orders-due',
-        skipped: name in needs && !needs[name]
-            ? `needs a real delivery ready for ${name === 'postGoodsIssue' ? 'goods issue' : 'billing'}: set ${name === 'postGoodsIssue' ? 'E2E_DRYRUN_PGI_DELIVERY' : 'E2E_DRYRUN_BILLING_DELIVERY'}` : null,
-        run: (session, baseUrl) => ordersDue.SUBCASES[name](session, { live: false, data: {}, get: rt.capGet(baseUrl), delivery: needs[name] })
+        before: followUp ? (session) => mockDeliveryReads(session.page, name) : null,
+        run: (session, baseUrl) => ordersDue.SUBCASES[name](session, { live: false, data: {}, get: rt.capGet(baseUrl), delivery: followUp ? MOCK_DELIVERY : undefined })
     };
 });
 
@@ -121,14 +139,16 @@ const kitFlows = [
         run: async (session, baseUrl) => {
             const d = (await huData(baseUrl))[name];
             if (typeof d === 'string') throw skip(d);
+            await kit.stubAction(session, huRt.PATH[name], () => ({})); // the round-trip dryRun() installs this stub; with kit.setFailure it answers the failure
             return huRt.SUBCASES[name](session, d);
         }
     })),
     ...Object.keys(mvt261.SUBCASES).map((name) => ({
-        label: `Movement 261: ${name}`, ...split(mvt261.PATH[name]), hash: 'wm/mvt261',
+        label: `Movement 261: ${name}`, ...split(mvt261.PATH[name]), hash: 'wm/mvt261', stale: /already in progress/i,
         run: async (session, baseUrl) => {
             const d = (await mvtData(baseUrl))[name];
             if (!d) throw skip('no candidate from READ-ONLY openItems()/scanContext()/cycle()');
+            await kit.stubAction(session, mvt261.PATH[name], () => ({}));
             const ui = await mvt261.SUBCASES[name](session, d);
             if (!ui.posted) throw skip(`UI does not allow posting: ${ui.message || ui.state}`);
             return ui;
@@ -156,7 +176,7 @@ const FLOWS = [...invoiceFlows, ...ordersDueFlows, ...wmFlows, ...kitFlows];
 async function failureCase(baseUrl, flow, f) {
     const errors = [];
     const session = await openSession({ baseUrl, user: 'alice' });
-    const calls = [];
+    let calls = []; // interceptAction returns a live list: keep the reference, never copy it
     try {
         if (flow.kit) {
             // these suites stub their own action: count its POSTs, and let the kit answer the failure
@@ -164,8 +184,9 @@ async function failureCase(baseUrl, flow, f) {
             kit.setFailure(f.fail);
             kit.capWaits(WAIT_MS);
         } else {
-            calls.push(...await rt.interceptAction(session.page, { flow: 'none', service: flow.service, action: flow.action, respond: flow.respond, fail: f.fail }));
+            calls = await rt.interceptAction(session.page, { flow: 'none', service: flow.service, action: flow.action, respond: flow.respond, fail: f.fail });
         }
+        if (flow.before) await flow.before(session);
         const result = await flow.run(session, baseUrl);
         const box = flow.observe ? await flow.observe(session, result) : await rt.resultBox(session.page, 30000);
         const real = calls.filter((c) => !c.mixed);
@@ -173,7 +194,9 @@ async function failureCase(baseUrl, flow, f) {
         if (real.length !== 1) errors.push(`action called ${real.length} times, expected 1`);
         if (box.type === 'success') errors.push(`success shown despite failure: ${box.text}`);
         else if (box.type !== 'error') errors.push(`expected an error box, got ${box.type || 'none'}: ${box.text}`);
-        if (!f.expect.test(box.text)) errors.push(`error box does not match ${f.expect}: ${box.text.slice(0, 200)}`);
+        // the movement 261 screens answer a 409 with their own "already in progress, refresh" dialog (flow.stale)
+        const expect = f.fail && f.fail.status === 409 && flow.stale ? flow.stale : f.expect;
+        if (!expect.test(box.text)) errors.push(`error box does not match ${expect}: ${box.text.slice(0, 200)}`);
         const screen = await session.page.evaluate(() => window.location.hash);
         if (!screen.includes(flow.hash)) errors.push(`navigated away to ${screen}`);
         const expected = f.fail && f.fail.status ? [{ status: f.fail.status, url: new RegExp(`${flow.service}/(\\$batch|${flow.action})`) }] : [];
@@ -189,11 +212,47 @@ async function failureCase(baseUrl, flow, f) {
     return errors;
 }
 
+/** Reload while the write is pending: the held-back answer never reaches the page; no second write and no false success. */
+async function reloadWhilePending(baseUrl, flow) {
+    const errors = [];
+    const session = await openSession({ baseUrl, user: 'alice' });
+    try {
+        const calls = await rt.interceptAction(session.page, { flow: 'none', service: flow.service, action: flow.action, respond: flow.respond, delayMs: 6000 });
+        if (flow.before) await flow.before(session);
+        let runError = null;
+        const running = Promise.resolve(flow.run(session, baseUrl)).catch((e) => { runError = e; }); // outcome is irrelevant once the page is reloaded; kept for the message below
+        const end = Date.now() + 90000; // some screens read for a long time before the write click (reservation retry ~25 s)
+        while (calls.length < 1 && Date.now() < end) await session.page.waitForTimeout(200);
+        if (calls.length !== 1) throw new Error(`expected the write to be sent once before the reload, got ${calls.length}${runError ? ` (driver: ${runError.message.split('\n')[0]})` : ''}`);
+        await session.page.reload({ waitUntil: 'domcontentloaded' });
+        await running;
+        await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
+        await session.settle();
+        await session.page.waitForTimeout(1500);
+        if (calls.filter((c) => !c.mixed).length !== 1) errors.push(`reload re-sent the write (${calls.length} calls)`);
+        const shown = await session.page.evaluate(() => {
+            const vis = (e) => e.getClientRects().length > 0;
+            return {
+                success: [...document.querySelectorAll('.sapMMessageBoxSuccess, .sapMMessageToast')].filter(vis).map((e) => e.textContent.trim()),
+                busy: [...document.querySelectorAll('.sapUiBusyIndicator, .sapUiLocalBusyIndicator')].some(vis)
+            };
+        });
+        if (shown.success.length) errors.push(`success shown although nothing completed: ${shown.success.join(' | ')}`);
+        if (shown.busy) errors.push('busy indicator still shown after the reload');
+    } catch (err) {
+        errors.push(`${err.name}: ${err.message.split('\n')[0]}`);
+    } finally {
+        await session.close();
+    }
+    return errors;
+}
+
 async function verifyActionFailures(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
     const errors = [];
     const details = [];
-    for (const flow of FLOWS) {
+    const only = process.env.E2E_FAILURE_FLOWS ? new RegExp(process.env.E2E_FAILURE_FLOWS, 'i') : null; // e.g. 'handling|261|scan-to' to run a subset
+    for (const flow of FLOWS.filter((f) => !only || only.test(f.label))) {
         if (flow.skipped) {
             console.log(`\n=== Submit failures: ${flow.label} === SKIPPED: ${flow.skipped}`);
             details.push({ flow: flow.label, status: 'SKIPPED', reason: flow.skipped });
@@ -211,6 +270,13 @@ async function verifyActionFailures(options = {}) {
             errs.forEach((e) => console.log(`      - ${e}`));
             details.push({ flow: flow.label, case: f.name, status: errs.length ? 'FAIL' : 'PASS', errors: errs });
             errs.forEach((e) => errors.push(`${flow.label}: ${f.name}: ${e}`));
+        }
+        if (!flow.kit) {
+            const errs = await reloadWhilePending(baseUrl, flow);
+            console.log(`  [${errs.length ? 'FAIL' : 'PASS'}] Reload while the write is pending sends no second write and shows no success`);
+            errs.forEach((e) => console.log(`      - ${e}`));
+            details.push({ flow: flow.label, case: 'reload while pending', status: errs.length ? 'FAIL' : 'PASS', errors: errs });
+            errs.forEach((e) => errors.push(`${flow.label}: reload while pending: ${e}`));
         }
     }
     return { status: errors.length ? 'FAIL' : 'PASS', errors, details };
