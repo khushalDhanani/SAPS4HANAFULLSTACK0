@@ -54,4 +54,52 @@ describe('Goods receipt posting: server-side plant scope', () => {
             expect(req.reject).toHaveBeenCalledWith(400, 'Plant is required.');
         });
     });
+
+    describe('optimistic concurrency (ETag) handling in postGoodsReceipt', () => {
+        it('forwards If-Match header to GoodsReceiptAdapter.postGoodsReceipt', async () => {
+            const req = {
+                data: { ...DATA },
+                user: ADMIN,
+                headers: { 'if-match': 'W/"datetimeoffset\'2026-10-28T10%3A00%3A00Z\'"' },
+                reject: jest.fn(),
+                error: jest.fn()
+            };
+            await handlers['postGoodsReceipt'](req);
+            expect(GoodsReceiptAdapter.postGoodsReceipt).toHaveBeenCalledWith(
+                expect.objectContaining({ DeliveryDocument: '180000003', Material: 'TG11' }),
+                { ifMatch: 'W/"datetimeoffset\'2026-10-28T10%3A00%3A00Z\'"' }
+            );
+        });
+
+        it('forwards ETag property in data to GoodsReceiptAdapter.postGoodsReceipt', async () => {
+            const req = {
+                data: { ...DATA, ETag: 'W/"body-etag-789"' },
+                user: ADMIN,
+                reject: jest.fn(),
+                error: jest.fn()
+            };
+            await handlers['postGoodsReceipt'](req);
+            expect(GoodsReceiptAdapter.postGoodsReceipt).toHaveBeenCalledWith(
+                expect.objectContaining({ DeliveryDocument: '180000003', Material: 'TG11' }),
+                { ifMatch: 'W/"body-etag-789"' }
+            );
+        });
+
+        it('rejects with HTTP 409 when adapter throws a 409 STALE_DATA error', async () => {
+            const staleErr = new Error('This document was modified by another user or session in SAP S/4HANA (stale data).');
+            staleErr.status = 409;
+            staleErr.statusCode = 409;
+            staleErr.code = 'STALE_DATA';
+            GoodsReceiptAdapter.postGoodsReceipt.mockRejectedValueOnce(staleErr);
+
+            const req = {
+                data: { ...DATA },
+                user: ADMIN,
+                reject: jest.fn(),
+                error: jest.fn()
+            };
+            await handlers['postGoodsReceipt'](req);
+            expect(req.reject).toHaveBeenCalledWith(409, expect.stringContaining('stale data'));
+        });
+    });
 });

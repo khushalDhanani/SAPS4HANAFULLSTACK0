@@ -253,6 +253,34 @@ describe('Unit: CustomerInvoiceService Handlers', () => {
       expect(res.Success).toBe(true);
       expect(res.AccountingDocument).toBe('9000000101');
     });
+
+    test('passes req carrying If-Match header to adapter', async () => {
+      customerInvoiceAdapter.getBillingDocument.mockResolvedValue({
+        BillingDocument: '31000112',
+        BillingDocumentIsCancelled: false,
+        AccountingTransferStatus: ''
+      });
+      customerInvoiceAdapter.postBillingDocumentToAccounting.mockResolvedValue({
+        BillingDocument: '31000112',
+        AccountingDocument: '9000000101',
+        FiscalYear: '2026',
+        Success: true
+      });
+
+      const req = {
+        data: { BillingDocument: '31000112' },
+        headers: { 'if-match': 'W/"datetimeoffset\'2026-10-28T10%3A00%3A00Z\'"' },
+        error: jest.fn()
+      };
+
+      await handlers['releaseInvoiceToAccounting'](req);
+      expect(customerInvoiceAdapter.postBillingDocumentToAccounting).toHaveBeenCalledWith(
+        { billingDocument: '31000112' },
+        expect.objectContaining({
+          headers: expect.objectContaining({ 'if-match': expect.any(String) })
+        })
+      );
+    });
   });
 
   describe('cancelBillingDocument', () => {

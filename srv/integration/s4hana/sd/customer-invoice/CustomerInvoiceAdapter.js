@@ -73,7 +73,10 @@ function _cleanOptions(options = {}) {
   if (!options) return {};
   if (typeof options.reject === 'function' || options.data !== undefined) {
     const userJwt = S4HttpClient.extractUserJwt(options);
-    const ifMatch = options.headers?.['if-match'] || options.headers?.['If-Match'] || options.data?.ETag || options.data?.etag;
+    const ifMatch = options.headers?.['if-match'] || options.headers?.['If-Match'] ||
+      options.req?.headers?.['if-match'] || options.req?.headers?.['If-Match'] ||
+      options._?.req?.headers?.['if-match'] || options._?.req?.headers?.['If-Match'] ||
+      options.data?.ETag || options.data?.etag;
     const res = userJwt ? { userJwt } : {};
     if (ifMatch) {
       res.ifMatch = ifMatch;

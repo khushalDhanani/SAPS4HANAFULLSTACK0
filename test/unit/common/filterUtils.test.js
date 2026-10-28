@@ -106,6 +106,42 @@ describe('Unit: filterUtils', () => {
     });
   });
 
+  describe('extractIfMatch', () => {
+    const { extractIfMatch } = require('../../../srv/common/filterUtils');
+
+    it('should return null for null, undefined, or primitive non-object inputs', () => {
+      expect(extractIfMatch(null)).toBeNull();
+      expect(extractIfMatch(undefined)).toBeNull();
+      expect(extractIfMatch('W/"123"')).toBeNull();
+      expect(extractIfMatch(123)).toBeNull();
+    });
+
+    it('should extract direct ifMatch or etag property', () => {
+      expect(extractIfMatch({ ifMatch: 'W/"2026-10-28T10:00:00Z"' })).toBe('W/"2026-10-28T10:00:00Z"');
+      expect(extractIfMatch({ etag: 'W/"etag-val"' })).toBe('W/"etag-val"');
+    });
+
+    it('should extract from req.headers (case-insensitive keys)', () => {
+      expect(extractIfMatch({ headers: { 'if-match': 'W/"lower-case-etag"' } })).toBe('W/"lower-case-etag"');
+      expect(extractIfMatch({ headers: { 'If-Match': 'W/"upper-case-etag"' } })).toBe('W/"upper-case-etag"');
+    });
+
+    it('should extract from Express req.req.headers or req._.req.headers', () => {
+      expect(extractIfMatch({ req: { headers: { 'if-match': 'W/"express-etag"' } } })).toBe('W/"express-etag"');
+      expect(extractIfMatch({ _: { req: { headers: { 'If-Match': 'W/"cds-internal-req-etag"' } } } })).toBe('W/"cds-internal-req-etag"');
+    });
+
+    it('should extract from req.data.ETag or req.data.etag', () => {
+      expect(extractIfMatch({ data: { ETag: 'W/"body-etag"' } })).toBe('W/"body-etag"');
+      expect(extractIfMatch({ data: { etag: 'W/"body-etag-lower"' } })).toBe('W/"body-etag-lower"');
+      expect(extractIfMatch({ data: { '@odata.etag': 'W/"odata-annotated-etag"' } })).toBe('W/"odata-annotated-etag"');
+    });
+
+    it('should return null when no ETag or If-Match exists', () => {
+      expect(extractIfMatch({ headers: {}, data: { Material: 'M1' } })).toBeNull();
+    });
+  });
+
   describe('applyPaging', () => {
     const { applyPaging } = require('../../../srv/common/filterUtils');
 

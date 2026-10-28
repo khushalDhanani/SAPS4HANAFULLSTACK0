@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Optimistic Concurrency & ETag CAP Handler Layer Phase 3 (2026-10-28 IST) — DONE, UNCOMMITTED:** Added shared `extractIfMatch(req)` helper in `srv/common/filterUtils.js` extracting concurrency tokens from `req.ifMatch`, `req.etag`, `req.headers['if-match']`, Express `req.req`/`req._.req` headers, and `req.data.ETag`. Integrated into `outboundDelivery.handler.js` (`postGoodsIssue`, `createBillingDocument`, `createOutboundDelivery`, `createDeliveryWithoutRef`), `goodsReceipt.handler.js` (`postGoodsReceipt`), and verified `customerInvoice.handler.js`. Updated `GoodsReceiptAdapter._toGatewayError` to preserve mapped 409 `STALE_DATA` errors. Unit tests 30/30 (filterUtils), 28/28 (outboundDeliveryHandler), 20/20 (customerInvoiceAdapter), 16/16 (customerInvoiceHandler), 15/15 (goodsReceiptPlantScope), 59/59 (goodsReceiptService) PASS; eslint clean.
+
 - **Optimistic Concurrency & ETag Adapter Layer Phase 2 (2026-10-28 IST) — DONE, UNCOMMITTED:** S4HttpClient, CustomerInvoiceAdapter, and GoodsReceiptAdapter now normalize and propagate `ifMatch`/`etag` to upstream SAP `If-Match` headers. Sanitization retains caller-provided ETags while preventing auth/cookie leaks. Unit tests 22/22 (s4HttpClient), 19/19 (customerInvoiceAdapter), 59/59 (goodsReceipt) PASS; eslint clean.
 
 - **Optimistic Concurrency & ETag Error Mapping Phase 1 (2026-10-28 IST) — DONE, UNCOMMITTED:** S4ErrorMapper now translates upstream SAP HTTP 412 (Precondition Failed) and ETag mismatch errors (`CX_SADL_ETAG_CHECK_FAILED`, `ETag condition check failed`, `stale data`, `changed by another user`) to HTTP 409 Conflict with code `STALE_DATA` and user-friendly error guidance. HTTP 428 maps to `PRECONDITION_REQUIRED`. Unit tests 25/25 PASS; eslint clean.
@@ -1801,6 +1803,24 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-28 IST — Optimistic Concurrency & ETag CAP Handler Layer Phase 3 — DONE, UNCOMMITTED
+
+- **Context / Request:** User requested Phase 3 of the Concurrency / Stale-Data (ETag Gaps) fix plan.
+- **Change:**
+  - `srv/common/filterUtils.js`: Added and exported `extractIfMatch(req)` supporting extraction of concurrency tokens across `req.ifMatch`, `req.etag`, normalized `req.headers['if-match']`/`req.headers['If-Match']`, Express request headers on `req.req` and `req._.req`, and body properties `req.data.ETag`/`req.data.etag`/`req.data['@odata.etag']`.
+  - `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`: Integrated `extractIfMatch` in `postGoodsIssue`, `createBillingDocument`, `createOutboundDelivery`, and `createDeliveryWithoutRef`. Forwarded `{ ifMatch }` options to adapters while preserving 1-argument compatibility when no token is present.
+  - `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`: Integrated `extractIfMatch` in `postGoodsReceipt`. Forwarded `{ ifMatch }` to `GoodsReceiptAdapter.postGoodsReceipt` and ensured `req.reject(err.status || err.statusCode || 500)` preserves HTTP 409 status.
+  - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`: Updated `_toGatewayError` to preserve mapped HTTP 409 `STALE_DATA` errors from `S4ErrorMapper`. Updated `postGoodsReceipt` to accept and extract `If-Match` from all option and request shapes.
+  - `srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js`: Updated `_cleanOptions` to inspect nested Express headers (`options.req.headers`, `options._.req.headers`) for `If-Match` propagation.
+  - `test/unit/common/filterUtils.test.js`: Added 6 unit tests for `extractIfMatch` (direct properties, case-insensitive headers, Express req nesting, body ETag properties, null handling).
+  - `test/unit/le/outboundDeliveryHandler.test.js`: Added 3 unit tests verifying `If-Match` header and body `ETag` forwarding to `postGoodsIssue` and `createBillingDocument`, and HTTP 409 STALE_DATA error propagation.
+  - `test/unit/sd/customerInvoiceHandler.test.js`: Added unit test verifying request carrying `If-Match` is forwarded to `postBillingDocumentToAccounting`.
+  - `test/unit/sd/customerInvoiceAdapter.test.js`: Added unit test verifying `If-Match` extraction from nested Express request headers.
+  - `test/unit/wm/goodsReceiptPlantScope.test.js`: Added 3 unit tests verifying `If-Match` header and body `ETag` forwarding in `postGoodsReceipt`, and HTTP 409 rejection on conflict.
+- **TEST DECISION:** TEST ADDED — 14 new unit tests across 5 test suites.
+- **Validation:** 10 test suites passed (234 passing tests, 38 real live SAP skips); ESLint clean on all modified files; `git diff --check` clean.
+- **Next:** Phase 4 (Frontend UI5 ETag preservation & reload prompt on 409 Conflict).
 
 ### 2026-10-28 IST — Optimistic Concurrency & ETag Adapter Layer Phase 2 — DONE, UNCOMMITTED
 

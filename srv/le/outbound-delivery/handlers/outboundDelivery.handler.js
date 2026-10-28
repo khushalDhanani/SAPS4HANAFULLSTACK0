@@ -1,7 +1,7 @@
 const LOG = require('../../../common/logger')('outbound-delivery');
 const outboundDeliveryAdapter = require('../../../integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
 const deliveryNoRefAdapter = require('../../../integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter');
-const { applyPaging, extractFilterParam } = require('../../../common/filterUtils');
+const { applyPaging, extractFilterParam, extractIfMatch } = require('../../../common/filterUtils');
 const { plantScope, isPlantAllowed } = require('../../../wm/reservation-entry/readScope');
 
 // Fields of the computed worklist rows a text search may match (OrdersDueForDelivery has no SoldToParty/Material).
@@ -79,11 +79,15 @@ function registerOutboundDeliveryHandlers(srv) {
     const resolvedSP = String(ShippingPoint).trim();
 
     try {
-      const result = await outboundDeliveryAdapter.createDeliveryFromOrder({
+      const ifMatch = extractIfMatch(req);
+      const payload = {
         salesOrder: SalesOrder,
         shippingPoint: resolvedSP,
         deliveryDate: DeliveryDate
-      });
+      };
+      const result = ifMatch
+        ? await outboundDeliveryAdapter.createDeliveryFromOrder(payload, { ifMatch })
+        : await outboundDeliveryAdapter.createDeliveryFromOrder(payload);
       return result.OutboundDelivery || '';
     } catch (err) {
       LOG.error(`Error in createOutboundDelivery (${err.status || 500}): ${err.message}`);
@@ -113,7 +117,10 @@ function registerOutboundDeliveryHandlers(srv) {
 
   srv.on('postGoodsIssue', async (req) => {
     try {
-      return await outboundDeliveryAdapter.postGoodsIssue(req.data?.DeliveryDocument);
+      const ifMatch = extractIfMatch(req);
+      return ifMatch
+        ? await outboundDeliveryAdapter.postGoodsIssue(req.data?.DeliveryDocument, { ifMatch })
+        : await outboundDeliveryAdapter.postGoodsIssue(req.data?.DeliveryDocument);
     } catch (err) {
       LOG.error(`postGoodsIssue failed: ${err.message}`);
       return req.error(err.status || 502, err.message);
@@ -132,7 +139,11 @@ function registerOutboundDeliveryHandlers(srv) {
   srv.on('createBillingDocument', async (req) => {
     const { DeliveryDocument, BillingDocumentType, BillingDocumentDate } = req.data || {};
     try {
-      return await outboundDeliveryAdapter.createBillingDocument({ deliveryDocument: DeliveryDocument, billingDocumentType: BillingDocumentType, billingDocumentDate: BillingDocumentDate });
+      const ifMatch = extractIfMatch(req);
+      const payload = { deliveryDocument: DeliveryDocument, billingDocumentType: BillingDocumentType, billingDocumentDate: BillingDocumentDate };
+      return ifMatch
+        ? await outboundDeliveryAdapter.createBillingDocument(payload, { ifMatch })
+        : await outboundDeliveryAdapter.createBillingDocument(payload);
     } catch (err) {
       LOG.error(`createBillingDocument failed: ${err.message}`);
       return req.error(err.status || 502, err.message);
@@ -214,7 +225,8 @@ function registerOutboundDeliveryHandlers(srv) {
       return req.error(403, `Plant ${data.Plant || '(none)'} is outside the authenticated user's plant scope`);
     }
     try {
-      const result = await deliveryNoRefAdapter.createDeliveryWithoutRef({
+      const ifMatch = extractIfMatch(req);
+      const payload = {
         shippingPoint: data.ShippingPoint,
         deliveryType: data.DeliveryDocumentType,
         salesOrg: data.SalesOrganization,
@@ -225,7 +237,10 @@ function registerOutboundDeliveryHandlers(srv) {
         storageLocation: data.StorageLocation,
         plannedGoodsIssueDate: data.PlannedGoodsIssueDate,
         items: data.Items
-      });
+      };
+      const result = ifMatch
+        ? await deliveryNoRefAdapter.createDeliveryWithoutRef(payload, { ifMatch })
+        : await deliveryNoRefAdapter.createDeliveryWithoutRef(payload);
       return result;
     } catch (err) {
       LOG.error(`Error in createDeliveryWithoutRef (${err.status || 500}): ${err.message}`);

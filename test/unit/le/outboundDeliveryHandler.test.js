@@ -287,6 +287,43 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       await handlers['postGoodsIssue'](req);
       expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('ErrorInGoodsIssue'));
     });
+
+    test('forwards If-Match header to postGoodsIssue adapter call when present', async () => {
+      outboundDeliveryAdapter.postGoodsIssue.mockResolvedValue({ DeliveryDocument: '13000526', Done: true, ErrorFlags: [] });
+      const req = {
+        data: { DeliveryDocument: '13000526' },
+        headers: { 'if-match': 'W/"datetimeoffset\'2026-10-28T10%3A00%3A00Z\'"' },
+        error: jest.fn()
+      };
+      await handlers['postGoodsIssue'](req);
+      expect(outboundDeliveryAdapter.postGoodsIssue).toHaveBeenCalledWith(
+        '13000526',
+        { ifMatch: 'W/"datetimeoffset\'2026-10-28T10%3A00%3A00Z\'"' }
+      );
+    });
+
+    test('forwards ETag property in data to createBillingDocument adapter call', async () => {
+      outboundDeliveryAdapter.createBillingDocument.mockResolvedValue({ BillingDocument: '90000123', Messages: [] });
+      const req = {
+        data: { DeliveryDocument: '13000526', BillingDocumentType: 'F2', ETag: 'W/"etag-val-456"' },
+        error: jest.fn()
+      };
+      await handlers['createBillingDocument'](req);
+      expect(outboundDeliveryAdapter.createBillingDocument).toHaveBeenCalledWith(
+        { deliveryDocument: '13000526', billingDocumentType: 'F2', billingDocumentDate: undefined },
+        { ifMatch: 'W/"etag-val-456"' }
+      );
+    });
+
+    test('propagates HTTP 409 STALE_DATA error when adapter encounters concurrency conflict', async () => {
+      const err = new Error('This document was modified by another user or session in SAP S/4HANA (stale data).');
+      err.status = 409;
+      err.code = 'STALE_DATA';
+      outboundDeliveryAdapter.postGoodsIssue.mockRejectedValue(err);
+      const req = { data: { DeliveryDocument: '13000526' }, error: jest.fn() };
+      await handlers['postGoodsIssue'](req);
+      expect(req.error).toHaveBeenCalledWith(409, expect.stringContaining('stale data'));
+    });
   });
 
   describe('getPlantContext', () => {

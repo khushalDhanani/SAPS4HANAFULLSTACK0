@@ -95,6 +95,48 @@ function extractFilterParams(req, fieldNames) {
 }
 
 /**
+ * Extracts If-Match or ETag concurrency tokens from a CAP request or options object.
+ *
+ * Checks in order:
+ *  1. req.ifMatch / req.etag
+ *  2. req.headers['if-match'] / req.headers['If-Match']
+ *  3. req.req.headers['if-match'] / req.req.headers['If-Match'] (Express IncomingMessage)
+ *  4. req._.req.headers['if-match'] / req._.req.headers['If-Match']
+ *  5. req.data.ETag / req.data.etag / req.data['@odata.etag']
+ *
+ * @param {import('@sap/cds').Request|Object} req
+ * @returns {string|null} The extracted If-Match / ETag string or null
+ */
+function extractIfMatch(req) {
+  if (!req || typeof req !== 'object') return null;
+
+  // 1. Direct property on options/req
+  if (typeof req.ifMatch === 'string' && req.ifMatch.trim() !== '') return req.ifMatch.trim();
+  if (typeof req.etag === 'string' && req.etag.trim() !== '') return req.etag.trim();
+
+  // 2. req.headers (Express normalized headers or CAP headers)
+  if (req.headers && typeof req.headers === 'object') {
+    const h = req.headers['if-match'] || req.headers['If-Match'];
+    if (typeof h === 'string' && h.trim() !== '') return h.trim();
+  }
+
+  // 3. Express req on req.req or req._.req
+  const httpReq = req.req || req._?.req;
+  if (httpReq && httpReq.headers && typeof httpReq.headers === 'object') {
+    const h = httpReq.headers['if-match'] || httpReq.headers['If-Match'];
+    if (typeof h === 'string' && h.trim() !== '') return h.trim();
+  }
+
+  // 4. In req.data (payload property)
+  if (req.data && typeof req.data === 'object') {
+    const d = req.data.ETag || req.data.etag || req.data['@odata.etag'];
+    if (typeof d === 'string' && d.trim() !== '') return d.trim();
+  }
+
+  return null;
+}
+
+/**
  * Applies pagination ($top, $skip) and @odata.count to an array of results based on req.query.
  *
  * @param {Array} items
@@ -300,6 +342,7 @@ function applyWhere(items, where) {
 module.exports = {
   extractFilterParam,
   extractFilterParams,
+  extractIfMatch,
   applyPaging,
   applyWhere,
   odataString

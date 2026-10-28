@@ -1,7 +1,7 @@
 const cds = require('@sap/cds');
 const LOG = require('../../../common/logger')('goods-receipt');
 const GoodsReceiptAdapter = require('../../../integration/s4hana/wm/GoodsReceiptAdapter');
-const { extractFilterParam, extractFilterParams, applyPaging } = require('../../../common/filterUtils');
+const { extractFilterParam, extractFilterParams, applyPaging, extractIfMatch } = require('../../../common/filterUtils');
 // Reuse the type-agnostic WM field-format primitives (plant/sloc/material/batch are the same
 // across Goods Issue and Goods Receipt) rather than duplicating the regexes here.
 const { checkMaterial, checkPlant, checkStorageLocation, checkBatch } = require('../../goods-issue/validation/common');
@@ -140,7 +140,8 @@ const init = (srv) => {
         }
 
         try {
-            return await GoodsReceiptAdapter.postGoodsReceipt({
+            const ifMatch = extractIfMatch(req);
+            const payload = {
                 StorageUnit,
                 DeliveryDocument,
                 Material,
@@ -156,10 +157,13 @@ const init = (srv) => {
                 GoodsMovementType,
                 DocumentItemText,
                 SourceOfGR
-            });
+            };
+            return ifMatch
+                ? await GoodsReceiptAdapter.postGoodsReceipt(payload, { ifMatch })
+                : await GoodsReceiptAdapter.postGoodsReceipt(payload);
         } catch (err) {
             LOG.error('postGoodsReceipt failed:', err.message);
-            req.reject(err.statusCode || 500, err.message);
+            req.reject(err.status || err.statusCode || 500, err.message);
         }
     });
 

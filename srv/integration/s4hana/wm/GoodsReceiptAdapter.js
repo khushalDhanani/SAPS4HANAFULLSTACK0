@@ -107,6 +107,11 @@ class GoodsReceiptAdapter {
    * the SAP message as text and the HTTP status in statusCode.
    */
   static _toGatewayError(err) {
+    const mapped = S4ErrorMapper.mapS4Error ? S4ErrorMapper.mapS4Error(err) : null;
+    if (mapped && (mapped.status === 409 || mapped.code === 'STALE_DATA' || mapped.status === 412)) {
+      mapped.statusCode = mapped.status || 409;
+      return mapped;
+    }
     const errObj = new Error(S4ErrorMapper.extractS4ErrorMessage(err));
     errObj.statusCode = err.status || err.statusCode;
     errObj.status = errObj.statusCode;
@@ -1141,7 +1146,11 @@ class GoodsReceiptAdapter {
 
     try {
       const path = '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers';
-      const ifMatch = options?.ifMatch || options?.etag || options?.headers?.['If-Match'] || options?.headers?.['if-match'];
+      const ifMatch = options?.ifMatch || options?.etag ||
+        options?.headers?.['If-Match'] || options?.headers?.['if-match'] ||
+        options?.req?.headers?.['If-Match'] || options?.req?.headers?.['if-match'] ||
+        options?._?.req?.headers?.['If-Match'] || options?._?.req?.headers?.['if-match'] ||
+        options?.data?.ETag || options?.data?.etag;
       const customHeaders = ifMatch ? { ...(options?.headers || {}), 'If-Match': ifMatch } : (options?.headers || {});
       const result = await this._post(path, postPayload, customHeaders);
 
