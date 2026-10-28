@@ -251,7 +251,8 @@ async function verifyActionFailures(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
     const errors = [];
     const details = [];
-    const only = process.env.E2E_FAILURE_FLOWS ? new RegExp(process.env.E2E_FAILURE_FLOWS, 'i') : null; // e.g. 'handling|261|scan-to' to run a subset
+    const filter = options.only || process.env.E2E_FAILURE_FLOWS; // a shard (see SHARDS) or e.g. 'handling|261|scan-to' for a subset
+    const only = filter ? new RegExp(filter, 'i') : null;
     for (const flow of FLOWS.filter((f) => !only || only.test(f.label))) {
         if (flow.skipped) {
             console.log(`\n=== Submit failures: ${flow.label} === SKIPPED: ${flow.skipped}`);
@@ -286,4 +287,10 @@ if (require.main === module) {
     verifyActionFailures().then((r) => process.exit(r.status === 'PASS' ? 0 : 1));
 }
 
-module.exports = { verifyActionFailures };
+// Kit flows share the kit's module-level failure mode, so they stay together and serial; the others run in their own shard
+const SHARDS = [
+    { name: 'Action failures: invoice, orders due, goods receipt, packing, retry (mocked)', only: '^(Customer invoice|Orders due|Goods receipt|Packing instruction|Reservation entry)' },
+    { name: 'Action failures: handling unit, 261, scan-to (mocked)', only: '^(Handling unit|Movement 261|Scan-to)' }
+];
+
+module.exports = { verifyActionFailures, FLOWS, SHARDS };

@@ -207,7 +207,8 @@ async function verifySubmitFailures(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
     const errors = [];
     const details = [];
-    for (const screen of SCREENS) {
+    const only = options.only ? new RegExp(options.only, 'i') : null; // a shard of SCREENS (see SHARDS)
+    for (const screen of SCREENS.filter((s) => !only || only.test(s.label))) {
         console.log(`\n=== Submit failures on ${screen.label} (write guard on; create action MOCKED per case, not SAP) ===`);
         let values;
         try {
@@ -242,4 +243,7 @@ if (require.main === module) {
     verifySubmitFailures().then((r) => process.exit(r.status === 'PASS' ? 0 : 1));
 }
 
-module.exports = { verifySubmitFailures };
+// One shard per screen so the runner can schedule them side by side; every screen label must match exactly one shard
+const SHARDS = SCREENS.map((s) => ({ name: `Submit failures: ${s.label} (mocked)`, only: `^${s.label}$` }));
+
+module.exports = { verifySubmitFailures, SCREENS, SHARDS };

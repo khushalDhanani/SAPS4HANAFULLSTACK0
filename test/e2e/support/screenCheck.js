@@ -33,6 +33,25 @@ function serviceMeta(baseUrl, service) {
 
 const IGNORED = /i18n_en_US\.properties|favicon|livereload/;
 
+// UI5 resources are version-pinned (index.html), so one download serves every context of the run
+const ui5Cache = new Map(); // url -> { status, headers, body }
+
+/** Serves ui5.sap.com GETs from memory after the first fetch; anything else falls through to the next route (the write guard). */
+function installUi5Cache(context) {
+    return context.route('https://ui5.sap.com/**', async (route) => {
+        const req = route.request();
+        if (req.method() !== 'GET') return route.fallback();
+        const hit = ui5Cache.get(req.url());
+        if (hit) return route.fulfill(hit);
+        const res = await route.fetch();
+        if (res.status() !== 200) return route.fulfill({ response: res });
+        const { 'content-encoding': _enc, 'content-length': _len, ...headers } = res.headers(); // body() is already decoded
+        const entry = { status: 200, headers, body: await res.body() };
+        ui5Cache.set(req.url(), entry);
+        return route.fulfill(entry);
+    });
+}
+
 let sharedBrowser = null; // one Chromium per process; every session still gets its own isolated context
 
 /** Launches Chromium on first use and again if it died; sessions share it, never a context. */
@@ -63,6 +82,7 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
         viewport: { width: 1440, height: 900 }
     });
     const blocked = await installWriteGuard(context, { allowWrites });
+    await installUi5Cache(context); // registered after the guard, so it is asked first and only for ui5.sap.com GETs
     const trace = await evidence.startSession(context); // null outside the runner
     const page = await context.newPage();
     const consoleErrors = [];

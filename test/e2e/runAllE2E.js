@@ -19,9 +19,9 @@ const { verifyWmScreens } = require('./wm/verifyWmScreens.e2e');
 const { verifyNegativeUi } = require('./negative/verifyNegativeUi.e2e');
 const { verifyPlantIsolation } = require('./negative/verifyPlantIsolation.e2e');
 const { verifyWriteAuthorization } = require('./negative/verifyWriteAuthorization.e2e');
-const { verifySubmitFailures } = require('./negative/verifySubmitFailures.e2e');
+const { verifySubmitFailures, SHARDS: SUBMIT_SHARDS } = require('./negative/verifySubmitFailures.e2e');
 const { verifyQuarantineLabels } = require('./wm/verifyQuarantineLabels.e2e');
-const { verifyActionFailures } = require('./negative/verifyActionFailures.e2e');
+const { verifyActionFailures, SHARDS: ACTION_SHARDS } = require('./negative/verifyActionFailures.e2e');
 const { verifyA11yScreens } = require('./a11y/verifyA11yScreens.e2e');
 const { verifyScreenPerformance } = require('./performance/verifyScreenPerformance.e2e');
 
@@ -149,11 +149,11 @@ async function runAll(options = {}) {
     { name: 'Plant isolation', file: 'negative/verifyPlantIsolation.e2e.js', fn: verifyPlantIsolation },
     { name: 'Write authorization (isolated server)', file: 'negative/verifyWriteAuthorization.e2e.js', fn: verifyWriteAuthorization },
     // Submit-time failures on PO create with the write action mocked per case (UI handling, not SAP)
-    { name: 'Submit failures (mocked)', file: 'negative/verifySubmitFailures.e2e.js', fn: verifySubmitFailures },
+    ...SUBMIT_SHARDS.map((s) => ({ name: s.name, file: 'negative/verifySubmitFailures.e2e.js', fn: (o) => verifySubmitFailures({ ...o, only: s.only }) })),
     // Quarantine labels screen; the label action is mocked in every case (SAP wrapper not yet activated)
     { name: 'Quarantine labels (mocked)', file: 'wm/verifyQuarantineLabels.e2e.js', fn: verifyQuarantineLabels },
     // Submit failures on action-style write screens (customer invoice so far); action MOCKED per case
-    { name: 'Action failures (mocked)', file: 'negative/verifyActionFailures.e2e.js', fn: verifyActionFailures },
+    ...ACTION_SHARDS.map((s) => ({ name: s.name, file: 'negative/verifyActionFailures.e2e.js', fn: (o) => verifyActionFailures({ ...o, only: s.only }) })),
     // P1: axe-core on every parameterless route (new serious/critical violations fail) and screen-load timings vs baseline
     { name: 'Accessibility (axe-core)', file: 'a11y/verifyA11yScreens.e2e.js', fn: verifyA11yScreens },
     // Timing suite: runs alone after the pool drains, so parallel load cannot distort its measurements
