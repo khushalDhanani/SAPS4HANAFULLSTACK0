@@ -3,6 +3,7 @@
 
 const path = require('path');
 const { uiReady } = require('../support/uiReady');
+const shots = require('../support/shots');
 const { chromium } = require('../playwrightLoader');
 
 async function verifyMvt201(options = {}) {
@@ -94,8 +95,7 @@ async function verifyMvt201(options = {}) {
 
     // Take screenshot
     const resScreenshotPath = path.resolve(__dirname, 'screenshots/mvt201_reservation_detail.png');
-    await page.screenshot({ path: resScreenshotPath, fullPage: true });
-    console.log(`Saved screenshot: ${resScreenshotPath}`);
+    await shots.evidence(page, resScreenshotPath);
 
     // Check header title
     const headerTitle = await page.textContent('.sapUxAPObjectPageHeaderTitleText, .sapMTitle');
@@ -186,8 +186,7 @@ async function verifyMvt201(options = {}) {
     await uiReady(page);
 
     const scanScreenshotPath = path.resolve(__dirname, 'screenshots/mvt201_warehouse_scan.png');
-    await page.screenshot({ path: scanScreenshotPath, fullPage: true });
-    console.log(`Saved screenshot: ${scanScreenshotPath}`);
+    await shots.evidence(page, scanScreenshotPath);
 
     const scanPageText = await page.innerText('body');
     console.log('Scan Page message contains completed TR validation:');
@@ -244,7 +243,7 @@ async function verifyMvt201(options = {}) {
       materialDocYear: '2026',
       statusText: 'Goods Issue Posted',
       statusCode: '05',
-      screenshots: [resScreenshotPath, scanScreenshotPath],
+      screenshots: shots.enabled() ? [resScreenshotPath, scanScreenshotPath] : [],
       sapReadBack: null
     };
 
@@ -310,6 +309,7 @@ async function verifyMvt201(options = {}) {
     report.ui = 'FAIL';
     report.playwright = 'FAIL';
     report.errors.push(err.message);
+    await shots.failure(page, path.resolve(__dirname, 'screenshots/mvt201_failure.png'));
   } finally {
     await browser.close();
   }

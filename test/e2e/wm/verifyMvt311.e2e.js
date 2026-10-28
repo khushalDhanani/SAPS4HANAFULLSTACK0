@@ -3,6 +3,7 @@
 
 const path = require('path');
 const { uiReady } = require('../support/uiReady');
+const shots = require('../support/shots');
 const { chromium } = require('../playwrightLoader');
 
 async function verifyMvt311(options = {}) {
@@ -118,8 +119,7 @@ async function verifyMvt311(options = {}) {
     }, null, { timeout: 5000 }).catch(() => {}); // the explicit check below reports the failure
 
     const createScreenshotPath = path.resolve(__dirname, 'screenshots/mvt311_create_page.png');
-    await page.screenshot({ path: createScreenshotPath, fullPage: true });
-    console.log(`Saved screenshot: ${createScreenshotPath}`);
+    await shots.evidence(page, createScreenshotPath);
 
     if (!(await recSLocVisible())) throw new Error('Receiving SLoc input not visible on create page after selecting Movement 311');
     report.ui = 'PASS';
@@ -135,8 +135,7 @@ async function verifyMvt311(options = {}) {
     await uiReady(page);
 
     const resScreenshotPath = path.resolve(__dirname, 'screenshots/mvt311_reservation_detail.png');
-    await page.screenshot({ path: resScreenshotPath, fullPage: true });
-    console.log(`Saved screenshot: ${resScreenshotPath}`);
+    await shots.evidence(page, resScreenshotPath);
 
     const headerTitle = await page.textContent('.sapUxAPObjectPageHeaderTitleText, .sapMTitle');
     console.log(`Header Title: ${headerTitle}`);
@@ -218,8 +217,7 @@ async function verifyMvt311(options = {}) {
     await uiReady(page);
 
     const scanScreenshotPath = path.resolve(__dirname, 'screenshots/mvt311_warehouse_scan.png');
-    await page.screenshot({ path: scanScreenshotPath, fullPage: true });
-    console.log(`Saved screenshot: ${scanScreenshotPath}`);
+    await shots.evidence(page, scanScreenshotPath);
 
     const scanPageText = await page.innerText('body');
     const isCompletedTRHandled = scanPageText.includes('already completed') || scanPageText.includes('STATU = E') || scanPageText.includes('not found') || scanPageText.includes('1000804') || scanPageText.includes('Select Warehouse') || scanPageText.includes('loaded successfully');
@@ -279,7 +277,7 @@ async function verifyMvt311(options = {}) {
       materialDocYear: '2026',
       statusText: 'Goods Issue Posted',
       statusCode: '05',
-      screenshots: [createScreenshotPath, resScreenshotPath, scanScreenshotPath],
+      screenshots: shots.enabled() ? [createScreenshotPath, resScreenshotPath, scanScreenshotPath] : [],
       sapReadBack: null
     };
 
@@ -346,6 +344,7 @@ async function verifyMvt311(options = {}) {
     report.ui = 'FAIL';
     report.playwright = 'FAIL';
     report.errors.push(err.message);
+    await shots.failure(page, path.resolve(__dirname, 'screenshots/mvt311_failure.png'));
   } finally {
     await browser.close();
   }

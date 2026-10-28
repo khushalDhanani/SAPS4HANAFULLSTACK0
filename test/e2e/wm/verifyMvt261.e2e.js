@@ -3,6 +3,7 @@
 
 const path = require('path');
 const { uiReady } = require('../support/uiReady');
+const shots = require('../support/shots');
 const { chromium } = require('../playwrightLoader');
 
 async function verifyMvt261(options = {}) {
@@ -93,8 +94,7 @@ async function verifyMvt261(options = {}) {
     await uiReady(page);
 
     const resScreenshotPath = path.resolve(__dirname, 'screenshots/mvt261_reservation_detail.png');
-    await page.screenshot({ path: resScreenshotPath, fullPage: true });
-    console.log(`Saved screenshot: ${resScreenshotPath}`);
+    await shots.evidence(page, resScreenshotPath);
 
     const pageContent = await page.content();
     console.log('Checking Reservation Detail content...');
@@ -129,8 +129,7 @@ async function verifyMvt261(options = {}) {
     await uiReady(page);
 
     const scanScreenshotPath = path.resolve(__dirname, 'screenshots/mvt261_scan_to_tr.png');
-    await page.screenshot({ path: scanScreenshotPath, fullPage: true });
-    console.log(`Saved screenshot: ${scanScreenshotPath}`);
+    await shots.evidence(page, scanScreenshotPath);
 
     const scanContent = await page.content();
     const hasScanMvt = scanContent.includes('261') || scanContent.includes('Order Assignment');
@@ -155,8 +154,7 @@ async function verifyMvt261(options = {}) {
     await uiReady(page);
 
     const createScreenshotPath = path.resolve(__dirname, 'screenshots/mvt261_reservation_create.png');
-    await page.screenshot({ path: createScreenshotPath, fullPage: true });
-    console.log(`Saved screenshot: ${createScreenshotPath}`);
+    await shots.evidence(page, createScreenshotPath);
 
     console.log('\n================================================================');
     console.log(' TELEMETRY & NETWORK AUDIT');
@@ -194,7 +192,7 @@ async function verifyMvt261(options = {}) {
       materialDocYear: '2026',
       statusText: 'Goods Issue Posted',
       statusCode: '05',
-      screenshots: [resScreenshotPath, scanScreenshotPath, createScreenshotPath],
+      screenshots: shots.enabled() ? [resScreenshotPath, scanScreenshotPath, createScreenshotPath] : [],
       sapReadBack: null
     };
 
@@ -255,6 +253,7 @@ async function verifyMvt261(options = {}) {
     console.error('Playwright E2E failed:', err);
     report.playwright = 'FAIL';
     report.errors.push(err.message);
+    await shots.failure(page, path.resolve(__dirname, 'screenshots/mvt261_failure.png'));
   } finally {
     await browser.close();
   }
