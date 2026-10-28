@@ -312,6 +312,13 @@
         "goods-issue-adapter": "info",
         "tr-to-adapter": "info"
       }
+    },
+    "cds-plugin-ui5": {
+      "modules": {
+        "fiori-app": {
+          "configFile": "ui5-cap.yaml"
+        }
+      }
     }
   },
   "optionalDependencies": {
