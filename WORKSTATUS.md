@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Optimistic Concurrency & ETag Error Mapping Phase 1 (2026-10-28 IST) — DONE, UNCOMMITTED:** S4ErrorMapper now translates upstream SAP HTTP 412 (Precondition Failed) and ETag mismatch errors (`CX_SADL_ETAG_CHECK_FAILED`, `ETag condition check failed`, `stale data`, `changed by another user`) to HTTP 409 Conflict with code `STALE_DATA` and user-friendly error guidance. HTTP 428 maps to `PRECONDITION_REQUIRED`. Unit tests 25/25 PASS; eslint clean.
+
 - **E2E sleep removal + list latency diagnosis (2026-10-28 IST) — PARTIAL:** fixed `waitForTimeout` sleeps in `verifyMvt201/241/261/301/311`, `verifyHardeningUI`, `verifySubmitFailures` now wait on UI readiness (`test/e2e/support/uiReady.js`); all seven pass against a live-read server on port 4010 (no timing benchmark taken). New read-only profiler `test/e2e/performance/profileLists.js` found duplicate list requests and unpaged WM reads (see the Changes Log entry); no app code changed yet.
 
 - **Postman API Collection export (2026-10-28 IST) — DONE, UNCOMMITTED:** Generated complete Postman Collection v2.1 `sap_s4hana_all_apis.postman_collection.json` (83.4 KB) with 219 requests covering all GET and POST endpoints across 19 modules, preconfigured with Basic Auth (`alice`), `{{baseUrl}}` variable, and typed request bodies for actions and queries. Documentation and artifact generated. No application logic changed.
@@ -1797,6 +1799,17 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-28 IST — Optimistic Concurrency & ETag Error Mapping Phase 1 — DONE, UNCOMMITTED
+
+- **Context / Request:** User requested Phase 1 of the Concurrency / Stale-Data (ETag Gaps) fix plan.
+- **Change:**
+  - `srv/integration/s4hana/S4ErrorMapper.js`: Extended classification condition 5 (Business Conflict / Optimistic Concurrency) to catch HTTP 412, `PRECONDITION_FAILED`, `ETAG_CHECK_FAILED`, `CONCURRENCY`, `stale data`, and `"changed/modified by another user"`. Maps to HTTP 409 with code `STALE_DATA`. Added condition 5b mapping HTTP 428 to code `PRECONDITION_REQUIRED`.
+  - Added user-friendly message fallback for bare precondition/ETag mismatch errors: `"The document was changed by another user. Please refresh and review latest changes before retrying."`
+  - `test/unit/errorMapping.test.js`: Added 4 focused unit tests verifying HTTP 412 -> 409 mapping, ETag check failure mapping with preserved SAP code, modified-by-another-user string mapping, and HTTP 428 mapping.
+- **TEST DECISION:** TEST ADDED — 4 new unit tests in `test/unit/errorMapping.test.js` (total 25/25 PASS).
+- **Validation:** `npx jest test/unit/errorMapping.test.js` 25/25 PASS; `npx eslint srv/integration/s4hana/S4ErrorMapper.js test/unit/errorMapping.test.js` clean; `git diff --check` clean.
+- **Next:** Phase 2 (Adapter Layer: removing wildcard `If-Match: *` and accepting caller-provided ETag in write calls).
 
 ### 2026-10-28 IST — E2E against the built app (dist/Component-preload.js): works, no measurable saving — PARTIAL
 

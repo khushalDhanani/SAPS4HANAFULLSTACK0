@@ -216,6 +216,66 @@ describe('Unit: Error Mapping', () => {
             expect(mapped.code).toBe('CX_SADL_ENTITY_CUD_DISABLED');
             expect(mapped.message).toContain('Creating operations are disabled');
         });
+
+        it('should map HTTP 412 Precondition Failed to HTTP 409 Conflict with STALE_DATA code', () => {
+            const preconditionError = {
+                response: {
+                    status: 412,
+                    data: {
+                        error: {
+                            message: { value: 'Precondition Failed' }
+                        }
+                    }
+                }
+            };
+            const mapped = mapS4Error(preconditionError);
+            expect(mapped.status).toBe(409);
+            expect(mapped.code).toBe('STALE_DATA');
+            expect(mapped.message).toContain('changed by another user');
+        });
+
+        it('should map SAP ETag check failure to HTTP 409 Conflict and preserve original SAP code if present', () => {
+            const etagError = {
+                response: {
+                    status: 412,
+                    data: {
+                        error: {
+                            code: 'CX_SADL_ETAG_CHECK_FAILED',
+                            message: { value: 'ETag condition check failed' }
+                        }
+                    }
+                }
+            };
+            const mapped = mapS4Error(etagError);
+            expect(mapped.status).toBe(409);
+            expect(mapped.code).toBe('CX_SADL_ETAG_CHECK_FAILED');
+            expect(mapped.message).toContain('changed by another user');
+        });
+
+        it('should map messages stating document was changed or modified by another user to HTTP 409 Conflict', () => {
+            const changedError = new Error('Document was modified by another user in transaction VF02');
+            const mapped = mapS4Error(changedError);
+            expect(mapped.status).toBe(409);
+            expect(mapped.code).toBe('STALE_DATA');
+            expect(mapped.message).toBe('Document was modified by another user in transaction VF02');
+        });
+
+        it('should map HTTP 428 Precondition Required to HTTP 428 with PRECONDITION_REQUIRED code', () => {
+            const requiredError = {
+                response: {
+                    status: 428,
+                    data: {
+                        error: {
+                            message: { value: 'Precondition Required' }
+                        }
+                    }
+                }
+            };
+            const mapped = mapS4Error(requiredError);
+            expect(mapped.status).toBe(428);
+            expect(mapped.code).toBe('PRECONDITION_REQUIRED');
+            expect(mapped.message).toContain('Precondition (If-Match) is required');
+        });
     });
 
     describe('mapS4Error with errors raised by an adapter (no S/4 response)', () => {
