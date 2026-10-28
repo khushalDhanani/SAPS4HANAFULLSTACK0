@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Optimistic Concurrency & ETag Adapter Layer Phase 2 (2026-10-28 IST) — DONE, UNCOMMITTED:** S4HttpClient, CustomerInvoiceAdapter, and GoodsReceiptAdapter now normalize and propagate `ifMatch`/`etag` to upstream SAP `If-Match` headers. Sanitization retains caller-provided ETags while preventing auth/cookie leaks. Unit tests 22/22 (s4HttpClient), 19/19 (customerInvoiceAdapter), 59/59 (goodsReceipt) PASS; eslint clean.
+
 - **Optimistic Concurrency & ETag Error Mapping Phase 1 (2026-10-28 IST) — DONE, UNCOMMITTED:** S4ErrorMapper now translates upstream SAP HTTP 412 (Precondition Failed) and ETag mismatch errors (`CX_SADL_ETAG_CHECK_FAILED`, `ETag condition check failed`, `stale data`, `changed by another user`) to HTTP 409 Conflict with code `STALE_DATA` and user-friendly error guidance. HTTP 428 maps to `PRECONDITION_REQUIRED`. Unit tests 25/25 PASS; eslint clean.
 
 - **E2E sleep removal + list latency diagnosis (2026-10-28 IST) — PARTIAL:** fixed `waitForTimeout` sleeps in `verifyMvt201/241/261/301/311`, `verifyHardeningUI`, `verifySubmitFailures` now wait on UI readiness (`test/e2e/support/uiReady.js`); all seven pass against a live-read server on port 4010 (no timing benchmark taken). New read-only profiler `test/e2e/performance/profileLists.js` found duplicate list requests and unpaged WM reads (see the Changes Log entry); no app code changed yet.
@@ -1799,6 +1801,19 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-28 IST — Optimistic Concurrency & ETag Adapter Layer Phase 2 — DONE, UNCOMMITTED
+
+- **Context / Request:** User requested Phase 2 of the Concurrency / Stale-Data (ETag Gaps) fix plan.
+- **Change:**
+  - `srv/integration/s4hana/S4HttpClient.js`: Added first-class normalization of `options.ifMatch`, `options.etag`, and incoming `cleanHeaders['if-match']` to `If-Match` on all Gateway POST calls.
+  - `srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js`: Updated `_cleanOptions` to preserve `If-Match` headers and `ifMatch`/`etag` properties from both plain option objects and CAP `req` contexts, ensuring client ETags reach S4HttpClient while continuing to sanitize cookies and auth tokens.
+  - `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`: Updated `postGoodsReceipt` signature and implementation to accept `options` and attach `If-Match` customHeaders when provided.
+  - `test/unit/s4HttpClient.test.js`: Added unit test verifying `options.ifMatch` normalization and propagation to `postConfig.headers['If-Match']`.
+  - `test/unit/sd/customerInvoiceAdapter.test.js`: Added unit test verifying `If-Match` propagation from CAP request to `S4HttpClient.post`.
+- **TEST DECISION:** TEST ADDED — 2 new unit tests in `test/unit/s4HttpClient.test.js` and `test/unit/sd/customerInvoiceAdapter.test.js`.
+- **Validation:** `npx jest test/unit/s4HttpClient.test.js` 22/22 PASS; `npx jest test/unit/sd/customerInvoiceAdapter.test.js` 19/19 PASS; `npx jest test/unit/wm/goodsReceiptService.test.js` 59/59 PASS; `npx eslint` clean; `git diff --check` clean.
+- **Next:** Phase 3 (CAP Service & Handler Layer: extracting `If-Match` from incoming requests and forwarding to adapters).
 
 ### 2026-10-28 IST — Optimistic Concurrency & ETag Error Mapping Phase 1 — DONE, UNCOMMITTED
 

@@ -198,6 +198,33 @@ describe('Unit: CustomerInvoiceAdapter', () => {
       expect(passedOptions.headers).toBeUndefined();
     });
 
+    test('preserves and propagates If-Match header from CAP request to S4HttpClient', async () => {
+      mockHttpClient.post.mockResolvedValue({
+        data: { d: { results: [{ Message: 'Document 31000111 has been saved.' }] } }
+      });
+      mockHttpClient.get.mockResolvedValue({
+        data: {
+          d: {
+            BillingDocument: '31000111',
+            AccountingDocument: '9000000100',
+            FiscalYear: '2026',
+            AccountingTransferStatus: 'C'
+          }
+        }
+      });
+
+      const fakeCapReq = {
+        data: { BillingDocument: '31000111' },
+        headers: { 'if-match': 'W/"2026-10-28T10:00:00Z"' },
+        reject: jest.fn()
+      };
+
+      await adapter.postBillingDocumentToAccounting({ billingDocument: '31000111' }, fakeCapReq);
+      expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+      const passedOptions = mockHttpClient.post.mock.calls[0][1];
+      expect(passedOptions.headers['If-Match']).toBe('W/"2026-10-28T10:00:00Z"');
+    });
+
     test('throws 400 when SAP returns MessageType E in FunctionImportResult', async () => {
       mockHttpClient.post.mockResolvedValue({
         data: {

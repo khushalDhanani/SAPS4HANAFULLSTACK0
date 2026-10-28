@@ -248,6 +248,22 @@ describe('Unit: S4HttpClient (shared SAP Cloud SDK client for S/4HANA)', () => {
             expect(postConfig.headers['x-custom-header']).toBe('safe-val');
         });
 
+        it('normalizes and propagates ifMatch or etag to If-Match header', async () => {
+            const executeHttpRequest = jest.fn()
+                .mockResolvedValueOnce(csrfResponse)
+                .mockResolvedValueOnce({ status: 200, data: {}, headers: {} });
+            const { client } = makeClient({ executeHttpRequest });
+
+            await client.post('/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_MANAGE/Action', {
+                data: {},
+                ifMatch: 'W/"datetimeoffset\'2026-10-28T10%3A00%3A00Z\'"'
+            });
+
+            const [, postConfig] = executeHttpRequest.mock.calls[1];
+            expect(postConfig.headers['If-Match']).toBe('W/"datetimeoffset\'2026-10-28T10%3A00%3A00Z\'"');
+            expect(postConfig.headers['if-match']).toBeUndefined();
+        });
+
         it('uses an explicit csrfPath when the caller provides one', async () => {
             const executeHttpRequest = jest.fn()
                 .mockResolvedValueOnce(csrfResponse)

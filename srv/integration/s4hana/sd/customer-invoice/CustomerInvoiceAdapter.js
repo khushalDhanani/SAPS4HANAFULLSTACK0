@@ -73,7 +73,13 @@ function _cleanOptions(options = {}) {
   if (!options) return {};
   if (typeof options.reject === 'function' || options.data !== undefined) {
     const userJwt = S4HttpClient.extractUserJwt(options);
-    return userJwt ? { userJwt } : {};
+    const ifMatch = options.headers?.['if-match'] || options.headers?.['If-Match'] || options.data?.ETag || options.data?.etag;
+    const res = userJwt ? { userJwt } : {};
+    if (ifMatch) {
+      res.ifMatch = ifMatch;
+      res.headers = { 'If-Match': ifMatch };
+    }
+    return res;
   }
   const clean = { ...options };
   if (clean.headers) {
@@ -85,6 +91,12 @@ function _cleanOptions(options = {}) {
     delete headers.cookie;
     delete headers.Cookie;
     clean.headers = headers;
+  }
+  const ifMatch = clean.ifMatch || clean.etag || clean.headers?.['if-match'] || clean.headers?.['If-Match'];
+  if (ifMatch) {
+    clean.ifMatch = ifMatch;
+    clean.headers = { ...(clean.headers || {}), 'If-Match': ifMatch };
+    delete clean.headers['if-match'];
   }
   return clean;
 }

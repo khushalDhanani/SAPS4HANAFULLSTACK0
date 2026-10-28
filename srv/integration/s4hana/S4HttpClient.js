@@ -338,6 +338,12 @@ class S4HttpClient {
         delete cleanHeaders['authorization'];
         delete cleanHeaders['Authorization'];
 
+        const resolvedIfMatch = options.ifMatch || options.etag || cleanHeaders['if-match'] || cleanHeaders['If-Match'];
+        if (resolvedIfMatch) {
+            delete cleanHeaders['if-match'];
+            cleanHeaders['If-Match'] = resolvedIfMatch;
+        }
+
         const requestConfig = {
             method: 'post',
             url: path,

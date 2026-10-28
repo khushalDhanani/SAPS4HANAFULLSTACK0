@@ -1009,7 +1009,7 @@ class GoodsReceiptAdapter {
    * Executes Goods Receipt posting in SAP S/4HANA via MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers
    * In strict accordance with AGENTS.md: NO mock persistence or synthetic document generation.
    */
-  async postGoodsReceipt(payload = {}) {
+  async postGoodsReceipt(payload = {}, options = {}) {
     const {
       StorageUnit,
       DeliveryDocument,
@@ -1141,7 +1141,9 @@ class GoodsReceiptAdapter {
 
     try {
       const path = '/sap/opu/odata/sap/MMIM_GR4PO_DL_SRV/GR4PO_DL_Headers';
-      const result = await this._post(path, postPayload);
+      const ifMatch = options?.ifMatch || options?.etag || options?.headers?.['If-Match'] || options?.headers?.['if-match'];
+      const customHeaders = ifMatch ? { ...(options?.headers || {}), 'If-Match': ifMatch } : (options?.headers || {});
+      const result = await this._post(path, postPayload, customHeaders);
 
       // Check sap-message response header for business errors or posted document text
       const rawSapMsg = result?._headers?.['sap-message'];
