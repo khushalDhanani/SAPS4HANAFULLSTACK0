@@ -2,6 +2,7 @@
 /* global document */
 
 const path = require('path');
+const { uiReady } = require('../support/uiReady');
 const { chromium } = require('../playwrightLoader');
 
 async function verifyMvt201(options = {}) {
@@ -89,7 +90,7 @@ async function verifyMvt201(options = {}) {
     console.log(`[Step 1] Loading Reservation Detail: ${resUrl}`);
     await page.goto(resUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.sapMTitle', { timeout: 10000 });
-    await page.waitForTimeout(1500);
+    await uiReady(page);
 
     // Take screenshot
     const resScreenshotPath = path.resolve(__dirname, 'screenshots/mvt201_reservation_detail.png');
@@ -163,7 +164,7 @@ async function verifyMvt201(options = {}) {
     // Test page refresh does not corrupt state
     console.log('[Step 1b] Testing page refresh persistence...');
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1500);
+    await page.waitForFunction(() => document.body.innerText.includes('4900050142'), null, { timeout: 15000 }).catch(() => {}); // asserted next
     const refreshedText = await page.innerText('body');
     if (!refreshedText.includes('0000525278') || !refreshedText.includes('4900050142')) {
       throw new Error('Refresh corrupted workflow state!');
@@ -182,7 +183,7 @@ async function verifyMvt201(options = {}) {
       const t = scanView.innerText;
       return t.includes('1000757') || t.includes('already completed') || t.includes('STATU = E') || t.includes('not found') || t.includes('Select Warehouse') || t.includes('loaded successfully');
     }, { timeout: 15000 });
-    await page.waitForTimeout(500);
+    await uiReady(page);
 
     const scanScreenshotPath = path.resolve(__dirname, 'screenshots/mvt201_warehouse_scan.png');
     await page.screenshot({ path: scanScreenshotPath, fullPage: true });

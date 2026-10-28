@@ -9,6 +9,7 @@
  * 5. Page refresh persistence across movements
  */
 const { chromium } = require('../playwrightLoader');
+const { uiReady } = require('../support/uiReady');
 
 async function runHardeningE2E(options = {}) {
   const baseUrl = (options.baseUrl || process.env.TARGET_URL || process.env.APP_URL || 'http://localhost:4004').replace(/\/+$/, '');
@@ -80,7 +81,7 @@ async function runHardeningE2E(options = {}) {
       timeout: 30000
     });
     await page.waitForSelector('.sapMTitle, .sapUxAPObjectPageHeaderTitleText', { timeout: 15000 });
-    await page.waitForTimeout(1500);
+    await uiReady(page);
 
     const detailHeader = await page.textContent('body');
     const hasHeader = detailHeader.includes('Reservation 0000525279');
@@ -102,7 +103,7 @@ async function runHardeningE2E(options = {}) {
         refreshBtn.click({ force: true }).catch(() => {}),
         refreshBtn.click({ force: true }).catch(() => {})
       ]);
-      await page.waitForTimeout(1500);
+      await uiReady(page);
       console.log('Rapid refresh handled cleanly without error');
     }
 
@@ -113,7 +114,7 @@ async function runHardeningE2E(options = {}) {
       timeout: 30000
     });
     await page.waitForSelector('.sapMTitle, .sapUiForm', { timeout: 15000 });
-    await page.waitForTimeout(1500);
+    await uiReady(page);
 
     const saveBtn = page.locator('#application-fiori-app-component---wmReservationEntryDetail--btnSaveReservation');
     if (await saveBtn.isVisible()) {
@@ -123,7 +124,7 @@ async function runHardeningE2E(options = {}) {
         saveBtn.click(),
         saveBtn.click({ force: true }).catch(() => {})
       ]);
-      await page.waitForTimeout(1000);
+      await uiReady(page);
 
       // Verify meaningful validation message appears
       const msgStrip = page.locator('.sapMMsgStrip');

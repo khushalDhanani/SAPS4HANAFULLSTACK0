@@ -2,6 +2,7 @@
 /* global document, window */
 
 const path = require('path');
+const { uiReady } = require('../support/uiReady');
 const { chromium } = require('../playwrightLoader');
 
 async function verifyMvt311(options = {}) {
@@ -86,7 +87,7 @@ async function verifyMvt311(options = {}) {
     console.log('[Step 1] Loading Reservation Create Page to verify 311 dual-SLoc dynamics...');
     await page.goto(`${baseUrl}/fiori-app/webapp/index.html#/wm/reservation-entry/create`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.sapMTitle', { timeout: 10000 });
-    await page.waitForTimeout(1000);
+    await page.waitForFunction(() => window.sap.ui.getCore().byId('__component0---reservationEntryDetail--inputRecSLoc'), null, { timeout: 10000 });
 
     // Visibility of the Receiving SLoc control; null when the control does not exist at all
     const recSLocVisible = () => page.evaluate(() => {
@@ -111,7 +112,10 @@ async function verifyMvt311(options = {}) {
         }
       }
     });
-    await page.waitForTimeout(500);
+    await page.waitForFunction(() => {
+      const c = window.sap.ui.getCore().byId('__component0---reservationEntryDetail--inputRecSLoc');
+      return c && c.getVisible();
+    }, null, { timeout: 5000 }).catch(() => {}); // the explicit check below reports the failure
 
     const createScreenshotPath = path.resolve(__dirname, 'screenshots/mvt311_create_page.png');
     await page.screenshot({ path: createScreenshotPath, fullPage: true });
@@ -128,7 +132,7 @@ async function verifyMvt311(options = {}) {
     await page.goto(resUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.sapMTitle', { timeout: 10000 });
     await page.waitForFunction(() => document.body.innerText.includes('4900050153'), { timeout: 10000 }).catch(() => {});
-    await page.waitForTimeout(1000);
+    await uiReady(page);
 
     const resScreenshotPath = path.resolve(__dirname, 'screenshots/mvt311_reservation_detail.png');
     await page.screenshot({ path: resScreenshotPath, fullPage: true });
@@ -211,7 +215,7 @@ async function verifyMvt311(options = {}) {
       const t = scanView.innerText;
       return t.includes('1000804') || t.includes('already completed') || t.includes('STATU = E') || t.includes('not found') || t.includes('Select Warehouse') || t.includes('loaded successfully');
     }, { timeout: 15000 });
-    await page.waitForTimeout(500);
+    await uiReady(page);
 
     const scanScreenshotPath = path.resolve(__dirname, 'screenshots/mvt311_warehouse_scan.png');
     await page.screenshot({ path: scanScreenshotPath, fullPage: true });

@@ -2,6 +2,7 @@
 
 
 const path = require('path');
+const { uiReady } = require('../support/uiReady');
 const { chromium } = require('../playwrightLoader');
 
 async function verifyMvt261(options = {}) {
@@ -88,7 +89,7 @@ async function verifyMvt261(options = {}) {
     console.log(`[Step 1] Loading Reservation Detail: ${resUrl}`);
     await page.goto(resUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.sapMTitle, .sapUxAPObjectPageHeaderTitleText', { timeout: 15000 });
-    await page.waitForTimeout(2000);
+    await uiReady(page);
 
     const resScreenshotPath = path.resolve(__dirname, 'screenshots/mvt261_reservation_detail.png');
     await page.screenshot({ path: resScreenshotPath, fullPage: true });
@@ -123,7 +124,7 @@ async function verifyMvt261(options = {}) {
     const scanUrl = `${baseUrl}/fiori-app/webapp/index.html#/wm/scan-to/TR/0001000858`;
     console.log(`\n[Step 2] Loading Scan-To Page for TR: ${scanUrl}`);
     await page.goto(scanUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2500);
+    await uiReady(page);
 
     const scanScreenshotPath = path.resolve(__dirname, 'screenshots/mvt261_scan_to_tr.png');
     await page.screenshot({ path: scanScreenshotPath, fullPage: true });
@@ -149,7 +150,7 @@ async function verifyMvt261(options = {}) {
     const createUrl = `${baseUrl}/fiori-app/webapp/index.html#/wm/reservation-entry/create`;
     console.log(`\n[Step 3] Loading Reservation Create View: ${createUrl}`);
     await page.goto(createUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
+    await uiReady(page);
 
     const createScreenshotPath = path.resolve(__dirname, 'screenshots/mvt261_reservation_create.png');
     await page.screenshot({ path: createScreenshotPath, fullPage: true });

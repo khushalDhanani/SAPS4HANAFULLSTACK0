@@ -82,6 +82,11 @@ function routeAction(screen, page, handler) {
     });
 }
 
+/** Polls until fn() is true or the timeout passes; the caller's own assertions report a miss. */
+async function untilTrue(fn, timeout) {
+    for (const end = Date.now() + timeout; Date.now() < end && !(await fn());) await new Promise((r) => setTimeout(r, 50));
+}
+
 /** What the user sees after a failed submit. */
 function uiState(page) {
     return page.evaluate(() => {
@@ -119,7 +124,8 @@ async function failureCase(screen, baseUrl, values, c) {
         await screen.prepare(session, values);
         await session.page.locator(screen.submit).first().click();
         await session.settle();
-        await session.page.waitForTimeout(500);
+        // the error UI renders after the response; poll for it instead of sleeping (absence is reported below)
+        await untilTrue(async () => (await uiState(session.page)).errorUi.length > 0, 5000);
         const st = await uiState(session.page);
         const shown = await inspectScreen(session.page);
         const errors = harness(session, screen);
@@ -137,15 +143,22 @@ async function failureCase(screen, baseUrl, values, c) {
 async function doubleClickWhilePending(screen, baseUrl, values) {
     const session = await openSession({ baseUrl });
     let calls = 0;
+    let firstCall;
+    const arrived = new Promise((r) => { firstCall = r; });
+    let respond;
+    const gate = new Promise((r) => { respond = r; });
     try {
+        // The response is held until the test releases it, so the pending window is controlled, not timed
         await routeAction(screen, session.page, async (route) => {
             calls++;
-            await new Promise((r) => setTimeout(r, 3000));
+            firstCall();
+            await gate;
             return route.fulfill(success(screen));
         });
         await screen.prepare(session, values);
         await session.page.locator(screen.submit).first().click({ clickCount: 2 });
-        await session.page.waitForTimeout(4000);
+        await Promise.race([arrived, new Promise((r) => setTimeout(r, 5000).unref())]); // a missing request is reported via calls below
+        respond();
         await session.settle();
         const errors = harness(session, screen);
         if (calls !== 1) {
@@ -162,14 +175,17 @@ async function reloadWhilePending(screen, baseUrl, values) {
     const session = await openSession({ baseUrl });
     let calls = 0;
     let release;
+    let firstCall;
+    const arrived = new Promise((r) => { firstCall = r; });
     try {
         await routeAction(screen, session.page, (route) => {
             calls++;
+            firstCall();
             return new Promise((r) => { release = () => r(route.abort('aborted').catch(() => {})); });
         });
         await screen.prepare(session, values);
         await session.page.locator(screen.submit).first().click();
-        await session.page.waitForTimeout(1000);
+        await Promise.race([arrived, new Promise((r) => setTimeout(r, 5000).unref())]);
         await session.page.reload({ waitUntil: 'domcontentloaded' });
         await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
         await session.settle();
