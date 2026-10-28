@@ -155,6 +155,11 @@ sap.ui.define([
             if (AuthService && typeof AuthService.syncModelHeaders === "function") {
                 AuthService.syncModelHeaders(this.getOwnerComponent(), true);
             }
+            // The first match is the initial visit: onInit already requested the list and metrics
+            if (!this._bRouteMatchedBefore) {
+                this._bRouteMatchedBefore = true;
+                return;
+            }
             var oTable = this.byId("tblCustomerReturns");
             var oBinding = oTable ? oTable.getBinding("items") : null;
             if (oBinding) {

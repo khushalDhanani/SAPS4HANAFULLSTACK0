@@ -48,6 +48,19 @@ describe('HandlingUnitAdapter.list', () => {
     expect(calls[0].query).toContain('$inlinecount=allpages');
   });
 
+  it('reads only `limit` rows and reports Truncated; the default stays the 1000 cap', async () => {
+    const { a, calls } = adapter([['C_HANDLINGUNITMONITOR_CDS', { __count: '500', results: [listRow] }]]);
+    const r = await a.list({ limit: 1 });
+    expect(r).toMatchObject({ TotalCount: 1, SapCount: 500, Truncated: true });
+    expect(calls[0].query).toContain('$top=1&');
+    const d = adapter([['C_HANDLINGUNITMONITOR_CDS', { __count: '1', results: [listRow] }]]);
+    await d.a.list({});
+    expect(d.calls[0].query).toContain('$top=1000');
+    const big = adapter([['C_HANDLINGUNITMONITOR_CDS', { __count: '1', results: [listRow] }]]);
+    await big.a.list({ limit: 99999 });
+    expect(big.calls[0].query).toContain('$top=1000');
+  });
+
   it('fills a blank header Plant/StorageLocation from the first HU item (lowest HandlingUnitItem)', async () => {
     const blankHeader = { ...listRow, HandlingUnitExternalID: '2000020330', Plant: '', StorageLocation: '' };
     const { a, calls } = adapter([

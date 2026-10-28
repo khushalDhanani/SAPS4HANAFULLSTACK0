@@ -182,9 +182,15 @@ describe("SalesInquiries.controller", () => {
             expect(viewModel.getProperty("/customerCount")).toBe(88);
         });
 
-        it("_onRouteMatched refreshes table binding safely", () => {
+        it("_onRouteMatched skips the reload on the first match (onInit already loaded)", () => {
             controller._onRouteMatched();
-            expect(mockBinding.refresh).toHaveBeenCalled();
+            expect(mockBinding.refresh).not.toHaveBeenCalled();
+        });
+
+        it("_onRouteMatched refreshes table binding safely on a return visit", () => {
+            controller._onRouteMatched();
+            controller._onRouteMatched();
+            expect(mockBinding.refresh).toHaveBeenCalledTimes(1);
         });
     });
 

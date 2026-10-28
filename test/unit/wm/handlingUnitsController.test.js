@@ -219,3 +219,28 @@ describe('_loadKpis (status KPI loading and busy toggle)', () => {
         expect(s._model.getProperty('/kpiBusy')).toBe(false);
     });
 });
+
+describe('list size (first page, then Load more)', () => {
+    const result = (truncated) => ({ Items: [{ HandlingUnitExternalID: '1' }], TotalCount: 1, SapCount: 900, Truncated: truncated });
+
+    it('onGo reads 200 rows and offers Load more when SAP holds more', async () => {
+        ODataClient.get.mockResolvedValueOnce(result(true));
+        const s = subject();
+        s._model._d['/plant'] = '';
+        s._model.getData = () => ({ plant: '', storageLocation: '', packagingMaterial: '', handlingUnitExternalID: '', status: '', shippingPoint: '' });
+        s.onGo();
+        await new Promise(setImmediate);
+        expect(ODataClient.get.mock.calls[0][0]).toContain(',limit=200)');
+        expect(s._model.getProperty('/canLoadMore')).toBe(true);
+    });
+
+    it('onLoadMore reads up to the 1000 cap and then hides Load more', async () => {
+        ODataClient.get.mockResolvedValueOnce(result(true));
+        const s = subject();
+        s._model.getData = () => ({ plant: '', storageLocation: '', packagingMaterial: '', handlingUnitExternalID: '', status: '', shippingPoint: '' });
+        s.onLoadMore();
+        await new Promise(setImmediate);
+        expect(ODataClient.get.mock.calls[0][0]).toContain(',limit=1000)');
+        expect(s._model.getProperty('/canLoadMore')).toBe(false);
+    });
+});

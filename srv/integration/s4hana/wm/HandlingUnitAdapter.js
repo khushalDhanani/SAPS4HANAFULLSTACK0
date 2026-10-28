@@ -189,15 +189,16 @@ class HandlingUnitAdapter {
     };
     if (filter.length) params.$filter = filter.join(' and ');
 
+    const cap = Math.min(MAX_LIST, Math.max(1, Math.floor(Number(input.limit)) || MAX_LIST));
     const rows = [];
     let sapCount = 0;
     do {
-      const top = Math.min(PAGE, MAX_LIST - rows.length);
+      const top = Math.min(PAGE, cap - rows.length);
       const d = await this._results(MONITOR, { ...params, $top: top, $skip: rows.length }, 'Read handling units');
       sapCount = Number(d.__count || 0);
       if (!(d.results || []).length) break;
       rows.push(...d.results);
-    } while (rows.length < sapCount && rows.length < MAX_LIST);
+    } while (rows.length < sapCount && rows.length < cap);
 
     const Items = rows.map((r) => ({
       HandlingUnitExternalID: strip(r.HandlingUnitExternalID),

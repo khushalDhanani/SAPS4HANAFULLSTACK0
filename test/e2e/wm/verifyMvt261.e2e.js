@@ -89,6 +89,7 @@ async function verifyMvt261(options = {}) {
     console.log(`[Step 1] Loading Reservation Detail: ${resUrl}`);
     await page.goto(resUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.sapMTitle, .sapUxAPObjectPageHeaderTitleText', { timeout: 15000 });
+    await page.waitForFunction(() => document.body.innerText.includes('1011'), null, { timeout: 15000 }).catch(() => {}); // asserted below
     await uiReady(page);
 
     const resScreenshotPath = path.resolve(__dirname, 'screenshots/mvt261_reservation_detail.png');
@@ -124,6 +125,7 @@ async function verifyMvt261(options = {}) {
     const scanUrl = `${baseUrl}/fiori-app/webapp/index.html#/wm/scan-to/TR/0001000858`;
     console.log(`\n[Step 2] Loading Scan-To Page for TR: ${scanUrl}`);
     await page.goto(scanUrl, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => /261|Order Assignment/.test(document.body.innerText), null, { timeout: 15000 }).catch(() => {}); // asserted below
     await uiReady(page);
 
     const scanScreenshotPath = path.resolve(__dirname, 'screenshots/mvt261_scan_to_tr.png');

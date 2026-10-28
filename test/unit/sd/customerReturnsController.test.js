@@ -322,8 +322,20 @@ describe("CustomerReturns Controller", () => {
             expect(MockCustomerReturnService.getReturnReasons).toHaveBeenCalled();
         });
 
-        test("_onRouteMatched refreshes binding and metrics", async () => {
+        test("_onRouteMatched skips the reload on the first match (onInit already loaded)", async () => {
             controller.onInit();
+            mockBinding.refresh.mockClear();
+            MockCustomerReturnService.getMetrics.mockClear();
+            await controller._onRouteMatched();
+
+            expect(mockBinding.refresh).not.toHaveBeenCalled();
+            expect(MockCustomerReturnService.getMetrics).not.toHaveBeenCalled();
+        });
+
+        test("_onRouteMatched refreshes binding and metrics on a return visit", async () => {
+            controller.onInit();
+            await controller._onRouteMatched();
+            mockBinding.refresh.mockClear();
             await controller._onRouteMatched();
 
             expect(mockBinding.refresh).toHaveBeenCalled();

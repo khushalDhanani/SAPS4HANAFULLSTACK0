@@ -183,6 +183,15 @@ describe("SalesOrders Controller", () => {
         });
     });
 
+    test("_onRouteMatched skips the reload on the first match and refreshes on a return visit", () => {
+        controller.onInit();
+        mockBinding.refresh.mockClear();
+        controller._onRouteMatched();
+        expect(mockBinding.refresh).not.toHaveBeenCalled();
+        controller._onRouteMatched();
+        expect(mockBinding.refresh).toHaveBeenCalledTimes(1);
+    });
+
     test("onInit sets up salesOrdersView model with '-' initial KPIs and attaches pattern matched", async () => {
         controller.onInit();
         const viewModel = mockView.getModel("salesOrdersView");

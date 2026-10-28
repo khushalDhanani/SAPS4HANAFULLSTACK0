@@ -126,6 +126,11 @@ sap.ui.define([
                     oVm.setProperty("/canCreateDelivery", AuthService.canCreateDelivery());
                 }
             }
+            // The first match is the initial visit: onInit already requested the list and metrics
+            if (!this._bRouteMatchedBefore) {
+                this._bRouteMatchedBefore = true;
+                return;
+            }
             var oTable = this.byId("salesOrdersTable");
             var oBinding = oTable ? oTable.getBinding("items") : null;
             if (oBinding) {

@@ -18,6 +18,7 @@ sap.ui.define([
     "use strict";
 
     var BASE_PATH = "/odata/v4/handling-unit";
+    var FIRST_PAGE = 200; // first read; "Load more" reads up to the server cap of 1000
     var PRINT_SAFE_LIMIT = 500; // Print All asks for extra confirmation above this many labels
     var READ_CHUNK = 8; // fallback path: each label costs a detail (+ serials) read; cap concurrent reads
     var READ_TIMEOUT = 30000; // ms per HU read before one retry, then abort
@@ -49,6 +50,7 @@ sap.ui.define([
                 messageType: "Information",
                 items: [],
                 selectedCount: 0,
+                canLoadMore: false,
                 vhPlant: [],
                 vhPackaging: [],
                 vhStatus: [],
@@ -103,23 +105,33 @@ sap.ui.define([
         },
 
         onGo: function () {
+            this._load(FIRST_PAGE);
+        },
+
+        onLoadMore: function () {
+            this._load(1000);
+        },
+
+        _load: function (iLimit) {
             var oModel = this.getModel("huView");
             var o = oModel.getData();
             var q = function (s) { return "'" + encodeURIComponent((s || "").trim().replace(/'/g, "''")) + "'"; };
             var sUrl = BASE_PATH + "/list(plant=" + q(o.plant) + ",storageLocation=" + q(o.storageLocation) +
                 ",warehouse=" + q("") + ",packagingMaterial=" + q(o.packagingMaterial) +
                 ",handlingUnitExternalID=" + q(o.handlingUnitExternalID) + ",status=" + q(o.status) +
-                ",shippingPoint=" + q(o.shippingPoint) + ")";
+                ",shippingPoint=" + q(o.shippingPoint) + ",limit=" + iLimit + ")";
 
             oModel.setProperty("/selectedCount", 0);
             oModel.setProperty("/busy", true);
             oModel.setProperty("/message", "");
             ODataClient.get(sUrl).then(function (oResult) {
                 oModel.setProperty("/items", oResult.Items || []);
+                oModel.setProperty("/canLoadMore", !!oResult.Truncated && iLimit < 1000);
                 oModel.setProperty("/messageType", oResult.Truncated ? "Warning" : "Information");
                 oModel.setProperty("/message", this.getText(oResult.Truncated ? "huTruncated" : "huSummary", [oResult.TotalCount, oResult.SapCount]));
             }.bind(this)).catch(function (oError) {
                 oModel.setProperty("/items", []);
+                oModel.setProperty("/canLoadMore", false);
                 oModel.setProperty("/messageType", "Error");
                 oModel.setProperty("/message", (oError && oError.message) || this.getText("huLoadError"));
             }.bind(this)).then(function () {

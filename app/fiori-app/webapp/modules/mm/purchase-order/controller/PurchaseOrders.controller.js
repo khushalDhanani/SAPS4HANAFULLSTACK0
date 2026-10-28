@@ -57,6 +57,11 @@ sap.ui.define([
         },
 
         _onRouteMatched: function () {
+            // The first match is the initial visit: onInit already requested the list and metrics
+            if (!this._bRouteMatchedBefore) {
+                this._bRouteMatchedBefore = true;
+                return;
+            }
             var oTable = this.byId("purchaseOrdersTable");
             var oBinding = oTable ? oTable.getBinding("items") : null;
             if (oBinding) {
