@@ -7,8 +7,8 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "start": "cds-serve",
-    "watch": "cds watch --exclude data",
+    "start": "sh -c '[ -f \"$HOME/.sap-certs/s4-dev.pem\" ] && export NODE_EXTRA_CA_CERTS=\"$HOME/.sap-certs/s4-dev.pem\"; cds-serve'",
+    "watch": "sh -c '[ -f \"$HOME/.sap-certs/s4-dev.pem\" ] && export NODE_EXTRA_CA_CERTS=\"$HOME/.sap-certs/s4-dev.pem\"; cds watch --exclude data'",
     "test": "jest --runInBand",
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration --runInBand",

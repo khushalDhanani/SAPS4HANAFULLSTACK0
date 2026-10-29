@@ -86,6 +86,7 @@ describe('QuarantineLabelAdapter', () => {
     describe('labelRows (rebuilt from read-only table reads; synthetic DEMO data)', () => {
         // Minimal RFC_READ_TABLE fake: every "FIELD = 'v'" in WHERE must match; repeated fields are OR'ed
         const DB = {
+            MARA: [{ MATNR: 'DEMO-MAT-1' }, { MATNR: 'DEMO-MAT-2' }],
             MATDOC: [{ MBLNR: '4900050304', MJAHR: '2026', WERKS: 'DM01' }],
             MSEG: [
                 { MBLNR: '4900050304', MJAHR: '2026', ZEILE: '0002', MATNR: 'DEMO-MAT-1', CHARG: 'DEMOB1', MENGE: '999.000', MEINS: 'KG', BUDAT_MKPF: '20261028', VBELN_IM: '', LIFNR: 'DEMOSUP02', HSDAT: '' },
@@ -125,6 +126,30 @@ describe('QuarantineLabelAdapter', () => {
         }
         const run = (rfc, extra = {}) => new QuarantineLabelAdapter(rfc).labelRows({ ...input, Text: 'DEMO TEXT', allowedPlants: ['DM01'], ...extra });
 
+        it('attaches MM master codes, reading each distinct material only once', async () => {
+            const rfc = tableFake();
+            const result = await run(rfc);
+            expect(result.Rows.map(row => row.Material)).toEqual(['DEMO-MAT-1', 'DEMO-MAT-1', 'DEMO-MAT-2']);
+            expect(rfc.readTable.mock.calls.filter(call => call[0] === 'MARA')).toEqual([
+                ['MARA', ['MATNR'], ["MATNR = 'DEMO-MAT-1'"]],
+                ['MARA', ['MATNR'], ["MATNR = 'DEMO-MAT-2'"]]
+            ]);
+        });
+
+        it('refuses a label whose MM master record is missing', async () => {
+            await expect(run(tableFake({ ...DB, MARA: [] }))).rejects.toMatchObject({ status: 404 });
+        });
+
+        it('propagates master read failures instead of using a transfer-item fallback', async () => {
+            const rfc = tableFake();
+            const read = rfc.readTable.getMockImplementation();
+            rfc.readTable.mockImplementation((table, ...args) => {
+                if (table === 'MARA') throw Object.assign(new Error('Master read denied'), { status: 403 });
+                return read(table, ...args);
+            });
+            await expect(run(rfc)).rejects.toMatchObject({ status: 403, message: 'Master read denied' });
+        });
+
         it('one label per quarantine TO item, sorted and counted per material/batch, like ZMM_R_062', async () => {
             const res = await run(tableFake(), { resolveOutput: async () => ({ formName: null, labelSize: '4x6' }) });
             expect(res).toMatchObject({ MaterialDocument: '4900050304', MaterialDocumentYear: '2026', LabelSize: '4x6' });
@@ -132,7 +157,7 @@ describe('QuarantineLabelAdapter', () => {
                 ['DEMO-SU-0001', '1 OF 2'], ['DEMO-SU-0002', '2 OF 2'], ['DEMO-SU-0003', '1 OF 1']
             ]);
             expect(res.Rows[0]).toEqual({
-                MaterialDescription: 'DEMO MATERIAL 1', MaterialDocument: '4900050304', PostingDate: '2026-10-27',
+                Material: 'DEMO-MAT-1', MaterialDescription: 'DEMO MATERIAL 1', MaterialDocument: '4900050304', PostingDate: '2026-10-27',
                 Batch: 'DEMOB1', SupplierBatch: 'DEMO-SB-1', SupplierName: 'DEMO SUPPLIER', BatchCharacteristics: 'DEMO-A DEMO-B',
                 ManufacturingDate: '2026-10-01', DateKind: 'EXPIRY', DateValue: '2027-04-01', PostedQuantity: '120.01 KG',
                 ContainerQuantity: '80', Unit: 'KG', Container: '1 OF 2', StorageUnit: 'DEMO-SU-0001', Text: 'DEMO TEXT'
@@ -160,7 +185,7 @@ describe('QuarantineLabelAdapter', () => {
             const rfc = tableFake();
             await run(rfc);
             expect(rfc.call).not.toHaveBeenCalled();
-            expect([...new Set(rfc.readTable.mock.calls.map((c) => c[0]))].sort()).toEqual(['AUSP', 'BUT000', 'LTAP', 'MAKT', 'MATDOC', 'MCH1', 'MSEG']);
+            expect([...new Set(rfc.readTable.mock.calls.map((c) => c[0]))].sort()).toEqual(['AUSP', 'BUT000', 'LTAP', 'MAKT', 'MARA', 'MATDOC', 'MCH1', 'MSEG']);
             expect(rfc.where).toContain("AND MJAHR = '2026'");
             expect(rfc.where).toContain("AND SPRAS = 'E'");
             expect(rfc.where).toContain("AND ( VLTYP = '920' OR VLTYP = '902' )");

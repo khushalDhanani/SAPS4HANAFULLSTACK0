@@ -6,8 +6,9 @@ sap.ui.define([
     "saps4hana/fiori/modules/wm/quarantine-label/util/ZquarLabelPdf",
     "saps4hana/fiori/modules/wm/quarantine-label/util/ZquarLabelRows",
     "sap/m/MessageBox",
-    "sap/m/MessageToast"
-], function (BaseController, JSONModel, QuarantineLabelService, ZquarLabelLayout, ZquarLabelPdf, ZquarLabelRows, MessageBox, MessageToast) {
+    "sap/m/MessageToast",
+    "saps4hana/fiori/service/AuthService"
+], function (BaseController, JSONModel, QuarantineLabelService, ZquarLabelLayout, ZquarLabelPdf, ZquarLabelRows, MessageBox, MessageToast, AuthService) {
     "use strict";
 
     /** Same rules as the server (QuarantineLabelAdapter.normalizeInput); the server stays authoritative. */
@@ -198,7 +199,7 @@ sap.ui.define([
                 }
                 // Size from the plant's BusinessConfig; the layout's default (4x6) when none is configured
                 var mTexts = that._labelTexts();
-                var aLabels = ZquarLabelRows.toLabels(oResult.Rows, mTexts);
+                var aLabels = ZquarLabelRows.toLabels(oResult.Rows, mTexts, AuthService.getCurrentUserName(that.getOwnerComponent()));
                 var oOpts = { size: oResult.LabelSize || ZquarLabelLayout.DEFAULT_SIZE };
                 return ZquarLabelPdf.toBlob(aLabels, mTexts, oOpts)
                     .then(function (oPdf) {
@@ -433,7 +434,7 @@ sap.ui.define([
                     throw new Error(that.getText("qlMixedSizes"));
                 }
                 var mTexts = that._labelTexts();
-                return { labels: ZquarLabelRows.toLabels(aRows, mTexts), texts: mTexts, opts: { size: aSizes[0] } };
+                return { labels: ZquarLabelRows.toLabels(aRows, mTexts, AuthService.getCurrentUserName(that.getOwnerComponent())), texts: mTexts, opts: { size: aSizes[0] } };
             });
         },
 

@@ -24,6 +24,7 @@ service QuarantineLabelService @(path: '/odata/v4/quarantine-label') {
 
     // One label row, rebuilt by CAP from read-only SAP table reads like report ZMM_R_062; dates ISO yyyy-mm-dd or ''
     type LabelRow {
+        Material             : String(40);
         MaterialDescription  : String(40);
         MaterialDocument     : String(10);
         PostingDate          : String(10);

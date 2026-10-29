@@ -115,7 +115,7 @@ const CASES = [
             ? json(200, {
                 MaterialDocument: '9900000001', MaterialDocumentYear: '2026', LabelSize: null,
                 Rows: [1, 2].map((n) => ({
-                    MaterialDescription: 'DEMO MATERIAL', MaterialDocument: '9900000001', PostingDate: '2026-10-27', Batch: 'DEMO-BATCH-01',
+                    Material: 'DEMO-MAT-1', MaterialDescription: 'DEMO MATERIAL', MaterialDocument: '9900000001', PostingDate: '2026-10-27', Batch: 'DEMO-BATCH-01',
                     SupplierBatch: 'DEMO-SB-01', SupplierName: 'DEMO SUPPLIER', BatchCharacteristics: 'DEMO-CHAR', ManufacturingDate: '2026-10-01',
                     DateKind: 'RETEST', DateValue: '2027-04-01', PostedQuantity: '120 KG', ContainerQuantity: '40', Unit: 'KG',
                     Container: `${n} OF 2`, StorageUnit: `0000000000990000000${n}`, Text: 'DEMO'
@@ -150,6 +150,8 @@ const CASES = [
             const errs = [];
             if (printed.length !== 1) errs.push(`${printed.length} print frames`);
             else {
+                if (!printed[0].includes('>alice</text>')) errs.push('signed-in Prepared by missing from print output');
+                if (!printed[0].includes('Item Code') || !printed[0].includes('DEMO-MAT-1')) errs.push('Item Code missing from print output');
                 if (!printed[0].includes('@page{size:288pt 432pt;margin:0}')) errs.push('print document not sized 288 x 432 pt with no margin');
                 const svgs = printed[0].match(/<svg [^>]*width="288pt" height="432pt"/g) || [];
                 if (svgs.length !== 2) errs.push(`${svgs.length} label pages in the print document`);
@@ -175,7 +177,7 @@ const CASES = [
             if (/labelRows$/.test(url)) {
                 const doc = route.request().postDataJSON().MaterialDocument;
                 return route.fulfill(json(200, { MaterialDocument: doc, MaterialDocumentYear: '2026', LabelSize: null, Rows: [1, 2].map((n) => ({
-                    MaterialDescription: 'DEMO MATERIAL', MaterialDocument: doc, PostingDate: '2026-10-27', Batch: 'DEMOB1', SupplierBatch: 'DEMO-SB',
+                    Material: 'DEMO-MAT-1', MaterialDescription: 'DEMO MATERIAL', MaterialDocument: doc, PostingDate: '2026-10-27', Batch: 'DEMOB1', SupplierBatch: 'DEMO-SB',
                     SupplierName: 'DEMO SUPPLIER', BatchCharacteristics: 'DEMO', ManufacturingDate: '2026-10-01', DateKind: 'EXPIRY', DateValue: '2027-04-01',
                     PostedQuantity: '80 KG', ContainerQuantity: '40', Unit: 'KG', Container: `${n} OF 2`, StorageUnit: `${doc}${n}`, Text: ''
                 })) }));
@@ -229,7 +231,10 @@ const CASES = [
             await s.page.waitForFunction(() => window.__qlPrintDocs.length > 0, null, { timeout: 15000 }).catch(() => {});
             const printed = await s.page.evaluate(() => window.__qlPrintDocs);
             if (printed.length !== 1 || !printed[0].includes('@page{size:288pt 432pt;margin:0}')) errs.push(`print frames ${printed.length}`);
-            else if ((printed[0].match(/<svg /g) || []).length !== 2) errs.push('row print is not 2 label pages');
+            else {
+                if ((printed[0].match(/<svg /g) || []).length !== 2) errs.push('row print is not 2 label pages');
+                if (!printed[0].includes('>alice</text>') || !printed[0].includes('DEMO-MAT-1')) errs.push('row print missing material code or signed-in Prepared by');
+            }
             const st = await state(s.page);
             if (st.messageType !== 'Success') errs.push(`message ${st.messageType} "${st.message}"`);
             return errs;

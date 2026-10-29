@@ -215,6 +215,17 @@ class QuarantineLabelAdapter {
     }
     if (!ltap.size) return [];
 
+    // MM master code verified in live DD03L and MARA (2026-10-29): MATNR CHAR(40).
+    // Resolve once per distinct label material; never substitute a transfer-item code for a missing master.
+    const materials = new Map();
+    for (const matnr of new Set([...ltap.values()].map((item) => item.MATNR))) {
+      const [master] = await read('MARA', ['MATNR'], [`MATNR = ${quote(matnr)}`]);
+      if (!master || master.MATNR !== matnr) {
+        throw httpError(404, `Material master record not found for label material ${matnr}.`);
+      }
+      materials.set(matnr, master.MATNR);
+    }
+
     const makt = new Map();
     for (const matnr of new Set(mseg.map((m) => m.MATNR))) {
       const [row] = await read('MAKT', ['MAKTX'], [`MATNR = ${quote(matnr)}`, `AND SPRAS = ${quote(MAKT_LANGUAGE)}`]);
@@ -247,6 +258,7 @@ class QuarantineLabelAdapter {
       const o = batch ? objek(batch) : null;
       const retest = o ? sapDate(value(o, ATINN.retest, 'DATE_FROM')) : '';
       return {
+        Material: materials.get(l.MATNR),
         MaterialDescription: makt.get(l.MATNR) || '',
         MaterialDocument: mblnr,
         PostingDate: sapDate(m.BUDAT_MKPF),

@@ -7,7 +7,7 @@ sap.ui.define([
     // ZQUAR quarantine label, 4 x 6 in: centred company title, hairline, QUARANTINE title with the SOP no. directly
     // below, hairline, then one field per row (caption left, value right, "Prepared by" is the last row) with 5 %-opacity
     // hairlines between the rows, then a large centred barcode with its number. The block from the second hairline to the
-    // barcode is divided into 13 row slots (a wrapped value makes its slot taller, the rest share the remaining height
+    // barcode is divided into 14 row slots (a wrapped value makes its slot taller, the rest share the remaining height
     // evenly); each row is centred in its slot, so a hairline (always on a slot boundary) can never touch text.
     // All positions in pt, origin top-left. render() returns a draw list that ZquarLabelPdf plays into jsPDF and the
     // print document.
@@ -36,15 +36,16 @@ sap.ui.define([
     var GAP = 4;             // minimum caption -> value
     var COL_GAP = 8;         // widest caption -> value column
     var SEP = { dots: 2, opacity: 0.05 }; // row hairlines: whole printer dots thick, 5 % black
+    var EXTRA_EDGE_PT = 2 * 72 / 96; // extra 2 CSS px of breathing room inside the unchanged page
     var EDGE_MM = 4;         // safe margin on the page edge
     // Vertical design numbers (pt at 432): title top, hairline under the title, white space above QUARANTINE, QUARANTINE ->
     // SOP no., SOP no. -> second hairline, barcode bars, number gap/pad, last row -> bars
-    var V = { titleTop: 14, titleRule: 34, quarGap: 9, sopGap: 6, sopRule: 8, barH: 100, hrGap: 3, bottomPad: 14, barGap: 14 };
+    var V = { titleTop: 14, titleRule: 34, quarGap: 9, sopGap: 6, sopRule: 4, barH: 100, hrGap: 3, bottomPad: 14, barGap: 6 };
     var BARCODE = { targetModuleMm: 0.5, minModuleMm: 0.375 };
 
     // One field per row, in label order (keys of the label row and of the caption texts)
     var FIELDS = [
-        { key: "materialName", lines: 2 }, { key: "grnNo" }, { key: "grnDate" }, { key: "inwNo" }, { key: "qtyReceived" },
+        { key: "materialName", lines: 2 }, { key: "itemCode" }, { key: "grnNo" }, { key: "grnDate" }, { key: "inwNo" }, { key: "qtyReceived" },
         { key: "containerNo" }, { key: "manufacturer", lines: 2 }, { key: "supplier", lines: 2 }, { key: "batchNo" },
         { key: "mfgDate" }, { key: "expiryDate" }, { key: "netWeight" }, { key: "preparedBy" }
     ];
@@ -53,7 +54,7 @@ sap.ui.define([
     // Texts used only for some rows (a row may replace a caption via row.captions[fieldKey])
     var EXTRA_KEYS = { retestDate: "zqRetestDate" };
     var CAPTION_KEYS = {
-        materialName: "zqMaterialName", grnNo: "zqGrnNo", grnDate: "zqGrnDate", inwNo: "zqInwNo", qtyReceived: "zqQtyReceived",
+        materialName: "zqMaterialName", itemCode: "zqItemCode", grnNo: "zqGrnNo", grnDate: "zqGrnDate", inwNo: "zqInwNo", qtyReceived: "zqQtyReceived",
         containerNo: "zqContainerNo", manufacturer: "zqManufacturer", supplier: "zqSupplier", batchNo: "zqBatchNo",
         mfgDate: "zqMfgDate", expiryDate: "zqExpiryDate", netWeight: "zqNetWeight", preparedBy: "zqPreparedBy"
     };
@@ -82,18 +83,18 @@ sap.ui.define([
         var f = Math.min(W / DESIGN_PAGE.w, H / DESIGN_PAGE.h);
         var k = H / DESIGN_PAGE.h;
         var pt = function (n) { return Math.max(MIN_PT, n * f); };
-        var edge = EDGE_MM * MM2PT;
+        var edge = EDGE_MM * MM2PT + EXTRA_EDGE_PT;
         var dotPt = PT_PER_INCH / dpi;
         var snap = function (n) { return Math.round(n / dotPt) * dotPt; };
 
         // Top-down: title, hairline, QUARANTINE, SOP no., hairline; bottom-up: number, bars; rows fill the space between
         var hrPt = pt(TYPE.humanReadable);
-        var hrTop = H - V.bottomPad * k - hrPt;
+        var hrTop = H - V.bottomPad * k - hrPt - EXTRA_EDGE_PT;
         var barH = snap(V.barH * k);
         var barTop = snap(hrTop - V.hrGap * k - barH);
         var qPt = pt(TYPE.quarantine);
         var fPt = pt(TYPE.formNumber);
-        var titleRule = V.titleRule * k;
+        var titleRule = V.titleRule * k + EXTRA_EDGE_PT;
         var quarBase = titleRule + V.quarGap * k + CAP_ASCENT * qPt;
         var sopBase = quarBase + V.sopGap * k + CAP_ASCENT * fPt;
         var rowsTop = sopBase + (DESCENT * fPt) + V.sopRule * k;
@@ -105,7 +106,7 @@ sap.ui.define([
         return {
             key: size.key, dpi: dpi, axis: W / 2, dotPt: dotPt, sepW: SEP.dots * dotPt, edge: edge,
             page: { wPt: W, hPt: H },
-            title: { x0: edge, x1: W - edge, top: V.titleTop * k, pt: pt(TYPE.title), rule: titleRule },
+            title: { x0: edge, x1: W - edge, top: V.titleTop * k + EXTRA_EDGE_PT, pt: pt(TYPE.title), rule: titleRule },
             content: { x0: edge, x1: W - edge },
             type: { caption: pt(TYPE.caption), value: valPt },
             rows: { top: rowsTop, end: rowsEnd, slot: slot },

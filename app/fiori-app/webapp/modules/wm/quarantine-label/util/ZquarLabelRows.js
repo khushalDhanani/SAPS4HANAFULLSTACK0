@@ -40,11 +40,13 @@ sap.ui.define([], function () {
      * One label per CAP row (one row per container). mTexts.retestDate replaces the "Expiry Date" caption when the
      * row's date is a retest date (the report sends that caption as data, ZDATE).
      */
-    function toLabels(aRows, mTexts) {
+    function toLabels(aRows, mTexts, sPreparedBy) {
         return (aRows || []).map(function (r) {
             var sQty = twoDecimals(r.ContainerQuantity);
             return {
                 materialName: r.MaterialDescription || "",
+                itemCode: r.Material || "",
+                preparedBy: sPreparedBy || "",
                 grnNo: r.MaterialDocument || "",
                 grnDate: date(r.PostingDate),
                 inwNo: r.Text || "",

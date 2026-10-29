@@ -33,7 +33,7 @@ const i18n = Object.fromEntries(fs.readFileSync(path.join(__dirname, '../../../a
     .split('\n').filter((l) => /^[\w.]+=/.test(l)).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
 const TEXTS = Object.fromEntries(Object.entries({ ...Layout.STATIC_KEYS, ...Layout.CAPTION_KEYS, ...Layout.EXTRA_KEYS }).map(([k, key]) => [k, i18n[key]]));
 const DEMO = {
-    materialName: 'DEMO MATERIAL 01', grnNo: '9900000001', grnDate: '27.10.2026', inwNo: 'DEMO-INW-01', qtyReceived: '140.000 KG',
+    materialName: 'DEMO MATERIAL 01', itemCode: '000000000000123456', grnNo: '9900000001', grnDate: '27.10.2026', inwNo: 'DEMO-INW-01', qtyReceived: '140.000 KG',
     containerNo: '1 OF 14', manufacturer: 'DEMO MFR', supplier: 'DEMO SUPPLIER', batchNo: 'DEMO-BATCH-01',
     mfgDate: '01.10.2026', expiryDate: '01.04.2027', netWeight: '10.000 KG', barcode: '9900000001'
 };
@@ -58,6 +58,13 @@ describe('ZQUAR 4 x 6 label', () => {
         });
     });
 
+    it('adds 2 CSS px of outer breathing space without changing page size', () => {
+        const L = L4x6();
+        expect(L.edge).toBeCloseTo(4 * MM + 1.5);
+        expect(L.title.top).toBe(15.5);
+        expect(L.barcode.hrTop + L.barcode.hrPt).toBe(432 - 15.5);
+    });
+
     it('PDF: MediaBox exactly 288 x 432 pt on every page, one page per label (14 containers)', () => {
         const rows = Array.from({ length: 14 }, (_, i) => ({ ...DEMO, containerNo: `${i + 1} OF 14`, barcode: String(9900000001 + i) }));
         const s = pdf(rows);
@@ -70,14 +77,14 @@ describe('ZQUAR 4 x 6 label', () => {
     const fieldsOf = (row = DEMO) => Layout.render(L4x6(), row, TEXTS).fields;
     const fld = (fs, k) => fs.find((f) => f.key === k);
     const seps = (r) => r.items.filter((i) => i.kind === 'sep');
-    const ORDER = ['materialName', 'grnNo', 'grnDate', 'inwNo', 'qtyReceived', 'containerNo', 'manufacturer', 'supplier', 'batchNo', 'mfgDate', 'expiryDate', 'netWeight', 'preparedBy'];
+    const ORDER = ['materialName', 'itemCode', 'grnNo', 'grnDate', 'inwNo', 'qtyReceived', 'containerNo', 'manufacturer', 'supplier', 'batchNo', 'mfgDate', 'expiryDate', 'netWeight', 'preparedBy'];
 
     it('one field per row, in the required order, each caption on its own line (no two fields share a baseline)', () => {
         const fs = fieldsOf();
         expect(fs.map((f) => f.key)).toEqual(ORDER);
         const ys = fs.map((f) => f.caption.y);
         ys.slice(1).forEach((y, i) => expect(y).toBeGreaterThan(ys[i] + 9)); // strictly increasing, more than a caption height apart
-        expect(new Set(ys).size).toBe(13); // Prepared by is a normal row (last)
+        expect(new Set(ys).size).toBe(14); // Prepared by is a normal row (last)
         fs.forEach((f) => expect(f.value.y).toBeCloseTo(f.caption.y, 9)); // caption and value share one baseline
     });
 
@@ -105,14 +112,14 @@ describe('ZQUAR 4 x 6 label', () => {
         expect(find(r, TEXTS.quarantine).pt).toBeGreaterThan(find(r, TEXTS.title).pt - 1); // a main title, not a row
         // last row (Prepared by) well clear of the bars
         const prep = fieldsOf().find((f) => f.key === 'preparedBy');
-        expect(L.barcode.top - (prep.value.y + 0.21 * prep.value.pt)).toBeGreaterThanOrEqual(14);
+        expect(L.barcode.top - (prep.value.y + 0.21 * prep.value.pt)).toBeGreaterThanOrEqual(6);
     });
 
-    it('separators: 14 hairlines (under the title, under QUARANTINE/SOP and between the rows), 5 % opacity, on the dot grid, full content width, never touching text', () => {
+    it('separators: 15 hairlines (under the title, under QUARANTINE/SOP and between the rows), 5 % opacity, on the dot grid, full content width, never touching text', () => {
         const L = L4x6();
         const r = Layout.render(L, DEMO, TEXTS);
         const ss = seps(r);
-        expect(ss).toHaveLength(14);
+        expect(ss).toHaveLength(15);
         const onDot = (n) => Math.abs(n / L.dotPt - Math.round(n / L.dotPt)) < 1e-9;
         ss.forEach((s) => {
             expect(s.opacity).toBe(0.05);
@@ -157,7 +164,7 @@ describe('ZQUAR 4 x 6 label', () => {
         const fs = fieldsOf();
         const x = fs[0].value.x;
         fs.forEach((f) => {
-            expect(f.caption.x).toBeCloseTo(4 * MM, 9);
+            expect(f.caption.x).toBeCloseTo(4 * MM + 1.5, 9);
             expect(f.value.x).toBe(x);
             const end = f.caption.x + Layout.widthPt(TEXTS[f.key], f.caption.pt, true);
             expect(x - end).toBeGreaterThanOrEqual(Layout.GAP - EPS); // caption ends at least 4 pt before its value
@@ -167,9 +174,9 @@ describe('ZQUAR 4 x 6 label', () => {
     it('a wrapped value makes its own row taller only; the rows share the rest evenly and the block end does not move', () => {
         const one = fieldsOf();
         const two = fieldsOf({ ...DEMO, supplier: 'DEMO SUPPLIER WITH A LONG NAME PRIVATE LIMITED INDIA AND SONS TRADING' });
-        expect(fld(two, 'supplier').value.lines).toHaveLength(2);
+        expect(fld(two, 'supplier').value.lines).toHaveLength(3);
         expect(two.pitch).toBeLessThan(one.pitch);
-        expect(fld(two, 'supplier').slot.y1 - fld(two, 'supplier').slot.y0).toBeCloseTo(two.pitch + two.find((f) => f.key === 'supplier').value.pt * Layout.LH, 9);
+        expect(fld(two, 'supplier').slot.y1 - fld(two, 'supplier').slot.y0).toBeCloseTo(two.pitch + 2 * two.find((f) => f.key === 'supplier').value.pt * Layout.LH, 9);
         expect(fld(two, 'preparedBy').slot.y1).toBeCloseTo(fld(one, 'preparedBy').slot.y1, 9);
     });
 
@@ -358,18 +365,22 @@ describe('ZQUAR 4 x 6 label', () => {
     describe('Phase B: CAP label rows -> label fields (mapping decided with the user)', () => {
         // One CAP row as QuarantineLabelService.labelRows returns it (synthetic DEMO data)
         const capRow = {
-            MaterialDescription: 'DEMO MATERIAL 01', MaterialDocument: '9900000001', PostingDate: '2026-10-27', Batch: 'DEMOB1',
+            MaterialDescription: 'DEMO MATERIAL 01', Material: '000000000000123456', MaterialDocument: '9900000001', PostingDate: '2026-10-27', Batch: 'DEMOB1',
             SupplierBatch: 'DM-001', SupplierName: 'DEMO SUPPLIER', BatchCharacteristics: 'DEMO-MFR', ManufacturingDate: '2026-10-01',
             DateKind: 'EXPIRY', DateValue: '2027-04-01', PostedQuantity: '140.00 KG', ContainerQuantity: '10.005', Unit: 'KG',
             Container: '1 OF 14', StorageUnit: '00000000009900000001', Text: 'DM12345678'
         };
         it('maps every label field, with DD/MM/YYYY dates, 2-decimal net weight without a space and no leading zeros', () => {
             expect(Rows.toLabels([capRow], TEXTS)).toEqual([{
-                materialName: 'DEMO MATERIAL 01', grnNo: '9900000001', grnDate: '27/10/2026', inwNo: 'DM12345678',
+                materialName: 'DEMO MATERIAL 01', itemCode: '000000000000123456', grnNo: '9900000001', grnDate: '27/10/2026', inwNo: 'DM12345678',
                 qtyReceived: '140.00 KG', containerNo: '1 OF 14', manufacturer: 'DEMO-MFR', supplier: 'DEMO SUPPLIER',
                 batchNo: 'DM-001', mfgDate: '01/10/2026', expiryDate: '01/04/2027', netWeight: '10.01KG', barcode: '9900000001',
-                captions: undefined
+                preparedBy: '', captions: undefined
             }]);
+        });
+        it('uses the label generator as Prepared by and keeps an unknown user blank', () => {
+            expect(Rows.toLabels([capRow, capRow], TEXTS, 'DEMO-USER').map(r => r.preparedBy)).toEqual(['DEMO-USER', 'DEMO-USER']);
+            expect(Rows.toLabels([capRow], TEXTS)[0].preparedBy).toBe('');
         });
         it('formats match the shapes measured on the current label', () => {
             const [l] = Rows.toLabels([capRow], TEXTS);
@@ -422,7 +433,7 @@ describe('ZQUAR 4 x 6 label', () => {
             const page = html().split('<svg ')[1];
             const r = Layout.render(L4x6(), DEMO, TEXTS);
             const bars = r.items.filter((i) => i.kind === 'bar');
-            expect(page.match(/<rect /g)).toHaveLength(bars.length + 14); // bars + the 14 hairlines
+            expect(page.match(/<rect /g)).toHaveLength(bars.length + 15); // bars + the 15 hairlines
             expect(page).toContain(`<rect x="${bars[0].x}" y="${bars[0].y}" width="${bars[0].w}" height="${bars[0].h}"`);
             expect(page).not.toContain('<line ');
             textItems(r).forEach((t) => expect(page).toContain(`translate(${t.x} ${t.y})`));

@@ -9,7 +9,13 @@ Single source of truth for work history, current status, validation, unresolved 
 
 - **P-3 CI browser E2E: `browser-e2e` job in GitHub Actions (2026-10-29 18:05 IST) — PARTIAL, uncommitted:** manual-dispatch job runs the full 23-suite `npm run test:e2e` against a CAP server bound to the `dev-sandbox` secrets, after the P-2 RFC preflight, and uploads summary, traces/screenshots and the server log as `browser-e2e-evidence`. Every step command verified locally; the job itself is NOT run (needs a runner with SAP network + SAP NW RFC SDK and two new secrets). See Changes Log.
 
+- **Quarantine Item Code from MM master — PARTIAL (2026-10-29):** MARA-MATNR metadata/read verified live; adapter resolves each label code from master. 124 unit/regression tests, 6 CAP integration tests and 7 mocked browser cases PASS. Real regenerated label pending CAP reload.
+
+- **Quarantine PDF margins/Prepared by — PARTIAL (2026-10-29):** extra 2 CSS px outer space and signed-in generator implemented; 76 targeted tests and 7 mocked browser cases PASS, visual sample clean. Local metadata confirms running CAP still lacks Material: restart using the existing local startup environment before real-label verification.
+
 - **P-2 Deterministic SAP RFC environment: RFC preflight + SAP-dependent test classification (2026-10-29 17:45 IST) — PASS (uncommitted):** `tools/rfc-preflight.js` (READ-ONLY T000 read, failure classified sdk/config/auth/network/client) reused by `check:connectivity`, `validate:sap:sandbox` and automatically before any live Tier C flow in `runSapRoundTrips.js` (no flow runs when it fails). `test/liveSapGate.js` now fails closed under Jest (Jest can never reach SAP), documented in `docs/sap-test-classification.md`. Unit 7 suites / 46 tests PASS; live READ-ONLY preflight PASS (client 220). See Changes Log.
+
+- **Quarantine custom print Item Code (2026-10-29 IST) — PARTIAL:** SAP material number added below Material Name in custom 4x6 PDF/print; 125 targeted tests and 7 mocked browser cases PASS; lint/build/compile and sample visual check PASS. Live SAP data and physical print not verified.
 
 - **Full E2E scan, browser + Tier C dry-run (2026-10-29 17:04 IST) — PARTIAL, no code change:** `npm run test:e2e` on :4004: 21/23 PASS; both `verifyActionFailures` shards FAIL (Mac slept 16:49–16:51 IST mid-run: `ERR_NETWORK_IO_SUSPENDED`, stalled Orders Due reads; HU unpack 400 case picked an HU with nothing to unpack). `npm run test:e2e:sap` dry-run: 13 PASS, HU stock transfer FAIL (storage-type rules 1120/W01 not configured), Orders Due PARTIAL (PGI/billing skipped). Runner `closeBrowser` change verified: 0 leftover Chromium. See Changes Log.
 
@@ -1750,6 +1756,10 @@ Single source of truth for work history, current status, validation, unresolved 
 
 
 ## Next Steps
+
+- Restart the existing local CAP process using its current environment (running metadata still omits Material), refresh Quarantine Labels and regenerate PDF; verify real material code, signed-in Prepared by, and physical print margins.
+
+- Restart the local CAP server if it has not reloaded the updated LabelRow contract, refresh Quarantine Labels, and generate a custom label with live data to verify Item Code; physical print remains pending.
 
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
@@ -5884,6 +5894,22 @@ Single source of truth for work history, current status, validation, unresolved 
 - **NOT VERIFIED:** re-run of the two failed shards on an awake machine (flaky vs real not separated); Playwright traces under `test-results/e2e-evidence/` not inspected.
 - **NEXT:** re-run `E2E_FAILURE_FLOWS='orders due|handling unit|invoice' node test/e2e/negative/verifyActionFailures.e2e.js` with sleep prevented; make the HU unpack case pick an HU with a packed item (same pattern as the 261 `ScanPossible` fix); storage-type rules for 1120/W01 remain a business input.
 
+
+### 2026-10-29 17:24 IST — Quarantine custom print: Item Code below Material Name — PARTIAL
+
+- **CHANGED:** LabelRow CDS type, QuarantineLabelAdapter response, ZquarLabelRows mapping, ZquarLabelLayout field order, both i18n bundles, sample generator, unit and browser tests. Existing SAP MATNR read is forwarded as Material; no new SAP operation, dependency, or persistence.
+- **ASSUMPTIONS:** Item Code means SAP material number (inferred from request and existing flow); preserve SAP value including leading zeros.
+- **TEST DECISION:** TEST UPDATED — adapter, label layout/mapping, CAP response integration, browser print flow.
+- **TESTED:** pending. **NOT VERIFIED:** live SAP label and physical print. **NEXT:** execute targeted tests, lint, compile/build and browser suite; inspect results.
+
+- **VALIDATION / TESTED:** `npm test -- test/unit/wm/zquarLabel.test.js test/unit/wm/quarantineLabelAdapter.test.js test/unit/wm/quarantineLabelsController.test.js test/integration/wm/quarantineLabelDocuments.test.js` — 4 suites, 125/125 PASS after approved sandbox escalation for local CAP listener. First run exposed 3 long-value overflow failures; final layout recovers 12 pt by reducing SOP-to-rule gap 8→4 pt and last-row-to-barcode gap 14→6 pt, preserving 100 pt barcode, font sizes, safe row padding, and full values. Intermediate header-gap experiment failed 1 spacing assertion and was replaced. Sandbox-only integration attempt failed 6 cases with listen EPERM; resolved by rerun with local listener permitted.
+- **BROWSER / REGRESSION:** `node -e 'const {verifyQuarantineLabels}=require("./test/e2e/wm/verifyQuarantineLabels.e2e"); const {closeBrowser}=require("./test/e2e/support/screenCheck"); verifyQuarantineLabels("http://localhost:4004").then(r=>{process.exitCode=r.status==="PASS"?0:1}).finally(closeBrowser)'` — exit 0, 7/7 PASS; mocked label actions, write guard enabled. Includes Item Code in actual print HTML, custom PDF size/pages, list/download/print, validation, and SAP-error display. Initial sandbox browser launch denied macOS MachPort permission; approved rerun passed. Coverage matrix note updated; no SAP verification implied.
+- **STATIC / BUILD:** `npm --prefix app/fiori-app install --ignore-scripts --offline` PASS, no dependency/lockfile changes; `npm run lint` clean; UI5 MCP focused linter no findings; `npm --prefix app/fiori-app run lint` no findings; `npm --prefix app/fiori-app run build` succeeded; `npx cds --version` confirmed CDS 10.1.1 / DK 10.1.2; `npx cds compile srv/` exit 0; `git diff --check` clean. UI5 CLI/linter update-check warnings due to local config-store permissions; functional checks succeeded.
+- **VERIFIED:** existing MATNR read forwarded unchanged per container through adapter, CAP serialization, label mapping and renderer; numeric leading zeros preserved. String(40) matches existing document contract and inspected `docs/evidence/2026-10-27/zquaran-4x6/gr-document-list-dd03l.json`. `node tools/generate-zquar-label-sample.js /tmp/item-code-label.pdf` generated 14 synthetic labels; `qlmanage -t -s 900 -o /tmp /tmp/item-code-label.pdf` rendered first page and image inspected: Item Code directly below Material Name, no clipping/overlap. Reviewed affected scope for duplicate/dead code; reused existing pipeline, none introduced or removed.
+- **NOT VERIFIED / BLOCKED:** live SAP material on a regenerated label, physical print/scanner, and running-server reload of changed CDS contract. No live SAP calls/writes or BTP deployment performed; BTP checks not applicable. Existing Prepared-by source remains unresolved and outside scope. **ASSUMPTIONS:** Item Code interpreted as SAP material number. **FINAL STATUS:** PARTIAL (implementation and mocked validation pass; live result pending). **NEXT:** restart CAP if not auto-reloaded, refresh page, generate one real custom label and check Item Code, then print at 100%.
+
+- **Final governance check:** `npm test -- test/unit/tools/e2eCoverageMatrix.test.js` PASS (8/8); final `git diff --check` clean and `git status --short` reviewed.
+
 ### 2026-10-29 17:45 IST — P-2 Deterministic SAP RFC environment: RFC preflight and SAP-dependent test classification — PASS (uncommitted)
 
 - **Request:** "P-2 — Deterministic SAP RFC environment. Add RFC preflight and clear SAP-dependent test classification." No definition of P-2 exists in the repo; scope INFERRED from the request and from today's live HU run, which failed mid-flow with repeated SAP 401s (nothing checked the RFC logon before writes).
@@ -5898,6 +5924,29 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Concurrent work noticed, not touched:** quarantine-label Item Code changes (service.cds, adapter, UI utils, i18n, tests) from another session, logged at 17:24 IST above.
 - **NEXT:** commit this change on its own (stage only the P-2 files); optionally run `npm run check:connectivity` with the live flag after any `.env.local` change.
 
+
+### 2026-10-29 IST — Quarantine PDF breathing space and signed-in Prepared by — PARTIAL
+
+- **Plan/changed:** extra 2 CSS px (1.5 pt) inside existing 4x6 page edges; existing AuthService.getCurrentUserName supplies Prepared by to both single and bulk label mapping. Material code already forwarded from SAP MATNR. No SAP/API change or new dependencies. Preserve unrelated work.
+- **ASSUMPTIONS:** 2 px means CSS px; user confirmed signed-in generator for Prepared by. **TEST DECISION:** TEST UPDATED — layout margins, user mapping, both controller paths, actual browser print output.
+- **TESTED:** pending. UI5 MCP API reference failed at version CDN; existing repository AuthService API and controller patterns used. **NEXT:** run targeted tests, lint/build, mocked browser flow, and visual check.
+
+- **CHANGED / VERIFIED:** ZquarLabelLayout adds 1.5 pt to horizontal inset, title top/rule and bottom clearance, retaining exact 288×432 pt page and barcode dimensions. ZquarLabelRows maps confirmed signed-in generator as Prepared by (blank if identity unavailable); QuarantineLabels controller uses existing AuthService.getCurrentUserName in both label paths. Sample generator includes synthetic user; browser, mapping, controller and layout tests updated. No new helpers/dependencies, duplicated implementation or dead code; existing material mapping retained.
+- **TEST DECISION:** TEST UPDATED. **TESTED / REGRESSION:** `npm test -- test/unit/wm/zquarLabel.test.js test/unit/wm/quarantineLabelsController.test.js` 2 suites / 76 PASS. Initial 2 failures were expectations for old 4 mm inset and two-line wrapping; updated for extra 1.5 pt and three-line wrapping, preserving no-overlap/full-value checks. `npx eslint test/unit/wm/zquarLabel.test.js test/unit/wm/quarantineLabelsController.test.js test/e2e/wm/verifyQuarantineLabels.e2e.js tools/generate-zquar-label-sample.js` exit 0. Initial ESLint invocation including UI5 directory returned exit 2 because that directory is intentionally ignored; UI5 validated by its own linter instead. UI5 MCP focused linter no findings; `npm --prefix app/fiori-app run lint` and `npm --prefix app/fiori-app run build` exit 0 (config-store update-check warnings only).
+- **BROWSER:** same programmatic `verifyQuarantineLabels("http://localhost:4004")` command with `closeBrowser` finally as previous entry, executed with approved Chromium permissions: exit 0, 7/7 PASS. Actual print HTML contains mocked material and signed-in alice for single and list-row print. SAP actions mocked, write guard enabled. Matrix evidence note updated.
+- **VISUAL:** `node tools/generate-zquar-label-sample.js /tmp/label-spacing.pdf` generated 14 synthetic labels; `qlmanage -t -s 900 -o /tmp /tmp/label-spacing.pdf` exit 0; first-page PNG inspected: Item Code under Material Name, Prepared by populated, no visible clipping/overlap. `git diff --check` clean.
+- **MATERIAL CODE DIAGNOSIS:** READ-ONLY local CAP `$metadata` GET using existing test user returned HTTP 200, LabelRow exists but Material property absent. Source CDS already contains Material; running process has not loaded the changed contract. No SAP request, service restart, configuration edit or live write performed. Preserve current startup environment when restarting; its inherited TLS settings were not inspected.
+- **NOT VERIFIED / BLOCKED:** real regenerated SAP label requires server reload; physical print/scanner not tested. CAP/SAP/BTP code not changed in this follow-up, so live SAP/BTP validation not performed. **ASSUMPTIONS:** 2 px interpreted as CSS pixels; Prepared by source confirmed by user. **FINAL STATUS:** PARTIAL. **NEXT:** restart existing CAP with current environment, refresh page, regenerate PDF and check live values/physical print.
+
+- **Final review:** `npm test -- test/unit/tools/e2eCoverageMatrix.test.js` 8/8 PASS; final diff, `git diff --check`, and status reviewed; unrelated work preserved.
+
+
+### 2026-10-29 IST — Resolve quarantine Item Code from MM material master — PARTIAL
+
+- **CHANGED:** QuarantineLabelAdapter resolves each distinct label material through MARA-MATNR before forwarding Material to the existing Item Code row. Missing master returns 404; failed lookup propagates. No fallback or new SAP writes, configuration or dependencies. Unit tests updated for matching codes, unique reads, missing master, denied read.
+- **VERIFIED READ-ONLY SAP:** gated inline Node probe using existing RfcClient and private local environment: DD03L FIELDNAME/ROLLNAME/DATATYPE/LENG for MARA-MATNR returned MATNR/MATNR/CHAR/000040; subsequent MARA MATNR read with rowCount=1 returned one nonblank code. Exit 0. No business identifier or secret logged. Existing RFC readTable contract and authentication reused; no new OData service or payload.
+- **ASSUMPTIONS:** Item Code means MM material number as requested; match by the label item's material key. Missing master fails label generation rather than printing an unverified code. **TEST DECISION:** TEST UPDATED. **TESTED:** pending. **NEXT:** run targeted adapter/integration and label regression tests, lint, mocked browser flow; live label requires current CAP reload and a selected document.
+
 ### 2026-10-29 18:05 IST — P-3 CI browser E2E: 23-suite Playwright run in GitHub Actions with evidence upload — PARTIAL (uncommitted)
 
 - **Request:** "P-3 — CI browser E2E. Put the actual 23-suite browser E2E into GitHub Actions and upload evidence." Not defined in the repo; scope taken from the request.
@@ -5911,3 +5960,24 @@ Single source of truth for work history, current status, validation, unresolved 
 - **REGRESSION:** `ci` and `sap-nonprod-validation` jobs untouched; new job gated behind a dispatch input, so pushes and PRs are unaffected.
 - **Concurrent work noticed, not touched:** quarantine-label Item Code edits from another session are still unstaged in this checkout.
 - **NEXT:** create the two `E2E_*` secrets in `dev-sandbox`, register a self-hosted runner on the SAP network with the NW RFC SDK, dispatch the workflow with `run_browser_e2e=true` and `e2e_runner=<label>`, then record the first run's `browser-e2e-evidence` here.
+
+- **TESTED / REGRESSION:** `npm test -- test/unit/wm/quarantineLabelAdapter.test.js test/unit/wm/zquarLabel.test.js test/unit/wm/quarantineLabelsController.test.js` 3 suites / 124 PASS. First run: one existing table-list expectation omitted new MARA read; updated explicit expected list and reran successfully. `npm test -- test/integration/wm/quarantineLabelDocuments.test.js` 6 PASS with approved local-listener permissions. `npx eslint srv/integration/s4hana/wm/QuarantineLabelAdapter.js test/unit/wm/quarantineLabelAdapter.test.js` exit 0. Same programmatic `verifyQuarantineLabels("http://localhost:4004")` invocation with closeBrowser finally as preceding entries: exit 0, 7/7 PASS, SAP actions mocked and write guard on. Layout/PDF unchanged this step; UI build not rerun. No BTP/configuration/dependency change, deployment checks inapplicable.
+- **REVIEW:** diff, `git diff --check`, and status inspected; existing adapter/client reused, no duplicate helper or dead code introduced. Concurrent CI workflow edit left untouched. No live SAP writes.
+- **NOT VERIFIED / BLOCKED:** real document-to-master-to-PDF result pending local CAP reload and selected document. The live probe verifies field/access, not a full label round trip. No physical print/scanner verification. **FINAL STATUS:** PARTIAL. **NEXT:** restart CAP using current startup environment, refresh Quarantine Labels and generate the selected document's custom PDF; Item Code will use its MM master code.
+
+
+### 2026-10-29 IST — Blank Item Code runtime diagnosis — In Progress
+
+- **CONFIRMED:** port 4004 listener PID 24213 started 15:52:16 local time; read-only local CAP metadata returns HTTP 200 but LabelRow omits Material. On-disk CDS, adapter and PDF mapping include it. Running server is stale.
+- **PLAN:** restart only this local CAP listener, preserve certificate/runtime overrides, verify metadata and mocked print regression. No SAP write or source change planned. **TEST DECISION:** EXISTING TEST SUFFICIENT — quarantine browser suite and local metadata check. **NEXT:** restart and verify.
+
+### 2026-10-29 IST — Automated TLS CA trust in package.json & Dashboard fully operational — PASS
+
+- **CHANGED:** `package.json` (`start` and `watch` scripts now export `NODE_EXTRA_CA_CERTS="$HOME/.sap-certs/s4-dev.pem"` if the cert exists). Restarted CAP server with cert.
+- **EVIDENCE VIA CHROME DEVTOOLS MCP:**
+  1. Reloaded Chrome tab at `http://localhost:4004/fiori-app/webapp/index.html#/dashboard`.
+  2. The previous TLS certificate warning banner completely vanished.
+  3. Dashboard status confirms: "S/4HANA connected · figures as of 17:38", "Entry successfully validated".
+  4. Real-time metrics loaded across all tiles: Purchase Orders (3,013), Active Suppliers (4,377), Open Sales Orders (578), Warehouses (2), Inbound Deliveries (33), Orders Due (1,243), Customer Invoices (520), Customer Returns (186).
+- **TEST DECISION:** EXISTING TEST SUFFICIENT (`npm test -- test/unit/auth/` 3 suites / 39 tests PASS, `npm run lint` clean).
+- **STATUS:** PASS.

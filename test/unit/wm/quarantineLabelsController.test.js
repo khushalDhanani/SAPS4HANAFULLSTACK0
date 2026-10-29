@@ -6,10 +6,11 @@ const Service = { generateLabels: jest.fn(), labelRows: jest.fn(), listDocuments
 const Layout = { DEFAULT_SIZE: '4x6', STATIC_KEYS: { title: 'zqTitle' }, CAPTION_KEYS: { grnNo: 'zqGrnNo' }, EXTRA_KEYS: { retestDate: 'zqRetestDate' } };
 const Pdf = { toBlob: jest.fn(), print: jest.fn() };
 const Rows = { toLabels: jest.fn((rows) => rows.map((r) => ({ barcode: r.StorageUnit }))) };
+const AuthService = { getCurrentUserName: jest.fn(() => "DEMO-USER") };
 const BaseController = { extend: (name, obj) => { ctrl = obj; return obj; } };
 const MessageBox = { error: jest.fn(), warning: jest.fn() };
 const MessageToast = { show: jest.fn() };
-global.sap = { ui: { define: (deps, f) => f(BaseController, function () {}, Service, Layout, Pdf, Rows, MessageBox, MessageToast) } };
+global.sap = { ui: { define: (deps, f) => f(BaseController, function () {}, Service, Layout, Pdf, Rows, MessageBox, MessageToast, AuthService) } };
 require('../../../app/fiori-app/webapp/modules/wm/quarantine-label/controller/QuarantineLabels.controller.js');
 
 const PDF_B64 = Buffer.from('%PDF-1.7').toString('base64');
@@ -25,7 +26,7 @@ function subject(data) {
         setProperty(p, v) { this._d[p.slice(1)] = v; },
         getData() { return this._d; }
     };
-    const s = Object.assign(Object.create(ctrl), { getModel: () => model, getText: (k, a, d) => (d || k).replace('{0}', a && a[0]), _iRequest: 0 });
+    const s = Object.assign(Object.create(ctrl), { getOwnerComponent: () => ({}), getModel: () => model, getText: (k, a, d) => (d || k).replace('{0}', a && a[0]), _iRequest: 0 });
     return { s, d: model._d };
 }
 const ok = { MaterialDocument: '4900050304', MaterialDocumentYear: '2026', LabelCount: 2, FileName: 'QuarantineLabels_4900050304_2026.pdf', PdfBase64: PDF_B64 };
@@ -123,7 +124,7 @@ describe('QuarantineLabels controller', () => {
             await s.on4x6Labels();
             expect(Service.labelRows).toHaveBeenCalledWith({ materialDocument: '4900050304', year: '2026', text: '' });
             const texts = { title: 'zqTitle', grnNo: 'zqGrnNo', retestDate: 'zqRetestDate' };
-            expect(Rows.toLabels).toHaveBeenCalledWith(rows.Rows, texts);
+            expect(Rows.toLabels).toHaveBeenCalledWith(rows.Rows, texts, "DEMO-USER");
             expect(Pdf.toBlob).toHaveBeenCalledWith([{ barcode: 'DEMO' }, { barcode: 'DEMO2' }], texts, { size: '4x6' });
             expect(d.pdfUrl).toBe('blob:pdf-1');
             expect(d.fileName).toBe('QuarantineLabels4x6_9900000001_2026.pdf');
@@ -308,6 +309,7 @@ describe('QuarantineLabels controller: goods-receipt list', () => {
             const { s, d } = listSubject();
             await run(s, () => s.onRowDownload(rowEvent(DOC1)));
             expect(Pdf.toBlob).toHaveBeenCalledWith([{ barcode: 'S1' }, { barcode: 'S2' }], expect.any(Object), { size: '4x6' });
+            expect(Rows.toLabels).toHaveBeenCalledWith(expect.any(Array), expect.any(Object), 'DEMO-USER');
             expect(saved).toEqual(['QuarantineLabels4x6_5000000001_2026.pdf']);
             expect([d.message, d.messageType, d.busy]).toEqual(['qlListLabelsReady|2|1', 'Success', false]);
             expect(MessageToast.show).toHaveBeenCalledWith('qlListLabelsReady|2|1'); // shown where the user is, not only at the page top
