@@ -2,6 +2,7 @@ const cds = require('@sap/cds');
 const LOG = require('../../../../common/logger')('sales-inquiry-adapter');
 const { S4HttpClient } = require('../../S4HttpClient');
 const { RfcClient } = require('../../RfcClient');
+const { SalesInquiryRfcCreator } = require('./SalesInquiryRfcCreator');
 const s4Config = require('../../s4Config');
 const businessConfigResolver = require('../../../../common/BusinessConfigResolver');
 const TtlCache = require('../../../../common/TtlCache');
@@ -1948,6 +1949,23 @@ class SalesInquiryAdapter {
       throw new Error('SalesInquiryType is required for Sales Inquiry creation');
     }
     return this.createSalesDocument(docType, header, items, options);
+  }
+
+  /**
+   * Creates a Sales Inquiry through BAPI_INQUIRY_CREATEFROMDATA2 (RFC) and reads it back from SAP. LORD_ODATA_ORDER_SRV
+   * refuses inquiry document types on this system, so inquiries use this route (see SalesInquiryRfcCreator).
+   * `options.testRun` simulates the BAPI without committing.
+   */
+  async createSalesInquiryViaRfc(header, items, options = {}) {
+    const creator = options.creator || new SalesInquiryRfcCreator({ rfc: this.rfc });
+    const result = await creator.create(header, items, { testRun: options.testRun === true });
+    if (result.testRun) return result;
+    const stored = await creator.readBack(result.SalesInquiry);
+    if (!stored) {
+      throw Object.assign(new Error(`SAP committed inquiry ${result.SalesInquiry}, but it could not be read back from SAP`),
+        { status: 502, SalesInquiry: result.SalesInquiry, name: 'PartialSalesInquiryError' });
+    }
+    return result;
   }
 
   /**

@@ -65,7 +65,7 @@ function registerSalesInquiryHandlers(srv) {
         }
 
         try {
-            const result = await salesInquiryAdapter.createSalesInquiry(s4Payload.header, s4Payload.items, { user: authenticatedUser });
+            const result = await salesInquiryAdapter.createSalesInquiryViaRfc(s4Payload.header, s4Payload.items, { user: authenticatedUser });
             const inquiryId = result && (result.SalesInquiry || result.SalesDocument || result.SalesOrderID);
             if (!inquiryId || String(inquiryId).trim() === '') {
                 LOG.error('S/4HANA Sales Inquiry creation succeeded but no Sales Inquiry document number was returned by SAP.');

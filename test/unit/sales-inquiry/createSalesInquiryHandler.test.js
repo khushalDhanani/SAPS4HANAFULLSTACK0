@@ -1,6 +1,6 @@
 jest.mock('../../../srv/integration/s4hana/sd/sales-inquiry/SalesInquiryAdapter', () => {
     const mockAdapter = {
-        createSalesInquiry: jest.fn(),
+        createSalesInquiryViaRfc: jest.fn(),
         getSalesMetrics: jest.fn(),
         getInquiryMetrics: jest.fn((opts) => mockAdapter.getSalesMetrics({ ...opts, entity: 'inquiry' })),
         getCustomerDefaults: jest.fn(),
@@ -24,7 +24,7 @@ function handler() {
 
 describe('Unit: createSalesInquiry handler', () => {
     beforeEach(() => {
-        salesInquiryAdapter.createSalesInquiry.mockReset();
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockReset();
         jest.spyOn(console, 'error').mockImplementation(() => {});
     });
     afterEach(() => jest.restoreAllMocks());
@@ -51,7 +51,7 @@ describe('Unit: createSalesInquiry handler', () => {
     };
 
     test('successfully creates sales inquiry and returns document number', async () => {
-        salesInquiryAdapter.createSalesInquiry.mockResolvedValue({
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockResolvedValue({
             SalesInquiry: '1000529',
             TotalNetAmount: '2500.00',
             TransactionCurrency: 'INR'
@@ -66,11 +66,11 @@ describe('Unit: createSalesInquiry handler', () => {
         const result = await handler()(req);
         expect(result).toBe('1000529');
         expect(req.error).not.toHaveBeenCalled();
-        expect(salesInquiryAdapter.createSalesInquiry).toHaveBeenCalledTimes(1);
+        expect(salesInquiryAdapter.createSalesInquiryViaRfc).toHaveBeenCalledTimes(1);
     });
 
     test('rejects with HTTP 502 when SAP returns no SalesInquiry document number', async () => {
-        salesInquiryAdapter.createSalesInquiry.mockResolvedValue({
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockResolvedValue({
             SalesInquiry: '',
             SalesDocument: '',
             TotalNetAmount: '2500.00'
@@ -95,11 +95,11 @@ describe('Unit: createSalesInquiry handler', () => {
 
         await handler()(req);
         expect(req.error).toHaveBeenCalledWith(400, expect.any(String));
-        expect(salesInquiryAdapter.createSalesInquiry).not.toHaveBeenCalled();
+        expect(salesInquiryAdapter.createSalesInquiryViaRfc).not.toHaveBeenCalled();
     });
 
     test('handles total failure at header creation with HTTP 500', async () => {
-        salesInquiryAdapter.createSalesInquiry.mockRejectedValue(new Error('Customer 10135 does not exist'));
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockRejectedValue(new Error('Customer 10135 does not exist'));
 
         const req = {
             data: validPayload,
@@ -120,7 +120,7 @@ describe('Unit: createSalesInquiry handler', () => {
             isPartialCreation: true,
             status: 502
         });
-        salesInquiryAdapter.createSalesInquiry.mockRejectedValue(partialErr);
+        salesInquiryAdapter.createSalesInquiryViaRfc.mockRejectedValue(partialErr);
 
         const req = {
             data: validPayload,
