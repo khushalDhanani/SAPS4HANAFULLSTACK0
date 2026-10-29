@@ -10,18 +10,19 @@ sap.ui.define([
         doc.setFillColor(0, 0, 0);
         doc.setTextColor(0, 0, 0);
         aItems.forEach(function (it) {
-            if (it.kind === "bar" || it.kind === "rule") {
+            if (it.kind === "sep") {
+                // Hairline at a fraction of black; the opacity stays in the graphics state, so isolate it
+                doc.saveGraphicsState();
+                doc.setGState(new doc.GState({ opacity: it.opacity }));
+                doc.rect(it.x, it.y, it.w, it.h, "F");
+                doc.restoreGraphicsState();
+            } else if (it.kind === "bar") {
                 doc.rect(it.x, it.y, it.w, it.h, "F");
             } else {
                 doc.setFont("helvetica", it.bold ? "bold" : "normal").setFontSize(it.pt);
                 var o = {};
                 if (it.align === "center") { o.align = "center"; }
-                if (it.angle) { o.angle = it.angle; }
-                // Horizontal scaling (Tz) stays in the graphics state: isolate it so later texts are not stretched
-                var bScaled = it.hScale && it.hScale !== 1;
-                if (bScaled) { o.horizontalScale = it.hScale; doc.saveGraphicsState(); }
                 doc.text(it.text, it.x, it.y, o);
-                if (bScaled) { doc.restoreGraphicsState(); }
             }
         });
     }
@@ -63,13 +64,11 @@ sap.ui.define([
     function svgPage(L, aItems) {
         var esc = HuLabelPrinter.esc;
         var out = aItems.map(function (it) {
-            if (it.kind === "bar" || it.kind === "rule") {
-                return '<rect x="' + it.x + '" y="' + it.y + '" width="' + it.w + '" height="' + it.h + '" fill="#000" shape-rendering="crispEdges"/>';
+            if (it.kind === "bar" || it.kind === "sep") {
+                return '<rect x="' + it.x + '" y="' + it.y + '" width="' + it.w + '" height="' + it.h + '" fill="#000"' +
+                    (it.opacity ? ' fill-opacity="' + it.opacity + '"' : "") + ' shape-rendering="crispEdges"/>';
             }
-            // jsPDF angle 90 = counter-clockwise about the baseline start; hScale stretches along the text direction
-            var sTransform = "translate(" + it.x + " " + it.y + ")" + (it.angle ? " rotate(" + (-it.angle) + ")" : "") +
-                (it.hScale && it.hScale !== 1 ? " scale(" + it.hScale + " 1)" : "");
-            return '<text transform="' + sTransform + '" font-size="' + it.pt + '" font-weight="' + (it.bold ? "bold" : "normal") + '"' +
+            return '<text transform="translate(' + it.x + " " + it.y + ')" font-size="' + it.pt + '" font-weight="' + (it.bold ? "bold" : "normal") + '"' +
                 (it.align === "center" ? ' text-anchor="middle"' : "") + ">" + esc(it.text) + "</text>";
         }).join("");
         return '<svg class="zq" xmlns="http://www.w3.org/2000/svg" width="' + L.page.wPt + 'pt" height="' + L.page.hPt + 'pt" viewBox="0 0 ' +

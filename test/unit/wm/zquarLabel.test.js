@@ -42,9 +42,7 @@ const textItems = (r) => r.items.filter((i) => i.kind === 'text');
 const find = (r, s) => textItems(r).find((i) => i.text === s);
 const top = (it) => it.y - it.pt * Layout.ASCENT;
 function box(it) {
-    if (it.kind === 'bar' || it.kind === 'rule') return { x0: it.x, y0: it.y, x1: it.x + it.w, y1: it.y + it.h };
-    if (it.kind === 'line') return { x0: Math.min(it.x1, it.x2), y0: Math.min(it.y1, it.y2), x1: Math.max(it.x1, it.x2), y1: Math.max(it.y1, it.y2) };
-    if (it.angle === 90) return { x0: it.band[0], x1: it.band[1], y0: it.y - it.len, y1: it.y };
+    if (it.kind === 'bar' || it.kind === 'sep') return { x0: it.x, y0: it.y, x1: it.x + it.w, y1: it.y + it.h };
     const w = Layout.widthPt(it.text, it.pt, it.bold);
     const x0 = it.align === 'center' ? it.x - w / 2 : it.x;
     return { x0, x1: x0 + w, y0: top(it), y1: top(it) + it.pt };
@@ -71,107 +69,108 @@ describe('ZQUAR 4 x 6 label', () => {
 
     const fieldsOf = (row = DEMO) => Layout.render(L4x6(), row, TEXTS).fields;
     const fld = (fs, k) => fs.find((f) => f.key === k);
+    const seps = (r) => r.items.filter((i) => i.kind === 'sep');
+    const ORDER = ['materialName', 'grnNo', 'grnDate', 'inwNo', 'qtyReceived', 'containerNo', 'manufacturer', 'supplier', 'batchNo', 'mfgDate', 'expiryDate', 'netWeight', 'preparedBy'];
 
-    it('fixed frame of the 4 x 6 design: title, rules, barcode (pt, top-left origin)', () => {
-        const L = L4x6();
-        expect(L.title.top).toBeCloseTo(19.8, 1);
-        expect(L.ruleH.y).toBeCloseTo(51.75, 2);
-        expect(L.ruleH.x1).toBe(288); // the title rule runs to the right edge of the label
-        expect(L.ruleV.x).toBe(36.7);
-        expect(L.ruleV.y0).toBe(0); // the side rule starts at the top edge of the label
-        expect(L.ruleH.x0).toBe(L.ruleV.x);
-        expect(L.ruleV.y1).toBe(432); // the side rule runs to the bottom edge
-        expect(L.barcode.top - (L.rows.lastBaseline + 10)).toBeCloseTo(4, 0); // "Prepared by" just above the barcode
-        expect(L.barcode).toMatchObject({ hrTop: 404, hrPt: 14 });
-        expect(L.barcode.h).toBeCloseTo(84, 0); // ≈ 30 mm (SAP label 62 pt; 129.5 pt was too big)
-        expect(L.barcode.hrTop - (L.barcode.top + L.barcode.h)).toBeCloseTo(3, 0);
+    it('one field per row, in the required order, each caption on its own line (no two fields share a baseline)', () => {
+        const fs = fieldsOf();
+        expect(fs.map((f) => f.key)).toEqual(ORDER);
+        const ys = fs.map((f) => f.caption.y);
+        ys.slice(1).forEach((y, i) => expect(y).toBeGreaterThan(ys[i] + 9)); // strictly increasing, more than a caption height apart
+        expect(new Set(ys).size).toBe(13); // Prepared by is a normal row (last)
+        fs.forEach((f) => expect(f.value.y).toBeCloseTo(f.caption.y, 9)); // caption and value share one baseline
     });
 
-    it('rules: solid bars 2 printer dots thick on the dot grid; the horizontal one starts at the vertical one (solid corner)', () => {
-        const L = L4x6();
-        const [v, h] = Layout.render(L, DEMO, TEXTS).items.filter((i) => i.kind === 'rule');
-        const onDot = (n) => Math.abs(n / L.dotPt - Math.round(n / L.dotPt)) < 1e-9;
-        [v.x, v.y, v.w, v.h, h.x, h.y, h.w, h.h].forEach((n) => expect(onDot(n)).toBe(true));
-        expect(v.w).toBeCloseTo(2 * 72 / 203, 12);
-        expect(h.h).toBeCloseTo(2 * 72 / 203, 12);
-        expect(h.x).toBe(v.x);
-        expect(h.y).toBeGreaterThan(v.y);
-        expect(h.x + h.w).toBeCloseTo(288, 0); // to the right edge (within a dot)
-        expect(h.x + h.w).toBeLessThanOrEqual(288 + EPS);
-        expect(v.y).toBe(0); // from the top edge
-        expect(v.y + v.h).toBeCloseTo(432, 0); // to the bottom edge (within a dot)
-        expect(v.x + v.w).toBeLessThan(Layout.render(L, DEMO, TEXTS).barcode.x0); // left of the barcode quiet zone
-        // barcode bars on the dot grid too
-        const bars = Layout.render(L, DEMO, TEXTS).items.filter((i) => i.kind === 'bar');
-        bars.forEach((b) => [b.x, b.y, b.w, b.h].forEach((n) => expect(onDot(n)).toBe(true)));
-    });
-
-    it('one centre axis: title, "Prepared by", barcode and its number are centred on the middle of the content', () => {
+    it('frame: title, hairline, QUARANTINE with the SOP no. directly below, hairline, rows, then bars 100 pt high (was 84) and the number below', () => {
         const L = L4x6();
         const r = Layout.render(L, DEMO, TEXTS);
-        expect(L.axis).toBeCloseTo((38.8 + 288 - 4 * MM) / 2, 9);
-        expect(find(r, TEXTS.title)).toMatchObject({ align: 'center', x: L.axis });
-        expect(find(r, TEXTS.preparedBy)).toMatchObject({ align: 'center', x: L.axis });
+        expect(L.page).toEqual({ wPt: 288, hPt: 432 });
+        expect(L.barcode.h).toBeGreaterThanOrEqual(100 - L.dotPt);
+        expect(L.barcode.hrTop - (L.barcode.top + L.barcode.h)).toBeCloseTo(3, 0);
+        expect(L.barcode.hrTop + L.barcode.hrPt).toBeLessThanOrEqual(432 - 10); // number inside the page, clear of the edge
+        const t = box(find(r, TEXTS.title));
+        const q = box(find(r, TEXTS.quarantine));
+        const s = box(find(r, TEXTS.formNumber));
+        const ss = seps(r);
+        const first = fieldsOf()[0];
+        expect(t.y0).toBeGreaterThanOrEqual(4 * MM - EPS);
+        // vertical order with clear white space between every pair (no overlap)
+        expect(t.y1 + 2).toBeLessThan(ss[0].y);          // title -> hairline 1
+        expect(ss[0].y + ss[0].h + 6).toBeLessThan(q.y0); // hairline 1 -> QUARANTINE
+        const gap = (find(r, TEXTS.formNumber).y - 0.718 * 9) - find(r, TEXTS.quarantine).y; // cap-letter baseline -> SOP cap top
+        expect(gap).toBeGreaterThanOrEqual(4);            // QUARANTINE -> SOP no.: clear ...
+        expect(gap).toBeLessThan(12);                     // ... and directly below
+        expect(s.y1 + 2).toBeLessThan(ss[1].y);          // SOP no. -> hairline 2
+        expect(ss[1].y).toBeLessThan(first.slot.y0 + 1);  // hairline 2 is the top of the first row
+        expect(find(r, TEXTS.quarantine).pt).toBeGreaterThan(find(r, TEXTS.title).pt - 1); // a main title, not a row
+        // last row (Prepared by) well clear of the bars
+        const prep = fieldsOf().find((f) => f.key === 'preparedBy');
+        expect(L.barcode.top - (prep.value.y + 0.21 * prep.value.pt)).toBeGreaterThanOrEqual(14);
+    });
+
+    it('separators: 14 hairlines (under the title, under QUARANTINE/SOP and between the rows), 5 % opacity, on the dot grid, full content width, never touching text', () => {
+        const L = L4x6();
+        const r = Layout.render(L, DEMO, TEXTS);
+        const ss = seps(r);
+        expect(ss).toHaveLength(14);
+        const onDot = (n) => Math.abs(n / L.dotPt - Math.round(n / L.dotPt)) < 1e-9;
+        ss.forEach((s) => {
+            expect(s.opacity).toBe(0.05);
+            [s.x, s.y, s.w, s.h].forEach((n) => expect(onDot(n)).toBe(true));
+            expect(s.h).toBeCloseTo(2 * 72 / 203, 12);
+            expect(s.x).toBeGreaterThanOrEqual(4 * MM - EPS);
+            expect(s.x + s.w).toBeLessThanOrEqual(288 - 4 * MM + EPS);
+        });
+        // no hairline intersects any text (rows, title, QUARANTINE block, Prepared by, barcode number)
+        textItems(r).forEach((t) => {
+            const g0 = t.y - 0.718 * t.pt;
+            const g1 = t.y + 0.21 * t.pt;
+            ss.forEach((s) => expect(s.y + s.h <= g0 || s.y >= g1).toBe(true));
+        });
+        // equal spacing of a one-line row: hairlines one slot apart
+        const ys = ss.slice(1).map((s) => s.y);
+        ys.slice(1).forEach((y, i) => expect(y - ys[i]).toBeCloseTo(fieldsOf().pitch, 0));
+    });
+
+    it('one centre axis: title, QUARANTINE, SOP no., barcode and its number are centred on the page', () => {
+        const L = L4x6();
+        const r = Layout.render(L, DEMO, TEXTS);
+        expect(L.axis).toBe(144);
+        [TEXTS.title, TEXTS.quarantine, TEXTS.formNumber].forEach((s) => expect(find(r, s)).toMatchObject({ align: 'center', x: 144 }));
         expect(Math.abs(r.barcode.x0 + r.barcode.widthPt / 2 - L.axis)).toBeLessThanOrEqual(L.dotPt / 2 + EPS);
         expect(textItems(r).filter((i) => i.text === DEMO.barcode).pop().x).toBeCloseTo(r.barcode.x0 + r.barcode.widthPt / 2, 9);
     });
 
-    it('caption and value of a row share one baseline (date columns: value one line below its caption)', () => {
-        const fs = fieldsOf();
-        fs.filter((f) => f.value && f.col === undefined).forEach((f) => expect(f.value.y).toBeCloseTo(f.caption.y, 9));
-        const byRow = {};
-        fs.forEach((f) => { (byRow[f.row] = byRow[f.row] || []).push(f.caption.y); });
-        Object.values(byRow).forEach((ys) => ys.forEach((y) => expect(y).toBeCloseTo(ys[0], 9)));
-        fs.filter((f) => f.col !== undefined).forEach((f) => expect(f.value.y - f.caption.y).toBeCloseTo(9 * Layout.LH + 3, 9));
-    });
-
-    it('rows are evenly spaced from the title rule to "Prepared by" (no reserved empty lines)', () => {
-        const fs = fieldsOf();
-        const rows = [...new Set(fs.map((f) => f.row))].map((r) => fs.find((f) => f.row === r));
-        const gaps = rows.slice(1).map((f, i) => f.caption.y - rows[i].caption.y - (rows[i].col !== undefined ? 9 * Layout.LH + 3 : 0));
-        gaps.forEach((g) => expect(g).toBeCloseTo(fs.pitch, 9));
-        expect(fld(fs, 'preparedBy').caption.y).toBeCloseTo(L4x6().rows.lastBaseline, 9);
-        expect(fs.pitch).toBeGreaterThan(25); // rows share the height above "Prepared by" + barcode
-        expect(fs.pitch).toBeLessThan(30);
-        expect(fld(fs, 'materialName').caption.y).toBeCloseTo(51.75 + 6 + 11 * Layout.ASCENT, 9);
-        expect(fs.pitch).toBeGreaterThan(11 * Layout.LH);
-    });
-
-    it('a wrapped value takes a second line only when used; the rows below move, spacing stays even', () => {
-        const one = fieldsOf();
-        const two = fieldsOf({ ...DEMO, supplier: 'DEMO SUPPLIER WITH A LONG NAME PRIVATE LIMITED INDIA' });
-        expect(fld(two, 'supplier').value.lines).toHaveLength(2);
-        expect(two.pitch).toBeLessThan(one.pitch);
-        expect(fld(two, 'batchNo').caption.y - fld(two, 'supplier').caption.y).toBeCloseTo(two.pitch + 11 * Layout.LH, 9);
-        expect(fld(two, 'preparedBy').caption.y).toBeCloseTo(fld(one, 'preparedBy').caption.y, 9);
-    });
-
-    it('fonts: every caption 9 bold, every value 11 (no per-field sizes), title 18 bold, minimum 9 everywhere', () => {
+    it('fonts: every caption 9 bold, every value 10 (no per-field sizes), title 16 bold, QUARANTINE 18 bold, minimum 9 everywhere', () => {
         const r = Layout.render(L4x6(), DEMO, TEXTS);
-        expect(find(r, TEXTS.title)).toMatchObject({ pt: 18, bold: true, align: 'center' });
+        expect(find(r, TEXTS.title)).toMatchObject({ pt: 16, bold: true });
+        expect(find(r, TEXTS.quarantine)).toMatchObject({ pt: 18, bold: true });
+        expect(find(r, TEXTS.formNumber)).toMatchObject({ pt: 9, bold: false });
         r.fields.forEach((f) => {
             expect(f.caption.pt).toBe(9);
-            if (f.value) expect(f.value.pt).toBe(11);
+            expect(f.value.pt).toBe(10);
         });
-        // GRN No. (10 digits) and the dates fit at 11 pt: nothing shrunk
-        ['grnNo', 'grnDate', 'mfgDate', 'expiryDate', 'netWeight', 'containerNo', 'qtyReceived'].forEach((k) => expect(fld(r.fields, k).value.pt).toBe(11));
         textItems(r).forEach((i) => expect(i.pt).toBeGreaterThanOrEqual(Layout.MIN_PT));
     });
 
-    it('columns: left values at x 103.9; right pairs share one caption column; date captions sit over their values', () => {
+    it('columns: every caption at the left margin, every value in one column right of the widest caption', () => {
         const fs = fieldsOf();
-        ['materialName', 'grnNo', 'inwNo', 'qtyReceived', 'manufacturer', 'supplier', 'batchNo'].forEach((k) => expect(fld(fs, k).value.x).toBeCloseTo(103.9, 6));
-        expect(fld(fs, 'grnDate').caption.x).toBeCloseTo(fld(fs, 'containerNo').caption.x, 9);
-        fs.filter((f) => f.col !== undefined).forEach((f) => expect(f.value.x).toBe(f.caption.x));
-        expect(fld(fs, 'grnNo').value.x + Layout.widthPt('0000000000', 11, false)).toBeLessThanOrEqual(fld(fs, 'grnDate').caption.x - Layout.GAP + EPS);
-        expect(fld(fs, 'grnDate').value.x + Layout.widthPt('00/00/0000', 11, false)).toBeLessThanOrEqual(288 - 4 * MM + EPS);
+        const x = fs[0].value.x;
+        fs.forEach((f) => {
+            expect(f.caption.x).toBeCloseTo(4 * MM, 9);
+            expect(f.value.x).toBe(x);
+            const end = f.caption.x + Layout.widthPt(TEXTS[f.key], f.caption.pt, true);
+            expect(x - end).toBeGreaterThanOrEqual(Layout.GAP - EPS); // caption ends at least 4 pt before its value
+        });
     });
 
-    it('every caption ends at least 4 pt before its value', () => {
-        fieldsOf().filter((f) => f.value && f.col === undefined).forEach((f) => {
-            const end = f.caption.x + Layout.widthPt(TEXTS[f.key], f.caption.pt, true);
-            expect(f.value.x - end).toBeGreaterThanOrEqual(Layout.GAP - 0.01 - EPS);
-        });
+    it('a wrapped value makes its own row taller only; the rows share the rest evenly and the block end does not move', () => {
+        const one = fieldsOf();
+        const two = fieldsOf({ ...DEMO, supplier: 'DEMO SUPPLIER WITH A LONG NAME PRIVATE LIMITED INDIA AND SONS TRADING' });
+        expect(fld(two, 'supplier').value.lines).toHaveLength(2);
+        expect(two.pitch).toBeLessThan(one.pitch);
+        expect(fld(two, 'supplier').slot.y1 - fld(two, 'supplier').slot.y0).toBeCloseTo(two.pitch + two.find((f) => f.key === 'supplier').value.pt * Layout.LH, 9);
+        expect(fld(two, 'preparedBy').slot.y1).toBeCloseTo(fld(one, 'preparedBy').slot.y1, 9);
     });
 
     it('every field of the layout table is on the label, captions and values, plus the static texts', () => {
@@ -181,25 +180,6 @@ describe('ZQUAR 4 x 6 label', () => {
         Object.keys(Layout.STATIC_KEYS).forEach((k) => expect(t).toContain(TEXTS[k]));
         Object.values(DEMO).forEach((v) => expect(t).toContain(v)); // barcode value printed under the bars too
         expect(t.filter((s) => s === DEMO.barcode)).toHaveLength(2); // GRN No. and human-readable (same DEMO value)
-    });
-
-    it('strip texts: rotated 90 degrees at normal width (no stretch), inside the 4 mm margin and left of the rule', () => {
-        const L = L4x6();
-        const r = Layout.render(L, DEMO, TEXTS);
-        const q = find(r, TEXTS.quarantine);
-        const f = find(r, TEXTS.formNumber);
-        [q, f].forEach((it) => {
-            expect(it).toMatchObject({ angle: 90, hScale: 1 });
-            const b = box(it);
-            expect(b.x0).toBeGreaterThanOrEqual(4 * MM - EPS);
-            expect(b.x1).toBeLessThan(L.ruleV.x);
-            expect(b.y0).toBeGreaterThanOrEqual(4 * MM - EPS);
-            expect(b.y1).toBeLessThanOrEqual(432 - 4 * MM + EPS);
-            expect((b.y0 + b.y1) / 2).toBeCloseTo(216, 6); // centred on the full label height (side rule)
-        });
-        expect(q).toMatchObject({ pt: 14, bold: true });
-        expect(f).toMatchObject({ pt: 9, bold: false });
-        expect(box(q).x1).toBeLessThan(box(f).x0); // QUARANTINE first, then the form number
     });
 
     // Worst realistic row: values at SAP field lengths (MAKTX 40, two BUT000 name lines, AUSP ATWRT 70, P_TEXT 50,
@@ -222,7 +202,7 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(b.x0).toBeGreaterThanOrEqual(-EPS);
             expect(b.y0).toBeGreaterThanOrEqual(-0.25 - EPS);
             expect(b.x1).toBeLessThanOrEqual(288 + EPS);
-            if (it.kind !== 'rule') expect(b.y1).toBeLessThanOrEqual(432 - 10 + EPS); // rules run edge to edge on purpose
+            expect(b.y1).toBeLessThanOrEqual(432 - 10 + EPS);
             if (it.kind === 'text') {
                 expect(b.x0).toBeGreaterThanOrEqual(4 * MM - EPS);
                 expect(b.x1).toBeLessThanOrEqual(288 - 4 * MM + EPS);
@@ -236,33 +216,33 @@ describe('ZQUAR 4 x 6 label', () => {
         r.fields.filter((f) => f.value).forEach((f) => {
             f.value.lines.forEach((line) => expect(f.value.x + Layout.widthPt(line, f.value.pt, false)).toBeLessThanOrEqual(f.value.end + EPS));
         });
-        // last line of each row stays above the next row's baseline by at least one line
-        const rows = [...new Set(r.fields.map((f) => f.row))];
-        rows.slice(1).forEach((row, i) => {
-            const prevBottom = Math.max(...r.fields.filter((f) => f.row === rows[i] && f.value && f.value.lines.length)
-                .map((f) => f.value.y + (f.value.lines.length - 1) * f.value.pt * Layout.LH)), next = r.fields.find((f) => f.row === row).caption.y;
-            if (Number.isFinite(prevBottom)) expect(next - prevBottom).toBeGreaterThanOrEqual(11 * Layout.LH);
+        // every row's glyphs stay inside its own slot: rows never overlap and never touch a hairline
+        r.fields.forEach((f) => {
+            const last = f.value.y + (f.value.lines.length - 1) * f.value.pt * Layout.LH;
+            expect(f.value.y - 0.718 * f.value.pt).toBeGreaterThan(f.slot.y0);
+            expect(last + 0.21 * f.value.pt).toBeLessThan(f.slot.y1);
         });
+        r.fields.slice(1).forEach((f, i) => expect(f.slot.y0).toBeCloseTo(r.fields[i].slot.y1, 9));
     });
 
     describe('long values are never cut: wrap, then shrink to 9 pt, then more lines', () => {
         const f = fld(fieldsOf(), 'materialName');
         const w = f.value.end - f.value.x;
-        it('wraps at 11 pt when two lines are enough', () => {
-            const r = Layout.fitText('DEMO MATERIAL WITH A LONGER NAME FOR TWO LINES', w, 11, 2, false);
-            expect(r).toMatchObject({ pt: 11, truncated: false });
+        it('wraps at 10 pt when two lines are enough', () => {
+            const r = Layout.fitText('DEMO MATERIAL WITH A LONGER NAME FOR TWO LINES', w, 10, 2, false);
+            expect(r).toMatchObject({ pt: 10, truncated: false });
             expect(r.lines).toHaveLength(2);
         });
-        it('shrinks between 11 and 9 pt before adding lines', () => {
-            const r = Layout.fitText('DEMO '.repeat(10).trim(), w, 11, 2, false);
+        it('shrinks between 10 and 9 pt before adding lines', () => {
+            const r = Layout.fitText('DEMO '.repeat(14).trim(), w, 10, 2, false);
             expect(r.truncated).toBe(false);
-            expect(r.pt).toBeLessThan(11);
+            expect(r.pt).toBeLessThan(10);
             expect(r.pt).toBeGreaterThanOrEqual(9);
-            expect(r.lines.join(' ')).toBe('DEMO '.repeat(10).trim());
+            expect(r.lines.join(' ')).toBe('DEMO '.repeat(14).trim());
         });
         it('at 9 pt uses more lines instead of "…"', () => {
             const s = 'DEMO MATERIAL '.repeat(8).trim();
-            const r = Layout.fitText(s, w, 11, 2, false);
+            const r = Layout.fitText(s, w, 10, 2, false);
             expect(r).toMatchObject({ pt: 9, truncated: false });
             expect(r.lines.length).toBeGreaterThan(2);
             expect(r.lines.join(' ')).toBe(s);
@@ -299,7 +279,7 @@ describe('ZQUAR 4 x 6 label', () => {
             const last = bars[bars.length - 1];
             expect(g.x0 + g.widthPt - (last.x + last.w)).toBeCloseTo(10 * g.modulePt, 9);
             expect(Math.abs(g.x0 + g.widthPt / 2 - L.axis)).toBeLessThanOrEqual(L.dotPt / 2 + EPS); // centred, snapped to a dot
-            expect(g.x0).toBeGreaterThanOrEqual(38.8 - EPS);
+            expect(g.x0).toBeGreaterThanOrEqual(4 * MM - EPS);
             expect(g.x0 + g.widthPt).toBeLessThanOrEqual(288 - 4 * MM + EPS);
             expect(Math.abs(g.x0 / L.dotPt - Math.round(g.x0 / L.dotPt))).toBeLessThan(1e-9);
             bars.forEach((b) => {
@@ -308,25 +288,25 @@ describe('ZQUAR 4 x 6 label', () => {
                 expect([1, 2, 3, 4]).toContain(Math.round(b.w / g.modulePt));
             });
             const hrItem = textItems(r).filter((i) => i.text === DEMO.barcode).pop();
-            expect(hrItem.pt).toBe(14);
+            expect(hrItem.pt).toBe(13);
             expect(hrItem.align).toBe('center'); // centred under the bars
             expect(hrItem.x).toBeCloseTo((bars[0].x + last.x + last.w) / 2, 9);
-            expect(top(hrItem)).toBeCloseTo(404, 6);
+            expect(top(hrItem)).toBeCloseTo(L.barcode.hrTop, 6);
         });
-        it('300 dpi: target 6 whole dots when it fits; 10 characters need 237.6 pt at 6 dots, so 5 dots (largest that fits)', () => {
+        it('300 dpi: target 6 whole dots; 10 characters need 237.6 pt there and fit the full content width', () => {
             const L = Layout.layout('4x6', { dpi: 300 });
-            expect(Layout.barcodeGeometry(L, '990001')).toMatchObject({ moduleDots: 6 });
             const g = Layout.render(L, DEMO, TEXTS).barcode;
-            expect(165 * 6 * 72 / 300).toBeGreaterThan(273.9 - g.x0);
-            expect(g.moduleDots).toBe(5);
-            expect(g.modulePt).toBeCloseTo(5 * 72 / 300, 12);
-            expect(g.modulePt * 25.4 / 72).toBeGreaterThanOrEqual(0.375);
+            expect(g.moduleDots).toBe(6);
+            expect(g.modulePt).toBeCloseTo(6 * 72 / 300, 12);
+            expect(g.widthPt).toBeCloseTo(165 * 6 * 72 / 300, 9);
+            expect(g.x0 + g.widthPt).toBeLessThanOrEqual(288 - 4 * MM + EPS);
+            expect(Layout.barcodeGeometry(L, '99000100010001')).toMatchObject({ moduleDots: 5 }); // longer value: largest whole-dot module
         });
         it('a longer value takes the largest whole-dot module that fits, never below 0.375 mm', () => {
-            const g = Layout.barcodeGeometry(L4x6(), 'DEMO-123456');
+            const g = Layout.barcodeGeometry(L4x6(), 'DEMO-12345678');
             expect(g.moduleDots).toBe(3);
             expect(g.modulePt * 25.4 / 72).toBeGreaterThanOrEqual(0.375 - EPS);
-            expect(g.widthPt).toBeLessThanOrEqual(273.9 - g.x0 + EPS);
+            expect(g.widthPt).toBeLessThanOrEqual(288 - 4 * MM - g.x0 + EPS);
         });
         it('fails with a clear error when even the minimum module does not fit (never squeezed)', () => {
             expect(() => Layout.barcodeGeometry(L4x6(), 'DEMO-1234567890123')).toThrow(/too long for the label.*0\.375 mm/);
@@ -340,7 +320,7 @@ describe('ZQUAR 4 x 6 label', () => {
         const empty = Layout.render(L, { barcode: DEMO.barcode }, TEXTS);
         const capsOf = (r) => textItems(r).filter((i) => i.bold).map((i) => [i.text, i.x, i.y]);
         expect(capsOf(empty)).toEqual(capsOf(full));
-        expect(textItems(empty).filter((i) => !i.bold && !i.angle).map((i) => i.text)).toEqual([DEMO.barcode]);
+        expect(textItems(empty).filter((i) => !i.bold && i.align === 'left').map((i) => i.text)).toEqual([]);
         expect(Layout.render(L, { ...DEMO, barcode: '' }, TEXTS).warnings).toContainEqual({ code: 'barcodeMissing', field: 'barcode' });
     });
 
@@ -442,12 +422,13 @@ describe('ZQUAR 4 x 6 label', () => {
             const page = html().split('<svg ')[1];
             const r = Layout.render(L4x6(), DEMO, TEXTS);
             const bars = r.items.filter((i) => i.kind === 'bar');
-            expect(page.match(/<rect /g)).toHaveLength(bars.length + 2); // bars + the two rules
+            expect(page.match(/<rect /g)).toHaveLength(bars.length + 14); // bars + the 14 hairlines
             expect(page).toContain(`<rect x="${bars[0].x}" y="${bars[0].y}" width="${bars[0].w}" height="${bars[0].h}"`);
             expect(page).not.toContain('<line ');
             textItems(r).forEach((t) => expect(page).toContain(`translate(${t.x} ${t.y})`));
-            const q = find(r, TEXTS.quarantine);
-            expect(page).toContain(`translate(${q.x} ${q.y}) rotate(-90)" font-size="${q.pt}" font-weight="bold">${TEXTS.quarantine}<`);
+            const s0 = r.items.find((i) => i.kind === 'sep');
+            expect(page).toContain(`<rect x="${s0.x}" y="${s0.y}" width="${s0.w}" height="${s0.h}" fill="#000" fill-opacity="0.05"`);
+            expect(page).toContain('text-anchor="middle">' + TEXTS.quarantine + '<');
             expect(page).toContain('text-anchor="middle">' + TEXTS.title + '<');
         });
 

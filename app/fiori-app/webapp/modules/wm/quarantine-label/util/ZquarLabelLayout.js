@@ -4,10 +4,13 @@ sap.ui.define([
 ], function (Barcode, HuLayout) {
     "use strict";
 
-    // ZQUAR quarantine label, same layout as the SAP label, enlarged to 4 x 6 in with a bigger barcode.
-    // All positions in pt, origin top-left. Field rows: caption and value share one baseline, one caption size and
-    // one value size, rows evenly spaced between the title rule and "Prepared by" (user request 2026-10-27).
-    // render() returns a draw list that ZquarLabelPdf plays into jsPDF and the print document.
+    // ZQUAR quarantine label, 4 x 6 in: centred company title, hairline, QUARANTINE title with the SOP no. directly
+    // below, hairline, then one field per row (caption left, value right, "Prepared by" is the last row) with 5 %-opacity
+    // hairlines between the rows, then a large centred barcode with its number. The block from the second hairline to the
+    // barcode is divided into 13 row slots (a wrapped value makes its slot taller, the rest share the remaining height
+    // evenly); each row is centred in its slot, so a hairline (always on a slot boundary) can never touch text.
+    // All positions in pt, origin top-left. render() returns a draw list that ZquarLabelPdf plays into jsPDF and the
+    // print document.
     var PT_PER_INCH = 72;
     var MM_PER_INCH = 25.4;
     var MM2PT = PT_PER_INCH / MM_PER_INCH;
@@ -19,58 +22,33 @@ sap.ui.define([
     var PRINTER_DPI = 203;
     var ALLOWED_DPI = [203, 300];
 
-    // MEASURED current label, 288 x 288 pt (docs/label/zquar-current-layout.md): rules, title, left caption and
-    // value columns (value column +1 pt: user decision "9 pt captions, +1 pt x"). Field rows are placed by render().
-    var BASE = {
-        page: { w: 288, h: 288 },
-        content: { x1: 273.9 }, // right end of the measured barcode span
-        ruleV: { x: 36.7 },
-        ruleH: { y: 34.5 },
-        titleTop: 13.2,
-        captionX: 38.8,
-        valueX: 102.9 + 1,
-        barcodeX: 38.8
-    };
-    // 4 x 6 design sizes (pt); on other pages they scale with the page, never below MIN_PT.
+    // 4 x 6 design sizes (pt); on other pages heights scale with the page height, fonts with the smaller page ratio,
+    // never below MIN_PT.
     var DESIGN_PAGE = { w: 288, h: 432 };
-    var TYPE = { caption: 9, value: 11, title: 18, quarantine: 14, formNumber: 9, humanReadable: 14 };
+    var TYPE = { title: 16, caption: 9, value: 10, quarantine: 18, formNumber: 9, humanReadable: 13 };
     var MIN_PT = 9;
     var MAX_LINES = 40;      // wrap limit for one value; far beyond what a label can hold (the label check fails first)
-    var MIN_ROW_GAP = 2;     // white space between rows below which a label is refused instead of overlapping
+    var ROW_PAD = 2.5;        // glyph box (cap + descender) -> hairlines; a slot below glyph box + this is refused instead of overlapping
+    var DESCENT = 0.21;      // Helvetica descender
     var LH = 1.15;           // line height of wrapped values
     var ASCENT = 0.79;       // text-box top -> baseline, measured in the sample (title, GRN No., barcode text: 0.789)
-    var EM = 0.925;          // Helvetica ascender + descender: band of a rotated strip text
-    var CAP_ASCENT = 0.718;  // Helvetica ascender
-    var GAP = 4;             // caption -> value; rules -> barcode
-    // rule -> first text top; "Prepared by" baseline -> rule end; date caption -> value
-    var ROWS = { padTop: 6, padBottom: 10, dateGap: 3 };
-    var RULE_DOTS = 2;       // rule thickness in whole printer dots (crisp edges on the label printer)
-    // Widest value expected in the right-hand pairs, so their caption column clears it (GRN No. is 10 digits)
-    var RIGHT_RESERVE = { grnDate: "00/00/0000", containerNo: "00 OF 00" };
-    var LEFT_RESERVE = { grnNo: "0000000000" };
-    var STRIP_GAP = 1.5;     // between the two strip texts and the rule
-    var EDGE_MM = 4;         // safe margin on the page edge (bottom: BARCODE.bottomPad)
-    // Bars 84 pt (≈ 30 mm; SAP label 62 pt): user asked for bigger, then "too big" at 129.5 pt
-    var BARCODE = { barH: 84, hrGap: 3, bottomPad: 14, targetModuleMm: 0.5, minModuleMm: 0.375 };
+    var CAP_ASCENT = 0.718;  // Helvetica cap height
+    var GAP = 4;             // minimum caption -> value
+    var COL_GAP = 8;         // widest caption -> value column
+    var SEP = { dots: 2, opacity: 0.05 }; // row hairlines: whole printer dots thick, 5 % black
+    var EDGE_MM = 4;         // safe margin on the page edge
+    // Vertical design numbers (pt at 432): title top, hairline under the title, white space above QUARANTINE, QUARANTINE ->
+    // SOP no., SOP no. -> second hairline, barcode bars, number gap/pad, last row -> bars
+    var V = { titleTop: 14, titleRule: 34, quarGap: 9, sopGap: 6, sopRule: 8, barH: 100, hrGap: 3, bottomPad: 14, barGap: 14 };
+    var BARCODE = { targetModuleMm: 0.5, minModuleMm: 0.375 };
 
-    // Field order (keys of the label row and of the caption texts): row index, right-hand pair, date column.
+    // One field per row, in label order (keys of the label row and of the caption texts)
     var FIELDS = [
-        { key: "materialName", row: 0, lines: 2 },
-        { key: "grnNo", row: 1 },
-        { key: "grnDate", row: 1, right: true },
-        { key: "inwNo", row: 2 },
-        { key: "qtyReceived", row: 3 },
-        { key: "containerNo", row: 3, right: true },
-        { key: "manufacturer", row: 4, lines: 2 },
-        { key: "supplier", row: 5, lines: 2 },
-        { key: "batchNo", row: 6 },
-        { key: "mfgDate", row: 7, col: 0 },
-        { key: "expiryDate", row: 7, col: 1 },
-        { key: "netWeight", row: 7, col: 2 },
-        { key: "preparedBy", row: 8, noValue: true, center: true }
+        { key: "materialName", lines: 2 }, { key: "grnNo" }, { key: "grnDate" }, { key: "inwNo" }, { key: "qtyReceived" },
+        { key: "containerNo" }, { key: "manufacturer", lines: 2 }, { key: "supplier", lines: 2 }, { key: "batchNo" },
+        { key: "mfgDate" }, { key: "expiryDate" }, { key: "netWeight" }, { key: "preparedBy" }
     ];
-    var ROW_COUNT = 9;
-    var DATE_COLS = 3;
+    var ROW_COUNT = FIELDS.length;
     var STATIC_KEYS = { title: "zqTitle", quarantine: "zqQuarantine", formNumber: "zqFormNumber" };
     // Texts used only for some rows (a row may replace a caption via row.captions[fieldKey])
     var EXTRA_KEYS = { retestDate: "zqRetestDate" };
@@ -81,6 +59,7 @@ sap.ui.define([
     };
 
     function widthPt(s, pt, bold) { return HuLayout.measureMm(s, pt, bold) * MM2PT; }
+    function minSlot(pt) { return pt * (CAP_ASCENT + DESCENT) + ROW_PAD; }
     function half(n) { return Math.round(n * 2) / 2; }
 
     function resolveSize(sizeOrKey) {
@@ -100,66 +79,39 @@ sap.ui.define([
         if (ALLOWED_DPI.indexOf(dpi) < 0) { throw new Error("Printer dpi must be one of " + ALLOWED_DPI.join(", ")); }
         var W = size.wPt;
         var H = size.hPt;
-        var sx = W / BASE.page.w;
-        var sy = H / BASE.page.h;
         var f = Math.min(W / DESIGN_PAGE.w, H / DESIGN_PAGE.h);
         var k = H / DESIGN_PAGE.h;
         var pt = function (n) { return Math.max(MIN_PT, n * f); };
-        var X = function (n) { return n * sx; };
         var edge = EDGE_MM * MM2PT;
-
         var dotPt = PT_PER_INCH / dpi;
         var snap = function (n) { return Math.round(n / dotPt) * dotPt; };
 
-        // Barcode anchored at the bottom; "Prepared by" sits just above it (user: keep the three together) and the
-        // field rows share the height above evenly
+        // Top-down: title, hairline, QUARANTINE, SOP no., hairline; bottom-up: number, bars; rows fill the space between
         var hrPt = pt(TYPE.humanReadable);
-        var hrTop = H - BARCODE.bottomPad * k - hrPt;
-        var barH = snap(BARCODE.barH * k);
-        var barTop = snap(hrTop - BARCODE.hrGap * k - barH);
-        var ruleEnd = snap(barTop - GAP * k);
-
-        var capPt = pt(TYPE.caption);
-        var valPt = pt(TYPE.value);
-        var firstTop = BASE.ruleH.y * sy + ROWS.padTop * k;
-        var dateExtra = capPt * LH + ROWS.dateGap * k;
-        var rows = {
-            firstTop: firstTop,                                  // top of the first row's value text
-            lastBaseline: ruleEnd - ROWS.padBottom * k,          // baseline of "Prepared by"
-            dateGap: ROWS.dateGap * k
-        };
-        // One-line rows need at least the line height + GAP between baselines
-        var pitch = (rows.lastBaseline - firstTop - valPt * ASCENT - dateExtra) / (ROW_COUNT - 1);
-        if (pitch < valPt * LH + GAP) { throw new Error("Label size too small for the quarantine label layout"); }
-
-        // Left strip: QUARANTINE then the form number, rotated 90 degrees counter-clockwise (read bottom to top),
-        // normal width (user decision 2026-10-27: x1.5 stretch removed); shrunk only if longer than the strip.
+        var hrTop = H - V.bottomPad * k - hrPt;
+        var barH = snap(V.barH * k);
+        var barTop = snap(hrTop - V.hrGap * k - barH);
         var qPt = pt(TYPE.quarantine);
         var fPt = pt(TYPE.formNumber);
-        var qBand = edge;
-        var fBand = qBand + EM * qPt + STRIP_GAP;
-        if (fBand + EM * fPt > X(BASE.ruleV.x) - STRIP_GAP) { throw new Error("Label too narrow for the strip texts"); }
+        var titleRule = V.titleRule * k;
+        var quarBase = titleRule + V.quarGap * k + CAP_ASCENT * qPt;
+        var sopBase = quarBase + V.sopGap * k + CAP_ASCENT * fPt;
+        var rowsTop = sopBase + (DESCENT * fPt) + V.sopRule * k;
+        var rowsEnd = barTop - V.barGap * k;
+        var valPt = pt(TYPE.value);
+        var slot = (rowsEnd - rowsTop) / ROW_COUNT;
+        if (slot < minSlot(valPt)) { throw new Error("Label size too small for the quarantine label layout"); }
 
-        // One vertical centre axis for the title, "Prepared by", the barcode and its number: middle of the content
-        var axis = (X(BASE.captionX) + W - edge) / 2;
         return {
-            key: size.key, dpi: dpi, axis: axis, dotPt: dotPt, ruleW: RULE_DOTS * dotPt, edge: edge, sx: sx, sy: sy,
+            key: size.key, dpi: dpi, axis: W / 2, dotPt: dotPt, sepW: SEP.dots * dotPt, edge: edge,
             page: { wPt: W, hPt: H },
-            // Rules run edge to edge (vertical top to bottom, horizontal to the right edge; user request 2026-10-27
-            // "lines not 100% fit"); the vertical rule passes left of the barcode quiet zone; the horizontal rule
-            // starts exactly on the vertical one
-            ruleV: { x: X(BASE.ruleV.x), y0: 0, y1: H },
-            ruleH: { y: BASE.ruleH.y * sy, x0: X(BASE.ruleV.x), x1: W },
-            title: { x0: X(BASE.captionX), x1: W - edge, top: BASE.titleTop * sy, pt: pt(TYPE.title) },
-            strip: {
-                center: H / 2, length: H - 2 * edge, hScale: 1, // centred on the full-height side rule
-                quarantine: { band: qBand, pt: qPt },
-                formNumber: { band: fBand, pt: fPt }
-            },
-            content: { x0: X(BASE.captionX), x1: W - edge, valueX: X(BASE.valueX) },
-            type: { caption: capPt, value: valPt },
-            rows: rows,
-            barcode: { x0: X(BASE.barcodeX), right: X(BASE.content.x1), top: barTop, h: barH, hrTop: hrTop, hrPt: hrPt }
+            title: { x0: edge, x1: W - edge, top: V.titleTop * k, pt: pt(TYPE.title), rule: titleRule },
+            content: { x0: edge, x1: W - edge },
+            type: { caption: pt(TYPE.caption), value: valPt },
+            rows: { top: rowsTop, end: rowsEnd, slot: slot },
+            quarantine: { y: quarBase, pt: qPt },
+            formNumber: { y: sopBase, pt: fPt },
+            barcode: { x0: edge, right: W - edge, top: barTop, h: barH, hrTop: hrTop, hrPt: hrPt }
         };
     }
 
@@ -209,88 +161,51 @@ sap.ui.define([
     }
 
     /**
-     * Field geometry for one label row: x columns from the caption widths, then fitted texts, then baselines.
-     * Caption and value share a baseline; a second value line takes space only when used; the rows share the
-     * remaining height evenly. Returns [{key, row, caption:{text,x,y,pt,end}, value:{x,y,end,pt,lines}|null}].
+     * Field geometry, one field per row: caption left, values in one column right of the widest caption. Caption and
+     * value share a baseline; each row is vertically centred in its slot between two hairlines. Returns
+     * [{key, row, caption:{text,x,y,pt,end,align}, value:{x,y,end,pt,lines}, slot:{y0,y1}}] (pitch = slot height of a
+     * one-line row).
      */
-    function placeFields(L, row, texts, warnings) {
+    function placeFields(L, row, texts) {
         var C = L.content;
         var capPt = L.type.caption;
         var valPt = L.type.value;
-        var capW = function (k) { return widthPt((row.captions && row.captions[k]) || texts[k], capPt, true); };
-        // Right-hand pairs share one caption column, as far right as their widest expected value allows
-        var rightX = C.x1 - Math.max.apply(null, Object.keys(RIGHT_RESERVE).map(function (k) {
-            return capW(k) + GAP + widthPt(RIGHT_RESERVE[k], valPt, false);
-        }));
-        var leftEnd = rightX - GAP;
-        if (C.valueX + widthPt(LEFT_RESERVE.grnNo, valPt, false) > leftEnd + 1e-9) {
-            throw new Error("Label too narrow for the GRN row at " + valPt + " pt");
-        }
-        var colW = (C.x1 - C.x0) / DATE_COLS;
+        var capText = function (d) { return (row.captions && row.captions[d.key]) || texts[d.key]; };
+        var valueX = C.x0 + Math.max.apply(null, FIELDS.map(function (d) { return widthPt(capText(d), capPt, true); })) + COL_GAP;
 
-        var fields = FIELDS.map(function (d) {
-            var cx;
-            var vx;
-            var vEnd;
-            var cEnd;
-            if (d.col !== undefined) {
-                cx = vx = C.x0 + d.col * colW;
-                vEnd = cEnd = d.col < DATE_COLS - 1 ? cx + colW - GAP : C.x1;
-            } else if (d.right) {
-                cx = rightX;
-                vx = rightX + capW(d.key) + GAP;
-                vEnd = C.x1;
-                cEnd = vx - GAP + 0.01; // the column is sized from this caption's own width; allow float rounding
-            } else {
-                cx = C.x0;
-                vx = C.valueX;
-                vEnd = FIELDS.some(function (o) { return o.right && o.row === d.row; }) ? leftEnd : C.x1;
-                cEnd = vx - GAP;
-            }
-            var sCaption = (row.captions && row.captions[d.key]) || texts[d.key];
-            var c = fitText(sCaption, cEnd - cx, capPt, 1, true);
-            var v = null;
-            if (!d.noValue) {
-                var s = row[d.key] == null ? "" : String(row[d.key]).trim();
-                // Every value may wrap (never cut); d.lines = lines allowed before shrinking
-                var r = s ? fitText(s, vEnd - vx, valPt, d.lines || 1, false) : { pt: valPt, lines: [], truncated: false };
-                if (r.truncated) { throw tooFull(d.key); }
-                v = { x: vx, end: vEnd, pt: r.pt, lines: r.lines };
-            }
-            if (d.center) { cx = L.axis; } // centred caption (no value): drawn with align center
-            return { key: d.key, row: d.row, col: d.col, caption: { text: c.lines[0] || "", x: cx, end: cEnd, pt: c.pt, align: d.center ? "center" : "left" }, value: v };
+        var fields = FIELDS.map(function (d, i) {
+            var c = fitText(capText(d), valueX - GAP - C.x0, capPt, 1, true);
+            var s = row[d.key] == null ? "" : String(row[d.key]).trim();
+            // Every value may wrap (never cut); d.lines = lines allowed before shrinking
+            var r = s ? fitText(s, C.x1 - valueX, valPt, d.lines || 1, false) : { pt: valPt, lines: [], truncated: false };
+            if (r.truncated) { throw tooFull(d.key); }
+            return {
+                key: d.key, row: i,
+                caption: { text: c.lines[0] || "", x: C.x0, end: valueX - GAP, pt: c.pt, align: "left" },
+                value: { x: valueX, end: C.x1, pt: r.pt, lines: r.lines }
+            };
         });
 
-        // Extra height per row beyond one line: wrapped value lines; the date row prints values under the captions
-        var extra = [];
-        for (var i = 0; i < ROW_COUNT; i++) { extra.push(0); }
-        fields.forEach(function (f) {
-            if (f.col !== undefined) {
-                var dateLines = Math.max(1, f.value.lines.length);
-                extra[f.row] = Math.max(extra[f.row], capPt * LH + L.rows.dateGap + (dateLines - 1) * f.value.pt * LH);
-            } else if (f.value && f.value.lines.length > 1) {
-                extra[f.row] = Math.max(extra[f.row], (f.value.lines.length - 1) * f.value.pt * LH);
-            }
-        });
-        var first = L.rows.firstTop + valPt * ASCENT;
-        var total = extra.reduce(function (a, b) { return a + b; }, 0) - extra[ROW_COUNT - 1];
-        var pitch = (L.rows.lastBaseline - first - total) / (ROW_COUNT - 1);
+        // Extra slot height beyond one line: wrapped value lines; the rest of the block is shared evenly
+        var extra = fields.map(function (f) { return Math.max(0, f.value.lines.length - 1) * f.value.pt * LH; });
+        var pitch = (L.rows.end - L.rows.top - extra.reduce(function (a, b) { return a + b; }, 0)) / ROW_COUNT;
         // Too much text for one label: refuse it (named by ZquarLabelPdf) rather than overlap or cut anything
-        if (pitch < L.type.value * LH + MIN_ROW_GAP) { throw tooFull(); }
-        var base = [first];
-        for (var j = 1; j < ROW_COUNT; j++) { base.push(base[j - 1] + extra[j - 1] + pitch); }
-
-        fields.forEach(function (f) {
-            f.caption.y = base[f.row];
-            if (f.value) { f.value.y = f.col !== undefined ? base[f.row] + capPt * LH + L.rows.dateGap : base[f.row]; }
+        if (pitch < minSlot(valPt)) { throw tooFull(); }
+        var y = L.rows.top;
+        fields.forEach(function (f, i) {
+            var h = pitch + extra[i];
+            var block = CAP_ASCENT * f.value.pt + extra[i]; // first cap top -> last baseline
+            f.slot = { y0: y, y1: y + h };
+            f.caption.y = f.value.y = y + (h - block) / 2 + CAP_ASCENT * f.value.pt;
+            y += h;
         });
         fields.pitch = pitch;
         return fields;
     }
 
     /**
-     * Draw list for one label row: items {kind:"rule",x,y,w,h} | {kind:"bar",x,y,w,h} |
-     * {kind:"text",text,x,y(baseline),pt,bold,align,angle,hScale}. texts: static texts + captions (STATIC_KEYS, CAPTION_KEYS).
+     * Draw list for one label: items {kind:"sep",x,y,w,h,opacity} | {kind:"bar",x,y,w,h} |
+     * {kind:"text",text,x,y(baseline),pt,bold,align}. texts: static texts + captions (STATIC_KEYS, CAPTION_KEYS).
      */
     function render(L, row, texts) {
         Object.keys(STATIC_KEYS).concat(Object.keys(CAPTION_KEYS)).forEach(function (kk) {
@@ -298,39 +213,29 @@ sap.ui.define([
         });
         var items = [];
         var warnings = [];
-        function text(s, x, top, p, bold, extra) {
-            items.push(Object.assign({ kind: "text", text: s, x: x, y: top + p * ASCENT, pt: p, bold: bold, align: "left" }, extra || {}));
+        var snap = function (n) { return Math.round(n / L.dotPt) * L.dotPt; };
+        function centered(s, y, p, bold) {
+            var t = fitText(s, L.content.x1 - L.content.x0, p, 1, bold);
+            items.push({ kind: "text", text: t.lines[0], x: L.axis, y: y, pt: t.pt, bold: bold, align: "center" });
+        }
+        function sep(y) {
+            items.push({ kind: "sep", x: snap(L.content.x0), y: snap(y - L.sepW / 2), w: snap(L.content.x1) - snap(L.content.x0), h: L.sepW, opacity: SEP.opacity });
         }
 
-        // Rules as filled bars on the printer dot grid, whole dots thick; the horizontal one starts at the vertical
-        // one's outer edge so the corner is solid
-        var snap = function (n) { return Math.round(n / L.dotPt) * L.dotPt; };
-        var vx = snap(L.ruleV.x - L.ruleW / 2);
-        var vy = snap(L.ruleV.y0);
-        items.push({ kind: "rule", x: vx, y: vy, w: L.ruleW, h: snap(L.ruleV.y1) - vy });
-        items.push({ kind: "rule", x: vx, y: snap(L.ruleH.y - L.ruleW / 2), w: snap(L.ruleH.x1) - vx, h: L.ruleW });
-
         var t = fitText(texts.title, L.title.x1 - L.title.x0, L.title.pt, 1, true);
-        text(t.lines[0], (L.title.x0 + L.title.x1) / 2, L.title.top, t.pt, true, { align: "center" });
+        items.push({ kind: "text", text: t.lines[0], x: L.axis, y: L.title.top + t.pt * ASCENT, pt: t.pt, bold: true, align: "center" });
 
-        // Strip texts: baseline sits CAP_ASCENT below the band's left edge (glyph tops point left when rotated)
-        [["quarantine", true], ["formNumber", false]].forEach(function (e) {
-            var S = L.strip[e[0]];
-            var len = widthPt(texts[e[0]], S.pt, e[1]);
-            var hScale = Math.min(L.strip.hScale, L.strip.length / len);
-            items.push({
-                kind: "text", text: texts[e[0]], x: S.band + CAP_ASCENT * S.pt, y: L.strip.center + len * hScale / 2,
-                pt: S.pt, bold: e[1], align: "left", angle: 90, hScale: hScale, len: len * hScale, band: [S.band, S.band + EM * S.pt]
-            });
-        });
-
-        var fields = placeFields(L, row, texts, warnings);
+        sep(L.title.rule);
+        centered(texts.quarantine, L.quarantine.y, L.quarantine.pt, true);
+        centered(texts.formNumber, L.formNumber.y, L.formNumber.pt, false);
+        var fields = placeFields(L, row, texts);
+        sep(L.rows.top);
         fields.forEach(function (fd) {
-            items.push({ kind: "text", text: fd.caption.text, x: fd.caption.x, y: fd.caption.y, pt: fd.caption.pt, bold: true, align: fd.caption.align });
-            if (!fd.value) { return; }
+            items.push({ kind: "text", text: fd.caption.text, x: fd.caption.x, y: fd.caption.y, pt: fd.caption.pt, bold: true, align: "left" });
             fd.value.lines.forEach(function (line, i) {
                 items.push({ kind: "text", text: line, x: fd.value.x, y: fd.value.y + i * fd.value.pt * LH, pt: fd.value.pt, bold: false, align: "left" });
             });
+            if (fd.row < ROW_COUNT - 1) { sep(fd.slot.y1); } // none after the last row: white space before the barcode
         });
 
         var code = row.barcode == null ? "" : String(row.barcode).trim();
@@ -341,7 +246,7 @@ sap.ui.define([
             // Human-readable number centred under the bars (quiet zones excluded)
             var barsW = (geo.totalModules - 20) * geo.modulePt;
             var hr = fitText(code, barsW, L.barcode.hrPt, 1, false);
-            text(hr.lines[0], geo.x0 + geo.widthPt / 2, L.barcode.hrTop, hr.pt, false, { align: "center" });
+            items.push({ kind: "text", text: hr.lines[0], x: geo.x0 + geo.widthPt / 2, y: L.barcode.hrTop + hr.pt * ASCENT, pt: hr.pt, bold: false, align: "center" });
         } else {
             warnings.push({ code: "barcodeMissing", field: "barcode" });
         }
@@ -350,7 +255,7 @@ sap.ui.define([
 
     return {
         SIZES: SIZES, DEFAULT_SIZE: DEFAULT_SIZE, PRINTER_DPI: PRINTER_DPI, ALLOWED_DPI: ALLOWED_DPI, PT_PER_INCH: PT_PER_INCH,
-        MM_PER_INCH: MM_PER_INCH, MIN_PT: MIN_PT, GAP: GAP, ASCENT: ASCENT, LH: LH, EM: EM, BARCODE: BARCODE, BASE: BASE,
+        MM_PER_INCH: MM_PER_INCH, MIN_PT: MIN_PT, GAP: GAP, ASCENT: ASCENT, LH: LH, BARCODE: BARCODE, SEP: SEP,
         FIELDS: FIELDS, STATIC_KEYS: STATIC_KEYS, CAPTION_KEYS: CAPTION_KEYS, EXTRA_KEYS: EXTRA_KEYS,
         layout: layout, fitText: fitText, barcodeGeometry: barcodeGeometry, render: render, widthPt: widthPt
     };

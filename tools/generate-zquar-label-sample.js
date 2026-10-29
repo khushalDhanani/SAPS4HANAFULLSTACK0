@@ -39,10 +39,10 @@ const base = {
 const rows = Array.from({ length: TOTAL }, (_, i) => ({
   ...base, containerNo: `${i + 1} OF ${TOTAL}`, barcode: String(9900000001 + i)
 }));
-// page 2: long values (wrap -> shrink -> "…"); page 3: empty values keep their space
+// page 2: long values (wrap -> shrink -> more lines); page 3: empty values keep their space
 Object.assign(rows[1], {
-  materialName: 'DEMO MATERIAL WITH A VERY LONG DESCRIPTION THAT NEEDS TWO LINES AND MORE TO TEST WRAPPING',
-  manufacturer: 'DEMO MANUFACTURER WITH AN EXTREMELY LONG REGISTERED COMPANY NAME FOR THE TRUNCATION CHECK OF THIS FIELD',
+  materialName: 'DEMO MATERIAL WITH LONG DESCRIPTION 0001',
+  manufacturer: 'DEMO MANUFACTURER WITH AN EXTREMELY LONG REGISTERED COMPANY NAME LTD',
   supplier: 'DEMO SUPPLIER WITH A LONG NAME INDUSTRIES PRIVATE LIMITED'
 });
 Object.assign(rows[2], { manufacturer: '', inwNo: '', netWeight: '' });
