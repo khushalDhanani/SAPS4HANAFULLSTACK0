@@ -1810,6 +1810,12 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-10-29 IST — Scan for per-row late-property fetches on all parameterless screens (read-only) — PASS for the scan scope
+
+- **Scan:** loaded each of the 20 parameterless routes (all except `login`) as alice on the live-read server (port 4010) and counted OData GETs, flagging key-predicate reads with `$select` (`Entity(Key=…)?$select=…`, the signature of UI5 fetching a missing property row by row). No code changed; scan script lives only in the scratchpad.
+- **RESULT:** 0 key-predicate reads on every route; read counts per screen 0-23 (largest: createPurchaseOrder 23 reads / 5255 ms, createSalesOrder 21, createSalesInquiry 19, wmReservationEntryCreate 10, purchaseOrders 8, wmHandlingUnits 7); no `settle` timeout.
+- **NOT COVERED:** parameterised routes (detail pages), value-help dialogs and other states reached by interaction; only the initial load of each screen. `baseline.json` untouched (decision for the user). No SAP write.
+
 ### 2026-10-29 IST — settle() "request still in flight after 30 s": root cause found (UI5 per-row MaterialName fetches) and fixed — PARTIAL
 
 - **Instrumentation (`test/e2e/support/requestTracker.js`, used by `screenCheck.js` `settle()`):** pending requests are tracked per Playwright `Request` object (request / requestfinished / requestfailed incl. `route.abort()` / page close), so a duplicate or unknown event cannot make the count drift (the old `inFlight++/--` counter could). On the 30 s bound, `settle()` now throws with, per outstanding request: method, URL, CAP service, start timestamp, open duration, whether response headers had arrived, plus the screen hash and test user. The 30 s bound, the visible busy-indicator timeout, the write guard and the contract validation are unchanged. Unit test: `test/unit/tools/e2eRequestTracker.test.js` (5 tests).
