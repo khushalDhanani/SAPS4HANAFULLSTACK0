@@ -7,15 +7,15 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
-- **Optimistic Concurrency & ETag Integration & Negative E2E Verification Phase 5 (2026-10-29 IST) — DONE, UNCOMMITTED:** Created `test/integration/concurrencyRoundTrip.test.js` validating complete end-to-end CAP HTTP round trips across Outbound Delivery (`postGoodsIssue`, `createBillingDocument`), Customer Invoice (`releaseInvoiceToAccounting`, `cancelBillingDocument`), and Goods Receipt (`postGoodsReceipt`). Verified client `If-Match` header extraction, adapter parameter forwarding, S/4 412 mapping to HTTP 409 `STALE_DATA`, and successful 200 responses on matching ETags. Cleaned UI5 action parameter payloads to strictly conform to CDS action signatures. Updated `verifyActionFailures.e2e.js` and `verifySubmitFailures.e2e.js` stale data regexes (`/changed by another user|stale data|modified by another user/i`). All 14 unit and integration test suites pass (290 passing tests, 38 skipped, 0 failed); ESLint clean.
+- **Optimistic Concurrency & ETag Integration & Negative E2E Verification Phase 5 (2026-10-29 IST) — COMMITTED (`b9242ec`):** Created `test/integration/concurrencyRoundTrip.test.js` validating complete end-to-end CAP HTTP round trips across Outbound Delivery (`postGoodsIssue`, `createBillingDocument`), Customer Invoice (`releaseInvoiceToAccounting`, `cancelBillingDocument`), and Goods Receipt (`postGoodsReceipt`). Verified client `If-Match` header extraction, adapter parameter forwarding, S/4 412 mapping to HTTP 409 `STALE_DATA`, and successful 200 responses on matching ETags. Cleaned UI5 action parameter payloads to strictly conform to CDS action signatures. Updated `verifyActionFailures.e2e.js` and `verifySubmitFailures.e2e.js` stale data regexes (`/changed by another user|stale data|modified by another user/i`). All 14 unit and integration test suites pass (290 passing tests, 38 skipped, 0 failed); ESLint clean.
 
 - **Optimistic Concurrency & ETag Frontend UI5 Layer Phase 4 (2026-10-29 IST) — COMMITTED (`2aa4bb6`):** UI5 services and controllers across Outbound Delivery, Customer Invoice, and Goods Receipt now preserve and pass ETags into write actions and handle HTTP 409 Conflict (`STALE_DATA`) responses with immediate reload prompts. Added dedicated `test/unit/sd/customerInvoiceService.test.js` and updated unit tests across `outboundDeliveryService.test.js`, `ordersDueForDeliveryController.test.js`, `customerInvoicesController.test.js`, `goodsReceiptService.test.js`, and `goodsReceiptController.test.js` (19 new unit tests, 13 suites / 283 tests passing, 38 skipped, 0 failed). ESLint clean on all touched files.
 
-- **Optimistic Concurrency & ETag CAP Handler Layer Phase 3 (2026-10-28 IST) — DONE, UNCOMMITTED:** Added shared `extractIfMatch(req)` helper in `srv/common/filterUtils.js` extracting concurrency tokens from `req.ifMatch`, `req.etag`, `req.headers['if-match']`, Express `req.req`/`req._.req` headers, and `req.data.ETag`. Integrated into `outboundDelivery.handler.js` (`postGoodsIssue`, `createBillingDocument`, `createOutboundDelivery`, `createDeliveryWithoutRef`), `goodsReceipt.handler.js` (`postGoodsReceipt`), and verified `customerInvoice.handler.js`. Updated `GoodsReceiptAdapter._toGatewayError` to preserve mapped 409 `STALE_DATA` errors. Unit tests 30/30 (filterUtils), 28/28 (outboundDeliveryHandler), 20/20 (customerInvoiceAdapter), 16/16 (customerInvoiceHandler), 15/15 (goodsReceiptPlantScope), 59/59 (goodsReceiptService) PASS; eslint clean.
+- **Optimistic Concurrency & ETag CAP Handler Layer Phase 3 (2026-10-28 IST) — COMMITTED (`9a62911`):** Added shared `extractIfMatch(req)` helper in `srv/common/filterUtils.js` extracting concurrency tokens from `req.ifMatch`, `req.etag`, `req.headers['if-match']`, Express `req.req`/`req._.req` headers, and `req.data.ETag`. Integrated into `outboundDelivery.handler.js` (`postGoodsIssue`, `createBillingDocument`, `createOutboundDelivery`, `createDeliveryWithoutRef`), `goodsReceipt.handler.js` (`postGoodsReceipt`), and verified `customerInvoice.handler.js`. Updated `GoodsReceiptAdapter._toGatewayError` to preserve mapped 409 `STALE_DATA` errors. Unit tests 30/30 (filterUtils), 28/28 (outboundDeliveryHandler), 20/20 (customerInvoiceAdapter), 16/16 (customerInvoiceHandler), 15/15 (goodsReceiptPlantScope), 59/59 (goodsReceiptService) PASS; eslint clean.
 
-- **Optimistic Concurrency & ETag Adapter Layer Phase 2 (2026-10-28 IST) — DONE, UNCOMMITTED:** S4HttpClient, CustomerInvoiceAdapter, and GoodsReceiptAdapter now normalize and propagate `ifMatch`/`etag` to upstream SAP `If-Match` headers. Sanitization retains caller-provided ETags while preventing auth/cookie leaks. Unit tests 22/22 (s4HttpClient), 19/19 (customerInvoiceAdapter), 59/59 (goodsReceipt) PASS; eslint clean.
+- **Optimistic Concurrency & ETag Adapter Layer Phase 2 (2026-10-28 IST) — COMMITTED (`18b2d5f`):** S4HttpClient, CustomerInvoiceAdapter, and GoodsReceiptAdapter now normalize and propagate `ifMatch`/`etag` to upstream SAP `If-Match` headers. Sanitization retains caller-provided ETags while preventing auth/cookie leaks. Unit tests 22/22 (s4HttpClient), 19/19 (customerInvoiceAdapter), 59/59 (goodsReceipt) PASS; eslint clean.
 
-- **Optimistic Concurrency & ETag Error Mapping Phase 1 (2026-10-28 IST) — DONE, UNCOMMITTED:** S4ErrorMapper now translates upstream SAP HTTP 412 (Precondition Failed) and ETag mismatch errors (`CX_SADL_ETAG_CHECK_FAILED`, `ETag condition check failed`, `stale data`, `changed by another user`) to HTTP 409 Conflict with code `STALE_DATA` and user-friendly error guidance. HTTP 428 maps to `PRECONDITION_REQUIRED`. Unit tests 25/25 PASS; eslint clean.
+- **Optimistic Concurrency & ETag Error Mapping Phase 1 (2026-10-28 IST) — COMMITTED (`be1c2fb`):** S4ErrorMapper now translates upstream SAP HTTP 412 (Precondition Failed) and ETag mismatch errors (`CX_SADL_ETAG_CHECK_FAILED`, `ETag condition check failed`, `stale data`, `changed by another user`) to HTTP 409 Conflict with code `STALE_DATA` and user-friendly error guidance. HTTP 428 maps to `PRECONDITION_REQUIRED`. Unit tests 25/25 PASS; eslint clean.
 
 - **E2E sleep removal + list latency diagnosis (2026-10-28 IST) — PARTIAL:** fixed `waitForTimeout` sleeps in `verifyMvt201/241/261/301/311`, `verifyHardeningUI`, `verifySubmitFailures` now wait on UI readiness (`test/e2e/support/uiReady.js`); all seven pass against a live-read server on port 4010 (no timing benchmark taken). New read-only profiler `test/e2e/performance/profileLists.js` found duplicate list requests and unpaged WM reads (see the Changes Log entry); no app code changed yet.
 
@@ -1808,7 +1808,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
-### 2026-10-29 IST — Optimistic Concurrency & ETag Integration & Negative E2E Verification Phase 5 — DONE, UNCOMMITTED
+### 2026-10-29 IST — Optimistic Concurrency & ETag Integration & Negative E2E Verification Phase 5 — COMMITTED (`b9242ec`)
 
 - **Context / Request:** User requested Phase 5 of the Concurrency / Stale-Data (ETag Gaps) fix plan.
 - **Change:**
@@ -1847,7 +1847,7 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Validation:** 13 test suites passed (283 passing tests, 38 real live SAP skips); ESLint clean on all touched files; `git diff --check` clean.
 - **Next:** Phase 5 (Negative E2E & Stale Data Verification Tests).
 
-### 2026-10-28 IST — Optimistic Concurrency & ETag CAP Handler Layer Phase 3 — DONE, UNCOMMITTED
+### 2026-10-28 IST — Optimistic Concurrency & ETag CAP Handler Layer Phase 3 — COMMITTED (`9a62911`)
 
 - **Context / Request:** User requested Phase 3 of the Concurrency / Stale-Data (ETag Gaps) fix plan.
 - **Change:**
@@ -1865,7 +1865,7 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Validation:** 10 test suites passed (234 passing tests, 38 real live SAP skips); ESLint clean on all modified files; `git diff --check` clean.
 - **Next:** Phase 4 (Frontend UI5 ETag preservation & reload prompt on 409 Conflict).
 
-### 2026-10-28 IST — Optimistic Concurrency & ETag Adapter Layer Phase 2 — DONE, UNCOMMITTED
+### 2026-10-28 IST — Optimistic Concurrency & ETag Adapter Layer Phase 2 — COMMITTED (`18b2d5f`)
 
 - **Context / Request:** User requested Phase 2 of the Concurrency / Stale-Data (ETag Gaps) fix plan.
 - **Change:**
@@ -1878,7 +1878,7 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Validation:** `npx jest test/unit/s4HttpClient.test.js` 22/22 PASS; `npx jest test/unit/sd/customerInvoiceAdapter.test.js` 19/19 PASS; `npx jest test/unit/wm/goodsReceiptService.test.js` 59/59 PASS; `npx eslint` clean; `git diff --check` clean.
 - **Next:** Phase 3 (CAP Service & Handler Layer: extracting `If-Match` from incoming requests and forwarding to adapters).
 
-### 2026-10-28 IST — Optimistic Concurrency & ETag Error Mapping Phase 1 — DONE, UNCOMMITTED
+### 2026-10-28 IST — Optimistic Concurrency & ETag Error Mapping Phase 1 — COMMITTED (`be1c2fb`)
 
 - **Context / Request:** User requested Phase 1 of the Concurrency / Stale-Data (ETag Gaps) fix plan.
 - **Change:**
