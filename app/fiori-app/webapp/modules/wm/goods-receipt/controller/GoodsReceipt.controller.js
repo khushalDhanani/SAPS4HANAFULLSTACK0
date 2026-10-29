@@ -437,6 +437,7 @@ sap.ui.define([
          */
         onPostGoodsReceipt: function () {
             var oModel = this.getView().getModel("grView");
+            if (oModel.getProperty("/isPosting")) return Promise.resolve(null);
             var oActive = oModel.getProperty("/activeSU");
 
             if (!oActive.StorageUnit && !oActive.DeliveryDocument && !oActive.PurchaseOrder) {

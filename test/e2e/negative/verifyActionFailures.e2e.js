@@ -119,6 +119,34 @@ const wmFlows = [
             return ui;
         },
         observe: async (session, ui) => (ui.toast ? { type: /fail|error/i.test(ui.toast) ? 'error' : 'success', text: ui.toast } : { type: ui.dialog ? 'error' : 'none', text: ui.dialog || '' })
+    },
+    {
+        label: 'Quarantine labels: generateLabels', ...split('/odata/v4/quarantine-label/generateLabels'),
+        respond: () => ({
+            MaterialDocument: '4900050304', MaterialDocumentYear: '2026', LabelCount: 2,
+            FileName: 'QuarantineLabels_4900050304_2026.pdf', PdfBase64: 'JVBERi0xLjQK'
+        }),
+        hash: 'wm/quarantine-labels',
+        run: async (session) => {
+            await session.page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/wm/quarantine-labels`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
+            await session.settle();
+            await session.page.fill('[id$="--qlDoc-inner"]', '4900050304');
+            await session.page.fill('[id$="--qlYear-inner"]', '2026');
+            await session.page.click('[id$="--qlPreview"]');
+        },
+        observe: async (session) => {
+            const st = await session.page.evaluate(() => {
+                const E = window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Element');
+                const strip = E && E.registry.filter((c) => c.getId().endsWith('--qlMessage'))[0];
+                const vis = strip && strip.getVisible && strip.getVisible();
+                return {
+                    text: vis ? strip.getText() : '',
+                    type: vis ? strip.getType() : ''
+                };
+            });
+            return { type: (st.type === 'Error' || st.type === 'Warning') ? 'error' : (st.text ? 'success' : 'none'), text: st.text };
+        }
     }
 ];
 
@@ -214,12 +242,89 @@ async function failureCase(baseUrl, flow, f) {
     return errors;
 }
 
+/** Double click while the write is pending: duplicate clicks must send exactly one write request. */
+async function doubleClickWhilePending(baseUrl, flow) {
+    const errors = [];
+    const session = await openSession({ baseUrl, user: 'alice' });
+    let calls = [];
+    let releaseGate;
+    const gate = new Promise((r) => { releaseGate = r; });
+    try {
+        if (flow.kit) {
+            session.page.on('request', (req) => {
+                if (req.method() === 'POST' && new URL(req.url()).pathname === `${flow.service}/${flow.action}`) {
+                    calls.push({ via: 'direct' });
+                }
+            });
+            kit.setGate(gate);
+            kit.capWaits(WAIT_MS);
+        } else {
+            calls = await rt.interceptAction(session.page, {
+                flow: 'none',
+                service: flow.service,
+                action: flow.action,
+                respond: flow.respond,
+                gate
+            });
+        }
+        if (flow.before) await flow.before(session);
+        let runError = null;
+        const running = Promise.resolve(flow.run(session, baseUrl)).catch((e) => { runError = e; });
+        const end = Date.now() + 60000;
+        while (calls.length < 1 && Date.now() < end) await session.page.waitForTimeout(100);
+        if (calls.length < 1) throw new Error(`expected the write to be sent at least once, got ${calls.length}${runError ? ` (driver: ${runError.message.split('\n')[0]})` : ''}`);
+
+        // Simulate rapid second click on visible action controls while first write is pending
+        await session.page.evaluate(() => {
+            const vis = (e) => e.getClientRects().length > 0;
+            const btns = [...document.querySelectorAll('button, .sapMBtn')].filter(vis);
+            for (const b of btns) {
+                b.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+            }
+        });
+        await session.page.waitForTimeout(300);
+
+        if (releaseGate) releaseGate();
+        await running;
+        await session.settle();
+
+        const real = calls.filter((c) => !c.mixed);
+        if (real.length !== 1) {
+            errors.push(`double click while pending sent ${real.length} action calls, expected 1`);
+        }
+    } catch (err) {
+        if (err.skip) return { skipped: err.message };
+        errors.push(`${err.name}: ${err.message.split('\n')[0]}`);
+    } finally {
+        if (releaseGate) releaseGate();
+        if (flow.kit) {
+            kit.setGate(null);
+            kit.capWaits(Infinity);
+        }
+        await session.close();
+    }
+    return errors;
+}
+
 /** Reload while the write is pending: the held-back answer never reaches the page; no second write and no false success. */
 async function reloadWhilePending(baseUrl, flow) {
     const errors = [];
     const session = await openSession({ baseUrl, user: 'alice' });
+    let releaseGate;
+    const gate = new Promise((r) => { releaseGate = r; });
     try {
-        const calls = await rt.interceptAction(session.page, { flow: 'none', service: flow.service, action: flow.action, respond: flow.respond, delayMs: 6000 });
+        let calls = [];
+        if (flow.kit) {
+            session.page.on('request', (req) => {
+                if (req.method() === 'POST' && new URL(req.url()).pathname === `${flow.service}/${flow.action}`) {
+                    calls.push({ via: 'direct' });
+                }
+            });
+            kit.setGate(gate);
+            kit.capWaits(WAIT_MS);
+        } else {
+            calls = await rt.interceptAction(session.page, { flow: 'none', service: flow.service, action: flow.action, respond: flow.respond, gate, delayMs: 6000 });
+        }
         if (flow.before) await flow.before(session);
         let runError = null;
         const running = Promise.resolve(flow.run(session, baseUrl)).catch((e) => { runError = e; }); // outcome is irrelevant once the page is reloaded; kept for the message below
@@ -227,6 +332,7 @@ async function reloadWhilePending(baseUrl, flow) {
         while (calls.length < 1 && Date.now() < end) await session.page.waitForTimeout(200);
         if (calls.length !== 1) throw new Error(`expected the write to be sent once before the reload, got ${calls.length}${runError ? ` (driver: ${runError.message.split('\n')[0]})` : ''}`);
         await session.page.reload({ waitUntil: 'domcontentloaded' });
+        if (releaseGate) releaseGate();
         await running;
         await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
         await session.settle();
@@ -242,8 +348,14 @@ async function reloadWhilePending(baseUrl, flow) {
         if (shown.success.length) errors.push(`success shown although nothing completed: ${shown.success.join(' | ')}`);
         if (shown.busy) errors.push('busy indicator still shown after the reload');
     } catch (err) {
+        if (err.skip) return { skipped: err.message };
         errors.push(`${err.name}: ${err.message.split('\n')[0]}`);
     } finally {
+        if (releaseGate) releaseGate();
+        if (flow.kit) {
+            kit.setGate(null);
+            kit.capWaits(Infinity);
+        }
         await session.close();
     }
     return errors;
@@ -274,12 +386,27 @@ async function verifyActionFailures(options = {}) {
             details.push({ flow: flow.label, case: f.name, status: errs.length ? 'FAIL' : 'PASS', errors: errs });
             errs.forEach((e) => errors.push(`${flow.label}: ${f.name}: ${e}`));
         }
-        if (!flow.kit) {
-            const errs = await reloadWhilePending(baseUrl, flow);
-            console.log(`  [${errs.length ? 'FAIL' : 'PASS'}] Reload while the write is pending sends no second write and shows no success`);
-            errs.forEach((e) => console.log(`      - ${e}`));
-            details.push({ flow: flow.label, case: 'reload while pending', status: errs.length ? 'FAIL' : 'PASS', errors: errs });
-            errs.forEach((e) => errors.push(`${flow.label}: reload while pending: ${e}`));
+
+        const dErr = await doubleClickWhilePending(baseUrl, flow);
+        if (dErr.skipped) {
+            console.log(`  [SKIPPED] Double click while pending — ${dErr.skipped}`);
+            details.push({ flow: flow.label, case: 'double click while pending', status: 'SKIPPED', reason: dErr.skipped });
+        } else {
+            console.log(`  [${dErr.length ? 'FAIL' : 'PASS'}] Double click while the write is pending sends exactly 1 action call`);
+            dErr.forEach((e) => console.log(`      - ${e}`));
+            details.push({ flow: flow.label, case: 'double click while pending', status: dErr.length ? 'FAIL' : 'PASS', errors: dErr });
+            dErr.forEach((e) => errors.push(`${flow.label}: double click while pending: ${e}`));
+        }
+
+        const rErr = await reloadWhilePending(baseUrl, flow);
+        if (rErr.skipped) {
+            console.log(`  [SKIPPED] Reload while pending — ${rErr.skipped}`);
+            details.push({ flow: flow.label, case: 'reload while pending', status: 'SKIPPED', reason: rErr.skipped });
+        } else {
+            console.log(`  [${rErr.length ? 'FAIL' : 'PASS'}] Reload while the write is pending sends no second write and shows no success`);
+            rErr.forEach((e) => console.log(`      - ${e}`));
+            details.push({ flow: flow.label, case: 'reload while pending', status: rErr.length ? 'FAIL' : 'PASS', errors: rErr });
+            rErr.forEach((e) => errors.push(`${flow.label}: reload while pending: ${e}`));
         }
     }
     return { status: errors.length ? 'FAIL' : 'PASS', errors, details };
@@ -291,7 +418,7 @@ if (require.main === module) {
 
 // Kit flows share the kit's module-level failure mode, so they stay together and serial; the others run in their own shard
 const SHARDS = [
-    { name: 'Action failures: invoice, orders due, goods receipt, packing, retry (mocked)', only: '^(Customer invoice|Orders due|Goods receipt|Packing instruction|Reservation entry)' },
+    { name: 'Action failures: invoice, orders due, goods receipt, packing, retry, quarantine (mocked)', only: '^(Customer invoice|Orders due|Goods receipt|Packing instruction|Reservation entry|Quarantine labels)' },
     { name: 'Action failures: handling unit, 261, scan-to (mocked)', only: '^(Handling unit|Movement 261|Scan-to)' }
 ];
 

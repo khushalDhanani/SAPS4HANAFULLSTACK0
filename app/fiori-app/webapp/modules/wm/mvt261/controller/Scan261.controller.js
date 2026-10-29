@@ -220,6 +220,7 @@ sap.ui.define([
          *  the request is in flight; on success the context is reloaded so the next partial post is live. */
         _doPost: function (nTotal, sBatch) {
             var oModel = this.getModel("scan261View");
+            if (oModel.getProperty("/busy")) return;
             var oCtx = oModel.getProperty("/ctx");
             var aRows = oModel.getProperty("/rows") || [];
             var aStorageUnits = [];

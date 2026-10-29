@@ -280,6 +280,8 @@ sap.ui.define([
         },
 
         _executeReleaseToAccounting: function (sDoc, sETag) {
+            if (this._bSubmitting) return;
+            this._bSubmitting = true;
             var that = this;
             var oModel = this.getView().getModel("customerInvoice");
 
@@ -289,6 +291,7 @@ sap.ui.define([
                 : CustomerInvoiceService.releaseInvoiceToAccounting(sDoc, oModel);
 
             pRelease.then(function (res) {
+                that._bSubmitting = false;
                 BusyIndicator.hide();
                 // Immediately refresh table to reflect live SAP status in UI
                 that.onRefresh();
@@ -316,6 +319,7 @@ sap.ui.define([
                     });
                 }
             }).catch(function (err) {
+                that._bSubmitting = false;
                 BusyIndicator.hide();
                 // Immediately refresh table to display current authentic SAP state
                 that.onRefresh();
@@ -366,6 +370,7 @@ sap.ui.define([
         },
 
         onConfirmCancelInvoice: function () {
+            if (this._bSubmitting) return;
             var oCancelModel = this._oCancelDialog ? this._oCancelDialog.getModel("cancelInvoiceModel") : null;
             if (!oCancelModel) return;
             var sDoc = oCancelModel.getProperty("/BillingDocument");
@@ -373,6 +378,7 @@ sap.ui.define([
             var that = this;
             var oModel = this.getView().getModel("customerInvoice");
 
+            this._bSubmitting = true;
             this.onCloseCancelInvoiceDialog();
             BusyIndicator.show(0);
 
@@ -381,6 +387,7 @@ sap.ui.define([
                 : CustomerInvoiceService.cancelBillingDocument(sDoc, oModel);
 
             pCancel.then(function (res) {
+                that._bSubmitting = false;
                 BusyIndicator.hide();
                 // Immediately refresh table to reflect cancellation in UI
                 that.onRefresh();
@@ -397,6 +404,7 @@ sap.ui.define([
                     }
                 });
             }).catch(function (err) {
+                that._bSubmitting = false;
                 BusyIndicator.hide();
                 // Immediately refresh table to reflect current SAP state
                 that.onRefresh();

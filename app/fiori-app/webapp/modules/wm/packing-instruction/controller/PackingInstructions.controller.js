@@ -100,6 +100,7 @@ sap.ui.define([
 
         onSubmitCreate: function () {
             var oModel = this.getModel("piCreate");
+            if (oModel.getProperty("/busy")) return;
             var o = oModel.getData();
             var aComponents = [{ item: "10", category: "P", material: o.pkgMaterial, targetQty: Number(o.pkgQty), unit: o.pkgUnit }];
             (o.materials || []).filter(function (m) { return (m.material || "").trim(); })

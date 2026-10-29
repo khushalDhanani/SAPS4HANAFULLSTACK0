@@ -69,8 +69,12 @@ function currentHash(page) {
  */
 let failure = null;
 let waitCap = Infinity;
+let delayMs = 0;
+let actionGate = null;
 function setFailure(f) { failure = f; }
 function capWaits(ms) { waitCap = ms; }
+function setDelay(ms) { delayMs = ms || 0; }
+function setGate(g) { actionGate = g || null; }
 function failAction(route) {
     if (failure === 'timeout') return route.abort('timedout');
     return route.fulfill({
@@ -87,16 +91,19 @@ function failAction(route) {
  */
 async function stubAction(session, path, respond) {
     const calls = [];
-    await session.page.route((url) => url.pathname === path, (route) => {
+    await session.page.route((url) => url.pathname === path, async (route) => {
         const body = route.request().postDataJSON() || {};
         calls.push({ path, method: route.request().method(), body });
-        if (failure) return failAction(route);
-        return route.fulfill({
+        if (actionGate) await actionGate;
+        if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+        const answer = (p) => (delayMs || actionGate ? p.catch(() => {}) : p);
+        if (failure) return answer(failAction(route));
+        return answer(route.fulfill({
             status: 200,
             contentType: 'application/json;odata.metadata=minimal;IEEE754Compatible=true',
             headers: { 'OData-Version': '4.0' },
             body: JSON.stringify(respond(body, calls.length - 1))
-        });
+        }));
     });
     return calls;
 }
@@ -194,6 +201,6 @@ function main(fn) {
 }
 
 module.exports = {
-    setFailure, capWaits, AUTH, waitForHealth, getJson, postReadOnlyAction, open, viewModel, currentHash, stubAction, recordPosts,
+    setFailure, capWaits, setDelay, setGate, AUTH, waitForHealth, getJson, postReadOnlyAction, open, viewModel, currentHash, stubAction, recordPosts,
     waitForToast, messageBoxButton, messageBoxText, sessionErrors, expectCalls, runSuite, main
 };

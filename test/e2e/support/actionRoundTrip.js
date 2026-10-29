@@ -55,7 +55,7 @@ function batchFulfill(json, status = 200) {
  * Registers the page-level route for `${service}/${action}` (after the session's guard, so it wins for that call only).
  * respond(body) → stub result (dry-run). Returns the live list of calls: { via, body, status, result } or { via, mixed }.
  */
-async function interceptAction(page, { flow, service, action, live = false, respond, fail = null, delayMs = 0 }) {
+async function interceptAction(page, { flow, service, action, live = false, respond, fail = null, delayMs = 0, gate = null }) {
     // Live forwarding bypasses the context write guard, so the gate is re-checked here instead of trusting the caller.
     if (live && resolveMode(flow).mode !== 'live') {
         throw new Error(`Blocked: live forwarding of ${service}/${action} requires an authorized live gate for flow "${flow}"`);
@@ -82,7 +82,8 @@ async function interceptAction(page, { flow, service, action, live = false, resp
         const call = { via: viaBatch ? 'batch' : 'direct', body };
         calls.push(call);
         // a held-back answer may arrive after the page was reloaded or closed: that is then not an error
-        const answer = (p) => (delayMs ? p.catch(() => {}) : p);
+        const answer = (p) => (delayMs || gate ? p.catch(() => {}) : p);
+        if (!live && gate) await gate;
         if (!live && fail) {
             if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
             if (fail === 'timeout') return answer(route.abort('timedout'));

@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Action-Style Write Screens Edge-Case Coverage & Double-Click Guarding (2026-10-29 IST) — DONE, UNCOMMITTED:** Enhanced `test/e2e/negative/verifyActionFailures.e2e.js` with `doubleClickWhilePending(baseUrl, flow)` and unified `reloadWhilePending(baseUrl, flow)` covering both standard action flows and kit flows (Handling Units, Movement 261, Scan-To). Added `setDelay` and `setGate` to `test/e2e/wm/wmRoundTripKit.js` and `gate` support to `test/e2e/support/actionRoundTrip.js`. Integrated Quarantine Labels (`generateLabels`) into action failure verification. Hardened UI5 controllers against duplicate clicks across `CustomerInvoices.controller.js` (`_bSubmitting`), `OrdersDueForDelivery.controller.js` (`_bDialogBusy`, `_bNoRefDialogBusy`, `/busy`), `GoodsReceipt.controller.js` (`/isPosting`), `PackingInstructions.controller.js` (`/busy`), `Scan261.controller.js` (`/busy`), and `Cycle261.controller.js` (`/busy`). Updated `docs/e2e-coverage-matrix.md`. All unit tests (97/97) and matrix governance tests PASS; `npm run lint` clean.
+
 - **Optimistic Concurrency & ETag Integration & Negative E2E Verification Phase 5 (2026-10-29 IST) — COMMITTED (`b9242ec`):** Created `test/integration/concurrencyRoundTrip.test.js` validating complete end-to-end CAP HTTP round trips across Outbound Delivery (`postGoodsIssue`, `createBillingDocument`), Customer Invoice (`releaseInvoiceToAccounting`, `cancelBillingDocument`), and Goods Receipt (`postGoodsReceipt`). Verified client `If-Match` header extraction, adapter parameter forwarding, S/4 412 mapping to HTTP 409 `STALE_DATA`, and successful 200 responses on matching ETags. Cleaned UI5 action parameter payloads to strictly conform to CDS action signatures. Updated `verifyActionFailures.e2e.js` and `verifySubmitFailures.e2e.js` stale data regexes (`/changed by another user|stale data|modified by another user/i`). All 14 unit and integration test suites pass (290 passing tests, 38 skipped, 0 failed); ESLint clean.
 
 - **Optimistic Concurrency & ETag Frontend UI5 Layer Phase 4 (2026-10-29 IST) — COMMITTED (`2aa4bb6`):** UI5 services and controllers across Outbound Delivery, Customer Invoice, and Goods Receipt now preserve and pass ETags into write actions and handle HTTP 409 Conflict (`STALE_DATA`) responses with immediate reload prompts. Added dedicated `test/unit/sd/customerInvoiceService.test.js` and updated unit tests across `outboundDeliveryService.test.js`, `ordersDueForDeliveryController.test.js`, `customerInvoicesController.test.js`, `goodsReceiptService.test.js`, and `goodsReceiptController.test.js` (19 new unit tests, 13 suites / 283 tests passing, 38 skipped, 0 failed). ESLint clean on all touched files.
@@ -1807,6 +1809,24 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-29 IST — Action-Style Write Screens Edge-Case Coverage & Double-Click Guarding — DONE, UNCOMMITTED
+
+- **Context / Request:** User requested Issue 8 ("Missing Edge-Case Coverage on Action-Style Write Screens": double-click while pending for action buttons, reload page while pending for kit flows, and Quarantine Labels action failure integration).
+- **Change:**
+  - `test/e2e/negative/verifyActionFailures.e2e.js`: Added `doubleClickWhilePending(baseUrl, flow)` exercising rapid second click on visible buttons while write requests are in-flight, verifying that only 1 backend request is dispatched. Unified `reloadWhilePending(baseUrl, flow)` across all flows including kit flows (Handling Units, Movement 261, Scan-To). Added `quarantineFlow` testing Quarantine Labels (`/odata/v4/quarantine-label/generateLabels`) across standard failure conditions (400, 409, 503, timeout, 401). Updated shard configuration.
+  - `test/e2e/wm/wmRoundTripKit.js`: Added `setDelay` and `setGate` hooks to `stubAction` so kit flows can hold back responses deterministically while page reload or second clicks occur.
+  - `test/e2e/support/actionRoundTrip.js`: Added `gate` support to `interceptAction`.
+  - `app/fiori-app/webapp/modules/sd/customer-invoice/controller/CustomerInvoices.controller.js`: Added `_bSubmitting` guard on `_executeReleaseToAccounting` and `onConfirmCancelInvoice`.
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`: Added `_bDialogBusy` guard on `onConfirmCreateDelivery`, `busy` guard on `onConfirmCreateDeliveryNoRef`, and `/busy` model check on `onPostGoodsIssue` and `onCreateBillingDocument`.
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceipt.controller.js`: Added `/isPosting` guard on `onPostGoodsReceipt`.
+  - `app/fiori-app/webapp/modules/wm/packing-instruction/controller/PackingInstructions.controller.js`: Added `/busy` guard on `onSubmitCreate`.
+  - `app/fiori-app/webapp/modules/wm/mvt261/controller/Scan261.controller.js`: Added `/busy` guard on `_doPost`.
+  - `app/fiori-app/webapp/modules/wm/mvt261/controller/Cycle261.controller.js`: Added `/busy` guard on `_doReverse`.
+  - `docs/e2e-coverage-matrix.md`: Updated documentation reflecting double-click and reload coverage across all action flows and Quarantine Labels integration.
+- **TEST DECISION:** TEST ADDED & UPDATED — Added double-click while pending and kit reload-while-pending in `test/e2e/negative/verifyActionFailures.e2e.js`. All 97 controller and tool unit tests PASS.
+- **Validation:** 5 unit test suites passed (97 passing tests, 0 failures); `npm run lint` clean (0 errors); `git diff --check` clean.
+- **Next:** Ready for PR review or user verification.
 
 ### 2026-10-29 IST — Optimistic Concurrency & ETag Integration & Negative E2E Verification Phase 5 — COMMITTED (`b9242ec`)
 

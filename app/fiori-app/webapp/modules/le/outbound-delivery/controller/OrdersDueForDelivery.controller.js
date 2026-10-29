@@ -411,6 +411,7 @@ sap.ui.define([
         },
 
         onConfirmCreateDelivery: function () {
+            if (this._bDialogBusy) return;
             var that = this;
             var oDialogModel = this.getView().getModel("deliveryDialog");
             var sSalesOrder = oDialogModel.getProperty("/salesOrder");
@@ -553,7 +554,7 @@ sap.ui.define([
         onConfirmCreateDeliveryNoRef: function () {
             var that = this;
             var oModel = this.getView().getModel("deliveryNoRefDialog");
-            if (!oModel) return;
+            if (!oModel || oModel.getProperty("/busy")) return;
 
             var sShippingPoint = oModel.getProperty("/shippingPoint");
             var sDeliveryType = oModel.getProperty("/deliveryType");
@@ -663,6 +664,7 @@ sap.ui.define([
         onPostGoodsIssue: function () {
             var that = this;
             var oFU = this.getView().getModel("deliveryFollowUp");
+            if (oFU && oFU.getProperty("/busy")) return;
             var sDelivery = (oFU.getProperty("/delivery") || "").trim();
             if (!sDelivery) { MessageBox.error(this._text("msgDeliveryNumberRequired", "Enter a delivery number.")); return; }
             MessageBox.confirm(this._text("msgConfirmPgi", "Post goods issue in S/4HANA for delivery {0}? This cannot be undone here.").replace("{0}", sDelivery), {
@@ -719,6 +721,7 @@ sap.ui.define([
         onCreateBillingDocument: function () {
             var that = this;
             var oFU = this.getView().getModel("deliveryFollowUp");
+            if (oFU && oFU.getProperty("/busy")) return;
             var sDelivery = (oFU.getProperty("/delivery") || "").trim();
             var sType = oFU.getProperty("/billingType") || "";
             if (!sDelivery) { MessageBox.error(this._text("msgDeliveryNumberRequired", "Enter a delivery number.")); return; }
@@ -759,6 +762,7 @@ sap.ui.define([
         },
 
         _setDialogBusy: function (bBusy) {
+            this._bDialogBusy = bBusy;
             if (this._pCreateDeliveryDialog) {
                 this._pCreateDeliveryDialog.then(function (oDialog) {
                     oDialog.setBusy(bBusy);

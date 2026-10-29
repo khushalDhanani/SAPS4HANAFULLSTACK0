@@ -75,6 +75,7 @@ sap.ui.define([
 
         _doReverse: function (oRow) {
             var oModel = this.getModel("cycle261View");
+            if (oModel.getProperty("/busy")) return;
             var oC = oModel.getProperty("/c") || {};
             oModel.setProperty("/busy", true);
             ODataClient.post(BASE_PATH + "/reverse", {
