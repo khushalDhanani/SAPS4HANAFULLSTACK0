@@ -171,17 +171,18 @@ async function typeInto(session, localId, value) {
 }
 
 /** Picks a key in an sap.m.Select/ComboBox by view-local id and fires its change event like a user selection. */
-async function selectKey(session, localId, key) {
-    const ok = await session.page.evaluate(([id, k]) => {
+async function selectKey(session, localId, key, { exact = false } = {}) {
+    const ok = await session.page.evaluate(([id, k, whole]) => {
         const Element = window.sap.ui.require('sap/ui/core/Element');
-        const c = Element.registry.filter((x) => x.getId().endsWith('--' + id))[0];
+        // exact: the full control id (a table-row clone has no '--' view-local part); otherwise the view-local id
+        const c = Element.registry.filter((x) => (whole ? x.getId() === id : x.getId().endsWith('--' + id)))[0];
         if (!c) return `control ${id} not found`;
         const item = c.getItems().find((i) => i.getKey() === k);
         if (!item) return `${id} has no item ${k} (items: ${c.getItems().map((i) => i.getKey()).join(', ')})`;
         c.setSelectedKey(k);
         c.fireChange({ selectedItem: item, value: item.getText() });
         return true;
-    }, [localId, String(key)]);
+    }, [localId, String(key), exact]);
     if (ok !== true) throw new Error(ok);
     await session.settle();
 }

@@ -112,7 +112,7 @@ async function fill(session, v, live) {
         const cell = cells[path];
         if (!cell) throw new Error(`item cell ${path} not found`);
         if (cell.select) {
-            await rt.selectKey(session, cell.id.split('--').pop(), value);
+            await rt.selectKey(session, cell.id, value, { exact: true });
         } else {
             await session.page.fill(`[id="${cell.id}-inner"]`, String(value));
             await session.page.press(`[id="${cell.id}-inner"]`, 'Enter');
@@ -189,6 +189,7 @@ async function roundTripCustomerReturn(options = {}) {
         const hash = await session.page.evaluate(() => window.location.hash);
         if (!/#\/sd\/returns$/.test(hash)) out.errors.push(`after OK expected #/sd/returns, got ${hash}`);
 
+        if (live) console.log(`  document: ${docNo || '(none)'}`);
         if (live && docNo) {
             out.details.readBack = 'VERIFIED';
             const rb = await (async () => {
@@ -197,6 +198,14 @@ async function roundTripCustomerReturn(options = {}) {
                 const errs = [];
                 if (doc.SoldToParty !== v.SoldToParty) errs.push(`read-back SoldToParty ${doc.SoldToParty} != ${v.SoldToParty}`);
                 if (!items.some((i) => i.Material === v.Material)) errs.push(`read-back items lack material ${v.Material}: ${JSON.stringify(items.map((i) => i.Material))}`);
+                // Everything the user entered must be in SAP, not only the keys: a PASS must not hide fields that were dropped
+                const it = items.find((i) => i.Material === v.Material) || {};
+                const same = (a, b) => String(a).trim() === String(b).trim() || (a !== '' && Number(a) === Number(b));
+                if (!same(doc.ReturnsOrderReason || it.ReturnReason || '', v.ReturnsOrderReason)) errs.push(`read-back return reason ${JSON.stringify(doc.ReturnsOrderReason || it.ReturnReason || '')} != entered ${v.ReturnsOrderReason}`);
+                if (!same(it.ReferenceSDDocument || '', v.ReferenceSDDocument)) errs.push(`read-back reference document ${JSON.stringify(it.ReferenceSDDocument || '')} != entered ${v.ReferenceSDDocument}`);
+                if (!same(it.StorageLocation || '', v.StorageLocation)) errs.push(`read-back storage location ${JSON.stringify(it.StorageLocation || '')} != entered ${v.StorageLocation}`);
+                if (!same(it.ProductionPlant || '', v.ProductionPlant)) errs.push(`read-back plant ${JSON.stringify(it.ProductionPlant || '')} != entered ${v.ProductionPlant}`);
+                if (!same(it.OrderQuantity === undefined ? '' : it.OrderQuantity, v.OrderQuantity)) errs.push(`read-back quantity ${JSON.stringify(it.OrderQuantity)} != entered ${v.OrderQuantity}`);
                 return errs;
             })().catch((err) => [`read-back failed: ${err.message}`]);
             if (rb.length) out.details.readBack = 'FAIL';
