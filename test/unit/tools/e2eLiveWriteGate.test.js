@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { resolveMode } = require('../../e2e/support/liveWriteGate');
+const { resolveMode, assertTarget, singleWriteHandler } = require('../../e2e/support/liveWriteGate');
 const { classifyRequest } = require('../../e2e/support/writeGuard');
 
 describe('Tier C live-write gate', () => {
@@ -45,5 +45,35 @@ describe('write guard live allowlist', () => {
         expect(classifyRequest({ method: 'POST', url }).allow).toBe(false);
         expect(classifyRequest({ method: 'PATCH', url }, [/createPurchaseOrder$/]).allow).toBe(false);
         expect(classifyRequest({ method: 'POST', url: 'http://localhost:4004/odata/v4/sales-order/createSalesOrder' }, [/createPurchaseOrder$/]).allow).toBe(false);
+    });
+});
+
+describe('Tier C live-write gate: target and single write', () => {
+    it('blocks when no target is named', () => {
+        expect(() => assertTarget('S4HANA_DEV - Client 220', {})).toThrow(/E2E_SAP_LIVE_TARGET/);
+    });
+
+    it('blocks when the server reports nothing, or a different system', () => {
+        expect(() => assertTarget('', { E2E_SAP_LIVE_TARGET: 'A' })).toThrow(/did not report/);
+        expect(() => assertTarget('B', { E2E_SAP_LIVE_TARGET: 'A' })).toThrow(/connected to "B".*authorizes "A"/);
+    });
+
+    it('passes only when the named target equals the reported one', () => {
+        expect(() => assertTarget(' S4 - Client 220 ', { E2E_SAP_LIVE_TARGET: 'S4 - Client 220' })).not.toThrow();
+    });
+
+    it('logs and lets the first write through, aborts every further one', () => {
+        const logs = []; const seen = [];
+        const handler = singleWriteHandler((m) => logs.push(m), seen);
+        const route = (body) => ({ request: () => ({ postData: () => body }), fallback: jest.fn(), abort: jest.fn() });
+        const first = route('{"a":1}'); const second = route('{"a":2}');
+        handler(first); handler(second);
+        expect(first.fallback).toHaveBeenCalled();
+        expect(first.abort).not.toHaveBeenCalled();
+        expect(second.abort).toHaveBeenCalledWith('blockedbyclient');
+        expect(second.fallback).not.toHaveBeenCalled();
+        expect(logs[0]).toContain('WRITE about to be sent to SAP: {"a":1}');
+        expect(logs[1]).toContain('WRITE ABORTED');
+        expect(seen.map((x) => x.aborted)).toEqual([false, true]);
     });
 });

@@ -11,7 +11,7 @@
  */
 
 const { openSession, inspectScreen } = require('./screenCheck');
-const { resolveMode } = require('./liveWriteGate');
+const { resolveMode, assertTarget, singleWriteHandler } = require('./liveWriteGate');
 
 const DRY_RUN_DOC = 'DRYRUN-0001';
 
@@ -128,12 +128,24 @@ async function runRoundTrip(spec, options = {}) {
     details.values = values;
     console.log(`  data (${live ? 'test/e2e/live/testData.json' : 'derived from READ-ONLY CAP value helps'}): ${JSON.stringify(values)}`);
 
+    if (live) {
+        try {
+            const info = await read('auth/getUserInfo()');
+            assertTarget(info && info.system);
+        } catch (err) {
+            errors.push(err.message);
+            return result(gate.mode);
+        }
+    }
+
     const session = await openSession({ baseUrl, user, allowWrites: live ? [actionRe] : [] });
     const { page } = session;
     const calls = [];
     page.on('request', (req) => {
         if (req.method() === 'POST' && actionRe.test(new URL(req.url()).pathname)) calls.push(req.postDataJSON());
     });
+    const writes = [];
+    if (live) await page.route((url) => actionRe.test(url.pathname), (route) => (route.request().method() === 'POST' ? singleWriteHandler(console.log, writes)(route) : route.fallback()));
     if (!live) {
         // Registered after the session's guard, so it takes precedence for this one URL only; all else stays guarded.
         await page.route((url) => actionRe.test(url.pathname), (route) => route.fulfill({

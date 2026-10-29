@@ -42,4 +42,36 @@ function resolveMode(flow, { argv = process.argv, env = process.env, dataFile = 
     return { mode: 'live', data };
 }
 
-module.exports = { resolveMode, placeholders, DATA_FILE };
+/**
+ * A live write may only reach the SAP target the person running it named: E2E_SAP_LIVE_TARGET must equal the system
+ * label the CAP server reports for its S/4 connection (auth getUserInfo().system). Nothing is assumed about which
+ * target is non-production; that is the named target's owner's statement, not this code's.
+ */
+function assertTarget(reportedSystem, env = process.env) {
+    const named = String(env.E2E_SAP_LIVE_TARGET || '').trim();
+    if (!named) throw new Error('Blocked: live SAP write needs E2E_SAP_LIVE_TARGET=<the SAP system label you authorize>');
+    const reported = String(reportedSystem || '').trim();
+    if (!reported) throw new Error('Blocked: the CAP server did not report which SAP system it is connected to');
+    if (reported !== named) throw new Error(`Blocked: server is connected to "${reported}", but E2E_SAP_LIVE_TARGET authorizes "${named}"`);
+}
+
+/**
+ * Route handler for the one write action of a live run: logs the exact payload before it is sent, lets the first call
+ * through (the guard's own allowlist still applies) and aborts any further call, so one run can never write twice.
+ * `seen` collects every payload for the report.
+ */
+function singleWriteHandler(log, seen = []) {
+    return (route) => {
+        const payload = route.request().postData();
+        if (seen.length >= 1) {
+            seen.push({ aborted: true, payload });
+            log(`  WRITE ABORTED (a second write in one run): ${payload}`);
+            return route.abort('blockedbyclient');
+        }
+        seen.push({ aborted: false, payload });
+        log(`  WRITE about to be sent to SAP: ${payload}`);
+        return route.fallback();
+    };
+}
+
+module.exports = { resolveMode, placeholders, assertTarget, singleWriteHandler, DATA_FILE };
