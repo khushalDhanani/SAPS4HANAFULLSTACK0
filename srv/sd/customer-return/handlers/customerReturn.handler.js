@@ -229,7 +229,12 @@ function registerCustomerReturnHandlers(srv) {
         Items
       };
 
-      const result = await customerReturnAdapter.createCustomerReturn(payload);
+      // CUSTOMER_RETURN_ROUTE=rfc: BAPI_CUSTOMERRETURN_CREATE, which carries the order reason, reference document and storage location
+      // (the default Lean Order route cannot). Opt-in until a live create has proven it; then it becomes the only route.
+      const create = process.env.CUSTOMER_RETURN_ROUTE === 'rfc'
+        ? customerReturnAdapter.createCustomerReturnViaRfc
+        : customerReturnAdapter.createCustomerReturn;
+      const result = await create.call(customerReturnAdapter, payload);
       return result;
     } catch (err) {
       LOG.error('Failed to execute createCustomerReturn:', err.message);

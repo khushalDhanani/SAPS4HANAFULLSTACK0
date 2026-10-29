@@ -250,6 +250,31 @@ describe('Unit: CustomerReturnService Handlers', () => {
       expect(res).toEqual(mockResult);
     });
 
+    describe('route selection (CUSTOMER_RETURN_ROUTE)', () => {
+      const req = () => ({
+        data: { SoldToParty: '10276', ReturnsOrderReason: '008', ReferenceSDDocument: '5000446' },
+        user: { is: jest.fn().mockReturnValue(true) },
+        error: jest.fn()
+      });
+      afterEach(() => { delete process.env.CUSTOMER_RETURN_ROUTE; });
+
+      test('uses the BAPI route only when CUSTOMER_RETURN_ROUTE=rfc', async () => {
+        process.env.CUSTOMER_RETURN_ROUTE = 'rfc';
+        customerReturnAdapter.createCustomerReturnViaRfc.mockResolvedValueOnce({ CustomerReturn: '4500200', Success: true });
+        const res = await handlers['createCustomerReturn'](req());
+        expect(customerReturnAdapter.createCustomerReturnViaRfc).toHaveBeenCalledWith(expect.objectContaining({ SoldToParty: '10276', ReturnsOrderReason: '008', ReferenceSDDocument: '5000446' }));
+        expect(customerReturnAdapter.createCustomerReturn).not.toHaveBeenCalled();
+        expect(res.CustomerReturn).toBe('4500200');
+      });
+
+      test('keeps the Lean Order route by default', async () => {
+        customerReturnAdapter.createCustomerReturn.mockResolvedValueOnce({ CustomerReturn: '4500201', Success: true });
+        await handlers['createCustomerReturn'](req());
+        expect(customerReturnAdapter.createCustomerReturn).toHaveBeenCalled();
+        expect(customerReturnAdapter.createCustomerReturnViaRfc).not.toHaveBeenCalled();
+      });
+    });
+
     test('forwards 501 when adapter throws missing persistence capability error', async () => {
       const err = new Error('SD_F2651_CRT_CREATE_SRV lacks persistence');
       err.code = 501;

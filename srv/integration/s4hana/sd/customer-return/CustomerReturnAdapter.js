@@ -5,6 +5,7 @@ const { mapS4Error } = require('../../S4ErrorMapper');
 const { RfcClient } = require('../../RfcClient');
 const { sapKey } = require('../../sapKey');
 const { resolveCustomerSalesArea } = require('../customerSalesArea');
+const { CustomerReturnRfcCreator } = require('./CustomerReturnRfcCreator');
 
 const SERVICE_PATH = '/sap/opu/odata/sap/SD_F2651_CRT_CREATE_SRV';
 const TRANSACTIONAL_SERVICE_PATH = '/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV';
@@ -585,6 +586,78 @@ class CustomerReturnAdapter {
       LOG.error(`Failed to create Customer Return in S/4HANA`, err);
       throw mapS4Error(err, 'Failed to create Customer Return in S/4HANA');
     }
+  }
+
+  /**
+   * Creates a customer return through BAPI_CUSTOMERRETURN_CREATE (RFC) and checks in SAP what was stored. Unlike the
+   * Lean Order route (createCustomerReturn) it carries the order reason, the reference document and the storage
+   * location. `options.testRun` simulates the BAPI without committing; `options.creator` is for tests.
+   * NOTE: validation below duplicates createCustomerReturn on purpose; merge when the Lean Order route is removed.
+   */
+  async createCustomerReturnViaRfc(payload = {}, options = {}) {
+    const bad = (message) => { const e = new Error(message); e.code = 400; e.status = 400; return e; };
+    if (!payload.SoldToParty) throw bad('SoldToParty is mandatory for Customer Return creation');
+    if (!payload.ReturnsOrderReason) throw bad('ReturnsOrderReason is mandatory for Customer Return creation');
+
+    const returnType = payload.CustomerReturnType || DEFAULT_RETURN_TYPE;
+    const items = (Array.isArray(payload.Items) && payload.Items.length > 0
+      ? payload.Items
+      : [{ Material: payload.Material, OrderQuantity: payload.OrderQuantity, OrderQuantityUnit: payload.OrderQuantityUnit, ProductionPlant: payload.ProductionPlant }]
+    ).filter((it) => it && it.Material);
+    if (items.length === 0) throw bad('At least one line item with a Material is required to create a Customer Return');
+
+    // Plants must exist in SAP (T001W); the sales area must be one maintained for the customer (KNVV). Read-only.
+    for (const plant of new Set(items.map((it) => String(it.ProductionPlant || it.Plant || '').trim()).filter(Boolean))) {
+      const t001w = await this.rfc.readTable('T001W', ['WERKS'], [`WERKS = '${sapKey(plant, 'plant', 'Plant')}'`], 1);
+      if (!t001w || !t001w.length) throw bad(`Plant ${plant} does not exist in SAP (T001W)`);
+    }
+    const salesArea = await resolveCustomerSalesArea(this.rfc, payload.SoldToParty, {
+      salesOrganization: payload.SalesOrganization,
+      distributionChannel: payload.DistributionChannel,
+      division: payload.OrganizationDivision
+    });
+
+    const creator = options.creator || new CustomerReturnRfcCreator({ rfc: this.rfc });
+    const full = { ...payload, CustomerReturnType: returnType, Items: items };
+    const created = await creator.create(full, salesArea, { testRun: options.testRun === true });
+    if (created.testRun) return created;
+
+    const stored = await creator.readBack(created.CustomerReturn);
+    const partial = (message) => Object.assign(new Error(message), { status: 502, code: 502, CustomerReturn: created.CustomerReturn, name: 'PartialCustomerReturnError' });
+    if (!stored) throw partial(`SAP committed customer return ${created.CustomerReturn}, but it could not be read back from SAP`);
+
+    // Persistence check: everything the user entered that the BAPI route is meant to carry must be in SAP
+    const missing = [];
+    const sameKey = (a, b) => String(a || '').trim().replace(/^0+/, '') === String(b || '').trim().replace(/^0+/, '');
+    if (String(stored.header.AUGRU || '').trim() !== String(payload.ReturnsOrderReason).trim()) missing.push(`order reason (stored "${String(stored.header.AUGRU || '').trim()}")`);
+    const item = stored.items[0] || {};
+    const wantItem = items[0];
+    const wantRef = String(wantItem.ReferenceSDDocument || payload.ReferenceSDDocument || '').trim();
+    if (wantRef && !sameKey(item.VGBEL || stored.header.VGBEL, wantRef)) missing.push(`reference document ${wantRef}`);
+    const wantSloc = String(wantItem.StorageLocation || '').trim().toUpperCase();
+    if (wantSloc && String(item.LGORT || '').trim().toUpperCase() !== wantSloc) missing.push(`storage location ${wantSloc}`);
+    if (missing.length) throw partial(`SAP created customer return ${created.CustomerReturn}, but did not store: ${missing.join(', ')}`);
+
+    let net = null;
+    let currency = null;
+    try {
+      const doc = await this.getCustomerReturn(String(created.CustomerReturn).replace(/^0+/, ''), _cleanOptions(options));
+      net = doc && doc.TotalNetAmount !== undefined ? doc.TotalNetAmount : null;
+      currency = (doc && doc.TransactionCurrency) || null;
+    } catch (e) {
+      LOG.warn(`Totals of customer return ${created.CustomerReturn} could not be read: ${e.message}`);
+    }
+    // The BAPI returns the 10-digit number (0004500185); CAP keys and the UI use it without leading zeros, as the Lean Order route did
+    const number = String(created.CustomerReturn).replace(/^0+/, '');
+    return {
+      CustomerReturn: number,
+      CustomerReturnType: returnType,
+      SoldToParty: String(payload.SoldToParty).trim(),
+      TotalNetAmount: net,
+      TransactionCurrency: currency,
+      Success: true,
+      Message: `Customer Return ${number} successfully created and verified in SAP S/4HANA.`
+    };
   }
 }
 

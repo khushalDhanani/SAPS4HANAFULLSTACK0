@@ -20,25 +20,7 @@ const BAPI = 'BAPI_INQUIRY_CREATEFROMDATA2';
 const SCHEDULE_LINE_CATEGORY = 'AT';
 const UNSUPPORTED_HEADER_FIELDS = ['PortOfLoading', 'PortOfDischarge', 'ContactPerson'];
 
-function failure(message, status, extra = {}) {
-    return Object.assign(new Error(message), { status }, extra);
-}
-
-const clean = (v) => (v === undefined || v === null ? '' : String(v).trim());
-
-/** 'YYYY-MM-DD' (or 'YYYYMMDD') -> 'YYYYMMDD'; '' stays ''. */
-function sapDate(value, label) {
-    const v = clean(value);
-    if (!v) return '';
-    const m = /^(\d{4})-?(\d{2})-?(\d{2})/.exec(v);
-    if (!m) throw failure(`${label} is not a date: ${v}`, 400);
-    return `${m[1]}${m[2]}${m[3]}`;
-}
-
-/** Customer / partner numbers are stored with leading zeros (VBPA KUNNR 0000020004). */
-const partnerNumber = (v) => (/^\d+$/.test(clean(v)) ? clean(v).padStart(10, '0') : clean(v));
-/** Numeric materials are stored 18 digits wide (VBAP MATNR 000000004000000033). */
-const materialNumber = (v) => (/^\d+$/.test(clean(v)) ? clean(v).padStart(18, '0') : clean(v));
+const { failure, clean, sapDate, partnerNumber, materialNumber, todaySap, runCreateBapi } = require('../salesDocBapi');
 
 /** Header fields -> [BAPI field, value]; blank values are not sent and get no update flag. */
 function headerFields(h) {
@@ -80,7 +62,7 @@ function buildInput(header, items) {
     const partners = [{ PARTN_ROLE: 'AG', PARTN_NUMB: partnerNumber(header.SoldToParty) }];
     if (clean(header.ShipToParty)) partners.push({ PARTN_ROLE: 'WE', PARTN_NUMB: partnerNumber(header.ShipToParty) });
 
-    const scheduleDate = sapDate(header.SalesInquiryDate, 'SalesInquiryDate') || new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const scheduleDate = sapDate(header.SalesInquiryDate, 'SalesInquiryDate') || todaySap();
     const itemsIn = [];
     const itemsInx = [];
     const schedules = [];
@@ -120,20 +102,6 @@ function buildInput(header, items) {
     };
 }
 
-const messages = (ret) => (Array.isArray(ret) ? ret : [])
-    .filter((r) => r && r.MESSAGE)
-    .map((r) => ({
-        type: r.TYPE, id: r.ID, number: r.NUMBER, text: String(r.MESSAGE).trim(),
-        // where SAP says the problem is: needed to tell which item / field a warning such as "not yet complete" refers to
-        vars: [r.MESSAGE_V1, r.MESSAGE_V2, r.MESSAGE_V3, r.MESSAGE_V4].map((v) => String(v || '').trim()).filter(Boolean),
-        parameter: r.PARAMETER ? String(r.PARAMETER).trim() : undefined,
-        row: r.ROW ? Number(r.ROW) : undefined,
-        field: r.FIELD ? String(r.FIELD).trim() : undefined
-    }));
-const errorsOf = (msgs) => msgs.filter((m) => m.type === 'E' || m.type === 'A');
-/** 'Document is incomplete [VBAPKOM, 000010] (KWMENG) @VBUVKOM': the SAP text plus where SAP says it applies. */
-const describe = (m) => `${m.text}${m.vars && m.vars.length ? ` [${m.vars.join(', ')}]` : ''}${m.field ? ` (${m.field})` : ''}${m.parameter ? ` @${m.parameter}` : ''}`;
-
 class SalesInquiryRfcCreator {
     constructor(options = {}) {
         this.rfc = options.rfc || new RfcClient();
@@ -147,33 +115,10 @@ class SalesInquiryRfcCreator {
      */
     async create(header, items, { testRun = false } = {}) {
         const input = buildInput(header, items);
-        return this.rfc.session(async (call) => {
-            const res = await call(BAPI, { ...input, TESTRUN: testRun ? 'X' : '' });
-            const msgs = messages(res && res.RETURN);
-            const errs = errorsOf(msgs);
-            const docNo = String((res && res.SALESDOCUMENT) || '').trim();
-
-            if (testRun) {
-                // Simulation: nothing is committed; closing the session discards the LUW.
-                if (errs.length) throw failure(`SAP rejected the inquiry (test run): ${errs.map(describe).slice(0, 3).join(' | ')}`, 400, { messages: msgs });
-                return { testRun: true, messages: msgs };
-            }
-            if (errs.length || !docNo) {
-                await call('BAPI_TRANSACTION_ROLLBACK', {});
-                LOG.warn(`${BAPI} rejected: ${JSON.stringify(msgs)}`);
-                const why = errs.length ? errs.map(describe).slice(0, 3).join(' | ') : 'SAP returned no document number';
-                throw failure(`SAP rejected the inquiry: ${why}`, errs.length ? 400 : 502, { messages: msgs });
-            }
-
-            const commit = await call('BAPI_TRANSACTION_COMMIT', { WAIT: 'X' });
-            const commitErrors = errorsOf(messages([].concat((commit && commit.RETURN) || [])));
-            if (commitErrors.length) {
-                await call('BAPI_TRANSACTION_ROLLBACK', {});
-                throw failure(`SAP created inquiry ${docNo} but the commit failed: ${commitErrors[0].text}`, 502, { SalesInquiry: docNo, name: 'PartialSalesInquiryError' });
-            }
-            LOG.info(`Sales inquiry ${docNo} committed via ${BAPI}`);
-            return { SalesInquiry: docNo, testRun: false, messages: msgs };
+        const out = await runCreateBapi(this.rfc, BAPI, input, {
+            testRun, log: LOG, labels: { noun: 'inquiry', partialName: 'PartialSalesInquiryError', keyProp: 'SalesInquiry' }
         });
+        return out.testRun ? out : { SalesInquiry: out.documentNumber, testRun: false, messages: out.messages };
     }
 
     /** Confirms the committed document exists in SAP (VBAK) before the caller reports success. */
