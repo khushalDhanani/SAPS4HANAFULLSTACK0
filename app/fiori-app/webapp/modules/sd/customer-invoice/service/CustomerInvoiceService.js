@@ -50,40 +50,56 @@ sap.ui.define([
             });
         },
 
-        releaseInvoiceToAccounting: function (sBillingDocument, oModel) {
-            var oTargetModel = oModel || _oModel;
+        releaseInvoiceToAccounting: function (sBillingDocument, oModel, mOptions) {
+            var oTargetModel = (oModel && typeof oModel.bindContext === "function") ? oModel : _oModel;
+            var options = (mOptions && typeof mOptions === "object") ? mOptions : (!oModel || typeof oModel.bindContext === "function" ? {} : oModel);
             var sDoc = String(sBillingDocument || "").trim();
+            var sETag = options.etag || options.ifMatch || "";
 
             if (oTargetModel && typeof oTargetModel.bindContext === "function") {
                 var oAction = oTargetModel.bindContext("/releaseInvoiceToAccounting(...)");
                 oAction.setParameter("BillingDocument", sDoc);
+                if (sETag) {
+                    oAction.setParameter("ETag", sETag);
+                }
                 return oAction.execute().then(function () {
                     var oCtx = oAction.getBoundContext();
                     return oCtx ? oCtx.getObject() : null;
                 });
             }
 
-            return ODataClient.post(SERVICE_BASE + "/releaseInvoiceToAccounting", {
-                BillingDocument: sDoc
-            });
+            var oPayload = { BillingDocument: sDoc };
+            if (sETag) {
+                oPayload.ETag = sETag;
+                return ODataClient.post(SERVICE_BASE + "/releaseInvoiceToAccounting", oPayload, { "If-Match": sETag });
+            }
+            return ODataClient.post(SERVICE_BASE + "/releaseInvoiceToAccounting", oPayload);
         },
 
-        cancelBillingDocument: function (sBillingDocument, oModel) {
-            var oTargetModel = oModel || _oModel;
+        cancelBillingDocument: function (sBillingDocument, oModel, mOptions) {
+            var oTargetModel = (oModel && typeof oModel.bindContext === "function") ? oModel : _oModel;
+            var options = (mOptions && typeof mOptions === "object") ? mOptions : (!oModel || typeof oModel.bindContext === "function" ? {} : oModel);
             var sDoc = String(sBillingDocument || "").trim();
+            var sETag = options.etag || options.ifMatch || "";
 
             if (oTargetModel && typeof oTargetModel.bindContext === "function") {
                 var oAction = oTargetModel.bindContext("/cancelBillingDocument(...)");
                 oAction.setParameter("BillingDocument", sDoc);
+                if (sETag) {
+                    oAction.setParameter("ETag", sETag);
+                }
                 return oAction.execute().then(function () {
                     var oCtx = oAction.getBoundContext();
                     return oCtx ? oCtx.getObject() : null;
                 });
             }
 
-            return ODataClient.post(SERVICE_BASE + "/cancelBillingDocument", {
-                BillingDocument: sDoc
-            });
+            var oPayload = { BillingDocument: sDoc };
+            if (sETag) {
+                oPayload.ETag = sETag;
+                return ODataClient.post(SERVICE_BASE + "/cancelBillingDocument", oPayload, { "If-Match": sETag });
+            }
+            return ODataClient.post(SERVICE_BASE + "/cancelBillingDocument", oPayload);
         }
     };
 });

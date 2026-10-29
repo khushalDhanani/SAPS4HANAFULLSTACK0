@@ -1395,5 +1395,36 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
             expect(mockODataClient.post).toHaveBeenCalledWith('/odata/v4/goods-receipt/postGoodsReceiptWithStorageUnit', payload);
             expect(res).toEqual({ Success: true, MaterialDocument: '5000005499' });
         });
+
+        it('invokes postGoodsReceipt with If-Match header when ETag is present in payload or options', async () => {
+            mockODataClient.post.mockResolvedValueOnce({ Success: true, MaterialDocument: '5000005500' });
+            const payload = { DeliveryDocument: '180000001', Quantity: 10, Unit: 'KG', ETag: 'W/"20261028160000"' };
+            await FrontendGoodsReceiptService.postGoodsReceipt(payload);
+            expect(mockODataClient.post).toHaveBeenCalledWith(
+                '/odata/v4/goods-receipt/postGoodsReceipt',
+                payload,
+                { 'If-Match': 'W/"20261028160000"' }
+            );
+
+            mockODataClient.post.mockResolvedValueOnce({ Success: true, MaterialDocument: '5000005501' });
+            const payload2 = { DeliveryDocument: '180000001', Quantity: 10, Unit: 'KG' };
+            await FrontendGoodsReceiptService.postGoodsReceipt(payload2, { etag: 'W/"20261028160001"' });
+            expect(mockODataClient.post).toHaveBeenCalledWith(
+                '/odata/v4/goods-receipt/postGoodsReceipt',
+                payload2,
+                { 'If-Match': 'W/"20261028160001"' }
+            );
+        });
+
+        it('invokes postGoodsReceiptWithStorageUnit with If-Match header when ETag is present', async () => {
+            mockODataClient.post.mockResolvedValueOnce({ Success: true, MaterialDocument: '5000005502' });
+            const payload = { StorageUnit: '2000018143', Quantity: 10, Unit: 'KG', ETag: 'W/"20261028160002"' };
+            await FrontendGoodsReceiptService.postGoodsReceiptWithStorageUnit(payload);
+            expect(mockODataClient.post).toHaveBeenCalledWith(
+                '/odata/v4/goods-receipt/postGoodsReceiptWithStorageUnit',
+                payload,
+                { 'If-Match': 'W/"20261028160002"' }
+            );
+        });
     });
 });

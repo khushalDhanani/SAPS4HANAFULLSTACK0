@@ -245,7 +245,8 @@ sap.ui.define([
             if (!oSelected || !oSelected.BillingDocument) {
                 return;
             }
-            this._confirmAndReleaseInvoice(oSelected.BillingDocument);
+            var sETag = (oSelected && (oSelected["@odata.etag"] || oSelected.ETag || oSelected.etag)) || "";
+            this._confirmAndReleaseInvoice(oSelected.BillingDocument, sETag);
         },
 
         onToolbarCancelPress: function () {
@@ -261,28 +262,33 @@ sap.ui.define([
             var oContext = oEvent.getSource().getBindingContext("customerInvoice");
             if (!oContext) return;
             var oData = oContext.getObject();
-            this._confirmAndReleaseInvoice(oData.BillingDocument);
+            var sETag = (oData && (oData["@odata.etag"] || oData.ETag || oData.etag)) || "";
+            this._confirmAndReleaseInvoice(oData.BillingDocument, sETag);
         },
 
-        _confirmAndReleaseInvoice: function (sDoc) {
+        _confirmAndReleaseInvoice: function (sDoc, sETag) {
             var that = this;
             var sConfirmMsg = this._getText("msgConfirmReleaseAccounting", [sDoc]);
             MessageBox.confirm(sConfirmMsg, {
                 title: this._getText("titleReleaseAccounting"),
                 onClose: function (sAction) {
                     if (sAction === "OK" || (MessageBox.Action && sAction === MessageBox.Action.OK)) {
-                        that._executeReleaseToAccounting(sDoc);
+                        that._executeReleaseToAccounting(sDoc, sETag);
                     }
                 }
             });
         },
 
-        _executeReleaseToAccounting: function (sDoc) {
+        _executeReleaseToAccounting: function (sDoc, sETag) {
             var that = this;
             var oModel = this.getView().getModel("customerInvoice");
 
             BusyIndicator.show(0);
-            CustomerInvoiceService.releaseInvoiceToAccounting(sDoc, oModel).then(function (res) {
+            var pRelease = sETag
+                ? CustomerInvoiceService.releaseInvoiceToAccounting(sDoc, oModel, { etag: sETag })
+                : CustomerInvoiceService.releaseInvoiceToAccounting(sDoc, oModel);
+
+            pRelease.then(function (res) {
                 BusyIndicator.hide();
                 // Immediately refresh table to reflect live SAP status in UI
                 that.onRefresh();
@@ -363,13 +369,18 @@ sap.ui.define([
             var oCancelModel = this._oCancelDialog ? this._oCancelDialog.getModel("cancelInvoiceModel") : null;
             if (!oCancelModel) return;
             var sDoc = oCancelModel.getProperty("/BillingDocument");
+            var sETag = oCancelModel.getProperty("/@odata.etag") || oCancelModel.getProperty("/ETag") || oCancelModel.getProperty("/etag") || "";
             var that = this;
             var oModel = this.getView().getModel("customerInvoice");
 
             this.onCloseCancelInvoiceDialog();
             BusyIndicator.show(0);
 
-            CustomerInvoiceService.cancelBillingDocument(sDoc, oModel).then(function (res) {
+            var pCancel = sETag
+                ? CustomerInvoiceService.cancelBillingDocument(sDoc, oModel, { etag: sETag })
+                : CustomerInvoiceService.cancelBillingDocument(sDoc, oModel);
+
+            pCancel.then(function (res) {
                 BusyIndicator.hide();
                 // Immediately refresh table to reflect cancellation in UI
                 that.onRefresh();
@@ -426,7 +437,13 @@ sap.ui.define([
                     }
                 }
             }
-            var sMsg = sRaw || err.message || this._getText(sFallbackKey);
+            var sDirectMsg = sRaw || (err && err.message) || "";
+            if (err && (err.status === 409 || err.statusCode === 409 || err.code === "STALE_DATA")) {
+                return (sDirectMsg && sDirectMsg.indexOf("changed") !== -1)
+                    ? sDirectMsg
+                    : (sDirectMsg || this._getText("msgStaleDataConflict", "This document was modified by another user or session in SAP S/4HANA (stale data). The list has been refreshed with the latest data from SAP. Please review the updated status before trying again."));
+            }
+            var sMsg = sDirectMsg || this._getText(sFallbackKey);
             if (sMsg.indexOf("ASSERTION_FAILED") !== -1 || sMsg.indexOf("Runtime Error") !== -1) {
                 return "SAP Gateway Runtime Error (ASSERTION_FAILED): The OData interface in SAP S/4HANA aborted execution because the billing document has an active Posting Block (Status A) or inconsistent buffer state.\n\nGuidance: Release cannot be performed via OData while a Posting Block is active. Open the document in SAP GUI (transaction VF02), verify pricing/tax conditions, and release to accounting directly from VF02.";
             }
@@ -442,9 +459,19 @@ sap.ui.define([
             return sMsg;
         },
 
-        _getText: function (sKey, aArgs) {
-            var oResourceBundle = this.getView().getModel("i18n").getResourceBundle();
-            return oResourceBundle.getText(sKey, aArgs);
+        _getText: function (sKey, aArgs, sFallback) {
+            var oI18n = this.getView() && typeof this.getView().getModel === "function" ? this.getView().getModel("i18n") : null;
+            var oResourceBundle = oI18n && typeof oI18n.getResourceBundle === "function" ? oI18n.getResourceBundle() : null;
+            var aParams = Array.isArray(aArgs) ? aArgs : undefined;
+            var sDefault = (typeof aArgs === "string") ? aArgs : sFallback;
+            if (!oResourceBundle || typeof oResourceBundle.getText !== "function") {
+                return sDefault || sKey;
+            }
+            if (typeof oResourceBundle.hasText === "function" && !oResourceBundle.hasText(sKey) && sDefault) {
+                return sDefault;
+            }
+            var sResult = oResourceBundle.getText(sKey, aParams);
+            return (sResult === sKey && sDefault) ? sDefault : sResult;
         },
 
         formatInvoiceStatusText: function (bIsCancelled, sAccountingStatus, sCategory) {

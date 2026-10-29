@@ -600,5 +600,43 @@ describe('GoodsReceipt Controller Unit Tests', () => {
 
             expect(mockMessageBox.error).toHaveBeenCalledWith('grPostFailed');
         });
+
+        it('should forward ETag in payload and handle 409 STALE_DATA error by resetting workflow', async () => {
+            // Set ETag on activeSU
+            controller.getView().getModel('grView').setProperty('/activeSU/ETag', 'W/"20261028150000"');
+
+            const staleErr = new Error('Inbound Delivery modified by another user in S/4HANA');
+            staleErr.status = 409;
+            staleErr.code = 'STALE_DATA';
+            mockGoodsReceiptService.postGoodsReceipt.mockRejectedValueOnce(staleErr);
+
+            mockMessageBox.confirm.mockImplementationOnce((msg, opts) => {
+                opts.onClose('YES');
+            });
+
+            let onCloseHandler;
+            mockMessageBox.error.mockImplementationOnce((msg, opts) => {
+                if (opts && opts.onClose) onCloseHandler = opts.onClose;
+            });
+
+            jest.spyOn(controller, 'onResetWorkflow');
+
+            await controller.onPostGoodsReceipt();
+
+            expect(mockGoodsReceiptService.postGoodsReceipt).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    StorageUnit: '180000001',
+                    ETag: 'W/"20261028150000"'
+                })
+            );
+
+            expect(mockMessageBox.error).toHaveBeenCalledWith(
+                expect.stringContaining('Inbound Delivery modified by another user in S/4HANA'),
+                expect.objectContaining({ title: 'titleStaleDataConflict' })
+            );
+
+            if (onCloseHandler) onCloseHandler();
+            expect(controller.onResetWorkflow).toHaveBeenCalled();
+        });
     });
 });

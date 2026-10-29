@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Optimistic Concurrency & ETag Frontend UI5 Layer Phase 4 (2026-10-29 IST) — DONE, UNCOMMITTED:** UI5 services and controllers across Outbound Delivery, Customer Invoice, and Goods Receipt now preserve and pass ETags into write actions and handle HTTP 409 Conflict (`STALE_DATA`) responses with immediate reload prompts. Added dedicated `test/unit/sd/customerInvoiceService.test.js` and updated unit tests across `outboundDeliveryService.test.js`, `ordersDueForDeliveryController.test.js`, `customerInvoicesController.test.js`, `goodsReceiptService.test.js`, and `goodsReceiptController.test.js` (19 new unit tests, 13 suites / 283 tests passing, 38 skipped, 0 failed). ESLint clean on all touched files.
+
 - **Optimistic Concurrency & ETag CAP Handler Layer Phase 3 (2026-10-28 IST) — DONE, UNCOMMITTED:** Added shared `extractIfMatch(req)` helper in `srv/common/filterUtils.js` extracting concurrency tokens from `req.ifMatch`, `req.etag`, `req.headers['if-match']`, Express `req.req`/`req._.req` headers, and `req.data.ETag`. Integrated into `outboundDelivery.handler.js` (`postGoodsIssue`, `createBillingDocument`, `createOutboundDelivery`, `createDeliveryWithoutRef`), `goodsReceipt.handler.js` (`postGoodsReceipt`), and verified `customerInvoice.handler.js`. Updated `GoodsReceiptAdapter._toGatewayError` to preserve mapped 409 `STALE_DATA` errors. Unit tests 30/30 (filterUtils), 28/28 (outboundDeliveryHandler), 20/20 (customerInvoiceAdapter), 16/16 (customerInvoiceHandler), 15/15 (goodsReceiptPlantScope), 59/59 (goodsReceiptService) PASS; eslint clean.
 
 - **Optimistic Concurrency & ETag Adapter Layer Phase 2 (2026-10-28 IST) — DONE, UNCOMMITTED:** S4HttpClient, CustomerInvoiceAdapter, and GoodsReceiptAdapter now normalize and propagate `ifMatch`/`etag` to upstream SAP `If-Match` headers. Sanitization retains caller-provided ETags while preventing auth/cookie leaks. Unit tests 22/22 (s4HttpClient), 19/19 (customerInvoiceAdapter), 59/59 (goodsReceipt) PASS; eslint clean.
@@ -1803,6 +1805,26 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-29 IST — Optimistic Concurrency & ETag Frontend UI5 Layer Phase 4 — DONE, UNCOMMITTED
+
+- **Context / Request:** User requested Phase 4 of the Concurrency / Stale-Data (ETag Gaps) fix plan.
+- **Change:**
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/service/OutboundDeliveryService.js`: `postGoodsIssue` and `createBillingDocument` updated to accept `mOptions` and pass `ETag` body property and `If-Match` request header when `mOptions.etag` is provided; preserves clean 2-argument call when absent.
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`: `onLoadDeliveryStatus` extracts `@odata.etag`/`ETag` and stores it in `/etag` on the `deliveryFollowUp` model. `onPostGoodsIssue` and `onCreateBillingDocument` pass `etag` to service and catch HTTP 409 / `STALE_DATA` errors with actionable error dialogs prompting immediate reload from SAP before retry.
+  - `app/fiori-app/webapp/modules/sd/customer-invoice/service/CustomerInvoiceService.js`: `releaseInvoiceToAccounting` and `cancelBillingDocument` updated to support `mOptions.etag`/`mOptions.ifMatch` via V4 model action parameters (`oAction.setParameter("ETag", sETag)`) and fallback ODataClient POST with `{ "If-Match": sETag }`; preserves 2-argument call when absent.
+  - `app/fiori-app/webapp/modules/sd/customer-invoice/controller/CustomerInvoices.controller.js`: `onToolbarReleasePress`, `onReleaseToAccountingPress`, and `onConfirmCancelInvoice` extract row/context ETag and forward it. Updated `_getText` to safely support string fallbacks, and `_extractErrorMessage` to provide clear user guidance and refresh for HTTP 409 and `STALE_DATA` errors.
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/service/GoodsReceiptService.js`: `postGoodsReceipt` and `postGoodsReceiptWithStorageUnit` extract `ETag` from payload or options and pass `{ "If-Match": sETag }` header.
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceipt.controller.js`: `onPostGoodsReceipt` attaches ETag from `activeSU` to the payload and catches 409 / `STALE_DATA` errors with workflow reset and reload guidance.
+  - `test/unit/sd/customerInvoiceService.test.js`: Created unit tests for `CustomerInvoiceService` verifying V4 model binding and ODataClient fallback with/without ETag (7 tests).
+  - `test/unit/le/outboundDeliveryService.test.js`: Added unit tests verifying ETag body property and If-Match header in `postGoodsIssue` and `createBillingDocument` (3 tests).
+  - `test/unit/le/ordersDueForDeliveryController.test.js`: Added unit tests verifying ETag storage in `onLoadDeliveryStatus`, and 409 `STALE_DATA` error handling in `onPostGoodsIssue` and `onCreateBillingDocument` (3 tests).
+  - `test/unit/sd/customerInvoicesController.test.js`: Added unit tests verifying ETag forwarding in `onToolbarReleasePress`, `onConfirmCancelInvoice`, and 409 error translation in `_extractErrorMessage` (3 tests).
+  - `test/unit/wm/goodsReceiptService.test.js`: Added unit tests verifying `If-Match` header propagation in `postGoodsReceipt` and `postGoodsReceiptWithStorageUnit` (2 tests).
+  - `test/unit/wm/goodsReceiptController.test.js`: Added unit test verifying ETag inclusion in payload and 409 `STALE_DATA` error handling with workflow reset (1 test).
+- **TEST DECISION:** TEST ADDED — 19 new unit tests across 6 test suites; 1 new test file created.
+- **Validation:** 13 test suites passed (283 passing tests, 38 real live SAP skips); ESLint clean on all touched files; `git diff --check` clean.
+- **Next:** Phase 5 (Negative E2E & Stale Data Verification Tests).
 
 ### 2026-10-28 IST — Optimistic Concurrency & ETag CAP Handler Layer Phase 3 — DONE, UNCOMMITTED
 

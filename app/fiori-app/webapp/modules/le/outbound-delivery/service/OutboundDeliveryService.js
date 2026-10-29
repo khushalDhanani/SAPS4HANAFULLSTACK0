@@ -192,9 +192,15 @@ sap.ui.define([
         },
 
         /** Post goods issue for a delivery. Resolves with SAP's PostGoodsReturnInfo-based result; rejects with SAP's message. */
-        postGoodsIssue: function (sDelivery) {
+        postGoodsIssue: function (sDelivery, mOptions) {
             if (!sDelivery) { return Promise.reject(new Error("Delivery number is required.")); }
-            return ODataClient.post(SERVICE_BASE + "/postGoodsIssue", { DeliveryDocument: String(sDelivery).trim() });
+            var oPayload = { DeliveryDocument: String(sDelivery).trim() };
+            var sETag = (mOptions && (mOptions.etag || mOptions.ifMatch)) || "";
+            if (sETag) {
+                oPayload.ETag = sETag;
+                return ODataClient.post(SERVICE_BASE + "/postGoodsIssue", oPayload, { "If-Match": sETag });
+            }
+            return ODataClient.post(SERVICE_BASE + "/postGoodsIssue", oPayload);
         },
 
         /** Billing document types SAP allows for this delivery (never a hardcoded list). */
@@ -207,13 +213,19 @@ sap.ui.define([
         },
 
         /** Create a billing document for a delivery; the number comes only from SAP. */
-        createBillingDocument: function (mParams) {
+        createBillingDocument: function (mParams, mOptions) {
             if (!mParams || !mParams.delivery) { return Promise.reject(new Error("Delivery number is required.")); }
-            return ODataClient.post(SERVICE_BASE + "/createBillingDocument", {
+            var oPayload = {
                 DeliveryDocument: String(mParams.delivery).trim(),
                 BillingDocumentType: mParams.billingType ? String(mParams.billingType).trim() : null,
                 BillingDocumentDate: mParams.billingDate ? String(mParams.billingDate).trim() : null
-            });
+            };
+            var sETag = (mOptions && (mOptions.etag || mOptions.ifMatch)) || (mParams && (mParams.etag || mParams.ifMatch)) || "";
+            if (sETag) {
+                oPayload.ETag = sETag;
+                return ODataClient.post(SERVICE_BASE + "/createBillingDocument", oPayload, { "If-Match": sETag });
+            }
+            return ODataClient.post(SERVICE_BASE + "/createBillingDocument", oPayload);
         },
 
         /**

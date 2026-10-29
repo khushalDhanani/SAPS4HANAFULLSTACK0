@@ -489,7 +489,8 @@ sap.ui.define([
                                 Batch: oActive.Batch,
                                 Quantity: nQty,
                                 PackagingMaterial: oActive.PackagingMaterial || "",
-                                ExpiryDate: oActive.ExpiryDate
+                                ExpiryDate: oActive.ExpiryDate,
+                                ETag: oActive.ETag || oActive["@odata.etag"] || oActive.etag || ""
                             };
 
                             var fnPost = (oActive.StorageUnit && typeof GoodsReceiptService.postGoodsReceiptWithStorageUnit === "function")
@@ -510,7 +511,18 @@ sap.ui.define([
                                 })
                                 .catch(function (err) {
                                     that._playBeep(false);
-                                    MessageBox.error(that.getText("grPostFailed", [err.message || err]));
+                                    if (err && (err.status === 409 || err.statusCode === 409 || err.code === "STALE_DATA")) {
+                                        var sStaleMsg = (err.message || that.getText("grErrStaleData", null, "This document was modified by another user or session in SAP S/4HANA (stale data).")) +
+                                            "\n\n" + that.getText("grPromptReloadData", null, "Please refresh and reload the latest data from SAP before retrying.");
+                                        MessageBox.error(sStaleMsg, {
+                                            title: that.getText("titleStaleDataConflict", null, "Document Changed / Stale Data"),
+                                            onClose: function () {
+                                                that.onResetWorkflow();
+                                            }
+                                        });
+                                    } else {
+                                        MessageBox.error(that.getText("grPostFailed", [err.message || err]));
+                                    }
                                     resolve(null);
                                 })
                                 .finally(function () {

@@ -397,4 +397,56 @@ describe("CustomerInvoices Controller", () => {
         expect(controller.formatCancelEnabled(false, "A", "N")).toBe(false);
         expect(controller.formatCancelEnabled(false, "A", "M")).toBe(true);
     });
+
+    describe("Optimistic concurrency and ETag handling (Phase 4)", () => {
+        test("onToolbarReleasePress forwards ETag to service when available", () => {
+            controller.onInit();
+            const viewModel = models["customerInvoicesView"];
+            viewModel.setProperty("/selectedInvoice", {
+                BillingDocument: "31000111",
+                "@odata.etag": 'W/"20261028130000"'
+            });
+
+            controller.onToolbarReleasePress();
+
+            expect(MockMessageBox.confirm).toHaveBeenCalled();
+            expect(MockCustomerInvoiceService.releaseInvoiceToAccounting).toHaveBeenCalledWith(
+                "31000111",
+                undefined,
+                { etag: 'W/"20261028130000"' }
+            );
+        });
+
+        test("onConfirmCancelInvoice forwards ETag to service when available", async () => {
+            controller.onInit();
+            controller.onCancelInvoicePress({
+                getSource: () => ({
+                    getBindingContext: () => ({
+                        getObject: () => ({
+                            BillingDocument: "31000112",
+                            "@odata.etag": 'W/"20261028140000"'
+                        })
+                    })
+                })
+            });
+            await controller._pCancelDialog;
+            controller._oCancelDialog.getModel("cancelInvoiceModel").setProperty("/@odata.etag", 'W/"20261028140000"');
+
+            await controller.onConfirmCancelInvoice();
+
+            expect(MockCustomerInvoiceService.cancelBillingDocument).toHaveBeenCalledWith(
+                "31000112",
+                undefined,
+                { etag: 'W/"20261028140000"' }
+            );
+        });
+
+        test("_extractErrorMessage translates 409 and STALE_DATA into helpful guidance", () => {
+            const err409 = { status: 409, message: "Resource changed by another user" };
+            expect(controller._extractErrorMessage(err409, "fallback")).toContain("changed by another user");
+
+            const errStale = { code: "STALE_DATA" };
+            expect(controller._extractErrorMessage(errStale, "fallback")).toContain("modified by another user or session in SAP S/4HANA (stale data)");
+        });
+    });
 });

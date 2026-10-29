@@ -176,18 +176,28 @@ sap.ui.define([
         /**
          * Posts Goods Receipt (101) directly to SAP S/4HANA
          * @param {Object} oPayload
+         * @param {Object} [mOptions]
          * @returns {Promise<Object>}
          */
-        postGoodsReceipt: function (oPayload) {
+        postGoodsReceipt: function (oPayload, mOptions) {
+            var sETag = (mOptions && (mOptions.etag || mOptions.ifMatch)) || (oPayload && (oPayload.ETag || oPayload.etag)) || "";
+            if (sETag) {
+                return ODataClient.post(BASE_PATH + "/postGoodsReceipt", oPayload, { "If-Match": sETag });
+            }
             return ODataClient.post(BASE_PATH + "/postGoodsReceipt", oPayload);
         },
 
         /**
          * Posts Goods Receipt (101) against Storage Unit / Inbound Delivery directly to SAP S/4HANA
          * @param {Object} oPayload
+         * @param {Object} [mOptions]
          * @returns {Promise<Object>}
          */
-        postGoodsReceiptWithStorageUnit: function (oPayload) {
+        postGoodsReceiptWithStorageUnit: function (oPayload, mOptions) {
+            var sETag = (mOptions && (mOptions.etag || mOptions.ifMatch)) || (oPayload && (oPayload.ETag || oPayload.etag)) || "";
+            if (sETag) {
+                return ODataClient.post(BASE_PATH + "/postGoodsReceiptWithStorageUnit", oPayload, { "If-Match": sETag });
+            }
             return ODataClient.post(BASE_PATH + "/postGoodsReceiptWithStorageUnit", oPayload);
         }
     };

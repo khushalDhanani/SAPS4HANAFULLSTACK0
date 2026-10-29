@@ -644,6 +644,8 @@ sap.ui.define([
             return OutboundDeliveryService.getDeliveryStatus(sDelivery)
                 .then(function (o) {
                     oFU.setProperty("/status", o);
+                    var sETag = (o && (o["@odata.etag"] || o.ETag || o.etag)) || "";
+                    oFU.setProperty("/etag", sETag);
                     oFU.setProperty("/statusText", that._text("dlvFollowUpStatus", "Type {0} · Ship-to {1} · Picking {2} · Goods movement {3} · Billing {4}")
                         .replace("{0}", o.DeliveryDocumentType).replace("{1}", o.SoldToParty).replace("{2}", that._statusLabel(o.OverallPickingStatus))
                         .replace("{3}", that._statusLabel(o.OverallGoodsMovementStatus)).replace("{4}", that._statusLabel(o.OverallDelivReltdBillgStatus)));
@@ -667,7 +669,8 @@ sap.ui.define([
                 onClose: function (sAction) {
                     if (sAction !== MessageBox.Action.OK) { return; }
                     oFU.setProperty("/busy", true);
-                    OutboundDeliveryService.postGoodsIssue(sDelivery)
+                    var sETag = oFU.getProperty("/etag") || "";
+                    OutboundDeliveryService.postGoodsIssue(sDelivery, sETag ? { etag: sETag } : undefined)
                         .then(function (oRes) {
                             var sMsg = that._text("msgPgiPosted", "Goods issue posted in S/4HANA for delivery {0}.").replace("{0}", sDelivery);
                             oFU.setProperty("/lastResult", sMsg);
@@ -675,6 +678,18 @@ sap.ui.define([
                             return oRes;
                         })
                         .catch(function (err) {
+                            if (err && (err.status === 409 || err.statusCode === 409 || err.code === "STALE_DATA")) {
+                                var sConflictMsg = (err.message || that._text("msgStaleDataConflict", "This delivery was modified by another user or session in SAP S/4HANA (stale data).")) +
+                                    "\n\n" + that._text("msgPromptReloadData", "Please reload the latest delivery data from SAP before retrying.");
+                                MessageBox.error(sConflictMsg, {
+                                    title: that._text("titleStaleDataConflict", "Document Changed / Stale Data"),
+                                    onClose: function () {
+                                        that.onRefresh();
+                                        that.onLoadDeliveryStatus();
+                                    }
+                                });
+                                return;
+                            }
                             // SAP's own message, verbatim
                             MessageBox.error((err && (err.message || err.statusText)) || "Goods issue could not be posted.");
                         })
@@ -711,7 +726,11 @@ sap.ui.define([
                 onClose: function (sAction) {
                     if (sAction !== MessageBox.Action.OK) { return; }
                     oFU.setProperty("/busy", true);
-                    OutboundDeliveryService.createBillingDocument({ delivery: sDelivery, billingType: sType, billingDate: oFU.getProperty("/billingDate") })
+                    var sETag = oFU.getProperty("/etag") || "";
+                    OutboundDeliveryService.createBillingDocument(
+                        { delivery: sDelivery, billingType: sType, billingDate: oFU.getProperty("/billingDate"), etag: sETag },
+                        sETag ? { etag: sETag } : undefined
+                    )
                         .then(function (oRes) {
                             var sNo = oRes && oRes.BillingDocument;
                             var aMsgs = (oRes && oRes.Messages) || [];
@@ -721,6 +740,17 @@ sap.ui.define([
                             MessageBox.success(sMsg + (sDetail ? "\n\n" + sDetail : ""), { onClose: function () { that.onLoadDeliveryStatus(); } });
                         })
                         .catch(function (err) {
+                            if (err && (err.status === 409 || err.statusCode === 409 || err.code === "STALE_DATA")) {
+                                var sConflictMsg = (err.message || that._text("msgStaleDataConflict", "This delivery was modified by another user or session in SAP S/4HANA (stale data).")) +
+                                    "\n\n" + that._text("msgPromptReloadData", "Please reload the latest delivery data from SAP before retrying.");
+                                MessageBox.error(sConflictMsg, {
+                                    title: that._text("titleStaleDataConflict", "Document Changed / Stale Data"),
+                                    onClose: function () {
+                                        that.onLoadDeliveryStatus();
+                                    }
+                                });
+                                return;
+                            }
                             MessageBox.error((err && (err.message || err.statusText)) || "Billing document could not be created.");
                         })
                         .finally(function () { oFU.setProperty("/busy", false); });
