@@ -1810,6 +1810,14 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-10-29 IST — Customer return price: copy-control evidence found (READ-ONLY); BAPI input now copies the reference price (pricing type D); NOT sent to SAP — PARTIAL
+
+- **READ-ONLY (RFC_READ_TABLE only):** item category of order 5000446 item 10 is `ZTAM`; copy control `TVCPA` for target document type `ZRET`: source item category `ZTAM` -> target `ZREN`, **`KNPRS = D`** (copy price elements unchanged); almost all other ZRET rows also use `D` (a few `A`). The real return 4500179 and our 4500185 both have item category `ZREN`. Invoice 31000108's item category is also `ZTAM`.
+- **CHANGED (no SAP call):** `CustomerReturnRfcCreator.buildInput` adds `LOGIC_SWITCH { PRICING: 'D' }` when a reference document is passed (constant `REFERENCE_PRICING`, marked `shortcut:` with the evidence; derive from TVCPA by item category if another category needs another value); no switch without a reference. Test added; `npx jest test/unit/sd` 184 pass; eslint clean. Print-only input: `LOGIC_SWITCH {PRICING: D}`, header/items as before (`REF_DOC 0005000446`).
+- **NOT VERIFIED:** that SAP then copies the price from order 5000446 and the return becomes complete (a TESTRUN shows no price, so the proof is a real save and a read of `VBAP-NETWR` / `UVALL`).
+- **NOT DONE:** live create with the switch (each is a new return in DEV; needs the user's written go); handler default unchanged.
+- **FINAL STATUS:** PARTIAL.
+
 ### 2026-10-29 IST — LIVE customer return via the BAPI route (user go: "live return (BAPI)"): return 4500185 created; reason, reference and storage location NOW persisted; price missing — PARTIAL (row stays 🟡)
 
 - **WRITE performed (one live create through UI → CAP → `BAPI_CUSTOMERRETURN_CREATE`, user's written go; target `S4HANA_DEV - Client 220`; server started with `CUSTOMER_RETURN_ROUTE=rfc`; data as before: reference order 5000446, sold-to 10276, 1000 / 10 / 52, reason 008, material 4000000181, 10 KG, plant 1130, SLoc FG01):** the BAPI committed return **0004500185**; the adapter's own persistence check against SAP (reason, reference, storage location) passed.

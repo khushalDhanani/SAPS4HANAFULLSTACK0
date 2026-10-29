@@ -16,6 +16,10 @@ const { failure, clean, sapDate, partnerNumber, materialNumber, documentNumber, 
  */
 
 const BAPI = 'BAPI_CUSTOMERRETURN_CREATE';
+// Pricing type for items copied from a reference document (BAPISDLS-PRICING, domain KNPRS): 'D' = copy price elements unchanged.
+// shortcut: copy control order item category ZTAM -> return item category ZREN uses KNPRS 'D' (TVCPA, read 2026-10-29) and so do nearly all
+// other ZRET rows; derive it from TVCPA by item category if a reference with another category needs a different value.
+const REFERENCE_PRICING = 'D';
 const isBlankKey = (v) => /^0*$/.test(clean(v)); // the UI sends item reference '0' / '000000' when there is none
 
 /** Header fields -> [BAPI field, value]; blank values are not sent and get no update flag. */
@@ -83,7 +87,9 @@ function buildInput(payload, salesArea) {
         schedules.push({ ITM_NUMBER: itm, SCHED_LINE: '0001', REQ_DATE: docDate, REQ_QTY: qty });
     });
 
+    const referenced = Boolean(headerRef) || itemsIn.some((r) => r.REF_DOC);
     return {
+        ...(referenced ? { LOGIC_SWITCH: { PRICING: REFERENCE_PRICING } } : {}),
         RETURN_HEADER_IN: Object.fromEntries(fields),
         RETURN_HEADER_INX: { UPDATEFLAG: 'I', ...Object.fromEntries(fields.map(([k]) => [k, 'X'])) },
         RETURN_PARTNERS: [{ PARTN_ROLE: 'AG', PARTN_NUMB: partnerNumber(payload.SoldToParty) }],
