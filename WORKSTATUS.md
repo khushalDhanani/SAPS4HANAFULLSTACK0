@@ -5832,3 +5832,8 @@ Single source of truth for work history, current status, validation, unresolved 
 - **CHANGED:** local `.env.local` only (git-ignored): `S4_DESTINATION_URL` set back to `https://vheudds4ap01.sap.aether.co.in:44300`; it had been changed to `http://172.27.100.32:8000` (plain HTTP, Basic-auth credentials in clear text). Backup `~/.sap-certs/env.local.bak2`. No source change.
 - **VERIFIED:** strict Node TLS to the FQHN with `NODE_EXTRA_CA_CERTS=$HOME/.sap-certs/s4-dev.pem` returned HTTP 401 unauthenticated (READ-ONLY, no credentials). **NOT VERIFIED:** app restarted on the new value; login against SAP; cert fingerprint with Basis. **TEST DECISION:** TEST NOT POSSIBLE — local environment config.
 - **NEXT:** restart with `NODE_EXTRA_CA_CERTS=$HOME/.sap-certs/s4-dev.pem npm start`.
+
+### 2026-10-29 IST — Restore HTTPS S/4 URL in local .env.local — PARTIAL
+
+- **CHANGED:** local `.env.local` only (git-ignored): `S4_DESTINATION_URL` set back to `https://vheudds4ap01.sap.aether.co.in:44300`; it had been changed to `http://172.27.100.32:8000` (plain HTTP, Basic-auth credentials in clear text). Backup `~/.sap-certs/env.local.bak2`. No source change.
+- **VERIFIED:** strict Node TLS to the FQHN with `NODE_EXTRA_CA_CERTS=$HOME/.sap-certs/s4-dev.pem` (unauthenticated, READ-ONLY). **NOT VERIFIED:** app restarted on the new value; login against SAP; cert fingerprint with Basis. **TEST DECISION:** TEST NOT POSSIBLE — local environment config. **NEXT:** restart `NODE_EXTRA_CA_CERTS=$HOME/.sap-certs/s4-dev.pem npm start`.
