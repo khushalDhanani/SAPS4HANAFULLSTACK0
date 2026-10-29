@@ -1810,6 +1810,23 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-10-29 IST — LIVE return create via the BAPI route with PRICING G (user go: "pricing G"): suite PASS, return 4500186; price STILL not copied — PARTIAL
+
+- **WRITE performed (one live create, user's written go; target `S4HANA_DEV - Client 220`; server with `CUSTOMER_RETURN_ROUTE=rfc`; same confirmed data):** `[PASS] create customer return`, document **4500186** (returned without leading zeros, the format fix works), the strengthened read-back (reason, reference, storage location, plant, quantity, sold-to through CAP) passed. `PRICING G` was accepted by the BAPI (D was refused).
+- **INDEPENDENT READ FROM SAP (READ-ONLY RFC_READ_TABLE):** `VBAK` 0004500186: ZRET, `AUGRU 008`, `KUNNR 10276`, 1000 / 10 / 52, INR, `VGBEL 0005000446`, `VGTYP C`, `NETWR 0.00`, `UVALL A`; `VBAP` 000010: `MATNR 000000004000000181`, `KWMENG 10 KG`, `WERKS 1130`, `LGORT FG01`, `VGBEL 0005000446 / VGPOS 000010`, `PSTYV ZREN`, **`NETPR 0.00`, `NETWR 0.00`, `UVPRS A`, `UVALL A`**; `VBFA`: 5000446 → 4500186 (item 10, 10 KG). For comparison the reference order item has `NETPR 6500.00` per KG and the real return 4500179 `NETWR 325 000.00` (50 KG).
+- **CONCLUSION:** with the reference passed, `PRICING G` does not make the BAPI copy the price (INFERRED: the BAPI takes conditions from its own `RETURN_CONDITIONS_IN` table, or `LOGIC_SWITCH-COND_HANDL` governs it). Reason, reference and storage location are solved; the price is not. Candidates, none verified: `PRICING B` (new pricing from condition records; the order's 6500.00/KG suggests condition records exist for material 4000000181 / customer 10276), `COND_HANDL` unset/other, or passing the price as a condition in `RETURN_CONDITIONS_IN`. Each trial adds another return to DEV (now 4500184 / 4500185 / 4500186, all with 10 KG and no price except none).
+- **CHANGED:** `docs/e2e-coverage-matrix.md` evidence text (row stays 🟡). No code change in this step.
+- **NOT DONE:** price copy; making the BAPI route the default; cancelling 4500184-4500186 in SAP (user decision); commit of the pricing-switch change (uncommitted).
+- **FINAL STATUS:** PARTIAL (reason / reference / storage location PASS, price open).
+
+### 2026-10-29 IST — LIVE return create with PRICING D (user go: "live return + price"): refused by the BAPI's own value check; nothing created; switched to G — PARTIAL
+
+- **WRITE attempt (one live create through UI → CAP → BAPI, `CUSTOMER_RETURN_ROUTE=rfc`; same confirmed data):** SAP answered `D is not allowed for LOGIC_SWITCH-PRICING [D] @LOGIC_SWITCH`; rolled back, no commit. READ-ONLY check: `VBAK` still has only 4500184 and 4500185 for today, nothing new. The UI showed the SAP message in its error box (negative path observed live); the suite failed with that error plus a follow-up `locator.click` timeout on the box it expected.
+- **FINDING (CONFIRMED):** the BAPI restricts `LOGIC_SWITCH-PRICING` to a subset of domain KNPRS and `D` is not in it, although the system's copy control (TVCPA ZTAM -> ZREN) uses `D`.
+- **CHANGED (no SAP call):** `REFERENCE_PRICING` `D` -> `G` (copy price elements unchanged and redetermine taxes), comment updated; unit test updated; `npx jest test/unit/sd` 184 pass; eslint clean. UNVERIFIED: that `G` is accepted and yields a priced, complete return; `B` (new pricing) is the other candidate.
+- **NOT DONE:** the live create with `G` (new written go; a value the BAPI refuses again creates nothing).
+- **FINAL STATUS:** PARTIAL.
+
 ### 2026-10-29 IST — Customer return price: copy-control evidence found (READ-ONLY); BAPI input now copies the reference price (pricing type D); NOT sent to SAP — PARTIAL
 
 - **READ-ONLY (RFC_READ_TABLE only):** item category of order 5000446 item 10 is `ZTAM`; copy control `TVCPA` for target document type `ZRET`: source item category `ZTAM` -> target `ZREN`, **`KNPRS = D`** (copy price elements unchanged); almost all other ZRET rows also use `D` (a few `A`). The real return 4500179 and our 4500185 both have item category `ZREN`. Invoice 31000108's item category is also `ZTAM`.

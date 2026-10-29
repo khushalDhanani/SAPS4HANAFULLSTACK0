@@ -42,8 +42,8 @@ describe('buildInput: domain -> BAPI_CUSTOMERRETURN_CREATE', () => {
         expect(b.RETURN_SCHEDULES_INX).toEqual([{ ITM_NUMBER: '000010', SCHED_LINE: '0001', UPDATEFLAG: 'I', REQ_DATE: 'X', REQ_QTY: 'X' }]);
     });
 
-    it('copies the price of the reference document (pricing type D, the system copy control value) and sends no switch without a reference', () => {
-        expect(buildInput(payload(), salesArea).LOGIC_SWITCH).toEqual({ PRICING: 'D' });
+    it('copies the price of the reference document (pricing type G; the BAPI refuses D) and sends no switch without a reference', () => {
+        expect(buildInput(payload(), salesArea).LOGIC_SWITCH).toEqual({ PRICING: 'G' });
         const p = payload(); delete p.ReferenceSDDocument; delete p.ReferenceSDDocumentCategory; p.Items[0].ReferenceSDDocument = '';
         expect(buildInput(p, salesArea)).not.toHaveProperty('LOGIC_SWITCH');
     });

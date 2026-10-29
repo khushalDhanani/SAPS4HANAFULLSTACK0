@@ -16,10 +16,10 @@ const { failure, clean, sapDate, partnerNumber, materialNumber, documentNumber, 
  */
 
 const BAPI = 'BAPI_CUSTOMERRETURN_CREATE';
-// Pricing type for items copied from a reference document (BAPISDLS-PRICING, domain KNPRS): 'D' = copy price elements unchanged.
-// shortcut: copy control order item category ZTAM -> return item category ZREN uses KNPRS 'D' (TVCPA, read 2026-10-29) and so do nearly all
-// other ZRET rows; derive it from TVCPA by item category if a reference with another category needs a different value.
-const REFERENCE_PRICING = 'D';
+// Pricing type for items copied from a reference document (BAPISDLS-PRICING, domain KNPRS). Copy control (TVCPA, ZTAM -> ZREN) says 'D'
+// (copy price elements unchanged), but the BAPI itself refused it live on 2026-10-29 ("D is not allowed for LOGIC_SWITCH-PRICING"), so 'G'
+// (copy price elements unchanged and redetermine taxes) is used: UNVERIFIED until a live save; 'B' (new pricing) is the other candidate.
+const REFERENCE_PRICING = 'G';
 const isBlankKey = (v) => /^0*$/.test(clean(v)); // the UI sends item reference '0' / '000000' when there is none
 
 /** Header fields -> [BAPI field, value]; blank values are not sent and get no update flag. */
