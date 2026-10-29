@@ -821,7 +821,7 @@ describe("OrdersDueForDelivery Controller", () => {
             await flush();
 
             expect(MockOutboundDeliveryService.createBillingDocument).toHaveBeenCalledWith(
-                expect.objectContaining({ delivery: "80000085", billingType: "F2", etag: 'W/"20261028120000"' }),
+                expect.objectContaining({ delivery: "80000085", billingType: "F2" }),
                 { etag: 'W/"20261028120000"' }
             );
             expect(MockMessageBox.error).toHaveBeenCalledWith(

@@ -476,6 +476,7 @@ sap.ui.define([
                             that.setBusy(true);
                             oModel.setProperty("/isPosting", true);
 
+                            var sETag = oActive.ETag || oActive["@odata.etag"] || oActive.etag || "";
                             var oPayload = {
                                 StorageUnit: oActive.StorageUnit || "",
                                 DeliveryDocument: oActive.DeliveryDocument,
@@ -489,15 +490,18 @@ sap.ui.define([
                                 Batch: oActive.Batch,
                                 Quantity: nQty,
                                 PackagingMaterial: oActive.PackagingMaterial || "",
-                                ExpiryDate: oActive.ExpiryDate,
-                                ETag: oActive.ETag || oActive["@odata.etag"] || oActive.etag || ""
+                                ExpiryDate: oActive.ExpiryDate
                             };
 
                             var fnPost = (oActive.StorageUnit && typeof GoodsReceiptService.postGoodsReceiptWithStorageUnit === "function")
                                 ? GoodsReceiptService.postGoodsReceiptWithStorageUnit.bind(GoodsReceiptService)
                                 : GoodsReceiptService.postGoodsReceipt.bind(GoodsReceiptService);
 
-                            fnPost(oPayload)
+                            var pPost = sETag
+                                ? fnPost(oPayload, { etag: sETag })
+                                : fnPost(oPayload);
+
+                            pPost
                                 .then(function (oResult) {
                                     that._playBeep(true);
                                     var sSuccessMsg = (oResult && oResult.Message) ? oResult.Message : that.getText("grPostSuccessDefault");

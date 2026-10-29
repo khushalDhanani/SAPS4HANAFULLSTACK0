@@ -70,7 +70,6 @@ sap.ui.define([
 
             var oPayload = { BillingDocument: sDoc };
             if (sETag) {
-                oPayload.ETag = sETag;
                 return ODataClient.post(SERVICE_BASE + "/releaseInvoiceToAccounting", oPayload, { "If-Match": sETag });
             }
             return ODataClient.post(SERVICE_BASE + "/releaseInvoiceToAccounting", oPayload);
@@ -85,9 +84,6 @@ sap.ui.define([
             if (oTargetModel && typeof oTargetModel.bindContext === "function") {
                 var oAction = oTargetModel.bindContext("/cancelBillingDocument(...)");
                 oAction.setParameter("BillingDocument", sDoc);
-                if (sETag) {
-                    oAction.setParameter("ETag", sETag);
-                }
                 return oAction.execute().then(function () {
                     var oCtx = oAction.getBoundContext();
                     return oCtx ? oCtx.getObject() : null;
@@ -96,7 +92,6 @@ sap.ui.define([
 
             var oPayload = { BillingDocument: sDoc };
             if (sETag) {
-                oPayload.ETag = sETag;
                 return ODataClient.post(SERVICE_BASE + "/cancelBillingDocument", oPayload, { "If-Match": sETag });
             }
             return ODataClient.post(SERVICE_BASE + "/cancelBillingDocument", oPayload);

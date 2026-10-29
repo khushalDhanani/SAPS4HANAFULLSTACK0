@@ -728,7 +728,7 @@ sap.ui.define([
                     oFU.setProperty("/busy", true);
                     var sETag = oFU.getProperty("/etag") || "";
                     OutboundDeliveryService.createBillingDocument(
-                        { delivery: sDelivery, billingType: sType, billingDate: oFU.getProperty("/billingDate"), etag: sETag },
+                        { delivery: sDelivery, billingType: sType, billingDate: oFU.getProperty("/billingDate") },
                         sETag ? { etag: sETag } : undefined
                     )
                         .then(function (oRes) {

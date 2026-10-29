@@ -55,7 +55,6 @@ describe('Frontend CustomerInvoiceService Unit Tests', () => {
             const res = await CustomerInvoiceService.releaseInvoiceToAccounting('31000111', mockModel, { etag: 'W/"12345"' });
             expect(mockModel.bindContext).toHaveBeenCalledWith('/releaseInvoiceToAccounting(...)');
             expect(mockAction.setParameter).toHaveBeenCalledWith('BillingDocument', '31000111');
-            expect(mockAction.setParameter).toHaveBeenCalledWith('ETag', 'W/"12345"');
             expect(mockAction.execute).toHaveBeenCalled();
             expect(res).toEqual({ AccountingDocument: '9000000100' });
             expect(mockODataClient.post).not.toHaveBeenCalled();
@@ -76,7 +75,7 @@ describe('Frontend CustomerInvoiceService Unit Tests', () => {
             const res = await CustomerInvoiceService.releaseInvoiceToAccounting('31000111', null, { etag: 'W/"ETAG999"' });
             expect(mockODataClient.post).toHaveBeenCalledWith(
                 '/odata/v4/customer-invoice/releaseInvoiceToAccounting',
-                { BillingDocument: '31000111', ETag: 'W/"ETAG999"' },
+                { BillingDocument: '31000111' },
                 { 'If-Match': 'W/"ETAG999"' }
             );
             expect(res).toEqual({ Success: true });
@@ -97,7 +96,6 @@ describe('Frontend CustomerInvoiceService Unit Tests', () => {
             const res = await CustomerInvoiceService.cancelBillingDocument('31000112', mockModel, { etag: 'W/"67890"' });
             expect(mockModel.bindContext).toHaveBeenCalledWith('/cancelBillingDocument(...)');
             expect(mockAction.setParameter).toHaveBeenCalledWith('BillingDocument', '31000112');
-            expect(mockAction.setParameter).toHaveBeenCalledWith('ETag', 'W/"67890"');
             expect(mockAction.execute).toHaveBeenCalled();
             expect(res).toEqual({ CancellationDocument: '90000053' });
             expect(mockODataClient.post).not.toHaveBeenCalled();
@@ -118,7 +116,7 @@ describe('Frontend CustomerInvoiceService Unit Tests', () => {
             const res = await CustomerInvoiceService.cancelBillingDocument('31000112', null, { etag: 'W/"ETAG888"' });
             expect(mockODataClient.post).toHaveBeenCalledWith(
                 '/odata/v4/customer-invoice/cancelBillingDocument',
-                { BillingDocument: '31000112', ETag: 'W/"ETAG888"' },
+                { BillingDocument: '31000112' },
                 { 'If-Match': 'W/"ETAG888"' }
             );
             expect(res).toEqual({ Success: true });

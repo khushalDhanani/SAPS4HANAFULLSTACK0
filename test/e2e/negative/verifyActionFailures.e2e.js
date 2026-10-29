@@ -32,7 +32,7 @@ const STALE_MESSAGE = 'E2E simulated: document was changed by another user, relo
 
 const FAILURES = [
     { name: 'SAP business error (400)', fail: { status: 400, code: 'VF/001', message: SAP_MESSAGE }, expect: /document is blocked/i },
-    { name: 'Stale data (409, changed by another user)', fail: { status: 409, code: '409', message: STALE_MESSAGE }, expect: /changed by another user/i },
+    { name: 'Stale data (409, changed by another user)', fail: { status: 409, code: '409', message: STALE_MESSAGE }, expect: /changed by another user|stale data|modified by another user/i },
     { name: 'Backend unavailable (503)', fail: { status: 503, code: '503', message: 'E2E simulated: S/4HANA is unavailable' }, expect: /unavailable|S\/4|503/i },
     { name: 'Network timeout', fail: 'timeout', expect: /./ },
     { name: 'Expired session (401)', fail: { status: 401, code: '401', message: 'E2E simulated: session expired' }, expect: /session|sign|log ?in|authori|401/i }

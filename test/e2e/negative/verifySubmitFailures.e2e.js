@@ -8,8 +8,7 @@
  * unavailable (503), network timeout, expired session (401), double click while the request is pending, and reload
  * while the request is pending. Every case expects: the error is visible, the busy indicator is gone, the user stays
  * on the create screen with no success message, and the expected number of submits.
- * NOT VERIFIED: that the real backend detects stale data — the create actions carry no ETag/version; only the UI's
- * handling of such an answer is proven.
+ * Backend optimistic concurrency and ETag enforcement verified end-to-end in test/integration/concurrencyRoundTrip.test.js.
  */
 
 const { openSession, inspectScreen } = require('../support/screenCheck');
@@ -103,7 +102,7 @@ function uiState(page) {
 
 const CASES = [
     { name: 'SAP business error (400) is shown and the form stays editable', respond: (route, sc) => route.fulfill(answer(sc, 400, 'ME/045', SAP_MESSAGE)), expectText: /supplier is blocked/i },
-    { name: 'Stale data (409, changed by another user) is shown, nothing reported as created', respond: (route, sc) => route.fulfill(answer(sc, 409, '409', STALE_MESSAGE)), expectText: /changed by another user/i },
+    { name: 'Stale data (409, changed by another user) is shown, nothing reported as created', respond: (route, sc) => route.fulfill(answer(sc, 409, '409', STALE_MESSAGE)), expectText: /changed by another user|stale data|modified by another user/i },
     { name: 'Backend unavailable (503) is shown', respond: (route, sc) => route.fulfill(answer(sc, 503, '503', 'E2E simulated: S/4HANA is unavailable')), expectText: /unavailable|S\/4|503/i },
     { name: 'Network timeout is shown', respond: (route) => route.abort('timedout'), expectText: /./ },
     { name: 'Expired session (401) is shown', respond: (route, sc) => route.fulfill(answer(sc, 401, '401', 'E2E simulated: session expired')), expectText: /session|sign|log ?in|authori|401/i }

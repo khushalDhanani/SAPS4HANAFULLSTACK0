@@ -625,9 +625,9 @@ describe('GoodsReceipt Controller Unit Tests', () => {
 
             expect(mockGoodsReceiptService.postGoodsReceipt).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    StorageUnit: '180000001',
-                    ETag: 'W/"20261028150000"'
-                })
+                    StorageUnit: '180000001'
+                }),
+                { etag: 'W/"20261028150000"' }
             );
 
             expect(mockMessageBox.error).toHaveBeenCalledWith(

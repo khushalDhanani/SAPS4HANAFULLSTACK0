@@ -197,7 +197,6 @@ sap.ui.define([
             var oPayload = { DeliveryDocument: String(sDelivery).trim() };
             var sETag = (mOptions && (mOptions.etag || mOptions.ifMatch)) || "";
             if (sETag) {
-                oPayload.ETag = sETag;
                 return ODataClient.post(SERVICE_BASE + "/postGoodsIssue", oPayload, { "If-Match": sETag });
             }
             return ODataClient.post(SERVICE_BASE + "/postGoodsIssue", oPayload);
@@ -222,7 +221,6 @@ sap.ui.define([
             };
             var sETag = (mOptions && (mOptions.etag || mOptions.ifMatch)) || (mParams && (mParams.etag || mParams.ifMatch)) || "";
             if (sETag) {
-                oPayload.ETag = sETag;
                 return ODataClient.post(SERVICE_BASE + "/createBillingDocument", oPayload, { "If-Match": sETag });
             }
             return ODataClient.post(SERVICE_BASE + "/createBillingDocument", oPayload);

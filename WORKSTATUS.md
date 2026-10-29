@@ -7,7 +7,9 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
-- **Optimistic Concurrency & ETag Frontend UI5 Layer Phase 4 (2026-10-29 IST) — DONE, UNCOMMITTED:** UI5 services and controllers across Outbound Delivery, Customer Invoice, and Goods Receipt now preserve and pass ETags into write actions and handle HTTP 409 Conflict (`STALE_DATA`) responses with immediate reload prompts. Added dedicated `test/unit/sd/customerInvoiceService.test.js` and updated unit tests across `outboundDeliveryService.test.js`, `ordersDueForDeliveryController.test.js`, `customerInvoicesController.test.js`, `goodsReceiptService.test.js`, and `goodsReceiptController.test.js` (19 new unit tests, 13 suites / 283 tests passing, 38 skipped, 0 failed). ESLint clean on all touched files.
+- **Optimistic Concurrency & ETag Integration & Negative E2E Verification Phase 5 (2026-10-29 IST) — DONE, UNCOMMITTED:** Created `test/integration/concurrencyRoundTrip.test.js` validating complete end-to-end CAP HTTP round trips across Outbound Delivery (`postGoodsIssue`, `createBillingDocument`), Customer Invoice (`releaseInvoiceToAccounting`, `cancelBillingDocument`), and Goods Receipt (`postGoodsReceipt`). Verified client `If-Match` header extraction, adapter parameter forwarding, S/4 412 mapping to HTTP 409 `STALE_DATA`, and successful 200 responses on matching ETags. Cleaned UI5 action parameter payloads to strictly conform to CDS action signatures. Updated `verifyActionFailures.e2e.js` and `verifySubmitFailures.e2e.js` stale data regexes (`/changed by another user|stale data|modified by another user/i`). All 14 unit and integration test suites pass (290 passing tests, 38 skipped, 0 failed); ESLint clean.
+
+- **Optimistic Concurrency & ETag Frontend UI5 Layer Phase 4 (2026-10-29 IST) — COMMITTED (`2aa4bb6`):** UI5 services and controllers across Outbound Delivery, Customer Invoice, and Goods Receipt now preserve and pass ETags into write actions and handle HTTP 409 Conflict (`STALE_DATA`) responses with immediate reload prompts. Added dedicated `test/unit/sd/customerInvoiceService.test.js` and updated unit tests across `outboundDeliveryService.test.js`, `ordersDueForDeliveryController.test.js`, `customerInvoicesController.test.js`, `goodsReceiptService.test.js`, and `goodsReceiptController.test.js` (19 new unit tests, 13 suites / 283 tests passing, 38 skipped, 0 failed). ESLint clean on all touched files.
 
 - **Optimistic Concurrency & ETag CAP Handler Layer Phase 3 (2026-10-28 IST) — DONE, UNCOMMITTED:** Added shared `extractIfMatch(req)` helper in `srv/common/filterUtils.js` extracting concurrency tokens from `req.ifMatch`, `req.etag`, `req.headers['if-match']`, Express `req.req`/`req._.req` headers, and `req.data.ETag`. Integrated into `outboundDelivery.handler.js` (`postGoodsIssue`, `createBillingDocument`, `createOutboundDelivery`, `createDeliveryWithoutRef`), `goodsReceipt.handler.js` (`postGoodsReceipt`), and verified `customerInvoice.handler.js`. Updated `GoodsReceiptAdapter._toGatewayError` to preserve mapped 409 `STALE_DATA` errors. Unit tests 30/30 (filterUtils), 28/28 (outboundDeliveryHandler), 20/20 (customerInvoiceAdapter), 16/16 (customerInvoiceHandler), 15/15 (goodsReceiptPlantScope), 59/59 (goodsReceiptService) PASS; eslint clean.
 
@@ -1806,7 +1808,26 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
-### 2026-10-29 IST — Optimistic Concurrency & ETag Frontend UI5 Layer Phase 4 — DONE, UNCOMMITTED
+### 2026-10-29 IST — Optimistic Concurrency & ETag Integration & Negative E2E Verification Phase 5 — DONE, UNCOMMITTED
+
+- **Context / Request:** User requested Phase 5 of the Concurrency / Stale-Data (ETag Gaps) fix plan.
+- **Change:**
+  - `test/integration/concurrencyRoundTrip.test.js`: Created dedicated integration test suite covering end-to-end CAP HTTP round trips across Outbound Delivery (`postGoodsIssue`, `createBillingDocument`), Customer Invoice (`releaseInvoiceToAccounting`, `cancelBillingDocument`), and Goods Receipt (`postGoodsReceipt`). Verified token propagation from client `If-Match` request headers to S/4 adapter options, error translation from S/4 HTTP 412 / `CX_SADL_ETAG_CHECK_FAILED` to HTTP 409 `STALE_DATA`, and successful 200 mutations when matching ETags are provided.
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/service/OutboundDeliveryService.js`: Removed redundant body `ETag` assignment in `postGoodsIssue` and `createBillingDocument`, ensuring action payloads contain only declared CDS parameters while ETags travel in the HTTP `If-Match` header.
+  - `app/fiori-app/webapp/modules/le/outbound-delivery/controller/OrdersDueForDelivery.controller.js`: Cleaned `createBillingDocument` parameter payload to strictly contain action inputs, forwarding ETag via `mOptions`.
+  - `app/fiori-app/webapp/modules/sd/customer-invoice/service/CustomerInvoiceService.js`: Removed body `ETag` assignment in `releaseInvoiceToAccounting` and `cancelBillingDocument`, preserving standard HTTP `If-Match` header transmission and OData V4 parameter validation.
+  - `app/fiori-app/webapp/modules/wm/goods-receipt/controller/GoodsReceipt.controller.js`: Cleaned `postGoodsReceipt` payload to exclude non-schema properties, passing ETag via `mOptions`.
+  - `test/e2e/negative/verifyActionFailures.e2e.js`: Enhanced stale data failure expectation regex (`/changed by another user|stale data|modified by another user/i`) to support standard S/4HANA concurrency error messages.
+  - `test/e2e/negative/verifySubmitFailures.e2e.js`: Enhanced stale data expectation regex and updated documentation confirming backend concurrency enforcement.
+  - `test/unit/le/outboundDeliveryService.test.js`: Aligned test assertions for clean parameter payloads.
+  - `test/unit/le/ordersDueForDeliveryController.test.js`: Aligned test assertions for clean parameter payloads.
+  - `test/unit/sd/customerInvoiceService.test.js`: Aligned test assertions for clean parameter payloads.
+  - `test/unit/wm/goodsReceiptController.test.js`: Aligned test assertions for clean parameter payloads.
+- **TEST DECISION:** TEST ADDED — 7 new integration tests in `test/integration/concurrencyRoundTrip.test.js`.
+- **Validation:** 14 test suites passed (290 passing tests, 38 real live SAP skips); ESLint clean on all touched files (`npm run lint` exit 0); `git diff --check` clean.
+- **Next:** Ready for final review and user verification.
+
+### 2026-10-29 IST — Optimistic Concurrency & ETag Frontend UI5 Layer Phase 4 — COMMITTED (`2aa4bb6`)
 
 - **Context / Request:** User requested Phase 4 of the Concurrency / Stale-Data (ETag Gaps) fix plan.
 - **Change:**
