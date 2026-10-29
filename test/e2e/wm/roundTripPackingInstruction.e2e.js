@@ -158,10 +158,11 @@ async function live(baseUrl, data) {
         } else {
             const uuid = decodeURIComponent(m[1]);
             const doc = await kit.getJson(baseUrl, `${SERVICE}/get(systemUUID='${uuid}')`);
-            details.readBack = { uuid, number: doc.PackingInstructionNumber, components: doc.Components };
+            details.readBack = { uuid, number: doc.PackingInstructionNumber, weightUnit: doc.WeightUnit, components: doc.Components };
+            console.log(`  document: packing instruction ${doc.PackingInstructionNumber} (UUID ${uuid})`);
             const got = (doc.Components || []).map((c) => `${c.Material}:${Number(c.TargetQuantity)}:${c.Unit}`).sort().join(',');
             const exp = expectedComponents(data).map((c) => `${c.material}:${c.targetQty}:${c.unit}`).sort().join(',');
-            if (doc.PackingInstructionExternalName !== data.externalName || got !== exp) errors.push(`SAP read-back mismatch: ${JSON.stringify(details.readBack)}`);
+            if (doc.PackingInstructionExternalName !== data.externalName || doc.WeightUnit !== data.weightUnit || got !== exp) errors.push(`SAP read-back mismatch: ${JSON.stringify(details.readBack)}`);
         }
     } catch (err) {
         errors.push(`${err.name}: ${err.message.split('\n')[0]}`);

@@ -1810,6 +1810,24 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-10-29 IST — LIVE packing instruction create (user go: "packingInstruction"): PASS, packing instruction 55 persisted in SAP — third full live round-trip proof
+
+- **WRITE performed (one live create, user's written go with the confirmed proposal; target `S4HANA_DEV - Client 220`; git-ignored `testData.json` `packingInstruction` section: externalName `E2E-PI-LIVE-01`, weightUnit KG, packaging 2000000000 x 1 NOS, material 4000000181 x 25 KG):** `[PASS] Packing instruction create round trip live`; document **packing instruction 55**, UUID `89e4c19e-a7c1-1fe1-b4ee-456b98a2d88f`; exactly one `create` POST; the UI showed the creation and opened the detail route.
+- **READ-BACK:** through CAP (which reads the SAP API): name `E2E-PI-LIVE-01`, weight unit KG, `CreatedByUser KHUSHAL`, `CreationDate 2026-10-29`, `IsDeleted false`, components item 10 `2000000000` x 1 NOS and item 20 `4000000181` x 25 KG. INDEPENDENT (READ-ONLY RFC_READ_TABLE): `PACKKP` has exactly one packing instruction created today: `PACKTYP P`, `CRNAM` = the RFC user, `CRDAT 20261029`, `INDDEL` blank, `POBJID ...0055`. The item table `PACKPO` could not be read directly (the packing-instruction GUID key made the WHERE clause invalid for RFC_READ_TABLE), so the components are confirmed through the SAP API read, not a table read.
+- **CHANGED:** `test/e2e/wm/roundTripPackingInstruction.e2e.js`: the live read-back now also compares the weight unit and prints the document number / UUID. `docs/e2e-coverage-matrix.md`: `wmPackingInstructions` SAP round trip 🔴 → 🟢, Tier C table live cell, totals "3 🟢, 1 🟡, 17 🔴, 13 N/A".
+- **REGRESSION:** READ-ONLY `verifyWmScreens` rc=0 (see packing instruction list result in the run); `npx jest test/unit/tools` 18 suites / 199 tests pass; eslint clean.
+- **NOT DONE:** live negative cases for this flow; the packing instruction stays in DEV (it can be marked deleted); the other 17 write routes remain 🔴; customer return stays 🟡.
+- **FINAL STATUS:** PASS (live proof for packing instruction create); overall objective PARTIAL: 3 🟢 + 1 🟡 of 21.
+
+### 2026-10-29 IST — Next live proof candidate: PACKING INSTRUCTION create — dry-run PASS, live data proposed, waiting for the user's confirmation and written go
+
+- **Why this flow:** creates one packing instruction (a master-data-like object, no stock or financial posting; it can be marked deleted in SAP). Path: UI -> CAP `create` -> `PackingInstructionAdapter.create` (OData deep insert of header + components) with the persisted document read back inside the adapter (`get(systemUUID)`).
+- **READ-ONLY dry-run today** (`E2E_SAP_FLOWS=packingInstruction node test/e2e/runSapRoundTrips.js`, port 4010, write stubbed): `PASS [dry-run]`.
+- **READ-ONLY FACTS (CAP GETs):** 107 packing instructions exist; the newest real ones are `HDPE OT DRUM 50L` (2026-10-06, by NAGRAJ: item 10 packaging 2000000000 x 1 NOS, item 20 material 4000000181 x 25 KG), `APPLE MACBOOK` (2026-10-13), `PI_REACTOR` (2026-10-25). The packaging value help offers e.g. 2000000000 "HDPE Open Top Drum 50L". Real packing instructions have an EMPTY external name, but the suite and adapter require one (`External name` is mandatory in `create`).
+- **PROPOSED live data (NOT confirmed by the user; no `packingInstruction` section in `testData.json`):** externalName `E2E-PI-LIVE-01` (my naming, the user may choose another), weightUnit `KG`, packagingMaterial `2000000000` (x 1 `NOS`), material `4000000181`, quantity `25`, unit `KG` (mirrors the real HDPE OT DRUM 50L instruction). EFFECT: one new packing instruction in DEV `S4HANA_DEV - Client 220`; no stock effect.
+- **GATE / PROOF:** `ALLOW_LIVE_SAP_TOOLS=1`, `--allow-live-sap`, `E2E_SAP_WRITE_FLOWS=packingInstruction`, `E2E_SAP_LIVE_TARGET`, the user's written go; exactly one write; proof = SAP number / UUID returned, read-back through CAP plus an independent read of the SAP table (read-only RFC), UI shows it. Lesson from the return flow: the suite's read-back must compare every entered value (name, unit, components); to be checked before the run.
+- **NOT DONE:** no live call; matrix row stays 🔴. **FINAL STATUS:** PREPARED. **Next:** user confirms target + data and writes "go: packingInstruction".
+
 ### 2026-10-29 IST — LIVE return create via the BAPI route with PRICING G (user go: "pricing G"): suite PASS, return 4500186; price STILL not copied — PARTIAL
 
 - **WRITE performed (one live create, user's written go; target `S4HANA_DEV - Client 220`; server with `CUSTOMER_RETURN_ROUTE=rfc`; same confirmed data):** `[PASS] create customer return`, document **4500186** (returned without leading zeros, the format fix works), the strengthened read-back (reason, reference, storage location, plant, quantity, sold-to through CAP) passed. `PRICING G` was accepted by the BAPI (D was refused).
