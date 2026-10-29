@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const evidence = require('./support/evidence');
+const { closeBrowser } = require('./support/screenCheck');
 
 const { runHardeningE2E } = require('./wm/verifyHardeningUI.e2e');
 const { verifyMvt201 } = require('./wm/verifyMvt201.e2e');
@@ -60,7 +61,7 @@ async function checkServerHealth(urlStr) {
   });
 }
 
-async function runAll(options = {}) {
+async function runSuitesAndSummarize(options) {
   const baseUrl = (options.baseUrl || targetUrlArg).replace(/\/+$/, '');
 
   console.log('================================================================');
@@ -234,15 +235,20 @@ async function runAll(options = {}) {
   console.log(`Report written to: ${summaryPath}`);
   console.log('================================================================\n');
 
-  if (require.main === module) {
-    process.exit(totalFailed === 0 ? 0 : 1);
-  }
-
   return summary;
 }
 
+// Sole owner of the shared Chromium shutdown: suites close only their contexts, never the browser.
+async function runAll(options = {}) {
+  try {
+    return await runSuitesAndSummarize(options);
+  } finally {
+    await closeBrowser();
+  }
+}
+
 if (require.main === module) {
-  runAll().catch(err => {
+  runAll().then(summary => process.exit(summary.failed === 0 ? 0 : 1)).catch(err => {
     console.error('Fatal runner error:', err);
     process.exit(1);
   });

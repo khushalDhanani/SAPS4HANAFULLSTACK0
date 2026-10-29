@@ -5856,3 +5856,12 @@ Single source of truth for work history, current status, validation, unresolved 
 - **TEST DECISION:** TEST UPDATED. **TESTED:** `npx jest test/unit/wm test/unit/tools test/integration/wm/quarantineLabelDocuments.test.js` 110 suites passed / 2564 tests passed (56 skipped); `git diff --check` clean. Rendered PDFs (demo row and worst-case row with a demo person) inspected via Quick Look: no overlap or clipping.
 - **NOT VERIFIED:** label generated through the running app with live SAP rows (browser pane is at the login screen; credentials needed from the user); print at 100 %; barcode scan; Playwright quarantine E2E not run.
 - **NEXT:** user decision on the Prepared-by source; sign in to the app and generate a real label.
+
+### 2026-10-29 IST — E2E runner: single owner of shared Chromium shutdown — PARTIAL
+
+- **CHANGED:** `test/e2e/runAllE2E.js` — `runAll` is now a wrapper that runs the old body (renamed `runSuitesAndSummarize`) in `try/finally` and calls `closeBrowser()` from `support/screenCheck.js`. The in-body `process.exit` was moved to the CLI entry (`runAll().then(exit)`) so `finally` runs before exit. Suites still close only their contexts.
+- **REASON:** shared Chromium was never closed by the runner (leak on repeated/programmatic/CI/failure runs). The early health-check `process.exit(1)` happens before any browser is launched, so it needs no cleanup.
+- **TEST DECISION:** TEST NOT POSSIBLE — the runner needs a live app server at the target URL and has no unit harness; prerequisite: running server.
+- **TESTED:** `node -e "require('./test/e2e/runAllE2E.js')"` loads OK; `git diff --check` clean.
+- **NOT VERIFIED:** full `npm run test:e2e` run confirming no leftover Chromium process; failure-path (suite throws) closes the browser.
+- **NEXT:** run `npm run test:e2e` with the server up and confirm `pgrep -f chrom` shows no orphan afterwards.
