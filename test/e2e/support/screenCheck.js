@@ -11,6 +11,7 @@ const { installWriteGuard } = require('./writeGuard');
 const evidence = require('./evidence');
 const { parseMetadata, checkRequest } = require('./contract');
 const { batchParts } = require('./actionRoundTrip');
+const { createRequestTracker } = require('./requestTracker');
 
 // CAP mock users (package.json cds.requires.auth.users); the UI session mirrors their roles.
 const USERS = {
@@ -89,7 +90,6 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
     const page = await context.newPage();
     const consoleErrors = [];
     const networkErrors = [];
-    let inFlight = 0;
 
     page.on('console', (msg) => {
         const loc = (msg.location() && msg.location().url) || '';
@@ -112,8 +112,8 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
             });
         }));
     }
+    const tracker = createRequestTracker(page, { user });
     page.on('request', (req) => {
-        inFlight++;
         const m = SERVICE_URL.exec(req.url());
         if (!m) return;
         if (req.method() === 'GET') contractCheck(m[1], m[2]);
@@ -121,8 +121,6 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
             batchParts(req.postData()).filter((p) => p.method === 'GET').forEach((p) => contractCheck(m[1], p.url.replace(/^\/+/, '')));
         }
     });
-    page.on('requestfinished', () => { inFlight--; });
-    page.on('requestfailed', () => { inFlight--; });
 
     if (user) {
         await page.addInitScript(([username, scopes]) => {
@@ -141,11 +139,11 @@ async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
         const end = Date.now() + 30000;
         let quietSince = Date.now();
         while (Date.now() < end) {
-            if (inFlight > 0) quietSince = Date.now();
+            if (tracker.size() > 0) quietSince = Date.now();
             if (Date.now() - quietSince >= QUIET_MS) break;
             await page.waitForTimeout(100);
         }
-        if (inFlight > 0) throw new Error(`settle: ${inFlight} request(s) still in flight after 30 s`);
+        if (tracker.size() > 0) throw new Error(`settle: ${tracker.size()} request(s) still in flight after 30 s: ${tracker.describe()}`);
         await page.waitForFunction(
             () => ![...document.querySelectorAll('.sapUiLocalBusyIndicator, .sapUiBusyIndicator')].some((e) => e.getClientRects().length > 0),
             null, { timeout: 15000 }
