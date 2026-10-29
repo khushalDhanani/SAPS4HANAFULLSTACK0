@@ -244,9 +244,11 @@ async function live(baseUrl, data) {
             if (!subErrors.length) {
                 const hu = created ? decodeURIComponent(created[1]) : d.handlingUnitExternalID;
                 const rb = await kit.getJson(baseUrl, detailPath(hu)).then((x) => ({ found: true, x }), (err) => ({ found: false, err: err.message }));
-                sub.readBack = { hu, found: rb.found, items: rb.found ? rb.x.Items : undefined };
+                sub.readBack = { hu, found: rb.found, items: rb.found ? rb.x.Items : undefined, packagingMaterial: rb.found ? rb.x.PackagingMaterial : undefined, plant: rb.found ? rb.x.Plant : undefined, storageLocation: rb.found ? rb.x.StorageLocation : undefined };
+                console.log(`  ${name}: handling unit ${hu}${rb.found ? ` (packaging ${rb.x.PackagingMaterial}, plant ${rb.x.Plant}, SLoc ${rb.x.StorageLocation})` : ' (not found)'}`);
                 const ok = {
-                    create: rb.found && rb.x.PackagingMaterial === d.packagingMaterial,
+                    // every value entered that detail() exposes must be in SAP, not only the packaging material
+                    create: rb.found && rb.x.PackagingMaterial === d.packagingMaterial && rb.x.Plant === d.plant && rb.x.StorageLocation === d.storageLocation,
                     pack: rb.found && (rb.x.Items || []).some((x) => x.Material === d.material),
                     unpack: rb.found && !(rb.x.Items || []).some((x) => String(x.HandlingUnitItem) === String(d.item) && Number(x.Quantity) === Number(d.quantity)),
                     remove: !rb.found
