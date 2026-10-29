@@ -124,10 +124,17 @@ sap.ui.define([
                 }
             });
 
+            // Decimal fields of the CAP action: an empty string is not a valid Decimal (HTTP 400 ASSERT_DATA_TYPE), so a blank optional
+            // value (e.g. no net price entered) is left out instead of being sent as "".
+            var DECIMAL_ITEM_FIELDS = ["OrderQuantity", "NetPriceAmount", "NetAmount"];
+
             var cleanItems = rawItems.map(function (item) {
                 var cleanItem = {};
                 ALLOWED_ITEM_FIELDS.forEach(function (field) {
                     if (item[field] !== undefined && item[field] !== null) {
+                        if (DECIMAL_ITEM_FIELDS.indexOf(field) !== -1 && String(item[field]).trim() === "") {
+                            return;
+                        }
                         cleanItem[field] = item[field];
                     }
                 });

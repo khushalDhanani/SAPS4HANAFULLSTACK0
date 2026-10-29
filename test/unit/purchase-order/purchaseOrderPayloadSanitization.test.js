@@ -147,4 +147,17 @@ describe('Unit: Purchase Order Creation Payload Sanitization', () => {
         mockODataClient.post.mockResolvedValueOnce({ value: ' 4500001010 ' });
         await expect(PurchaseOrderService.createPurchaseOrder({ header: {}, items: [] })).resolves.toBe('4500001010');
     });
+    it('PurchaseOrderService.createPurchaseOrder leaves blank Decimal item fields out (CAP rejects "" as a Decimal) and keeps entered ones', async () => {
+        mockODataClient.post.mockResolvedValueOnce({ value: '4500001011' });
+        await PurchaseOrderService.createPurchaseOrder({
+            header: { PurchaseOrderType: 'ZDOM' },
+            items: [
+                { PurchaseOrderItem: '10', Material: 'M1', OrderQuantity: '1', NetPriceAmount: '', NetAmount: '   ', TaxCode: '' },
+                { PurchaseOrderItem: '20', Material: 'M2', OrderQuantity: '2', NetPriceAmount: '15.50', NetAmount: '31.00' }
+            ]
+        });
+        const [, sent] = mockODataClient.post.mock.calls[mockODataClient.post.mock.calls.length - 1];
+        expect(sent.items[0]).toEqual({ PurchaseOrderItem: '10', Material: 'M1', OrderQuantity: '1', TaxCode: '' });
+        expect(sent.items[1]).toEqual({ PurchaseOrderItem: '20', Material: 'M2', OrderQuantity: '2', NetPriceAmount: '15.50', NetAmount: '31.00' });
+    });
 });

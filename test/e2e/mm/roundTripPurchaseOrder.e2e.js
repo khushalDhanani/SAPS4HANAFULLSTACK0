@@ -6,7 +6,9 @@
  * /odata/v4/purchase-order/createPurchaseOrder, `returns String` in srv/mm/purchase-order/service.cds).
  * Dry-run by default (stubbed action, write guard on); live mode only via liveWriteGate (flow key "po").
  * Live data file section "po": { header: { PurchaseOrderType, CompanyCode, PurchasingOrganization, PurchasingGroup,
- * Supplier, Currency }, item: { Plant, StorageLocation, Material, OrderQuantity, UnitOfMeasure } }.
+ * Supplier, Currency, PaymentTerms?, IncotermsClassification?, IncotermsLocation1? },
+ * item: { Plant, StorageLocation, Material, OrderQuantity, UnitOfMeasure, NetPriceAmount? } } (the optional ones are entered when present;
+ * SAP requires net price, payment terms and Incoterms for ZDOM, the screen does not).
  */
 
 const { runRoundTrip } = require('../support/roundTrip');
@@ -67,12 +69,16 @@ const SPEC = {
         await ui.enter('inPurchGrp', h.PurchasingGroup);
         await ui.enter('inSupplier', h.Supplier);
         await ui.enter('inCurrency', h.Currency);
+        if (h.PaymentTerms) await ui.enter('inPaymentTerms', h.PaymentTerms);
+        if (h.IncotermsClassification) await ui.enter('inIncoterms', h.IncotermsClassification);
+        if (h.IncotermsLocation1) await ui.enter('inIncotermsLoc', h.IncotermsLocation1);
         const i = v.item;
         await ui.enterItem('poItemsTable', 0, 'Plant', i.Plant);
         await ui.enterItem('poItemsTable', 0, 'StorageLocation', i.StorageLocation);
         await ui.enterItem('poItemsTable', 0, 'Material', i.Material);
         await ui.enterItem('poItemsTable', 0, 'OrderQuantity', i.OrderQuantity);
         await ui.enterItem('poItemsTable', 0, 'UnitOfMeasure', i.UnitOfMeasure);
+        if (i.NetPriceAmount) await ui.enterItem('poItemsTable', 0, 'NetPriceAmount', i.NetPriceAmount);
     },
     expectedPayload: (v) => ({ header: v.header, item: v.item }),
     // Controller: MessageToast with the PO number, then navigates back to the list
