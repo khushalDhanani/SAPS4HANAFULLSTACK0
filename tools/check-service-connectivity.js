@@ -24,6 +24,7 @@ const productionGuard = require('../srv/common/productionGuard');
 const s4Config = require('../srv/common/s4Config');
 const { RfcClient } = require('../srv/integration/s4hana/RfcClient');
 const aiClient = require('../srv/common/aiClient');
+const { rfcPreflight } = require('./rfc-preflight');
 
 async function checkServiceConnectivity(options = {}) {
   const allowLive = options.allowLiveSap || process.env.ALLOW_LIVE_SAP_TOOLS === '1' || process.argv.includes('--allow-live-sap');
@@ -89,19 +90,14 @@ async function checkServiceConnectivity(options = {}) {
   // 4. Live SAP S/4HANA RFC & Table Probe
   if (allowLive) {
     console.log('\n  [INFO] Executing safe READ-ONLY live SAP RFC connectivity check...');
-    try {
-      const rfc = options.rfcClient || new RfcClient();
-      const rows = await rfc.readTable('T000', ['MANDT', 'MTEXT'], [`MANDT = '${client}'`]);
-      if (rows && rows.length > 0) {
-        console.log(`  [PASS] Live SAP RFC: Connected to Client ${rows[0].MANDT} (${rows[0].MTEXT}).`);
-        results.push({ check: 'Live SAP RFC', status: 'PASSED', client: rows[0].MANDT });
-      } else {
-        throw new Error(`Client ${client} not found in T000`);
-      }
-    } catch (err) {
+    const pre = await rfcPreflight({ rfcClient: options.rfcClient || new RfcClient(), client });
+    if (pre.ok) {
+      console.log(`  [PASS] Live SAP RFC: ${pre.message}.`);
+      results.push({ check: 'Live SAP RFC', status: 'PASSED', client: pre.client });
+    } else {
       allHealthy = false;
-      console.log(`  [FAIL] Live SAP RFC: ${err.message}`);
-      results.push({ check: 'Live SAP RFC', status: 'FAILED', error: err.message });
+      console.log(`  [FAIL] Live SAP RFC [${pre.stage}]: ${pre.message}`);
+      results.push({ check: 'Live SAP RFC', status: 'FAILED', stage: pre.stage, error: pre.message });
     }
   } else {
     console.log('  [SKIP] Live SAP RFC Check: Gated by default (set ALLOW_LIVE_SAP_TOOLS=1 or --allow-live-sap to probe).');

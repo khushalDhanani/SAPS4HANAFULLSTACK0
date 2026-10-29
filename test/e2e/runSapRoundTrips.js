@@ -42,11 +42,27 @@ const SUITES = [
     { flow: 'reservationRetry', name: 'Reservation entry retry', fn: roundTripReservationRetry }
 ];
 
+/**
+ * Live mode only: prove the RFC environment of this machine before any flow sends a write. The CAP server under test
+ * is assumed to read the same .env.local (local runs); a failure names the broken layer (sdk/config/auth/network/client).
+ */
+async function livePreflight(env = process.env, preflight = () => require('../../tools/rfc-preflight').rfcPreflight()) {
+    const wantsLive = env.ALLOW_LIVE_SAP_TOOLS === '1' || String(env.E2E_SAP_WRITE_FLOWS || '').trim() !== '';
+    if (!wantsLive) return null;
+    require('dotenv').config({ path: '.env.local' });
+    console.log('READ-ONLY: RFC preflight before live flows');
+    const r = await preflight();
+    console.log(`RFC PREFLIGHT ${r.ok ? 'PASS' : 'FAIL'} [${r.stage}]: ${r.message}`);
+    return r.ok ? null : { flow: '*', suite: 'RFC preflight', status: 'FAIL', mode: 'live', errors: [`[${r.stage}] ${r.message}`] };
+}
+
 async function runSapRoundTrips(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
     const only = String(process.env.E2E_SAP_FLOWS || '').split(',').map((s) => s.trim()).filter(Boolean);
     const results = [];
-    for (const s of SUITES.filter((x) => only.length === 0 || only.includes(x.flow))) {
+    const blocked = await livePreflight(process.env, options.preflight);
+    if (blocked) results.push(blocked);
+    for (const s of blocked ? [] : SUITES.filter((x) => only.length === 0 || only.includes(x.flow))) {
         console.log(`\n>>> ${s.name} (${s.flow})`);
         let r;
         try {
@@ -67,4 +83,4 @@ if (require.main === module) {
     runSapRoundTrips().then((rs) => process.exit(rs.every((r) => r.status === 'PASS') ? 0 : 1));
 }
 
-module.exports = { runSapRoundTrips, SUITES };
+module.exports = { runSapRoundTrips, livePreflight, SUITES };

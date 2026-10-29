@@ -17,6 +17,7 @@
 
 require('dotenv').config({ path: '.env.local' });
 const { RfcClient } = require('../srv/integration/s4hana/RfcClient');
+const { rfcPreflight } = require('./rfc-preflight');
 
 async function validateNonProdSap() {
   console.log('[SAP NON-PROD VALIDATION] Starting controlled non-production SAP smoke validation...');
@@ -53,13 +54,13 @@ async function validateNonProdSap() {
   try {
     console.log('\n[SAP NON-PROD VALIDATION] [READ-ONLY SAP OPERATION] Verifying RFC connectivity and table accessibility...');
     
-    // Read T000 for client verification
-    const t000Rows = await rfc.readTable('T000', ['MANDT', 'MTEXT'], [`MANDT = '${s4Client}'`]);
-    if (!t000Rows || t000Rows.length === 0) {
-      console.error(`[SAP NON-PROD VALIDATION] FAILED: SAP Client ${s4Client} not found in T000.`);
+    // T000 preflight: a failure names the broken layer (sdk / config / auth / network / client)
+    const pre = await rfcPreflight({ rfcClient: rfc, client: s4Client });
+    if (!pre.ok) {
+      console.error(`[SAP NON-PROD VALIDATION] FAILED [${pre.stage}]: ${pre.message}`);
       process.exit(1);
     }
-    console.log(`[SAP NON-PROD VALIDATION] Verified SAP Client in T000: Client=${t000Rows[0].MANDT}, Name=${t000Rows[0].MTEXT}`);
+    console.log(`[SAP NON-PROD VALIDATION] Verified SAP Client in T000: ${pre.message}`);
 
     // Read T001W for Plant 1120 verification
     const t001wRows = await rfc.readTable('T001W', ['WERKS', 'NAME1'], ["WERKS = '1120'"]);

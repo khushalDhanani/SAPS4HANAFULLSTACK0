@@ -20,6 +20,7 @@
     "test:smoke": "node tools/smoke-test-deployment.js",
     "test:monitoring": "jest test/unit/monitoring --runInBand",
     "check:connectivity": "node tools/check-service-connectivity.js",
+    "preflight:rfc": "node tools/rfc-preflight.js",
     "scan:secrets": "node tools/scan-secrets.js",
     "scan:dependencies": "node tools/scan-dependencies.js",
     "validate:sap:sandbox": "node tools/validate-sap-sandbox.js",
