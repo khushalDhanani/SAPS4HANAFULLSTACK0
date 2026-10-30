@@ -196,15 +196,30 @@ function inspectScreen(page) {
 }
 
 /**
+ * Opens #/<hash> and waits until the UI5 router has matched it, then for the screen to settle. A quiet network alone
+ * does not mean the router ran (slow runners load UI5 from the CDN), so checking right after it saw no route.
+ * A hash that never matches continues after 30 s and the caller's route check reports it.
+ */
+async function openHash(session, hash) {
+    const { page } = session;
+    await page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/${hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForFunction(() => {
+        const Component = window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component');
+        const HashChanger = Component && window.sap.ui.require('sap/ui/core/routing/HashChanger');
+        const comp = Component && Component.registry.filter((c) => c.getRouter && c.getRouter())[0];
+        return !!(comp && HashChanger && comp.getRouter().getRouteInfoByHash(HashChanger.getInstance().getHash()));
+    }, null, { timeout: 30000 }).catch(() => {});
+    await session.settle();
+}
+
+/**
  * Opens #/<hash>, waits for the screen to settle and returns the checks for it.
  * expect: { route, needsList }. Failures are collected, not thrown, so one suite reports every screen.
  */
 async function checkScreen(session, { hash, route, needsList = false, expectRows = false, fill }) {
     const { page } = session;
     const before = { console: session.consoleErrors.length, network: session.networkErrors.length, blocked: session.blocked.length };
-    await page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/${hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
-    await session.settle();
+    await openHash(session, hash);
     if (fill) {
         // Types into an sap.m.Input (its inner <input>) and confirms with Enter, as a user would
         await page.fill(`[id$="--${fill.id}-inner"]`, fill.value);
@@ -298,4 +313,4 @@ async function runScreens({ baseUrl, user, title, steps }) {
     return { status: errors.length ? 'FAIL' : 'PASS', errors, details };
 }
 
-module.exports = { openSession, closeBrowser, checkScreen, openFirstRow, inspectScreen, runScreens, USERS };
+module.exports = { openSession, closeBrowser, openHash, checkScreen, openFirstRow, inspectScreen, runScreens, USERS };

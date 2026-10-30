@@ -53,7 +53,7 @@ sap.ui.define([
     var ROW_COUNT = FIELDS.length;
     var STATIC_KEYS = { title: "zqTitle", quarantine: "zqQuarantine", formNumber: "zqFormNumber" };
     // Texts used only for some rows (a row may replace a caption via row.captions[fieldKey])
-    var EXTRA_KEYS = { retestDate: "zqRetestDate", materialCode: "zqMaterialCode", inspectionLotNo: "zqInspectionLotNo" };
+    var EXTRA_KEYS = { retestDate: "zqRetestDate", materialCode: "zqMaterialCode", inspectionLotNo: "zqInspectionLotNo", inwBatchNo: "zqInwBatchNo" };
     var CAPTION_KEYS = {
         materialName: "zqMaterialName", itemCode: "zqItemCode", grnNo: "zqGrnNo", grnDate: "zqGrnDate", inwNo: "zqInwNo",
         inspectionLot: "zqInspectionLot", qtyReceived: "zqQtyReceived",
@@ -63,6 +63,19 @@ sap.ui.define([
 
     function widthPt(s, pt, bold) { return HuLayout.measureMm(s, pt, bold) * MM2PT; }
     function minSlot(pt) { return pt * (CAP_ASCENT + DESCENT) + ROW_PAD; }
+
+    /** Numeric or padded material code "000000008000009753" -> "8000009753" (trim leading zeros, keep up to last 10 digits). */
+    function formatMaterialCode(v) {
+        var s = String(v == null ? "" : v).trim();
+        if (!s) {
+            return "";
+        }
+        if (/^\d+$/.test(s)) {
+            var unpadded = s.replace(/^0+(?=\d)/, "");
+            return unpadded.length > 10 ? unpadded.slice(-10) : unpadded;
+        }
+        return s;
+    }
     function half(n) { return Math.round(n * 2) / 2; }
 
     function resolveSize(sizeOrKey) {
@@ -176,6 +189,7 @@ sap.ui.define([
         var capText = function (d) {
             return (row.captions && row.captions[d.key]) || texts[d.key]
                 || (d.key === "itemCode" ? (texts.materialCode || texts.itemCode) : "")
+                || (d.key === "inwNo" ? (texts.inwBatchNo || texts.inwNo) : "")
                 || (d.key === "inspectionLot" ? (texts.inspectionLot || texts.inspectionLotNo) : "");
         };
         var valueX = C.x0 + Math.max.apply(null, FIELDS.map(function (d) { return widthPt(capText(d), capPt, true); })) + COL_GAP;
@@ -184,9 +198,15 @@ sap.ui.define([
             var c = fitText(capText(d), valueX - GAP - C.x0, capPt, 1, true);
             var rawVal = d.key === "itemCode" ? (row.itemCode != null && row.itemCode !== "" ? row.itemCode : row.materialCode)
                 : (d.key === "inspectionLot" ? (row.inspectionLot != null && row.inspectionLot !== "" ? row.inspectionLot : row.InspectionLot) : row[d.key]);
+            if (d.key === "itemCode" && rawVal) {
+                rawVal = formatMaterialCode(rawVal);
+            }
             var s = rawVal == null ? "" : String(rawVal).trim();
+            if (!s) {
+                s = "-";
+            }
             // Every value may wrap (never cut); d.lines = lines allowed before shrinking
-            var r = s ? fitText(s, C.x1 - valueX, valPt, d.lines || 1, false) : { pt: valPt, lines: [], truncated: false };
+            var r = fitText(s, C.x1 - valueX, valPt, d.lines || 1, false);
             if (r.truncated) { throw tooFull(d.key); }
             return {
                 key: d.key, row: i,
@@ -266,6 +286,7 @@ sap.ui.define([
         SIZES: SIZES, DEFAULT_SIZE: DEFAULT_SIZE, PRINTER_DPI: PRINTER_DPI, ALLOWED_DPI: ALLOWED_DPI, PT_PER_INCH: PT_PER_INCH,
         MM_PER_INCH: MM_PER_INCH, MIN_PT: MIN_PT, GAP: GAP, ASCENT: ASCENT, LH: LH, BARCODE: BARCODE, SEP: SEP,
         FIELDS: FIELDS, STATIC_KEYS: STATIC_KEYS, CAPTION_KEYS: CAPTION_KEYS, EXTRA_KEYS: EXTRA_KEYS,
-        layout: layout, fitText: fitText, barcodeGeometry: barcodeGeometry, render: render, widthPt: widthPt
+        layout: layout, fitText: fitText, barcodeGeometry: barcodeGeometry, render: render, widthPt: widthPt,
+        formatMaterialCode: formatMaterialCode
     };
 });

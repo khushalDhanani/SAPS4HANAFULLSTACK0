@@ -1,5 +1,5 @@
 'use strict';
-/* global document, window */
+/* global document */
 
 /**
  * Tier B negative-path E2E, all behind the write guard (no SAP write possible):
@@ -7,7 +7,7 @@
  * no write request attempted; B3 simulated list read failure (mocked HTTP 500, not SAP) → load-error text, no crash.
  */
 
-const { openSession, inspectScreen } = require('../support/screenCheck');
+const { openSession, openHash, inspectScreen } = require('../support/screenCheck');
 
 const CREATE_SCREENS = [
     { name: 'Purchase order create', hash: 'mm/purchase-orders/create', route: 'createPurchaseOrder', button: 'btnSave' },
@@ -21,12 +21,6 @@ const FAILING_LISTS = [
     { name: 'Purchase order list read fails', hash: 'mm/purchase-orders', route: 'purchaseOrders', service: '/odata/v4/purchase-order/' },
     { name: 'Sales order list read fails', hash: 'sd/sales-orders', route: 'salesOrders', service: '/odata/v4/sales-order/' }
 ];
-
-async function open(session, hash) {
-    await session.page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/${hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
-    await session.settle();
-}
 
 /** Visible validation feedback: inputs in error state or a message box/strip/toast/popover. */
 function feedback(page) {
@@ -43,7 +37,7 @@ function feedback(page) {
 async function b1SignedOut(baseUrl) {
     const session = await openSession({ baseUrl, user: null });
     try {
-        await open(session, 'mm/purchase-orders');
+        await openHash(session, 'mm/purchase-orders');
         const screen = await inspectScreen(session.page);
         return screen.route === 'login' ? [] : [`expected redirect to login, got ${screen.route || '(none)'} (hash "${screen.hash}")`];
     } finally {
@@ -54,7 +48,7 @@ async function b1SignedOut(baseUrl) {
 async function b2EmptySubmit(baseUrl, screen) {
     const session = await openSession({ baseUrl });
     try {
-        await open(session, screen.hash);
+        await openHash(session, screen.hash);
         const errors = [];
         const shown = await inspectScreen(session.page);
         if (shown.route !== screen.route) return [`expected route ${screen.route}, got ${shown.route}`];
@@ -82,7 +76,7 @@ async function b3ListFailure(baseUrl, list) {
             contentType: 'application/json',
             body: JSON.stringify({ error: { code: '500', message: 'E2E simulated backend failure' } })
         }));
-        await open(session, list.hash);
+        await openHash(session, list.hash);
         const screen = await inspectScreen(session.page);
         const errors = [];
         if (screen.route !== list.route) errors.push(`expected route ${list.route}, got ${screen.route}`);

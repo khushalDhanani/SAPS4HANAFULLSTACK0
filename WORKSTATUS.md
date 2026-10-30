@@ -11,8 +11,8 @@ Single source of truth for work history, current status, validation, unresolved 
   1. **Material Code Leading Zero Trimming**: Added `formatMaterialCode` in `ZquarLabelRows.js` and `ZquarLabelLayout.js` to strip leading zeros from numeric SAP material codes, preserving up to the last 10 digits (`000000008000009753` -> `8000009753`, `000000008000009832` -> `8000009832`).
   2. **INW. Batch No Caption**: Updated caption key `zqInwNo` and form input `qlText` in both `i18n.properties` and `i18n_en.properties` from `INW. No` to `INW. Batch No`. Added fallback `inwBatchNo: "zqInwBatchNo"` in `EXTRA_KEYS`.
   3. **Net Weight Formatting with Space**: Updated `ZquarLabelRows.toLabels` to format `netWeight` with a space between quantity and unit (`sQty + " " + Unit`, e.g. `1.00 NOS` instead of `1.00NOS`).
-  4. **Dash (-) for Missing Data**: Updated `ZquarLabelLayout.placeFields` so that any field on the label without data (null, empty string, or whitespace) renders with a dash `-` (`manufacturer`, `batchNo`, `expiryDate`, `inspectionLot`, etc.), maintaining clean table structure without empty gaps.
-  Verified live in browser via Chrome DevTools MCP against running CAP and live S/4HANA (Client 220): document `5000005753` -> `Material Code: 8000009753`, `INW. Batch No: 34567`, `Net Weight: 1.00 NOS`, missing fields (`Manufacturer`, `Batch No`, `Expiry Date`) -> `-`; document `5000005750` -> `Material Code: 8000009832`, `Inspection Lot: -`. All 5 quarantine Jest suites (165 tests) and Playwright E2E (`verifyQuarantineLabels.e2e.js`, 7/7) PASS; UI5 linter and root ESLint 100% clean.
+  4. **Dash (-) for Missing Data**: Updated `ZquarLabelLayout.placeFields` and `ZquarLabelRows.dash` so that any field on the label without data renders with a dash `-` (`manufacturer`, `batchNo`, `expiryDate`, `inspectionLot`, etc.). In `QuarantineLabels.view.xml`, added expression bindings `{= ${qlList>...} || '-' }` for table cells (`PostingDate`, `MaterialDescription`, `Material`, `Batch`, `SupplierName`) so missing table data consistently renders as `-`.
+  Verified live in browser via Chrome DevTools MCP against running CAP and live S/4HANA (Client 220): table row `5000005752` -> `Material Description: -`, `Material Code: -`, `Batch: -`; document `5000005753` -> `Material Code: 8000009753`, `INW. Batch No: 34567`, `Net Weight: 1.00 NOS`, missing fields (`Manufacturer`, `Batch No`, `Expiry Date`) -> `-`; document `5000005750` -> `Material Code: 8000009832`, `Inspection Lot: -`. All 5 quarantine Jest suites (105 tests), 90 WM suites (2368 tests), and Playwright E2E (`verifyQuarantineLabels.e2e.js`, 7/7) PASS; UI5 linter and root ESLint 100% clean.
 
 - **Zquar Label: Inspection Lot from SAP QALS (2026-10-30 IST) — PASS:** Added `Inspection Lot` to Zquar 4x6 label. SAP S/4HANA (DS4 Client 220) stores inspection lots for goods-receipt material documents in table `QALS` linked by `MBLNR = MKPF-MBLNR` and `MJAHR = MKPF-MJAHR` with inspection lot number `PRUEFLOS` (NUMC 12). Live SAP discovery via `RFC_READ_TABLE` on document `5000005753` confirmed inspection lot `010000005588` (document `5000005750` confirmed blank as no inspection lot was generated). In `QuarantineLabelAdapter.js`, `readLabelRows` now reads `QALS` and maps `InspectionLot` to each label row. Declared `InspectionLot : String(12);` in `srv/wm/quarantine-label/service.cds`. In `ZquarLabelRows.js`, mapped `inspectionLot: r.InspectionLot ? String(r.InspectionLot).trim() : ""`. In `ZquarLabelLayout.js`, added `{ key: "inspectionLot" }` between `inwNo` and `qtyReceived` (15 total rows), added i18n caption keys `zqInspectionLot=Inspection Lot`, adjusted vertical gap constants (`quarGap=8`, `sopGap=5`, `ROW_PAD=1.8`), and centered slots across the full glyph box `(CAP_ASCENT + DESCENT) * pt + extra` so all 15 rows (including wrapped 2-line descriptions) fit within 4x6 in dimensions without overflow or text touching hairlines. Verified live in browser with Chrome DevTools MCP against running CAP and live S/4HANA: document `5000005753` -> `inspectionLot = "010000005588"`, document `5000005750` -> `inspectionLot = ""`. All 5 quarantine Jest suites (163 tests) and Playwright E2E (`verifyQuarantineLabels.e2e.js`, 7/7) PASS; root ESLint, UI5 lint, and CDS compilation 100% clean.
 
@@ -6218,3 +6218,34 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Correction:** commit `82900bd` unintentionally included another session's uncommitted WORKSTATUS entry ("Zquar Label: Material Code Trimming, INW. Batch No, Net Weight Spacing & Dash Fallback — PASS") whose code is still uncommitted in the working tree; history not rewritten. The previous note "not touched or committed" holds for that session's code files only.
 - **TEST DECISION:** TEST NOT POSSIBLE (runner image behaviour); `npx jest test/unit/tools/e2eRunner.test.js` PASS, `git diff --check` clean.
 - **NEXT:** push, check the run; if green, add `browser-e2e-sap-free` as a required status check (user, branch protection).
+
+### 2026-10-30 IST — Quarantine Labels: Table and Label Dash (-) Display for Missing Data — PASS
+
+- **Request:**
+  "Where No Data At Show -"
+- **Inspect & Plan:**
+  1. On the 4x6 label: In `ZquarLabelLayout.js`, all field values that are empty, null, or whitespace are defaulted to `"-"` via `if (!s) { s = "-"; }`.
+  2. In `ZquarLabelRows.js`: Helper `dash(v)` added and applied to all mapped fields in `toLabels` (`materialName`, `itemCode`, `materialCode`, `preparedBy`, `grnNo`, `grnDate`, `inwNo`, `inspectionLot`, `qtyReceived`, `containerNo`, `manufacturer`, `supplier`, `batchNo`, `mfgDate`, `expiryDate`, `netWeight`), ensuring structured records never leave empty gaps.
+  3. On the Goods Receipts table in `QuarantineLabels.view.xml`: Wrapped cells with UI5 expression bindings `{= ${qlList>PostingDate} || '-' }`, `{= ${qlList>MaterialDescription} || '-' }`, `{= ${qlList>Material} || '-' }`, `{= ${qlList>Batch} || '-' }`, and `{= ${qlList>SupplierName} || '-' }` so that missing table cells render a clear dash `-` instead of an empty blank space.
+- **Changed:**
+  1. `app/fiori-app/webapp/modules/wm/quarantine-label/view/QuarantineLabels.view.xml`:
+     - Applied `{= ... || '-' }` expression bindings to `PostingDate`, `MaterialDescription`, `Material`, `Batch`, and `SupplierName` cells.
+  2. `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelRows.js`:
+     - Added `dash(v)` helper and wrapped all mapped label fields.
+  3. `test/unit/wm/zquarLabel.test.js`:
+     - Updated assertions to verify that missing fields render as `"-"`.
+- **Test Decision:** TEST UPDATED.
+- **Tested & Verified:**
+  - All 5 quarantine suites: `test/unit/wm/zquarLabel.test.js`, `test/integration/wm/quarantineLabelDocuments.test.js`, `test/unit/tools/checkLabelPdf.test.js`, `test/unit/frontend/viewModelContracts.test.js`, `test/unit/wm/handlingUnitLabel.test.js` → 5/5 suites, 105/105 tests PASS.
+  - Full WM unit test suite: 90/90 suites, 2368/2368 tests PASS.
+  - Playwright browser E2E (`test/e2e/wm/verifyQuarantineLabels.e2e.js`): 7/7 cases PASS.
+  - Live Browser DevTools MCP Verification on `http://localhost:4004/fiori-app/webapp/index.html#/wm/quarantine-labels` against SAP S/4HANA (DS4 Client 220):
+    - Goods Receipts Table: For document `5000005752`, Material Description, Material Code, and Batch display `-`; for documents `5000005753` and `5000005750`, Batch displays `-`.
+    - 4x6 Label Dialog: Document `5000005753` displays `8000009753` for Material Code, `34567` for INW. Batch No, `1.00 NOS` for Net Weight, and `-` for missing fields (`Manufacturer`, `Batch No`, `Expiry Date`).
+    - 4x6 Label Dialog: Document `5000005750` displays `8000009832` for Material Code, `-` for Inspection Lot, `1.00 NOS` for Net Weight, and `-` for missing fields (`Manufacturer`, `Batch No`, `Mfg Date`, `Expiry Date`).
+  - Linters:
+    - Root ESLint: `npm run lint` → 0 errors, 0 warnings (100% clean).
+    - UI5 Linter: `npm --prefix app/fiori-app run lint` → 0 findings (100% clean).
+- **Assumptions made:** None.
+- **Status:** PASS.
+- **CI RESULT run 41009667159 (`16aae8b`):** `Build, Test & Validate` PASS. `browser-e2e-sap-free` (ubuntu-24.04): Playwright install PASS (pin confirmed); step 7 `npm run test:e2e:sap-free` FAIL at log line 72 after 1m29s; `browser-e2e-sap-free-evidence` artifact uploaded. Which suite failed and why: UNKNOWN (log/artifact need sign-in). **BLOCKED** on step 7 log of job 123913634052 (or `e2e-summary.json` from the artifact).

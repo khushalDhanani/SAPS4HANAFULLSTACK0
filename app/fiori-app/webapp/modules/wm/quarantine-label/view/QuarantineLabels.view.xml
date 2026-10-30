@@ -89,10 +89,10 @@
                                 <cells>
                                     <Text text="{qlList>MaterialDocument}" />
                                     <Text text="{qlList>MaterialDocumentYear}" />
-                                    <Text text="{qlList>PostingDate}" />
-                                    <ObjectIdentifier title="{qlList>MaterialDescription}" text="{qlList>Material}" />
-                                    <Text text="{qlList>Batch}" />
-                                    <Text text="{qlList>SupplierName}" />
+                                    <Text text="{= ${qlList>PostingDate} || '-' }" />
+                                    <ObjectIdentifier title="{= ${qlList>MaterialDescription} || '-' }" text="{= ${qlList>Material} || '-' }" />
+                                    <Text text="{= ${qlList>Batch} || '-' }" />
+                                    <Text text="{= ${qlList>SupplierName} || '-' }" />
                                     <HBox justifyContent="End">
                                         <Button icon="sap-icon://bar-code" tooltip="{i18n>qlRowLabels}" type="Transparent" press=".onRowLabels"
                                             enabled="{= !${qlView>/busy} }" />

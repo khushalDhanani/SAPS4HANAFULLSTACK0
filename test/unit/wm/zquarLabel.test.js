@@ -33,10 +33,10 @@ const i18n = Object.fromEntries(fs.readFileSync(path.join(__dirname, '../../../a
     .split('\n').filter((l) => /^[\w.]+=/.test(l)).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
 const TEXTS = Object.fromEntries(Object.entries({ ...Layout.STATIC_KEYS, ...Layout.CAPTION_KEYS, ...Layout.EXTRA_KEYS }).map(([k, key]) => [k, i18n[key]]));
 const DEMO = {
-    materialName: 'DEMO MATERIAL 01', itemCode: '000000000000123456', grnNo: '9900000001', grnDate: '27.10.2026', inwNo: 'DEMO-INW-01',
+    materialName: 'DEMO MATERIAL 01', itemCode: '8000009753', grnNo: '9900000001', grnDate: '27.10.2026', inwNo: 'DEMO-INW-01',
     inspectionLot: '010000005588', qtyReceived: '140.000 KG',
     containerNo: '1 OF 14', manufacturer: 'DEMO MFR', supplier: 'DEMO SUPPLIER', batchNo: 'DEMO-BATCH-01',
-    mfgDate: '01.10.2026', expiryDate: '01.04.2027', netWeight: '10.000 KG', barcode: '9900000001'
+    mfgDate: '01.10.2026', expiryDate: '01.04.2027', netWeight: '10.000 KG', barcode: '9900000001', preparedBy: 'MSHUSSAIN'
 };
 const L4x6 = () => Layout.layout('4x6');
 const textItems = (r) => r.items.filter((i) => i.kind === 'text');
@@ -79,6 +79,20 @@ describe('ZQUAR 4 x 6 label', () => {
         const fs = fieldsOf();
         const codeFld = fld(fs, 'itemCode');
         expect(codeFld.caption.text).toBe('Material Code');
+    });
+
+    it('inwNo caption is "INW. Batch No"', () => {
+        const fs = fieldsOf();
+        const inwFld = fld(fs, 'inwNo');
+        expect(inwFld.caption.text).toBe('INW. Batch No');
+    });
+
+    it('material code trims leading zeros and keeps last 10 digits', () => {
+        expect(Layout.formatMaterialCode('000000008000009753')).toBe('8000009753');
+        expect(Layout.formatMaterialCode('000000008000009832')).toBe('8000009832');
+        expect(Layout.formatMaterialCode('000000000000123456')).toBe('123456');
+        expect(Rows.formatMaterialCode('000000008000009753')).toBe('8000009753');
+        expect(Layout.formatMaterialCode('DEMO-MAT-01')).toBe('DEMO-MAT-01');
     });
 
     const fieldsOf = (row = DEMO) => Layout.render(L4x6(), row, TEXTS).fields;
@@ -334,7 +348,7 @@ describe('ZQUAR 4 x 6 label', () => {
         const empty = Layout.render(L, { barcode: DEMO.barcode }, TEXTS);
         const capsOf = (r) => textItems(r).filter((i) => i.bold).map((i) => [i.text, i.x, i.y]);
         expect(capsOf(empty)).toEqual(capsOf(full));
-        expect(textItems(empty).filter((i) => !i.bold && i.align === 'left').map((i) => i.text)).toEqual([]);
+        expect(textItems(empty).filter((i) => !i.bold && i.align === 'left').map((i) => i.text)).toEqual(Array(Layout.FIELDS.length).fill('-'));
         expect(Layout.render(L, { ...DEMO, barcode: '' }, TEXTS).warnings).toContainEqual({ code: 'barcodeMissing', field: 'barcode' });
     });
 
@@ -377,32 +391,32 @@ describe('ZQUAR 4 x 6 label', () => {
             DateKind: 'EXPIRY', DateValue: '2027-04-01', PostedQuantity: '140.00 KG', ContainerQuantity: '10.005', Unit: 'KG',
             Container: '1 OF 14', StorageUnit: '00000000009900000001', Text: 'DM12345678', InspectionLot: '010000005588'
         };
-        it('maps every label field, with DD/MM/YYYY dates, 2-decimal net weight without a space and no leading zeros', () => {
+        it('maps every label field, with DD/MM/YYYY dates, 2-decimal net weight with a space and no leading zeros', () => {
             expect(Rows.toLabels([capRow], TEXTS)).toEqual([{
-                materialName: 'DEMO MATERIAL 01', itemCode: '000000000000123456', materialCode: '000000000000123456', grnNo: '9900000001', grnDate: '27/10/2026', inwNo: 'DM12345678',
+                materialName: 'DEMO MATERIAL 01', itemCode: '123456', materialCode: '123456', grnNo: '9900000001', grnDate: '27/10/2026', inwNo: 'DM12345678',
                 inspectionLot: '010000005588',
                 qtyReceived: '140.00 KG', containerNo: '1 OF 14', manufacturer: 'DEMO-MFR', supplier: 'DEMO SUPPLIER',
-                batchNo: 'DM-001', mfgDate: '01/10/2026', expiryDate: '01/04/2027', netWeight: '10.01KG', barcode: '9900000001',
-                preparedBy: '', captions: undefined
+                batchNo: 'DM-001', mfgDate: '01/10/2026', expiryDate: '01/04/2027', netWeight: '10.01 KG', barcode: '9900000001',
+                preparedBy: '-', captions: undefined
             }]);
         });
         it('prefers SAP PreparedBy from row and falls back to generator user or empty', () => {
             const sapRow = { ...capRow, PreparedBy: 'MSHUSSAIN' };
             expect(Rows.toLabels([sapRow], TEXTS, 'DEMO-USER')[0].preparedBy).toBe('MSHUSSAIN');
             expect(Rows.toLabels([capRow, capRow], TEXTS, 'DEMO-USER').map(r => r.preparedBy)).toEqual(['DEMO-USER', 'DEMO-USER']);
-            expect(Rows.toLabels([capRow], TEXTS)[0].preparedBy).toBe('');
+            expect(Rows.toLabels([capRow], TEXTS)[0].preparedBy).toBe('-');
         });
         it('prefers InwardNo and falls back to Text or empty', () => {
             expect(Rows.toLabels([{ ...capRow, InwardNo: 'INW-999', Text: '' }], TEXTS)[0].inwNo).toBe('INW-999');
             expect(Rows.toLabels([{ ...capRow, InwardNo: '', Text: 'TEXT-888' }], TEXTS)[0].inwNo).toBe('TEXT-888');
-            expect(Rows.toLabels([{ ...capRow, InwardNo: '', Text: '' }], TEXTS)[0].inwNo).toBe('');
+            expect(Rows.toLabels([{ ...capRow, InwardNo: '', Text: '' }], TEXTS)[0].inwNo).toBe('-');
         });
         it('formats match the shapes measured on the current label', () => {
             const [l] = Rows.toLabels([capRow], TEXTS);
             expect(l.grnNo).toMatch(/^\d{10}$/);
             [l.grnDate, l.mfgDate, l.expiryDate].forEach((d) => expect(d).toMatch(/^\d\d\/\d\d\/\d{4}$/));
             expect(l.qtyReceived).toMatch(/^\d+\.\d\d [A-Z]+$/);
-            expect(l.netWeight).toMatch(/^\d+\.\d\d[A-Z]+$/);
+            expect(l.netWeight).toMatch(/^\d+\.\d\d [A-Z]+$/);
             expect(l.containerNo).toMatch(/^\d+ OF \d+$/);
             expect(l.barcode).toMatch(/^\d{10}$/);
         });
@@ -413,9 +427,9 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(textItems(r).map((i) => i.text)).toContain('Retest Date');
             expect(textItems(r).map((i) => i.text)).not.toContain(TEXTS.expiryDate);
         });
-        it('empty or odd values: empty dates and weights stay empty, alphanumeric storage units keep their zeros', () => {
+        it('empty or odd values: empty values become dash (-), alphanumeric storage units keep their zeros', () => {
             const [l] = Rows.toLabels([{ Container: '1 OF 1', StorageUnit: '00DEMO', DateValue: '', ContainerQuantity: '' }], TEXTS);
-            expect(l).toMatchObject({ grnDate: '', expiryDate: '', netWeight: '', barcode: '00DEMO', inwNo: '', batchNo: '' });
+            expect(l).toMatchObject({ grnDate: '-', expiryDate: '-', netWeight: '-', barcode: '00DEMO', inwNo: '-', batchNo: '-' });
             expect(Rows.twoDecimals('5.000-')).toBe('5.000-'); // not a number: unchanged, never guessed
             expect(Rows.withoutLeadingZeros('0000000000')).toBe('0');
         });
