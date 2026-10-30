@@ -83,8 +83,9 @@ jobs:
         run: npm run test:monitoring
 
       - name: Run post-deployment smoke tests against server
+        # Test profile: this job has no SAP; any other profile fails closed in srv/common/productionGuard.js (S4 config missing).
         run: |
-          npx cds-serve &
+          NODE_ENV=test npx cds-serve &
           PID=$!
           node tools/smoke-test-deployment.js --wait=30
           kill $PID || true

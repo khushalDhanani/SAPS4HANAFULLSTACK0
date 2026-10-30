@@ -7,6 +7,13 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Zquar Label: Material Code Trimming, INW. Batch No, Net Weight Spacing & Dash Fallback (2026-10-30 IST) — PASS:** Delivered four user-requested enhancements to Zquar 4x6 label formatting and captions:
+  1. **Material Code Leading Zero Trimming**: Added `formatMaterialCode` in `ZquarLabelRows.js` and `ZquarLabelLayout.js` to strip leading zeros from numeric SAP material codes, preserving up to the last 10 digits (`000000008000009753` -> `8000009753`, `000000008000009832` -> `8000009832`).
+  2. **INW. Batch No Caption**: Updated caption key `zqInwNo` and form input `qlText` in both `i18n.properties` and `i18n_en.properties` from `INW. No` to `INW. Batch No`. Added fallback `inwBatchNo: "zqInwBatchNo"` in `EXTRA_KEYS`.
+  3. **Net Weight Formatting with Space**: Updated `ZquarLabelRows.toLabels` to format `netWeight` with a space between quantity and unit (`sQty + " " + Unit`, e.g. `1.00 NOS` instead of `1.00NOS`).
+  4. **Dash (-) for Missing Data**: Updated `ZquarLabelLayout.placeFields` so that any field on the label without data (null, empty string, or whitespace) renders with a dash `-` (`manufacturer`, `batchNo`, `expiryDate`, `inspectionLot`, etc.), maintaining clean table structure without empty gaps.
+  Verified live in browser via Chrome DevTools MCP against running CAP and live S/4HANA (Client 220): document `5000005753` -> `Material Code: 8000009753`, `INW. Batch No: 34567`, `Net Weight: 1.00 NOS`, missing fields (`Manufacturer`, `Batch No`, `Expiry Date`) -> `-`; document `5000005750` -> `Material Code: 8000009832`, `Inspection Lot: -`. All 5 quarantine Jest suites (165 tests) and Playwright E2E (`verifyQuarantineLabels.e2e.js`, 7/7) PASS; UI5 linter and root ESLint 100% clean.
+
 - **Zquar Label: Inspection Lot from SAP QALS (2026-10-30 IST) — PASS:** Added `Inspection Lot` to Zquar 4x6 label. SAP S/4HANA (DS4 Client 220) stores inspection lots for goods-receipt material documents in table `QALS` linked by `MBLNR = MKPF-MBLNR` and `MJAHR = MKPF-MJAHR` with inspection lot number `PRUEFLOS` (NUMC 12). Live SAP discovery via `RFC_READ_TABLE` on document `5000005753` confirmed inspection lot `010000005588` (document `5000005750` confirmed blank as no inspection lot was generated). In `QuarantineLabelAdapter.js`, `readLabelRows` now reads `QALS` and maps `InspectionLot` to each label row. Declared `InspectionLot : String(12);` in `srv/wm/quarantine-label/service.cds`. In `ZquarLabelRows.js`, mapped `inspectionLot: r.InspectionLot ? String(r.InspectionLot).trim() : ""`. In `ZquarLabelLayout.js`, added `{ key: "inspectionLot" }` between `inwNo` and `qtyReceived` (15 total rows), added i18n caption keys `zqInspectionLot=Inspection Lot`, adjusted vertical gap constants (`quarGap=8`, `sopGap=5`, `ROW_PAD=1.8`), and centered slots across the full glyph box `(CAP_ASCENT + DESCENT) * pt + extra` so all 15 rows (including wrapped 2-line descriptions) fit within 4x6 in dimensions without overflow or text touching hairlines. Verified live in browser with Chrome DevTools MCP against running CAP and live S/4HANA: document `5000005753` -> `inspectionLot = "010000005588"`, document `5000005750` -> `inspectionLot = ""`. All 5 quarantine Jest suites (163 tests) and Playwright E2E (`verifyQuarantineLabels.e2e.js`, 7/7) PASS; root ESLint, UI5 lint, and CDS compilation 100% clean.
 
 - **P-1 Browser E2E PR gate: `browser-e2e-sap-free` job on every push/PR (2026-10-30 10:10 IST) — PARTIAL, uncommitted:** `npm run test:e2e:sap-free` runs the 3 suites that pass with SAP unreachable (Negative UI, Write authorization, Quarantine labels) on its own isolated test-profile server; locally 3/3 PASS twice. The other 20 suites need SAP and stay in the manual `browser-e2e` job. Not yet run in GitHub Actions.
@@ -6137,3 +6144,68 @@ Single source of truth for work history, current status, validation, unresolved 
     - CDS compilation: `npx cds compile srv --to json > /dev/null` → 0 errors.
 - **Assumptions made:** None. `QALS` table schema, relationships (`MBLNR`, `MJAHR`, `ZEILE`, `PRUEFLOS`), and values verified directly from live SAP system.
 - **Status:** PASS.
+
+### 2026-10-30 IST — Zquar Label: Material Code Trimming, INW. Batch No, Net Weight Spacing & Dash Fallback — PASS
+
+- **Request:**
+  "Material Code 000000008000009753 : 00000000 Trim This Staring We Need Only last 10 Digits.
+   INW. No : Updated Name - INW. Batch No
+   Net Weight 1.00NOS : SHOW : 1.00 NOS
+   Where No data Show Dash (-)"
+- **Inspect & Plan:**
+  1. Material Code: SAP MATNR internal representation is padded with 8 leading zeros (`000000008000009753`). External representation strips leading zeros and keeps up to the last 10 digits (`8000009753`).
+  2. INW. No: Caption updated to `INW. Batch No` across i18n properties and layout extra keys.
+  3. Net Weight: Formatted with a clean space between two-decimal quantity and unit string (`1.00 NOS`).
+  4. Missing Data: Empty or whitespace fields render as `-` on the 4x6 label.
+- **Changed:**
+  1. `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelRows.js`:
+     - Added `formatMaterialCode(v)` trimming leading zeros from numeric codes and keeping up to last 10 digits.
+     - Updated `toLabels`: `itemCode` and `materialCode` mapped using `formatMaterialCode(r.Material)`.
+     - Updated `netWeight` mapping: `sQty ? (sQty + (r.Unit ? " " + String(r.Unit).trim() : "")) : ""`.
+     - Exported `formatMaterialCode`.
+  2. `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js`:
+     - Added `formatMaterialCode(v)` and applied to `rawVal` for `itemCode`.
+     - Updated `placeFields`: when `s` is empty or whitespace, defaults to `s = "-"`.
+     - Added `inwBatchNo: "zqInwBatchNo"` to `EXTRA_KEYS` and updated `capText` lookup.
+     - Exported `formatMaterialCode`.
+  3. `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+     - Updated `zqInwNo=INW. Batch No`.
+     - Added `zqInwBatchNo=INW. Batch No`.
+     - Updated `qlText=INW. Batch No (Optional)`.
+  4. `tools/generate-zquar-label-sample.js`:
+     - Updated demo row and regenerated `docs/label/samples/zquar-4x6-same-DEMO.pdf` (14 pages).
+  5. `test/unit/wm/zquarLabel.test.js`:
+     - Added tests for `formatMaterialCode` and `INW. Batch No` caption.
+     - Updated `netWeight` expectation to require a space (`10.01 KG`, `/^\d+\.\d\d [A-Z]+$/`).
+     - Added test verifying that empty fields on a label render as `-`.
+- **Test Decision:** TEST ADDED.
+- **Tested & Verified:**
+  - All 5 quarantine suites: `test/unit/wm/quarantineLabelAdapter.test.js`, `test/unit/wm/quarantineLabelsController.test.js`, `test/unit/wm/quarantineLabelOutput.test.js`, `test/unit/wm/zquarLabel.test.js`, `test/integration/wm/quarantineLabelDocuments.test.js` → 5/5 suites, 165/165 tests PASS.
+  - Playwright browser E2E (`test/e2e/wm/verifyQuarantineLabels.e2e.js`): 7/7 cases PASS.
+  - Live Browser DevTools MCP Verification against running CAP server on port 4004 & live SAP S/4HANA (DS4 Client 220):
+    - Document `5000005753`:
+      - `Material Code`: `8000009753` (leading `00000000` trimmed, 10 digits)
+      - `INW. Batch No`: `34567` (updated caption)
+      - `Net Weight`: `1.00 NOS` (with space)
+      - Missing fields (`Manufacturer`, `Batch No`, `Expiry Date`): `-`
+      - `Prepared by`: `MSHUSSAIN`
+    - Document `5000005750`:
+      - `Material Code`: `8000009832` (trimmed)
+      - `Inspection Lot`: `-` (no lot in SAP)
+      - `Net Weight`: `1.00 NOS`
+      - Missing fields: `-`
+  - Static Quality Gates:
+    - Root ESLint: `npm run lint` → 0 errors, 0 warnings (100% clean).
+    - UI5 linter: `npm --prefix app/fiori-app run lint` → Success! No findings detected.
+    - CDS compilation: `npx cds compile srv --to json > /dev/null` → 0 errors.
+    - `git diff --check` → Clean (0 whitespace/formatting errors).
+- **Assumptions made:** None.
+- **Status:** PASS.
+
+### 2026-10-30 IST — CI smoke step runs the server in the test profile (third CI blocker) — PARTIAL (CI run pending)
+
+- **Root cause (CONFIRMED from the step 14 log pasted by the user, and reproduced):** `npx cds-serve` with `NODE_ENV` unset exits at `server.js:19` → `srv/common/productionGuard.js:98` `assertS4ConnectionConfig`: `missing: S4_DESTINATION_URL, S4_CLIENT`; the readiness probe then times out after 30 s. The guard is correct (fails closed; skips only `test`); the CI job has no SAP. Earlier "smoke PASS" in the local clean clone was FALSE: the user's dev server (PID 11597) already listened on :4004 and answered the probe.
+- **CHANGED:** `.github/workflows/ci.yml` smoke step starts `NODE_ENV=test npx cds-serve &` (comment states why). Guard unchanged.
+- **TEST DECISION:** TEST NOT POSSIBLE for the workflow step itself (GitHub Actions); validated by exact local reproduction instead.
+- **TESTED:** clean clone, port 4111 (free): bare `cds-serve` → `ProductionGuardError … missing: S4_DESTINATION_URL, S4_CLIENT` + readiness timeout (matches CI); `NODE_ENV=test` → `smoke-test-deployment.js --wait=30 --url=http://localhost:4111` 10 passed, 0 failed. Workflow parsed with `yaml`; `npx jest test/unit/tools/e2eRunner.test.js` PASS; `git diff --check` clean.
+- **NOT VERIFIED:** GitHub run of this commit; steps after 14 (UI5 build, `validate:mta` passed in the clean clone) and `browser-e2e-sap-free` on `ubuntu-latest`. **NEXT:** push, check the run.
