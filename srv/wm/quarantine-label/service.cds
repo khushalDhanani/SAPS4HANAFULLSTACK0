@@ -44,6 +44,7 @@ service QuarantineLabelService @(path: '/odata/v4/quarantine-label') {
         Text                 : String(50);
         InwardNo             : String(50);
         PreparedBy           : String(80);
+        InspectionLot        : String(12);
     }
 
     type LabelRows {

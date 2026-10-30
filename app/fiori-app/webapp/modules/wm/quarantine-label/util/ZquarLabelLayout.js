@@ -28,7 +28,7 @@ sap.ui.define([
     var TYPE = { title: 16, caption: 9, value: 10, quarantine: 18, formNumber: 9, humanReadable: 13 };
     var MIN_PT = 9;
     var MAX_LINES = 40;      // wrap limit for one value; far beyond what a label can hold (the label check fails first)
-    var ROW_PAD = 2.5;        // glyph box (cap + descender) -> hairlines; a slot below glyph box + this is refused instead of overlapping
+    var ROW_PAD = 1.8;        // glyph box (cap + descender) -> hairlines; a slot below glyph box + this is refused instead of overlapping
     var DESCENT = 0.21;      // Helvetica descender
     var LH = 1.15;           // line height of wrapped values
     var ASCENT = 0.79;       // text-box top -> baseline, measured in the sample (title, GRN No., barcode text: 0.789)
@@ -40,21 +40,23 @@ sap.ui.define([
     var EDGE_MM = 4;         // safe margin on the page edge
     // Vertical design numbers (pt at 432): title top, hairline under the title, white space above QUARANTINE, QUARANTINE ->
     // SOP no., SOP no. -> second hairline, barcode bars, number gap/pad, last row -> bars
-    var V = { titleTop: 14, titleRule: 34, quarGap: 9, sopGap: 6, sopRule: 4, barH: 100, hrGap: 3, bottomPad: 14, barGap: 6 };
+    var V = { titleTop: 14, titleRule: 34, quarGap: 8, sopGap: 5, sopRule: 4, barH: 100, hrGap: 3, bottomPad: 14, barGap: 6 };
     var BARCODE = { targetModuleMm: 0.5, minModuleMm: 0.375 };
 
     // One field per row, in label order (keys of the label row and of the caption texts)
     var FIELDS = [
-        { key: "materialName", lines: 2 }, { key: "itemCode" }, { key: "grnNo" }, { key: "grnDate" }, { key: "inwNo" }, { key: "qtyReceived" },
+        { key: "materialName", lines: 2 }, { key: "itemCode" }, { key: "grnNo" }, { key: "grnDate" }, { key: "inwNo" },
+        { key: "inspectionLot" }, { key: "qtyReceived" },
         { key: "containerNo" }, { key: "manufacturer", lines: 2 }, { key: "supplier", lines: 2 }, { key: "batchNo" },
         { key: "mfgDate" }, { key: "expiryDate" }, { key: "netWeight" }, { key: "preparedBy" }
     ];
     var ROW_COUNT = FIELDS.length;
     var STATIC_KEYS = { title: "zqTitle", quarantine: "zqQuarantine", formNumber: "zqFormNumber" };
     // Texts used only for some rows (a row may replace a caption via row.captions[fieldKey])
-    var EXTRA_KEYS = { retestDate: "zqRetestDate", materialCode: "zqMaterialCode" };
+    var EXTRA_KEYS = { retestDate: "zqRetestDate", materialCode: "zqMaterialCode", inspectionLotNo: "zqInspectionLotNo" };
     var CAPTION_KEYS = {
-        materialName: "zqMaterialName", itemCode: "zqItemCode", grnNo: "zqGrnNo", grnDate: "zqGrnDate", inwNo: "zqInwNo", qtyReceived: "zqQtyReceived",
+        materialName: "zqMaterialName", itemCode: "zqItemCode", grnNo: "zqGrnNo", grnDate: "zqGrnDate", inwNo: "zqInwNo",
+        inspectionLot: "zqInspectionLot", qtyReceived: "zqQtyReceived",
         containerNo: "zqContainerNo", manufacturer: "zqManufacturer", supplier: "zqSupplier", batchNo: "zqBatchNo",
         mfgDate: "zqMfgDate", expiryDate: "zqExpiryDate", netWeight: "zqNetWeight", preparedBy: "zqPreparedBy"
     };
@@ -172,13 +174,16 @@ sap.ui.define([
         var capPt = L.type.caption;
         var valPt = L.type.value;
         var capText = function (d) {
-            return (row.captions && row.captions[d.key]) || texts[d.key] || (d.key === "itemCode" ? (texts.materialCode || texts.itemCode) : "");
+            return (row.captions && row.captions[d.key]) || texts[d.key]
+                || (d.key === "itemCode" ? (texts.materialCode || texts.itemCode) : "")
+                || (d.key === "inspectionLot" ? (texts.inspectionLot || texts.inspectionLotNo) : "");
         };
         var valueX = C.x0 + Math.max.apply(null, FIELDS.map(function (d) { return widthPt(capText(d), capPt, true); })) + COL_GAP;
 
         var fields = FIELDS.map(function (d, i) {
             var c = fitText(capText(d), valueX - GAP - C.x0, capPt, 1, true);
-            var rawVal = d.key === "itemCode" ? (row.itemCode != null && row.itemCode !== "" ? row.itemCode : row.materialCode) : row[d.key];
+            var rawVal = d.key === "itemCode" ? (row.itemCode != null && row.itemCode !== "" ? row.itemCode : row.materialCode)
+                : (d.key === "inspectionLot" ? (row.inspectionLot != null && row.inspectionLot !== "" ? row.inspectionLot : row.InspectionLot) : row[d.key]);
             var s = rawVal == null ? "" : String(rawVal).trim();
             // Every value may wrap (never cut); d.lines = lines allowed before shrinking
             var r = s ? fitText(s, C.x1 - valueX, valPt, d.lines || 1, false) : { pt: valPt, lines: [], truncated: false };
@@ -198,7 +203,7 @@ sap.ui.define([
         var y = L.rows.top;
         fields.forEach(function (f, i) {
             var h = pitch + extra[i];
-            var block = CAP_ASCENT * f.value.pt + extra[i]; // first cap top -> last baseline
+            var block = (CAP_ASCENT + DESCENT) * f.value.pt + extra[i]; // full glyph box (cap to descender)
             f.slot = { y0: y, y1: y + h };
             f.caption.y = f.value.y = y + (h - block) / 2 + CAP_ASCENT * f.value.pt;
             y += h;

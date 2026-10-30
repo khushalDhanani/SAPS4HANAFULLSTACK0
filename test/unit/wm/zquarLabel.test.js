@@ -33,7 +33,8 @@ const i18n = Object.fromEntries(fs.readFileSync(path.join(__dirname, '../../../a
     .split('\n').filter((l) => /^[\w.]+=/.test(l)).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
 const TEXTS = Object.fromEntries(Object.entries({ ...Layout.STATIC_KEYS, ...Layout.CAPTION_KEYS, ...Layout.EXTRA_KEYS }).map(([k, key]) => [k, i18n[key]]));
 const DEMO = {
-    materialName: 'DEMO MATERIAL 01', itemCode: '000000000000123456', grnNo: '9900000001', grnDate: '27.10.2026', inwNo: 'DEMO-INW-01', qtyReceived: '140.000 KG',
+    materialName: 'DEMO MATERIAL 01', itemCode: '000000000000123456', grnNo: '9900000001', grnDate: '27.10.2026', inwNo: 'DEMO-INW-01',
+    inspectionLot: '010000005588', qtyReceived: '140.000 KG',
     containerNo: '1 OF 14', manufacturer: 'DEMO MFR', supplier: 'DEMO SUPPLIER', batchNo: 'DEMO-BATCH-01',
     mfgDate: '01.10.2026', expiryDate: '01.04.2027', netWeight: '10.000 KG', barcode: '9900000001'
 };
@@ -83,14 +84,14 @@ describe('ZQUAR 4 x 6 label', () => {
     const fieldsOf = (row = DEMO) => Layout.render(L4x6(), row, TEXTS).fields;
     const fld = (fs, k) => fs.find((f) => f.key === k);
     const seps = (r) => r.items.filter((i) => i.kind === 'sep');
-    const ORDER = ['materialName', 'itemCode', 'grnNo', 'grnDate', 'inwNo', 'qtyReceived', 'containerNo', 'manufacturer', 'supplier', 'batchNo', 'mfgDate', 'expiryDate', 'netWeight', 'preparedBy'];
+    const ORDER = ['materialName', 'itemCode', 'grnNo', 'grnDate', 'inwNo', 'inspectionLot', 'qtyReceived', 'containerNo', 'manufacturer', 'supplier', 'batchNo', 'mfgDate', 'expiryDate', 'netWeight', 'preparedBy'];
 
     it('one field per row, in the required order, each caption on its own line (no two fields share a baseline)', () => {
         const fs = fieldsOf();
         expect(fs.map((f) => f.key)).toEqual(ORDER);
         const ys = fs.map((f) => f.caption.y);
         ys.slice(1).forEach((y, i) => expect(y).toBeGreaterThan(ys[i] + 9)); // strictly increasing, more than a caption height apart
-        expect(new Set(ys).size).toBe(14); // Prepared by is a normal row (last)
+        expect(new Set(ys).size).toBe(15); // Prepared by is a normal row (last)
         fs.forEach((f) => expect(f.value.y).toBeCloseTo(f.caption.y, 9)); // caption and value share one baseline
     });
 
@@ -121,11 +122,11 @@ describe('ZQUAR 4 x 6 label', () => {
         expect(L.barcode.top - (prep.value.y + 0.21 * prep.value.pt)).toBeGreaterThanOrEqual(6);
     });
 
-    it('separators: 15 hairlines (under the title, under QUARANTINE/SOP and between the rows), 5 % opacity, on the dot grid, full content width, never touching text', () => {
+    it('separators: 16 hairlines (under the title, under QUARANTINE/SOP and between the rows), 5 % opacity, on the dot grid, full content width, never touching text', () => {
         const L = L4x6();
         const r = Layout.render(L, DEMO, TEXTS);
         const ss = seps(r);
-        expect(ss).toHaveLength(15);
+        expect(ss).toHaveLength(16);
         const onDot = (n) => Math.abs(n / L.dotPt - Math.round(n / L.dotPt)) < 1e-9;
         ss.forEach((s) => {
             expect(s.opacity).toBe(0.05);
@@ -374,11 +375,12 @@ describe('ZQUAR 4 x 6 label', () => {
             MaterialDescription: 'DEMO MATERIAL 01', Material: '000000000000123456', MaterialDocument: '9900000001', PostingDate: '2026-10-27', Batch: 'DEMOB1',
             SupplierBatch: 'DM-001', SupplierName: 'DEMO SUPPLIER', BatchCharacteristics: 'DEMO-MFR', ManufacturingDate: '2026-10-01',
             DateKind: 'EXPIRY', DateValue: '2027-04-01', PostedQuantity: '140.00 KG', ContainerQuantity: '10.005', Unit: 'KG',
-            Container: '1 OF 14', StorageUnit: '00000000009900000001', Text: 'DM12345678'
+            Container: '1 OF 14', StorageUnit: '00000000009900000001', Text: 'DM12345678', InspectionLot: '010000005588'
         };
         it('maps every label field, with DD/MM/YYYY dates, 2-decimal net weight without a space and no leading zeros', () => {
             expect(Rows.toLabels([capRow], TEXTS)).toEqual([{
                 materialName: 'DEMO MATERIAL 01', itemCode: '000000000000123456', materialCode: '000000000000123456', grnNo: '9900000001', grnDate: '27/10/2026', inwNo: 'DM12345678',
+                inspectionLot: '010000005588',
                 qtyReceived: '140.00 KG', containerNo: '1 OF 14', manufacturer: 'DEMO-MFR', supplier: 'DEMO SUPPLIER',
                 batchNo: 'DM-001', mfgDate: '01/10/2026', expiryDate: '01/04/2027', netWeight: '10.01KG', barcode: '9900000001',
                 preparedBy: '', captions: undefined
@@ -446,7 +448,7 @@ describe('ZQUAR 4 x 6 label', () => {
             const page = html().split('<svg ')[1];
             const r = Layout.render(L4x6(), DEMO, TEXTS);
             const bars = r.items.filter((i) => i.kind === 'bar');
-            expect(page.match(/<rect /g)).toHaveLength(bars.length + 15); // bars + the 15 hairlines
+            expect(page.match(/<rect /g)).toHaveLength(bars.length + 16); // bars + the 16 hairlines
             expect(page).toContain(`<rect x="${bars[0].x}" y="${bars[0].y}" width="${bars[0].w}" height="${bars[0].h}"`);
             expect(page).not.toContain('<line ');
             textItems(r).forEach((t) => expect(page).toContain(`translate(${t.x} ${t.y})`));

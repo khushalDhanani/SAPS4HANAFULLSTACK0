@@ -217,6 +217,25 @@ class QuarantineLabelAdapter {
 
     const inwardNo = text || sapInwNo || String(mseg[0].VBELN_IM || '').trim();
 
+    const qalsMap = new Map();
+    try {
+      const qalsRows = await read('QALS', ['PRUEFLOS', 'MBLNR', 'MJAHR', 'ZEILE', 'MATNR', 'CHARG'], [
+        `MBLNR = ${quote(mblnr)}`,
+        `AND MJAHR = ${quote(mjahr)}`
+      ]);
+      qalsRows.forEach((q) => {
+        const lot = String(q.PRUEFLOS || '').trim();
+        if (lot) {
+          if (q.MATNR && q.CHARG) qalsMap.set(key(q.MATNR, q.CHARG), lot);
+          if (q.ZEILE) qalsMap.set(`ITEM_${q.ZEILE}`, lot);
+          if (q.MATNR) qalsMap.set(`MAT_${q.MATNR}`, lot);
+          if (!qalsMap.has('DEFAULT')) qalsMap.set('DEFAULT', lot);
+        }
+      });
+    } catch {
+      // QALS not configured or read denied: empty inspection lot
+    }
+
     const pairs = [...new Map(mseg.map((m) => [key(m.MATNR, m.CHARG), m])).values()];
     // The report matches LTAP by inbound delivery when the first MSEG item has one, else by document number (WENUM)
     const vbeln = mseg[0].VBELN_IM;
@@ -295,7 +314,8 @@ class QuarantineLabelAdapter {
         StorageUnit: l.NLENR,
         Text: inwardNo,
         InwardNo: inwardNo,
-        PreparedBy: preparedBy
+        PreparedBy: preparedBy,
+        InspectionLot: qalsMap.get(group) || (m.ZEILE ? qalsMap.get(`ITEM_${m.ZEILE}`) : '') || qalsMap.get(`MAT_${l.MATNR}`) || ''
       };
     });
   }

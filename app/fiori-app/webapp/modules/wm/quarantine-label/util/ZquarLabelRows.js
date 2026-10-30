@@ -51,6 +51,7 @@ sap.ui.define([], function () {
                 grnNo: r.MaterialDocument || "",
                 grnDate: date(r.PostingDate),
                 inwNo: r.InwardNo || r.Text || "",
+                inspectionLot: r.InspectionLot ? String(r.InspectionLot).trim() : "",
                 qtyReceived: r.PostedQuantity || "",
                 containerNo: r.Container || "",
                 manufacturer: r.BatchCharacteristics || "",

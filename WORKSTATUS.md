@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Zquar Label: Inspection Lot from SAP QALS (2026-10-30 IST) — PASS:** Added `Inspection Lot` to Zquar 4x6 label. SAP S/4HANA (DS4 Client 220) stores inspection lots for goods-receipt material documents in table `QALS` linked by `MBLNR = MKPF-MBLNR` and `MJAHR = MKPF-MJAHR` with inspection lot number `PRUEFLOS` (NUMC 12). Live SAP discovery via `RFC_READ_TABLE` on document `5000005753` confirmed inspection lot `010000005588` (document `5000005750` confirmed blank as no inspection lot was generated). In `QuarantineLabelAdapter.js`, `readLabelRows` now reads `QALS` and maps `InspectionLot` to each label row. Declared `InspectionLot : String(12);` in `srv/wm/quarantine-label/service.cds`. In `ZquarLabelRows.js`, mapped `inspectionLot: r.InspectionLot ? String(r.InspectionLot).trim() : ""`. In `ZquarLabelLayout.js`, added `{ key: "inspectionLot" }` between `inwNo` and `qtyReceived` (15 total rows), added i18n caption keys `zqInspectionLot=Inspection Lot`, adjusted vertical gap constants (`quarGap=8`, `sopGap=5`, `ROW_PAD=1.8`), and centered slots across the full glyph box `(CAP_ASCENT + DESCENT) * pt + extra` so all 15 rows (including wrapped 2-line descriptions) fit within 4x6 in dimensions without overflow or text touching hairlines. Verified live in browser with Chrome DevTools MCP against running CAP and live S/4HANA: document `5000005753` -> `inspectionLot = "010000005588"`, document `5000005750` -> `inspectionLot = ""`. All 5 quarantine Jest suites (163 tests) and Playwright E2E (`verifyQuarantineLabels.e2e.js`, 7/7) PASS; root ESLint, UI5 lint, and CDS compilation 100% clean.
+
 - **P-1 Browser E2E PR gate: `browser-e2e-sap-free` job on every push/PR (2026-10-30 10:10 IST) — PARTIAL, uncommitted:** `npm run test:e2e:sap-free` runs the 3 suites that pass with SAP unreachable (Negative UI, Write authorization, Quarantine labels) on its own isolated test-profile server; locally 3/3 PASS twice. The other 20 suites need SAP and stay in the manual `browser-e2e` job. Not yet run in GitHub Actions.
 
 - **Zquar Label: INW. No from SAP MKPF Reference & Fallback (2026-10-30 IST) — PASS:** Resolved root cause of "INW. No is not coming": when user leaves "Label Text" input empty (or clicks row "4x6 Labels" on Goods Receipts list), `text` was `""`, resulting in blank `inwNo`. In SAP S/4HANA, inward document/reference is stored in `MKPF-XBLNR` (Reference / Vendor Delivery Challan / Inward Note) and `MKPF-LE_VBELN` / `MSEG-VBELN_IM` (Inbound Delivery number), with `MKPF-FRBNR` and `MKPF-BKTXT` as fallbacks. `QuarantineLabelAdapter.readLabelRows` now queries `MKPF` for `['USNAM', 'XBLNR', 'LE_VBELN', 'FRBNR', 'BKTXT']` and cascades: user override `Text` -> `MKPF.XBLNR` -> `MKPF.LE_VBELN` -> `MKPF.FRBNR` -> `MKPF.BKTXT` -> `MSEG.VBELN_IM` -> `""`. Populated both `InwardNo` and `Text` on `LabelRow`, declared `InwardNo : String(50);` in `service.cds`, updated `ZquarLabelRows.toLabels` to map `inwNo: r.InwardNo || r.Text || ""`, and updated UI i18n labels to `qlText=INW. No (Optional)` / `qlTextPlaceholder=Optional, defaults to SAP inward reference`. Verified live in browser with Chrome DevTools MCP against running CAP and live S/4HANA client 220: document `5000005753` -> `inwNo = "34567"`, document `5000005750` -> `inwNo = "0180000157"`, and custom user override `INW-CUSTOM-888` confirmed. All 147 Jest unit/integration tests and 7/7 Playwright browser E2E tests PASS; root ESLint & UI5 lint clean.
@@ -6090,3 +6092,48 @@ Single source of truth for work history, current status, validation, unresolved 
 - **TESTED:** the 3 suites with `seed-data-local/` temporarily moved away → 3 suites / 132 PASS (folder restored). Clean clone + both fixes, CI command `npx jest --runInBand --ci --coverage --json …` (`TZ=UTC CI=true`) → exit 0, `success: true`, 0 failed, 4243 passed. Remaining `ci` steps in the clean clone (never reached in GitHub so far): `scan:secrets`, `scan:dependencies`, root lint, UI5 lint, `test:a11y`, `test:monitoring`, server smoke (`cds-serve` + `smoke-test-deployment.js --wait=30`), UI5 build, `validate:mta` → all exit 0. `test:performance` → first (cold) run FAIL at `test/performance/servicePerformance.test.js:113` (heap delta ≥ 25 MB), then 5/5 PASS.
 - **FINDING (not fixed, out of scope):** `servicePerformance.test.js` heap-delta test is flaky — `global.gc` is undefined without `--expose-gc`, so the delta is measured without GC; can turn CI red intermittently.
 - **NOT VERIFIED:** GitHub Actions run of this commit; `browser-e2e-sap-free` on `ubuntu-latest`. **NEXT:** push, check the run.
+- **CI RESULT run 41006475832 (`a5c5ed5`) — FAIL, progress:** Jest (step 10), performance, a11y, monitoring now pass in GitHub; job fails at step 14 "Run post-deployment smoke tests against server" (`npx cds-serve &` + `node tools/smoke-test-deployment.js --wait=30`), annotation at log line 32. `browser-e2e-sap-free` still skipped (`needs: ci`). Same step passed in the local clean clone (macOS, Node 24); not reproducible here (no Docker for Linux/Node 22). Cause UNKNOWN — step log needs a GitHub sign-in. **BLOCKED** on the step 14 log (job 123902403518). Unrelated uncommitted quarantine-label edits from another session are in the working tree and were not touched or committed.
+
+### 2026-10-30 IST — Zquar Label: Inspection Lot from SAP QM QALS Table — PASS
+
+- **Request:** "in ZQURAN PDF Add inspection lot. First Find And Add Properly."
+- **Inspect & SAP Discovery:**
+  1. Investigated how SAP QM stores inspection lots linked to material documents (movement type 101 goods receipt).
+  2. Executed live READ-ONLY `RFC_READ_TABLE` against SAP S/4HANA (DS4 Client 220) on table `QALS`:
+     - Fields: `PRUEFLOS` (Inspection lot number, NUMC 12), `MBLNR` (Material document, CHAR 10), `MJAHR` (Year, NUMC 4), `ZEILE` (Item, NUMC 4), `MATNR` (Material, CHAR 40), `CHARG` (Batch, CHAR 10).
+     - Live document `5000005753` returned: `PRUEFLOS = '010000005588'`, `ZEILE = '0001'`, `MATNR = '000000008000009753'`.
+     - Live document `5000005750` returned empty array `[]` (goods receipt without inspection lot).
+- **Changed:**
+  1. `srv/wm/quarantine-label/service.cds`:
+     - Added `InspectionLot : String(12);` to complex type `LabelRow`.
+  2. `srv/integration/s4hana/wm/QuarantineLabelAdapter.js`:
+     - Updated `readLabelRows` to read table `QALS` with fields `['PRUEFLOS', 'MBLNR', 'MJAHR', 'ZEILE', 'MATNR', 'CHARG']` using `MBLNR = quote(mblnr)` and `MJAHR = quote(mjahr)`.
+     - Built lookup map indexed by `MATNR+CHARG`, `ITEM_ZEILE`, and `MAT_MATNR`.
+     - Assigned `InspectionLot` to each row: `qalsMap.get(group) || (m.ZEILE ? qalsMap.get('ITEM_' + m.ZEILE) : '') || qalsMap.get('MAT_' + l.MATNR) || ''`.
+  3. `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelRows.js`:
+     - Mapped `inspectionLot: r.InspectionLot ? String(r.InspectionLot).trim() : ""`.
+  4. `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js`:
+     - Added `{ key: "inspectionLot" }` between `inwNo` and `qtyReceived` in `FIELDS` (15 total rows).
+     - Added caption keys: `inspectionLot: "zqInspectionLot"` in `CAPTION_KEYS` and `inspectionLotNo: "zqInspectionLotNo"` in `EXTRA_KEYS`.
+     - Adjusted `quarGap = 8`, `sopGap = 5`, `ROW_PAD = 1.8`, and balanced slot centering `(CAP_ASCENT + DESCENT) * pt + extra` so all 15 rows fit precisely on 4x6 inch label dimensions with zero overflow and positive padding around hairlines.
+  5. `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+     - Added `zqInspectionLot=Inspection Lot` and `zqInspectionLotNo=Inspection Lot`.
+  6. `tools/generate-zquar-label-sample.js`:
+     - Added `inspectionLot: '010000005588'` to base demo row. Generated `docs/label/samples/zquar-4x6-same-DEMO.pdf` (14 pages).
+  7. Automated Tests:
+     - `test/unit/wm/quarantineLabelAdapter.test.js`: Added QALS mock DB and tests for QM InspectionLot mapping from QALS and empty fallback when lot is missing. (55/55 passed)
+     - `test/integration/wm/quarantineLabelDocuments.test.js`: Added CAP OData serialization test asserting `InspectionLot` presence. (8/8 passed)
+     - `test/unit/wm/zquarLabel.test.js`: Updated to 15 fields, 16 separators, tested layout rendering and boundaries across both `DEMO` and `LONGEST` wrapped text fixtures. (41/41 passed)
+- **Test Decision:** TEST ADDED.
+- **Tested & Verified:**
+  - All 5 quarantine suites: `test/unit/wm/quarantineLabelAdapter.test.js`, `test/unit/wm/quarantineLabelsController.test.js`, `test/unit/wm/quarantineLabelOutput.test.js`, `test/unit/wm/zquarLabel.test.js`, `test/integration/wm/quarantineLabelDocuments.test.js` → 5/5 suites, 163/163 tests PASS.
+  - Playwright browser E2E (`test/e2e/wm/verifyQuarantineLabels.e2e.js`): 7/7 cases PASS.
+  - Live Browser DevTools MCP Verification against running CAP server on port 4004 & live SAP S/4HANA (DS4 Client 220):
+    - Document `5000005753`: `Inspection Lot` displayed as `"010000005588"`, `Material Code` as `"000000008000009753"`, `INW. No` as `"34567"`, `Prepared by` as `"MSHUSSAIN"`.
+    - Document `5000005750`: `Inspection Lot` blank (no lot in SAP), `INW. No` as `"0180000157"`, `Prepared by` as `"NARESH"`.
+  - Static Quality Gates:
+    - Root ESLint: `npm run lint` → 0 errors, 0 warnings (100% clean).
+    - UI5 linter: `npm --prefix app/fiori-app run lint` → Success! No findings detected.
+    - CDS compilation: `npx cds compile srv --to json > /dev/null` → 0 errors.
+- **Assumptions made:** None. `QALS` table schema, relationships (`MBLNR`, `MJAHR`, `ZEILE`, `PRUEFLOS`), and values verified directly from live SAP system.
+- **Status:** PASS.

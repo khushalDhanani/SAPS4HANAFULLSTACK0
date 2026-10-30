@@ -33,6 +33,7 @@ const texts = Object.fromEntries(Object.entries({ ...Layout.STATIC_KEYS, ...Layo
 const TOTAL = 14;
 const base = {
   materialName: 'DEMO MATERIAL NAME 01', itemCode: 'DEMO-MAT-01', materialCode: 'DEMO-MAT-01', preparedBy: 'DEMO-USER', grnNo: '9900000001', grnDate: '27.10.2026', inwNo: 'DEMO-INW-01',
+  inspectionLot: '010000005588',
   qtyReceived: '140.000 KG', manufacturer: 'DEMO MANUFACTURER LTD', supplier: 'DEMO SUPPLIER PVT LTD', batchNo: 'DEMO-BATCH-01',
   mfgDate: '01.10.2026', expiryDate: '01.04.2027', netWeight: '10.000 KG'
 };
