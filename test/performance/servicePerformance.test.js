@@ -10,6 +10,12 @@
 
 const cds = require('@sap/cds');
 const path = require('path');
+const v8 = require('v8');
+const vm = require('vm');
+
+// Real GC without a --expose-gc CLI flag: without it the heap delta is uncollected garbage, not retained memory.
+v8.setFlagsFromString('--expose-gc');
+const gc = vm.runInNewContext('gc');
 
 const cdsTest = cds.test(path.resolve(__dirname, '../..'));
 cdsTest.defaults.auth = { username: 'alice', password: '' };
@@ -97,7 +103,7 @@ describe('Release Automation: Performance & Scalability Benchmarks', () => {
 
   // 4. Memory Leak / Heap Stability Guard
   it('maintains bounded heap memory usage (delta < 25MB) across 50 sequential operations', async () => {
-    if (global.gc) global.gc();
+    gc();
     const initialHeap = process.memoryUsage().heapUsed;
 
     for (let i = 0; i < 50; i++) {
@@ -105,7 +111,7 @@ describe('Release Automation: Performance & Scalability Benchmarks', () => {
       expect(res.status).toBe(200);
     }
 
-    if (global.gc) global.gc();
+    gc();
     const finalHeap = process.memoryUsage().heapUsed;
     const deltaMb = (finalHeap - initialHeap) / (1024 * 1024);
 
