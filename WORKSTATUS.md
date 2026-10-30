@@ -6278,3 +6278,4 @@ Single source of truth for work history, current status, validation, unresolved 
 - **TEST DECISION:** EXISTING TEST SUFFICIENT — the gated suite itself.
 - **TESTED:** `npx eslint` clean; latency probe with the fix 2/2 PASS; `npm run test:e2e:sap-free` 3 runs → 3/3 PASS each; `git diff --check` clean.
 - **NOT VERIFIED:** CI stability — a single green run cannot prove an intermittent fix. **NEXT:** push; watch this and the next few runs before making the gate a required check.
+- **CI RESULT run 41041194622 (`bb99978`) — SUCCESS:** `Build, Test & Validate` 4m09s (heap fix green in CI), `browser-e2e-sap-free` 1m17s. Gate record since router-wait work: 3 green, 1 red (the red was the quarantine cold-load case fixed here). One green run does not prove the intermittent fix; watch a few more runs before making the gate a required check.
