@@ -147,6 +147,49 @@ jobs:
           S4_PASSWORD: ${{ secrets.S4_DEV_PASSWORD }}
         run: npm run validate:sap:sandbox
 
+  browser-e2e-sap-free:
+    # PR gate: runs on every push/PR. No environment, no secrets, no SAP; the runner starts its own test-profile server.
+    name: Browser E2E, SAP-free suites (PR gate)
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            app/fiori-app/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install UI5 application dependencies
+        run: |
+          cd app/fiori-app
+          npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run SAP-free browser E2E (isolated test-profile server, SAP unreachable, writes mocked)
+        run: npm run test:e2e:sap-free
+
+      - name: Upload browser E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-e2e-sap-free-evidence
+          path: |
+            test-results/e2e-summary.json
+            test-results/e2e-evidence/
+          if-no-files-found: warn
+
   browser-e2e:
     name: Browser E2E, 23 suites (Separately Controlled)
     needs: ci

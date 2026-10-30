@@ -33,6 +33,25 @@ describe('E2E suite registration', () => {
     });
 });
 
+describe('SAP-free browser E2E PR gate', () => {
+    const yaml = require('yaml'); // shortcut: transitive via @sap/cds, add as devDependency if cds ever drops it
+    const ci = yaml.parse(fs.readFileSync(path.join(__dirname, '../../../.github/workflows/ci.yml'), 'utf8'));
+    const job = ci.jobs['browser-e2e-sap-free'];
+
+    it('marks exactly the suites that pass without SAP', () => {
+        const sapFree = RUNNERS[0].split('\n').filter((l) => l.includes('sapFree: true')).map((l) => l.match(/file: '([^']+)'/)[1]);
+        expect(sapFree).toEqual(['negative/verifyNegativeUi.e2e.js', 'negative/verifyWriteAuthorization.e2e.js', 'wm/verifyQuarantineLabels.e2e.js']);
+    });
+
+    it('runs on every push and PR, without SAP environment or secrets', () => {
+        expect(Object.keys(ci.on)).toEqual(expect.arrayContaining(['push', 'pull_request']));
+        expect(job.if).toBeUndefined();
+        expect(job.environment).toBeUndefined();
+        expect(JSON.stringify(job)).not.toMatch(/secrets\.|S4_|ALLOW_LIVE_SAP/);
+        expect(job.steps.map((s) => s.run)).toContain('npm run test:e2e:sap-free');
+    });
+});
+
 describe('E2E failure evidence', () => {
     const fakeSession = () => {
         const calls = [];

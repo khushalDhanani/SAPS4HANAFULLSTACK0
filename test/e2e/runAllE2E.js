@@ -5,6 +5,7 @@ const path = require('path');
 const http = require('http');
 const evidence = require('./support/evidence');
 const { closeBrowser } = require('./support/screenCheck');
+const { startIsolatedServer, assertSapUnreachable } = require('./support/isolatedServer');
 
 const { runHardeningE2E } = require('./wm/verifyHardeningUI.e2e');
 const { verifyMvt201 } = require('./wm/verifyMvt201.e2e');
@@ -34,6 +35,9 @@ const targetUrlArg = process.argv.find(a => a.startsWith('--url='))?.split('=')[
 
 // Parallel suites: --workers=N or E2E_WORKERS (default 2). 1 restores strictly sequential runs.
 const workersArg = Number(process.argv.find(a => a.startsWith('--workers='))?.split('=')[1] || process.env.E2E_WORKERS) || 2;
+
+// --sap-free: only the suites marked sapFree, against a private test-profile server that cannot reach SAP (the PR gate in CI).
+const sapFreeArg = process.argv.includes('--sap-free');
 
 async function checkServerHealth(urlStr) {
   const target = (urlStr || targetUrlArg).replace(/\/+$/, '');
@@ -145,21 +149,21 @@ async function runSuitesAndSummarize(options) {
     { name: 'LE screens', file: 'le/verifyLeScreens.e2e.js', fn: verifyLeScreens },
     { name: 'WM screens', file: 'wm/verifyWmScreens.e2e.js', fn: verifyWmScreens },
     // Tier B negative paths (write guard on; list failures use a mocked 500, not SAP)
-    { name: 'Negative UI paths', file: 'negative/verifyNegativeUi.e2e.js', fn: verifyNegativeUi },
+    { name: 'Negative UI paths', file: 'negative/verifyNegativeUi.e2e.js', fn: verifyNegativeUi, sapFree: true },
     // Authorization: plant isolation as a plant-scoped Viewer (READ-ONLY) and write denial on an isolated server without SAP
     { name: 'Plant isolation', file: 'negative/verifyPlantIsolation.e2e.js', fn: verifyPlantIsolation },
-    { name: 'Write authorization (isolated server)', file: 'negative/verifyWriteAuthorization.e2e.js', fn: verifyWriteAuthorization },
+    { name: 'Write authorization (isolated server)', file: 'negative/verifyWriteAuthorization.e2e.js', fn: verifyWriteAuthorization, sapFree: true },
     // Submit-time failures on PO create with the write action mocked per case (UI handling, not SAP)
     ...SUBMIT_SHARDS.map((s) => ({ name: s.name, file: 'negative/verifySubmitFailures.e2e.js', fn: (o) => verifySubmitFailures({ ...o, only: s.only }) })),
     // Quarantine labels screen; the label action is mocked in every case (SAP wrapper not yet activated)
-    { name: 'Quarantine labels (mocked)', file: 'wm/verifyQuarantineLabels.e2e.js', fn: verifyQuarantineLabels },
+    { name: 'Quarantine labels (mocked)', file: 'wm/verifyQuarantineLabels.e2e.js', fn: verifyQuarantineLabels, sapFree: true },
     // Submit failures on action-style write screens (customer invoice so far); action MOCKED per case
     ...ACTION_SHARDS.map((s) => ({ name: s.name, file: 'negative/verifyActionFailures.e2e.js', fn: (o) => verifyActionFailures({ ...o, only: s.only }) })),
     // P1: axe-core on every parameterless route (new serious/critical violations fail) and screen-load timings vs baseline
     { name: 'Accessibility (axe-core)', file: 'a11y/verifyA11yScreens.e2e.js', fn: verifyA11yScreens },
     // Timing suite: runs alone after the pool drains, so parallel load cannot distort its measurements
     { name: 'Screen performance baseline', file: 'performance/verifyScreenPerformance.e2e.js', fn: verifyScreenPerformance, serial: true }
-  ];
+  ].filter((s) => !options.sapFree || s.sapFree);
 
   let totalPassed = 0;
   let totalFailed = 0;
@@ -218,6 +222,7 @@ async function runSuitesAndSummarize(options) {
   const summary = {
     timestamp: new Date().toISOString(),
     baseUrl,
+    ...(options.sapFree ? { mode: 'sap-free' } : {}),
     totalSuites: suites.length,
     passed: totalPassed,
     failed: totalFailed,
@@ -240,15 +245,22 @@ async function runSuitesAndSummarize(options) {
 
 // Sole owner of the shared Chromium shutdown: suites close only their contexts, never the browser.
 async function runAll(options = {}) {
+  let server = null;
   try {
+    if (options.sapFree) {
+      server = await startIsolatedServer();
+      await assertSapUnreachable(server);
+      options = { ...options, baseUrl: server.baseUrl };
+    }
     return await runSuitesAndSummarize(options);
   } finally {
     await closeBrowser();
+    if (server) await server.stop();
   }
 }
 
 if (require.main === module) {
-  runAll().then(summary => process.exit(summary.failed === 0 ? 0 : 1)).catch(err => {
+  runAll({ sapFree: sapFreeArg }).then(summary => process.exit(summary.failed === 0 ? 0 : 1)).catch(err => {
     console.error('Fatal runner error:', err);
     process.exit(1);
   });

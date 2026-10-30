@@ -13,6 +13,7 @@
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration --runInBand",
     "test:e2e": "node test/e2e/runAllE2E.js",
+    "test:e2e:sap-free": "node test/e2e/runAllE2E.js --sap-free",
     "test:e2e:sap": "node test/e2e/runSapRoundTrips.js",
     "test:coverage": "jest --coverage --runInBand",
     "test:performance": "jest test/performance --runInBand",
