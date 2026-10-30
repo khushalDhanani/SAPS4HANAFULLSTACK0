@@ -6249,3 +6249,12 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Assumptions made:** None.
 - **Status:** PASS.
 - **CI RESULT run 41009667159 (`16aae8b`):** `Build, Test & Validate` PASS. `browser-e2e-sap-free` (ubuntu-24.04): Playwright install PASS (pin confirmed); step 7 `npm run test:e2e:sap-free` FAIL at log line 72 after 1m29s; `browser-e2e-sap-free-evidence` artifact uploaded. Which suite failed and why: UNKNOWN (log/artifact need sign-in). **BLOCKED** on step 7 log of job 123913634052 (or `e2e-summary.json` from the artifact).
+
+### 2026-10-30 IST — E2E screens wait for the UI5 router match before checking (gate failure on CI runner) — PARTIAL (CI run pending)
+
+- **Failure (CONFIRMED from the step 7 log pasted by the user, run 41009667159):** 2/3 PASS; "Negative UI paths" FAIL: `B2 Sales inquiry create: expected route createSalesInquiry, got null`, `B3 Purchase order list read fails: expected route purchaseOrders, got null` (+ no visible list). The other 7 B2/B3 cases in the same suite passed.
+- **Root cause (INFERRED from code, not reproduced locally):** `open()` in `verifyNegativeUi.e2e.js` and `checkScreen()` in `test/e2e/support/screenCheck.js` waited only for the `sap/ui/core/Component` class and a quiet network (`settle`, 400 ms), never for the router to match the hash; on the slower runner (UI5 from the CDN, 2 workers) the check ran before routing.
+- **CHANGED:** NEW shared `openHash(session, hash)` in `screenCheck.js` (exported): goto, wait up to 30 s until the component router resolves the current hash (continues on timeout so the route check reports it), then `settle`. Used by `checkScreen` and by the negative suite (local `open()` removed, unused `window` global dropped). 13 other files copy the old goto/Component wait (Tier A/B/C kits, perf) — not changed (out of scope; candidate for reuse of `openHash`).
+- **TEST DECISION:** EXISTING TEST SUFFICIENT — the gated suites themselves.
+- **TESTED:** `npx eslint` on both files clean; `npx jest test/unit/tools/e2eRunner.test.js` 9/9; `npm run test:e2e:sap-free` 3 runs → 3/3 PASS each; regression of `checkScreen`: Shell screens suite against the running dev server :4004 (READ-ONLY, write guard on) → PASS 3/3 screens. `git diff --check` clean.
+- **NOT VERIFIED:** that the CI failure is fixed (not reproducible locally) — next CI run decides.
