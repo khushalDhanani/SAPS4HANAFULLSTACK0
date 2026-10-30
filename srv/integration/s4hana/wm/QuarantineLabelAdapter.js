@@ -200,6 +200,16 @@ class QuarantineLabelAdapter {
       [`MBLNR = ${quote(mblnr)}`, `AND MJAHR = ${quote(mjahr)}`])).sort((a, b) => a.ZEILE.localeCompare(b.ZEILE));
     if (!mseg.length) return [];
 
+    let preparedBy = '';
+    try {
+      const mkpf = await read('MKPF', ['USNAM'], [`MBLNR = ${quote(mblnr)}`, `AND MJAHR = ${quote(mjahr)}`]);
+      if (mkpf && mkpf.length && mkpf[0].USNAM) {
+        preparedBy = mkpf[0].USNAM.trim();
+      }
+    } catch {
+      preparedBy = '';
+    }
+
     const pairs = [...new Map(mseg.map((m) => [key(m.MATNR, m.CHARG), m])).values()];
     // The report matches LTAP by inbound delivery when the first MSEG item has one, else by document number (WENUM)
     const vbeln = mseg[0].VBELN_IM;
@@ -276,7 +286,8 @@ class QuarantineLabelAdapter {
         Unit: l.MEINS,
         Container: `${seen.get(group)} OF ${totals.get(group)}`,
         StorageUnit: l.NLENR,
-        Text: text
+        Text: text,
+        PreparedBy: preparedBy
       };
     });
   }

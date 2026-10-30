@@ -46,7 +46,8 @@ sap.ui.define([], function () {
             return {
                 materialName: r.MaterialDescription || "",
                 itemCode: r.Material || "",
-                preparedBy: sPreparedBy || "",
+                materialCode: r.Material || "",
+                preparedBy: (r.PreparedBy !== undefined && r.PreparedBy !== null) ? r.PreparedBy : (sPreparedBy || ""),
                 grnNo: r.MaterialDocument || "",
                 grnDate: date(r.PostingDate),
                 inwNo: r.Text || "",

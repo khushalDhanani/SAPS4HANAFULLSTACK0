@@ -88,6 +88,7 @@ describe('QuarantineLabelAdapter', () => {
         const DB = {
             MARA: [{ MATNR: 'DEMO-MAT-1' }, { MATNR: 'DEMO-MAT-2' }],
             MATDOC: [{ MBLNR: '4900050304', MJAHR: '2026', WERKS: 'DM01' }],
+            MKPF: [{ MBLNR: '4900050304', MJAHR: '2026', USNAM: 'DEMO-PREPARED-USER' }],
             MSEG: [
                 { MBLNR: '4900050304', MJAHR: '2026', ZEILE: '0002', MATNR: 'DEMO-MAT-1', CHARG: 'DEMOB1', MENGE: '999.000', MEINS: 'KG', BUDAT_MKPF: '20261028', VBELN_IM: '', LIFNR: 'DEMOSUP02', HSDAT: '' },
                 { MBLNR: '4900050304', MJAHR: '2026', ZEILE: '0001', MATNR: 'DEMO-MAT-1', CHARG: 'DEMOB1', MENGE: '120.005', MEINS: 'KG', BUDAT_MKPF: '20261027', VBELN_IM: '', LIFNR: 'DEMOSUP01', HSDAT: '20261001' },
@@ -160,7 +161,8 @@ describe('QuarantineLabelAdapter', () => {
                 Material: 'DEMO-MAT-1', MaterialDescription: 'DEMO MATERIAL 1', MaterialDocument: '4900050304', PostingDate: '2026-10-27',
                 Batch: 'DEMOB1', SupplierBatch: 'DEMO-SB-1', SupplierName: 'DEMO SUPPLIER', BatchCharacteristics: 'DEMO-A DEMO-B',
                 ManufacturingDate: '2026-10-01', DateKind: 'EXPIRY', DateValue: '2027-04-01', PostedQuantity: '120.01 KG',
-                ContainerQuantity: '80', Unit: 'KG', Container: '1 OF 2', StorageUnit: 'DEMO-SU-0001', Text: 'DEMO TEXT'
+                ContainerQuantity: '80', Unit: 'KG', Container: '1 OF 2', StorageUnit: 'DEMO-SU-0001', Text: 'DEMO TEXT',
+                PreparedBy: 'DEMO-PREPARED-USER'
             });
             // no batch master / classification / supplier: empty, not invented
             expect(res.Rows[2]).toMatchObject({ Batch: '', SupplierBatch: '', SupplierName: '', BatchCharacteristics: '', DateKind: 'EXPIRY', DateValue: '', ManufacturingDate: '', PostedQuantity: '5.00 ST' });
@@ -185,11 +187,17 @@ describe('QuarantineLabelAdapter', () => {
             const rfc = tableFake();
             await run(rfc);
             expect(rfc.call).not.toHaveBeenCalled();
-            expect([...new Set(rfc.readTable.mock.calls.map((c) => c[0]))].sort()).toEqual(['AUSP', 'BUT000', 'LTAP', 'MAKT', 'MARA', 'MATDOC', 'MCH1', 'MSEG']);
+            expect([...new Set(rfc.readTable.mock.calls.map((c) => c[0]))].sort()).toEqual(['AUSP', 'BUT000', 'LTAP', 'MAKT', 'MARA', 'MATDOC', 'MCH1', 'MKPF', 'MSEG']);
             expect(rfc.where).toContain("AND MJAHR = '2026'");
             expect(rfc.where).toContain("AND SPRAS = 'E'");
             expect(rfc.where).toContain("AND ( VLTYP = '920' OR VLTYP = '902' )");
             rfc.where.forEach((w) => expect(w.length).toBeLessThanOrEqual(72));
+        });
+        it('falls back to empty PreparedBy when MKPF row is missing or USNAM is blank', async () => {
+            const resNoMkpf = await run(tableFake({ ...DB, MKPF: [] }));
+            expect(resNoMkpf.Rows[0].PreparedBy).toBe('');
+            const resBlankUsnam = await run(tableFake({ ...DB, MKPF: [{ MBLNR: '4900050304', MJAHR: '2026', USNAM: '   ' }] }));
+            expect(resBlankUsnam.Rows[0].PreparedBy).toBe('');
         });
         it('403 before any label table is read when a plant is outside the user scope', async () => {
             const rfc = tableFake();

@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Zquar Label: Material Code & SAP Prepared by (2026-10-29 IST) — PASS:** Replaced caption "Item Code" with "Material Code" in i18n properties (`zqItemCode` and `zqMaterialCode`). Resolved root cause of "Prepared by Coming wrong": previous session used `AuthService.getCurrentUserName()` which showed the current viewing user (`KHUSHAL` or `alice`), whereas the SAP document creator is `MKPF-USNAM`. `QuarantineLabelAdapter.readLabelRows` now reads `MKPF-USNAM` via RFC_READ_TABLE, adds `PreparedBy` to CAP `LabelRow`, and `ZquarLabelRows.toLabels` prioritizes the SAP row's `PreparedBy`. Verified live in browser with Chrome DevTools MCP against S/4HANA client 220 (`5000005753` -> `MSHUSSAIN`, `5000005750` -> `NARESH`, caption `Material Code`). All 141 Jest unit/integration tests and 7/7 Playwright browser E2E tests PASS; root/UI5 lint clean.
+
 - **P-3 CI browser E2E: `browser-e2e` job in GitHub Actions (2026-10-29 18:05 IST) — PARTIAL, uncommitted:** manual-dispatch job runs the full 23-suite `npm run test:e2e` against a CAP server bound to the `dev-sandbox` secrets, after the P-2 RFC preflight, and uploads summary, traces/screenshots and the server log as `browser-e2e-evidence`. Every step command verified locally; the job itself is NOT run (needs a runner with SAP network + SAP NW RFC SDK and two new secrets). See Changes Log.
 
 - **Quarantine Item Code from MM master — PARTIAL (2026-10-29):** MARA-MATNR metadata/read verified live; adapter resolves each label code from master. 124 unit/regression tests, 6 CAP integration tests and 7 mocked browser cases PASS. Real regenerated label pending CAP reload.
@@ -5981,3 +5983,28 @@ Single source of truth for work history, current status, validation, unresolved 
   4. Real-time metrics loaded across all tiles: Purchase Orders (3,013), Active Suppliers (4,377), Open Sales Orders (578), Warehouses (2), Inbound Deliveries (33), Orders Due (1,243), Customer Invoices (520), Customer Returns (186).
 - **TEST DECISION:** EXISTING TEST SUFFICIENT (`npm test -- test/unit/auth/` 3 suites / 39 tests PASS, `npm run lint` clean).
 - **STATUS:** PASS.
+
+### 2026-10-29 IST — Zquar Label: Material Code caption and SAP MKPF-USNAM Prepared by — PASS
+
+- **Request:** "Check Zquar label : Item Code name repalce to Material code and Prepared by Coming wrong also. Check and Fix."
+- **Inspect & Root Cause:**
+  1. Caption "Item Code": `i18n.properties` & `i18n_en.properties` defined `zqItemCode=Item Code`. Required change to "Material Code" (matching title-cased "Material Name").
+  2. "Prepared by Coming wrong": The previous session implemented `AuthService.getCurrentUserName()` as `preparedBy`. When user `KHUSHAL` (or `alice` in tests) generated labels for SAP material document `5000005753`, the label displayed `KHUSHAL` instead of the actual user who created the document in SAP (`MKPF-USNAM` = `MSHUSSAIN`). For document `5000005750`, the creator is `NARESH`.
+- **Changed:**
+  1. `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Set `zqItemCode=Material Code` and added `zqMaterialCode=Material Code`.
+  2. `srv/wm/quarantine-label/service.cds`: Added `PreparedBy : String(80);` to `type LabelRow`.
+  3. `srv/integration/s4hana/wm/QuarantineLabelAdapter.js`: `readLabelRows` reads `MKPF` by primary key (`MBLNR`, `MJAHR`) for `USNAM` via `RFC_READ_TABLE` (safe read-only) and sets `PreparedBy: mkpf[0].USNAM.trim()` on each container row.
+  4. `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelRows.js`: Sets both `itemCode` and `materialCode`, and maps `preparedBy` prioritizing `r.PreparedBy` from SAP before falling back to generator user or empty.
+  5. `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js`: Added `materialCode` to `EXTRA_KEYS` and made `placeFields` resolve `materialCode` alongside `itemCode`.
+  6. `test/e2e/wm/verifyQuarantineLabels.e2e.js`: Updated print assertion from `'Item Code'` to `'Material Code'`.
+  7. `tools/generate-zquar-label-sample.js`: Added `materialCode`.
+- **Test Decision:** TEST UPDATED.
+- **Tested & Verified:**
+  - `npx jest test/unit/wm/zquarLabel.test.js test/unit/wm/quarantineLabelsController.test.js test/unit/wm/quarantineLabelAdapter.test.js test/integration/wm/quarantineLabelDocuments.test.js test/unit/tools/e2eCoverageMatrix.test.js`: 5 suites / 141 tests PASS (100% green).
+  - Playwright browser E2E: `node -e 'const {verifyQuarantineLabels}=require("./test/e2e/wm/verifyQuarantineLabels.e2e"); const {closeBrowser}=require("./test/e2e/support/screenCheck"); verifyQuarantineLabels("http://localhost:4004").then(r=>{console.log("E2E result:", r); process.exitCode=r.status==="PASS"?0:1}).finally(closeBrowser)'` -> 7/7 PASS.
+  - Live Browser DevTools MCP Verification against running CAP & live SAP S/4HANA (client 220):
+    - Document `5000005753`: Label caption displayed: `"Material Code"` with value `000000008000009753`; "Prepared by" displayed: `"MSHUSSAIN"`.
+    - Document `5000005750`: "Prepared by" displayed: `"NARESH"`.
+  - Quality gates: `npm run lint` clean (0 errors, 0 warnings); `npm --prefix app/fiori-app run lint` clean; `npx cds compile srv --to json > /dev/null` clean; `git diff --check` clean.
+- **Assumptions made:** None. Every field, table (`MKPF`), and behavior verified against live SAP metadata and runtime responses.
+- **Status:** PASS.

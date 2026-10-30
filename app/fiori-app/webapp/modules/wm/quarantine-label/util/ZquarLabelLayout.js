@@ -52,7 +52,7 @@ sap.ui.define([
     var ROW_COUNT = FIELDS.length;
     var STATIC_KEYS = { title: "zqTitle", quarantine: "zqQuarantine", formNumber: "zqFormNumber" };
     // Texts used only for some rows (a row may replace a caption via row.captions[fieldKey])
-    var EXTRA_KEYS = { retestDate: "zqRetestDate" };
+    var EXTRA_KEYS = { retestDate: "zqRetestDate", materialCode: "zqMaterialCode" };
     var CAPTION_KEYS = {
         materialName: "zqMaterialName", itemCode: "zqItemCode", grnNo: "zqGrnNo", grnDate: "zqGrnDate", inwNo: "zqInwNo", qtyReceived: "zqQtyReceived",
         containerNo: "zqContainerNo", manufacturer: "zqManufacturer", supplier: "zqSupplier", batchNo: "zqBatchNo",
@@ -171,12 +171,15 @@ sap.ui.define([
         var C = L.content;
         var capPt = L.type.caption;
         var valPt = L.type.value;
-        var capText = function (d) { return (row.captions && row.captions[d.key]) || texts[d.key]; };
+        var capText = function (d) {
+            return (row.captions && row.captions[d.key]) || texts[d.key] || (d.key === "itemCode" ? (texts.materialCode || texts.itemCode) : "");
+        };
         var valueX = C.x0 + Math.max.apply(null, FIELDS.map(function (d) { return widthPt(capText(d), capPt, true); })) + COL_GAP;
 
         var fields = FIELDS.map(function (d, i) {
             var c = fitText(capText(d), valueX - GAP - C.x0, capPt, 1, true);
-            var s = row[d.key] == null ? "" : String(row[d.key]).trim();
+            var rawVal = d.key === "itemCode" ? (row.itemCode != null && row.itemCode !== "" ? row.itemCode : row.materialCode) : row[d.key];
+            var s = rawVal == null ? "" : String(rawVal).trim();
             // Every value may wrap (never cut); d.lines = lines allowed before shrinking
             var r = s ? fitText(s, C.x1 - valueX, valPt, d.lines || 1, false) : { pt: valPt, lines: [], truncated: false };
             if (r.truncated) { throw tooFull(d.key); }

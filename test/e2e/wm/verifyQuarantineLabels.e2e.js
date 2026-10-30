@@ -151,7 +151,7 @@ const CASES = [
             if (printed.length !== 1) errs.push(`${printed.length} print frames`);
             else {
                 if (!printed[0].includes('>alice</text>')) errs.push('signed-in Prepared by missing from print output');
-                if (!printed[0].includes('Item Code') || !printed[0].includes('DEMO-MAT-1')) errs.push('Item Code missing from print output');
+                if (!printed[0].includes('Material Code') || !printed[0].includes('DEMO-MAT-1')) errs.push('Material Code missing from print output');
                 if (!printed[0].includes('@page{size:288pt 432pt;margin:0}')) errs.push('print document not sized 288 x 432 pt with no margin');
                 const svgs = printed[0].match(/<svg [^>]*width="288pt" height="432pt"/g) || [];
                 if (svgs.length !== 2) errs.push(`${svgs.length} label pages in the print document`);

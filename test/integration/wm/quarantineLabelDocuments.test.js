@@ -33,6 +33,15 @@ describe('Integration: quarantine labels document list', () => {
     expect(data.Rows.map((row) => row.Material)).toEqual(['000000000000123456', 'DEMO-MAT-2']);
   });
 
+  it('preserves PreparedBy on each label row through CAP serialization', async () => {
+    jest.spyOn(QuarantineLabelAdapter.prototype, 'labelRows').mockResolvedValue({
+      MaterialDocument: '5000000001', MaterialDocumentYear: '2026',
+      Rows: [{ Material: 'DEMO-MAT-1', PreparedBy: 'MSHUSSAIN' }]
+    });
+    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('alice'));
+    expect(data.Rows[0].PreparedBy).toBe('MSHUSSAIN');
+  });
+
   it('Admin is unrestricted (allowedPlants null)', async () => {
     const list = jest.spyOn(QuarantineLabelAdapter.prototype, 'listDocuments').mockResolvedValue({ Plant: '1120', More: false, Documents: [] });
     await POST(`${BASE}/listDocuments`, range, as('alice'));

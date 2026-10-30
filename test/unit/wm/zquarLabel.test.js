@@ -74,6 +74,12 @@ describe('ZQUAR 4 x 6 label', () => {
         expect(s).toContain('/PrintScaling /None');
     });
 
+    it('material code caption is "Material Code", not "Item Code"', () => {
+        const fs = fieldsOf();
+        const codeFld = fld(fs, 'itemCode');
+        expect(codeFld.caption.text).toBe('Material Code');
+    });
+
     const fieldsOf = (row = DEMO) => Layout.render(L4x6(), row, TEXTS).fields;
     const fld = (fs, k) => fs.find((f) => f.key === k);
     const seps = (r) => r.items.filter((i) => i.kind === 'sep');
@@ -372,13 +378,15 @@ describe('ZQUAR 4 x 6 label', () => {
         };
         it('maps every label field, with DD/MM/YYYY dates, 2-decimal net weight without a space and no leading zeros', () => {
             expect(Rows.toLabels([capRow], TEXTS)).toEqual([{
-                materialName: 'DEMO MATERIAL 01', itemCode: '000000000000123456', grnNo: '9900000001', grnDate: '27/10/2026', inwNo: 'DM12345678',
+                materialName: 'DEMO MATERIAL 01', itemCode: '000000000000123456', materialCode: '000000000000123456', grnNo: '9900000001', grnDate: '27/10/2026', inwNo: 'DM12345678',
                 qtyReceived: '140.00 KG', containerNo: '1 OF 14', manufacturer: 'DEMO-MFR', supplier: 'DEMO SUPPLIER',
                 batchNo: 'DM-001', mfgDate: '01/10/2026', expiryDate: '01/04/2027', netWeight: '10.01KG', barcode: '9900000001',
                 preparedBy: '', captions: undefined
             }]);
         });
-        it('uses the label generator as Prepared by and keeps an unknown user blank', () => {
+        it('prefers SAP PreparedBy from row and falls back to generator user or empty', () => {
+            const sapRow = { ...capRow, PreparedBy: 'MSHUSSAIN' };
+            expect(Rows.toLabels([sapRow], TEXTS, 'DEMO-USER')[0].preparedBy).toBe('MSHUSSAIN');
             expect(Rows.toLabels([capRow, capRow], TEXTS, 'DEMO-USER').map(r => r.preparedBy)).toEqual(['DEMO-USER', 'DEMO-USER']);
             expect(Rows.toLabels([capRow], TEXTS)[0].preparedBy).toBe('');
         });
