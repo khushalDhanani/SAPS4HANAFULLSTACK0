@@ -50,7 +50,7 @@ sap.ui.define([], function () {
                 preparedBy: (r.PreparedBy !== undefined && r.PreparedBy !== null) ? r.PreparedBy : (sPreparedBy || ""),
                 grnNo: r.MaterialDocument || "",
                 grnDate: date(r.PostingDate),
-                inwNo: r.Text || "",
+                inwNo: r.InwardNo || r.Text || "",
                 qtyReceived: r.PostedQuantity || "",
                 containerNo: r.Container || "",
                 manufacturer: r.BatchCharacteristics || "",

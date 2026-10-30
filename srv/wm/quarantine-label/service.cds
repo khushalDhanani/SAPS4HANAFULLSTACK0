@@ -42,6 +42,7 @@ service QuarantineLabelService @(path: '/odata/v4/quarantine-label') {
         Container            : String(20);
         StorageUnit          : String(20);
         Text                 : String(50);
+        InwardNo             : String(50);
         PreparedBy           : String(80);
     }
 

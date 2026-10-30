@@ -88,7 +88,7 @@ describe('QuarantineLabelAdapter', () => {
         const DB = {
             MARA: [{ MATNR: 'DEMO-MAT-1' }, { MATNR: 'DEMO-MAT-2' }],
             MATDOC: [{ MBLNR: '4900050304', MJAHR: '2026', WERKS: 'DM01' }],
-            MKPF: [{ MBLNR: '4900050304', MJAHR: '2026', USNAM: 'DEMO-PREPARED-USER' }],
+            MKPF: [{ MBLNR: '4900050304', MJAHR: '2026', USNAM: 'DEMO-PREPARED-USER', XBLNR: 'DEMO-INW-001' }],
             MSEG: [
                 { MBLNR: '4900050304', MJAHR: '2026', ZEILE: '0002', MATNR: 'DEMO-MAT-1', CHARG: 'DEMOB1', MENGE: '999.000', MEINS: 'KG', BUDAT_MKPF: '20261028', VBELN_IM: '', LIFNR: 'DEMOSUP02', HSDAT: '' },
                 { MBLNR: '4900050304', MJAHR: '2026', ZEILE: '0001', MATNR: 'DEMO-MAT-1', CHARG: 'DEMOB1', MENGE: '120.005', MEINS: 'KG', BUDAT_MKPF: '20261027', VBELN_IM: '', LIFNR: 'DEMOSUP01', HSDAT: '20261001' },
@@ -162,6 +162,7 @@ describe('QuarantineLabelAdapter', () => {
                 Batch: 'DEMOB1', SupplierBatch: 'DEMO-SB-1', SupplierName: 'DEMO SUPPLIER', BatchCharacteristics: 'DEMO-A DEMO-B',
                 ManufacturingDate: '2026-10-01', DateKind: 'EXPIRY', DateValue: '2027-04-01', PostedQuantity: '120.01 KG',
                 ContainerQuantity: '80', Unit: 'KG', Container: '1 OF 2', StorageUnit: 'DEMO-SU-0001', Text: 'DEMO TEXT',
+                InwardNo: 'DEMO TEXT',
                 PreparedBy: 'DEMO-PREPARED-USER'
             });
             // no batch master / classification / supplier: empty, not invented
@@ -198,6 +199,33 @@ describe('QuarantineLabelAdapter', () => {
             expect(resNoMkpf.Rows[0].PreparedBy).toBe('');
             const resBlankUsnam = await run(tableFake({ ...DB, MKPF: [{ MBLNR: '4900050304', MJAHR: '2026', USNAM: '   ' }] }));
             expect(resBlankUsnam.Rows[0].PreparedBy).toBe('');
+        });
+        it('falls back to MKPF.XBLNR as InwardNo and Text when input Text is omitted or empty', async () => {
+            const rfc = tableFake();
+            const res = await new QuarantineLabelAdapter(rfc).labelRows({ ...input, Text: '', allowedPlants: ['DM01'] });
+            expect(res.Rows[0].InwardNo).toBe('DEMO-INW-001');
+            expect(res.Rows[0].Text).toBe('DEMO-INW-001');
+        });
+        it('cascades inward fallback: LE_VBELN, then FRBNR, then BKTXT, then MSEG.VBELN_IM', async () => {
+            const resLeVbeln = await new QuarantineLabelAdapter(tableFake({ ...DB, MKPF: [{ MBLNR: '4900050304', MJAHR: '2026', XBLNR: '', LE_VBELN: '0180000157' }] })).labelRows({ ...input, Text: '', allowedPlants: ['DM01'] });
+            expect(resLeVbeln.Rows[0].InwardNo).toBe('0180000157');
+            const resFrbnr = await new QuarantineLabelAdapter(tableFake({ ...DB, MKPF: [{ MBLNR: '4900050304', MJAHR: '2026', XBLNR: '', LE_VBELN: '', FRBNR: 'BOL-99' }] })).labelRows({ ...input, Text: '', allowedPlants: ['DM01'] });
+            expect(resFrbnr.Rows[0].InwardNo).toBe('BOL-99');
+            const resBktxt = await new QuarantineLabelAdapter(tableFake({ ...DB, MKPF: [{ MBLNR: '4900050304', MJAHR: '2026', XBLNR: '', LE_VBELN: '', FRBNR: '', BKTXT: 'JIA-2627' }] })).labelRows({ ...input, Text: '', allowedPlants: ['DM01'] });
+            expect(resBktxt.Rows[0].InwardNo).toBe('JIA-2627');
+            const resMsegVbeln = await new QuarantineLabelAdapter(tableFake({ ...DB, MKPF: [], MSEG: DB.MSEG.map((m) => ({ ...m, VBELN_IM: '0180000999' })), LTAP: DB.LTAP.map((l) => ({ ...l, VBELN: '0180000999', WENUM: '' })) })).labelRows({ ...input, Text: '', allowedPlants: ['DM01'] });
+            expect(resMsegVbeln.Rows[0].InwardNo).toBe('0180000999');
+        });
+        it('user Text overrides SAP inward document reference', async () => {
+            const rfc = tableFake();
+            const res = await new QuarantineLabelAdapter(rfc).labelRows({ ...input, Text: 'OVERRIDE-INW', allowedPlants: ['DM01'] });
+            expect(res.Rows[0].InwardNo).toBe('OVERRIDE-INW');
+            expect(res.Rows[0].Text).toBe('OVERRIDE-INW');
+        });
+        it('empty InwardNo when no inward reference exists in SAP and no Text provided', async () => {
+            const resEmpty = await new QuarantineLabelAdapter(tableFake({ ...DB, MKPF: [] })).labelRows({ ...input, Text: '', allowedPlants: ['DM01'] });
+            expect(resEmpty.Rows[0].InwardNo).toBe('');
+            expect(resEmpty.Rows[0].Text).toBe('');
         });
         it('403 before any label table is read when a plant is outside the user scope', async () => {
             const rfc = tableFake();

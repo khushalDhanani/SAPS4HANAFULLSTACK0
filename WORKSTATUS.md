@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Zquar Label: INW. No from SAP MKPF Reference & Fallback (2026-10-30 IST) — PASS:** Resolved root cause of "INW. No is not coming": when user leaves "Label Text" input empty (or clicks row "4x6 Labels" on Goods Receipts list), `text` was `""`, resulting in blank `inwNo`. In SAP S/4HANA, inward document/reference is stored in `MKPF-XBLNR` (Reference / Vendor Delivery Challan / Inward Note) and `MKPF-LE_VBELN` / `MSEG-VBELN_IM` (Inbound Delivery number), with `MKPF-FRBNR` and `MKPF-BKTXT` as fallbacks. `QuarantineLabelAdapter.readLabelRows` now queries `MKPF` for `['USNAM', 'XBLNR', 'LE_VBELN', 'FRBNR', 'BKTXT']` and cascades: user override `Text` -> `MKPF.XBLNR` -> `MKPF.LE_VBELN` -> `MKPF.FRBNR` -> `MKPF.BKTXT` -> `MSEG.VBELN_IM` -> `""`. Populated both `InwardNo` and `Text` on `LabelRow`, declared `InwardNo : String(50);` in `service.cds`, updated `ZquarLabelRows.toLabels` to map `inwNo: r.InwardNo || r.Text || ""`, and updated UI i18n labels to `qlText=INW. No (Optional)` / `qlTextPlaceholder=Optional, defaults to SAP inward reference`. Verified live in browser with Chrome DevTools MCP against running CAP and live S/4HANA client 220: document `5000005753` -> `inwNo = "34567"`, document `5000005750` -> `inwNo = "0180000157"`, and custom user override `INW-CUSTOM-888` confirmed. All 147 Jest unit/integration tests and 7/7 Playwright browser E2E tests PASS; root ESLint & UI5 lint clean.
+
 - **Zquar Label: Material Code & SAP Prepared by (2026-10-29 IST) — PASS:** Replaced caption "Item Code" with "Material Code" in i18n properties (`zqItemCode` and `zqMaterialCode`). Resolved root cause of "Prepared by Coming wrong": previous session used `AuthService.getCurrentUserName()` which showed the current viewing user (`KHUSHAL` or `alice`), whereas the SAP document creator is `MKPF-USNAM`. `QuarantineLabelAdapter.readLabelRows` now reads `MKPF-USNAM` via RFC_READ_TABLE, adds `PreparedBy` to CAP `LabelRow`, and `ZquarLabelRows.toLabels` prioritizes the SAP row's `PreparedBy`. Verified live in browser with Chrome DevTools MCP against S/4HANA client 220 (`5000005753` -> `MSHUSSAIN`, `5000005750` -> `NARESH`, caption `Material Code`). All 141 Jest unit/integration tests and 7/7 Playwright browser E2E tests PASS; root/UI5 lint clean.
 
 - **P-3 CI browser E2E: `browser-e2e` job in GitHub Actions (2026-10-29 18:05 IST) — PARTIAL, uncommitted:** manual-dispatch job runs the full 23-suite `npm run test:e2e` against a CAP server bound to the `dev-sandbox` secrets, after the P-2 RFC preflight, and uploads summary, traces/screenshots and the server log as `browser-e2e-evidence`. Every step command verified locally; the job itself is NOT run (needs a runner with SAP network + SAP NW RFC SDK and two new secrets). See Changes Log.
@@ -6007,4 +6009,45 @@ Single source of truth for work history, current status, validation, unresolved 
     - Document `5000005750`: "Prepared by" displayed: `"NARESH"`.
   - Quality gates: `npm run lint` clean (0 errors, 0 warnings); `npm --prefix app/fiori-app run lint` clean; `npx cds compile srv --to json > /dev/null` clean; `git diff --check` clean.
 - **Assumptions made:** None. Every field, table (`MKPF`), and behavior verified against live SAP metadata and runtime responses.
+- **Status:** PASS.
+
+### 2026-10-30 IST — Zquar Label: INW. No from SAP MKPF reference and fallback — PASS
+
+- **Request:** "INW. No is not coming Check and Fix"
+- **Inspect & Root Cause:**
+  1. In `QuarantineLabelAdapter.js`, `readLabelRows` previously set `Text: text`. If the user leaves the optional "Label Text" input field blank (or clicks row "4x6 Labels" on the Goods Receipts list), `text` is `""`.
+  2. `ZquarLabelRows.js` set `inwNo: r.Text || ""`, resulting in an empty `INW. No` on the printed/previewed label.
+  3. Live inspection of SAP S/4HANA (client 220) via `RFC_READ_TABLE` on `MKPF` proved that goods receipt inward numbers and delivery references are stored in:
+     - `MKPF-XBLNR` (Reference document / Vendor Delivery Challan / Inward Note; e.g., `5000005753` has `XBLNR = '34567'`, `5000005752` has `XBLNR = 'JIA-2627-0001'`).
+     - `MKPF-LE_VBELN` / `MSEG-VBELN_IM` (Inbound Delivery number; e.g., `5000005750` has `LE_VBELN = '0180000157'`).
+     - `MKPF-FRBNR` (Bill of Lading) and `MKPF-BKTXT` (Header Text).
+  4. The UI input in `QuarantineLabels.view.xml` had generic label `qlText=Label Text` / `qlTextPlaceholder=Optional, up to 50 characters`, making it unclear that this input supplies the `INW. No`.
+- **Changed:**
+  1. `srv/integration/s4hana/wm/QuarantineLabelAdapter.js`:
+     - In `readLabelRows(mblnr, mjahr, text)`: queried `MKPF` for `['USNAM', 'XBLNR', 'LE_VBELN', 'FRBNR', 'BKTXT']`.
+     - Cascaded inward document resolution: `user text override` -> `MKPF.XBLNR` -> `MKPF.LE_VBELN` -> `MKPF.FRBNR` -> `MKPF.BKTXT` -> `MSEG.VBELN_IM` -> `""`.
+     - Attached `InwardNo: inwardNo` and `Text: inwardNo` to each label row.
+  2. `srv/wm/quarantine-label/service.cds`: Added `InwardNo : String(50);` to `type LabelRow`.
+  3. `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelRows.js`: In `toLabels`: mapped `inwNo: r.InwardNo || r.Text || ""`.
+  4. `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+     - `qlText=INW. No (Optional)`
+     - `qlTextPlaceholder=Optional, defaults to SAP inward reference`
+  5. `test/unit/wm/quarantineLabelAdapter.test.js`:
+     - Added mock DB `MKPF.XBLNR = 'DEMO-INW-001'`.
+     - Added unit tests verifying fallback to `MKPF.XBLNR` when `Text` is empty, cascading through `LE_VBELN`, `FRBNR`, `BKTXT`, and `MSEG.VBELN_IM`.
+     - Added unit test verifying user `Text` override takes priority.
+     - Added unit test verifying empty `InwardNo` when no inward reference exists in SAP and no user `Text` is provided.
+  6. `test/integration/wm/quarantineLabelDocuments.test.js`: Added integration test asserting `InwardNo` and `Text` preservation through CAP OData serialization.
+  7. `test/unit/wm/zquarLabel.test.js`: Added unit test verifying `toLabels` maps `inwNo` from `r.InwardNo` or `r.Text`.
+- **Test Decision:** TEST ADDED.
+- **Tested & Verified:**
+  - `npx jest test/unit/wm/zquarLabel.test.js test/unit/wm/quarantineLabelsController.test.js test/unit/wm/quarantineLabelAdapter.test.js test/integration/wm/quarantineLabelDocuments.test.js test/unit/tools/e2eCoverageMatrix.test.js`: 5 suites / 147 tests PASS (100% green).
+  - Playwright browser E2E: `verifyQuarantineLabels.e2e.js`: 7/7 cases PASS.
+  - Live Browser DevTools MCP Verification against running CAP server on port 4004 & live SAP S/4HANA (client 220):
+    - Document `5000005753`: `inwNo` displayed as `"34567"` (read from SAP `MKPF-XBLNR`), `Material Code` displayed as `"000000008000009753"`, `Prepared by` displayed as `"MSHUSSAIN"`.
+    - Document `5000005750`: `inwNo` displayed as `"0180000157"` (read from SAP `MKPF-LE_VBELN`), `Prepared by` displayed as `"NARESH"`.
+    - Custom user override: typing `"INW-CUSTOM-888"` in the input field overrides SAP default to `"INW-CUSTOM-888"`.
+    - Row "4x6 Labels" on Goods Receipts list: automatically pulls SAP inward reference without manual input.
+  - Quality gates: `npm run lint` clean (0 findings); `npm --prefix app/fiori-app run lint` clean (0 findings); `npx cds compile srv --to json > /dev/null` clean; `git diff --check` clean.
+- **Assumptions made:** None. Inward fields (`XBLNR`, `LE_VBELN`, `FRBNR`, `BKTXT`, `VBELN_IM`) verified directly against SAP S/4HANA metadata and live document records.
 - **Status:** PASS.

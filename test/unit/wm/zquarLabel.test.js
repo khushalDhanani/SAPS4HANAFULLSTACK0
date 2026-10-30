@@ -390,6 +390,11 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(Rows.toLabels([capRow, capRow], TEXTS, 'DEMO-USER').map(r => r.preparedBy)).toEqual(['DEMO-USER', 'DEMO-USER']);
             expect(Rows.toLabels([capRow], TEXTS)[0].preparedBy).toBe('');
         });
+        it('prefers InwardNo and falls back to Text or empty', () => {
+            expect(Rows.toLabels([{ ...capRow, InwardNo: 'INW-999', Text: '' }], TEXTS)[0].inwNo).toBe('INW-999');
+            expect(Rows.toLabels([{ ...capRow, InwardNo: '', Text: 'TEXT-888' }], TEXTS)[0].inwNo).toBe('TEXT-888');
+            expect(Rows.toLabels([{ ...capRow, InwardNo: '', Text: '' }], TEXTS)[0].inwNo).toBe('');
+        });
         it('formats match the shapes measured on the current label', () => {
             const [l] = Rows.toLabels([capRow], TEXTS);
             expect(l.grnNo).toMatch(/^\d{10}$/);

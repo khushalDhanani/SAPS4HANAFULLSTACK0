@@ -201,14 +201,21 @@ class QuarantineLabelAdapter {
     if (!mseg.length) return [];
 
     let preparedBy = '';
+    let sapInwNo = '';
     try {
-      const mkpf = await read('MKPF', ['USNAM'], [`MBLNR = ${quote(mblnr)}`, `AND MJAHR = ${quote(mjahr)}`]);
-      if (mkpf && mkpf.length && mkpf[0].USNAM) {
-        preparedBy = mkpf[0].USNAM.trim();
+      const mkpf = await read('MKPF', ['USNAM', 'XBLNR', 'LE_VBELN', 'FRBNR', 'BKTXT'], [`MBLNR = ${quote(mblnr)}`, `AND MJAHR = ${quote(mjahr)}`]);
+      if (mkpf && mkpf.length) {
+        if (mkpf[0].USNAM) {
+          preparedBy = mkpf[0].USNAM.trim();
+        }
+        sapInwNo = (mkpf[0].XBLNR || mkpf[0].LE_VBELN || mkpf[0].FRBNR || mkpf[0].BKTXT || '').trim();
       }
     } catch {
       preparedBy = '';
+      sapInwNo = '';
     }
+
+    const inwardNo = text || sapInwNo || String(mseg[0].VBELN_IM || '').trim();
 
     const pairs = [...new Map(mseg.map((m) => [key(m.MATNR, m.CHARG), m])).values()];
     // The report matches LTAP by inbound delivery when the first MSEG item has one, else by document number (WENUM)
@@ -286,7 +293,8 @@ class QuarantineLabelAdapter {
         Unit: l.MEINS,
         Container: `${seen.get(group)} OF ${totals.get(group)}`,
         StorageUnit: l.NLENR,
-        Text: text,
+        Text: inwardNo,
+        InwardNo: inwardNo,
         PreparedBy: preparedBy
       };
     });
