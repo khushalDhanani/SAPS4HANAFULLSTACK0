@@ -9,17 +9,13 @@
  * real action through: once the wrapper is active that would render in SAP (side effects not yet proven).
  */
 
-const { openSession, inspectScreen } = require('../support/screenCheck');
+const { openSession, openHash, inspectScreen } = require('../support/screenCheck');
 
 const ACTION_RE = /\/odata\/v4\/quarantine-label\/(generateLabels|labelRows|listDocuments)$/;
 const PDF_B64 = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF').toString('base64');
 const json = (status, body) => ({ status, contentType: 'application/json;odata.metadata=minimal', headers: { 'OData-Version': '4.0' }, body: JSON.stringify(body) });
 
-async function open(session) {
-    await session.page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/wm/quarantine-labels`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
-    await session.settle();
-}
+const open = (session) => openHash(session, 'wm/quarantine-labels');
 
 function state(page) {
     return page.evaluate(() => {
