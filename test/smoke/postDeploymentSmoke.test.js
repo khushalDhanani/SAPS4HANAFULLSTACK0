@@ -8,11 +8,17 @@
  */
 
 const { executeSmokeTests, waitForServer } = require('../../tools/smoke-test-deployment');
+const { startIsolatedServer } = require('../e2e/support/isolatedServer');
 
 describe('Post-Deployment Smoke Test Suite', () => {
+  // Own test-profile server (no SAP) on a free port: the suite must not depend on a server someone left on :4004.
+  let server;
+  beforeAll(async () => { server = await startIsolatedServer(); }, 90000);
+  afterAll(() => server && server.stop());
+
   it('executes smoke tests against the running server and validates all 10 endpoints pass', async () => {
     const summary = await executeSmokeTests({
-      baseUrl: 'http://localhost:4004',
+      baseUrl: server.baseUrl,
       authUser: 'alice:'
     });
 
@@ -47,7 +53,7 @@ describe('Post-Deployment Smoke Test Suite', () => {
   });
 
   it('validates bounded readiness wait against a healthy server', async () => {
-    const isReady = await waitForServer('http://localhost:4004', 5000, 200);
+    const isReady = await waitForServer(server.baseUrl, 5000, 200);
     expect(isReady).toBe(true);
   });
 
