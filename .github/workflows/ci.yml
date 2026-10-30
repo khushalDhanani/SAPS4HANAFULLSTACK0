@@ -152,7 +152,8 @@ jobs:
     # PR gate: runs on every push/PR. No environment, no secrets, no SAP; the runner starts its own test-profile server.
     name: Browser E2E, SAP-free suites (PR gate)
     needs: ci
-    runs-on: ubuntu-latest
+    # shortcut: Playwright 1.57 install-deps knows Ubuntu up to 24.04; ubuntu-latest is 26.04. Unpin after upgrading Playwright (>= 1.64 lists ubuntu26.04).
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout repository

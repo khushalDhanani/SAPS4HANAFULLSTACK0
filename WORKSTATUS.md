@@ -6209,3 +6209,12 @@ Single source of truth for work history, current status, validation, unresolved 
 - **TEST DECISION:** TEST NOT POSSIBLE for the workflow step itself (GitHub Actions); validated by exact local reproduction instead.
 - **TESTED:** clean clone, port 4111 (free): bare `cds-serve` → `ProductionGuardError … missing: S4_DESTINATION_URL, S4_CLIENT` + readiness timeout (matches CI); `NODE_ENV=test` → `smoke-test-deployment.js --wait=30 --url=http://localhost:4111` 10 passed, 0 failed. Workflow parsed with `yaml`; `npx jest test/unit/tools/e2eRunner.test.js` PASS; `git diff --check` clean.
 - **NOT VERIFIED:** GitHub run of this commit; steps after 14 (UI5 build, `validate:mta` passed in the clean clone) and `browser-e2e-sap-free` on `ubuntu-latest`. **NEXT:** push, check the run.
+
+### 2026-10-30 IST — PR-gate job pinned to ubuntu-24.04 (Playwright 1.57 vs Ubuntu 26) — PARTIAL (CI run pending)
+
+- **CI RESULT run 41009054520 (`82900bd`):** `Build, Test & Validate` PASS for the first time on `feature01` (smoke fix confirmed). `browser-e2e-sap-free` ran for the first time and FAILED after 28 s at step 6 `npx playwright install --with-deps chromium` (annotation line 9); evidence upload found no files (E2E never started).
+- **Cause (INFERRED, step log not read):** GitHub annotation: `ubuntu-latest` migrated to Ubuntu 26 from 2026-10-19. CONFIRMED from Playwright source: `v1.57.0` `nativeDeps.ts` lists up to `ubuntu24.04-x64` (no 26.04); `v1.64.1` lists `ubuntu26.04-x64`. Lockfile has playwright 1.57.0.
+- **CHANGED:** `.github/workflows/ci.yml` — `browser-e2e-sap-free` `runs-on: ubuntu-24.04` with a `shortcut:` comment (unpin after upgrading Playwright). No dependency change.
+- **Correction:** commit `82900bd` unintentionally included another session's uncommitted WORKSTATUS entry ("Zquar Label: Material Code Trimming, INW. Batch No, Net Weight Spacing & Dash Fallback — PASS") whose code is still uncommitted in the working tree; history not rewritten. The previous note "not touched or committed" holds for that session's code files only.
+- **TEST DECISION:** TEST NOT POSSIBLE (runner image behaviour); `npx jest test/unit/tools/e2eRunner.test.js` PASS, `git diff --check` clean.
+- **NEXT:** push, check the run; if green, add `browser-e2e-sap-free` as a required status check (user, branch protection).
