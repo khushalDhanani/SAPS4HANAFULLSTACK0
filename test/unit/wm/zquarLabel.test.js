@@ -493,18 +493,33 @@ describe('ZQUAR 4 x 6 label', () => {
     describe('vertical variant (left strip with SOP number)', () => {
         const LVert = () => Layout.layout('4x6', { variant: 'vertical' });
 
-        it('layout exposes variant, vertical rule, horizontal rule, and left strip geometry', () => {
+        it('layout exposes variant, vertical rule extending up to Prepared by, left strip, barcode left, and logo right', () => {
             const L = LVert();
             expect(L.variant).toBe('vertical');
-            expect(L.ruleV).toMatchObject({ y0: 0, y1: 432 });
+            expect(L.ruleV.y0).toBe(0);
+            expect(L.ruleV.y1).toBeCloseTo(L.rows.end, 1);
+            expect(L.ruleV.y1).toBeLessThan(432);
             expect(L.ruleV.x).toBeCloseTo(36.7, 0);
             expect(L.ruleH.y).toBeCloseTo(34 + 1.5, 0);
             expect(L.ruleH.x1).toBe(288);
             expect(L.strip).toBeDefined();
             expect(L.strip.quarantine).toBeDefined();
             expect(L.strip.formNumber).toBeDefined();
-            expect(L.strip.center).toBe(216);
+            expect(L.strip.center).toBeCloseTo(L.rows.end / 2, 1);
+            expect(L.strip.length).toBeCloseTo(L.rows.end - 2 * L.edge, 1);
             expect(L.content.x0).toBeGreaterThan(L.ruleV.x);
+
+            // Barcode positioned on the left side
+            expect(L.barcode.x0).toBeCloseTo(L.edge, 1);
+            expect(L.barcode.right).toBeLessThan(200);
+            expect(L.barcode.axis).toBeCloseTo((L.barcode.x0 + L.barcode.right) / 2, 1);
+
+            // Dedicated logo space positioned on the right side
+            expect(L.logo).toBeDefined();
+            expect(L.logo.x).toBeGreaterThan(L.barcode.right);
+            expect(L.logo.x + L.logo.w).toBeCloseTo(288 - L.edge, 0);
+            expect(L.logo.y).toBeCloseTo(L.barcode.top, 1);
+            expect(L.logo.y + L.logo.h).toBeCloseTo(L.barcode.hrTop + L.barcode.hrPt, 0);
         });
 
         it('renders QUARANTINE and SOP Number in vertical write up (angle 90) on the left side of vertical rule', () => {
@@ -520,21 +535,23 @@ describe('ZQUAR 4 x 6 label', () => {
                 expect(it.band[0]).toBeGreaterThanOrEqual(0);
                 expect(it.band[1]).toBeLessThanOrEqual(L.ruleV.x);
                 expect(it.y).toBeGreaterThan(0);
-                expect(it.y).toBeLessThanOrEqual(432);
+                expect(it.y).toBeLessThanOrEqual(L.ruleV.y1);
             });
             expect(q.bold).toBe(true);
             expect(f.bold).toBe(false);
         });
 
-        it('draws full-height vertical rule and horizontal rule under company title', () => {
+        it('draws vertical rule extending only up to Prepared by and horizontal rule under company title', () => {
             const L = LVert();
             const r = Layout.render(L, DEMO, TEXTS);
             const rules = r.items.filter((i) => i.kind === 'rule');
             expect(rules).toHaveLength(2);
-            const vRule = rules.find((item) => item.h === 432);
-            const hRule = rules.find((item) => item.h < 432);
+            const vRule = rules.find((item) => item.w === L.ruleW);
+            const hRule = rules.find((item) => item.h === L.ruleW);
             expect(vRule).toBeDefined();
             expect(hRule).toBeDefined();
+            expect(vRule.h).toBeCloseTo(L.ruleV.y1, 1);
+            expect(vRule.h).toBeLessThan(432);
             expect(vRule.x).toBeCloseTo(L.ruleV.x - L.ruleW / 2, 0);
             expect(hRule.y).toBeCloseTo(L.ruleH.y - L.ruleW / 2, 0);
             expect(hRule.w).toBeCloseTo(288 - vRule.x, 0);
@@ -549,9 +566,41 @@ describe('ZQUAR 4 x 6 label', () => {
                 expect(fd.value.x).toBeGreaterThan(fd.caption.x);
                 expect(fd.value.end).toBeLessThanOrEqual(288);
             });
+            // 15th row (Prepared by) ends right at vertical rule termination
+            expect(r.fields[14].key).toBe('preparedBy');
+            expect(r.fields[14].slot.y1).toBeCloseTo(L.ruleV.y1, 1);
         });
 
-        it('generates valid PDF and HTML with rotated vertical strip texts and rules', () => {
+        it('renders barcode on the left side and dedicated logo space on the right', () => {
+            const L = LVert();
+            const r = Layout.render(L, DEMO, TEXTS);
+
+            // Barcode stays on the left
+            expect(r.barcode).toBeDefined();
+            expect(r.barcode.x0).toBeGreaterThanOrEqual(L.edge - EPS);
+            expect(r.barcode.x0 + r.barcode.widthPt).toBeLessThanOrEqual(L.barcode.right + EPS);
+            const hr = r.items.find((i) => i.kind === 'text' && i.text === DEMO.barcode);
+            expect(hr).toBeDefined();
+            expect(hr.x).toBeLessThan(L.barcode.right);
+
+            // Dedicated logo box on the right
+            const boxItem = r.items.find((i) => i.kind === 'box');
+            expect(boxItem).toBeDefined();
+            expect(boxItem.x).toBeCloseTo(L.logo.x, 1);
+            expect(boxItem.y).toBeCloseTo(L.logo.y, 1);
+            expect(boxItem.w).toBeCloseTo(L.logo.w, 1);
+            expect(boxItem.h).toBeCloseTo(L.logo.h, 1);
+
+            // Centered logo text inside the box
+            const logoText = r.items.find((i) => i.kind === 'text' && i.text === 'LOGO');
+            expect(logoText).toBeDefined();
+            expect(logoText.align).toBe('center');
+            expect(logoText.x).toBeCloseTo(L.logo.x + L.logo.w / 2, 1);
+            expect(logoText.y).toBeGreaterThan(L.logo.y);
+            expect(logoText.y).toBeLessThan(L.logo.y + L.logo.h);
+        });
+
+        it('generates valid PDF and HTML with rotated vertical strip texts, barcode left, and logo box right', () => {
             const rows = [DEMO];
             const pdfStr = pdf(rows, { variant: 'vertical' });
             expect(pdfStr).toContain('/PrintScaling /None');
@@ -561,6 +610,8 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(h).toContain('rotate(-90)');
             expect(h).toContain(TEXTS.quarantine);
             expect(h).toContain(TEXTS.formNumber);
+            expect(h).toContain('fill="none" stroke="#000"');
+            expect(h).toContain('>LOGO<');
         });
     });
 });

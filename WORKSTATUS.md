@@ -7,6 +7,14 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Zquar Label: Vertical Left Strip Termination at "Prepared by", Left Barcode & Right Dedicated Logo Space (2026-10-31 IST) — PASS:** Delivered user-requested vertical layout refinement in ZQURAN (Quarantine Labels):
+  1. **Vertical Line Termination**: Vertical dividing rule (`ruleV`) now terminates at `rowsEndV` (the bottom boundary of the 15th row, "Prepared by", `y ≈ 310.4 pt`), rather than running down to the label bottom edge (`432 pt`).
+  2. **Vertical Text Centering**: The rotated "QUARANTINE" and SOP Number ("F-06-00-SOP-WH-002-01/09/2016") on the left strip are now vertically centered alongside the active rule height (`strip.center = rowsEndV / 2 ≈ 155.2 pt`, `length = rowsEndV - 2 * edge`), maintaining balanced margins above and below without text compression.
+  3. **Left-Side Barcode**: Moved the Code 128 B barcode and human-readable text to the left side (`x0: edge ≈ 12.8 pt`, `right: 190.8 pt`, `axis: 101.8 pt`), rendering bars and centered number cleanly on the dot grid.
+  4. **Dedicated Logo Space on the Right**: Added dedicated logo geometry on the right (`logo.x ≈ 196.8 pt`, `logo.w ≈ 78.4 pt`, `logo.y = barcode.top ≈ 316.7 pt`, `logo.h ≈ 99.8 pt`) perfectly top-aligned with the barcode bars and bottom-aligned with the human-readable number text, rendering a crisp hairline border frame (`kind: "box"`) and centered "LOGO" text (`zqLogo`).
+  5. **Unchanged Specifications**: All other label content and dimensions remain 100% intact: 4x6 in (288 x 432 pt), 15 field rows with 5% hairlines, numeric material code trimming, net weight spacing, dash `-` fallbacks, and standard top-header variant.
+  6. **Validation**: All 49 tests in `test/unit/wm/zquarLabel.test.js`, 38 tests in `test/unit/wm/quarantineLabelsController.test.js`, all 90 WM test suites (2375 tests), root ESLint, UI5 lint, and UI5 build 100% clean with 0 findings.
+
 - **Zquar Label: New Vertical Left Strip Variant with SOP Number (2026-10-31 IST) — PASS:** Delivered user-requested new label variant in ZQURAN (Quarantine Labels):
   1. **New Vertical Left Strip Variant**: Implemented `VARIANTS.VERTICAL` in `ZquarLabelLayout.js` and `ZquarLabelPdf.js` alongside existing `VARIANTS.TOP`. In the vertical variant, "QUARANTINE" (14 pt bold) and SOP Number ("F-06-00-SOP-WH-002-01/09/2016", regular 9 pt) are rendered in vertical write-up (rotated 90° counter-clockwise, read bottom-to-top) on the left side of a full-height solid vertical rule (`x ≈ 36.7 pt`). Company title ("Aether Industries Limited") is centered over the content area with a horizontal rule running from the vertical rule to the right edge.
   2. **Content Geometry & 15 Field Spacing**: In the content area (`x ≈ 40 pt` to `276 pt`), all 15 single-field rows (`materialName`, `itemCode`, `grnNo`, `grnDate`, `inwNo`, `inspectionLot`, `qtyReceived`, `containerNo`, `manufacturer`, `supplier`, `batchNo`, `mfgDate`, `expiryDate`, `netWeight`, `preparedBy`) are evenly spaced in slots with 5% hairlines without overlapping or clipping, retaining leading zero trimming, INW. Batch No caption, net weight formatting with space, and dash `-` fallbacks. Centered barcode and human-readable number are rendered at the bottom.
@@ -6309,5 +6317,37 @@ Single source of truth for work history, current status, validation, unresolved 
   - `npm run lint`: ESLint clean, 0 errors/warnings (Code 0).
   - `npm --prefix app/fiori-app run lint`: UI5 linter 100% clean, 0 findings (Code 0).
   - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 1.26s (Code 0).
+- **Assumptions made:** None.
+- **Status:** PASS.
+
+### 2026-10-31 IST — Zquar Label: Vertical Left Strip Termination at "Prepared by", Left Barcode & Right Dedicated Logo Space — PASS
+
+- **Request:** "In the vertical left strip, extend the line only up to “Prepared by.” Move the barcode to the left side and add a dedicated logo space on the right, with clean spacing, precise alignment, and balanced proportions. Do not alter any other label content or dimensions."
+- **CHANGED:**
+  - `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js`:
+    - Updated `ruleV.y1` from `H` (432 pt) to `rowsEndV` (approx 310.4 pt, the bottom boundary of the 15th row "Prepared by"), so the vertical dividing rule stops cleanly at "Prepared by".
+    - Updated `strip.center` to `rowsEndV / 2` (approx 155.2 pt) and `strip.length` to `rowsEndV - 2 * edge` (approx 284.7 pt), centering rotated "QUARANTINE" and SOP Number vertically within the active strip height with balanced top and bottom spacing.
+    - Updated `L.barcode` in `VARIANTS.VERTICAL` to left-side geometry: `x0: edge` (approx 12.8 pt), `right: snap(edge + snap(178 * f))` (approx 190.8 pt), `axis: (edge + right) / 2` (approx 101.8 pt).
+    - Updated `barcodeGeometry` to use `(L.barcode && L.barcode.axis != null) ? L.barcode.axis : L.axis`, centering the Code 128 symbol on the barcode's left axis while preserving full-width centering in the top variant.
+    - Added dedicated logo space geometry in `VARIANTS.VERTICAL`: `logo: { x: logoLeftV, y: barTopV, w: logoWV, h: logoHV, pt: pt(11) }` on the right side (`x ≈ 196.8 pt`, `w ≈ 78.4 pt`, `y ≈ 316.7 pt`, `h ≈ 99.8 pt`), top-aligned with the barcode bars and bottom-aligned with the human-readable text.
+    - In `render()`, added rendering for `L.logo`: emits `{ kind: "box", x, y, w, h, lineWidth }` (crisp 2-dot hairline border) and centered `{ kind: "text", text: "LOGO", ... }` (`zqLogo` fallback).
+    - Added `logo: "zqLogo"` to `EXTRA_KEYS`.
+  - `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelPdf.js`:
+    - In `drawItems(doc, aItems)`, added support for `kind === "box"` rendering stroked rectangle: `doc.rect(it.x, it.y, it.w, it.h, "S")`.
+    - In `svgPage(L, aItems)`, added support for `kind === "box"` rendering SVG stroked rect: `<rect x="..." y="..." width="..." height="..." fill="none" stroke="#000" stroke-width="..." shape-rendering="crispEdges"/>`.
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+    - Added `zqLogo=LOGO`.
+  - `test/unit/wm/zquarLabel.test.js`:
+    - Updated and added unit tests validating that `ruleV.y1` terminates at `L.rows.end` ("Prepared by"), `strip.center` aligns to `L.rows.end / 2`, barcode stays on the left (`x0` at edge, `right < 200 pt`), dedicated logo space is defined and rendered on the right (`logo.x > barcode.right`, top aligned with barcode top, bottom aligned with human-readable text), and SVG/PDF output contains the stroked logo box and centered "LOGO" text.
+- **TEST DECISION: TEST ADDED & UPDATED** (`test/unit/wm/zquarLabel.test.js`).
+- **Executed validation:**
+  - `npm test -- test/unit/wm/zquarLabel.test.js test/unit/wm/quarantineLabelsController.test.js`: 2 suites / 87 tests PASS (Code 0).
+  - `npm test -- test/unit/wm/`: 90 suites / 2375 tests PASS, 56 skipped, 0 failed (Code 0).
+  - `node tools/generate-zquar-label-sample.js docs/label/samples/zquar-4x6-vertical-sample.pdf --variant vertical`: PASS (14 labels rendered).
+  - `node tools/generate-zquar-label-sample.js docs/label/samples/zquar-4x6-same-DEMO.pdf`: PASS (14 labels rendered).
+  - `npm run lint`: ESLint clean, 0 errors/warnings (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter 100% clean, 0 findings (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 1.19s (Code 0).
+  - `git diff --check`: 0 whitespace issues (Code 0).
 - **Assumptions made:** None.
 - **Status:** PASS.

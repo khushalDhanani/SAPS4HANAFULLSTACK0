@@ -62,7 +62,7 @@ sap.ui.define([
     var ROW_COUNT = FIELDS.length;
     var STATIC_KEYS = { title: "zqTitle", quarantine: "zqQuarantine", formNumber: "zqFormNumber" };
     // Texts used only for some rows (a row may replace a caption via row.captions[fieldKey])
-    var EXTRA_KEYS = { retestDate: "zqRetestDate", materialCode: "zqMaterialCode", inspectionLotNo: "zqInspectionLotNo", inwBatchNo: "zqInwBatchNo" };
+    var EXTRA_KEYS = { retestDate: "zqRetestDate", materialCode: "zqMaterialCode", inspectionLotNo: "zqInspectionLotNo", inwBatchNo: "zqInwBatchNo", logo: "zqLogo" };
     var CAPTION_KEYS = {
         materialName: "zqMaterialName", itemCode: "zqItemCode", grnNo: "zqGrnNo", grnDate: "zqGrnDate", inwNo: "zqInwNo",
         inspectionLot: "zqInspectionLot", qtyReceived: "zqQtyReceived",
@@ -130,22 +130,30 @@ sap.ui.define([
             if (slotV < minSlot(valPtV)) { throw new Error("Label size too small for the quarantine label layout"); }
             var axisV = (ruleVx + W - edge) / 2;
 
+            var barRightV = snap(edge + snap(178 * f));
+            var barAxisV = (edge + barRightV) / 2;
+            var logoLeftV = snap(barRightV + snap(6 * f));
+            var logoRightV = snap(W - edge);
+            var logoWV = logoRightV - logoLeftV;
+            var logoHV = snap((hrTopV + hrPtV) - barTopV);
+
             return {
                 key: size.key, variant: VARIANTS.VERTICAL, dpi: dpi, axis: axisV, dotPt: dotPt,
                 sepW: SEP.dots * dotPt, ruleW: RULE_DOTS * dotPt, edge: edge,
                 page: { wPt: W, hPt: H },
-                ruleV: { x: ruleVx, y0: 0, y1: H },
+                ruleV: { x: ruleVx, y0: 0, y1: rowsEndV },
                 ruleH: { y: titleRuleY, x0: ruleVx, x1: W },
                 title: { x0: ruleVx, x1: W - edge, top: V.titleTop * k + EXTRA_EDGE_PT, pt: pt(TYPE.title), rule: titleRuleY },
                 strip: {
-                    center: H / 2, length: H - 2 * edge, hScale: 1,
+                    center: rowsEndV / 2, length: rowsEndV - 2 * edge, hScale: 1,
                     quarantine: { band: qBand, pt: qPtV },
                     formNumber: { band: fBand, pt: fPtV }
                 },
                 content: { x0: ruleVx + GAP, x1: W - edge },
                 type: { caption: pt(TYPE.caption), value: valPtV },
                 rows: { top: rowsTopV, end: rowsEndV, slot: slotV },
-                barcode: { x0: ruleVx + GAP, right: W - edge, top: barTopV, h: barHV, hrTop: hrTopV, hrPt: hrPtV }
+                barcode: { x0: edge, right: barRightV, axis: barAxisV, top: barTopV, h: barHV, hrTop: hrTopV, hrPt: hrPtV },
+                logo: { x: logoLeftV, y: barTopV, w: logoWV, h: logoHV, pt: pt(11) }
             };
         }
 
@@ -206,10 +214,11 @@ sap.ui.define([
         var minDots = Math.ceil(BARCODE.minModuleMm / dotMm - 1e-9);
         // Module chosen for the measured barcode span; the symbol is then centred on the label axis, on a printer dot
         var avail = L.barcode.right - Math.round(L.barcode.x0 / L.dotPt) * L.dotPt;
+        var axis = (L.barcode && L.barcode.axis != null) ? L.barcode.axis : L.axis;
         for (var dots = target; dots >= minDots; dots--) {
             var m = dots * L.dotPt;
             if (g.total * m <= avail + 1e-9) {
-                var x0 = Math.round((L.axis - g.total * m / 2) / L.dotPt) * L.dotPt;
+                var x0 = Math.round((axis - g.total * m / 2) / L.dotPt) * L.dotPt;
                 return { x0: x0, modulePt: m, moduleDots: dots, totalModules: g.total, widthPt: g.total * m, bars: g.bars };
             }
         }
@@ -339,6 +348,17 @@ sap.ui.define([
             } else {
                 warnings.push({ code: "barcodeMissing", field: "barcode" });
             }
+
+            if (L.logo) {
+                var logoLineWidth = snap(SEP.dots * L.dotPt);
+                items.push({ kind: "box", x: L.logo.x, y: L.logo.y, w: L.logo.w, h: L.logo.h, lineWidth: logoLineWidth });
+                var sLogo = (texts && texts.logo) || "LOGO";
+                var logoPt = (L.logo && L.logo.pt) || 11;
+                var logoText = fitText(sLogo, L.logo.w - 8, logoPt, 1, true);
+                var logoY = L.logo.y + (L.logo.h + CAP_ASCENT * logoText.pt) / 2;
+                items.push({ kind: "text", text: logoText.lines[0], x: L.logo.x + L.logo.w / 2, y: logoY, pt: logoText.pt, bold: true, align: "center" });
+            }
+
             return { items: items, warnings: warnings, barcode: geoV, fields: fieldsV };
         }
 

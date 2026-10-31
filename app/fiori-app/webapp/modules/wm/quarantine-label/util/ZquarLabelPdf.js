@@ -18,6 +18,10 @@ sap.ui.define([
                 doc.restoreGraphicsState();
             } else if (it.kind === "bar" || it.kind === "rule") {
                 doc.rect(it.x, it.y, it.w, it.h, "F");
+            } else if (it.kind === "box") {
+                doc.setDrawColor(0, 0, 0);
+                doc.setLineWidth(it.lineWidth || 0.5);
+                doc.rect(it.x, it.y, it.w, it.h, "S");
             } else {
                 doc.setFont("helvetica", it.bold ? "bold" : "normal").setFontSize(it.pt);
                 var o = {};
@@ -71,6 +75,10 @@ sap.ui.define([
             if (it.kind === "bar" || it.kind === "rule" || it.kind === "sep") {
                 return '<rect x="' + it.x + '" y="' + it.y + '" width="' + it.w + '" height="' + it.h + '" fill="#000"' +
                     (it.opacity ? ' fill-opacity="' + it.opacity + '"' : "") + ' shape-rendering="crispEdges"/>';
+            }
+            if (it.kind === "box") {
+                return '<rect x="' + it.x + '" y="' + it.y + '" width="' + it.w + '" height="' + it.h + '" fill="none" stroke="#000" stroke-width="' +
+                    (it.lineWidth || 0.5) + '" shape-rendering="crispEdges"/>';
             }
             var sTransform = "translate(" + it.x + " " + it.y + ")" + (it.angle ? " rotate(" + (-it.angle) + ")" : "") +
                 (it.hScale && it.hScale !== 1 ? " scale(" + it.hScale + " 1)" : "");
