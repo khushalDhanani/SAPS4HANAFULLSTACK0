@@ -489,4 +489,78 @@ describe('ZQUAR 4 x 6 label', () => {
             spy.mockRestore();
         });
     });
+
+    describe('vertical variant (left strip with SOP number)', () => {
+        const LVert = () => Layout.layout('4x6', { variant: 'vertical' });
+
+        it('layout exposes variant, vertical rule, horizontal rule, and left strip geometry', () => {
+            const L = LVert();
+            expect(L.variant).toBe('vertical');
+            expect(L.ruleV).toMatchObject({ y0: 0, y1: 432 });
+            expect(L.ruleV.x).toBeCloseTo(36.7, 0);
+            expect(L.ruleH.y).toBeCloseTo(34 + 1.5, 0);
+            expect(L.ruleH.x1).toBe(288);
+            expect(L.strip).toBeDefined();
+            expect(L.strip.quarantine).toBeDefined();
+            expect(L.strip.formNumber).toBeDefined();
+            expect(L.strip.center).toBe(216);
+            expect(L.content.x0).toBeGreaterThan(L.ruleV.x);
+        });
+
+        it('renders QUARANTINE and SOP Number in vertical write up (angle 90) on the left side of vertical rule', () => {
+            const L = LVert();
+            const r = Layout.render(L, DEMO, TEXTS);
+            const q = find(r, TEXTS.quarantine);
+            const f = find(r, TEXTS.formNumber);
+            expect(q).toBeDefined();
+            expect(f).toBeDefined();
+            [q, f].forEach((it) => {
+                expect(it).toMatchObject({ angle: 90, hScale: 1 });
+                expect(it.x).toBeLessThan(L.ruleV.x);
+                expect(it.band[0]).toBeGreaterThanOrEqual(0);
+                expect(it.band[1]).toBeLessThanOrEqual(L.ruleV.x);
+                expect(it.y).toBeGreaterThan(0);
+                expect(it.y).toBeLessThanOrEqual(432);
+            });
+            expect(q.bold).toBe(true);
+            expect(f.bold).toBe(false);
+        });
+
+        it('draws full-height vertical rule and horizontal rule under company title', () => {
+            const L = LVert();
+            const r = Layout.render(L, DEMO, TEXTS);
+            const rules = r.items.filter((i) => i.kind === 'rule');
+            expect(rules).toHaveLength(2);
+            const vRule = rules.find((item) => item.h === 432);
+            const hRule = rules.find((item) => item.h < 432);
+            expect(vRule).toBeDefined();
+            expect(hRule).toBeDefined();
+            expect(vRule.x).toBeCloseTo(L.ruleV.x - L.ruleW / 2, 0);
+            expect(hRule.y).toBeCloseTo(L.ruleH.y - L.ruleW / 2, 0);
+            expect(hRule.w).toBeCloseTo(288 - vRule.x, 0);
+        });
+
+        it('places all 15 field rows in content area right of vertical rule without overlap', () => {
+            const L = LVert();
+            const r = Layout.render(L, DEMO, TEXTS);
+            expect(r.fields).toHaveLength(15);
+            r.fields.forEach((fd) => {
+                expect(fd.caption.x).toBeGreaterThan(L.ruleV.x);
+                expect(fd.value.x).toBeGreaterThan(fd.caption.x);
+                expect(fd.value.end).toBeLessThanOrEqual(288);
+            });
+        });
+
+        it('generates valid PDF and HTML with rotated vertical strip texts and rules', () => {
+            const rows = [DEMO];
+            const pdfStr = pdf(rows, { variant: 'vertical' });
+            expect(pdfStr).toContain('/PrintScaling /None');
+            expect(pdfStr).toMatch(/\/MediaBox\s*\[0 0 288\.? 432\.?\]/);
+
+            const h = Pdf.buildHtml(rows, TEXTS, { variant: 'vertical' });
+            expect(h).toContain('rotate(-90)');
+            expect(h).toContain(TEXTS.quarantine);
+            expect(h).toContain(TEXTS.formNumber);
+        });
+    });
 });

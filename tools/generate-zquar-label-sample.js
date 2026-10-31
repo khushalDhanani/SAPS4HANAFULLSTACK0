@@ -50,9 +50,11 @@ Object.assign(rows[2], { manufacturer: '', inwNo: '', netWeight: '' });
 
 const dpiArg = process.argv.indexOf('--dpi');
 const dpi = dpiArg > 0 ? Number(process.argv[dpiArg + 1]) : undefined;
+const variantArg = process.argv.indexOf('--variant');
+const variant = variantArg > 0 ? process.argv[variantArg + 1] : undefined;
 const out = (process.argv[2] && !process.argv[2].startsWith('--')) ? process.argv[2] : path.join(root, 'docs/label/samples/zquar-4x6-same-DEMO.pdf');
 fs.mkdirSync(path.dirname(out), { recursive: true });
-const r = Pdf.generate(jsPDF, rows, texts, { dpi });
+const r = Pdf.generate(jsPDF, rows, texts, { dpi, variant });
 fs.writeFileSync(out, Buffer.from(r.doc.output('arraybuffer')));
 console.log(`Wrote ${path.relative(root, out)} (${rows.length} labels)`);
 r.warnings.forEach((w) => console.log(`  label ${w.label}: ${w.code} ${w.field}`));

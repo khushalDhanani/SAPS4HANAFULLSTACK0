@@ -4,16 +4,15 @@ sap.ui.define([
 ], function (Barcode, HuLayout) {
     "use strict";
 
-    // ZQUAR quarantine label, 4 x 6 in: centred company title, hairline, QUARANTINE title with the SOP no. directly
-    // below, hairline, then one field per row (caption left, value right, "Prepared by" is the last row) with 5 %-opacity
-    // hairlines between the rows, then a large centred barcode with its number. The block from the second hairline to the
-    // barcode is divided into 14 row slots (a wrapped value makes its slot taller, the rest share the remaining height
-    // evenly); each row is centred in its slot, so a hairline (always on a slot boundary) can never touch text.
-    // All positions in pt, origin top-left. render() returns a draw list that ZquarLabelPdf plays into jsPDF and the
-    // print document.
+    // ZQUAR quarantine label, 4 x 6 in: supports two layout variants:
+    // 1) TOP (default): centred company title, hairline, QUARANTINE title with SOP no. directly below, hairline, 15 single-field rows with 5% hairlines, barcode.
+    // 2) VERTICAL: QUARANTINE and SOP no. on the left strip in vertical write-up (rotated 90° counter-clockwise), vertical rule, horizontal title rule, 15 single-field rows, barcode.
     var PT_PER_INCH = 72;
     var MM_PER_INCH = 25.4;
     var MM2PT = PT_PER_INCH / MM_PER_INCH;
+
+    var VARIANTS = { TOP: "top", VERTICAL: "vertical" };
+    var DEFAULT_VARIANT = VARIANTS.VERTICAL;
 
     // Page sizes in inches (source of truth; pt derived, so 4x6 is exactly 288 x 432 pt).
     var SIZES = { "4x6": { key: "4x6", widthIn: 4, heightIn: 6 } };
@@ -21,6 +20,16 @@ sap.ui.define([
     // Printer resolution: 203 default, 300 allowed; the barcode module is a whole number of printer dots.
     var PRINTER_DPI = 203;
     var ALLOWED_DPI = [203, 300];
+
+    // Design coordinates for vertical strip variant (pt)
+    var BASE_V = {
+        ruleV: { x: 36.7 },
+        captionX: 38.8,
+        barcodeX: 38.8
+    };
+    var EM = 0.925;          // Helvetica ascender + descender: band of rotated strip text
+    var STRIP_GAP = 1.5;     // between the two strip texts and the rule
+    var RULE_DOTS = 2;       // rule thickness in whole printer dots
 
     // 4 x 6 design sizes (pt); on other pages heights scale with the page height, fonts with the smaller page ratio,
     // never below MIN_PT.
@@ -102,6 +111,44 @@ sap.ui.define([
         var dotPt = PT_PER_INCH / dpi;
         var snap = function (n) { return Math.round(n / dotPt) * dotPt; };
 
+        var variant = (opts && opts.variant) || VARIANTS.TOP;
+        if (variant === VARIANTS.VERTICAL) {
+            var ruleVx = snap(BASE_V.ruleV.x * f);
+            var titleRuleY = snap(V.titleRule * k + EXTRA_EDGE_PT);
+            var qPtV = pt(14);
+            var fPtV = pt(TYPE.formNumber);
+            var qBand = edge;
+            var fBand = qBand + EM * qPtV + STRIP_GAP;
+            var hrPtV = pt(TYPE.humanReadable);
+            var hrTopV = H - V.bottomPad * k - hrPtV - EXTRA_EDGE_PT;
+            var barHV = snap(84 * k);
+            var barTopV = snap(hrTopV - V.hrGap * k - barHV);
+            var rowsTopV = titleRuleY + V.sopRule * k;
+            var rowsEndV = barTopV - V.barGap * k;
+            var valPtV = pt(TYPE.value);
+            var slotV = (rowsEndV - rowsTopV) / ROW_COUNT;
+            if (slotV < minSlot(valPtV)) { throw new Error("Label size too small for the quarantine label layout"); }
+            var axisV = (ruleVx + W - edge) / 2;
+
+            return {
+                key: size.key, variant: VARIANTS.VERTICAL, dpi: dpi, axis: axisV, dotPt: dotPt,
+                sepW: SEP.dots * dotPt, ruleW: RULE_DOTS * dotPt, edge: edge,
+                page: { wPt: W, hPt: H },
+                ruleV: { x: ruleVx, y0: 0, y1: H },
+                ruleH: { y: titleRuleY, x0: ruleVx, x1: W },
+                title: { x0: ruleVx, x1: W - edge, top: V.titleTop * k + EXTRA_EDGE_PT, pt: pt(TYPE.title), rule: titleRuleY },
+                strip: {
+                    center: H / 2, length: H - 2 * edge, hScale: 1,
+                    quarantine: { band: qBand, pt: qPtV },
+                    formNumber: { band: fBand, pt: fPtV }
+                },
+                content: { x0: ruleVx + GAP, x1: W - edge },
+                type: { caption: pt(TYPE.caption), value: valPtV },
+                rows: { top: rowsTopV, end: rowsEndV, slot: slotV },
+                barcode: { x0: ruleVx + GAP, right: W - edge, top: barTopV, h: barHV, hrTop: hrTopV, hrPt: hrPtV }
+            };
+        }
+
         // Top-down: title, hairline, QUARANTINE, SOP no., hairline; bottom-up: number, bars; rows fill the space between
         var hrPt = pt(TYPE.humanReadable);
         var hrTop = H - V.bottomPad * k - hrPt - EXTRA_EDGE_PT;
@@ -119,7 +166,7 @@ sap.ui.define([
         if (slot < minSlot(valPt)) { throw new Error("Label size too small for the quarantine label layout"); }
 
         return {
-            key: size.key, dpi: dpi, axis: W / 2, dotPt: dotPt, sepW: SEP.dots * dotPt, edge: edge,
+            key: size.key, variant: VARIANTS.TOP, dpi: dpi, axis: W / 2, dotPt: dotPt, sepW: SEP.dots * dotPt, edge: edge,
             page: { wPt: W, hPt: H },
             title: { x0: edge, x1: W - edge, top: V.titleTop * k + EXTRA_EDGE_PT, pt: pt(TYPE.title), rule: titleRule },
             content: { x0: edge, x1: W - edge },
@@ -251,6 +298,50 @@ sap.ui.define([
             items.push({ kind: "sep", x: snap(L.content.x0), y: snap(y - L.sepW / 2), w: snap(L.content.x1) - snap(L.content.x0), h: L.sepW, opacity: SEP.opacity });
         }
 
+        if (L.variant === VARIANTS.VERTICAL) {
+            var vx = snap(L.ruleV.x - L.ruleW / 2);
+            var vy = snap(L.ruleV.y0);
+            items.push({ kind: "rule", x: vx, y: vy, w: L.ruleW, h: snap(L.ruleV.y1) - vy });
+            items.push({ kind: "rule", x: vx, y: snap(L.ruleH.y - L.ruleW / 2), w: snap(L.page.wPt) - vx, h: L.ruleW });
+
+            var tV = fitText(texts.title, L.title.x1 - L.title.x0, L.title.pt, 1, true);
+            items.push({ kind: "text", text: tV.lines[0], x: L.axis, y: L.title.top + tV.pt * ASCENT, pt: tV.pt, bold: true, align: "center" });
+
+            // Strip texts: QUARANTINE and SOP no. rotated 90 degrees counter-clockwise
+            [["quarantine", true], ["formNumber", false]].forEach(function (e) {
+                var S = L.strip[e[0]];
+                var len = widthPt(texts[e[0]], S.pt, e[1]);
+                var hScale = Math.min(L.strip.hScale, L.strip.length / len);
+                items.push({
+                    kind: "text", text: texts[e[0]], x: S.band + CAP_ASCENT * S.pt, y: L.strip.center + len * hScale / 2,
+                    pt: S.pt, bold: e[1], align: "left", angle: 90, hScale: hScale, len: len * hScale, band: [S.band, S.band + EM * S.pt]
+                });
+            });
+
+            var fieldsV = placeFields(L, row, texts);
+            sep(L.rows.top);
+            fieldsV.forEach(function (fd) {
+                items.push({ kind: "text", text: fd.caption.text, x: fd.caption.x, y: fd.caption.y, pt: fd.caption.pt, bold: true, align: "left" });
+                fd.value.lines.forEach(function (line, i) {
+                    items.push({ kind: "text", text: line, x: fd.value.x, y: fd.value.y + i * fd.value.pt * LH, pt: fd.value.pt, bold: false, align: "left" });
+                });
+                if (fd.row < ROW_COUNT - 1) { sep(fd.slot.y1); }
+            });
+
+            var codeV = row.barcode == null ? "" : String(row.barcode).trim();
+            var geoV = null;
+            if (codeV) {
+                geoV = barcodeGeometry(L, codeV);
+                geoV.bars.forEach(function (b) { items.push({ kind: "bar", x: geoV.x0 + b.x * geoV.modulePt, y: L.barcode.top, w: b.w * geoV.modulePt, h: L.barcode.h }); });
+                var barsWV = (geoV.totalModules - 20) * geoV.modulePt;
+                var hrV = fitText(codeV, barsWV, L.barcode.hrPt, 1, false);
+                items.push({ kind: "text", text: hrV.lines[0], x: geoV.x0 + geoV.widthPt / 2, y: L.barcode.hrTop + hrV.pt * ASCENT, pt: hrV.pt, bold: false, align: "center" });
+            } else {
+                warnings.push({ code: "barcodeMissing", field: "barcode" });
+            }
+            return { items: items, warnings: warnings, barcode: geoV, fields: fieldsV };
+        }
+
         var t = fitText(texts.title, L.title.x1 - L.title.x0, L.title.pt, 1, true);
         items.push({ kind: "text", text: t.lines[0], x: L.axis, y: L.title.top + t.pt * ASCENT, pt: t.pt, bold: true, align: "center" });
 
@@ -283,7 +374,8 @@ sap.ui.define([
     }
 
     return {
-        SIZES: SIZES, DEFAULT_SIZE: DEFAULT_SIZE, PRINTER_DPI: PRINTER_DPI, ALLOWED_DPI: ALLOWED_DPI, PT_PER_INCH: PT_PER_INCH,
+        SIZES: SIZES, DEFAULT_SIZE: DEFAULT_SIZE, VARIANTS: VARIANTS, DEFAULT_VARIANT: DEFAULT_VARIANT,
+        PRINTER_DPI: PRINTER_DPI, ALLOWED_DPI: ALLOWED_DPI, PT_PER_INCH: PT_PER_INCH,
         MM_PER_INCH: MM_PER_INCH, MIN_PT: MIN_PT, GAP: GAP, ASCENT: ASCENT, LH: LH, BARCODE: BARCODE, SEP: SEP,
         FIELDS: FIELDS, STATIC_KEYS: STATIC_KEYS, CAPTION_KEYS: CAPTION_KEYS, EXTRA_KEYS: EXTRA_KEYS,
         layout: layout, fitText: fitText, barcodeGeometry: barcodeGeometry, render: render, widthPt: widthPt,

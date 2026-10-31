@@ -7,6 +7,12 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Zquar Label: New Vertical Left Strip Variant with SOP Number (2026-10-31 IST) — PASS:** Delivered user-requested new label variant in ZQURAN (Quarantine Labels):
+  1. **New Vertical Left Strip Variant**: Implemented `VARIANTS.VERTICAL` in `ZquarLabelLayout.js` and `ZquarLabelPdf.js` alongside existing `VARIANTS.TOP`. In the vertical variant, "QUARANTINE" (14 pt bold) and SOP Number ("F-06-00-SOP-WH-002-01/09/2016", regular 9 pt) are rendered in vertical write-up (rotated 90° counter-clockwise, read bottom-to-top) on the left side of a full-height solid vertical rule (`x ≈ 36.7 pt`). Company title ("Aether Industries Limited") is centered over the content area with a horizontal rule running from the vertical rule to the right edge.
+  2. **Content Geometry & 15 Field Spacing**: In the content area (`x ≈ 40 pt` to `276 pt`), all 15 single-field rows (`materialName`, `itemCode`, `grnNo`, `grnDate`, `inwNo`, `inspectionLot`, `qtyReceived`, `containerNo`, `manufacturer`, `supplier`, `batchNo`, `mfgDate`, `expiryDate`, `netWeight`, `preparedBy`) are evenly spaced in slots with 5% hairlines without overlapping or clipping, retaining leading zero trimming, INW. Batch No caption, net weight formatting with space, and dash `-` fallbacks. Centered barcode and human-readable number are rendered at the bottom.
+  3. **UI Variant Selection**: Added `Label Variant` selector (`SegmentedButton id="qlVariantSelect"`) in `QuarantineLabels.view.xml` with options "Vertical Left Strip" (`vertical`, default) and "Top Header" (`top`). In `QuarantineLabels.controller.js`, `variant` state is preserved in `qlView` model and propagated across single 4x6 preview, row-level preview/download, and bulk download.
+  4. **Validation**: All 48 tests in `test/unit/wm/zquarLabel.test.js`, 38 tests in `test/unit/wm/quarantineLabelsController.test.js`, all 90 WM test suites (2374 tests), and Playwright E2E (`verifyQuarantineLabels.e2e.js`, 7/7 cases) PASS; root ESLint, UI5 linter, and UI5 build 100% clean with 0 findings.
+
 - **Zquar Label: Material Code Trimming, INW. Batch No, Net Weight Spacing & Dash Fallback (2026-10-30 IST) — PASS:** Delivered four user-requested enhancements to Zquar 4x6 label formatting and captions:
   1. **Material Code Leading Zero Trimming**: Added `formatMaterialCode` in `ZquarLabelRows.js` and `ZquarLabelLayout.js` to strip leading zeros from numeric SAP material codes, preserving up to the last 10 digits (`000000008000009753` -> `8000009753`, `000000008000009832` -> `8000009832`).
   2. **INW. Batch No Caption**: Updated caption key `zqInwNo` and form input `qlText` in both `i18n.properties` and `i18n_en.properties` from `INW. No` to `INW. Batch No`. Added fallback `inwBatchNo: "zqInwBatchNo"` in `EXTRA_KEYS`.
@@ -6280,3 +6286,28 @@ Single source of truth for work history, current status, validation, unresolved 
 - **NOT VERIFIED:** CI stability — a single green run cannot prove an intermittent fix. **NEXT:** push; watch this and the next few runs before making the gate a required check.
 - **CI RESULT run 41041194622 (`bb99978`) — SUCCESS:** `Build, Test & Validate` 4m09s (heap fix green in CI), `browser-e2e-sap-free` 1m17s. Gate record since router-wait work: 3 green, 1 red (the red was the quarantine cold-load case fixed here). One green run does not prove the intermittent fix; watch a few more runs before making the gate a required check.
 - **CI RESULT run 41042087698 (`5079b34`) — SUCCESS:** `Build, Test & Validate` 3m50s, `browser-e2e-sap-free` 1m07s. Since the quarantine router-wait fix: 2/2 green. Watching continues on normal pushes (no empty commits to trigger CI); recommend about 5 consecutive green gate runs before making it a required status check.
+
+### 2026-10-31 IST — Zquar Label: New Vertical Left Strip Variant with SOP Number — PASS
+
+- **Request:** "Make one new labe variable in ZQURAN. Quarantine write should be left side of label in vertical write up. With SOP Number."
+- **Clarification:** Confirmed via user multiple-choice selection to add a selectable Label Variant in the Fiori app toggling between "Vertical Left Strip" and "Top Header".
+- **CHANGED:**
+  - `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js`: Added `VARIANTS = { TOP: 'top', VERTICAL: 'vertical' }` and `DEFAULT_VARIANT = VARIANTS.VERTICAL`. In `layout(sizeOrKey, opts)`, added geometry for `VARIANTS.VERTICAL`: full-height vertical rule at `x ≈ 36.7 pt` (`y: 0..432`), horizontal title rule (`y ≈ 35.5 pt`), left strip with rotated "QUARANTINE" (14 pt bold) and SOP Number (9 pt regular), and 15 evenly-spaced single-field row slots in content area right of vertical rule with 84 pt barcode. In `render`, branched to emit vertical rules, rotated strip texts (`angle: 90`), and content items when `L.variant === VARIANTS.VERTICAL`.
+  - `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelPdf.js`: Added support in `drawItems` for `kind === 'rule'`, `angle: 90`, and `hScale`. In `svgPage`, added `<text transform="translate(...) rotate(-90) ...">` for HTML/SVG print document. Passed `opts.variant` through `generate`, `toBlob`, and `buildHtml`.
+  - `app/fiori-app/webapp/modules/wm/quarantine-label/view/QuarantineLabels.view.xml`: Added `Label Variant` selector (`SegmentedButton id="qlVariantSelect"`) in form bound to `qlView>/variant`.
+  - `app/fiori-app/webapp/modules/wm/quarantine-label/controller/QuarantineLabels.controller.js`: Initialized `variant: 'vertical'` in `qlView` model; forwarded `sVariant` in `oOpts` for `on4x6Labels`, `_buildLabels` (row download/print and bulk download).
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Added localized strings `qlVariant=Label Variant`, `qlVariantVertical=Vertical Left Strip`, `qlVariantTop=Top Header`.
+  - `tools/generate-zquar-label-sample.js`: Added `--variant` CLI argument support.
+  - `test/unit/wm/zquarLabel.test.js`: Added 5 new unit tests covering layout geometry, rotated strip texts, rules, 15 field placement, and PDF/HTML generation with `variant: 'vertical'`.
+  - `test/unit/wm/quarantineLabelsController.test.js`: Updated and added unit tests validating that selected variant (`vertical` default, `top` selectable) is passed to `Pdf.toBlob` and `Pdf.print`.
+- **TEST DECISION: TEST ADDED & UPDATED** (`test/unit/wm/zquarLabel.test.js`, `test/unit/wm/quarantineLabelsController.test.js`).
+- **Executed validation:**
+  - `npm test -- test/unit/wm/zquarLabel.test.js test/unit/wm/quarantineLabelsController.test.js`: 2 suites / 86 tests PASS (Code 0).
+  - `npm test -- test/unit/wm/`: 90 suites / 2374 tests PASS, 56 skipped, 0 failed (Code 0).
+  - `npm run test:e2e:sap-free`: 3 suites / 3 PASS (Negative UI paths, Write authorization, Quarantine labels 7/7) in 13.6s (Code 0).
+  - `git diff --check`: 0 whitespace or formatting issues (Code 0).
+  - `npm run lint`: ESLint clean, 0 errors/warnings (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter 100% clean, 0 findings (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 1.26s (Code 0).
+- **Assumptions made:** None.
+- **Status:** PASS.

@@ -125,7 +125,7 @@ describe('QuarantineLabels controller', () => {
             expect(Service.labelRows).toHaveBeenCalledWith({ materialDocument: '4900050304', year: '2026', text: '' });
             const texts = { title: 'zqTitle', grnNo: 'zqGrnNo', retestDate: 'zqRetestDate' };
             expect(Rows.toLabels).toHaveBeenCalledWith(rows.Rows, texts, "DEMO-USER");
-            expect(Pdf.toBlob).toHaveBeenCalledWith([{ barcode: 'DEMO' }, { barcode: 'DEMO2' }], texts, { size: '4x6' });
+            expect(Pdf.toBlob).toHaveBeenCalledWith([{ barcode: 'DEMO' }, { barcode: 'DEMO2' }], texts, { size: '4x6', variant: 'vertical' });
             expect(d.pdfUrl).toBe('blob:pdf-1');
             expect(d.fileName).toBe('QuarantineLabels4x6_9900000001_2026.pdf');
             expect(d.messageType).toBe('Success');
@@ -137,7 +137,15 @@ describe('QuarantineLabels controller', () => {
             Pdf.toBlob.mockResolvedValue({ blob: {}, warnings: [] });
             const { s } = subject();
             await s.on4x6Labels();
-            expect(Pdf.toBlob.mock.calls[0][2]).toEqual({ size: '4x6' });
+            expect(Pdf.toBlob.mock.calls[0][2]).toEqual({ size: '4x6', variant: 'vertical' });
+        });
+        it('passes selected variant (top header) to Pdf.toBlob', async () => {
+            Service.labelRows.mockResolvedValue(rows);
+            Pdf.toBlob.mockResolvedValue({ blob: {}, warnings: [] });
+            const { s, d } = subject();
+            d.variant = 'top';
+            await s.on4x6Labels();
+            expect(Pdf.toBlob.mock.calls[0][2]).toEqual({ size: '4x6', variant: 'top' });
         });
         it('shows render warnings (e.g. no barcode) as a warning, the PDF stays available', async () => {
             Service.labelRows.mockResolvedValue(rows);
@@ -195,7 +203,7 @@ describe('QuarantineLabels controller', () => {
             await s.on4x6Labels();
             await s.onPrint();
             const texts = { title: 'zqTitle', grnNo: 'zqGrnNo', retestDate: 'zqRetestDate' };
-            expect(Pdf.print).toHaveBeenCalledWith([{ barcode: 'DEMO' }, { barcode: 'DEMO2' }], texts, { size: '4x6' });
+            expect(Pdf.print).toHaveBeenCalledWith([{ barcode: 'DEMO' }, { barcode: 'DEMO2' }], texts, { size: '4x6', variant: 'vertical' });
         });
         it('a print failure is shown as an error', async () => {
             Service.labelRows.mockResolvedValue(rows);
@@ -308,7 +316,7 @@ describe('QuarantineLabels controller: goods-receipt list', () => {
             Service.labelRows.mockResolvedValue({ Rows: [{ StorageUnit: 'S1' }, { StorageUnit: 'S2' }], LabelSize: null });
             const { s, d } = listSubject();
             await run(s, () => s.onRowDownload(rowEvent(DOC1)));
-            expect(Pdf.toBlob).toHaveBeenCalledWith([{ barcode: 'S1' }, { barcode: 'S2' }], expect.any(Object), { size: '4x6' });
+            expect(Pdf.toBlob).toHaveBeenCalledWith([{ barcode: 'S1' }, { barcode: 'S2' }], expect.any(Object), { size: '4x6', variant: 'vertical' });
             expect(Rows.toLabels).toHaveBeenCalledWith(expect.any(Array), expect.any(Object), 'DEMO-USER');
             expect(saved).toEqual(['QuarantineLabels4x6_5000000001_2026.pdf']);
             expect([d.message, d.messageType, d.busy]).toEqual(['qlListLabelsReady|2|1', 'Success', false]);
@@ -318,7 +326,7 @@ describe('QuarantineLabels controller: goods-receipt list', () => {
             Service.labelRows.mockResolvedValue({ Rows: [{ StorageUnit: 'S1' }] });
             const { s } = listSubject();
             await run(s, () => s.onRowPrint(rowEvent(DOC1)));
-            expect(Pdf.print).toHaveBeenCalledWith([{ barcode: 'S1' }], expect.any(Object), { size: '4x6' });
+            expect(Pdf.print).toHaveBeenCalledWith([{ barcode: 'S1' }], expect.any(Object), { size: '4x6', variant: 'vertical' });
             expect(saved).toEqual([]);
         });
         it('selected documents: rows read one after the other, one combined PDF', async () => {

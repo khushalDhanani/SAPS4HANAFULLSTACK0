@@ -71,6 +71,7 @@ sap.ui.define([
                 materialDocument: "",
                 year: String(new Date().getFullYear()),
                 text: "",
+                variant: "vertical",
                 busy: false,
                 message: "",
                 messageType: "Information",
@@ -200,7 +201,8 @@ sap.ui.define([
                 // Size from the plant's BusinessConfig; the layout's default (4x6) when none is configured
                 var mTexts = that._labelTexts();
                 var aLabels = ZquarLabelRows.toLabels(oResult.Rows, mTexts, AuthService.getCurrentUserName(that.getOwnerComponent()));
-                var oOpts = { size: oResult.LabelSize || ZquarLabelLayout.DEFAULT_SIZE };
+                var sVariant = oVm.getProperty("/variant") || "vertical";
+                var oOpts = { size: oResult.LabelSize || ZquarLabelLayout.DEFAULT_SIZE, variant: sVariant };
                 return ZquarLabelPdf.toBlob(aLabels, mTexts, oOpts)
                     .then(function (oPdf) {
                         if (iRequest !== that._iRequest) {
@@ -434,7 +436,8 @@ sap.ui.define([
                     throw new Error(that.getText("qlMixedSizes"));
                 }
                 var mTexts = that._labelTexts();
-                return { labels: ZquarLabelRows.toLabels(aRows, mTexts, AuthService.getCurrentUserName(that.getOwnerComponent())), texts: mTexts, opts: { size: aSizes[0] } };
+                var sVariant = that.getModel("qlView").getProperty("/variant") || "vertical";
+                return { labels: ZquarLabelRows.toLabels(aRows, mTexts, AuthService.getCurrentUserName(that.getOwnerComponent())), texts: mTexts, opts: { size: aSizes[0], variant: sVariant } };
             });
         },
 

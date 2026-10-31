@@ -16,13 +16,17 @@ sap.ui.define([
                 doc.setGState(new doc.GState({ opacity: it.opacity }));
                 doc.rect(it.x, it.y, it.w, it.h, "F");
                 doc.restoreGraphicsState();
-            } else if (it.kind === "bar") {
+            } else if (it.kind === "bar" || it.kind === "rule") {
                 doc.rect(it.x, it.y, it.w, it.h, "F");
             } else {
                 doc.setFont("helvetica", it.bold ? "bold" : "normal").setFontSize(it.pt);
                 var o = {};
                 if (it.align === "center") { o.align = "center"; }
+                if (it.angle) { o.angle = it.angle; }
+                var bScaled = it.hScale && it.hScale !== 1;
+                if (bScaled) { o.horizontalScale = it.hScale; doc.saveGraphicsState(); }
                 doc.text(it.text, it.x, it.y, o);
+                if (bScaled) { doc.restoreGraphicsState(); }
             }
         });
     }
@@ -33,7 +37,7 @@ sap.ui.define([
      */
     function generate(JsPDF, aRows, oTexts, oOpts) {
         if (!aRows || !aRows.length) { throw new Error("No labels to render"); }
-        var L = Layout.layout((oOpts && oOpts.size) || Layout.DEFAULT_SIZE, { dpi: oOpts && oOpts.dpi });
+        var L = Layout.layout((oOpts && oOpts.size) || Layout.DEFAULT_SIZE, { dpi: oOpts && oOpts.dpi, variant: oOpts && oOpts.variant });
         var doc = new JsPDF({ orientation: "portrait", unit: "pt", format: [L.page.wPt, L.page.hPt] });
         if (typeof doc.viewerPreferences === "function") { doc.viewerPreferences({ PrintScaling: "None" }); }
         var aWarnings = [];
@@ -64,11 +68,13 @@ sap.ui.define([
     function svgPage(L, aItems) {
         var esc = HuLabelPrinter.esc;
         var out = aItems.map(function (it) {
-            if (it.kind === "bar" || it.kind === "sep") {
+            if (it.kind === "bar" || it.kind === "rule" || it.kind === "sep") {
                 return '<rect x="' + it.x + '" y="' + it.y + '" width="' + it.w + '" height="' + it.h + '" fill="#000"' +
                     (it.opacity ? ' fill-opacity="' + it.opacity + '"' : "") + ' shape-rendering="crispEdges"/>';
             }
-            return '<text transform="translate(' + it.x + " " + it.y + ')" font-size="' + it.pt + '" font-weight="' + (it.bold ? "bold" : "normal") + '"' +
+            var sTransform = "translate(" + it.x + " " + it.y + ")" + (it.angle ? " rotate(" + (-it.angle) + ")" : "") +
+                (it.hScale && it.hScale !== 1 ? " scale(" + it.hScale + " 1)" : "");
+            return '<text transform="' + sTransform + '" font-size="' + it.pt + '" font-weight="' + (it.bold ? "bold" : "normal") + '"' +
                 (it.align === "center" ? ' text-anchor="middle"' : "") + ">" + esc(it.text) + "</text>";
         }).join("");
         return '<svg class="zq" xmlns="http://www.w3.org/2000/svg" width="' + L.page.wPt + 'pt" height="' + L.page.hPt + 'pt" viewBox="0 0 ' +
@@ -81,7 +87,7 @@ sap.ui.define([
      */
     function buildHtml(aRows, oTexts, oOpts) {
         if (!aRows || !aRows.length) { throw new Error("No labels to render"); }
-        var L = Layout.layout((oOpts && oOpts.size) || Layout.DEFAULT_SIZE, { dpi: oOpts && oOpts.dpi });
+        var L = Layout.layout((oOpts && oOpts.size) || Layout.DEFAULT_SIZE, { dpi: oOpts && oOpts.dpi, variant: oOpts && oOpts.variant });
         var aPages = aRows.map(function (row, i) {
             try {
                 return svgPage(L, Layout.render(L, row, oTexts).items);
