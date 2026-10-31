@@ -27,8 +27,8 @@ const DEMO = {
     'Mfg. Date': '01/10/2026', 'Expiry Date': '01/04/2027', 'Net Weight': '10.00KG'
 };
 const ROWS = [['Material Name', 13.7, 39.1, 21.0], ['GRN No.', 13.7, 39.1, 33.0], ['GRN Date', 60.2, 78.1, 33.0], ['INW. No', 13.7, 39.1, 40.5],
-    ['Qty. Received', 13.7, 39.1, 48.0], ['Container No', 57.6, 81.2, 48.0], ['Manufacturer', 13.7, 39.1, 55.5], ['Supplier', 13.7, 39.1, 66.5],
-    ['Batch No', 13.7, 39.1, 77.5]];
+['Qty. Received', 13.7, 39.1, 48.0], ['Container No', 57.6, 81.2, 48.0], ['Manufacturer', 13.7, 39.1, 55.5], ['Supplier', 13.7, 39.1, 66.5],
+['Batch No', 13.7, 39.1, 77.5]];
 const COLS = [['Mfg. Date', 13.7], ['Expiry Date', 39.1], ['Net Weight', 66.0]];
 
 /** A label drawn to the spec; `bad` injects one defect. Returns the PDF path. */
@@ -47,7 +47,7 @@ function makePdf(name, bad = {}) {
     text('Aether Industries Limited', (13.7 + 96.7) / 2 - tw / 2 / MM, 4.5, 18, true);
     // strip: rotated 90 degrees counter-clockwise, centred on y 56 mm, inside the 4 mm margin
     let band = 4 * MM;
-    [['QUARANTINE', 14, true], ['F-06-01-SOP-WH-0020-04/04/2026', 9, false]].forEach(([s, pt, b]) => {
+    [['QUARANTINE', 14, true], ['F-06-01-SOP-WH-002-04/04/202', 9, false]].forEach(([s, pt, b]) => {
         const len = width(s, pt, b);
         doc.setFont('helvetica', b ? 'bold' : 'normal').setFontSize(pt);
         doc.text(s, band + ASCENT * pt, 56 * MM + len / 2, { angle: 90 });
