@@ -49,6 +49,12 @@ sap.ui.define([], function () {
         return s;
     }
 
+    /** Container number formatting: "1 OF 14" -> "1 of 14" (replace whole-word uppercase OF with lowercase of). */
+    function formatContainerNo(v) {
+        var s = String(v == null ? "" : v).trim();
+        return s ? s.replace(/\bOF\b/g, "of") : "";
+    }
+
     /** Returns trimmed string or "-" when empty / missing. */
     function dash(v) {
         var s = String(v == null ? "" : v).trim();
@@ -77,7 +83,7 @@ sap.ui.define([], function () {
                 inwNo: dash(r.InwardNo || r.Text),
                 inspectionLot: dash(r.InspectionLot),
                 qtyReceived: dash(r.PostedQuantity),
-                containerNo: dash(r.Container),
+                containerNo: dash(formatContainerNo(r.Container)),
                 manufacturer: dash(r.BatchCharacteristics),
                 supplier: dash(r.SupplierName),
                 batchNo: dash(r.SupplierBatch),
@@ -90,5 +96,5 @@ sap.ui.define([], function () {
         });
     }
 
-    return { toLabels: toLabels, date: date, twoDecimals: twoDecimals, withoutLeadingZeros: withoutLeadingZeros, formatMaterialCode: formatMaterialCode, dash: dash };
+    return { toLabels: toLabels, date: date, twoDecimals: twoDecimals, withoutLeadingZeros: withoutLeadingZeros, formatMaterialCode: formatMaterialCode, formatContainerNo: formatContainerNo, dash: dash };
 });

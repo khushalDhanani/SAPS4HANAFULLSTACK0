@@ -55,17 +55,17 @@ sap.ui.define([
     // One field per row, in label order (keys of the label row and of the caption texts)
     var FIELDS = [
         { key: "materialName", lines: 2 }, { key: "itemCode" }, { key: "grnNo" }, { key: "grnDate" }, { key: "inwNo" },
-        { key: "inspectionLot" }, { key: "qtyReceived" },
+        { key: "qtyReceived" },
         { key: "containerNo" }, { key: "manufacturer", lines: 2 }, { key: "supplier", lines: 2 }, { key: "batchNo" },
         { key: "mfgDate" }, { key: "expiryDate" }, { key: "netWeight" }, { key: "preparedBy" }
     ];
     var ROW_COUNT = FIELDS.length;
     var STATIC_KEYS = { title: "zqTitle", quarantine: "zqQuarantine", formNumber: "zqFormNumber" };
     // Texts used only for some rows (a row may replace a caption via row.captions[fieldKey])
-    var EXTRA_KEYS = { retestDate: "zqRetestDate", materialCode: "zqMaterialCode", inspectionLotNo: "zqInspectionLotNo", inwBatchNo: "zqInwBatchNo", logo: "zqLogo" };
+    var EXTRA_KEYS = { retestDate: "zqRetestDate", materialCode: "zqMaterialCode", inspectionLot: "zqInspectionLot", inspectionLotNo: "zqInspectionLotNo", inwBatchNo: "zqInwBatchNo", logo: "zqLogo" };
     var CAPTION_KEYS = {
         materialName: "zqMaterialName", itemCode: "zqItemCode", grnNo: "zqGrnNo", grnDate: "zqGrnDate", inwNo: "zqInwNo",
-        inspectionLot: "zqInspectionLot", qtyReceived: "zqQtyReceived",
+        qtyReceived: "zqQtyReceived",
         containerNo: "zqContainerNo", manufacturer: "zqManufacturer", supplier: "zqSupplier", batchNo: "zqBatchNo",
         mfgDate: "zqMfgDate", expiryDate: "zqExpiryDate", netWeight: "zqNetWeight", preparedBy: "zqPreparedBy"
     };
@@ -84,6 +84,12 @@ sap.ui.define([
             return unpadded.length > 10 ? unpadded.slice(-10) : unpadded;
         }
         return s;
+    }
+
+    /** Container number formatting: "1 OF 14" -> "1 of 14" (replace whole-word uppercase OF with lowercase of). */
+    function formatContainerNo(v) {
+        var s = String(v == null ? "" : v).trim();
+        return s ? s.replace(/\bOF\b/g, "of") : "";
     }
     function half(n) { return Math.round(n * 2) / 2; }
 
@@ -244,18 +250,19 @@ sap.ui.define([
         var valPt = L.type.value;
         var capText = function (d) {
             return (row.captions && row.captions[d.key]) || texts[d.key]
-                || (d.key === "itemCode" ? (texts.materialCode || texts.itemCode) : "")
-                || (d.key === "inwNo" ? (texts.inwBatchNo || texts.inwNo) : "")
-                || (d.key === "inspectionLot" ? (texts.inspectionLot || texts.inspectionLotNo) : "");
+                || (d.key === "itemCode" ? (texts.itemCode || texts.materialCode) : "")
+                || (d.key === "inwNo" ? (texts.inwBatchNo || texts.inwNo) : "");
         };
         var valueX = C.x0 + Math.max.apply(null, FIELDS.map(function (d) { return widthPt(capText(d), capPt, true); })) + COL_GAP;
 
         var fields = FIELDS.map(function (d, i) {
             var c = fitText(capText(d), valueX - GAP - C.x0, capPt, 1, true);
-            var rawVal = d.key === "itemCode" ? (row.itemCode != null && row.itemCode !== "" ? row.itemCode : row.materialCode)
-                : (d.key === "inspectionLot" ? (row.inspectionLot != null && row.inspectionLot !== "" ? row.inspectionLot : row.InspectionLot) : row[d.key]);
+            var rawVal = d.key === "itemCode" ? (row.itemCode != null && row.itemCode !== "" ? row.itemCode : row.materialCode) : row[d.key];
             if (d.key === "itemCode" && rawVal) {
                 rawVal = formatMaterialCode(rawVal);
+            }
+            if (d.key === "containerNo" && rawVal) {
+                rawVal = formatContainerNo(rawVal);
             }
             var s = rawVal == null ? "" : String(rawVal).trim();
             if (!s) {
@@ -399,6 +406,6 @@ sap.ui.define([
         MM_PER_INCH: MM_PER_INCH, MIN_PT: MIN_PT, GAP: GAP, ASCENT: ASCENT, LH: LH, BARCODE: BARCODE, SEP: SEP,
         FIELDS: FIELDS, STATIC_KEYS: STATIC_KEYS, CAPTION_KEYS: CAPTION_KEYS, EXTRA_KEYS: EXTRA_KEYS,
         layout: layout, fitText: fitText, barcodeGeometry: barcodeGeometry, render: render, widthPt: widthPt,
-        formatMaterialCode: formatMaterialCode
+        formatMaterialCode: formatMaterialCode, formatContainerNo: formatContainerNo
     };
 });

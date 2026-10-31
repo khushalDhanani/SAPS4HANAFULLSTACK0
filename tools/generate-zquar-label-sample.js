@@ -38,7 +38,7 @@ const base = {
   mfgDate: '01.10.2026', expiryDate: '01.04.2027', netWeight: '10.000 KG'
 };
 const rows = Array.from({ length: TOTAL }, (_, i) => ({
-  ...base, containerNo: `${i + 1} OF ${TOTAL}`, barcode: String(9900000001 + i)
+  ...base, containerNo: `${i + 1} of ${TOTAL}`, barcode: String(9900000001 + i)
 }));
 // page 2: long values (wrap -> shrink -> more lines); page 3: empty values keep their space
 Object.assign(rows[1], {

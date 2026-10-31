@@ -7,6 +7,13 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Zquar Label: Format Number F-06-01-SOP-WH-0020-04/04/2026, Item Code Caption, Removal of Inspection Lot from Print Format & Lowercase "of" for Container (2026-10-31 IST) — PASS:** Delivered user-requested refinements to ZQUAR 4x6 print format:
+  1. **Format Number Updated**: Format number / SOP Number updated to `F-06-01-SOP-WH-0020-04/04/2026` across localized i18n bundles (`zqFormNumber`), label layout renderers, and acceptance verification tools (`tools/check-label-pdf.py`, `test/unit/tools/checkLabelPdf.test.js`).
+  2. **Item Code Caption**: Caption updated from "Material Code" to "Item Code" in both `i18n.properties` and `i18n_en.properties` (`zqItemCode=Item Code`, `zqMaterialCode=Item Code`). `ZquarLabelLayout.placeFields` renders "Item Code" as caption for the material code row.
+  3. **Inspection Lot Removed from Print Format**: Removed `{ key: "inspectionLot" }` from `FIELDS` and `CAPTION_KEYS` in `ZquarLabelLayout.js`, restoring the label to exactly 14 field rows. Spacing and vertical slot geometry evenly distribute across content area (`~19.35 pt` slot height), terminating the vertical dividing line at the 14th row "Prepared by" (`ruleV.y1 = rowsEndV`). Moved `inspectionLot: "zqInspectionLot"` to `EXTRA_KEYS`.
+  4. **Container Number "of" in Lowercase**: Replaced uppercase `OF` with lowercase `of` in `QuarantineLabelAdapter.js` (`Container: "${seen} of ${totals}"`), `ZquarLabelRows.js` (`formatContainerNo`), and `ZquarLabelLayout.js` (`formatContainerNo`), ensuring container count prints as `1 of 14`.
+  5. **Validation**: All 50 tests in `test/unit/wm/zquarLabel.test.js`, 55 tests in `test/unit/wm/quarantineLabelAdapter.test.js`, 10 tests in `test/unit/tools/checkLabelPdf.test.js`, 38 tests in `test/unit/wm/quarantineLabelsController.test.js`, all 90 WM suites (2376 tests), root ESLint, UI5 lint, and UI5 build 100% clean with 0 findings.
+
 - **Zquar Label: Vertical Left Strip Termination at "Prepared by", Left Barcode & Right Dedicated Logo Space (2026-10-31 IST) — PASS:** Delivered user-requested vertical layout refinement in ZQURAN (Quarantine Labels):
   1. **Vertical Line Termination**: Vertical dividing rule (`ruleV`) now terminates at `rowsEndV` (the bottom boundary of the 15th row, "Prepared by", `y ≈ 310.4 pt`), rather than running down to the label bottom edge (`432 pt`).
   2. **Vertical Text Centering**: The rotated "QUARANTINE" and SOP Number ("F-06-00-SOP-WH-002-01/09/2016") on the left strip are now vertically centered alongside the active rule height (`strip.center = rowsEndV / 2 ≈ 155.2 pt`, `length = rowsEndV - 2 * edge`), maintaining balanced margins above and below without text compression.
@@ -6348,6 +6355,56 @@ Single source of truth for work history, current status, validation, unresolved 
   - `npm run lint`: ESLint clean, 0 errors/warnings (Code 0).
   - `npm --prefix app/fiori-app run lint`: UI5 linter 100% clean, 0 findings (Code 0).
   - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 1.19s (Code 0).
+  - `git diff --check`: 0 whitespace issues (Code 0).
+- **Assumptions made:** None.
+- **Status:** PASS.
+
+### 2026-10-31 IST — Zquar Label: Format Number F-06-01-SOP-WH-0020-04/04/2026, Item Code Caption, Removal of Inspection Lot from Print Format & Lowercase "of" for Container — PASS
+
+- **Request:** "Changes ZQUAR PRINT: Format number - F-06-01-SOP-WH-0020-04/04/2026, Item code to be write instead of material code, Inspection lot is coming extra - it is not part of format- remove it, Container number "OF" to be write in small latter"
+- **CHANGED:**
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`:
+    - Updated `zqFormNumber=F-06-01-SOP-WH-0020-04/04/2026`.
+    - Updated `zqItemCode=Item Code` and `zqMaterialCode=Item Code`.
+  - `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js`:
+    - Removed `{ key: "inspectionLot" }` from `FIELDS`, returning total rows to 14 (`ROW_COUNT = 14`).
+    - Removed `inspectionLot: "zqInspectionLot"` from `CAPTION_KEYS` and added to `EXTRA_KEYS`.
+    - Added and exported `formatContainerNo(v)`: converts uppercase `\bOF\b` to lowercase `of`.
+    - In `placeFields`: removed `inspectionLot` from `capText` and `rawVal` ternary; applied `formatContainerNo` to `containerNo` raw value.
+  - `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelRows.js`:
+    - Added and exported `formatContainerNo(v)`.
+    - In `toLabels`: mapped `containerNo: dash(formatContainerNo(r.Container))`.
+  - `srv/integration/s4hana/wm/QuarantineLabelAdapter.js`:
+    - In `readLabelRows`: updated `Container: "${seen.get(group)} of ${totals.get(group)}"`.
+  - `tools/check-label-pdf.py`:
+    - Updated `strip_texts` to include `F-06-01-SOP-WH-0020-04/04/2026` with `alt_strip_texts` fallback for previous format. Handled `cy` defensively to prevent KeyErrors on horizontal sample checks.
+  - `tools/generate-zquar-label-sample.js`:
+    - Updated container string to `${i + 1} of ${TOTAL}`.
+  - `test/unit/tools/checkLabelPdf.test.js`:
+    - Updated format number expectation to `F-06-01-SOP-WH-0020-04/04/2026`.
+  - `test/unit/wm/zquarLabel.test.js`:
+    - Updated `ORDER` to 14 fields (without `inspectionLot`).
+    - Added test for `formatContainerNo` on both `Layout` and `Rows`.
+    - Updated caption test for `itemCode` to expect `'Item Code'`.
+    - Updated separator count to 15 hairlines in top variant (13 between 14 rows + 2 header/strip).
+    - Updated vertical variant test to 14 rows (`fields[13].key === 'preparedBy'`).
+    - Updated container format expectation to `/^\d+ of \d+$/`.
+  - `test/unit/wm/quarantineLabelAdapter.test.js`:
+    - Updated expected `Container` values from `'1 OF 2'` to `'1 of 2'`.
+  - `test/e2e/wm/verifyQuarantineLabels.e2e.js`:
+    - Updated line 150 to verify `'Item Code'` in print frame output.
+- **TEST DECISION: TEST ADDED & UPDATED** (`test/unit/wm/zquarLabel.test.js`, `test/unit/wm/quarantineLabelAdapter.test.js`, `test/unit/tools/checkLabelPdf.test.js`, `test/e2e/wm/verifyQuarantineLabels.e2e.js`).
+- **Executed validation:**
+  - `npx jest test/unit/wm/zquarLabel.test.js`: 50/50 tests PASS (Code 0).
+  - `npx jest test/unit/wm/quarantineLabelAdapter.test.js`: 55/55 tests PASS (Code 0).
+  - `npx jest test/unit/tools/checkLabelPdf.test.js`: 10/10 tests PASS (Code 0).
+  - `npx jest test/unit/wm/quarantineLabelsController.test.js`: 38/38 tests PASS (Code 0).
+  - `npm test -- test/unit/wm/`: 90 suites / 2376 tests PASS, 56 skipped, 0 failed (Code 0).
+  - `node tools/generate-zquar-label-sample.js`: PASS, 14 labels rendered to `docs/label/samples/zquar-4x6-same-DEMO.pdf` (Code 0).
+  - `node tools/generate-zquar-label-sample.js docs/label/samples/zquar-4x6-vertical-DEMO.pdf --variant vertical`: PASS, 14 labels rendered with vertical strip, barcode left, and logo right (Code 0).
+  - `npm run lint`: Root ESLint 100% clean, 0 errors/warnings (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter 100% clean, 0 findings (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 1.34s (Code 0).
   - `git diff --check`: 0 whitespace issues (Code 0).
 - **Assumptions made:** None.
 - **Status:** PASS.

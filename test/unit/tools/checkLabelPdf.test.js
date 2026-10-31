@@ -47,7 +47,7 @@ function makePdf(name, bad = {}) {
     text('Aether Industries Limited', (13.7 + 96.7) / 2 - tw / 2 / MM, 4.5, 18, true);
     // strip: rotated 90 degrees counter-clockwise, centred on y 56 mm, inside the 4 mm margin
     let band = 4 * MM;
-    [['QUARANTINE', 14, true], ['F-06-00-SOP-WH-002-01/09/2016', 9, false]].forEach(([s, pt, b]) => {
+    [['QUARANTINE', 14, true], ['F-06-01-SOP-WH-0020-04/04/2026', 9, false]].forEach(([s, pt, b]) => {
         const len = width(s, pt, b);
         doc.setFont('helvetica', b ? 'bold' : 'normal').setFontSize(pt);
         doc.text(s, band + ASCENT * pt, 56 * MM + len / 2, { angle: 90 });

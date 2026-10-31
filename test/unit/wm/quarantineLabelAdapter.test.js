@@ -156,13 +156,13 @@ describe('QuarantineLabelAdapter', () => {
             const res = await run(tableFake(), { resolveOutput: async () => ({ formName: null, labelSize: '4x6' }) });
             expect(res).toMatchObject({ MaterialDocument: '4900050304', MaterialDocumentYear: '2026', LabelSize: '4x6' });
             expect(res.Rows.map((r) => [r.StorageUnit, r.Container])).toEqual([
-                ['DEMO-SU-0001', '1 OF 2'], ['DEMO-SU-0002', '2 OF 2'], ['DEMO-SU-0003', '1 OF 1']
+                ['DEMO-SU-0001', '1 of 2'], ['DEMO-SU-0002', '2 of 2'], ['DEMO-SU-0003', '1 of 1']
             ]);
             expect(res.Rows[0]).toEqual({
                 Material: 'DEMO-MAT-1', MaterialDescription: 'DEMO MATERIAL 1', MaterialDocument: '4900050304', PostingDate: '2026-10-27',
                 Batch: 'DEMOB1', SupplierBatch: 'DEMO-SB-1', SupplierName: 'DEMO SUPPLIER', BatchCharacteristics: 'DEMO-A DEMO-B',
                 ManufacturingDate: '2026-10-01', DateKind: 'EXPIRY', DateValue: '2027-04-01', PostedQuantity: '120.01 KG',
-                ContainerQuantity: '80', Unit: 'KG', Container: '1 OF 2', StorageUnit: 'DEMO-SU-0001', Text: 'DEMO TEXT',
+                ContainerQuantity: '80', Unit: 'KG', Container: '1 of 2', StorageUnit: 'DEMO-SU-0001', Text: 'DEMO TEXT',
                 InwardNo: 'DEMO TEXT',
                 PreparedBy: 'DEMO-PREPARED-USER',
                 InspectionLot: '010000005588'

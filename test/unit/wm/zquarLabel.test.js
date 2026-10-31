@@ -34,8 +34,8 @@ const i18n = Object.fromEntries(fs.readFileSync(path.join(__dirname, '../../../a
 const TEXTS = Object.fromEntries(Object.entries({ ...Layout.STATIC_KEYS, ...Layout.CAPTION_KEYS, ...Layout.EXTRA_KEYS }).map(([k, key]) => [k, i18n[key]]));
 const DEMO = {
     materialName: 'DEMO MATERIAL 01', itemCode: '8000009753', grnNo: '9900000001', grnDate: '27.10.2026', inwNo: 'DEMO-INW-01',
-    inspectionLot: '010000005588', qtyReceived: '140.000 KG',
-    containerNo: '1 OF 14', manufacturer: 'DEMO MFR', supplier: 'DEMO SUPPLIER', batchNo: 'DEMO-BATCH-01',
+    qtyReceived: '140.000 KG',
+    containerNo: '1 of 14', manufacturer: 'DEMO MFR', supplier: 'DEMO SUPPLIER', batchNo: 'DEMO-BATCH-01',
     mfgDate: '01.10.2026', expiryDate: '01.04.2027', netWeight: '10.000 KG', barcode: '9900000001', preparedBy: 'MSHUSSAIN'
 };
 const L4x6 = () => Layout.layout('4x6');
@@ -67,7 +67,7 @@ describe('ZQUAR 4 x 6 label', () => {
     });
 
     it('PDF: MediaBox exactly 288 x 432 pt on every page, one page per label (14 containers)', () => {
-        const rows = Array.from({ length: 14 }, (_, i) => ({ ...DEMO, containerNo: `${i + 1} OF 14`, barcode: String(9900000001 + i) }));
+        const rows = Array.from({ length: 14 }, (_, i) => ({ ...DEMO, containerNo: `${i + 1} of 14`, barcode: String(9900000001 + i) }));
         const s = pdf(rows);
         const boxes = s.match(/\/MediaBox\s*\[[^\]]*\]/g);
         expect(boxes).toHaveLength(14);
@@ -75,10 +75,18 @@ describe('ZQUAR 4 x 6 label', () => {
         expect(s).toContain('/PrintScaling /None');
     });
 
-    it('material code caption is "Material Code", not "Item Code"', () => {
+    it('material code caption is "Item Code"', () => {
         const fs = fieldsOf();
         const codeFld = fld(fs, 'itemCode');
-        expect(codeFld.caption.text).toBe('Material Code');
+        expect(codeFld.caption.text).toBe('Item Code');
+    });
+
+    it('container number formats uppercase OF as lowercase of', () => {
+        expect(Layout.formatContainerNo('1 OF 14')).toBe('1 of 14');
+        expect(Layout.formatContainerNo('2 OF 2')).toBe('2 of 2');
+        expect(Layout.formatContainerNo('1 OF 1')).toBe('1 of 1');
+        expect(Rows.formatContainerNo('1 OF 14')).toBe('1 of 14');
+        expect(Layout.formatContainerNo('1 of 14')).toBe('1 of 14');
     });
 
     it('inwNo caption is "INW. Batch No"', () => {
@@ -98,14 +106,14 @@ describe('ZQUAR 4 x 6 label', () => {
     const fieldsOf = (row = DEMO) => Layout.render(L4x6(), row, TEXTS).fields;
     const fld = (fs, k) => fs.find((f) => f.key === k);
     const seps = (r) => r.items.filter((i) => i.kind === 'sep');
-    const ORDER = ['materialName', 'itemCode', 'grnNo', 'grnDate', 'inwNo', 'inspectionLot', 'qtyReceived', 'containerNo', 'manufacturer', 'supplier', 'batchNo', 'mfgDate', 'expiryDate', 'netWeight', 'preparedBy'];
+    const ORDER = ['materialName', 'itemCode', 'grnNo', 'grnDate', 'inwNo', 'qtyReceived', 'containerNo', 'manufacturer', 'supplier', 'batchNo', 'mfgDate', 'expiryDate', 'netWeight', 'preparedBy'];
 
     it('one field per row, in the required order, each caption on its own line (no two fields share a baseline)', () => {
         const fs = fieldsOf();
         expect(fs.map((f) => f.key)).toEqual(ORDER);
         const ys = fs.map((f) => f.caption.y);
         ys.slice(1).forEach((y, i) => expect(y).toBeGreaterThan(ys[i] + 9)); // strictly increasing, more than a caption height apart
-        expect(new Set(ys).size).toBe(15); // Prepared by is a normal row (last)
+        expect(new Set(ys).size).toBe(14); // Prepared by is a normal row (last)
         fs.forEach((f) => expect(f.value.y).toBeCloseTo(f.caption.y, 9)); // caption and value share one baseline
     });
 
@@ -136,11 +144,11 @@ describe('ZQUAR 4 x 6 label', () => {
         expect(L.barcode.top - (prep.value.y + 0.21 * prep.value.pt)).toBeGreaterThanOrEqual(6);
     });
 
-    it('separators: 16 hairlines (under the title, under QUARANTINE/SOP and between the rows), 5 % opacity, on the dot grid, full content width, never touching text', () => {
+    it('separators: 15 hairlines (under the title, under QUARANTINE/SOP and between the rows), 5 % opacity, on the dot grid, full content width, never touching text', () => {
         const L = L4x6();
         const r = Layout.render(L, DEMO, TEXTS);
         const ss = seps(r);
-        expect(ss).toHaveLength(16);
+        expect(ss).toHaveLength(15);
         const onDot = (n) => Math.abs(n / L.dotPt - Math.round(n / L.dotPt)) < 1e-9;
         ss.forEach((s) => {
             expect(s.opacity).toBe(0.05);
@@ -218,7 +226,7 @@ describe('ZQUAR 4 x 6 label', () => {
         manufacturer: 'DYNAMIC CHEMICALS MANUFACTURING PRIVATE LIMITED UNIT II GUJARAT INDIA', // 70
         supplier: 'DYNAMIC MERCANTILE PRIVATE LIMITED INDIA TRADING AND DISTRIBUTION DIVISION',
         inwNo: 'INWARD 2026/10/27 GATE 3 VEHICLE GJ06AB1234 LOT 7', // 50
-        batchNo: 'SUPBATCH-123456', qtyReceived: '123456.789 KG', containerNo: '100 OF 140', netWeight: '12345.67KG',
+        batchNo: 'SUPBATCH-123456', qtyReceived: '123456.789 KG', containerNo: '100 of 140', netWeight: '12345.67KG',
         grnDate: '27/10/2026', mfgDate: '01/10/2026', expiryDate: '30/09/2028'
     };
     const textOf = (f) => f.value.lines.join(' ');
@@ -395,7 +403,7 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(Rows.toLabels([capRow], TEXTS)).toEqual([{
                 materialName: 'DEMO MATERIAL 01', itemCode: '123456', materialCode: '123456', grnNo: '9900000001', grnDate: '27/10/2026', inwNo: 'DM12345678',
                 inspectionLot: '010000005588',
-                qtyReceived: '140.00 KG', containerNo: '1 OF 14', manufacturer: 'DEMO-MFR', supplier: 'DEMO SUPPLIER',
+                qtyReceived: '140.00 KG', containerNo: '1 of 14', manufacturer: 'DEMO-MFR', supplier: 'DEMO SUPPLIER',
                 batchNo: 'DM-001', mfgDate: '01/10/2026', expiryDate: '01/04/2027', netWeight: '10.01 KG', barcode: '9900000001',
                 preparedBy: '-', captions: undefined
             }]);
@@ -417,7 +425,7 @@ describe('ZQUAR 4 x 6 label', () => {
             [l.grnDate, l.mfgDate, l.expiryDate].forEach((d) => expect(d).toMatch(/^\d\d\/\d\d\/\d{4}$/));
             expect(l.qtyReceived).toMatch(/^\d+\.\d\d [A-Z]+$/);
             expect(l.netWeight).toMatch(/^\d+\.\d\d [A-Z]+$/);
-            expect(l.containerNo).toMatch(/^\d+ OF \d+$/);
+            expect(l.containerNo).toMatch(/^\d+ of \d+$/);
             expect(l.barcode).toMatch(/^\d{10}$/);
         });
         it('a retest date keeps its own caption instead of "Expiry Date"', () => {
@@ -446,7 +454,7 @@ describe('ZQUAR 4 x 6 label', () => {
         });
     });
     describe('print document (exact label size, no fit-to-page)', () => {
-        const rows = [DEMO, { ...DEMO, supplier: 'A & B <Ltd>', containerNo: '2 OF 14', barcode: '9900000002' }];
+        const rows = [DEMO, { ...DEMO, supplier: 'A & B <Ltd>', containerNo: '2 of 14', barcode: '9900000002' }];
         const html = () => Pdf.buildHtml(rows, TEXTS, {});
 
         it('@page is exactly the label (288 x 432 pt) with no margin; one SVG page of that size per label', () => {
@@ -462,7 +470,7 @@ describe('ZQUAR 4 x 6 label', () => {
             const page = html().split('<svg ')[1];
             const r = Layout.render(L4x6(), DEMO, TEXTS);
             const bars = r.items.filter((i) => i.kind === 'bar');
-            expect(page.match(/<rect /g)).toHaveLength(bars.length + 16); // bars + the 16 hairlines
+            expect(page.match(/<rect /g)).toHaveLength(bars.length + 15); // bars + the 15 hairlines
             expect(page).toContain(`<rect x="${bars[0].x}" y="${bars[0].y}" width="${bars[0].w}" height="${bars[0].h}"`);
             expect(page).not.toContain('<line ');
             textItems(r).forEach((t) => expect(page).toContain(`translate(${t.x} ${t.y})`));
@@ -557,18 +565,18 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(hRule.w).toBeCloseTo(288 - vRule.x, 0);
         });
 
-        it('places all 15 field rows in content area right of vertical rule without overlap', () => {
+        it('places all 14 field rows in content area right of vertical rule without overlap', () => {
             const L = LVert();
             const r = Layout.render(L, DEMO, TEXTS);
-            expect(r.fields).toHaveLength(15);
+            expect(r.fields).toHaveLength(14);
             r.fields.forEach((fd) => {
                 expect(fd.caption.x).toBeGreaterThan(L.ruleV.x);
                 expect(fd.value.x).toBeGreaterThan(fd.caption.x);
                 expect(fd.value.end).toBeLessThanOrEqual(288);
             });
-            // 15th row (Prepared by) ends right at vertical rule termination
-            expect(r.fields[14].key).toBe('preparedBy');
-            expect(r.fields[14].slot.y1).toBeCloseTo(L.ruleV.y1, 1);
+            // 14th row (Prepared by) ends right at vertical rule termination
+            expect(r.fields[13].key).toBe('preparedBy');
+            expect(r.fields[13].slot.y1).toBeCloseTo(L.ruleV.y1, 1);
         });
 
         it('renders barcode on the left side and dedicated logo space on the right', () => {

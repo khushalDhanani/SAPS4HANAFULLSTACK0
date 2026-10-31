@@ -310,7 +310,7 @@ class QuarantineLabelAdapter {
         PostedQuantity: m.MENGE !== undefined ? `${quantity2(m.MENGE)} ${m.MEINS}`.trim() : '',
         ContainerQuantity: quantity(l.VSOLM),
         Unit: l.MEINS,
-        Container: `${seen.get(group)} OF ${totals.get(group)}`,
+        Container: `${seen.get(group)} of ${totals.get(group)}`,
         StorageUnit: l.NLENR,
         Text: inwardNo,
         InwardNo: inwardNo,

@@ -40,7 +40,8 @@ SPEC = {
     'columns': [('Mfg. Date', 13.7, 86.0, 91.5), ('Expiry Date', 39.1, 86.0, 91.5), ('Net Weight', 66.0, 86.0, 91.5)],
     'alt_captions': {'Expiry Date': ['Retest Date']},
     'blank': ('Prepared by', 13.7, 102.0),
-    'strip_texts': ['QUARANTINE', 'F-06-00-SOP-WH-002-01/09/2016'],
+    'strip_texts': ['QUARANTINE', 'F-06-01-SOP-WH-0020-04/04/2026'],
+    'alt_strip_texts': {'F-06-01-SOP-WH-0020-04/04/2026': ['F-06-00-SOP-WH-002-01/09/2016']},
     'barcode': {'top': 117.0, 'height': 22.0, 'module': 0.5, 'module_tol': 0.03, 'module_min': 0.375, 'quiet': 5.0,
                 'pos_tol': 0.5, 'subset': 'B', 'hr_pt': 13.0, 'hr_gap_max': 3.0, 'hr_center_tol': 1.0},
 }
@@ -596,7 +597,8 @@ def check(path, page_no=1, dpi=203, masked=False):
 
     texts = to_top_left(m, H)
     statics = {S['title']['text'], *S['strip_texts'], S['blank'][0], *[r[0] for r in S['rows']], *[c[0] for c in S['columns']],
-               *[a for v in S['alt_captions'].values() for a in v]}
+               *[a for v in S['alt_captions'].values() for a in v],
+               *[a for v in S.get('alt_strip_texts', {}).values() for a in v]}
     used = set()
 
     def find_text(s):
@@ -651,12 +653,17 @@ def check(path, page_no=1, dpi=203, masked=False):
     # strip texts
     for s in S['strip_texts']:
         t = find_text(s)
+        if not t and s in S.get('alt_strip_texts', {}):
+            for alt in S['alt_strip_texts'][s]:
+                t = find_text(alt)
+                if t:
+                    break
         if not t:
             res(f'strip "{s[:12]}"', False, 'not found')
             continue
         ok = t['angle'] == 90 and t['x'] >= max(S['strip']['x0'], mg) - 0.3 and t['x'] + t['w'] <= S['strip']['x1'] + 0.3 \
-            and abs(t['cy'] - S['strip']['center_y']) <= S['strip']['center_tol']
-        res(f'strip "{s[:12]}"', ok, f'angle {t["angle"]}, x {t["x"]:.2f}..{t["x"] + t["w"]:.2f} mm, centre y {t["cy"]:.2f} '
+            and abs(t.get('cy', 0) - S['strip']['center_y']) <= S['strip']['center_tol']
+        res(f'strip "{s[:12]}"', ok, f'angle {t["angle"]}, x {t["x"]:.2f}..{t["x"] + t["w"]:.2f} mm, centre y {t.get("cy", 0):.2f} '
             f'(spec rotated 90, x {max(S["strip"]["x0"], mg)}..{S["strip"]["x1"]}, centre {S["strip"]["center_y"]})')
 
     # caption/value rows
