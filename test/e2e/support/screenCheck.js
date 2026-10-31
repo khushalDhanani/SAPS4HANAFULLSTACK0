@@ -201,15 +201,19 @@ function inspectScreen(page) {
  * A hash that never matches continues after 30 s and the caller's route check reports it.
  */
 async function openHash(session, hash) {
-    const { page } = session;
-    await page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/${hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForFunction(() => {
+    await session.page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/${hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await waitForRoute(session.page);
+    await session.settle();
+}
+
+/** Waits up to 30 s until the UI5 router has matched the current hash (also after a reload); never throws. */
+function waitForRoute(page) {
+    return page.waitForFunction(() => {
         const Component = window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component');
         const HashChanger = Component && window.sap.ui.require('sap/ui/core/routing/HashChanger');
         const comp = Component && Component.registry.filter((c) => c.getRouter && c.getRouter())[0];
         return !!(comp && HashChanger && comp.getRouter().getRouteInfoByHash(HashChanger.getInstance().getHash()));
     }, null, { timeout: 30000 }).catch(() => {});
-    await session.settle();
 }
 
 /**
@@ -313,4 +317,4 @@ async function runScreens({ baseUrl, user, title, steps }) {
     return { status: errors.length ? 'FAIL' : 'PASS', errors, details };
 }
 
-module.exports = { openSession, closeBrowser, openHash, checkScreen, openFirstRow, inspectScreen, runScreens, USERS };
+module.exports = { openSession, closeBrowser, openHash, waitForRoute, checkScreen, openFirstRow, inspectScreen, runScreens, USERS };

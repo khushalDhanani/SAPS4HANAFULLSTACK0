@@ -1,5 +1,5 @@
 'use strict';
-/* global document, window */
+/* global document */
 
 /**
  * Negative E2E at submit time (item 8) on the PO, sales inquiry, sales order and customer return create flows, behind
@@ -11,7 +11,7 @@
  * Backend optimistic concurrency and ETag enforcement verified end-to-end in test/integration/concurrencyRoundTrip.test.js.
  */
 
-const { openSession, inspectScreen } = require('../support/screenCheck');
+const { openSession, waitForRoute, inspectScreen } = require('../support/screenCheck');
 const { capReader, formUi } = require('../support/roundTrip');
 const rt = require('../support/actionRoundTrip');
 const { SPEC: PO } = require('../mm/roundTripPurchaseOrder.e2e');
@@ -186,7 +186,7 @@ async function reloadWhilePending(screen, baseUrl, values) {
         await session.page.locator(screen.submit).first().click();
         await Promise.race([arrived, new Promise((r) => setTimeout(r, 5000).unref())]);
         await session.page.reload({ waitUntil: 'domcontentloaded' });
-        await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
+        await waitForRoute(session.page);
         await session.settle();
         const shown = await inspectScreen(session.page);
         const st = await uiState(session.page);

@@ -12,7 +12,7 @@
  *   { "deliveryDocument": "...", "quantity": 1 }
  */
 
-const { openSession } = require('../support/screenCheck');
+const { openSession, openHash } = require('../support/screenCheck');
 const { resolveMode } = require('../support/liveWriteGate');
 
 const FLOW = 'goodsReceipt';
@@ -53,11 +53,7 @@ async function readDelivery(baseUrl, delivery) {
     return res.json();
 }
 
-async function open(session, hash) {
-    await session.page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/${hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
-    await session.settle();
-}
+const open = openHash;
 
 /** grView model of the goods receipt view (found through its open-deliveries table). */
 function grView(page) {

@@ -14,7 +14,7 @@
  * (no candidate), double click while pending.
  */
 
-const { openSession } = require('../support/screenCheck');
+const { openSession, waitForRoute } = require('../support/screenCheck');
 const rt = require('../support/actionRoundTrip');
 const invoice = require('../sd/roundTripCustomerInvoice.e2e');
 const ordersDue = require('../le/roundTripOrdersDue.e2e');
@@ -128,14 +128,18 @@ const wmFlows = [
         }),
         hash: 'wm/quarantine-labels',
         run: async (session) => {
-            await session.page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/wm/quarantine-labels`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-            await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
-            await session.settle();
+            await rt.openHash(session, 'wm/quarantine-labels');
             await session.page.fill('[id$="--qlDoc-inner"]', '4900050304');
             await session.page.fill('[id$="--qlYear-inner"]', '2026');
             await session.page.click('[id$="--qlPreview"]');
         },
         observe: async (session) => {
+            // Preview answers asynchronously: wait for the message strip instead of reading it right after the click
+            await session.page.waitForFunction(() => {
+                const E = window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Element');
+                const strip = E && E.registry.filter((c) => c.getId().endsWith('--qlMessage'))[0];
+                return !!(strip && strip.getVisible() && strip.getText());
+            }, null, { timeout: 30000 }).catch(() => {});
             const st = await session.page.evaluate(() => {
                 const E = window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Element');
                 const strip = E && E.registry.filter((c) => c.getId().endsWith('--qlMessage'))[0];
@@ -334,7 +338,7 @@ async function reloadWhilePending(baseUrl, flow) {
         await session.page.reload({ waitUntil: 'domcontentloaded' });
         if (releaseGate) releaseGate();
         await running;
-        await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
+        await waitForRoute(session.page);
         await session.settle();
         await session.page.waitForTimeout(1500);
         if (calls.filter((c) => !c.mixed).length !== 1) errors.push(`reload re-sent the write (${calls.length} calls)`);

@@ -17,6 +17,8 @@
  */
 
 const { resolveMode } = require('./liveWriteGate');
+// Resolved at call time: screenCheck requires this module (batchParts), so a load-time import would be undefined.
+const openHash = (session, hash) => require('./screenCheck').openHash(session, hash);
 const BATCH_LINE = /^(GET|POST|PUT|PATCH|DELETE|MERGE)\s+(\S+)\s+HTTP\/1\.[01]\s*$/gm;
 const JSON_TYPE = 'application/json;odata.metadata=minimal;IEEE754Compatible=true';
 const RESULT_BOX = '.sapMMessageBoxSuccess, .sapMMessageBoxError, .sapMMessageBoxWarning, .sapMMessageBoxInformation';
@@ -125,12 +127,6 @@ async function waitForHealth(baseUrl) {
         await new Promise((r) => setTimeout(r, 2000));
     }
     return false;
-}
-
-async function openHash(session, hash) {
-    await session.page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/${hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
-    await session.settle();
 }
 
 /** Waits for the result MessageBox and returns { type, text } (type: success | error | warning | information). */

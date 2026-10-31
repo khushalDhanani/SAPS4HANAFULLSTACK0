@@ -10,7 +10,7 @@
  *   retried, then the document is read back through the CAP read API. Needs the user's written go per run (AGENTS.md).
  */
 
-const { openSession, inspectScreen } = require('./screenCheck');
+const { openSession, openHash, inspectScreen } = require('./screenCheck');
 const { resolveMode, assertTarget, singleWriteHandler } = require('./liveWriteGate');
 
 const DRY_RUN_DOC = 'DRYRUN-0001';
@@ -157,9 +157,7 @@ async function runRoundTrip(spec, options = {}) {
     }
 
     try {
-        await page.goto(`${baseUrl}/fiori-app/webapp/index.html#/${spec.hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        await page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
-        await session.settle();
+        await openHash(session, spec.hash);
         const screen = await inspectScreen(page);
         if (screen.route !== spec.route) throw new Error(`expected route ${spec.route}, got ${screen.route || '(none)'}`);
 

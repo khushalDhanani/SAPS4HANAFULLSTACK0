@@ -13,7 +13,7 @@
  *   { "plant", "storageLocation", "warehouseNumber", "material", "quantity", "unit", "costCenter" }
  */
 
-const { openSession } = require('../support/screenCheck');
+const { openSession, openHash } = require('../support/screenCheck');
 const { resolveMode } = require('../support/liveWriteGate');
 
 const FLOW = 'goodsIssue';
@@ -83,11 +83,7 @@ async function pickDryRunData(baseUrl) {
     throw new Error(`no open 201 reservation item with plant, SLoc, material, unit and cost center among ${Math.min(open.length, 10)} read`);
 }
 
-async function open(session, hash) {
-    await session.page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/${hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
-    await session.settle();
-}
+const open = openHash;
 
 function createModel(page) {
     return page.evaluate(() => {

@@ -9,16 +9,12 @@
  * - choosing a plant outside the user's scope on Orders Due is refused and loads no rows.
  */
 
-const { openSession, inspectScreen } = require('../support/screenCheck');
+const { openSession, openHash, inspectScreen } = require('../support/screenCheck');
 
 const OWN_PLANT = '1120';
 const ADMIN = { Authorization: 'Basic ' + Buffer.from('alice:').toString('base64') };
 
-async function open(session, hash) {
-    await session.page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/${hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
-    await session.settle();
-}
+const open = openHash;
 
 /** Values of the scoping `Plant` property of the loaded rows (not ReceivingPlant etc., which may legitimately differ). */
 function rowPlants(page) {

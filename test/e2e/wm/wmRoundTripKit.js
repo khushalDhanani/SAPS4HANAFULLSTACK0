@@ -1,6 +1,8 @@
 'use strict';
 /* global window, document */
 
+const { openHash } = require('../support/screenCheck');
+
 /**
  * Small helpers shared by the WM Tier C round-trip suites (roundTripScanTo, roundTripMvt261, roundTripHandlingUnit,
  * roundTripPackingInstruction, roundTripReservationRetry). Same patterns as roundTripHuTransfer.e2e.js:
@@ -42,11 +44,7 @@ async function postReadOnlyAction(baseUrl, path, body) {
     return { status: res.status, body: await res.json().catch(() => null) };
 }
 
-async function open(session, hash) {
-    await session.page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/${hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
-    await session.settle();
-}
+const open = openHash;
 
 /** A named JSON model of the view that owns the control with the given local id (copy of its data). */
 function viewModel(page, controlId, model) {

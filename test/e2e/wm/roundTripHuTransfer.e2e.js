@@ -14,7 +14,7 @@
  *   { "reservationNo", "reservationItem", "unitNumber", "transferQty" }
  */
 
-const { openSession } = require('../support/screenCheck');
+const { openSession, openHash } = require('../support/screenCheck');
 const { resolveMode } = require('../support/liveWriteGate');
 
 const FLOW = 'huTransfer';
@@ -64,11 +64,7 @@ async function getJson(baseUrl, path) {
     return body.value !== undefined ? body.value : body;
 }
 
-async function open(session, hash) {
-    await session.page.goto(`${session.baseUrl}/fiori-app/webapp/index.html#/${hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await session.page.waitForFunction(() => window.sap && window.sap.ui && window.sap.ui.require('sap/ui/core/Component'), null, { timeout: 30000 });
-    await session.settle();
-}
+const open = openHash;
 
 /** A named JSON model of the view that owns the control with the given local id. */
 function viewModel(page, controlId, model) {
