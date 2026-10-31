@@ -558,9 +558,10 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(L.strip.length).toBeCloseTo(L.rows.end - 2 * L.edge, 1);
             expect(L.content.x0).toBeGreaterThan(L.ruleV.x);
 
-            // Barcode positioned on the left side
-            expect(L.barcode.x0).toBeCloseTo(L.edge, 1);
-            expect(L.barcode.right).toBeLessThan(200);
+            // Barcode positioned on the left side, starting from the "P" position of Prepared by
+            expect(L.barcode.x0).toBeCloseTo(L.content.x0, 1);
+            expect(L.barcode.firstBarX).toBeCloseTo(L.content.x0, 1);
+            expect(L.barcode.right).toBeLessThan(215);
             expect(L.barcode.axis).toBeCloseTo((L.barcode.x0 + L.barcode.right) / 2, 1);
 
             // Dedicated logo space positioned on the right side
@@ -625,8 +626,16 @@ describe('ZQUAR 4 x 6 label', () => {
             const L = LVert();
             const r = Layout.render(L, DEMO, TEXTS);
 
-            // Barcode stays on the left
+            // Barcode starts exactly from the "P" position of "Prepared by"
+            const prepBy = r.fields.find((f) => f.key === 'preparedBy');
+            const firstBar = r.items.find((i) => i.kind === 'bar');
+            expect(prepBy).toBeDefined();
+            expect(firstBar).toBeDefined();
+            expect(firstBar.x).toBeCloseTo(prepBy.caption.x, 1);
+
+            // Barcode stays within bounds on the left
             expect(r.barcode).toBeDefined();
+            expect(r.barcode.firstBarX).toBeCloseTo(prepBy.caption.x, 1);
             expect(r.barcode.x0).toBeGreaterThanOrEqual(L.edge - EPS);
             expect(r.barcode.x0 + r.barcode.widthPt).toBeLessThanOrEqual(L.barcode.right + EPS);
             const hr = r.items.find((i) => i.kind === 'text' && i.text === DEMO.barcode);
@@ -637,7 +646,7 @@ describe('ZQUAR 4 x 6 label', () => {
             const boxItem = r.items.find((i) => i.kind === 'box');
             expect(boxItem).toBeUndefined();
 
-            // Aether logo vector item, fitted with balanced proportions and alignment
+            // Aether logo vector item, fitted with reduced size and balanced alignment
             const logoItem = r.items.find((i) => i.kind === 'logo');
             expect(logoItem).toBeDefined();
             expect(logoItem.paths).toHaveLength(30);
@@ -647,10 +656,12 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(logoItem.y).toBeGreaterThanOrEqual(L.logo.y);
             expect(logoItem.y + logoItem.h).toBeLessThanOrEqual(L.logo.y + L.logo.h + EPS);
             expect(logoItem.w / logoItem.h).toBeCloseTo(4232 / 2804, 3); // exact aspect ratio preserved
+            expect(logoItem.w).toBeLessThan(60); // reduced size (was ~78.7 pt)
+            expect(logoItem.w).toBeGreaterThan(45);
 
             // Balanced horizontal alignment: gap to barcode matches gap to right margin within 1.0 pt
-            const leftGap = logoItem.x - L.barcode.right;
-            const rightGap = (288 - L.edge) - (logoItem.x + logoItem.w);
+            const leftGap = L.logo.x - L.barcode.right;
+            const rightGap = (288 - L.edge) - (L.logo.x + L.logo.w);
             expect(Math.abs(leftGap - rightGap)).toBeLessThan(1.0);
         });
 

@@ -137,8 +137,9 @@ sap.ui.define([
             if (slotV < minSlot(valPtV)) { throw new Error("Label size too small for the quarantine label layout"); }
             var axisV = (ruleVx + W - edge) / 2;
 
-            var barRightV = snap(edge + snap(178 * f));
-            var barAxisV = (edge + barRightV) / 2;
+            var pX = snap(ruleVx + GAP);
+            var barRightV = snap(pX + snap(166 * f));
+            var barAxisV = (pX + barRightV) / 2;
             var logoGapV = snap(3 * f);
             var logoLeftV = snap(barRightV + logoGapV);
             var logoRightV = snap(W - edge - logoGapV);
@@ -157,11 +158,11 @@ sap.ui.define([
                     quarantine: { band: qBand, pt: qPtV },
                     formNumber: { band: fBand, pt: fPtV }
                 },
-                content: { x0: ruleVx + GAP, x1: W - edge },
+                content: { x0: pX, x1: W - edge },
                 type: { caption: pt(TYPE.caption), value: valPtV },
                 rows: { top: rowsTopV, end: rowsEndV, slot: slotV },
-                barcode: { x0: edge, right: barRightV, axis: barAxisV, top: barTopV, h: barHV, hrTop: hrTopV, hrPt: hrPtV },
-                logo: { x: logoLeftV, y: barTopV, w: logoWV, h: logoHV, pt: pt(11) }
+                barcode: { x0: pX, firstBarX: pX, right: barRightV, axis: barAxisV, top: barTopV, h: barHV, hrTop: hrTopV, hrPt: hrPtV },
+                logo: { x: logoLeftV, y: barTopV, w: logoWV, h: logoHV, pt: pt(11), padding: snap(4 * f) }
             };
         }
 
@@ -220,14 +221,18 @@ sap.ui.define([
         var dotMm = MM_PER_INCH / L.dpi;
         var target = Math.round(BARCODE.targetModuleMm / dotMm);
         var minDots = Math.ceil(BARCODE.minModuleMm / dotMm - 1e-9);
-        // Module chosen for the measured barcode span; the symbol is then centred on the label axis, on a printer dot
-        var avail = L.barcode.right - Math.round(L.barcode.x0 / L.dotPt) * L.dotPt;
+        var isLeft = Boolean(L.barcode && L.barcode.firstBarX != null);
+        var startX = isLeft ? Math.round(L.barcode.firstBarX / L.dotPt) * L.dotPt : Math.round(L.barcode.x0 / L.dotPt) * L.dotPt;
+        var avail = L.barcode.right - startX;
         var axis = (L.barcode && L.barcode.axis != null) ? L.barcode.axis : L.axis;
         for (var dots = target; dots >= minDots; dots--) {
             var m = dots * L.dotPt;
-            if (g.total * m <= avail + 1e-9) {
-                var x0 = Math.round((axis - g.total * m / 2) / L.dotPt) * L.dotPt;
-                return { x0: x0, modulePt: m, moduleDots: dots, totalModules: g.total, widthPt: g.total * m, bars: g.bars };
+            var barsW = isLeft ? ((g.total - 10) * m) : (g.total * m);
+            if (barsW <= avail + 1e-9) {
+                var x0 = isLeft
+                    ? Math.round((L.barcode.firstBarX - 10 * m) / L.dotPt) * L.dotPt
+                    : Math.round((axis - g.total * m / 2) / L.dotPt) * L.dotPt;
+                return { x0: x0, firstBarX: x0 + 10 * m, modulePt: m, moduleDots: dots, totalModules: g.total, widthPt: g.total * m, bars: g.bars };
             }
         }
         throw Object.assign(new Error("Barcode value '" + sValue + "' is too long for the label: " + g.total + " modules need "
@@ -370,7 +375,7 @@ sap.ui.define([
             }
 
             if (L.logo) {
-                var fittedLogo = AetherLogo.fit(L.logo, 0);
+                var fittedLogo = AetherLogo.fit(L.logo, L.logo.padding != null ? L.logo.padding : snap(4 * f));
                 items.push({
                     kind: "logo",
                     x: fittedLogo.x,

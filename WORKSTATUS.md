@@ -7,6 +7,11 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Zquar Label: Barcode Alignment to "P" of "Prepared by" & Reduced Aether Logo Size (2026-10-31 IST) — PASS:** Delivered user-requested visual refinements to the vertical quarantine label layout:
+  1. **Barcode Aligned to "P" of "Prepared by"**: Aligned the vertical variant barcode to begin with its first bar directly at `firstBarX = snap(ruleVx + GAP) ≈ 40.43 pt` (`x0 = snap(firstBarX - 10 * m) ≈ 29.79 pt`), matching the exact horizontal coordinate of the "P" glyph in the 14th row "Prepared by" (`prepBy.caption.x = C.x0 = 40.43 pt`). The 10-module quiet zone is completely preserved in the clear left margin space, and the human-readable number is centered under the bars at `x ≈ 117.58 pt`.
+  2. **Reduced Aether Logo Size & Balanced Alignment**: Applied `padding: snap(4 * f)` to the right-side logo bounding box (`logoWV ≈ 63.13 pt`, `logoHV ≈ 100.02 pt`), reducing the rendered official vector corporate logo width from `~78.7 pt` to `~55.33 pt` (height `~36.66 pt`, ~29.7% reduction) while strictly preserving the `4232 : 2804` aspect ratio. Centered the logo horizontally with equal `3.90 pt` interior padding and vertically with equal `31.7 pt` interior padding, maintaining symmetric `~2.8 pt` exterior margins between the barcode right edge and the content right boundary.
+  3. **Validation**: All 52 tests in `test/unit/wm/zquarLabel.test.js`, 10 tests in `test/unit/tools/checkLabelPdf.test.js`, all 5 quarantine suites (176 tests), all 90 WM suites (2378 tests), root ESLint, UI5 lint, and UI5 build 100% clean with 0 findings.
+
 - **Zquar Label: Alignment of All Field Colons in Exact Same Vertical Line (2026-10-31 IST) — PASS:** Delivered user-requested visual alignment in ZQUAR 4x6 Quarantine Labels:
   1. **Vertical Colon Alignment (`colonX`)**: Calculated the maximum caption advance width across all 14 field rows (`maxCapW = Math.max(... widthPt(capText(d)))` = `62.00 pt` for "INW. Batch No", `61.02 pt` for "Material Name"). Positioned all colons across all 14 rows at the exact same vertical axis `colonX = snap(C.x0 + maxCapW + colonGapBefore)` (`106.0 pt` in vertical layout; `78.4 pt` in top layout), followed by a uniform value start `valueX = snap(colonX + colonW + colonGapAfter)` (`114.6 pt` in vertical layout; `86.9 pt` in top layout).
   2. **Dedicated Colon Render Item & Normalization**: Stripped trailing colons defensively from captions (`capText(d).replace(/:\s*$/, "").trim()`) and emitted dedicated text items for the colon `{ kind: "text", text: ":", x: colonX, y: fd.caption.y, pt: fd.colon.pt, bold: true }` in both `VARIANTS.VERTICAL` and `VARIANTS.TOP`. Both jsPDF and HTML/SVG export render each colon on its exact vertical coordinate across all pages.
@@ -6519,6 +6524,42 @@ Single source of truth for work history, current status, validation, unresolved 
   - `npm run lint`: Root ESLint clean, 0 errors/warnings (Code 0).
   - `npm --prefix app/fiori-app run lint`: UI5 linter 100% clean, 0 findings (Code 0).
   - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 1.21s (Code 0).
+  - `git diff --check`: 0 whitespace issues (Code 0).
+- **Assumptions made:** None.
+- **Status:** PASS.
+
+### 2026-10-31 IST — Zquar Label: Barcode Alignment to "P" of "Prepared by" & Reduced Aether Logo Size — PASS
+
+- **Request:** "Align the barcode to start exactly from the “P” position of “Prepared by”. Reduce the Aether logo size and keep it properly aligned within the right-side logo space."
+- **CHANGED:**
+  - `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js`:
+    - Updated `layout` (`VARIANTS.VERTICAL`):
+      - Defined `pX = snap(ruleVx + GAP)` representing the exact horizontal coordinate of the 14th row "Prepared by" caption.
+      - Aligned `barcode.x0` and `barcode.firstBarX` to `pX` (`40.43 pt`).
+      - Set `barRightV = snap(pX + snap(166 * f))` (`206.42 pt`) and `barAxisV = (pX + barRightV) / 2`.
+      - Derived balanced right-side logo space `logoLeftV = snap(barRightV + logoGapV)` (`209.26 pt`), `logoRightV = snap(W - edge - logoGapV)` (`272.39 pt`), `logoWV = 63.13 pt`, and `padding = snap(4 * f)`.
+    - Updated `barcodeGeometry`:
+      - Handled `firstBarX` left-alignment when present: `startX = Math.round(L.barcode.firstBarX / L.dotPt) * L.dotPt`, `avail = L.barcode.right - startX`, `barsW = (g.total - 10) * m`, and `x0 = Math.round((L.barcode.firstBarX - 10 * m) / L.dotPt) * L.dotPt`.
+      - Ensures the very first rendered black bar begins at the exact same horizontal coordinate as "Prepared by" (`firstBar.x === prepBy.caption.x`), preserving the 10-module quiet zone in the blank left margin.
+    - Updated `render`:
+      - Passed `L.logo.padding` (`snap(4 * f)`) to `AetherLogo.fit(L.logo, padding)` in the vertical layout, reducing logo width from `~78.7 pt` to `~55.33 pt` (height `~36.66 pt`), centered horizontally and vertically within the right logo frame without borders.
+  - `test/unit/wm/zquarLabel.test.js`:
+    - Updated layout tests to verify `L.barcode.x0` and `L.barcode.firstBarX` equal `L.content.x0` (`prepBy.caption.x`).
+    - Verified first rendered bar starts at `prepBy.caption.x` (`diff = 0 pt`).
+    - Verified Aether vector logo is reduced (`45 < width < 60 pt`), preserving the `4232 : 2804` aspect ratio, with balanced margins (`|leftGap - rightGap| < 1.0 pt`).
+  - `docs/label/samples/zquar-4x6-vertical-DEMO.pdf` & `docs/label/samples/zquar-4x6-same-DEMO.pdf`:
+    - Regenerated sample PDFs reflecting the new barcode alignment and reduced logo sizing.
+- **TEST DECISION: TEST UPDATED** (`test/unit/wm/zquarLabel.test.js`).
+- **Executed validation:**
+  - `npx jest test/unit/wm/zquarLabel.test.js`: 52/52 tests PASS (Code 0).
+  - `npx jest test/unit/tools/checkLabelPdf.test.js`: 10/10 tests PASS (Code 0).
+  - `npx jest test/unit/wm/quarantineLabelAdapter.test.js test/unit/wm/quarantineLabelOutput.test.js test/unit/wm/quarantineLabelsController.test.js test/unit/wm/zquarLabel.test.js test/unit/tools/checkLabelPdf.test.js`: 5 suites / 176 tests PASS (Code 0).
+  - `npm test -- test/unit/wm/`: 90 suites / 2378 tests PASS, 56 skipped, 0 failed (Code 0).
+  - `node tools/generate-zquar-label-sample.js docs/label/samples/zquar-4x6-vertical-DEMO.pdf --variant vertical`: PASS (Code 0).
+  - `node tools/generate-zquar-label-sample.js docs/label/samples/zquar-4x6-same-DEMO.pdf`: PASS (Code 0).
+  - `npm run lint`: Root ESLint clean, 0 errors/warnings (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter 100% clean, 0 findings (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 1.19s (Code 0).
   - `git diff --check`: 0 whitespace issues (Code 0).
 - **Assumptions made:** None.
 - **Status:** PASS.
