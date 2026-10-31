@@ -38,10 +38,24 @@ SPEC = {
     ],
     # date columns: caption, x, header top, value top
     'columns': [('Mfg. Date', 13.7, 86.0, 91.5), ('Expiry Date', 39.1, 86.0, 91.5), ('Net Weight', 66.0, 86.0, 91.5)],
-    'alt_captions': {'Expiry Date': ['Retest Date']},
+    'alt_captions': {
+        'Material Name': ['Material Name:'],
+        'Expiry Date': ['Retest Date', 'Expiry Date:', 'Retest Date:'],
+        'GRN No.': ['GRN No.:'],
+        'GRN Date': ['GRN Date:'],
+        'INW. No': ['INW. Batch No', 'INW. Batch No:', 'INW. No:'],
+        'Qty. Received': ['Qty. Received:'],
+        'Container No': ['Container No:'],
+        'Manufacturer': ['Manufacturer:'],
+        'Supplier': ['Supplier:'],
+        'Batch No': ['Batch No:'],
+        'Mfg. Date': ['Mfg. Date:'],
+        'Net Weight': ['Net Weight:'],
+        'Prepared by': ['Prepared by:']
+    },
     'blank': ('Prepared by', 13.7, 102.0),
-    'strip_texts': ['QUARANTINE', 'F-06-01-SOP-WH-002-04/04/202'],
-    'alt_strip_texts': {'F-06-01-SOP-WH-002-04/04/202': ['F-06-00-SOP-WH-002-01/09/2016']},
+    'strip_texts': ['QUARANTINE', 'F-06-01-SOP-WH-002-04/04/2026'],
+    'alt_strip_texts': {'F-06-01-SOP-WH-002-04/04/2026': ['F-06-00-SOP-WH-002-01/09/2016']},
     'barcode': {'top': 117.0, 'height': 22.0, 'module': 0.5, 'module_tol': 0.03, 'module_min': 0.375, 'quiet': 5.0,
                 'pos_tol': 0.5, 'subset': 'B', 'hr_pt': 13.0, 'hr_gap_max': 3.0, 'hr_center_tol': 1.0},
 }

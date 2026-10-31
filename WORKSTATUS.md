@@ -14,8 +14,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 - **Zquar Label: Integration of Official Aether Corporate SVG Vector Logo (AetherLogoForSAP.svg) (2026-10-31 IST) — PASS:** Replaced placeholder "LOGO" text in dedicated right-side logo box with the official Aether corporate SVG vector logo (`AetherLogoForSAP.svg`). Extracted and encapsulated 30 vector path definitions in `AetherLogo.js` (`viewBox: 4232 x 2804`). Rendered native vector paths via `doc.path()` in jsPDF and native `<svg>` `<path>` in HTML print view, fitted cleanly with balanced proportions and padding inside the right logo frame (`x ≈ 196.8 pt`, `w ≈ 78.4 pt`, `y ≈ 316.7 pt`, `h ≈ 99.8 pt`). All 50 `zquarLabel.test.js` tests, 93 controller/adapter tests, all 90 WM suites (2376 tests), ESLint, UI5 lint, and UI5 build 100% PASS with 0 findings.
 
-- **Zquar Label: Format Number F-06-01-SOP-WH-002-04/04/202, Item Code Caption, Removal of Inspection Lot from Print Format & Lowercase "of" for Container (2026-10-31 IST) — PASS:** Delivered user-requested refinements to ZQUAR 4x6 print format:
-  1. **Format Number Updated**: Format number / SOP Number updated to `F-06-01-SOP-WH-002-04/04/202` across localized i18n bundles (`zqFormNumber`), label layout renderers, and acceptance verification tools (`tools/check-label-pdf.py`, `test/unit/tools/checkLabelPdf.test.js`).
+- **Zquar Label: Format Number F-06-01-SOP-WH-002-04/04/2026, Item Code Caption, Removal of Inspection Lot from Print Format & Lowercase "of" for Container (2026-10-31 IST) — PASS:** Delivered user-requested refinements to ZQUAR 4x6 print format:
+  1. **Format Number Updated**: Format number / SOP Number updated to `F-06-01-SOP-WH-002-04/04/2026` across localized i18n bundles (`zqFormNumber`), label layout renderers, and acceptance verification tools (`tools/check-label-pdf.py`, `test/unit/tools/checkLabelPdf.test.js`).
   2. **Item Code Caption**: Caption updated from "Material Code" to "Item Code" in both `i18n.properties` and `i18n_en.properties` (`zqItemCode=Item Code`, `zqMaterialCode=Item Code`). `ZquarLabelLayout.placeFields` renders "Item Code" as caption for the material code row.
   3. **Inspection Lot Removed from Print Format**: Removed `{ key: "inspectionLot" }` from `FIELDS` and `CAPTION_KEYS` in `ZquarLabelLayout.js`, restoring the label to exactly 14 field rows. Spacing and vertical slot geometry evenly distribute across content area (`~19.35 pt` slot height), terminating the vertical dividing line at the 14th row "Prepared by" (`ruleV.y1 = rowsEndV`). Moved `inspectionLot: "zqInspectionLot"` to `EXTRA_KEYS`.
   4. **Container Number "of" in Lowercase**: Replaced uppercase `OF` with lowercase `of` in `QuarantineLabelAdapter.js` (`Container: "${seen} of ${totals}"`), `ZquarLabelRows.js` (`formatContainerNo`), and `ZquarLabelLayout.js` (`formatContainerNo`), ensuring container count prints as `1 of 14`.
@@ -6366,12 +6366,12 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Assumptions made:** None.
 - **Status:** PASS.
 
-### 2026-10-31 IST — Zquar Label: Format Number F-06-01-SOP-WH-002-04/04/202, Item Code Caption, Removal of Inspection Lot from Print Format & Lowercase "of" for Container — PASS
+### 2026-10-31 IST — Zquar Label: Format Number F-06-01-SOP-WH-002-04/04/2026, Item Code Caption, Removal of Inspection Lot from Print Format & Lowercase "of" for Container — PASS
 
-- **Request:** "Changes ZQUAR PRINT: Format number - F-06-01-SOP-WH-002-04/04/202, Item code to be write instead of material code, Inspection lot is coming extra - it is not part of format- remove it, Container number "OF" to be write in small latter"
+- **Request:** "Changes ZQUAR PRINT: Format number - F-06-01-SOP-WH-002-04/04/2026, Item code to be write instead of material code, Inspection lot is coming extra - it is not part of format- remove it, Container number "OF" to be write in small latter"
 - **CHANGED:**
   - `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`:
-    - Updated `zqFormNumber=F-06-01-SOP-WH-002-04/04/202`.
+    - Updated `zqFormNumber=F-06-01-SOP-WH-002-04/04/2026`.
     - Updated `zqItemCode=Item Code` and `zqMaterialCode=Item Code`.
   - `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js`:
     - Removed `{ key: "inspectionLot" }` from `FIELDS`, returning total rows to 14 (`ROW_COUNT = 14`).
@@ -6384,11 +6384,11 @@ Single source of truth for work history, current status, validation, unresolved 
   - `srv/integration/s4hana/wm/QuarantineLabelAdapter.js`:
     - In `readLabelRows`: updated `Container: "${seen.get(group)} of ${totals.get(group)}"`.
   - `tools/check-label-pdf.py`:
-    - Updated `strip_texts` to include `F-06-01-SOP-WH-002-04/04/202` with `alt_strip_texts` fallback for previous format. Handled `cy` defensively to prevent KeyErrors on horizontal sample checks.
+    - Updated `strip_texts` to include `F-06-01-SOP-WH-002-04/04/2026` with `alt_strip_texts` fallback for previous format. Handled `cy` defensively to prevent KeyErrors on horizontal sample checks.
   - `tools/generate-zquar-label-sample.js`:
     - Updated container string to `${i + 1} of ${TOTAL}`.
   - `test/unit/tools/checkLabelPdf.test.js`:
-    - Updated format number expectation to `F-06-01-SOP-WH-002-04/04/202`.
+    - Updated format number expectation to `F-06-01-SOP-WH-002-04/04/2026`.
   - `test/unit/wm/zquarLabel.test.js`:
     - Updated `ORDER` to 14 fields (without `inspectionLot`).
     - Added test for `formatContainerNo` on both `Layout` and `Rows`.

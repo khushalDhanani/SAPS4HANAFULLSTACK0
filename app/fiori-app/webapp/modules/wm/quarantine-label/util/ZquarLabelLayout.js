@@ -250,15 +250,22 @@ sap.ui.define([
         var C = L.content;
         var capPt = L.type.caption;
         var valPt = L.type.value;
+        var snap = function (n) { return Math.round(n / L.dotPt) * L.dotPt; };
         var capText = function (d) {
-            return (row.captions && row.captions[d.key]) || texts[d.key]
+            var raw = (row.captions && row.captions[d.key]) || texts[d.key]
                 || (d.key === "itemCode" ? (texts.itemCode || texts.materialCode) : "")
                 || (d.key === "inwNo" ? (texts.inwBatchNo || texts.inwNo) : "");
+            return String(raw == null ? "" : raw).replace(/:\s*$/, "").trim();
         };
-        var valueX = C.x0 + Math.max.apply(null, FIELDS.map(function (d) { return widthPt(capText(d), capPt, true); })) + COL_GAP;
+        var colonW = widthPt(":", capPt, true);
+        var colonGapBefore = snap(3.5);
+        var colonGapAfter = snap(5.5);
+        var maxCapW = Math.max.apply(null, FIELDS.map(function (d) { return widthPt(capText(d), capPt, true); }));
+        var colonX = snap(C.x0 + maxCapW + colonGapBefore);
+        var valueX = snap(colonX + colonW + colonGapAfter);
 
         var fields = FIELDS.map(function (d, i) {
-            var c = fitText(capText(d), valueX - GAP - C.x0, capPt, 1, true);
+            var c = fitText(capText(d), colonX - C.x0 - 1.0, capPt, 1, true);
             var rawVal = d.key === "itemCode" ? (row.itemCode != null && row.itemCode !== "" ? row.itemCode : row.materialCode) : row[d.key];
             if (d.key === "itemCode" && rawVal) {
                 rawVal = formatMaterialCode(rawVal);
@@ -275,7 +282,8 @@ sap.ui.define([
             if (r.truncated) { throw tooFull(d.key); }
             return {
                 key: d.key, row: i,
-                caption: { text: c.lines[0] || "", x: C.x0, end: valueX - GAP, pt: c.pt, align: "left" },
+                caption: { text: c.lines[0] || "", x: C.x0, end: colonX - colonGapBefore, pt: c.pt, align: "left" },
+                colon: { text: ":", x: colonX, pt: c.pt },
                 value: { x: valueX, end: C.x1, pt: r.pt, lines: r.lines }
             };
         });
@@ -340,6 +348,9 @@ sap.ui.define([
             sep(L.rows.top);
             fieldsV.forEach(function (fd) {
                 items.push({ kind: "text", text: fd.caption.text, x: fd.caption.x, y: fd.caption.y, pt: fd.caption.pt, bold: true, align: "left" });
+                if (fd.colon) {
+                    items.push({ kind: "text", text: fd.colon.text, x: fd.colon.x, y: fd.caption.y, pt: fd.colon.pt, bold: true, align: "left" });
+                }
                 fd.value.lines.forEach(function (line, i) {
                     items.push({ kind: "text", text: line, x: fd.value.x, y: fd.value.y + i * fd.value.pt * LH, pt: fd.value.pt, bold: false, align: "left" });
                 });
@@ -385,6 +396,9 @@ sap.ui.define([
         sep(L.rows.top);
         fields.forEach(function (fd) {
             items.push({ kind: "text", text: fd.caption.text, x: fd.caption.x, y: fd.caption.y, pt: fd.caption.pt, bold: true, align: "left" });
+            if (fd.colon) {
+                items.push({ kind: "text", text: fd.colon.text, x: fd.colon.x, y: fd.caption.y, pt: fd.colon.pt, bold: true, align: "left" });
+            }
             fd.value.lines.forEach(function (line, i) {
                 items.push({ kind: "text", text: line, x: fd.value.x, y: fd.value.y + i * fd.value.pt * LH, pt: fd.value.pt, bold: false, align: "left" });
             });

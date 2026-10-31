@@ -41,6 +41,7 @@ const DEMO = {
     mfgDate: '01.10.2026', expiryDate: '01.04.2027', netWeight: '10.000 KG', barcode: '9900000001', preparedBy: 'MSHUSSAIN'
 };
 const L4x6 = () => Layout.layout('4x6');
+const LVert = () => Layout.layout('4x6', { variant: 'vertical' });
 const textItems = (r) => r.items.filter((i) => i.kind === 'text');
 const find = (r, s) => textItems(r).find((i) => i.text === s);
 const top = (it) => it.y - it.pt * Layout.ASCENT;
@@ -77,10 +78,48 @@ describe('ZQUAR 4 x 6 label', () => {
         expect(s).toContain('/PrintScaling /None');
     });
 
-    it('material code caption is "Item Code"', () => {
+    it('material code caption is "Item Code" and material name caption is "Material Name"', () => {
         const fs = fieldsOf();
         const codeFld = fld(fs, 'itemCode');
         expect(codeFld.caption.text).toBe('Item Code');
+        const matFld = fld(fs, 'materialName');
+        expect(matFld.caption.text).toBe('Material Name');
+    });
+
+    it('all colons come in the exact same vertical line across all field rows', () => {
+        const fs = fieldsOf();
+        expect(fs).toHaveLength(14);
+        const colonX = fs[0].colon.x;
+        const valX = fs[0].value.x;
+        fs.forEach((f) => {
+            expect(f.colon).toBeDefined();
+            expect(f.colon.text).toBe(':');
+            expect(f.colon.x).toBe(colonX);
+            expect(f.value.x).toBe(valX);
+            const capEnd = f.caption.x + Layout.widthPt(f.caption.text, f.caption.pt, true);
+            expect(f.colon.x - capEnd).toBeGreaterThanOrEqual(1.0); // caption ends before colon
+            expect(f.value.x - f.colon.x).toBeGreaterThanOrEqual(Layout.GAP - 1e-6); // value starts after colon
+        });
+    });
+
+    it('vertical layout places all colons in the exact same vertical line', () => {
+        const r = Layout.render(LVert(), DEMO, TEXTS);
+        const fs = r.fields;
+        expect(fs).toHaveLength(14);
+        const colonX = fs[0].colon.x;
+        const valX = fs[0].value.x;
+        fs.forEach((f) => {
+            expect(f.colon).toBeDefined();
+            expect(f.colon.text).toBe(':');
+            expect(f.colon.x).toBe(colonX);
+            expect(f.value.x).toBe(valX);
+            const capEnd = f.caption.x + Layout.widthPt(f.caption.text, f.caption.pt, true);
+            expect(f.colon.x - capEnd).toBeGreaterThanOrEqual(1.0);
+        });
+        // Check that rendered text items contain colon at the exact colon line
+        const colons = r.items.filter((it) => it.kind === 'text' && it.text === ':');
+        expect(colons).toHaveLength(14);
+        colons.forEach((c) => expect(c.x).toBe(colonX));
     });
 
     it('container number formats uppercase OF as lowercase of', () => {
