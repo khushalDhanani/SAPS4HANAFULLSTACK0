@@ -139,8 +139,9 @@ sap.ui.define([
 
             var barRightV = snap(edge + snap(178 * f));
             var barAxisV = (edge + barRightV) / 2;
-            var logoLeftV = snap(barRightV + snap(6 * f));
-            var logoRightV = snap(W - edge);
+            var logoGapV = snap(3 * f);
+            var logoLeftV = snap(barRightV + logoGapV);
+            var logoRightV = snap(W - edge - logoGapV);
             var logoWV = logoRightV - logoLeftV;
             var logoHV = snap((hrTopV + hrPtV) - barTopV);
 
@@ -358,9 +359,7 @@ sap.ui.define([
             }
 
             if (L.logo) {
-                var logoLineWidth = snap(SEP.dots * L.dotPt);
-                items.push({ kind: "box", x: L.logo.x, y: L.logo.y, w: L.logo.w, h: L.logo.h, lineWidth: logoLineWidth });
-                var fittedLogo = AetherLogo.fit(L.logo, 4);
+                var fittedLogo = AetherLogo.fit(L.logo, 0);
                 items.push({
                     kind: "logo",
                     x: fittedLogo.x,

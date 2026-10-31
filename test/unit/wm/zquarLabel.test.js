@@ -527,7 +527,8 @@ describe('ZQUAR 4 x 6 label', () => {
             // Dedicated logo space positioned on the right side
             expect(L.logo).toBeDefined();
             expect(L.logo.x).toBeGreaterThan(L.barcode.right);
-            expect(L.logo.x + L.logo.w).toBeCloseTo(288 - L.edge, 0);
+            expect(L.logo.x + L.logo.w).toBeLessThanOrEqual(288 - L.edge + EPS);
+            expect(L.logo.x + L.logo.w).toBeGreaterThan(260);
             expect(L.logo.y).toBeCloseTo(L.barcode.top, 1);
             expect(L.logo.y + L.logo.h).toBeCloseTo(L.barcode.hrTop + L.barcode.hrPt, 0);
         });
@@ -581,7 +582,7 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(r.fields[13].slot.y1).toBeCloseTo(L.ruleV.y1, 1);
         });
 
-        it('renders barcode on the left side and dedicated Aether corporate logo space on the right', () => {
+        it('renders barcode on the left side and dedicated Aether corporate logo space on the right without border', () => {
             const L = LVert();
             const r = Layout.render(L, DEMO, TEXTS);
 
@@ -593,24 +594,25 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(hr).toBeDefined();
             expect(hr.x).toBeLessThan(L.barcode.right);
 
-            // Dedicated logo box on the right
+            // Dedicated logo on the right without border (no box item)
             const boxItem = r.items.find((i) => i.kind === 'box');
-            expect(boxItem).toBeDefined();
-            expect(boxItem.x).toBeCloseTo(L.logo.x, 1);
-            expect(boxItem.y).toBeCloseTo(L.logo.y, 1);
-            expect(boxItem.w).toBeCloseTo(L.logo.w, 1);
-            expect(boxItem.h).toBeCloseTo(L.logo.h, 1);
+            expect(boxItem).toBeUndefined();
 
-            // Aether logo vector item inside the box, fitted with balanced proportions
+            // Aether logo vector item, fitted with balanced proportions and alignment
             const logoItem = r.items.find((i) => i.kind === 'logo');
             expect(logoItem).toBeDefined();
             expect(logoItem.paths).toHaveLength(30);
             expect(logoItem.viewBox).toEqual({ w: 4232, h: 2804 });
-            expect(logoItem.x).toBeGreaterThanOrEqual(L.logo.x);
-            expect(logoItem.x + logoItem.w).toBeLessThanOrEqual(L.logo.x + L.logo.w + EPS);
+            expect(logoItem.x).toBeGreaterThan(L.barcode.right);
+            expect(logoItem.x + logoItem.w).toBeLessThanOrEqual(288 - L.edge + EPS);
             expect(logoItem.y).toBeGreaterThanOrEqual(L.logo.y);
             expect(logoItem.y + logoItem.h).toBeLessThanOrEqual(L.logo.y + L.logo.h + EPS);
             expect(logoItem.w / logoItem.h).toBeCloseTo(4232 / 2804, 3); // exact aspect ratio preserved
+
+            // Balanced horizontal alignment: gap to barcode matches gap to right margin within 1.0 pt
+            const leftGap = logoItem.x - L.barcode.right;
+            const rightGap = (288 - L.edge) - (logoItem.x + logoItem.w);
+            expect(Math.abs(leftGap - rightGap)).toBeLessThan(1.0);
         });
 
         it('generates valid PDF and HTML with rotated vertical strip texts, barcode left, and Aether SVG logo right', () => {
@@ -623,7 +625,7 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(h).toContain('rotate(-90)');
             expect(h).toContain(TEXTS.quarantine);
             expect(h).toContain(TEXTS.formNumber);
-            expect(h).toContain('fill="none" stroke="#000"');
+            expect(h).not.toContain('fill="none" stroke="#000"'); // No border box around logo
             expect(h).toContain('<svg x=');
             expect(h).toContain('viewBox="0 0 4232 2804"');
             expect(h).toContain('M1854.06');

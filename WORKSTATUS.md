@@ -7,6 +7,11 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Zquar Label: Removal of Border from Logo & Balanced Axis Alignment (2026-10-31 IST) — PASS:** Delivered user-requested refinement to remove the box border around the logo and align it with balanced proportions:
+  1. **Border Box Removed**: Removed `kind: "box"` hairline stroke rectangle around `L.logo` in `ZquarLabelLayout.js`, rendering the official vector corporate logo cleanly without an enclosing box frame.
+  2. **Balanced Horizontal & Vertical Alignment**: Symmetric `logoGapV = snap(3 * f)` applied on both left and right bounds (`logoLeftV = snap(barRightV + logoGapV) ≈ 193.7 pt`, `logoRightV = snap(W - edge - logoGapV) ≈ 272.4 pt`, `logoWV ≈ 78.7 pt`). Fitted via `AetherLogo.fit(L.logo, 0)` to achieve equal `~2.8 pt` margins from both barcode right edge and content right edge, and equal `~24.0 pt` margins from barcode top and human-readable text bottom.
+  3. **Validation**: All 50 `zquarLabel.test.js` tests, all 90 WM test suites (2376 tests), root ESLint, UI5 lint, and UI5 build 100% clean with 0 findings.
+
 - **Zquar Label: Integration of Official Aether Corporate SVG Vector Logo (AetherLogoForSAP.svg) (2026-10-31 IST) — PASS:** Replaced placeholder "LOGO" text in dedicated right-side logo box with the official Aether corporate SVG vector logo (`AetherLogoForSAP.svg`). Extracted and encapsulated 30 vector path definitions in `AetherLogo.js` (`viewBox: 4232 x 2804`). Rendered native vector paths via `doc.path()` in jsPDF and native `<svg>` `<path>` in HTML print view, fitted cleanly with balanced proportions and padding inside the right logo frame (`x ≈ 196.8 pt`, `w ≈ 78.4 pt`, `y ≈ 316.7 pt`, `h ≈ 99.8 pt`). All 50 `zquarLabel.test.js` tests, 93 controller/adapter tests, all 90 WM suites (2376 tests), ESLint, UI5 lint, and UI5 build 100% PASS with 0 findings.
 
 - **Zquar Label: Format Number F-06-01-SOP-WH-0020-04/04/2026, Item Code Caption, Removal of Inspection Lot from Print Format & Lowercase "of" for Container (2026-10-31 IST) — PASS:** Delivered user-requested refinements to ZQUAR 4x6 print format:
@@ -6445,6 +6450,34 @@ Single source of truth for work history, current status, validation, unresolved 
   - `npm run lint`: Root ESLint clean, 0 errors/warnings (Code 0).
   - `npm --prefix app/fiori-app run lint`: UI5 linter 100% clean, 0 findings (Code 0).
   - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 1.2s (Code 0).
+  - `git diff --check`: 0 whitespace issues (Code 0).
+- **Assumptions made:** None.
+- **Status:** PASS.
+
+### 2026-10-31 IST — Zquar Label: Removal of Border from Logo & Balanced Axis Alignment — PASS
+
+- **Request:** "Remove Border from logo and Align."
+- **CHANGED:**
+  - `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js`:
+    - Removed hairline box border rendering `{ kind: "box", ... }` for `L.logo` in `render()`.
+    - Balanced `L.logo` geometry in `VARIANTS.VERTICAL` by applying symmetric `logoGapV = snap(3 * f)` on both left and right: `logoLeftV = snap(barRightV + logoGapV)` and `logoRightV = snap(W - edge - logoGapV)`, ensuring exact equal margins (`~2.8 pt`) from the barcode on the left and the right margin of the content area.
+    - Updated `AetherLogo.fit(L.logo, 0)` to fit the logo cleanly within the balanced bounding box, maintaining proportional aspect ratio `4232 : 2804` and equal `~24.0 pt` vertical margins above and below the barcode extent.
+  - `test/unit/wm/zquarLabel.test.js`:
+    - Updated vertical variant layout test to verify `L.logo.x + L.logo.w` is within `288 - L.edge`.
+    - Updated test to assert `boxItem` (`kind: "box"`) is `undefined` (border removed).
+    - Added assertions verifying equal horizontal margins (`|leftGap - rightGap| < 1.0 pt`).
+    - Verified HTML/SVG export does not contain stroke box (`expect(h).not.toContain('fill="none" stroke="#000"')`).
+  - `docs/label/samples/zquar-4x6-vertical-DEMO.pdf` & `docs/label/samples/zquar-4x6-same-DEMO.pdf`:
+    - Regenerated PDF samples reflecting the borderless and aligned logo layout.
+- **TEST DECISION: TEST UPDATED** (`test/unit/wm/zquarLabel.test.js`).
+- **Executed validation:**
+  - `npx jest test/unit/wm/zquarLabel.test.js`: 50/50 tests PASS (Code 0).
+  - `npm test -- test/unit/wm/`: 90 suites / 2376 tests PASS, 56 skipped, 0 failed (Code 0).
+  - `node tools/generate-zquar-label-sample.js docs/label/samples/zquar-4x6-vertical-DEMO.pdf --variant vertical`: PASS (Code 0).
+  - `node tools/generate-zquar-label-sample.js docs/label/samples/zquar-4x6-same-DEMO.pdf`: PASS (Code 0).
+  - `npm run lint`: Root ESLint clean, 0 errors/warnings (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter 100% clean, 0 findings (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 1.21s (Code 0).
   - `git diff --check`: 0 whitespace issues (Code 0).
 - **Assumptions made:** None.
 - **Status:** PASS.
