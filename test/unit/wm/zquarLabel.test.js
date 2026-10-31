@@ -13,10 +13,12 @@ global.sap.ui.define = (d, f) => { Hu = f(Barcode); };
 require(R + 'wm/handling-unit/util/HuLabelLayout.js');
 global.sap.ui.define = (d, f) => { HuPdf = f(Barcode, Hu); };
 require(R + 'wm/handling-unit/util/HuLabelPdf.js');
-let Printer;
+let Printer, AetherLogo;
 global.sap.ui.define = (d, f) => { Printer = f(Barcode, Hu); };
 require(R + 'wm/handling-unit/util/HuLabelPrinter.js');
-global.sap.ui.define = (d, f) => { Layout = f(Barcode, Hu); };
+global.sap.ui.define = (d, f) => { AetherLogo = f(); };
+require(R + 'wm/quarantine-label/util/AetherLogo.js');
+global.sap.ui.define = (d, f) => { Layout = f(Barcode, Hu, AetherLogo); };
 require(R + 'wm/quarantine-label/util/ZquarLabelLayout.js');
 global.sap.ui.define = (d, f) => { Pdf = f(Layout, HuPdf, Printer); };
 require(R + 'wm/quarantine-label/util/ZquarLabelPdf.js');
@@ -579,7 +581,7 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(r.fields[13].slot.y1).toBeCloseTo(L.ruleV.y1, 1);
         });
 
-        it('renders barcode on the left side and dedicated logo space on the right', () => {
+        it('renders barcode on the left side and dedicated Aether corporate logo space on the right', () => {
             const L = LVert();
             const r = Layout.render(L, DEMO, TEXTS);
 
@@ -599,16 +601,19 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(boxItem.w).toBeCloseTo(L.logo.w, 1);
             expect(boxItem.h).toBeCloseTo(L.logo.h, 1);
 
-            // Centered logo text inside the box
-            const logoText = r.items.find((i) => i.kind === 'text' && i.text === 'LOGO');
-            expect(logoText).toBeDefined();
-            expect(logoText.align).toBe('center');
-            expect(logoText.x).toBeCloseTo(L.logo.x + L.logo.w / 2, 1);
-            expect(logoText.y).toBeGreaterThan(L.logo.y);
-            expect(logoText.y).toBeLessThan(L.logo.y + L.logo.h);
+            // Aether logo vector item inside the box, fitted with balanced proportions
+            const logoItem = r.items.find((i) => i.kind === 'logo');
+            expect(logoItem).toBeDefined();
+            expect(logoItem.paths).toHaveLength(30);
+            expect(logoItem.viewBox).toEqual({ w: 4232, h: 2804 });
+            expect(logoItem.x).toBeGreaterThanOrEqual(L.logo.x);
+            expect(logoItem.x + logoItem.w).toBeLessThanOrEqual(L.logo.x + L.logo.w + EPS);
+            expect(logoItem.y).toBeGreaterThanOrEqual(L.logo.y);
+            expect(logoItem.y + logoItem.h).toBeLessThanOrEqual(L.logo.y + L.logo.h + EPS);
+            expect(logoItem.w / logoItem.h).toBeCloseTo(4232 / 2804, 3); // exact aspect ratio preserved
         });
 
-        it('generates valid PDF and HTML with rotated vertical strip texts, barcode left, and logo box right', () => {
+        it('generates valid PDF and HTML with rotated vertical strip texts, barcode left, and Aether SVG logo right', () => {
             const rows = [DEMO];
             const pdfStr = pdf(rows, { variant: 'vertical' });
             expect(pdfStr).toContain('/PrintScaling /None');
@@ -619,7 +624,9 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(h).toContain(TEXTS.quarantine);
             expect(h).toContain(TEXTS.formNumber);
             expect(h).toContain('fill="none" stroke="#000"');
-            expect(h).toContain('>LOGO<');
+            expect(h).toContain('<svg x=');
+            expect(h).toContain('viewBox="0 0 4232 2804"');
+            expect(h).toContain('M1854.06');
         });
     });
 });

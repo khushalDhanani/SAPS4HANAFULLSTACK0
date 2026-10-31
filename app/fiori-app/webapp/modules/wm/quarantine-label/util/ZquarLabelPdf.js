@@ -22,6 +22,16 @@ sap.ui.define([
                 doc.setDrawColor(0, 0, 0);
                 doc.setLineWidth(it.lineWidth || 0.5);
                 doc.rect(it.x, it.y, it.w, it.h, "S");
+            } else if (it.kind === "logo") {
+                doc.setFillColor(0, 0, 0);
+                var fnParse = Layout.AetherLogo && Layout.AetherLogo.parsePath;
+                if (fnParse && it.paths) {
+                    it.paths.forEach(function (d) {
+                        var ops = fnParse(d, it.scale, it.x, it.y);
+                        doc.path(ops);
+                        doc.fill();
+                    });
+                }
             } else {
                 doc.setFont("helvetica", it.bold ? "bold" : "normal").setFontSize(it.pt);
                 var o = {};
@@ -79,6 +89,13 @@ sap.ui.define([
             if (it.kind === "box") {
                 return '<rect x="' + it.x + '" y="' + it.y + '" width="' + it.w + '" height="' + it.h + '" fill="none" stroke="#000" stroke-width="' +
                     (it.lineWidth || 0.5) + '" shape-rendering="crispEdges"/>';
+            }
+            if (it.kind === "logo") {
+                var sPaths = it.paths.map(function (d) {
+                    return '<path d="' + d + '" fill="#000"/>';
+                }).join("");
+                return '<svg x="' + it.x + '" y="' + it.y + '" width="' + it.w + '" height="' + it.h + '" viewBox="0 0 ' +
+                    it.viewBox.w + ' ' + it.viewBox.h + '" fill="none">' + sPaths + '</svg>';
             }
             var sTransform = "translate(" + it.x + " " + it.y + ")" + (it.angle ? " rotate(" + (-it.angle) + ")" : "") +
                 (it.hScale && it.hScale !== 1 ? " scale(" + it.hScale + " 1)" : "");

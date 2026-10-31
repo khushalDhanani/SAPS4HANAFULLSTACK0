@@ -1,7 +1,8 @@
 sap.ui.define([
     "saps4hana/fiori/modules/wm/handling-unit/util/Barcode",
-    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelLayout"
-], function (Barcode, HuLayout) {
+    "saps4hana/fiori/modules/wm/handling-unit/util/HuLabelLayout",
+    "saps4hana/fiori/modules/wm/quarantine-label/util/AetherLogo"
+], function (Barcode, HuLayout, AetherLogo) {
     "use strict";
 
     // ZQUAR quarantine label, 4 x 6 in: supports two layout variants:
@@ -359,11 +360,17 @@ sap.ui.define([
             if (L.logo) {
                 var logoLineWidth = snap(SEP.dots * L.dotPt);
                 items.push({ kind: "box", x: L.logo.x, y: L.logo.y, w: L.logo.w, h: L.logo.h, lineWidth: logoLineWidth });
-                var sLogo = (texts && texts.logo) || "LOGO";
-                var logoPt = (L.logo && L.logo.pt) || 11;
-                var logoText = fitText(sLogo, L.logo.w - 8, logoPt, 1, true);
-                var logoY = L.logo.y + (L.logo.h + CAP_ASCENT * logoText.pt) / 2;
-                items.push({ kind: "text", text: logoText.lines[0], x: L.logo.x + L.logo.w / 2, y: logoY, pt: logoText.pt, bold: true, align: "center" });
+                var fittedLogo = AetherLogo.fit(L.logo, 4);
+                items.push({
+                    kind: "logo",
+                    x: fittedLogo.x,
+                    y: fittedLogo.y,
+                    w: fittedLogo.w,
+                    h: fittedLogo.h,
+                    scale: fittedLogo.scale,
+                    paths: AetherLogo.paths,
+                    viewBox: AetherLogo.viewBox
+                });
             }
 
             return { items: items, warnings: warnings, barcode: geoV, fields: fieldsV };
@@ -406,6 +413,7 @@ sap.ui.define([
         MM_PER_INCH: MM_PER_INCH, MIN_PT: MIN_PT, GAP: GAP, ASCENT: ASCENT, LH: LH, BARCODE: BARCODE, SEP: SEP,
         FIELDS: FIELDS, STATIC_KEYS: STATIC_KEYS, CAPTION_KEYS: CAPTION_KEYS, EXTRA_KEYS: EXTRA_KEYS,
         layout: layout, fitText: fitText, barcodeGeometry: barcodeGeometry, render: render, widthPt: widthPt,
-        formatMaterialCode: formatMaterialCode, formatContainerNo: formatContainerNo
+        formatMaterialCode: formatMaterialCode, formatContainerNo: formatContainerNo,
+        AetherLogo: AetherLogo
     };
 });
