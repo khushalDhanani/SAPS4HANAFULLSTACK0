@@ -7,6 +7,12 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Zquar Label: Alignment of All Field Colons in Exact Same Vertical Line (2026-10-31 IST) — PASS:** Delivered user-requested visual alignment in ZQUAR 4x6 Quarantine Labels:
+  1. **Vertical Colon Alignment (`colonX`)**: Calculated the maximum caption advance width across all 14 field rows (`maxCapW = Math.max(... widthPt(capText(d)))` = `62.00 pt` for "INW. Batch No", `61.02 pt` for "Material Name"). Positioned all colons across all 14 rows at the exact same vertical axis `colonX = snap(C.x0 + maxCapW + colonGapBefore)` (`106.0 pt` in vertical layout; `78.4 pt` in top layout), followed by a uniform value start `valueX = snap(colonX + colonW + colonGapAfter)` (`114.6 pt` in vertical layout; `86.9 pt` in top layout).
+  2. **Dedicated Colon Render Item & Normalization**: Stripped trailing colons defensively from captions (`capText(d).replace(/:\s*$/, "").trim()`) and emitted dedicated text items for the colon `{ kind: "text", text: ":", x: colonX, y: fd.caption.y, pt: fd.colon.pt, bold: true }` in both `VARIANTS.VERTICAL` and `VARIANTS.TOP`. Both jsPDF and HTML/SVG export render each colon on its exact vertical coordinate across all pages.
+  3. **Headroom & Word Wrap Protection**: Allocated `colonX - C.x0 - 1.0` pt for caption fitting in `fitText`, preventing sub-pixel rounding differences from wrapping long captions.
+  4. **Validation**: All 52 tests in `test/unit/wm/zquarLabel.test.js`, 10 tests in `test/unit/tools/checkLabelPdf.test.js`, all 5 quarantine suites (176 tests), all 90 WM test suites (2378 tests), root ESLint, UI5 lint, and UI5 build 100% clean with 0 findings.
+
 - **Zquar Label: Removal of Border from Logo & Balanced Axis Alignment (2026-10-31 IST) — PASS:** Delivered user-requested refinement to remove the box border around the logo and align it with balanced proportions:
   1. **Border Box Removed**: Removed `kind: "box"` hairline stroke rectangle around `L.logo` in `ZquarLabelLayout.js`, rendering the official vector corporate logo cleanly without an enclosing box frame.
   2. **Balanced Horizontal & Vertical Alignment**: Symmetric `logoGapV = snap(3 * f)` applied on both left and right bounds (`logoLeftV = snap(barRightV + logoGapV) ≈ 193.7 pt`, `logoRightV = snap(W - edge - logoGapV) ≈ 272.4 pt`, `logoWV ≈ 78.7 pt`). Fitted via `AetherLogo.fit(L.logo, 0)` to achieve equal `~2.8 pt` margins from both barcode right edge and content right edge, and equal `~24.0 pt` margins from barcode top and human-readable text bottom.
@@ -6475,6 +6481,41 @@ Single source of truth for work history, current status, validation, unresolved 
   - `npm test -- test/unit/wm/`: 90 suites / 2376 tests PASS, 56 skipped, 0 failed (Code 0).
   - `node tools/generate-zquar-label-sample.js docs/label/samples/zquar-4x6-vertical-DEMO.pdf --variant vertical`: PASS (Code 0).
   - `node tools/generate-zquar-label-sample.js docs/label/samples/zquar-4x6-same-DEMO.pdf`: PASS (Code 0).
+  - `npm run lint`: Root ESLint clean, 0 errors/warnings (Code 0).
+  - `npm --prefix app/fiori-app run lint`: UI5 linter 100% clean, 0 findings (Code 0).
+  - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 1.21s (Code 0).
+  - `git diff --check`: 0 whitespace issues (Code 0).
+- **Assumptions made:** None.
+- **Status:** PASS.
+
+### 2026-10-31 IST — Zquar Label: Alignment of All Field Colons in Exact Same Vertical Line — PASS
+
+- **Request:** "Add “Material Name:” and “Item Code:” fields to every label, with consistent formatting and alignment." & "All Colon Comes in Same Vertical Line."
+- **CHANGED:**
+  - `app/fiori-app/webapp/modules/wm/quarantine-label/util/ZquarLabelLayout.js`:
+    - Updated `placeFields`:
+      - Normalized `capText(d)` by stripping trailing colons (`replace(/:\s*$/, "").trim()`).
+      - Computed `colonW = widthPt(":", capPt, true)` (`3.00 pt`), `colonGapBefore = snap(3.5)` (`~3.52 pt`), and `colonGapAfter = snap(5.5)` (`~5.52 pt`).
+      - Calculated `maxCapW` across all 14 field captions (`62.00 pt`).
+      - Derived shared `colonX = snap(C.x0 + maxCapW + colonGapBefore)` (`106.0 pt` in vertical layout; `78.4 pt` in top layout).
+      - Derived shared `valueX = snap(colonX + colonW + colonGapAfter)` (`114.6 pt` in vertical layout; `86.9 pt` in top layout).
+      - Set caption available width to `colonX - C.x0 - 1.0` pt to prevent sub-pixel rounding wrap.
+      - Attached `colon: { text: ":", x: colonX, pt: c.pt }` to each field descriptor.
+    - Updated `render()`:
+      - Emitted colon text items `{ kind: "text", text: fd.colon.text, x: fd.colon.x, y: fd.caption.y, pt: fd.colon.pt, bold: true, align: "left" }` in both `VARIANTS.VERTICAL` and `VARIANTS.TOP`.
+  - `tools/check-label-pdf.py`:
+    - Added `alt_captions` support to match field captions with and without trailing colons across PDF sample pages.
+  - `test/unit/wm/zquarLabel.test.js`:
+    - Added unit test: "all colons come in the exact same vertical line across all field rows", verifying all 14 field descriptors share the identical `colonX`.
+    - Added unit test: "vertical layout places all colons in the exact same vertical line", verifying `colonX = 106.0 pt` and `valueX = 114.6 pt`.
+  - `docs/label/samples/zquar-4x6-vertical-DEMO.pdf` & `docs/label/samples/zquar-4x6-same-DEMO.pdf`:
+    - Regenerated sample PDFs with all colons aligned vertically on all 14 container pages.
+- **TEST DECISION: TEST ADDED** (`test/unit/wm/zquarLabel.test.js`).
+- **Executed validation:**
+  - `npx jest test/unit/wm/zquarLabel.test.js`: 52/52 tests PASS (Code 0).
+  - `npx jest test/unit/tools/checkLabelPdf.test.js`: 10/10 tests PASS (Code 0).
+  - `npx jest test/unit/wm/quarantineLabelAdapter.test.js test/unit/wm/quarantineLabelOutput.test.js test/unit/wm/quarantineLabelsController.test.js test/unit/wm/zquarLabel.test.js test/unit/tools/checkLabelPdf.test.js`: 5 suites / 176 tests PASS (Code 0).
+  - `npm test -- test/unit/wm/`: 90 suites / 2378 tests PASS, 56 skipped, 0 failed (Code 0).
   - `npm run lint`: Root ESLint clean, 0 errors/warnings (Code 0).
   - `npm --prefix app/fiori-app run lint`: UI5 linter 100% clean, 0 findings (Code 0).
   - `npm --prefix app/fiori-app run build`: UI5 build succeeded in 1.21s (Code 0).
