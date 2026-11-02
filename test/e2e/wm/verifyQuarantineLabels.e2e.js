@@ -175,7 +175,8 @@ const CASES = [
                 return route.fulfill(json(200, { MaterialDocument: doc, MaterialDocumentYear: '2026', LabelSize: null, Rows: [1, 2].map((n) => ({
                     Material: 'DEMO-MAT-1', MaterialDescription: 'DEMO MATERIAL', MaterialDocument: doc, PostingDate: '2026-10-27', Batch: 'DEMOB1', SupplierBatch: 'DEMO-SB',
                     SupplierName: 'DEMO SUPPLIER', BatchCharacteristics: 'DEMO', ManufacturingDate: '2026-10-01', DateKind: 'EXPIRY', DateValue: '2027-04-01',
-                    PostedQuantity: '80 KG', ContainerQuantity: '40', Unit: 'KG', Container: `${n} OF 2`, StorageUnit: `${doc}${n}`, Text: ''
+                    // 10 significant digits like a real SAP storage unit: the longest barcode the default vertical label fits
+                    PostedQuantity: '80 KG', ContainerQuantity: '40', Unit: 'KG', Container: `${n} OF 2`, StorageUnit: `000000000099000000${doc.slice(-1)}${n}`, Text: ''
                 })) }));
             }
             return route.fulfill(json(500, { error: { message: 'unexpected SAP PDF call' } }));
@@ -228,7 +229,7 @@ const CASES = [
             const printed = await s.page.evaluate(() => window.__qlPrintDocs);
             if (printed.length !== 1 || !printed[0].includes('@page{size:288pt 432pt;margin:0}')) errs.push(`print frames ${printed.length}`);
             else {
-                if ((printed[0].match(/<svg /g) || []).length !== 2) errs.push('row print is not 2 label pages');
+                if ((printed[0].match(/<svg [^>]*width="288pt" height="432pt"/g) || []).length !== 2) errs.push('row print is not 2 label pages');
                 if (!printed[0].includes('>khushal</text>') || !printed[0].includes('DEMO-MAT-1')) errs.push('row print missing material code or signed-in Prepared by');
             }
             const st = await state(s.page);

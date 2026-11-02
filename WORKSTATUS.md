@@ -9,6 +9,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 - **Missing i18n keys added (2026-11-02 15:52 IST) — PASS, merged to local `feature01`, not pushed:** 10 literal keys that neither bundle defined now exist in both, plus 1 new key that keeps the invoice wording separate, and no literal `i18n>key` or `getText("key")` is unresolved. Only `huNoSelection` could show a raw key before; the other 9 already showed fallback text, and those messages read the same now. Jest 226 suites passed, 1 skipped; 4,432 tests passed, 59 skipped; `ui5lint` clean. No SAP call was made, and the messages were not triggered on live screens.
 
+- **Quarantine labels E2E case fixed (2026-11-02 15:52 IST) — PASS locally:** `npm run test:e2e:sap-free` now passes 3 of 3 suites, on 3 runs in a row. The screen was correct; two checks in the test had gone out of date when the label layout changed. Only the test file changed. GitHub Actions has not run this. This supersedes the "2 of 3 suites" result in the cleanup line below. See the two Changes Log entries of 2026-11-02 15:49 and 15:52 IST.
+
 - **Dead-code cleanup, 7 removal batches (2026-11-02 15:45 IST) — PARTIAL, uncommitted:** 1,354 lines removed across 37 files, including 2 deleted files and 474 unused i18n keys, with no intended behaviour change. Jest is unchanged from baseline (226 suites and 4,428 tests passed, 59 skipped). SAP-free browser E2E is also unchanged at 2 of 3 suites: one Quarantine labels case fails the same way before and after the cleanup. The other 20 browser suites were not run. See Change Entry 2026-11-02 15:45 IST.
 
 - **Duplicate code in `server.js` merged (2026-11-02 15:15 IST) — PASS, uncommitted:** one loop now sets the credentials of the 5 S/4 services and one shared `applyBearerToken` does the local token check at both mount points. No behaviour change. `ReservationProcessAdapter.js` is deliberately not split: audit finding 13 says to split it only when it is next worked on. See Change Entry 2026-11-02 15:15 IST.
@@ -1828,7 +1830,8 @@ Single source of truth for work history, current status, validation, unresolved 
 ## Next Steps
 
 - Missing i18n keys (2026-11-02): merged to local `feature01`; push when the user asks. The new test in `uiConsistency.test.js` fails on any new literal key that is not in both bundles.
-- Dead-code cleanup (2026-11-02): review the diff and commit when the user asks. Decide on the Medium-confidence list in Change Entry 2026-11-02 15:45 IST. Fix the failing Quarantine labels E2E case and the i18n keys that code references but no bundle defines; both existed before the cleanup.
+- Quarantine labels E2E (2026-11-02): the fix is merged to local `feature01`; push when the user asks, then confirm `browser-e2e-sap-free` on GitHub Actions.
+- Dead-code cleanup (2026-11-02): review the diff and commit when the user asks. Decide on the Medium-confidence list in Change Entry 2026-11-02 15:45 IST. The failing Quarantine labels E2E case and the missing i18n keys that were listed here are both resolved on local `feature01` (Changes Log 2026-11-02 15:49, 15:52 and 15:56 IST).
 - **URGENT, user action (2026-11-02):** The SAP password in `S4_PASSWORD` was committed in `2256822d` to `origin/feature01`, and the GitHub API answers 200 without login, so the repository appears public. Change that SAP password and update `.env.local`. Treat the two other removed values as exposed too. Removing them from the current files does not remove them from Git history; rewriting history needs a separate decision and a force push.
 - Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. The goods receipt is PROVEN on inbound delivery 0180000137 (document 5000005789/2026, read back from SAP) for a full quantity on an unpacked delivery; partial receipts are refused. Scan-to is proven for TO create and confirm on TR 1000982 (TO 1037664, read back from SAP); automatic MIGO and Retry MIGO are not. Route count from `docs/e2e-coverage-matrix.md`: 7 proven, 2 partial, 12 not proven. Each later run needs read-only data discovery and its own written go. A live reservation goods movement should prove the new `BKTXT` replay check (audit finding 10).
 
@@ -1951,6 +1954,27 @@ Single source of truth for work history, current status, validation, unresolved 
 - **What changed:** The test now also checks literal `getText("key")`, `_getText("key")` and `_text("key")` calls in app JS, excluding `thirdparty`. Keys built at runtime do not match. The XML pattern now also catches `i18n>key` written without braces.
 - **File:** `test/unit/controller/uiConsistency.test.js`.
 - **Validation:** Before the bundle change it failed and listed the missing keys across 5 controllers. After the change it passes. Full Jest and `ui5lint` results are in Change 1.
+
+### 2026-11-02 15:52 IST — Quarantine labels E2E, second stale check: row print counted the logo as a label page: PASS locally
+
+- **Status:** PASS locally. Test-only change; no SAP call was made.
+- **Changed:** `test/e2e/wm/verifyQuarantineLabels.e2e.js`, the row print check in the `Goods-receipt list` case. It now counts only page-sized SVGs (`width="288pt" height="432pt"`), the same match the `App-drawn 4x6 labels` case already uses.
+- **Why:** With the first fix in place the case reached this check and failed with `row print is not 2 label pages`. It counted every `<svg `. A check of `ZquarLabelPdf.buildHtml` with 2 labels on the vertical variant gave 4 `<svg ` tags: 2 label pages and 1 nested logo in each. The logo was added in `e6207dd1`. The print output is correct.
+- **Tested:** `npm run test:e2e:sap-free` 3 runs in a row: 3 of 3 suites, exit 0 each. `npx jest` on `zquarLabel`, `quarantineLabelsController`, `quarantineLabelAdapter`, `e2eRunner`, `e2eCoverageMatrix`: 5 suites, 162 tests passed. `npx eslint` on the test file: clean. `git diff --check`: clean.
+- **Not run:** The full Jest suite, because only this E2E file changed; the other 20 browser suites, which need SAP; GitHub Actions.
+- **Next:** Merge into `feature01`, then confirm `browser-e2e-sap-free` on GitHub Actions.
+
+### 2026-11-02 15:49 IST — Quarantine labels E2E, first stale check: demo storage unit too long for the default label: PASS for this cause
+
+- **Status:** PASS for this cause. The case then stopped at the second stale check, logged in the 15:52 entry above. Test-only change; no SAP call was made.
+- **Failing click (CONFIRMED from the Playwright trace):** The row print click at line 226 timed out. The button was found, visible and enabled, but `sap-ui-blocklayer-popup` intercepted every click attempt.
+- **Root cause (CONFIRMED):** The earlier `Download selected` step had failed and left an error dialog open: `Label 1: the storage unit is too long for the barcode at this label size. Nothing was printed.` The wait for the download swallows its timeout (`.catch(() => {})`), so the test went on and reported the later click instead.
+- **Screen or test:** The test. The mock returned an 11-digit storage unit (`${doc}${n}`). On the default vertical label at 203 dpi, a check of `barcodeGeometry` shows 10 characters fit and 11 throw `barcodeTooLong`. The layout refuses rather than squeezes bars by design. Storage units recorded in this file from SAP have 10 digits (for example 2000019372 and 1000059430), so real labels of that length print.
+- **When it started (INFERRED from the layout code, not run at each commit):** `ee2f909f` made vertical the default with a wide barcode area. `3ae4435a` narrowed that area, which is when 11 digits stopped fitting. Jest does not run this browser case, which is why the Jest passes recorded on 2026-10-31 did not show it. The cleanup did not cause it.
+- **Changed:** `test/e2e/wm/verifyQuarantineLabels.e2e.js`: the mock now returns a zero-padded 20-character storage unit with 10 significant digits, as SAP does.
+- **Tested:** `npm run test:e2e:sap-free`, 3 runs: the click timeout was gone and the case failed at the next check, `row print is not 2 label pages`. Jest on the 5 related suites: 162 tests passed. Baseline before the change: reproduced `TimeoutError: page.click: Timeout 30000ms exceeded` on `b0a879b9`.
+- **Findings, not changed:** (1) The vertical label also refuses 10-digit values at 300 dpi, because the minimum module is 5 dots there. The screen does not pass a dpi today, so it always uses 203; this matters only if 300 dpi is offered. (2) A storage unit with more than 10 significant digits is refused on the vertical label, but fits the Top Header variant. `NLENR` allows 20 characters. Whether SAP issues longer numbers here is Not verified. (3) The swallowed download timeout makes any failure of that step show up as a misleading 30 s click timeout.
+- **CI flakiness:** This failure is deterministic, so it does not explain the earlier `route null` failure of run 41033598034, which had a different cause. Whether GitHub runs failed on this case since 2026-10-31 is Not verified.
 
 ### 2026-11-02 IST — SAP accepts the stored password again at 15:11; rejections remain unexplained: PARTIAL, uncommitted
 
