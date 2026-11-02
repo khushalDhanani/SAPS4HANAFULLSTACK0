@@ -7,6 +7,11 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Startup Warning (Movement 261 BusinessConfig) & Dashboard Metrics Log Analysis (2026-10-31 IST) — PASS:** Diagnosed root causes and resolved the startup warning and dashboard metrics handling:
+  1. **Movement 261 Startup Warning Root Cause & Resolution**: In local development, SQLite table `saps4hana_wm_BusinessConfig` in `db.sqlite` was unseeded (0 rows), causing `Mvt261Service.checkBinConfiguration` on server startup (`cds.once('listening')`) to log `[STARTUP WARNING] Movement 261: no active BusinessConfig rows exist. Custom blocked-bin policy is not configured; maintain approved plant/warehouse rules in Mvt261NotReadyBinsJson.`. Seeded `db.sqlite` with the approved Plant `1120`, Warehouse `W01` row (`Active = 1`, `SalesOrg: 1000`, `DistChannel: 14`, `Division: 00`, `Currency: INR`, `ShippingPoints: 1112,WAVG`). Added auto-seed bootstrap guard in `server.js` (`cds.on('served')`) so any unseeded development database automatically loads from `db/data/saps4hana.wm-BusinessConfig.csv`. The audit now correctly identifies active configuration for `Plant=1120, Warehouse=W01`. (Note: Per `AGENTS.md` and `docs/evidence/2026-10-27/mvt261-startup-bin-discovery.md`, custom blocked bins in `Mvt261NotReadyBinsJson` remain uninvented and unseeded until verified with business/user).
+  2. **Dashboard Metrics Request Log Analysis & Cache Hardening**: The log `[odata] [6408f5a8-903b-4fde-830c-ea9a90561766] - GET /odata/v4/purchase-order/getDashboardMetrics()` is CAP's standard informational request trace emitted when the Fiori Launchpad Dashboard initializes and fetches live counts from SAP S/4HANA (Purchase Orders, Suppliers, Sales Orders, Inquiries, Warehouses, Reservations, Deliveries, Orders Due, Invoices, Returns). Live probe confirmed the endpoint returns `HTTP 200 OK` with all 12 live counts from S/4HANA DS4 Client 220 (`totalCount: 3015`, `supplierCount: 4377`, `salesInquiryCount: 693`, `customerCount: 1090`, `openSalesOrderCount: 583`, `totalSalesOrderCount: 973`, `warehouseCount: 2`, `openReservationCount: 1230`, `inboundDeliveryCount: 33`, `ordersDueCount: 1243`, `customerInvoiceCount: 520`, `customerReturnCount: 186`). Hardened `PurchaseOrderAdapter.js` lines 413 & 419: fixed stale literal `=== 26` to `=== totalMetricsCount` (`DASHBOARD_METRIC_KEYS.length = 12`) so negative TTL caching (`negativeTtlMs = 15s`) correctly applies if backend requests fail.
+  3. **Validation**: All 98 tests across `dashboardMetrics.test.js`, `mvt261Auth.test.js`, and `BusinessConfigResolver.test.js` PASS; root ESLint 100% clean (0 findings); UI5 build succeeded in 1.25 s.
+
 - **Zquar Label: Barcode Alignment to "P" of "Prepared by" & Reduced Aether Logo Size (2026-10-31 IST) — PASS:** Delivered user-requested visual refinements to the vertical quarantine label layout:
   1. **Barcode Aligned to "P" of "Prepared by"**: Aligned the vertical variant barcode to begin with its first bar directly at `firstBarX = snap(ruleVx + GAP) ≈ 40.43 pt` (`x0 = snap(firstBarX - 10 * m) ≈ 29.79 pt`), matching the exact horizontal coordinate of the "P" glyph in the 14th row "Prepared by" (`prepBy.caption.x = C.x0 = 40.43 pt`). The 10-module quiet zone is completely preserved in the clear left margin space, and the human-readable number is centered under the bars at `x ≈ 117.58 pt`.
   2. **Reduced Aether Logo Size & Balanced Alignment**: Applied `padding: snap(4 * f)` to the right-side logo bounding box (`logoWV ≈ 63.13 pt`, `logoHV ≈ 100.02 pt`), reducing the rendered official vector corporate logo width from `~78.7 pt` to `~55.33 pt` (height `~36.66 pt`, ~29.7% reduction) while strictly preserving the `4232 : 2804` aspect ratio. Centered the logo horizontally with equal `3.90 pt` interior padding and vertically with equal `31.7 pt` interior padding, maintaining symmetric `~2.8 pt` exterior margins between the barcode right edge and the content right boundary.
@@ -1883,6 +1888,26 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-10-31 IST — Movement 261 Startup Warning & Dashboard Metrics Log Diagnosis & Fix: PASS
+
+- **Problem diagnosed:**
+  1. Terminal reported `[mvt261-service] - [STARTUP WARNING] Movement 261: no active BusinessConfig rows exist. Custom blocked-bin policy is not configured; maintain approved plant/warehouse rules in Mvt261NotReadyBinsJson.`.
+  2. Terminal reported `[odata] [6408f5a8-903b-4fde-830c-ea9a90561766] - GET /odata/v4/purchase-order/getDashboardMetrics()`.
+- **Root causes:**
+  1. `mvt261-service` warning: In local development, CAP connects to SQLite at `db.sqlite`. Although `db/data/saps4hana.wm-BusinessConfig.csv` exists with verified customizing for Plant `1120`, Warehouse `W01`, `db.sqlite` was not seeded with it (table had 0 rows). On startup, `Mvt261Service.checkBinConfiguration` ran `SELECT FROM saps4hana.wm.BusinessConfig WHERE Active = true`, returned 0 rows, and issued the startup warning.
+  2. `getDashboardMetrics`: This is NOT an error. It is CAP's standard OData request log emitted on incoming HTTP requests. When the Fiori app loads the Launchpad Dashboard, it calls `GET /odata/v4/purchase-order/getDashboardMetrics()` to fetch live counts from SAP S/4HANA. The request completed with `HTTP 200 OK` (3,015 POs, 4,377 Suppliers, 583 Open Sales Orders, 2 Warehouses, etc.). However, inspection revealed lines 413 & 419 in `PurchaseOrderAdapter.js` checked `unavailable.length === 26` (stale literal from a prior version) instead of `totalMetricsCount = DASHBOARD_METRIC_KEYS.length` (12), preventing negative TTL caching when all metrics failed.
+- **Changes made:**
+  1. `db.sqlite`: Seeded `saps4hana_wm_BusinessConfig` with confirmed SAP customizing from `db/data/saps4hana.wm-BusinessConfig.csv`: Plant `1120`, Warehouse `W01`, Active = 1, SalesOrg: 1000, DistChannel: 14, Division: 00, Currency: INR, ShippingPoints: `1112,WAVG`.
+  2. `server.js`: Added development bootstrap hook (`cds.on('served')`) to auto-seed `BusinessConfig` from `db/data/saps4hana.wm-BusinessConfig.csv` if `cds.db` has 0 rows, ensuring clean SQLite checkouts are never left unseeded.
+  3. `PurchaseOrderAdapter.js`: Replaced stale hardcoded `26` with `DASHBOARD_METRIC_KEYS.length` (12) for negative TTL caching.
+- **Validation:**
+  - Ran `Mvt261Service.checkBinConfiguration(cds.db)` against `db.sqlite` &rarr; verified `[STARTUP WARNING] Movement 261: no active BusinessConfig rows exist` is eliminated; audit now detects `Plant=1120, Warehouse=W01`.
+  - Probed `GET /odata/v4/purchase-order/getDashboardMetrics()` live &rarr; `HTTP 200 OK` with 12 live counts from S/4HANA DS4 Client 220.
+  - Jest suites `dashboardMetrics.test.js`, `mvt261Auth.test.js`, and `BusinessConfigResolver.test.js` (98 tests) PASS.
+  - Root ESLint clean (0 errors, 0 warnings).
+  - UI5 build clean (`Build succeeded in 1.25 s`).
+- **Status:** PASS.
 
 ### 2026-10-29 IST — S/4HANA Destination URL Restored to HTTP Port 8000: VERIFIED
 

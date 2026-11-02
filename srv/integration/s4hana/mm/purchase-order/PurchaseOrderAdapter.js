@@ -6,6 +6,21 @@ const { S4HttpClient } = require('../../S4HttpClient');
 const s4Config = require('../../s4Config');
 const TtlCache = require('../../../../common/TtlCache');
 
+const DASHBOARD_METRIC_KEYS = [
+  'totalCount',
+  'supplierCount',
+  'salesInquiryCount',
+  'customerCount',
+  'openSalesOrderCount',
+  'totalSalesOrderCount',
+  'warehouseCount',
+  'openReservationCount',
+  'inboundDeliveryCount',
+  'ordersDueCount',
+  'customerInvoiceCount',
+  'customerReturnCount'
+];
+
 /**
  * Adapter class to encapsulate all communication with S/4HANA services
  * using SAP Cloud SDK and BTP Destination management via S4HttpClient.
@@ -389,17 +404,19 @@ class PurchaseOrderAdapter {
       return metrics;
     };
 
+    const totalMetricsCount = DASHBOARD_METRIC_KEYS.length;
+
     if (useCache && !options.forceRefresh) {
       return await this.metricsCache.getOrSet(
         cacheKey,
         fetchMetrics,
-        (metrics) => (metrics?.unavailable?.length === 26 ? (options.negativeTtlMs || 15000) : (options.ttlMs || 30000))
+        (metrics) => (metrics?.unavailable?.length === totalMetricsCount ? (options.negativeTtlMs || 15000) : (options.ttlMs || 30000))
       );
     }
 
     const result = await fetchMetrics();
     if (useCache) {
-      const ttl = result?.unavailable?.length === 26 ? (options.negativeTtlMs || 15000) : (options.ttlMs || 30000);
+      const ttl = result?.unavailable?.length === totalMetricsCount ? (options.negativeTtlMs || 15000) : (options.ttlMs || 30000);
       this.metricsCache.set(cacheKey, result, ttl);
     }
     return result;

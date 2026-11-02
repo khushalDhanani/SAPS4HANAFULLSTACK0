@@ -215,5 +215,44 @@ cds.middlewares.add((req, res, next) => {
     next();
 }, { before: 'auth' });
 
+// Auto-seed local development SQLite database from db/data if BusinessConfig is empty
+cds.on('served', async () => {
+    if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
+        try {
+            const db = cds.db;
+            if (db) {
+                const countResult = await db.run(cds.ql.SELECT.from('saps4hana.wm.BusinessConfig').columns('count(*) as count'));
+                const count = countResult?.[0]?.count || 0;
+                if (!count) {
+                    const fs = require('fs');
+                    const path = require('path');
+                    const csvPath = path.resolve(__dirname, 'db/data/saps4hana.wm-BusinessConfig.csv');
+                    if (fs.existsSync(csvPath)) {
+                        const lines = fs.readFileSync(csvPath, 'utf8').trim().split('\n').filter(Boolean);
+                        if (lines.length > 1) {
+                            const headers = lines[0].split(';');
+                            for (let i = 1; i < lines.length; i++) {
+                                const values = lines[i].split(';');
+                                const entry = {};
+                                headers.forEach((h, idx) => {
+                                    const val = (values[idx] || '').trim();
+                                    if (h === 'Active') {
+                                        entry[h] = val === 'true' || val === '1';
+                                    } else if (val) {
+                                        entry[h] = val;
+                                    }
+                                });
+                                await db.run(cds.ql.INSERT.into('saps4hana.wm.BusinessConfig').entries(entry));
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_) {
+            // Table may not exist yet or not initialized; no-op
+        }
+    }
+});
+
 // Delegate to default CAP server bootstrap
 module.exports = cds.server;
