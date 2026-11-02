@@ -7,7 +7,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
-- **MIGO double-posting guard on `/odata/v4/tr-to` and `/odata/v4/reservation-entry` now stops the posting (2026-11-02 IST) — PARTIAL:** mock-tested only; no browser E2E run and no live SAP proof. On reservation-entry a blocked posting returns HTTP 200 with status 90 and the reason, like its other MIGO failures.
+- **MIGO double-posting guard on `/odata/v4/tr-to` and `/odata/v4/reservation-entry` now stops the posting (2026-11-02 IST) — PARTIAL:** handler behaviour is mock-tested; the reservation-entry adapter check was run READ-ONLY against live SAP (5 TRs refused, 1 passed). No browser E2E run and no action was exercised end to end against SAP. On reservation-entry a blocked posting returns HTTP 200 with status 90 and the reason, like its other MIGO failures.
 
 - **Startup Warning (Movement 261 BusinessConfig) & Dashboard Metrics Log Analysis (2026-10-31 IST) — PASS:** Diagnosed root causes and resolved the startup warning and dashboard metrics handling:
   1. **Movement 261 Startup Warning Root Cause & Resolution**: In local development, SQLite table `saps4hana_wm_BusinessConfig` in `db.sqlite` was unseeded (0 rows), causing `Mvt261Service.checkBinConfiguration` on server startup (`cds.once('listening')`) to log `[STARTUP WARNING] Movement 261: no active BusinessConfig rows exist. Custom blocked-bin policy is not configured; maintain approved plant/warehouse rules in Mvt261NotReadyBinsJson.`. Seeded `db.sqlite` with the approved Plant `1120`, Warehouse `W01` row (`Active = 1`, `SalesOrg: 1000`, `DistChannel: 14`, `Division: 00`, `Currency: INR`, `ShippingPoints: 1112,WAVG`). Added auto-seed bootstrap guard in `server.js` (`cds.on('served')`) so any unseeded development database automatically loads from `db/data/saps4hana.wm-BusinessConfig.csv`. The audit now correctly identifies active configuration for `Plant=1120, Warehouse=W01`. (Note: Per `AGENTS.md` and `docs/evidence/2026-10-27/mvt261-startup-bin-discovery.md`, custom blocked bins in `Mvt261NotReadyBinsJson` remain uninvented and unseeded until verified with business/user).
@@ -1818,7 +1818,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
-- MIGO guard (2026-11-02): before this reaches users, run a READ-ONLY check that `RFC_READ_TABLE` can read `LTBK-MBLNR`; if it cannot, the reservation-entry guard fails closed and blocks every MIGO on a record with a TR or TO. Decide whether an empty LTAK result (Transfer Order not found) should stop posting on either path. Live proof of the guard needs a written go; it should use a TR with `MBLNR` set, so SAP is only read and nothing is posted if the guard works.
+- MIGO guard (2026-11-02): decide whether an empty LTAK result (Transfer Order not found) should stop posting on either path. The guard code is in local commit e4393ce5, not pushed. An end-to-end action run needs a written go; it should use a TR with `MBLNR` set, so nothing is posted if the guard works.
 
 - P-1: commit and push the SAP-free PR gate, confirm `browser-e2e-sap-free` runs green on GitHub Actions, then mark it a required status check in branch protection (repo settings, user action). Follow-up for a fuller gate: a deterministic S/4 fixture backend so the 20 SAP-reading suites can run per PR.
 
@@ -1892,6 +1892,13 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 IST — READ-ONLY live check of `LTBK-MBLNR` and the reservation-entry guard: PASS for the check; guard work stays PARTIAL
+
+- **Change:** None to the code. Resolves the NOT VERIFIED item in the 09:46 entry.
+- **Command:** `RFC_READ_TABLE` reads only, from a throwaway script outside the repo, using the local `.env.local` connection. No write was sent to SAP.
+- **Result:** `LTBK-MBLNR` is readable. In warehouse W01, TRs 1000955, 1000956, 1000957, 1000958 and 1000959 have `MBLNR` filled, and each document exists in `MATDOC` (movements 311, 311, 101, 311, 311). `assertGoodsMovementNotPosted` refused all 5 with 409 and passed TR 1000961, whose `MBLNR` is blank.
+- **Not proven:** A sample of 5 TRs does not show that a filled `MBLNR` always means no further movement is due. The `postMigoGoodsMovement` and `retryStep` actions were not called, and no browser E2E was run. The tr-to guard's read through `Z_WM_GET_TR_MATERIAL_LIST` was not exercised.
 
 ### 2026-11-02 09:46 IST — MIGO double-posting guard added to `/odata/v4/reservation-entry`: PARTIAL
 
