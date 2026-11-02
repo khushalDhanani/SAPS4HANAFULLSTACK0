@@ -1904,6 +1904,17 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-11-02 IST — Audit finding 8: dependency vulnerabilities fixed: PASS for the audit result, uncommitted
+
+- **Status:** `npm audit --omit=dev` is at 0 vulnerabilities, from 11 (5 high, 6 moderate). Uncommitted. No SAP write was sent. Not deployed, and `npm run build:mta` was not run.
+- **Change:** `npm audit fix`, without `--force` or `--omit=dev`; only `package-lock.json` changed. `body-parser` 2.3.0 to 2.4.0, `follow-redirects` 1.16.0 to 1.16.2, `node-forge` 1.4.0 to 1.4.2, `undici` 6.28.1 to 6.29.1, `zod` 4.6.5 to 4.6.7, plus other in-range updates including `qs` and dev tools such as `jest` 30.5.2 and `eslint` 10.14.0. No dependency was added on purpose.
+- **Avoided:** `--omit=dev` in the dry run would have removed the dev tools. `--force` suggested `eslint` 4.0.0, a large downgrade.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT: the full Jest suite and the browser suites named below.
+- **Validation:** Full `npx jest`: 224 suites passed, 1 skipped; 4,395 tests passed, 59 skipped. `npx eslint .`, `cds compile srv` and `npm ci --dry-run`: exit 0. `npm ls --all`: no invalid or missing packages. `node-rfc` loads. Browser, write guard on: `Shell screens`, `MM screens` and `Write authorization` PASS. Dry-run `mvt261` and `goodsReceipt`: PASS, using live read-only SAP data. `app/fiori-app` audit: already 0.
+- **Not verified:** Full browser suite after this change; the deployed build; `follow-redirects` header handling in a real redirect.
+- **Note:** The `WORKSTATUS.md` and test work for audit finding 6 was committed outside this session as `12612858`.
+- **Next:** Audit finding 9 (attempt memory not shared between instances).
+
 ### 2026-11-02 IST — Audit finding 6: plant limits added to reservation entry write actions: PARTIAL, uncommitted
 
 - **Status:** PARTIAL. Code and tests are done and uncommitted. No SAP write or real write action was sent, so a live refusal was not exercised. This closes the reservation entry item left open in the entry below.
