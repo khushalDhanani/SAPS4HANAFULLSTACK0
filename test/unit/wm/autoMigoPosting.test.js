@@ -3316,7 +3316,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       // Now simulate MATDOC returning this document for the processId (as SAP would persist it)
       setupDefaultReadTable({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${processId}'`) || whereStr.includes("RSNUM = '0000520235'")) {
+          if (whereStr.includes(`BKTXT = '${processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520235'")) {
             return [{
               MBLNR: '5000999999',
               MJAHR: '2026',
@@ -3399,7 +3399,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       // Case A: Valid uncancelled document in MATDOC
       setupDefaultReadTable({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes("SGTXT = 'E5B42701-1111-4222-8333-000000000003'") && whereStr.includes("CANCELLED = ''")) {
+          if (whereStr.includes("BKTXT = 'E5B4270111114222833300000'") && whereStr.includes("CANCELLED = ''")) {
             return [{
               MBLNR: '5000777777',
               MJAHR: '2026',
@@ -3458,22 +3458,55 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         expect(res.alreadyPosted).toBe(false);
       });
 
-      test('lost response (RESB withdrawn greater than tracked withdrawn) is a replay: returns the SAP document', async () => {
+      const PROCESS_TEXT = 'E5B4270111114222833300000'; // the first 25 characters written to HEADER_TXT, stored in MATDOC-BKTXT
+
+      test('lost response: the document carrying this process id in BKTXT is a replay', async () => {
+        const wheres = [];
         setupDefaultReadTable({
-          MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
+          MATDOC: (_f, _w, whereStr) => { wheres.push(whereStr); return whereStr.includes(`BKTXT = '${PROCESS_TEXT}'`) ? priorDoc : []; },
           RESB: () => [{ ENMNG: '10.000', KZEAR: '' }]
         });
         const res = await withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', Status_code: '90', MaterialDocument: null, WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(keyParams));
         expect(res).toMatchObject({ alreadyPosted: true, materialDocument: '5000111111', source: 'SAP' });
+        expect(wheres[0]).toContain(`BKTXT = '${PROCESS_TEXT}'`);
+        expect(wheres.join(' ')).not.toContain('SGTXT');
       });
 
-      test('final-issued item (RESB KZEAR = X) is a replay regardless of quantities', async () => {
+      test('a withdrawal made outside this flow is not a replay: no false success, the new quantity posts', async () => {
+        setupDefaultReadTable({
+          MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
+          RESB: () => [{ ENMNG: '10.000', KZEAR: '' }]
+        });
+        const res = await withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', Status_code: '05', MaterialDocument: '5000111110', WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(keyParams));
+        expect(res.alreadyPosted).toBe(false);
+      });
+
+      test('a final-issued item with no document of this process is refused, not reported as posted', async () => {
         setupDefaultReadTable({
           MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
           RESB: () => [{ ENMNG: '6.000', KZEAR: 'X' }]
         });
-        const res = await withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(keyParams));
-        expect(res.alreadyPosted).toBe(true);
+        await expect(withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(keyParams)))
+          .rejects.toMatchObject({ status: 422, message: expect.stringContaining('5000111111') });
+      });
+
+      test('with no tracking row the app cannot tell: refused with 409, neither posted nor reported as posted', async () => {
+        setupDefaultReadTable({
+          MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
+          RESB: () => [{ ENMNG: '6.000', KZEAR: '' }]
+        });
+        await expect(withTrack(null, () => adapter.checkMigoIdempotency(keyParams)))
+          .rejects.toMatchObject({ status: 409, message: expect.stringContaining('5000111111') });
+      });
+
+      test('with no process id the quantity comparison is still the guard: a higher withdrawal counts as a replay', async () => {
+        setupDefaultReadTable({
+          MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
+          RESB: () => [{ ENMNG: '10.000', KZEAR: '' }]
+        });
+        const { processId: _none, ...noId } = keyParams;
+        const res = await withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(noId));
+        expect(res).toMatchObject({ alreadyPosted: true, materialDocument: '5000111111' });
       });
     });
 
@@ -3496,7 +3529,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       setupDefaultReadTable({
         MATDOC: (fields, where, whereStr) => {
           // Only matches previous TO / process ID, not the new one
-          if (whereStr.includes("SGTXT = 'E5B42701-1111-4222-8333-000000000005'")) {
+          if (whereStr.includes("BKTXT = 'E5B4270111114222833300000'")) {
             return [{ MBLNR: '5000999991', MJAHR: '2026', BWART: '201' }];
           }
           return [];
@@ -3515,7 +3548,7 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         quantity: 4,
         unit: 'NOS',
         costCenter: '1011201301',
-        processId: 'E5B42701-1111-4222-8333-000000000006' // fresh process ID
+        processId: 'F5B42701-1111-4222-8333-000000000006' // fresh process ID, different within the 25 characters BKTXT keeps
       });
 
       expect(partial2Result.success).toBe(true);

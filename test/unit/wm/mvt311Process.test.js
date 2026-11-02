@@ -789,7 +789,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
       let postedDocuments = [];
       mockRfc.readTable.mockImplementation(async (table, fields, where = []) => {
         if (table === 'MATDOC') {
-          if (where.some((condition) => condition.includes('SGTXT ='))) return [];
+          if (where.some((condition) => condition.includes('BKTXT ='))) return [];
           return postedDocuments;
         }
         if (table === 'T320') return [
@@ -845,7 +845,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
     test('the same TO retried under a new PROCESS_ID is still blocked after a successful post [MOCK]', async () => {
       mockRfc.readTable.mockImplementation(async (table, _fields, where = []) => {
         if (table === 'MATDOC') {
-          if (where.some((condition) => condition.includes('SGTXT ='))) return [];
+          if (where.some((condition) => condition.includes('BKTXT ='))) return [];
           return [{ MBLNR: '4900050210', MJAHR: '2026' }];
         }
         return [];
@@ -910,7 +910,7 @@ describe('Movement Type 311 (SLoc to SLoc Transfer) Process Tests [mock only, no
         { MBLNR: '4900050210', MJAHR: '2026', ZEILE: '0002', WERKS: movementType === '301' ? '1110' : '1120', LGORT: movementType === '301' ? 'CS01' : 'HS01', MENGE: '5.000', SHKZG: 'S' }
       ];
       mockRfc.readTable.mockImplementation(async (table, _fields, where = []) => {
-        if (table === 'MATDOC') return where.some((condition) => condition.includes('SGTXT =')) ? [] : docs;
+        if (table === 'MATDOC') return where.some((condition) => condition.includes('BKTXT =')) ? [] : docs;
         if (table === 'T320') return [
           { LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' },
           { LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' },

@@ -258,17 +258,23 @@ describe('Fix 7: strict input validation before RFC filters [mock only, not SAP 
 describe('Fix 9: goods-movement retry guard by PROCESS_ID [mock only, not SAP verification]', () => {
   const pid = '7f3e2a10-1111-4222-8333-444455556666';
   const base = { reservationNo: '524979', movementType: '201', material: '8000000023', plant: '1120', quantity: 1, unit: 'KG', costCenter: '1011201301', processId: pid };
-  it('does not post again when MATDOC already holds a non-cancelled document with this PROCESS_ID in SGTXT', async () => {
-    const rfc = fakeRfc({ fm: {}, tables: { MATDOC: (where) => (where.some((w) => w.includes(pid.toUpperCase())) ? [{ MBLNR: '4900050147', MJAHR: '2026' }] : []) } });
+  const processText = pid.toUpperCase().replace(/-/g, '').slice(0, 25);
+  it('does not post again when MATDOC already holds a non-cancelled document with this PROCESS_ID in BKTXT', async () => {
+    const rfc = fakeRfc({ fm: {}, tables: { MATDOC: (where) => (where.some((w) => w.includes(processText)) ? [{ MBLNR: '4900050147', MJAHR: '2026' }] : []) } });
     const res = await new ReservationProcessAdapter({ rfc }).postGoodsMovement(base);
     expect(res).toMatchObject({ success: true, alreadyPosted: true, materialDocument: '4900050147', materialDocYear: '2026', processId: pid.toUpperCase() });
-    expect(rfc.readTable).toHaveBeenCalledWith('MATDOC', ['MBLNR', 'MJAHR'], expect.arrayContaining([`SGTXT = '${pid.toUpperCase()}'`, "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"]), 1);
+    expect(rfc.readTable).toHaveBeenCalledWith('MATDOC', ['MBLNR', 'MJAHR'], expect.arrayContaining([`BKTXT = '${processText}'`, "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"]), 1);
     expect(rfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
   });
-  it('does not post again when MATDOC holds document matching reservation even if SGTXT is blank (SAP standard reservation behavior)', async () => {
+  it('writes the same text to HEADER_TXT that the retry guard searches for in BKTXT', async () => {
+    const rfc = fakeRfc({ fm: { BAPI_GOODSMVT_CREATE: () => ({ MATERIALDOCUMENT: '4900050150', MATDOCUMENTYEAR: '2026', RETURN: [] }) }, tables: { MATDOC: () => [] } });
+    await new ReservationProcessAdapter({ rfc }).postGoodsMovement(base).catch(() => {});
+    const posting = rfc.call.mock.calls.find(([fm]) => fm === 'BAPI_GOODSMVT_CREATE');
+    expect(posting?.[1]?.GOODSMVT_HEADER?.HEADER_TXT).toBe(processText);
+  });
+  it('refuses, rather than reports as posted, a document on the reservation that does not carry this PROCESS_ID when there is no tracking row', async () => {
     const rfc = fakeRfc({ fm: {}, tables: { MATDOC: (where) => (where.some((w) => w.includes("RSNUM = '0000524979'")) ? [{ MBLNR: '4900050148', MJAHR: '2026' }] : []) } });
-    const res = await new ReservationProcessAdapter({ rfc }).postGoodsMovement(base);
-    expect(res).toMatchObject({ success: true, alreadyPosted: true, materialDocument: '4900050148', materialDocYear: '2026' });
+    await expect(new ReservationProcessAdapter({ rfc }).postGoodsMovement(base)).rejects.toMatchObject({ status: 409, message: expect.stringContaining('4900050148') });
     expect(rfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
   });
   it('posts with the full 36-character PROCESS_ID in ITEM_TEXT (SGTXT CHAR 50), never truncated', async () => {

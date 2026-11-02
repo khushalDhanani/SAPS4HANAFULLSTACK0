@@ -462,7 +462,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       // Now simulate SAP table MATDOC holding this document for the processId
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${defaultInput201.processId}'`) || whereStr.includes("RSNUM = '0000520201'")) {
+          if (whereStr.includes(`BKTXT = '${defaultInput201.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520201'")) {
             return [{
               MBLNR: '5000000201',
               MJAHR: '2026',
@@ -795,7 +795,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       // Simulate SAP MATDOC transparent table containing the document
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${defaultInput241.processId}'`) || whereStr.includes("RSNUM = '0000520241'")) {
+          if (whereStr.includes(`BKTXT = '${defaultInput241.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520241'")) {
             return [{
               MBLNR: '5000000241',
               MJAHR: '2026',
@@ -1129,7 +1129,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       // Simulate SAP MATDOC transparent table containing the document
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${defaultInput311.processId}'`) || whereStr.includes("RSNUM = '0000520311'")) {
+          if (whereStr.includes(`BKTXT = '${defaultInput311.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520311'")) {
             return [{
               MBLNR: '5000000311',
               MJAHR: '2026',
@@ -1462,7 +1462,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       // Simulate SAP MATDOC transparent table containing the document
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${defaultInput301.processId}'`) || whereStr.includes("RSNUM = '0000520301'")) {
+          if (whereStr.includes(`BKTXT = '${defaultInput301.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520301'")) {
             return [{
               MBLNR: '5000000301',
               MJAHR: '2026',
@@ -1775,7 +1775,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       // Simulate timeout occurred after SAP committed document
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${baseInput.processId}'`) || whereStr.includes("RSNUM = '0000520201'")) {
+          if (whereStr.includes(`BKTXT = '${baseInput.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520201'")) {
             return [{
               MBLNR: '5000000201',
               MJAHR: '2026',
@@ -1817,7 +1817,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       // Setup MATDOC for repeat attempt
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${baseInput.processId}'`) || whereStr.includes("RSNUM = '0000520201'")) {
+          if (whereStr.includes(`BKTXT = '${baseInput.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520201'")) {
             return [{
               MBLNR: '5000000201',
               MJAHR: '2026',
@@ -2084,7 +2084,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
     test('Fix 7 (MIGO timeout recovery): Re-submitting identical processId after timeout recovers committed document via idempotency', async () => {
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${baseInput241.processId}'`) || whereStr.includes("RSNUM = '0000520241'")) {
+          if (whereStr.includes(`BKTXT = '${baseInput241.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520241'")) {
             return [{
               MBLNR: '5000000241',
               MJAHR: '2026',
@@ -2122,7 +2122,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
 
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${baseInput241.processId}'`) || whereStr.includes("RSNUM = '0000520241'")) {
+          if (whereStr.includes(`BKTXT = '${baseInput241.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520241'")) {
             return [{
               MBLNR: '5000000241',
               MJAHR: '2026',
@@ -2384,7 +2384,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
     test('Fix 7 (MIGO timeout recovery): Re-submitting identical processId after timeout recovers committed document via idempotency', async () => {
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${baseInput311.processId}'`) || whereStr.includes("RSNUM = '0000520311'")) {
+          if (whereStr.includes(`BKTXT = '${baseInput311.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520311'")) {
             return [{
               MBLNR: '5000000311',
               MJAHR: '2026',
@@ -2422,7 +2422,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
 
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${baseInput311.processId}'`) || whereStr.includes("RSNUM = '0000520311'")) {
+          if (whereStr.includes(`BKTXT = '${baseInput311.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520311'")) {
             return [{
               MBLNR: '5000000311',
               MJAHR: '2026',
@@ -2687,7 +2687,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
     test('Fix 7 (MIGO timeout recovery): Re-submitting identical processId after timeout recovers committed document via idempotency', async () => {
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${baseInput301.processId}'`) || whereStr.includes("RSNUM = '0000520301'")) {
+          if (whereStr.includes(`BKTXT = '${baseInput301.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520301'")) {
             return [{
               MBLNR: '5000000301',
               MJAHR: '2026',
@@ -2726,7 +2726,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
 
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${baseInput301.processId}'`) || whereStr.includes("RSNUM = '0000520301'")) {
+          if (whereStr.includes(`BKTXT = '${baseInput301.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520301'")) {
             return [{
               MBLNR: '5000000301',
               MJAHR: '2026',

@@ -24,6 +24,8 @@ const pad4 = (v) => String(v || '').trim().padStart(4, '0');
 /** ALPHA-exit padding for numeric keys only; alphanumeric cost centers / assets are sent as entered (audit D6). */
 const padIfNumeric = (v, n) => (/^\d+$/.test(String(v || '').trim()) ? String(v).trim().padStart(n, '0') : String(v || '').trim());
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
+/** MATDOC-BKTXT (from HEADER_TXT, CHAR 25) identifies a process id on every line of its document. */
+const processHeaderText = (processId) => String(processId).replace(/-/g, '').slice(0, 25);
 const padMat = (m) => (/^\d+$/.test(m) ? m.padStart(18, '0') : m);
 const sapNum = (v) => (v == null || v === '' ? 0 : Number(String(v).trim()));
 const trRetryQueues = new Map();
@@ -2081,9 +2083,9 @@ class ReservationProcessAdapter {
       } catch (_) { /* ignore DB query errors in mock unit test environments */ }
     }
 
-    // 3. SAP MATDOC transparent table query, keyed on THIS attempt (PROCESS_ID in SGTXT, or the TO in XBLNR).
+    // 3. SAP MATDOC transparent table query, keyed on THIS attempt (PROCESS_ID in BKTXT, or the TO in XBLNR).
     //    A read failure fails closed: posting without knowing whether the previous attempt committed could double-post.
-    //    No lookup by reservation item alone: a later partial issue on the same item is a new document, not a replay.
+    //    BKTXT carries HEADER_TXT on every line; SGTXT is blank on reservation postings (live 2026-11-02, all 5 movement types).
     if (this.rfc) {
       const lookup = async (label, where) => {
         try {
@@ -2097,15 +2099,14 @@ class ReservationProcessAdapter {
       };
       let found = null;
       if (processId) {
-        found = await lookup('process id', [`SGTXT = '${processId}'`, ...(s4Mat ? [`AND MATNR = '${s4Mat}'`] : []), ...(sPlant ? [`AND WERKS = '${sPlant}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"]);
+        found = await lookup('process id', [`BKTXT = '${processHeaderText(processId)}'`, ...(s4Mat ? [`AND MATNR = '${s4Mat}'`] : []), ...(sPlant ? [`AND WERKS = '${sPlant}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"]);
       }
       if (!found?.[0]?.MBLNR && transferOrder) {
         found = await lookup('transfer order', [`XBLNR = 'TO ${alphaOut(transferOrder)}'`, ...(sMvt ? [`AND BWART = '${sMvt}'`] : []), "AND CANCELLED = ''", "AND REVERSAL_MOVEMENT = ''"]);
       }
-      // Reservation-item lookup: on this system MATDOC-SGTXT is blank for every posting (customer exit, see WORKSTATUS
-      // 2026-10-12 13:45), so this is the guard that works live. A document on the item is a replay of THIS request only
-      // when SAP has withdrawn more than the tracking row knows (lost response) or the item is final-issued; otherwise it
-      // is an earlier partial issue and the new quantity must still be posted.
+      // Reservation-item lookup. With a process id the BKTXT lookup above already proved this request did not post, so a
+      // document here belongs to something else and is never reported as this request's result. Without a process id
+      // the quantities are the only guard: a replay when SAP has withdrawn more than tracking knows or the item is final-issued.
       if (!found?.[0]?.MBLNR && reservationNo) {
         const safeResnum = sapKey(reservationNo, 'rsnum');
         const safeRspos = sapKey(reservationItem, 'rspos');
@@ -2120,10 +2121,22 @@ class ReservationProcessAdapter {
           const sapWithdrawn = Number(resb?.ENMNG) || 0;
           const knownWithdrawn = trk ? (Number(trk.WithdrawnQuantity) || 0) : null;
           const finalIssued = String(resb?.KZEAR || '').trim() === 'X';
-          // shortcut: with no tracking row the app has no withdrawn baseline, so any document on the item counts as a replay (no partial issues for untracked items); add an attempt id to the SAP posting once a persisted text field is available.
-          const replay = knownWithdrawn === null || finalIssued || sapWithdrawn > knownWithdrawn;
-          if (replay) found = docs;
-          else LOG.info(`[Idempotency Guard] Reservation ${reservationNo}/${reservationItem}: document ${alphaOut(docs[0].MBLNR)} is an earlier partial issue (RESB withdrawn ${sapWithdrawn} = tracked ${knownWithdrawn}); posting the new quantity`);
+          const otherDoc = alphaOut(docs[0].MBLNR);
+          if (processId) {
+            if (finalIssued) {
+              throw Object.assign(httpError(422, `Reservation ${reservationNo}/${reservationItem} is already final-issued in SAP (for example material document ${otherDoc}). This request did not post; nothing was posted.`), { stage: 'MIGO' });
+            }
+            // A fresh process id with no tracking row cannot be told from a resubmit (tr-to generates one per call).
+            if (knownWithdrawn === null) {
+              throw Object.assign(httpError(409, `Reservation ${reservationNo}/${reservationItem} already has material document ${otherDoc} and no tracking record, so this cannot be told apart from a repeat. Nothing was posted; check the document in MB51.`), { stage: 'MIGO' });
+            }
+            LOG.info(`[Idempotency Guard] Reservation ${reservationNo}/${reservationItem}: document ${otherDoc} does not carry this process id; posting the new quantity`);
+          } else if (knownWithdrawn === null || finalIssued || sapWithdrawn > knownWithdrawn) {
+            // shortcut: without a process id a withdrawal outside this flow looks like a replay; every screen path sends one.
+            found = docs;
+          } else {
+            LOG.info(`[Idempotency Guard] Reservation ${reservationNo}/${reservationItem}: document ${otherDoc} is an earlier partial issue (RESB withdrawn ${sapWithdrawn} = tracked ${knownWithdrawn}); posting the new quantity`);
+          }
         }
       }
 
@@ -2605,8 +2618,8 @@ class ReservationProcessAdapter {
    * Wraps BAPI_GOODSMVT_CREATE.
    *  - RESERV_NO/RES_ITEM only when the caller/tracking row names a reservation (never looked up by material).
    *  - NO_MORE_GR only when completeReservation === true (operator ticked "complete reservation").
-   *  - processId: PROCESS_ID of this GI step, written to ITEM_TEXT (MATDOC-SGTXT, CHAR 50, §13); before posting,
-   *    MATDOC is searched for it so a retry never posts twice.
+   *  - processId: PROCESS_ID of this GI step, written to ITEM_TEXT and, cut to 25 characters, HEADER_TXT (MATDOC-BKTXT); before posting,
+   *    MATDOC-BKTXT is searched for it so a retry never posts twice.
    *  - Batch: input -> reservation (RESB) -> TO (LTAP); none for a batch-managed material (MARC-XCHPF) stops with 400.
    */
   async postGoodsMovement(params = {}) {
@@ -3173,7 +3186,7 @@ class ReservationProcessAdapter {
       PSTNG_DATE: today,
       DOC_DATE: today,
       REF_DOC_NO: hasRes ? `RES ${sResNo}` : (orderId ? `ORDER ${orderId}` : (sTanum ? `TO ${sTanum}` : 'WM SCAN-TO')),
-      ...(sProcessId ? { HEADER_TXT: sProcessId.replace(/-/g, '').slice(0, 25) } : {})
+      ...(sProcessId ? { HEADER_TXT: processHeaderText(sProcessId) } : {})
     };
 
     const item = {

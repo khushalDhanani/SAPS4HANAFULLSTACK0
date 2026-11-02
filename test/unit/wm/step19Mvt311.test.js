@@ -755,7 +755,7 @@ describe('Step 19: Movement Type 311 (SLoc to SLoc Transfer) Proof Suite [mock o
       // Setup MATDOC for repeat attempt
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${input.processId}'`) || whereStr.includes("RSNUM = '0000520997'") || whereStr.includes("MBLNR = '5000000311'")) {
+          if (whereStr.includes(`BKTXT = '${input.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520997'") || whereStr.includes("MBLNR = '5000000311'")) {
             return [{
               MBLNR: '5000000311',
               MJAHR: '2026',

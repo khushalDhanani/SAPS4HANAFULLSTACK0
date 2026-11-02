@@ -462,7 +462,7 @@ describe('Phase 2: Movement Type 261 Complete Lifecycle & Failure Matrix [mock o
 
       env.setupDefaultTables({
         MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`SGTXT = '${env.defaultInput261.processId}'`) || whereStr.includes("RSNUM = '0000520261'")) {
+          if (whereStr.includes(`BKTXT = '${env.defaultInput261.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520261'")) {
             return [{
               MBLNR: '5000000261',
               MJAHR: '2026',

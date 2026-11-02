@@ -1585,7 +1585,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       });
       const sPlant = data.plant || data.Plant || data.sourcePlant || data.SourcePlant || track.Plant;
       // PROCESS_ID of this GI step; persisted before posting so a retry finds an already posted document.
-      // After a posted document the next issue on this item is a new step: a fresh id, so the SGTXT lookup cannot return the earlier document.
+      // After a posted document the next issue on this item is a new step: a fresh id, so the BKTXT lookup cannot return the earlier document.
       const priorDocPosted = Boolean(track.MaterialDocument) && track.Status_code === STATUS.GI_POSTED;
       const processId = data.ProcessId || (!priorDocPosted && track.ProcessId) || cds.utils.uuid();
       if (track.ProcessId !== processId) await UPDATE(ReservationEntries).set({ ProcessId: processId }).where(key);

@@ -335,7 +335,7 @@ describe('Final SAP WM Production Hardening Audit Suite [mock only, not SAP veri
       // Setup MATDOC mock representing the committed document
       env.setupTables({
         MATDOC: (_f, _w, whereStr) => {
-          if (whereStr.includes(`5000000${mvt}`) || whereStr.includes(input.processId) || whereStr.includes(`000052${mvt}`)) {
+          if (whereStr.includes(`5000000${mvt}`) || whereStr.includes(input.processId.toUpperCase().replace(/-/g, '').slice(0, 25)) || whereStr.includes(`000052${mvt}`)) {
             return [{
               MBLNR: `5000000${mvt}`,
               MJAHR: '2026',

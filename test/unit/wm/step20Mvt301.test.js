@@ -689,7 +689,7 @@ describe('Step 20: Movement Type 301 (Plant to Plant Transfer) Proof Suite [mock
     // Setup MATDOC for repeat attempt
     env.setupDefaultTables({
       MATDOC: (_f, _w, whereStr) => {
-        if (whereStr.includes('c0a80101-0000-0000-0000-000000000301') || whereStr.includes("RSNUM = '0000525868'") || whereStr.includes("MBLNR = '4900050149'")) {
+        if (whereStr.includes('C0A801010000000000000000') || whereStr.includes("RSNUM = '0000525868'") || whereStr.includes("MBLNR = '4900050149'")) {
           return [{
             MBLNR: '4900050149',
             MJAHR: '2026',

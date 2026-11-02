@@ -642,7 +642,7 @@ describe('Movement Type 261 – Goods Issue to Order Unified Tests [mock only, n
       mockRfc.readTable = jest.fn(async (table, fields, options) => {
         const optStr = Array.isArray(options) ? options.join(' ') : String(options || '');
         if (table === 'MATDOC') {
-          if (optStr.includes(`SGTXT = '${pid}'`) || optStr.includes("MBLNR = '004900052261'")) {
+          if (optStr.includes(`BKTXT = '${pid.replace(/-/g, '').slice(0, 25)}'`) || optStr.includes("MBLNR = '004900052261'")) {
             return [{
               MBLNR: '004900052261', MJAHR: '2026', ZEILE: '0001', BWART: '261',
               MATNR: '000000001000000045', WERKS: '1120', LGORT: 'CS01', MENGE: '10.000',

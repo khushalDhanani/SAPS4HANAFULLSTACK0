@@ -1823,9 +1823,9 @@ Single source of truth for work history, current status, validation, unresolved 
 ## Next Steps
 
 - **URGENT, user action (2026-11-02):** The SAP password in `S4_PASSWORD` was committed in `2256822d` to `origin/feature01`, and the GitHub API answers 200 without login, so the repository appears public. Change that SAP password and update `.env.local`. Treat the two other removed values as exposed too. Removing them from the current files does not remove them from Git history; rewriting history needs a separate decision and a force push.
-- Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. Route count from `docs/e2e-coverage-matrix.md`: 5 proven, 1 partial, 15 not proven. The goods receipt is PROVEN on inbound delivery 0180000137 (document 5000005789/2026, read back from SAP) for a full quantity on an unpacked delivery; partial receipts are refused. Scan-to is proven for TO create and confirm on TR 1000982 (TO 1037664, read back from SAP); automatic MIGO and Retry MIGO are not. Route count from `docs/e2e-coverage-matrix.md`: 7 proven, 2 partial, 12 not proven. Each later run needs read-only data discovery and its own written go. Proposed order: 261, goods receipt, scan-to, because audit findings 2 to 5 changed that code and none of it has run live.
+- Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. The goods receipt is PROVEN on inbound delivery 0180000137 (document 5000005789/2026, read back from SAP) for a full quantity on an unpacked delivery; partial receipts are refused. Scan-to is proven for TO create and confirm on TR 1000982 (TO 1037664, read back from SAP); automatic MIGO and Retry MIGO are not. Route count from `docs/e2e-coverage-matrix.md`: 7 proven, 2 partial, 12 not proven. Each later run needs read-only data discovery and its own written go. A live reservation goods movement should prove the new `BKTXT` replay check (audit finding 10).
 
-- Goods receipt (2026-11-02): next audit item is finding 6 (plant limits), including the storage-unit path, which checks the client's plant and not the delivery's. Prove the receipt flow live with a written go. Deploy note: `ReservationItem` widens from String(4) to String(6) on HANA.
+- Goods receipt (2026-11-02): the storage-unit path now checks the delivery's plant (audit finding 6). Deploy note: `ReservationItem` widens from String(4) to String(6) on HANA.
 
 - Movement 261 (2026-11-02): decide whether the Scan 261 screen should send a client attempt id, which is the only way to tell a repeat of a confirmed posting from a new partial issue of the same quantity.
 
@@ -1903,6 +1903,21 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 IST — Audit finding 10: reservation replay check uses the process id stored in SAP: PARTIAL, uncommitted
+
+- **Status:** PARTIAL. Code and tests are done and uncommitted. No SAP write was sent. A live goods movement has not run through this code, including a real retry after a lost response.
+- **Confirmed problem:** `checkMigoIdempotency` searched `MATDOC-SGTXT`, which is blank on reservation postings, so the exact check never matched. A guess decided instead: SAP withdrawn above tracked withdrawn, or final issued, or no tracking row, returned an old document as this request's success and posted nothing.
+- **READ-ONLY evidence:** `BKTXT` holds the first 25 characters of the process id on every line of real documents, with `SGTXT` blank (4900050153 for 311, 4900050304 for 201). Documents with this text exist for all of 201, 241, 261, 301 and 311 since 2026-10-15. Earlier documents have it blank. Lookups took about 0.1 to 0.3 s in client 220; production table size is UNKNOWN.
+- **Change in `ReservationProcessAdapter.js`:** With a process id: a `BKTXT` match is a replay. On a miss, a document on the reservation item means: final issued = 422; no tracking row = 409; tracked = post the new quantity. Without a process id the quantity comparison stays as the only guard (`shortcut:` comment). HEADER_TXT and the lookup share `processHeaderText`.
+- **Behaviour change:** A request that used to receive an old document as success now gets a refusal, or posts if tracked. A tracked item withdrawn outside this flow now posts, which is intended.
+- **Not done from the design:** The Tier 3 open-quantity check (quantity above open is left to SAP) and a process id for `executeReservationWarehouseFlow` calls that send none.
+- **Remaining double-post exposure (INFERRED):** A caller sending a new `ProcessId` on a tracked item after a lost response. The screen resends the returned one, and `reservation-entry` declares no such input.
+- **TEST DECISION:** TEST ADDED and TEST UPDATED. Mocks in 11 test files answered on the old `SGTXT` field and now answer on `BKTXT`; a fresh-id test changed because ids differing only at the end share a 25-character text.
+- **Validation:** 4 new cases failed on the old code. After the fix: full `npx jest`: 225 suites passed, 1 skipped; 4,405 tests passed, 59 skipped. `eslint` on the source and main test files and `git diff --check`: clean. Browser, write guard on: `verifyMvt201`, `verifyMvt311`, `verifyHardeningUI` PASS. Dry-run `reservationRetry` and `scanTo`: PASS.
+- **READ-ONLY live run of `checkMigoIdempotency`:** real id on reservation 525877 returned document 4900050153 as a replay; unknown ids on final-issued 525877 and 528779 got 422; an unknown id on 529651, with no document, returned not posted.
+- **Note:** The audit finding 9 work was committed outside this session as `34a7cad1`.
+- **Next:** Audit finding 11 (SAP data to the AI provider).
 
 ### 2026-11-02 IST — Audit finding 9: database is the only attempt source when one is bound: PARTIAL, uncommitted
 
