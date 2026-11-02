@@ -106,7 +106,8 @@ async function verifyMvt201(options = {}) {
     report.reservation = 'PASS';
     report.ui = 'PASS';
 
-    // Read full page text content
+    // Read full page text content, once the reservation data has arrived (slower when suites run in parallel)
+    await page.waitForFunction(() => document.body.innerText.includes('8000009754'), null, { timeout: 15000 }).catch(() => {});
     const pageText = await page.innerText('body');
 
     // Assert Movement Type 201

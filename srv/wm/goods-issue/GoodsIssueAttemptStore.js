@@ -106,10 +106,12 @@ class GoodsIssueAttemptStore {
       createdAt: new Date().toISOString()
     };
     if (!row.ReferenceDocument) throw new Error('ReferenceDocument is required to record a posting attempt');
+    // Memory is only the fallback with no database: instances do not share it, and it would only grow.
     if (this.db) {
       await this._run(INSERT.into(ATTEMPT_ENTITY).entries(row));
+    } else {
+      this._memoryStore.set(row.ReferenceDocument, { ...row });
     }
-    this._memoryStore.set(row.ReferenceDocument, { ...row });
     return row;
   }
 
@@ -204,8 +206,7 @@ class GoodsIssueAttemptStore {
     const ref = String(referenceDocument || '').trim();
     if (!this.isAvailable() || !ref) return null;
     if (this.db) {
-      const row = await this._run(SELECT.one.from(ATTEMPT_ENTITY).where({ ReferenceDocument: ref }));
-      if (row) return row;
+      return (await this._run(SELECT.one.from(ATTEMPT_ENTITY).where({ ReferenceDocument: ref }))) || null;
     }
     return this._memoryStore.get(ref) || null;
   }
@@ -225,12 +226,13 @@ class GoodsIssueAttemptStore {
     if (fields.DeliveryNumber !== undefined) updates.DeliveryNumber = String(fields.DeliveryNumber || '');
     if (fields.LastError !== undefined) updates.LastError = String(fields.LastError || '').slice(0, 500);
 
+    if (this.db) {
+      await this._run(UPDATE(ATTEMPT_ENTITY).set(updates).where({ ReferenceDocument: ref }));
+      return;
+    }
     const mem = this._memoryStore.get(ref);
     if (mem) {
       Object.assign(mem, updates);
-    }
-    if (this.db) {
-      await this._run(UPDATE(ATTEMPT_ENTITY).set(updates).where({ ReferenceDocument: ref }));
     }
   }
 
@@ -296,13 +298,14 @@ class GoodsIssueAttemptStore {
     const resvSet = new Set();
     if (!this.isAvailable()) return resvSet;
 
-    for (const attempt of this._memoryStore.values()) {
-      if (OPEN_STATUSES.includes(attempt.Status) && attempt.ReservationNo) {
-        resvSet.add(String(attempt.ReservationNo).trim().replace(/^0+/, ''));
+    if (!this.db) {
+      for (const attempt of this._memoryStore.values()) {
+        if (OPEN_STATUSES.includes(attempt.Status) && attempt.ReservationNo) {
+          resvSet.add(String(attempt.ReservationNo).trim().replace(/^0+/, ''));
+        }
       }
+      return resvSet;
     }
-
-    if (!this.db) return resvSet;
 
     try {
       const rows = await this._run(

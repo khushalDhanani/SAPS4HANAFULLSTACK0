@@ -1904,6 +1904,18 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-11-02 IST — Audit finding 9: database is the only attempt source when one is bound: PARTIAL, uncommitted
+
+- **Status:** PARTIAL. Code and tests are done and uncommitted. No SAP write was sent. Not exercised on 2 real running instances; the test uses 2 store objects on one database.
+- **Finding checked against current code:** The false 409 in `hasOpenAttemptForReservation` was already removed by the audit finding 3 work. Still wrong: `create()` added every attempt to memory and never removed it; `getOpenAttemptReservations` merged stale memory with the database; `getByReference` fell back to memory; `setStatus` kept writing to memory.
+- **Change:** `srv/wm/goods-issue/GoodsIssueAttemptStore.js`: with a database bound, none of these read or write memory. Memory stays as the no-database fallback. `test/unit/wm/goodsIssueAttemptInstances.test.js` is new.
+- **Behaviour change:** If the database read in `getOpenAttemptReservations` fails, the list now shows no pending marks rather than this instance's memory. It logs a warning. The posting check `hasOpenAttemptForReservation` still fails closed.
+- **TEST DECISION:** TEST ADDED.
+- **Validation:** 3 of the 6 new tests failed on the old code. After the fix: full `npx jest`: 225 suites passed, 1 skipped; 4,401 tests passed, 59 skipped. `eslint` on the 2 files and `git diff --check`: clean. Browser suites `verifyHardeningUI` and `verifyMvt261`: PASS.
+- **Test flakiness found and fixed:** `verifyMvt201` failed 3 of 4 runs alongside other suites (`Movement Type 201 not displayed on page`) and passed 3 of 3 alone. Cause: the suite read the page text before the reservation data arrived; the 241, 261, 301 and 311 suites already wait. `test/e2e/wm/verifyMvt201.e2e.js` now waits for the material number. After the fix: 8 of 8 runs of the same 3 suites PASS. The higher parallel default of 4 workers made this race easier to hit; the two earlier full runs passed anyway.
+- **Note:** The dependency fix was committed outside this session as `09f12898`.
+- **Next:** Audit finding 10 (reservation replay check).
+
 ### 2026-11-02 IST — Audit finding 8: dependency vulnerabilities fixed: PASS for the audit result, uncommitted
 
 - **Status:** `npm audit --omit=dev` is at 0 vulnerabilities, from 11 (5 high, 6 moderate). Uncommitted. No SAP write was sent. Not deployed, and `npm run build:mta` was not run.
