@@ -1822,6 +1822,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- **URGENT, user action (2026-11-02):** The SAP password in `S4_PASSWORD` was committed in `2256822d` to `origin/feature01`, and the GitHub API answers 200 without login, so the repository appears public. Change that SAP password and update `.env.local`. Treat the two other removed values as exposed too. Removing them from the current files does not remove them from Git history; rewriting history needs a separate decision and a force push.
 - Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. Route count from `docs/e2e-coverage-matrix.md`: 5 proven, 1 partial, 15 not proven. The goods receipt is PROVEN on inbound delivery 0180000137 (document 5000005789/2026, read back from SAP) for a full quantity on an unpacked delivery; partial receipts are refused. Scan-to is proven for TO create and confirm on TR 1000982 (TO 1037664, read back from SAP); automatic MIGO and Retry MIGO are not. Route count from `docs/e2e-coverage-matrix.md`: 7 proven, 2 partial, 12 not proven. Each later run needs read-only data discovery and its own written go. Proposed order: 261, goods receipt, scan-to, because audit findings 2 to 5 changed that code and none of it has run live.
 
 - Goods receipt (2026-11-02): next audit item is finding 6 (plant limits), including the storage-unit path, which checks the client's plant and not the delivery's. Prove the receipt flow live with a written go. Deploy note: `ReservationItem` widens from String(4) to String(6) on HANA.
@@ -1902,6 +1903,72 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 IST — Browser E2E runner: run part of the suite, show progress, 4 workers: PASS for the runner change
+
+- **Status:** Runner change done and uncommitted. The full suite still reports 1 failure, which predates this work (below).
+- **Requested by the user:** Fix how long the browser suite takes and how frozen it looks.
+- **Cause:** I piped output through `grep | tail`, which held it back until the end. The runner could only run everything or the SAP-free subset. Two suites took 712 s and 428 s of about 32 minutes of total suite time, on 2 workers.
+- **Changes:**
+  - `test/e2e/runAllE2E.js`: added `--only=` or `E2E_ONLY`, a `[n/total]` counter, a slowest-5 list, and a default of 4 workers.
+  - `test/e2e/support/selectSuites.js`: new filter; a term matching nothing throws, so a typo cannot pass with no tests run.
+  - `test/unit/tools/e2eSelectSuites.test.js`: new tests.
+- **Not changed, on purpose:** The 712 s handling unit, 261 and scan-to group stays in one suite, because the code says those flows share the kit's module-level failure mode. That group sets the floor for a full run.
+- **Measured:** 4 workers: 991 s (16.5 minutes), 22 of 23 suites passed. 2 workers: about 19.5 minutes (INFERRED from process times, not timed directly), 22 of 23 passed with the same failure. `--only=shell`: 5 s, PASS. `--only=wmm`: refused, exit 1. Final full `npx jest`: 223 suites passed, 1 skipped; 4,364 tests passed, 59 skipped. `eslint` on the runner and `git diff --check`: clean.
+- **TEST DECISION:** TEST ADDED.
+- **Pre-existing failure, not fixed:** `Quarantine labels (mocked)` fails in `Goods-receipt list (mocked, DEMO)` with `page.click: Timeout 30000ms exceeded`. The same suite was recorded FAIL in `test-results/e2e-summary.json` on 2026-10-31, before today's user changes. Evidence is in `test-results/e2e-evidence/quarantine-labels-mocked`.
+
+### 2026-11-02 IST — Remove `bob`, `dave`, `eve`, `carol` and CAP's built-in mock users: PASS for the removal, uncommitted
+
+- **Status:** Removal done and uncommitted. The credential exposure below is still open.
+- **Requested by the user:** Remove the invented mock users.
+- **Correction:** The `alice` entry below reported that user as removed, but CAP's built-in defaults still supplied `alice`, `bob`, `carol`, `dave`, `erin`, `fred`, `me`, `yves` and a `*` wildcard that accepted any username over HTTP Basic. Deleting from `package.json` alone was not enough.
+- **Changes:**
+  - `package.json`: `[development]` and `[test]` now keep only `khushal`, and set the built-in users and `*` to `false`. CAP's `mocked-users.js` refuses those.
+  - `srv/auth-service.js`: removed the mock-only login branch.
+  - `test/testUsers.js` (new): 4 test-only identities named by role and plant, loaded through `CDS_CONFIG` by `test/setupEnv.js`, `test/e2e/support/isolatedServer.js` and the CI E2E server. They are kept because the permission tests need low-privilege users.
+  - 18 test, tool and doc files renamed; `test/unit/auth/authService.test.js` rewritten for one login path.
+  - `.claude/launch.json` (local, not in Git): new `cap-e2e` configuration.
+- **TEST DECISION:** TEST ADDED and TEST UPDATED.
+- **Validation:** Against a running development-profile server without test identities: `alice`, `bob`, `carol`, `dave`, `eve`, `erin`, `fred`, `me`, `yves`, `any-other-name`, `test-viewer-1120` and no login all got HTTP 401 on `$metadata`; `khushal` got 200. Full `npx jest` before the runner change: 222 suites passed, 1 skipped; 4,359 tests passed, 59 skipped. Full browser suite: 22 of 23 PASS, including `Plant isolation` and `Write authorization`.
+- **Findings, not fixed:** `khushal` still has no password in mocked HTTP Basic on a development-profile server. Customer returns still has the bypass for a user with id `mock`. `AUDIT_RESERVATION_CREATE.md` still names `bob` as a historical note.
+
+### 2026-11-02 IST — Remove invented user `alice`; local passwords compared exactly: PARTIAL, uncommitted
+
+- **Status:** PARTIAL. Code and tests are done and uncommitted. No SAP write was sent, and the credential exposure in the entry below is still open.
+- **Requested by the user:** Remove `alice`, and compare local mock passwords with exact case.
+- **Changes in source:**
+  - `package.json`: removed `alice` from the `[development]` and `[test]` mocked users. `khushal` already had the same roles.
+  - `srv/auth-service.js`: `alice` removed from the mock-only check, and `LOCAL_DEV_PASSWORD` compared exactly for `bob` and `khushal`.
+  - `srv/sd/customer-return/handlers/customerReturn.handler.js`: removed the check that let a user named `alice` create returns with no role.
+  - `SalesOrderModel.js`, `SalesInquiryModel.js`: the default creator name is now empty, not `alice`.
+  - `i18n.properties`, `i18n_en.properties`: removed `loginDemoAdmin` (no code uses it) and `alice` from the username placeholder.
+- **Changes in tests and tools:** 66 files used `alice` as a login and now use `khushal`, including `test/e2e`, `test/unit`, `test/integration`, `tools/`, the Postman collection and one matrix note. In `test/unit/auth/authService.test.js` the mock-only cases use `bob`, so no test reaches SAP.
+- **Not renamed, on purpose:** `WORKSTATUS.md`, `docs/archive/`, `docs/evidence/` and `docs/abap/sandbox-results.md`, because they record what actually happened.
+- **TEST DECISION:** TEST ADDED and TEST UPDATED (exact-case compare, no `alice` login or mocked user, no `alice` access to customer returns, empty default creator).
+- **Validation:** Full `npx jest`: 222 suites passed, 1 skipped; 4,331 tests passed, 59 skipped. `eslint` on the changed source and test files checked: clean. `git diff --check`: clean. Browser shell suite: PASS. Dry-run `salesOrder`, `customerReturn` and `mvt261` suites: PASS as `khushal`. The server log shows read-only `$batch` POSTs only for these runs.
+- **Findings, not fixed:**
+  - Mocked auth accepts `khushal:` with an empty password over HTTP Basic on any server running the development profile, which is how the browser suites sign in. So API access there is still not protected by a password, even though the login action now is.
+  - `bob`, `dave`, `eve` and `carol` are still mocked users.
+  - Customer returns still has the same bypass for a user with id `mock`.
+  - Unused i18n keys `loginDemoTitle` and `loginDemoPurchaser` remain, and the second shows `khushal / khushal`.
+- **Not verified:** the rest of the browser suites and other Tier C dry runs after the rename; CI; whether anyone used `alice` on a shared development server.
+- **Next:** The user changes the SAP password and decides on commit, repository visibility and history.
+
+### 2026-11-02 IST — Audit finding 1: login accepted any password for `khushal`; hardcoded passwords removed: PARTIAL, credential exposure open
+
+- **Status:** PARTIAL. The code fix is done and uncommitted. The exposed SAP password is not resolved: it needs the user to change it, and the commit is still in Git history and on the remote. No SAP write and no failed SAP login was sent.
+- **Root cause:** `srv/auth-service.js` treated any non-empty password as known for `khushal` outside production, and that user gets all roles including Admin. This applied wherever the dev issuer is on (`ENABLE_DEV_TOKEN_ISSUER=true` is set in `.env.local`). The same check held 3 passwords in source, added in `2256822d` (2026-10-29).
+- **Exposure, checked without printing values:** One of the 3 values equals `S4_PASSWORD` in `.env.local`. All 3 are on `origin/feature01` in `srv/auth-service.js` and `WORKSTATUS.md`, and none on `origin/main`. Unauthenticated `GET https://api.github.com/repos/khushalDhanani/SAPS4HANAFULLSTACK0` returned 200, so the repository appears public. Whether anyone used them is UNKNOWN.
+- **Changes:**
+  - `srv/auth-service.js`: removed the any-password condition and the 3 values. `khushal` now needs `LOCAL_DEV_PASSWORD`, `S4_PASSWORD`, or SAP's own check.
+  - `test/unit/auth/authService.test.js`: added a wrong-password test and a no-literal-password test.
+  - `WORKSTATUS.md`: replaced 6 occurrences of those values with `[REDACTED]` in older entries. This is a deliberate exception to not changing history in this file, and only the values changed.
+- **TEST DECISION:** TEST ADDED.
+- **Validation:** Both new tests failed on the old code. After the fix: `test/unit/auth` 4 suites and 55 tests passed. Full `npx jest`: 222 suites passed, 1 skipped; 4,328 tests passed, 59 skipped. `eslint` on the 2 changed JS files and `git diff --check`: clean. `git grep` finds none of the 3 values in tracked files. Browser suite `test/e2e/shell/verifyShellScreens.e2e.js`: default route, dashboard and login screen PASS, signed out.
+- **Not verified:** a real wrong-password login through the browser, on purpose, because it would send a failed logon to SAP and count against the `KHUSHAL` account. Whether a deployed environment had the dev issuer on; `productionGuard.js` blocks it in production.
+- **Findings, not fixed:** Mock and `khushal` local passwords are compared case-insensitively (`toLowerCase`). This session's local transcript displayed the values when reading the file. A full secret scan of Git history was not run.
+- **Next:** The user changes the SAP password, then decides on rewriting history and on making the repository private.
 
 ### 2026-11-02 IST — Live scan-to on TR 1000982 after the user's written go: PASS for TO create and confirm, read back from SAP
 
@@ -6157,11 +6224,11 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ### 2026-10-29 IST — DevTools Live Inspection & Local Dev Authentication Hardening — PASS
 
-- **CHANGED:** `srv/auth-service.js`. Updated local development authentication handler for `isKhushalUser` to support developer password variations (`Khushal@1234567890`, `Aether@1234567890`, `Aether@0102034`, `LOCAL_DEV_PASSWORD=init`, or any provided development password while `NODE_ENV !== "production"`). Restarted local CAP server on port 4004 via `npm start`.
+- **CHANGED:** `srv/auth-service.js`. Updated local development authentication handler for `isKhushalUser` to support developer password variations (`[REDACTED]`, `[REDACTED]`, `[REDACTED]`, `LOCAL_DEV_PASSWORD=init`, or any provided development password while `NODE_ENV !== "production"`). Restarted local CAP server on port 4004 via `npm start`.
 - **EVIDENCE VIA CHROME DEVTOOLS MCP:**
   1. Inspected the open browser session at `http://localhost:4004/fiori-app/webapp/index.html#/login`.
-  2. Evaluated password field and found 17 characters starting with `Aet` (`Aether@1234567890`), which differed from `Khushal@1234567890` (18 chars) that succeeded in curl. S/4 Gateway rejected the 17-char string with 401.
-  3. Hardened `srv/auth-service.js` to accept `Aether@1234567890` and developer variations in local dev mode.
+  2. Evaluated password field and found 17 characters starting with `Aet` (`[REDACTED]`), which differed from `[REDACTED]` (18 chars) that succeeded in curl. S/4 Gateway rejected the 17-char string with 401.
+  3. Hardened `srv/auth-service.js` to accept `[REDACTED]` and developer variations in local dev mode.
   4. Clicked the "Sign In to SAP S/4HANA" button (`uid=1_14`) live in Chrome via `chrome-devtools`.
   5. The page immediately logged in, routed to `http://localhost:4004/fiori-app/webapp/index.html#dashboard`, and rendered the complete Enterprise Operations Dashboard.
   6. Verified live metrics call `GET /odata/v4/purchase-order/getDashboardMetrics()` returned `200 OK` (3,013 Purchase Orders, 4,377 Active Suppliers, 578 Open Sales Orders, 2 Warehouses, 33 Inbound Deliveries, 1,243 Orders Due, 520 Invoices, 186 Returns).

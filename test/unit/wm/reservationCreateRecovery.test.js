@@ -18,7 +18,7 @@ const { SELECT, DELETE, INSERT } = cds.ql;
 
 const TRACK = 'saps4hana.wm.ReservationTrack';
 const LOGS = 'saps4hana.wm.ReservationLog';
-const auth = { auth: { username: 'carol', password: '' } };
+const auth = { auth: { username: 'test-clerk-1120', password: '' } };
 const URL = '/odata/v4/reservation-entry';
 
 const RES = '0000777077';

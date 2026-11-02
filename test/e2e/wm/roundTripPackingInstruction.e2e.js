@@ -123,7 +123,7 @@ async function dryRun(baseUrl) {
     let data = null;
     let ui = null;
     let calls = [];
-    const session = await openSession({ baseUrl, user: 'alice' });
+    const session = await openSession({ baseUrl, user: 'khushal' });
     try {
         data = await pickDryRunData(baseUrl);
         calls = await kit.stubAction(session, ACTION, stubResult);
@@ -145,7 +145,7 @@ async function dryRun(baseUrl) {
 async function live(baseUrl, data) {
     const errors = [];
     const details = { readBack: 'NOT RUN' };
-    const session = await openSession({ baseUrl, user: 'alice', allowWrites: [new RegExp(`^${ACTION}$`)] });
+    const session = await openSession({ baseUrl, user: 'khushal', allowWrites: [new RegExp(`^${ACTION}$`)] });
     const calls = kit.recordPosts(session, [ACTION]);
     try {
         const ui = await driveUi(session, data);

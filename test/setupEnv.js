@@ -14,4 +14,6 @@ process.env.S4_STORAGE_LOCATION = 'CS01';
 process.env.ENABLE_DEV_TOKEN_ISSUER = process.env.ENABLE_DEV_TOKEN_ISSUER || 'true';
 process.env.LOCAL_AUTH_SECRET = process.env.LOCAL_AUTH_SECRET || 'test-mock-secret-key-32-chars-long!';
 
+process.env.CDS_CONFIG = require('./testUsers').cdsConfig;
+
 require('./outboundNetworkGuard');

@@ -26,7 +26,7 @@ describe('P1: Controlled SAP Read-Back Evidence for Critical Movement Flows [moc
   let adapter;
   let rfcClient;
   let postingClient;
-  const authCarol = { auth: { username: 'carol', password: '' } };
+  const authCarol = { auth: { username: 'test-clerk-1120', password: '' } };
 
   beforeEach(() => {
     jest.restoreAllMocks();

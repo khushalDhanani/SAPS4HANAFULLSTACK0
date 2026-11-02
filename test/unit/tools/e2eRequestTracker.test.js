@@ -34,7 +34,7 @@ describe('request tracker', () => {
     });
 
     it('describes each outstanding request with method, URL, service, start, elapsed, screen and user', () => {
-        let clock = 1000; const p = page(); const t = createRequestTracker(p, { user: 'alice', now: () => clock });
+        let clock = 1000; const p = page(); const t = createRequestTracker(p, { user: 'khushal', now: () => clock });
         const slow = request('POST', 'http://localhost:4004/odata/v4/purchase-order/$batch');
         const events = request('GET', 'http://localhost:4004/ai/chat/stream');
         p.emit('request', slow);
@@ -43,7 +43,7 @@ describe('request tracker', () => {
         p.emit('response', { request: () => events });
         clock = 31000;
         const text = t.describe();
-        expect(text).toContain('screen #/mm/purchase-orders/create, user alice');
+        expect(text).toContain('screen #/mm/purchase-orders/create, user khushal');
         expect(text).toContain('POST http://localhost:4004/odata/v4/purchase-order/$batch [service purchase-order] started 1970-01-01T00:00:01.000Z, open 30000 ms, no response received');
         expect(text).toContain('GET http://localhost:4004/ai/chat/stream started 1970-01-01T00:00:01.500Z, open 29500 ms, response headers received but body not finished');
         expect(text.indexOf('$batch')).toBeLessThan(text.indexOf('/ai/chat'));

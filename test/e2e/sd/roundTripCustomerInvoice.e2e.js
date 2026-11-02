@@ -82,7 +82,7 @@ const CASES = {
 
 async function runCase(baseUrl, c, live, data) {
     const out = { name: c.name, errors: [], details: {} };
-    const session = await openSession({ baseUrl, user: 'alice' });
+    const session = await openSession({ baseUrl, user: 'khushal' });
     try {
         const calls = await rt.interceptAction(session.page, { flow: FLOW, service: SERVICE, action: c.action, live, respond: c.respond });
         await rt.openHash(session, HASH);

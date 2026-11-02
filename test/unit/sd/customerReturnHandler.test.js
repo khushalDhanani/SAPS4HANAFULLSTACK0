@@ -203,6 +203,19 @@ describe('Unit: CustomerReturnService Handlers', () => {
   });
 
   describe('createCustomerReturn', () => {
+    test('a user named alice has no special access: without a role the request is refused', async () => {
+      const req = {
+        data: { CustomerReturnType: 'CBAR', SoldToParty: '10001', ReturnsOrderReason: '101' },
+        user: { id: 'alice', is: jest.fn().mockReturnValue(false) },
+        error: jest.fn()
+      };
+
+      await handlers['createCustomerReturn'](req);
+
+      expect(req.error).toHaveBeenCalledWith(403, expect.stringContaining('not authorized'));
+      expect(customerReturnAdapter.createCustomerReturn).not.toHaveBeenCalled();
+    });
+
     test('rejects missing SoldToParty with 400', async () => {
       const req = {
         data: { ReturnsOrderReason: '101' },

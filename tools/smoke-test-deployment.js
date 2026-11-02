@@ -27,7 +27,7 @@ const urlArg = process.argv.find(a => a.startsWith('--url='))?.split('=')[1]
 
 const userArg = process.argv.find(a => a.startsWith('--user='))?.split('=')[1]
   || process.env.SMOKE_AUTH_USER
-  || (process.env.NODE_ENV === 'production' ? '' : 'alice:');
+  || (process.env.NODE_ENV === 'production' ? '' : 'khushal:');
 
 const waitArg = process.argv.find(a => a.startsWith('--wait=') || a === '--wait');
 const waitSecs = waitArg ? (waitArg.includes('=') ? parseInt(waitArg.split('=')[1], 10) : 30) : 0;

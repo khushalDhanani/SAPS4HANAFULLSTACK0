@@ -96,44 +96,19 @@ module.exports = class AuthServiceHandler extends cds.ApplicationService {
     }
 
     const sEnvDevUser = (process.env.S4_USERNAME || "").trim().toLowerCase();
-    // Local mock passwords exist only when LOCAL_DEV_PASSWORD is set; a username is never a password.
+    // A local password exists only when LOCAL_DEV_PASSWORD is set; a username is never a password.
     const sLocalDevPass = (process.env.LOCAL_DEV_PASSWORD || "").trim();
 
     let authResult;
-    const isMockOnlyUser = sUserLower === "alice" || sUserLower === "bob";
     const isKhushalUser = sUserLower === "khushal";
 
-    if (isMockOnlyUser) {
-      if (!sLocalDevPass) {
-        return {
-          authenticated: false,
-          message: "Local mock users are disabled: set LOCAL_DEV_PASSWORD to enable them."
-        };
-      }
-      const isMatch = localTokenUtil.timingSafeEqual(sPass.toLowerCase(), sLocalDevPass.toLowerCase());
-      if (isMatch) {
-        authResult = {
-          authenticated: true,
-          message: "Authentication successful (Local Development User).",
-          system: s4Config.getSystemLabel()
-        };
-      } else {
-        authResult = {
-          authenticated: false,
-          message: "Invalid username or password."
-        };
-      }
-    } else if (isKhushalUser) {
+    if (isKhushalUser) {
       // Allow 'khushal' with the local mock password (LOCAL_DEV_PASSWORD, if set),
-      // real S/4 credentials (S4_PASSWORD), local dev aliases, or S/4 Gateway
+      // real S/4 credentials (S4_PASSWORD), or S/4 Gateway
       const sEnvDevPass = (process.env.S4_PASSWORD || "").trim();
       const isKnownPass =
-        (sLocalDevPass && localTokenUtil.timingSafeEqual(sPass.toLowerCase(), sLocalDevPass.toLowerCase())) ||
-        (sEnvDevPass && localTokenUtil.timingSafeEqual(sPass, sEnvDevPass)) ||
-        localTokenUtil.timingSafeEqual(sPass, "Aether@1234567890") ||
-        localTokenUtil.timingSafeEqual(sPass, "Aether@0102034") ||
-        localTokenUtil.timingSafeEqual(sPass, "Khushal@1234567890") ||
-        (process.env.NODE_ENV !== "production" && sPass.length > 0);
+        (sLocalDevPass && localTokenUtil.timingSafeEqual(sPass, sLocalDevPass)) ||
+        (sEnvDevPass && localTokenUtil.timingSafeEqual(sPass, sEnvDevPass));
 
       if (isKnownPass) {
         authResult = {

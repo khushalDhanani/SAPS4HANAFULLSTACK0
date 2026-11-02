@@ -82,7 +82,7 @@ async function dryRun(baseUrl) {
     let entry = null;
     let ui = null;
     let calls = [];
-    const session = await openSession({ baseUrl, user: 'alice' });
+    const session = await openSession({ baseUrl, user: 'khushal' });
     try {
         entry = await pickDryRunData(baseUrl);
         calls = await kit.stubAction(session, ACTION, () => stubResult(entry));
@@ -107,7 +107,7 @@ async function dryRun(baseUrl) {
 async function live(baseUrl, data) {
     const errors = [];
     const details = { readBack: 'NOT RUN' };
-    const session = await openSession({ baseUrl, user: 'alice', allowWrites: [new RegExp(`^${ACTION}$`)] });
+    const session = await openSession({ baseUrl, user: 'khushal', allowWrites: [new RegExp(`^${ACTION}$`)] });
     const calls = kit.recordPosts(session, [ACTION]);
     try {
         const entry = await kit.getJson(baseUrl, `${SERVICE}/ReservationEntries(ReservationNo='${data.reservationNo}',ReservationItem='${data.reservationItem}')`);

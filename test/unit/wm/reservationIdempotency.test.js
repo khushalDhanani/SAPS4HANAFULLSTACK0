@@ -17,10 +17,10 @@ const { SELECT, DELETE } = cds.ql;
 
 const TRACK = 'saps4hana.wm.ReservationTrack';
 const LOGS = 'saps4hana.wm.ReservationLog';
-const auth = { auth: { username: 'carol', password: '' } };
+const auth = { auth: { username: 'test-clerk-1120', password: '' } };
 const URL = '/odata/v4/reservation-entry/createReservationEntry';
 const body = { MovementType: '311', Plant: '1120', StorageLocation: 'CS01', ReceivingStorageLocation: 'ST02', Material: '1000000045', Quantity: 3, Unit: 'KG' };
-const hash = (p, u = 'carol') => ReservationAttemptStore.hash(p, u);
+const hash = (p, u = 'test-clerk-1120') => ReservationAttemptStore.hash(p, u);
 
 let seq = 0;
 const nextRes = () => { seq += 1; const n = String(778000 + seq); return { success: true, reservationNo: n, reservationNoRaw: `0000${n}`, reservationItem: '0001', sapVerified: true, status: '01' }; };
@@ -55,7 +55,7 @@ describe('Step 7.8: business key of a reservation intent', () => {
   });
 
   test('a different user is a different intent', () => {
-    expect(hash(body, 'carol')).not.toBe(hash(body, 'alice'));
+    expect(hash(body, 'test-clerk-1120')).not.toBe(hash(body, 'khushal'));
   });
 });
 

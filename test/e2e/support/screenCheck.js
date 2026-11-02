@@ -13,10 +13,10 @@ const { parseMetadata, checkRequest } = require('./contract');
 const { batchParts } = require('./actionRoundTrip');
 const { createRequestTracker } = require('./requestTracker');
 
-// CAP mock users (package.json cds.requires.auth.users); the UI session mirrors their roles.
+// CAP users (package.json cds.requires.auth.users, test/testUsers.js); the UI session mirrors their roles.
 const USERS = {
-    alice: ['Admin', 'Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager'],
-    bob: ['Viewer']
+    khushal: ['Admin', 'Viewer', 'PurchasingManager', 'SalesRepresentative', 'SalesManager', 'WarehouseClerk', 'WarehouseManager'],
+    'test-viewer-1120': ['Viewer']
 };
 
 const SERVICE_URL = /\/odata\/v4\/([^/?]+)\/([^?]*(?:\?.*)?)$/;
@@ -26,7 +26,7 @@ const metaCache = new Map(); // `${baseUrl}|${service}` -> Promise<{ meta } | { 
 function serviceMeta(baseUrl, service) {
     const key = `${baseUrl}|${service}`;
     if (!metaCache.has(key)) {
-        metaCache.set(key, fetch(`${baseUrl}/odata/v4/${service}/$metadata`, { headers: { Authorization: 'Basic ' + Buffer.from('alice:').toString('base64') } })
+        metaCache.set(key, fetch(`${baseUrl}/odata/v4/${service}/$metadata`, { headers: { Authorization: 'Basic ' + Buffer.from('khushal:').toString('base64') } })
             .then(async (r) => (r.ok ? { meta: parseMetadata(await r.text()) } : { error: `HTTP ${r.status}` }), (e) => ({ error: e.message })));
     }
     return metaCache.get(key);
@@ -78,7 +78,7 @@ async function closeBrowser() {
  * user: a CAP mock user name, or null for a signed-out browser (no Basic header, no stored UI session).
  * allowWrites: only for gated live Tier C runs (support/liveWriteGate.js) — exact action paths the guard lets through.
  */
-async function openSession({ baseUrl, user = 'alice', allowWrites = [] }) {
+async function openSession({ baseUrl, user = 'khushal', allowWrites = [] }) {
     const browser = await getBrowser();
     const context = await browser.newContext({
         extraHTTPHeaders: user ? { Authorization: 'Basic ' + Buffer.from(`${user}:`).toString('base64') } : {},
@@ -277,7 +277,7 @@ async function evaluate(session, { route, needsList, expectRows }, before) {
  * Optional on an opened route: fill: { id, value } types into that input and presses Enter; expectRows: true.
  */
 async function runScreens({ baseUrl, user, title, steps }) {
-    console.log(`\n=== ${title} (user ${user === null ? '(signed out)' : user || 'alice'}, READ-ONLY, write guard on) ===`);
+    console.log(`\n=== ${title} (user ${user === null ? '(signed out)' : user || 'khushal'}, READ-ONLY, write guard on) ===`);
     const health = await fetch(`${baseUrl}/fiori-app/webapp/index.html`).then((r) => r.ok, () => false);
     if (!health) {
         console.log(`  [FAIL] server not reachable at ${baseUrl}`);

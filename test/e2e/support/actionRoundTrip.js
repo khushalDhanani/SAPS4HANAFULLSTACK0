@@ -229,7 +229,7 @@ function checkCalls(calls, expectedBody, label) {
 }
 
 /** GET-only CAP read used for live read-back (and dry-run data derivation). */
-function capGet(baseUrl, user = 'alice') {
+function capGet(baseUrl, user = 'khushal') {
     const headers = { Authorization: 'Basic ' + Buffer.from(`${user}:`).toString('base64'), Accept: 'application/json' };
     return async (path) => {
         const res = await fetch(`${baseUrl}/odata/v4/${path}`, { method: 'GET', headers });

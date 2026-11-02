@@ -32,6 +32,7 @@ function isolatedEnv(port, base = process.env) {
     const env = {};
     Object.keys(base).filter((k) => !STRIPPED.test(k)).forEach((k) => { env[k] = base[k]; });
     env.NODE_ENV = 'test';
+    env.CDS_CONFIG = require('../../testUsers').cdsConfig;
     env.PORT = String(port);
     return env;
 }
@@ -88,7 +89,7 @@ async function assertSapUnreachable(server) {
         throw new Error('isolated server environment still carries SAP connectivity variables');
     }
     const res = await fetch(`${server.baseUrl}/odata/v4/purchase-order/PurchaseOrders?$top=1`, {
-        headers: { Authorization: 'Basic ' + Buffer.from('alice:').toString('base64') }
+        headers: { Authorization: 'Basic ' + Buffer.from('khushal:').toString('base64') }
     });
     const body = await res.text();
     if (res.ok && /"value"\s*:\s*\[\s*\{/.test(body)) {

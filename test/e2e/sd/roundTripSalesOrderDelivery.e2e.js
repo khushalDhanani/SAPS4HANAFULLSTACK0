@@ -60,7 +60,7 @@ async function roundTripSalesOrderDelivery(options = {}) {
     out.details.values = v;
     console.log(`  data (${live ? 'test/e2e/live/testData.json' : 'READ-ONLY CAP reads'}): ${JSON.stringify(v)}`);
 
-    const session = await openSession({ baseUrl, user: 'alice' });
+    const session = await openSession({ baseUrl, user: 'khushal' });
     try {
         const calls = await rt.interceptAction(session.page, { flow: FLOW,
             service: SERVICE, action: ACTION, live,

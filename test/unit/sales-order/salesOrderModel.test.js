@@ -63,8 +63,8 @@ describe("SalesOrderModel - Initial State and User Resolution", () => {
         expect(SalesOrderModel.getCurrentUserName(mockComponent)).toBe("sales_manager");
     });
 
-    test("getCurrentUserName falls back to alice when no component or user model", () => {
-        expect(SalesOrderModel.getCurrentUserName(null)).toBe("alice");
+    test("getCurrentUserName returns no name, never an invented one, when no component or user model", () => {
+        expect(SalesOrderModel.getCurrentUserName(null)).toBe("");
     });
 
     test("createInitialModel initializes header and item with defaults", () => {

@@ -9,7 +9,7 @@
     "basic": [
       {
         "key": "username",
-        "value": "alice",
+        "value": "khushal",
         "type": "string"
       },
       {
@@ -107,7 +107,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"alice\",\n  \"password\": \"\"\n}"
+              "raw": "{\n  \"username\": \"khushal\",\n  \"password\": \"\"\n}"
             },
             "url": "{{baseUrl}}/odata/v4/auth/login"
           }

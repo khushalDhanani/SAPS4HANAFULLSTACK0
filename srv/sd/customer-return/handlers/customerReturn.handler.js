@@ -211,7 +211,7 @@ function registerCustomerReturnHandlers(srv) {
       // Check user authorization
       const allowedRoles = ['SalesRepresentative', 'SalesManager', 'Admin'];
       const hasRole = allowedRoles.some(r => req.user?.is(r));
-      if (req.user && !hasRole && req.user.id !== 'alice' && req.user.id !== 'mock') {
+      if (req.user && !hasRole && req.user.id !== 'mock') {
         return req.error(403, 'User not authorized to create Customer Returns in S/4HANA.');
       }
 

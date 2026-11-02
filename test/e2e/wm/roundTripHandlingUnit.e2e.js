@@ -198,7 +198,7 @@ async function dryRun(baseUrl) {
             continue;
         }
         const subErrors = [];
-        const session = await openSession({ baseUrl, user: 'alice' });
+        const session = await openSession({ baseUrl, user: 'khushal' });
         try {
             const calls = await kit.stubAction(session, PATH[name], (body) => writeResult(body, name === 'remove' ? { Deleted: true } : {}));
             sub.calls = calls;
@@ -226,7 +226,7 @@ async function live(baseUrl, data) {
         const raw = data[name];
         const sub = details.subcases[name] = { readBack: 'NOT RUN' };
         const subErrors = [];
-        const session = await openSession({ baseUrl, user: 'alice', allowWrites: [new RegExp(`^${PATH[name]}$`)] });
+        const session = await openSession({ baseUrl, user: 'khushal', allowWrites: [new RegExp(`^${PATH[name]}$`)] });
         const calls = kit.recordPosts(session, [PATH[name]]);
         try {
             let d = { ...raw };

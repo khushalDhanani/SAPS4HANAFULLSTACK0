@@ -4,7 +4,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
 const { RfcClient } = require('../srv/integration/s4hana/RfcClient');
 
 const CAP_BASE = 'http://localhost:4004';
-const AUTH_HEADER = 'Basic ' + Buffer.from('alice:admin').toString('base64');
+const AUTH_HEADER = 'Basic ' + Buffer.from('khushal:admin').toString('base64');
 const rfc = new RfcClient();
 
 async function postJson(url, body) {

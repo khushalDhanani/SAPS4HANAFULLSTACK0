@@ -92,7 +92,7 @@ function comparePayload(label, actual, expected) {
  */
 async function runRoundTrip(spec, options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
-    const user = spec.user || 'alice';
+    const user = spec.user || 'khushal';
     const actionPath = `${spec.service}/${spec.action}`;
     const actionRe = new RegExp(`^${actionPath.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`);
     const errors = [];

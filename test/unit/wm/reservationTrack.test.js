@@ -16,8 +16,8 @@ const TRACK_ENTITY = 'saps4hana.wm.ReservationTrack';
 const STATUS_ENTITY = 'saps4hana.wm.ReservationStatus';
 const LOG_ENTITY = 'saps4hana.wm.ReservationLog';
 
-const authClerk = { auth: { username: 'carol', password: '' } };
-const authViewer = { auth: { username: 'bob', password: '' } };
+const authClerk = { auth: { username: 'test-clerk-1120', password: '' } };
+const authViewer = { auth: { username: 'test-viewer-1120', password: '' } };
 const { seedLocalWmData } = require('../../wmSeedHelper');
 
 describe('Chunk 1: Data Model — ZRES_TRACK & ZRES_LOG', () => {
@@ -300,7 +300,7 @@ describe('Chunk 1: Data Model — ZRES_TRACK & ZRES_LOG', () => {
       }
     });
 
-    test('Viewer role (bob) is forbidden from calling write action', async () => {
+    test('Viewer role (test-viewer-1120) is forbidden from calling write action', async () => {
       await expect(
         POST(
           '/odata/v4/reservation-track/updateTrack',

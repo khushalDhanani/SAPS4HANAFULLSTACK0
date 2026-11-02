@@ -2,9 +2,9 @@
 /* global document, window */
 
 /**
- * Authorization / plant-isolation E2E (READ-ONLY, write guard on), as CAP mock user `bob` (Viewer, Plant 1120):
+ * Authorization / plant-isolation E2E (READ-ONLY, write guard on), as CAP mock user `test-viewer-1120` (Viewer, Plant 1120):
  * - plant-scoped lists show only rows of plant 1120;
- * - deep links to another plant's documents (ids looked up read-only as `alice`, Admin) show no foreign data and are
+ * - deep links to another plant's documents (ids looked up read-only as `khushal`, Admin) show no foreign data and are
  *   refused by the server (403/404), never a 5xx;
  * - choosing a plant outside the user's scope on Orders Due is refused and loads no rows.
  */
@@ -12,7 +12,7 @@
 const { openSession, openHash, inspectScreen } = require('../support/screenCheck');
 
 const OWN_PLANT = '1120';
-const ADMIN = { Authorization: 'Basic ' + Buffer.from('alice:').toString('base64') };
+const ADMIN = { Authorization: 'Basic ' + Buffer.from('khushal:').toString('base64') };
 
 const open = openHash;
 
@@ -72,7 +72,7 @@ async function adminRead(baseUrl, path) {
 
 async function verifyPlantIsolation(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
-    console.log(`\n=== Plant isolation as bob (Viewer, Plant ${OWN_PLANT}) — READ-ONLY, write guard on ===`);
+    console.log(`\n=== Plant isolation as test-viewer-1120 (Viewer, Plant ${OWN_PLANT}) — READ-ONLY, write guard on ===`);
 
     const res = await adminRead(baseUrl, `/odata/v4/reservation-entry/ReservationEntries?$top=1&$select=ReservationNo,ReservationItem,Plant&$filter=Plant ne '${OWN_PLANT}'`);
     const foreignRes = res && res.value && res.value[0];
@@ -124,7 +124,7 @@ async function verifyPlantIsolation(options = {}) {
             details.push({ case: c.name, status: 'SKIPPED', reason: c.skip });
             continue;
         }
-        const session = await openSession({ baseUrl, user: 'bob' });
+        const session = await openSession({ baseUrl, user: 'test-viewer-1120' });
         try {
             errs = await c.run(session);
         } catch (err) {

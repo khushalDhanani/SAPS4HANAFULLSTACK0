@@ -3,7 +3,7 @@ const purchaseOrderAdapter = require('../../../srv/integration/s4hana/mm/purchas
 const validPayload = require('../../fixtures/purchase-order/validPOPayload.json');
 const s4Errors = require('../../fixtures/purchase-order/s4ErrorResponses.json');
 const cdsTest = cds.test(__dirname + '/../../../');
-cdsTest.defaults.auth = { username: 'alice', password: '' };
+cdsTest.defaults.auth = { username: 'khushal', password: '' };
 const { POST } = cdsTest;
 
 describe('Integration: Create Purchase Order Action', () => {

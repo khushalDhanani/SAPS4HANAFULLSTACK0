@@ -24,9 +24,9 @@ const { SELECT, INSERT, DELETE } = cds.ql;
 const TRACK_ENTITY = 'saps4hana.wm.ReservationTrack';
 const LOG_ENTITY = 'saps4hana.wm.ReservationLog';
 
-const authClerk = { auth: { username: 'carol', password: '' } };
-const authPlant1130 = { auth: { username: 'dave', password: '' } };
-const authNoPlant = { auth: { username: 'eve', password: '' } };
+const authClerk = { auth: { username: 'test-clerk-1120', password: '' } };
+const authPlant1130 = { auth: { username: 'test-clerk-1130', password: '' } };
+const authNoPlant = { auth: { username: 'test-viewer-noplant', password: '' } };
 const { seedLocalWmData } = require('../../wmSeedHelper');
 
 describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservation + Auto-TR)', () => {
@@ -230,7 +230,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValue({ ...okRes, createdByUser: null });
       createTrSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement').mockResolvedValue(okTr);
       const { data } = await post({});
-      expect(data.CreatedByUser).toBe('carol');
+      expect(data.CreatedByUser).toBe('test-clerk-1120');
       expect(data.CreatedByUser).not.toBe('KHUSHAL');
     });
 
@@ -392,20 +392,20 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
   });
 
   describe('1b. Entity write authorization (D1)', () => {
-    const authViewer = { auth: { username: 'bob', password: '' } };
+    const authViewer = { auth: { username: 'test-viewer-1120', password: '' } };
     const body = {
       ReservationNo: '0000777009', ReservationItem: '0001', MovementType: '311', Plant: '1120',
       StorageLocation: 'CS01', Material: '1000000045', Quantity: 1, Unit: 'KG', ReceivingStorageLocation: 'ST02'
     };
 
-    test('Viewer (bob) cannot CREATE ReservationEntries and the SAP adapter is never called', async () => {
+    test('Viewer (test-viewer-1120) cannot CREATE ReservationEntries and the SAP adapter is never called', async () => {
       createResSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValue({ success: true, reservationNo: '777009', reservationNoRaw: '0000777009', reservationItem: '0001' });
       await expect(POST('/odata/v4/reservation-entry/ReservationEntries', body, authViewer))
         .rejects.toMatchObject({ response: { status: 403 } });
       expect(createResSpy).not.toHaveBeenCalled();
     });
 
-    test('Viewer (bob) cannot UPDATE or DELETE a tracked ReservationEntries row', async () => {
+    test('Viewer (test-viewer-1120) cannot UPDATE or DELETE a tracked ReservationEntries row', async () => {
       const key = "/odata/v4/reservation-entry/ReservationEntries(ReservationNo='0000524979',ReservationItem='0001')";
       await expect(PATCH(key, { ErrorMessage: 'x' }, authViewer)).rejects.toMatchObject({ response: { status: 403 } });
       await expect(HTTP_DELETE(key, authViewer)).rejects.toMatchObject({ response: { status: 403 } });
@@ -1477,7 +1477,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
     });
 
     test('Admin remains unrestricted by the Plant predicate', async () => {
-      const admin = await GET('/odata/v4/reservation-entry/ReservationEntries?$top=50', { auth: { username: 'alice', password: '' } });
+      const admin = await GET('/odata/v4/reservation-entry/ReservationEntries?$top=50', { auth: { username: 'khushal', password: '' } });
       expect(admin.status).toBe(200);
       expect(admin.data.value.some((row) => row.Plant === '1120')).toBe(true);
     });

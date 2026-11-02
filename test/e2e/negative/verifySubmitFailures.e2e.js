@@ -31,7 +31,7 @@ const specScreen = (label, SPEC, actionPath) => ({
     label, route: SPEC.route, submit: `[id$="--${SPEC.submit}"]`, actionPath, via: 'direct',
     actionRe: new RegExp(`${actionPath.replace(/[/$]/g, '\\$&')}$`),
     okBody: { '@odata.context': '$metadata#Edm.String', value: 'DRYRUN-NEG1' },
-    deriveData: (baseUrl) => SPEC.deriveData(capReader(baseUrl, 'alice')),
+    deriveData: (baseUrl) => SPEC.deriveData(capReader(baseUrl, 'khushal')),
     async prepare(session, values) {
         await rt.openHash(session, SPEC.hash);
         await SPEC.fill(formUi(session, SPEC.modelName), values);

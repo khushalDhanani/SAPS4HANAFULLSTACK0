@@ -42,7 +42,7 @@ async function verifyA11yScreens(options = {}) {
     const errors = [];
     console.log('\n=== Accessibility (axe-core, serious/critical; READ-ONLY, write guard on) ===');
     for (const r of routes()) {
-        const session = await openSession({ baseUrl, user: r.signedOut ? null : 'alice' });
+        const session = await openSession({ baseUrl, user: r.signedOut ? null : 'khushal' });
         try {
             await rt.openHash(session, r.hash);
             const screen = await inspectScreen(session.page);

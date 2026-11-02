@@ -18,7 +18,7 @@ const PLANT_USER = [
 async function verifyLeScreens(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
     const a = await runScreens({ baseUrl, title: 'LE screens (Admin without plant)', steps: NO_PLANT_USER });
-    const b = await runScreens({ baseUrl, user: 'bob', title: 'LE screens (plant-scoped user)', steps: PLANT_USER });
+    const b = await runScreens({ baseUrl, user: 'test-viewer-1120', title: 'LE screens (plant-scoped user)', steps: PLANT_USER });
     const errors = a.errors.concat(b.errors);
     return { status: errors.length ? 'FAIL' : 'PASS', errors, details: a.details.concat(b.details) };
 }

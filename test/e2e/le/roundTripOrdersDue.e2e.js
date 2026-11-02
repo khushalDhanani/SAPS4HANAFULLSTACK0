@@ -219,7 +219,7 @@ const ACTIONS = {
 async function runCase(baseUrl, name, ctx) {
     const out = { name, errors: [], details: {} };
     const a = ACTIONS[name];
-    const session = await openSession({ baseUrl, user: 'alice' });
+    const session = await openSession({ baseUrl, user: 'khushal' });
     try {
         const calls = await rt.interceptAction(session.page, { flow: FLOW, service: SERVICE, action: a.action, live: ctx.live, respond: a.respond });
         const step = await SUBCASES[name](session, ctx);

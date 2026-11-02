@@ -63,8 +63,8 @@ describe("SalesInquiryModel - Initial State and User Resolution", () => {
         expect(SalesInquiryModel.getCurrentUserName(mockComponent)).toBe("sales_rep");
     });
 
-    test("getCurrentUserName falls back to alice when no component or user model", () => {
-        expect(SalesInquiryModel.getCurrentUserName(null)).toBe("alice");
+    test("getCurrentUserName returns no name, never an invented one, when no component or user model", () => {
+        expect(SalesInquiryModel.getCurrentUserName(null)).toBe("");
     });
 
     test("createInitialModel initializes header and item with 10-increment numbering", () => {
@@ -109,14 +109,14 @@ describe("SalesInquiryModel - Configuration Defaults & Cascading Derivations", (
     };
 
     test("applyConfigurationDefaults prefers ZIN when available", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SalesInquiryType", "");
         SalesInquiryModel.applyConfigurationDefaults(oModel, mockConfig);
         expect(oModel.getProperty("/header/SalesInquiryType")).toBe("ZIN");
     });
 
     test("applyConfigurationDefaults respects user modification flag", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SalesInquiryType", "IN");
         SalesInquiryModel.markUserModified(oModel, "SalesInquiryType", true);
 
@@ -125,7 +125,7 @@ describe("SalesInquiryModel - Configuration Defaults & Cascading Derivations", (
     });
 
     test("applyConfigurationDefaults filters channels by sales org and division by org + channel", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SalesOrganization", "1000");
         oModel.setProperty("/header/DistributionChannel", "");
         oModel.setProperty("/header/OrganizationDivision", "");
@@ -138,7 +138,7 @@ describe("SalesInquiryModel - Configuration Defaults & Cascading Derivations", (
 
 describe("SalesInquiryModel - Customer Commercial Defaults", () => {
     test("deriveCustomerDefaults populates Sold-to details and derives Ship-To and Currency", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         const customerDefaults = {
             derived: true,
             CustomerName: "ACME Corp",
@@ -157,7 +157,7 @@ describe("SalesInquiryModel - Customer Commercial Defaults", () => {
     });
 
     test("deriveCustomerDefaults respects user-modified Ship-To and Currency", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/ShipToParty", "CUSTOM_SHIP_TO");
         oModel.setProperty("/header/TransactionCurrency", "USD");
         SalesInquiryModel.markUserModified(oModel, "ShipToParty", true);
@@ -178,7 +178,7 @@ describe("SalesInquiryModel - Customer Commercial Defaults", () => {
 
 describe("SalesInquiryModel - Item Management & Calculations", () => {
     test("addItem increments item numbers in 10s (000010, 000020...)", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         expect(oModel.getProperty("/items").length).toBe(1);
         expect(oModel.getProperty("/items/0/SalesInquiryItem")).toBe("000010");
 
@@ -194,7 +194,7 @@ describe("SalesInquiryModel - Item Management & Calculations", () => {
     });
 
     test("deleteItem removes item and re-sequences 10-increment numbers", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         SalesInquiryModel.addItem(oModel); // 000020
         SalesInquiryModel.addItem(oModel); // 000030
         expect(oModel.getProperty("/items").length).toBe(3);
@@ -208,7 +208,7 @@ describe("SalesInquiryModel - Item Management & Calculations", () => {
     });
 
     test("calculateTotals computes line net amount and header total", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         SalesInquiryModel.addItem(oModel);
 
         oModel.setProperty("/items/0/OrderQuantity", 2);
@@ -224,7 +224,7 @@ describe("SalesInquiryModel - Item Management & Calculations", () => {
     });
 
     test("updateStatus transitions to Ready to Create when all mandatory fields are present", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SalesInquiryType", "ZIN");
         oModel.setProperty("/header/SalesOrganization", "1000");
         oModel.setProperty("/header/DistributionChannel", "10");
@@ -243,7 +243,7 @@ describe("SalesInquiryModel - Item Management & Calculations", () => {
 
 describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     test("validateForm fails when required header fields are missing", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SoldToParty", ""); // Missing Sold-to
 
         const isValid = SalesInquiryModel.validateForm(oModel);
@@ -253,7 +253,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     });
 
     test("validateForm catches invalid currency code", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/TransactionCurrency", "INVALID_CURRENCY");
 
@@ -263,7 +263,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     });
 
     test("validateForm catches invalid date sequence (end date before start date)", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/header/BindingPeriodValidityStartDate", "2026-05-10");
         oModel.setProperty("/header/BindingPeriodValidityEndDate", "2026-05-01"); // Before start
@@ -274,7 +274,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     });
 
     test("validateForm validates item material, positive quantity, and unit", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SoldToParty", "10135");
         oModel.setProperty("/items/0/Material", ""); // Missing
         oModel.setProperty("/items/0/OrderQuantity", 0); // Invalid quantity <= 0
@@ -289,7 +289,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     });
 
     test("validateForm succeeds when all header and item mandatory fields are provided", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SalesInquiryType", "ZIN");
         oModel.setProperty("/header/SalesOrganization", "1000");
         oModel.setProperty("/header/DistributionChannel", "10");
@@ -309,7 +309,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     });
 
     test("clearErrors clears all header and item errors", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         oModel.setProperty("/header/SoldToParty", "");
         SalesInquiryModel.validateForm(oModel);
         expect(oModel.getProperty("/hasError")).toBe(true);
@@ -321,7 +321,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
     });
 
     test("applyMaterialDefaults sets Material, description and direct UNIT based on Material master data configuration", () => {
-        const oModel = SalesInquiryModel.createInitialModel("alice");
+        const oModel = SalesInquiryModel.createInitialModel("khushal");
         // Pre-set an error state on OrderQuantityUnit
         oModel.setProperty("/items/0/errors/OrderQuantityUnit", { state: "Error", text: "Unit is required" });
         oModel.setProperty("/items/0/errors/Material", { state: "Error", text: "Material is required" });
@@ -374,7 +374,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
 
     describe("SalesInquiryModel - API Payload Builder (buildPayload)", () => {
         test("buildPayload strips CustomerCity, CustomerCountry, and other non-contract UI properties from header", () => {
-            const oModel = SalesInquiryModel.createInitialModel("alice");
+            const oModel = SalesInquiryModel.createInitialModel("khushal");
             oModel.setProperty("/header/SalesInquiryType", "ZIN");
             oModel.setProperty("/header/SalesOrganization", "1000");
             oModel.setProperty("/header/DistributionChannel", "10");
@@ -418,7 +418,7 @@ describe("SalesInquiryModel - Incompletion Log Validation (V.02)", () => {
         });
 
         test("buildPayload strips item errors object while preserving all item contract fields", () => {
-            const oModel = SalesInquiryModel.createInitialModel("alice");
+            const oModel = SalesInquiryModel.createInitialModel("khushal");
             oModel.setProperty("/header/TransactionCurrency", "INR");
             oModel.setProperty("/items/0/Material", "4000000091");
             oModel.setProperty("/items/0/SalesInquiryItemText", "BPAO88063");

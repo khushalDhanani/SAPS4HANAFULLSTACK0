@@ -11,7 +11,7 @@ const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 const { POST, GET } = cds.test(__dirname + '/../../../');
 const { INSERT, DELETE } = cds.ql;
 
-const authClerk = { auth: { username: 'carol', password: '' } };
+const authClerk = { auth: { username: 'test-clerk-1120', password: '' } };
 const { seedLocalWmData } = require('../../wmSeedHelper');
 
 describe('Chunk 6: Monitor App, Retry Handling & SLG1 Integration', () => {

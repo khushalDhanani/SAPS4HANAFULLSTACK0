@@ -28,7 +28,7 @@ function routes() {
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 
 async function timeRoute(baseUrl, r) {
-    const session = await openSession({ baseUrl, user: r.signedOut ? null : 'alice' });
+    const session = await openSession({ baseUrl, user: r.signedOut ? null : 'khushal' });
     try {
         const t0 = Date.now();
         await session.page.goto(`${baseUrl}/fiori-app/webapp/index.html#/${r.hash}`, { waitUntil: 'domcontentloaded', timeout: 30000 });

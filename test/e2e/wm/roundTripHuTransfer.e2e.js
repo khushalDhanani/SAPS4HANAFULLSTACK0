@@ -20,7 +20,7 @@ const { resolveMode } = require('../support/liveWriteGate');
 const FLOW = 'huTransfer';
 const SERVICE = '/odata/v4/hu-stock-transfer';
 const ACTION = `${SERVICE}/executeHuStockTransfer`;
-const AUTH = { Authorization: 'Basic ' + Buffer.from('alice:').toString('base64') };
+const AUTH = { Authorization: 'Basic ' + Buffer.from('khushal:').toString('base64') };
 const RESULT_BOX = '.sapMMessageBoxSuccess, .sapMMessageBoxError, .sapMMessageBoxWarning, .sapMMessageBoxInformation';
 // Synthetic value: never a real SAP number, so a dry-run result cannot be mistaken for a posting.
 const STUB_DOC = 'DRYRUNHU01';
@@ -146,7 +146,7 @@ async function dryRun(baseUrl) {
     const calls = [];
     let data = null;
     let ui = null;
-    const session = await openSession({ baseUrl, user: 'alice' });
+    const session = await openSession({ baseUrl, user: 'khushal' });
     try {
         data = await pickDryRunData(session);
         // Registered after the session's context guard, so it takes precedence for this one URL only
@@ -180,7 +180,7 @@ async function dryRun(baseUrl) {
 async function live(baseUrl, data) {
     const errors = [];
     const details = { readBack: 'NOT RUN' };
-    const session = await openSession({ baseUrl, user: 'alice', allowWrites: [new RegExp(`^${ACTION}$`)] });
+    const session = await openSession({ baseUrl, user: 'khushal', allowWrites: [new RegExp(`^${ACTION}$`)] });
     try {
         const ui = await driveUi(session, { ...data, transferQty: Number(data.transferQty) });
         details.ui = { validated: ui.validated, success: ui.success, dialog: ui.dialog };

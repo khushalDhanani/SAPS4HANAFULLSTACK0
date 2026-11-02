@@ -18,7 +18,7 @@ v8.setFlagsFromString('--expose-gc');
 const gc = vm.runInNewContext('gc');
 
 const cdsTest = cds.test(path.resolve(__dirname, '../..'));
-cdsTest.defaults.auth = { username: 'alice', password: '' };
+cdsTest.defaults.auth = { username: 'khushal', password: '' };
 const { GET } = cdsTest;
 
 describe('Release Automation: Performance & Scalability Benchmarks', () => {

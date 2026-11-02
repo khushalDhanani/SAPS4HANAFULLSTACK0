@@ -26,6 +26,7 @@ const { verifyQuarantineLabels } = require('./wm/verifyQuarantineLabels.e2e');
 const { verifyActionFailures, SHARDS: ACTION_SHARDS } = require('./negative/verifyActionFailures.e2e');
 const { verifyA11yScreens } = require('./a11y/verifyA11yScreens.e2e');
 const { verifyScreenPerformance } = require('./performance/verifyScreenPerformance.e2e');
+const { selectSuites } = require('./support/selectSuites');
 
 const targetUrlArg = process.argv.find(a => a.startsWith('--url='))?.split('=')[1]
   || process.argv.find(a => a.startsWith('--target-url='))?.split('=')[1]
@@ -33,11 +34,14 @@ const targetUrlArg = process.argv.find(a => a.startsWith('--url='))?.split('=')[
   || process.env.APP_URL
   || 'http://localhost:4004';
 
-// Parallel suites: --workers=N or E2E_WORKERS (default 2). 1 restores strictly sequential runs.
-const workersArg = Number(process.argv.find(a => a.startsWith('--workers='))?.split('=')[1] || process.env.E2E_WORKERS) || 2;
+// Parallel suites: --workers=N or E2E_WORKERS (default 4). 1 restores strictly sequential runs.
+const workersArg = Number(process.argv.find(a => a.startsWith('--workers='))?.split('=')[1] || process.env.E2E_WORKERS) || 4;
 
 // --sap-free: only the suites marked sapFree, against a private test-profile server that cannot reach SAP (the PR gate in CI).
 const sapFreeArg = process.argv.includes('--sap-free');
+
+// --only=wm,shell or E2E_ONLY: only the suites whose name or file contains a term, for checking one change quickly.
+const onlyArg = process.argv.find(a => a.startsWith('--only='))?.split('=')[1] || process.env.E2E_ONLY || '';
 
 async function checkServerHealth(urlStr) {
   const target = (urlStr || targetUrlArg).replace(/\/+$/, '');
@@ -87,7 +91,7 @@ async function runSuitesAndSummarize(options) {
     fs.mkdirSync(testResultsDir, { recursive: true });
   }
 
-  const suites = [
+  const suites = selectSuites([
     {
       name: 'UI Hardening & Rapid Submission',
       file: 'verifyHardeningUI.e2e.js',
@@ -163,15 +167,17 @@ async function runSuitesAndSummarize(options) {
     { name: 'Accessibility (axe-core)', file: 'a11y/verifyA11yScreens.e2e.js', fn: verifyA11yScreens },
     // Timing suite: runs alone after the pool drains, so parallel load cannot distort its measurements
     { name: 'Screen performance baseline', file: 'performance/verifyScreenPerformance.e2e.js', fn: verifyScreenPerformance, serial: true }
-  ].filter((s) => !options.sapFree || s.sapFree);
+  ].filter((s) => !options.sapFree || s.sapFree), options.only === undefined ? onlyArg : options.only);
 
   let totalPassed = 0;
   let totalFailed = 0;
+  let started = 0;
   const results = new Array(suites.length);
 
   async function runSuite(suite, index) {
     const startTime = Date.now();
-    console.log(`\n>>> STARTING: ${suite.name} (${suite.file})`);
+    started++;
+    console.log(`\n>>> STARTING [${started}/${suites.length}]: ${suite.name} (${suite.file})`);
     evidence.beginSuite(suite.name);
     try {
       const outcome = await suite.fn({ baseUrl });
@@ -237,6 +243,9 @@ async function runSuitesAndSummarize(options) {
   console.log(' E2E PLAYWRIGHT SUITE SUMMARY');
   console.log('================================================================');
   console.log(`Total: ${suites.length} | Passed: ${totalPassed} | Failed: ${totalFailed}`);
+  console.log('Slowest suites:');
+  results.slice().sort((a, b) => b.durationMs - a.durationMs).slice(0, 5)
+    .forEach((r) => console.log(`  ${Math.round(r.durationMs / 1000)}s  ${r.suite}`));
   console.log(`Report written to: ${summaryPath}`);
   console.log('================================================================\n');
 

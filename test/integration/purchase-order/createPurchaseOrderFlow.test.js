@@ -3,7 +3,7 @@ const purchaseOrderAdapter = require('../../../srv/integration/s4hana/mm/purchas
 const valueHelpsFixture = require('../../fixtures/purchase-order/valueHelps.json');
 const purchaseOrdersFixture = require('../../fixtures/purchase-order/purchaseOrders.json');
 const cdsTest = cds.test(__dirname + '/../../../');
-cdsTest.defaults.auth = { username: 'alice', password: '' };
+cdsTest.defaults.auth = { username: 'khushal', password: '' };
 const { POST, GET } = cdsTest;
 
 describe('Integration (mocked SAP): Create Purchase Order flow through CAP', () => {

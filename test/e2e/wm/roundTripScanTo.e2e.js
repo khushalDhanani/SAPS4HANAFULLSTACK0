@@ -171,7 +171,7 @@ async function dryRun(baseUrl) {
         return { errors: [`test data: ${err.message}`], details };
     }
     for (const name of Object.keys(SUBCASES)) {
-        const session = await openSession({ baseUrl, user: 'alice' });
+        const session = await openSession({ baseUrl, user: 'khushal' });
         let res;
         try {
             res = await SUBCASES[name](session, list);
@@ -192,7 +192,7 @@ async function dryRun(baseUrl) {
 async function live(baseUrl, data) {
     const errors = [];
     const details = { readBack: 'NOT RUN' };
-    const session = await openSession({ baseUrl, user: 'alice', allowWrites: [new RegExp(`^${CREATE}$`)] });
+    const session = await openSession({ baseUrl, user: 'khushal', allowWrites: [new RegExp(`^${CREATE}$`)] });
     const calls = kit.recordPosts(session, [CREATE, MIGO]);
     try {
         const c = { lgnum: data.lgnum, tbnum: data.tbnum };

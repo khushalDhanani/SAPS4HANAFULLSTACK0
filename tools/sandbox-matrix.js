@@ -12,7 +12,7 @@ require('./live-sap-gate')();
  *   node tools/sandbox-matrix.js --mvt 311 --case full  dry run, one movement type / case
  *   node tools/sandbox-matrix.js --mvt 311 --execute    LIVE writes on the sandbox (CAP server must run: npm start)
  *   --base <url>  (default CAP_BASE_URL or http://localhost:4004)   --out <file> (default docs/abap/sandbox-results.md)
- *   CAP_USER / CAP_PASSWORD: Basic auth for the CAP mocked users (default alice / admin, as tools/run*-live.js)
+ *   CAP_USER / CAP_PASSWORD: Basic auth for the CAP mocked users (default khushal / admin, as tools/run*-live.js)
  */
 const fs = require('fs');
 const path = require('path');
@@ -28,7 +28,7 @@ const BASE = opt('--base', process.env.CAP_BASE_URL || 'http://localhost:4004');
 const OUT = opt('--out', path.resolve(__dirname, '../docs/abap/sandbox-results.md'));
 const ONLY_MVT = opt('--mvt', '');
 const ONLY_CASE = opt('--case', '');
-const AUTH = 'Basic ' + Buffer.from(`${process.env.CAP_USER || 'alice'}:${process.env.CAP_PASSWORD || 'admin'}`).toString('base64');
+const AUTH = 'Basic ' + Buffer.from(`${process.env.CAP_USER || 'khushal'}:${process.env.CAP_PASSWORD || 'admin'}`).toString('base64');
 const CASES = ['full', 'partial', 'batch', 'serial', 'gi-failure-retry'];
 const picked = {}; // test data per movement type / flags, read once per run
 const pickOnce = async (r, wh, mvt, flags) => { const k = `${mvt}|${flags.needBatch}|${flags.needSerial}`; if (!picked[k]) picked[k] = await pickTestData(r, wh, mvt, flags); return picked[k]; };

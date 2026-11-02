@@ -12,7 +12,7 @@ const { openHash } = require('../support/screenCheck');
 
 const { resolveMode } = require('../support/liveWriteGate');
 
-const AUTH = { Authorization: 'Basic ' + Buffer.from('alice:').toString('base64') };
+const AUTH = { Authorization: 'Basic ' + Buffer.from('khushal:').toString('base64') };
 const RESTART = /ECONNREFUSED|ECONNRESET|ERR_CONNECTION|ERR_EMPTY_RESPONSE|fetch failed|socket hang up|server not healthy|HTTP 50[23]/;
 
 async function waitForHealth(baseUrl) {

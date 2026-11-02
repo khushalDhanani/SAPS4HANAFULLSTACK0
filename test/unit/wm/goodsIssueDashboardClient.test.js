@@ -147,7 +147,7 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
           MENGE: '5.000',
           MEINS: 'KG',
           BUDAT: '20260901',
-          USNAM: 'BOB',
+          USNAM: 'TESTUSER',
           KOSTL: '',
           AUFNR: '',
           RSNUM: '',
@@ -216,7 +216,7 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
           MENGE: '20',
           MEINS: 'EA',
           BUDAT: '20260920',
-          USNAM: 'ALICE'
+          USNAM: 'KHUSHAL'
         }]); // MSEG window succeeds
 
       const data = await client.getDashboardData({ days: 7, plant: '1120' });
@@ -259,7 +259,7 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
         {
           MBLNR: '3001', MJAHR: '2026', ZEILE: '0001', BWART: '301', MATNR: '000000000000000515',
           WERKS: '1120', LGORT: '1121', CHARG: '', MENGE: '25', MEINS: 'M', BUDAT: '20260926',
-          USNAM: 'BOB', KOSTL: '', AUFNR: '', RSNUM: '', RSPOS: '', SHKZG: 'S',
+          USNAM: 'TESTUSER', KOSTL: '', AUFNR: '', RSNUM: '', RSPOS: '', SHKZG: 'S',
           UMWRK: '1130', UMLGO: 'MT01'
         }
       ];

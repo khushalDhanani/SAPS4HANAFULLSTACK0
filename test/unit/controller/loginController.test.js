@@ -32,7 +32,7 @@ describe("Login.controller Unit Tests", () => {
 
         mockAuthService = {
             getModel: jest.fn(() => ({
-                getProperty: jest.fn((path) => path === "/savedUsername" ? "alice" : null)
+                getProperty: jest.fn((path) => path === "/savedUsername" ? "khushal" : null)
             })),
             isAuthenticated: jest.fn(),
             login: jest.fn(),
@@ -171,12 +171,12 @@ describe("Login.controller Unit Tests", () => {
     });
 
     test("onInputChange should sync control values to view model and reset error states", () => {
-        mockUserInput.getValue.mockReturnValue("alice");
+        mockUserInput.getValue.mockReturnValue("khushal");
         mockPassInput.getValue.mockReturnValue("secret123");
 
         controller.onInputChange();
 
-        expect(mockViewModel.setProperty).toHaveBeenCalledWith("/username", "alice");
+        expect(mockViewModel.setProperty).toHaveBeenCalledWith("/username", "khushal");
         expect(mockViewModel.setProperty).toHaveBeenCalledWith("/password", "secret123");
         expect(mockViewModel.setProperty).toHaveBeenCalledWith("/hasError", false);
     });
@@ -196,9 +196,9 @@ describe("Login.controller Unit Tests", () => {
     });
 
     test("onLogin should reject if password is empty", () => {
-        mockUserInput.getValue.mockReturnValue("alice");
+        mockUserInput.getValue.mockReturnValue("khushal");
         mockPassInput.getValue.mockReturnValue("");
-        mockViewModel.data.username = "alice";
+        mockViewModel.data.username = "khushal";
         mockViewModel.data.password = "";
 
         controller.onLogin();
@@ -211,20 +211,20 @@ describe("Login.controller Unit Tests", () => {
 
     test("onLogin should read live control values before blur (Enter key submission)", async () => {
         // Simulating the exact bug: model is empty because user pressed Enter inside password field
-        mockViewModel.data.username = "alice";
+        mockViewModel.data.username = "khushal";
         mockViewModel.data.password = ""; // model empty
 
         // But control has value
-        mockUserInput.getValue.mockReturnValue("alice");
-        mockPassInput.getValue.mockReturnValue("alice");
+        mockUserInput.getValue.mockReturnValue("khushal");
+        mockPassInput.getValue.mockReturnValue("khushal");
 
-        mockAuthService.login.mockResolvedValue({ username: "alice" });
+        mockAuthService.login.mockResolvedValue({ username: "khushal" });
 
         controller.onLogin();
 
         // Model was synced with control value
-        expect(mockViewModel.setProperty).toHaveBeenCalledWith("/password", "alice");
-        expect(mockAuthService.login).toHaveBeenCalledWith("alice", "alice", true);
+        expect(mockViewModel.setProperty).toHaveBeenCalledWith("/password", "khushal");
+        expect(mockAuthService.login).toHaveBeenCalledWith("khushal", "khushal", true);
 
         // Await promise microtask
         await new Promise(process.nextTick);
@@ -234,9 +234,9 @@ describe("Login.controller Unit Tests", () => {
     });
 
     test("onLogin reloads the page after login so OData V4 models drop a cached 401 $metadata (deep link before login)", async () => {
-        mockUserInput.getValue.mockReturnValue("alice");
-        mockPassInput.getValue.mockReturnValue("alice");
-        mockAuthService.login.mockResolvedValue({ username: "alice" });
+        mockUserInput.getValue.mockReturnValue("khushal");
+        mockPassInput.getValue.mockReturnValue("khushal");
+        mockAuthService.login.mockResolvedValue({ username: "khushal" });
         global.window = { location: { hash: "le/orders-due", reload: jest.fn() } };
         try {
             controller.onLogin();
@@ -250,7 +250,7 @@ describe("Login.controller Unit Tests", () => {
     });
 
     test("onLogin should handle authentication failure cleanly", async () => {
-        mockUserInput.getValue.mockReturnValue("alice");
+        mockUserInput.getValue.mockReturnValue("khushal");
         mockPassInput.getValue.mockReturnValue("wrongpass");
         mockAuthService.login.mockRejectedValue(new Error("Invalid credentials"));
 

@@ -19,7 +19,7 @@ describe('Post-Deployment Smoke Test Suite', () => {
   it('executes smoke tests against the running server and validates all 10 endpoints pass', async () => {
     const summary = await executeSmokeTests({
       baseUrl: server.baseUrl,
-      authUser: 'alice:'
+      authUser: 'khushal:'
     });
 
     expect(summary.isSuccess).toBe(true);
@@ -43,7 +43,7 @@ describe('Post-Deployment Smoke Test Suite', () => {
   it('fails gracefully when targeting an unreachable port or invalid host', async () => {
     const summary = await executeSmokeTests({
       baseUrl: 'http://127.0.0.1:59999',
-      authUser: 'alice:'
+      authUser: 'khushal:'
     });
 
     expect(summary.isSuccess).toBe(false);

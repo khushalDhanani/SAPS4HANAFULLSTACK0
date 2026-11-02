@@ -18,7 +18,7 @@ describe('Integration: quarantine labels document list', () => {
       Documents: [{ MaterialDocument: '5000000001', MaterialDocumentYear: '2026', PostingDate: '2026-10-20', Plant: '1120',
         Material: 'DEMO-MAT-1', MaterialDescription: 'DEMO MATERIAL 1', Batch: 'B1', SupplierName: 'DEMO SUPPLIER' }]
     });
-    const { data } = await POST(`${BASE}/listDocuments`, range, as('carol'));
+    const { data } = await POST(`${BASE}/listDocuments`, range, as('test-clerk-1120'));
     expect(data).toMatchObject({ Plant: '1120', More: false, Documents: [{ MaterialDocument: '5000000001', SupplierName: 'DEMO SUPPLIER' }] });
     expect(list.mock.calls[0][0]).toMatchObject({ ...range, allowedPlants: ['1120'] });
   });
@@ -29,7 +29,7 @@ describe('Integration: quarantine labels document list', () => {
       Rows: [{ Material: '000000000000123456', MaterialDescription: 'DEMO MATERIAL' },
         { Material: 'DEMO-MAT-2', MaterialDescription: 'DEMO SECOND MATERIAL' }]
     });
-    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('alice'));
+    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('khushal'));
     expect(data.Rows.map((row) => row.Material)).toEqual(['000000000000123456', 'DEMO-MAT-2']);
   });
 
@@ -38,7 +38,7 @@ describe('Integration: quarantine labels document list', () => {
       MaterialDocument: '5000000001', MaterialDocumentYear: '2026',
       Rows: [{ Material: 'DEMO-MAT-1', PreparedBy: 'MSHUSSAIN' }]
     });
-    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('alice'));
+    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('khushal'));
     expect(data.Rows[0].PreparedBy).toBe('MSHUSSAIN');
   });
 
@@ -47,7 +47,7 @@ describe('Integration: quarantine labels document list', () => {
       MaterialDocument: '5000000001', MaterialDocumentYear: '2026',
       Rows: [{ Material: 'DEMO-MAT-1', InwardNo: '34567', Text: '34567' }]
     });
-    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('alice'));
+    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('khushal'));
     expect(data.Rows[0].InwardNo).toBe('34567');
     expect(data.Rows[0].Text).toBe('34567');
   });
@@ -57,29 +57,29 @@ describe('Integration: quarantine labels document list', () => {
       MaterialDocument: '5000000001', MaterialDocumentYear: '2026',
       Rows: [{ Material: 'DEMO-MAT-1', InspectionLot: '010000005588' }]
     });
-    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('alice'));
+    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('khushal'));
     expect(data.Rows[0].InspectionLot).toBe('010000005588');
   });
 
   it('Admin is unrestricted (allowedPlants null)', async () => {
     const list = jest.spyOn(QuarantineLabelAdapter.prototype, 'listDocuments').mockResolvedValue({ Plant: '1120', More: false, Documents: [] });
-    await POST(`${BASE}/listDocuments`, range, as('alice'));
+    await POST(`${BASE}/listDocuments`, range, as('khushal'));
     expect(list.mock.calls[0][0].allowedPlants).toBeNull();
   });
 
   it('adapter errors keep their status (403 plant, 400 input)', async () => {
     jest.spyOn(QuarantineLabelAdapter.prototype, 'listDocuments').mockRejectedValue(Object.assign(new Error('You are not authorized for plant 1130.'), { status: 403 }));
-    await expect(POST(`${BASE}/listDocuments`, { ...range, Plant: '1130' }, as('carol'))).rejects.toMatchObject({ response: { status: 403 } });
+    await expect(POST(`${BASE}/listDocuments`, { ...range, Plant: '1130' }, as('test-clerk-1120'))).rejects.toMatchObject({ response: { status: 403 } });
   });
 
   it('a user without a warehouse role cannot list', async () => {
     const list = jest.spyOn(QuarantineLabelAdapter.prototype, 'listDocuments');
-    await expect(POST(`${BASE}/listDocuments`, range, as('bob'))).rejects.toMatchObject({ response: { status: 403 } });
+    await expect(POST(`${BASE}/listDocuments`, range, as('test-viewer-1120'))).rejects.toMatchObject({ response: { status: 403 } });
     expect(list).not.toHaveBeenCalled();
   });
 
   it('getPlantContext returns the user\'s plants; Admin is unrestricted', async () => {
-    expect((await GET(`${BASE}/getPlantContext()`, as('dave'))).data).toMatchObject({ plants: ['1130'], unrestricted: false });
-    expect((await GET(`${BASE}/getPlantContext()`, as('alice'))).data).toMatchObject({ plants: [], unrestricted: true });
+    expect((await GET(`${BASE}/getPlantContext()`, as('test-clerk-1130'))).data).toMatchObject({ plants: ['1130'], unrestricted: false });
+    expect((await GET(`${BASE}/getPlantContext()`, as('khushal'))).data).toMatchObject({ plants: [], unrestricted: true });
   });
 });

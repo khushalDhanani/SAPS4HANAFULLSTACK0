@@ -15,7 +15,7 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
     describe('Gating and Opt-In Validation', () => {
         it('should be disabled by default (no env vars set)', () => {
             expect(localTokenUtil.isDevTokenIssuerEnabled()).toBe(false);
-            expect(() => localTokenUtil.issueToken('alice')).toThrow(/disabled/i);
+            expect(() => localTokenUtil.issueToken('khushal')).toThrow(/disabled/i);
             expect(localTokenUtil.verifyToken('some.dummy.token')).toBeNull();
         });
 
@@ -24,7 +24,7 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
             delete process.env.LOCAL_AUTH_SECRET;
 
             expect(localTokenUtil.isDevTokenIssuerEnabled()).toBe(false);
-            expect(() => localTokenUtil.issueToken('alice')).toThrow(/disabled/i);
+            expect(() => localTokenUtil.issueToken('khushal')).toThrow(/disabled/i);
             expect(localTokenUtil.verifyToken('some.dummy.token')).toBeNull();
         });
 
@@ -33,7 +33,7 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
             process.env.LOCAL_AUTH_SECRET = 'super-secret-key-12345';
 
             expect(localTokenUtil.isDevTokenIssuerEnabled()).toBe(false);
-            expect(() => localTokenUtil.issueToken('alice')).toThrow(/disabled/i);
+            expect(() => localTokenUtil.issueToken('khushal')).toThrow(/disabled/i);
             expect(localTokenUtil.verifyToken('some.dummy.token')).toBeNull();
         });
 
@@ -50,7 +50,7 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
             process.env.LOCAL_AUTH_SECRET = 'super-secret-key-12345';
 
             expect(localTokenUtil.isDevTokenIssuerEnabled()).toBe(false);
-            expect(() => localTokenUtil.issueToken('alice')).toThrow(/disabled/i);
+            expect(() => localTokenUtil.issueToken('khushal')).toThrow(/disabled/i);
         });
     });
 
@@ -66,22 +66,22 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
         });
 
         it('should issue a valid JWT with standard XSUAA claims and verify it', () => {
-            const tokenResult = localTokenUtil.issueToken('alice', ['PurchasingManager', 'Viewer']);
+            const tokenResult = localTokenUtil.issueToken('khushal', ['PurchasingManager', 'Viewer']);
             expect(tokenResult).toHaveProperty('token');
             expect(tokenResult.scopes).toEqual(['$XSAPPNAME.PurchasingManager', '$XSAPPNAME.Viewer']);
             expect(typeof tokenResult.expiresAt).toBe('number');
 
             const verifiedUser = localTokenUtil.verifyToken(tokenResult.token);
             expect(verifiedUser).not.toBeNull();
-            expect(verifiedUser.id).toBe('alice');
+            expect(verifiedUser.id).toBe('khushal');
             expect(verifiedUser.is('PurchasingManager')).toBe(true);
             expect(verifiedUser.is('Viewer')).toBe(true);
-            expect(verifiedUser.attr.logon_name).toBe('alice');
-            expect(verifiedUser.attr.email).toBe('alice@example.corp');
+            expect(verifiedUser.attr.logon_name).toBe('khushal');
+            expect(verifiedUser.attr.email).toBe('khushal@example.corp');
         });
 
         it('should reject tampered token signatures', () => {
-            const tokenResult = localTokenUtil.issueToken('bob', ['Viewer']);
+            const tokenResult = localTokenUtil.issueToken('test-viewer-1120', ['Viewer']);
             const parts = tokenResult.token.split('.');
             // Tamper with payload
             const tamperedPayload = Buffer.from(JSON.stringify({ user_name: 'admin', scope: ['$XSAPPNAME.Admin'] })).toString('base64url');
@@ -92,7 +92,7 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
         });
 
         it('should reject tokens with modified signatures', () => {
-            const tokenResult = localTokenUtil.issueToken('bob', ['Viewer']);
+            const tokenResult = localTokenUtil.issueToken('test-viewer-1120', ['Viewer']);
             const parts = tokenResult.token.split('.');
             const corruptedSig = parts[2].slice(0, -2) + (parts[2].endsWith('a') ? 'b' : 'a');
             const corruptedToken = `${parts[0]}.${parts[1]}.${corruptedSig}`;
@@ -102,7 +102,7 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
         });
 
         it('should reject expired tokens', () => {
-            const tokenResult = localTokenUtil.issueToken('bob', ['Viewer'], { expiresInSeconds: -10 });
+            const tokenResult = localTokenUtil.issueToken('test-viewer-1120', ['Viewer'], { expiresInSeconds: -10 });
             const verified = localTokenUtil.verifyToken(tokenResult.token);
             expect(verified).toBeNull();
         });

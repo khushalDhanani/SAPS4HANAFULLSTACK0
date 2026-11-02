@@ -34,7 +34,7 @@ function installRowProbe(page) {
 }
 
 async function profile(baseUrl, r) {
-    const session = await openSession({ baseUrl, user: 'alice' });
+    const session = await openSession({ baseUrl, user: 'khushal' });
     const { page } = session;
     const calls = [];
     page.on('request', (req) => { if (/\/odata\/v4\//.test(req.url())) req.__t0 = Date.now(); });

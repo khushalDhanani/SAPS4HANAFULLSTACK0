@@ -36,7 +36,7 @@ async function verifyMvt261(options = {}) {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     extraHTTPHeaders: {
-      'Authorization': 'Basic ' + Buffer.from('alice:').toString('base64')
+      'Authorization': 'Basic ' + Buffer.from('khushal:').toString('base64')
     },
     viewport: { width: 1440, height: 900 }
   });
@@ -72,7 +72,7 @@ async function verifyMvt261(options = {}) {
   await page.addInitScript(() => {
     localStorage.setItem('saps4hana_fiori_auth_session', JSON.stringify({
       user: {
-        username: 'alice',
+        username: 'khushal',
         avatarInitials: 'AL',
         system: 'S4HANA_DEV - Client 220',
         loginTimestamp: '10:00 AM',

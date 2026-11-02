@@ -1,6 +1,6 @@
 /**
  * F4: postGoodsIssue is a write and must be denied to the read-only Viewer role.
- * Boots the CAP server (mocked auth: bob=Viewer, carol=Viewer+WarehouseClerk) and spies the
+ * Boots the CAP server (mocked auth: test-viewer-1120=Viewer, test-clerk-1120=Viewer+WarehouseClerk) and spies the
  * adapter so the authorized path never reaches S/4HANA. No live posting.
  */
 const cds = require('@sap/cds');
@@ -30,13 +30,13 @@ describe('Mvt261Service postGoodsIssue authorization (F4)', () => {
   const call = (user) => POST('/odata/v4/mvt261/postGoodsIssue',
     { movementType: '261', orderId: '4000033120', orderType: 'ZBDN', reservation: '278650', item: '1', quantity: 1 }, { auth: { username: user, password: '' } });
 
-  it('rejects a Viewer (bob) with 403 and never reaches the adapter', async () => {
-    await expect(call('bob')).rejects.toMatchObject({ response: { status: 403 } });
+  it('rejects a Viewer (test-viewer-1120) with 403 and never reaches the adapter', async () => {
+    await expect(call('test-viewer-1120')).rejects.toMatchObject({ response: { status: 403 } });
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('allows a WarehouseClerk (carol) to invoke the action', async () => {
-    const { status, data } = await call('carol');
+  it('allows a WarehouseClerk (test-clerk-1120) to invoke the action', async () => {
+    const { status, data } = await call('test-clerk-1120');
     expect(status).toBe(200);
     expect(data).toMatchObject({ MaterialDocument: '4900050046' });
     expect(spy).toHaveBeenCalledTimes(1);
@@ -50,13 +50,13 @@ describe('Mvt261Service plant scope (F10)', () => {
     { auth: { username: user, password: '' } });
 
   it('an out-of-scope plant is a 403 (not an empty list)', async () => {
-    // dave is a Viewer scoped to plant 1130; asking for 1120 is forbidden.
-    await expect(openItems('dave', '1120')).rejects.toMatchObject({ response: { status: 403 } });
+    // test-clerk-1130 is a Viewer scoped to plant 1130; asking for 1120 is forbidden.
+    await expect(openItems('test-clerk-1130', '1120')).rejects.toMatchObject({ response: { status: 403 } });
   });
 
   it('a user with no plant scope is a 403', async () => {
-    // eve is a Viewer with no Plant attribute at all.
-    await expect(openItems('eve', '1120')).rejects.toMatchObject({ response: { status: 403 } });
+    // test-viewer-noplant is a Viewer with no Plant attribute at all.
+    await expect(openItems('test-viewer-noplant', '1120')).rejects.toMatchObject({ response: { status: 403 } });
   });
 });
 
@@ -76,18 +76,18 @@ describe('Mvt261Service reverse authorization (F6: managers/admin only)', () => 
     { reservation: '512851', item: '3', materialDocument: '4900050046', materialDocumentYear: '2026', materialDocumentItem: '1' },
     { auth: { username: user, password: '' } });
 
-  it('rejects a Viewer (bob) with 403 and never reaches the adapter', async () => {
-    await expect(call('bob')).rejects.toMatchObject({ response: { status: 403 } });
+  it('rejects a Viewer (test-viewer-1120) with 403 and never reaches the adapter', async () => {
+    await expect(call('test-viewer-1120')).rejects.toMatchObject({ response: { status: 403 } });
     expect(revSpy).not.toHaveBeenCalled();
   });
 
-  it('rejects a WarehouseClerk (carol) with 403 - reversal is managers/admin only', async () => {
-    await expect(call('carol')).rejects.toMatchObject({ response: { status: 403 } });
+  it('rejects a WarehouseClerk (test-clerk-1120) with 403 - reversal is managers/admin only', async () => {
+    await expect(call('test-clerk-1120')).rejects.toMatchObject({ response: { status: 403 } });
     expect(revSpy).not.toHaveBeenCalled();
   });
 
-  it('allows an Admin/Manager (alice) to reverse', async () => {
-    const { status, data } = await call('alice');
+  it('allows an Admin/Manager (khushal) to reverse', async () => {
+    const { status, data } = await call('khushal');
     expect(status).toBe(200);
     expect(data).toMatchObject({ MaterialDocument: '4900050099' });
     expect(revSpy).toHaveBeenCalledTimes(1);
@@ -123,8 +123,8 @@ describe('Mvt261Service 518006/3 empty-issue-location, end-to-end through the se
   });
   afterEach(() => { rfcSpy.mockRestore(); getSpy.mockRestore(); });
 
-  it('scanContext: Blocked with the transfer reason (alice = all plants)', async () => {
-    const { status, data } = await GET("/odata/v4/mvt261/scanContext(reservation='518006',item='3')", { auth: { username: 'alice', password: '' } });
+  it('scanContext: Blocked with the transfer reason (khushal = all plants)', async () => {
+    const { status, data } = await GET("/odata/v4/mvt261/scanContext(reservation='518006',item='3')", { auth: { username: 'khushal', password: '' } });
     expect(status).toBe(200);
     expect(data).toMatchObject({ Blocked: true, SupplyAreaStock: 25, IssuableQuantity: 0 });
     expect(data.BlockReason).toBe('25 KG in supply area CS01; issue location PT01 is empty - transfer required');
@@ -132,7 +132,7 @@ describe('Mvt261Service 518006/3 empty-issue-location, end-to-end through the se
 
   it('openItems: the item is not ScanPossible and carries the transfer reason', async () => {
     const url = "/odata/v4/mvt261/openItems(plant='1120',material='',productionOrder='',reservation='518006',dateFrom='',dateTo='',includeFullyWithdrawn=false,scanPossibleOnly=false)";
-    const { status, data } = await GET(url, { auth: { username: 'alice', password: '' } });
+    const { status, data } = await GET(url, { auth: { username: 'khushal', password: '' } });
     expect(status).toBe(200);
     const item = (data.Items || []).find((i) => String(i.ReservationItem) === '3');
     expect(item).toMatchObject({ ScanPossible: false, Blocked: true });

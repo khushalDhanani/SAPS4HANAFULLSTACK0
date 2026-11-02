@@ -77,7 +77,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             process.env.LOCAL_AUTH_SECRET = 'secret';
 
             const req = {
-                data: { username: 'alice', password: 'password' },
+                data: { username: 'khushal', password: 'password' },
                 error: jest.fn((status, msg) => {
                     const err = new Error(msg);
                     err.status = status;
@@ -94,7 +94,7 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             delete process.env.LOCAL_AUTH_SECRET;
 
             const req = {
-                data: { username: 'alice', password: 'password' },
+                data: { username: 'khushal', password: 'password' },
                 error: jest.fn((status, msg) => {
                     const err = new Error(msg);
                     err.status = status;
@@ -106,47 +106,80 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(req.error).toHaveBeenCalledWith(403, expect.stringContaining('SAP BTP XSUAA Single Sign-On'));
         });
 
-        it('should reject local mock users when LOCAL_DEV_PASSWORD is not set (no username-as-password)', async () => {
+        it('should allow dev login for khushal with the local password and keep the configured roles', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
-            delete process.env.LOCAL_DEV_PASSWORD;
-
-            const res = await service._handleLogin({ data: { username: 'alice', password: 'alice' } });
-            expect(res.authenticated).toBe(false);
-            expect(res.message).toContain('LOCAL_DEV_PASSWORD');
-        });
-
-        it('should allow dev login for alice when valid password provided and dev issuer enabled', async () => {
-            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
-            process.env.LOCAL_DEV_PASSWORD = 'alice';
+            process.env.LOCAL_DEV_PASSWORD = 'local-password';
 
             const req = {
-                data: { username: 'alice', password: 'alice' }
+                data: { username: 'khushal', password: 'local-password' }
             };
 
             const res = await service._handleLogin(req);
             expect(res.authenticated).toBe(true);
-            expect(res.username).toBe('alice');
+            expect(res.username).toBe('khushal');
             expect(res.token).toBeDefined();
             expect(typeof res.token).toBe('string');
             expect(res.scopes).toEqual(expect.arrayContaining(['$XSAPPNAME.PurchasingManager']));
         });
 
-        it('should reject login for alice when password is missing or wrong', async () => {
+        it('compares the local password exactly, including upper and lower case', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
-            process.env.LOCAL_DEV_PASSWORD = 'alice';
+            process.env.LOCAL_DEV_PASSWORD = 'Local-Password';
+            const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: false });
+
+            const wrongCase = await service._handleLogin({ data: { username: 'khushal', password: 'local-password' } });
+            expect(wrongCase.authenticated).toBe(false);
+            expect(validate).toHaveBeenCalledTimes(1);
+
+            const exact = await service._handleLogin({ data: { username: 'khushal', password: 'Local-Password' } });
+            expect(exact.authenticated).toBe(true);
+        });
+
+        it.each(['alice', 'bob', 'carol', 'dave', 'eve', 'erin', 'fred', 'me', 'yves'])('%s has no local login: the local password is refused and SAP decides', async (name) => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_DEV_PASSWORD = 'local-password';
+            const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: false });
+
+            const res = await service._handleLogin({ data: { username: name, password: 'local-password' } });
+
+            expect(res.authenticated).toBe(false);
+            expect(validate).toHaveBeenCalledWith(name, 'local-password');
+        });
+
+        describe.each(['[development]', '[test]'])('mocked users in the %s profile', (profile) => {
+            const { cds: config } = require('../../../package.json');
+            const MockedUsers = require('@sap/cds/lib/srv/middlewares/auth/mocked-users');
+            // Merged over CAP's built-in users, as cds.env does: a built-in user or the wildcard must not survive.
+            const builtIn = { alice: {}, bob: {}, carol: {}, dave: {}, erin: {}, fred: {}, me: {}, yves: {}, '*': true };
+            const users = () => MockedUsers({ users: { ...builtIn, ...JSON.parse(JSON.stringify(config.requires.auth[profile].users)) } });
+
+            it.each(['alice', 'bob', 'carol', 'dave', 'eve', 'erin', 'fred', 'me', 'yves', 'any-other-name'])('refuses %s', (name) => {
+                expect(users().verify(name, '').failed).toBeDefined();
+            });
+
+            it('keeps only khushal', () => {
+                expect(Object.entries(config.requires.auth[profile].users).filter(([, v]) => v !== false).map(([k]) => k)).toEqual(['khushal']);
+            });
+        });
+
+        it('should reject login for khushal when password is missing or wrong', async () => {
+            jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({ authenticated: false, message: 'Invalid username or password.' });
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_DEV_PASSWORD = 'local-password';
 
             const req1 = {
-                data: { username: 'alice', password: '' }
+                data: { username: 'khushal', password: '' }
             };
             const res1 = await service._handleLogin(req1);
             expect(res1.authenticated).toBe(false);
             expect(res1.message).toContain('Password is required');
 
             const req2 = {
-                data: { username: 'alice', password: 'wrongpassword' }
+                data: { username: 'khushal', password: 'wrongpassword' }
             };
             const res2 = await service._handleLogin(req2);
             expect(res2.authenticated).toBe(false);
@@ -191,6 +224,28 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(res3.message).toContain('S/4 Development User');
         });
 
+        it('refuses khushal with a wrong password and asks SAP, instead of accepting any password', async () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
+            process.env.LOCAL_DEV_PASSWORD = 'mock-password';
+            process.env.S4_PASSWORD = 'real-password';
+            const validate = jest.spyOn(authAdapter, 'validateCredentials').mockResolvedValue({
+                authenticated: false,
+                message: 'Invalid username or password.'
+            });
+
+            const res = await service._handleLogin({ data: { username: 'KHUSHAL', password: 'not-the-password' } });
+
+            expect(res.authenticated).toBe(false);
+            expect(res.token).toBeUndefined();
+            expect(validate).toHaveBeenCalledWith('KHUSHAL', 'not-the-password');
+        });
+
+        it('has no password written in the login source', () => {
+            const source = require('fs').readFileSync(require.resolve('../../../srv/auth-service'), 'utf8');
+            expect(source).not.toMatch(/timingSafeEqual\([^,]+,\s*["'`]/);
+        });
+
         it('should validate credentials against authAdapter when username is not a dev user', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
@@ -214,37 +269,22 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(authAdapter.validateCredentials).toHaveBeenCalledWith('REAL_SAP_USER', 'realpassword');
         });
 
-        it('should grant only Viewer role to bob', async () => {
-            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
-            process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
-            process.env.LOCAL_DEV_PASSWORD = 'bob';
-
-            const req = {
-                data: { username: 'bob', password: 'bob' }
-            };
-
-            const res = await service._handleLogin(req);
-            expect(res.authenticated).toBe(true);
-            expect(res.username).toBe('bob');
-            expect(res.scopes).toEqual(['$XSAPPNAME.Viewer']);
-        });
-
         it('should build system label dynamically from S4_SYSTEM_NAME and S4_CLIENT in user profile and login', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890';
             process.env.S4_SYSTEM_NAME = 'S4HANA_DEV';
             process.env.S4_CLIENT = '300';
-            process.env.LOCAL_DEV_PASSWORD = 'alice';
+            process.env.LOCAL_DEV_PASSWORD = 'local-password';
 
             const req = {
-                data: { username: 'alice', password: 'alice' }
+                data: { username: 'khushal', password: 'local-password' }
             };
 
             const res = await service._handleLogin(req);
             expect(res.system).toBe('S4HANA_DEV - Client 300');
 
             const infoRes = await service._handleGetUserInfo({
-                user: { id: 'alice', _is_anonymous: false, roles: ['Viewer'] }
+                user: { id: 'khushal', _is_anonymous: false, roles: ['Viewer'] }
             });
             expect(infoRes.system).toBe('S4HANA_DEV - Client 300');
         });

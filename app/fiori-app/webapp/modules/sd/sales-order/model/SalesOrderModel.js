@@ -33,7 +33,7 @@ sap.ui.define([
                 // AuthService not loaded (e.g. unit tests): no user name available.
             }
 
-            if (!oComponent) return "alice";
+            if (!oComponent) return "";
             var oAuthModel = oComponent.getModel("auth");
             var sAuthUser = oAuthModel ? oAuthModel.getProperty("/user/username") : "";
             if (sAuthUser && typeof sAuthUser === "string" && sAuthUser.trim() !== "") {
@@ -41,13 +41,13 @@ sap.ui.define([
             }
             var oUserModel = oComponent.getModel("user");
             var sModelUser = oUserModel ? oUserModel.getProperty("/username") : "";
-            return (sModelUser && typeof sModelUser === "string" && sModelUser.trim() !== "") ? sModelUser.trim() : "alice";
+            return (sModelUser && typeof sModelUser === "string" && sModelUser.trim() !== "") ? sModelUser.trim() : "";
         },
 
         /**
          * Creates initial model for VA01 Sales Order creation.
          *
-         * @param {string} [sUser="alice"]
+         * @param {string} [sUser]
          * @returns {sap.ui.model.json.JSONModel}
          */
         createInitialModel: function (sUser) {
@@ -85,7 +85,7 @@ sap.ui.define([
                     ContactPerson: "",
                     PaymentTerms: "",
                     PaymentTermCode: "",
-                    CreatedByUser: sUser || "alice",
+                    CreatedByUser: sUser || "",
                     StatusText: "In Progress",
                     StatusState: "Warning",
                     StatusIcon: "sap-icon://in-progress"

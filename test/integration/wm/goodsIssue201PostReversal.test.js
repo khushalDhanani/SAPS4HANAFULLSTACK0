@@ -2,7 +2,7 @@ const cds = require('@sap/cds');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 
 const cdsTest = cds.test(__dirname + '/../../../');
-cdsTest.defaults.auth = { username: 'alice', password: '' };
+cdsTest.defaults.auth = { username: 'khushal', password: '' };
 const { POST, axios } = cdsTest;
 
 const BASE = '/odata/v4/goods-issue';

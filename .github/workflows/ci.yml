@@ -244,7 +244,7 @@ jobs:
       - name: Start CAP server and wait for /health
         run: |
           mkdir -p test-results
-          npx cds-serve > test-results/cap-server.log 2>&1 &
+          CDS_CONFIG="$(node -p "require('./test/testUsers').cdsConfig")" npx cds-serve > test-results/cap-server.log 2>&1 &
           echo "CAP_PID=$!" >> "$GITHUB_ENV"
           node tools/smoke-test-deployment.js --wait=60
 

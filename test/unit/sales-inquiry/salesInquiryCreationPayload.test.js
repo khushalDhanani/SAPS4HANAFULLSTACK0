@@ -48,7 +48,7 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
                 StatusText: 'Ready to Create',   // Invalid backend field
                 StatusState: 'Success',          // Invalid backend field
                 StatusIcon: 'sap-icon://accept', // Invalid backend field
-                CreatedByUser: 'alice'           // Invalid backend field
+                CreatedByUser: 'khushal'           // Invalid backend field
             },
             items: [
                 {
@@ -133,11 +133,11 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
         expect(validation.isValid).toBe(true);
         expect(validation.errors).toHaveLength(0);
 
-        const normalized = normalizeSalesInquiryData(payload, { user: 'alice' });
+        const normalized = normalizeSalesInquiryData(payload, { user: 'khushal' });
         expect(normalized.header.SoldToParty).toBe('10135');
         expect(normalized.items[0].Material).toBe('4000000091');
 
-        const s4Payload = mapToS4InquiryPayload(normalized.header, normalized.items, { user: 'alice' });
+        const s4Payload = mapToS4InquiryPayload(normalized.header, normalized.items, { user: 'khushal' });
         expect(s4Payload.header.SoldToParty).toBe('10135');
         expect(s4Payload.header.CustomerCity).toBeUndefined();
         expect(s4Payload.items[0].OrderQuantity).toBe('1.000');

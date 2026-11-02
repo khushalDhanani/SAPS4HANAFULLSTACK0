@@ -207,7 +207,7 @@ const FLOWS = [...invoiceFlows, ...ordersDueFlows, ...wmFlows, ...kitFlows];
 
 async function failureCase(baseUrl, flow, f) {
     const errors = [];
-    const session = await openSession({ baseUrl, user: 'alice' });
+    const session = await openSession({ baseUrl, user: 'khushal' });
     let calls = []; // interceptAction returns a live list: keep the reference, never copy it
     try {
         if (flow.kit) {
@@ -249,7 +249,7 @@ async function failureCase(baseUrl, flow, f) {
 /** Double click while the write is pending: duplicate clicks must send exactly one write request. */
 async function doubleClickWhilePending(baseUrl, flow) {
     const errors = [];
-    const session = await openSession({ baseUrl, user: 'alice' });
+    const session = await openSession({ baseUrl, user: 'khushal' });
     let calls = [];
     let releaseGate;
     const gate = new Promise((r) => { releaseGate = r; });
@@ -313,7 +313,7 @@ async function doubleClickWhilePending(baseUrl, flow) {
 /** Reload while the write is pending: the held-back answer never reaches the page; no second write and no false success. */
 async function reloadWhilePending(baseUrl, flow) {
     const errors = [];
-    const session = await openSession({ baseUrl, user: 'alice' });
+    const session = await openSession({ baseUrl, user: 'khushal' });
     let releaseGate;
     const gate = new Promise((r) => { releaseGate = r; });
     try {

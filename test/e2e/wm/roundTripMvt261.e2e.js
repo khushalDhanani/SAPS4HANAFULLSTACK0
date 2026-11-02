@@ -169,7 +169,7 @@ async function dryRun(baseUrl) {
             continue;
         }
         const subErrors = [];
-        const session = await openSession({ baseUrl, user: 'alice' });
+        const session = await openSession({ baseUrl, user: 'khushal' });
         try {
             const calls = await kit.stubAction(session, PATH[name], STUBS[name]);
             sub.calls = calls;
@@ -196,7 +196,7 @@ async function live(baseUrl, data) {
         const d = name === 'scan' ? { ...data.scan, storageUnits: String(data.scan.storageUnits).split(',').map((s) => s.trim()).filter(Boolean) } : { ...data.reverse };
         const sub = details.subcases[name] = { readBack: 'NOT RUN' };
         const subErrors = [];
-        const session = await openSession({ baseUrl, user: 'alice', allowWrites: [new RegExp(`^${PATH[name]}$`)] });
+        const session = await openSession({ baseUrl, user: 'khushal', allowWrites: [new RegExp(`^${PATH[name]}$`)] });
         const calls = kit.recordPosts(session, [PATH[name]]);
         try {
             sub.ui = await SUBCASES[name](session, d);

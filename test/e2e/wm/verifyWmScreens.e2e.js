@@ -27,7 +27,7 @@ async function mvt261Steps(baseUrl) {
     let item = null;
     try {
         const res = await fetch(`${baseUrl}/odata/v4/mvt261/openItems()`, {
-            headers: { Authorization: 'Basic ' + Buffer.from('alice:').toString('base64') }
+            headers: { Authorization: 'Basic ' + Buffer.from('khushal:').toString('base64') }
         });
         // Blocked items (order not released, no unrestricted stock, ...) legitimately show an error strip, so only scannable ones qualify.
         item = res.ok ? ((await res.json()).Items || []).find((i) => i.ScanPossible === true) : null;

@@ -146,7 +146,7 @@ const CASES = [
             const errs = [];
             if (printed.length !== 1) errs.push(`${printed.length} print frames`);
             else {
-                if (!printed[0].includes('>alice</text>')) errs.push('signed-in Prepared by missing from print output');
+                if (!printed[0].includes('>khushal</text>')) errs.push('signed-in Prepared by missing from print output');
                 if (!printed[0].includes('Item Code') || !printed[0].includes('DEMO-MAT-1')) errs.push('Item Code missing from print output');
                 if (!printed[0].includes('@page{size:288pt 432pt;margin:0}')) errs.push('print document not sized 288 x 432 pt with no margin');
                 const svgs = printed[0].match(/<svg [^>]*width="288pt" height="432pt"/g) || [];
@@ -229,7 +229,7 @@ const CASES = [
             if (printed.length !== 1 || !printed[0].includes('@page{size:288pt 432pt;margin:0}')) errs.push(`print frames ${printed.length}`);
             else {
                 if ((printed[0].match(/<svg /g) || []).length !== 2) errs.push('row print is not 2 label pages');
-                if (!printed[0].includes('>alice</text>') || !printed[0].includes('DEMO-MAT-1')) errs.push('row print missing material code or signed-in Prepared by');
+                if (!printed[0].includes('>khushal</text>') || !printed[0].includes('DEMO-MAT-1')) errs.push('row print missing material code or signed-in Prepared by');
             }
             const st = await state(s.page);
             if (st.messageType !== 'Success') errs.push(`message ${st.messageType} "${st.message}"`);

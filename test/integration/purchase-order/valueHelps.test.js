@@ -2,7 +2,7 @@ const cds = require('@sap/cds');
 const purchaseOrderAdapter = require('../../../srv/integration/s4hana/mm/purchase-order/PurchaseOrderAdapter');
 const valueHelpsFixture = require('../../fixtures/purchase-order/valueHelps.json');
 const cdsTest = cds.test(__dirname + '/../../../');
-cdsTest.defaults.auth = { username: 'alice', password: '' };
+cdsTest.defaults.auth = { username: 'khushal', password: '' };
 const { GET } = cdsTest;
 
 describe('Integration: Value Helps', () => {

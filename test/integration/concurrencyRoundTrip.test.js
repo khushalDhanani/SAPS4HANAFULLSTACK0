@@ -18,9 +18,9 @@ const GoodsReceiptAdapter = require('../../srv/integration/s4hana/wm/GoodsReceip
 const S4ErrorMapper = require('../../srv/integration/s4hana/S4ErrorMapper');
 
 const cdsTest = cds.test(__dirname + '/../../');
-cdsTest.defaults.auth = { username: 'alice', password: '' };
+cdsTest.defaults.auth = { username: 'khushal', password: '' };
 const { axios } = cdsTest;
-const AUTH = { username: 'alice', password: '' };
+const AUTH = { username: 'khushal', password: '' };
 
 describe('Integration: Optimistic Concurrency & ETag Round Trip (Phase 5)', () => {
     afterEach(() => {

@@ -3,7 +3,7 @@
 /**
  * HuStockTransferService HTTP contract [mock only, not SAP verification]:
  *  - precheck fields (TransferPath, BlockerDetails, WarningDetails) are part of the OData contract;
- *  - plant scope is enforced server-side for plant-scoped users (dave: 1130, carol: 1120, alice: Admin);
+ *  - plant scope is enforced server-side for plant-scoped users (test-clerk-1130: 1130, test-clerk-1120: 1120, khushal: Admin);
  *  - a write with unknown SAP outcome is recorded as 'unconfirmed', a definitive SAP rejection as 'rejected'.
  */
 const cds = require('@sap/cds');
@@ -29,34 +29,34 @@ describe('HuStockTransferService contract, plant scope and attempt status', () =
       Blockers: ['b'], BlockerDetails: [{ code: 'OPEN_DELIVERY_EXISTS', key: 'blockerOpenDeliveryExists', message: 'm', params: ['80000097', '529960', '1'] }],
       Warnings: ['w'], WarningDetails: [{ code: 'NO_T319A_ROW', key: 'warningNoT319ARow', severity: 'warning', message: 'wm', params: ['Z007', 'W01'] }]
     });
-    const v = await GET(`${base}/validateUnit(reservation='529960',item='1',unitNumber='HU1')`, as('alice'));
+    const v = await GET(`${base}/validateUnit(reservation='529960',item='1',unitNumber='HU1')`, as('khushal'));
     expect(v.data.BlockerDetails[0]).toMatchObject({ key: 'blockerOpenDeliveryExists', params: ['80000097', '529960', '1'] });
     expect(v.data.WarningDetails[0]).toMatchObject({ key: 'warningNoT319ARow', severity: 'warning' });
-    const c = await GET(`${base}/getCockpitDetail(reservation='529960',item='1')`, as('alice'));
+    const c = await GET(`${base}/getCockpitDetail(reservation='529960',item='1')`, as('khushal'));
     expect(c.data.TransferPath).toBe('A');
   });
 
-  it('denies a plant-scoped user (dave, 1130) every reservation-keyed read and the posting action for a plant-1120 reservation', async () => {
+  it('denies a plant-scoped user (test-clerk-1130, 1130) every reservation-keyed read and the posting action for a plant-1120 reservation', async () => {
     const exec = jest.spyOn(HuStockTransferAdapter.prototype, 'executeHuStockTransfer').mockResolvedValue({ Success: true, MaterialDocument: '1' });
     const bins = jest.spyOn(HuStockTransferAdapter.prototype, 'getStorageBins').mockResolvedValue([]);
-    const dave = as('dave');
-    await expect(GET(`${base}/getCockpitDetail(reservation='529960',item='1')`, dave)).rejects.toMatchObject({ response: { status: 403 } });
-    await expect(GET(`${base}/getStorageBins(reservation='529960',item='1')`, dave)).rejects.toMatchObject({ response: { status: 403 } });
-    await expect(GET(`${base}/rackLayout(warehouse='W01',storageType='',rackPrefix='',reservation='',item='')`, dave)).rejects.toMatchObject({ response: { status: 403 } });
-    await expect(GET(`${base}/getOpenReservations(plant='1120',storageLocation='',movementType='311',requester='',reservation='',material='',status='open',includeDeleted=false)`, dave))
+    const clerk1130 = as('test-clerk-1130');
+    await expect(GET(`${base}/getCockpitDetail(reservation='529960',item='1')`, clerk1130)).rejects.toMatchObject({ response: { status: 403 } });
+    await expect(GET(`${base}/getStorageBins(reservation='529960',item='1')`, clerk1130)).rejects.toMatchObject({ response: { status: 403 } });
+    await expect(GET(`${base}/rackLayout(warehouse='W01',storageType='',rackPrefix='',reservation='',item='')`, clerk1130)).rejects.toMatchObject({ response: { status: 403 } });
+    await expect(GET(`${base}/getOpenReservations(plant='1120',storageLocation='',movementType='311',requester='',reservation='',material='',status='open',includeDeleted=false)`, clerk1130))
       .rejects.toMatchObject({ response: { status: 403 } });
-    await expect(POST(`${base}/executeHuStockTransfer`, { ReservationNo: '529960', ReservationItem: '1', UnitNumber: '2000019372', TransferQty: 1, ClientAttemptId: 'scope-1' }, dave))
+    await expect(POST(`${base}/executeHuStockTransfer`, { ReservationNo: '529960', ReservationItem: '1', UnitNumber: '2000019372', TransferQty: 1, ClientAttemptId: 'scope-1' }, clerk1130))
       .rejects.toMatchObject({ response: { status: 403 } });
     expect(exec).not.toHaveBeenCalled();
     expect(bins).not.toHaveBeenCalled();
   });
 
-  it('allows the plant-scoped clerk of plant 1120 (carol) and the Admin (alice)', async () => {
+  it('allows the plant-scoped clerk of plant 1120 (test-clerk-1120) and the Admin (khushal)', async () => {
     jest.spyOn(HuStockTransferAdapter.prototype, 'getStorageBins').mockResolvedValue([]);
-    const carol = await GET(`${base}/getStorageBins(reservation='529960',item='1')`, as('carol'));
-    expect(carol.status).toBe(200);
-    const alice = await GET(`${base}/getCockpitDetail(reservation='529960',item='1')`, as('alice'));
-    expect(alice.data.Plant).toBe('1120');
+    const clerk1120 = await GET(`${base}/getStorageBins(reservation='529960',item='1')`, as('test-clerk-1120'));
+    expect(clerk1120.status).toBe(200);
+    const khushal = await GET(`${base}/getCockpitDetail(reservation='529960',item='1')`, as('khushal'));
+    expect(khushal.data.Plant).toBe('1120');
   });
 
   it("records 'unconfirmed' with the document when the adapter reports an unknown SAP outcome, 'rejected' otherwise", async () => {
@@ -67,10 +67,10 @@ describe('HuStockTransferService contract, plant scope and attempt status', () =
       .mockRejectedValueOnce(Object.assign(new Error('SAP rejected stock transfer'), { status: 422 }));
     const body = { ReservationNo: '529960', ReservationItem: '1', UnitNumber: '2000019372', TransferQty: 1, ClientAttemptId: 'unc-1' };
 
-    await expect(POST(`${base}/executeHuStockTransfer`, body, as('alice'))).rejects.toMatchObject({ response: { status: 502 } });
+    await expect(POST(`${base}/executeHuStockTransfer`, body, as('khushal'))).rejects.toMatchObject({ response: { status: 502 } });
     expect(setStatus).toHaveBeenLastCalledWith(expect.any(String), 'unconfirmed', expect.objectContaining({ MaterialDocument: '4900012345', MaterialDocYear: '2026' }));
 
-    await expect(POST(`${base}/executeHuStockTransfer`, { ...body, ClientAttemptId: 'unc-2' }, as('alice'))).rejects.toMatchObject({ response: { status: 422 } });
+    await expect(POST(`${base}/executeHuStockTransfer`, { ...body, ClientAttemptId: 'unc-2' }, as('khushal'))).rejects.toMatchObject({ response: { status: 422 } });
     expect(setStatus).toHaveBeenLastCalledWith(expect.any(String), 'rejected', expect.objectContaining({ LastError: 'SAP rejected stock transfer' }));
     expect(exec).toHaveBeenCalledTimes(2);
   });
@@ -91,7 +91,7 @@ describe('multi-HU posting HTTP regressions', () => {
   });
   afterEach(() => jest.restoreAllMocks());
 
-  it.each(['dave', 'bob'])('denies out-of-scope/role user %s before validation or claims', async (user) => {
+  it.each(['test-clerk-1130', 'test-viewer-1120'])('denies out-of-scope/role user %s before validation or claims', async (user) => {
     await expect(POST(`${base}/executeHuStockTransferSelection`, body, as(user))).rejects.toMatchObject({ response: { status: 403 } });
     expect(validate).not.toHaveBeenCalled();
     expect(claim).not.toHaveBeenCalled();
@@ -99,15 +99,15 @@ describe('multi-HU posting HTTP regressions', () => {
   });
 
   it('rejects missing attempt ID and failed selection prevalidation before claims', async () => {
-    await expect(POST(`${base}/executeHuStockTransferSelection`, { ...body, ClientAttemptId: '' }, as('alice'))).rejects.toMatchObject({ response: { status: 400 } });
+    await expect(POST(`${base}/executeHuStockTransferSelection`, { ...body, ClientAttemptId: '' }, as('khushal'))).rejects.toMatchObject({ response: { status: 400 } });
     validate.mockRejectedValue(Object.assign(new Error('selection exceeds open quantity'), { status: 422 }));
-    await expect(POST(`${base}/executeHuStockTransferSelection`, body, as('carol'))).rejects.toMatchObject({ response: { status: 422 } });
+    await expect(POST(`${base}/executeHuStockTransferSelection`, body, as('test-clerk-1120'))).rejects.toMatchObject({ response: { status: 422 } });
     expect(claim).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
   });
 
   it('posts sequentially after validation and uses a distinct claim per HU', async () => {
-    const { data } = await POST(`${base}/executeHuStockTransferSelection`, body, as('carol'));
+    const { data } = await POST(`${base}/executeHuStockTransferSelection`, body, as('test-clerk-1120'));
     expect(data).toMatchObject({ Success: true, PostedCount: 3, FailedCount: 0, SkippedCount: 0 });
     expect(data.Items.map((item) => item.UnitNumber)).toEqual(['HU1', 'HU2', 'HU3']);
     expect(execute.mock.calls.map(([payload]) => payload.ClientAttemptId)).toEqual(['selection-regression-1', 'selection-regression-2', 'selection-regression-3']);
@@ -118,7 +118,7 @@ describe('multi-HU posting HTTP regressions', () => {
 
   it('keeps posted results, records unknown outcome, and leaves later HUs untouched', async () => {
     execute.mockResolvedValueOnce({ MaterialDocument: '4900012345', MaterialDocYear: '2026' }).mockRejectedValueOnce(Object.assign(new Error('read-back unavailable'), { sapWriteAttempted: true, status: 502 }));
-    const { data } = await POST(`${base}/executeHuStockTransferSelection`, body, as('alice'));
+    const { data } = await POST(`${base}/executeHuStockTransferSelection`, body, as('khushal'));
     expect(data).toMatchObject({ Success: false, PostedCount: 1, FailedCount: 1, SkippedCount: 1 });
     expect(data.Items).toEqual([
       expect.objectContaining({ UnitNumber: 'HU1', Success: true, MaterialDocument: '4900012345' }),
@@ -131,7 +131,7 @@ describe('multi-HU posting HTTP regressions', () => {
 
   it('blocks posting when attempt logging is unavailable', async () => {
     claim.mockRejectedValue(new Error('database unavailable'));
-    const { data } = await POST(`${base}/executeHuStockTransferSelection`, body, as('alice'));
+    const { data } = await POST(`${base}/executeHuStockTransferSelection`, body, as('khushal'));
     expect(data).toMatchObject({ Success: false, PostedCount: 0, FailedCount: 1, SkippedCount: 2 });
     expect(execute).not.toHaveBeenCalled();
   });

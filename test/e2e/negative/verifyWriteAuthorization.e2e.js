@@ -4,8 +4,8 @@
  * Write-authorization E2E against a private CAP server that cannot reach SAP (support/isolatedServer.js):
  * every request that wrongly passes authorization ends at the dead S/4 endpoint, so no SAP write is possible.
  * - Role checks, generated from the compiled CDS model: every write action that does not grant Viewer must answer
- *   401 when signed out and 403 for the Viewer-only mock users `bob` (Plant 1120) and `eve` (no plant).
- * - Plant checks: the WarehouseClerk mock user `dave` (Plant 1130) acting on plant 1120 must get 403 before any S/4 call.
+ *   401 when signed out and 403 for the Viewer-only mock users `test-viewer-1120` (Plant 1120) and `test-viewer-noplant` (no plant).
+ * - Plant checks: the WarehouseClerk mock user `test-clerk-1130` (Plant 1130) acting on plant 1120 must get 403 before any S/4 call.
  */
 
 const path = require('path');
@@ -78,7 +78,7 @@ async function verifyWriteAuthorization() {
         const roleChecked = actions.filter((a) => a.roles.length > 0 && !a.roles.includes('Viewer'));
         const errs = [];
         for (const a of roleChecked) {
-            for (const [user, expected] of [[null, 401], ['bob', 403], ['eve', 403]]) {
+            for (const [user, expected] of [[null, 401], ['test-viewer-1120', 403], ['test-viewer-noplant', 403]]) {
                 const r = await post(server, user, a.path);
                 if (r.status !== expected) errs.push(`${a.id} as ${user || 'signed-out'}: HTTP ${r.status} (expected ${expected}) ${r.message}`);
             }
@@ -88,7 +88,7 @@ async function verifyWriteAuthorization() {
         record(`Viewer and signed-out users are refused on all ${roleChecked.length} write actions`, errs);
 
         for (const c of PLANT_CASES) {
-            const r = await post(server, 'dave', c.path, c.body);
+            const r = await post(server, 'test-clerk-1130', c.path, c.body);
             record(`Clerk of plant 1130 refused: ${c.name}`, r.status === 403 ? [] : [`HTTP ${r.status}: ${r.message} — passed authorization (no SAP reachable here)`]);
         }
     } finally {

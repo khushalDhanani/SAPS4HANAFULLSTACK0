@@ -59,7 +59,7 @@ describe('Unit: createSalesInquiry handler', () => {
 
         const req = {
             data: validPayload,
-            user: { id: 'alice' },
+            user: { id: 'khushal' },
             error: jest.fn()
         };
 
@@ -78,7 +78,7 @@ describe('Unit: createSalesInquiry handler', () => {
 
         const req = {
             data: validPayload,
-            user: { id: 'alice' },
+            user: { id: 'khushal' },
             error: jest.fn()
         };
 
@@ -89,7 +89,7 @@ describe('Unit: createSalesInquiry handler', () => {
     test('rejects invalid payload with HTTP 400', async () => {
         const req = {
             data: { header: null, items: [] },
-            user: { id: 'alice' },
+            user: { id: 'khushal' },
             error: jest.fn()
         };
 
@@ -103,7 +103,7 @@ describe('Unit: createSalesInquiry handler', () => {
 
         const req = {
             data: validPayload,
-            user: { id: 'alice' },
+            user: { id: 'khushal' },
             error: jest.fn()
         };
 
@@ -124,7 +124,7 @@ describe('Unit: createSalesInquiry handler', () => {
 
         const req = {
             data: validPayload,
-            user: { id: 'alice' },
+            user: { id: 'khushal' },
             error: jest.fn()
         };
 

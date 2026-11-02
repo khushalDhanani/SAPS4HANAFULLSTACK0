@@ -10,13 +10,13 @@ const track = [
     ReservationNo: '0000524979', ReservationItem: '0001', MovementType: '311', WarehouseNumber: 'W01',
     Plant: '1120', StorageLocation: 'HS01', Material: '000000008000000023', MaterialName: 'Test Material A',
     Quantity: 1, Unit: 'NOS', ReceivingPlant: '1120', ReceivingStorageLocation: 'CS01',
-    Status_code: '01', createdBy: 'alice'
+    Status_code: '01', createdBy: 'khushal'
   },
   {
     ReservationNo: '0000524301', ReservationItem: '0001', MovementType: '261', WarehouseNumber: 'W01',
     Plant: '1130', StorageLocation: 'CS01', Material: '000000008000000023', MaterialName: 'Test Material A',
     Quantity: 25, Unit: 'KG', TransferRequirement: '0001001839', TransferOrder: '0001012966',
-    MaterialDocument: '4900050128', MaterialDocYear: '2026', Status_code: '05', createdBy: 'alice'
+    MaterialDocument: '4900050128', MaterialDocYear: '2026', Status_code: '05', createdBy: 'khushal'
   }
 ];
 
@@ -29,7 +29,7 @@ const log = [
   ['0000524301', 'MIGO', '05']
 ].map(([ReservationNo, Step, Status], i) => ({
   ID: `a0000001-0000-0000-0000-00000000000${i + 1}`,
-  ReservationNo, ReservationItem: '0001', Step, Status, MessageType: 'S', createdBy: 'alice'
+  ReservationNo, ReservationItem: '0001', Step, Status, MessageType: 'S', createdBy: 'khushal'
 }));
 
 module.exports = { track, log };

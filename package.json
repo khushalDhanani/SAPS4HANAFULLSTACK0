@@ -76,54 +76,6 @@
         "[development]": {
           "kind": "mocked",
           "users": {
-            "alice": {
-              "roles": [
-                "Admin",
-                "Viewer",
-                "PurchasingManager",
-                "SalesRepresentative",
-                "SalesManager",
-                "WarehouseClerk",
-                "WarehouseManager"
-              ]
-            },
-            "bob": {
-              "roles": [
-                "Viewer"
-              ],
-              "attr": {
-                "Plant": [
-                  "1120"
-                ]
-              }
-            },
-            "dave": {
-              "roles": [
-                "Viewer",
-                "WarehouseClerk"
-              ],
-              "attr": {
-                "Plant": [
-                  "1130"
-                ]
-              }
-            },
-            "eve": {
-              "roles": [
-                "Viewer"
-              ]
-            },
-            "carol": {
-              "roles": [
-                "Viewer",
-                "WarehouseClerk"
-              ],
-              "attr": {
-                "Plant": [
-                  "1120"
-                ]
-              }
-            },
             "khushal": {
               "roles": [
                 "Admin",
@@ -134,60 +86,21 @@
                 "WarehouseClerk",
                 "WarehouseManager"
               ]
-            }
+            },
+            "alice": false,
+            "bob": false,
+            "carol": false,
+            "dave": false,
+            "erin": false,
+            "fred": false,
+            "me": false,
+            "yves": false,
+            "*": false
           }
         },
         "[test]": {
           "kind": "mocked",
           "users": {
-            "alice": {
-              "roles": [
-                "Admin",
-                "Viewer",
-                "PurchasingManager",
-                "SalesRepresentative",
-                "SalesManager",
-                "WarehouseClerk",
-                "WarehouseManager"
-              ]
-            },
-            "bob": {
-              "roles": [
-                "Viewer"
-              ],
-              "attr": {
-                "Plant": [
-                  "1120"
-                ]
-              }
-            },
-            "dave": {
-              "roles": [
-                "Viewer",
-                "WarehouseClerk"
-              ],
-              "attr": {
-                "Plant": [
-                  "1130"
-                ]
-              }
-            },
-            "eve": {
-              "roles": [
-                "Viewer"
-              ]
-            },
-            "carol": {
-              "roles": [
-                "Viewer",
-                "WarehouseClerk"
-              ],
-              "attr": {
-                "Plant": [
-                  "1120"
-                ]
-              }
-            },
             "khushal": {
               "roles": [
                 "Admin",
@@ -198,7 +111,16 @@
                 "WarehouseClerk",
                 "WarehouseManager"
               ]
-            }
+            },
+            "alice": false,
+            "bob": false,
+            "carol": false,
+            "dave": false,
+            "erin": false,
+            "fred": false,
+            "me": false,
+            "yves": false,
+            "*": false
           }
         },
         "[production]": {
