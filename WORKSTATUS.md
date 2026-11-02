@@ -7,7 +7,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
-- **Missing i18n keys added (2026-11-02 15:52 IST) — PASS, committed on `claude/xenodochial-edison-130e3c`, not merged to `feature01`:** 10 literal keys that neither bundle defined now exist in both, plus 1 new key that keeps the invoice wording separate, and no literal `i18n>key` or `getText("key")` is unresolved. Only `huNoSelection` could show a raw key before; the other 9 already showed fallback text, and those messages read the same now. Jest 226 suites passed, 1 skipped; 4,432 tests passed, 59 skipped; `ui5lint` clean. No SAP call was made, and the messages were not triggered on live screens.
+- **Missing i18n keys added (2026-11-02 15:52 IST) — PASS, merged to local `feature01`, not pushed:** 10 literal keys that neither bundle defined now exist in both, plus 1 new key that keeps the invoice wording separate, and no literal `i18n>key` or `getText("key")` is unresolved. Only `huNoSelection` could show a raw key before; the other 9 already showed fallback text, and those messages read the same now. Jest 226 suites passed, 1 skipped; 4,432 tests passed, 59 skipped; `ui5lint` clean. No SAP call was made, and the messages were not triggered on live screens.
 
 - **Dead-code cleanup, 7 removal batches (2026-11-02 15:45 IST) — PARTIAL, uncommitted:** 1,354 lines removed across 37 files, including 2 deleted files and 474 unused i18n keys, with no intended behaviour change. Jest is unchanged from baseline (226 suites and 4,428 tests passed, 59 skipped). SAP-free browser E2E is also unchanged at 2 of 3 suites: one Quarantine labels case fails the same way before and after the cleanup. The other 20 browser suites were not run. See Change Entry 2026-11-02 15:45 IST.
 
@@ -1827,7 +1827,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
-- Missing i18n keys (2026-11-02): merge `claude/xenodochial-edison-130e3c` into `feature01` when the user asks. The new test in `uiConsistency.test.js` fails on any new literal key that is not in both bundles.
+- Missing i18n keys (2026-11-02): merged to local `feature01`; push when the user asks. The new test in `uiConsistency.test.js` fails on any new literal key that is not in both bundles.
 - Dead-code cleanup (2026-11-02): review the diff and commit when the user asks. Decide on the Medium-confidence list in Change Entry 2026-11-02 15:45 IST. Fix the failing Quarantine labels E2E case and the i18n keys that code references but no bundle defines; both existed before the cleanup.
 - **URGENT, user action (2026-11-02):** The SAP password in `S4_PASSWORD` was committed in `2256822d` to `origin/feature01`, and the GitHub API answers 200 without login, so the repository appears public. Change that SAP password and update `.env.local`. Treat the two other removed values as exposed too. Removing them from the current files does not remove them from Git history; rewriting history needs a separate decision and a force push.
 - Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. The goods receipt is PROVEN on inbound delivery 0180000137 (document 5000005789/2026, read back from SAP) for a full quantity on an unpacked delivery; partial receipts are refused. Scan-to is proven for TO create and confirm on TR 1000982 (TO 1037664, read back from SAP); automatic MIGO and Retry MIGO are not. Route count from `docs/e2e-coverage-matrix.md`: 7 proven, 2 partial, 12 not proven. Each later run needs read-only data discovery and its own written go. A live reservation goods movement should prove the new `BKTXT` replay check (audit finding 10).
@@ -1910,6 +1910,13 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 15:56 IST — Missing i18n keys merged to local `feature01`: PASS
+
+- **Status:** PASS. The user asked for the merge. `feature01` was clean and had not moved, so it fast-forwarded from `b0a879b9` to `25b050de`. Nothing was pushed.
+- **Files:** `WORKSTATUS.md` only for this entry; the merge brought in the 7 files from `25b050de`.
+- **Validation on `feature01` at `25b050de`:** `npx jest --no-coverage --testPathIgnorePatterns '/\.claude/' '/node_modules/'`: 226 suites passed, 1 skipped; 4,432 tests passed, 59 skipped. `npx ui5lint`: no findings.
+- **Warning:** Plain `npx jest` in the main checkout also runs the test copies under `.claude/worktrees/`: 681 suites, 8 failed. All 8 failures are in those copies (4 in `loving-hugle-dd58b1`, 4 in `xenodochial-edison-130e3c`). The errors read show missing modules, because those worktrees have no `node_modules`. `jest.config.js` was not changed.
 
 ### 2026-11-02 15:52 IST — Change 1 of 4: 10 missing i18n keys added to both bundles: PASS
 
