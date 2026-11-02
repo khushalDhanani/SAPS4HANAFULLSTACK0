@@ -246,7 +246,7 @@ sap.ui.define([
                 if (sLgnum && oDetail.WarehouseNumber && oDetail.WarehouseNumber !== sLgnum) {
                     throw new Error(that.getText("scanToErrWrongWarehouse", [oDetail.WarehouseNumber, sLgnum]));
                 }
-                if (oDetail.Status === "E" || oDetail.Status === "04" || oDetail.Status === "05" || oDetail.DeliveryCompleted) {
+                if (oDetail.Status === "E" || oDetail.Status === "U" || oDetail.Status === "04" || oDetail.Status === "05" || oDetail.DeliveryCompleted) {
                     throw new Error(that.getText("scanToErrTrCompleted"));
                 }
                 var nOpenQtyCheck = parseFloat(oDetail.OpenQty !== undefined ? oDetail.OpenQty : (oDetail.OpenQuantity !== undefined ? oDetail.OpenQuantity : 0));

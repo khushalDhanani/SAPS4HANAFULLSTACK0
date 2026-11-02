@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Warehouse scan-to open TR list completed-TR leak fixed (2026-11-02 16:40 IST) — PASS, uncommitted:** `getOpenTRs` previously queried `LTBK` with `"AND STATU <> 'E'"` only. In SAP S/4HANA WM, transfer posting / posting change TRs (e.g. movement 311 `0001000992` created by MATDOC `4900050356` and processed via TO `0001037677`) receive `STATU = 'U'` upon completion, leaking into the open TR list and sorting to row 1. `TrToAdapter.js` now filters `STATU <> 'E'` AND `STATU <> 'U'` in both the `LTBK` query and in-memory list/lookup/candidate checks. `WarehouseScanToDetail.controller.js` guards against `oDetail.Status === 'U'`. Unit tests added in `trToAdapter.test.js` (79/79 passed) and `warehouseScanToUi.test.js` (67/67 passed); all 94 WM unit suites (2,500 tests passed) and full browser E2E `verifyWmScreens.e2e.js` (16/16 steps passed) and `roundTripScanTo.e2e.js` (createTO passed). See Change Entry 2026-11-02 16:40 IST.
+
 - **Reservation list hid SAP GUI reservations on its first page (2026-11-02 16:17 IST) — PASS for the list fix, uncommitted:** `#/wm/reservation-entry` listed app-tracked rows before SAP-only rows and shows 25 rows at a time, so the newest SAP reservation sat at row 28. The merged list now sorts newest reservation first. Which screen problem the user meant by "GUI based Entry" is INFERRED. See Change Entry 2026-11-02 16:17 IST.
 
 - **Missing i18n keys added (2026-11-02 15:52 IST) — PASS, merged to local `feature01`, not pushed:** 10 literal keys that neither bundle defined now exist in both, plus 1 new key that keeps the invoice wording separate, and no literal `i18n>key` or `getText("key")` is unresolved. Only `huNoSelection` could show a raw key before; the other 9 already showed fallback text, and those messages read the same now. Jest 226 suites passed, 1 skipped; 4,432 tests passed, 59 skipped; `ui5lint` clean. No SAP call was made, and the messages were not triggered on live screens.
@@ -1832,7 +1834,7 @@ Single source of truth for work history, current status, validation, unresolved 
 ## Next Steps
 
 - Reservation list (2026-11-02): user confirms the fix on `#/wm/reservation-entry` after a browser refresh; commit when the user asks.
-- Warehouse scan-to detail (2026-11-02): the first open TR on the scan-to screen, 1000992, opens with "has no open items (already completed)", so `verifyWmScreens` fails that step. Cause NOT VERIFIED; not touched by the reservation list fix.
+- Warehouse scan-to detail (2026-11-02): RESOLVED (2026-11-02 16:40 IST). Root cause identified and fixed: completed TR 1000992 had LTBK-STATU = 'U' (Umbuchung vollzogen) which bypassed the previous STATU <> 'E' filter and sorted to row 1. Now excluded at both DB and adapter layers (STATU <> 'E' and STATU <> 'U'); verifyWmScreens 16/16 steps and roundTripScanTo PASS. Commit when the user asks.
 - Missing i18n keys (2026-11-02): pushed to `origin/feature01` (`3aa2ad95`). The new test in `uiConsistency.test.js` fails on any new literal key that is not in both bundles.
 - Quarantine labels E2E (2026-11-02): the fix is pushed to `origin/feature01` (`3aa2ad95`). CI run 41429280039 on `3aa2ad95` passed, including `Build, Test & Validate` and `Browser E2E, SAP-free suites (PR gate)`. The separately controlled SAP validation and 23-suite browser jobs were skipped.
 - Dead-code cleanup (2026-11-02): committed and pushed. Decide on the Medium-confidence list in Change Entry 2026-11-02 15:45 IST. First item done: `checkStagingForReservation` removed, uncommitted (Change Entry 2026-11-02 16:20 IST). Commit when the user asks.
@@ -1917,6 +1919,48 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 16:40 IST — Scan-to completed TR (STATU = U) leak fixed: PASS
+
+- **Status:** PASS.
+- **Why:** `#/wm/scan-to` listed completed Transfer Requirement `0001000992` as the very first open TR. Clicking on it opened `#/wm/scan-to/W01/TR/0001000992` with the error "Transfer Requirement 1000992 has no open items (already completed)", causing step `Warehouse scan-to detail (first open TR)` in `verifyWmScreens.e2e.js` to fail.
+- **Root Cause:**
+  1. Live read-only SAP trace of `LTBK` and `LTBP` for `0001000992` confirmed:
+     - `LTBK`: `{ LGNUM: 'W01', TBNUM: '0001000992', BWLVS: '311', STATU: 'U', BDATU: '20261102', MBLNR: '4900050356' }`.
+     - `LTBP`: `{ MENGE: '1.000', TAMEN: '1.000', ELIKZ: 'X', TANUM: '0001037677' }`.
+     - `LTAK`: `{ TANUM: '0001037677', KQUIT: 'X', BNAME: 'NARESH' }`.
+     The TR was 100% processed and confirmed via Transfer Order `1037677`.
+  2. In SAP WM, transfer postings / posting changes (movement type 311, 301, etc.) receive header status `STATU = 'U'` (Umbuchung vollzogen) upon completion, whereas standard TRs receive `STATU = 'E'`.
+  3. `TrToAdapter.getOpenTRs` previously queried `LTBK` with only `AND STATU <> 'E'`. Because `'U' <> 'E'`, `0001000992` was returned as open and sorted to the top (newest date `20261102`).
+  4. In `lookupTR` and `createTOFromTR`, completed TR validation only checked `tr.Statu === 'E'`, falling through to the open-items check (`open.length === 0`).
+- **Changes:**
+  - `srv/integration/s4hana/wm/TrToAdapter.js`:
+    - `getOpenTRs`: Added `"AND STATU <> 'U'"` to the `LTBK` RFC WHERE clause and added in-memory defensive filtering `r.STATU !== 'E' && r.STATU !== 'U'`.
+    - `getTRByReservation`: Excluded `r.STATU !== 'E' && r.STATU !== 'U'`.
+    - `lookupTR`: Candidate status mapping and `openCandidates` filter now treat both `'E'` and `'U'` as completed.
+    - `lookupTR`: Checks `if (tr.Statu === 'E' || tr.Statu === 'U')` and surfaces `already completed (STATU = ${tr.Statu})`. Returned `Status` is `STATUS.TO_CONFIRMED` when completed.
+    - `createTOFromTR`: Checks `if (tr.Statu === 'E' || tr.Statu === 'U')` and throws 400.
+  - `app/fiori-app/webapp/modules/wm/warehouse-scan-to/controller/WarehouseScanToDetail.controller.js`:
+    - `loadDetail`: Added `oDetail.Status === 'U'` to the client-side completion check.
+  - `test/unit/wm/trToAdapter.test.js`:
+    - Added unit test: `excludes completed TRs with STATU = E and STATU = U from open TR list and queries LTBK with both excluded`.
+    - Added unit test: `lookupTR rejects TR that is already completed (STATU = U) with 400`.
+    - Added unit test: `createTOFromTR rejects TR already completed with STATU = U with 400`.
+  - `test/unit/wm/warehouseScanToUi.test.js`:
+    - Added unit test: `Step 6: rejects TR that is already completed (STATU = U) with clear error`.
+- **Validation:**
+  - Unit tests: `npm test test/unit/wm/trToAdapter.test.js` (79/79 passed, 0 failed).
+  - UI controller unit tests: `npm test test/unit/wm/warehouseScanToUi.test.js` (67/67 passed, 0 failed).
+  - All WM unit tests: `npm test test/unit/wm` (94 suites / 2,500 tests passed, 56 skipped, 0 failed).
+  - Tools tests: `npm test test/unit/tools` (20 suites / 221 tests passed, 0 failed).
+  - UI5 linter: `cd app/fiori-app && npm run lint` (0 findings).
+  - UI5 build: `cd app/fiori-app && npm run build` (build succeeded in 1.29 s).
+  - Root ESLint: `npm run lint` (0 findings).
+  - Browser E2E suite: `node test/e2e/wm/verifyWmScreens.e2e.js` (16 of 16 steps PASS, exit code 0):
+    - `Warehouse scan-to entry (rows: listOpenTRs=1841)` PASS
+    - `Warehouse scan-to detail (first open TR) (rows: tableSuggestedBatches=6)` PASS (opened open TR `0001000988` cleanly without error)
+  - Round-trip scan-to E2E: `node test/e2e/wm/roundTripScanTo.e2e.js` (createTO PASS, exit code 0).
+- **SAP Calls:** READ-ONLY RFC queries were performed during discovery (`LTBK`, `LTBP`, `LTAK`, `MATDOC`, `DD03L`, `DD07L`, `DD07T`, `TFDIR`, `RPY_PROGRAM_READ`). No SAP write was performed.
 
 ### 2026-11-02 15:58 IST — Quarantine labels E2E fix merged to local `feature01`: PASS
 

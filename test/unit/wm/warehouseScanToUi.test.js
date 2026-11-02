@@ -1503,6 +1503,28 @@ describe('WarehouseScanTo UI: Main & Detail Controllers [mock only, not browser 
             expect(detailModel.getProperty('/scanVerificationStatusState')).toBe('Error');
         });
 
+        it('Step 6: rejects TR that is already completed (STATU = U) with clear error', async () => {
+            mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({
+                WarehouseNumber: 'W01',
+                TRNumber: '1000992',
+                TRItem: '0001',
+                Material: '8000009835',
+                Status: 'U',
+                OpenQty: 0
+            });
+
+            await detailCtrl._onRouteMatched({
+                getParameter: jest.fn((p) => (p === 'arguments' ? { docType: 'TR', number: '1000992' } : null))
+            });
+
+            expect(detailModel.getProperty('/hasTR')).toBe(false);
+            expect(detailModel.getProperty('/hasMessage')).toBe(true);
+            expect(detailModel.getProperty('/messageType')).toBe('Error');
+            expect(detailModel.getProperty('/messageText')).toContain('scanToErrTrCompleted');
+            expect(detailModel.getProperty('/scanVerificationStatusText')).toBe('REJECTED');
+            expect(detailModel.getProperty('/scanVerificationStatusState')).toBe('Error');
+        });
+
         it('Step 6: rejects TR belonging to wrong warehouse with clear error', async () => {
             detailModel.setProperty('/lgnum', 'W01');
             mockWarehouseScanToService.lookupTR.mockResolvedValueOnce({

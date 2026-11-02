@@ -1044,6 +1044,13 @@ describe('TrToAdapter (RFC)', () => {
         .rejects.toMatchObject({ status: 400, message: expect.stringContaining('already completed (STATU = E)') });
     });
 
+    it('lookupTR rejects TR that is already completed (STATU = U) with 400', async () => {
+      const completedHeader = { ...HEADER, STATU: 'U' };
+      const rfc = fakeRfc({ header: completedHeader });
+      await expect(new TrToAdapter({ rfc }).lookupTR('1000663', 'W01', 'TR'))
+        .rejects.toMatchObject({ status: 400, message: expect.stringContaining('already completed (STATU = U)') });
+    });
+
     it('lookupTR rejects TR that has no open items with 400', async () => {
       const closedItems = [
         { ...ITEMS[0], MENGE: '10.000', TAMEN: '10.000', ELIKZ: 'X' },
@@ -1094,6 +1101,13 @@ describe('TrToAdapter (RFC)', () => {
       const rfc = fakeRfc({ header: completedHeader });
       await expect(new TrToAdapter({ rfc }).createTOFromTR({ lgnum: 'W01', tbnum: '1000663', tbpos: '0001', qty: 5 }))
         .rejects.toMatchObject({ status: 400, message: expect.stringContaining('already completed (STATU = E)') });
+    });
+
+    it('createTOFromTR rejects TR already completed with STATU = U with 400', async () => {
+      const completedHeader = { ...HEADER, STATU: 'U' };
+      const rfc = fakeRfc({ header: completedHeader });
+      await expect(new TrToAdapter({ rfc }).createTOFromTR({ lgnum: 'W01', tbnum: '1000663', tbpos: '0001', qty: 5 }))
+        .rejects.toMatchObject({ status: 400, message: expect.stringContaining('already completed (STATU = U)') });
     });
 
     it('createTOFromTR rejects wrong material mismatch with 400', async () => {
@@ -1226,6 +1240,31 @@ describe('getOpenTRs without a warehouse: derived from the user Plant attribute 
     const rfc2 = rfcFor([]);
     expect((await new TrToAdapter({ rfc: rfc2 }).getOpenTRs('W01', '', clerk(['1120']))).map((r) => r.Lgnum)).toEqual(['W01']);
     expect(rfc2.readTable).not.toHaveBeenCalledWith('T320', expect.anything(), expect.anything());
+  });
+
+  it('excludes completed TRs with STATU = E and STATU = U from open TR list and queries LTBK with both excluded', async () => {
+    const rfc = {
+      readTable: jest.fn(async (table) => {
+        if (table === 'T320') return [{ WERKS: '1120', LGNUM: 'W01' }];
+        if (table === 'LTBK') {
+          return [
+            { LGNUM: 'W01', TBNUM: '0001000990', BWLVS: '311', STATU: '', BDATU: '20261102' },
+            { LGNUM: 'W01', TBNUM: '0001000991', BWLVS: '311', STATU: 'T', BDATU: '20261102' },
+            { LGNUM: 'W01', TBNUM: '0001000992', BWLVS: '311', STATU: 'U', BDATU: '20261102' },
+            { LGNUM: 'W01', TBNUM: '0001000993', BWLVS: '311', STATU: 'E', BDATU: '20261102' }
+          ];
+        }
+        return [];
+      })
+    };
+    const adapter = new TrToAdapter({ rfc });
+    const openTRs = await adapter.getOpenTRs('W01');
+    expect(rfc.readTable).toHaveBeenCalledWith(
+      'LTBK',
+      ['LGNUM', 'TBNUM', 'BWLVS', 'BETYP', 'BENUM', 'RSNUM', 'STATU', 'BDATU'],
+      ["LGNUM = 'W01'", "AND STATU <> 'E'", "AND STATU <> 'U'"]
+    );
+    expect(openTRs.map((r) => r.Tbnum)).toEqual(['0001000991', '0001000990']);
   });
 });
 

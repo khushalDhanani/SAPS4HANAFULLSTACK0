@@ -410,7 +410,7 @@ class TrToAdapter {
 
     const rows = [];
     for (const wh of warehouses) {
-      const where = [`LGNUM = '${wh}'`, "AND STATU <> 'E'"];
+      const where = [`LGNUM = '${wh}'`, "AND STATU <> 'E'", "AND STATU <> 'U'"];
       if (sMvt) where.push(`AND BWLVS = '${sMvt}'`);
       rows.push(...await this._rfc(
         () => this.rfc.readTable('LTBK', ['LGNUM', 'TBNUM', 'BWLVS', 'BETYP', 'BENUM', 'RSNUM', 'STATU', 'BDATU'], where),
@@ -418,9 +418,10 @@ class TrToAdapter {
       ));
     }
 
-    rows.sort((a, b) => (b.BDATU || '').localeCompare(a.BDATU || '') || (b.TBNUM || '').localeCompare(a.TBNUM || ''));
+    const openRows = rows.filter((r) => r.STATU !== 'E' && r.STATU !== 'U');
+    openRows.sort((a, b) => (b.BDATU || '').localeCompare(a.BDATU || '') || (b.TBNUM || '').localeCompare(a.TBNUM || ''));
 
-    return rows.map((r) => {
+    return openRows.map((r) => {
       const tbnum = alphaOut(r.TBNUM);
       const bwlvs = r.BWLVS || '';
       const benum = alphaOut(r.BENUM);
@@ -567,7 +568,7 @@ class TrToAdapter {
       () => this.rfc.readTable('LTBK', ['TBNUM', 'STATU'], [`LGNUM = '${wh}'`, `AND RSNUM = '${rs}'`]),
       `Read Transfer Requirements of reservation ${alphaOut(rs)}`
     );
-    const open = (rows || []).filter((r) => r.TBNUM && r.STATU !== 'E').map((r) => r.TBNUM);
+    const open = (rows || []).filter((r) => r.TBNUM && r.STATU !== 'E' && r.STATU !== 'U').map((r) => r.TBNUM);
     if (!open.length) {
       // Check if tracked in ReservationTrack (e.g. movement 311 where LTBK-RSNUM is 0000000000)
       try {
@@ -1151,7 +1152,7 @@ class TrToAdapter {
           plant,
           movementType: r.BWLVS || '',
           statusCode: r.STATU || '',
-          status: r.STATU === 'E' ? 'Completed' : 'Open',
+          status: (r.STATU === 'E' || r.STATU === 'U') ? 'Completed' : 'Open',
           createdDate
         };
         return Object.assign({
@@ -1165,7 +1166,7 @@ class TrToAdapter {
       // Requirement 6 & Point 2:
       // Only open TRs count for auto-pick. If no open TR is in the user's scope,
       // return 404 "TR not found in any warehouse" rather than a 400 that reveals completed TR existence.
-      const openCandidates = candidates.filter((c) => c.statusCode !== 'E');
+      const openCandidates = candidates.filter((c) => c.statusCode !== 'E' && c.statusCode !== 'U');
 
       if (openCandidates.length === 1) {
         wh = openCandidates[0].lgnum;
@@ -1192,18 +1193,18 @@ class TrToAdapter {
     if (wh && tr.Lgnum && tr.Lgnum !== wh) {
       throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} belongs to warehouse ${tr.Lgnum}, not ${wh}`);
     }
-    if (tr.Statu === 'E') {
-      const isCorrupted = await this._isCorruptedStagingTR(tr, wh);
+    if (tr.Statu === 'E' || tr.Statu === 'U') {
+      const isCorrupted = tr.Statu === 'E' ? await this._isCorruptedStagingTR(tr, wh) : null;
       if (isCorrupted) {
         LOG.warn(`[lookupTR] TR ${alphaOut(tr.Tbnum)} has STATU = 'E' with NO Transfer Order in SAP, but Reservation ${alphaOut(isCorrupted.ReservationNo)} is open; auto-recovering to active staging TR...`);
         const recoveredTr = await this._recoverCorruptedStagingTR(tr, isCorrupted, wh);
         if (recoveredTr) {
           tr = recoveredTr;
         } else {
-          throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = E)`);
+          throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = ${tr.Statu})`);
         }
       } else {
-        throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = E)`);
+        throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = ${tr.Statu})`);
       }
     }
 
@@ -1581,8 +1582,8 @@ class TrToAdapter {
       IsBatchManaged: isBatchManaged,
       IsSerialManaged: isSerialManaged,
       DeliveryCompleted: Boolean(sel.DeliveryCompleted),
-      Status: tr.Statu === 'E' ? STATUS.TO_CONFIRMED : STATUS.TR_CREATED,
-      StatusText: tr.Statu === 'E' ? 'Completed' : STATUS_TEXT[STATUS.TR_CREATED],
+      Status: (tr.Statu === 'E' || tr.Statu === 'U') ? STATUS.TO_CONFIRMED : STATUS.TR_CREATED,
+      StatusText: (tr.Statu === 'E' || tr.Statu === 'U') ? 'Completed' : STATUS_TEXT[STATUS.TR_CREATED],
       StockWarning: stockWarning,
       Items: open
     };
@@ -1865,8 +1866,8 @@ class TrToAdapter {
     if (wh && tr.Lgnum && tr.Lgnum !== wh) {
       throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} belongs to warehouse ${tr.Lgnum}, not ${wh}`);
     }
-    if (tr.Statu === 'E') {
-      const isCorrupted = await this._isCorruptedStagingTR(tr, wh);
+    if (tr.Statu === 'E' || tr.Statu === 'U') {
+      const isCorrupted = tr.Statu === 'E' ? await this._isCorruptedStagingTR(tr, wh) : null;
       if (isCorrupted) {
         LOG.warn(`[createTOFromTR] TR ${alphaOut(tr.Tbnum)} has STATU = 'E' with NO Transfer Order in SAP, but Reservation ${alphaOut(isCorrupted.ReservationNo)} is open; auto-recovering to active staging TR...`);
         const recoveredTr = await this._recoverCorruptedStagingTR(tr, isCorrupted, wh);
@@ -1876,10 +1877,10 @@ class TrToAdapter {
             trackedReservation.TransferRequirement = tr.Tbnum;
           }
         } else {
-          throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = E)`);
+          throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = ${tr.Statu})`);
         }
       } else {
-        throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = E)`);
+        throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = ${tr.Statu})`);
       }
     }
 
