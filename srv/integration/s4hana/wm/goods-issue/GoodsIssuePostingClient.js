@@ -755,7 +755,13 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
       const delays = GoodsIssuePostingClient.referenceLookupDelaysMs();
       for (const delayMs of delays) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
-        const doc = await this.findPostedByReference(data.ReferenceDocument, '261', data.PostingDate);
+        let doc;
+        try {
+          doc = await this.findPostedByReference(data.ReferenceDocument, '261', data.PostingDate);
+        } catch (lookupErr) {
+          LOG.warn(`Reference lookup ${data.ReferenceDocument} failed: ${lookupErr.message}`);
+          throw err; // cannot verify: keep the unknown outcome
+        }
         if (doc) return GoodsIssuePostingClient._resultFromReference(doc, data, '261', 'Goods Issue to Order');
       }
       throw err;

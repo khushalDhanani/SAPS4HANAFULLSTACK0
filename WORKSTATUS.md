@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Movement 261 retry after a timeout or HTTP 500 no longer posts again (2026-11-02 IST) — PARTIAL:** an unresolved attempt now blocks the whole reservation item, HTTP 500 counts as an unknown outcome, and re-issue works once SAP shows the document as reversed. Mock-tested only; no browser E2E and no live SAP run.
+
 - **MIGO double-posting guard on `/odata/v4/tr-to` and `/odata/v4/reservation-entry` now stops the posting (2026-11-02 IST) — PARTIAL:** handler behaviour is mock-tested; the reservation-entry adapter check was run READ-ONLY against live SAP (5 TRs refused, 1 passed). No browser E2E run and no action was exercised end to end against SAP. On reservation-entry a blocked posting returns HTTP 200 with status 90 and the reason, like its other MIGO failures.
 
 - **Startup Warning (Movement 261 BusinessConfig) & Dashboard Metrics Log Analysis (2026-10-31 IST) — PASS:** Diagnosed root causes and resolved the startup warning and dashboard metrics handling:
@@ -1818,6 +1820,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- Movement 261 (2026-11-02): decide whether the Scan 261 screen should send a client attempt id, which is the only way to tell a repeat of a confirmed posting from a new partial issue of the same quantity.
+
 - MIGO guard (2026-11-02): decide whether an empty LTAK result (Transfer Order not found) should stop posting on either path. The guard code is in local commit e4393ce5, not pushed. An end-to-end action run needs a written go; it should use a TR with `MBLNR` set, so nothing is posted if the guard works.
 
 - P-1: commit and push the SAP-free PR gate, confirm `browser-e2e-sap-free` runs green on GitHub Actions, then mark it a required status check in branch protection (repo settings, user action). Follow-up for a fuller gate: a deterministic S/4 fixture backend so the 20 SAP-reading suites can run per PR.
@@ -1892,6 +1896,27 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 09:55 IST — Movement 261 HTTP 500 treated as an unknown outcome (audit finding 4): PARTIAL
+
+- **Change:** `postGoodsIssue` now uses the shared `classifyPostingError` (same rule as 201/301/311) instead of its own status list. HTTP 500 and the `GI_POSTING_OUTCOME_UNKNOWN` code now give `unconfirmed`, not `rejected`, and the user is told not to post again. `post261` keeps the unknown outcome when the reference lookup fails, instead of letting the lookup's error replace it (same handling as `post201`).
+- **Files:** `srv/wm/mvt261/service.js`, `srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient.js`, `test/unit/wm/mvt261Concurrency.test.js`, `test/unit/wm/goodsIssueOutcomesPerType.test.js`, `test/unit/wm/mvt261Scan.test.js`.
+- **Test decision:** TEST ADDED (5 mock tests). TEST UPDATED: one exact-message assertion in `mvt261Scan.test.js` failed because of the new wording; it now checks both the original reason and the warning.
+- **Validation:** Before the fix, the new tests: 3 failed, 2 passed. After the fix: 5 passed. First `npx jest test/unit test/integration` run: 1 failed (the assertion above), 4266 passed, 59 skipped. After updating it: 218 suites passed, 1 skipped; 4267 tests passed, 59 skipped. `npx eslint` on the 5 changed files: clean. `git diff --check`: clean.
+- **Not run:** browser E2E and live SAP. No SAP call was made. **NOT VERIFIED:** which status live SAP uses for business refusals on this API.
+- **Behaviour change:** a definite SAP refusal that arrives as HTTP 500 now blocks the item until the recheck marks it `not_posted` (about 15 minutes at default settings), instead of allowing an immediate retry.
+- **Open:** The 261 `reverse` action keeps its own status list, so an HTTP 500 there stays `rejected` and re-claimable; it reads SAP's reversed flag before each reversal, and an existing test expects a closed-period 500 to be re-claimable. Not changed. Behaviour changes for errors without a status: a message matching "service unavailable" or a connection-refused error is now definite, not unknown, under the shared rule.
+
+### 2026-11-02 09:51 IST — Movement 261 double post after timeout and blocked re-issue after reversal: PARTIAL
+
+- **Change:** `postGoodsIssue` now returns 409 while any `sending` or `unconfirmed` attempt exists for the reservation item (`hasOpenAttemptForReservation`), and stops if that check cannot be read. `createOrGet` takes an optional `isReclaimable`; 261 uses it to allow a new claim when the fresh SAP history shows the latest posted document as reversed. With a database bound, `hasOpenAttemptForReservation` no longer reads process memory, which could be stale on a second instance.
+- **Deviation from the audit's proposed fix:** `openQty` stays in the key. Removing it would give a second partial issue of the same quantity the same key as the first and block it with a permanent 409 (partial issues: `test/unit/wm/mvt261Adapter.test.js` A3). The new item-level check closes the same timeout hole.
+- **Files:** `srv/wm/mvt261/service.js`, `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, `test/unit/wm/mvt261Concurrency.test.js`.
+- **Test decision:** TEST ADDED (8 mock tests).
+- **Validation:** Before the fix, `npx jest test/unit/wm/mvt261Concurrency.test.js -t 'open quantity changes'`: 5 failed, 3 passed. After the fix: 8 passed. `npx jest test/unit test/integration`: 218 suites passed, 1 skipped; 4262 tests passed, 59 skipped. `npx eslint` on the 3 changed code files: clean. `git diff --check`: clean. The 503 error line and its test mock message were then adjusted to avoid a repeated sentence, then `npx jest test/unit/wm/mvt261 test/unit/wm/goodsIssue` was rerun: 26 suites passed, 1 skipped; 512 tests passed, 18 skipped. `npx eslint` on the 2 files changed by that edit: clean. The full suite was not rerun after that edit.
+- **Not run:** browser E2E and live SAP. No SAP call was made. **NOT VERIFIED:** that SAP's cancelled flag (`IsReversed`) appears in the live cycle history after a 262.
+- **Behaviour change:** after a timeout, the item stays blocked until the recheck resolves the attempt (first check after about 3 minutes, `not_posted` after about 15 minutes at default settings).
+- **Open:** Once an attempt is confirmed `posted`, resubmitting the same quantity at the new open quantity still posts, because it looks the same as a new partial issue. Two simultaneous requests can both pass the item check when their keys differ. HTTP 500 is still marked `rejected` (audit finding 4). A `delivery_created` attempt does not block a request with a different key.
 
 ### 2026-11-02 IST — READ-ONLY live check of `LTBK-MBLNR` and the reservation-entry guard: PASS for the check; guard work stays PARTIAL
 

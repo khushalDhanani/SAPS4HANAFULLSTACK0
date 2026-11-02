@@ -188,6 +188,174 @@ describe('Movement 261 Concurrency and Edge Case Regression Tests', () => {
     });
   });
 
+  // [mock only, not SAP verification]
+  describe('Idempotency when the open quantity changes between tries', () => {
+    const DOC = { MaterialDocument: '4900050046', MaterialDocumentYear: '2026', Pending: false };
+    const stock = (over) => jest.spyOn(Mvt261Adapter.prototype, 'revalidateStock')
+      .mockResolvedValue({ eligible: true, issuableQuantity: 5, freshCycle: cycleOf(over) });
+    const post = (quantity = 5) => {
+      const r = req({ reservation: '512851', item: '3', quantity });
+      return handlers.postGoodsIssue(r).then((result) => ({ r, result }));
+    };
+
+    it('blocks the retry when SAP saved a timed-out posting and the open quantity dropped', async () => {
+      await svc.init();
+      const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
+        .mockRejectedValueOnce(Object.assign(new Error('Gateway Timeout'), { status: 504 }))
+        .mockResolvedValue(DOC);
+
+      stock({ OpenQuantity: 20 });
+      await post();
+      stock({ OpenQuantity: 15 }); // SAP committed the first attempt
+      const { r } = await post();
+
+      expect(r.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
+      expect(postSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('blocks any other quantity on the item while an attempt is unresolved', async () => {
+      await svc.init();
+      const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
+        .mockRejectedValueOnce(Object.assign(new Error('connect ETIMEDOUT')));
+
+      stock({ OpenQuantity: 20 });
+      await post(5);
+      const { r } = await post(3);
+
+      expect(r.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
+      expect(postSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('allows the retry once the recheck proves nothing was posted', async () => {
+      await svc.init();
+      const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
+        .mockRejectedValueOnce(Object.assign(new Error('Gateway Timeout'), { status: 504 }))
+        .mockResolvedValue(DOC);
+
+      stock({ OpenQuantity: 20 });
+      await post();
+      const [attempt] = GoodsIssueAttemptStore._memoryStore.values();
+      await GoodsIssueAttemptStore.setStatus(attempt.ReferenceDocument, 'not_posted');
+      const { r } = await post();
+
+      expect(r.error).not.toHaveBeenCalled();
+      expect(postSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('still allows a second partial issue of the same quantity', async () => {
+      await svc.init();
+      const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockResolvedValue(DOC);
+
+      stock({ OpenQuantity: 20 });
+      await post();
+      stock({ OpenQuantity: 15 });
+      const { r } = await post();
+
+      expect(r.error).not.toHaveBeenCalled();
+      expect(postSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('allows re-issue after SAP shows the posted document as reversed', async () => {
+      await svc.init();
+      const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
+        .mockResolvedValueOnce(DOC)
+        .mockResolvedValueOnce({ ...DOC, MaterialDocument: '4900050047' });
+
+      stock({ OpenQuantity: 20 });
+      await post();
+      stock({
+        OpenQuantity: 20,
+        History: [{ MovementType: '261', MaterialDocument: '4900050046', MaterialDocumentYear: '2026', IsReversed: true }]
+      });
+      const { r, result } = await post();
+
+      expect(r.error).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ MaterialDocument: '4900050047' });
+      expect(postSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps blocking the same request when the posted document is not reversed', async () => {
+      await svc.init();
+      const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockResolvedValue(DOC);
+
+      stock({
+        OpenQuantity: 20,
+        History: [{ MovementType: '261', MaterialDocument: '4900050046', MaterialDocumentYear: '2026', IsReversed: false }]
+      });
+      await post();
+      const { r } = await post();
+
+      expect(r.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
+      expect(postSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not post when the attempt log cannot be read', async () => {
+      await svc.init();
+      const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockResolvedValue(DOC);
+      jest.spyOn(GoodsIssueAttemptStore, 'hasOpenAttemptForReservation')
+        .mockRejectedValue(Object.assign(new Error('Open posting attempts could not be read. Goods Issue was NOT posted.'), { status: 503 }));
+
+      stock({ OpenQuantity: 20 });
+      const { r } = await post();
+
+      expect(r.error).toHaveBeenCalledWith(503, expect.stringContaining('NOT posted'));
+      expect(postSpy).not.toHaveBeenCalled();
+    });
+
+    it('trusts the database over a stale in-memory attempt from before another instance resolved it', async () => {
+      const { GoodsIssueAttemptStore: Store } = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
+      const db = { tx: async (_ctx, fn) => fn({ run: async () => [] }) };
+      const store = new Store({ db });
+      store._memoryStore.set('GIABC0', { ReservationNo: '512851', ReservationItem: '3', Status: 'unconfirmed' });
+
+      await expect(store.hasOpenAttemptForReservation('512851', '3')).resolves.toBe(false);
+    });
+  });
+
+  // [mock only, not SAP verification]
+  describe('Posting error classification', () => {
+    const failWith = async (error) => {
+      await svc.init();
+      jest.spyOn(Mvt261Adapter.prototype, 'revalidateStock')
+        .mockResolvedValue({ eligible: true, issuableQuantity: 5, freshCycle: cycleOf() });
+      const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockRejectedValueOnce(error)
+        .mockResolvedValue({ MaterialDocument: '4900050046', MaterialDocumentYear: '2026', Pending: false });
+      const r1 = req({ reservation: '512851', item: '3', quantity: 5 });
+      await handlers.postGoodsIssue(r1);
+      const r2 = req({ reservation: '512851', item: '3', quantity: 5 });
+      await handlers.postGoodsIssue(r2);
+      const [attempt] = GoodsIssueAttemptStore._memoryStore.values();
+      return { attempt, postSpy, r1, r2 };
+    };
+
+    it('treats HTTP 500 as an unknown outcome: warns the user and blocks the retry', async () => {
+      const { attempt, postSpy, r1, r2 } = await failWith(Object.assign(new Error('Internal Server Error'), { status: 500 }));
+
+      expect(attempt.Status).toBe('unconfirmed');
+      expect(r1.error).toHaveBeenCalledWith(500, expect.stringContaining('do not post again'));
+      expect(r2.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
+      expect(postSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats the posting client unknown-outcome code as unknown whatever its status', async () => {
+      const { attempt, postSpy } = await failWith(Object.assign(new Error('Outcome is unconfirmed'), { status: 422, code: 'GI_POSTING_OUTCOME_UNKNOWN' }));
+
+      expect(attempt.Status).toBe('unconfirmed');
+      expect(postSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['definite SAP refusal', Object.assign(new Error('Deficit of stock'), { status: 422 })],
+      ['SAP service never reached', Object.assign(new Error('Service offline'), { status: 503 })]
+    ])('keeps the retry open after a %s', async (_name, error) => {
+      const { attempt, postSpy, r2 } = await failWith(error);
+
+      expect(attempt.Status).toBe('rejected');
+      expect(r2.error).not.toHaveBeenCalled();
+      expect(postSpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('2. Network Timeout Handling', () => {
     it('network timeout (ETIMEDOUT / no status) sets attempt status to unconfirmed and blocks duplicate submission with 409', async () => {
       await svc.init();

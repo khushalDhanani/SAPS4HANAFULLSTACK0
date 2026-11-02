@@ -655,7 +655,7 @@ describe('Mvt261Service postGoodsIssue action', () => {
       expect.stringContaining('DB deadlock'),
       expect.anything()
     );
-    expect(r.error).toHaveBeenCalledWith(504, 'Gateway timeout');
+    expect(r.error).toHaveBeenCalledWith(504, expect.stringMatching(/Gateway timeout.*do not post again/));
   });
 });
 

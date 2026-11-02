@@ -133,7 +133,7 @@ class GoodsIssueAttemptStore {
    * claimed the same idempotency key.
    *
    * @param {Object} data - carries ReferenceDocument (the base key) and RequestHash (the identity)
-   * @param {{reclaimableStatuses: string[]}} [reclaim] - OPT-IN re-claim policy (261 post/reverse only;
+   * @param {{reclaimableStatuses: string[], isReclaimable?: function(Object): boolean}} [reclaim] - OPT-IN re-claim policy (261 post/reverse only;
    *   the 201 flow passes nothing and keeps the plain idempotent-replay behaviour below). When set, a
    *   new claim is allowed only if the latest attempt for this identity is in a status that proves
    *   nothing is posted (e.g. 'rejected', or 'not_posted' for posts); any other status (sending /
@@ -161,7 +161,7 @@ class GoodsIssueAttemptStore {
       if (priors.length) {
         const latest = priors[priors.length - 1];
         // Latest attempt is live or proves something happened -> block a blind re-claim.
-        if (!reclaim.reclaimableStatuses.includes(String(latest.Status || ''))) {
+        if (!reclaim.reclaimableStatuses.includes(String(latest.Status || '')) && !reclaim.isReclaimable?.(latest)) {
           return { created: false, row: latest };
         }
       }
@@ -247,19 +247,21 @@ class GoodsIssueAttemptStore {
 
     if (!this.isAvailable()) return false;
 
-    for (const attempt of this._memoryStore.values()) {
-      if (OPEN_STATUSES.includes(attempt.Status)) {
-        const aRes = String(attempt.ReservationNo || '').trim().replace(/^0+/, '');
-        if (cleanItem) {
-          const aItem = String(attempt.ReservationItem || '').trim().replace(/^0+/, '');
-          if (aRes === cleanRes && aItem === cleanItem) return true;
-        } else if (aRes === cleanRes) {
-          return true;
+    // With a database, memory can be stale: another instance may have resolved the attempt.
+    if (!this.db) {
+      for (const attempt of this._memoryStore.values()) {
+        if (OPEN_STATUSES.includes(attempt.Status)) {
+          const aRes = String(attempt.ReservationNo || '').trim().replace(/^0+/, '');
+          if (cleanItem) {
+            const aItem = String(attempt.ReservationItem || '').trim().replace(/^0+/, '');
+            if (aRes === cleanRes && aItem === cleanItem) return true;
+          } else if (aRes === cleanRes) {
+            return true;
+          }
         }
       }
+      return false;
     }
-
-    if (!this.db) return false;
 
     try {
       const rows = await this._run(

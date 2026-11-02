@@ -2,6 +2,7 @@ const cds = require('@sap/cds');
 const crypto = require('crypto');
 const Mvt261Adapter = require('../../integration/s4hana/wm/Mvt261Adapter');
 const GoodsIssueAttemptStore = require('../goods-issue/GoodsIssueAttemptStore');
+const { classifyPostingError } = require('../goods-issue/handlers/goodsIssuePerType.handler');
 const plantScope = require('../handling-unit/plantScope');
 const { validateMovement261Payload } = require('../../common/movementConfig');
 const LOG = require('../../common/logger')('mvt261-service');
@@ -90,6 +91,20 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
       // no document) is re-claimable, so fixing the cause and retrying works; a live/posted attempt
       // ('sending'/'unconfirmed'/'posted'/'delivery_created'/'needs-attention') still blocks (409). The
       // old row is kept and a new generation is suffixed to the base reference (audit trail).
+      // A posted attempt is also re-claimable once SAP shows its document as reversed (re-issue after 262).
+      // Open quantity stays in the key so a second partial issue of the same quantity is a new posting.
+      // That key changes when SAP commits a timed-out post, so an unresolved attempt must block the whole item.
+      try {
+        if (await GoodsIssueAttemptStore.hasOpenAttemptForReservation(reservation, item)) {
+          return req.error(409, `A goods issue for reservation ${reservation}/${item} is already in progress.`);
+        }
+      } catch (openErr) {
+        return req.error(openErr.status || 503, openErr.message); // the store's message says nothing was posted
+      }
+      const isReversedInSap = (attempt) => attempt.Status === 'posted' && (c.History || []).some((h) =>
+        h.MovementType === '261' && h.IsReversed &&
+        strip(h.MaterialDocument) === strip(attempt.MaterialDocument) &&
+        String(h.MaterialDocumentYear) === String(attempt.MaterialDocYear));
       const openQty = Number(c.OpenQuantity) || 0;
       const requestHash = crypto.createHash('sha1').update(`261|${orderId}|${orderType}|${strip(reservation)}|${strip(item)}|${quantity}|${effBatch}|${openQty}`).digest('hex');
       const baseRef = `GI${requestHash.slice(0, 12)}`.toUpperCase(); // base (14 chars); createOrGet adds the generation suffix
@@ -109,7 +124,7 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
           Unit: c.Unit || '',
           User: req.user?.id || 'anonymous',
           PostingDate: new Date().toISOString().slice(0, 10)
-        }, { reclaimableStatuses: ['rejected', 'not_posted'] });
+        }, { reclaimableStatuses: ['rejected', 'not_posted'], isReclaimable: isReversedInSap });
       } catch (claimErr) {
         if (claimErr.status === 409) {
           // Same key, different request details: a different posting is already claimed under this key.
@@ -160,11 +175,11 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
 
         return result;
       } catch (err) {
-        // Unknown outcome (network / timeout: the adapter surfaces it as 502, or no status at all):
-        // SAP may or may not have posted. Keep the attempt OPEN ('unconfirmed') so the recheck job can
-        // resolve it, instead of dead-ending it as 'rejected'. A definite SAP rejection (e.g. 403/422)
-        // stays 'rejected'. Either way the deterministic key still blocks a blind retry (409).
-        const unknown = !err.status || err.status === 502 || err.status === 504;
+        // Unknown outcome (network / timeout / HTTP 500): SAP may or may not have posted. Keep the attempt
+        // OPEN ('unconfirmed') so the recheck job can resolve it, instead of dead-ending it as 'rejected'.
+        // A definite outcome (SAP refusal, or SAP never reached) stays 'rejected' and can be retried.
+        const classified = classifyPostingError(err);
+        const unknown = !classified.definitive;
         const failStatus = unknown ? 'unconfirmed' : 'rejected';
         const failFields = {
           LastError: err.message || 'Posting failed'
@@ -177,7 +192,7 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
           );
         });
 
-        return req.error(err.status || 500, err.message || 'Goods issue posting failed');
+        return req.error(err.status || 500, unknown ? classified.message : (err.message || 'Goods issue posting failed'));
       }
     });
 

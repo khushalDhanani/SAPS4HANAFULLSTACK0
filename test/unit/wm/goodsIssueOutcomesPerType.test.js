@@ -2,6 +2,32 @@
 
 const GoodsIssuePostingClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient');
 
+// [mock only, not SAP verification]
+describe('post261 reference lookup after an unknown outcome', () => {
+  const saved = process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+    else process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = saved;
+  });
+
+  it('keeps the unknown outcome when the lookup itself fails with a 4xx', async () => {
+    process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = '0';
+    const client = new GoodsIssuePostingClient({ adapter: { _getDestination: jest.fn(), _post: jest.fn(), _get: jest.fn() } });
+    jest.spyOn(client, '_assert261CapabilityReady').mockResolvedValue();
+    jest.spyOn(client, '_preflightPosting').mockResolvedValue();
+    jest.spyOn(client, '_submitMaterialDocument')
+      .mockRejectedValue(Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }));
+    jest.spyOn(client, 'findPostedByReference')
+      .mockRejectedValue(Object.assign(new Error('Not authorized for lookup'), { status: 403 }));
+
+    await expect(client.post261({
+      MovementType: '261', ValidatedMovementType: '261', ReservationNo: '512851', ReservationItem: '3',
+      Material: 'M1', Plant: '1130', StorageLocation: 'CS02', IssueQty: 5, Unit: 'KG',
+      OrderNo: '1002707', OrderType: 'ZP01', ReferenceDocument: 'GIABC0'
+    })).rejects.toMatchObject({ status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' });
+  });
+});
+
 describe('User-Facing Posting Outcome Messages Per Movement Type (201, 301, 311)', () => {
   const movementTypes = [
     { type: '201', name: 'Goods Issue to Cost Center' },
