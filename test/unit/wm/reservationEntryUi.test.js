@@ -642,9 +642,38 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             await listSubject.loadData();
             const entries = viewModel.getProperty('/entries');
             expect(entries).toHaveLength(2);
-            expect(entries[0].ReservationNo).toBe('0000527594');
-            expect(entries[0].TransferRequirement).toBe('1000810');
-            expect(entries[1].ReservationNo).toBe('0000527595');
+            expect(entries[0].ReservationNo).toBe('0000527595');
+            expect(entries[1].ReservationNo).toBe('0000527594');
+            expect(entries[1].TransferRequirement).toBe('1000810');
+        });
+
+        // The table shows 25 rows at a time, so a tracked-first order hid reservations created in SAP GUI.
+        it('lists tracked and SAP-only reservations together, newest reservation first', async () => {
+            const serviceMock = {
+                getEntries: jest.fn().mockResolvedValue([
+                    { ReservationNo: '0000533320', ReservationItem: '0001', MovementType: '301', Status_code: '05' },
+                    { ReservationNo: '0000500000', ReservationItem: '0001', MovementType: '311', Status_code: '02' }
+                ]),
+                getOpenReservations: jest.fn().mockResolvedValue([
+                    { ReservationNo: '535381', MovementType: '311', CreatedByUser: 'SAP_GUI_USER', Status_code: '01' },
+                    { ReservationNo: '533320', MovementType: '301', Status_code: '01' },
+                    { ReservationNo: '2912', MovementType: '261', Status_code: '01' }
+                ])
+            };
+            const viewModel = new FakeJSONModel({
+                filterMvtType: '', filterPlant: '', entries: [], allEntries: [], busy: false
+            });
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oService: serviceMock,
+                _oViewModel: viewModel
+            });
+
+            await listSubject.loadData();
+
+            const expected = ['0000535381', '0000533320', '0000500000', '0000002912'];
+            expect(viewModel.getProperty('/entries').map((e) => e.ReservationNo)).toEqual(expected);
+            expect(viewModel.getProperty('/allEntries').map((e) => e.ReservationNo)).toEqual(expected);
+            expect(viewModel.getProperty('/entries')[0].CreatedByUser).toBe('SAP_GUI_USER');
         });
 
         it('loadData strictly filters out non-supported movements like 999 from both tracked and open lists while supporting 261', async () => {
@@ -679,7 +708,7 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             const entries = viewModel.getProperty('/entries');
             expect(entries).toHaveLength(5);
             const mvts = entries.map((e) => e.MovementType);
-            expect(mvts).toEqual(['311', '201', '241', '301', '261']);
+            expect(mvts).toEqual(['301', '241', '201', '311', '261']);
             expect(entries.some((e) => e.MovementType === '999')).toBe(false);
             expect(entries.some((e) => e.MovementType === '261')).toBe(true);
         });
@@ -1260,18 +1289,18 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(entries).toHaveLength(2);
 
             // Tracked entry enriched and material unpadded
-            expect(entries[0].ReservationNo).toBe('0000527594');
-            expect(entries[0].Material).toBe('62');
-            expect(entries[0].MovementTypeName).toBe('GI for Order');
-            expect(entries[0].CreatedByUser).toBe('KHUSHAL');
-            expect(entries[0].OrderNo).toBe('4000123');
+            expect(entries[1].ReservationNo).toBe('0000527594');
+            expect(entries[1].Material).toBe('62');
+            expect(entries[1].MovementTypeName).toBe('GI for Order');
+            expect(entries[1].CreatedByUser).toBe('KHUSHAL');
+            expect(entries[1].OrderNo).toBe('4000123');
 
             // Open entry normalized
-            expect(entries[1].ReservationNo).toBe('0000527595');
-            expect(entries[1].Material).toBe('45');
-            expect(entries[1].MovementTypeName).toBe('SLoc to SLoc');
-            expect(entries[1].CreatedByUser).toBe('RFW12');
-            expect(entries[1].ItemCount).toBe(2);
+            expect(entries[0].ReservationNo).toBe('0000527595');
+            expect(entries[0].Material).toBe('45');
+            expect(entries[0].MovementTypeName).toBe('SLoc to SLoc');
+            expect(entries[0].CreatedByUser).toBe('RFW12');
+            expect(entries[0].ItemCount).toBe(2);
         });
 
         it('onSearchFieldSearch matches query across CreatedByUser, OrderNo, and MovementTypeName', () => {

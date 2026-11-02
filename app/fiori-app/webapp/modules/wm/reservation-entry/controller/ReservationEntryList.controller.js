@@ -142,6 +142,12 @@ sap.ui.define([
                     }
                 });
 
+                // Newest first across both sources: the table grows 25 rows at a time, so listing
+                // tracked rows first would push reservations created in SAP GUI off the first page.
+                aCombined.sort(function (a, b) {
+                    return Number(b.ReservationNo) - Number(a.ReservationNo);
+                });
+
                 that._oViewModel.setProperty("/entries", aCombined);
                 that._oViewModel.setProperty("/allEntries", aCombined);
                 that._oViewModel.setProperty("/busy", false);

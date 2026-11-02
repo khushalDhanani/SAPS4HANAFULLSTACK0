@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Reservation list hid SAP GUI reservations on its first page (2026-11-02 16:17 IST) — PASS for the list fix, uncommitted:** `#/wm/reservation-entry` listed app-tracked rows before SAP-only rows and shows 25 rows at a time, so the newest SAP reservation sat at row 28. The merged list now sorts newest reservation first. Which screen problem the user meant by "GUI based Entry" is INFERRED. See Change Entry 2026-11-02 16:17 IST.
+
 - **Missing i18n keys added (2026-11-02 15:52 IST) — PASS, merged to local `feature01`, not pushed:** 10 literal keys that neither bundle defined now exist in both, plus 1 new key that keeps the invoice wording separate, and no literal `i18n>key` or `getText("key")` is unresolved. Only `huNoSelection` could show a raw key before; the other 9 already showed fallback text, and those messages read the same now. Jest 226 suites passed, 1 skipped; 4,432 tests passed, 59 skipped; `ui5lint` clean. No SAP call was made, and the messages were not triggered on live screens.
 
 - **Quarantine labels E2E case fixed (2026-11-02 15:52 IST) — PASS, merged to local `feature01`, not pushed:** `npm run test:e2e:sap-free` now passes 3 of 3 suites, on 3 runs in a row. The screen was correct; two checks in the test had gone out of date when the label layout changed. Only the test file changed. GitHub Actions has not run this. This supersedes the "2 of 3 suites" result in the cleanup line below. See the Changes Log entries of 2026-11-02 15:49, 15:52 and 15:58 IST.
@@ -1829,9 +1831,11 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
-- Missing i18n keys (2026-11-02): merged to local `feature01`; push when the user asks. The new test in `uiConsistency.test.js` fails on any new literal key that is not in both bundles.
-- Quarantine labels E2E (2026-11-02): the fix is merged to local `feature01`; push when the user asks, then confirm `browser-e2e-sap-free` on GitHub Actions.
-- Dead-code cleanup (2026-11-02): review the diff and commit when the user asks. Decide on the Medium-confidence list in Change Entry 2026-11-02 15:45 IST. The failing Quarantine labels E2E case and the missing i18n keys that were listed here are both resolved on local `feature01` (Changes Log 2026-11-02 15:49, 15:52 and 15:56 IST).
+- Reservation list (2026-11-02): user confirms the fix on `#/wm/reservation-entry` after a browser refresh; commit when the user asks.
+- Warehouse scan-to detail (2026-11-02): the first open TR on the scan-to screen, 1000992, opens with "has no open items (already completed)", so `verifyWmScreens` fails that step. Cause NOT VERIFIED; not touched by the reservation list fix.
+- Missing i18n keys (2026-11-02): pushed to `origin/feature01` (`3aa2ad95`). The new test in `uiConsistency.test.js` fails on any new literal key that is not in both bundles.
+- Quarantine labels E2E (2026-11-02): the fix is pushed to `origin/feature01` (`3aa2ad95`). CI run 41429280039 on `3aa2ad95` passed, including `Build, Test & Validate` and `Browser E2E, SAP-free suites (PR gate)`. The separately controlled SAP validation and 23-suite browser jobs were skipped.
+- Dead-code cleanup (2026-11-02): committed and pushed. Decide on the Medium-confidence list in Change Entry 2026-11-02 15:45 IST. First item done: `checkStagingForReservation` removed, uncommitted (Change Entry 2026-11-02 16:20 IST). Commit when the user asks.
 - **URGENT, user action (2026-11-02):** The SAP password in `S4_PASSWORD` was committed in `2256822d` to `origin/feature01`, and the GitHub API answers 200 without login, so the repository appears public. Change that SAP password and update `.env.local`. Treat the two other removed values as exposed too. Removing them from the current files does not remove them from Git history; rewriting history needs a separate decision and a force push.
 - Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. The goods receipt is PROVEN on inbound delivery 0180000137 (document 5000005789/2026, read back from SAP) for a full quantity on an unpacked delivery; partial receipts are refused. Scan-to is proven for TO create and confirm on TR 1000982 (TO 1037664, read back from SAP); automatic MIGO and Retry MIGO are not. Route count from `docs/e2e-coverage-matrix.md`: 7 proven, 2 partial, 12 not proven. Each later run needs read-only data discovery and its own written go. A live reservation goods movement should prove the new `BKTXT` replay check (audit finding 10).
 
@@ -7191,3 +7195,39 @@ Single source of truth for work history, current status, validation, unresolved 
 - **Assumptions:** no SAP contract changes. Code outside this repo does not call the removed internal members (INFERRED).
 - **Next action:** review the diff and commit when the user asks.
 - **Status:** PARTIAL. Removal is complete and matches baseline on everything run; browser coverage is incomplete and uncommitted.
+
+## Change Entry — 2026-11-02 16:10 IST — Review of `checkStagingForReservation` (No Code Change)
+
+- **CHANGED:** `WORKSTATUS.md` only (Next Steps brought up to date and this entry). `feature01` was pushed to `origin` at `3aa2ad95`; the two side-session worktrees and local `claude/*` branches were removed at the user's request.
+- **Finding:** `GoodsIssueStockUnitClient.checkStagingForReservation` lost its callers in `e5ab2aae` (2026-10-05, removal of the old 261 feature). Those callers were `stagingCheck` in `postGoodsIssue261`, `storageUnitFinalReconcileCheck261`, and `submitGoodsIssueRequest`; none of them exists today.
+- **Current staging guard:** the 261 flow re-checks staging before posting through `Mvt261Adapter.revalidateStock`, which throws HTTP 422 on a shortfall (`srv/integration/s4hana/wm/Mvt261Adapter.js:955-979`, called at `:1086` and `srv/wm/mvt261/service.js:57`). `test/unit/wm/mvt261Adapter.test.js` covers the shortfall classification.
+- **Why the old method should not be rewired:** it answers `isStaged: true` when its SAP reads fail (`GoodsIssueStockUnitClient.js:1277-1292`), so it fails open.
+- **UNKNOWN:** 201, 301 and 311 have no staging check today. No removed per-type staging call applied to them, but whether `submitGoodsIssueRequest` covered other movements, and whether the business needs staging there, is not verified.
+- **TEST DECISION:** TEST NOT POSSIBLE for live behaviour: no SAP call was in scope. No code changed, so no test run was needed. **TESTED:** none. **NOT VERIFIED:** CI result of `3aa2ad95` (in progress when last read).
+- **Assumptions:** none beyond the UNKNOWN above.
+- **Next action:** user decides whether to remove the method. No SAP read or write ran.
+- **Status:** PASS for the review; removal not done.
+
+## Change Entry — 2026-11-02 16:20 IST — Remove Unused `checkStagingForReservation`
+
+- **Reason:** the user approved removal after the review in Change Entry 2026-11-02 16:10 IST. The method had no caller and is superseded by `Mvt261Adapter.revalidateStock`.
+- **CHANGED:** `srv/integration/s4hana/wm/goods-issue/GoodsIssueStockUnitClient.js`, 70 lines removed (method and its comment), no line added. `_detectWmManaged`, `listStockUnitsForReservationItem` and `sapKey` stay in use by other code in that file.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT — the full Jest suite. No test referenced the method.
+- **TESTED:** `env -u RUN_LIVE_SAP -u SAP_SYSTEM_TYPE -u ALLOW_LIVE_SAP_TOOLS npx jest --runInBand --ci` 226 suites passed, 1 skipped; 4,432 tests passed, 59 skipped, 0 failed (4,432 is the current baseline since the i18n fix added 4 tests). `npx eslint .` clean. `npx cds compile srv --to json` exit 0.
+- **NOT VERIFIED:** browser E2E not run, as this is a backend method with no caller. No SAP read or write ran. Deployed external callers cannot be seen from this repo (INFERRED none). Whether 201, 301 and 311 need a staging check remains UNKNOWN; this removal does not change them.
+- **Next action:** commit when the user asks; continue the Medium-confidence list.
+- **Status:** PASS for the removal; uncommitted.
+
+## Change Entry — 2026-11-02 16:17 IST — Reservation List Shows SAP GUI Reservations First Page
+
+- **Reported:** "#/wm/reservation-entry? GUI based Entry is not showing." INFERRED meaning: reservations created in SAP GUI do not appear in the list. The create form and the list both render, so no other reading was reproduced.
+- **Root cause (reproduced, READ-ONLY):** `ReservationEntryList.controller.js` appended SAP-only rows after app-tracked rows without sorting. The table grows 25 rows at a time, so with 27 tracked rows the first page held 0 SAP-only rows and the newest reservation, 535381, sat at row 28. The backend was correct: `getOpenReservations` returned 429 rows, 415 of them untracked. Not caused by the dead-code cleanup, which removed only the uncalled `getStatuses` from this module.
+- **CHANGED:** `ReservationEntryList.controller.js`, one sort on the merged list, newest reservation first. `test/unit/wm/reservationEntryUi.test.js`.
+- **TEST DECISION:** TEST ADDED and TEST UPDATED — new `lists tracked and SAP-only reservations together, newest reservation first`, seen failing before the fix. Three existing tests had only order expectations updated (dedupe, unsupported movements, normalization); their data and field checks are unchanged.
+- **TESTED:** Jest 226 suites passed, 1 skipped; 4,433 tests passed, 59 skipped, 0 failed. `npx eslint .` clean. `ui5lint` no findings. UI5 build succeeded (before the final test-only edits). `npm run test:e2e:sap-free` 3 of 3 suites. `git diff --check` clean.
+- **VERIFIED on a local server, port 4010, READ-ONLY against SAP under the write guard:** first row 0000535381 (DRATHOD); first page 14 SAP-only and 11 tracked rows; all 442 rows present and sorted; the 27 tracked rows still listed; opening the first row routes to its detail with no error or failed request.
+- **E2E:** `test/e2e/wm/verifyWmScreens.e2e.js` READ-ONLY: 16 of 17 steps PASS, including all three reservation entry steps. **FAIL:** "Warehouse scan-to detail (first open TR)": TR 1000992 "has no open items (already completed)" with an HTTP 400. This is a different screen that this fix does not touch; cause NOT VERIFIED and not fixed here. The suite status is therefore FAIL on that step.
+- **NOT VERIFIED:** the user's server on port 4004 and browser were not used; the user has not confirmed this was the reported problem. No SAP write ran.
+- **Assumptions:** the INFERRED meaning above. `ReservationNo` is numeric, as in the existing sort in `GoodsIssueReservationsClient`.
+- **Next action:** user refreshes the page and confirms; commit when the user asks.
+- **Status:** PASS for the list fix; uncommitted.
