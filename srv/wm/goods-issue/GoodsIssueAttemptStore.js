@@ -12,6 +12,8 @@ const OPEN_STATUSES = ['sending', 'unconfirmed'];
 // delivery_created ends the attempt: SAP created an outbound delivery (L9/514) instead of a material
 // document. Whether that delivery is still open is read live from SAP, not from this log.
 const FINAL_STATUSES = ['posted', 'rejected', 'not_posted', 'needs-attention', 'delivery_created'];
+/** Goods receipt attempts share this log: ReservationNo/ReservationItem hold the inbound delivery and its item. */
+const RECEIPT_MOVEMENT = '101';
 
 function envMs(name, fallback) {
   const n = Number(process.env[name]);
@@ -432,7 +434,9 @@ class GoodsIssueAttemptStore {
       open = Array.from(this._memoryStore.values()).filter((a) => OPEN_STATUSES.includes(a.Status));
     }
     const ageOf = (a) => now - new Date(a.createdAt).getTime();
-    const due = (Array.isArray(open) ? open : []).filter((a) => ageOf(a) >= GoodsIssueAttemptStore.recheckAgeMs());
+    // Receipts (101) carry no ReferenceDocument in SAP: a lookup by reference would wrongly say not_posted.
+    const due = (Array.isArray(open) ? open : [])
+      .filter((a) => a.MovementType !== RECEIPT_MOVEMENT && ageOf(a) >= GoodsIssueAttemptStore.recheckAgeMs());
 
     for (const attempt of due) {
       summary.Checked++;
@@ -473,6 +477,45 @@ class GoodsIssueAttemptStore {
         summary.DeliveryCreated++;
       } else if (ageOf(attempt) >= GoodsIssueAttemptStore.notPostedAgeMs()) {
         const finding = `No material document with reference ${ref} exists in S/4HANA ${Math.round(ageOf(attempt) / 60000)} min after the attempt: not posted.`;
+        await this.setStatus(ref, 'not_posted', { LastError: finding });
+        summary.NotPosted++;
+      } else {
+        summary.StillOpen++;
+      }
+    }
+    return summary;
+  }
+
+  /**
+   * Background re-check of goods receipt attempts: looks for a 101 document of the delivery item in SAP.
+   *
+   * @param {Object} adapter - GoodsReceiptAdapter (findReceiptForAttempt)
+   * @param {number} [now] - current time in ms (tests)
+   * @returns {Promise<{ Checked: number, Posted: number, NotPosted: number, StillOpen: number, Errors: number }>}
+   */
+  async recheckReceipts(adapter, now = Date.now()) {
+    const summary = { Checked: 0, Posted: 0, NotPosted: 0, StillOpen: 0, Errors: 0 };
+    const open = this.db
+      ? await this._run(SELECT.from(ATTEMPT_ENTITY).where({ Status: { in: OPEN_STATUSES }, MovementType: RECEIPT_MOVEMENT }))
+      : Array.from(this._memoryStore.values()).filter((a) => OPEN_STATUSES.includes(a.Status) && a.MovementType === RECEIPT_MOVEMENT);
+    const ageOf = (a) => now - new Date(a.createdAt).getTime();
+
+    for (const attempt of (open || []).filter((a) => ageOf(a) >= GoodsIssueAttemptStore.recheckAgeMs())) {
+      summary.Checked++;
+      const ref = attempt.ReferenceDocument;
+      let doc;
+      try {
+        doc = await adapter.findReceiptForAttempt(attempt);
+      } catch (err) {
+        LOG.warn(`Re-check of receipt attempt ${ref} failed, status ${attempt.Status} kept: ${err.message}`);
+        summary.Errors++;
+        continue;
+      }
+      if (doc) {
+        await this.setStatus(ref, 'posted', { MaterialDocument: doc.MaterialDocument, MaterialDocYear: doc.MaterialDocumentYear, LastError: '' });
+        summary.Posted++;
+      } else if (ageOf(attempt) >= GoodsIssueAttemptStore.notPostedAgeMs()) {
+        const finding = `No 101 material document exists for this delivery item in S/4HANA ${Math.round(ageOf(attempt) / 60000)} min after the attempt: not posted.`;
         await this.setStatus(ref, 'not_posted', { LastError: finding });
         summary.NotPosted++;
       } else {

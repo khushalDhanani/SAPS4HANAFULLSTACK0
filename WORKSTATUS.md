@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Goods receipt (101) double-posting protection added (2026-11-02 IST) — PARTIAL:** both posting actions now use an atomic per-delivery-item attempt log, unknown outcomes block retries until a MATDOC recheck resolves them, and the storage-unit path reports only the new document. Mock-tested only; no browser E2E and no live posting or recheck was run. Goods receipt is still not proven live end to end.
+
 - **Movement 261 retry after a timeout or HTTP 500 no longer posts again (2026-11-02 IST) — PARTIAL:** an unresolved attempt now blocks the whole reservation item, HTTP 500 counts as an unknown outcome, and re-issue works once SAP shows the document as reversed. Mock-tested only; no browser E2E and no live SAP run.
 
 - **MIGO double-posting guard on `/odata/v4/tr-to` and `/odata/v4/reservation-entry` now stops the posting (2026-11-02 IST) — PARTIAL:** handler behaviour is mock-tested; the reservation-entry adapter check was run READ-ONLY against live SAP (5 TRs refused, 1 passed). No browser E2E run and no action was exercised end to end against SAP. On reservation-entry a blocked posting returns HTTP 200 with status 90 and the reason, like its other MIGO failures.
@@ -1820,6 +1822,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- Goods receipt (2026-11-02): next audit item is finding 6 (plant limits), including the storage-unit path, which checks the client's plant and not the delivery's. Prove the receipt flow live with a written go. Deploy note: `ReservationItem` widens from String(4) to String(6) on HANA.
+
 - Movement 261 (2026-11-02): decide whether the Scan 261 screen should send a client attempt id, which is the only way to tell a repeat of a confirmed posting from a new partial issue of the same quantity.
 
 - MIGO guard (2026-11-02): decide whether an empty LTAK result (Transfer Order not found) should stop posting on either path. The guard code is in local commit e4393ce5, not pushed. An end-to-end action run needs a written go; it should use a TR with `MBLNR` set, so nothing is posted if the guard works.
@@ -1896,6 +1900,22 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 10:05 IST — Goods receipt (101) double-posting protection (audit finding 5): PARTIAL
+
+- **Change:** `postGoodsReceipt` and `postGoodsReceiptWithStorageUnit` now claim an attempt per delivery item before calling SAP. `sending`/`unconfirmed` blocks the item with 409; `posted`/`rejected`/`not_posted` allow the next posting. Unknown outcomes return 504 and tell the user not to post again. New `recheckReceipts` and `findReceiptForAttempt` resolve 101 attempts from `MATDOC`, on a timer in the goods-receipt service; the goods-issue `recheck` now skips 101.
+- **Storage-unit path:** Reads the item's 101 documents before posting, reports only a document that is new, and no longer takes the last row or falls back to `EKBE`. If that first read fails, nothing is posted (503). `DeliveryDocument` and its item now pass `sapKey` before reaching RFC WHERE text.
+- **MMIM path:** Keeps SAP's HTTP status (previously lost, so it surfaced as 500), and a `sap-message` error is a definite 422.
+- **Schema:** `GoodsIssuePostingAttempt.ReservationItem` widened from String(4) to String(6) for delivery items. No new table or column.
+- **Deviation from the audit's proposed fix:** The store could not be reused as it was. Its recheck searches SAP by `ReferenceDocument`, which receipts do not send, so it would have marked a saved receipt `not_posted` after 15 minutes and allowed a double post.
+- **Files:** `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`, `srv/wm/goods-issue/GoodsIssueAttemptStore.js`, `srv/wm/goods-receipt/handlers/goodsReceipt.handler.js`, `srv/wm/goods-receipt/service.js`, `db/wm/goods-issue-attempt.cds`, `test/unit/wm/goodsReceiptAttempt.test.js` (new), `test/unit/wm/goodsReceiptService.test.js`.
+- **Test decision:** TEST ADDED (30 mock tests). TEST UPDATED: the `MATDOC` mock in the `liveDescribe` block of `goodsReceiptService.test.js`; that block never runs under Jest (`test/liveSapGate.js` returns false), so the edit was NOT executed.
+- **SAP evidence (READ-ONLY, `RFC_READ_TABLE` on `MATDOC`):** 101 rows carry `VBELN_IM`, `VBELP_IM` and `CPUDT`, and document 5000000015 was returned twice, so row order and uniqueness cannot be relied on. No write was sent.
+- **Validation:** Before the fix, the new tests: 25 failed, 5 passed. After the fix: 30 passed. After the final schema edit: `npx jest test/unit test/integration`: 219 suites passed, 1 skipped; 4297 tests passed, 59 skipped; `npm run lint`: no findings; `git diff --check`: clean; `npx cds compile db srv --to json`: succeeded. Local `db.sqlite` still shows `NVARCHAR(4)` for the column; it was not migrated, and SQLite does not enforce that length.
+- **Session note:** A verification command accidentally included `rm -f /dev/null`. Checked straight after: `/dev/null` is still an intact character device and accepts writes. No other effect.
+- **Not run:** browser E2E (`test/e2e/wm/roundTripGoodsReceipt.e2e.js`), any live receipt posting, and `findReceiptForAttempt` against live SAP. **NOT VERIFIED:** whether HANA deployment applies the column widening cleanly.
+- **Behaviour change:** after an unknown outcome the delivery item stays blocked until the recheck resolves it (about 3 to 15 minutes at default settings). A MATDOC read failure now stops the storage-unit posting.
+- **Open:** A same-day earlier partial receipt makes the recheck mark an attempt `posted`, possibly naming the wrong document; this is safe against double posting and is marked `shortcut:` in the code. Resubmitting right after a confirmed partial receipt still posts, as on 261. `postGoodsReceipt` without `DeliveryDocument` skips the attempt log; the screen always sends a delivery. A reservation with the same number and item as a delivery would be blocked too (marked `shortcut:`). LIKP and VEKP pre-checks remain best effort and fail open. Audit finding 6 (plant limits) is not addressed.
 
 ### 2026-11-02 09:55 IST — Movement 261 HTTP 500 treated as an unknown outcome (audit finding 4): PARTIAL
 

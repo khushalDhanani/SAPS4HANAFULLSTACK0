@@ -5,6 +5,8 @@ using { cuid, managed } from '@sap/cds/common';
 /**
  * One row per Goods Issue posting attempt, written BEFORE S/4HANA is called so that an attempt whose
  * outcome is unknown (timeout, crash mid-call) can be re-checked in SAP by its ReferenceDocument.
+ * Goods receipts (MovementType 101) share this log: ReservationNo/ReservationItem hold the inbound delivery
+ * and its item, ReferenceDocument never reaches SAP, and the re-check finds them through MATDOC instead.
  * Never a business document: SAP stays the system of record (ADR-0001).
  */
 @assert.unique: { referenceDocument: [ReferenceDocument] }
@@ -13,7 +15,7 @@ entity GoodsIssuePostingAttempt : cuid, managed {
     RequestHash       : String(64);
     MovementType      : String(3);
     ReservationNo     : String(10);
-    ReservationItem   : String(4);
+    ReservationItem   : String(6);    // 6 for delivery items (POSNR), e.g. batch-split item 900001
     Material          : String(40);
     Plant             : String(4);
     StorageLocation   : String(4);

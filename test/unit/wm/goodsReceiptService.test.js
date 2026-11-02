@@ -932,7 +932,8 @@ describe('GoodsReceiptService & GoodsReceiptAdapter Unit & Integration Tests', (
                         return [{ VENUM: '0000019318', EXIDV: '00000000002000018143', VHILM: '000000002000000130', VPOBJ: '03', VPOBJKEY: '0180000035' }];
                     }
                     if (table === 'MATDOC') {
-                        return [{ MBLNR: '5000005501', MJAHR: '2026', ZEILE: '0001', BWART: '101' }];
+                        // The document appears only after the BAPI ran: the read-back reports a NEW document.
+                        return mockCall.mock.calls.length ? [{ MBLNR: '5000005501', MJAHR: '2026', ZEILE: '0001', BWART: '101' }] : [];
                     }
                     return [];
                 })

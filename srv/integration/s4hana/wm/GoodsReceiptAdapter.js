@@ -1164,7 +1164,7 @@ class GoodsReceiptAdapter {
       }
 
       if (sapMsgObj && sapMsgObj.severity === 'error') {
-        throw new Error(sapMsgObj.message || 'SAP S/4HANA rejected Goods Receipt posting');
+        throw Object.assign(new Error(sapMsgObj.message || 'SAP S/4HANA rejected Goods Receipt posting'), { status: 422 });
       }
 
       let matDoc = result?.MaterialDocument;
@@ -1199,10 +1199,39 @@ class GoodsReceiptAdapter {
       // Per AGENTS.md: Stop implementation and report exactly what SAP capability is missing / failing.
       // Mock persistence and dummy document generation are strictly prohibited.
       const errorMsg = err.message || JSON.stringify(err);
-      throw new Error(
+      const status = err.status || err.statusCode;
+      // Only an explicit SAP 4xx, or SAP never reached (503), proves nothing was posted.
+      const definite = (status >= 400 && status < 500) || status === 503;
+      throw Object.assign(new Error(
         `SAP S/4HANA Backend Posting Capability Error: Posting Goods Receipt for Inbound Delivery '${sDoc}' via MMIM_GR4PO_DL_SRV failed in SAP Gateway (Client ${s4Config.getClient()}): ${errorMsg}. In accordance with AGENTS.md, mock persistence and synthetic document generation are strictly prohibited.`
-      );
+      ), { status, statusCode: status, outcomeUnknown: !definite });
     }
+  }
+
+  /**
+   * 101 documents of a delivery item, newest first. RFC_READ_TABLE returns rows in no fixed order and can
+   * repeat a document, so the last row is not the latest document.
+   */
+  async _read101Docs(delivery, item, extraWhere = []) {
+    const vbeln = sapKey(delivery, 'vbeln').padStart(10, '0');
+    const posnr = sapKey(item, 'posnr').padStart(6, '0');
+    const rows = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART'], [
+      `VBELN_IM = '${vbeln}'`, `AND VBELP_IM = '${posnr}'`, `AND BWART = '101'`, ...extraWhere
+    ]);
+    const unique = new Map((rows || []).map((r) => [`${r.MJAHR}/${r.MBLNR}`, r]));
+    return [...unique.keys()].sort().reverse().map((key) => unique.get(key));
+  }
+
+  /**
+   * The 101 document that may belong to a receipt attempt whose outcome is unknown, or null.
+   * shortcut: a same-day partial receipt also matches, so the attempt may name the wrong document; it never
+   * allows a double post, because a match only ends the block. Store a pre-post baseline on the attempt to be exact.
+   * Searches from the day before the attempt because SAP's date can be behind the UTC date in createdAt.
+   */
+  async findReceiptForAttempt(attempt) {
+    const from = new Date(new Date(attempt.createdAt).getTime() - 86400000).toISOString().slice(0, 10).replace(/-/g, '');
+    const [latest] = await this._read101Docs(attempt.ReservationNo, attempt.ReservationItem, [`AND CPUDT >= '${from}'`]);
+    return latest ? { MaterialDocument: latest.MBLNR, MaterialDocumentYear: latest.MJAHR } : null;
   }
 
   /**
@@ -1217,8 +1246,6 @@ class GoodsReceiptAdapter {
       StorageUnit,
       DeliveryDocument,
       DeliveryDocumentItem,
-      PurchaseOrder,
-      PurchaseOrderItem,
       Material,
       Plant,
       StorageLocation,
@@ -1261,8 +1288,8 @@ class GoodsReceiptAdapter {
       }
     }
 
-    const sDeliv = DeliveryDocument ? String(DeliveryDocument).padStart(10, '0') : '';
-    const sItem = DeliveryDocumentItem ? String(DeliveryDocumentItem).padStart(6, '0') : '000010';
+    const sDeliv = DeliveryDocument ? sapKey(DeliveryDocument, 'vbeln').padStart(10, '0') : '';
+    const sItem = DeliveryDocumentItem ? sapKey(DeliveryDocumentItem, 'posnr').padStart(6, '0') : '000010';
     const sSU = StorageUnit ? String(StorageUnit).trim() : '';
     const sMat = (/^\d+$/.test(Material) && Material.length < 18) ? Material.padStart(18, '0') : Material;
     const isSimulate = !!Simulate;
@@ -1294,13 +1321,8 @@ class GoodsReceiptAdapter {
           if (likp.WBSTK === 'C') {
             let existingDoc = '';
             try {
-              const matdocs = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'BWART'], [
-                `VBELN_IM = '${targetDeliv}'`, `AND BWART = '101'`
-              ]);
-              if (matdocs.length > 0) {
-                const latest = matdocs[matdocs.length - 1];
-                existingDoc = `${latest.MBLNR}/${latest.MJAHR}`;
-              }
+              const [latest] = await this._read101Docs(targetDeliv, sItem);
+              if (latest) existingDoc = `${latest.MBLNR}/${latest.MJAHR}`;
             } catch (_) {}
             const errMsg = `Delivery already completed: Goods Receipt has already been completely processed for Inbound Delivery '${targetDeliv}' (Status: Completed)${existingDoc ? `. Existing Material Document: ${existingDoc}` : ''}. Duplicate posting is prevented (SAP HUDIALOG 018).`;
             const conflictErr = new Error(errMsg);
@@ -1368,8 +1390,20 @@ class GoodsReceiptAdapter {
 
     const bapiError = (ret) => [].concat(ret || []).find((r) => r && (r.TYPE === 'E' || r.TYPE === 'A'));
 
+    // Documents that exist before posting: only a document outside this set belongs to this receipt.
+    const docKey = (r) => `${r.MJAHR}/${r.MBLNR}`;
+    let knownDocs = new Set();
+    if (!isSimulate) {
+      try {
+        knownDocs = new Set((await this._read101Docs(targetDeliv, sItem)).map(docKey));
+      } catch (e) {
+        throw Object.assign(new Error(`Existing material documents of Inbound Delivery '${targetDeliv}' could not be read (${e.message}). The Goods Receipt was NOT posted.`), { statusCode: 503, status: 503 });
+      }
+    }
+
     let bapiResult = null;
-    await this.rfc.session(async (call) => {
+    try {
+      await this.rfc.session(async (call) => {
       const itemControl = {
         DELIV_NUMB: targetDeliv,
         DELIV_ITEM: sItem
@@ -1442,7 +1476,12 @@ class GoodsReceiptAdapter {
           throw new Error(`BAPI_TRANSACTION_COMMIT failed: ${commitErr.MESSAGE}`);
         }
       }
-    });
+      });
+    } catch (e) {
+      // A BAPI error return is a definite refusal and 503 means SAP was never reached; anything else may have posted.
+      if (!e.bapiReturn && e.status !== 503) e.outcomeUnknown = !isSimulate;
+      throw e;
+    }
 
     if (isSimulate) {
       return {
@@ -1456,37 +1495,21 @@ class GoodsReceiptAdapter {
     }
 
     // Read back persisted material document immediately from SAP
-    let matDoc = '';
-    let matDocYear = '';
+    let newDoc;
     try {
-      if (this.rfc && typeof this.rfc.readTable === 'function') {
-        const matdocs = await this.rfc.readTable('MATDOC', ['MBLNR', 'MJAHR', 'ZEILE', 'BWART'], [
-          `VBELN_IM = '${targetDeliv}'`, `AND BWART = '101'`
-        ]);
-        if (matdocs.length > 0) {
-          const latest = matdocs[matdocs.length - 1];
-          matDoc = latest.MBLNR;
-          matDocYear = latest.MJAHR;
-        } else if (PurchaseOrder) {
-          const poPad = String(PurchaseOrder).padStart(10, '0');
-          const poItemPad = PurchaseOrderItem ? String(PurchaseOrderItem).padStart(5, '0') : '00010';
-          const ekbe = await this.rfc.readTable('EKBE', ['EBELN', 'EBELP', 'BELNR', 'GJAHR', 'BWART'], [
-            `EBELN = '${poPad}'`, `AND EBELP = '${poItemPad}'`, `AND BWART = '101'`
-          ]);
-          if (ekbe.length > 0) {
-            const latest = ekbe[ekbe.length - 1];
-            matDoc = latest.BELNR;
-            matDocYear = latest.GJAHR;
-          }
-        }
-      }
+      newDoc = (await this._read101Docs(targetDeliv, sItem)).find((r) => !knownDocs.has(docKey(r)));
     } catch (readErr) {
       LOG.warn(`Immediate read-back table query warning: ${readErr.message}`);
     }
 
-    if (!matDoc) {
-      throw new Error(`SAP S/4HANA executed BAPI_INB_DELIVERY_CONFIRM_DEC but no persisted Material Document was found in MATDOC or EKBE for Delivery ${targetDeliv}. In accordance with AGENTS.md, mock persistence is strictly prohibited.`);
+    if (!newDoc) {
+      throw Object.assign(
+        new Error(`SAP S/4HANA executed BAPI_INB_DELIVERY_CONFIRM_DEC but no new Material Document was found in MATDOC for Delivery ${targetDeliv}. In accordance with AGENTS.md, mock persistence is strictly prohibited.`),
+        { statusCode: 504, status: 504, outcomeUnknown: true }
+      );
     }
+    const matDoc = newDoc.MBLNR;
+    const matDocYear = newDoc.MJAHR;
 
     return {
       Success: true,
