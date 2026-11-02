@@ -508,6 +508,10 @@ describe('Mvt261Adapter.scanContext production-stock filter', () => {
     return new Mvt261Adapter({ rfc: { readTable: async (table) => t[table] || [] } }).scanContext({ reservation: '519944', item: '6' });
   };
 
+  it('returns the order type: the scan screen posts it, and the service refuses an empty one with 400', async () => {
+    expect((await ctx()).OrderType).toBe('ZP01');
+  });
+
   it('WM reservation: includes the reservation and supply-area locations (both suggested), excludes unrelated, no stranded flag', async () => {
     const c = await ctx();
     expect(c).toMatchObject({ OrderReleased: true, SupplyArea: 'IP02', SupplyAreaStorageLocation: 'SA02', OpenQuantity: 677, SupplyAreaStock: 0 });

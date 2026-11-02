@@ -850,7 +850,7 @@ class Mvt261Adapter {
     // SupplyAreaStock (stock stranded in the supply area, non-WM) and the Blocked decision both come from
     // cycle()/_issuable, so the scan page, the open list and the posting gate agree. Nothing recomputed here.
     return {
-      Reservation: c.Reservation, ReservationItem: c.ReservationItem, ProductionOrder: c.ProductionOrder, OrderStatus: c.OrderStatus,
+      Reservation: c.Reservation, ReservationItem: c.ReservationItem, ProductionOrder: c.ProductionOrder, OrderType: c.OrderType, OrderStatus: c.OrderStatus,
       Material: c.Material, MaterialName: makt ? makt.MAKTX : '', BatchManaged: !!marc && marc.XCHPF === 'X',
       Plant: c.Plant, StorageLocation: c.StorageLocation, Warehouse: c.Warehouse, RequiredQuantity: c.RequiredQuantity, WithdrawnQuantity: c.WithdrawnQuantity,
       OpenQuantity: c.OpenQuantity, Unit: c.Unit, Batch: c.Batch || '',

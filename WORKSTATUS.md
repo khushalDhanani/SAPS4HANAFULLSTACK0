@@ -1822,7 +1822,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
-- Live proof (2026-11-02): the authorized reversal of 4900050046/2026 failed at TLS before reaching SAP, so the document is still not reversed. Reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The 261 scan post is still not proven live. Each next run needs read-only data discovery and its own written go. Proposed order: 261, goods receipt, scan-to, because audit findings 2 to 5 changed that code and none of it has run live.
+- Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. Route count from `docs/e2e-coverage-matrix.md`: 5 proven, 1 partial, 15 not proven. Each later run needs read-only data discovery and its own written go. Proposed order: 261, goods receipt, scan-to, because audit findings 2 to 5 changed that code and none of it has run live.
 
 - Goods receipt (2026-11-02): next audit item is finding 6 (plant limits), including the storage-unit path, which checks the client's plant and not the delivery's. Prove the receipt flow live with a written go. Deploy note: `ReservationItem` widens from String(4) to String(6) on HANA.
 
@@ -1902,6 +1902,41 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 IST — Live 261 post on reservation 528779/1 after a new written go: PASS, read back from SAP
+
+- **Status:** PASS for this post. Finding 7 stays open for the other write flows. The order type fix behind this result is uncommitted.
+- **Command (WRITE, one run):** the `mvt261` Tier C suite in live mode with `E2E_SAP_LIVE_TARGET='S4HANA_DEV - Client 220'`. RFC preflight passed; suite `[PASS] [live]`; the server log shows one `POST /odata/v4/mvt261/postGoodsIssue`.
+- **READ-ONLY read-back from SAP:** `MATDOC` 4900050350/2026 item 0001, movement 261, material 8400000046, batch 2CED260006, `CS01`, 1 KG, order 1011, `CANCELLED` blank, user KHUSHAL. Reservation 528779/1 `ENMNG` 1.000, `KZEAR` X. `cycle` shows Withdrawn 1, Open 0.
+- **Side effects in client 220:** `MARD` for `CS01` fell from 14,020 to 14,019 KG. Storage unit 1000059430 still shows 220 KG (`LQUA` unchanged). New TR 1000982 (W01, movement 261) is open with no Transfer Order. So IM and WM stock differ by 1 KG until that TR is processed or the document is reversed.
+- **Observed:** `cycle` shows step Reservation as `blocked` after the post; the cause is Not verified. The scanned unit is validated but not used in the posting, as the service comments describe (Option A).
+- **Change:** `docs/e2e-coverage-matrix.md` row `wmScan261` moved to SAP 🟢 with this evidence.
+- **Validation:** `npx jest test/unit/tools/e2eCoverageMatrix.test.js test/unit/wm/mvt261Adapter.test.js test/unit/wm/mvt261Scan.test.js`: 3 suites and 124 tests passed. `git diff --check` clean. The full suite last passed before the live runs; only docs changed since.
+- **Not verified:** whether order 1011 is really test data; live negative paths; the local attempt row.
+- **Next:** Decide whether to keep or reverse 4900050350/2026 and how to handle TR 1000982. Then do read-only data discovery for the goods receipt live run.
+
+### 2026-11-02 IST — Live 261 post on reservation 528777/1 after the user's written go: FAIL, refused by SAP, nothing posted
+
+- **Status:** FAIL for the live run, not retried. BLOCKED on a new written go for a different reservation. The 261 scan post is still not proven live.
+- **Command (WRITE, one run):** the `mvt261` Tier C suite in live mode with `E2E_SAP_LIVE_TARGET='S4HANA_DEV - Client 220'`. RFC preflight passed. SAP answered `POST .../A_MaterialDocumentHeader` with `HTTP 400 - Maintain serial numbers for total quantity`, and the UI showed that message.
+- **READ-ONLY state after the run:** reservation 528777/1 `ENMNG` 0.000; no `MATDOC` rows for it; storage unit 1000059695 `VERME` 1.000. Material 8000009754 has `SERNP` ZSN2 in plant 1120. The local attempt row was not read; by the code path it is `rejected`.
+- **What this proves:** The order type fix got the request through CAP to SAP, and SAP's refusal reaches the UI unchanged.
+- **Gap found, not fixed:** The 261 flow has no serial number input or payload, and `openItems` and `scanContext` still offer serial-managed materials as scan possible. So these reservations can pass every screen check and then fail at SAP. Serial handling exists elsewhere (`srv/integration/s4hana/wm/TrToAdapter.js`, per the live run in the log at `tools/run1-mvt201-live.js`). How many open 261 items are affected is Not verified.
+- **Changes:** `docs/e2e-coverage-matrix.md` row `wmScan261` moved to SAP 🟡 with this result. Local gitignored `test/e2e/live/testData.json` now targets 528779/1.
+- **Next attempt prepared (not sent):** Stubbed body `{"movementType":"261","reservation":"528779","item":"1","quantity":1,"orderId":"1011","orderType":"ZEMP","batch":"2CED260006","storageUnits":["1000059430"]}`. Material 8400000046 has `SERNP` blank and is batch-managed. Reservation shows 0 of 1 KG withdrawn; unit 1000059430 had 220 KG available when read.
+- **Next:** Send it only after a new written go, then read it back from SAP.
+
+### 2026-11-02 IST — Audit finding 7: fix 261 scan order type and prepare the next live run: PARTIAL, BLOCKED on the user's written go
+
+- **Status:** PARTIAL. Code and tests are done and uncommitted. No SAP write was sent. The 261 scan post is not proven live.
+- **Bug found by rehearsal:** `Scan261.controller.js:239` posts `oCtx.OrderType`, but `scanContext` did not return it, so the screen sent `orderType: ""`. `srv/wm/mvt261/service.js` refuses that with 400, as `test/unit/wm/mvt261Scan.test.js` shows. So the screen could not post at all. This is from code and the stubbed request body; a real refused POST was not sent.
+- **Changes:** `srv/integration/s4hana/wm/Mvt261Adapter.js` and `srv/wm/mvt261/service.cds` now return `OrderType` from `scanContext`. `test/e2e/wm/roundTripMvt261.e2e.js` now fails on an empty `orderType`, which the dry run could not catch before. `test/unit/wm/mvt261Adapter.test.js` has a new test. Local gitignored `test/e2e/live/testData.json` now holds only the scan case, so one run can send only one write.
+- **TEST DECISION:** TEST ADDED and TEST UPDATED.
+- **Validation:** Full `npx jest`: 222 suites passed, 1 skipped; 4,318 tests passed, 59 skipped. `eslint` on the 3 changed JS files, `cds compile` and `git diff --check`: clean. Dry-run `mvt261` suite: scan and reverse PASS. Stubbed rehearsal body: `{"movementType":"261","reservation":"528777","item":"1","quantity":1,"orderId":"1011","orderType":"ZEMP","storageUnits":["1000059695"]}`.
+- **First candidate dropped:** Storage unit 1000059694 lost its available stock during discovery. User `NARESH` created TO 1037663 (movement 311) at 12:18:50, the unit's `LQUA` change time. So other users are active in client 220. The server log showed no POST from this work.
+- **READ-ONLY target:** reservation 528777/1 is 1 NOS, 0 withdrawn, `HS01`, order 1011 (type ZEMP, created by SSINGH). Storage unit 1000059695 has 1 of 1 available in bin 1-L0001-03. The `LTAP` read by `VLENR` failed with `ID:AD Type:E Number:718`; the other reads worked.
+- **Not verified:** whether order 1011 is really test data (INFERRED from its material and order number); whether SAP accepts the post; whether it creates a TR or a delivery; other screens' fields were not checked for the same gap.
+- **Next:** After the written go, send one post through the `mvt261` Tier C suite in live mode and read it back from SAP.
 
 ### 2026-11-02 IST — Live reversal of 4900050046/2026 after a second written go: PASS, read back from SAP
 

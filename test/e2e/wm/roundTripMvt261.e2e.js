@@ -140,6 +140,7 @@ function check(name, d, body, ui, stubDoc) {
         if (String(body[k]) !== String(v)) errors.push(`payload ${k} = ${JSON.stringify(body[k])}, expected ${JSON.stringify(v)}`);
     });
     if (name === 'scan') {
+        if (!body.orderType) errors.push('payload orderType is empty; the service refuses that with 400');
         const sent = (body.storageUnits || []).slice().sort().join(',');
         if (sent !== d.storageUnits.slice().sort().join(',')) errors.push(`payload storageUnits ${sent}, scanned ${d.storageUnits.join(',')}`);
         if (d.batch !== undefined && (body.batch || '') !== d.batch) errors.push(`payload batch ${body.batch}, scanned batch ${d.batch}`);

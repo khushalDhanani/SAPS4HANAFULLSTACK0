@@ -140,7 +140,7 @@ service Mvt261Service @(path: '/odata/v4/mvt261') {
         Suggested : Boolean;
     };
     type ScanContext {
-        Reservation : String(10); ReservationItem : String(4); ProductionOrder : String(12); OrderStatus : String(40);
+        Reservation : String(10); ReservationItem : String(4); ProductionOrder : String(12); OrderType : String(4); OrderStatus : String(40);
         Material : String(40); MaterialName : String(40); BatchManaged : Boolean; Plant : String(4); StorageLocation : String(4);
         Warehouse : String(3); Batch : String(10); SupplyArea : String(10); SupplyAreaStorageLocation : String(4); SupplyAreaStock : Decimal(13, 3); OrderReleased : Boolean;
         IssuableQuantity : Decimal(13, 3); PartialCoverage : Boolean; Backflush : Boolean;
