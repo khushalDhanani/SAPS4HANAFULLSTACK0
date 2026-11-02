@@ -1550,6 +1550,11 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         e.status = 400;
         throw e;
       }
+      await adapter.assertGoodsMovementNotPosted({
+        transferRequirement: track.TransferRequirement,
+        transferOrder: track.TransferOrder,
+        warehouseNumber: track.WarehouseNumber
+      });
       const sPlant = data.plant || data.Plant || data.sourcePlant || data.SourcePlant || track.Plant;
       // PROCESS_ID of this GI step; persisted before posting so a retry finds an already posted document.
       // After a posted document the next issue on this item is a new step: a fresh id, so the SGTXT lookup cannot return the earlier document.

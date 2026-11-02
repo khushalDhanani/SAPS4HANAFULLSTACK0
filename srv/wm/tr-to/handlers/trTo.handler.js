@@ -123,8 +123,13 @@ class TrToHandler {
 
       // Resilient destination/account resolution from TO (LTAK -> LTAP -> RESB/RKPF) if missing on untracked records
       if (sTanum && resProcessAdapter.rfc) {
+        // The confirmation and double-posting checks depend on these reads: if SAP cannot answer, do not post.
+        const guardReadFailed = (what) => (err) => {
+          throw Object.assign(httpError(503, `Could not read ${what} to rule out a double posting: ${err.message}. The goods movement was not posted.`), { failClosed: true });
+        };
         try {
-          const ltakRows = await resProcessAdapter.rfc.readTable('LTAK', ['LGNUM', 'TBNUM', 'RSNUM', 'BWLVS', 'KQUIT'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
+          const ltakRows = await resProcessAdapter.rfc.readTable('LTAK', ['LGNUM', 'TBNUM', 'RSNUM', 'BWLVS', 'KQUIT'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1)
+            .catch(guardReadFailed(`Transfer Order ${sTanum}`));
           if (ltakRows?.[0]) {
             if (ltakRows[0].KQUIT !== undefined && ltakRows[0].KQUIT !== null && ltakRows[0].KQUIT.trim() === '') {
               throw httpError(400, `Transfer Order ${sTanum} is not confirmed in SAP (LTAK-KQUIT is blank). TO must be confirmed before posting MIGO goods movement.`);
@@ -132,7 +137,7 @@ class TrToHandler {
             const tbnum = ltakRows[0].TBNUM?.trim();
             // Never post a second goods movement for a TR that SAP created from an already posted material document.
             if (tbnum && ltakRows[0].LGNUM?.trim() && typeof adapter.getTR === 'function') {
-              const trHeader = await adapter.getTR(tbnum, ltakRows[0].LGNUM.trim()).catch(() => null);
+              const trHeader = await adapter.getTR(tbnum, ltakRows[0].LGNUM.trim()).catch(guardReadFailed(`Transfer Requirement ${tbnum}`));
               if (trHeader?.Mblnr && String(trHeader.Mblnr).trim()) {
                 throw httpError(409, `Transfer Requirement ${tbnum} was created by material document ${String(trHeader.Mblnr).trim()}: the goods movement is already posted in SAP; MIGO is not allowed.`);
               }
@@ -228,7 +233,7 @@ class TrToHandler {
             }
           }
         } catch (_lookupErr) {
-          if (_lookupErr.status === 400) throw _lookupErr;
+          if (_lookupErr.status === 400 || _lookupErr.status === 409 || _lookupErr.failClosed) throw _lookupErr;
           console.warn('[trTo.handler] TransferOrder metadata lookup note:', _lookupErr.message);
         }
       }

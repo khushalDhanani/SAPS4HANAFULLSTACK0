@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **MIGO double-posting guard on `/odata/v4/tr-to` and `/odata/v4/reservation-entry` now stops the posting (2026-11-02 IST) — PARTIAL:** mock-tested only; no browser E2E run and no live SAP proof. On reservation-entry a blocked posting returns HTTP 200 with status 90 and the reason, like its other MIGO failures.
+
 - **Startup Warning (Movement 261 BusinessConfig) & Dashboard Metrics Log Analysis (2026-10-31 IST) — PASS:** Diagnosed root causes and resolved the startup warning and dashboard metrics handling:
   1. **Movement 261 Startup Warning Root Cause & Resolution**: In local development, SQLite table `saps4hana_wm_BusinessConfig` in `db.sqlite` was unseeded (0 rows), causing `Mvt261Service.checkBinConfiguration` on server startup (`cds.once('listening')`) to log `[STARTUP WARNING] Movement 261: no active BusinessConfig rows exist. Custom blocked-bin policy is not configured; maintain approved plant/warehouse rules in Mvt261NotReadyBinsJson.`. Seeded `db.sqlite` with the approved Plant `1120`, Warehouse `W01` row (`Active = 1`, `SalesOrg: 1000`, `DistChannel: 14`, `Division: 00`, `Currency: INR`, `ShippingPoints: 1112,WAVG`). Added auto-seed bootstrap guard in `server.js` (`cds.on('served')`) so any unseeded development database automatically loads from `db/data/saps4hana.wm-BusinessConfig.csv`. The audit now correctly identifies active configuration for `Plant=1120, Warehouse=W01`. (Note: Per `AGENTS.md` and `docs/evidence/2026-10-27/mvt261-startup-bin-discovery.md`, custom blocked bins in `Mvt261NotReadyBinsJson` remain uninvented and unseeded until verified with business/user).
   2. **Dashboard Metrics Request Log Analysis & Cache Hardening**: The log `[odata] [6408f5a8-903b-4fde-830c-ea9a90561766] - GET /odata/v4/purchase-order/getDashboardMetrics()` is CAP's standard informational request trace emitted when the Fiori Launchpad Dashboard initializes and fetches live counts from SAP S/4HANA (Purchase Orders, Suppliers, Sales Orders, Inquiries, Warehouses, Reservations, Deliveries, Orders Due, Invoices, Returns). Live probe confirmed the endpoint returns `HTTP 200 OK` with all 12 live counts from S/4HANA DS4 Client 220 (`totalCount: 3015`, `supplierCount: 4377`, `salesInquiryCount: 693`, `customerCount: 1090`, `openSalesOrderCount: 583`, `totalSalesOrderCount: 973`, `warehouseCount: 2`, `openReservationCount: 1230`, `inboundDeliveryCount: 33`, `ordersDueCount: 1243`, `customerInvoiceCount: 520`, `customerReturnCount: 186`). Hardened `PurchaseOrderAdapter.js` lines 413 & 419: fixed stale literal `=== 26` to `=== totalMetricsCount` (`DASHBOARD_METRIC_KEYS.length = 12`) so negative TTL caching (`negativeTtlMs = 15s`) correctly applies if backend requests fail.
@@ -1816,6 +1818,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- MIGO guard (2026-11-02): before this reaches users, run a READ-ONLY check that `RFC_READ_TABLE` can read `LTBK-MBLNR`; if it cannot, the reservation-entry guard fails closed and blocks every MIGO on a record with a TR or TO. Decide whether an empty LTAK result (Transfer Order not found) should stop posting on either path. Live proof of the guard needs a written go; it should use a TR with `MBLNR` set, so SAP is only read and nothing is posted if the guard works.
+
 - P-1: commit and push the SAP-free PR gate, confirm `browser-e2e-sap-free` runs green on GitHub Actions, then mark it a required status check in branch protection (repo settings, user action). Follow-up for a fuller gate: a deterministic S/4 fixture backend so the 20 SAP-reading suites can run per PR.
 
 - Restart the existing local CAP process using its current environment (running metadata still omits Material), refresh Quarantine Labels and regenerate PDF; verify real material code, signed-in Prepared by, and physical print margins.
@@ -1888,6 +1892,26 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 09:46 IST — MIGO double-posting guard added to `/odata/v4/reservation-entry`: PARTIAL
+
+- **Change:** New `ReservationProcessAdapter.assertGoodsMovementNotPosted`, called at the start of `postMigoForTrack`, so it covers both `postMigoGoodsMovement` and `retryStep` with step MIGO. It reads `LTBK-MBLNR` for the record's TR (found through `LTAK` when only a TO is stored). A filled value gives 409, a failed read gives 503, and nothing posts in either case. Both callers record these as status 90 with the reason; `postMigoGoodsMovement` still returns HTTP 200 with that record, as for its other MIGO failures.
+- **Files:** `srv/integration/s4hana/wm/ReservationProcessAdapter.js`, `srv/wm/reservation-entry/service.js`, `test/unit/wm/reservationEntryService.test.js`.
+- **Reason:** This path had no such check, so a TR already posted through its material document could be posted again.
+- **Test decision:** TEST ADDED (5 mock tests). The `retryStep` MIGO route is not tested directly; it shares `postMigoForTrack`.
+- **Validation:** Before the fix, `npx jest test/unit/wm/reservationEntryService.test.js -t 'double-posting guard'`: 4 failed, 1 passed (posting went through with status 05). After the fix: 5 passed. `npx jest test/unit test/integration`: 218 suites passed, 1 skipped; 4254 tests passed, 59 skipped. `npx eslint` on the 3 changed code files: clean. `git diff --check`: clean.
+- **Not run:** browser E2E and live SAP. No SAP call was made. **NOT VERIFIED:** that `RFC_READ_TABLE` can read `LTBK-MBLNR` on the live system; existing code at `trTo.handler.js` requests the same field, but its failures are tolerated there.
+- **Open:** Records with neither TR nor TO have nothing to check. An empty LTAK result still skips the guard on both paths. The tr-to guard reads through `Z_WM_GET_TR_MATERIAL_LIST` and this one through `LTBK`; they were not merged.
+
+### 2026-11-02 09:42 IST — MIGO double-posting guard no longer ignored on `/odata/v4/tr-to`: PARTIAL
+
+- **Change:** In `postMigoGoodsMovement`, the 409 for a TR created by a posted material document now reaches the caller. A failed LTAK or TR read now returns 503 and stops the posting. Failures of the optional RESB/RKPF/LTBK/LTAP metadata reads still only log a warning, as before.
+- **Files:** `srv/wm/tr-to/handlers/trTo.handler.js`, `test/unit/wm/trToHandler.test.js`.
+- **Reason:** The surrounding `catch` rethrew only status 400 and `getTR` errors were swallowed, so the check could be skipped and the same stock moved twice. Found by the 2026-11-02 repo audit.
+- **Test decision:** TEST ADDED (5 mock tests).
+- **Validation:** Before the fix, `npx jest test/unit/wm/trToHandler.test.js -t 'double-posting guard'`: 3 failed, 2 passed (bug reproduced). After the fix: 5 passed. `npx jest test/unit test/integration`: 218 suites passed, 1 skipped; 4249 tests passed, 59 skipped. `npx eslint` on both changed files: clean. `git diff --check`: clean.
+- **Not run:** browser E2E (`test/e2e/wm/roundTripScanTo.e2e.js`) and live SAP. No SAP call was made.
+- **Open:** `srv/wm/reservation-entry/service.js` `postMigoGoodsMovement` has no equivalent check. An empty LTAK result still skips the guard. Neither was changed because both are outside this fix.
 
 ### 2026-10-31 IST — Movement 261 Startup Warning & Dashboard Metrics Log Diagnosis & Fix: PASS
 

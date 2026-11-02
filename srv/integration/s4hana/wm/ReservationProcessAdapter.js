@@ -885,6 +885,39 @@ class ReservationProcessAdapter {
   }
 
   /**
+   * Refuses a goods movement (409) when SAP created the TR from an already posted material document.
+   * Fails closed (503) when SAP cannot answer. Without a TR or TO on the record there is nothing to check.
+   */
+  async assertGoodsMovementNotPosted({ transferRequirement, transferOrder, warehouseNumber } = {}) {
+    if (!this.rfc || (!transferRequirement && !transferOrder)) return;
+    const read = async (table, fields, where, what) => {
+      try {
+        return await this.rfc.readTable(table, fields, where, 1);
+      } catch (err) {
+        throw httpError(503, `Could not read ${what} to rule out a double posting: ${err.message}. The goods movement was not posted.`);
+      }
+    };
+
+    let tbnum = transferRequirement ? sapKey(transferRequirement, 'tbnum').padStart(10, '0') : '';
+    let lgnum = warehouseNumber ? sapKey(warehouseNumber, 'lgnum') : '';
+    if (!tbnum) {
+      const tanum = sapKey(transferOrder, 'tanum').padStart(10, '0');
+      const where = [`TANUM = '${tanum}'`, ...(lgnum ? [`AND LGNUM = '${lgnum}'`] : [])];
+      const ltak = (await read('LTAK', ['LGNUM', 'TBNUM'], where, `Transfer Order ${alphaOut(tanum)}`))?.[0];
+      tbnum = String(ltak?.TBNUM || '').trim();
+      lgnum = lgnum || String(ltak?.LGNUM || '').trim();
+      if (!tbnum || /^0+$/.test(tbnum)) return;
+    }
+
+    const where = [`TBNUM = '${tbnum}'`, ...(lgnum ? [`AND LGNUM = '${lgnum}'`] : [])];
+    const ltbk = (await read('LTBK', ['MBLNR'], where, `Transfer Requirement ${alphaOut(tbnum)}`))?.[0];
+    const mblnr = String(ltbk?.MBLNR || '').trim();
+    if (mblnr && !/^0+$/.test(mblnr)) {
+      throw httpError(409, `Transfer Requirement ${alphaOut(tbnum)} was created by material document ${alphaOut(mblnr)}: the goods movement is already posted in SAP; MIGO is not allowed.`);
+    }
+  }
+
+  /**
    * TR verification lookup: reads LTBK (header) or falls back to Z_WM_GET_TR_MATERIAL_LIST.
    * Returns verified TR header data or null if not found in SAP.
    */

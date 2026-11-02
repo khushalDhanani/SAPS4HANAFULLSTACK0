@@ -106,6 +106,69 @@ describe('TrToHandler', () => {
     }
   });
 
+  // [mock only, not SAP verification]
+  describe('postMigoGoodsMovement double-posting guard fails closed [mock only, not SAP verification]', () => {
+    const LTAK_ROW = { LGNUM: 'W01', TBNUM: '0001000850', RSNUM: '', BWLVS: '311', KQUIT: 'X' };
+    let resProcessAdapter;
+    let readTable;
+    const mkReq = () => ({
+      data: { MovementType: '311', TransferOrder: '1037299', Plant: '1120', Material: 'M1', Quantity: 1, Unit: 'NOS' },
+      user: { id: 'tester' },
+      error: jest.fn()
+    });
+
+    beforeEach(() => {
+      readTable = jest.fn(async (table) => (table === 'LTAK' ? [LTAK_ROW] : []));
+      resProcessAdapter = {
+        rfc: { readTable },
+        withRfc: null,
+        checkAuthorization: jest.fn().mockResolvedValue(undefined),
+        postGoodsMovement: jest.fn().mockResolvedValue({ materialDocument: '4900099001', materialDocYear: '2026', status: '05' })
+      };
+      handlers = {};
+      adapter = { getTR: jest.fn().mockResolvedValue({ Mblnr: '' }) };
+      TrToHandler.init({ on: (event, fn) => { handlers[event] = fn; } }, { adapter, resProcessAdapter });
+    });
+
+    it('rejects with 409 and posts nothing when the TR was created by a posted material document', async () => {
+      adapter.getTR.mockResolvedValue({ Mblnr: '4900050046' });
+
+      await expect(handlers.postMigoGoodsMovement(mkReq())).rejects.toMatchObject({ status: 409 });
+      expect(resProcessAdapter.postGoodsMovement).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 503 and posts nothing when the TR cannot be read', async () => {
+      adapter.getTR.mockRejectedValue(new Error('RFC down'));
+
+      await expect(handlers.postMigoGoodsMovement(mkReq())).rejects.toMatchObject({ status: 503 });
+      expect(resProcessAdapter.postGoodsMovement).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 503 and posts nothing when the TO header cannot be read', async () => {
+      readTable.mockRejectedValue(new Error('RFC down'));
+
+      await expect(handlers.postMigoGoodsMovement(mkReq())).rejects.toMatchObject({ status: 503 });
+      expect(resProcessAdapter.postGoodsMovement).not.toHaveBeenCalled();
+    });
+
+    it('still posts once when the TR has no material document', async () => {
+      await handlers.postMigoGoodsMovement(mkReq());
+
+      expect(resProcessAdapter.postGoodsMovement).toHaveBeenCalledTimes(1);
+    });
+
+    it('still posts when only an optional metadata read fails after the guard passed', async () => {
+      readTable.mockImplementation(async (table) => {
+        if (table === 'LTAK') return [LTAK_ROW];
+        throw Object.assign(new Error('RFC down'), { status: 503 });
+      });
+
+      await handlers.postMigoGoodsMovement(mkReq());
+
+      expect(resProcessAdapter.postGoodsMovement).toHaveBeenCalledTimes(1);
+    });
+  });
+
   // ─── autoConfirm × autoPostMigo MIGO gate matrix (handler level) ───────────
   // Tests the fix at trTo.handler.js: `data.autoConfirm !== false && data.autoPostMigo && result.Confirmed`
   // [mock only, not SAP verification]

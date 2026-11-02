@@ -1567,6 +1567,78 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
       expect(postGoodsMvtSpy).not.toHaveBeenCalled();
     });
 
+    // [mock only, not SAP verification]
+    describe('double-posting guard', () => {
+      const FIELDS = ['TransferRequirement', 'TransferOrder', 'WarehouseNumber', 'Status_code', 'ProcessStatus', 'ErrorMessage', 'ErrorStep'];
+      const where = { ReservationNo: testMigoResNo, ReservationItem: '0001' };
+      let saved;
+
+      beforeEach(async () => {
+        saved = await cds.db.run(SELECT.one.from(TRACK_ENTITY).columns(FIELDS).where(where));
+        await cds.db.run(cds.ql.UPDATE(TRACK_ENTITY).set({ TransferRequirement: '1000850', TransferOrder: '', WarehouseNumber: 'W01' }).where(where));
+        postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement').mockResolvedValue({
+          success: true, materialDocument: '4900050999', materialDocYear: '2026', status: '05'
+        });
+      });
+
+      afterEach(async () => {
+        await cds.db.run(cds.ql.UPDATE(TRACK_ENTITY).set({ ...saved, MaterialDocument: null, MaterialDocYear: null }).where(where));
+        await cds.db.run(DELETE.from(LOG_ENTITY).where({ ReservationNo: testMigoResNo }));
+      });
+
+      const post = () => POST('/odata/v4/reservation-entry/postMigoGoodsMovement', {
+        MovementType: '311', ReservationNo: testMigoResNo, ReservationItem: '0001'
+      }, authClerk);
+
+      test('records status 90 and posts nothing when the TR came from a posted material document', async () => {
+        t320Spy.mockImplementation(async (table) => (table === 'LTBK' ? [{ MBLNR: '4900050046' }] : []));
+
+        const { data } = await post();
+
+        expect(data.Status_code).toBe('90');
+        expect(data.ErrorMessage).toContain('4900050046');
+        expect(postGoodsMvtSpy).not.toHaveBeenCalled();
+      });
+
+      test('records status 90 and posts nothing when the TR cannot be read', async () => {
+        t320Spy.mockImplementation(async () => { throw new Error('RFC down'); });
+
+        const { data } = await post();
+
+        expect(data.Status_code).toBe('90');
+        expect(data.ErrorMessage).toContain('not posted');
+        expect(postGoodsMvtSpy).not.toHaveBeenCalled();
+      });
+
+      test('posts once when the TR has no material document', async () => {
+        t320Spy.mockImplementation(async (table) => (table === 'LTBK' ? [{ MBLNR: '' }] : []));
+
+        const { data } = await post();
+
+        expect(data.Status_code).toBe('05');
+        expect(postGoodsMvtSpy).toHaveBeenCalledTimes(1);
+      });
+
+      test('finds the TR through the Transfer Order when the track has none', async () => {
+        const readTable = jest.fn(async (table) => {
+          if (table === 'LTAK') return [{ LGNUM: 'W01', TBNUM: '0001000850' }];
+          return [{ MBLNR: '4900050046' }];
+        });
+        const adapter = new ReservationProcessAdapter({ rfc: { readTable } });
+
+        await expect(adapter.assertGoodsMovementNotPosted({ transferOrder: '1037299' })).rejects.toMatchObject({ status: 409 });
+        expect(readTable).toHaveBeenCalledWith('LTBK', ['MBLNR'], ["TBNUM = '0001000850'", "AND LGNUM = 'W01'"], 1);
+      });
+
+      test('has nothing to check without a TR or Transfer Order', async () => {
+        const readTable = jest.fn();
+        const adapter = new ReservationProcessAdapter({ rfc: { readTable } });
+
+        await expect(adapter.assertGoodsMovementNotPosted({})).resolves.toBeUndefined();
+        expect(readTable).not.toHaveBeenCalled();
+      });
+    });
+
     test('POST /odata/v4/reservation-entry/postMigoGoodsMovement updates status to 05 and logs MIGO step', async () => {
       postGoodsMvtSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'postGoodsMovement').mockResolvedValueOnce({
         success: true,
