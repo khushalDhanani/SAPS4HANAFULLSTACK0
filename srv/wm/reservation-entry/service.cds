@@ -46,6 +46,19 @@ service ReservationEntryService {
             CompanyCode    : String(4);
     };
 
+    @readonly
+    entity BatchVH {
+        key Material        : String(40);
+        key Plant           : String(4);
+        key Batch           : String(10);
+            StorageLocation : String(4);
+            Stock           : Decimal(13, 3);
+    };
+
+    function checkMaterialBatchManaged(material: String(40), plant: String(4)) returns {
+        isBatchManaged : Boolean;
+    };
+
     type ReservationCreatedDoc {
         number : String(10);
         item   : String(4);

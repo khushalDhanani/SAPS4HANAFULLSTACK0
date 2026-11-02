@@ -78,9 +78,27 @@ sap.ui.define([
             this._oViewModel.setProperty("/isCreate", true);
             this._oViewModel.setProperty("/isTracked", false);
             this._oViewModel.setProperty("/busy", false);
+            this._oViewModel.setProperty("/isBatchRequired", false);
             this._oViewModel.setProperty("/errorMessage", "");
             this._oViewModel.setProperty("/successMessage", "");
             this._oCreateModel.setData(this._getDefaultCreateData());
+        },
+
+        _checkBatchRequirement: function (sMaterial, sPlant) {
+            const that = this;
+            const mat = sMaterial !== undefined ? sMaterial : (this._oCreateModel && this._oCreateModel.getProperty("/Material"));
+            const plt = sPlant !== undefined ? sPlant : (this._oCreateModel && this._oCreateModel.getProperty("/Plant"));
+            if (!mat || !plt) {
+                this._oViewModel.setProperty("/isBatchRequired", false);
+                return;
+            }
+            if (this._oService && typeof this._oService.checkMaterialBatchManaged === "function") {
+                this._oService.checkMaterialBatchManaged(mat, plt).then(function (oRes) {
+                    that._oViewModel.setProperty("/isBatchRequired", Boolean(oRes && oRes.isBatchManaged));
+                }).catch(function () {
+                    that._oViewModel.setProperty("/isBatchRequired", false);
+                });
+            }
         },
 
         _onRouteDetailMatched: function (oEvent) {
@@ -278,6 +296,15 @@ sap.ui.define([
                 if (sOrdPlantSug) {
                     aContextFilters.push(new Filter("Plant", FilterOperator.EQ, sOrdPlantSug));
                 }
+            } else if (sId.indexOf("inputBatch") !== -1) {
+                var sBatchMat = this._oCreateModel.getProperty("/Material");
+                if (sBatchMat) {
+                    aContextFilters.push(new Filter("Material", FilterOperator.EQ, sBatchMat));
+                }
+                var sBatchPlt = this._oCreateModel.getProperty("/Plant");
+                if (sBatchPlt) {
+                    aContextFilters.push(new Filter("Plant", FilterOperator.EQ, sBatchPlt));
+                }
             }
 
             if (ValueHelpService && typeof ValueHelpService.applySuggestionFilter === "function") {
@@ -316,6 +343,15 @@ sap.ui.define([
                 if (sOrdPlantVH) {
                     aInitialFilters.push(new Filter("Plant", FilterOperator.EQ, sOrdPlantVH));
                 }
+            } else if (sId.indexOf("inputBatch") !== -1) {
+                var sBatchMatVH = this._oCreateModel.getProperty("/Material");
+                if (sBatchMatVH) {
+                    aInitialFilters.push(new Filter("Material", FilterOperator.EQ, sBatchMatVH));
+                }
+                var sBatchPltVH = this._oCreateModel.getProperty("/Plant");
+                if (sBatchPltVH) {
+                    aInitialFilters.push(new Filter("Plant", FilterOperator.EQ, sBatchPltVH));
+                }
             }
 
             if (ValueHelpService && typeof ValueHelpService.openValueHelp === "function") {
@@ -348,9 +384,11 @@ sap.ui.define([
                     this._oCreateModel.setProperty("/Unit", sUnit);
                 }
                 oInput.setValueState("None");
+                this._checkBatchRequirement(sKey, this._oCreateModel.getProperty("/Plant"));
             } else if (sId.indexOf("inputPlant") !== -1) {
                 this._oCreateModel.setProperty("/Plant", sKey);
                 oInput.setValueState("None");
+                this._checkBatchRequirement(this._oCreateModel.getProperty("/Material"), sKey);
             } else if (sId.indexOf("inputStorageLocation") !== -1) {
                 this._oCreateModel.setProperty("/StorageLocation", sKey);
                 if (oData && oData.Plant && !this._oCreateModel.getProperty("/Plant")) {
@@ -394,6 +432,15 @@ sap.ui.define([
             if (!oItem) return;
             var sKey = oItem.getKey() || oItem.getText();
             var oContext = oItem.getBindingContext();
+            var oData = oContext ? oContext.getObject() : null;
+            this._handleValueHelpSelected(oEvent.getSource(), sKey, oItem, oData);
+        },
+
+        onBatchSelect: function (oEvent) {
+            var oItem = oEvent.getParameter("selectedItem");
+            if (!oItem) return;
+            var sKey = oItem.getKey() || oItem.getText();
+            var oContext = (typeof oItem.getBindingContext === "function") ? (oItem.getBindingContext("reservationEntry") || oItem.getBindingContext()) : null;
             var oData = oContext ? oContext.getObject() : null;
             this._handleValueHelpSelected(oEvent.getSource(), sKey, oItem, oData);
         },
@@ -506,6 +553,9 @@ sap.ui.define([
             }
             if (oData.Unit !== undefined && oData.Unit !== null && !String(oData.Unit).trim()) {
                 return "Unit of Measure is required";
+            }
+            if (this._oViewModel && this._oViewModel.getProperty("/isBatchRequired") && (!oData.Batch || !oData.Batch.trim())) {
+                return "Batch is mandatory for batch-managed material " + (oData.Material || "");
             }
 
             switch (oData.MovementType) {

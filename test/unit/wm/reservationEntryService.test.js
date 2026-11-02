@@ -1485,8 +1485,34 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
 
     // Value helps come from SAP tables only. The default readTable stub throws 503 for every table but T320,
     // so without an explicit table stub each value help must fail with the SAP read error, never a local list.
-    test.each(['OrderTypeVH', 'InternalOrderVH', 'CostCenterVH'])('GET %s returns the SAP read error (no local fallback list) when the table read fails', async (vh) => {
+    test.each(['OrderTypeVH', 'InternalOrderVH', 'CostCenterVH', 'BatchVH'])('GET %s returns the SAP read error (no local fallback list) when the table read fails', async (vh) => {
       await expect(GET(`/odata/v4/reservation-entry/${vh}`, authClerk)).rejects.toMatchObject({ response: { status: 503 } });
+    });
+
+    test('GET /odata/v4/reservation-entry/BatchVH returns MCHB batch rows with stock sorted by stock desc', async () => {
+      t320Spy.mockImplementation(async (table) => {
+        if (table === 'MCHB') return [
+          { MATNR: '000000008000006684', WERKS: '1120', LGORT: 'HS01', CHARG: 'IN26001071', CLABS: '8.000' },
+          { MATNR: '000000008000006684', WERKS: '1120', LGORT: 'CI01', CHARG: '8000006684', CLABS: '10.000' }
+        ];
+        return [];
+      });
+      const { status, data } = await GET('/odata/v4/reservation-entry/BatchVH', authClerk);
+      expect(status).toBe(200);
+      expect(data.value).toEqual([
+        { Material: '8000006684', Plant: '1120', Batch: '8000006684', StorageLocation: 'CI01', Stock: 10 },
+        { Material: '8000006684', Plant: '1120', Batch: 'IN26001071', StorageLocation: 'HS01', Stock: 8 }
+      ]);
+    });
+
+    test('checkMaterialBatchManaged returns isBatchManaged true when MARC-XCHPF = X', async () => {
+      t320Spy.mockImplementation(async (table) => {
+        if (table === 'MARC') return [{ XCHPF: 'X' }];
+        return [];
+      });
+      const { status, data } = await GET("/odata/v4/reservation-entry/checkMaterialBatchManaged(material='8000006684',plant='1120')", authClerk);
+      expect(status).toBe(200);
+      expect(data).toMatchObject({ isBatchManaged: true });
     });
 
     test('GET /odata/v4/reservation-entry/OrderTypeVH returns order types from T003O/T003P sorted by key, no pinned entries', async () => {

@@ -269,13 +269,29 @@
                                                 width="35%" />
                                         </HBox>
 
-                                        <Label text="{i18n>resFieldBatch}" />
+                                        <Label
+                                            text="{i18n>resFieldBatch}"
+                                            required="{view>/isBatchRequired}" />
                                         <Input
                                             id="inputBatch"
                                             value="{create>/Batch}"
-                                            placeholder="{i18n>resPlaceholderBatch}"
+                                            placeholder="{= ${view>/isBatchRequired} ? ${i18n>resPlaceholderBatchRequired} : ${i18n>resPlaceholderBatch} }"
                                             maxLength="10"
-                                            liveChange=".onFieldLiveChange" />
+                                            showValueHelp="true"
+                                            showSuggestion="true"
+                                            filterSuggests="false"
+                                            suggest=".onSuggest"
+                                            valueHelpRequest=".onValueHelpRequest"
+                                            suggestionItemSelected=".onBatchSelect"
+                                            suggestionItems="{path: 'reservationEntry>/BatchVH', templateShareable: false}"
+                                            liveChange=".onFieldLiveChange">
+                                            <suggestionItems>
+                                                <core:ListItem
+                                                    key="{reservationEntry>Batch}"
+                                                    text="{reservationEntry>Batch}"
+                                                    additionalText="{= ${reservationEntry>StorageLocation} ? 'SLoc: ' + ${reservationEntry>StorageLocation} + ' (Stock: ' + ${reservationEntry>Stock} + ')' : '' }" />
+                                            </suggestionItems>
+                                        </Input>
                                     </f:content>
                                 </f:SimpleForm>
 

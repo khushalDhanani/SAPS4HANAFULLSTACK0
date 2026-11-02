@@ -66,6 +66,17 @@ sap.ui.define([
             });
         },
 
+        checkMaterialBatchManaged: function (sMaterial, sPlant) {
+            if (!sMaterial || !sPlant) return Promise.resolve({ isBatchManaged: false });
+            const sUrl = SERVICE_URL + "/checkMaterialBatchManaged(material='" + encodeURIComponent(sMaterial) +
+                "',plant='" + encodeURIComponent(sPlant) + "')";
+            return ODataClient.get(sUrl).then(function (data) {
+                return (data && data.value) ? data.value : data;
+            }).catch(function () {
+                return { isBatchManaged: false };
+            });
+        },
+
         createReservation: function (oPayload) {
             const sUrl = SERVICE_URL + "/createReservation";
             return ODataClient.post(sUrl, oPayload);

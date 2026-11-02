@@ -97,12 +97,28 @@ async function verifyMvt311(options = {}) {
       return recSLoc ? recSLoc.getVisible() : null;
     });
 
-    // The create form has no default movement type, so Receiving SLoc starts hidden
-    const visibleBefore = await recSLocVisible();
-    if (visibleBefore === null) throw new Error('Receiving SLoc control not found on create page');
-    if (visibleBefore) throw new Error('Receiving SLoc input visible before a movement type was selected');
+    // The create form defaults to Movement Type 311, so Receiving SLoc starts visible
+    const visibleInitial = await recSLocVisible();
+    if (visibleInitial === null) throw new Error('Receiving SLoc control not found on create page');
+    if (!visibleInitial) throw new Error('Receiving SLoc input should be visible for default Movement 311');
 
-    // Switch to Movement Type 311 to verify dynamic Receiving SLoc field
+    // Switch to Movement Type 201 to verify dynamic Receiving SLoc hides
+    await page.evaluate(() => {
+      const core = window.sap && window.sap.ui && window.sap.ui.getCore();
+      if (core) {
+        const select = core.byId('__component0---reservationEntryDetail--selectMovementType');
+        if (select) {
+          select.setSelectedKey('201');
+          select.fireChange({ selectedItem: select.getItemByKey('201') });
+        }
+      }
+    });
+    await page.waitForFunction(() => {
+      const c = window.sap.ui.getCore().byId('__component0---reservationEntryDetail--inputRecSLoc');
+      return c && !c.getVisible();
+    }, null, { timeout: 5000 }).catch(() => {});
+
+    // Switch back to Movement Type 311 to verify dynamic Receiving SLoc field reappears
     await page.evaluate(() => {
       const core = window.sap && window.sap.ui && window.sap.ui.getCore();
       if (core) {
@@ -116,7 +132,7 @@ async function verifyMvt311(options = {}) {
     await page.waitForFunction(() => {
       const c = window.sap.ui.getCore().byId('__component0---reservationEntryDetail--inputRecSLoc');
       return c && c.getVisible();
-    }, null, { timeout: 5000 }).catch(() => {}); // the explicit check below reports the failure
+    }, null, { timeout: 5000 }).catch(() => {});
 
     const createScreenshotPath = path.resolve(__dirname, 'screenshots/mvt311_create_page.png');
     await shots.evidence(page, createScreenshotPath);

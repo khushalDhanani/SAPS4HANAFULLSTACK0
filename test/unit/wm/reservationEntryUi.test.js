@@ -217,6 +217,39 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(subject.validateForm(dataValid)).toBeNull();
         });
 
+        it('validates Batch: requires Batch when isBatchRequired is true', () => {
+            subject._oViewModel.setProperty('/isBatchRequired', true);
+            const dataNoBatch = { MovementType: '311', Plant: '1120', StorageLocation: 'HS01', ReceivingStorageLocation: 'CS01', Material: '8000006684', Quantity: 5, Batch: '' };
+            expect(subject.validateForm(dataNoBatch)).toMatch(/Batch is mandatory for batch-managed material 8000006684/);
+
+            const dataWithBatch = { MovementType: '311', Plant: '1120', StorageLocation: 'HS01', ReceivingStorageLocation: 'CS01', Material: '8000006684', Quantity: 5, Batch: 'IN26001071' };
+            expect(subject.validateForm(dataWithBatch)).toBeNull();
+        });
+
+        it('_checkBatchRequirement queries service and updates isBatchRequired', async () => {
+            subject._oService.checkMaterialBatchManaged = jest.fn().mockResolvedValue({ isBatchManaged: true });
+            subject._checkBatchRequirement('8000006684', '1120');
+            await Promise.resolve();
+            expect(subject._oViewModel.getProperty('/isBatchRequired')).toBe(true);
+
+            subject._oService.checkMaterialBatchManaged = jest.fn().mockResolvedValue({ isBatchManaged: false });
+            subject._checkBatchRequirement('8000000023', '1120');
+            await Promise.resolve();
+            expect(subject._oViewModel.getProperty('/isBatchRequired')).toBe(false);
+        });
+
+        it('onBatchSelect populates Batch and clears error state', () => {
+            const fakeEvent = {
+                getSource: () => ({ getId: () => 'inputBatch', setValueState: jest.fn() }),
+                getParameter: () => ({
+                    getKey: () => 'IN26001071',
+                    getText: () => 'IN26001071'
+                })
+            };
+            subject.onBatchSelect(fakeEvent);
+            expect(subject._oCreateModel.getProperty('/Batch')).toBe('IN26001071');
+        });
+
         it('validates 301: requires Receiving Plant, Receiving SLoc, and Plant must differ from Issuing Plant', () => {
             const dataNoPlant = { MovementType: '301', Plant: '1120', StorageLocation: 'HS01', Material: '100', Quantity: 5, ReceivingPlant: '', ReceivingStorageLocation: 'CS01' };
             expect(subject.validateForm(dataNoPlant)).toMatch(/Receiving Plant is mandatory for Movement Type 301/);

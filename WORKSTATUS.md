@@ -15,6 +15,19 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Reservation create (/wm/reservation-entry/create) Batch-managed material detection & BatchVH Value Help fixed (2026-11-02 17:55 IST) — PASS, uncommitted:**
+  1. Root cause: In SAP S/4HANA (Client 220), material `8000006684` has `MARC-XCHPF = 'X'` (Batch management requirement indicator active in Plant 1120). Reservations for batch-managed materials require `RESB-CHARG`. `ReservationProcessAdapter.js:226-228` validates `MARC-XCHPF === 'X'` and rejects with HTTP 400 (`"Batch is mandatory for batch-managed material 8000006684"`) when batch is omitted. However, `ReservationEntryDetail.view.xml` previously displayed `inputBatch` with no required indicator, placeholder `Batch (optional)`, no value help, and no suggestion items. The user was unaware the material required a batch and had no F4 discovery of live SAP batches from `MCHB`/`MCHA` (e.g. batch `IN26001071` with 8 KG in SLoc HS01).
+  2. Resolution:
+     - `srv/wm/reservation-entry/service.cds`: Added `@readonly entity BatchVH` with keys `Material`, `Plant`, `Batch`, and fields `StorageLocation`, `Stock`. Added OData function `checkMaterialBatchManaged(material, plant) returns { isBatchManaged: Boolean }`.
+     - `srv/wm/reservation-entry/service.js`: Implemented `READ BatchVH` handler reading `MCHB` with fallback to `MCHA` via RFC `RFC_READ_TABLE`, filtering by Material and Plant, deduplicating keys, and sorting by available unrestricted stock descending. Implemented `checkMaterialBatchManaged` querying `MARC-XCHPF` via RFC client.
+     - `app/fiori-app/webapp/modules/wm/reservation-entry/service/ReservationEntryService.js`: Added `checkMaterialBatchManaged(sMaterial, sPlant)`.
+     - `app/fiori-app/webapp/service/ValueHelpService.js`: Registered `"/BatchVH"` configuration metadata (`title: "Select Batch", key: "Batch", desc: "Batch", info: "StorageLocation"`).
+     - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`: Added `resPlaceholderBatchRequired`.
+     - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`: Bound Batch label `required="{view>/isBatchRequired}"`, added `showValueHelp="true"`, `showSuggestion="true"`, `suggest=".onSuggest"`, `valueHelpRequest=".onValueHelpRequest"`, `suggestionItemSelected=".onBatchSelect"`, and dynamic suggestion items from `reservationEntry>/BatchVH`.
+     - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`: Implemented `_checkBatchRequirement(sMaterial, sPlant)` to query backend and update `view>/isBatchRequired`, hooked into material/plant selection and live changes, added `onBatchSelect`, added contextual filtering for `BatchVH`, and updated `validateForm()` to validate batch presence client-side when `isBatchRequired` is true.
+     - `test/e2e/wm/verifyMvt311.e2e.js`: Updated dynamic Receiving SLoc test to verify that 311 defaults visible, hides upon switching to 201, and reappears upon switching back to 311.
+  3. Verification: Target unit tests updated and added in `reservationEntryService.test.js` (108/108 passed) and `reservationEntryUi.test.js` (75/75 passed). All 95 WM unit suites (2,513 passed), UI5 linter (clean), UI5 build (1.19 s), root ESLint (clean), secret scan (clean), browser E2E `verifyWmScreens.e2e.js` (17/17 steps passed), and browser E2E `verifyMvt311.e2e.js` (PASS with SAP read-back evidence) PASS. See Change Entry 2026-11-02 17:55 IST.
+
 - **Reservation create (/wm/reservation-entry/create) Movement Type synchronization fixed (2026-11-02 17:35 IST) — PASS, uncommitted:** On `#/wm/reservation-entry/create`, `ReservationEntryDetail.controller.js` initialized `MovementType: ""` in `_getDefaultCreateData()`, whereas `ReservationEntryDetail.view.xml` `<Select id="selectMovementType">` contained no blank item (`key=""`) and defaulted visually to item 0 (`311 - Storage Location Transfer`). UI5's two-way data binding does not update the model on fallback display, leaving `create>/MovementType` empty, hiding the 311 dynamic fields (Receiving Storage Location), suppressing `change` when clicking 311 in the dropdown, and causing `validateForm` to reject with `"Movement Type is required (201, 241, 311, 301, 261)"`. Updated `_getDefaultCreateData()` to default `MovementType: "311"`, aligning model and view as originally documented in controller comment (`// MovementType is the first entry of the select`). Dynamic fields for 311 are now immediately visible and validation passes cleanly. Target unit tests updated and added in `reservationEntryUi.test.js` (72/72 passed). All 95 WM unit suites (2,510 passed), UI5 linter (clean), UI5 build (1.29 s), root ESLint (clean), secret scan (clean), and browser E2E `verifyWmScreens.e2e.js` (17/17 steps passed including Reservation entry create) PASS. See Change Entry 2026-11-02 17:35 IST.
 
 - **Dead-Code Cleanup (Medium-Confidence Candidates: sapFacts.js, obsolete requires, tools audit) (2026-11-02 17:15 IST) — PASS, uncommitted:**
@@ -41,6 +54,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Reservation create batch detection & Value Help (2026-11-02 17:55 IST): RESOLVED (PASS, uncommitted). Batch management dynamically detected via `checkMaterialBatchManaged`, Batch marked mandatory on batch-managed materials, `BatchVH` value help implemented reading `MCHB`/`MCHA` stock, unit tests (108/108 service, 75/75 UI) and browser E2E (17/17 screens, verifyMvt311) pass. Commit when the user asks.
 - Reservation create Movement Type default (2026-11-02 17:35 IST): RESOLVED (PASS, uncommitted). Model and Select dropdown synchronized with `MovementType: "311"`; unit tests (72/72) and browser E2E (17/17) pass. Commit when the user asks.
 - Reservation list date display (2026-11-02): RESOLVED (2026-11-02 17:00 IST). Date resolved and formatted on `#/wm/reservation-entry` across UI XML, controller formatter, CAP service mapping, and S/4HANA OData client; verifyWmScreens 16/16 steps PASS. Commit when the user asks.
 - Reservation list (2026-11-02): user confirms the fix on `#/wm/reservation-entry` after a browser refresh; commit when the user asks.
@@ -66,6 +80,60 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-02 17:55 IST — Reservation Entry Batch Detection & BatchVH Value Help: PASS
+
+- **Status:** PASS.
+- **Why:** On `#/wm/reservation-entry/create`, submitting a reservation for material `8000006684` failed with backend error `"Failed to create reservation: Batch is mandatory for batch-managed material 8000006684"`.
+- **Root Cause & SAP Discovery:**
+  1. Read-only live SAP table inspection (`RFC_READ_TABLE` on `MARC` for Material `000000008000006684` in Plant `1120`) confirmed `XCHPF = 'X'` (Batch management requirement indicator is active).
+  2. In SAP S/4HANA IM/WM, reservations (`RKPF`/`RESB`) for batch-managed materials require `RESB-CHARG`.
+  3. Backend preflight guard in `srv/integration/s4hana/wm/reservation-entry/ReservationProcessAdapter.js:226-228` checks `MARC-XCHPF === 'X'` and throws HTTP 400 (`"Batch is mandatory for batch-managed material " + sMaterial`) when `sBatch` is empty.
+  4. In `ReservationEntryDetail.view.xml`, `inputBatch` was marked optional (`required="false"`), had placeholder `Batch (optional)`, lacked value help (`showValueHelp="false"`), and provided no suggestion items.
+  5. The UI had no discovery of live SAP batches from `MCHB` / `MCHA` (e.g. batch `IN26001071` with 8.000 KG in `1120/HS01`), did not check `MARC-XCHPF` when the material was selected, and did not validate batch presence in `validateForm()`.
+- **Changes:**
+  - `srv/wm/reservation-entry/service.cds`:
+    - Added `@readonly entity BatchVH` with keys `Material`, `Plant`, `Batch`, and fields `StorageLocation`, `Stock`.
+    - Added OData function `checkMaterialBatchManaged(material: String(40), plant: String(4)) returns { isBatchManaged: Boolean; };`.
+  - `srv/wm/reservation-entry/service.js`:
+    - Implemented `READ BatchVH` handler dynamically reading `MCHB` (fallback to `MCHA`), extracting `Material` and `Plant` filters, deduplicating keys, and sorting by available unrestricted stock descending.
+    - Implemented `checkMaterialBatchManaged` function handler querying `MARC-XCHPF` via RFC client.
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/service/ReservationEntryService.js`:
+    - Added `checkMaterialBatchManaged(sMaterial, sPlant)` calling `/odata/v4/reservation-entry/checkMaterialBatchManaged`.
+  - `app/fiori-app/webapp/service/ValueHelpService.js`:
+    - Registered `"/BatchVH"` configuration metadata (`title: "Select Batch", key: "Batch", desc: "Batch", info: "StorageLocation"`).
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `i18n_en.properties`:
+    - Added `resPlaceholderBatchRequired=Enter or select Batch (required)`.
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryDetail.view.xml`:
+    - Bound Batch label `required="{view>/isBatchRequired}"`.
+    - Enhanced `inputBatch`: added `showValueHelp="true"`, `showSuggestion="true"`, `suggest=".onSuggest"`, `valueHelpRequest=".onValueHelpRequest"`, `suggestionItemSelected=".onBatchSelect"`, `suggestionItems="{path: 'reservationEntry>/BatchVH', templateShareable: false}"`, and dynamic placeholder binding.
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`:
+    - Initialized `view>/isBatchRequired: false` in `_onRouteCreateMatched`.
+    - Implemented `_checkBatchRequirement(sMaterial, sPlant)` to query backend and update `view>/isBatchRequired`.
+    - Hooked `_checkBatchRequirement` into material/plant selection and change handlers.
+    - Added `onBatchSelect` event handler.
+    - Enhanced `onSuggest` and `onValueHelpRequest` with `Material` and `Plant` contextual filters for `inputBatch`.
+    - Updated `validateForm(oData)` to validate batch presence client-side when `isBatchRequired` is true.
+  - `test/e2e/wm/verifyMvt311.e2e.js`:
+    - Updated dynamic Receiving SLoc test to verify that 311 defaults visible, hides upon switching to 201, and reappears upon switching back to 311.
+  - `test/unit/wm/reservationEntryService.test.js`:
+    - Added unit tests for `GET BatchVH` 503 error bubbling, `MCHB` stock sorted desc, and `checkMaterialBatchManaged` (108/108 passed).
+  - `test/unit/wm/reservationEntryUi.test.js`:
+    - Added unit tests for Batch required validation, `_checkBatchRequirement`, and `onBatchSelect` (75/75 passed).
+- **Verification Commands Run:**
+  - `npx cds compile srv/wm/reservation-entry/service.cds --to csn`: PASS (CSN compiled cleanly).
+  - `npx jest test/unit/wm/reservationEntryService.test.js`: PASS (108/108 passed).
+  - `npx jest test/unit/wm/reservationEntryUi.test.js`: PASS (75/75 passed).
+  - `npx jest test/unit/wm`: PASS (95 passed suites, 1 skipped, 2,513 passed tests, 56 skipped, 0 failed).
+  - `cd app/fiori-app && npm run lint`: PASS (0 findings).
+  - `cd app/fiori-app && npm run build`: PASS (Build succeeded in 1.19 s).
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `npm run scan:secrets`: PASS (0 secrets, credentials, or private keys detected).
+  - `test/unit/tools/e2eCoverageMatrix.test.js`: PASS (8/8 passed).
+  - `ALLOW_LIVE_SAP_TOOLS=1 node test/e2e/wm/verifyWmScreens.e2e.js --allow-live-sap`: PASS (17/17 steps passed).
+  - `ALLOW_LIVE_SAP_TOOLS=1 node test/e2e/wm/verifyMvt311.e2e.js`: PASS (all steps, network/console health, and SAP read-back passed).
+- **Assumptions:** None.
+
 
 ### 2026-11-02 17:35 IST — Reservation Entry Create Movement Type Synchronization: PASS
 

@@ -15,12 +15,13 @@ const { plantScope, applyPlantScope, isPlantAllowed, assertPlantsInScope } = req
 const { formatDateToYMD } = require('../../common/dateUtils');
 const LOG = cds.log('reservation-entry');
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
+const padMat = (m) => (/^\d+$/.test(String(m || '').trim()) ? String(m || '').trim().padStart(18, '0') : String(m || '').trim());
 const reservationNoKey = (value) => sapKey(value, 'rsnum').padStart(10, '0');
 const reservationItemKey = (value) => sapKey(value || '0001', 'rspos').padStart(4, '0');
 
 module.exports = class ReservationEntryService extends cds.ApplicationService {
   async init() {
-    const { ReservationEntries, ReservationLogs, OrderTypeVH, InternalOrderVH, CostCenterVH } = this.entities;
+    const { ReservationEntries, ReservationLogs, OrderTypeVH, InternalOrderVH, CostCenterVH, BatchVH } = this.entities;
     const adapter = new ReservationProcessAdapter();
 
     /** Answers the request and returns true when a plant read from SAP or tracking is outside the user's scope. */
@@ -1567,6 +1568,76 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         return vhUnavailable(req, 'Cost centers (CSKS/CSKT)', err);
       }
       return vhUnavailable(req, 'Cost centers (CSKS/CSKT)');
+    });
+
+    // Value Help for Batches (loaded dynamically from MCHB / MCHA)
+    this.on('READ', BatchVH, async (req) => {
+      try {
+        if (adapter.rfc) {
+          let sMaterial = '';
+          let sPlant = '';
+          if (req.query && req.query.SELECT && req.query.SELECT.where) {
+            const whereStr = JSON.stringify(req.query.SELECT.where);
+            const mMat = /Material['"]?\s*,\s*['"]?=?['"]?\s*,\s*['"]?([^'"]+)['"]/.exec(whereStr);
+            if (mMat) sMaterial = mMat[1];
+            const mPlt = /Plant['"]?\s*,\s*['"]?=?['"]?\s*,\s*['"]?([^'"]+)['"]/.exec(whereStr);
+            if (mPlt) sPlant = mPlt[1];
+          }
+          if (!sMaterial && req.data?.Material) sMaterial = req.data.Material;
+          if (!sPlant && req.data?.Plant) sPlant = req.data.Plant;
+
+          const whereOpts = [];
+          if (sMaterial) {
+            whereOpts.push(`MATNR = '${padMat(sapKey(sMaterial, 'matnr'))}'`);
+          }
+          if (sPlant) {
+            whereOpts.push(`WERKS = '${sapKey(sPlant, 'plant')}'`);
+          }
+
+          let rows = await adapter.rfc.readTable('MCHB', ['MATNR', 'WERKS', 'LGORT', 'CHARG', 'CLABS'], whereOpts, 100);
+          if (!rows || !rows.length) {
+            const mchaRows = await adapter.rfc.readTable('MCHA', ['MATNR', 'WERKS', 'CHARG'], whereOpts, 100);
+            rows = (mchaRows || []).map((r) => ({ ...r, LGORT: '', CLABS: '0' }));
+          }
+
+          const seen = new Set();
+          const result = (rows || []).filter((r) => {
+            const charg = String(r.CHARG || '').trim();
+            const key = `${r.MATNR}|${r.WERKS}|${charg}|${r.LGORT}`;
+            return charg && !seen.has(key) && seen.add(key);
+          }).map((r) => ({
+            Material: alphaOut(r.MATNR),
+            Plant: String(r.WERKS || '').trim(),
+            Batch: String(r.CHARG || '').trim(),
+            StorageLocation: String(r.LGORT || '').trim(),
+            Stock: Number(r.CLABS || 0)
+          }));
+          result.sort((a, b) => (b.Stock - a.Stock) || a.Batch.localeCompare(b.Batch));
+          return result;
+        }
+      } catch (err) {
+        return vhUnavailable(req, 'Batches (MCHB/MCHA)', err);
+      }
+      return vhUnavailable(req, 'Batches (MCHB/MCHA)');
+    });
+
+    // Check if material is batch-managed via MARC-XCHPF
+    this.on('checkMaterialBatchManaged', async (req) => {
+      const { material, plant } = req.data || {};
+      if (!material || !plant) return { isBatchManaged: false };
+      try {
+        if (adapter.rfc) {
+          const s4Mat = padMat(sapKey(material, 'matnr'));
+          const marcRows = await adapter.rfc.readTable('MARC', ['XCHPF'], [
+            `MATNR = '${s4Mat}'`,
+            `AND WERKS = '${sapKey(plant, 'plant')}'`
+          ], 1);
+          return { isBatchManaged: String(marcRows?.[0]?.XCHPF || '').trim() === 'X' };
+        }
+      } catch (err) {
+        LOG.warn('checkMaterialBatchManaged check failed:', err.message);
+      }
+      return { isBatchManaged: false };
     });
 
     /** Goods movement for a tracked reservation item (step MIGO). Shares one adapter path with tr-to. */
