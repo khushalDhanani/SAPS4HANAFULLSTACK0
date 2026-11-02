@@ -64,6 +64,19 @@ describe('Phase 3: Operational Error Classification & Pending-State Gating', () 
       expect(c2.definitive).toBe(true);
     });
 
+    test('never_reached: a rejected TLS certificate is definitive even when the adapter wrapped it as 502', () => {
+      const tlsErr = Object.assign(new Error('Reverse: S/4HANA POST /x failed: self-signed certificate'), { status: 502 });
+      const c = classifyPostingError(tlsErr);
+      expect(c.category).toBe('never_reached');
+      expect(c.status).toBe(503);
+      expect(c.definitive).toBe(true);
+    });
+
+    test('a business message that only mentions a certificate stays an SAP rejection', () => {
+      const c = classifyPostingError(Object.assign(new Error('Quality certificate is missing for batch B1'), { status: 422 }));
+      expect(c.category).toBe('rejected_by_sap');
+    });
+
     test('never_reached: classifies HTTP 403 with /IWFND/MED/170 (service inactive) as 503 never_reached', () => {
       const med170Err = Object.assign(new Error('/IWFND/MED/170 No service found for namespace /SAP/, name API_SERVICE'), { status: 403 });
       const c = classifyPostingError(med170Err);

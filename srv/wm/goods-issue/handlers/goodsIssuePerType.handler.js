@@ -323,7 +323,7 @@ function isDefinitiveRejection(err) {
 
 /**
  * Classifies an error from posting directly to SAP S/4HANA into one of 4 non-queue categories:
- * 1. never_reached: 404, 503, 403 with /IWFND/MED/170, connection refused, DNS resolution failure.
+ * 1. never_reached: 404, 503, 403 with /IWFND/MED/170, connection refused, DNS resolution failure, TLS certificate rejected.
  *    -> HTTP 503, "The posting was not made and can be tried again." Definitive failure (claims deleted).
  * 2. auth_error: Plain HTTP 403 (no /IWFND/MED/170).
  *    -> HTTP 403, pointing to SU53. Definitive failure (claims deleted).
@@ -344,7 +344,9 @@ function classifyPostingError(err) {
   const isConnRefused = code === 'ECONNREFUSED' || /ECONNREFUSED|connection refused/i.test(msg);
   const isDns = ['ENOTFOUND', 'EAI_AGAIN'].includes(code) || /ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(msg);
   const isCapabilityUnavailable = status === 501 || /capability unavailable|service unavailable/i.test(msg);
-  if (status === 404 || status === 503 || isCapabilityUnavailable || (status === 403 && hasMed170) || isConnRefused || isDns) {
+  // A failed certificate check stops the TLS handshake, so no request was sent. Adapters keep only the message text.
+  const isTlsTrust = /self[- ]signed certificate|unable to (verify|get) .*certificate|certificate has expired|DEPTH_ZERO_SELF_SIGNED_CERT|SELF_SIGNED_CERT_IN_CHAIN|ERR_TLS_CERT_ALTNAME_INVALID/i.test(`${code} ${msg}`);
+  if (status === 404 || status === 503 || isCapabilityUnavailable || (status === 403 && hasMed170) || isConnRefused || isDns || isTlsTrust) {
     const detailMsg = msg ? ` (${msg})` : '';
     return {
       category: 'never_reached',

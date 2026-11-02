@@ -269,13 +269,13 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
         });
         return result;
       } catch (err) {
-        const msg = String(err.message || '');
-        const alreadyReversed = /already|reversed|cancel/i.test(msg);
-        // Definite "already reversed" stays 'rejected'; an unknown outcome (timeout → 502, or no status)
-        // is kept OPEN ('unconfirmed') for the recheck job rather than dead-ended.
-        const unknown = !alreadyReversed && (!err.status || err.status === 502 || err.status === 504);
+        // Never read the outcome from the message text: it carries the CancelItem URL. "Already reversed"
+        // is decided by the IsReversed read above. A definite outcome stays 'rejected'; an unknown one
+        // (timeout, 5xx, no status) is kept OPEN ('unconfirmed') rather than dead-ended.
+        const classified = classifyPostingError(err);
+        const unknown = !classified.definitive;
         const failStatus = unknown ? 'unconfirmed' : 'rejected';
-        const failFields = { LastError: msg || 'Reversal failed' };
+        const failFields = { LastError: err.message || 'Reversal failed' };
         await GoodsIssueAttemptStore.setStatus(refDoc, failStatus, failFields).catch((statusErr) => {
           LOG.error(
             `Critical reconciliation error: failed to persist attempt status '${failStatus}' for reference ${refDoc}:`,
@@ -283,10 +283,9 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
             failFields
           );
         });
-        if (alreadyReversed) {
-          return req.error(422, `Material document ${doc}/${year} item ${docItem} is already reversed`);
-        }
-        return req.error(err.status || 500, msg || 'Reversal failed');
+        return req.error(classified.status, unknown
+          ? `Reversal outcome unconfirmed in SAP S/4HANA (${err.message || 'no answer'}). The reversal may have been posted. Check the document in MB51 and do not reverse it again.`
+          : classified.message);
       }
     });
 

@@ -744,20 +744,66 @@ describe('Mvt261Service reverse action (F6)', () => {
     expect(revSpy).not.toHaveBeenCalled();
   });
 
-  it("maps SAP's already-cancelled error to 422", async () => {
+  const CANCEL_URL = "S/4HANA POST /sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/CancelItem?MaterialDocument='4900050046' failed";
+
+  it("shows SAP's own refusal and stores it as 'rejected', without claiming the document is reversed", async () => {
     await svc.init();
     jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith());
-    jest.spyOn(Mvt261Adapter.prototype, 'reverse').mockRejectedValue(Object.assign(new Error('Document 4900050046 is already cancelled'), { status: 500 }));
+    jest.spyOn(Mvt261Adapter.prototype, 'reverse').mockRejectedValue(Object.assign(new Error(`${CANCEL_URL}: Posting period 2026 is closed`), { status: 400 }));
+    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus');
     const r = req(input);
     await handlers.reverse(r);
-    expect(r.error).toHaveBeenCalledWith(422, expect.stringContaining('already reversed'));
+    expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('Posting period 2026 is closed'));
+    expect(r.error).not.toHaveBeenCalledWith(expect.anything(), expect.stringContaining('already reversed'));
+    expect(statusSpy).toHaveBeenCalledWith(expect.stringMatching(/^RV/), 'rejected', expect.anything());
+  });
+
+  it("a rejected TLS certificate never reached SAP: 503, 'rejected', not 'already reversed' (live failure 2026-11-02)", async () => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith());
+    const revSpy = jest.spyOn(Mvt261Adapter.prototype, 'reverse')
+      .mockRejectedValueOnce(Object.assign(new Error(`${CANCEL_URL}: self-signed certificate; if the root CA is installed locally, try running Node.js with --use-system-ca`), { status: 502 }))
+      .mockResolvedValue({ MaterialDocument: '4900050099', MaterialDocumentYear: '2026' });
+    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus');
+    const r = req(input);
+    await handlers.reverse(r);
+    expect(r.error).toHaveBeenCalledWith(503, expect.stringContaining('self-signed certificate'));
+    expect(r.error).not.toHaveBeenCalledWith(expect.anything(), expect.stringContaining('already reversed'));
+    expect(statusSpy).toHaveBeenCalledWith(expect.stringMatching(/^RV/), 'rejected', expect.anything());
+
+    const r2 = req(input); // nothing was sent, so a retry after fixing the certificate may post
+    await handlers.reverse(r2);
+    expect(r2.error).not.toHaveBeenCalled();
+    expect(revSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['a timeout', 502, 'timeout'],
+    ['HTTP 500', 500, 'internal error'],
+    ['no status', undefined, 'socket closed']
+  ])('%s with the CancelItem URL in the message is unconfirmed and blocks a second reversal', async (_name, status, text) => {
+    await svc.init();
+    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith());
+    const revSpy = jest.spyOn(Mvt261Adapter.prototype, 'reverse')
+      .mockRejectedValue(Object.assign(new Error(`${CANCEL_URL}: ${text}`), { status }));
+    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus');
+    const r = req(input);
+    await handlers.reverse(r);
+    expect(r.error).toHaveBeenCalledWith(status || 500, expect.stringContaining('Reversal outcome unconfirmed'));
+    expect(r.error).not.toHaveBeenCalledWith(expect.anything(), expect.stringContaining('already reversed'));
+    expect(statusSpy).toHaveBeenCalledWith(expect.stringMatching(/^RV/), 'unconfirmed', expect.anything());
+
+    const r2 = req(input);
+    await handlers.reverse(r2);
+    expect(r2.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
+    expect(revSpy).toHaveBeenCalledTimes(1);
   });
 
   it("re-claim: a 'rejected' reversal is re-claimable (e.g. a closed period, then reopened)", async () => {
     await svc.init();
     jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleWith());
     const revSpy = jest.spyOn(Mvt261Adapter.prototype, 'reverse')
-      .mockRejectedValueOnce(Object.assign(new Error('Posting period 2026 is closed'), { status: 500 }))   // -> rejected
+      .mockRejectedValueOnce(Object.assign(new Error('Posting period 2026 is closed'), { status: 400 }))   // -> rejected
       .mockResolvedValue({ MaterialDocument: '4900050099', MaterialDocumentYear: '2026' });
 
     await handlers.reverse(req(input));                  // rejected

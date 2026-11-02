@@ -1822,6 +1822,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- Live proof (2026-11-02): the authorized reversal of 4900050046/2026 failed at TLS before reaching SAP, so the document is still not reversed. Reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The 261 scan post is still not proven live. Each next run needs read-only data discovery and its own written go. Proposed order: 261, goods receipt, scan-to, because audit findings 2 to 5 changed that code and none of it has run live.
+
 - Goods receipt (2026-11-02): next audit item is finding 6 (plant limits), including the storage-unit path, which checks the client's plant and not the delivery's. Prove the receipt flow live with a written go. Deploy note: `ReservationItem` widens from String(4) to String(6) on HANA.
 
 - Movement 261 (2026-11-02): decide whether the Scan 261 screen should send a client attempt id, which is the only way to tell a repeat of a confirmed posting from a new partial issue of the same quantity.
@@ -1900,6 +1902,66 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 IST — Live reversal of 4900050046/2026 after a second written go: PASS, read back from SAP
+
+- **Status:** PASS for this reversal. Finding 7 stays open for the other write flows, and the 261 scan post is still not proven live.
+- **Command (WRITE, one run):** the same `runSapRoundTrips.js --allow-live-sap` command as the failed run, against `cap-live-rfc` with the certificate loaded. RFC preflight passed; suite `[PASS] [live]`.
+- **READ-ONLY read-back from SAP:** new 262 document 4900050348/2026 with `SMBLN` 4900050046 and `SJAHR` 2026. Document 4900050046/2026 has `CANCELLED` X. `cycle` shows `IsReversed` true, a 262 row with `Reverses` 4900050046/2026/0001, and Reversal done.
+- **Side effects in client 220:** reservation 278650/1 is open again (`ENMNG` 0.000, `KZEAR` blank, Open 1). TR 1000744 (W01) `STATU` changed from blank to `E` and still has no Transfer Order; the meaning of `E` is Not verified. `LTBK-MBLNR` still shows 4900050046.
+- **Change:** `docs/e2e-coverage-matrix.md` row `wmCycle261` moved to SAP 🟢 with this evidence.
+- **Validation:** `npx jest test/unit/tools/e2eCoverageMatrix.test.js test/unit/wm/mvt261Scan.test.js`: 2 suites and 58 tests passed. `git diff --check` clean. The local attempt row was not read.
+- **Not verified:** the meaning of TR status `E`; whether the open reservation or the TR needs clean-up; negative paths in a live run.
+- **Next:** Decide whether reservation 278650/1 and TR 1000744 need clean-up. Then do read-only data discovery for the next live proof.
+
+### 2026-11-02 IST — Fix false `already reversed` on movement 261 reversal: PARTIAL, live proof pending
+
+- **Status:** PARTIAL. Code and tests are done and uncommitted. No SAP write was sent in this change, so the reversal is still not proven live.
+- **Root cause:** `srv/wm/mvt261/service.js` matched `/already|reversed|cancel/i` against an error message that carries the `CancelItem` URL.
+- **Changes:**
+  - `srv/wm/mvt261/service.js`: removed the text match and now uses the shared `classifyPostingError`. `Already reversed` now comes only from the `IsReversed` read before the post. An unknown outcome stays `unconfirmed`, blocks retries and tells the user to check MB51.
+  - `srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js`: a rejected TLS certificate is now `never_reached`, because no request was sent. This shared classifier also serves goods issue postings.
+  - `test/unit/wm/mvt261Scan.test.js`, `test/unit/wm/queueReplayResiliency.test.js`: tests added and updated.
+  - `.claude/launch.json` (local, untracked): `cap-live-rfc` now sets `NODE_EXTRA_CA_CERTS` to the same certificate as `npm start`. Certificate checks stay on.
+- **Behaviour change:** A reversal answered with HTTP 500 is now `unconfirmed`, not `rejected`, so it stays blocked until an operator checks MB51. This matches how goods issue postings are handled.
+- **TEST DECISION:** TEST ADDED and TEST UPDATED.
+- **Validation:**
+  - Focused suites: 7 suites and 187 tests passed.
+  - New tests against the old `service.js`: 5 failed, as expected.
+  - Full `npx jest`: 222 suites passed, 1 skipped; 4,317 tests passed, 59 skipped.
+  - `eslint` on the 4 changed JS files and `git diff --check`: clean.
+  - Dry-run `E2E_SAP_FLOWS=mvt261 node test/e2e/runSapRoundTrips.js`: the first run FAILED because `cap-live-rfc` had no certificate (`self-signed certificate` on the `openItems` read). After the launch change it PASSED for scan and reverse. This proves UI wiring only.
+- **READ-ONLY SAP state after validation:** document 4900050046/2026 `CANCELLED` blank; no reversal rows.
+- **Not verified:** whether SAP accepts `CancelItem` on `HS01` with open TR 1000744; SAP's real refusal text; the local attempt row from the failed run (by the code path `rejected`, which a retry may reclaim); the certificate fingerprint with Basis.
+- **Next:** Send the reversal only after a new written go, then read the result back.
+
+### 2026-11-02 IST — Live reversal of 4900050046/2026 after the user's written go: FAIL, nothing posted in SAP
+
+- **Status:** FAIL for the live run. Blocked on a code fix and a new written go. No tracked code changed. Finding 7 stays open for this flow.
+- **Command (WRITE, one run, not retried):** `ALLOW_LIVE_SAP_TOOLS=1 E2E_SAP_WRITE_FLOWS=mvt261 E2E_SAP_FLOWS=mvt261 E2E_SAP_LIVE_TARGET='S4HANA_DEV - Client 220' TARGET_URL=http://localhost:4010 node test/e2e/runSapRoundTrips.js --allow-live-sap`. RFC preflight passed; the suite failed with HTTP 422 and the dialog `Material document 4900050046/2026 item 0001 is already reversed`.
+- **Actual failure:** The server log shows the `CancelItem` POST failed with `self-signed certificate`. The `cap-live-rfc` launch config runs `cds-serve` directly and so skips the `NODE_EXTRA_CA_CERTS` export in `package.json` `start`. RFC reads still work, which is why every earlier check passed.
+- **READ-ONLY SAP state after the run:** `CANCELLED` blank; no reversal rows; `cycle` shows `IsReversed` false and Reversal open; reservation 278650/1 withdrawn 1 of 1; TR 1000744 unchanged. The local attempt row was not read; by the code path it is `rejected`.
+- **Bug found, not fixed:** `srv/wm/mvt261/service.js:273` tests `/already|reversed|cancel/i` against the error message. The failing message evidently includes the `CancelItem` URL (INFERRED: nothing else in the logged text matches). So any failure, including a timeout with an unknown outcome, can be reported as `already reversed` and stored as `rejected`, which is reclaimable. This also corrects the earlier claim here and to the user that an unclear outcome blocks a retry.
+- **Unresolved:** The trusted certificate is trust-on-first-use; its fingerprint is still not confirmed with Basis.
+- **Next:** Fix the classifier with a test, then rerun with `NODE_EXTRA_CA_CERTS` only after a new written go. The certificate bypass was not used.
+
+### 2026-11-02 IST — Prepare reversal of 4900050046/2026 (audit finding 7): BLOCKED on the user's written go
+
+- **Status:** Blocked. No SAP write was sent. No tracked code changed. The reversal has not run, so nothing is proven live.
+- **Change:** Added an `mvt261.reverse` section to the gitignored `test/e2e/live/testData.json` (reservation 278650, item 1, document 4900050046/2026, item 0001). This section is what a live run would use.
+- **Rehearsal (write stubbed in the browser):** UI toast `Reversal posted. Material document DRYRUN2621/2026`; 1 call to the write action; session errors none. Body: `{"reservation":"278650","item":"1","materialDocument":"4900050046","materialDocumentYear":"2026","materialDocumentItem":"0001"}`. This proves UI wiring only, not SAP behaviour.
+- **READ-ONLY SAP state after the rehearsal:** system label `S4HANA_DEV - Client 220`; document row not reversed; no reversal rows; reservation 278650/1 withdrawn 1 of 1 with `KZEAR` X; TR 1000744 (W01) has `MBLNR` 4900050046, blank `STATU`, no Transfer Order.
+- **Error:** The first rehearsal ran about 1h46m and was stopped. Root cause: my scratchpad script never called `closeBrowser()`, so Node could not exit and `tail` held back the output. Fixed by calling it and adding a 180s limit. The rerun passed. The stuck run's result was never seen, and server logs show it sent no reverse call.
+- **Not verified:** whether SAP accepts `CancelItem` for WM-related `HS01` with open TR 1000744, what happens to that TR, and whether the reservation reopens.
+- **Next:** After the written go, start `cap-live-rfc` on port 4010 and run the `mvt261` Tier C suite in live mode with `E2E_SAP_LIVE_TARGET='S4HANA_DEV - Client 220'`, then read the result back.
+
+### 2026-11-02 IST — READ-ONLY check for audit finding 7 (live proof gap): BLOCKED on the user's decision
+
+- **Change:** None to the code. No SAP write was sent.
+- **SAP evidence (READ-ONLY, `RFC_READ_TABLE`):** Client 220 is "Pre-Test", `T000-CCCATEGORY` = T. Material document 4900050046/2026 still exists (261, 1.000, plant 1120, HS01, reservation 278650/1), and no `MATDOC` row reverses it. RESB 278650/1 shows 1.000 of 1.000 withdrawn, final-issue flag X. TR 1000744 (W01) still points at that document, has blank `STATU`, and has no Transfer Order in `LTAK`.
+- **Proof gap:** From `docs/e2e-coverage-matrix.md`: 3 routes proven, 1 partial, 17 not proven. Goods receipt, 261 and scan-to code changed today and has not run live.
+- **NOT VERIFIED:** Whether SAP accepts a 262 reversal while TR 1000744 is open, and what happens to that TR afterwards.
+- **Next action:** The user decides on the document and gives a written go per run.
 
 ### 2026-11-02 10:05 IST — Goods receipt (101) double-posting protection (audit finding 5): PARTIAL
 
