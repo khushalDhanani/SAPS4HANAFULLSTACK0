@@ -2,14 +2,12 @@ sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/service/ODataClient",
-    "sap/m/MessageToast",
-    "sap/ui/core/Fragment"
+    "sap/m/MessageToast"
 ], function (
     BaseController,
     JSONModel,
     ODataClient,
-    MessageToast,
-    Fragment
+    MessageToast
 ) {
     "use strict";
 
@@ -320,8 +318,6 @@ sap.ui.define([
             }
         },
 
-        onSelectTabFI: function () { this.switchToTab("fi"); },
-        onSelectTabMM: function () { this.switchToTab("mm"); },
         onSelectTabSD: function () { this.switchToTab("sd"); },
         onSelectTabEWM: function () { this.switchToTab("ewm"); },
         /**

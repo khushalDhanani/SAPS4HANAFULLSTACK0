@@ -94,14 +94,6 @@ sap.ui.define([
             this._resetModel(true);
         },
 
-        onHeaderChange: function () {
-            var oModel = this.getView().getModel("newPO");
-            PurchaseOrderModel.updateStatus(oModel);
-            if (oModel.getProperty("/hasError")) {
-                PurchaseOrderModel.validateForm(oModel);
-            }
-        },
-
         /**
          * Lightweight liveChange handler for the Document Type input.
          * Delegates domain validation to PurchaseOrderModel.

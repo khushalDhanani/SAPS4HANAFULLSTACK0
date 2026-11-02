@@ -77,4 +77,4 @@ async function runCreateBapi(rfc, bapi, input, { testRun = false, labels, log } 
     });
 }
 
-module.exports = { failure, clean, sapDate, partnerNumber, materialNumber, documentNumber, todaySap, messages, errorsOf, describe, runCreateBapi };
+module.exports = { failure, clean, sapDate, partnerNumber, materialNumber, documentNumber, todaySap, messages, describe, runCreateBapi };

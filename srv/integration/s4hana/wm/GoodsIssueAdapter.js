@@ -613,9 +613,6 @@ class GoodsIssueAdapter {
     return [...new Set(rows.map((r) => r.WERKS))];
   }
 
-  /** Router that dispatches a posting by MovementType. */
-  async postGoodsIssueByType(data) { return this.posting.postByMovementType(data); }
-
   /**
    * Verify ONE scanned serial number against the open reservation item it is scanned for: the
    * material / plant / storage location come from the reservation in SAP (the caller's storage

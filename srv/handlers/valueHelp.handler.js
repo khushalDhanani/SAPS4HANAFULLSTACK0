@@ -104,5 +104,4 @@ function registerValueHelpHandlers(srv, groups) {
 }
 
 module.exports = registerValueHelpHandlers;
-module.exports.projectionWhere = projectionWhere;
 module.exports.fillAliasColumns = fillAliasColumns;

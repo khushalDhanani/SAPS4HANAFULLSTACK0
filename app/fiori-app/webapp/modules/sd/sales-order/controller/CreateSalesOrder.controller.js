@@ -44,7 +44,6 @@ sap.ui.define([
 
         _loadConfigurationAndDefaults: function (bForce) {
             var that = this;
-            var oModel = this.getView().getModel("newOrder");
 
             // Load server defaults (org, plant, currency, dates) and apply to empty fields
             var pDefaults = SalesOrderService.getSalesOrderDefaults().then(function (oDefaults) {

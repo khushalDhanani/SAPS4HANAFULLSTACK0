@@ -225,10 +225,5 @@ function mapToS4OrderPayload(header, items, _options = {}) {
 
 module.exports = {
     mapToS4InquiryPayload,
-    mapToS4OrderPayload,
-    mapToS4DocumentPayload: (header, items, options = {}) => {
-        return (header?.SalesOrderType && !header?.SalesInquiryType)
-            ? mapToS4OrderPayload(header, items, options)
-            : mapToS4InquiryPayload(header, items, options);
-    }
+    mapToS4OrderPayload
 };

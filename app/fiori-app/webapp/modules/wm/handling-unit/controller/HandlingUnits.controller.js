@@ -521,7 +521,6 @@ sap.ui.define([
             this.getModel("huQr").setProperty("/huNumber", sHuNumber);
             this.getModel("huQr").setProperty("/materialName", sMaterial);
 
-            var self = this;
             if (!this._pQrDialog) {
                 this._pQrDialog = Fragment.load({
                     id: oView.getId(),

@@ -11,8 +11,6 @@
 
 const PLANT_REGEX = /^[A-Za-z0-9]{4}$/;
 const SLOC_REGEX = /^[A-Za-z0-9]{4}$/;
-const COST_CENTER_REGEX = /^[A-Za-z0-9_-]{1,10}$/;
-const GL_ACCOUNT_REGEX = /^[A-Za-z0-9]{1,10}$/;
 const QTY_DECIMAL_REGEX = /^\d+(\.\d{1,3})?$/;
 
 /**
@@ -119,20 +117,6 @@ function checkUnit(value) {
   }
   if (s.length > 3) {
     return { field: 'Unit', message: `Unit of measure '${s}' exceeds maximum length of 3 characters` };
-  }
-  return null;
-}
-
-/**
- * @param {*} value  A receiving plant/sloc (optional field on transfers)
- * @param {'ReceivingPlant'|'ReceivingStorageLocation'} field
- * @returns {{field:string,message:string}|null}
- */
-function checkOptionalFourChar(value, field) {
-  const s = String(value || '').trim();
-  if (!s) return null;
-  if (!PLANT_REGEX.test(s)) {
-    return { field, message: `${field} '${s}' must be exactly 4 alphanumeric characters` };
   }
   return null;
 }
@@ -251,8 +235,6 @@ function buildResult(errors) {
 module.exports = {
   PLANT_REGEX,
   SLOC_REGEX,
-  COST_CENTER_REGEX,
-  GL_ACCOUNT_REGEX,
   QTY_DECIMAL_REGEX,
   isValidCalendarDate,
   checkQuantity,
@@ -260,7 +242,6 @@ module.exports = {
   checkPlant,
   checkStorageLocation,
   checkUnit,
-  checkOptionalFourChar,
   checkDates,
   checkSerialNumbers,
   checkBatch,

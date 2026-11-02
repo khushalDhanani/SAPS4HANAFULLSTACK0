@@ -2255,6 +2255,4 @@ defaultAdapter._cqnWhereToODataFilter = _cqnWhereToODataFilter;
 module.exports = defaultAdapter;
 module.exports.PartialSalesInquiryError = PartialSalesInquiryError;
 module.exports._formatODataV2Date = _formatODataV2Date;
-module.exports._formatODataV2Literal = _formatODataV2Literal;
-module.exports._cqnOrderByToOData = _cqnOrderByToOData;
 module.exports._cqnWhereToODataFilter = _cqnWhereToODataFilter;

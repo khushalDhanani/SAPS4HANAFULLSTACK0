@@ -1,17 +1,9 @@
 sap.ui.define([
-    "saps4hana/fiori/service/ODataClient",
-    "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator"
-], function (ODataClient, Filter, FilterOperator) {
+    "saps4hana/fiori/service/ODataClient"
+], function (ODataClient) {
     "use strict";
 
     var SERVICE_BASE = "/odata/v4/customer-invoice";
-
-    var _FilterOperator = FilterOperator || {
-        EQ: "EQ",
-        NE: "NE",
-        Contains: "Contains"
-    };
 
     var _oModel = null;
 

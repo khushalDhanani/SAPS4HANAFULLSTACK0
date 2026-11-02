@@ -76,5 +76,5 @@ function addPageCheck(result) {
 }
 
 module.exports = {
-  PT_PER_INCH, LABEL_SIZES_IN, normalizeQuarantineLabelOutput, resolveOutputForPlants, pdfPageSize, pageSizeMatches, addPageCheck
+  PT_PER_INCH, normalizeQuarantineLabelOutput, resolveOutputForPlants, pdfPageSize, pageSizeMatches, addPageCheck
 };

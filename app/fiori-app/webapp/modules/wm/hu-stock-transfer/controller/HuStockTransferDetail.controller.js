@@ -26,8 +26,7 @@ sap.ui.define([
                 selectionSummary: "",
                 statusMessage: "",
                 statusStateType: "None",
-                storageBins: [],
-                visualRack: []
+                storageBins: []
             });
             this.setModel(oViewModel, "cockpitView");
 
@@ -272,52 +271,6 @@ sap.ui.define([
                 reservation: sRes,
                 item: sItem
             });
-        },
-
-        onSearchVisualRack: function (oEvent) {
-            var sQuery = oEvent.getParameter("query") || oEvent.getParameter("newValue") || "";
-            var oViewModel = this.getModel("cockpitView");
-            var aAll = oViewModel.getProperty("/allVisualRack") || [];
-
-            if (!sQuery.trim()) {
-                oViewModel.setProperty("/visualRack", aAll);
-                return;
-            }
-
-            var sLower = sQuery.toLowerCase();
-            var aFiltered = aAll.filter(function (it) {
-                return (it.UnitNumber && it.UnitNumber.toLowerCase().includes(sLower)) ||
-                       (it.ActualStorageBin && it.ActualStorageBin.toLowerCase().includes(sLower)) ||
-                       (it.ShelfLevelDesc && it.ShelfLevelDesc.toLowerCase().includes(sLower)) ||
-                       (it.LevelCode && it.LevelCode.toLowerCase().includes(sLower));
-            });
-            oViewModel.setProperty("/visualRack", aFiltered);
-        },
-
-        onCloseVisualRackDialog: function () {
-            if (this._pVisualRackDialog) {
-                this._pVisualRackDialog.then(function (oDialog) {
-                    oDialog.close();
-                });
-            }
-        },
-
-        onSelectRackItem: function (oEvent) {
-            var oItem = (oEvent && typeof oEvent.getParameter === "function" && oEvent.getParameter("listItem")) ||
-                        (oEvent && oEvent.getSource ? oEvent.getSource() : null);
-            if (!oItem || typeof oItem.getBindingContext !== "function") return;
-            var oCtx = oItem.getBindingContext("cockpitView");
-            if (!oCtx) return;
-
-            var sUnit = oCtx.getProperty("UnitNumber") || oCtx.getProperty("ActualStorageBin");
-            if (sUnit) {
-                this.getModel("cockpitView").setProperty("/scanUnitNumber", sUnit);
-                this.onCloseVisualRackDialog();
-                this.onValidateUnit();
-            } else {
-                var sBin = oCtx.getProperty("ActualStorageBin");
-                MessageToast.show("Selected bin " + sBin + " has no specific HU/SU or Bin number.");
-            }
         },
 
         onAddUnitToSelection: function () {

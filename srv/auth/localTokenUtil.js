@@ -197,7 +197,5 @@ module.exports = {
     verifyToken,
     applyBearerToken,
     isDevTokenIssuerEnabled,
-    timingSafeEqual,
-    LOCAL_DEV_ISSUER,
-    LOCAL_DEV_EXPIRY_SECONDS
+    timingSafeEqual
 };

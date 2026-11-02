@@ -44,7 +44,6 @@ sap.ui.define([
     var ASCENT = 0.79;       // text-box top -> baseline, measured in the sample (title, GRN No., barcode text: 0.789)
     var CAP_ASCENT = 0.718;  // Helvetica cap height
     var GAP = 4;             // minimum caption -> value
-    var COL_GAP = 8;         // widest caption -> value column
     var SEP = { dots: 2, opacity: 0.05 }; // row hairlines: whole printer dots thick, 5 % black
     var EXTRA_EDGE_PT = 2 * 72 / 96; // extra 2 CSS px of breathing room inside the unchanged page
     var EDGE_MM = 4;         // safe margin on the page edge

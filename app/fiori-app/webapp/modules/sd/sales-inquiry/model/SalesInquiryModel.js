@@ -142,7 +142,6 @@ sap.ui.define([
         applyConfigurationDefaults: function (oModel, oConfigData) {
             if (!oModel || !oConfigData) return;
 
-            var oHeader = oModel.getProperty("/header") || {};
             var oUserMod = oModel.getProperty("/userModified") || {};
 
             // 1. Inquiry Type: Default to ZIN if valid in Inquiry Types, otherwise first valid
@@ -569,7 +568,6 @@ sap.ui.define([
         validateSingleField: function (oModel, sField) {
             if (!oModel || !sField) return;
             var val = oModel.getProperty("/header/" + sField);
-            var oErr = oModel.getProperty("/errors/" + sField);
 
             if (!val || String(val).trim() === "") {
                 this.setFieldValidation(oModel, sField, "Error", sField + " is mandatory");

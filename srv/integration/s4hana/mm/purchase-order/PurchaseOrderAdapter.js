@@ -317,27 +317,6 @@ class PurchaseOrderAdapter {
         }
       };
 
-      // Plain-text /$count responses.
-      const _fetchRawCount = async (serviceRelPath) => {
-        if (authFailed) return null;
-        try {
-          const res = await executeFn(dest, {
-            method: 'get',
-            url: `${rootUrl}${serviceRelPath}`,
-            headers: { ...reqHeaders, 'Accept': 'text/plain, */*' }
-          });
-          return toCount(res && res.data);
-        } catch (err) {
-          lastError = err.message || String(err);
-          const status = err.response?.status || err.status;
-          if (status === 401 || String(lastError).includes('401')) {
-            authFailed = true;
-          }
-          LOG.warn(`Dashboard metric unavailable (${serviceRelPath}): ${err.message}`);
-          return null;
-        }
-      };
-
       const sources = {
         totalCount: () => fetchCount('/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV/C_PurchaseOrderFs?$inlinecount=allpages&$top=1&$select=PurchaseOrder'),
         supplierCount: () => fetchCount('/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/C_MM_SupplierValueHelp?$inlinecount=allpages&$top=1'),

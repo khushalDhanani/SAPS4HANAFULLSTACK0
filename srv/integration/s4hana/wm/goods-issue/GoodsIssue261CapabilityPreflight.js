@@ -120,8 +120,5 @@ async function assert261CapabilityReady({
 
 module.exports = {
   METADATA_PATH,
-  READBACK_TABLE,
-  assert261Request,
-  assertMaterialDocumentMetadata,
   assert261CapabilityReady
 };

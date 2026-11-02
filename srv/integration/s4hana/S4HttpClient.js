@@ -410,6 +410,5 @@ module.exports = {
     S4HttpError,
     serviceRootOf,
     joinQuery,
-    DESTINATION_NOT_CONFIGURED,
-    LOCAL_CREDENTIAL_SOURCES
+    DESTINATION_NOT_CONFIGURED
 };

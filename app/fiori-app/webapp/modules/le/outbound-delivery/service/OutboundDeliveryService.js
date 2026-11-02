@@ -1,22 +1,9 @@
 sap.ui.define([
-    "saps4hana/fiori/service/ODataClient",
-    "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator"
-], function (ODataClient, Filter, FilterOperator) {
+    "saps4hana/fiori/service/ODataClient"
+], function (ODataClient) {
     "use strict";
 
     var SERVICE_BASE = "/odata/v4/outbound-delivery";
-
-    var _FilterOperator = FilterOperator || {
-        EQ: "EQ",
-        NE: "NE",
-        GT: "GT",
-        GE: "GE",
-        LT: "LT",
-        LE: "LE",
-        BT: "BT",
-        Contains: "Contains"
-    };
 
     var _oModel = null;
 
@@ -224,40 +211,6 @@ sap.ui.define([
                 return ODataClient.post(SERVICE_BASE + "/createBillingDocument", oPayload, { "If-Match": sETag });
             }
             return ODataClient.post(SERVICE_BASE + "/createBillingDocument", oPayload);
-        },
-
-        /**
-         * Fetch supported delivery document types for delivery without reference.
-         *
-         * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
-         * @param {sap.ui.model.Filter[]} [aFilters]
-         * @param {Object} [mParameters]
-         * @returns {Promise<Array>}
-         */
-        getDeliveryWithoutRefTypes: function (oModel, aFilters, mParameters) {
-            if (oModel && typeof oModel.bindList !== "function") {
-                mParameters = aFilters;
-                aFilters = oModel;
-                oModel = _oModel;
-            }
-            return _readEntitySet(oModel || _oModel, "/DeliveryWithoutRefTypes", aFilters, mParameters);
-        },
-
-        /**
-         * Fetch ship-to parties value help for delivery without reference.
-         *
-         * @param {sap.ui.model.odata.v4.ODataModel} [oModel]
-         * @param {sap.ui.model.Filter[]} [aFilters]
-         * @param {Object} [mParameters]
-         * @returns {Promise<Array>}
-         */
-        getDeliveryWithoutRefShipToParties: function (oModel, aFilters, mParameters) {
-            if (oModel && typeof oModel.bindList !== "function") {
-                mParameters = aFilters;
-                aFilters = oModel;
-                oModel = _oModel;
-            }
-            return _readEntitySet(oModel || _oModel, "/DeliveryWithoutRefShipToParties", aFilters, mParameters);
         },
 
         /**

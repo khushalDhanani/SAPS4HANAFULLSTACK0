@@ -831,11 +831,6 @@ class GoodsIssuePostingClient extends BaseGoodsIssueClient {
    *
    * @private
    */
-  /** Midnight UTC today. SAP Edm.DateTime posting/document dates carry no time part. */
-  static _today() {
-    return new Date().setUTCHours(0, 0, 0, 0);
-  }
-
   _extractStatus(err) {
     if (!err) return null;
     if (typeof err.status === 'number') return err.status;

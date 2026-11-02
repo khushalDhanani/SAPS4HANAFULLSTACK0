@@ -128,4 +128,4 @@ class SalesInquiryRfcCreator {
     }
 }
 
-module.exports = { SalesInquiryRfcCreator, buildInput, BAPI, UNSUPPORTED_HEADER_FIELDS };
+module.exports = { SalesInquiryRfcCreator, buildInput, BAPI };

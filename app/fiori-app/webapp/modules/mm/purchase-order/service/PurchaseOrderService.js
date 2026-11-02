@@ -191,24 +191,6 @@ sap.ui.define([
         },
 
         /**
-         * Queries a single Purchase Order by key.
-         *
-         * @param {sap.ui.model.odata.v4.ODataModel|string} [oModelOrPo]
-         * @param {string} [sPoNumber]
-         * @returns {Promise<Object>}
-         */
-        getPurchaseOrder: function (oModelOrPo, sPoNumber) {
-            var oModel = _isModel(oModelOrPo) ? oModelOrPo : _oModel;
-            var sPoVal = _isModel(oModelOrPo) ? sPoNumber : oModelOrPo;
-            if (oModel && typeof oModel.bindContext === "function") {
-                var oContextBinding = oModel.bindContext("/PurchaseOrders('" + encodeURIComponent(sPoVal) + "')");
-                return oContextBinding.requestObject();
-            }
-            var sUrl = SERVICE_BASE + "/PurchaseOrders('" + encodeURIComponent(sPoVal) + "')";
-            return ODataClient.get(sUrl);
-        },
-
-        /**
          * Loads actual configuration and master data from CAP OData service concurrently:
          * Document Types, Company Codes, Purchasing Organizations, and Purchasing Groups.
          *

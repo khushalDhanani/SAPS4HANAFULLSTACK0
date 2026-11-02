@@ -146,7 +146,6 @@ function normalizeReversalPayload(data, context = {}) {
 module.exports = {
   toIsoDateString,
   sanitizeScannerString,
-  cleanSerials,
   baseNormalized,
   normalizeReversalPayload
 };

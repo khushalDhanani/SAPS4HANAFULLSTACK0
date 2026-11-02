@@ -414,5 +414,4 @@ module.exports.normalizeInput = normalizeInput;
 module.exports.normalizeListInput = normalizeListInput;
 module.exports.LIST_MAX_ITEMS = LIST_MAX_ITEMS;
 module.exports.FUNCTION_NAME = FUNCTION_NAME;
-module.exports.QUARANTINE_STORAGE_TYPES = QUARANTINE_STORAGE_TYPES;
 module.exports.ATINN = ATINN;

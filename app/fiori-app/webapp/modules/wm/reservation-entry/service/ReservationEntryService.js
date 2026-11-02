@@ -66,13 +66,6 @@ sap.ui.define([
             });
         },
 
-        getStatuses: function () {
-            const sUrl = SERVICE_URL + "/ReservationStatuses";
-            return ODataClient.get(sUrl).then(function (data) {
-                return (data && data.value) ? data.value : (Array.isArray(data) ? data : []);
-            });
-        },
-
         createReservation: function (oPayload) {
             const sUrl = SERVICE_URL + "/createReservation";
             return ODataClient.post(sUrl, oPayload);

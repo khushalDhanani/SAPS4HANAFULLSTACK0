@@ -271,7 +271,6 @@ sap.ui.define([
         // =========================================================================
 
         _loadMetrics: function () {
-            var that = this;
             var oViewModel = this.getView().getModel("customerReturnsView");
             if (!oViewModel) {
                 return Promise.resolve();
@@ -295,7 +294,6 @@ sap.ui.define([
         },
 
         _loadReasons: function () {
-            var that = this;
             var oModel = this._oReturnReasonsModel;
             if (!oModel) {
                 return Promise.resolve();

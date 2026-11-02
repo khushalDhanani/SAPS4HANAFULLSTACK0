@@ -115,7 +115,6 @@ sap.ui.define([
                     oBin.SectionDisplay = oBin.BinMasterFound === false ? sMasterUnavailable : (oBin.SectionCode ? (oBin.SectionName || oBin.SectionCode) : sUnmaintained);
                     return oBin;
                 });
-                var aDecoratedCells = aAllBins.filter(function (b) { return b.IsRackBin === true; });
 
                 this._oViewModel.setProperty("/bins", aAllBins);
                 this._oViewModel.setProperty("/filteredBins", aAllBins.slice());

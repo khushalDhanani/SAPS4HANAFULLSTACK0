@@ -86,15 +86,6 @@ sap.ui.define([
             } catch (e) {
                 // Ignore localStorage errors
             }
-        },
-
-        clearRecentScans: function (oComponent) {
-            var sKey = this.getStorageKey(oComponent);
-            if (sKey) {
-                try {
-                    localStorage.removeItem(sKey);
-                } catch (e) {}
-            }
         }
     };
 });
