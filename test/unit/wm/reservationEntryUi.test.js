@@ -93,9 +93,24 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
         it('D7: the create form carries no master-data defaults (only the first movement type of the select)', () => {
             const subject = createDetailSubject();
             const defaults = subject._getDefaultCreateData();
-            expect(defaults.MovementType).toBe('');
+            expect(defaults.MovementType).toBe('311');
             for (const f of BUSINESS_FIELDS) expect(`${f}=${defaults[f]}`).toBe(`${f}=`);
             expect(Object.keys(defaults).sort()).toEqual(['MovementType', ...BUSINESS_FIELDS].sort());
+        });
+
+        it('initializes default MovementType to 311 so UI select and model stay synchronized without validation failure', () => {
+            const subject = createDetailSubject();
+            const defaults = subject._getDefaultCreateData();
+            expect(defaults.MovementType).toBe('311');
+            const populated = Object.assign({}, defaults, {
+                Plant: '1120',
+                StorageLocation: 'HS01',
+                ReceivingStorageLocation: 'CS01',
+                Material: '1000000045',
+                Quantity: 5,
+                Unit: 'KG'
+            });
+            expect(subject.validateForm(populated)).toBeNull();
         });
 
         it.each(['201', '241', '261', '301', '311'])('D7: switching to %s prefills no business value', (mvt) => {

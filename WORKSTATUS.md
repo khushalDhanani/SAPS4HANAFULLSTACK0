@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Reservation create (/wm/reservation-entry/create) Movement Type synchronization fixed (2026-11-02 17:35 IST) — PASS, uncommitted:** On `#/wm/reservation-entry/create`, `ReservationEntryDetail.controller.js` initialized `MovementType: ""` in `_getDefaultCreateData()`, whereas `ReservationEntryDetail.view.xml` `<Select id="selectMovementType">` contained no blank item (`key=""`) and defaulted visually to item 0 (`311 - Storage Location Transfer`). UI5's two-way data binding does not update the model on fallback display, leaving `create>/MovementType` empty, hiding the 311 dynamic fields (Receiving Storage Location), suppressing `change` when clicking 311 in the dropdown, and causing `validateForm` to reject with `"Movement Type is required (201, 241, 311, 301, 261)"`. Updated `_getDefaultCreateData()` to default `MovementType: "311"`, aligning model and view as originally documented in controller comment (`// MovementType is the first entry of the select`). Dynamic fields for 311 are now immediately visible and validation passes cleanly. Target unit tests updated and added in `reservationEntryUi.test.js` (72/72 passed). All 95 WM unit suites (2,510 passed), UI5 linter (clean), UI5 build (1.29 s), root ESLint (clean), secret scan (clean), and browser E2E `verifyWmScreens.e2e.js` (17/17 steps passed including Reservation entry create) PASS. See Change Entry 2026-11-02 17:35 IST.
+
 - **Dead-Code Cleanup (Medium-Confidence Candidates: sapFacts.js, obsolete requires, tools audit) (2026-11-02 17:15 IST) — PASS, uncommitted:**
   1. `srv/integration/s4hana/sapFacts.js`: Removed 8 unused dead exports (`MESSAGES`, `RFBSK`, `STATV`, `REFERENCE_PERSISTED_MOVEMENT_TYPES`, `systemUtcOffsetMinutes`, `sapLocalToEpochMs`, `rfcMessageId`, `_resetForTests`) and dead internal state (`offsetPromise`), reducing file from 106 lines to 26 lines. Retained `parseSapNumber` with defensive dash handling. Added dedicated unit test suite `test/unit/wm/sapFacts.test.js` (6/6 tests passing).
   2. `srv/integration/s4hana/wm/goods-issue/BaseGoodsIssueClient.js`: Removed obsolete unused require `const LOG = require('../../logger')('goods-issue-client');`.
@@ -39,6 +41,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Reservation create Movement Type default (2026-11-02 17:35 IST): RESOLVED (PASS, uncommitted). Model and Select dropdown synchronized with `MovementType: "311"`; unit tests (72/72) and browser E2E (17/17) pass. Commit when the user asks.
 - Reservation list date display (2026-11-02): RESOLVED (2026-11-02 17:00 IST). Date resolved and formatted on `#/wm/reservation-entry` across UI XML, controller formatter, CAP service mapping, and S/4HANA OData client; verifyWmScreens 16/16 steps PASS. Commit when the user asks.
 - Reservation list (2026-11-02): user confirms the fix on `#/wm/reservation-entry` after a browser refresh; commit when the user asks.
 - Warehouse scan-to detail (2026-11-02): RESOLVED & COMMITTED (`cd317a3d`). Completed TR 1000992 with LTBK-STATU = 'U' excluded from open TR list.
@@ -63,6 +66,34 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-02 17:35 IST — Reservation Entry Create Movement Type Synchronization: PASS
+
+- **Status:** PASS.
+- **Why:** On `#/wm/reservation-entry/create`, user reported error `"Movement Type is required (201, 241, 311, 301, 261)"` when attempting to create a reservation.
+- **Root Cause:**
+  1. `ReservationEntryDetail.controller.js`: `_getDefaultCreateData()` initialized `MovementType: ""` (empty string), despite the author comment stating `// MovementType is the first entry of the select.`.
+  2. `ReservationEntryDetail.view.xml`: `<Select id="selectMovementType">` has keys `311`, `201`, `241`, `301`, `261` with no blank item (`key=""`). In OpenUI5, when `selectedKey` is empty and no matching item exists, `sap.m.Select` with `forceSelection="true"` displays item 0 (`311`) visually.
+  3. UI5's two-way data binding does not push fallback selection back into the model, nor does it fire `change`. The model retained `create>/MovementType === ""`.
+  4. Movement 311 dynamic fields (Receiving Storage Location) remained hidden because `visible="{= ${create>/MovementType} === '311' || ${create>/MovementType} === '301' }"`.
+  5. Clicking "311" in the dropdown did not fire `change` because index 0 was already selected in the UI control.
+  6. Submitting triggered `validateForm(oData)` line 491: `if (!oData.MovementType) return "Movement Type is required (201, 241, 311, 301, 261)"`.
+- **Changes:**
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryDetail.controller.js`:
+    - Updated `_getDefaultCreateData()` line 50 to return `MovementType: "311"`.
+  - `test/unit/wm/reservationEntryUi.test.js`:
+    - Updated `_getDefaultCreateData` default test to expect `'311'`.
+    - Added test `initializes default MovementType to 311 so UI select and model stay synchronized without validation failure` (72/72 passed).
+- **Verification Commands Run:**
+  - `npx jest test/unit/wm/reservationEntryUi.test.js`: PASS (72/72 tests).
+  - `npx jest test/unit/wm/reservationEntry`: PASS (3 suites, 181/181 tests).
+  - `npx jest test/unit/wm`: PASS (95 passed suites, 1 skipped, 2,510 passed tests, 56 skipped, 0 failed).
+  - `cd app/fiori-app && npm run lint`: PASS (Success! No findings detected).
+  - `cd app/fiori-app && npm run build`: PASS (Build succeeded in 1.29 s).
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `npm run scan:secrets`: PASS (0 secrets, credentials, or private keys detected).
+  - `ALLOW_LIVE_SAP_TOOLS=1 node test/e2e/wm/verifyWmScreens.e2e.js --allow-live-sap`: PASS (17/17 steps passed).
+- **Assumptions:** None.
 
 ### 2026-11-02 17:15 IST — Dead-Code Cleanup (Medium-Confidence Candidates): PASS
 
