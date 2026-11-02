@@ -5,7 +5,7 @@ const BaseGoodsIssueClient = require('./BaseGoodsIssueClient');
 // the 2,000-item scan slow. Newest reservations first, so a truncated list keeps the recent ones.
 const OPEN_RESV_SELECT = [
   'Reservation', 'ReservationItem', 'OrderID', 'Plant', 'StorageLocation', 'GoodsMovementType', 'GoodsMovementTypeName',
-  'Product', 'ProductName', 'ResvnItmRequiredQtyInBaseUnit', 'ResvnItmWithdrawnQtyInBaseUnit'
+  'Product', 'ProductName', 'ResvnItmRequiredQtyInBaseUnit', 'ResvnItmWithdrawnQtyInBaseUnit', 'MatlCompRequirementDate'
 ].join(',');
 
 /**
@@ -182,6 +182,7 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
               MovementType: r.GoodsMovementType || '',
               MovementTypeName: r.GoodsMovementTypeName || '',
               CreatedByUser: r.CreatedByUser || r.UserID || '',
+              ReservationDate: this._formatDate(r.MatlCompRequirementDate) || '',
               ItemCount: 1,
               ItemCountPartial: false,
               SampleMaterial: r.Product || '',
@@ -190,6 +191,9 @@ class GoodsIssueReservationsClient extends BaseGoodsIssueClient {
           } else {
             const entry = resvMap.get(sRes);
             entry.ItemCount++;
+            if (!entry.ReservationDate && r.MatlCompRequirementDate) {
+              entry.ReservationDate = this._formatDate(r.MatlCompRequirementDate) || '';
+            }
             if (!entry.OrderNo && r.OrderID) entry.OrderNo = r.OrderID;
             if (!entry.StorageLocation && r.StorageLocation) entry.StorageLocation = r.StorageLocation;
             if (!entry.CreatedByUser && (r.CreatedByUser || r.UserID)) entry.CreatedByUser = r.CreatedByUser || r.UserID;

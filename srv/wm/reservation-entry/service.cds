@@ -341,6 +341,7 @@ service ReservationEntryService {
         ReceivingStorageLocation : String(4);
         OrderNo                  : String(12);
         CreatedByUser            : String(12);
+        ReservationDate          : Date;
         ItemCount                : Integer;
         DisplayText              : String(150);
     }
@@ -373,6 +374,7 @@ service ReservationEntryService {
         SubNumber                : String(4);
         WarehouseNumber          : String(3);
         CreatedByUser            : String(12);
+        ReservationDate          : Date;
         Status_code              : String(2);
         StatusText               : String(40);
         TransferRequirement      : String(10);

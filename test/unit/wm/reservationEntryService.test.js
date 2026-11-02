@@ -1837,6 +1837,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
           ReservationNo: '0000525868', MovementType: '301', MovementTypeName: 'TF trfr.plnt to plnt',
           SampleMaterial: '8000009753', SampleMaterialDesc: 'iPhone 16', Plant: '1120', StorageLocation: 'CS01',
           ReceivingPlant: '1110', ReceivingStorageLocation: 'CS01', OrderNo: '', CreatedByUser: 'KHUSHAL',
+          ReservationDate: '2026-10-15',
           ItemCount: 1, DisplayText: 'Reservation 0000525868 (TF • Plant 1120 • 1 item)'
         }
       ]);
@@ -1857,6 +1858,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
         MaterialName: 'iPhone 16',
         Plant: '1120',
         ReceivingPlant: '1110',
+        ReservationDate: '2026-10-15',
         ItemCount: 1
       });
     });

@@ -211,7 +211,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(q).toContain(encodeURIComponent("GoodsMovementType eq '261'"));
       expect(q).not.toContain(encodeURIComponent("'201'"));
       expect(q).not.toContain(encodeURIComponent("'531'"));
-      expect(q).toContain('$select=Reservation,ReservationItem,OrderID,Plant,StorageLocation,GoodsMovementType,GoodsMovementTypeName,Product,ProductName,ResvnItmRequiredQtyInBaseUnit,ResvnItmWithdrawnQtyInBaseUnit');
+      expect(q).toContain('$select=Reservation,ReservationItem,OrderID,Plant,StorageLocation,GoodsMovementType,GoodsMovementTypeName,Product,ProductName,ResvnItmRequiredQtyInBaseUnit,ResvnItmWithdrawnQtyInBaseUnit,MatlCompRequirementDate');
       expect(q).toContain(`$orderby=${encodeURIComponent('Reservation desc')}`);
       expect(q).toContain('$top=1000&$skip=0');
     });
@@ -492,6 +492,33 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
 
       // No items have OpenQty > 0, so the reservation is not listed
       expect(result).toHaveLength(0);
+    });
+
+    it('populates ReservationDate formatted from MatlCompRequirementDate', async () => {
+      const mockAdapter = {
+        _get: jest.fn().mockResolvedValue([
+          {
+            Reservation: '519366',
+            ReservationItem: '1',
+            OrderID: '40001',
+            Plant: '1120',
+            GoodsMovementType: '261',
+            GoodsMovementTypeName: 'GI for order',
+            Product: 'MAT01',
+            ProductName: 'Material 1',
+            ResvnItmRequiredQtyInBaseUnit: '100',
+            ResvnItmWithdrawnQtyInBaseUnit: '20',
+            MatlCompRequirementDate: '/Date(1753660800000)/'
+          }
+        ])
+      };
+
+      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
+      const result = await reservationsClient.getOpenReservations('261', '1120');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].ReservationNo).toBe('519366');
+      expect(result[0].ReservationDate).toBe('2025-07-28');
     });
 
     it('should calculate openQty and attach packaging units in getOpenItems', async () => {

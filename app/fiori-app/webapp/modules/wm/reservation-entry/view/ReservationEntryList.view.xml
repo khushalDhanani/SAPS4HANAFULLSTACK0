@@ -128,9 +128,9 @@
                                     <Text text="{= ${view>CreatedByUser} || '-' }" design="Bold" />
                                 </HBox>
                                 <Text
-                                    text="{= ${view>createdAt} ? ${path: 'view>createdAt', formatter: '._formatDateIso'} : (${view>ReservationDate} || '') }"
+                                    text="{parts: [{path: 'view>ReservationDate'}, {path: 'view>createdAt'}], formatter: '._formatDateIso'}"
                                     class="textMuted"
-                                    visible="{= !!${view>createdAt} || !!${view>ReservationDate} }" />
+                                    visible="{= !!${view>ReservationDate} || !!${view>createdAt} }" />
                             </VBox>
 
                             <ObjectIdentifier

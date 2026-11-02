@@ -12,6 +12,7 @@ const { userFacingSapError } = require('../../common/sapErrorText');
 const { classifyCreateFailure } = require('./ReservationAttemptStore');
 const { validateReservationInput, getMovementConfig, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
 const { plantScope, applyPlantScope, isPlantAllowed, assertPlantsInScope } = require('./readScope');
+const { formatDateToYMD } = require('../../common/dateUtils');
 const LOG = cds.log('reservation-entry');
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 const reservationNoKey = (value) => sapKey(value, 'rsnum').padStart(10, '0');
@@ -477,7 +478,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       const s4Rspos = String(resItem || '0001').padStart(4, '0');
       try {
         const [rkpf, resb] = await Promise.all([
-          adapter.rfc.readTable('RKPF', ['BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO', 'USNAM', 'AUFNR'], [`RSNUM = '${s4Rsnum}'`], 1),
+          adapter.rfc.readTable('RKPF', ['BWART', 'KOSTL', 'ANLN1', 'ANLN2', 'UMWRK', 'UMLGO', 'USNAM', 'AUFNR', 'RSDAT'], [`RSNUM = '${s4Rsnum}'`], 1),
           adapter.rfc.readTable('RESB', ['MATNR', 'WERKS', 'LGORT', 'BDMNG', 'ENMNG', 'MEINS', 'CHARG', 'KZEAR', 'AUFNR'], [`RSNUM = '${s4Rsnum}'`, `AND RSPOS = '${s4Rspos}'`], 1)
         ]);
         const h = rkpf && rkpf[0];
@@ -594,7 +595,8 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           ExternalId: `${strip(resNo)}/${s4Rspos}`,
           LogHandle: '',
           CreatedByUser: (h && h.USNAM) || '',
-          createdBy: (h && h.USNAM) || ''
+          createdBy: (h && h.USNAM) || '',
+          ReservationDate: (h && h.RSDAT) ? formatDateToYMD(h.RSDAT) : ''
         };
       } catch (_e) {
         return null;
@@ -2200,6 +2202,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       if (!live.CreatedByUser && (track?.CreatedByUser || track?.createdBy)) {
         live.CreatedByUser = track.CreatedByUser || track.createdBy;
       }
+      if (!live.ReservationDate && (track?.ReservationDate || track?.createdAt)) {
+        live.ReservationDate = track.ReservationDate || (track.createdAt ? String(track.createdAt).substring(0, 10) : '');
+      }
       return live;
     });
 
@@ -2243,6 +2248,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           OrderNo: r.OrderNo || '',
           OrderID: r.OrderNo || '',
           CreatedByUser: r.CreatedByUser || '',
+          ReservationDate: r.ReservationDate || '',
           ItemCount: r.ItemCount || 0,
           DisplayText: r.DisplayText || '',
           Status_code: STATUS.RES_CREATED,

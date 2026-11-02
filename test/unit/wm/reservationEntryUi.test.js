@@ -717,8 +717,61 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             const listSubject = Object.create(listCtrl);
             expect(listSubject._formatDateIso(null)).toBe('');
             expect(listSubject._formatDateIso('2026-10-10')).toBe('2026-10-10');
+            expect(listSubject._formatDateIso('20261016')).toBe('2026-10-16');
+            expect(listSubject._formatDateIso('/Date(1753660800000)/')).toBe('2025-07-28');
+            expect(listSubject._formatDateIso(null, '2026-10-12T08:30:00.000Z')).toBe('2026-10-12');
             const d = new Date(2026, 9, 10); // month is 0-indexed, so 9 = October
             expect(listSubject._formatDateIso(d)).toBe('2026-10-10');
+        });
+
+        it('loadData populates and formats ReservationDate on both tracked and SAP-only reservations', async () => {
+            const serviceMock = {
+                getEntries: jest.fn().mockResolvedValue([
+                    { ReservationNo: '0000527594', ReservationItem: '0001', MovementType: '311', ReservationDate: '2026-10-14', Status_code: '02' }
+                ]),
+                getOpenReservations: jest.fn().mockResolvedValue([
+                    { ReservationNo: '527595', ReservationItem: '0001', MovementType: '311', ReservationDate: '2026-10-16', Status_code: '01' }
+                ])
+            };
+
+            const viewModel = new FakeJSONModel({
+                filterMvtType: '',
+                filterPlant: '',
+                entries: [],
+                allEntries: [],
+                busy: false
+            });
+
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oService: serviceMock,
+                _oViewModel: viewModel
+            });
+
+            await listSubject.loadData();
+            const entries = viewModel.getProperty('/entries');
+            expect(entries).toHaveLength(2);
+            expect(entries[0].ReservationNo).toBe('0000527595');
+            expect(entries[0].ReservationDate).toBe('2026-10-16');
+            expect(entries[1].ReservationNo).toBe('0000527594');
+            expect(entries[1].ReservationDate).toBe('2026-10-14');
+        });
+
+        it('searches by ReservationDate in onSearchFieldSearch', () => {
+            const all = [
+                { ReservationNo: '0000527594', MovementType: '311', ReservationDate: '2026-10-14' },
+                { ReservationNo: '0000527595', MovementType: '311', ReservationDate: '2026-10-16' }
+            ];
+            const viewModel = new FakeJSONModel({
+                allEntries: all,
+                entries: all
+            });
+            const listSubject = Object.assign(Object.create(listCtrl), {
+                _oViewModel: viewModel
+            });
+
+            listSubject.onSearchFieldSearch({ getParameter: () => '2026-10-16' });
+            expect(viewModel.getProperty('/entries')).toHaveLength(1);
+            expect(viewModel.getProperty('/entries')[0].ReservationNo).toBe('0000527595');
         });
 
         it('keeps retry on the detail page and navigates there from the list', () => {

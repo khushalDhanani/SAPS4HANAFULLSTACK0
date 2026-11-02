@@ -90,6 +90,7 @@ sap.ui.define([
                         e.CreatedByUser = e.CreatedByUser || e.createdBy || e.USNAM || "";
                         e.OrderNo = e.OrderNo || e.OrderID || "";
                         e.ItemCount = e.ItemCount || 1;
+                        e.ReservationDate = that._formatDateIso(e.ReservationDate, e.createdAt);
 
                         const sClean = fnNorm(e.ReservationNo);
                         const sPad = e.ReservationNo;
@@ -126,6 +127,9 @@ sap.ui.define([
                             if (!existing.MaterialName && o.MaterialName) {
                                 existing.MaterialName = o.MaterialName;
                             }
+                            if (!existing.ReservationDate && o.ReservationDate) {
+                                existing.ReservationDate = that._formatDateIso(o.ReservationDate);
+                            }
                         } else {
                             o.ReservationNo = sPad;
                             o.Material = fnCleanMaterial(o.Material);
@@ -133,6 +137,7 @@ sap.ui.define([
                             o.CreatedByUser = o.CreatedByUser || o.USNAM || o.createdBy || "";
                             o.OrderNo = o.OrderNo || o.OrderID || "";
                             o.ItemCount = o.ItemCount || 1;
+                            o.ReservationDate = that._formatDateIso(o.ReservationDate);
 
                             mSeen[sClean] = o;
                             mSeen[sPad] = o;
@@ -201,6 +206,7 @@ sap.ui.define([
                     (e.MovementType && e.MovementType.includes(sQuery)) ||
                     (e.MovementTypeName && e.MovementTypeName.toLowerCase().includes(sQuery)) ||
                     (e.CreatedByUser && e.CreatedByUser.toLowerCase().includes(sQuery)) ||
+                    (e.ReservationDate && e.ReservationDate.includes(sQuery)) ||
                     (e.OrderNo && e.OrderNo.toLowerCase().includes(sQuery)) ||
                     (e.Plant && e.Plant.toLowerCase().includes(sQuery)) ||
                     (e.StorageLocation && e.StorageLocation.toLowerCase().includes(sQuery)) ||
@@ -212,11 +218,28 @@ sap.ui.define([
             this._oViewModel.setProperty("/entries", aFiltered);
         },
 
-        _formatDateIso: function (sVal) {
+        _formatDateIso: function (sResDate, sCreatedAt) {
+            const sVal = sResDate || sCreatedAt;
             if (!sVal) return "";
             try {
-                if (typeof sVal === "string" && /^\d{4}-\d{2}-\d{2}/.test(sVal)) {
-                    return sVal.substring(0, 10);
+                if (typeof sVal === "string") {
+                    const sTrimmed = sVal.trim();
+                    if (/^\d{4}-\d{2}-\d{2}/.test(sTrimmed)) {
+                        return sTrimmed.substring(0, 10);
+                    }
+                    if (/^\d{8}$/.test(sTrimmed)) {
+                        return sTrimmed.substring(0, 4) + "-" + sTrimmed.substring(4, 6) + "-" + sTrimmed.substring(6, 8);
+                    }
+                    const m = /\/Date\((\d+)(?:[+-]\d+)?\)\//.exec(sTrimmed);
+                    if (m) {
+                        const d = new Date(parseInt(m[1], 10));
+                        if (!isNaN(d.getTime())) {
+                            const year = d.getFullYear();
+                            const month = String(d.getMonth() + 1).padStart(2, "0");
+                            const day = String(d.getDate()).padStart(2, "0");
+                            return year + "-" + month + "-" + day;
+                        }
+                    }
                 }
                 const d = (sVal instanceof Date) ? sVal : new Date(sVal);
                 if (isNaN(d.getTime())) return String(sVal);

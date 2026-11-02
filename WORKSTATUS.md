@@ -7,7 +7,9 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
-- **Warehouse scan-to open TR list completed-TR leak fixed (2026-11-02 16:40 IST) — PASS, uncommitted:** `getOpenTRs` previously queried `LTBK` with `"AND STATU <> 'E'"` only. In SAP S/4HANA WM, transfer posting / posting change TRs (e.g. movement 311 `0001000992` created by MATDOC `4900050356` and processed via TO `0001037677`) receive `STATU = 'U'` upon completion, leaking into the open TR list and sorting to row 1. `TrToAdapter.js` now filters `STATU <> 'E'` AND `STATU <> 'U'` in both the `LTBK` query and in-memory list/lookup/candidate checks. `WarehouseScanToDetail.controller.js` guards against `oDetail.Status === 'U'`. Unit tests added in `trToAdapter.test.js` (79/79 passed) and `warehouseScanToUi.test.js` (67/67 passed); all 94 WM unit suites (2,500 tests passed) and full browser E2E `verifyWmScreens.e2e.js` (16/16 steps passed) and `roundTripScanTo.e2e.js` (createTO passed). See Change Entry 2026-11-02 16:40 IST.
+- **Reservation entry list (/wm/reservation-entry) Date resolution & formatting fixed (2026-11-02 17:00 IST) — PASS, uncommitted:** In `ReservationEntryList.view.xml`, the date display line under Created By used an invalid OpenUI5 nested expression binding `text="{= ${view>createdAt} ? ${path: 'view>createdAt', formatter: '._formatDateIso'} : (${view>ReservationDate} || '') }"`, which caused UI5 expression parsing to fail and evaluate to empty string. Furthermore, for open SAP reservations fetched via `getOpenReservations`, `GoodsIssueReservationsClient.js` did not include `MatlCompRequirementDate` in `OPEN_RESV_SELECT`, `service.cds` omitted `ReservationDate : Date;` on `OpenReservationRow` and `ReservationDetailRow`, and `service.js` did not map `ReservationDate`. In `ReservationEntryList.controller.js`, `_formatDateIso` was expanded to format compact SAP `YYYYMMDD` (`20261016` from `RKPF-RSDAT`), OData `/Date(ms)/`, and ISO strings into `YYYY-MM-DD`, with composite fallback `(ReservationDate, createdAt)`. View binding updated to standard `{parts: [{path: 'view>ReservationDate'}, {path: 'view>createdAt'}], formatter: '._formatDateIso'}`. Target unit tests added and updated in `goodsIssueClients.test.js` (24/24 passed), `reservationEntryService.test.js` (99/99 passed), and `reservationEntryUi.test.js` (116/116 passed). All 94 WM unit suites (2,503 passed), root ESLint (clean), UI5 linter (clean), UI5 build (1.19 s), and browser E2E `verifyWmScreens.e2e.js` (16/16 steps passed including Reservation entry list with 443 rows) PASS. See Change Entry 2026-11-02 17:00 IST.
+
+- **Warehouse scan-to open TR list completed-TR leak fixed (2026-11-02 16:40 IST) — COMMITTED (`cd317a3d`):** `getOpenTRs` previously queried `LTBK` with `"AND STATU <> 'E'"` only. In SAP S/4HANA WM, transfer posting / posting change TRs (e.g. movement 311 `0001000992` created by MATDOC `4900050356` and processed via TO `0001037677`) receive `STATU = 'U'` upon completion, leaking into the open TR list and sorting to row 1. `TrToAdapter.js` now filters `STATU <> 'E'` AND `STATU <> 'U'` in both the `LTBK` query and in-memory list/lookup/candidate checks. `WarehouseScanToDetail.controller.js` guards against `oDetail.Status === 'U'`. Unit tests added in `trToAdapter.test.js` (79/79 passed) and `warehouseScanToUi.test.js` (67/67 passed); all 94 WM unit suites (2,500 tests passed) and full browser E2E `verifyWmScreens.e2e.js` (16/16 steps passed) and `roundTripScanTo.e2e.js` (createTO passed). See Change Entry 2026-11-02 16:40 IST.
 
 - **Reservation list hid SAP GUI reservations on its first page (2026-11-02 16:17 IST) — PASS for the list fix, uncommitted:** `#/wm/reservation-entry` listed app-tracked rows before SAP-only rows and shows 25 rows at a time, so the newest SAP reservation sat at row 28. The merged list now sorts newest reservation first. Which screen problem the user meant by "GUI based Entry" is INFERRED. See Change Entry 2026-11-02 16:17 IST.
 
@@ -1833,8 +1835,9 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- Reservation list date display (2026-11-02): RESOLVED (2026-11-02 17:00 IST). Date resolved and formatted on `#/wm/reservation-entry` across UI XML, controller formatter, CAP service mapping, and S/4HANA OData client; verifyWmScreens 16/16 steps PASS. Commit when the user asks.
 - Reservation list (2026-11-02): user confirms the fix on `#/wm/reservation-entry` after a browser refresh; commit when the user asks.
-- Warehouse scan-to detail (2026-11-02): RESOLVED (2026-11-02 16:40 IST). Root cause identified and fixed: completed TR 1000992 had LTBK-STATU = 'U' (Umbuchung vollzogen) which bypassed the previous STATU <> 'E' filter and sorted to row 1. Now excluded at both DB and adapter layers (STATU <> 'E' and STATU <> 'U'); verifyWmScreens 16/16 steps and roundTripScanTo PASS. Commit when the user asks.
+- Warehouse scan-to detail (2026-11-02): RESOLVED & COMMITTED (`cd317a3d`). Completed TR 1000992 with LTBK-STATU = 'U' excluded from open TR list.
 - Missing i18n keys (2026-11-02): pushed to `origin/feature01` (`3aa2ad95`). The new test in `uiConsistency.test.js` fails on any new literal key that is not in both bundles.
 - Quarantine labels E2E (2026-11-02): the fix is pushed to `origin/feature01` (`3aa2ad95`). CI run 41429280039 on `3aa2ad95` passed, including `Build, Test & Validate` and `Browser E2E, SAP-free suites (PR gate)`. The separately controlled SAP validation and 23-suite browser jobs were skipped.
 - Dead-code cleanup (2026-11-02): committed and pushed. Decide on the Medium-confidence list in Change Entry 2026-11-02 15:45 IST. First item done: `checkStagingForReservation` removed, uncommitted (Change Entry 2026-11-02 16:20 IST). Commit when the user asks.
@@ -1919,6 +1922,55 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 17:00 IST — Reservation list (/wm/reservation-entry) Date display & SAP date resolution: PASS
+
+- **Status:** PASS.
+- **Why:** On `#/wm/reservation-entry`, the reservation creation/requirement date in the table (under the Created By username column) was not being rendered and was always blank.
+- **Root Cause:**
+  1. In `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryList.view.xml`: Line 131 used an invalid OpenUI5 nested expression binding `text="{= ${view>createdAt} ? ${path: 'view>createdAt', formatter: '._formatDateIso'} : (${view>ReservationDate} || '') }"`. In OpenUI5, expression bindings (`{= ... }`) cannot contain embedded property binding objects with formatters (`${path: ..., formatter: ...}`). The UI5 ExpressionParser rejects the syntax and fails to evaluate `text`.
+  2. In `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`: `OPEN_RESV_SELECT` did not include `MatlCompRequirementDate` when querying `/sap/opu/odata/sap/UI_RESERVATION_ITM_MNG_V2/ReservationDocumentItem`, and `resvMap` entries did not populate `ReservationDate`.
+  3. In `srv/wm/reservation-entry/service.cds`: `type OpenReservationRow` and `type ReservationDetailRow` omitted `ReservationDate : Date;`.
+  4. In `srv/wm/reservation-entry/service.js`: `getOpenReservations` handler mapping did not forward `r.ReservationDate`, and `fetchSapReservation` did not query `RKPF-RSDAT`.
+  5. In `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryList.controller.js`:
+     - `loadData()` did not populate or normalize `e.ReservationDate` on tracked rows, did not merge `o.ReservationDate` into tracked rows, and did not normalize `o.ReservationDate` on open SAP rows.
+     - `_formatDateIso` did not handle compact SAP `YYYYMMDD` strings (e.g. `'20261016'` from `RKPF-RSDAT`) or OData `/Date(ms)/` JSON timestamps.
+     - `onSearchFieldSearch` did not search by `ReservationDate`.
+- **Changes:**
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryList.view.xml`:
+    - Replaced invalid expression binding with standard composite binding:
+      `text="{parts: [{path: 'view>ReservationDate'}, {path: 'view>createdAt'}], formatter: '._formatDateIso'}"`
+      `visible="{= !!${view>ReservationDate} || !!${view>createdAt} }"`.
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/controller/ReservationEntryList.controller.js`:
+    - Updated `_formatDateIso` to accept `(sResDate, sCreatedAt)`, parse compact `YYYYMMDD`, `/Date(ms)/`, ISO strings, and Date objects into `YYYY-MM-DD`.
+    - In `loadData()`: Populated and normalized `e.ReservationDate = that._formatDateIso(e.ReservationDate, e.createdAt)` on tracked rows and `o.ReservationDate = that._formatDateIso(o.ReservationDate)` on SAP-only rows. Enriched existing tracked rows with `o.ReservationDate` when absent.
+    - In `onSearchFieldSearch`: Added `(e.ReservationDate && e.ReservationDate.includes(sQuery))`.
+  - `srv/integration/s4hana/wm/goods-issue/GoodsIssueReservationsClient.js`:
+    - Added `'MatlCompRequirementDate'` to `OPEN_RESV_SELECT`.
+    - Populated `ReservationDate: this._formatDate(r.MatlCompRequirementDate) || ''` when building and updating `resvMap` entries.
+  - `srv/wm/reservation-entry/service.cds`:
+    - Added `ReservationDate : Date;` to `OpenReservationRow` and `ReservationDetailRow`.
+  - `srv/wm/reservation-entry/service.js`:
+    - In `getOpenReservations`: Mapped `ReservationDate: r.ReservationDate || ''`.
+    - In `fetchSapReservation`: Added `RSDAT` to `RKPF` read and mapped `ReservationDate: (h && h.RSDAT) ? formatDateToYMD(h.RSDAT) : ''`.
+    - In `getReservationDetail`: Populated `ReservationDate` from tracking row when missing on live document.
+  - `test/unit/wm/goodsIssueClients.test.js`:
+    - Updated `$select` query assertion to include `MatlCompRequirementDate`.
+    - Added unit test verifying `ReservationDate` formatted from `MatlCompRequirementDate`.
+  - `test/unit/wm/reservationEntryService.test.js`:
+    - Updated `getOpenReservations` test to assert `ReservationDate`.
+  - `test/unit/wm/reservationEntryUi.test.js`:
+    - Added tests for `_formatDateIso` (compact `YYYYMMDD`, `/Date(ms)/`, ISO, Date, fallback), `loadData()` date normalization across tracked and SAP-only rows, and `onSearchFieldSearch` date matching.
+- **Verification Commands Run:**
+  - `npx jest test/unit/wm/goodsIssueClients.test.js test/unit/wm/reservationEntryService.test.js test/unit/wm/reservationEntryUi.test.js`: PASS (3 suites, 239/239 tests).
+  - `npx jest test/unit/wm`: PASS (94 passed suites, 1 skipped, 2,503 passed tests, 56 skipped, 0 failed).
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `cd app/fiori-app && npm run lint`: PASS (Success! No findings detected).
+  - `cd app/fiori-app && npm run build`: PASS (Build succeeded in 1.19 s).
+  - `npx cds compile srv --to json > /dev/null`: PASS (exit 0).
+  - `ALLOW_LIVE_SAP_TOOLS=1 node test/e2e/wm/verifyWmScreens.e2e.js --allow-live-sap`: PASS (16/16 steps passed, including Reservation entry list with 443 rows).
+- **Assumptions:** None.
+- **Test Impact Decision:** TEST UPDATED & TEST ADDED (`goodsIssueClients.test.js`, `reservationEntryService.test.js`, `reservationEntryUi.test.js`).
 
 ### 2026-11-02 16:40 IST — Scan-to completed TR (STATU = U) leak fixed: PASS
 
