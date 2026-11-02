@@ -1822,7 +1822,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
-- Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. Route count from `docs/e2e-coverage-matrix.md`: 5 proven, 1 partial, 15 not proven. The goods receipt is PROVEN on inbound delivery 0180000137 (document 5000005789/2026, read back from SAP) for a full quantity on an unpacked delivery; partial receipts are refused. Route count from `docs/e2e-coverage-matrix.md`: 7 proven, 1 partial, 13 not proven. Each later run needs read-only data discovery and its own written go. Proposed order: 261, goods receipt, scan-to, because audit findings 2 to 5 changed that code and none of it has run live.
+- Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. Route count from `docs/e2e-coverage-matrix.md`: 5 proven, 1 partial, 15 not proven. The goods receipt is PROVEN on inbound delivery 0180000137 (document 5000005789/2026, read back from SAP) for a full quantity on an unpacked delivery; partial receipts are refused. Scan-to is proven for TO create and confirm on TR 1000982 (TO 1037664, read back from SAP); automatic MIGO and Retry MIGO are not. Route count from `docs/e2e-coverage-matrix.md`: 7 proven, 2 partial, 12 not proven. Each later run needs read-only data discovery and its own written go. Proposed order: 261, goods receipt, scan-to, because audit findings 2 to 5 changed that code and none of it has run live.
 
 - Goods receipt (2026-11-02): next audit item is finding 6 (plant limits), including the storage-unit path, which checks the client's plant and not the delivery's. Prove the receipt flow live with a written go. Deploy note: `ReservationItem` widens from String(4) to String(6) on HANA.
 
@@ -1902,6 +1902,29 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 IST — Live scan-to on TR 1000982 after the user's written go: PASS for TO create and confirm, read back from SAP
+
+- **Status:** PASS for this TO; PARTIAL for the route. Finding 7 stays open. No tracked code changed.
+- **Command (WRITE, one run):** the `scanTo` Tier C suite in live mode with `E2E_SAP_LIVE_TARGET='S4HANA_DEV - Client 220'`. RFC preflight passed; suite `[PASS] [live]`. The server log shows one `POST /odata/v4/tr-to/createTOFromTR`, then the read-only `verifyMaterialDocument`.
+- **READ-ONLY read-back from SAP:** `LTAK` TO 1037664, movement 261, `KQUIT` X, user KHUSHAL. `LTAP` item 0001: GS1/0002000589 to 914/0000001011, 1 KG, batch 2CED260006, `PQUIT` X, source unit `VLENR` 1000059430. `LTBK` 1000982 `STATU` E; `LTBP` `TANUM` 1037664, `ELIKZ` X.
+- **Stock effect:** Storage unit 1000059430 fell from 220 to 219 KG. The negative interim quant in 914 is gone. `MARD` `CS01` stays 14,019 KG. This closes the 1 KG IM/WM difference from document 4900050350. Whole-warehouse totals were not compared.
+- **Observed:** TR `STATU` E appears here on a completed TR, which suggests the `E` on TR 1000744 is not an error state. INFERRED; its meaning is not confirmed from SAP documentation.
+- **Change:** `docs/e2e-coverage-matrix.md` row `wmWarehouseScanToDetailWithWh` moved to SAP 🟡. Row `wmWarehouseScanToDetail` stays 🔴 because this run did not use that route. The finished `scanTo` section was removed from local gitignored `test/e2e/live/testData.json`.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT: `test/e2e/wm/roundTripScanTo.e2e.js`.
+- **Validation:** Live suite as above. `npx jest test/unit/tools/e2eCoverageMatrix.test.js`: 8 tests passed. `git diff --check`: clean.
+- **Not verified:** automatic MIGO; Retry MIGO; the audit finding 2 guard on a TO whose goods movement is not yet posted; live negative paths; undoing a confirmed TO.
+- **Next:** Proving the automatic MIGO needs a TR with its goods movement unposted and a new written go. The remaining not-proven routes need the same one-at-a-time approach.
+
+### 2026-11-02 IST — Prepare scan-to live run on TR 1000982: BLOCKED on the user's written go
+
+- **Status:** Blocked. No SAP write was sent. No tracked code changed. The scan-to flow is not proven live through the screen.
+- **Change:** Local gitignored `test/e2e/live/testData.json` now holds `scanTo` (W01, TR 1000982).
+- **Why this TR:** It was created by today's authorized 261 post (document 4900050350/2026), so it is this work's own leftover, not another user's open work. A confirmed TO should clear the 1 KG difference between IM and WM (INFERRED).
+- **READ-ONLY target:** LTBK `STATU` blank, movement 261, `TRART` A, `BETYP` F, `BENUM` 1011, `MBLNR` 4900050350. LTBP item 0001: material 8400000046, batch 2CED260006, 1 KG, no TO. No TO in `LTAK`. Destination bin: interim type 914 bin 0000001011 holds `VERME` 1.000- (the negative 1 KG). Source candidate: GS1 bin 0002000589, where storage unit 1000059430 holds 220 KG.
+- **Stubbed rehearsal:** Screen `READY FOR TO`, `autoPostMigo` false because the goods movement is already posted. 1 call; session errors none. Body: `{"lgnum":"W01","tbnum":"1000982","tbpos":"0001","qty":1,"unit":"KG","batch":"2CED260006","serials":[],"sourceStorageType":"GS1","sourceStorageBin":"0002000589","receivingPlant":"","receivingStorageLocation":"","costCenter":"","assetNo":"","subNumber":"0000","orderId":"1011","autoConfirm":true,"autoPostMigo":false,"CompleteReservation":false,"storageUnit":"","ReservationMovementType":"","ReservationNo":"","ReservationItem":"0"}`.
+- **Not verified:** whether SAP accepts a 1 KG pick from a storage-unit bin with `storageUnit` blank; which unit it uses; whether the remainder of the 220 KG stays on the same unit; how a confirmed TO would be undone. This run cannot prove the `Retry MIGO` path or the audit finding 2 guard's post-MIGO branch, because the goods movement is already posted.
+- **Next:** After the written go, send one `createTOFromTR` through the `scanTo` Tier C suite in live mode and read the TO, TR and quants back from SAP.
 
 ### 2026-11-02 IST — Live goods receipt on delivery 0180000137 after a new written go: PASS for the post, read back from SAP
 
