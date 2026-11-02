@@ -9,7 +9,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 - **Missing i18n keys added (2026-11-02 15:52 IST) — PASS, merged to local `feature01`, not pushed:** 10 literal keys that neither bundle defined now exist in both, plus 1 new key that keeps the invoice wording separate, and no literal `i18n>key` or `getText("key")` is unresolved. Only `huNoSelection` could show a raw key before; the other 9 already showed fallback text, and those messages read the same now. Jest 226 suites passed, 1 skipped; 4,432 tests passed, 59 skipped; `ui5lint` clean. No SAP call was made, and the messages were not triggered on live screens.
 
-- **Quarantine labels E2E case fixed (2026-11-02 15:52 IST) — PASS locally:** `npm run test:e2e:sap-free` now passes 3 of 3 suites, on 3 runs in a row. The screen was correct; two checks in the test had gone out of date when the label layout changed. Only the test file changed. GitHub Actions has not run this. This supersedes the "2 of 3 suites" result in the cleanup line below. See the two Changes Log entries of 2026-11-02 15:49 and 15:52 IST.
+- **Quarantine labels E2E case fixed (2026-11-02 15:52 IST) — PASS, merged to local `feature01`, not pushed:** `npm run test:e2e:sap-free` now passes 3 of 3 suites, on 3 runs in a row. The screen was correct; two checks in the test had gone out of date when the label layout changed. Only the test file changed. GitHub Actions has not run this. This supersedes the "2 of 3 suites" result in the cleanup line below. See the Changes Log entries of 2026-11-02 15:49, 15:52 and 15:58 IST.
 
 - **Dead-code cleanup, 7 removal batches (2026-11-02 15:45 IST) — PARTIAL, uncommitted:** 1,354 lines removed across 37 files, including 2 deleted files and 474 unused i18n keys, with no intended behaviour change. Jest is unchanged from baseline (226 suites and 4,428 tests passed, 59 skipped). SAP-free browser E2E is also unchanged at 2 of 3 suites: one Quarantine labels case fails the same way before and after the cleanup. The other 20 browser suites were not run. See Change Entry 2026-11-02 15:45 IST.
 
@@ -1913,6 +1913,14 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 15:58 IST — Quarantine labels E2E fix merged to local `feature01`: PASS
+
+- **Status:** PASS. The user asked for the cherry-pick. `2a8461b6` landed on `feature01` as `da5fe837`, on top of the i18n commits `25b050de` and `309a0a42`. Not pushed; `feature01` is 5 commits ahead of `origin/feature01` with this entry.
+- **Conflict:** Only in `WORKSTATUS.md`, in 3 places where the i18n session and this session both added text. Both sides were kept. The cleanup line in Next Steps listed both fixes as open, so it now says both are resolved. The test file applied cleanly.
+- **Validation on `feature01` at `da5fe837`:** `npm run test:e2e:sap-free` 2 runs in a row: 3 of 3 suites, exit 0 each, and the `Goods-receipt list` case passed. `npx jest --no-coverage --testPathIgnorePatterns '/\.claude/'` on `zquarLabel`, `quarantineLabelsController`, `quarantineLabelAdapter`, `e2eRunner`, `e2eCoverageMatrix`, `uiConsistency`: 6 suites, 170 tests passed. No SAP call was made.
+- **Not run:** The full Jest suite on this commit, the other 20 browser suites, which need SAP, and GitHub Actions.
+- **Next:** Push when the user asks, then confirm `browser-e2e-sap-free` on GitHub Actions.
 
 ### 2026-11-02 15:56 IST — Missing i18n keys merged to local `feature01`: PASS
 
