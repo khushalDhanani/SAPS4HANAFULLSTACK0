@@ -59,9 +59,14 @@ test('UI texts come from i18n, and every referenced key exists in both bundles',
   views.forEach(({ name, xml }) => {
     const literal = [...xml.matchAll(/\s(?:text|title|header|subheader|headerText|placeholder|tooltip|noDataText)="([^"{]*[A-Za-z]{3}[^"{]*)"/g)].map((m) => m[1]);
     expect(`${name}: ${literal.join(' | ')}`).toBe(`${name}: `);
-    const missing = [...new Set([...xml.matchAll(/\{i18n>([\w.]+)\}/g)].map((m) => m[1]))].filter((key) => !k.has(key) || !kEn.has(key));
+    const missing = [...new Set([...xml.matchAll(/i18n>([\w.]+)/g)].map((m) => m[1]))].filter((key) => !k.has(key) || !kEn.has(key));
     expect(`${name}: ${missing.join(',')}`).toBe(`${name}: `);
   });
+  // Literal keys only: a key built at runtime ("cycle261Step_" + code) is followed by "+" and does not match.
+  const scripts = walk(WEBAPP).filter((f) => f.endsWith('.js') && !f.includes('thirdparty'));
+  const missing = scripts.flatMap((f) => [...fs.readFileSync(f, 'utf8').matchAll(/\b_?(?:getText|text)\(\s*["']([\w.]+)["']\s*[,)]/g)]
+    .map((m) => m[1]).filter((key) => !k.has(key) || !kEn.has(key)).map((key) => `${path.relative(WEBAPP, f)}: ${key}`));
+  expect([...new Set(missing)]).toEqual([]);
 });
 
 test('i18n bundles declare supportedLocales/fallbackLocale (browser audit: 6x 404 for i18n_en_GB.properties per page load)', () => {

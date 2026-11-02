@@ -7,6 +7,8 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Missing i18n keys added (2026-11-02 15:52 IST) — PASS, committed on `claude/xenodochial-edison-130e3c`, not merged to `feature01`:** 10 literal keys that neither bundle defined now exist in both, plus 1 new key that keeps the invoice wording separate, and no literal `i18n>key` or `getText("key")` is unresolved. Only `huNoSelection` could show a raw key before; the other 9 already showed fallback text, and those messages read the same now. Jest 226 suites passed, 1 skipped; 4,432 tests passed, 59 skipped; `ui5lint` clean. No SAP call was made, and the messages were not triggered on live screens.
+
 - **Dead-code cleanup, 7 removal batches (2026-11-02 15:45 IST) — PARTIAL, uncommitted:** 1,354 lines removed across 37 files, including 2 deleted files and 474 unused i18n keys, with no intended behaviour change. Jest is unchanged from baseline (226 suites and 4,428 tests passed, 59 skipped). SAP-free browser E2E is also unchanged at 2 of 3 suites: one Quarantine labels case fails the same way before and after the cleanup. The other 20 browser suites were not run. See Change Entry 2026-11-02 15:45 IST.
 
 - **Duplicate code in `server.js` merged (2026-11-02 15:15 IST) — PASS, uncommitted:** one loop now sets the credentials of the 5 S/4 services and one shared `applyBearerToken` does the local token check at both mount points. No behaviour change. `ReservationProcessAdapter.js` is deliberately not split: audit finding 13 says to split it only when it is next worked on. See Change Entry 2026-11-02 15:15 IST.
@@ -1825,6 +1827,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
+- Missing i18n keys (2026-11-02): merge `claude/xenodochial-edison-130e3c` into `feature01` when the user asks. The new test in `uiConsistency.test.js` fails on any new literal key that is not in both bundles.
 - Dead-code cleanup (2026-11-02): review the diff and commit when the user asks. Decide on the Medium-confidence list in Change Entry 2026-11-02 15:45 IST. Fix the failing Quarantine labels E2E case and the i18n keys that code references but no bundle defines; both existed before the cleanup.
 - **URGENT, user action (2026-11-02):** The SAP password in `S4_PASSWORD` was committed in `2256822d` to `origin/feature01`, and the GitHub API answers 200 without login, so the repository appears public. Change that SAP password and update `.env.local`. Treat the two other removed values as exposed too. Removing them from the current files does not remove them from Git history; rewriting history needs a separate decision and a force push.
 - Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. The goods receipt is PROVEN on inbound delivery 0180000137 (document 5000005789/2026, read back from SAP) for a full quantity on an unpacked delivery; partial receipts are refused. Scan-to is proven for TO create and confirm on TR 1000982 (TO 1037664, read back from SAP); automatic MIGO and Retry MIGO are not. Route count from `docs/e2e-coverage-matrix.md`: 7 proven, 2 partial, 12 not proven. Each later run needs read-only data discovery and its own written go. A live reservation goods movement should prove the new `BKTXT` replay check (audit finding 10).
@@ -1907,6 +1910,40 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 15:52 IST — Change 1 of 4: 10 missing i18n keys added to both bundles: PASS
+
+- **Status:** PASS. Based on `feature01` at `b0a879b9`, which includes the dead-code cleanup. The worktree first pointed at `main`, which is 818 commits behind and has none of these keys, so its empty branch was moved to `feature01` before any edit.
+- **Why:** The UI referenced keys that neither bundle defined.
+- **What users saw before:** `huNoSelection` had no fallback, so the toast showed the raw key. Its button is disabled when nothing is selected, so normal use does not reach it. The other 9 keys had fallback text in the code, so users saw that text and never a raw key. The stale-data body texts only appear when the SAP error has no message of its own.
+- **Added to both bundles:** `poValCompanyCodeMismatch`, `poValSupplierAccountGroupMismatch`, `poValPurchOrgMismatch`, `poValCurrencyMismatch`, `msgStaleDataConflict`, `msgPromptReloadData`, `titleStaleDataConflict`, `grErrStaleData`, `grPromptReloadData`, `huNoSelection`. Text is the existing fallback, except `huNoSelection`, which had none and is new wording: "Select at least one handling unit."
+- **Files:** `app/fiori-app/webapp/i18n/i18n.properties`, `app/fiori-app/webapp/i18n/i18n_en.properties`.
+- **Validation:** Scan of XML views and JS: 17 unresolved before, 7 after, and all 7 are runtime prefixes left out by request (`cycle261Status_`, `cycle261Step_`, `ql4x6Error_`, `qlLabelWarn_`, `scan261Reject_`, `scan261Unit_`, `scan261Warn_`). UI5 1.136.20 `ResourceBundle` in the browser loaded both bundles and returned the expected text for all new keys. `npx jest --no-coverage`: 226 suites passed, 1 skipped; 4,432 tests passed, 59 skipped. `npx ui5lint`: no findings. `git diff --check`: clean.
+- **Not verified:** The messages were not triggered on live screens, and the 409 paths were not run against SAP. No SAP call was made. E2E suites were not run. The completed forms of the 7 runtime prefixes were not checked.
+
+### 2026-11-02 15:52 IST — Change 2 of 4: PO mismatch warnings pass the selected value to the bundle text: PASS
+
+- **Status:** PASS.
+- **Why:** The fallback texts name the selected value, for example "Selected Company Code 9999", but the call args did not include it. The new bundle entries take priority over the fallback, so without this change the warnings would have lost that value. The supplier warning would also have lost the document type.
+- **What changed:** The selected value is appended to the args at all 5 call sites, and the supplier call also gets the document type. Existing placeholder positions are unchanged. The warning text users see is the same as before.
+- **File:** `app/fiori-app/webapp/modules/mm/purchase-order/controller/CreatePurchaseOrder.controller.js`.
+- **Validation:** New tests in `test/unit/purchase-order/headerValueHelpSelection.test.js` run `_onDocTypeSelectedCheck` against each real bundle and assert the filled text equals the code's fallback, for a rule-based type (ZIMP) and for ZSTO. 64 of 64 pass in that file. Full Jest and `ui5lint` results are in Change 1.
+
+### 2026-11-02 15:52 IST — Change 3 of 4: Invoice stale-data message gets its own key: PASS
+
+- **Status:** PASS.
+- **Why:** `msgStaleDataConflict` had two different fallback texts. Deliveries say "This delivery was modified…", and invoices say "This document was modified… The list has been refreshed…". One bundle entry would have given one screen the wrong message.
+- **What changed:** Deliveries keep `msgStaleDataConflict`. The invoice call now uses a new key, `msgInvoiceStaleDataConflict`, with its existing fallback text, added to both bundles. Both bundles therefore grow by 11 keys, from 1,597 to 1,608: the 10 from Change 1 plus this one.
+- **File:** `app/fiori-app/webapp/modules/sd/customer-invoice/controller/CustomerInvoices.controller.js`, plus both bundles.
+- **Validation:** The browser `ResourceBundle` check in Change 1 returned the correct separate text for each key. Full Jest and `ui5lint` results are in Change 1. The invoice 409 path was not run against SAP.
+
+### 2026-11-02 15:52 IST — Change 4 of 4: Test now covers literal keys in JS: PASS
+
+- **Status:** PASS.
+- **Why:** The existing test only checked `{i18n>key}` in XML views, so missing keys in JS went unnoticed.
+- **What changed:** The test now also checks literal `getText("key")`, `_getText("key")` and `_text("key")` calls in app JS, excluding `thirdparty`. Keys built at runtime do not match. The XML pattern now also catches `i18n>key` written without braces.
+- **File:** `test/unit/controller/uiConsistency.test.js`.
+- **Validation:** Before the bundle change it failed and listed the missing keys across 5 controllers. After the change it passes. Full Jest and `ui5lint` results are in Change 1.
 
 ### 2026-11-02 IST — SAP accepts the stored password again at 15:11; rejections remain unexplained: PARTIAL, uncommitted
 

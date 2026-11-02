@@ -449,7 +449,7 @@ sap.ui.define([
             if (err && (err.status === 409 || err.statusCode === 409 || err.code === "STALE_DATA")) {
                 return (sDirectMsg && sDirectMsg.indexOf("changed") !== -1)
                     ? sDirectMsg
-                    : (sDirectMsg || this._getText("msgStaleDataConflict", "This document was modified by another user or session in SAP S/4HANA (stale data). The list has been refreshed with the latest data from SAP. Please review the updated status before trying again."));
+                    : (sDirectMsg || this._getText("msgInvoiceStaleDataConflict", "This document was modified by another user or session in SAP S/4HANA (stale data). The list has been refreshed with the latest data from SAP. Please review the updated status before trying again."));
             }
             var sMsg = sDirectMsg || this._getText(sFallbackKey);
             if (sMsg.indexOf("ASSERTION_FAILED") !== -1 || sMsg.indexOf("Runtime Error") !== -1) {

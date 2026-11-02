@@ -152,6 +152,45 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
         });
     });
 
+    describe.each(['i18n.properties', 'i18n_en.properties'])('mismatch warnings from %s', (sFile) => {
+        const sBundle = require('fs').readFileSync(require('path').join(__dirname, '../../../app/fiori-app/webapp/i18n', sFile), 'utf8');
+        let aKeys;
+
+        // The bundle text filled with the call's args must read exactly like the code's fallback text.
+        beforeEach(() => {
+            aKeys = [];
+            controller.getText = (sKey, aArgs, sFallback) => {
+                if (!/^poVal\w+Mismatch$/.test(sKey)) return sFallback;
+                aKeys.push(sKey);
+                const sText = aArgs.reduce((s, v, i) => s.split(`{${i}}`).join(v), sBundle.match(new RegExp(`^${sKey}=(.*)$`, 'm'))[1]);
+                expect(sText).toBe(sFallback);
+                return sText;
+            };
+        });
+
+        it('keeps the selected values for a rule-based document type', () => {
+            oModel.setProperty('/header/Supplier', '10300001');
+            oModel.setProperty('/header/SupplierAccountGroup', 'ZDOM');
+            oModel.setProperty('/header/CompanyCode', '9999');
+            oModel.setProperty('/header/PurchasingOrganization', 'XX99');
+            oModel.setProperty('/header/Currency', 'XXX');
+
+            controller._onDocTypeSelectedCheck('ZIMP');
+
+            expect(aKeys.sort()).toEqual(['poValCompanyCodeMismatch', 'poValCurrencyMismatch', 'poValPurchOrgMismatch', 'poValSupplierAccountGroupMismatch']);
+            expect(oModel.getProperty('/errors/CompanyCode').text).toContain('9999');
+        });
+
+        it('keeps the selected company code for ZSTO', () => {
+            oModel.setProperty('/header/CompanyCode', '9999');
+
+            controller._onDocTypeSelectedCheck('ZSTO');
+
+            expect(aKeys).toEqual(['poValCompanyCodeMismatch']);
+            expect(oModel.getProperty('/errors/CompanyCode').text).toContain('9999');
+        });
+    });
+
     it('should set /header/PaymentTerms when inPaymentTerms value help item is selected', () => {
         // Initial state
         expect(oModel.getProperty('/header/PaymentTerms')).toBe('');

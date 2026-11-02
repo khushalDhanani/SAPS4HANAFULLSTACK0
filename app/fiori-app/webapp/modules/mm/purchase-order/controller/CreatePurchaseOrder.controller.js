@@ -806,7 +806,7 @@ sap.ui.define([
                         oModel,
                         "CompanyCode",
                         "Warning",
-                        this.getText("poValCompanyCodeMismatch", ["ZSTO", "1000, 2000"], "Selected Company Code " + sExistingCoCodeSto + " is not permitted for document type ZSTO (Allowed: 1000, 2000).")
+                        this.getText("poValCompanyCodeMismatch", ["ZSTO", "1000, 2000", sExistingCoCodeSto], "Selected Company Code " + sExistingCoCodeSto + " is not permitted for document type ZSTO (Allowed: 1000, 2000).")
                     );
                 } else if (sExistingCoCodeSto) {
                     var oCoErrorSto = oModel.getProperty("/errors/CompanyCode");
@@ -824,7 +824,7 @@ sap.ui.define([
                             oModel,
                             "Supplier",
                             "Warning",
-                            this.getText("poValSupplierAccountGroupMismatch", [oPoRule.supplierAccountGroup], "Selected supplier account group (" + sExistingAccountGroupGen + ") does not match required group " + oPoRule.supplierAccountGroup + " for " + sCleanDocType + ".")
+                            this.getText("poValSupplierAccountGroupMismatch", [oPoRule.supplierAccountGroup, sExistingAccountGroupGen, sCleanDocType], "Selected supplier account group (" + sExistingAccountGroupGen + ") does not match required group " + oPoRule.supplierAccountGroup + " for " + sCleanDocType + ".")
                         );
                     }
 
@@ -834,7 +834,7 @@ sap.ui.define([
                             oModel,
                             "CompanyCode",
                             "Warning",
-                            this.getText("poValCompanyCodeMismatch", [sCleanDocType, oPoRule.allowedCompanyCodes.join(", ")], "Selected Company Code " + sExistingCoCodeGen + " is not permitted for document type " + sCleanDocType + " (Allowed: " + oPoRule.allowedCompanyCodes.join(", ") + ").")
+                            this.getText("poValCompanyCodeMismatch", [sCleanDocType, oPoRule.allowedCompanyCodes.join(", "), sExistingCoCodeGen], "Selected Company Code " + sExistingCoCodeGen + " is not permitted for document type " + sCleanDocType + " (Allowed: " + oPoRule.allowedCompanyCodes.join(", ") + ").")
                         );
                     } else if (sExistingCoCodeGen) {
                         var oCoErrorGen = oModel.getProperty("/errors/CompanyCode");
@@ -849,7 +849,7 @@ sap.ui.define([
                             oModel,
                             "PurchasingOrganization",
                             "Warning",
-                            this.getText("poValPurchOrgMismatch", [sCleanDocType, oPoRule.allowedPurchOrgs.join(", ")], "Selected Purchasing Org " + sExistingPurchOrgGen + " is not permitted for document type " + sCleanDocType + " (Allowed: " + oPoRule.allowedPurchOrgs.join(", ") + ").")
+                            this.getText("poValPurchOrgMismatch", [sCleanDocType, oPoRule.allowedPurchOrgs.join(", "), sExistingPurchOrgGen], "Selected Purchasing Org " + sExistingPurchOrgGen + " is not permitted for document type " + sCleanDocType + " (Allowed: " + oPoRule.allowedPurchOrgs.join(", ") + ").")
                         );
                     }
 
@@ -859,7 +859,7 @@ sap.ui.define([
                             oModel,
                             "Currency",
                             "Warning",
-                            this.getText("poValCurrencyMismatch", [sCleanDocType, oPoRule.allowedCurrencies.join(", ")], "Selected Currency " + sExistingCurrencyGen + " is not permitted for " + sCleanDocType + " (Allowed: " + oPoRule.allowedCurrencies.join(", ") + ").")
+                            this.getText("poValCurrencyMismatch", [sCleanDocType, oPoRule.allowedCurrencies.join(", "), sExistingCurrencyGen], "Selected Currency " + sExistingCurrencyGen + " is not permitted for " + sCleanDocType + " (Allowed: " + oPoRule.allowedCurrencies.join(", ") + ").")
                         );
                     }
                 }
