@@ -152,6 +152,13 @@ class AuthAdapter {
 
       if (!err.response) {
         LOG.error('S/4HANA connection error:', err.message);
+        if (/certificate|altnames|ERR_TLS|SELF_SIGNED/i.test(`${err.code || ''} ${err.message || ''}`)) {
+          return {
+            authenticated: false,
+            statusCode: 503,
+            message: "SAP S/4HANA's security certificate was rejected. S4_DESTINATION_URL must use the host name on the certificate, not an IP address, and the server must be started with that certificate trusted (npm start)."
+          };
+        }
         return {
           authenticated: false,
           statusCode: 503,

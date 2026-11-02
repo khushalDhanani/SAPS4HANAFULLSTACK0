@@ -1904,6 +1904,50 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-11-02 IST — SAP accepts the stored password again at 15:11; rejections remain unexplained: PARTIAL, uncommitted
+
+- **Status:** PARTIAL. SAP access works right now, but the earlier rejections are not explained, so it is not proven stable. No SAP write was sent, and no code changed since the entry below.
+- **Input from the user:** The account was reported as not locked, which rules out a lock as seen at that moment. Whether a short lock came and cleared is Not verified.
+- **Observed at 15:11:16:** Direct `validateCredentials`: 200. Purchase order read through the server on port 4004, started 15:08:14: HTTP 200. `.env.local` was unchanged since 15:07:37, with the host name. So this server and these settings work, and the earlier failure followed the time, not the server or sign-in type.
+- **Timeline for the same stored password and client:** accepted up to 14:44; rejected 14:56 to 14:59; accepted about 15:08; rejected about 15:10; accepted 15:11.
+- **Cause:** UNKNOWN. The Basis audit log for 14:40 to 15:15 remains the way to find it.
+- **User confirmation after this:** The user reports that the login and the Purchase Orders screen both work on port 4004.
+- **Next:** Commit the certificate-error message fix when asked. The Basis team reviews the audit log for 14:40 to 15:15, the user replaces the exposed password, and the writer of the IP address in `.env.local` is found. If it fails again, note the exact time.
+
+### 2026-11-02 IST — SAP rejects the stored password again at about 15:10: BLOCKED, uncommitted
+
+- **Status:** BLOCKED. This corrects the PASS in the entry below: SAP access is not stable. All SAP calls from this session stopped. No SAP write was sent.
+- **Observed:** Server on port 4004, started 15:08:14 with the host name. App login route: authenticated, token issued. Purchase order read: HTTP 502 from SAP 401, with both a Bearer token and Basic sign-in, so sign-in type is not the cause.
+- **Timeline for the same stored password:** worked at or before 14:44:56; rejected 14:56 to 14:59; accepted about 15:08; rejected about 15:10.
+- **Correction:** For `khushal`, the login route compares the password locally when it equals `S4_PASSWORD`, without asking SAP. So `authenticated: true` on that route does not prove SAP accepts the password. Only the `validateCredentials` check proved that, at about 15:08.
+- **Cause:** UNKNOWN. A lock from repeated failed logons would fit (Not verified). Failed logons today include this session's checks; a server on 4004 and login attempts typed in the browser may also count. Only SAP can show this.
+- **Next:** Stop the server on port 4004. The Basis team checks the `KHUSHAL` lock status and audit log in client 220.
+
+### 2026-11-02 IST — Login error resolved on a fresh server: PASS for the app login route, uncommitted
+
+- **Status:** The app login route and SAP reads work on a fresh server. The browser login screen with a typed password was not exercised here. The server on port 4004 needs a restart, because it started at 15:07:00, before `.env.local` was corrected at 15:07:37. Changes are uncommitted. No SAP write was sent.
+- **What fixed it:** `S4_DESTINATION_URL` back on the host name on the certificate. The stored password was not changed. The user's `curl` with `sap-client: 220` returned 200, then `validateCredentials` with the stored password returned 200.
+- **Corrections to the entry below:** A new password was not needed. My advice that the stored value was wrong did not hold: it was rejected at 14:56 to 14:59 and accepted after 15:07.
+- **Validation:** App route `POST /odata/v4/auth/login`: HTTP 200, authenticated, `S4HANA_DEV - Client 220`, token issued. HTTPS and RFC reads through CAP: HTTP 200. Browser `Shell screens` and `MM screens`: PASS. `npm run scan:secrets` and `git diff --check`: clean. Jest last ran before this result with no code change since: 225 suites passed, 1 skipped; 4,419 tests passed, 59 skipped.
+- **Still UNKNOWN:** Why the same password was rejected from 14:56 to 14:59, and what wrote the IP address into `.env.local` at 14:49 and 15:00. If it is written again, this error returns. The Basis audit log should cover the rejection window, and the password should still be replaced, because it is exposed on GitHub and in this chat.
+
+### 2026-11-02 IST — Login error `Cannot connect to S/4HANA`: certificate cause fixed; SAP now rejects the configured password: BLOCKED, uncommitted
+
+- **Status:** BLOCKED on the user updating `S4_PASSWORD`. The certificate cause is fixed; the login is not proven working. No SAP write was sent. All SAP calls stopped once the 401 appeared.
+- **Reported:** Login at port 4004 showed `Cannot connect to S/4HANA system`.
+- **Root cause 1 (fixed):** `.env.local` was modified at 14:49:34 and `S4_DESTINATION_URL` held an IP address, which SAP's certificate does not cover (`ERR_TLS_CERT_ALTNAME_INVALID`). SAP itself was reachable. `AuthAdapter` reported every connection failure as a network problem.
+- **Changes:** `.env.local` (local, not in Git): only the host in `S4_DESTINATION_URL`, restored to the name recovered from Git history; it resolves to the same address and answers 401 without credentials, with the certificate verified. `srv/integration/s4hana/AuthAdapter.js`: a certificate failure now has its own message and shows no address. `.env.example`: comment. `test/unit/authAdapter.test.js`: 3 new cases. Certificate checks were not bypassed.
+- **Root cause 2 (open, UNKNOWN):** With credentials from `.env.local`, SAP answers HTTP 401 and RFC reports `Name or password is incorrect`. The user confirms they did not change the password, which removes my earlier inference. The local username, password format, client and file encoding show no fault. The same password read SAP successfully at or before 14:44:56 and failed at 14:56:43. What changed in between can only be seen in SAP: a password reset by someone else or a locked account (SAP may hide a lock behind the same message; Not verified on this system). The password was exposed on GitHub, so an unauthorized change cannot be ruled out; no evidence for or against it was seen.
+- **Side effect of this diagnosis:** My checks sent failed logons with that password: one direct check, one purchase order read, one RFC read and the signed-in `Shell screens` browser run, whose dashboard made more. This counts against the account's failed-logon limit, so it may be locked. Lock state is UNKNOWN.
+- **Note on local logins:** `khushal` with the value in `S4_PASSWORD` is accepted locally without asking SAP, so that old value still signs in to the local app until `.env.local` is updated.
+- **TEST DECISION:** TEST ADDED.
+- **Validation:** 3 new cases failed on the old code. Full `npx jest`: 225 suites passed, 1 skipped; 4,419 tests passed, 59 skipped. `eslint` on the 2 JS files, `npm run scan:secrets`, `git diff --check`: clean. `Shell screens` FAILED on the rejected SAP password; it was not rerun.
+- **Not verified:** A successful login, HTTPS or RFC read with the correct password; the new message in the browser.
+- **Update after the user's SAP GUI check:** The user reports that a SAP GUI logon works with their current password, so the account is not locked in the client used. One read-only `validateCredentials` check at 14:59 with `.env.local` still returned 401. So `S4_PASSWORD` is rejected in client 220 while the GUI logon works. Why is UNKNOWN: the typed password may differ, the GUI may use another client, or the GUI may sign in without a typed password. No further SAP calls were made.
+- **Update at 15:01:** `.env.local` was saved again at 15:00:21. It holds the IP address again, undoing the host fix, and `S4_PASSWORD` is unchanged (the same old exposed value as this morning). No SAP call was made, because it would only fail. What saved the file is UNKNOWN. INFERRED candidate: the Antigravity editor, which is running, with a stale open copy or its agent; it is not confirmed. The server on port 4004 was restarted at 15:00:38 with these values.
+- **Update at 15:07:** The user supplied a `curl` they describe as working. It uses the stored password and sends no client. One read-only equivalent with the stored credentials, certificate verified, returned HTTP 401 with `sap-authenticated: false` and realm client 100. So with no client SAP uses client 100, not the app's 220, and this request did not authenticate from here. Whether the user's own `curl` returned 200 is UNKNOWN. This added one failed logon, in client 100. The password was also pasted into the chat. The app was not changed to bypass certificate checks.
+- **Next:** The user reports the HTTP status of the same request with `sap-client: 220`, finds what is rewriting the file and confirms the GUI client, sets a new password, updates `S4_PASSWORD` in `.env.local`, stops the server on port 4004 and restarts with `npm start`. Then run one read-only check. The Basis team should still review the account's audit log, because the old password was exposed.
+
 ### 2026-11-02 IST — Other people's SAP user names replaced with neutral labels: PARTIAL, uncommitted
 
 - **Status:** PARTIAL. Done and uncommitted for the current files. The names stay in Git history and on the remote until history is rewritten. No SAP call or write was made.

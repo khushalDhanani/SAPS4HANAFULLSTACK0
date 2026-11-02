@@ -133,6 +133,25 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
             expect(res.message).toContain('Cannot connect to S/4HANA system');
         });
 
+        it.each([
+            ['the address is not on the certificate', "Hostname/IP does not match certificate's altnames: IP: 10.0.0.1 is not in the cert's list: "],
+            ['the certificate is not trusted', 'self-signed certificate; if the root CA is installed locally, try running Node.js with --use-system-ca'],
+            ['the certificate chain cannot be verified', 'unable to verify the first certificate']
+        ])('names the certificate, not the network, when %s, and never shows the address', async (_name, message) => {
+            const mockFetch = jest.fn().mockRejectedValueOnce(new Error(message));
+
+            const res = await authAdapter.validateCredentials('cb9980000001', 'pass', {
+                baseUrl: 'https://s4hana.example.corp:44300',
+                fetchFn: mockFetch
+            });
+
+            expect(res).toMatchObject({ authenticated: false, statusCode: 503 });
+            expect(res.message).toContain('certificate');
+            expect(res.message).toContain('S4_DESTINATION_URL');
+            expect(res.message).not.toContain('network connectivity');
+            expect(res.message).not.toContain('10.0.0.1');
+        });
+
         it('should handle unexpected HTTP error status from Gateway', async () => {
             const mockFetch = jest.fn().mockResolvedValueOnce({
                 ok: false,
