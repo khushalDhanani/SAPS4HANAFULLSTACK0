@@ -86,7 +86,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 - **SAP S/4HANA Live Connectivity & Credentials Verified (2026-10-29 IST) — PASS:** Verified SAP credentials for user `KHUSHAL` against S/4HANA (`DS4` Client 220). Direct READ-ONLY OData probes return HTTP 200 OK (`MM_PUR_PO_MAINT_V2_SRV`, `API_MATERIAL_DOCUMENT_SRV`), and RFC connectivity test (`tools/check-service-connectivity.js`) returns `HEALTHY` (connected to Client 220). Configured `.env.local` with verified credentials. Previous 401 logon blockers are RESOLVED.
 
-- **Local Development Authentication & .env.local Configuration Hardening (2026-10-29 IST) — VERIFIED:** Added `PORT=4004`, `NODE_ENV=development`, and `LOCAL_DEV_PASSWORD=init` to `.env.local`, and ensured `S4_DESTINATION_URL=http://172.27.100.32:8000` is well-formed. Resolved the local mock login blockage ("Local mock users are disabled: set LOCAL_DEV_PASSWORD to enable them") across `alice`, `bob`, and `khushal`. Auth unit suites (3 suites / 39 tests) and AuthAdapter/Login controller (2 suites / 21 tests) PASS (60/60 total).
+- **Local Development Authentication & .env.local Configuration Hardening (2026-10-29 IST) — VERIFIED:** Added `PORT=4004`, `NODE_ENV=development`, and `LOCAL_DEV_PASSWORD=init` to `.env.local`, and ensured `S4_DESTINATION_URL=http://sap-host.invalid:8000` is well-formed. Resolved the local mock login blockage ("Local mock users are disabled: set LOCAL_DEV_PASSWORD to enable them") across `alice`, `bob`, and `khushal`. Auth unit suites (3 suites / 39 tests) and AuthAdapter/Login controller (2 suites / 21 tests) PASS (60/60 total).
 
 - **Action-Style Write Screens Edge-Case Coverage & Double-Click Guarding (2026-10-29 IST) — COMMITTED (82901d0):** Enhanced `test/e2e/negative/verifyActionFailures.e2e.js` with `doubleClickWhilePending(baseUrl, flow)` and unified `reloadWhilePending(baseUrl, flow)` covering both standard action flows and kit flows (Handling Units, Movement 261, Scan-To). Added `setDelay` and `setGate` to `test/e2e/wm/wmRoundTripKit.js` and `gate` support to `test/e2e/support/actionRoundTrip.js`. Integrated Quarantine Labels (`generateLabels`) into action failure verification. Hardened UI5 controllers against duplicate clicks across `CustomerInvoices.controller.js` (`_bSubmitting`), `OrdersDueForDelivery.controller.js` (`_bDialogBusy`, `_bNoRefDialogBusy`, `/busy`), `GoodsReceipt.controller.js` (`/isPosting`), `PackingInstructions.controller.js` (`/busy`), `Scan261.controller.js` (`/busy`), and `Cycle261.controller.js` (`/busy`). Updated `docs/e2e-coverage-matrix.md`. All unit tests (97/97) and matrix governance tests PASS; `npm run lint` clean.
 
@@ -1839,7 +1839,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
-- Backend 401 & Browser Login: RESOLVED (2026-10-29 IST). Configured S4_DESTINATION_URL=http://172.27.100.32:8000 and verified user KHUSHAL with S/4 Client 220 credentials. Direct OData probes, RFC connectivity (HEALTHY), backend auth endpoint, and Playwright browser E2E login and dashboard navigation verified PASS.
+- Backend 401 & Browser Login: RESOLVED (2026-10-29 IST). Configured S4_DESTINATION_URL=http://sap-host.invalid:8000 and verified user KHUSHAL with S/4 Client 220 credentials. Direct OData probes, RFC connectivity (HEALTHY), backend auth endpoint, and Playwright browser E2E login and dashboard navigation verified PASS.
 
 - **Movement 261 after actual discovery:** obtain an authoritative custom exclusion policy (actual SAP bin names/texts do not establish it), then fix request-scoped runtime loading with tests and prepare any configuration update for specific written go. Startup diagnostic now reports the persisted configuration accurately; full business enforcement remains NOT VERIFIED.
 
@@ -1903,6 +1903,20 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 IST — Audit finding 12: SAP address and hostnames removed from tracked files; scanner strengthened: PARTIAL, uncommitted
+
+- **Status:** PARTIAL. Done and uncommitted for the current files. These values stay in Git history and on the remote until history is rewritten. No SAP call or write was made. The finding 1 password exposure is still open.
+- **Checked against current state:** Local `S4_DESTINATION_URL` is already `https` on port 44300, so the plain-HTTP part of the finding no longer applies to the current setup. `.env.example` held the real private address.
+- **Change:** The real private address (16 places) and SAP hostnames (17 places) are now `sap-host.invalid` in `.env.example`, `WORKSTATUS.md`, `docs/evidence/2026-10-26/261-sap-system-info.raw.json` and 3 `docs/wm-discovery` files. This is a deliberate edit of older log entries and evidence; only those values changed. A test-only private address in 4 test files stays.
+- **Scanner:** `tools/scan-secrets.js` reported 0 while passwords were in code because its rules matched only fixed forms. Added rules for a hardcoded password in a comparison and for private network addresses, plus a check for real values from `.env.local` (secrets and SAP host) in any form, reporting file and line only. `test/unit/tools/scanSecrets.test.js` also runs this over the repository.
+- **Mistake during this work:** My first replacement script used a wrong address pattern and left the address in place; the new scanner caught it. One of my commands also printed the `.env.example` line with that address to this session's output. It was already public.
+- **TEST DECISION:** TEST ADDED.
+- **Validation:** 5 new tests failed on the old code. After the fix: `npm run scan:secrets`: exit 0 over 1,028 files with 8 rules. Full `npx jest`: 225 suites passed, 1 skipped; 4,415 tests passed, 59 skipped. `eslint` on the 2 changed files and `git diff --check`: clean. The evidence JSON parses, and the 3 XML files pass `xmllint`.
+- **Not verified:** The scanner's local-value check in CI, where `.env.local` does not exist, so it adds nothing there. It also does not read `docs/archive`, which the scanner ignores; a separate scan of that folder found no address.
+- **Open, needs a decision:** The SAP hostname appears in 5 commits across all refs, and the address and passwords are in history too. Rewriting history needs a force push. `KHUSHAL`, the SAP user, is in 97 files, including tests and the GitHub name, and was left. Seven other SAP user names appear 331 times in tracked docs and tests, which is personal data in a repository that appears public.
+- **Note:** The audit finding 11 work was committed outside this session as `916d3e77`.
+- **Next:** The user decides on repository visibility, history rewrite and other users' names. Remaining: audit finding 13 and moving the AI prompt to the server.
 
 ### 2026-11-02 IST — Audit finding 11: AI provider must be chosen, masking covers streaming, models limited: PARTIAL, uncommitted
 
@@ -2317,13 +2331,13 @@ Single source of truth for work history, current status, validation, unresolved 
 ### 2026-10-29 IST — S/4HANA Destination URL Restored to HTTP Port 8000: VERIFIED
 
 - **Problem diagnosed:** User encountered `"Cannot connect to S/4HANA system. Please check network connectivity and try again."` (HTTP 503 from `AuthAdapter.js:158`).
-- **Root cause:** `.env.local` was modified to `S4_DESTINATION_URL=https://172.27.100.32:44300`. The HTTPS port on that SAP host uses a self-signed certificate, which caused Node.js / SAP Cloud SDK to reject the TLS handshake (`DEPTH_ZERO_SELF_SIGNED_CERT`) with `!err.response`.
-- **Fix:** Restored `S4_DESTINATION_URL=http://172.27.100.32:8000` in `.env.local`.
-- **Validation:** Executed `AuthAdapter.validateCredentials(process.env.S4_USERNAME, process.env.S4_PASSWORD)` against `http://172.27.100.32:8000` &rarr; returned `{ authenticated: true, statusCode: 200, message: "Authentication successful." }`.
+- **Root cause:** `.env.local` was modified to `S4_DESTINATION_URL=https://sap-host.invalid:44300`. The HTTPS port on that SAP host uses a self-signed certificate, which caused Node.js / SAP Cloud SDK to reject the TLS handshake (`DEPTH_ZERO_SELF_SIGNED_CERT`) with `!err.response`.
+- **Fix:** Restored `S4_DESTINATION_URL=http://sap-host.invalid:8000` in `.env.local`.
+- **Validation:** Executed `AuthAdapter.validateCredentials(process.env.S4_USERNAME, process.env.S4_PASSWORD)` against `http://sap-host.invalid:8000` &rarr; returned `{ authenticated: true, statusCode: 200, message: "Authentication successful." }`.
 
 ### 2026-10-29 IST — SAP S/4HANA Live Connectivity & Credentials Verified: PASS
 
-- **Evidence from user probe:** User provided probe `curl -i -u 'KHUSHAL:...' 'http://172.27.100.32:8000/sap/opu/odata/sap/ZMY_SERVICE_SRV/?sap-client=220'`.
+- **Evidence from user probe:** User provided probe `curl -i -u 'KHUSHAL:...' 'http://sap-host.invalid:8000/sap/opu/odata/sap/ZMY_SERVICE_SRV/?sap-client=220'`.
 - **READ-ONLY Validation Performed:**
   1. Direct probe of `ZMY_SERVICE_SRV` with user `KHUSHAL` returned HTTP 403 `/IWFND/MED/170` ("No service found for namespace '', name 'ZMY_SERVICE_SRV', version '0001'"). HTTP 401 was NOT returned, confirming logon authentication succeeded.
   2. Direct probe of real Gateway services `MM_PUR_PO_MAINT_V2_SRV` and `API_MATERIAL_DOCUMENT_SRV` returned HTTP 200 OK with full metadata XML payloads.
@@ -2346,7 +2360,7 @@ Single source of truth for work history, current status, validation, unresolved 
   3. `NODE_ENV=development` and `PORT=4004` were absent from `.env.local`.
 - **Changes made:**
   1. Updated `.env.local`: Added `PORT=4004`, `NODE_ENV=development`, and `LOCAL_DEV_PASSWORD=init` under `# Local Development Authentication`.
-  2. Verified `S4_DESTINATION_URL=http://172.27.100.32:8000` is well-formed with protocol prefix.
+  2. Verified `S4_DESTINATION_URL=http://sap-host.invalid:8000` is well-formed with protocol prefix.
 - **Validation:**
   - `npm test -- test/unit/auth/`: 3 suites / 39 tests PASS.
   - `npm test -- test/unit/authAdapter.test.js test/unit/controller/loginController.test.js`: 2 suites / 21 tests PASS.
@@ -6277,14 +6291,14 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ### 2026-10-29 IST — Local S/4 URL/TLS diagnosis: "Cannot connect to S/4HANA" — PARTIAL
 
-- **CHANGED:** local `.env.local` only (git-ignored, not committed): `S4_DESTINATION_URL` set to `https://vheudds4ap01.sap.aether.co.in:44300` (was IP with port 443, then IP:44300). Backup outside repo. No source files changed.
-- **ROOT CAUSE (reproduced, READ-ONLY, no credentials):** port 443 closed; 44300 is the SAP HTTPS port. Node rejected the self-signed server cert (`DEPTH_ZERO_SELF_SIGNED_CERT`), mapped by `AuthAdapter.js` to "Cannot connect to S/4HANA". With the server cert supplied via `NODE_EXTRA_CA_CERTS`, the IP then failed `ERR_TLS_CERT_ALTNAME_INVALID` (cert CN `*.sap.aether.co.in`, no SAN); using the FQHN (DNS resolves to 172.27.100.32; FQHN from `docs/evidence/2026-10-26/261-sap-system-info.raw.json`) passes strict TLS and returns 401 unauthenticated.
+- **CHANGED:** local `.env.local` only (git-ignored, not committed): `S4_DESTINATION_URL` set to `https://sap-host.invalid:44300` (was IP with port 443, then IP:44300). Backup outside repo. No source files changed.
+- **ROOT CAUSE (reproduced, READ-ONLY, no credentials):** port 443 closed; 44300 is the SAP HTTPS port. Node rejected the self-signed server cert (`DEPTH_ZERO_SELF_SIGNED_CERT`), mapped by `AuthAdapter.js` to "Cannot connect to S/4HANA". With the server cert supplied via `NODE_EXTRA_CA_CERTS`, the IP then failed `ERR_TLS_CERT_ALTNAME_INVALID` (cert CN `*sap-host.invalid`, no SAN); using the FQHN (DNS resolves to sap-host.invalid; FQHN from `docs/evidence/2026-10-26/261-sap-system-info.raw.json`) passes strict TLS and returns 401 unauthenticated.
 - **TEST DECISION:** TEST NOT POSSIBLE — local environment/TLS trust configuration; no code changed. **VERIFIED:** strict Node TLS + HTTP 401 unauthenticated against the FQHN with the exported cert. **NOT VERIFIED:** login with the user's credentials; app restarted with `NODE_EXTRA_CA_CERTS`; cert fingerprint vs Basis (SHA-256 3F:D7:A6:85:…:DE:EE).
 - **ASSUMPTIONS:** the presented cert is the genuine SAP cert (trust-on-first-use) — to be confirmed with Basis. **NEXT:** stop the process holding port 4004, restart with `NODE_EXTRA_CA_CERTS=$HOME/.sap-certs/s4-dev.pem npm start`, sign in. Earlier 401 history (2026-10-27) is separate and unresolved.
 
 ### 2026-10-29 IST — Live SAP S/4 Gateway & Browser E2E Login Verification — PASS
 
-- **CHANGED:** `WORKSTATUS.md` (and local `.env.local`, git-ignored). Configured `S4_DESTINATION_URL=http://172.27.100.32:8000` (standard HTTP OData Gateway port on NetWeaver DS4 / Client 220, avoiding self-signed TLS cert rejections on 44300), `PORT=4004`, `NODE_ENV=development`, `LOCAL_DEV_PASSWORD=init`, and verified `S4_USERNAME=KHUSHAL`.
+- **CHANGED:** `WORKSTATUS.md` (and local `.env.local`, git-ignored). Configured `S4_DESTINATION_URL=http://sap-host.invalid:8000` (standard HTTP OData Gateway port on NetWeaver DS4 / Client 220, avoiding self-signed TLS cert rejections on 44300), `PORT=4004`, `NODE_ENV=development`, `LOCAL_DEV_PASSWORD=init`, and verified `S4_USERNAME=KHUSHAL`.
 - **ROOT CAUSE OF PREVIOUS LOGIN FAILURES:**
   1. Port 44300 caused `DEPTH_ZERO_SELF_SIGNED_CERT`, mapped by `AuthAdapter.js` to `"Cannot connect to S/4HANA system. Please check network connectivity and try again."`
   2. Input mismatch against running process credentials triggered S/4 fallback rejection: `"Invalid username or password. S/4HANA logon failed (check credentials or SU01 lock status)."`.
@@ -6292,8 +6306,8 @@ Single source of truth for work history, current status, validation, unresolved 
 - **TEST DECISION:** EXISTING TEST SUFFICIENT — Playwright headless browser automation & direct API endpoint verification.
 - **TESTED / VERIFIED (ALL PASS):**
   1. **Direct S/4 Gateway Probes (READ-ONLY):**
-     - `GET http://172.27.100.32:8000/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/?sap-client=220` &rarr; `HTTP 200 OK`.
-     - `GET http://172.27.100.32:8000/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/?sap-client=220` &rarr; `HTTP 200 OK`.
+     - `GET http://sap-host.invalid:8000/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV/?sap-client=220` &rarr; `HTTP 200 OK`.
+     - `GET http://sap-host.invalid:8000/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/?sap-client=220` &rarr; `HTTP 200 OK`.
      - RFC Connectivity (`tools/check-service-connectivity.js`) &rarr; `[PASS] Live SAP RFC: Connected to Client 220 (Pre-Test). Overall Status: HEALTHY`.
   2. **Backend Auth API:**
      - `POST http://localhost:4004/odata/v4/auth/login` with user `KHUSHAL` returned `HTTP 200 OK` (`authenticated: true`, `Authentication successful (S/4 Development User)`, JWT token minted with Admin, PurchasingManager, SalesRepresentative, SalesManager, WarehouseManager roles).
@@ -6331,13 +6345,13 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ### 2026-10-29 IST — Restore HTTPS S/4 URL in local .env.local — PARTIAL
 
-- **CHANGED:** local `.env.local` only (git-ignored): `S4_DESTINATION_URL` set back to `https://vheudds4ap01.sap.aether.co.in:44300`; it had been changed to `http://172.27.100.32:8000` (plain HTTP, Basic-auth credentials in clear text). Backup `~/.sap-certs/env.local.bak2`. No source change.
+- **CHANGED:** local `.env.local` only (git-ignored): `S4_DESTINATION_URL` set back to `https://sap-host.invalid:44300`; it had been changed to `http://sap-host.invalid:8000` (plain HTTP, Basic-auth credentials in clear text). Backup `~/.sap-certs/env.local.bak2`. No source change.
 - **VERIFIED:** strict Node TLS to the FQHN with `NODE_EXTRA_CA_CERTS=$HOME/.sap-certs/s4-dev.pem` returned HTTP 401 unauthenticated (READ-ONLY, no credentials). **NOT VERIFIED:** app restarted on the new value; login against SAP; cert fingerprint with Basis. **TEST DECISION:** TEST NOT POSSIBLE — local environment config.
 - **NEXT:** restart with `NODE_EXTRA_CA_CERTS=$HOME/.sap-certs/s4-dev.pem npm start`.
 
 ### 2026-10-29 IST — Restore HTTPS S/4 URL in local .env.local — PARTIAL
 
-- **CHANGED:** local `.env.local` only (git-ignored): `S4_DESTINATION_URL` set back to `https://vheudds4ap01.sap.aether.co.in:44300`; it had been changed to `http://172.27.100.32:8000` (plain HTTP, Basic-auth credentials in clear text). Backup `~/.sap-certs/env.local.bak2`. No source change.
+- **CHANGED:** local `.env.local` only (git-ignored): `S4_DESTINATION_URL` set back to `https://sap-host.invalid:44300`; it had been changed to `http://sap-host.invalid:8000` (plain HTTP, Basic-auth credentials in clear text). Backup `~/.sap-certs/env.local.bak2`. No source change.
 - **VERIFIED:** strict Node TLS to the FQHN with `NODE_EXTRA_CA_CERTS=$HOME/.sap-certs/s4-dev.pem` (unauthenticated, READ-ONLY). **NOT VERIFIED:** app restarted on the new value; login against SAP; cert fingerprint with Basis. **TEST DECISION:** TEST NOT POSSIBLE — local environment config. **NEXT:** restart `NODE_EXTRA_CA_CERTS=$HOME/.sap-certs/s4-dev.pem npm start`.
 
 ### 2026-10-29 IST — Quarantine label 4 x 6 layout: one field per row, 5 % hairlines, larger barcode — PARTIAL

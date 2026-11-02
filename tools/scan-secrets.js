@@ -44,8 +44,22 @@ const SECRET_RULES = [
     name: 'Hardcoded S/4HANA Password in non-test file',
     regex: /(?:S4_PASSWORD|S4HANA_PASSWORD|SAP_PASSWORD)\s*[:=]\s*["'][^"'\s${}]{6,}["']/,
     nonTestOnly: true
+  },
+  {
+    name: 'Hardcoded password comparison',
+    regex: /(?:timingSafeEqual|compareSync)\([^,)]+,\s*["'`]/,
+    nonTestOnly: true
+  },
+  {
+    name: 'Private network address',
+    regex: /(?<![\d.])(?:10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}(?![\d.])/,
+    nonTestOnly: true
   }
 ];
+
+// Keys in .env.local whose real values must never be in a tracked file, in any form.
+const LOCAL_SECRET_KEYS = ['S4_PASSWORD', 'LOCAL_DEV_PASSWORD', 'LOCAL_AUTH_SECRET', 'NVIDIA_API_KEY', 'AICORE_SERVICE_KEY'];
+const MIN_LOCAL_VALUE_LENGTH = 8; // shorter values match ordinary words and would only produce noise
 
 // File exclusions
 const IGNORED_PATHS = [
@@ -109,7 +123,33 @@ function verifyGitignore() {
   return { ok: true };
 }
 
-function scanFile(relPath) {
+/** Real secret values and the SAP host from .env.local; none in CI, where that file does not exist. */
+function localSecretValues(read = () => fs.readFileSync(path.join(PROJECT_ROOT, '.env.local'), 'utf8')) {
+  let env;
+  try {
+    env = require('dotenv').parse(read());
+  } catch (_) {
+    return [];
+  }
+  const values = LOCAL_SECRET_KEYS.map((key) => String(env[key] || '').trim());
+  try {
+    values.push(new URL(env.S4_DESTINATION_URL).hostname);
+  } catch (_) { /* no URL configured */ }
+  return values.filter((value) => value.length >= MIN_LOCAL_VALUE_LENGTH);
+}
+
+/** Reports the file and line only: a finding must never print the value it found. */
+function findLocalValues(relPath, content, values) {
+  const findings = [];
+  content.split('\n').forEach((line, idx) => {
+    if (values.some((value) => line.includes(value))) {
+      findings.push({ file: relPath, line: idx + 1, rule: 'Value from the local environment file', snippet: '' });
+    }
+  });
+  return findings;
+}
+
+function scanFile(relPath, localValues = []) {
   const fullPath = path.join(PROJECT_ROOT, relPath);
   if (!fs.existsSync(fullPath)) return [];
   try {
@@ -126,7 +166,7 @@ function scanFile(relPath) {
 
   const content = buffer.toString('utf8');
   const lines = content.split('\n');
-  const findings = [];
+  const findings = findLocalValues(relPath, content, localValues);
   const isTest = relPath.startsWith('test/') || relPath.includes('.test.') || relPath.includes('fixtures/');
 
   lines.forEach((line, idx) => {
@@ -166,8 +206,9 @@ function run() {
   console.log(`[SECRET SCAN] Inspecting ${trackedFiles.length} tracked files against ${SECRET_RULES.length} detection rules...`);
 
   let allFindings = [];
+  const localValues = localSecretValues();
   for (const file of trackedFiles) {
-    const findings = scanFile(file);
+    const findings = scanFile(file, localValues);
     if (findings.length > 0) {
       allFindings = allFindings.concat(findings);
     }
@@ -190,4 +231,4 @@ if (require.main === module) {
   run();
 }
 
-module.exports = { scanFile, verifyGitignore, getTrackedFiles, SECRET_RULES };
+module.exports = { scanFile, verifyGitignore, getTrackedFiles, SECRET_RULES, localSecretValues, findLocalValues };

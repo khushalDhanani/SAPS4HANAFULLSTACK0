@@ -1,4 +1,4 @@
-const { verifyGitignore, getTrackedFiles, SECRET_RULES } = require('../../../tools/scan-secrets');
+const { verifyGitignore, getTrackedFiles, SECRET_RULES, scanFile, localSecretValues, findLocalValues } = require('../../../tools/scan-secrets');
 
 describe('Release Automation: Secret Scanner Unit Tests', () => {
   it('fails closed when git ls-files fails', () => {
@@ -47,5 +47,45 @@ describe('Release Automation: Secret Scanner Unit Tests', () => {
     expect(pwdRule.regex.test('S4_PASSWORD = "supersecretpassword123"')).toBe(true);
     expect(pwdRule.regex.test('S4HANA_PASSWORD: "anothersecretvalue"')).toBe(true);
     expect(pwdRule.regex.test('S4HANA_PASSWORD: "${S4HANA_PASSWORD}"')).toBe(false);
+  });
+
+  it('detects a password written into a comparison, the form that got past this scanner', () => {
+    const rule = SECRET_RULES.find((r) => r.name === 'Hardcoded password comparison');
+    expect(rule).toBeDefined();
+    expect(rule.regex.test('localTokenUtil.timingSafeEqual(sPass, "not-a-real-value")')).toBe(true);
+    expect(rule.regex.test('localTokenUtil.timingSafeEqual(sPass, sEnvDevPass)')).toBe(false);
+  });
+
+  it('detects private network addresses and not public ones', () => {
+    const rule = SECRET_RULES.find((r) => r.name === 'Private network address');
+    expect(rule).toBeDefined();
+    ['10.20.30.40', 'https://172.16.0.5:44300', '172.31.255.1', '192.168.1.1'].forEach((v) => expect(rule.regex.test(v)).toBe(true));
+    ['8.8.8.8', '172.15.0.1', '172.32.0.1', 'version 10.1.1', '1.10.20.30.40'].forEach((v) => expect(rule.regex.test(v)).toBe(false));
+  });
+
+  describe('real values from the local environment file', () => {
+    const SECRET = 'an-example-value-1';
+
+    it('reads secrets and the SAP host, and skips short or missing values', () => {
+      const values = localSecretValues(() => `S4_PASSWORD=${SECRET}\nS4_DESTINATION_URL=https://sap.example.test:44300\nLOCAL_DEV_PASSWORD=short\nS4_CLIENT=220\n`);
+      expect(values).toEqual(expect.arrayContaining([SECRET, 'sap.example.test']));
+      expect(values).not.toContain('short');
+      expect(values).not.toContain('220');
+      expect(localSecretValues(() => { throw new Error('ENOENT'); })).toEqual([]);
+    });
+
+    it('finds a value in any form and never includes it in the finding', () => {
+      const findings = findLocalValues('notes.md', `line one\nsomeCall(x, "${SECRET}")\n`, [SECRET]);
+      expect(findings).toEqual([expect.objectContaining({ file: 'notes.md', line: 2, rule: 'Value from the local environment file' })]);
+      expect(JSON.stringify(findings)).not.toContain(SECRET);
+      expect(findLocalValues('notes.md', 'nothing here', [SECRET])).toEqual([]);
+    });
+  });
+
+  it('the repository has no finding for the new rules and local values', () => {
+    const files = getTrackedFiles();
+    const local = localSecretValues();
+    const found = files.flatMap((f) => scanFile(f, local)).map((x) => `${x.file}:${x.line} ${x.rule}`);
+    expect(found).toEqual([]);
   });
 });

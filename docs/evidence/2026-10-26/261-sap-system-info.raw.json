@@ -5,7 +5,7 @@
   "result": {
     "CURRENT_RESOURCES": 30,
     "FAST_SER_VERS": 3,
-    "FQHN": "vheudds4ap01.sap.aether.co.in",
+    "FQHN": "sap-host.invalid",
     "INSTANCE_NUMBER": "00",
     "MAXIMAL_RESOURCES": 32,
     "RECOMMENDED_DELAY": 0,
@@ -25,11 +25,11 @@
       "RFCOPSYS": "Linux",
       "RFCTZONE": " 19800",
       "RFCDAYST": "",
-      "RFCIPADDR": "172.27.100.32",
+      "RFCIPADDR": "sap-host.invalid",
       "RFCKERNRL": "916",
       "RFCHOST2": "vheudds4ap01",
       "RFCSI_RESV": "",
-      "RFCIPV6ADDR": "172.27.100.32"
+      "RFCIPV6ADDR": "sap-host.invalid"
     },
     "S4_HANA": "X",
     "SCCSTATE": "N"
