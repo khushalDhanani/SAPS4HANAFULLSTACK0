@@ -53,6 +53,21 @@ async function readDelivery(baseUrl, delivery) {
     return res.json();
 }
 
+/** READ-ONLY: the delivery's 101 rows in MATDOC (RFC_READ_TABLE on the same SAP system the server reads). */
+async function readReceiptFromSap(materialDocument, delivery) {
+    require('dotenv').config({ path: '.env.local', quiet: true });
+    const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
+    return new RfcClient().readTable('MATDOC', ['MBLNR', 'MJAHR', 'BWART', 'MENGE', 'VBELN_IM', 'CANCELLED'],
+        [`VBELN_IM = '${String(delivery).padStart(10, '0')}'`, `AND MBLNR = '${materialDocument}'`], 5);
+}
+
+function receiptReadBackErrors(rows, materialDocument, data) {
+    const received = rows.filter((r) => r.BWART === '101' && !r.CANCELLED).reduce((sum, r) => sum + Number(r.MENGE), 0);
+    return Math.abs(received - Number(data.quantity)) > 0.001
+        ? [`SAP read-back: document ${materialDocument} holds ${received} on delivery ${data.deliveryDocument}, expected ${data.quantity}`]
+        : [];
+}
+
 const open = openHash;
 
 /** grView model of the goods receipt view (found through its open-deliveries table). */
@@ -145,7 +160,6 @@ async function dryRun(baseUrl) {
 async function live(baseUrl, data) {
     const errors = [];
     const details = { readBack: 'NOT RUN' };
-    const before = await readDelivery(baseUrl, data.deliveryDocument);
     const session = await openSession({ baseUrl, user: 'alice', allowWrites: [new RegExp(`^${ACTION}$`)] });
     try {
         const ui = await driveUi(session, { delivery: data.deliveryDocument, quantity: Number(data.quantity) });
@@ -155,14 +169,10 @@ async function live(baseUrl, data) {
             errors.push(`posting not confirmed by the UI: ${ui.dialog}`);
         } else {
             details.materialDocument = doc;
-            // READ-ONLY read-back: verifyMaterialDocument rejects 101 (ReservationProcessAdapter.js:1135), so the
-            // delivery is read again from SAP and must show the received quantity as no longer open.
-            const after = await readDelivery(baseUrl, data.deliveryDocument);
-            details.readBack = { before: { open: before.OpenQuantity, status: before.GoodsMovementStatus }, after: { open: after.OpenQuantity, status: after.GoodsMovementStatus } };
-            const received = Number(before.OpenQuantity) - Number(after.OpenQuantity);
-            if (after.GoodsMovementStatus !== 'C' && Math.abs(received - Number(data.quantity)) > 0.001) {
-                errors.push(`SAP read-back: open quantity ${before.OpenQuantity} → ${after.OpenQuantity}, status ${after.GoodsMovementStatus}; expected ${data.quantity} received`);
-            }
+            // READ-ONLY read-back from MATDOC: verifyMaterialDocument rejects 101 (ReservationProcessAdapter.js:1135),
+            // and getStorageUnitDetails answers 404 once the delivery is complete (live 2026-11-02).
+            details.readBack = await readReceiptFromSap(doc, data.deliveryDocument);
+            errors.push(...receiptReadBackErrors(details.readBack, doc, data));
         }
     } catch (err) {
         errors.push(`${err.name}: ${err.message.split('\n')[0]}`);
@@ -198,4 +208,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { roundTripGoodsReceipt, driveUi, ACTION, stubResult };
+module.exports = { roundTripGoodsReceipt, driveUi, ACTION, stubResult, readReceiptFromSap, receiptReadBackErrors };

@@ -1822,7 +1822,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Next Steps
 
-- Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. Route count from `docs/e2e-coverage-matrix.md`: 5 proven, 1 partial, 15 not proven. Each later run needs read-only data discovery and its own written go. Proposed order: 261, goods receipt, scan-to, because audit findings 2 to 5 changed that code and none of it has run live.
+- Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. Route count from `docs/e2e-coverage-matrix.md`: 5 proven, 1 partial, 15 not proven. The goods receipt is PROVEN on inbound delivery 0180000137 (document 5000005789/2026, read back from SAP) for a full quantity on an unpacked delivery; partial receipts are refused. Route count from `docs/e2e-coverage-matrix.md`: 7 proven, 1 partial, 13 not proven. Each later run needs read-only data discovery and its own written go. Proposed order: 261, goods receipt, scan-to, because audit findings 2 to 5 changed that code and none of it has run live.
 
 - Goods receipt (2026-11-02): next audit item is finding 6 (plant limits), including the storage-unit path, which checks the client's plant and not the delivery's. Prove the receipt flow live with a written go. Deploy note: `ReservationItem` widens from String(4) to String(6) on HANA.
 
@@ -1902,6 +1902,54 @@ Single source of truth for work history, current status, validation, unresolved 
   Branch `feature01` is fully hardened, tested, documented, and ready for merge / PR review.
 
 ## Changes Log
+
+### 2026-11-02 IST — Live goods receipt on delivery 0180000137 after a new written go: PASS for the post, read back from SAP
+
+- **Status:** PASS for this post. Finding 7 stays open for the other write flows. The fix behind it is uncommitted.
+- **Command (WRITE, one run):** the `goodsReceipt` Tier C suite in live mode with `E2E_SAP_LIVE_TARGET='S4HANA_DEV - Client 220'`. RFC preflight passed. The server log shows one `POST /odata/v4/goods-receipt/postGoodsReceiptWithStorageUnit`.
+- **Suite result recorded honestly:** The suite reported FAIL with a 404 from `getStorageUnitDetails` after the post. That was its read-back step, because a completed delivery is no longer found by that lookup. The post itself succeeded. The suite has not had a complete live PASS, because this delivery cannot be posted again.
+- **READ-ONLY read-back from SAP:** `MATDOC` 5000005789/2026 item 0001, movement 101, material 8000004571, plant 1130, `HS01`, 100 KG, PO 0300002116/00010, `CANCELLED` blank, user KHUSHAL. LIKP `WBSTK` C, `WADAT_IST` 20261102. LIPS `WBSTA` C. `EKPO` `ELIKZ` X. `EKBE` shows the 101 for 100 KG. `MARD` `HS01` rose from 500 to 600 KG. `LTBK` has no transfer requirement for this document in W12.
+- **Change:** `test/e2e/wm/roundTripGoodsReceipt.e2e.js` now reads back from `MATDOC` by document and delivery. `docs/e2e-coverage-matrix.md` rows `wmGoodsReceipt` and `wmGoodsReceiptDetail` moved to SAP 🟢. The finished `goodsReceipt` section was removed from local gitignored `test/e2e/live/testData.json`.
+- **TEST DECISION:** TEST UPDATED (the suite's read-back).
+- **Validation:** The new read-back, run READ-ONLY against this document: no errors for 100; an error for 99 and for no rows. Dry-run `goodsReceipt` suite: PASS. `eslint` on the suite: clean. Full `npx jest`: 222 suites passed, 1 skipped; 4,326 tests passed, 59 skipped. `git diff --check`: clean.
+- **Findings, not fixed:**
+  - After completion, `getStorageUnitDetails` tells the user the number `does not exist in any active record`, which is misleading for a delivery that has been received.
+  - The server logged `Tier 5 Production Order check failed: Property ManufacturingOrder not found in type MMIMProductionOrderVHType`, so that lookup tier fails.
+- **Not verified:** whether this delivery was really test data; reversing it (`tools/test-gr-su-post-cycle.js cancel` was not run); live negative paths; partial receipts.
+- **Next:** Decide whether to keep or reverse 5000005789/2026 with RONAK. Then do read-only data discovery for the scan-to live run.
+
+### 2026-11-02 IST — Goods receipt `VLBAPI 004`: cause found by simulation and fixed: PARTIAL, live proof pending
+
+- **Status:** PARTIAL. Code and tests are done and uncommitted. No real post or commit was sent in this change, so the goods receipt is still not proven live.
+- **Simulation (after the user's written go; `SIMULATE` X, no commit, two calls on 0180000137):** The call as sent today returned `E VLBAPI 004` and `W VL 268` with values 0 and 0. `T100` for `VL 268`: `Conversion factors &1:&2 are zero, not defined mathematically`. The call with `SALES_UNIT` KG, `BASE_UOM` KG, `FACT_UNIT_NOM` 1 and `FACT_UNIT_DENOM` 1 returned no messages. `SIMULATE` was confirmed in `BAPIIBDLVHDRCTRLCON` first.
+- **READ-ONLY state after the simulation:** LIKP `WBSTK` A; no `MATDOC` rows for this delivery; `MARD` plant 1130 `HS01` still 500 KG.
+- **Change:** `srv/integration/s4hana/wm/GoodsReceiptAdapter.js`: for an unpacked delivery, the BAPI now receives units and factors read from `LIPS`. The handling-unit path is unchanged.
+- **New refusals on the unpacked path, none reaching the BAPI:** a quantity other than the full delivery quantity (422); a unit that differs from the delivery unit, a delivery unit that differs from the base unit, or a factor other than 1:1 (422); an unreadable delivery item (503). Reason: `CHG_DELQTY` is not sent there, and the archive says SAP then confirms the whole item. So this fix must not make the partial-quantity bug reachable. Partial receipts stay unsupported until proven; the code has a `shortcut:` comment.
+- **TEST DECISION:** TEST ADDED and TEST UPDATED (`test/unit/wm/goodsReceiptAttempt.test.js`).
+- **Validation:** That suite: 38 tests passed. Full `npx jest`: 222 suites passed, 1 skipped; 4,326 tests passed, 59 skipped. `eslint` on the 2 changed JS files and `git diff --check`: clean. Dry-run `goodsReceipt` suite: PASS (UI wiring only).
+- **Not verified:** a real post with these fields; whether partial receipts are possible with `CHG_DELQTY` or `PART_GR_QTY`; why the packed path worked without factors; other flows that call this BAPI.
+- **Next:** After a new written go, send one real post through the `goodsReceipt` Tier C suite and read it back from SAP.
+
+### 2026-11-02 IST — Live goods receipt on delivery 0180000137 after the user's written go: FAIL, refused by SAP, nothing posted
+
+- **Status:** FAIL for the live run, not retried. BLOCKED on the user's written go for a simulate-only diagnosis. No tracked code changed. The goods receipt screen is not proven live.
+- **Command (WRITE, one run):** the `goodsReceipt` Tier C suite in live mode with `E2E_SAP_LIVE_TARGET='S4HANA_DEV - Client 220'`. RFC preflight passed. The UI and server log show HTTP 422 from `postGoodsReceiptWithStorageUnit`, mapped from SAP message `VLBAPI 004`. `T100` text: `Error in document &1 item &2 (quantity consistency check)`.
+- **READ-ONLY state after the run:** LIKP `WBSTK` A, `KOSTK` C, `WADAT_IST` blank; no `MATDOC` rows for this delivery; `MARD` plant 1130 `HS01` still 500 KG. The local attempt row was not read; by the code path it is `rejected`.
+- **Delivery facts:** LIPS `LFIMG` and `LGMNG` both 100 KG; factors 1/1; `KOSTA` and `LVSTA` C; `PKSTA` blank; no handling units in `VEKP` by delivery. TO 1013081 by RONAK is confirmed (`KQUIT` X). So the requested quantity equals the delivery quantity and putaway is complete.
+- **Root cause:** UNKNOWN. The adapter reports only the first error row of the BAPI `RETURN`. The archived proof (document 5000005654, `docs/archive/WORKSTATUS-archive-2026-10-22.md:3739`) was a packed delivery with real handling units and `CHG_DELQTY`. The unpacked path sends `DLV_QTY` with no flag, and no live success on that path was found in the logs searched. The screen sends the delivery number as the storage unit, so it always uses this unpacked path when a row is selected. INFERRED: the screen may be unable to post by delivery at all. One untested idea is the unit fields of `ITEM_DATA` (`FACT_UNIT_NOM`, `FACT_UNIT_DENOM`, `SALES_UNIT`, `BASE_UOM`), which exist in `BAPIIBDLVITEMCON` but are not sent.
+- **Correction:** My earlier note that the BAPI route "worked once before" applied only to that packed delivery, not to this kind of delivery.
+- **Change:** `docs/e2e-coverage-matrix.md` row `wmGoodsReceiptDetail` moved to SAP 🟡 with this result.
+- **Next:** With a written go, call `BAPI_INB_DELIVERY_CONFIRM_DEC` on 0180000137 with `SIMULATE` X and no commit, once as sent today and once with the unit fields, and print the full `RETURN`.
+
+### 2026-11-02 IST — Prepare goods receipt live run on delivery 0180000137: BLOCKED on the user's written go
+
+- **Status:** Blocked. No SAP write was sent. No tracked code changed. The goods receipt flow is not proven live through the app after the audit finding 5 changes.
+- **Change:** Local gitignored `test/e2e/live/testData.json` now holds `goodsReceipt` (delivery 180000137, quantity 100). The finished `mvt261` section was removed.
+- **Stubbed rehearsal:** UI success with stub document DRYRUNGR01; 1 call; session errors none. Body: `{"StorageUnit":"180000137","DeliveryDocument":"180000137","DeliveryDocumentItem":"000010","PurchaseOrder":"300002116","PurchaseOrderItem":"00010","Unit":"KG","Material":"8000004571","Plant":"1130","StorageLocation":"HS01","Batch":"","Quantity":100,"PackagingMaterial":"","ExpiryDate":""}`.
+- **READ-ONLY target:** LIKP `WBSTK` A, `KOSTK` C, `LGNUM` W12, created by RONAK 2026-10-21. LIPS item 000010: 100 KG, plant 1130, `HS01`, `WBSTA` A. PO 0300002116 item 00010 (ZDOM, created by RONAK), 100 KG, not closed. No `MATDOC` rows for this delivery. Candidates were read from the first 60 deliveries in the 33-row list; none is under 100 units apart from a 0-quantity item on 0180000001.
+- **Candidate bug, not fixed:** `postGoodsReceiptWithStorageUnit` sets `CHG_DELQTY` only for a real handling unit, and the screen sends the delivery number as the storage unit, so that flag is not sent. `docs/archive/WORKSTATUS-archive-2026-10-22.md:9490` records that without it SAP confirms the entire delivery item. So a partial quantity entered on this screen may post the full item while the app reports the entered quantity. INFERRED from code and the archive; not tested. This run uses the full quantity, so it cannot prove or disprove this.
+- **Not verified:** whether SAP accepts this post; whether this delivery is test data; how to undo it (no 102 path in the app is proven); plant limits (audit finding 6).
+- **Next:** After the written go, send one post through the `goodsReceipt` Tier C suite in live mode and read it back from SAP.
 
 ### 2026-11-02 IST — Live 261 post on reservation 528779/1 after a new written go: PASS, read back from SAP
 

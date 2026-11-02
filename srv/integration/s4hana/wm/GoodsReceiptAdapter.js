@@ -323,7 +323,7 @@ class GoodsReceiptAdapter {
     const vbeln = sapKey(deliveryDocument, 'vbeln').padStart(10, '0');
     const posnr = sapKey(deliveryItem, 'posnr').padStart(6, '0');
     try {
-      const rows = await this.rfc.readTable('LIPS', ['VBELN', 'POSNR', 'LGORT', 'CHARG', 'LFIMG', 'MEINS', 'VRKME', 'LGNUM', 'LGPLA', 'WBSTA'], [
+      const rows = await this.rfc.readTable('LIPS', ['VBELN', 'POSNR', 'LGORT', 'CHARG', 'LFIMG', 'MEINS', 'VRKME', 'UMVKZ', 'UMVKN', 'LGNUM', 'LGPLA', 'WBSTA'], [
         `VBELN = '${vbeln}' AND POSNR = '${posnr}'`
       ]);
       if (!rows.length) return null;
@@ -335,6 +335,9 @@ class GoodsReceiptAdapter {
         Batch: li.CHARG || '',
         DeliveryQuantity: toNum(li.LFIMG),
         Unit: li.VRKME || li.MEINS || '',
+        BaseUnit: li.MEINS || '',
+        FactorNumerator: toNum(li.UMVKZ),
+        FactorDenominator: toNum(li.UMVKN),
         WarehouseNumber: li.LGNUM || '',
         WarehouseStorageBin: li.LGPLA || '',
         GoodsMovementStatus: li.WBSTA || '',
@@ -1388,6 +1391,29 @@ class GoodsReceiptAdapter {
       }
     }
 
+    // Unpacked delivery: DLV_QTY without conversion factors fails with VL 268 + VLBAPI 004 (simulated live 2026-11-02).
+    let unitFields = {};
+    if (huHeaders.length === 0) {
+      const facts = await this._readDeliveryItemFacts(targetDeliv, sItem);
+      if (!facts) {
+        throw Object.assign(new Error(`Delivery item ${targetDeliv}/${sItem} could not be read. The Goods Receipt was NOT posted.`), { statusCode: 503, status: 503 });
+      }
+      // shortcut: only a full receipt in a 1:1 unit is proven; CHG_DELQTY is not sent here, so SAP would confirm the whole item. Prove partial receipts live before allowing them.
+      const refuse = (msg) => Object.assign(new Error(`${msg} The Goods Receipt was NOT posted.`), { statusCode: 422, status: 422 });
+      if (Math.abs(nQty - facts.DeliveryQuantity) > 0.0005) {
+        throw refuse(`Partial receipt is not supported for an unpacked delivery: enter the full quantity ${facts.DeliveryQuantity} ${facts.Unit}.`);
+      }
+      if (sUnit !== facts.Unit || facts.Unit !== facts.BaseUnit || facts.FactorNumerator !== facts.FactorDenominator || !(facts.FactorDenominator > 0)) {
+        throw refuse(`Unit ${sUnit} cannot be posted for delivery item ${targetDeliv}/${sItem} (delivery unit ${facts.Unit}, base unit ${facts.BaseUnit}, factor ${facts.FactorNumerator}:${facts.FactorDenominator}).`);
+      }
+      unitFields = {
+        SALES_UNIT: facts.Unit,
+        BASE_UOM: facts.BaseUnit,
+        FACT_UNIT_NOM: String(facts.FactorNumerator),
+        FACT_UNIT_DENOM: String(facts.FactorDenominator)
+      };
+    }
+
     const bapiError = (ret) => [].concat(ret || []).find((r) => r && (r.TYPE === 'E' || r.TYPE === 'A'));
 
     // Documents that exist before posting: only a document outside this set belongs to this receipt.
@@ -1423,7 +1449,8 @@ class GoodsReceiptAdapter {
           DELIV_NUMB: targetDeliv,
           DELIV_ITEM: sItem,
           DLV_QTY: String(nQty),
-          DLV_QTY_IMUNIT: String(nQty)
+          DLV_QTY_IMUNIT: String(nQty),
+          ...unitFields
         }],
         ITEM_CONTROL: [itemControl]
       };

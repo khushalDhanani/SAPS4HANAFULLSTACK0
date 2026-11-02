@@ -115,7 +115,8 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
       Plant: '1120', StorageLocation: 'HS01', Quantity: 1, Unit: 'KG'
     };
     const doc = (MBLNR, MJAHR = '2026') => ({ MBLNR, MJAHR, ZEILE: '0001', BWART: '101' });
-    const make = ({ before = [], after = [], call } = {}) => {
+    const LIPS = { LFIMG: '1.000', MEINS: 'KG', VRKME: 'KG', UMVKZ: '1', UMVKN: '1' };
+    const make = ({ before = [], after = [], call, lips = LIPS } = {}) => {
       const adapter = new GoodsReceiptAdapter();
       let posted = false;
       const defaultCall = jest.fn(async (fm) => {
@@ -124,11 +125,62 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
       });
       const rfcCall = call || defaultCall;
       adapter.rfc = {
-        readTable: jest.fn(async (table) => (table === 'MATDOC' ? (posted ? after : before) : [])),
+        readTable: jest.fn(async (table) => {
+          if (table === 'MATDOC') return posted ? after : before;
+          return table === 'LIPS' && lips ? [lips] : [];
+        }),
         session: jest.fn(async (fn) => fn(rfcCall))
       };
       return { adapter, rfcCall };
     };
+
+    it('sends the delivery item units and factors, which SAP needs to post an unpacked delivery', async () => {
+      const { adapter, rfcCall } = make({ after: [doc('5000000010')] });
+
+      await adapter.postGoodsReceiptWithStorageUnit(PAYLOAD);
+
+      expect(rfcCall).toHaveBeenCalledWith('BAPI_INB_DELIVERY_CONFIRM_DEC', expect.objectContaining({
+        ITEM_DATA: [expect.objectContaining({ DLV_QTY: '1', SALES_UNIT: 'KG', BASE_UOM: 'KG', FACT_UNIT_NOM: '1', FACT_UNIT_DENOM: '1' })]
+      }));
+    });
+
+    it.each([
+      ['a partial quantity', { LFIMG: '100.000' }, 'Partial receipt'],
+      ['a different delivery unit', { VRKME: 'NOS', MEINS: 'NOS' }, 'cannot be posted'],
+      ['a delivery unit that differs from the base unit', { VRKME: 'KG', MEINS: 'TO' }, 'cannot be posted'],
+      ['a factor other than 1:1', { UMVKZ: '2' }, 'cannot be posted'],
+      ['zero factors', { UMVKZ: '0', UMVKN: '0' }, 'cannot be posted']
+    ])('refuses %s with 422 and never calls the BAPI', async (_name, over, text) => {
+      const { adapter, rfcCall } = make({ lips: { ...LIPS, ...over } });
+
+      await expect(adapter.postGoodsReceiptWithStorageUnit(PAYLOAD)).rejects.toMatchObject({
+        statusCode: 422, message: expect.stringContaining(text)
+      });
+      expect(rfcCall).not.toHaveBeenCalled();
+    });
+
+    it('does not call the BAPI when the delivery item cannot be read', async () => {
+      const { adapter, rfcCall } = make({ lips: null });
+
+      await expect(adapter.postGoodsReceiptWithStorageUnit(PAYLOAD)).rejects.toMatchObject({
+        statusCode: 503, message: expect.stringContaining('NOT posted')
+      });
+      expect(rfcCall).not.toHaveBeenCalled();
+    });
+
+    it('leaves the proven handling-unit path without the unit fields', async () => {
+      const { adapter, rfcCall } = make({ after: [doc('5000000010')] });
+      const readTable = adapter.rfc.readTable.getMockImplementation();
+      adapter.rfc.readTable.mockImplementation(async (table, ...rest) => (table === 'VEKP'
+        ? [{ EXIDV: '00000000002000018143', VHILM: 'PACK', STATUS: '0020' }]
+        : readTable(table, ...rest)));
+
+      await adapter.postGoodsReceiptWithStorageUnit({ ...PAYLOAD, StorageUnit: '2000018143', Quantity: 0.5 });
+
+      const params = rfcCall.mock.calls.find(([fm]) => fm === 'BAPI_INB_DELIVERY_CONFIRM_DEC')[1];
+      expect(params.ITEM_DATA[0]).not.toHaveProperty('FACT_UNIT_NOM');
+      expect(params.ITEM_CONTROL[0]).toMatchObject({ CHG_DELQTY: 'X' });
+    });
 
     it('reports the new document, not an earlier partial receipt listed last', async () => {
       const { adapter } = make({
@@ -154,10 +206,12 @@ describe('Goods receipt double-posting protection [mock only, not SAP verificati
       const { adapter, rfcCall } = make();
       adapter.rfc.readTable.mockImplementation(async (table) => {
         if (table === 'MATDOC') throw new Error('RFC down');
-        return [];
+        return table === 'LIPS' ? [LIPS] : [];
       });
 
-      await expect(adapter.postGoodsReceiptWithStorageUnit(PAYLOAD)).rejects.toMatchObject({ statusCode: 503 });
+      await expect(adapter.postGoodsReceiptWithStorageUnit(PAYLOAD)).rejects.toMatchObject({
+        statusCode: 503, message: expect.stringContaining('Existing material documents')
+      });
       expect(rfcCall).not.toHaveBeenCalled();
     });
 
