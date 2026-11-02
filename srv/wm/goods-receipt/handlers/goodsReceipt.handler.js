@@ -7,7 +7,7 @@ const { extractFilterParam, extractFilterParams, applyPaging, extractIfMatch } =
 // Reuse the type-agnostic WM field-format primitives (plant/sloc/material/batch are the same
 // across Goods Issue and Goods Receipt) rather than duplicating the regexes here.
 const { checkMaterial, checkPlant, checkStorageLocation, checkBatch } = require('../../goods-issue/validation/common');
-const { plantScope, isPlantAllowed } = require('../../reservation-entry/readScope');
+const { plantScope, isPlantAllowed, assertPlantsInScope } = require('../../reservation-entry/readScope');
 
 /** 403 message when the posting plant is outside the authenticated user's plant scope (Admin: unrestricted), else null. */
 function plantScopeError(req, plant) {
@@ -16,6 +16,18 @@ function plantScopeError(req, plant) {
 }
 
 const stripZeros = (value) => String(value || '').trim().replace(/^0+(?=.)/, '');
+
+/** SAP posts by delivery number, so the delivery's own plant decides; the Plant in the request proves nothing. */
+async function deliveryPlantFailure(req) {
+    const { DeliveryDocument, DeliveryDocumentItem, PurchaseOrderItem } = req.data;
+    if (!DeliveryDocument) return null;
+    try {
+        await assertPlantsInScope(req.user, async () => [await GoodsReceiptAdapter.readDeliveryPlant(DeliveryDocument, DeliveryDocumentItem || PurchaseOrderItem || '10')], `delivery ${DeliveryDocument}`);
+        return null;
+    } catch (err) {
+        return err;
+    }
+}
 
 /**
  * Runs one SAP receipt posting under an atomic per-delivery-item claim. An unresolved attempt blocks the item;
@@ -195,6 +207,10 @@ const init = (srv) => {
         if (scopeErr) {
             return req.reject(403, scopeErr);
         }
+        const plantErr = await deliveryPlantFailure(req);
+        if (plantErr) {
+            return req.reject(plantErr.status, plantErr.message);
+        }
 
         try {
             const ifMatch = extractIfMatch(req);
@@ -275,6 +291,10 @@ const init = (srv) => {
         const scopeErr = plantScopeError(req, Plant);
         if (scopeErr) {
             return req.reject(403, scopeErr);
+        }
+        const plantErr = await deliveryPlantFailure(req);
+        if (plantErr) {
+            return req.reject(plantErr.status, plantErr.message);
         }
 
         try {

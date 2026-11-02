@@ -4,6 +4,7 @@ const ReservationProcessAdapter = require('../../../integration/s4hana/wm/Reserv
 const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
 const { sapKey, sapKeyOpt } = require('../../../integration/s4hana/sapKey');
 const { withReservationLock } = require('../../../integration/s4hana/wm/resLock');
+const { assertPlantsInScope } = require('../../reservation-entry/readScope');
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
@@ -244,6 +245,19 @@ class TrToHandler {
       for (const [v, label] of requiredFields) {
         if (!v) throw httpError(400, `${label} is required (not in the request and not on the tracking record)`);
       }
+      // The reservation or transfer order decides the plant in SAP; the named plant is checked too because it is posted.
+      await assertPlantsInScope(req.user, async () => {
+        const plants = [sPlant];
+        if (sResNo) {
+          const rows = await resProcessAdapter.rfc.readTable('RESB', ['WERKS'], [`RSNUM = '${sapKey(sResNo, 'rsnum').padStart(10, '0')}'`, `AND RSPOS = '${sapKey(sResItem, 'rspos').padStart(4, '0')}'`]);
+          plants.push(rows[0]?.WERKS);
+        }
+        if (sTanum) {
+          const rows = await resProcessAdapter.rfc.readTable('LTAP', ['WERKS'], [`TANUM = '${sapKey(sTanum, 'tanum').padStart(10, '0')}'`]);
+          plants.push(rows[0]?.WERKS);
+        }
+        return plants;
+      }, sResNo ? `reservation ${sResNo}` : (sTanum ? `Transfer Order ${sTanum}` : `plant ${sPlant}`));
 
       // PROCESS_ID of this GI step: reused on retry so an already posted document is found, never posted twice.
       // After a posted document the next issue on this item is a new step and gets a fresh id.
@@ -455,6 +469,10 @@ class TrToHandler {
       }
       let existing = null;
       const wh = sapKeyOpt(data.lgnum || data.WarehouseNumber || data.warehouseNumber, 'lgnum');
+      const trToCheck = data.tbnum || data.trNumber || data.TRNumber;
+      if (trToCheck) {
+        await assertPlantsInScope(req.user, async () => ((await adapter.getTR(trToCheck, wh)).Items || []).map((i) => i.Plant), `Transfer Requirement ${trToCheck}`);
+      }
 
       if (ReservationTrack && wh) {
         try {

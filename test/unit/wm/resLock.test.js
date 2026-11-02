@@ -8,7 +8,7 @@
 const cds = require('@sap/cds');
 const { withReservationLock, isLockConflict } = require('../../../srv/integration/s4hana/wm/resLock');
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
-const TrToHandler = require('../../../srv/wm/tr-to/handlers/trTo.handler');
+const TrToHandler = require('../../support/trToHandlerAsAdmin');
 
 const withFlag = async (value, fn) => {
   const saved = cds.env.s4.resLockEnabled;

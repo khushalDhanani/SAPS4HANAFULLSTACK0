@@ -1,4 +1,4 @@
-const TrToHandler = require('../../../srv/wm/tr-to/handlers/trTo.handler');
+const TrToHandler = require('../../support/trToHandlerAsAdmin');
 const fs = require('fs');
 const path = require('path');
 

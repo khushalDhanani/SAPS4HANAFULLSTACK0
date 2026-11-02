@@ -11,7 +11,7 @@ const attemptStore = require('./ReservationAttemptStore');
 const { userFacingSapError } = require('../../common/sapErrorText');
 const { classifyCreateFailure } = require('./ReservationAttemptStore');
 const { validateReservationInput, getMovementConfig, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
-const { plantScope, applyPlantScope, isPlantAllowed } = require('./readScope');
+const { plantScope, applyPlantScope, isPlantAllowed, assertPlantsInScope } = require('./readScope');
 const LOG = cds.log('reservation-entry');
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 const reservationNoKey = (value) => sapKey(value, 'rsnum').padStart(10, '0');
@@ -21,6 +21,24 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
   async init() {
     const { ReservationEntries, ReservationLogs, OrderTypeVH, InternalOrderVH, CostCenterVH } = this.entities;
     const adapter = new ReservationProcessAdapter();
+
+    /** Answers the request and returns true when a plant read from SAP or tracking is outside the user's scope. */
+    const refusedOutsidePlant = async (req, readPlants, what) => {
+      try {
+        await assertPlantsInScope(req.user, readPlants, what);
+        return false;
+      } catch (err) {
+        req.error(err.status, err.message);
+        return true;
+      }
+    };
+    /** Plants of a TR (LTBP) or TO (LTAP) in SAP; [''] when SAP has none, which the plant check refuses. */
+    const sapDocumentPlants = async (table, keyField, keyName, number, warehouse) => {
+      const where = [`${keyField} = '${sapKey(number, keyName).padStart(10, '0')}'`];
+      if (warehouse) where.push(`AND LGNUM = '${sapKey(warehouse, 'lgnum')}'`);
+      const rows = await adapter.rfc.readTable(table, ['WERKS'], where);
+      return rows.length ? rows.map((row) => row.WERKS) : [''];
+    };
 
     // Validation per movement type backed by normalized MOVEMENT_CONFIG
     function validateMovementType(data, req) {
@@ -826,6 +844,7 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       if (!track) {
         return req.error(404, `Reservation ${alphaOut(sResNo)}/${sResItem} not found in tracking records`);
       }
+      if (await refusedOutsidePlant(req, async () => [track.Plant], `reservation ${alphaOut(sResNo)}`)) return;
 
       let determinedWh = '';
       try {
@@ -989,6 +1008,11 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       }
 
       let determinedWh = WarehouseNumber || track?.WarehouseNumber || '';
+      // The TR number comes from the request, so it may belong to another plant than the tracked reservation.
+      if (await refusedOutsidePlant(req, async () => [
+        ...(track ? [track.Plant] : []),
+        ...await sapDocumentPlants('LTBP', 'TBNUM', 'tbnum', rawTrNumber, determinedWh)
+      ], `Transfer Requirement ${alphaOut(rawTrNumber)}`)) return;
       if (!determinedWh && track?.Plant && track?.StorageLocation) {
         try {
           determinedWh = await warehouseFor(track.Plant, track.StorageLocation, '');
@@ -1227,6 +1251,10 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
         });
       }
       const wh = WarehouseNumber || track?.WarehouseNumber || '';
+      if (await refusedOutsidePlant(req, async () => [
+        ...(track ? [track.Plant] : []),
+        ...await sapDocumentPlants('LTAP', 'TANUM', 'tanum', TransferOrder, wh)
+      ], `Transfer Order ${alphaOut(TransferOrder)}`)) return;
       try {
         await adapter.confirmTransferOrder({
           warehouseNumber: wh,
@@ -1834,9 +1862,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
           await lockEntry({ ReservationNo: sClean, ReservationItem: sResItem });
       }
 
+      if (track && await refusedOutsidePlant(req, async () => [track.Plant], `reservation ${alphaOut(sResNo)}`)) return;
+
       if (!track && adapter.rfc) {
         const live = await fetchSapReservation(sResNo, sResItem);
         if (live) {
+          if (await refusedOutsidePlant(req, async () => [live.Plant], `reservation ${alphaOut(sResNo)}`)) return;
           const sPadded = reservationNoKey(sResNo);
           const sCanonicalItem = reservationItemKey(sResItem);
           const imported = {

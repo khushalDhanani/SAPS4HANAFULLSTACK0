@@ -2,7 +2,8 @@
 
 jest.mock('../../../srv/integration/s4hana/wm/GoodsReceiptAdapter', () => ({
     postGoodsReceipt: jest.fn().mockResolvedValue({ MaterialDocument: '5000000001' }),
-    postGoodsReceiptWithStorageUnit: jest.fn().mockResolvedValue({ MaterialDocument: '5000000002' })
+    postGoodsReceiptWithStorageUnit: jest.fn().mockResolvedValue({ MaterialDocument: '5000000002' }),
+    readDeliveryPlant: jest.fn().mockResolvedValue('1120')
 }));
 
 const GoodsReceiptAdapter = require('../../../srv/integration/s4hana/wm/GoodsReceiptAdapter');

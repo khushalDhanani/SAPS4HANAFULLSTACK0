@@ -1904,6 +1904,45 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-11-02 IST — Audit finding 6: plant limits added to reservation entry write actions: PARTIAL, uncommitted
+
+- **Status:** PARTIAL. Code and tests are done and uncommitted. No SAP write or real write action was sent, so a live refusal was not exercised. This closes the reservation entry item left open in the entry below.
+- **Review:** All `srv/wm/reservation-entry/service.js` write actions were checked. `createReservation`, `createReservationEntry`, `postMigoGoodsMovement` and `executeReservationWarehouseFlow` already had a plant check. `verify*` actions were not changed. Four actions had none.
+- **Changes in `service.js`, all through `assertPlantsInScope`:**
+  - `createTransferRequirement`: the tracked reservation's plant.
+  - `createTOFromTR`: the tracked plant plus `LTBP-WERKS`, because the TR number comes from the request.
+  - `confirmTransferOrder`: the tracked plant, if any, plus `LTAP-WERKS`.
+  - `retryStep`: the tracked plant, or the SAP reservation's plant before it is imported into tracking.
+- **Behaviour change:** For a non-Admin, `createTOFromTR` on a TR with no `LTBP` rows now gets 503 before the existing `TR_VALIDATION` result, and `confirmTransferOrder` on a TO with no `LTAP` rows gets 503.
+- **TEST DECISION:** TEST ADDED (7 cases in `test/unit/wm/criticalTransactionAuth.test.js`) and TEST UPDATED (plant rows added to the mocks in `reservationEntryService.test.js` and `reservationCreateRecovery.test.js`).
+- **Validation:** 6 of the 7 new cases failed on the old code; the Admin case passed. After the fix: full `npx jest`: 224 suites passed, 1 skipped; 4,395 tests passed, 59 skipped. `eslint` on the 4 changed files and `git diff --check`: clean. Browser, write guard on: `Write authorization` and `Plant isolation` PASS. Dry-run `reservationRetry`: PASS.
+- **Not verified:** A refusal through a real write action on a live server. These actions' `LTBP` and `LTAP` plant reads use the same tables and field read successfully earlier today on TR 1000982 and TO 1037664, not through this new code path.
+- **Still open from the entry below:** `postGoodsReceipt` by purchase order with no delivery; `tr-to` read functions; whether `gm.checkAuthorization` runs as the technical account; `postMigoGoodsMovement` and `retryStep` trust the tracking table's plant, which is written after a checked create or from SAP (INFERRED).
+- **Next:** Decide on committing. Remaining audit findings not started: 8 to 13.
+
+### 2026-11-02 IST — Audit finding 6: plant limits read from SAP on goods receipt, reversal and transfer orders: PARTIAL, uncommitted
+
+- **Status:** PARTIAL. Code and tests are done and uncommitted. No SAP write or real write action was sent, so a live refusal was not exercised. Similar gaps in reservation entry remain open (below).
+- **Problem:** Goods receipt checked the plant named by the request, while SAP posts by delivery number. `reverseGoodsIssue` and the `tr-to` `createTOFromTR` and `postMigoGoodsMovement` handlers had no check of the user's plant.
+- **Changes:**
+  - `srv/wm/reservation-entry/readScope.js`: new `assertPlantsInScope`. For a non-Admin, every plant read from SAP must be in scope; an unreadable plant is a 503 and nothing is posted. Admins skip the read.
+  - `goodsReceipt.handler.js` and `GoodsReceiptAdapter.js`: both post actions now check the delivery item's `LIPS-WERKS`.
+  - `goodsIssue.handler.js` and `GoodsIssueAdapter.js`: reversal checks every `MATDOC-WERKS` of the document.
+  - `trTo.handler.js`: `createTOFromTR` checks the TR item plants. `postMigoGoodsMovement` checks the named plant, `RESB-WERKS` and `LTAP-WERKS`.
+  - `test/unit/wm/plantLimits.test.js` (new, 24 tests); `test/support/trToHandlerAsAdmin.js` (new) runs older no-user tests as Admin; 5 older test files use it; `goodsReceiptPlantScope.test.js` mock updated.
+- **Behaviour change:** A request with no user or no plant attribute is now refused on these actions.
+- **TEST DECISION:** TEST ADDED and TEST UPDATED.
+- **Validation:** The new tests failed on the old code (22 of 24). Full `npx jest`: 224 suites passed, 1 skipped; 4,388 tests passed, 59 skipped. `eslint` on the changed source and new test files: clean. `git diff --check`: clean.
+- **READ-ONLY live reads matched the expected plants:** delivery 0180000137 = 1130; document 4900050350/2026 = 1120; document 5000005789/2026 = 1130; TR 1000982 = 1120; `RESB` 528779/1 = 1120; `LTAP` TO 1037664 = 1120.
+- **Browser, write guard on:** `Write authorization`, `Plant isolation` and `Movement 261` PASS. Dry-run `goodsReceipt` and `scanTo`: PASS.
+- **Not verified:** A refusal through a real write action on a live server; I did not send one, because a failed check could reverse a real document. Whether a live clerk flow has any other issue with the extra read.
+- **Open:**
+  - `srv/wm/reservation-entry/service.js`: `createTOFromTR` and `confirmTransferOrder` show no plant check in the code read (INFERRED, not tested); `createTransferRequirement` was not reviewed.
+  - `postGoodsReceipt` with a purchase order and no delivery still checks only the named plant; that path failed live in October.
+  - `srv/wm/tr-to` read functions `getTR`, `getFifoBatches` and `getAvailableSerials` were not changed.
+  - `gm.checkAuthorization` running as the technical account was not confirmed.
+- **Next:** Decide whether to apply the same check to reservation entry.
+
 ### 2026-11-02 IST — Browser E2E runner: run part of the suite, show progress, 4 workers: PASS for the runner change
 
 - **Status:** Runner change done and uncommitted. The full suite still reports 1 failure, which predates this work (below).

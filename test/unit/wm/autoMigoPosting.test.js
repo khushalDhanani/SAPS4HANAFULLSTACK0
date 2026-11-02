@@ -17,7 +17,7 @@
  */
 
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
-const TrToHandler = require('../../../srv/wm/tr-to/handlers/trTo.handler');
+const TrToHandler = require('../../support/trToHandlerAsAdmin');
 const { STATUS, PROCESS_STATUS } = require('../../../srv/common/wmStatus');
 
 describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {

@@ -1129,7 +1129,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
 
     // ─── Step 8: Automatic TO Confirmation & MIGO Dependency ───────────────
     describe('15. Step 8: Automatic TO Confirmation & MIGO Dependency', () => {
-        const TrToHandler = require('../../../srv/wm/tr-to/handlers/trTo.handler');
+        const TrToHandler = require('../../support/trToHandlerAsAdmin');
         const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
 
         it('executes strict sequence: Create TO -> TO number received -> Confirm TO -> SAP confirmation successful -> confirmed = true', async () => {

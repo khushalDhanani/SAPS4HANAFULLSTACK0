@@ -41,6 +41,7 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
   let t320Spy;
   // Step 7.5: the service derives the warehouse from T320 before any SAP write; default stub = W01 for every plant/SLoc.
   const t320Stub = (byLgort = {}) => async (table, _fields, where) => {
+    if (table === 'LTBP' || table === 'LTAP') return [{ WERKS: '1120' }]; // the plant check of the clerk in these tests
     // Other tables behave as before the stub existed: RFC unavailable (503), so fallbacks stay exercised.
     if (table !== 'T320') throw Object.assign(new Error('node-rfc is not available (test stub)'), { status: 503 });
     const lgort = (String(where?.[0] || '').match(/LGORT = '([A-Z0-9]+)'/) || [])[1];

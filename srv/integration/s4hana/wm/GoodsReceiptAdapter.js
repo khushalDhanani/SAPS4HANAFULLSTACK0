@@ -323,7 +323,7 @@ class GoodsReceiptAdapter {
     const vbeln = sapKey(deliveryDocument, 'vbeln').padStart(10, '0');
     const posnr = sapKey(deliveryItem, 'posnr').padStart(6, '0');
     try {
-      const rows = await this.rfc.readTable('LIPS', ['VBELN', 'POSNR', 'LGORT', 'CHARG', 'LFIMG', 'MEINS', 'VRKME', 'UMVKZ', 'UMVKN', 'LGNUM', 'LGPLA', 'WBSTA'], [
+      const rows = await this.rfc.readTable('LIPS', ['VBELN', 'POSNR', 'WERKS', 'LGORT', 'CHARG', 'LFIMG', 'MEINS', 'VRKME', 'UMVKZ', 'UMVKN', 'LGNUM', 'LGPLA', 'WBSTA'], [
         `VBELN = '${vbeln}' AND POSNR = '${posnr}'`
       ]);
       if (!rows.length) return null;
@@ -331,6 +331,7 @@ class GoodsReceiptAdapter {
       const likp = await this.rfc.readTable('LIKP', ['VBELN', 'LFDAT'], [`VBELN = '${vbeln}'`]);
       const lfdat = (likp[0] && likp[0].LFDAT) || '';
       return {
+        Plant: li.WERKS || '',
         StorageLocation: li.LGORT || '',
         Batch: li.CHARG || '',
         DeliveryQuantity: toNum(li.LFIMG),
@@ -348,6 +349,12 @@ class GoodsReceiptAdapter {
       LOG.warn(`Delivery item read (LIPS/LIKP) failed for ${vbeln}/${deliveryItem}: ${err.message}`);
       return null;
     }
+  }
+
+  /** The plant SAP holds for an inbound delivery item; '' when it cannot be read. */
+  async readDeliveryPlant(deliveryDocument, deliveryItem) {
+    const facts = await this._readDeliveryItemFacts(deliveryDocument, deliveryItem);
+    return facts ? facts.Plant : '';
   }
 
   /**

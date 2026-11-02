@@ -604,6 +604,15 @@ class GoodsIssueAdapter {
   }
 
 
+  /** The distinct plants of a material document's items, read from SAP. */
+  async getDocumentPlants(materialDocument, materialDocYear) {
+    const doc = String(materialDocument || '').trim();
+    const year = String(materialDocYear || '').trim();
+    if (!/^\d{1,10}$/.test(doc) || !/^\d{4}$/.test(year)) return [];
+    const rows = await this.rfc.readTable('MATDOC', ['WERKS'], [`MBLNR = '${doc.padStart(10, '0')}'`, `AND MJAHR = '${year}'`]);
+    return [...new Set(rows.map((r) => r.WERKS))];
+  }
+
   /** Router that dispatches a posting by MovementType. */
   async postGoodsIssueByType(data) { return this.posting.postByMovementType(data); }
 

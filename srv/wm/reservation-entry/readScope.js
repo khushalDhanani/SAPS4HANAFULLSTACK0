@@ -29,4 +29,26 @@ function isPlantAllowed(plant, allowedPlants) {
   return Boolean(normalized) && allowedPlants.includes(normalized);
 }
 
-module.exports = { plantScope, applyPlantScope, isPlantAllowed };
+/**
+ * For a non-Admin: every plant readPlants() reports from SAP must be in the user's scope. A plant named by the request
+ * proves nothing, so a plant that cannot be read refuses the action (503) rather than letting it through.
+ */
+async function assertPlantsInScope(user, readPlants, what) {
+  const allowedPlants = plantScope(user);
+  if (allowedPlants === null) return;
+  const refuse = (status, message) => Object.assign(new Error(message), { status, statusCode: status });
+  let plants;
+  try {
+    plants = await readPlants();
+  } catch (err) {
+    if (err.status >= 400 && err.status < 500) throw err;
+    throw refuse(503, `The plant of ${what} could not be read from SAP; nothing was posted (NOT posted). Try again.`);
+  }
+  if (!plants.length || plants.some((plant) => !String(plant || '').trim())) {
+    throw refuse(503, `The plant of ${what} could not be read from SAP; nothing was posted (NOT posted). Try again.`);
+  }
+  const outside = plants.find((plant) => !isPlantAllowed(plant, allowedPlants));
+  if (outside) throw refuse(403, `Plant ${outside} is outside the authenticated user's plant scope`);
+}
+
+module.exports = { plantScope, applyPlantScope, isPlantAllowed, assertPlantsInScope };

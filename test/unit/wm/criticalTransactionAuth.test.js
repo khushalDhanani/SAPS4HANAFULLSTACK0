@@ -110,6 +110,7 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       if (table === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011201301', DATBI: '99991231' }];
       if (table === 'MARC') return [{ MATNR: '000000008000000023', WERKS: '1120' }, { MATNR: '000000008000000023', WERKS: '1110' }];
       if (table === 'MARD') return [{ MATNR: '000000008000000023', WERKS: '1120', LGORT: 'HS01', LABST: '100.000' }, { MATNR: '000000008000000023', WERKS: '1110', LGORT: 'CS01', LABST: '50.000' }];
+      if (table === 'LTBP' || table === 'LTAP') return [{ WERKS: '1120' }];
       return [];
     });
 
@@ -410,6 +411,72 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       it('rejects unassigned plant user (test-viewer-noplant, no plant attribute) creating entry with 403', async () => {
         await expect(POST(url, defaultResvPayload, { auth: { username: 'test-viewer-noplant', password: '' } }))
           .rejects.toMatchObject({ response: { status: 403 } });
+      });
+    });
+
+    describe('plant limits read from the document, not the request', () => {
+      const clerk1120 = { auth: { username: 'test-clerk-1120', password: '' } };
+      const clerk1130 = { auth: { username: 'test-clerk-1130', password: '' } };
+      const base = { ReservationNo: '520001', ReservationItem: '0001', WarehouseNumber: 'W01' };
+      // Own reservation numbers, so the result does not depend on rows other tests in this file created.
+      const seedTrack = async (ReservationNo, Plant) => {
+        await DELETE.from('saps4hana.wm.ReservationTrack').where({ ReservationNo, ReservationItem: '0001' });
+        await INSERT.into('saps4hana.wm.ReservationTrack').entries({ ReservationNo, ReservationItem: '0001', MovementType: '201', Plant, StorageLocation: 'HS01', Material: '8000000023', Quantity: 1, Unit: 'KG', WarehouseNumber: 'W01', Status_code: '01' });
+      };
+      const sapPlant = (table, rows) => {
+        const original = _rfcReadTableSpy.getMockImplementation();
+        _rfcReadTableSpy.mockImplementation(async (name, ...rest) => (name === table ? rows() : original(name, ...rest)));
+      };
+
+      it('createTransferRequirement: refuses a clerk of another plant than the tracked reservation', async () => {
+        await seedTrack('0000529901', '1120');
+        await expect(POST('/odata/v4/reservation-entry/createTransferRequirement', { ...base, ReservationNo: '0000529901' }, clerk1130))
+          .rejects.toMatchObject({ response: { status: 403 } });
+        expect(trSpy).not.toHaveBeenCalled();
+      });
+
+      it("createTOFromTR: refuses a clerk who names a foreign plant's TR on their own reservation", async () => {
+        sapPlant('LTBP', () => [{ WERKS: '1130' }]);
+        await expect(POST('/odata/v4/reservation-entry/createTOFromTR', { ...base, TRNumber: '1000001' }, clerk1120))
+          .rejects.toMatchObject({ response: { status: 403 } });
+        expect(_toSpy).not.toHaveBeenCalled();
+      });
+
+      it('createTOFromTR: fails closed when the TR plant cannot be read', async () => {
+        sapPlant('LTBP', () => { throw new Error('RFC down'); });
+        await expect(POST('/odata/v4/reservation-entry/createTOFromTR', { ...base, TRNumber: '1000001' }, clerk1120))
+          .rejects.toMatchObject({ response: { status: 503 } });
+        expect(_toSpy).not.toHaveBeenCalled();
+      });
+
+      it("confirmTransferOrder: refuses a foreign plant's TO, with or without a reservation", async () => {
+        sapPlant('LTAP', () => [{ WERKS: '1130' }]);
+        await expect(POST('/odata/v4/reservation-entry/confirmTransferOrder', { ...base, TransferOrder: '1030001' }, clerk1120))
+          .rejects.toMatchObject({ response: { status: 403 } });
+        await expect(POST('/odata/v4/reservation-entry/confirmTransferOrder', { WarehouseNumber: 'W01', TransferOrder: '1030001' }, clerk1120))
+          .rejects.toMatchObject({ response: { status: 403 } });
+        expect(toConfirmSpy).not.toHaveBeenCalled();
+      });
+
+      it('confirmTransferOrder: fails closed when SAP has no plant for the TO', async () => {
+        sapPlant('LTAP', () => []);
+        await expect(POST('/odata/v4/reservation-entry/confirmTransferOrder', { WarehouseNumber: 'W01', TransferOrder: '1030001' }, clerk1120))
+          .rejects.toMatchObject({ response: { status: 503 } });
+        expect(toConfirmSpy).not.toHaveBeenCalled();
+      });
+
+      it('retryStep: refuses a clerk of another plant than the tracked reservation', async () => {
+        await seedTrack('0000529902', '1120');
+        await expect(POST('/odata/v4/reservation-entry/retryStep', { ReservationNo: '0000529902', ReservationItem: '0001', Step: 'TR' }, clerk1130))
+          .rejects.toMatchObject({ response: { status: 403 } });
+        expect(trSpy).not.toHaveBeenCalled();
+      });
+
+      it('an Admin is not limited and needs no plant read', async () => {
+        sapPlant('LTAP', () => [{ WERKS: '1130' }]);
+        const res = await POST('/odata/v4/reservation-entry/confirmTransferOrder', { WarehouseNumber: 'W01', TransferOrder: '1030001' }, { auth: { username: 'khushal', password: '' } });
+        expect(res.status).toBe(200);
+        expect(toConfirmSpy).toHaveBeenCalledTimes(1);
       });
     });
 

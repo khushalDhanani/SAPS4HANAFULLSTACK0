@@ -53,6 +53,7 @@ const expect409 = (p, re) => expect(p).rejects.toMatchObject({ response: { statu
 describe('Step 7.7: reservation-create partial failure and recovery', () => {
   beforeEach(() => {
     spies.push(jest.spyOn(RfcClient.prototype, 'readTable').mockImplementation(async (table) => {
+      if (table === 'LTBP' || table === 'LTAP') return [{ WERKS: '1120' }];
       if (table === 'T320') return [{ LGNUM: 'W01' }];
       if (table === 'LTAK' || table === 'LTAP' || table === 'LTBK') return []; // no unconfirmed TO items
       throw Object.assign(new Error('node-rfc is not available (test stub)'), { status: 503 });
