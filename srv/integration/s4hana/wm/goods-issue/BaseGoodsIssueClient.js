@@ -1,4 +1,3 @@
-const LOG = require('../../logger')('goods-issue-client');
 const S4ErrorMapper = require('../../S4ErrorMapper');
 const { S4HttpClient, DESTINATION_NOT_CONFIGURED } = require('../../S4HttpClient');
 const { enrichBatchStatus } = require('../../../../common/batchUtils');

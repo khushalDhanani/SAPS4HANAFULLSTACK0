@@ -7,6 +7,13 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Dead-Code Cleanup (Medium-Confidence Candidates: sapFacts.js, obsolete requires, tools audit) (2026-11-02 17:15 IST) — PASS, uncommitted:**
+  1. `srv/integration/s4hana/sapFacts.js`: Removed 8 unused dead exports (`MESSAGES`, `RFBSK`, `STATV`, `REFERENCE_PERSISTED_MOVEMENT_TYPES`, `systemUtcOffsetMinutes`, `sapLocalToEpochMs`, `rfcMessageId`, `_resetForTests`) and dead internal state (`offsetPromise`), reducing file from 106 lines to 26 lines. Retained `parseSapNumber` with defensive dash handling. Added dedicated unit test suite `test/unit/wm/sapFacts.test.js` (6/6 tests passing).
+  2. `srv/integration/s4hana/wm/goods-issue/BaseGoodsIssueClient.js`: Removed obsolete unused require `const LOG = require('../../logger')('goods-issue-client');`.
+  3. Secret Scanner: Redacted real user name in historical LTAK BNAME to `BNAME: 'SAP_USER_22'` to keep repository secret scanner 100% clean (`scanSecrets.test.js` 13/13 passing).
+  4. Tools Audit: Audited all 58 JS tools in `tools/` and shell/Python scripts; verified all 58 pass `node --check` syntax check and require resolution. Classified them into active/dormant live SAP test scripts, ADT deployers, and catalog verification tools; preserved them as non-destructive developer tooling per `AGENTS.md`.
+  5. Verification: All 227 Jest test suites (4,446 tests passed, 59 skipped, 0 failed), all 95 WM unit suites (2,509 tests passed, 56 skipped), root ESLint (clean), UI5 linter (clean), UI5 build (1.33 s), and browser E2E `verifyWmScreens.e2e.js` (16/16 steps passed) PASS. See Change Entry 2026-11-02 17:15 IST.
+
 - **Reservation entry list (/wm/reservation-entry) Date resolution & formatting fixed (2026-11-02 17:00 IST) — PASS, uncommitted:** In `ReservationEntryList.view.xml`, the date display line under Created By used an invalid OpenUI5 nested expression binding `text="{= ${view>createdAt} ? ${path: 'view>createdAt', formatter: '._formatDateIso'} : (${view>ReservationDate} || '') }"`, which caused UI5 expression parsing to fail and evaluate to empty string. Furthermore, for open SAP reservations fetched via `getOpenReservations`, `GoodsIssueReservationsClient.js` did not include `MatlCompRequirementDate` in `OPEN_RESV_SELECT`, `service.cds` omitted `ReservationDate : Date;` on `OpenReservationRow` and `ReservationDetailRow`, and `service.js` did not map `ReservationDate`. In `ReservationEntryList.controller.js`, `_formatDateIso` was expanded to format compact SAP `YYYYMMDD` (`20261016` from `RKPF-RSDAT`), OData `/Date(ms)/`, and ISO strings into `YYYY-MM-DD`, with composite fallback `(ReservationDate, createdAt)`. View binding updated to standard `{parts: [{path: 'view>ReservationDate'}, {path: 'view>createdAt'}], formatter: '._formatDateIso'}`. Target unit tests added and updated in `goodsIssueClients.test.js` (24/24 passed), `reservationEntryService.test.js` (99/99 passed), and `reservationEntryUi.test.js` (116/116 passed). All 94 WM unit suites (2,503 passed), root ESLint (clean), UI5 linter (clean), UI5 build (1.19 s), and browser E2E `verifyWmScreens.e2e.js` (16/16 steps passed including Reservation entry list with 443 rows) PASS. See Change Entry 2026-11-02 17:00 IST.
 
 - **Warehouse scan-to open TR list completed-TR leak fixed (2026-11-02 16:40 IST) — COMMITTED (`cd317a3d`):** `getOpenTRs` previously queried `LTBK` with `"AND STATU <> 'E'"` only. In SAP S/4HANA WM, transfer posting / posting change TRs (e.g. movement 311 `0001000992` created by MATDOC `4900050356` and processed via TO `0001037677`) receive `STATU = 'U'` upon completion, leaking into the open TR list and sorting to row 1. `TrToAdapter.js` now filters `STATU <> 'E'` AND `STATU <> 'U'` in both the `LTBK` query and in-memory list/lookup/candidate checks. `WarehouseScanToDetail.controller.js` guards against `oDetail.Status === 'U'`. Unit tests added in `trToAdapter.test.js` (79/79 passed) and `warehouseScanToUi.test.js` (67/67 passed); all 94 WM unit suites (2,500 tests passed) and full browser E2E `verifyWmScreens.e2e.js` (16/16 steps passed) and `roundTripScanTo.e2e.js` (createTO passed). See Change Entry 2026-11-02 16:40 IST.
@@ -1840,7 +1847,7 @@ Single source of truth for work history, current status, validation, unresolved 
 - Warehouse scan-to detail (2026-11-02): RESOLVED & COMMITTED (`cd317a3d`). Completed TR 1000992 with LTBK-STATU = 'U' excluded from open TR list.
 - Missing i18n keys (2026-11-02): pushed to `origin/feature01` (`3aa2ad95`). The new test in `uiConsistency.test.js` fails on any new literal key that is not in both bundles.
 - Quarantine labels E2E (2026-11-02): the fix is pushed to `origin/feature01` (`3aa2ad95`). CI run 41429280039 on `3aa2ad95` passed, including `Build, Test & Validate` and `Browser E2E, SAP-free suites (PR gate)`. The separately controlled SAP validation and 23-suite browser jobs were skipped.
-- Dead-code cleanup (2026-11-02): committed and pushed. Decide on the Medium-confidence list in Change Entry 2026-11-02 15:45 IST. First item done: `checkStagingForReservation` removed, uncommitted (Change Entry 2026-11-02 16:20 IST). Commit when the user asks.
+- Dead-code cleanup (2026-11-02 17:15 IST): PASS (uncommitted). Cleaned unused exports from `sapFacts.js`, removed obsolete `LOG` require from `BaseGoodsIssueClient.js`, added `sapFacts.test.js` (6/6 tests), audited `tools/` scripts, and verified full Jest (227 suites / 4,446 tests) and browser E2E (16/16). Commit when the user asks.
 - **URGENT, user action (2026-11-02):** The SAP password in `S4_PASSWORD` was committed in `2256822d` to `origin/feature01`, and the GitHub API answers 200 without login, so the repository appears public. Change that SAP password and update `.env.local`. Treat the two other removed values as exposed too. Removing them from the current files does not remove them from Git history; rewriting history needs a separate decision and a force push.
 - Live proof (2026-11-02): reversal of 4900050046/2026 is DONE and read back from SAP (262 document 4900050348/2026). The live 261 post is PROVEN on reservation 528779/1 (document 4900050350/2026, read back from SAP); serial-managed materials are still unsupported by this flow. The goods receipt is PROVEN on inbound delivery 0180000137 (document 5000005789/2026, read back from SAP) for a full quantity on an unpacked delivery; partial receipts are refused. Scan-to is proven for TO create and confirm on TR 1000982 (TO 1037664, read back from SAP); automatic MIGO and Retry MIGO are not. Route count from `docs/e2e-coverage-matrix.md`: 7 proven, 2 partial, 12 not proven. Each later run needs read-only data discovery and its own written go. A live reservation goods movement should prove the new `BKTXT` replay check (audit finding 10).
 
@@ -1923,6 +1930,42 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-11-02 17:15 IST — Dead-Code Cleanup (Medium-Confidence Candidates): PASS
+
+- **Status:** PASS.
+- **Why:** User requested dead-code cleanup of Medium-Confidence candidates from the 2026-11-02 15:45 IST review: unused members from `sapFacts.js`, obsolete requires, and review of unreferenced tools.
+- **Root Cause & Reachability Verification:**
+  1. `srv/integration/s4hana/sapFacts.js`: AST and word-exact searches across `srv/`, `app/`, `db/`, `test/`, and `tools/` confirmed that 8 of 9 exports (`MESSAGES`, `RFBSK`, `STATV`, `REFERENCE_PERSISTED_MOVEMENT_TYPES`, `systemUtcOffsetMinutes`, `sapLocalToEpochMs`, `rfcMessageId`, `_resetForTests`) and internal helper `offsetPromise` had zero references in the codebase. Stale header comment cited `tools/smoke-sap-readonly.js` which did not exist. Only `parseSapNumber` was actively imported and used (in `Mvt261Adapter.js`, `QuarantineLabelAdapter.js`, and `tools/test-261-post-cycle.js`).
+  2. `srv/integration/s4hana/wm/goods-issue/BaseGoodsIssueClient.js`: Line 1 imported `const LOG = require('../../logger')('goods-issue-client');`, but `LOG` was never referenced anywhere in `BaseGoodsIssueClient.js`.
+  3. `tools/` Scripts: Full scan of `tools/*.js` showed 58 JS files and multiple shell/Python utilities. Syntax checking (`node --check`) and module resolution checks confirmed all 58 scripts are valid with zero broken imports. Categorized into: (a) Gated live SAP verification & cycle test harnesses (`test-261-post-cycle.js`, `post-261-once.js`, `run1-mvt201-live.js` through `run5-mvt261-live.js`, etc.); (b) ADT ABAP deployment scripts (`adt-create-quar-label.js`, `adt-create-to-wrapper.js`, `adt-extend-tr-wrapper.js`); (c) Catalog, DDIC and metadata discovery utilities; (d) Build/preflight/release tools. Preserved as non-destructive developer tooling per `AGENTS.md`.
+  4. Redacted real user name in historical LTAK BNAME to `BNAME: 'SAP_USER_22'` in WORKSTATUS to resolve secret scanner rule `Real name in an SAP user field`.
+- **Changes:**
+  - `srv/integration/s4hana/sapFacts.js`:
+    - Removed unused constants `MESSAGES`, `RFBSK`, `STATV`, `REFERENCE_PERSISTED_MOVEMENT_TYPES`.
+    - Removed unused functions `systemUtcOffsetMinutes`, `sapLocalToEpochMs`, `rfcMessageId`, `_resetForTests`, and internal variable `offsetPromise`.
+    - Retained only `parseSapNumber` with defensive whitespace and dash handling (`if (!s || s === '-') return NaN;`).
+    - Cleaned header documentation.
+  - `srv/integration/s4hana/wm/goods-issue/BaseGoodsIssueClient.js`:
+    - Removed unused import `const LOG = require('../../logger')('goods-issue-client');`.
+  - `test/unit/wm/sapFacts.test.js`:
+    - Added comprehensive unit test suite covering `parseSapNumber` (positive integers, decimals, trailing-minus strings, standard prefix negatives, whitespace trimming, blank/null/undefined returning NaN, non-numeric strings returning NaN).
+  - `WORKSTATUS.md`:
+    - Sanitized historical SAP user name to `SAP_USER_22`.
+- **Verification Commands Run:**
+  - `npx jest test/unit/wm/sapFacts.test.js`: PASS (6/6 tests).
+  - `npx jest test/unit/wm/goodsIssueClients.test.js`: PASS (63/63 tests).
+  - `npx jest test/unit/wm/mvt261Adapter.test.js test/unit/wm/quarantineLabelAdapter.test.js`: PASS (121/121 tests).
+  - `npx jest test/unit/wm`: PASS (95 passed suites, 1 skipped, 2,509 passed tests, 56 skipped, 0 failed).
+  - `npm run scan:secrets`: PASS (0 secrets, credentials, or private keys detected).
+  - `npx jest test/unit/tools/scanSecrets.test.js`: PASS (13/13 tests).
+  - `npm run lint`: PASS (0 errors, 0 warnings).
+  - `cd app/fiori-app && npm run lint`: PASS (Success! No findings detected).
+  - `cd app/fiori-app && npm run build`: PASS (Build succeeded in 1.33 s).
+  - `npx jest --runInBand`: PASS (227 passed suites, 1 skipped, 4,446 passed tests, 59 skipped, 0 failed).
+  - `ALLOW_LIVE_SAP_TOOLS=1 node test/e2e/wm/verifyWmScreens.e2e.js --allow-live-sap`: PASS (16/16 steps passed).
+- **Assumptions:** None.
+- **Test Impact Decision:** TEST ADDED (`test/unit/wm/sapFacts.test.js`).
+
 ### 2026-11-02 17:00 IST — Reservation list (/wm/reservation-entry) Date display & SAP date resolution: PASS
 
 - **Status:** PASS.
@@ -1980,7 +2023,7 @@ Single source of truth for work history, current status, validation, unresolved 
   1. Live read-only SAP trace of `LTBK` and `LTBP` for `0001000992` confirmed:
      - `LTBK`: `{ LGNUM: 'W01', TBNUM: '0001000992', BWLVS: '311', STATU: 'U', BDATU: '20261102', MBLNR: '4900050356' }`.
      - `LTBP`: `{ MENGE: '1.000', TAMEN: '1.000', ELIKZ: 'X', TANUM: '0001037677' }`.
-     - `LTAK`: `{ TANUM: '0001037677', KQUIT: 'X', BNAME: 'NARESH' }`.
+     - `LTAK`: `{ TANUM: '0001037677', KQUIT: 'X', BNAME: 'SAP_USER_22' }`.
      The TR was 100% processed and confirmed via Transfer Order `1037677`.
   2. In SAP WM, transfer postings / posting changes (movement type 311, 301, etc.) receive header status `STATU = 'U'` (Umbuchung vollzogen) upon completion, whereas standard TRs receive `STATU = 'E'`.
   3. `TrToAdapter.getOpenTRs` previously queried `LTBK` with only `AND STATU <> 'E'`. Because `'U' <> 'E'`, `0001000992` was returned as open and sorted to the top (newest date `20261102`).
