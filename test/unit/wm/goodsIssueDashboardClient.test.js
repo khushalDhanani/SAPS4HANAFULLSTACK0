@@ -128,7 +128,7 @@ describe('GoodsIssueDashboardClient Unit Tests', () => {
           MENGE: '2.000',
           MEINS: 'EA',
           BUDAT: todayYMD,
-          USNAM: 'NARESH',
+          USNAM: 'SAP_USER_14',
           KOSTL: '1011103001',
           AUFNR: '',
           RSNUM: '',

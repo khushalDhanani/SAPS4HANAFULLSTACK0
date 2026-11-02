@@ -51,6 +51,11 @@ const SECRET_RULES = [
     nonTestOnly: true
   },
   {
+    name: 'Real name in an SAP user field',
+    regex: /\b(?:USNAM|ERNAM|AENAM|BNAME|UNAME)\b["'`]?\s*[:=]\s*["'`](?!SAP_USER_\d|KHUSHAL\b|TESTUSER\b|IP\d{10}\b)[A-Za-z]/,
+    nonTestOnly: true
+  },
+  {
     name: 'Private network address',
     regex: /(?<![\d.])(?:10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}(?![\d.])/,
     nonTestOnly: true

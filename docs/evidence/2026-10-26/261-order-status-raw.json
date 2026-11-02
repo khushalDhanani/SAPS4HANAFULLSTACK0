@@ -48,7 +48,7 @@
       "AUFNR": "000001002318",
       "AUART": "ZP01",
       "WERKS": "1120",
-      "ERNAM": "ADAPHALE",
+      "ERNAM": "SAP_USER_01",
       "ERDAT": "20260812",
       "OBJNR": "OR000001002318",
       "LOEKZ": ""
@@ -57,7 +57,7 @@
       "AUFNR": "000002000585",
       "AUART": "ZP02",
       "WERKS": "1600",
-      "ERNAM": "NAGRAJ",
+      "ERNAM": "SAP_USER_13",
       "ERDAT": "20260820",
       "OBJNR": "OR000002000585",
       "LOEKZ": ""
@@ -66,7 +66,7 @@
       "AUFNR": "000002000589",
       "AUART": "ZP02",
       "WERKS": "1600",
-      "ERNAM": "NAGRAJ",
+      "ERNAM": "SAP_USER_13",
       "ERDAT": "20260821",
       "OBJNR": "OR000002000589",
       "LOEKZ": ""
@@ -75,7 +75,7 @@
       "AUFNR": "000001000227",
       "AUART": "ZP01",
       "WERKS": "1120",
-      "ERNAM": "SANDHLE",
+      "ERNAM": "SAP_USER_23",
       "ERDAT": "20250911",
       "OBJNR": "OR000001000227",
       "LOEKZ": ""
@@ -84,7 +84,7 @@
       "AUFNR": "000002000540",
       "AUART": "ZP02",
       "WERKS": "1120",
-      "ERNAM": "NAGRAJ",
+      "ERNAM": "SAP_USER_13",
       "ERDAT": "20260808",
       "OBJNR": "OR000002000540",
       "LOEKZ": ""
@@ -93,7 +93,7 @@
       "AUFNR": "000002000542",
       "AUART": "ZP02",
       "WERKS": "1110",
-      "ERNAM": "NAGRAJ",
+      "ERNAM": "SAP_USER_13",
       "ERDAT": "20260809",
       "OBJNR": "OR000002000542",
       "LOEKZ": ""
@@ -102,7 +102,7 @@
       "AUFNR": "000002000588",
       "AUART": "ZP02",
       "WERKS": "1600",
-      "ERNAM": "SANDHLE",
+      "ERNAM": "SAP_USER_23",
       "ERDAT": "20260820",
       "OBJNR": "OR000002000588",
       "LOEKZ": ""
@@ -111,7 +111,7 @@
       "AUFNR": "000002000598",
       "AUART": "ZP02",
       "WERKS": "1130",
-      "ERNAM": "NAGRAJ",
+      "ERNAM": "SAP_USER_13",
       "ERDAT": "20260903",
       "OBJNR": "OR000002000598",
       "LOEKZ": ""
@@ -120,7 +120,7 @@
       "AUFNR": "000001002710",
       "AUART": "ZP01",
       "WERKS": "1110",
-      "ERNAM": "PRITIKA",
+      "ERNAM": "SAP_USER_18",
       "ERDAT": "20260914",
       "OBJNR": "OR000001002710",
       "LOEKZ": ""
@@ -129,7 +129,7 @@
       "AUFNR": "000001002716",
       "AUART": "ZP01",
       "WERKS": "1110",
-      "ERNAM": "PRITIKA",
+      "ERNAM": "SAP_USER_18",
       "ERDAT": "20260914",
       "OBJNR": "OR000001002716",
       "LOEKZ": ""

@@ -368,7 +368,7 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
         });
 
         it('should filter by CreatedByUser (matching user ID or full name)', () => {
-            mockControls.fbCreatedBy.getValue.mockReturnValue("SANDHLE");
+            mockControls.fbCreatedBy.getValue.mockReturnValue("SAP_USER_23");
             const aFilters = controller._buildFilterCriteria();
 
             expect(aFilters.length).toBe(1);
@@ -376,10 +376,10 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             expect(aFilters[0].aFilters.length).toBe(2);
             expect(aFilters[0].aFilters[0].sPath).toBe("CreatedByUser");
             expect(aFilters[0].aFilters[0].sOperator).toBe(FilterOperator.Contains);
-            expect(aFilters[0].aFilters[0].oValue1).toBe("SANDHLE");
+            expect(aFilters[0].aFilters[0].oValue1).toBe("SAP_USER_23");
             expect(aFilters[0].aFilters[1].sPath).toBe("UserFullName");
             expect(aFilters[0].aFilters[1].sOperator).toBe(FilterOperator.Contains);
-            expect(aFilters[0].aFilters[1].oValue1).toBe("SANDHLE");
+            expect(aFilters[0].aFilters[1].oValue1).toBe("SAP_USER_23");
         });
     });
 
@@ -429,7 +429,7 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             mockControls.fbPurchasingOrg.setValue("1010");
             mockControls.fbPurchasingGroup.setValue("001");
             mockControls.fbDocType.setValue("NB");
-            mockControls.fbCreatedBy.setValue("SANDHLE");
+            mockControls.fbCreatedBy.setValue("SAP_USER_23");
             mockControls.fbStatus.setSelectedKey("true");
 
             controller.onFilterBarClear();

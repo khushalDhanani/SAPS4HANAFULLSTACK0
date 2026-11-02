@@ -9,7 +9,7 @@ describe('Mvt261Adapter.findFirst', () => {
     MaterialDocument: '4900000255', MaterialDocumentYear: '2025', MaterialDocumentItem: '0001',
     PostingDate: '/Date(1750896000000)/', CreationDateTime: '/Date(1750930883000+0000)/',
     Material: '1000000514', Plant: '1120', StorageLocation: 'CS01', OrderID: '1000026',
-    QuantityInEntryUnit: '9625.000', EntryUnit: 'KG', IsAutomaticallyCreated: '', IsCancelled: true, CreatedByUser: 'ADAPHALE'
+    QuantityInEntryUnit: '9625.000', EntryUnit: 'KG', IsAutomaticallyCreated: '', IsCancelled: true, CreatedByUser: 'SAP_USER_01'
   };
   const reversal = {
     MaterialDocument: '4900000282', MaterialDocumentYear: '2025', MaterialDocumentItem: '1',
@@ -243,7 +243,7 @@ describe('Mvt261Adapter.cycle', () => {
   });
 
   it('fully issued item with a 261 and its 262: history is shown, the reversed 261 is not reversible again', async () => {
-    const doc = { MJAHR: '2025', ZEILE: '0004', BUDAT: '20250626', MENGE: '835.000', MEINS: 'KG', CHARG: 'IN25700001', LGORT: 'PT01', USNAM: 'ADAPHALE' };
+    const doc = { MJAHR: '2025', ZEILE: '0004', BUDAT: '20250626', MENGE: '835.000', MEINS: 'KG', CHARG: 'IN25700001', LGORT: 'PT01', USNAM: 'SAP_USER_01' };
     const c = await cycle({
       RESB: [{ ...base.RESB[0], BDMNG: '835.000', ENMNG: '835.000' }],
       MATDOC: [

@@ -387,7 +387,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
           .mockResolvedValueOnce([
             {
               Reservation: '518660',
-              UserID: 'NARESH'
+              UserID: 'SAP_USER_14'
             }
           ])
       };
@@ -397,7 +397,7 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].ReservationNo).toBe('518660');
-      expect(result[0].CreatedByUser).toBe('NARESH');
+      expect(result[0].CreatedByUser).toBe('SAP_USER_14');
     });
 
     it('should exclude items with OpenQty <= 0 from ItemCount (single source of truth)', async () => {

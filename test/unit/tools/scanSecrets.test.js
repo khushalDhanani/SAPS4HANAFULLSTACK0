@@ -56,6 +56,13 @@ describe('Release Automation: Secret Scanner Unit Tests', () => {
     expect(rule.regex.test('localTokenUtil.timingSafeEqual(sPass, sEnvDevPass)')).toBe(false);
   });
 
+  it('detects a real name in an SAP user field and accepts the neutral labels', () => {
+    const rule = SECRET_RULES.find((r) => r.name === 'Real name in an SAP user field');
+    expect(rule).toBeDefined();
+    ['"USNAM":"SOMEPERSON"', "ERNAM: 'SOMEPERSON'", 'BNAME = "someperson"'].forEach((v) => expect(rule.regex.test(v)).toBe(true));
+    ['"USNAM":"SAP_USER_07"', "ERNAM: 'KHUSHAL'", "USNAM: 'TESTUSER'", 'USNAM: row.USNAM', "['ERNAM', 'ERDAT']"].forEach((v) => expect(rule.regex.test(v)).toBe(false));
+  });
+
   it('detects private network addresses and not public ones', () => {
     const rule = SECRET_RULES.find((r) => r.name === 'Private network address');
     expect(rule).toBeDefined();

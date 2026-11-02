@@ -7,7 +7,7 @@
         "AUFNR": "000001002318",
         "AUART": "ZP01",
         "WERKS": "1120",
-        "ERNAM": "ADAPHALE",
+        "ERNAM": "SAP_USER_01",
         "ERDAT": "20260812",
         "OBJNR": "OR000001002318",
         "LOEKZ": ""
@@ -178,7 +178,7 @@
         "AUFNR": "000002000585",
         "AUART": "ZP02",
         "WERKS": "1600",
-        "ERNAM": "NAGRAJ",
+        "ERNAM": "SAP_USER_13",
         "ERDAT": "20260820",
         "OBJNR": "OR000002000585",
         "LOEKZ": ""
@@ -317,7 +317,7 @@
         "AUFNR": "000002000540",
         "AUART": "ZP02",
         "WERKS": "1120",
-        "ERNAM": "NAGRAJ",
+        "ERNAM": "SAP_USER_13",
         "ERDAT": "20260808",
         "OBJNR": "OR000002000540",
         "LOEKZ": ""

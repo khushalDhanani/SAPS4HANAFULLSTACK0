@@ -199,8 +199,8 @@ describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
             expect(mmFormatter.purchasingOrgDisplay("AE01", "101")).toBe("AE01 / 101");
             expect(mmFormatter.purchasingOrgDisplay("", "")).toBe("-");
 
-            expect(mmFormatter.createdByDisplay("Shriram Andhale", "SANDHLE")).toBe("Shriram Andhale (SANDHLE)");
-            expect(mmFormatter.createdByDisplay("", "SANDHLE")).toBe("SANDHLE");
+            expect(mmFormatter.createdByDisplay("Shriram Andhale", "SAP_USER_23")).toBe("Shriram Andhale (SAP_USER_23)");
+            expect(mmFormatter.createdByDisplay("", "SAP_USER_23")).toBe("SAP_USER_23");
             expect(mmFormatter.createdByDisplay("Shriram Andhale", "")).toBe("Shriram Andhale");
             expect(mmFormatter.createdByDisplay("", "")).toBe("-");
         });

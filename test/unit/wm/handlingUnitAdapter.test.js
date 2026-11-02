@@ -5,12 +5,12 @@ const listRow = {
   HandlingUnitExternalID: '1000000000', Warehouse: '', HandlingUnitIDChar32: '005056B40AF61FE08DD83C72B2D7F7F0',
   HandlingUnitOrigin: 'ERP', PackagingMaterial: '2000000042', PackagingMaterialName: 'Pallet', Plant: '1010',
   StorageLocation: '', StorageBin: '0000000007', GrossWeight: '209.200', NetWeight: '200.000', WeightUnit: 'KG',
-  GrossVolume: '0.000', VolumeUnit: '', HandlingUnitProcessStatus: '', CreatedByUser: 'ADAPHALE', CreationDateTime: '/Date(1747886400000)/'
+  GrossVolume: '0.000', VolumeUnit: '', HandlingUnitProcessStatus: '', CreatedByUser: 'SAP_USER_01', CreationDateTime: '/Date(1747886400000)/'
 };
 const detailHeader = {
   HandlingUnitExternalID: '1000000000', Warehouse: '', PackagingMaterial: '2000000042', Plant: '1010',
   GrossWeight: '209.200', NetWeight: '200.000', HandlingUnitTareWeight: '9.200', WeightUnit: 'KG',
-  HandlingUnitPackingObjectKey: '000002000000', CreatedByUser: 'ADAPHALE', CreationDateTime: '/Date(1747886400000)/'
+  HandlingUnitPackingObjectKey: '000002000000', CreatedByUser: 'SAP_USER_01', CreationDateTime: '/Date(1747886400000)/'
 };
 const detailItem = {
   HandlingUnitItem: '000001', Material: '000000000004000000002', MaterialName: 'HEEP', Plant: '1130',
@@ -42,7 +42,7 @@ describe('HandlingUnitAdapter.list', () => {
     expect(r).toMatchObject({ TotalCount: 1, SapCount: 1, Truncated: false });
     expect(r.Items[0]).toMatchObject({
       HandlingUnitExternalID: '1000000000', HandlingUnitIDChar32: '005056B40AF61FE08DD83C72B2D7F7F0',
-      PackagingMaterial: '2000000042', GrossWeight: 209.2, NetWeight: 200, WeightUnit: 'KG', CreatedByUser: 'ADAPHALE'
+      PackagingMaterial: '2000000042', GrossWeight: 209.2, NetWeight: 200, WeightUnit: 'KG', CreatedByUser: 'SAP_USER_01'
     });
     expect(calls[0].query).toContain("$filter=Plant eq '1010'");
     expect(calls[0].query).toContain('$inlinecount=allpages');

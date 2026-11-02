@@ -181,7 +181,7 @@
         "BUKRS": "1000",
         "AUART": "ZP01",
         "LOEKZ": "",
-        "ERNAM": "ADAPHALE",
+        "ERNAM": "SAP_USER_01",
         "ERDAT": "20260812"
       },
       {
@@ -191,7 +191,7 @@
         "BUKRS": "1000",
         "AUART": "ZP02",
         "LOEKZ": "",
-        "ERNAM": "NAGRAJ",
+        "ERNAM": "SAP_USER_13",
         "ERDAT": "20260820"
       },
       {
@@ -201,7 +201,7 @@
         "BUKRS": "1000",
         "AUART": "ZP02",
         "LOEKZ": "",
-        "ERNAM": "NAGRAJ",
+        "ERNAM": "SAP_USER_13",
         "ERDAT": "20260808"
       }
     ],

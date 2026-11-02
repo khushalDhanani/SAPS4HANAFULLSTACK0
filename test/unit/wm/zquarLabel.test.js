@@ -38,7 +38,7 @@ const DEMO = {
     materialName: 'DEMO MATERIAL 01', itemCode: '8000009753', grnNo: '9900000001', grnDate: '27.10.2026', inwNo: 'DEMO-INW-01',
     qtyReceived: '140.000 KG',
     containerNo: '1 of 14', manufacturer: 'DEMO MFR', supplier: 'DEMO SUPPLIER', batchNo: 'DEMO-BATCH-01',
-    mfgDate: '01.10.2026', expiryDate: '01.04.2027', netWeight: '10.000 KG', barcode: '9900000001', preparedBy: 'MSHUSSAIN'
+    mfgDate: '01.10.2026', expiryDate: '01.04.2027', netWeight: '10.000 KG', barcode: '9900000001', preparedBy: 'SAP_USER_12'
 };
 const L4x6 = () => Layout.layout('4x6');
 const LVert = () => Layout.layout('4x6', { variant: 'vertical' });
@@ -450,8 +450,8 @@ describe('ZQUAR 4 x 6 label', () => {
             }]);
         });
         it('prefers SAP PreparedBy from row and falls back to generator user or empty', () => {
-            const sapRow = { ...capRow, PreparedBy: 'MSHUSSAIN' };
-            expect(Rows.toLabels([sapRow], TEXTS, 'DEMO-USER')[0].preparedBy).toBe('MSHUSSAIN');
+            const sapRow = { ...capRow, PreparedBy: 'SAP_USER_12' };
+            expect(Rows.toLabels([sapRow], TEXTS, 'DEMO-USER')[0].preparedBy).toBe('SAP_USER_12');
             expect(Rows.toLabels([capRow, capRow], TEXTS, 'DEMO-USER').map(r => r.preparedBy)).toEqual(['DEMO-USER', 'DEMO-USER']);
             expect(Rows.toLabels([capRow], TEXTS)[0].preparedBy).toBe('-');
         });

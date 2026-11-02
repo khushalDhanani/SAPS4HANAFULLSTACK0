@@ -1,6 +1,6 @@
 # Gateway Service Remediation Request — DS4 client 220
 
-**Raised by:** Dipak Rathod, CIO — Aether Industries Limited
+**Raised by:** SAP_USER_05, CIO — Aether Industries Limited
 **Date:** 18 September 2026
 **System:** DS4, client 220 (`<S4_HOST>:8000`)
 **Evidence:** `catalog-audit.csv` — all 1345 catalogued services probed live on 18-Sep-2026

@@ -3,7 +3,7 @@
 > **Document Type:** Business Process & Technical Discovery  
 > **Target Transaction:** `ZRF_RES_HU_DNR`  
 > **Source ABAP Program:** `ZRF_RES_HU_TRANSFER_DNR` (verified in SAP Client 220, Package `ZAMM`)  
-> **Author:** DNR / Dipak Rathod (Date: 18.10.2026, Transport Request: `DS4K905295`)  
+> **Author:** DNR / SAP_USER_05 (Date: 18.10.2026, Transport Request: `DS4K905295`)  
 > **Status:** READ-ONLY DISCOVERY COMPLETE — Zero code mutations, zero live writes.
 
 ---
@@ -18,7 +18,7 @@
 | **Initial Screen (Dynpro)** | `1000` | `TSTC-DYPNO` |
 | **Program Type** | Executable Program (`SUBC = 1`) | `TRDIR-SUBC` |
 | **Package (Dev Class)** | `ZAMM` | `TADIR-DEVCLASS` |
-| **Author / Creator** | `DIPAK` (DNR / Dipak Rathod) | `TADIR-AUTHOR`, `TRDIR-CNAM` |
+| **Author / Creator** | `SAP_USER_05` (DNR / SAP_USER_05) | `TADIR-AUTHOR`, `TRDIR-CNAM` |
 | **Creation / Modification Date** | Created: `2026-10-16`, Updated: `2026-10-22` | `TRDIR-CDAT`, `TRDIR-UDAT` |
 | **Transport Request** | `DS4K905295` | Source Header Documentation |
 | **WebGUI / FLP Enablement** | `S_WEBGUI = '1'`, `S_SERVICE = '1'` | `TSTCC` |
@@ -421,7 +421,7 @@ All messages captured directly from the ABAP program source:
 ### VERIFIED (Direct Live Evidence from SAP Client 220)
 
 - Transaction code `ZRF_RES_HU_DNR` exists in `TSTC` and points to program `ZRF_RES_HU_TRANSFER_DNR` with dynpro `1000`.
-- Program `ZRF_RES_HU_TRANSFER_DNR` is an active Executable Program (`SUBC = 1`) in package `ZAMM`, authored by `DIPAK` (`2026-10-16`, updated `2026-10-22`).
+- Program `ZRF_RES_HU_TRANSFER_DNR` is an active Executable Program (`SUBC = 1`) in package `ZAMM`, authored by `SAP_USER_05` (`2026-10-16`, updated `2026-10-22`).
 - All 6,671 lines of ABAP source code have been retrieved verbatim via ADT REST API and saved to [`docs/abap/zrf_res_hu_transfer_dnr.abap`](file:///Users/khushaldhanani/Desktop/SAPS4HANAFULLSTACK0/docs/abap/zrf_res_hu_transfer_dnr.abap).
 - Complete field list, labels, validations, and user commands for Screen `1000` and Screen `2000`.
 - All database queries against `RESB`, `RKPF`, `USR21`, `ADRP`, `ADCP`, `ADR6`, `ADR2`, `T320`, `T001W`, `T300`, `T001L`, `MLGN`, `T334T`, `MLGT`, `LQUA`, `LAGP`, `T301T`, `T302T`, `T307T`, `VEKP`, `VEPO`, `SER06`, `OBJK`, `MATDOC`.
@@ -430,7 +430,7 @@ All messages captured directly from the ABAP program source:
 
 ### FOUND IN CODE (Observed in ABAP Source)
 
-- Test email recipients hardcoded in lines 155-159 (`gv_test_notify = abap_true`, CC to `naresh@aether.co.in`, `Dipak@aether.co.in`, users `DRATHOD`, `NARESH`).
+- Test email recipients hardcoded in lines 155-159 (`gv_test_notify = abap_true`, CC to `SAP_USER_14@example.invalid`, `SAP_USER_05@example.invalid`, users `SAP_USER_29`, `SAP_USER_14`).
 - Fallback default material hardcoded in line 1921 (`000000008000009754`, Plant `1120`, SLoc `CS02`, Unit `NOS`).
 - Storage type priority logic: `EN1` as preferred/available, `OH1` or bin containing `HOLD`/`BLOCK` as On-Hold (Priority 4), `9*`/`911`/`902` as In-Process (Priority 3).
 

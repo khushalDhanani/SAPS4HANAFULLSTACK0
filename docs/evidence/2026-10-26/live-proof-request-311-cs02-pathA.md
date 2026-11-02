@@ -28,7 +28,7 @@ Source abbreviations: **RAW** = `docs/evidence/2026-10-26/hu-stock-evidence.raw.
 | HU location / stock for material 9754 in W01/1120/CS02 | 20 LQUA rows, 15 LENUM, total 10 NOS: 902 −5, OH1 +5, 911 3, 913 5, EN1 1, 921 1. All `LETYP E10`. | RAW q2 |
 | HU candidate for the pick | **PENDING (pickability rule)**. Facts only: `2000019372` is the sole EN1 quant (`1-L0001-04`, 1 NOS); five HUs sit in 913 of which `2000019371` is packed to delivery `0080000134` (VEKP `VPOBJ 01`, `VPOBJKEY 0080000134`); 3 HUs in 911, 1 in 921, 5 in OH1 (each offset by a negative 902 quant). | RAW q2, q11 |
 | HU not on an open TO | `2000019372`: 2 TOs, both `PQUIT X`, LTAK `KQUIT X` → 0 open. | RAW q8–q10 |
-| HU packaging type → T319A row for W01 | VEKP `VHART Z007`, `VHILM 000000002000000340` (MARA `VHART Z007`). **T319A W01 read live 06:12Z: `0001 → E1`, `Z003 → E1`, no `Z007` row. W15 has `Z007 → E1`.** → **Precondition NOT MET (CONFIRMED); PENDING SANDHLE / functional decision (E10 vs E1).** | RAW2 q6-equivalent VEKP, q141, q143, q144 |
+| HU packaging type → T319A row for W01 | VEKP `VHART Z007`, `VHILM 000000002000000340` (MARA `VHART Z007`). **T319A W01 read live 06:12Z: `0001 → E1`, `Z003 → E1`, no `Z007` row. W15 has `Z007 → E1`.** → **Precondition NOT MET (CONFIRMED); PENDING SAP_USER_23 / functional decision (E10 vs E1).** | RAW2 q6-equivalent VEKP, q141, q143, q144 |
 | Open delivery already existing for the reservation | **None as of 06:12Z** for 529960/1 (LIPS by RSNUM/RSPOS and by VGBEL: 0 rows). Note: 524283/1 (material 6485) already has two open deliveries `0080000097`/`0080000098` (`HOD`, status A/A/A), so it is not a clean candidate. Re-read READ-ONLY immediately before any write. | RAW2 q155, q156, q148, q151, q152 |
 | Serial selection for the HU | HU 19372 carries exactly one serial, `RKN000111` (SER06 `OBKNR 50049` → OBJK). Whether to assign it is still the user's choice → **PENDING**. | RAW2 `serials` |
 | Competing reservations for the same material | `523654/1` and `529959/1` are open for 9754 (1 NOS each). Code offers a default ranking (earliest BDTER, then RSNUM; `srv/integration/s4hana/wm/HuStockTransferAdapter.js:1628`). **Business rule PENDING.** | RAW q25 |
@@ -48,12 +48,12 @@ Source abbreviations: **RAW** = `docs/evidence/2026-10-26/hu-stock-evidence.raw.
 ## 2a. Consequences the user must accept before any "go"
 
 - **The proof consumes HU 2000019372 and cannot be repeated.** Goods issue on the delivery removes the HU's single quant (`1.000 NOS`, RAW q2) from `EN1`/`1-L0001-04`; the sole EN1 unit of material 9754 is then gone and a second run would need a different HU and a different reservation.
-- **Step 3 (serial assignment) is expected to fail with `L3 866`** ("SU type for pack. mat. type Z007 could not be determined in warehouse no. W01", live on 2026-10-21, WORKSTATUS line 810) unless the cause is resolved first: either a `T319A` row for `W01`/`Z007` exists (none evidenced; SANDHLE/functional decision PENDING) or the ABAP reproduction (`docs/sap-customizing/L3866-reproduction.md`) proves and removes another cause. Running steps 1–2 before that would leave an open delivery and a confirmed picking TO on the HU.
+- **Step 3 (serial assignment) is expected to fail with `L3 866`** ("SU type for pack. mat. type Z007 could not be determined in warehouse no. W01", live on 2026-10-21, WORKSTATUS line 810) unless the cause is resolved first: either a `T319A` row for `W01`/`Z007` exists (none evidenced; SAP_USER_23/functional decision PENDING) or the ABAP reproduction (`docs/sap-customizing/L3866-reproduction.md`) proves and removes another cause. Running steps 1–2 before that would leave an open delivery and a confirmed picking TO on the HU.
 
 ## 3. What must happen before any "go"
 
 1. READ-ONLY re-reads immediately before the write (all were last read 06:12Z, RAW2): RESB `0000529960/0001` still open; LQUA for the chosen HU unchanged; LIPS by RSNUM = 0 rows; SER06/OBJK for the HU; T319A for `W01`/`Z007`.
-2. User decisions recorded in the user's own words: candidate reservation, HU / pickability rule (incl. OH1), competing-reservation rule, oversize rule, serial, T319A W01/Z007 maintenance (SANDHLE).
+2. User decisions recorded in the user's own words: candidate reservation, HU / pickability rule (incl. OH1), competing-reservation rule, oversize rule, serial, T319A W01/Z007 maintenance (SAP_USER_23).
 3. One written "go" per step above, naming environment, reservation, HU and serial.
 
 **Decisions made on the user's behalf: none.** All PENDING items above are unfilled.

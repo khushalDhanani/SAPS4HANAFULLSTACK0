@@ -5,7 +5,7 @@
 *& Module      : MM / WM / HUM
 *& Program     : ZRF_RES_HU_TRANSFER_DNR
 *& Description : List of 311 Reservations & RF/Desktop HU Stock Transfer
-*& Author      : DNR / Dipak Rathod
+*& Author      : DNR / SAP_USER_05
 *& Date        : 18.10.2026
 *& TR          : DS4K905295
 *&---------------------------------------------------------------------*
@@ -153,10 +153,10 @@ DATA: gt_strategy_stg TYPE STANDARD TABLE OF ty_strategy_stg WITH KEY lgtyp.
 *& (Set gv_test_notify = abap_false or clear recipient variables for PROD)
 *&---------------------------------------------------------------------*
 DATA: gv_test_notify    TYPE abap_bool      VALUE abap_true, " Set abap_false for Production
-      gv_test_cc_email1 TYPE adr6-smtp_addr VALUE 'naresh@aether.co.in',
-      gv_test_cc_email2 TYPE adr6-smtp_addr VALUE 'Dipak@aether.co.in',
-      gv_test_user1     TYPE sy-uname       VALUE 'DRATHOD',
-      gv_test_user2     TYPE sy-uname       VALUE 'NARESH'.
+      gv_test_cc_email1 TYPE adr6-smtp_addr VALUE 'SAP_USER_14@example.invalid',
+      gv_test_cc_email2 TYPE adr6-smtp_addr VALUE 'SAP_USER_05@example.invalid',
+      gv_test_user1     TYPE sy-uname       VALUE 'SAP_USER_29',
+      gv_test_user2     TYPE sy-uname       VALUE 'SAP_USER_14'.
 
 DATA: gr_salv_table     TYPE REF TO cl_salv_table,
       gr_salv_popup     TYPE REF TO cl_salv_table,
@@ -533,7 +533,7 @@ INITIALIZATION.
     ls_reg_tadir-object   = 'TRAN'.
     ls_reg_tadir-obj_name = 'ZRF_RES_HU_DNR'.
     ls_reg_tadir-devclass = 'ZAMM'.
-    ls_reg_tadir-author   = 'DIPAK'.
+    ls_reg_tadir-author   = 'SAP_USER_05'.
     MODIFY tadir FROM ls_reg_tadir.
   ENDIF.
 
@@ -1456,7 +1456,7 @@ ENDFORM.
 *& Description: Checks Storage Strategies for Stock Removal (MLGN-LTKZA
 *&              & T334T KZEAR='A') and Stock Placement (MLGN-LTKZE &
 *&              T334T KZEAR='E'), Material Master MLGT, and Whse Quants
-*& Author     : DNR / Dipak Rathod
+*& Author     : DNR / SAP_USER_05
 *&---------------------------------------------------------------------*
 FORM determine_whse_and_pref_stg.
   CLEAR: gt_strategy_stg, gv_pref_stg.
@@ -1630,7 +1630,7 @@ ENDFORM.
 
 *&---------------------------------------------------------------------*
 *& Form: append_strategy_stg
-*& Author     : DNR / Dipak Rathod
+*& Author     : DNR / SAP_USER_05
 *&---------------------------------------------------------------------*
 FORM append_strategy_stg USING iv_lgtyp TYPE lqua-lgtyp
                                iv_prio  TYPE i
@@ -4794,7 +4794,7 @@ ENDFORM.
 *& Description: Displays interactive popup showing Storage Strategies
 *&              for Stock Removal (A) and Stock Placement (E), Material
 *&              Master MLGT, and Available Stock by Storage Type
-*& Author     : DNR / Dipak Rathod
+*& Author     : DNR / SAP_USER_05
 *&---------------------------------------------------------------------*
 FORM f4_storage_strategies.
   PERFORM determine_whse_and_pref_stg.
@@ -6308,9 +6308,9 @@ FORM send_requester_notification USING iv_doc  TYPE mblnr
 
       lo_send_req->set_document( lo_doc ).
 
-      " Set Authorized SMTP Sender (Must be SAPHANA@AETHER.CO.IN for Office365 SMTP relay)
+      " Set Authorized SMTP Sender (Must be user@example.invalid for Office365 SMTP relay)
       DATA(lo_sender) = cl_cam_address_bcs=>create_internet_address(
-                          i_address_string = 'saphana@aether.co.in'
+                          i_address_string = 'user@example.invalid'
                           i_address_name   = 'SAP S/4HANA Notifications' ).
       lo_send_req->set_sender( lo_sender ).
 
@@ -6400,7 +6400,7 @@ FORM send_requester_notification USING iv_doc  TYPE mblnr
       ENDTRY.
     ENDIF.
 
-    " Testing Notifications to DRATHOD and NARESH
+    " Testing Notifications to SAP_USER_29 and SAP_USER_14
     IF gv_test_notify = abap_true.
       IF gv_test_user1 IS NOT INITIAL AND gv_test_user1 <> lv_requester AND gv_test_user1 <> sy-uname.
         TRY.
@@ -6439,7 +6439,7 @@ ENDFORM.
 *& Form: build_transfer_pdf
 *& Description: Builds a formatted PDF 1.4 vector document capturing
 *&              all transfer transaction details & returns binary SOLIX
-*& Author     : DNR / Dipak Rathod
+*& Author     : DNR / SAP_USER_05
 *&---------------------------------------------------------------------*
 FORM build_transfer_pdf USING    iv_doc     TYPE mblnr
                                  iv_year    TYPE mjahr

@@ -6,7 +6,7 @@ const headerRow = {
   PackingInstructionExternalName: 'Pallet EUR', HandlingUnitType: '0001', HandlingUnitLength: '120.000',
   HandlingUnitWidth: '80.000', HandlingUnitHeight: '15.000', HandlingUnitUoMDimension: 'CM',
   HandlingUnitGrossWeight: '25.000', HandlingUnitWeightUnit: 'KG', PackingInstructionIsDeleted: false,
-  CreatedByUser: 'ADAPHALE', CreationDate: '/Date(1747872000000)/'
+  CreatedByUser: 'SAP_USER_01', CreationDate: '/Date(1747872000000)/'
 };
 const componentRow = { PackingInstructionItem: '000001', Material: '000000000004000000002', PackingInstructionItmTargetQty: '50.000', BaseUnitofMeasure: 'EA' };
 

@@ -3,7 +3,7 @@
 > **Status:** Proposal & ABAP Specification for SAP S/4HANA DS4 Client 220
 > **Target Package:** `Z001`
 > **Target Function Group:** `ZWM_FINISHEDGOODS` (same as `ZWM_TO_CREATE_FROM_TR`)
-> **Author / Reference:** ABAP Team (DIPAK / BASIS)
+> **Author / Reference:** ABAP Team (SAP_USER_05 / BASIS)
 
 ---
 

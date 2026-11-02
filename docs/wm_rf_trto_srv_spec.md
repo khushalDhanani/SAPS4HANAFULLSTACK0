@@ -607,7 +607,7 @@ CLASS zcl_zwm_rf_trto_dpc_ext IMPLEMENTATION.
       ls_item-vlenr = lv_lenum.
       APPEND ls_item TO lt_items.
 
-      " Call the verified RFC function module created by DIPAK
+      " Call the verified RFC function module created by SAP_USER_05
       CALL FUNCTION 'ZWM_TO_CREATE_FROM_TR'
         EXPORTING
           iv_lgnum    = lv_lgnum

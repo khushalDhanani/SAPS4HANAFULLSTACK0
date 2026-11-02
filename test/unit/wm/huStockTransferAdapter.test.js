@@ -69,7 +69,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
         }
         if (table === 'RKPF') {
           return Promise.resolve([
-            { RSNUM: '0000010042', USNAM: 'DIPAK', BWART: '311' }
+            { RSNUM: '0000010042', USNAM: 'SAP_USER_05', BWART: '311' }
           ]);
         }
         if (table === 'MAKT') {
@@ -84,12 +84,12 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
         }
         if (table === 'USR21') {
           return Promise.resolve([
-            { BNAME: 'DIPAK', PERSNUMBER: '0000012345', ADDRNUMBER: '0000054321' }
+            { BNAME: 'SAP_USER_05', PERSNUMBER: '0000012345', ADDRNUMBER: '0000054321' }
           ]);
         }
         if (table === 'ADRP') {
           return Promise.resolve([
-            { PERSNUMBER: '0000012345', NAME_TEXT: 'Dipak Rathod' }
+            { PERSNUMBER: '0000012345', NAME_TEXT: 'SAP_USER_05' }
           ]);
         }
         return Promise.resolve([]);
@@ -104,8 +104,8 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
       expect(item.MaterialDesc).toBe('Raw Material 9754');
       expect(item.OpenQty).toBe(80);
       expect(item.Status).toBe('Partial');
-      expect(item.Requester).toBe('DIPAK');
-      expect(item.RequesterName).toBe('Dipak Rathod');
+      expect(item.Requester).toBe('SAP_USER_05');
+      expect(item.RequesterName).toBe('SAP_USER_05');
       expect(item.Warehouse).toBe('W01');
     });
 
@@ -135,7 +135,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
             UMLGO: 'CS01'
           }]);
         }
-        if (table === 'RKPF') return Promise.resolve([{ USNAM: 'DIPAK' }]);
+        if (table === 'RKPF') return Promise.resolve([{ USNAM: 'SAP_USER_05' }]);
         if (table === 'MAKT') return Promise.resolve([{ MAKTX: 'Chemical Compound' }]);
         if (table === 'T320') return Promise.resolve([{ LGNUM: 'W01' }]);
         if (table === 'MLGN') return Promise.resolve([{ LTKZA: 'EN1' }]);
@@ -167,7 +167,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
             CHARG: '', BDMNG: '2.000', ENMNG: '0.000', MEINS: 'NOS', WERKS: '1120', LGORT: 'CS02', UMLGO: 'CS01'
           }]);
         }
-        if (table === 'RKPF') return Promise.resolve([{ USNAM: 'DIPAK' }]);
+        if (table === 'RKPF') return Promise.resolve([{ USNAM: 'SAP_USER_05' }]);
         if (table === 'T320') return Promise.resolve([{ LGNUM: 'W01' }]);
         if (table === 'VEPO') return Promise.resolve([]);
         if (table === 'LQUA') return Promise.resolve([
@@ -193,13 +193,13 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
     it('leaves the e-mail blank when ADR6 has no address instead of deriving one from the user name', async () => {
       mockRfc.readTable.mockImplementation((table) => {
         if (table === 'RESB') return Promise.resolve([{ RSNUM: '0000010042', RSPOS: '0001', BWART: '311', MATNR: '000000008000009754', BDMNG: '10.000', ENMNG: '0.000', MEINS: 'NOS', WERKS: '1120', LGORT: 'CS02', UMLGO: 'CS01' }]);
-        if (table === 'RKPF') return Promise.resolve([{ USNAM: 'DIPAK', BWART: '311' }]);
+        if (table === 'RKPF') return Promise.resolve([{ USNAM: 'SAP_USER_05', BWART: '311' }]);
         if (table === 'USR21') return Promise.resolve([{ PERSNUMBER: '0000000123', ADDRNUMBER: '0000000456' }]);
-        if (table === 'ADRP') return Promise.resolve([{ NAME_TEXT: 'Dipak Patel' }]);
+        if (table === 'ADRP') return Promise.resolve([{ NAME_TEXT: 'SAP_USER_05 Patel' }]);
         return Promise.resolve([]);
       });
       const res = await adapter.getCockpitDetail('10042', '1');
-      expect(res.RequesterName).toBe('Dipak Patel');
+      expect(res.RequesterName).toBe('SAP_USER_05 Patel');
       expect(res.RequesterEmail).toBe('');
     });
 
@@ -470,7 +470,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
         ReceivingStorageLocation: 'CS01',
         Warehouse: 'W01',
         PreferredStorageType: 'EN1',
-        Requester: 'DIPAK'
+        Requester: 'SAP_USER_05'
       });
 
       jest.spyOn(adapter, 'validateUnit').mockResolvedValue({
@@ -586,7 +586,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
     beforeEach(() => {
       jest.spyOn(adapter, 'getCockpitDetail').mockResolvedValue({
         OpenQty: 50, BaseUnit: 'NOS', Plant: '1120', Material: '8000009754', Batch: '',
-        StorageLocation: 'CS02', ReceivingStorageLocation: 'CS01', Requester: 'DIPAK'
+        StorageLocation: 'CS02', ReceivingStorageLocation: 'CS01', Requester: 'SAP_USER_05'
       });
       jest.spyOn(adapter, 'validateUnit').mockResolvedValue({ Valid: true, UnitType: 'Handling Unit (HU)', AvailableQuantity: 50, StorageLocation: 'CS02' });
     });

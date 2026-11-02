@@ -4,7 +4,7 @@
       "TRKORR": "DS4K905281",
       "TRFUNCTION": "Q",
       "TRSTATUS": "D",
-      "AS4USER": "MSHUSSAIN",
+      "AS4USER": "SAP_USER_12",
       "AS4DATE": "20260930",
       "AS4TIME": "130054",
       "STRKORR": "DS4K905280"
@@ -13,7 +13,7 @@
       "TRKORR": "DS4K905280",
       "TRFUNCTION": "W",
       "TRSTATUS": "D",
-      "AS4USER": "SANDHLE",
+      "AS4USER": "SAP_USER_23",
       "AS4DATE": "20260930",
       "AS4TIME": "134704",
       "STRKORR": ""
@@ -22,7 +22,7 @@
       "TRKORR": "DS4K905282",
       "TRFUNCTION": "Q",
       "TRSTATUS": "D",
-      "AS4USER": "SANDHLE",
+      "AS4USER": "SAP_USER_23",
       "AS4DATE": "20261023",
       "AS4TIME": "133723",
       "STRKORR": "DS4K905280"

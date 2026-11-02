@@ -8,7 +8,7 @@
       "TABNAME": "T319A",
       "LOGDATE": "20260129",
       "LOGTIME": "123305",
-      "USERNAME": "SANDHLE",
+      "USERNAME": "SAP_USER_23",
       "LOGKEY": "110W010001",
       "OPTYPE": "I",
       "TCODE": "SCC1"
@@ -17,7 +17,7 @@
       "TABNAME": "T319A",
       "LOGDATE": "20260129",
       "LOGTIME": "124819",
-      "USERNAME": "SANDHLE",
+      "USERNAME": "SAP_USER_23",
       "LOGKEY": "220W010001",
       "OPTYPE": "I",
       "TCODE": "SCC1"
@@ -26,7 +26,7 @@
       "TABNAME": "T319A",
       "LOGDATE": "20260129",
       "LOGTIME": "123250",
-      "USERNAME": "SANDHLE",
+      "USERNAME": "SAP_USER_23",
       "LOGKEY": "100W010001",
       "OPTYPE": "I",
       "TCODE": "SIMG"
@@ -35,7 +35,7 @@
       "TABNAME": "T319A",
       "LOGDATE": "20260819",
       "LOGTIME": "173257",
-      "USERNAME": "SANDHLE",
+      "USERNAME": "SAP_USER_23",
       "LOGKEY": "100W01Z001",
       "OPTYPE": "I",
       "TCODE": "SIMG"
@@ -44,7 +44,7 @@
       "TABNAME": "T319A",
       "LOGDATE": "20260819",
       "LOGTIME": "201105",
-      "USERNAME": "SANDHLE",
+      "USERNAME": "SAP_USER_23",
       "LOGKEY": "100W01Z001",
       "OPTYPE": "D",
       "TCODE": "SIMG"
@@ -53,7 +53,7 @@
       "TABNAME": "T319A",
       "LOGDATE": "20260928",
       "LOGTIME": "162251",
-      "USERNAME": "SANDHLE",
+      "USERNAME": "SAP_USER_23",
       "LOGKEY": "100W01Z003",
       "OPTYPE": "I",
       "TCODE": "SIMG"
@@ -62,7 +62,7 @@
       "TABNAME": "T319A",
       "LOGDATE": "20260928",
       "LOGTIME": "162309",
-      "USERNAME": "SANDHLE",
+      "USERNAME": "SAP_USER_23",
       "LOGKEY": "220W01Z003",
       "OPTYPE": "I",
       "TCODE": "SCC1"
