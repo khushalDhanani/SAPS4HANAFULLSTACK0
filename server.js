@@ -39,60 +39,17 @@ if (process.env.NODE_ENV !== 'production' && process.env.S4_DESTINATION_URL) {
     const client = s4Config.getClient();
     const headers = { 'sap-client': client };
 
-    const credsFS = {
-        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV`,
-        authentication: 'BasicAuthentication',
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: headers
-    };
-
-    const credsMaint = {
-        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/MM_PUR_PO_MAINT_V2_SRV`,
-        authentication: 'BasicAuthentication',
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: headers
-    };
-
-
-    const credsSDWL = {
-        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/SD_F2370_INQY_WL_SRV`,
-        authentication: 'BasicAuthentication',
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: headers
-    };
-
-    const credsSDFS = {
-        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/SD_F2369_INQY_FS_SRV`,
-        authentication: 'BasicAuthentication',
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: headers
-    };
-
-    const credsSDSO = {
-        url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/SD_F1873_SO_WL_SRV`,
-        authentication: 'BasicAuthentication',
-        username: process.env.S4_USERNAME,
-        password: process.env.S4_PASSWORD,
-        headers: headers
-    };
-
     cds.env.requires = cds.env.requires || {};
-    cds.env.requires.C_PURCHASEORDER_FS_SRV = Object.assign(cds.env.requires.C_PURCHASEORDER_FS_SRV || { kind: 'odata-v2', model: 'srv/external/C_PURCHASEORDER_FS_SRV' }, { credentials: credsFS });
-    cds.env.requires.MM_PUR_PO_MAINT_V2_SRV = Object.assign(cds.env.requires.MM_PUR_PO_MAINT_V2_SRV || { kind: 'odata-v2', model: 'srv/external/MM_PUR_PO_MAINT_V2_SRV' }, { credentials: credsMaint });
-    cds.env.requires.SD_F2370_INQY_WL_SRV = Object.assign(cds.env.requires.SD_F2370_INQY_WL_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F2370_INQY_WL_SRV' }, { credentials: credsSDWL });
-    cds.env.requires.SD_F2369_INQY_FS_SRV = Object.assign(cds.env.requires.SD_F2369_INQY_FS_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F2369_INQY_FS_SRV' }, { credentials: credsSDFS });
-    cds.env.requires.SD_F1873_SO_WL_SRV = Object.assign(cds.env.requires.SD_F1873_SO_WL_SRV || { kind: 'odata-v2', model: 'srv/external/SD_F1873_SO_WL_SRV' }, { credentials: credsSDSO });
-
-    if (cds.requires) {
-        if (cds.requires.C_PURCHASEORDER_FS_SRV) cds.requires.C_PURCHASEORDER_FS_SRV.credentials = credsFS;
-        if (cds.requires.MM_PUR_PO_MAINT_V2_SRV) cds.requires.MM_PUR_PO_MAINT_V2_SRV.credentials = credsMaint;
-        if (cds.requires.SD_F2370_INQY_WL_SRV) cds.requires.SD_F2370_INQY_WL_SRV.credentials = credsSDWL;
-        if (cds.requires.SD_F2369_INQY_FS_SRV) cds.requires.SD_F2369_INQY_FS_SRV.credentials = credsSDFS;
-        if (cds.requires.SD_F1873_SO_WL_SRV) cds.requires.SD_F1873_SO_WL_SRV.credentials = credsSDSO;
+    for (const service of ['C_PURCHASEORDER_FS_SRV', 'MM_PUR_PO_MAINT_V2_SRV', 'SD_F2370_INQY_WL_SRV', 'SD_F2369_INQY_FS_SRV', 'SD_F1873_SO_WL_SRV']) {
+        const credentials = {
+            url: `${process.env.S4_DESTINATION_URL}/sap/opu/odata/sap/${service}`,
+            authentication: 'BasicAuthentication',
+            username: process.env.S4_USERNAME,
+            password: process.env.S4_PASSWORD,
+            headers: headers
+        };
+        cds.env.requires[service] = Object.assign(cds.env.requires[service] || { kind: 'odata-v2', model: `srv/external/${service}` }, { credentials });
+        if (cds.requires && cds.requires[service]) cds.requires[service].credentials = credentials;
     }
 
     registerDestination({
@@ -134,19 +91,7 @@ cds.on('bootstrap', (app) => {
     });
 
     // In local development, verify Bearer tokens (JWT with standard XSUAA claims) when dev issuer is explicitly enabled
-    app.use((req, res, next) => {
-        if (process.env.NODE_ENV !== 'production' && localTokenUtil.isDevTokenIssuerEnabled()) {
-            const auth = req.headers.authorization;
-            if (auth && auth.match(/^bearer\s+/i)) {
-                const token = auth.replace(/^bearer\s+/i, '').trim();
-                const u = localTokenUtil.verifyToken(token);
-                if (u) {
-                    req.user = u;
-                }
-            }
-        }
-        next();
-    });
+    app.use(localTokenUtil.applyBearerToken);
 
     // AI assistant streaming endpoint (SSE). Runs behind the CAP auth middlewares so cds.context.user is set.
     const express = require('express');
@@ -198,22 +143,7 @@ cds.on('serving', (srv) => {
 });
 
 // Register local development Bearer token verification into CAP OData middleware chain when dev issuer is enabled
-cds.middlewares.add((req, res, next) => {
-    if (process.env.NODE_ENV !== 'production' && localTokenUtil.isDevTokenIssuerEnabled()) {
-        const auth = req.headers.authorization;
-        if (auth && auth.match(/^bearer\s+/i)) {
-            const token = auth.replace(/^bearer\s+/i, '').trim();
-            const u = localTokenUtil.verifyToken(token);
-            if (u) {
-                req.user = u;
-                if (cds.context) {
-                    cds.context.user = u;
-                }
-            }
-        }
-    }
-    next();
-}, { before: 'auth' });
+cds.middlewares.add(localTokenUtil.applyBearerToken, { before: 'auth' });
 
 // Auto-seed local development SQLite database from db/data if BusinessConfig is empty
 cds.on('served', async () => {

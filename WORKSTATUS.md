@@ -7,6 +7,7 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Current Status
 
+- **Duplicate code in `server.js` merged (2026-11-02 15:15 IST) — PASS, uncommitted:** one loop now sets the credentials of the 5 S/4 services and one shared `applyBearerToken` does the local token check at both mount points. No behaviour change. `ReservationProcessAdapter.js` is deliberately not split: audit finding 13 says to split it only when it is next worked on. See Change Entry 2026-11-02 15:15 IST.
 - **Goods receipt (101) double-posting protection added (2026-11-02 IST) — PARTIAL:** both posting actions now use an atomic per-delivery-item attempt log, unknown outcomes block retries until a MATDOC recheck resolves them, and the storage-unit path reports only the new document. Mock-tested only; no browser E2E and no live posting or recheck was run. Goods receipt is still not proven live end to end.
 
 - **Movement 261 retry after a timeout or HTTP 500 no longer posts again (2026-11-02 IST) — PARTIAL:** an unresolved attempt now blocks the whole reservation item, HTTP 500 counts as an unknown outcome, and re-issue works once SAP shows the document as reversed. Mock-tested only; no browser E2E and no live SAP run.
@@ -7065,3 +7066,26 @@ Single source of truth for work history, current status, validation, unresolved 
   - `git diff --check`: 0 whitespace issues (Code 0).
 - **Assumptions made:** None.
 - **Status:** PASS.
+
+## Change Entry — 2026-11-02 15:15 IST — Merge Duplicate Credentials and Token Check in server.js (Audit Finding 13)
+
+- **Reason:** `server.js` repeated the same credentials block for 5 S/4 services and the same Bearer token check twice, so a change had to be made in several places.
+- **Changed:**
+  - `server.js`: one loop over the 5 service names replaces `credsFS`, `credsMaint`, `credsSDWL`, `credsSDFS`, `credsSDSO` and their two lists of assignments (258 → 188 lines). Both mount points (`app.use` in bootstrap, `cds.middlewares.add` before auth) now use one function.
+  - `srv/auth/localTokenUtil.js`: new `applyBearerToken` middleware. The production and issuer gate stays inside `verifyToken` through `isDevTokenIssuerEnabled`.
+  - `test/unit/serverLocalConfig.test.js`: new, loads the real `server.js` with fake values. It passed on the old code first (6/6), then on the new code.
+  - `test/unit/auth/localTokenUtil.test.js`: 3 new `applyBearerToken` cases.
+- **Behaviour note:** the `app.use` mount now also sets `cds.context.user` when a CAP context exists; only the second copy did this before. Expected to have no effect, because CAP's context starts after that mount (INFERRED, not separately tested).
+- **Not changed:** `ReservationProcessAdapter.js` (about 4,339 lines) is not split. The finding says to split it only when it is next worked on.
+- **TEST DECISION: TEST ADDED.**
+- **Executed validation:**
+  - `npx jest test/unit/serverLocalConfig.test.js test/unit/auth/localTokenUtil.test.js test/integration/purchase-order/authorization.test.js`: 3 suites, 32 tests PASS.
+  - `npx jest --silent`: 226 suites passed, 1 skipped; 4428 tests passed, 59 skipped, 0 failed.
+  - `npm run lint`: clean. `git diff --check`: clean.
+  - READ-ONLY `node test/e2e/runAllE2E.js http://localhost:4010 --only="Shell screens,MM screens,SD screens,Write authorization"` on a fresh `cap-e2e` server: all 4 suites PASS, with live SAP reads for purchase orders (3019 rows), sales orders (973), customer invoices (520) and customer returns (186).
+  - Local server, `$metadata` of the purchase order service: no token 401, valid token 200, valid lower-case `bearer` 200, forged token 401.
+- **Not run:** the full browser E2E run, and the WM, LE and goods movement suites. They do not use the 5 merged service settings differently, but this was not checked by running them. No SAP write was made.
+- **Errors/warnings:** server log showed only `[cds-plugin-ui5] - Failed to inject application links into CDS index page!` and shell `getcwd` messages; neither was investigated and neither is from this change (INFERRED).
+- **Next action:** commit when the user asks. Remaining audit items: replace the exposed SAP password, make the repo private, and the other open items in Current Status.
+- **Assumptions:** the behaviour note above is INFERRED.
+- **Status:** PASS for the requested merge; uncommitted.

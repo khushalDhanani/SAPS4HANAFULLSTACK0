@@ -114,4 +114,43 @@ describe('Unit: localTokenUtil (Harden Dev Token Issuer)', () => {
             expect(localTokenUtil.verifyToken(null)).toBeNull();
         });
     });
+
+    describe('applyBearerToken', () => {
+        const run = (authorization) => {
+            const req = { headers: { authorization } };
+            const next = jest.fn();
+            localTokenUtil.applyBearerToken(req, {}, next);
+            expect(next).toHaveBeenCalledTimes(1);
+            return req;
+        };
+        const enable = () => {
+            process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
+            process.env.LOCAL_AUTH_SECRET = 'super-secret-key-12345';
+        };
+
+        it('signs in the user from a valid token, whatever the case of "Bearer"', () => {
+            enable();
+            const { token } = localTokenUtil.issueToken('khushal');
+            expect(run(`Bearer ${token}`).user.id).toBe('khushal');
+            expect(run(`bearer   ${token}`).user.id).toBe('khushal');
+        });
+
+        it('leaves the user unset for a missing, blank, non-Bearer or forged token', () => {
+            enable();
+            const { token } = localTokenUtil.issueToken('khushal');
+            for (const header of [undefined, 'Bearer ', 'Basic abc', 'Bearer not.a.token', `${token}`, `Bearer ${token}x`]) {
+                expect(run(header).user).toBeUndefined();
+            }
+        });
+
+        it('ignores a valid token once the issuer is disabled, and in production', () => {
+            enable();
+            const { token } = localTokenUtil.issueToken('khushal');
+            process.env.NODE_ENV = 'production';
+            expect(run(`Bearer ${token}`).user).toBeUndefined();
+            process.env.NODE_ENV = 'test';
+            delete process.env.ENABLE_DEV_TOKEN_ISSUER;
+            expect(run(`Bearer ${token}`).user).toBeUndefined();
+        });
+    });
 });

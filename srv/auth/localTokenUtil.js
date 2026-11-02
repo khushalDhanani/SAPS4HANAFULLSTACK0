@@ -176,9 +176,26 @@ function verifyToken(token) {
     });
 }
 
+/**
+ * Express middleware: signs in the request's user from a valid local dev Bearer token.
+ * Does nothing when the dev token issuer is disabled, which it always is in production.
+ */
+function applyBearerToken(req, res, next) {
+    const [, token] = /^bearer\s+(.+)$/i.exec(req.headers.authorization || '') || [];
+    const user = token && verifyToken(token);
+    if (user) {
+        req.user = user;
+        if (cds.context) {
+            cds.context.user = user;
+        }
+    }
+    next();
+}
+
 module.exports = {
     issueToken,
     verifyToken,
+    applyBearerToken,
     isDevTokenIssuerEnabled,
     timingSafeEqual,
     LOCAL_DEV_ISSUER,
