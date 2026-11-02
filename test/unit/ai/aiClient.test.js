@@ -6,7 +6,8 @@ jest.mock('openai', () => jest.fn().mockImplementation(() => ({
 })));
 
 const mockChatCompletion = jest.fn();
-const mockOrchestrationClient = jest.fn().mockImplementation(() => ({ chatCompletion: mockChatCompletion }));
+const mockStream = jest.fn();
+const mockOrchestrationClient = jest.fn().mockImplementation(() => ({ chatCompletion: mockChatCompletion, stream: mockStream }));
 jest.mock('@sap-ai-sdk/orchestration', () => ({
   OrchestrationClient: mockOrchestrationClient,
   buildDpiMaskingProvider: (cfg) => ({ type: 'sap_data_privacy_integration', ...cfg })
@@ -26,25 +27,65 @@ describe('aiClient', () => {
     aiClient._reset();
     mockCreate.mockReset();
     mockChatCompletion.mockReset();
+    mockStream.mockReset();
     mockOrchestrationClient.mockClear();
   });
   afterAll(() => { process.env = origEnv; });
 
-  test('provider defaults: sap when AICORE_SERVICE_KEY set, else nvidia; AI_PROVIDER overrides', () => {
-    expect(aiClient.getProvider()).toBe('nvidia');
-    process.env.AICORE_SERVICE_KEY = '{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}';
-    expect(aiClient.getProvider()).toBe('nvidia'); // placeholder key is ignored
+  describe('no silent provider: business data only leaves on an explicit choice', () => {
+    const drain = async (gen) => { let r; while (!(r = await gen.next()).done); return r.value; };
+
+    test.each([
+      ['unset', undefined],
+      ['blank', '  '],
+      ['an unknown value', 'nvida']
+    ])('refuses when AI_PROVIDER is %s, even with keys present', async (_name, value) => {
+      if (value !== undefined) process.env.AI_PROVIDER = value;
+      process.env.NVIDIA_API_KEY = 'test-key';
+      process.env.AICORE_SERVICE_KEY = VALID_KEY;
+      aiClient._reset();
+
+      await expect(aiClient.askAI('hi')).rejects.toMatchObject({ code: 'AI_NOT_CONFIGURED', message: expect.stringContaining('AI_PROVIDER') });
+      await expect(drain(aiClient.chatStream([{ role: 'user', content: 'hi' }]))).rejects.toMatchObject({ code: 'AI_NOT_CONFIGURED' });
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect(mockOrchestrationClient).not.toHaveBeenCalled();
+    });
+
+    test('uses exactly the provider that was chosen', () => {
+      expect(aiClient.getProvider()).toBe('');
+      process.env.AICORE_SERVICE_KEY = VALID_KEY;
+      expect(aiClient.getProvider()).toBe('');
+      process.env.AI_PROVIDER = 'NVIDIA';
+      expect(aiClient.getProvider()).toBe('nvidia');
+      process.env.AI_PROVIDER = 'sap';
+      expect(aiClient.getProvider()).toBe('sap');
+    });
+  });
+
+  test('sap: streaming applies the same masking and resource group as chat', async () => {
+    process.env.AI_PROVIDER = 'sap';
     process.env.AICORE_SERVICE_KEY = VALID_KEY;
-    expect(aiClient.getProvider()).toBe('sap');
-    process.env.AI_PROVIDER = 'nvidia';
-    expect(aiClient.getProvider()).toBe('nvidia');
+    process.env.AI_SAP_RESOURCE_GROUP = 'rg1';
+    process.env.AI_SAP_MASK_PII = 'true';
+    mockStream.mockResolvedValue({ stream: { toContentStream: async function* () { yield 'Hi'; } } });
+
+    const gen = aiClient.chatStream([{ role: 'user', content: 'x' }]);
+    const out = []; let r;
+    while (!(r = await gen.next()).done) out.push(r.value);
+
+    expect(out).toEqual(['Hi']);
+    const [config, deployment] = mockOrchestrationClient.mock.calls[0];
+    expect(config.masking.providers[0]).toMatchObject({ method: 'pseudonymization', entities: expect.arrayContaining(['profile-person']) });
+    expect(deployment).toEqual({ resourceGroup: 'rg1' });
   });
 
   test('nvidia: throws AI_NOT_CONFIGURED when key missing', async () => {
+    process.env.AI_PROVIDER = 'nvidia';
     await expect(aiClient.askAI('hi')).rejects.toMatchObject({ code: 'AI_NOT_CONFIGURED' });
   });
 
   test('nvidia: sends question and returns content, model and usage', async () => {
+    process.env.AI_PROVIDER = 'nvidia';
     process.env.NVIDIA_API_KEY = 'test-key';
     process.env.NVIDIA_MODEL = 'test/model';
     mockCreate.mockResolvedValue({
@@ -61,6 +102,7 @@ describe('aiClient', () => {
   });
 
   test('nvidia: falls back to active default model if configured model is deprecated', async () => {
+    process.env.AI_PROVIDER = 'nvidia';
     process.env.NVIDIA_API_KEY = 'test-key';
     delete process.env.NVIDIA_MODEL;
     expect(aiClient.getDefaultModel()).toBe('meta/llama-3.2-11b-vision-instruct');
@@ -85,6 +127,7 @@ describe('aiClient', () => {
   });
 
   test('sap: uses OrchestrationClient with history split, model params and masking flag', async () => {
+    process.env.AI_PROVIDER = 'sap';
     process.env.AICORE_SERVICE_KEY = VALID_KEY;
     process.env.AI_SAP_MODEL = 'gpt-4.1';
     process.env.AI_SAP_RESOURCE_GROUP = 'rg1';
@@ -109,6 +152,7 @@ describe('aiClient', () => {
   });
 
   test('sap: no masking / no resource group by default', async () => {
+    process.env.AI_PROVIDER = 'sap';
     process.env.AICORE_SERVICE_KEY = VALID_KEY;
     mockChatCompletion.mockResolvedValue({ getContent: () => '', getTokenUsage: () => ({}), getFinishReason: () => undefined });
     await aiClient.askAI('q');
@@ -118,6 +162,7 @@ describe('aiClient', () => {
   });
 
   test('nvidia chatStream yields content deltas, thinking heartbeats and the finish reason', async () => {
+    process.env.AI_PROVIDER = 'nvidia';
     process.env.NVIDIA_API_KEY = 'k';
     async function* fake() {
       yield { model: 'm', choices: [{ delta: { reasoning_content: 'hmm' } }] };

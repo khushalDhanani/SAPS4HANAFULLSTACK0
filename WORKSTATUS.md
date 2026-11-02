@@ -1904,6 +1904,23 @@ Single source of truth for work history, current status, validation, unresolved 
 
 ## Changes Log
 
+### 2026-11-02 IST — Audit finding 11: AI provider must be chosen, masking covers streaming, models limited: PARTIAL, uncommitted
+
+- **Status:** PARTIAL. Code and tests are done and uncommitted. No SAP write was sent, and no call reached an AI provider. The prompt is still built in the browser (below).
+- **Confirmed problem:** With `AI_PROVIDER` blank, the client chose NVIDIA unless an SAP AI Core key was present, and any unknown value also went to NVIDIA. The local `.env.local` has it blank with an NVIDIA key set, so Ask AI sent purchase order rows to NVIDIA there.
+- **New bug found:** `chatStream` built its own SAP client without `AI_SAP_MASK_PII` masking or the resource group check path shared with chat. The screen streams first, so masking did not apply to the main path.
+- **Changes:**
+  - `srv/common/aiClient.js`: `AI_PROVIDER` must be `sap` or `nvidia`; otherwise `AI_NOT_CONFIGURED` with no provider call. `sapClient` is now shared by chat and streaming.
+  - `srv/ai/service.js`: a request's `model` must be the configured model or listed in new `AI_ALLOWED_MODELS`.
+  - `tools/check-service-connectivity.js`, `.env.example`, `srv/ai/service.cds`: same rule and wording.
+- **Behaviour change:** Ask AI stops wherever `AI_PROVIDER` is blank, including local. `.env.local` was not changed; setting it is a deliberate choice for its owner.
+- **TEST DECISION:** TEST ADDED and TEST UPDATED (`test/unit/ai/aiClient.test.js`, `test/unit/ai/aiService.test.js`).
+- **Validation:** 6 new cases failed on the old code. After the fix: full `npx jest`: 225 suites passed, 1 skipped; 4,410 tests passed, 59 skipped. `eslint` on the 4 changed JS and test files, `cds compile srv/ai/service.cds`, `git diff --check`: clean. Running server with blank provider and an NVIDIA key: `/odata/v4/ai/chat` HTTP 503 in about 0.01 s; `/ai/chat/stream` reports the same error; an unlisted model gets 400. Browser `MM screens`: PASS.
+- **Not verified:** A real AI answer through either provider; masking with real SAP AI Core (no key here, tested with a mock SDK); the Ask AI error display in the browser, which `MM screens` does not exercise.
+- **Open, needs a decision:** The browser still builds the system prompt from purchase order rows, so a logged-in user can send their own `system` text. Moving it means about 120 lines of prompt code, the browser's row gathering (`PurchaseOrders.controller.js`, 1,830 lines) and an 890-line test file. An allowed `nvidia` setting still sends this data to NVIDIA by choice; `AI_SAP_MASK_PII` still defaults to false.
+- **Note:** The audit finding 10 work was committed outside this session as `4bbe72b6`.
+- **Next:** Decide on moving the prompt to the server. Audit finding 12 follows.
+
 ### 2026-11-02 IST — Audit finding 10: reservation replay check uses the process id stored in SAP: PARTIAL, uncommitted
 
 - **Status:** PARTIAL. Code and tests are done and uncommitted. No SAP write was sent. A live goods movement has not run through this code, including a real retry after a lost response.

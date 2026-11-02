@@ -28,7 +28,7 @@ function flag(name) {
 
 /**
  * Provider selection (all from env, see .env.example):
- *   AI_PROVIDER = sap | nvidia   (default: sap when AICORE_SERVICE_KEY is set, else nvidia)
+ *   AI_PROVIDER = sap | nvidia   (required: business data never leaves on a default)
  * SAP AI Core (SAP Cloud SDK for AI, orchestration service):
  *   AICORE_SERVICE_KEY, AI_SAP_MODEL, AI_SAP_RESOURCE_GROUP, AI_SAP_MASK_PII
  * NVIDIA NIM (OpenAI-compatible):
@@ -46,15 +46,19 @@ function hasSapKey() {
 }
 
 function getProvider() {
-  const p = (process.env.AI_PROVIDER || '').trim().toLowerCase();
-  if (p) return p;
-  return hasSapKey() ? 'sap' : 'nvidia';
+  return (process.env.AI_PROVIDER || '').trim().toLowerCase();
 }
 
 function notConfigured(msg) {
   const err = new Error(`AI provider not configured: ${msg}`);
   err.code = 'AI_NOT_CONFIGURED';
   return err;
+}
+
+function requireProvider() {
+  const provider = getProvider();
+  if (provider !== 'sap' && provider !== 'nvidia') throw notConfigured('AI_PROVIDER must be set to sap or nvidia');
+  return provider;
 }
 
 function getDefaultModel() {
@@ -70,10 +74,10 @@ function getDefaultModel() {
 }
 
 // ---------------- SAP AI Core via @sap-ai-sdk/orchestration ----------------
-async function chatSap(messages, options) {
+/** One client for chat and streaming, so masking and the resource group apply to both. */
+function sapClient(model, options) {
   if (!hasSapKey()) throw notConfigured('AICORE_SERVICE_KEY is missing or not a valid service key JSON');
   const { OrchestrationClient, buildDpiMaskingProvider } = require('@sap-ai-sdk/orchestration');
-  const model = options.model || getDefaultModel();
   const config = {
     promptTemplating: {
       model: {
@@ -96,7 +100,12 @@ async function chatSap(messages, options) {
   }
   const deployment = {};
   if ((process.env.AI_SAP_RESOURCE_GROUP || '').trim()) deployment.resourceGroup = process.env.AI_SAP_RESOURCE_GROUP.trim();
-  const client = new OrchestrationClient(config, deployment);
+  return new OrchestrationClient(config, deployment);
+}
+
+async function chatSap(messages, options) {
+  const model = options.model || getDefaultModel();
+  const client = sapClient(model, options);
   const last = messages[messages.length - 1];
   const res = await client.chatCompletion(
     { messages: [last], messagesHistory: messages.slice(0, -1) },
@@ -158,7 +167,7 @@ async function chatNvidia(messages, options) {
  * @returns {Promise<{content:string, model:string, usage:object|null, finishReason?:string}>}
  */
 async function chat(messages, options = {}) {
-  const provider = getProvider();
+  const provider = requireProvider();
   const started = Date.now();
   const out = provider === 'sap' ? await chatSap(messages, options) : await chatNvidia(messages, options);
   logger.info(`chat ok provider=${provider} model=${out.model} ms=${Date.now() - started} tokens=${out.usage?.total_tokens ?? 'n/a'}`);
@@ -172,14 +181,10 @@ async function chat(messages, options = {}) {
  * @returns {AsyncGenerator<string|{thinking:true}>} yields text chunks (or a thinking heartbeat); returns {model, finishReason}
  */
 async function* chatStream(messages, options = {}) {
-  const provider = getProvider();
+  const provider = requireProvider();
   if (provider === 'sap') {
     const model = options.model || getDefaultModel();
-    if (!hasSapKey()) throw notConfigured('AICORE_SERVICE_KEY is missing or not a valid service key JSON');
-    const { OrchestrationClient } = require('@sap-ai-sdk/orchestration');
-    const client = new OrchestrationClient({ promptTemplating: { model: { name: model, params: {
-      temperature: options.temperature ?? num('AI_TEMPERATURE', 0.2), max_tokens: options.maxTokens ?? num('AI_MAX_TOKENS', 4096) } } } },
-    (process.env.AI_SAP_RESOURCE_GROUP || '').trim() ? { resourceGroup: process.env.AI_SAP_RESOURCE_GROUP.trim() } : {});
+    const client = sapClient(model, options);
     const res = await client.stream({ messages: [messages[messages.length - 1]], messagesHistory: messages.slice(0, -1) });
     for await (const chunk of res.stream.toContentStream()) yield chunk;
     return { model };

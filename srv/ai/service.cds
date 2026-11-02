@@ -14,7 +14,7 @@ service AIService {
         content : String;
     }
 
-    /** Single question to the configured LLM (NVIDIA NIM). */
+    /** Single question to the LLM chosen by AI_PROVIDER. */
     action askAI(question : String not null, system : String, model : String) returns AIAnswer;
 
     /** Multi-turn chat; client sends the conversation so far (last message must be from user). */

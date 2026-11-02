@@ -76,7 +76,7 @@ async function checkServiceConnectivity(options = {}) {
       } catch (_) {
         isConfigured = false;
       }
-    } else {
+    } else if (provider === 'nvidia') {
       isConfigured = Boolean(process.env.NVIDIA_API_KEY && !process.env.NVIDIA_API_KEY.includes('xxxxx'));
     }
 

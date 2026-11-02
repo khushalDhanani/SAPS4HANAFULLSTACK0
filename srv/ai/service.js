@@ -34,6 +34,11 @@ function prepareChat(data) {
     if (typeof data.model !== 'string' || !SAFE_MODEL_REGEX.test(data.model) || data.model.includes('..')) {
       throw Object.assign(new Error('invalid model name format'), { status: 400 });
     }
+    // A user may not choose where the data goes or what it costs: only the configured or listed models.
+    const allowed = [aiClient.getDefaultModel(), ...(process.env.AI_ALLOWED_MODELS || '').split(',').map((m) => m.trim())];
+    if (!allowed.includes(data.model)) {
+      throw Object.assign(new Error('this model is not allowed'), { status: 400 });
+    }
     model = data.model;
   }
 

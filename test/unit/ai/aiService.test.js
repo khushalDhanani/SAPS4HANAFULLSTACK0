@@ -75,6 +75,20 @@ describe('AIService & prepareChat Security & Validation', () => {
     expect(valid.model).toBe('meta/llama-3.2-11b-vision-instruct');
   });
 
+  test('prepareChat refuses a model the deployment did not allow', () => {
+    const messages = [{ role: 'user', content: 'valid' }];
+    const before = process.env.AI_ALLOWED_MODELS;
+    try {
+      delete process.env.AI_ALLOWED_MODELS;
+      expect(() => prepareChat({ model: 'some-vendor/expensive-model', messages })).toThrow(/model is not allowed/);
+      process.env.AI_ALLOWED_MODELS = 'some-vendor/expensive-model, other/model';
+      expect(prepareChat({ model: 'some-vendor/expensive-model', messages }).model).toBe('some-vendor/expensive-model');
+      expect(() => prepareChat({ model: 'third/model', messages })).toThrow(/model is not allowed/);
+    } finally {
+      if (before === undefined) delete process.env.AI_ALLOWED_MODELS; else process.env.AI_ALLOWED_MODELS = before;
+    }
+  });
+
   test('streamHandler rejects unauthenticated callers with 401 Unauthorized', async () => {
     const origContext = cds.context;
     try {
