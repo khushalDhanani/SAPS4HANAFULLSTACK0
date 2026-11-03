@@ -89,6 +89,18 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-03 — Correction: branch moved during the full browser run
+
+- **Status:** Correction to the full browser E2E entry below. No code changed in this entry.
+- **What happened:** While the run was in progress, the working tree moved to a new branch, `feature/remove-reservation-entry-final`, with 2 new commits: `5b99d041` deleted `test/e2e/support/uiReady.js`, and `86771016` deleted `test/e2e/support/shots.js` and its paths in `.gitignore` and `.github/workflows/ci.yml`. The source of those commits is UNKNOWN; this session did not make them. The result commit `b12d18d8` landed on that new branch, not on `feature/remove-reservation-entry` (still at `ae945e76`).
+- **Effect on the result:** The 17 of 17 run started before those commits and ended after them (summary written 10:52:58 IST; commits at 10:41 IST), and its server was started from `ae945e76`. The commits change no app or backend code, and no file in `test/e2e` requires the deleted helpers. The full run was not repeated on the branch tip.
+- **Executed validation on the tip of the new branch:**
+  - `npx jest --silent --runInBand`: 224 suites passed, 1 skipped; 4,176 tests passed, 59 skipped.
+  - `npx eslint .`: clean.
+  - A check of relative requires in `test/e2e`: none missing.
+  - `npm run test:e2e:sap-free`: 3 of 3 passed.
+- **Next action:** The user confirms which branch to keep.
+
 ### 2026-11-03 — Full browser E2E after the removal: PASS for this run
 
 - **Status:** The browser run passed. The branch stays PARTIAL overall, because no live SAP write was proven and outside API callers and the production table are not verified.
