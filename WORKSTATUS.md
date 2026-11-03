@@ -89,6 +89,14 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-03 — Full browser E2E after the removal: PASS for this run
+
+- **Status:** The browser run passed. The branch stays PARTIAL overall, because no live SAP write was proven and outside API callers and the production table are not verified.
+- **Executed validation:** `TARGET_URL=http://localhost:4010 npm run test:e2e`, on a fresh server from `feature/remove-reservation-entry`: Total 17, Passed 17, Failed 0. SAP use was read-only; writes were guarded or mocked.
+- **Not run:** `npm run test:e2e:sap`, including live round trips, because each live run needs a written go.
+- **Changes:** this log entry only.
+- **Next action:** The user decides about merging into `feature01`, after checking for outside API callers.
+
 ### 2026-11-03 — Backend removal confirmed
 
 - **Status:** Decision recorded. No code changed and no test was run.
