@@ -2,6 +2,8 @@
 
 Empirically inspected against live SAP Gateway `$metadata` and active SAP business logic on DS4 client 220.
 
+> **Corrected 2026-11-03:** rows 2, 6, 9 and 10 claimed more than the repo's evidence supports. The all-module count is in `docs/creatable-services-classification.md`.
+
 ---
 
 ## 1. Raw Catalog Scan vs. "Proper Creatable" Services
@@ -22,15 +24,15 @@ The following services are authentic, verified transactional endpoints capable o
 | # | Business Object / Step | Proper Creatable Service | Creation Path & Method | Payload / Parameters | DS4 Client 220 Verification Status |
 |---|---|---|---|---|---|
 | **1** | **Sales Order & Sales Inquiry** | **`LORD_ODATA_ORDER_SRV`** | `POST /HeaderSet` (Deep Insert) | Header (`SalesOrderTypeCode`, `SalesOrganization`, `DistributionChannel`, `Division`, `SoldToPartyID`) + `ItemSet` (`MaterialID`, `OrderQty`, `SalesUnit`) + `PriceCondSet` | **PROVEN LIVE**. Creates real `VBAK`/`VBAP` documents (e.g. `10000045`, `10000046`). |
-| **2** | **Delivery with Reference** | **`LE_SHP_QC_DLVREF_SRV`** *(LE/SD)* | `POST /C_DelivWthRefQuickCreate` | `ReferenceSDDocument` (Sales Order #), `ShippingPoint`, `DeliveryDate` | **PROVEN LIVE** (Delivery `13000526` created). |
+| **2** | **Delivery with Reference** | **`LE_SHP_QC_DLVREF_SRV`** *(LE/SD)* | `POST /C_DelivWthRefQuickCreate` | `ReferenceSDDocument` (Sales Order #), `ShippingPoint`, `DeliveryDate` | **Recorded as created** (Delivery `13000526`). No read-back proof in the repo. |
 | **3** | **Delivery for Order (Direct)** | **`SD_SOFM_DELIVERY_SRV_01`** | `POST /CreateDeliveryForOrder` or `CreateDeliveryForOrderItems` | `SalesOrderID`, `ItemID`, `DueDate`, `RollbackOnError` | **Active in Gateway**, verified in metadata. |
 | **4** | **Delivery without Reference** | **`LE_SHP_QC_DLVNOREF_SRV`** | `POST /C_DelivWthoutRefQuickCreate` + `C_DelivItmWthoutRefQuickCrte` | `ShippingPoint`, `DeliveryDocumentType`, `SoldToParty`, items | **Active in Gateway**, verified in metadata. |
 | **5** | **Post Goods Issue (PGI)** | **`SD_SOFM_CREDIT_BLOCK_SRV`** | `POST /PostGoodsIssue` | `DeliveryNumber` (String). Returns `PostGoodsReturnInfo` (`Done`, `ErrorAny`). | **Code implemented**, awaiting picked candidate delivery (candidate: `13000515`). |
-| **6** | **Credit Block Release** | **`SD_SOFM_CREDIT_BLOCK_SRV`** | `POST /ReleaseCreditOrder`, `ReleaseCreditDelivery` | `SalesOrderNumber` or `DeliveryNumber` | **PROVEN LIVE** in DS4 client 220. |
+| **6** | **Credit Block Release** | **`SD_SOFM_CREDIT_BLOCK_SRV`** | `POST /ReleaseCreditOrder`, `ReleaseCreditDelivery` | `SalesOrderNumber` or `DeliveryNumber` | **Not proven.** No live run is recorded in the repo. `docs/creatable_services_report.md` lists it as untested. |
 | **7** | **Customer Invoice (from Delivery/Order)** | **`SD_CUSTOMER_INVOICES_CREATE`** | `POST /CreateBillingDocuments` | `ReferenceSDDocument` (Delivery/Order #), `ReferenceSDDocumentCategory` ('J'/'C'), `BillingDocumentType` (optional), `BillingDocumentDate` | **Active in Gateway**, verified in metadata. Code implemented in `OutboundDeliveryAdapter.js`. |
 | **8** | **Customer Invoice (Direct from Order/Delivery)** | **`SD_SOFM_INVOICE_SRV`** / `SD_SOF` | `POST /createInvoice` | `DeliveryDocumentNumber`, `SalesDocumentNumber` | **Active in Gateway**, verified in metadata. |
-| **9** | **Customer Invoice Accounting Release & Cancel** | **`SD_CUSTOMER_INVOICES_MANAGE`** | `POST /PostBillingDocumentToAccounting`, `CancelBillingDocument` | `BillingDocument`, `SDDocumentCategory`. Creates FI `BKPF` journal entry or `S1` cancellation. | **PROVEN LIVE** on DS4 client 220 (implemented in `CustomerInvoiceAdapter.js`). |
-| **10** | **Customer Returns** | **`SD_F2651_CRT_CREATE_SRV`** | `POST /C_CustomerReturnOPg` (with `C_CustomerReturnItemOPg`) | Customer Return Header + Items (Order Type `RE`/`C2`, Return Reason, Customer, Material, Quantity). | **Active in Gateway**, RAP-based Fiori transactional service. |
+| **9** | **Customer Invoice Accounting Release & Cancel** | **`SD_CUSTOMER_INVOICES_MANAGE`** | `POST /PostBillingDocumentToAccounting`, `CancelBillingDocument` | `BillingDocument`, `SDDocumentCategory`. Creates FI `BKPF` journal entry or `S1` cancellation. | **Not proven.** Implemented in `CustomerInvoiceAdapter.js`; the live run is still pending (`docs/e2e-coverage-matrix.md:81`). |
+| **10** | **Customer Returns** | **`SD_F2651_CRT_CREATE_SRV`** | `POST /C_CustomerReturnOPg` (with `C_CustomerReturnItemOPg`) | Customer Return Header + Items (Order Type `RE`/`C2`, Return Reason, Customer, Material, Quantity). | **Active in Gateway; create not proven.** The app only reads through this service. It creates returns through `LORD_ODATA_ORDER_SRV/HeaderSet` or `BAPI_CUSTOMERRETURN_CREATE` (`srv/integration/s4hana/sd/customer-return/`). |
 | **11** | **Customer Materials (VD51 / VD52)** | **`SD_F2499_CUSTOMER_MATERIAL_SRV`** | `POST /C_CustomerMaterial_F2499` | `Customer`, `SalesOrganization`, `DistributionChannel`, `Material`, `CustomerMaterial` | **Active in Gateway**, full draft-enabled transactional service (F2499). |
 | **12** | **Sales Item Proposals (VA51 / VA52)** | **`SD_F2583_SLSITMPRPSL_SRV`** | `POST /C_SalesItemProposalTP` + items | Header + Item Collection (`C_SalesItemProposalItemTP`). | **Active in Gateway**, draft-enabled transactional service. |
 | **13** | **In-House Repairs** | **`UI_MANAGEINHREPAIRS`** | `POST /C_InhRepairObjPg` + actions | Repair objects, actions: `CreateCustomerReturn`, `CreateInboundDelivery`, `CreateOutboundDelivery`. | **Active in Gateway**. |
@@ -51,7 +53,7 @@ The following services are authentic, verified transactional endpoints capable o
 ## 4. Key Takeaway & Architecture Rule for SD
 
 * For **Sales Order & Sales Inquiry creation**, **`LORD_ODATA_ORDER_SRV`** is the only active, proven live transactional service available on this system.
-* For **Delivery creation**, **`LE_SHP_QC_DLVREF_SRV`** (`C_DelivWthRefQuickCreate`) is the proven live service.
+* For **Delivery creation**, **`LE_SHP_QC_DLVREF_SRV`** (`C_DelivWthRefQuickCreate`) is the service in use. A created delivery is recorded, without read-back proof.
 * For **Goods Issue & Credit release**, **`SD_SOFM_CREDIT_BLOCK_SRV`** (`PostGoodsIssue`, `ReleaseCreditOrder`) is the proper transactional service.
 * For **Billing Document creation**, **`SD_CUSTOMER_INVOICES_CREATE`** (`CreateBillingDocuments`) is the proper transactional service.
 * For **Accounting release & cancellation**, **`SD_CUSTOMER_INVOICES_MANAGE`** (`PostBillingDocumentToAccounting`, `CancelBillingDocument`) is the proper transactional service.

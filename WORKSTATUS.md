@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Creatable services classification (2026-11-03 16:43 IST) — PARTIAL, uncommitted:** `docs/creatable-services-classification.md` sorts the 497 workbook services: 4 proven live, 69 likely proper (unproven), 117 likely master data or configuration, 152 unclear, 155 not proper. Two service docs were corrected. Only the proven bucket is CONFIRMED. See the entry below.
+
 - **HU storage type rules for W01 (2026-11-03 16:37 IST) — PARTIAL, pushed to `origin/feature01`:** W01 now has approved rules in `srv/wm/hu-stock-transfer/storage-types.json`, and the missing-rules error is gone. The HU dry run still fails on an HU that is correctly refused, so no browser run has proven an accepted HU. See the entry below.
 
 - **Database removal Phase 1 and test cleanup merged (2026-11-03 16:09 IST) — pushed to `origin/feature01`:** The work from `chore/remove-application-db`, `chore/remove-local-db-files` and `chore/test-audit-cleanup` is on `feature01`. `db/` and the posting-attempt guard stay until the SAP table replaces them. See the entry below.
@@ -84,6 +86,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Creatable services (2026-11-03): the user decides whether to commit the classification. To rebuild the workbook, restore `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json`. POST-only services are still outside the workbook.
 - HU rules (2026-11-03): decide 261 blocked-bin rules; have the SAP administrator check packaging type Z007, which has no storage unit type in W01; get rules for other warehouses.
 - Database removal (2026-11-03): Phase 1 is done and the target is the connected client. Still needed: a transport request owned by, or with a task for, the connected user, and a written go for the live proof in docs/decisions/sap-only-persistence-migration.md (Phase 2), then the store swap and final removal (Phase 3). The user also decides where movement 261 blocked-bin rules and HU storage types should live. Check production BusinessConfig values before any deployment.
 
@@ -1527,3 +1530,34 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **NOT VERIFIED:** GitHub Actions results for this push. `gh` is not installed here.
 - **ASSUMPTIONS:** none.
 - **FINAL STATUS:** PASS for the push. The HU rules work stays PARTIAL.
+
+### 2026-11-03 16:43 IST — Creatable services classification saved and conflicting doc rows corrected: PARTIAL
+
+- **Request:** The user asked how many services in `creatable-services.xlsx` are proper, asked for a deep dive, then said "Yes, save it".
+- **CHANGED:**
+  - New `docs/creatable-services-classification.md`: all 497 workbook services in five buckets, with evidence and limits.
+  - `docs/sd-creatable-services.md`: rows 2, 6, 9, 10 and one takeaway line no longer claim proof the repo does not hold.
+  - `docs/creatable_services_report.md`: the `LE_SHP_QC_DLVREF_SRV` and `MMIM_GR4PO_DL_SRV` rows corrected, and a dated correction section added.
+  - `creatable-services.xlsx` was not changed. Nothing is committed.
+- **Result:** 4 proven live with read-back, 69 likely document or posting services, 117 likely master data or configuration, 152 unclear, 155 not proper. Only the proven bucket is CONFIRMED. The other four are INFERRED from names.
+- **Evidence for the corrections:**
+  - `MMIM_GR4PO_DL_SRV`: failing live on 2026-10-06 (`docs/archive/WORKSTATUS-archive-2026-10-31.md:1805`). Goods receipt 5000005789/2026 used `BAPI_INB_DELIVERY_CONFIRM_DEC` (`srv/integration/s4hana/wm/GoodsReceiptAdapter.js:1471`).
+  - Delivery 13000526: found only in docs and unit test fixtures, with no read-back proof.
+  - `SD_CUSTOMER_INVOICES_MANAGE`: the live run is pending (`docs/e2e-coverage-matrix.md:81`).
+  - Credit release actions: no live run found in `WORKSTATUS.md` or `docs/archive/`.
+  - `SD_F2651_CRT_CREATE_SRV`: `CustomerReturnAdapter.js` sends only GETs to it, and POSTs through `LORD_ODATA_ORDER_SRV/HeaderSet` (line 536).
+- **TEST DECISION:** TEST NOT POSSIBLE: documentation only, with no executable behaviour to test. A one-off cross-check stood in for a test.
+- **TESTED:**
+  - One-off Python check: all 497 rows match the workbook on service, module, type, set count and POST count; bucket and module totals add up. PASS.
+  - `npx jest test/unit/tools/e2eCoverageMatrix.test.js`: 8 passed. The matrix itself was not changed.
+  - `node tools/scan-secrets.js`: 0 findings across tracked files. The new doc is untracked, so this scan did not cover it.
+  - `git diff --check`: clean.
+- **NOT VERIFIED:** Buckets 2 to 5 against SAP. No SAP call, read or write, ran for this work. The 261 route through `API_MATERIAL_DOCUMENT_SRV` is traced from code, because the log names only the CAP action (INFERRED).
+- **BLOCKED:** The workbook cannot be rebuilt here, because `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json` are absent.
+- **Findings, not fixed:**
+  - About 139 POST-only services are outside the workbook, including `SD_CUSTOMER_INVOICES_CREATE`, the app's billing path. Reason: `tools/build-creatable-xlsx.py:61`.
+  - `tools/find-creatable.py:22-23` counts a missing `sap:creatable` flag as creatable, and its filter lets helper sets such as `VHLockboxNumberCollection` through.
+  - `docs/e2e-coverage-matrix.md:78` and `:84` still say "pending go" for goods receipt and movement 261, although the route rows above them record live passes on 2026-11-02.
+- **ASSUMPTIONS:** "Proper" follows `docs/sd-creatable-services.md`, meaning the service really creates or posts a business document. Bucket assignment is my own judgement from names.
+- **Next action:** The user reviews the docs and decides whether to commit them.
+- **FINAL STATUS:** PARTIAL.

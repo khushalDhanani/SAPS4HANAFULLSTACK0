@@ -55,9 +55,9 @@ These are the SAP OData services actually referenced in `srv/integration/s4hana/
 | Service | Module | Create Capability | App Usage | Status |
 |---|---|---|---|---|
 | `LORD_ODATA_ORDER_SRV` | SD | `HeaderSet` deep insert + `Simulate`, `CheckATP`, `RemoveBillingBlock`, `RemoveDeliveryBlock` | Sales Order &amp; Sales Inquiry creation | **Proven live** (ZDOM orders created) |
-| `LE_SHP_QC_DLVREF_SRV` | LE | `C_DelivWthRefQuickCreate` POST | Outbound Delivery with reference | **Proven live** (delivery 13000526 created) |
+| `LE_SHP_QC_DLVREF_SRV` | LE | `C_DelivWthRefQuickCreate` POST | Outbound Delivery with reference | **Recorded as created** (delivery 13000526); no read-back proof in the repo (corrected 2026-11-03) |
 | `MM_PUR_PO_MAINT_V2_SRV` | MM | 13 creatable entity sets + 57 POST actions (`C_PurchaseOrderTP`, items, notes, scheduling) | Purchase Order create/maintain | **Proven live** (POs created) |
-| `MMIM_GR4PO_DL_SRV` | WM | `GR4PO_DL_Headers` + items, sub-items, serial numbers, batch create | Goods Receipt posting | **Proven live** (GR posted) |
+| `MMIM_GR4PO_DL_SRV` | WM | `GR4PO_DL_Headers` + items, sub-items, serial numbers, batch create | Goods Receipt posting | **Not proven through this service** (corrected 2026-11-03): see the correction at the end of this report |
 
 ### Implemented but Awaiting First Live POST
 
@@ -216,3 +216,11 @@ This is a later, focused probe; it does not rewrite the dated 23 September catal
 - The automated 261 capability preflight passed again against the current local non-production configuration: exact `API_MATERIAL_DOCUMENT_SRV` metadata GET and read-only RFC access to `MATDOC` fields `MBLNR`, `MJAHR`, and `BWART`; SAP client 220 resolved.
 - `ALLOW_LIVE_SAP_TOOLS=1 npm run check:connectivity` passed the production guardrails, S/4 configuration, and live RFC client check for Client 220.
 - No SAP POST or other write was performed. Create authorization, generated document persistence, and exact post-write `BWART=261` remain unverified.
+
+## Correction — 2026-11-03
+
+Two rows under "Fully Implemented & Proven Live" claimed more than the repo's evidence supports. The all-module count of proper services is in `docs/creatable-services-classification.md`.
+
+- **`MMIM_GR4PO_DL_SRV`:** the status log records this posting as unproven and failing live on 2026-10-06 (`docs/archive/WORKSTATUS-archive-2026-10-31.md:1805`). Goods receipt 5000005789/2026 of 2026-11-02 was posted through `BAPI_INB_DELIVERY_CONFIRM_DEC` (`srv/integration/s4hana/wm/GoodsReceiptAdapter.js:1471`), not this service.
+- **`LE_SHP_QC_DLVREF_SRV`:** delivery 13000526 appears only in this report, `docs/sd-creatable-services.md`, `docs/data-lineage-audit.md` and unit test fixtures. The repo holds no read-back proof.
+- **`API_MATERIAL_DOCUMENT_SRV`:** the "Blocked — Not Registered" row is out of date. The later probes above found it reachable, and 261 document 4900050350/2026 was posted and read back on 2026-11-02 (`WORKSTATUS.md`). The log names the CAP action, so the route through this service is traced from the code (INFERRED).
