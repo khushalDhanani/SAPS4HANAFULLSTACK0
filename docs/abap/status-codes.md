@@ -1,6 +1,6 @@
 # Reservation / WM process status codes
 
-Single value set shared by the JS layer (`srv/common/wmStatus.js`, seeded into `db/data/saps4hana.wm-ReservationStatus.csv`)
+Single value set shared by the JS layer (`srv/common/wmStatus.js`)
 and the ABAP mirror (`docs/abap/zcl_res_process.clas.abap` constants `gc_status_*`, domain `ZRES_STATUS` in `docs/abap/zres_track.ddl`).
 The JS adapter layer owns the process logic; the ABAP class mirrors it and is not called by the app.
 
@@ -19,23 +19,3 @@ The JS adapter layer owns the process logic; the ABAP class mirrors it and is no
 
 `99` is never written for a failed step any more; a failed goods movement is `90`. Codes `03` and `13` mean "an unconfirmed
 TO exists" and block the creation of another TO for the same TR item until it is confirmed.
-
-## Migration note for existing data (NOT executed)
-
-Rows written before this change used `99` for "MIGO failed". They must become `90` so that retry applies to them again.
-Run once, after backup, on the CAP database (SQLite file in development, HANA HDI container in BTP):
-
-```sql
-UPDATE saps4hana_wm_ReservationTrack
-   SET Status_code = '90'
- WHERE Status_code = '99'
-   AND (MaterialDocument IS NULL OR MaterialDocument = '');
-
-UPDATE saps4hana_wm_ReservationLog
-   SET Status = '90'
- WHERE Status = '99'
-   AND Step = 'MIGO';
-```
-
-Rows with `99` that carry a material document are genuine cancellations/reversals and stay `99`.
-Until the statement is run, the retry action no longer auto-selects old `99` rows (they are not an error status any more).

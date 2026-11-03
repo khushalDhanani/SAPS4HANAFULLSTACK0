@@ -11,7 +11,7 @@ MM, WM, LE, SD, FI, and AI service areas, automated tests, and SAP BTP deploymen
 | Fiori application | `app/fiori-app/` | SAPUI5 views, controllers, routing, and user experience |
 | CAP services | `srv/` | HTTP/OData APIs, authorization, validation, and orchestration |
 | S/4HANA integration | `srv/integration/s4hana/` | Technical clients, adapters, and SAP payload mappings |
-| Persistence | `db/` | CAP data model; the MTA provisions HANA for the goods-issue dispatch queue |
+| Persistence | `db/` | CAP data model for posting attempts only; the MTA provisions HANA for it |
 | Configuration | `config/`, `mta/`, `mta.yaml`, `xs-security.json` | Destination/Connectivity templates, deployment topology, and XSUAA roles |
 | Tests | `test/` | Unit, integration, and end-to-end tests with controlled fixtures |
 
@@ -37,7 +37,7 @@ flowchart LR
     CAP --> ADAPTER["S/4HANA adapters<br/>srv/integration/s4hana/"]
     ADAPTER --> DEST["BTP Destination and Connectivity"]
     DEST --> SAP["SAP S/4HANA"]
-    CAP --> DB["CAP persistence<br/>db/ and HANA HDI queue"]
+    CAP --> DB["CAP persistence<br/>db/ and HANA HDI posting attempts"]
     CAP --> AI["AI provider client<br/>SAP AI Core or configured provider"]
 ```
 
@@ -131,7 +131,7 @@ does not verify live SAP connectivity, destination credentials, or backend trans
 | --- | --- |
 | `srv/mm/`, `srv/wm/`, `srv/le/`, `srv/sd/`, `srv/fi/`, `srv/ai/` | CAP domain services and handlers |
 | `srv/integration/s4hana/` | S/4HANA clients and adapters |
-| `db/` | CDS persistence model and seed data |
+| `db/` | CDS persistence model for posting attempts |
 | `app/fiori-app/webapp/modules/` | Fiori business-area modules |
 | `test/unit/`, `test/integration/`, `test/e2e/` | Automated test suites |
 | `docs/` | Architecture, SAP discovery evidence, decisions, and runbooks |

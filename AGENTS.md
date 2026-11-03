@@ -93,7 +93,7 @@ Keep responsibilities separated according to this repository structure:
 | Area | Responsibility | Must not contain |
 | --- | --- | --- |
 | `app/fiori-app/` | SAPUI5/Fiori presentation, view models, presentation logic | Credentials, persistence, direct database access, S/4 technical calls, business workflows |
-| `db/` | CAP CDS persistence model and controlled seed data | UI logic, HTTP calls, environment-specific configuration |
+| `db/` | CAP CDS persistence model for posting attempts, until the SAP table replaces it | UI logic, HTTP calls, environment-specific configuration |
 | `srv/` | CAP APIs, authorization, validation, orchestration | UI implementation or duplicate integration clients |
 | `srv/integration/s4hana/` | S/4 clients, API services, adapters, technical mappings | UI behavior or CAP business workflows |
 | `config/` | Version-safe service configuration templates | Secrets or production-only values |

@@ -102,7 +102,6 @@ When `MIGO` posts with `T321-TBFKZ = 'X'`, SAP Gateway writes the `MBLNR` direct
 - **Reused Components:**
   - `srv/integration/s4hana/wm/MigoAdapter.js`: Full reuse of `postGoodsMovement` (`BAPI_GOODSMVT_CREATE`).
   - `srv/integration/s4hana/wm/TrToAdapter.js`: Full reuse of `createTOFromTR` (`L_TO_CREATE_TR`), `confirmTO` (`L_TO_CONFIRM`), and FIFO source quant selection (`_resolvePickSourceFromLqua`).
-  - CAP Persistence & Logging: `ReservationTrack` and `ReservationLog` entities.
 - **Removed / Deprecated Components:**
   - Upfront `L_TR_CREATE` call in `ReservationProcessAdapter.js:160-220` (completely eliminated).
   - Artificial movement type substitution (`s4Bwlvs = '311'`) in `ReservationProcessAdapter.js:170`.

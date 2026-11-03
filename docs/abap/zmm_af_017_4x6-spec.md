@@ -108,7 +108,7 @@ The mm values in section 3 are a design proposal, not user decisions. Adjust the
 
 ## 7. CAP / Fiori configuration (this repo)
 
-- **Per-plant settings** (BusinessConfig, admin API `/odata/v4/business-config`):
+- **Per-plant settings** (no source since 2026-11-03; where they live is undecided):
   - `QuarantineLabelForm` = the new form name;
   - `QuarantineLabelSize` = `4x6`.
   - Both empty (default): the current form and no size check.
@@ -124,7 +124,7 @@ The mm values in section 3 are a design proposal, not user decisions. Adjust the
 | 3 | Print test on the 4 x 6 printer at 100 % (no fit-to-page), measure the label | user / Basis | PENDING |
 | 4 | Scan test of the barcode at working distance with the warehouse scanner; the scanned value equals the printed number | user | PENDING |
 | 5 | Output device and page format (SPAD, 4 x 6 portrait, 203 dpi) | Basis | PENDING |
-| 6 | App: BusinessConfig for one DEV plant, preview via Quarantine Labels → no size warning | app team | PENDING (needs the activated wrapper and form) |
+| 6 | App: label settings for one DEV plant, preview via Quarantine Labels → no size warning | app team | PENDING (needs the activated wrapper and form) |
 
 **Never commit or share a PDF with real values.** Preview and test PDFs for this repo must use synthetic data.
 
@@ -133,4 +133,4 @@ The mm values in section 3 are a design proposal, not user decisions. Adjust the
 1. Create the form copy in a transportable package (ZAMM proposed, **PENDING**) on a workbench request (**PENDING**).
 2. The wrapper function group `ZMM_QUAR_LABEL` is currently in `$TMP`. Reassign it to the transportable package (SE03 object directory entry, or re-create it there) and put it on the same request.
 3. Release in SE09/SE10, import with STMS, and repeat tests 1–5 in QA.
-4. Set the BusinessConfig fields per plant only in environments where the transport is imported.
+4. Set the label settings per plant only in environments where the transport is imported.

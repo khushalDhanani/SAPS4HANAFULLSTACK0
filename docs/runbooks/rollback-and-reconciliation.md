@@ -142,7 +142,7 @@ If the frontend bundle in `html5-apps-repo` exhibits UI defects:
 
 ### 5.1 HDI Container Compatibility Policy
 
-The application's SAP HANA Cloud HDI Container (`saps4hana-db`) stores **only** dispatch queue entities (`saps4hana.wm.GoodsIssuePostingAttempt`).
+The application's SAP HANA Cloud HDI Container (`saps4hana-db`) stores **only** the posting-attempt entity (`saps4hana.wm.GoodsIssuePostingAttempt`).
 - **Rule of Non-Destructive Migrations**: All CDS entity modifications MUST be purely additive (new optional columns or new tables).
 - **Zero Column Deletions**: Never drop columns or rename existing tables in production CDS definitions.
 - **Backward Compatibility**: If a new version of `saps4hana-srv` is rolled back, the existing HDI container schema remains fully compatible with the older version.
