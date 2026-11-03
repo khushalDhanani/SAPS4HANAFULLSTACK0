@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **HU storage type rules for W01 (2026-11-03 16:37 IST) — PARTIAL, committed locally on `chore/hu-storage-rules`, not merged or pushed:** W01 now has approved rules in `srv/wm/hu-stock-transfer/storage-types.json`, and the missing-rules error is gone. The HU dry run still fails on an HU that is correctly refused, so no browser run has proven an accepted HU. See the entry below.
+
 - **Database removal Phase 1 and test cleanup merged (2026-11-03 16:09 IST) — pushed to `origin/feature01`:** The work from `chore/remove-application-db`, `chore/remove-local-db-files` and `chore/test-audit-cleanup` is on `feature01`. `db/` and the posting-attempt guard stay until the SAP table replaces them. See the entry below.
 
 - **Test audit cleanup (2026-11-03 16:07 IST) — PASS for the cleanup, committed locally on `chore/test-audit-cleanup`, not pushed:** 20 false tests deleted and 4 weak tests fixed, with no production code changed. Jest passed; SAP-free E2E 3 of 3. `test/screenshots/` was removed afterwards at the user's request. See the entries below.
@@ -82,6 +84,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- HU rules (2026-11-03): review and merge `chore/hu-storage-rules`; decide 261 blocked-bin rules; have the SAP administrator check packaging type Z007, which has no storage unit type in W01; get rules for other warehouses.
 - Database removal (2026-11-03): Phase 1 is done and the target is the connected client. Still needed: a transport request owned by, or with a task for, the connected user, and a written go for the live proof in docs/decisions/sap-only-persistence-migration.md (Phase 2), then the store swap and final removal (Phase 3). The user also decides where movement 261 blocked-bin rules and HU storage types should live. Check production BusinessConfig values before any deployment.
 
 - SAP-only migration: await the development target and workbench transport request the user will provide; ZAMM is selected. Then establish verified replacement contracts for durable posting claims, tracking and settings as specified in docs/decisions/sap-only-persistence-migration.md. Preserve existing data until migration and retention are settled.
@@ -1487,3 +1490,20 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **NOT VERIFIED:** GitHub Actions results for this push.
 - **ASSUMPTIONS:** none.
 - **FINAL STATUS:** PASS for the push. Complete database removal stays BLOCKED on the SAP posting-attempt table.
+
+### 2026-11-03 16:37 IST — HU storage type rules for W01: PARTIAL
+
+- **Request:** The user chose: `OH1` is hold only; pickable `RM1`, `EN1`, `GS1`; all 14 interim areas; rules in a JSON file.
+- **CHANGED, branch `chore/hu-storage-rules`, commit `58e9c880`:** added `srv/wm/hu-stock-transfer/storage-types.json`; `BusinessConfigResolver.js` loads it; updated `BusinessConfigResolver.test.js`, `transferPathPrecheck.test.js` and the migration document.
+- **Deviation from the user's choice:** the user chose `config/`. `cds build --production` does not copy `config/`, so the file would not reach production; it sits under `srv/`, and the build output includes it.
+- **VERIFIED (READ-ONLY):** T301 lists all 18 chosen types for W01. `validateUnit` on a local server: HU `2000019372` on `EN1` returns Valid, IsPreferredStorage true; HU `2000019348` on `911` returns Valid, IsInProcess true; HU `2000020150` on `OH1` returns not valid with blockers OPEN_DELIVERY_EXISTS and HU_NOT_IN_STOCK. A sample of 24 HUs across the first 60 of 78 open reservations in plant 1120 returned Valid, with no `OH1` among them. The server log has no "could not resolve storage type rules".
+- **Finding, not changed:** every accepted HU in that sample warned "Packaging type Z007 has no storage unit type in warehouse W01". 18 of the 24 are on interim types `911` and `913`, and these return Valid with an in-process status.
+- **TEST DECISION:** TEST UPDATED: `BusinessConfigResolver.test.js`, `transferPathPrecheck.test.js`.
+- **TESTED:** `npx eslint . --max-warnings 0` exit 0. `node tools/scan-secrets.js` exit 0. `npm test`: 223 suites, 4,101 passed, 56 skipped. `npm run test:e2e:sap-free`: 3 of 3. `runAllE2E --only=wm,a11y`: 3 of 3. Full `test:e2e` not rerun.
+- **FAIL:** `npm run test:e2e:sap` exit 1: HU stock transfer picks HU `2000020150`, which is now refused as intended. Orders due stays PARTIAL. A temporary change raising the suite's candidate limit from 5 to 25 did not help and was reverted. Why the suite's picker does not reach an accepted HU is NOT VERIFIED.
+- **VERIFIED (READ-ONLY, RFC_READ_TABLE only):** the app user's documents created today in MKPF, LIKP, VBAK, EKKO, VBRK, LTAK and VEKP: 0 before and 0 after each run. No SAP write ran.
+- **NOT VERIFIED:** an accepted HU through the browser; a real transfer, which needs a written go; other warehouses, which still fail closed; whether packaging type Z007 blocks a live post.
+- **ASSUMPTIONS:** the user's approved lists are warehouse policy, not production-only configuration (INFERRED; agreed as the premise of the question).
+- **REGRESSION:** Jest and WM browser suites as above; other flows in the dry run unchanged.
+- **Next action:** the user reviews and merges the branch, and has packaging type Z007 checked.
+- **FINAL STATUS:** PARTIAL.
