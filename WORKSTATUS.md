@@ -15,7 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Reservation Entry screen removed (2026-11-03) — PARTIAL, on local branch `feature/remove-reservation-entry`, not pushed:** The UI at `#/wm/reservation-entry` is gone, and the three old URLs now show the dashboard with no console errors. Backend, API and database are unchanged. The five `verifyMvt*` browser suites and the other reservation-entry tests were then deleted at the user's request, so the backend service that stays no longer has its own tests. See the three Change Entries of 2026-11-03 below for what was run and what was not.
+- **Reservation Entry screen removed (2026-11-03) — PARTIAL, on local branch `feature/remove-reservation-entry`, not pushed:** The UI at `#/wm/reservation-entry` is gone, and the three old URLs now show the dashboard with no console errors. Backend, API and database are unchanged. The five `verifyMvt*` browser suites and the other reservation-entry tests were then deleted at the user's request, and the backend service `/odata/v4/reservation-entry` was removed as well. `tr-to` can still post reservations through `executeReservationWarehouseFlow`. See the four Change Entries of 2026-11-03 below for what was run and what was not.
 
 - **MIGO resend versus further issue, reservation-entry and tr-to (2026-11-03 09:55 IST) — PARTIAL, uncommitted:** A resend with the same id returns its document without posting, and a new id posts the further quantity, on both `postMigoGoodsMovement` actions. A further issue with no id gets HTTP 400 before SAP (`ClientAttemptId` on reservation-entry, `ProcessId` on tr-to). The false repeat is fixed once in `checkMigoIdempotency`. Jest: 228 suites and 4,464 tests passed, 59 skipped. SAP-free browser E2E: 3 of 3 passed; those suites do not post a goods movement. Not proven against live SAP. See Change Entry 2026-11-03 09:55 IST.
 
@@ -58,7 +58,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- Reservation Entry removal (2026-11-03): review `feature/remove-reservation-entry` and decide whether to merge it. Decide separately about the backend with no UI caller: `/odata/v4/reservation-entry` and `ReservationCreateAttempt`. This screen was the only UI for creating a reservation entry or retrying a failed reservation step.
+- Reservation Entry removal (2026-11-03): review `feature/remove-reservation-entry` and decide whether to merge it. Before merging, check for outside callers of `/odata/v4/reservation-entry`. Any production drop of the `ReservationCreateAttempt` table needs a data export and a written go. This screen was the only UI for creating a reservation entry or retrying a failed reservation step.
 
 - MIGO resend versus further issue (2026-11-03): commit when the user asks, then restart the local CAP server to load it. Live proof needs a written go: post a partial issue, resend the same id, post a further issue with a new id, and read MATDOC and RESB back. Decide whether one Transfer Order may have more than one goods movement; today a new id on the same TO posts again.
 
@@ -88,6 +88,30 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-03 — Reservation-entry backend removed: PARTIAL
+
+- **Status:** PARTIAL. Production behaviour, outside API callers and the production table are not verified. No SAP write was made.
+- **Why:** The user approved the backend removal plan.
+- **Deleted:** `srv/wm/reservation-entry/service.js`, `service.cds`, `ReservationAttemptStore.js`; `tools/run1-mvt201-live.js` to `run5-mvt261-live.js`; `tools/sandbox-matrix.js`, because its first step needs `createReservationEntry`.
+- **Moved:** `srv/wm/reservation-entry/readScope.js` to `srv/wm/readScope.js`, with its 5 importers updated. `test/unit/wm/reservationEntryReadScope.test.js` is now `readScope.test.js`.
+- **Changed:** `srv/service.cds`; `db/wm/reservation-track.cds` (`ReservationCreateAttempt` removed); `tools/smoke-test-deployment.js` and `test/smoke/postDeploymentSmoke.test.js` (10 checks to 9); the Postman collection (folder 16 removed); `docs/runbooks/rollback-and-reconciliation.md`.
+- **Test decision:** TEST UPDATED.
+- **Executed validation:**
+  - `npx cds compile db srv --to json`: exit 0; the compiled model has no `ReservationEntryService`.
+  - `npx jest --silent --runInBand`: 224 suites passed, 1 skipped; 4,176 tests passed, 59 skipped, on 2 runs in a row.
+  - **Failure seen:** one earlier full run on this commit crashed with exit 139 and no summary, while other work may have been running. The cause is UNKNOWN. An earlier run in this session also printed no summary while the SAP-free E2E started in parallel.
+  - `npx eslint .`: clean. `node tools/scan-secrets.js`: 0 secrets. `git diff --check`: clean.
+  - `npm run validate:mta`: exit 0.
+  - `tools/smoke-test-deployment.js` on a test-profile server: 9 passed, 0 failed.
+  - On that server, `$metadata` returned 404 for `reservation-entry` and 200 for `tr-to`, `goods-issue`, `goods-receipt`, `hu-stock-transfer`, `outbound-delivery` and `reservation-track`.
+  - `npm run test:e2e:sap-free`: 3 of 3 passed.
+  - `verifyWmScreens.e2e.js` on port 4010: all 14 steps passed (READ-ONLY, write guard on).
+- **Not run:** the full 17-suite browser run and `npm run test:e2e:sap`.
+- **Not changed:** `ReservationProcessAdapter.js`, because `tr-to` uses it. `ReservationTrack` and `ReservationLog` are kept, because `tr-to` and `reservation-track` use them.
+- **Dead-code candidates, left in place:** in `srv`, `applyPlantScope`, `userFacingSapError`, `SUPPORTED_MOVEMENT_TYPES`, `STEP_ERROR`, `isTrClosedWithoutTo` and `isLockConflict` are now referenced only by their own modules. The adapter methods `assertGoodsMovementNotPosted`, `checkStockForReservation`, `writeApplicationLog` and `getTransferRequirement` have few internal references. Reachability is not proven.
+- **Historical references kept:** `AUDIT_RESERVATION_CREATE.md`, root `db-migrate-*.sql`, `docs/abap/sandbox-results.md`, `docs/abap/test-runbook.md`, `docs/wm_tr_create_rfc_wrapper.md`.
+- **Next action:** The user checks for outside API callers, then decides about merging, and separately about the production table.
 
 ### 2026-11-03 — Reservation-entry tests deleted: PARTIAL
 
