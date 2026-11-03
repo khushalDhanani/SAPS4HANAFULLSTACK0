@@ -97,6 +97,16 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-03 — Orders Due intermittent E2E failure diagnosed: root cause found, not fixed
+
+- **Status:** Diagnosis only. No code changed. No SAP write was made.
+- **Evidence:** The trace of the failed run shows `_onScroll` → `onScrollToLoad` → `requestNewPage` → `updateItems` → `getContexts` → `checkSuspended`.
+- **Root cause:** `OrdersDueForDelivery.view.xml` has `growingScrollToLoad="true"` on a table whose binding starts `suspended: true`. A scroll event before a plant is set makes UI5 request the next page from the suspended binding, which throws an uncaught error. This corrects the earlier inferred `filter`/`refresh` cause in the final report of the `tr-to` work.
+- **Reproduced in a browser (test login, port 4010, write guard on):** no plant and no scroll, 0 page errors; no plant with scroll, 1 page error (2 of 2 runs); plant set with scroll, 0 page errors. Because a scroll depends on page timing, the LE suite fails only sometimes.
+- **Origin:** the suspended binding came with `82060ce2` (2026-10-26). This work did not introduce it. The `tr-to` branch did not change this screen.
+- **Recommended fix, not applied:** start with `growingScrollToLoad="false"` and enable it after `resume()` in `_loadForPlant`.
+- **Next action:** The user decides whether to apply the fix.
+
 ### 2026-11-03 — `tr-to` lookupTR read-only, plant scope, limited removal: PARTIAL
 
 - **Status:** PARTIAL. Tested with SAP writes mocked or guarded. Outside callers are not verified, and the fix was not proven against a real status-E TR in SAP.
