@@ -11,7 +11,7 @@
 ## 1. Executive Summary & Root Cause Analysis
 
 ### 1.1 The Double-Removal & Stranded Stock Problem
-When processing reservations via the custom CAP application (`/wm/scan-to`), users observed inventory discrepancies where stock was removed twice in WM while consumed only once in IM (`RESB-ENMNG = 1.000`):
+When processing reservations via the custom CAP application, users observed inventory discrepancies where stock was removed twice in WM while consumed only once in IM (`RESB-ENMNG = 1.000`):
 1. **App Staging Step:** The application executed `L_TR_CREATE` upfront, substituting the movement type to `BWLVS 311`. A subsequent Transfer Order (TO) moved physical stock from bin storage into interim destination `921/TRANSFER`.
 2. **Goods Movement Step:** Later in the process, the application executed `MIGO` (`BAPI_GOODSMVT_CREATE`) to issue the goods against the reservation (`BWART 201` for Cost Center, `BWART 241` for Asset).
 3. **Standard SAP Auto-TR Creation:** Standard IM-WM interface table `T321` has `TBFKZ = 'X'` for movement types 201, 241, 301, and 311 in warehouse `W01`. As a result, standard SAP automatically generated a **second** Transfer Requirement (`LTBK-MBLNR` filled).
