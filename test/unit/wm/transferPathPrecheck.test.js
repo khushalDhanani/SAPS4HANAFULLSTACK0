@@ -265,7 +265,7 @@ describe('transferPathHelper Unit Tests', () => {
             interimStorageTypes: ['STG']
           }
         })
-      ).rejects.toThrow(/could not resolve valid storage type rules for W77: BusinessConfig\.holdStorageTypes must be non-empty/);
+      ).rejects.toThrow(/could not resolve valid storage type rules for W77: holdStorageTypes must be non-empty/);
     });
   });
 

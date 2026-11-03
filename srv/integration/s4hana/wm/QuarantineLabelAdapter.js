@@ -376,9 +376,8 @@ class QuarantineLabelAdapter {
 
   /**
    * allowedPlants: plantScope(user) — null for Admin (unrestricted), otherwise the user's plants; every plant of the
-   * document must be in it before anything is rendered. resolveOutput(plants) -> { formName, labelSize } comes from the
-   * CAP layer (per-plant BusinessConfig); IV_FORM is sent only when a form is configured, so without configuration the
-   * call is the one the activated wrapper already accepts.
+   * document must be in it before anything is rendered. resolveOutput(plants) -> { formName, labelSize } is optional; IV_FORM
+   * is sent only when a form is given, so without one the call is the one the activated wrapper already accepts.
    */
   async generate({ MaterialDocument, MaterialDocumentYear, Text, allowedPlants, resolveOutput }) {
     const { mblnr, mjahr, text } = normalizeInput({ MaterialDocument, MaterialDocumentYear, Text });

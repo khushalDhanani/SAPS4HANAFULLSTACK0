@@ -291,37 +291,4 @@ module.exports = class Mvt261Service extends cds.ApplicationService {
 
     return super.init();
   }
-
-  static async checkBinConfiguration(db = cds.db) {
-    let rows;
-    try {
-      rows = await db.run(cds.ql.SELECT.from('saps4hana.wm.BusinessConfig')
-        .columns('Plant', 'WarehouseNumber', 'Mvt261NotReadyBinsJson')
-        .where({ Active: true }));
-    } catch (_) {
-      LOG.warn('[STARTUP WARNING] Movement 261 BusinessConfig audit failed: could not read active configuration rows. Bin policy is NOT VERIFIED; check database availability and schema.');
-      return;
-    }
-    if (!rows.length) {
-      LOG.warn('[STARTUP WARNING] Movement 261: no active BusinessConfig rows exist. Custom blocked-bin policy is not configured; maintain approved plant/warehouse rules in Mvt261NotReadyBinsJson.');
-      return;
-    }
-    const { parseJsonArray } = require('../../common/BusinessConfigResolver');
-    for (const row of rows) {
-      const scope = `Plant=${row.Plant || '(all)'}, Warehouse=${row.WarehouseNumber || '(all)'}`;
-      try {
-        const bins = parseJsonArray(row.Mvt261NotReadyBinsJson, 'Mvt261NotReadyBinsJson');
-        if (!bins.length) {
-          LOG.warn(`[STARTUP WARNING] Movement 261 BusinessConfig ${scope}: Mvt261NotReadyBinsJson is empty; no custom blocked-bin rules are configured for this row.`);
-        }
-      } catch (_) {
-        LOG.warn(`[STARTUP WARNING] Movement 261 BusinessConfig ${scope}: Mvt261NotReadyBinsJson must contain a valid JSON array. Bin policy is NOT VERIFIED.`);
-      }
-    }
-  }
-
 };
-
-// Register once per module, not per service instance. Audit after the database is
-// ready; the request-time resolver cannot resolve a global plant/warehouse scope.
-cds.once('listening', () => module.exports.checkBinConfiguration());

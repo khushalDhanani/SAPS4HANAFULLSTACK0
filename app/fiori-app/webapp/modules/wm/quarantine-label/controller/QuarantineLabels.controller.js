@@ -198,7 +198,7 @@ sap.ui.define([
                 if (!oResult || !oResult.Rows || !oResult.Rows.length) {
                     throw new Error(that.getText("qlFailed", null, "Quarantine labels could not be generated."));
                 }
-                // Size from the plant's BusinessConfig; the layout's default (4x6) when none is configured
+                // The layout's default size (4x6)
                 var mTexts = that._labelTexts();
                 var aLabels = ZquarLabelRows.toLabels(oResult.Rows, mTexts, AuthService.getCurrentUserName(that.getOwnerComponent()));
                 var sVariant = oVm.getProperty("/variant") || "vertical";

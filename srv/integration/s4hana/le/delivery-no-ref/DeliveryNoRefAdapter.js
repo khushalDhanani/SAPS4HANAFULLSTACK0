@@ -64,9 +64,9 @@ class DeliveryNoRefAdapter {
    * @param {Object} payload
    * @param {string} payload.shippingPoint       - e.g. '1104' (required)
    * @param {string} [payload.deliveryType='LO2']- e.g. 'LO2'
-   * @param {string} [payload.salesOrg]          - Override SalesOrganization (resolved from BusinessConfig if absent)
-   * @param {string} [payload.distChannel]       - Override DistributionChannel (resolved from BusinessConfig if absent)
-   * @param {string} [payload.division]          - Override Division (resolved from BusinessConfig if absent)
+   * @param {string} [payload.salesOrg]          - Override SalesOrganization (read from SAP customizing if absent)
+   * @param {string} [payload.distChannel]       - Override DistributionChannel (read from SAP customizing if absent)
+   * @param {string} [payload.division]          - Override Division (read from SAP customizing if absent)
    * @param {string} payload.shipToParty         - Customer number e.g. '10135'
    * @param {string} payload.plant               - Delivering Plant (WERKS, e.g. '1110') — used as resolver key
    * @param {string} payload.storageLocation     - Storage Location e.g. 'FG01'

@@ -2,7 +2,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const cds = require('@sap/cds');
 const businessConfigResolver = require('../../../srv/common/BusinessConfigResolver');
 const { BusinessConfigResolver, BusinessConfigError } = businessConfigResolver;
 
@@ -10,57 +9,30 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
 
   // ─── Test Fixtures ─────────────────────────────────────────────────────────
 
-  const rowW01 = {
-    Plant: '1120',
-    WarehouseNumber: 'W01',
-    SalesOrganization: '1000',
-    DistributionChannel: '14',
-    Division: '00',
-    Currency: 'INR',
-    InquiryType: 'ZIN',
-    OrderType: 'ZDOM',
-    ConditionType: 'ZPR1',
-    ShippingPoints: '1112, WAVG',
-    SalesMaterialTypes: 'ZFRT, FERT',
-    DifferenceStorageType: '999',
-    Mvt261NotReadyBinsJson: JSON.stringify([
+  const customizingW01 = {
+    salesOrganization: '1000',
+    distributionChannel: '14',
+    division: '00',
+    currency: 'INR',
+    inquiryType: 'ZIN',
+    orderType: 'ZDOM',
+    conditionType: 'ZPR1',
+    shippingPoints: '1112, WAVG',
+    salesMaterialTypes: 'ZFRT, FERT',
+    differenceStorageType: '999',
+    mvt261NotReadyBins: JSON.stringify([
       { storageType: 'OH1', bin: 'ONHOLD', reason: 'onHold' }
-    ]),
-    Active: true
+    ])
   };
 
-  const rowW02 = {
-    Plant: '1120',
-    WarehouseNumber: 'W02',
-    SalesOrganization: '2000',
-    DistributionChannel: '20',
-    Division: '10',
-    Currency: 'EUR',
-    InquiryType: 'INQ2',
-    OrderType: 'ORD2',
-    ConditionType: 'PR00',
-    ShippingPoints: '2201, 2202',
-    SalesMaterialTypes: 'HAWA, FERT',
-    DifferenceStorageType: '998',
-    Mvt261NotReadyBinsJson: JSON.stringify([
-      { storageType: 'QA1', bin: 'INSP', reason: 'qualityInspection' }
-    ]),
-    Active: true
-  };
-
-  const rowPlantLevel = {
-    Plant: '1130',
-    WarehouseNumber: '',
-    SalesOrganization: '3000',
-    DistributionChannel: '30',
-    Division: '00',
-    Currency: 'USD',
-    InquiryType: 'AF',
-    OrderType: 'TA',
-    ConditionType: 'PR00',
-    ShippingPoints: '1130',
-    SalesMaterialTypes: 'FERT',
-    Active: true
+  const customizingW02 = {
+    ...customizingW01,
+    salesOrganization: '2000',
+    distributionChannel: '20',
+    division: '10',
+    currency: 'EUR',
+    orderType: 'ORD2',
+    shippingPoints: '2201, 2202'
   };
 
   beforeEach(() => {
@@ -86,109 +58,27 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       })).toThrow(/overlaps/);
     });
 
-    test('defaults missing oversize behavior to BLOCK and accepts a configured WARN policy', async () => {
-      const defaultResolver = new BusinessConfigResolver({ dbQuery: async () => null, ttlMs: 0 });
-      const warnResolver = new BusinessConfigResolver({
-        dbQuery: async () => ({ OversizeHuSelectionBehavior: 'warn' }), ttlMs: 0
-      });
-      expect(await defaultResolver.resolveOversizeHuSelectionBehavior({ plant: '1120', warehouse: 'W01' })).toBe('BLOCK');
-      expect(await warnResolver.resolveOversizeHuSelectionBehavior({ plant: '1120', warehouse: 'W01' })).toBe('WARN');
+    test('an oversize HU stays blocked', async () => {
+      const resolver = new BusinessConfigResolver({ ttlMs: 0 });
+      expect(await resolver.resolveOversizeHuSelectionBehavior({ plant: '1120', warehouse: 'W01' })).toBe('BLOCK');
     });
 
-    test('resolves the quarantine label form and size per plant; missing config means the default form', async () => {
-      const rows = { DM01: { QuarantineLabelForm: 'zdemo_4x6', QuarantineLabelSize: '4X6' } };
-      const queried = [];
-      const resolver = new BusinessConfigResolver({ dbQuery: async (plant, wh) => { queried.push([plant, wh]); return rows[plant] || null; }, ttlMs: 0 });
-      expect(await resolver.resolveQuarantineLabelOutput({ plant: 'dm01' })).toEqual({ formName: 'ZDEMO_4X6', labelSize: '4x6' });
-      expect(await resolver.resolveQuarantineLabelOutput({ plant: 'DM02' })).toEqual({ formName: null, labelSize: null });
-      expect(queried).toEqual([['DM01', ''], ['DM02', '']]);
-    });
+    test('storage-type rules fail closed unless a warehouse has them registered', async () => {
+      const resolver = new BusinessConfigResolver({ ttlMs: 0 });
+      await expect(resolver.resolveHuStorageTypeRules({ plant: '1120', warehouse: 'W01' }))
+        .rejects.toThrow(/could not resolve storage type rules/);
 
-    test('BusinessConfig admin API normalizes valid lists and rejects empty or overlapping lists', async () => {
-      const BusinessConfigService = require('../../../srv/wm/business-config/service');
-      const service = new BusinessConfigService();
-      let beforeHandler = null;
-      service.before = jest.fn().mockImplementation((events, entity, fn) => {
-        if (events.includes('CREATE')) beforeHandler = fn;
+      BusinessConfigResolver.registerWarehouseStorageTypes('W01', {
+        pickableStorageTypes: ['EN1'], holdStorageTypes: ['OH1'], interimStorageTypes: ['911']
       });
-      service.storageTypeConfigAdapter = {
-        validateStorageTypeListsForWarehouse: jest.fn().mockResolvedValue({ warehouse: 'W01' })
-      };
-      Object.defineProperty(service, 'entities', {
-        value: { BusinessConfigs: 'BusinessConfigs' },
-        configurable: true
-      });
-      jest.spyOn(cds.ApplicationService.prototype, 'init').mockResolvedValue(service);
-      await service.init();
-      expect(beforeHandler).toEqual(expect.any(Function));
-
-      const validReq = { data: {
-        WarehouseNumber: 'W01',
-        PickableStorageTypes: 'en1,EN2', HoldStorageTypes: 'OH1', InterimStorageTypes: '911',
-        OversizeHuSelectionBehavior: 'block'
-      }, error: jest.fn() };
-      await beforeHandler(validReq);
-      expect(validReq.data).toMatchObject({
-        PickableStorageTypes: 'EN1,EN2', HoldStorageTypes: 'OH1',
-        InterimStorageTypes: '911', OversizeHuSelectionBehavior: 'BLOCK'
-      });
-      expect(validReq.error).not.toHaveBeenCalled();
-      expect(service.storageTypeConfigAdapter.validateStorageTypeListsForWarehouse).toHaveBeenCalledWith('W01', {
-        pickableStorageTypes: ['EN1', 'EN2'], holdStorageTypes: ['OH1'], interimStorageTypes: ['911']
-      });
-
-      const invalidReq = { data: {
-        PickableStorageTypes: 'EN1', HoldStorageTypes: '', InterimStorageTypes: 'EN1'
-      }, error: jest.fn() };
-      await beforeHandler(invalidReq);
-      expect(invalidReq.error).toHaveBeenCalledWith(400, expect.stringMatching(/must be non-empty|overlaps/));
-    });
-
-    test('BusinessConfig admin API rejects storage-type updates when T301 is unreadable', async () => {
-      const BusinessConfigService = require('../../../srv/wm/business-config/service');
-      const service = new BusinessConfigService();
-      let beforeHandler = null;
-      service.before = jest.fn().mockImplementation((events, entity, fn) => {
-        if (events.includes('CREATE')) beforeHandler = fn;
-      });
-      service.storageTypeConfigAdapter = {
-        validateStorageTypeListsForWarehouse: jest.fn().mockRejectedValue(
-          Object.assign(new Error('SAP T301 storage types are unreadable; BusinessConfig update is blocked.'), { status: 503 })
-        )
-      };
-      Object.defineProperty(service, 'entities', {
-        value: { BusinessConfigs: 'BusinessConfigs' },
-        configurable: true
-      });
-      jest.spyOn(cds.ApplicationService.prototype, 'init').mockResolvedValue(service);
-      await service.init();
-
-      const req = { data: {
-        WarehouseNumber: 'W01', PickableStorageTypes: 'EN1', HoldStorageTypes: 'OH1', InterimStorageTypes: '911'
-      }, error: jest.fn() };
-      await beforeHandler(req);
-      expect(req.error).toHaveBeenCalledWith(503, expect.stringContaining('T301 storage types are unreadable'));
-    });
-
-    test('BusinessConfig admin API normalizes the quarantine label form/size and rejects invalid values', async () => {
-      const BusinessConfigService = require('../../../srv/wm/business-config/service');
-      const service = new BusinessConfigService();
-      let beforeHandler = null;
-      service.before = jest.fn().mockImplementation((events, entity, fn) => {
-        if (events.includes('CREATE')) beforeHandler = fn;
-      });
-      Object.defineProperty(service, 'entities', { value: { BusinessConfigs: 'BusinessConfigs' }, configurable: true });
-      jest.spyOn(cds.ApplicationService.prototype, 'init').mockResolvedValue(service);
-      await service.init();
-
-      const valid = { data: { QuarantineLabelForm: ' zdemo_4x6 ', QuarantineLabelSize: '4X6' }, error: jest.fn() };
-      await beforeHandler(valid);
-      expect(valid.data).toEqual({ QuarantineLabelForm: 'ZDEMO_4X6', QuarantineLabelSize: '4x6' });
-      expect(valid.error).not.toHaveBeenCalled();
-
-      const invalid = { data: { QuarantineLabelSize: 'A6' }, error: jest.fn() };
-      await beforeHandler(invalid);
-      expect(invalid.error).toHaveBeenCalledWith(400, expect.stringContaining('QuarantineLabelSize'));
+      try {
+        const rules = await resolver.resolveHuStorageTypeRules({ plant: '1120', warehouse: 'W01' });
+        expect(rules.isPickable('EN1')).toBe(true);
+        expect(rules.isOnHold('OH1')).toBe(true);
+        expect(rules.isInterim('911')).toBe(true);
+      } finally {
+        BusinessConfigResolver.unregisterWarehouseStorageTypes('W01');
+      }
     });
   });
 
@@ -196,12 +86,8 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
 
   describe('(1) Tamper Protection: Trusted server-side overrides only', () => {
     test('resolves from trustedOverrides when supplied by verified server-side caller', async () => {
-      const dbSpy = jest.fn();
       const sapSpy = jest.fn();
-      const resolver = new BusinessConfigResolver({
-        dbQuery: dbSpy,
-        sapCustomizing: sapSpy
-      });
+      const resolver = new BusinessConfigResolver({ sapCustomizing: sapSpy });
 
       const res = await resolver.resolve({
         plant: '1120',
@@ -219,7 +105,6 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
         }
       });
 
-      expect(dbSpy).not.toHaveBeenCalled();
       expect(sapSpy).not.toHaveBeenCalled();
       expect(res.salesOrganization).toBe('9999');
       expect(res.salesOrg).toBe('9999');
@@ -251,12 +136,11 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       expect(res.shippingPoints).toEqual(['1120', '1108']);
     });
 
-    test('TAMPER TEST: ignores overrides in untrusted request body and resolves authentic data from DB', async () => {
-      const mockDb = jest.fn().mockResolvedValue(rowW01);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
+    test('TAMPER TEST: ignores overrides in untrusted request body and resolves authentic data from SAP', async () => {
+      const resolver = new BusinessConfigResolver({ sapCustomizing: async () => customizingW01 });
 
       // An untrusted caller passes request body with malicious overrides attempting to spoof sales org
-      const untrustedRequestBody = {
+      const res = await resolver.resolve({
         plant: '1120',
         warehouse: 'W01',
         salesOrg: 'MALICIOUS_9999',
@@ -267,23 +151,17 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
           salesOrganization: 'MALICIOUS_9999',
           currency: 'HACKED_CURRENCY'
         }
-      };
+      });
 
-      const res = await resolver.resolve(untrustedRequestBody);
-
-      // Verify tamper protection: untrusted overrides were ignored, DB was queried, and authentic values were returned
-      expect(mockDb).toHaveBeenCalledWith('1120', 'W01');
-      expect(res.salesOrganization).toBe('1000');  // authentic value from DB, NOT MALICIOUS_9999
+      expect(res.salesOrganization).toBe('1000');
       expect(res.salesOrg).toBe('1000');
-      expect(res.currency).toBe('INR');           // authentic value from DB, NOT HACKED_CURRENCY
-      expect(res.orderType).toBe('ZDOM');         // authentic value from DB, NOT SPOOFED
+      expect(res.currency).toBe('INR');
+      expect(res.orderType).toBe('ZDOM');
     });
 
     test('TAMPER TEST: fails closed when untrusted body supplies invalid plant and attempted overrides', async () => {
-      const mockDb = jest.fn().mockResolvedValue(null);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
+      const resolver = new BusinessConfigResolver();
 
-      // Untrusted body provides fake plant and fake salesOrg
       await expect(resolver.resolve({
         plant: '9999',
         warehouse: 'W99',
@@ -292,357 +170,154 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
     });
   });
 
-  // ─── (2) Write Restrictions: @restrict: WarehouseManager and Admin ─────────
+  // ─── (2) Per-Key TTL Cache ─────────────────────────────────────────────────
 
-  describe('(2) Write restrictions: @restrict: WarehouseManager and Admin, read-only otherwise', () => {
-    test('db/wm/business-config.cds annotates BusinessConfig entity with WarehouseManager and Admin write restrictions', async () => {
-      const csn = await cds.load('db/wm/business-config.cds');
-      const entity = csn.definitions['saps4hana.wm.BusinessConfig'];
-      expect(entity).toBeDefined();
-
-      const restrict = entity['@restrict'];
-      expect(Array.isArray(restrict)).toBe(true);
-
-      const readRule = restrict.find(r => r.grant === 'READ');
-      expect(readRule).toBeDefined();
-      expect(readRule.to).toBe('authenticated-user');
-
-      const writeRule = restrict.find(r => Array.isArray(r.grant) && r.grant.includes('CREATE'));
-      expect(writeRule).toBeDefined();
-      expect(writeRule.grant).toEqual(expect.arrayContaining(['CREATE', 'UPDATE', 'DELETE', 'WRITE']));
-      expect(writeRule.to).toEqual(['WarehouseManager', 'Admin']);
-      expect(entity.elements.PickableStorageTypes).toBeDefined();
-      expect(entity.elements.HoldStorageTypes).toBeDefined();
-      expect(entity.elements.InterimStorageTypes).toBeDefined();
-      expect(entity.elements.OversizeHuSelectionBehavior.default.val).toBe('BLOCK');
-    });
-
-    test('srv/wm/business-config/service.cds annotates BusinessConfigs projection with WarehouseManager and Admin write restrictions', async () => {
-      const csn = await cds.load('srv/wm/business-config/service.cds');
-      const srv = csn.definitions['saps4hana.wm.BusinessConfigService'];
-      expect(srv).toBeDefined();
-      expect(srv['@requires']).toBe('authenticated-user');
-
-      const entity = csn.definitions['saps4hana.wm.BusinessConfigService.BusinessConfigs'];
-      expect(entity).toBeDefined();
-
-      const restrict = entity['@restrict'];
-      expect(Array.isArray(restrict)).toBe(true);
-
-      const readRule = restrict.find(r => r.grant === 'READ');
-      expect(readRule).toBeDefined();
-      expect(readRule.to).toBe('authenticated-user');
-
-      const writeRule = restrict.find(r => Array.isArray(r.grant) && r.grant.includes('CREATE'));
-      expect(writeRule).toBeDefined();
-      expect(writeRule.to).toEqual(['WarehouseManager', 'Admin']);
-    });
-  });
-
-  // ─── (3) Seed CSV for W01 / Plant 1120 ──────────────────────────────────────
-
-  describe('(3) Seed CSV for W01 / plant 1120 (confirmed customizing values only)', () => {
-    test('seed CSV exists in db/data/saps4hana.wm-BusinessConfig.csv and contains only confirmed values', () => {
-      const csvPath = path.resolve(__dirname, '../../../db/data/saps4hana.wm-BusinessConfig.csv');
-      expect(fs.existsSync(csvPath)).toBe(true);
-
-      const content = fs.readFileSync(csvPath, 'utf8').trim();
-      const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
-      expect(lines.length).toBe(2);
-
-      const headers = lines[0].split(';');
-      const values = lines[1].split(';');
-
-      const row = {};
-      headers.forEach((h, i) => { row[h] = values[i] || ''; });
-
-      // Confirmed SAP customizing values:
-      expect(row.Plant).toBe('1120');
-      expect(row.WarehouseNumber).toBe('W01');
-      expect(row.SalesOrganization).toBe('1000');
-      expect(row.DistributionChannel).toBe('14');
-      expect(row.Division).toBe('00');
-      expect(row.Currency).toBe('INR');
-      expect(row.ShippingPoints).toBe('1112,WAVG');
-      expect(row.Active).toBe('true');
-
-      // Unverified / unconfirmed fields MUST BE EMPTY (no guessed values):
-      expect(row.InquiryType).toBe('');
-      expect(row.OrderType).toBe('');
-      expect(row.ConditionType).toBe('');
-      expect(row.SalesMaterialTypes).toBe('');
-      expect(row.DifferenceStorageType).toBe('');
-      expect(row.Mvt261NotReadyBinsJson).toBe('');
-    });
-
-    test('seed CSV loads with multi-value shipping points intact (1112, WAVG)', async () => {
-      const csvPath = path.join(__dirname, '../../../db/data/saps4hana.wm-BusinessConfig.csv');
-      const content = fs.readFileSync(csvPath, 'utf8').trim();
-      const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
-      const headers = lines[0].split(';');
-      const values = lines[1].split(';');
-      const row = {};
-      headers.forEach((h, i) => { row[h] = values[i] || ''; });
-
-      expect(row.ShippingPoints).toBe('1112,WAVG');
-
-      // Inject parsed row into resolver
-      const mockDb = jest.fn().mockResolvedValue(row);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
-
-      const resolved = await resolver.resolve({
-        plant: '1120',
-        warehouse: 'W01',
-        fields: ['shippingPoints']
-      });
-
-      expect(Array.isArray(resolved.shippingPoints)).toBe(true);
-      expect(resolved.shippingPoints).toHaveLength(2);
-      expect(resolved.shippingPoints).toEqual(['1112', 'WAVG']);
-      expect(resolved.shippingPoints[0]).toBe('1112');
-      expect(resolved.shippingPoints[1]).toBe('WAVG');
-    });
-  });
-
-  // ─── (4) Per-Key TTL Cache with Invalidation on Admin Writes ───────────────
-
-  describe('(4) Per-key TTL cache with invalidation on admin writes', () => {
+  describe('(2) Per-key TTL cache', () => {
     test('caches resolved authentic config per plant/warehouse key', async () => {
-      const mockDb = jest.fn().mockResolvedValue(rowW01);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb, ttlMs: 60000 });
+      const sap = jest.fn().mockResolvedValue(customizingW01);
+      const resolver = new BusinessConfigResolver({ sapCustomizing: sap, ttlMs: 60000 });
 
-      // First call queries DB
       const res1 = await resolver.resolve({ plant: '1120', warehouse: 'W01' });
-      expect(mockDb).toHaveBeenCalledTimes(1);
+      expect(sap).toHaveBeenCalledTimes(1);
       expect(res1.salesOrg).toBe('1000');
       expect(resolver.getCacheSize()).toBe(1);
 
-      // Second call returns cached value without calling DB again
       const res2 = await resolver.resolve({ plant: '1120', warehouse: 'W01' });
-      expect(mockDb).toHaveBeenCalledTimes(1); // Still 1!
+      expect(sap).toHaveBeenCalledTimes(1);
       expect(res2).toEqual(res1);
     });
 
-    test('invalidates cache specifically for updated plant/warehouse', async () => {
-      const mockDb = jest.fn().mockImplementation((plant, wh) => {
-        if (wh === 'W01') return rowW01;
-        if (wh === 'W02') return rowW02;
-        return null;
-      });
-
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb, ttlMs: 60000 });
+    test('invalidates cache specifically for the given plant/warehouse', async () => {
+      const sap = jest.fn().mockImplementation(async ({ warehouse }) => (warehouse === 'W01' ? customizingW01 : customizingW02));
+      const resolver = new BusinessConfigResolver({ sapCustomizing: sap, ttlMs: 60000 });
 
       await resolver.resolve({ plant: '1120', warehouse: 'W01' });
       await resolver.resolve({ plant: '1120', warehouse: 'W02' });
       expect(resolver.getCacheSize()).toBe(2);
-      expect(mockDb).toHaveBeenCalledTimes(2);
+      expect(sap).toHaveBeenCalledTimes(2);
 
-      // Invalidate only W01
       resolver.invalidate('1120', 'W01');
       expect(resolver.getCacheSize()).toBe(1);
 
-      // W02 is still cached
       await resolver.resolve({ plant: '1120', warehouse: 'W02' });
-      expect(mockDb).toHaveBeenCalledTimes(2); // No new DB call for W02
+      expect(sap).toHaveBeenCalledTimes(2);
 
-      // W01 must re-query DB
       await resolver.resolve({ plant: '1120', warehouse: 'W01' });
-      expect(mockDb).toHaveBeenCalledTimes(3); // New DB call for W01
+      expect(sap).toHaveBeenCalledTimes(3);
     });
 
     test('cache entry expires after TTL', async () => {
-      const mockDb = jest.fn().mockResolvedValue(rowW01);
-      // Short TTL of 50ms
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb, ttlMs: 50 });
+      const sap = jest.fn().mockResolvedValue(customizingW01);
+      const resolver = new BusinessConfigResolver({ sapCustomizing: sap, ttlMs: 50 });
 
       await resolver.resolve({ plant: '1120', warehouse: 'W01' });
-      expect(mockDb).toHaveBeenCalledTimes(1);
-
-      // Before expiry: hits cache
       await resolver.resolve({ plant: '1120', warehouse: 'W01' });
-      expect(mockDb).toHaveBeenCalledTimes(1);
+      expect(sap).toHaveBeenCalledTimes(1);
 
-      // Wait 60ms for TTL to expire
       await new Promise(r => setTimeout(r, 60));
 
-      // After expiry: re-queries DB
       await resolver.resolve({ plant: '1120', warehouse: 'W01' });
-      expect(mockDb).toHaveBeenCalledTimes(2);
-    });
-
-    test('BusinessConfigService handler invalidates resolver cache on admin writes', async () => {
-      const BusinessConfigService = require('../../../srv/wm/business-config/service');
-      const service = new BusinessConfigService();
-
-      let afterHandler = null;
-      service.after = jest.fn().mockImplementation((events, entity, fn) => {
-        if (events.includes('UPDATE')) afterHandler = fn;
-      });
-      Object.defineProperty(service, 'entities', {
-        value: { BusinessConfigs: 'BusinessConfigs' },
-        configurable: true
-      });
-      jest.spyOn(cds.ApplicationService.prototype, 'init').mockResolvedValue(service);
-
-      await service.init();
-      expect(service.after).toHaveBeenCalledWith(
-        ['CREATE', 'UPDATE', 'DELETE'],
-        'BusinessConfigs',
-        expect.any(Function)
-      );
-
-      // Seed cache
-      const mockDb = jest.fn().mockResolvedValue(rowW01);
-      businessConfigResolver._dbQuery = mockDb;
-      businessConfigResolver.clearCache();
-
-      await businessConfigResolver.resolve({ plant: '1120', warehouse: 'W01' });
-      expect(businessConfigResolver.getCacheSize()).toBe(1);
-
-      // Admin executes an update
-      afterHandler({ Plant: '1120', WarehouseNumber: 'W01' });
-      expect(businessConfigResolver.getCacheSize()).toBe(0);
+      expect(sap).toHaveBeenCalledTimes(2);
     });
   });
 
-  // ─── (5) Read-Only Live Check Validation (T001L, T320, TVKO) ────────────────
+  // ─── (3) SAP customizing reads ─────────────────────────────────────────────
 
-  describe('(5) Live check logic: T001L, T320 and TVKO querying and mapping', () => {
-    test('queries T001L, T320, TVKO and correctly derives confirmed customizing values', async () => {
-      const mockRfc = {
-        readTable: jest.fn().mockImplementation((table, _fields, _where) => {
-          if (table === 'T001L') {
-            return [{
-              WERKS: '1120',
-              LGORT: 'CS02',
-              LGOBE: 'Raw Material',
-              VKORG: '1000',
-              VTWEG: '14',
-              SPART: '00',
-              KUNNR: '0000001120',
-              XHUPF: 'X'
-            }];
-          }
-          if (table === 'T320') {
-            return [{ WERKS: '1120', LGORT: 'CS02', LGNUM: 'W01' }];
-          }
-          if (table === 'TVKO') {
-            return [{ VKORG: '1000', BUKRS: '1000', WAERS: 'INR' }];
-          }
-          return [];
-        })
-      };
-
-      const mockDb = jest.fn().mockResolvedValue(rowW01);
-      const resolver = new BusinessConfigResolver({ rfc: mockRfc, dbQuery: mockDb });
-
-      const res = await resolver.resolve({
-        plant: '1120',
-        storageLocation: 'CS02'
-      });
-
-      expect(mockRfc.readTable).toHaveBeenCalledWith('T001L', expect.any(Array), expect.any(Array));
-      expect(mockRfc.readTable).toHaveBeenCalledWith('T320', expect.any(Array), expect.any(Array));
-
-      expect(res.salesOrganization).toBe('1000');
-      expect(res.distributionChannel).toBe('14');
-      expect(res.division).toBe('00');
-      expect(res.warehouseNumber).toBe('W01');
-    });
-  });
-
-  // ─── Two different warehouses in the same runtime ─────────────────────────
-
-  describe('Two different warehouses in the same runtime', () => {
-    test('resolves W01 and W02 independently with distinct configuration in the same process', async () => {
-      const mockDb = jest.fn().mockImplementation((plant, wh) => {
-        if (wh === 'W01') return rowW01;
-        if (wh === 'W02') return rowW02;
-        return null;
-      });
-
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
-
-      // First call for warehouse W01
-      const resW01 = await resolver.resolve({ plant: '1120', warehouse: 'W01' });
-
-      // Second call for warehouse W02 in the same runtime instance
-      const resW02 = await resolver.resolve({ plant: '1120', warehouse: 'W02' });
-
-      // Verify W01 values
-      expect(resW01.warehouse).toBe('W01');
-      expect(resW01.salesOrg).toBe('1000');
-      expect(resW01.distChannel).toBe('14');
-      expect(resW01.division).toBe('00');
-      expect(resW01.currency).toBe('INR');
-      expect(resW01.orderType).toBe('ZDOM');
-      expect(resW01.shippingPoints).toEqual(['1112', 'WAVG']);
-
-      // Verify W02 values
-      expect(resW02.warehouse).toBe('W02');
-      expect(resW02.salesOrg).toBe('2000');
-      expect(resW02.distChannel).toBe('20');
-      expect(resW02.division).toBe('10');
-      expect(resW02.currency).toBe('EUR');
-      expect(resW02.orderType).toBe('ORD2');
-      expect(resW02.shippingPoints).toEqual(['2201', '2202']);
-
-      // Verify distinctness across both results
-      expect(resW01.salesOrg).not.toBe(resW02.salesOrg);
-      expect(resW01.currency).not.toBe(resW02.currency);
-      expect(resW01.shippingPoints).not.toEqual(resW02.shippingPoints);
-    });
-  });
-
-  describe('Phase 2 step 2: T001K/T001 company code and currency, validated keys, flow-aware cache key', () => {
+  describe('(3) SAP customizing: T001L, T320, T001K, T001 and TVSTZ', () => {
     const sapRfc = (overrides = {}) => ({
       readTable: jest.fn(async (table, fields, where) => {
         if (overrides[table]) return overrides[table](where);
         if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }];
         if (table === 'T001') return [{ BUKRS: '1000', WAERS: 'INR' }];
         if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'CS02', VKORG: '1000', VTWEG: '14', SPART: '00' }];
-        if (table === 'TVSTZ') return [{ WERKS: '1120', VSTEL: '1112' }];
+        if (table === 'T320') return [{ WERKS: '1120', LGORT: 'CS02', LGNUM: 'W01' }];
+        if (table === 'TVSTZ') return [{ WERKS: '1120', VSTEL: '1112' }, { WERKS: '1120', VSTEL: 'WAVG' }];
         return [];
       })
     });
 
-    test('company code (T001K) and its currency (T001) are read from SAP before the admin table', async () => {
-      const db = jest.fn(async () => ({ Plant: '1120', WarehouseNumber: 'W01', Currency: 'EUR' })); // admin row must NOT win over SAP
-      const resolver = new BusinessConfigResolver({ rfc: sapRfc(), dbQuery: db, ttlMs: 0 });
+    test('derives the sales area and warehouse of a storage location', async () => {
+      const rfc = sapRfc();
+      const resolver = new BusinessConfigResolver({ rfc, ttlMs: 0 });
+
+      const res = await resolver.resolve({
+        plant: '1120',
+        storageLocation: 'CS02',
+        fields: ['salesOrganization', 'distributionChannel', 'division']
+      });
+
+      expect(rfc.readTable).toHaveBeenCalledWith('T001L', expect.any(Array), expect.any(Array));
+      expect(rfc.readTable).toHaveBeenCalledWith('T320', expect.any(Array), expect.any(Array));
+      expect(res.salesOrganization).toBe('1000');
+      expect(res.distributionChannel).toBe('14');
+      expect(res.division).toBe('00');
+      expect(res.warehouseNumber).toBe('W01');
+    });
+
+    test('a storage location with no sales area in T001L fails closed', async () => {
+      const rfc = sapRfc({ T001L: () => [{ WERKS: '1120', LGORT: 'HS01', VKORG: '', VTWEG: '', SPART: '' }] });
+      const resolver = new BusinessConfigResolver({ rfc, ttlMs: 0 });
+      await expect(resolver.resolve({ plant: '1120', storageLocation: 'HS01', flow: 'delivery-no-ref' }))
+        .rejects.toThrow(/could not resolve required business config fields \[salesOrganization, distributionChannel, division\]/);
+    });
+
+    test('company code (T001K) and its currency (T001) are read from SAP', async () => {
+      const resolver = new BusinessConfigResolver({ rfc: sapRfc(), ttlMs: 0 });
       const res = await resolver.resolve({ plant: '1120', warehouse: 'W01', storageLocation: 'CS02', fields: ['currency', 'salesOrganization'] });
       expect(res).toMatchObject({ companyCode: '1000', currency: 'INR', salesOrganization: '1000' });
     });
 
-    test('an invalid plant key fails closed before any SAP read or DB query', async () => {
-      const rfc = sapRfc(); const db = jest.fn();
-      const resolver = new BusinessConfigResolver({ rfc, dbQuery: db, ttlMs: 0 });
-      await expect(resolver.resolve({ plant: "1120' OR WERKS <> '", fields: ['currency'] })).rejects.toThrow(/rejected plant/);
-      expect(rfc.readTable).not.toHaveBeenCalled();
-      expect(db).not.toHaveBeenCalled();
+    test('shipping points of a plant come from TVSTZ', async () => {
+      const resolver = new BusinessConfigResolver({ rfc: sapRfc(), ttlMs: 0 });
+      const res = await resolver.resolve({ plant: '1120', fields: ['shippingPoints'] });
+      expect(res.shippingPoints).toEqual(['1112', 'WAVG']);
     });
 
-    test('neither plant nor warehouse -> specific error, no unfiltered admin lookup', async () => {
-      const db = jest.fn(async () => ({ Plant: '', WarehouseNumber: '', Currency: 'INR' }));
-      const resolver = new BusinessConfigResolver({ dbQuery: db, ttlMs: 0 });
+    test('an invalid plant key fails closed before any SAP read', async () => {
+      const rfc = sapRfc();
+      const resolver = new BusinessConfigResolver({ rfc, ttlMs: 0 });
+      await expect(resolver.resolve({ plant: "1120' OR WERKS <> '", fields: ['currency'] })).rejects.toThrow(/rejected plant/);
+      expect(rfc.readTable).not.toHaveBeenCalled();
+    });
+
+    test('neither plant nor warehouse -> specific error', async () => {
+      const resolver = new BusinessConfigResolver({ ttlMs: 0 });
       await expect(resolver.resolve({ fields: ['currency'] })).rejects.toThrow(/neither plant nor warehouse/);
-      expect(db).not.toHaveBeenCalled();
     });
 
     test('SAP read failures are named in the final error instead of being swallowed', async () => {
       const rfc = sapRfc({ T001K: () => { throw new Error('RFC_COMMUNICATION_FAILURE'); }, T001L: () => [] });
-      const resolver = new BusinessConfigResolver({ rfc, dbQuery: async () => null, ttlMs: 0 });
+      const resolver = new BusinessConfigResolver({ rfc, ttlMs: 0 });
       await expect(resolver.resolve({ plant: '1120', storageLocation: 'CS02', fields: ['currency'] })).rejects.toThrow(/T001K\/T001: RFC_COMMUNICATION_FAILURE/);
     });
 
     test('cache key includes the flow: same plant/warehouse resolved for two flows are two entries', async () => {
-      const db = jest.fn(async () => ({ Plant: '1120', WarehouseNumber: 'W01', SalesOrganization: '1000', DistributionChannel: '14', Division: '00', Mvt261NotReadyBinsJson: '[]' }));
-      const resolver = new BusinessConfigResolver({ dbQuery: db, ttlMs: 60000 });
+      const sap = jest.fn().mockResolvedValue(customizingW01);
+      const resolver = new BusinessConfigResolver({ sapCustomizing: sap, ttlMs: 60000 });
       await resolver.resolve({ plant: '1120', warehouse: 'W01', flow: 'delivery-no-ref' });
       await resolver.resolve({ plant: '1120', warehouse: 'W01', flow: '261' });
       expect(resolver.getCacheSize()).toBe(2);
       expect(resolver.getCacheEntry('1120', 'W01', resolver.FLOW_REQUIRED_FIELDS['261'], '261')).toBeTruthy();
       await resolver.resolve({ plant: '1120', warehouse: 'W01', flow: '261' }); // served from cache
-      expect(db).toHaveBeenCalledTimes(2);
+      expect(sap).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ─── Two different warehouses in the same runtime ─────────────────────────
+
+  describe('Two different warehouses in the same runtime', () => {
+    test('resolves W01 and W02 independently in the same process', async () => {
+      const resolver = new BusinessConfigResolver({
+        sapCustomizing: async ({ warehouse }) => (warehouse === 'W01' ? customizingW01 : customizingW02)
+      });
+
+      const resW01 = await resolver.resolve({ plant: '1120', warehouse: 'W01' });
+      const resW02 = await resolver.resolve({ plant: '1120', warehouse: 'W02' });
+
+      expect(resW01).toMatchObject({ warehouse: 'W01', salesOrg: '1000', distChannel: '14', division: '00', currency: 'INR', orderType: 'ZDOM' });
+      expect(resW01.shippingPoints).toEqual(['1112', 'WAVG']);
+      expect(resW02).toMatchObject({ warehouse: 'W02', salesOrg: '2000', distChannel: '20', division: '10', currency: 'EUR', orderType: 'ORD2' });
+      expect(resW02.shippingPoints).toEqual(['2201', '2202']);
     });
   });
 
@@ -650,8 +325,7 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
 
   describe('Unresolved case: strict fail-closed and no fallback to defaults', () => {
     test('throws BusinessConfigError when config cannot be resolved for an unknown plant/warehouse', async () => {
-      const mockDb = jest.fn().mockResolvedValue(null);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
+      const resolver = new BusinessConfigResolver();
 
       await expect(resolver.resolve({ plant: '9999', warehouse: 'W99' }))
         .rejects.toThrow(BusinessConfigError);
@@ -664,8 +338,7 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       process.env.S4_SALES_ORGANIZATION = 'FAKE_ORG';
       process.env.S4_PLANT = 'FAKE_PLANT';
 
-      const mockDb = jest.fn().mockResolvedValue(null);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
+      const resolver = new BusinessConfigResolver();
 
       await expect(resolver.resolve({ plant: '1120', warehouse: 'W01' }))
         .rejects.toThrow(BusinessConfigError);
@@ -674,88 +347,22 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       delete process.env.S4_PLANT;
     });
 
-    test('throws when DB row has invalid JSON in Mvt261NotReadyBinsJson', async () => {
-      const corruptRow = {
-        ...rowW01,
-        Mvt261NotReadyBinsJson: 'invalid-json{'
-      };
-      const mockDb = jest.fn().mockResolvedValue(corruptRow);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
+    test('throws when mvt261NotReadyBins is invalid JSON', async () => {
+      const resolver = new BusinessConfigResolver({ sapCustomizing: async () => ({ ...customizingW01, mvt261NotReadyBins: 'invalid-json{' }) });
 
       await expect(resolver.resolve({ plant: '1120', warehouse: 'W01' }))
         .rejects.toThrow(/contains invalid JSON/);
     });
 
-    test('throws when DB row Mvt261NotReadyBinsJson is not an array', async () => {
-      const corruptRow = {
-        ...rowW01,
-        Mvt261NotReadyBinsJson: '{"storageType":"OH1"}'
-      };
-      const mockDb = jest.fn().mockResolvedValue(corruptRow);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
+    test('throws when mvt261NotReadyBins is not an array', async () => {
+      const resolver = new BusinessConfigResolver({ sapCustomizing: async () => ({ ...customizingW01, mvt261NotReadyBins: '{"storageType":"OH1"}' }) });
 
       await expect(resolver.resolve({ plant: '1120', warehouse: 'W01' }))
         .rejects.toThrow(/must be a JSON array/);
     });
   });
 
-  // ─── Filtered fields (subset resolution) ───────────────────────────────────
-
-  describe('Subset fields resolution (used by specific adapters)', () => {
-    test('resolves only mvt261NotReadyBins for Mvt261Adapter without requiring SD fields', async () => {
-      const row = {
-        Plant: '1120',
-        WarehouseNumber: 'W01',
-        Mvt261NotReadyBinsJson: JSON.stringify([{ storageType: 'OH1', bin: 'BIN1', reason: 'onHold' }])
-      };
-      const mockDb = jest.fn().mockResolvedValue(row);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
-
-      const res = await resolver.resolve({
-        plant: '1120',
-        warehouse: 'W01',
-        fields: ['mvt261NotReadyBins']
-      });
-
-      expect(res.mvt261NotReadyBins).toEqual([{ storageType: 'OH1', bin: 'BIN1', reason: 'onHold' }]);
-    });
-
-    test('resolves only SD org fields for DeliveryNoRefAdapter', async () => {
-      const row = {
-        Plant: '1110',
-        WarehouseNumber: '',
-        SalesOrganization: '1000',
-        DistributionChannel: '10',
-        Division: '52'
-      };
-      const mockDb = jest.fn().mockResolvedValue(row);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
-
-      const res = await resolver.resolve({
-        plant: '1110',
-        fields: ['salesOrganization', 'distributionChannel', 'division']
-      });
-
-      expect(res.salesOrganization).toBe('1000');
-      expect(res.distributionChannel).toBe('10');
-      expect(res.division).toBe('52');
-    });
-
-    test('resolves plant-level configuration when warehouse is unspecified', async () => {
-      const mockDb = jest.fn().mockResolvedValue(rowPlantLevel);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
-
-      const res = await resolver.resolve({
-        plant: '1130'
-      });
-
-      expect(res.salesOrganization).toBe('3000');
-      expect(res.distributionChannel).toBe('30');
-      expect(res.currency).toBe('USD');
-    });
-  });
-
-  // ─── Flow-Specific Required Fields (delivery-no-ref, 261, scan-to) ─────────
+  // ─── Flow-Specific Required Fields ─────────────────────────────────────────
 
   describe('Flow-specific required fields (delivery-no-ref, 261, scan-to)', () => {
     test('FLOW_REQUIRED_FIELDS defines exact minimal fields per flow', () => {
@@ -771,62 +378,32 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
     });
 
     test('delivery-no-ref flow requires only salesOrganization, distributionChannel, division', async () => {
-      const minimalSdRow = {
-        Plant: '1120',
-        WarehouseNumber: '',
-        SalesOrganization: '1000',
-        DistributionChannel: '14',
-        Division: '00',
-        Active: true
-      };
-      const mockDb = jest.fn().mockResolvedValue(minimalSdRow);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
-
-      const res = await resolver.resolve({
-        plant: '1120',
-        flow: 'delivery-no-ref'
+      const resolver = new BusinessConfigResolver({
+        sapCustomizing: async () => ({ salesOrganization: '1000', distributionChannel: '14', division: '00' })
       });
+
+      const res = await resolver.resolve({ plant: '1120', flow: 'delivery-no-ref' });
 
       expect(res.salesOrganization).toBe('1000');
       expect(res.distributionChannel).toBe('14');
       expect(res.division).toBe('00');
     });
 
-    test('261 flow requires only mvt261NotReadyBins and succeeds with unmaintained SD fields', async () => {
-      const minimal261Row = {
-        Plant: '1120',
-        WarehouseNumber: 'W01',
-        Mvt261NotReadyBinsJson: JSON.stringify([{ storageType: 'QA1', bin: 'INSP', reason: 'qualityInspection' }]),
-        Active: true
-      };
-      const mockDb = jest.fn().mockResolvedValue(minimal261Row);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
+    test('261 flow requires only mvt261NotReadyBins, and without a source it fails closed for the caller to handle', async () => {
+      const resolver = new BusinessConfigResolver();
+      await expect(resolver.resolve({ plant: '1120', warehouse: 'W01', flow: '261' })).rejects.toThrow(/mvt261NotReadyBins/);
 
-      const res = await resolver.resolve({
-        plant: '1120',
-        warehouse: 'W01',
-        flow: '261'
+      const withBins = new BusinessConfigResolver({
+        sapCustomizing: async () => ({ mvt261NotReadyBins: [{ storageType: 'QA1', bin: 'INSP', reason: 'qualityInspection' }] })
       });
-
-      expect(res.mvt261NotReadyBins).toEqual([
-        { storageType: 'QA1', bin: 'INSP', reason: 'qualityInspection' }
-      ]);
+      const res = await withBins.resolve({ plant: '1120', warehouse: 'W01', flow: '261' });
+      expect(res.mvt261NotReadyBins).toEqual([{ storageType: 'QA1', bin: 'INSP', reason: 'qualityInspection' }]);
     });
 
     test('scan-to flow requires only warehouseNumber and plant', async () => {
-      const minimalScanRow = {
-        Plant: '1120',
-        WarehouseNumber: 'W01',
-        Active: true
-      };
-      const mockDb = jest.fn().mockResolvedValue(minimalScanRow);
-      const resolver = new BusinessConfigResolver({ dbQuery: mockDb });
+      const resolver = new BusinessConfigResolver();
 
-      const res = await resolver.resolve({
-        plant: '1120',
-        warehouse: 'W01',
-        flow: 'scan-to'
-      });
+      const res = await resolver.resolve({ plant: '1120', warehouse: 'W01', flow: 'scan-to' });
 
       expect(res.plant).toBe('1120');
       expect(res.warehouseNumber).toBe('W01');

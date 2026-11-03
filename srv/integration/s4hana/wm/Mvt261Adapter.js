@@ -123,8 +123,8 @@ class Mvt261Adapter {
    * @param {Object}   [options.client]          - S4HttpClient override (for tests)
    * @param {Object}   [options.rfc]             - RfcClient override (for tests)
    * @param {Array}    [options.notReadyBins]    - Explicit notReadyBins override (for tests; skips DB lookup)
-   * @param {string}   [options.plant]           - WERKS; used when resolving notReadyBins from BusinessConfig
-   * @param {string}   [options.warehouseNumber] - LGNUM; used to narrow BusinessConfig lookup
+   * @param {string}   [options.plant]           - WERKS; used when resolving notReadyBins
+   * @param {string}   [options.warehouseNumber] - LGNUM; used to narrow the notReadyBins lookup
    * @param {Object}   [options.resolver]        - BusinessConfigResolver override (for tests)
    */
   constructor(options = {}) {
@@ -152,7 +152,7 @@ class Mvt261Adapter {
   }
 
   /**
-   * Returns the notReadyBins array, resolving it from BusinessConfig on first use.
+   * Returns the notReadyBins array, resolving it on first use.
    * @param {string} [plant]
    * @param {string} [warehouseNumber]
    * @returns {Promise<Array>}

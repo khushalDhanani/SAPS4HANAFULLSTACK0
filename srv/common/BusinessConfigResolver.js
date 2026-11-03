@@ -11,13 +11,12 @@
  *     Request body values can never tamper with business customizing.
  *   - Never reads business defaults from package.json or process.env.
  *   - Never falls back to silent defaults.
- *   - Per-key TTL cache (default 5 min) with invalidation on admin writes.
+ *   - Per-key TTL cache (default 5 min).
  *   - Resolves dynamically per request/document in strict order:
  *       1. Trusted server-side overrides
  *       2. Cached valid entry (per plant/warehouse key)
  *       3. SAP customizing tables (T001L, T320 via RFC or customizer provider)
- *       4. Admin-maintained BusinessConfig table (CDS entity keyed by plant or warehouse)
- *       5. Throw BusinessConfigError with actionable diagnostic message
+ *       4. Throw BusinessConfigError with actionable diagnostic message
  *
  * Fields resolved:
  *   salesOrg / salesOrganization, distChannel / distributionChannel, division, currency,
@@ -27,15 +26,7 @@
  *   differenceStorageType
  */
 
-let cds;
-try {
-  cds = require('@sap/cds');
-} catch (_) {
-  cds = null;
-}
-
 const { sapKey } = require('../integration/s4hana/sapKey');
-const { normalizeQuarantineLabelOutput } = require('../wm/quarantine-label/labelOutput');
 
 class BusinessConfigError extends Error {
   constructor(message) {
@@ -65,12 +56,12 @@ function parseJsonArray(json, fieldName) {
     parsed = typeof json === 'string' ? JSON.parse(json) : json;
   } catch (e) {
     throw new BusinessConfigError(
-      `BusinessConfig.${fieldName} contains invalid JSON: ${e.message}`
+      `${fieldName} contains invalid JSON: ${e.message}`
     );
   }
   if (!Array.isArray(parsed)) {
     throw new BusinessConfigError(
-      `BusinessConfig.${fieldName} must be a JSON array, got: ${typeof parsed}`
+      `${fieldName} must be a JSON array, got: ${typeof parsed}`
     );
   }
   return parsed;
@@ -82,15 +73,15 @@ function validateHuStorageTypeLists(values = {}) {
   for (const field of fields) {
     const raw = values[field] ?? values[field[0].toUpperCase() + field.slice(1)];
     const list = Array.isArray(raw) ? raw : parseCsv(raw);
-    if (!list.length) throw new BusinessConfigError(`BusinessConfig.${field} must be non-empty.`);
+    if (!list.length) throw new BusinessConfigError(`${field} must be non-empty.`);
     let normalized;
     try {
       normalized = list.map((item) => sapKey(item, 'lgtyp'));
     } catch (error) {
-      throw new BusinessConfigError(`BusinessConfig.${field} contains an invalid storage type: ${error.message}`);
+      throw new BusinessConfigError(`${field} contains an invalid storage type: ${error.message}`);
     }
     if (new Set(normalized).size !== normalized.length) {
-      throw new BusinessConfigError(`BusinessConfig.${field} contains duplicate storage types.`);
+      throw new BusinessConfigError(`${field} contains duplicate storage types.`);
     }
     result[field] = normalized;
   }
@@ -147,13 +138,11 @@ class BusinessConfigResolver {
 
   /**
    * @param {Object} [options]
-   * @param {Function} [options.dbQuery] - Injectable async (plant, warehouseNumber) => row | null
    * @param {Function} [options.sapCustomizing] - Injectable async (context) => partialConfig | null
    * @param {Object} [options.rfc] - Optional RFC client for querying SAP customizing tables (T001L, T320)
    * @param {number} [options.ttlMs=300000] - Per-key TTL cache duration in milliseconds (default 5 minutes; 0 disables)
    */
   constructor(options = {}) {
-    this._dbQuery = options.dbQuery || null;
     this._sapCustomizing = options.sapCustomizing || null;
     this._rfc = options.rfc || null;
     this._ttlMs = options.ttlMs !== undefined ? options.ttlMs : 300000;
@@ -211,23 +200,9 @@ class BusinessConfigResolver {
     return this._cache.get(key) || null;
   }
 
-  /** Oversize-HU setting: “default BLOCK, pending the user's confirmation”. */
-  async resolveOversizeHuSelectionBehavior(context = {}) {
-    const row = await this._queryDb(
-      String(context.plant || '').trim().toUpperCase(),
-      String(context.warehouse || context.warehouseNumber || '').trim().toUpperCase()
-    );
-    const value = String(row?.OversizeHuSelectionBehavior || 'BLOCK').trim().toUpperCase();
-    if (!['BLOCK', 'WARN'].includes(value)) {
-      throw new BusinessConfigError('BusinessConfig.OversizeHuSelectionBehavior must be BLOCK or WARN.');
-    }
-    return value;
-  }
-
-  /** Quarantine label form/size of a plant; no row or empty fields = the wrapper's default form, no size check. */
-  async resolveQuarantineLabelOutput(context = {}) {
-    const row = await this._queryDb(String(context.plant || '').trim().toUpperCase(), '');
-    return normalizeQuarantineLabelOutput(row);
+  /** No setting source exists, so an oversize HU stays blocked. */
+  async resolveOversizeHuSelectionBehavior() {
+    return 'BLOCK';
   }
 
   /**
@@ -324,64 +299,6 @@ class BusinessConfigResolver {
 
       if (sapReadErrors.length) result.sapReadErrors = sapReadErrors;
       return Object.keys(result).length > 0 ? result : null;
-    }
-
-    return null;
-  }
-
-  /**
-   * Queries the BusinessConfig table for the given plant/warehouse combination.
-   * @private
-   */
-  async _queryDb(plant, warehouseNumber) {
-    if (this._dbQuery) {
-      return this._dbQuery(plant, warehouseNumber);
-    }
-
-    if (!cds || typeof cds.entities !== 'function' || !cds.model) {
-      return null;
-    }
-
-    let BusinessConfig;
-    try {
-      const entities = cds.entities('saps4hana.wm');
-      BusinessConfig = entities ? entities.BusinessConfig : null;
-    } catch (_) {
-      return null;
-    }
-    if (!BusinessConfig) return null;
-
-    const pl = (plant || '').trim();
-    const wh = (warehouseNumber || '').trim();
-
-    // 1. Exact match: plant + warehouse
-    if (pl && wh) {
-      const exact = await cds.run(
-        SELECT.one.from(BusinessConfig).where({ Plant: pl, WarehouseNumber: wh, Active: true })
-      );
-      if (exact) return exact;
-    }
-
-    // 2. Warehouse-level row (e.g. when warehouse is supplied)
-    if (wh) {
-      const byWh = await cds.run(
-        SELECT.one.from(BusinessConfig).where({ WarehouseNumber: wh, Active: true })
-      );
-      if (byWh) return byWh;
-    }
-
-    // 3. Plant-level fallback (WarehouseNumber = '')
-    if (pl) {
-      const plantLevel = await cds.run(
-        SELECT.one.from(BusinessConfig).where({ Plant: pl, WarehouseNumber: '', Active: true })
-      );
-      if (plantLevel) return plantLevel;
-
-      // Or any active row for this plant
-      const anyPlant = await cds.run(
-        SELECT.one.from(BusinessConfig).where({ Plant: pl, Active: true })
-      );
-      if (anyPlant) return anyPlant;
     }
 
     return null;
@@ -570,55 +487,7 @@ class BusinessConfigResolver {
       );
     }
 
-    // ─── Step 4: Admin Config Table (BusinessConfig) ──────────────────────────
-    if (missing.length > 0) {
-      const row = await this._queryDb(result.plant || plant, result.warehouse || warehouse);
-      if (row) {
-        if (!result.plant && row.Plant) result.plant = row.Plant;
-        if (!result.warehouse && row.WarehouseNumber) {
-          result.warehouse = row.WarehouseNumber;
-          result.warehouseNumber = row.WarehouseNumber;
-        }
-
-        const assign = (field, val) => {
-          if (result[field] === undefined && val && String(val).trim()) {
-            result[field] = String(val).trim();
-          }
-        };
-
-        assign('salesOrganization',   row.SalesOrganization);
-        assign('distributionChannel', row.DistributionChannel);
-        assign('division',            row.Division);
-        assign('currency',            row.Currency);
-        assign('inquiryType',         row.InquiryType);
-        assign('orderType',           row.OrderType);
-        assign('conditionType',       row.ConditionType);
-        assign('differenceStorageType', row.DifferenceStorageType);
-
-        if (result.shippingPoints === undefined && row.ShippingPoints) {
-          result.shippingPoints = parseCsv(row.ShippingPoints);
-        }
-        if (result.salesMaterialTypes === undefined && row.SalesMaterialTypes) {
-          result.salesMaterialTypes = parseCsv(row.SalesMaterialTypes);
-        }
-        if (result.mvt261NotReadyBins === undefined && row.Mvt261NotReadyBinsJson) {
-          result.mvt261NotReadyBins = parseJsonArray(row.Mvt261NotReadyBinsJson, 'Mvt261NotReadyBinsJson');
-        }
-        if (result.pickableStorageTypes === undefined && (row.PickableStorageTypes || row.pickableStorageTypes)) {
-          result.pickableStorageTypes = parseCsv(row.PickableStorageTypes || row.pickableStorageTypes);
-        }
-        if (result.holdStorageTypes === undefined && (row.HoldStorageTypes || row.holdStorageTypes)) {
-          result.holdStorageTypes = parseCsv(row.HoldStorageTypes || row.holdStorageTypes);
-        }
-        if (result.interimStorageTypes === undefined && (row.InterimStorageTypes || row.interimStorageTypes)) {
-          result.interimStorageTypes = parseCsv(row.InterimStorageTypes || row.interimStorageTypes);
-        }
-      }
-
-      missing = requiredFields.filter(f => result[f] === undefined);
-    }
-
-    // ─── Step 5: Throw if required fields remain unresolved ───────────────────
+    // ─── Step 4: Throw if required fields remain unresolved ───────────────────
     if (missing.length > 0) {
       const loc = `Plant=${result.plant || plant || '(none)'}, Warehouse=${result.warehouse || warehouse || '(none)'}, StorageLocation=${storageLocation || '(none)'}`;
       if (flow === 'hu-stock-transfer') {
@@ -628,7 +497,7 @@ class BusinessConfigResolver {
       }
       throw new BusinessConfigError(
         `BusinessConfigResolver could not resolve required business config fields [${missing.join(', ')}] for ${loc}. ` +
-        `Maintain the values in SAP customizing or via the BusinessConfig admin table.` +
+        `Maintain the values in SAP customizing.` +
         (sapReadErrors.length ? ` SAP reads failed: ${sapReadErrors.join('; ')}.` : '')
       );
     }

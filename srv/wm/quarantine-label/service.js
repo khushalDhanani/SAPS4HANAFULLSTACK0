@@ -1,8 +1,7 @@
 const cds = require('@sap/cds');
 const QuarantineLabelAdapter = require('../../integration/s4hana/wm/QuarantineLabelAdapter');
 const plantScope = require('../handling-unit/plantScope');
-const businessConfigResolver = require('../../common/BusinessConfigResolver');
-const { resolveOutputForPlants, addPageCheck } = require('./labelOutput');
+const { addPageCheck } = require('./labelOutput');
 
 /** Thin CAP binding; validation, plant authorization and the SAP calls live in QuarantineLabelAdapter. */
 module.exports = class QuarantineLabelService extends cds.ApplicationService {
@@ -13,8 +12,7 @@ module.exports = class QuarantineLabelService extends cds.ApplicationService {
         // Plant authorization is server-side from the authenticated user (null = Admin, unrestricted)
         const result = await adapter.generate({
           ...(req.data || {}),
-          allowedPlants: plantScope(req.user),
-          resolveOutput: (plants) => resolveOutputForPlants(plants, businessConfigResolver)
+          allowedPlants: plantScope(req.user)
         });
         return addPageCheck(result);
       } catch (err) {
@@ -25,8 +23,7 @@ module.exports = class QuarantineLabelService extends cds.ApplicationService {
       try {
         return await adapter.labelRows({
           ...(req.data || {}),
-          allowedPlants: plantScope(req.user),
-          resolveOutput: (plants) => resolveOutputForPlants(plants, businessConfigResolver)
+          allowedPlants: plantScope(req.user)
         });
       } catch (err) {
         return req.error(err.status || 500, err.message || 'Quarantine label data could not be read');

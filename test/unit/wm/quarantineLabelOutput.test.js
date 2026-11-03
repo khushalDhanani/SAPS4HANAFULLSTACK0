@@ -1,9 +1,8 @@
 'use strict';
 
 const {
-    PT_PER_INCH, normalizeQuarantineLabelOutput, resolveOutputForPlants, pdfPageSize, pageSizeMatches, addPageCheck
+    PT_PER_INCH, pdfPageSize, pageSizeMatches, addPageCheck
 } = require('../../../srv/wm/quarantine-label/labelOutput');
-const { BusinessConfigResolver } = require('../../../srv/common/BusinessConfigResolver');
 
 // Synthetic PDFs only (DEMO data); no SAP output
 const pdf = (box) => Buffer.from(`%PDF-1.4\n1 0 obj<</Type/Pages/Kids[2 0 R]/Count 1>>endobj\n2 0 obj<</Type/Page${box ? `/MediaBox [${box}]` : ''}>>endobj\n%%EOF`);
@@ -51,39 +50,6 @@ describe('quarantine label output', () => {
         });
         it('missing config: no check', () => {
             expect(addPageCheck(demoResult(null, '0 0 595.28 841.89'))).toMatchObject({ LabelSize: null, PageSizeOk: null });
-        });
-    });
-
-    describe('normalizeQuarantineLabelOutput', () => {
-        it('missing row or empty fields -> default form, no size', () => {
-            expect(normalizeQuarantineLabelOutput(null)).toEqual({ formName: null, labelSize: null });
-            expect(normalizeQuarantineLabelOutput({ QuarantineLabelForm: ' ', QuarantineLabelSize: '' })).toEqual({ formName: null, labelSize: null });
-        });
-        it('normalizes a configured form and size', () => {
-            expect(normalizeQuarantineLabelOutput({ QuarantineLabelForm: ' zdemo_label_4x6 ', QuarantineLabelSize: '4X6' }))
-                .toEqual({ formName: 'ZDEMO_LABEL_4X6', labelSize: '4x6' });
-        });
-        it.each([
-            [{ QuarantineLabelForm: "ZDEMO'X" }, /Adobe form name/],
-            [{ QuarantineLabelForm: 'Z'.repeat(31) }, /Adobe form name/],
-            [{ QuarantineLabelSize: 'A6' }, /must be one of: 4x6/]
-        ])('rejects %p', (row, msg) => {
-            expect(() => normalizeQuarantineLabelOutput(row)).toThrow(msg);
-        });
-    });
-
-    describe('resolveOutputForPlants', () => {
-        const resolverFor = (rows) => new BusinessConfigResolver({ dbQuery: async (plant) => rows[plant] || null, ttlMs: 0 });
-        it('one setting for all plants', async () => {
-            const r = resolverFor({ DM01: { QuarantineLabelForm: 'ZDEMO_4X6', QuarantineLabelSize: '4x6' }, DM02: { QuarantineLabelForm: 'ZDEMO_4X6', QuarantineLabelSize: '4x6' } });
-            await expect(resolveOutputForPlants(['DM01', 'DM02'], r)).resolves.toEqual({ formName: 'ZDEMO_4X6', labelSize: '4x6' });
-        });
-        it('missing config -> default form, no size', async () => {
-            await expect(resolveOutputForPlants(['DM01'], resolverFor({}))).resolves.toEqual({ formName: null, labelSize: null });
-        });
-        it('plants with different settings -> 409, nothing chosen', async () => {
-            const r = resolverFor({ DM01: { QuarantineLabelForm: 'ZDEMO_4X6', QuarantineLabelSize: '4x6' } });
-            await expect(resolveOutputForPlants(['DM01', 'DM02'], r)).rejects.toMatchObject({ status: 409 });
         });
     });
 });
