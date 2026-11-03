@@ -7,11 +7,6 @@ const evidence = require('./support/evidence');
 const { closeBrowser } = require('./support/screenCheck');
 const { startIsolatedServer, assertSapUnreachable } = require('./support/isolatedServer');
 
-const { verifyMvt201 } = require('./wm/verifyMvt201.e2e');
-const { verifyMvt241 } = require('./wm/verifyMvt241.e2e');
-const { verifyMvt261 } = require('./wm/verifyMvt261.e2e');
-const { verifyMvt301 } = require('./wm/verifyMvt301.e2e');
-const { verifyMvt311 } = require('./wm/verifyMvt311.e2e');
 const { verifyShellScreens } = require('./shell/verifyShellScreens.e2e');
 const { verifyMmScreens } = require('./mm/verifyMmScreens.e2e');
 const { verifySdScreens } = require('./sd/verifySdScreens.e2e');
@@ -91,51 +86,6 @@ async function runSuitesAndSummarize(options) {
   }
 
   const suites = selectSuites([
-    {
-      name: 'Movement 201 (GI to Cost Center)',
-      file: 'verifyMvt201.e2e.js',
-      fn: async (opts) => {
-        const res = await verifyMvt201(opts);
-        const pass = res.ui === 'PASS' && res.playwright === 'PASS' && res.network === 'PASS' && res.console === 'PASS' && (!res.errors || res.errors.length === 0);
-        return { status: pass ? 'PASS' : 'FAIL', errors: res.errors || [], details: res.details };
-      }
-    },
-    {
-      name: 'Movement 241 (GI to Asset)',
-      file: 'verifyMvt241.e2e.js',
-      fn: async (opts) => {
-        const res = await verifyMvt241(opts);
-        const pass = res.ui === 'PASS' && res.playwright === 'PASS' && res.network === 'PASS' && res.console === 'PASS' && (!res.errors || res.errors.length === 0);
-        return { status: pass ? 'PASS' : 'FAIL', errors: res.errors || [], details: res.details };
-      }
-    },
-    {
-      name: 'Movement 261 (GI to Internal Order)',
-      file: 'verifyMvt261.e2e.js',
-      fn: async (opts) => {
-        const res = await verifyMvt261(opts);
-        const pass = res.ui === 'PASS' && res.playwright === 'PASS' && res.network === 'PASS' && res.console === 'PASS' && (!res.errors || res.errors.length === 0);
-        return { status: pass ? 'PASS' : 'FAIL', errors: res.errors || [], details: res.details };
-      }
-    },
-    {
-      name: 'Movement 301 (Plant-to-Plant Transfer)',
-      file: 'verifyMvt301.e2e.js',
-      fn: async (opts) => {
-        const res = await verifyMvt301(opts);
-        const pass = res.ui === 'PASS' && res.playwright === 'PASS' && res.network === 'PASS' && res.console === 'PASS' && (!res.errors || res.errors.length === 0);
-        return { status: pass ? 'PASS' : 'FAIL', errors: res.errors || [], details: res.details };
-      }
-    },
-    {
-      name: 'Movement 311 (SLoc-to-SLoc Transfer)',
-      file: 'verifyMvt311.e2e.js',
-      fn: async (opts) => {
-        const res = await verifyMvt311(opts);
-        const pass = res.ui === 'PASS' && res.playwright === 'PASS' && res.network === 'PASS' && res.console === 'PASS' && (!res.errors || res.errors.length === 0);
-        return { status: pass ? 'PASS' : 'FAIL', errors: res.errors || [], details: res.details };
-      }
-    },
     // Tier A read-only screen suites (write guard on); they already return { status, errors, details }
     { name: 'Shell screens', file: 'shell/verifyShellScreens.e2e.js', fn: verifyShellScreens },
     { name: 'MM screens', file: 'mm/verifyMmScreens.e2e.js', fn: verifyMmScreens },

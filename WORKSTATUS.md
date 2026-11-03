@@ -15,7 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Reservation Entry screen removed (2026-11-03) — PARTIAL, on local branch `feature/remove-reservation-entry`, not pushed:** The UI at `#/wm/reservation-entry` is gone, and the three old URLs now show the dashboard with no console errors. Backend, API and database are unchanged. See the Change Entry below for what was run and what was not.
+- **Reservation Entry screen removed (2026-11-03) — PARTIAL, on local branch `feature/remove-reservation-entry`, not pushed:** The UI at `#/wm/reservation-entry` is gone, and the three old URLs now show the dashboard with no console errors. Backend, API and database are unchanged. The five `verifyMvt*` browser suites were then deleted at the user's request. See the two Change Entries of 2026-11-03 below for what was run and what was not.
 
 - **MIGO resend versus further issue, reservation-entry and tr-to (2026-11-03 09:55 IST) — PARTIAL, uncommitted:** A resend with the same id returns its document without posting, and a new id posts the further quantity, on both `postMigoGoodsMovement` actions. A further issue with no id gets HTTP 400 before SAP (`ClientAttemptId` on reservation-entry, `ProcessId` on tr-to). The false repeat is fixed once in `checkMigoIdempotency`. Jest: 228 suites and 4,464 tests passed, 59 skipped. SAP-free browser E2E: 3 of 3 passed; those suites do not post a goods movement. Not proven against live SAP. See Change Entry 2026-11-03 09:55 IST.
 
@@ -88,6 +88,25 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-03 — Movement browser suites deleted: PARTIAL
+
+- **Status:** PARTIAL. The full 17-suite browser run was not run. No SAP call was made in this step.
+- **Why:** The user asked to delete all `verifyMvt*` suites as well. This supersedes the earlier decision on this branch to keep their scan-to and read-back steps.
+- **Deleted:** `test/e2e/wm/verifyMvt201.e2e.js`, `verifyMvt241.e2e.js`, `verifyMvt261.e2e.js`, `verifyMvt301.e2e.js`, `verifyMvt311.e2e.js`.
+- **Changed:**
+  - `test/e2e/runAllE2E.js`: 5 imports and 5 suite entries removed.
+  - `docs/e2e-coverage-matrix.md`: the `wmWarehouseScanToDetail` row now cites `verifyWmScreens.e2e.js`; suite count changed from 22 to 17.
+  - `.github/workflows/ci.yml`: suite count changed from 22 to 17.
+- **Test decision:** TEST UPDATED. Suites were removed at the user's request.
+- **Executed validation:**
+  - `npx jest --silent --runInBand`: 227 suites passed, 1 skipped; 4,388 tests passed, 59 skipped.
+  - `npx eslint .`: clean. `node tools/scan-secrets.js`: 0 secrets. `git diff --check`: clean.
+  - `npm run test:e2e:sap-free`: 3 of 3 passed.
+  - `runAllE2E.js` lists 17 suites, and every file exists.
+- **Coverage lost:** No browser suite now opens these fixed TRs per movement type or calls `verifyMaterialDocument` after a movement. `verifyWmScreens.e2e.js` still opens the first open TR. `test/unit/wm/sapReadBackEvidence.test.js` still covers read-back with mocks.
+- **Not changed:** `AUDIT_RESERVATION_CREATE.md` mentions these suites as a historical record.
+- **Next action:** The user reviews the branch and decides about merging.
 
 ### 2026-11-03 — Reservation Entry screen removed: PARTIAL
 
