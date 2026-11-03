@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **SAP user existence check for a LOCK request (2026-11-03 17:30 IST) — STOP, BLOCKED on the user's confirmation:** READ-ONLY on `DS4/220`. The requested user exists, but it is the same user the local `.env.local` RFC connection logs on with, so locking it would be expected to cut off that connection. No lock was sent. See the entry below.
+
 - **Administrator item in the sidebar (2026-11-03 17:09 IST) — PASS, uncommitted:** An Admin-only sidebar item opens an empty section at `#/dashboard/admin`. Other users do not see the item, and that URL shows them the Overview. No administrator tools exist yet. The check only hides UI. See the entry below.
 
 - **Undefined `FinanceManager` role removed (2026-11-03) — PARTIAL, pushed to `origin/feature01`:** `cancelBillingDocument` now allows `SalesManager` and `Admin` only. A new test fails if any `@requires` role is missing from `xs-security.json`. See the entry below.
@@ -92,6 +94,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
 - Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
 - Creatable services (2026-11-03): the classification is pushed in `43e96d2b`. To rebuild the workbook, restore `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json`. POST-only services are still outside the workbook.
@@ -1670,3 +1673,16 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **ASSUMPTIONS:** none. Wording of the item tooltip and empty message is the agent's.
 - **Next action:** The user decides whether to commit, and which tools the section should hold.
 - **FINAL STATUS:** PASS for the item and empty section. It offers no administrator function yet. Uncommitted.
+
+### 2026-11-03 17:30 IST — SAP user existence check for a LOCK request: STOP
+
+- **Request:** STEP 1 read-only existence check, action LOCK, target `DS4/220`. The username is left out of this log on purpose (`AGENTS.md` security rules); the user gave it in chat.
+- **CHANGED:** this log only. The check ran from a throwaway script outside the repo. `tools/lib/readOnlyRfcGuard.js` allows only `RFC_READ_TABLE`, so the script kept its own allowlist of the two functions this run needed.
+- **TEST DECISION:** TEST NOT POSSIBLE: no repo code changed, so there is nothing to test.
+- **SAP:** READ-ONLY, run twice because the first run's output filter masked one role name and the message text. Each run: the connection reported `DS4` and client `220` before any function call, then `BAPI_USER_EXISTENCE_CHECK` and `BAPI_USER_GET_DETAIL`. No write, no `BAPI_TRANSACTION_COMMIT`. The role check and duplicate check did not apply: no roles were requested and the action is not CREATE.
+- **VERIFIED:** `BAPI_USER_EXISTENCE_CHECK` returned type I, 01/088, "exists". `BAPI_USER_GET_DETAIL` returned an empty `RETURN`, `USTYP` A, all four `ISLOCKED` flags `U`, `GLTGV` and `GLTGB` `00000000`, 95 roles. The requested user equals the user of the local RFC connection.
+- **NOT VERIFIED:** the meaning of the `U` flag on this system, what a lock would do to other logons, and whether deployed environments use this user. `ABSENT_MSG` was not supplied; this run did not need it because the user exists.
+- **Blocker:** the prompt's decision table has no PROCEED rule for LOCK on an existing user, and the user is also the local RFC user. Recommendation is STOP.
+- **ASSUMPTIONS:** none.
+- **Next action:** The user confirms the target user. Any lock is a separate step that needs a written go for that call.
+- **FINAL STATUS:** BLOCKED. Existence check done; no lock sent.
