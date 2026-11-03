@@ -52,10 +52,6 @@ sap.ui.define([
                 this._updateShell("salesInquiryDetail", { SalesInquiry: sInqId });
             } else if (sHash.indexOf("sd/sales-inquiries") === 0) {
                 this._updateShell("salesInquiries");
-            } else if (sHash.indexOf("wm/scan-to/") === 0) {
-                this._updateShell("wmWarehouseScanToDetail");
-            } else if (sHash.indexOf("wm/scan-to") === 0) {
-                this._updateShell("wmWarehouseScanTo");
             } else if (sHash.indexOf("wm/mvt261/open/") === 0) {
                 this._updateShell(/\/cycle$/.test(sHash) ? "wmCycle261" : "wmScan261");
             } else if (sHash.indexOf("wm/handling-unit/") === 0) {
@@ -219,12 +215,6 @@ sap.ui.define([
                     bShowNav = true;
                     break;
 
-                case "wmWarehouseScanTo":
-                case "wmWarehouseScanToDetail":
-                case "wmWarehouseScanToDetailWithWh":
-                    sTitle = oBundle ? oBundle.getText("scanToPageTitle") : "Scan TR to Transfer Order";
-                    bShowNav = true;
-                    break;
                 case "wmScan261":
                     sTitle = oBundle ? oBundle.getText("scan261Title") : "Scan for Goods Issue 261";
                     bShowNav = true;
@@ -328,10 +318,6 @@ sap.ui.define([
                 this.onNavBack("wmHandlingUnits");
             } else if (sRoute === "wmPackingInstructionDetail") {
                 this.onNavBack("wmPackingInstructions");
-            } else if (sRoute === "wmWarehouseScanToDetail" || sRoute === "wmWarehouseScanToDetailWithWh") {
-                this.onNavBack("wmWarehouseScanTo");
-            } else if (sRoute === "wmWarehouseScanTo") {
-                this.onNavBack("dashboard");
             } else if (sRoute === "wmHuStockTransferRack") {
                 var oRackArgs = this._oLastArgs || {};
                 this.getRouter().navTo("wmHuStockTransferDetail", {

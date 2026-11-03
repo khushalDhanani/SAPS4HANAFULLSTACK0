@@ -78,14 +78,6 @@
           "odataVersion": "4.0"
         }
       },
-      "trToService": {
-        "uri": "/odata/v4/tr-to/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "odataVersion": "4.0"
-        }
-      },
       "huStockTransferService": {
         "uri": "/odata/v4/hu-stock-transfer/",
         "type": "OData",
@@ -180,13 +172,6 @@
       },
       "customerReturn": {
         "dataSource": "customerReturnService",
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true
-        }
-      },
-      "trTo": {
-        "dataSource": "trToService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true
@@ -343,21 +328,6 @@
           "target": "TargetQuarantineLabels"
         },
         {
-          "name": "wmWarehouseScanTo",
-          "pattern": "wm/scan-to",
-          "target": "TargetWarehouseScanTo"
-        },
-        {
-          "name": "wmWarehouseScanToDetailWithWh",
-          "pattern": "wm/scan-to/{lgnum}/{docType}/{number}",
-          "target": "TargetWarehouseScanToDetail"
-        },
-        {
-          "name": "wmWarehouseScanToDetail",
-          "pattern": "wm/scan-to/{docType}/{number}",
-          "target": "TargetWarehouseScanToDetail"
-        },
-        {
           "name": "wmHuStockTransfer",
           "pattern": "wm/hu-stock-transfer",
           "target": "TargetHuStockTransferList"
@@ -488,16 +458,6 @@
           "id": "packingInstructionDetail",
           "name": "PackingInstructionDetail",
           "path": "saps4hana.fiori.modules.wm.packing-instruction.view"
-        },
-        "TargetWarehouseScanTo": {
-          "id": "warehouseScanTo",
-          "name": "WarehouseScanTo",
-          "path": "saps4hana.fiori.modules.wm.warehouse-scan-to.view"
-        },
-        "TargetWarehouseScanToDetail": {
-          "id": "warehouseScanToDetail",
-          "name": "WarehouseScanToDetail",
-          "path": "saps4hana.fiori.modules.wm.warehouse-scan-to.view"
         },
         "TargetHuStockTransferList": {
           "id": "huStockTransferList",
