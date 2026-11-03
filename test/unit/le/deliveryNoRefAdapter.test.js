@@ -141,7 +141,7 @@ describe('Unit: DeliveryNoRefAdapter', () => {
         plant: '9999',
         storageLocation: 'FG01',
         items: [{ material: '4000000186', quantity: 1, uom: 'KG' }]
-      })).rejects.toThrow(/could not resolve required business config/);
+      })).rejects.toThrow(/^Enter Sales Organization/);
     });
 
     test('throws BusinessConfigError when org context cannot be resolved', async () => {
@@ -151,7 +151,7 @@ describe('Unit: DeliveryNoRefAdapter', () => {
         plant: '9999',
         storageLocation: 'FG01',
         items: [{ material: '4000000186', quantity: 1, uom: 'KG' }]
-      })).rejects.toThrow(/could not resolve required business config/);
+      })).rejects.toThrow(/^Enter Sales Organization/);
     });
 
     test('asks the user for the sales area with a 400 when neither the form nor SAP has it', async () => {
@@ -185,6 +185,18 @@ describe('Unit: DeliveryNoRefAdapter', () => {
         items: [{ material: '4000000186', quantity: 1, uom: 'KG' }]
       }, { isTrusted: true });
       expect(mockClient.post.mock.calls[0][1].data).toMatchObject({ SalesOrganization: '1000', DistributionChannel: '14', Division: '00' });
+    });
+
+    test('names a failed SAP read in the message, so a read failure is not taken for missing data', async () => {
+      const rfc = { readTable: jest.fn(async () => { throw new Error('RFC_COMMUNICATION_FAILURE'); }) };
+      await expect(new DeliveryNoRefAdapter({ client: mockClient, rfc }).createDeliveryWithoutRef({
+        shippingPoint: '1104',
+        shipToParty: '10135',
+        plant: '1120',
+        storageLocation: 'CS02',
+        items: [{ material: '4000000186', quantity: 1, uom: 'KG' }]
+      })).rejects.toThrow(/SAP reads failed: .*RFC_COMMUNICATION_FAILURE/);
+      expect(mockClient.post).not.toHaveBeenCalled();
     });
 
     test('sends the typed sales area to SAP and keeps the trust flag out of the HTTP call', async () => {

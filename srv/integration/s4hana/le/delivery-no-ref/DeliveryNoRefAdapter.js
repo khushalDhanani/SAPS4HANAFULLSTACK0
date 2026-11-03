@@ -150,7 +150,8 @@ class DeliveryNoRefAdapter {
     }).catch((err) => {
       if (/could not resolve/.test(err.message)) {
         err.status = 400;
-        err.message = `Enter Sales Organization, Distribution Channel and Division: they could not be read from SAP for plant ${String(payload.plant).trim()}, storage location ${String(payload.storageLocation).trim()}. ${err.message}`;
+        const sapReadFailure = /SAP reads failed: .*/.exec(err.message)?.[0];
+        err.message = `Enter Sales Organization, Distribution Channel and Division: they could not be read from SAP for plant ${String(payload.plant).trim()}, storage location ${String(payload.storageLocation).trim()}.${sapReadFailure ? ` ${sapReadFailure}` : ''}`;
       }
       throw err;
     });
