@@ -93,7 +93,7 @@ modules:
           content-target: true
       - name: saps4hana-auth
 
-  # ------------------ HDI CONTAINER DEPLOYER (Goods Issue dispatch queue) ------------------
+  # ------------------ HDI CONTAINER DEPLOYER (posting attempts) ------------------
   - name: saps4hana-db-deployer
     type: hdb
     path: gen/db
@@ -150,7 +150,7 @@ resources:
       service: html5-apps-repo
       service-plan: app-runtime
   # ------------------ SAP HANA CLOUD HDI CONTAINER ------------------
-  # Holds only the Goods Issue dispatch queue (ADR-0001 addendum 2026-09-14).
+  # Holds only the posting-attempt double-post guard, until the SAP table replaces it.
   - name: saps4hana-db
     type: com.sap.xs.hdi-container
     parameters:
