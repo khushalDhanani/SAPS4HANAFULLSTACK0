@@ -90,7 +90,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- Root file move (2026-11-03): pushed to `origin/feature01`. Still not run: Playwright E2E and `npm run build:mta`.
+- Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
 - Creatable services (2026-11-03): the classification is pushed in `43e96d2b`. To rebuild the workbook, restore `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json`. POST-only services are still outside the workbook.
 - HU rules (2026-11-03): decide 261 blocked-bin rules; have the SAP administrator check packaging type Z007, which has no storage unit type in W01; get rules for other warehouses.
 - Database removal (2026-11-03): Phase 1 is done and the target is the connected client. Still needed: a transport request owned by, or with a task for, the connected user, and a written go for the live proof in docs/decisions/sap-only-persistence-migration.md (Phase 2), then the store swap and final removal (Phase 3). The user also decides where movement 261 blocked-bin rules and HU storage types should live. Check production BusinessConfig values before any deployment.
@@ -1629,3 +1629,29 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **NOT VERIFIED:** GitHub Actions results for this push. `gh` is not installed here.
 - **ASSUMPTIONS:** none.
 - **FINAL STATUS:** PASS for the push. The three pieces of work stay PARTIAL.
+
+### 2026-11-03 16:58 IST — Open checks for the root file move and role fix: PASS for these checks
+
+- **Request:** The user said "Next". I took it to mean the checks still open from the file move, because they cannot touch SAP.
+- **CHANGED:** This log entry and one Next Steps line. No code changed.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT: `npm run test:e2e:sap-free` and `npm run validate:mta`.
+- **TESTED:**
+  - `npm run validate:mta`: exit 0.
+  - `npm run test:e2e:sap-free`: 3 suites passed, 0 failed (write authorization, negative UI paths, quarantine labels with mocked data).
+- **NOT VERIFIED:** The full `npm run test:e2e`, which reads SAP. `npm run build:mta`. The header logo after sign-in; these suites do not assert it. No SAP call ran.
+- **ASSUMPTIONS:** none.
+- **Next action:** The user chooses the next item. Open findings: `docs/e2e-coverage-matrix.md:78` and `:84` are stale; POST-only services are outside the workbook; `tools/find-creatable.py:22-23` counts a missing flag as creatable.
+- **FINAL STATUS:** PASS for these checks. The file move and role fix stay PARTIAL.
+
+### 2026-11-03 16:59 IST — Stale Tier C rows corrected in the E2E matrix: PASS for this doc fix
+
+- **Request:** The user said "Yes, fix them" for the two stale rows in `docs/e2e-coverage-matrix.md`.
+- **CHANGED:** The "Goods receipt post" and "Movement 261 post / reverse" rows in the Tier C table no longer say "pending go". Each now records the 2026-11-02 live result, matching the route rows above it and the status log. The goods receipt row keeps the fact that the suite has not had a complete live PASS. No code changed.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT: `test/unit/tools/e2eCoverageMatrix.test.js`.
+- **TESTED:** `npx jest test/unit/tools/e2eCoverageMatrix.test.js`: 8 passed. `git diff --check`: clean.
+- **NOT VERIFIED:** No new live run. These rows restate results already recorded on 2026-11-02. No SAP call ran.
+- **Noticed, not changed:** The HU stock transfer row at `docs/e2e-coverage-matrix.md:79` says the storage-type rules for 1120/W01 are not configured, but W01 rules were added on 2026-11-03 and the dry run now fails on a correctly refused HU.
+- **ASSUMPTIONS:** none.
+- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry and the earlier check entry. Not pushed.
+- **Next action:** The user decides whether to push.
+- **FINAL STATUS:** PASS for this doc fix.

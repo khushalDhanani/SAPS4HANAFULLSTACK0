@@ -75,13 +75,13 @@ Totals, counted from the rows above on 2026-11-03: Browser E2E 🟢 28 / 🟡 0 
 | PO create | `test/e2e/mm/roundTripPurchaseOrder.e2e.js` | PASS | **PASS 2026-10-29: PO 300002151, read-back VERIFIED (CAP + SAP tables)** |
 | Sales inquiry create | `test/e2e/sd/roundTripSalesInquiry.e2e.js` | PASS (after Plant allowlist fix) | attempted 4 times 2026-10-29 (user go): Lean Order service refuses ZIN/ZLIS; RFC BAPI route accepted by TESTRUN but a real create is refused by SAP (`SLS_LORD 009 Document is incomplete`), no document created; blocked on the SAP-side extension for ZIN (`docs/sap-inquiry-service-extension-spec.md`) |
 | Sales order create | `test/e2e/sd/roundTripSalesOrder.e2e.js` | PASS | **PASS 2026-10-29: order 5000534, read-back VERIFIED (CAP + SAP tables)** |
-| Goods receipt post | `test/e2e/wm/roundTripGoodsReceipt.e2e.js` | PASS | pending go (read-back via open quantity; no read-only 101 document API) |
+| Goods receipt post | `test/e2e/wm/roundTripGoodsReceipt.e2e.js` | PASS | **PASS for the post 2026-11-02: delivery 0180000137, document 5000005789/2026, read back from SAP (`MATDOC`, `EKBE`, `MARD`). The suite reported FAIL on a read-back bug, since fixed and rerun read-only; no complete live suite PASS yet** |
 | HU stock transfer 311 | `test/e2e/wm/roundTripHuTransfer.e2e.js` | FAIL — storage-type rules for 1120/W01 not configured | pending go |
 | Customer return create | `test/e2e/sd/roundTripCustomerReturn.e2e.js` | PASS (after reference-document value help fix) | **PARTIAL 2026-10-29: return 4500184 created; reason, reference and storage location not persisted (API has no fields)** |
 | Invoice release / cancel | `test/e2e/sd/roundTripCustomerInvoice.e2e.js` | PASS | pending go |
 | Delivery from sales order list | `test/e2e/sd/roundTripSalesOrderDelivery.e2e.js` | PASS (after search / ShippingPoint fix) | pending go |
 | Orders due: delivery, no-ref delivery, PGI, billing | `test/e2e/le/roundTripOrdersDue.e2e.js` | PARTIAL — deliveries PASS; PGI only with `E2E_DRYRUN_PGI_DELIVERY`; billing NOT VERIFIED | pending go |
-| Movement 261 post / reverse | `test/e2e/wm/roundTripMvt261.e2e.js` | PASS | pending go |
+| Movement 261 post / reverse | `test/e2e/wm/roundTripMvt261.e2e.js` | PASS | **PASS 2026-11-02: post on reservation 528779/1 (document 4900050350/2026) and reversal of 4900050046/2026 (262 document 4900050348/2026), both read back from SAP. FAIL the same day on serial-managed reservation 528777/1, nothing posted; serial-managed materials are not supported by this flow** |
 | HU create / pack / unpack / remove | `test/e2e/wm/roundTripHandlingUnit.e2e.js` | PASS | pending go |
 | Packing instruction create | `test/e2e/wm/roundTripPackingInstruction.e2e.js` | PASS | **PASS 2026-10-29: packing instruction 55, read-back VERIFIED (CAP + PACKKP)** |
 
