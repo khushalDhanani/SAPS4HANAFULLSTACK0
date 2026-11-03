@@ -89,6 +89,13 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-03 — Reservation Entry removal merged into `feature01`: PARTIAL
+
+- **Status:** PARTIAL. Merged locally by fast-forward at the user's request. Not pushed. Outside API callers and the production table are not verified, and no live SAP write was proven.
+- **Changes:** `feature01` moved to `feature/remove-reservation-entry-final`. Both removal branches were kept.
+- **Executed validation:** the merged tree hash equals the audited branch tree. No test was rerun, because the code is identical. See the final audit entry below.
+- **Next action:** Check outside API callers before pushing. Pushing needs the user's request.
+
 ### 2026-11-03 10:58 IST — Final Reservation Entry audit: PARTIAL
 
 - **Status:** PARTIAL. The frontend, tests, tools and config have no feature reference. The word search cannot reach zero, by user decision. No live SAP write was proven, and outside API callers and the production table are not verified.
