@@ -159,7 +159,8 @@ describe("OrdersDueForDelivery Controller", () => {
         };
 
         mockTable = {
-            getBinding: jest.fn().mockReturnValue(mockBinding)
+            getBinding: jest.fn().mockReturnValue(mockBinding),
+            setGrowingScrollToLoad: jest.fn()
         };
 
         const models = {};
@@ -618,6 +619,8 @@ describe("OrdersDueForDelivery Controller", () => {
             const vm = mockView.getModel("ordersDueView");
             expect(vm.getProperty("/plant")).toBe("1120");
             expect(plantFilter()).toMatchObject({ operator: "EQ", value: "1120" });
+            expect(mockTable.setGrowingScrollToLoad).toHaveBeenCalledWith(true);
+            expect(mockBinding.resume.mock.invocationCallOrder[0]).toBeLessThan(mockTable.setGrowingScrollToLoad.mock.invocationCallOrder[0]);
             expect(mockBinding.resume).toHaveBeenCalledTimes(1);
             expect(mockBinding.filter.mock.invocationCallOrder[0]).toBeLessThan(mockBinding.resume.mock.invocationCallOrder[0]);
             expect(MockOutboundDeliveryService.getOrdersDueMetrics).toHaveBeenCalledWith("1120");
@@ -632,6 +635,7 @@ describe("OrdersDueForDelivery Controller", () => {
             expect(vm.getProperty("/plantValueState")).toBe("Error");
             expect(vm.getProperty("/plantValueStateText")).toMatch(/plant/i);
             expect(mockBinding.resume).not.toHaveBeenCalled();
+            expect(mockTable.setGrowingScrollToLoad).not.toHaveBeenCalled();
             expect(MockOutboundDeliveryService.getOrdersDueMetrics).not.toHaveBeenCalled();
         });
 

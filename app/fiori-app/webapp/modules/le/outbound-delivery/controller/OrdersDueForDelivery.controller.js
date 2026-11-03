@@ -149,6 +149,8 @@ sap.ui.define([
             var oBinding = oTable ? oTable.getBinding("items") : null;
             if (oBinding && typeof oBinding.isSuspended === "function" && oBinding.isSuspended()) {
                 oBinding.resume();
+                // Off until now: a scroll on the suspended table would ask it for a page, which UI5 refuses with an error.
+                oTable.setGrowingScrollToLoad(true);
             }
             this._loadServerMetrics();
         },

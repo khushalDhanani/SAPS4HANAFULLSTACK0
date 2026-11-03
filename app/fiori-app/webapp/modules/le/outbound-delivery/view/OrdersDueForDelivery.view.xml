@@ -135,7 +135,7 @@
                     }"
                     growing="true"
                     growingThreshold="25"
-                    growingScrollToLoad="true"
+                    growingScrollToLoad="false"
                     noDataText="{i18n>ordersDueNoDataText}"
                     sticky="ColumnHeaders,HeaderToolbar">
                     <headerToolbar>
