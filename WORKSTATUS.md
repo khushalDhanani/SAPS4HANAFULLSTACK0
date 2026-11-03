@@ -15,7 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **HU storage type rules for W01 (2026-11-03 16:37 IST) — PARTIAL, merged to local `feature01`, not pushed:** W01 now has approved rules in `srv/wm/hu-stock-transfer/storage-types.json`, and the missing-rules error is gone. The HU dry run still fails on an HU that is correctly refused, so no browser run has proven an accepted HU. See the entry below.
+- **HU storage type rules for W01 (2026-11-03 16:37 IST) — PARTIAL, pushed to `origin/feature01`:** W01 now has approved rules in `srv/wm/hu-stock-transfer/storage-types.json`, and the missing-rules error is gone. The HU dry run still fails on an HU that is correctly refused, so no browser run has proven an accepted HU. See the entry below.
 
 - **Database removal Phase 1 and test cleanup merged (2026-11-03 16:09 IST) — pushed to `origin/feature01`:** The work from `chore/remove-application-db`, `chore/remove-local-db-files` and `chore/test-audit-cleanup` is on `feature01`. `db/` and the posting-attempt guard stay until the SAP table replaces them. See the entry below.
 
@@ -1517,3 +1517,13 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **Remote:** `origin/feature01` does not have these commits.
 - **ASSUMPTIONS:** none.
 - **FINAL STATUS:** PASS for the merge. The HU rules work itself stays PARTIAL, because the HU dry run still fails.
+
+### 2026-11-03 16:38 IST — Pushed HU storage type rules to origin: PASS for the push
+
+- **Request:** The user said "Push it".
+- **CHANGED:** `origin/feature01` moved from `0120fbac` to `b85c83f9` by a normal push, with no force. This log entry follows as one more commit. No deployment and no SAP write ran.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT: runs recorded above.
+- **TESTED:** `node tools/scan-secrets.js` passed before the push. The remote had no commits missing locally.
+- **NOT VERIFIED:** GitHub Actions results for this push. `gh` is not installed here.
+- **ASSUMPTIONS:** none.
+- **FINAL STATUS:** PASS for the push. The HU rules work stays PARTIAL.
