@@ -1,0 +1,101 @@
+# SAP-only persistence migration — discovery and implementation gate
+
+Date: 2026-11-03 IST. Status: **BLOCKED for application database removal**.
+
+The user confirmed removing the application database and approved proceeding with SAP-side replacement investigation. This document defines required behavior; it does not define a verified new SAP API or authorize deployment or SAP writes.
+
+## Live evidence
+
+READ-ONLY discovery used the existing `RfcClient` and `tools/lib/readOnlyRfcGuard.js`, permitting only `RFC_READ_TABLE`. Connection settings were loaded from local configuration without recording their values. The first sandbox attempt failed with `RFC_COMMUNICATION_FAILURE`; the approved retry outside the sandbox succeeded.
+
+The following queries were executed on the configured SAP system:
+
+- `TFDIR`, fields `FUNCNAME, FMODE`, filter `FUNCNAME = 'Z_WM_RES_LOCK'`: zero rows.
+- `DD03L`, fields `TABNAME, FIELDNAME, DATATYPE, LENG`, filter `TABNAME = 'ZRES_TRACK' AND AS4LOCAL = 'A'`: zero rows.
+- Same DD03L query for `ZRES_LOG`: zero rows.
+- `TFDIR`, filter `FUNCNAME LIKE 'Z%RES%'`: zero rows.
+- Control query: `TFDIR`, filter `FUNCNAME = 'Z_WM_GET_TR_MATERIAL_LIST'`: one row, `FMODE = R`.
+- `TFDIR`, filter `FUNCNAME LIKE 'Z%'`: 193 rows, below the 501-row cap. A later concise capture found 49 remote-enabled functions.
+- `TADIR`, field `OBJ_NAME`, filter `PGMID = 'R3TR' AND OBJECT = 'TABL' AND OBJ_NAME LIKE 'Z%'`: 490 rows, below the 501-row cap. Name filtering for `RES|TRACK|LOG|CONFIG|IDEMP|ATTEMPT|LOCK|CLAIM|WM` matched only `ZWM_S_001` and `ZSTR_WM_BIN_STOCK`. TABL objects can be structures; this is not evidence of a usable storage service.
+
+These exact names were checked because the repository references them: `db/wm/reservation-track.cds:17-18`, `:65-66`, and `docs/abap/z_wm_res_lock.fugr.abap:2`. The metadata query pattern is established in `tools/read-system-metadata.js:15-17` and `:100`; the control function is already used by the warehouse integration.
+
+**CONFIRMED:** metadata connectivity and the query results above. No posting, locking, activation, transport, or other SAP write was called.
+
+**UNKNOWN:** whether a differently named, Y-namespace, standard, namespaced, or OData implementation provides the required behavior. Function/table names do not establish contracts. The catalog search does not prove no replacement exists anywhere in SAP. No catalog function other than RFC_READ_TABLE was invoked.
+
+## Package and target decision — 2026-11-03 14:02 IST
+
+The user selected: **Use ZAMM; I will provide the development target and transport request**. ZAMM is the selected package for the planned implementation. No new package needs to be invented or created at this stage.
+
+READ-ONLY package/client discovery used the same guarded RFC client:
+
+- TDEVC returned ZAMM with DLVUNIT HOME and $TMP with DLVUNIT LOCAL. It returned no row for ZRES_WM. Package lookup conventions are present in `tools/check-chunk0-prereqs.js:117` and the ZAMM proposal in `docs/abap/zmm_af_017_4x6-spec.md:28`.
+- TADIR returned function groups Z_VENDOR_REMOTES and ZMM_QUAR_LABEL in $TMP. These existing objects do not decide the package for this migration.
+- DD03L first confirmed the client-role field and its domain. T000 then returned role T for the configured client; DD07T resolved T to Test. This verifies the current connection's client role, not its suitability as an approved development target or the role of every client in that system.
+- Five RFC_READ_TABLE calls succeeded. No environment/credential values were recorded and no SAP writes ran.
+
+**Pending user input:** the development target and assigned workbench transport request. The current test client is not implicitly selected as that target. Do not create, activate or transport SAP objects until the target/transport are supplied, the required contracts/design are verified and the specific write is authorized. Package selection does not resolve the backend persistence contract gaps below.
+
+## Required replacement behavior
+
+### Durable posting attempts and duplicate protection
+
+Current source: `srv/wm/goods-issue/GoodsIssueAttemptStore.js:24-39`, `:84`, `:150`, `:205`, `:221`, `:429`, `:499`. Consumers include goods issue, movement 261 and goods receipt handlers/services. This is application attempt state, separate from a successfully posted SAP material document.
+
+A verified SAP implementation must provide:
+
+1. An atomic claim for the same posting identity across concurrent application instances. Only one claimant may proceed to posting.
+2. Durable state before the posting call, visible after a process restart and independently of a failed CAP request transaction.
+3. Reading an attempt by reference and identifying unresolved attempts for a reservation/item or receipt.
+4. Controlled state transitions and replay of a confirmed SAP result; preserve the current distinction between retrying the same request and a new partial issue.
+5. Recovery after a timeout or lost response by reading SAP's actual outcome. An empty early read must not be treated as proof that posting never happened.
+6. Preservation of retry generations and unresolved attempts during migration. A reference search alone is not an atomic claim; a session lock alone does not preserve pending state after connection loss.
+7. Authorization, error semantics, transaction/commit behavior and retention defined by an inspected SAP contract.
+
+The existing database-free Map is process-local (`GoodsIssueAttemptStore.js:40`, `:111-114`, `:186`). Using it would not meet the requested SAP-only persistence goal or preserve restart/multi-instance guarantees. New SAP technical names, payloads, and parameter types are **Not verified**; no adapter is implemented against assumed names.
+
+### Reservation workflow tracking
+
+Current sources: `srv/wm/reservation-track/service.cds`, its handler, `srv/wm/tr-to/handlers/trTo.handler.js`, and `db/wm/reservation-track.cds`. The tracking API and tr-to backend remain present even though their former UI screens were removed.
+
+A replacement must support the existing track/log reads and updates, step status, SAP document links, retry identity and error history, including authorization and failure behavior. The comments saying the CDS entities mirror SAP objects are not evidence that those SAP objects exist; the live exact-name metadata queries returned no rows.
+
+Removing the backend APIs instead would be a separate feature removal with caller/retention review. It is not assumed by this migration.
+
+### Business settings
+
+Current sources: `srv/common/BusinessConfigResolver.js`, `srv/wm/business-config/service.cds`, its handler, and `db/wm/business-config.cds`.
+
+The replacement must cover all current configuration consumers, including warehouse storage-type classifications, movement-261 blocked-bin policy, oversize-HU behavior, label form/size and sales/document defaults. Some organizational values already have SAP lookups; that does not establish SAP equivalents for all application-specific policy choices.
+
+Preserve existing plant/warehouse scoping, validation, required-field failure behavior and admin authorization. Do not infer business policy from storage-type names or replace it with hardcoded/environment defaults. Verify the source and maintenance operation for every required setting before changing the resolver or removing its admin API.
+
+## Implementation sequence after contract verification
+
+1. Identify the SAP owner and existing contracts, or obtain the approved SAP development design for the missing responsibilities. Verify callable interfaces, authorization, storage, atomicity, commit behavior and recovery. ZAMM is selected by the user; the development target and transport request are pending. New API/object names remain unverified.
+2. Prove the required SAP operations with explicitly authorized test calls and direct read-back. Concurrency and interrupted-response behavior need their own tests; a metadata response alone is insufficient.
+3. Implement mappings through the existing integration boundary under `srv/integration/s4hana/`, preserving CAP APIs and UI behavior. Use controlled mocks for unit/integration coverage; mocks must not be described as SAP proof.
+4. Inventory actual persisted application data without exposing record contents. Define retention and migration for unresolved attempts, tracking history and configuration. Drain or reconcile in-flight work before cutover. No database export/deletion was performed during this review.
+5. Replace the shared persistence boundaries and verify all consumers. Keep existing working SAP reads intact; do not retain a hidden memory/file/SQLite fallback.
+6. Once live proofs and relevant E2E pass, remove application persistence models/dependencies/configuration and MTA HDI bindings/deployer coherently. Check all environment extensions, build scripts, CI and tests before editing them. Test-fixture strategy must remain isolated from live SAP.
+7. Remove obsolete SQL migration artifacts only after replacement and retention are verified. A deployment/database drop is a separate specific write approval, not implied by editing repository files.
+
+The original architecture decision and its later persistence exception are recorded in `ADR-0001-s4-centric-integration-facade.md`. Update that decision at the implemented cutover rather than claim the current runtime already complies with SAP-only persistence.
+
+## Validation and acceptance
+
+Existing tests to preserve or adapt include:
+
+- `test/unit/wm/goodsIssueAttemptInstances.test.js` — shared state and single claims across instances.
+- `test/unit/wm/goodsIssueAttempt.test.js` and `transactionPersistenceAndRetry.test.js` — attempts and retry outcomes.
+- `test/unit/wm/duplicateConcurrentTimeoutRecovery.test.js` — concurrent/timeout behavior.
+- `test/unit/common/BusinessConfigResolver.test.js` — configuration resolution and errors.
+- `test/unit/wm/reservationTrack.test.js` and tr-to coverage — tracking/API behavior.
+- `test/unit/tools/readHuStockEvidence.test.js` — read-only guard and redaction behavior used during discovery.
+
+The affected Playwright flows and SAP round trips must be selected from `docs/e2e-coverage-matrix.md` when implementation is possible. Full acceptance includes application restart, two instances, duplicate requests, uncertain SAP outcomes, invalid/missing configuration, authorization failures, existing list/detail reads, SAP result read-back and removal of every application persistence binding. No SAP-only E2E or deployment validation has run.
+
+## Next action
+
+The missing prerequisite is a verified SAP implementation/contract for the responsibilities above. The scoped discovery did not find one. The user selected ZAMM and will supply the development target and transport request. The approved technical design and verified replacement contracts must also be established before dependent implementation or deployment. No further generic approval is needed for the already authorized migration scope; what is missing is backend capability and contract evidence.

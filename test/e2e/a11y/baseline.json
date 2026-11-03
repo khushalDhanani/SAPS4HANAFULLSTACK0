@@ -1,59 +1,76 @@
 {
   "login": {},
   "dashboard": {
+    "aria-allowed-attr": 4,
     "label-content-name-mismatch": 10
   },
   "purchaseOrders": {
+    "aria-allowed-attr": 4,
     "label-content-name-mismatch": 1
   },
   "createPurchaseOrder": {
+    "aria-allowed-attr": 4,
     "aria-input-field-name": 1,
     "label-content-name-mismatch": 1
   },
   "salesInquiries": {
+    "aria-allowed-attr": 4,
     "label-content-name-mismatch": 1
   },
   "createSalesInquiry": {
+    "aria-allowed-attr": 4,
     "aria-input-field-name": 1,
     "label-content-name-mismatch": 1
   },
   "salesOrders": {
+    "aria-allowed-attr": 4,
     "label-content-name-mismatch": 1
   },
   "createSalesOrder": {
+    "aria-allowed-attr": 4,
     "aria-input-field-name": 1,
     "label-content-name-mismatch": 1
   },
   "wmGoodsReceipt": {
+    "aria-allowed-attr": 4,
     "label-content-name-mismatch": 1
   },
   "ordersDueForDelivery": {
+    "aria-allowed-attr": 4,
     "aria-input-field-name": 1,
     "aria-valid-attr-value": 1,
     "label-content-name-mismatch": 1
   },
   "customerInvoices": {
+    "aria-allowed-attr": 4,
     "label-content-name-mismatch": 1
   },
   "customerReturns": {
+    "aria-allowed-attr": 4,
     "label-content-name-mismatch": 5
   },
   "createCustomerReturn": {
+    "aria-allowed-attr": 4,
     "label-content-name-mismatch": 1
   },
   "wmHandlingUnits": {
+    "aria-allowed-attr": 4,
     "label-content-name-mismatch": 1
   },
   "wmPackingInstructions": {
+    "aria-allowed-attr": 4,
     "label-content-name-mismatch": 1
   },
   "wmQuarantineLabels": {
+    "aria-allowed-attr": 4,
     "label-content-name-mismatch": 1
   },
   "wmHuStockTransfer": {
+    "aria-allowed-attr": 4,
     "label-content-name-mismatch": 1
   },
   "wmHuStockTransferRackDemo": {
+    "aria-allowed-attr": 4,
     "aria-input-field-name": 3,
     "label-content-name-mismatch": 1
   }

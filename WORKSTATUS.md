@@ -15,7 +15,11 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Standard sidebar on all screens (2026-11-03 13:15 IST) — In Progress, uncommitted:** The dashboard's four tabs are now a `sap.tnt.SideNavigation` in the app shell, shown on every signed-in screen and hidden on login. Each item opens `#/dashboard/<section>`. See the Change Entry below for what was run.
+- **SAP-only / application database removal (2026-11-03 14:02 IST) — BLOCKED:** User selected ZAMM and will provide the development target and transport request. Live metadata confirms ZAMM exists and the currently connected client has role Test; it is not implicitly the approved development target. Required persistence contracts remain UNKNOWN. See docs/decisions/sap-only-persistence-migration.md. No runtime/database changes or SAP writes made.
+
+- **Theme switcher in the header (2026-11-03 14:00 IST) — PASS, committed locally (`39cd7044`), not pushed:** A palette button in the `ShellBar` offers Morning Horizon, Evening Horizon, Quartz Light and Quartz Dark. The choice is saved under `app.theme`, and UI5 boots with it, so the default theme CSS is never requested. In the browser it applied without a reload, survived a refresh and a new tab, and invalid or missing values fell back to `sap_horizon`. See the Change Entry below.
+
+- **Standard sidebar on all screens (2026-11-03 14:00 IST) — PASS, committed locally (`1b717ddd`, `0faa075e`), not pushed:** The dashboard's four tabs are a `sap.tnt.SideNavigation` in the app shell, closed by default at the user's request. The user accepted SAP's `aria-allowed-attr` ×4 from the closed sidebar into `test/e2e/a11y/baseline.json` (uncommitted). See the Change Entry below.
 
 - **`tr-to` security fix and limited cleanup (2026-11-03) — PARTIAL, on local branch `fix/tr-to-lookup-readonly`, not pushed:** `lookupTR` no longer writes to SAP, read operations enforce plant scope, and 6 unreachable handler names and `getAvailableSUs` are removed. Backend `tr-to` stays deployed. See the Change Entry below.
 
@@ -64,7 +68,10 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- Sidebar on all screens (2026-11-03): finish the full browser run, then the user reviews the screens and asks for a commit if happy.
+- SAP-only migration: await the development target and workbench transport request the user will provide; ZAMM is selected. Then establish verified replacement contracts for durable posting claims, tracking and settings as specified in docs/decisions/sap-only-persistence-migration.md. Preserve existing data until migration and retention are settled.
+
+- Accessibility baseline (2026-11-03): commit `test/e2e/a11y/baseline.json` and `WORKSTATUS.md` when the user asks. If a later UI5 version stops setting `aria-selected` on these items, remove the rule from the baseline.
+- Theme switcher (2026-11-03): committed locally as `39cd7044`, not pushed. The Aether logo is nearly invisible on dark themes; decide whether to fix it separately.
 
 - `tr-to` (2026-11-03): review `fix/tr-to-lookup-readonly` and decide about merging. Check outside callers of `/odata/v4/tr-to` with API owners. Decide about `createTO`, `_createTO`, `checkSU`, `tools/test-rfc-trto.js` and the `scan-to` flow entry. `getAvailableSerials` is still not limited by plant in its SAP read.
 
@@ -101,7 +108,43 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
-### 2026-11-03 13:15 IST — Standard sidebar on all screens: In Progress
+### 2026-11-03 14:00 IST — Accessibility baseline: closed sidebar accepted: PASS
+
+- **Status:** PASS. Not committed. No SAP write was made.
+- **Why:** The user chose to accept the violation into the baseline rather than open the sidebar by default.
+- **Changes:** `test/e2e/a11y/baseline.json`: added `"aria-allowed-attr": 4` to the 17 signed-in routes. Edited by hand rather than with `E2E_UPDATE_BASELINE=1`, so no other recorded count moved. App code is unchanged.
+- **Test decision:** TEST UPDATED (the baseline).
+- **Executed validation:**
+  - `TARGET_URL=http://localhost:4010 node test/e2e/runAllE2E.js --only=a11y --workers=1`: Total 1, Passed 1, Failed 0; 18 of 18 routes passed.
+  - `npx jest --silent`: 225 suites passed, 1 skipped; 4,153 tests passed, 59 skipped. `git diff --check`: clean.
+  - The other 16 browser suites were not rerun: they passed in the full run on the same app code, and only the a11y suite reads this file. So 17 of 17 passed across two runs, not in one run.
+- **Known limit:** The suite compares rule ids per route, not node counts, so this rule growing past 4 nodes on a route would not fail it.
+- **Next action:** Commit when the user asks.
+
+### 2026-11-03 13:56 IST — Theme switcher in the header: PARTIAL
+
+- **Status:** PARTIAL. Committed as `39cd7044` under the git user, not by the agent; not pushed. The tested code equals that commit (`git diff HEAD -- app test` is empty). The theme tests pass, but the full browser run has one failing suite, explained in the sidebar entry below. No SAP write was made.
+- **Why:** The user asked for a header theme control whose choice survives every load and refresh.
+- **Changes:**
+  - New `service/ThemeService.js`: list of themes, saving under `app.theme`, restoring, invalid-value fallback, storage access in try/catch.
+  - New `themeStartup.js`, loaded by `index.html` before `sap-ui-core.js`: sets `window["sap-ui-config"].theme`. `data-sap-ui-theme` removed from `index.html`. An external file because `ui5lint` flagged an inline script (`csp-unsafe-inline-script`).
+  - `Component.js`: restores the theme before base init, for entry points that skip `index.html`.
+  - `CommonHeader.fragment.xml`: `OverflowToolbarButton` and a single-select `Menu`. `App.controller.js`: `onThemeMenuPressed`, `onThemeSelected`, `/theme` in `shellModel`.
+  - `i18n.properties` and `i18n_en.properties`: 5 new keys.
+- **Theme availability:** all 4 themes returned HTTP 200 for `library.css` of `sap/ui/core`, `sap/m`, `sap/f`, `sap/tnt`, `sap/uxap`, `sap/ui/comp` on UI5 1.136.22 (24 of 24).
+- **Dependencies:** none added. `sap/ui/core/Theming` is part of UI5.
+- **Test decision:** TEST ADDED and TEST UPDATED: new `themeService.test.js`, `AppController.test.js`, `componentAuthGate.test.js`, `verifyShellScreens.e2e.js`.
+- **Failures found and fixed on the way:** the first browser run failed on every screen because `MenuItemGroup` has no default aggregation (`Cannot add direct child`); an explicit `<items>` fixed it. A test regex also failed on `>` inside bindings, and was fixed.
+- **Executed validation (final code):**
+  - `npx jest --silent`: 225 suites passed, 1 skipped; 4,153 tests passed, 59 skipped.
+  - `npx eslint --max-warnings 0 .`: clean. `npm --prefix app/fiori-app run lint`: clean. `npm --prefix app/fiori-app run build`: succeeded, and `dist` contains `themeStartup.js`. `node tools/scan-secrets.js`: 0 found. `git diff --check`: clean.
+  - `npm run test:e2e:sap-free`: 3 of 3 passed.
+  - `TARGET_URL=http://localhost:4010 node test/e2e/runAllE2E.js`: Total 17, Passed 16, Failed 1 (`Accessibility (axe-core)`). SAP read-only; writes guarded or mocked. Shell suite passed, including theme selection without reload, refresh, new tab, no default theme CSS request, invalid and missing values.
+- **Not covered:** `npm run test:e2e:sap` not run. The a11y suite scans the default theme only. Dark themes were looked at by screenshot on the dashboard and purchase orders only. No check with a real blocked-storage browser (unit test only). The FLP preview path through `Component.js` was not opened.
+- **Finding, not changed:** The Aether logo is nearly invisible on dark themes.
+- **Next action:** The user decides about the accessibility baseline.
+
+### 2026-11-03 13:15 IST — Standard sidebar on all screens: PARTIAL
 
 - **Status:** In Progress. Not committed. No SAP write was made; browser runs read from SAP behind the write guard.
 - **Why:** The user asked to move the `#/dashboard` tabs into a standard UI5 sidebar, and chose all screens over the dashboard only.
@@ -121,7 +164,12 @@ All historical change logs and past milestone statuses are preserved verbatim in
   - `npm --prefix app/fiori-app run lint`: clean. `npm --prefix app/fiori-app run build`: succeeded. `git diff --check`: clean.
   - `TARGET_URL=http://localhost:4010 node test/e2e/runAllE2E.js --only=shell --workers=1`: PASS, 21 of 21 steps.
 - **Not covered:** No check that the sidebar is usable on a real phone or tablet; the phone check is an emulated Android browser. Screens were looked at by screenshot only for dashboard, purchase orders, rack demo, login and phone.
-- **Next action:** Finish the full browser run and record it here.
+- **Update 2026-11-03 13:56 IST:**
+  - The user asked for the sidebar closed by default: `sideExpanded="false"` in `App.view.xml`, covered by new shell E2E steps. These edits were committed as `1b717ddd` and `0faa075e` under the git user, not by the agent.
+  - Browser runs: the first full run was stopped by the agent because its code was superseded, and is not a result (its Accessibility suite had passed with the sidebar open). The next was stopped by the user or the app. A run from terminal `ttys008` ended without writing a summary. Neither counts as evidence.
+  - Full run on the final code (with the theme switcher): Total 17, Passed 16, Failed 1.
+  - **FAIL:** `Accessibility (axe-core)`: new `aria-allowed-attr` ×4 on 17 routes. Root cause: with the sidebar closed, `sap.tnt.NavigationListItem` renders `role="menuitemradio"` and still sets `aria-selected` (UI5 1.136.22 `NavigationListItem-dbg.js:790-793`). With the sidebar open, axe reports 0 of these. Baseline not edited.
+- **Next action:** The user decides between accepting this in `baseline.json` and opening the sidebar by default.
 
 ### 2026-11-03 — Scan To removal and `tr-to` fixes merged into `feature01`: PARTIAL
 
@@ -1250,3 +1298,45 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **Assumptions:** the INFERRED meaning above. `ReservationNo` is numeric, as in the existing sort in `GoodsIssueReservationsClient`.
 - **Next action:** user refreshes the page and confirms; commit when the user asks.
 - **Status:** PASS for the list fix; uncommitted.
+
+### 2026-11-03 13:51 IST — SAP-only database removal investigation: BLOCKED
+
+- **Request:** User confirmed removing the application database entirely and using SAP only. This confirms scope, not a live SAP write or deployment.
+- **Preflight:** Read AGENTS.md and WORKSTATUS.md; git status was clean. Inspected package configuration, MTA topology, persistence consumers, tests, SAP-source proposals and customizing documentation. CAP MCP model and documentation queries succeeded.
+- **CHANGED:** WORKSTATUS.md only; recorded findings and next action. No runtime code, SQL file, database, dependency or deployment resource removed.
+- **CONFIRMED:** package.json:62-72 configures development SQLite and test memory storage. mta.yaml:97-103 and :154-158 define the HANA deployer/resource. tools/live-sap-gate.js:3-9 requires ALLOW_LIVE_SAP_TOOLS=1 plus --allow-live-sap; it is a tool opt-in, not a persistence provider.
+- **Affected flows:** Goods issue, 261 and goods receipt use GoodsIssueAttemptStore (srv/wm/goods-issue/GoodsIssueAttemptStore.js:24-39; goods-receipt/handlers/goodsReceipt.handler.js:48). Database-free fallback is per-instance memory (:111-114); restart durability and shared claims would be lost (INFERRED from implementation). Reservation-track and tr-to handlers still use persisted workflow records. BusinessConfigResolver resolves warehouse policies and label settings from application data, including direct DB lookups (:232-247); BusinessConfig admin writes remain database-backed.
+- **Discovery:** Searched repository ABAP, WM discovery, tools and customizing evidence for replacements. docs/abap/z_wm_res_lock.fugr.abap:2 labels the lock wrapper proposal NOT deployed/activated/tested. Existing SAP material-document read-back is not proof of a durable atomic pre-posting claim. No verified complete replacement contract was found; actual SAP availability remains UNKNOWN. No SAP calls made.
+- **Plan:** Stop dependent removal per AGENTS.md; identify and verify SAP contracts for durable claims, workflow tracking and application settings before implementation. Do not substitute volatile memory or guessed configuration. No dependencies added; active persistence consumers cannot be classified as dead code.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT for investigation — test/unit/wm/goodsIssueAttemptInstances.test.js, test/unit/common/BusinessConfigResolver.test.js, test/unit/liveSapToolGate.test.js. These tests do not prove SAP-only operation.
+- **TESTED / REGRESSION:** `env -u RUN_LIVE_SAP -u SAP_SYSTEM_TYPE -u ALLOW_LIVE_SAP_TOOLS npx jest --runInBand test/unit/wm/goodsIssueAttemptInstances.test.js test/unit/common/BusinessConfigResolver.test.js test/unit/liveSapToolGate.test.js`: first run failed on sandbox localhost binding (`listen EPERM`), with 2 suites / 42 tests passing and 1 suite / 6 tests failing. Approved retry outside sandbox: all 3 suites / 48 tests PASS. Warnings: CAP custom create/get method name conflicts and empty configured 261 blocked-bin rules. These were not changed. `git diff --check` passed; reviewed diff and git status show WORKSTATUS.md only. Full regression, build, UI/browser and deployment checks not run because runtime code is unchanged; SAP-only business behavior remains unverified.
+- **NOT VERIFIED:** SAP replacement APIs, live connectivity/authorization, SAP-only runtime, browser E2E, deployed BTP behavior and data migration/retention. No live writes authorized or executed.
+- **BLOCKED / next action:** User identifies existing SAP API/owner for these responsibilities, or confirms SAP-side development is in scope. A later specific live write still requires written go.
+- **ASSUMPTIONS:** ALLOW_LIVE_SAP_TOOLS is the flag intended by the user's spelling (INFERRED). Preserve existing behavior during migration (INFERRED).
+- **FINAL STATUS:** BLOCKED for database removal.
+
+### 2026-11-03 13:55 IST — Live SAP-only replacement discovery and migration specification: BLOCKED
+
+- **Request / plan:** User said Go after the replacement question; proceeded with read-only discovery and a concrete migration specification. No specific SAP write/deployment was authorized. Read AGENTS.md/current work status, checked git status (only prior WORKSTATUS.md edit), inspected existing client/guard, metadata tools, architecture decision, model/handler consumers and tests.
+- **CHANGED:** docs/decisions/sap-only-persistence-migration.md and WORKSTATUS.md. Requirements cover durable claims, tracking, business settings, migration/retention, removal sequence and acceptance tests. No runtime code, database, SQL files, dependencies or MTA resources changed.
+- **VERIFIED (READ-ONLY):** Existing native RFC library available; required local connection keys present (values not displayed). Guarded inline Node probes used ALLOW_LIVE_SAP_TOOLS=1, --allow-live-sap, RfcClient and createReadOnlyRfcClient; allowed function RFC_READ_TABLE only. First sandbox query failed RFC_COMMUNICATION_FAILURE; approved outside-sandbox retry succeeded. Exact TFDIR query for Z_WM_RES_LOCK and active DD03L queries for ZRES_TRACK/ZRES_LOG each returned zero rows; Z%RES% function search also zero. Control Z_WM_GET_TR_MATERIAL_LIST returned FMODE R. Z% catalog: 193 functions and 490 TABL repository objects, both below 501 cap. Large initial catalog output was truncated; repeated two reads for concise inspected capture. Name search is not capability verification. No SAP writes ran.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT for investigation — readHuStockEvidence.test.js, goodsIssueAttemptInstances.test.js, BusinessConfigResolver.test.js and liveSapToolGate.test.js. No implementation is claimed.
+- **TESTED:** `env -u RUN_LIVE_SAP -u SAP_SYSTEM_TYPE -u ALLOW_LIVE_SAP_TOOLS npx jest --runInBand test/unit/tools/readHuStockEvidence.test.js test/unit/wm/goodsIssueAttemptInstances.test.js test/unit/common/BusinessConfigResolver.test.js test/unit/liveSapToolGate.test.js` — 4 suites / 50 tests PASS (approved outside-sandbox localhost listener). Warnings: CAP custom create/get method conflicts and empty configured 261 blocked-bin rules; not changed. `git diff --check` PASS. Reviewed new specification and WORKSTATUS diff. Unrelated concurrent theme/sidebar updates in WORKSTATUS.md were preserved; their validation is not evidence from this task. `node tools/scan-secrets.js` passed: 992 tracked files, zero findings (new untracked specification reviewed manually; scanner does not cover it). Final git status also shows an unrelated concurrent test/e2e/a11y/baseline.json change; left untouched.
+- **NOT VERIFIED / BLOCKED:** Differently named/Y/standard/namespaced/OData alternatives, complete SAP replacement interfaces, authorization for replacement operations, durable atomicity/recovery, SAP-only browser round trips, BTP deployment, migration/retention. Live metadata does not prove new transactional behavior.
+- **ASSUMPTIONS:** Go approves proceeding with SAP-side replacement investigation/preparation (INFERRED), not a specific external write. Preserve current features and safeguards (INFERRED).
+- **REGRESSION:** No runtime changes. Full runtime regression and SAP-only E2E pending implementation.
+- **Next action:** Establish SAP development ownership and verified replacement contracts using the specification; scope approval already exists. Do not delete application persistence until replacements and migration are proven.
+- **FINAL STATUS:** BLOCKED for database removal; discovery/specification prepared.
+
+### 2026-11-03 14:02 IST — SAP package/client discovery and ZAMM selection: BLOCKED
+
+- **Request / plan:** User requested implementing the SAP package/target. Inspected AGENTS.md, current WORKSTATUS, git status, existing ADT tools/package conventions and read-only test guard. Investigated package/client metadata before requesting the remaining decision. User explicitly selected ZAMM and will provide development target and transport request.
+- **CHANGED:** docs/decisions/sap-only-persistence-migration.md and WORKSTATUS.md; recorded selected package and verified live facts. No runtime implementation, package creation, SAP activation, SQL removal or deployment. Preserved prior work and unrelated a11y baseline edit.
+- **VERIFIED (READ-ONLY):** Guarded inline Node probe (`ALLOW_LIVE_SAP_TOOLS=1 node - --allow-live-sap`, existing RfcClient/readOnlyRfcGuard) made five successful RFC_READ_TABLE calls outside the network sandbox. TDEVC: ZAMM/HOME and $TMP/LOCAL found; ZRES_WM absent from query results. TADIR: Z_VENDOR_REMOTES and ZMM_QUAR_LABEL both in $TMP. DD03L verified client-role field/domain; T000 returned T for configured client; DD07T resolved T to Test. No credential/environment values displayed; no SAP writes. This does not prove that the current test client is the approved development target.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT — test/unit/tools/readHuStockEvidence.test.js and test/unit/liveSapToolGate.test.js for read-only/redaction and opt-in behavior.
+- **TESTED:** `env -u RUN_LIVE_SAP -u SAP_SYSTEM_TYPE -u ALLOW_LIVE_SAP_TOOLS npx jest --runInBand test/unit/tools/readHuStockEvidence.test.js test/unit/liveSapToolGate.test.js` — 2 suites / 5 tests PASS, no warnings. `git diff --check` PASS. Reviewed specification additions, work log and git status; only documentation changed by this task, unrelated a11y baseline edit preserved.
+- **NOT VERIFIED / BLOCKED:** User's development target and workbench transport request are pending; replacement SAP contracts/atomicity/authorization and SAP-only E2E remain unverified. Package selection does not remove these dependencies.
+- **ASSUMPTIONS:** Preserve existing behavior; the connected test client is not assumed to be the deployment target.
+- **REGRESSION:** No runtime changes; full application regression/build/E2E not applicable to this documentation decision.
+- **Next action:** User supplies development target and transport request; then verify target/contracts before preparing dependent implementation.
+- **FINAL STATUS:** BLOCKED for implementation/database removal. ZAMM selection is confirmed.
