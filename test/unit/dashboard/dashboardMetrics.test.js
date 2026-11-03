@@ -97,6 +97,7 @@ describe('Unit: Dashboard Controller live figures', () => {
     let DashboardControllerClass;
     let mockODataClient;
     const mockMessageToast = { show: jest.fn() };
+    const mockAuthService = { hasAnyRole: jest.fn(() => false) };
 
     class MockJSONModel {
         constructor(data) {
@@ -149,7 +150,7 @@ describe('Unit: Dashboard Controller live figures', () => {
         global.sap = {
             ui: {
                 define: jest.fn((deps, factory) => {
-                    DashboardControllerClass = factory(MockBaseController, MockJSONModel, mockODataClient, mockMessageToast);
+                    DashboardControllerClass = factory(MockBaseController, MockJSONModel, mockODataClient, mockMessageToast, mockAuthService);
                 })
             }
         };
@@ -364,6 +365,20 @@ describe('Unit: Dashboard Controller live figures', () => {
                 expect(oViewModel.getProperty('/selectedTab')).toBe('overview');
             });
 
+            test('the Administrator section opens only for the Admin role', () => {
+                const controller = setup(makeAuthModel(true));
+                const oViewModel = controller.getView().getModel('dashboardView');
+
+                mockAuthService.hasAnyRole.mockReturnValueOnce(false);
+                controller._onDashboardMatched(matched('admin'));
+                expect(oViewModel.getProperty('/selectedTab')).toBe('overview');
+                expect(mockAuthService.hasAnyRole).toHaveBeenLastCalledWith(['Admin']);
+
+                mockAuthService.hasAnyRole.mockReturnValueOnce(true);
+                controller._onDashboardMatched(matched('admin'));
+                expect(oViewModel.getProperty('/selectedTab')).toBe('admin');
+            });
+
             test('switching section does not reload the figures; returning from another screen does', () => {
                 const controller = setup(makeAuthModel(true));
 
@@ -462,15 +477,15 @@ describe('Unit: Dashboard view binds only live figures', () => {
         tilesWithValue.forEach((tile) => expect(tile).toMatch(/state="\{path: 'dashboardView>\/[A-Za-z]+', formatter: '\.formatTileState'\}"/));
     });
 
-    test('contains no simulators, info dialogs, hard-coded status or placeholder tabs', () => {
+    test('contains no simulators, info dialogs or hard-coded status, and only Administrator is an empty section', () => {
         expect(viewXml).not.toMatch(/onSimulateCarLoan|onNewCarLoanApp|onShowMasterDataInfo/);
         expect(viewXml).not.toMatch(/Client 220/);
         expect(viewXml).not.toMatch(/systemHealth|totalSpend|completeRate/);
-        // The sidebar in the app shell and the dashboard's sections must offer the same four keys, in order
+        // The sidebar in the app shell and the dashboard's sections must offer the same keys, in order
         const appViewXml = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/view/App.view.xml'), 'utf8');
         const navKeys = [...appViewXml.matchAll(/<tnt:NavigationListItem[^>]*?key="([a-zA-Z]+)"/g)].map((m) => m[1]);
         const sectionKeys = [...viewXml.matchAll(/dashboardView>\/selectedTab\} === '([a-zA-Z]+)'/g)].map((m) => m[1]);
-        expect(navKeys).toEqual(['overview', 'mm', 'sd', 'ewm']);
+        expect(navKeys).toEqual(['overview', 'mm', 'sd', 'ewm', 'admin']);
         expect(sectionKeys).toEqual(navKeys);
     });
 

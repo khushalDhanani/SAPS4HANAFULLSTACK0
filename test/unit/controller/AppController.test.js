@@ -3,6 +3,7 @@ const path = require('path');
 let AppController;
 const mockDevice = { system: { phone: false } };
 const mockThemeService = { applyTheme: jest.fn(), getSavedTheme: jest.fn() };
+const mockAuthService = { hasAnyRole: jest.fn(() => false) };
 const manifest = require('../../../app/fiori-app/webapp/manifest.json');
 const routes = manifest['sap.ui5'].routing.routes;
 
@@ -18,7 +19,7 @@ beforeAll(() => {
   global.sap = {
     ui: {
       define: (_dependencies, factory) => {
-        AppController = factory(BaseController, function JSONModel() {}, {}, mockDevice, mockThemeService);
+        AppController = factory(BaseController, function JSONModel() {}, {}, mockDevice, mockThemeService, mockAuthService);
       }
     }
   };
@@ -81,6 +82,14 @@ describe('App shell sidebar', () => {
     expect(controller._getSideNavKey('dashboard', { section: 'sd' })).toBe('sd');
     expect(controller._getSideNavKey('dashboard', { section: 'bogus' })).toBe('overview');
     expect(controller._getSideNavKey('dashboard')).toBe('overview');
+  });
+
+  test('the Administrator section is highlighted only for the Admin role', () => {
+    const controller = makeController();
+    expect(controller._getSideNavKey('dashboard', { section: 'admin' })).toBe('overview');
+    expect(mockAuthService.hasAnyRole).toHaveBeenLastCalledWith(['Admin']);
+    mockAuthService.hasAnyRole.mockReturnValueOnce(true);
+    expect(controller._getSideNavKey('dashboard', { section: 'admin' })).toBe('admin');
   });
 
   test('an item opens its dashboard section; Overview opens the plain dashboard URL', () => {

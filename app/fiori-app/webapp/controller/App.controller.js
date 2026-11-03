@@ -3,8 +3,9 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "sap/ui/core/Messaging",
     "sap/ui/Device",
-    "saps4hana/fiori/service/ThemeService"
-], function (BaseController, JSONModel, Messaging, Device, ThemeService) {
+    "saps4hana/fiori/service/ThemeService",
+    "saps4hana/fiori/service/AuthService"
+], function (BaseController, JSONModel, Messaging, Device, ThemeService, AuthService) {
     "use strict";
 
     // First segment of a route pattern -> the dashboard section the sidebar highlights for that screen
@@ -301,10 +302,20 @@ sap.ui.define([
         _getSideNavKey: function (sRouteName, oArgs) {
             if (sRouteName === "dashboard") {
                 var sSection = oArgs && oArgs.section;
+                if (sSection === "admin") {
+                    return this.isAdmin() ? "admin" : "overview";
+                }
                 return ["mm", "sd", "ewm"].indexOf(sSection) === -1 ? "overview" : sSection;
             }
             var oRoute = this.getOwnerComponent().getRouter().getRoute(sRouteName);
             return SECTION_BY_ROUTE_PREFIX[oRoute ? oRoute.getPattern().split("/")[0] : ""] || "overview";
+        },
+
+        /**
+         * Shows the Administrator item. This only hides UI; an admin API still needs its own server check.
+         */
+        isAdmin: function () {
+            return AuthService.hasAnyRole(["Admin"]);
         },
 
         /**

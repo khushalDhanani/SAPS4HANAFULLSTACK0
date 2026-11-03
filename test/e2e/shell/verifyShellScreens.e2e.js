@@ -20,8 +20,8 @@ const PHONE = {
     hasTouch: true,
     userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
 };
-const ITEM = { overview: 'sideNavOverview', mm: 'sideNavMM', sd: 'sideNavSD', ewm: 'sideNavEWM' };
-const SECTION = { overview: 'sectionOverview', mm: 'sectionMM', sd: 'sectionSD', ewm: 'sectionEWM' };
+const ITEM = { overview: 'sideNavOverview', mm: 'sideNavMM', sd: 'sideNavSD', ewm: 'sideNavEWM', admin: 'sideNavAdmin' };
+const SECTION = { overview: 'sectionOverview', mm: 'sectionMM', sd: 'sectionSD', ewm: 'sectionEWM', admin: 'sectionAdmin' };
 
 /** The sidebar's highlighted key and the dashboard sections currently on screen. */
 const shellState = (page) => page.evaluate((sections) => {
@@ -81,7 +81,7 @@ async function verifySidebar(baseUrl) {
 
         // Everything below also runs on the closed sidebar's icons, so the closed state stays usable
         const loaded = metricsCalls;
-        for (const key of ['mm', 'sd', 'ewm']) {
+        for (const key of ['mm', 'sd', 'ewm', 'admin']) {
             await click(ITEM[key]);
             step(errors, details, `Sidebar item ${key} opens its section`, await expectSection(`dashboard/${key}`, key));
         }
@@ -124,6 +124,21 @@ async function verifySidebar(baseUrl) {
         step(errors, details, 'Sidebar flow', [`${err.name}: ${err.message.split('\n')[0]}`]);
     } finally {
         await session.close();
+    }
+
+    const viewer = await openSession({ baseUrl, user: 'test-viewer-1120' });
+    try {
+        await openHash(viewer, 'dashboard/admin');
+        const seen = await shellState(viewer.page);
+        const problems = [];
+        if (await viewer.page.locator(`[id$="--${ITEM.admin}"]`).count()) problems.push('Administrator item is rendered for a non-admin');
+        if (seen.selected !== 'overview') problems.push(`expected highlight overview, got ${seen.selected}`);
+        if (seen.sections.join() !== 'overview') problems.push(`expected only section overview, got [${seen.sections}]`);
+        step(errors, details, 'A non-admin sees no Administrator item, and its URL shows the Overview', problems);
+    } catch (err) {
+        step(errors, details, 'Non-admin sidebar', [`${err.name}: ${err.message.split('\n')[0]}`]);
+    } finally {
+        await viewer.close();
     }
 
     const signedOut = await openSession({ baseUrl, user: null });

@@ -2,12 +2,14 @@ sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/service/ODataClient",
-    "sap/m/MessageToast"
+    "sap/m/MessageToast",
+    "saps4hana/fiori/service/AuthService"
 ], function (
     BaseController,
     JSONModel,
     ODataClient,
-    MessageToast
+    MessageToast,
+    AuthService
 ) {
     "use strict";
 
@@ -103,7 +105,8 @@ sap.ui.define([
 
         _onDashboardMatched: function (oEvent) {
             var sSection = oEvent ? oEvent.getParameter("arguments").section : "";
-            this.getView().getModel("dashboardView").setProperty("/selectedTab", SECTIONS.indexOf(sSection) === -1 ? "overview" : sSection);
+            var bAllowed = sSection === "admin" ? AuthService.hasAnyRole(["Admin"]) : SECTIONS.indexOf(sSection) !== -1;
+            this.getView().getModel("dashboardView").setProperty("/selectedTab", bAllowed ? sSection : "overview");
             // A sidebar click only changes the section; the figures reload on arrival from another screen.
             if (this._bFiguresLoaded) {
                 return;

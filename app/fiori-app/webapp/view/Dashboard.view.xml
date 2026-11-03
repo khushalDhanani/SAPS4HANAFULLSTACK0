@@ -317,6 +317,14 @@
                                 </HBox>
                             </VBox>
                         </VBox>
+
+                        <!-- ADMINISTRATOR -->
+                        <VBox id="sectionAdmin" visible="{= ${dashboardView>/selectedTab} === 'admin' }">
+                            <VBox class="sapUiSmallMarginTop">
+                                <Title text="{i18n>tabAdminTitle}" level="H3" titleStyle="H4" />
+                                <Text text="{i18n>tabAdminEmpty}" class="textMuted" />
+                            </VBox>
+                        </VBox>
                     </items>
                 </VBox>
             </VBox>

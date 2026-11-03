@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Administrator item in the sidebar (2026-11-03 17:09 IST) — PASS, uncommitted:** An Admin-only sidebar item opens an empty section at `#/dashboard/admin`. Other users do not see the item, and that URL shows them the Overview. No administrator tools exist yet. The check only hides UI. See the entry below.
+
 - **Undefined `FinanceManager` role removed (2026-11-03) — PARTIAL, pushed to `origin/feature01`:** `cancelBillingDocument` now allows `SalesManager` and `Admin` only. A new test fails if any `@requires` role is missing from `xs-security.json`. See the entry below.
 
 - **Root files moved into folders (2026-11-03 16:49 IST) — PARTIAL, pushed to `origin/feature01`:** Four documents moved under `docs/` with `git mv`. The root logo was a byte-identical duplicate of the app's copy, so only the root copy was removed. See the entry below.
@@ -90,6 +92,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
 - Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
 - Creatable services (2026-11-03): the classification is pushed in `43e96d2b`. To rebuild the workbook, restore `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json`. POST-only services are still outside the workbook.
 - HU rules (2026-11-03): decide 261 blocked-bin rules; have the SAP administrator check packaging type Z007, which has no storage unit type in W01; get rules for other warehouses.
@@ -1655,3 +1658,15 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry and the earlier check entry. Not pushed.
 - **Next action:** The user decides whether to push.
 - **FINAL STATUS:** PASS for this doc fix.
+
+### 2026-11-03 17:09 IST — Administrator item in the sidebar: PASS for the item and its empty section
+
+- **Request:** "In Side nav Add administrator." The repo had no administrator screen, service or route, so the user was asked and chose an empty section, visible to the Admin role only.
+- **CHANGED:** `App.view.xml` has an `Administrator` sidebar item, shown only when `AuthService.hasAnyRole(["Admin"])` is true. `Dashboard.view.xml` has an empty `sectionAdmin` with a "No administrator tools are available yet." message. `App.controller.js` and `Dashboard.controller.js` accept the `admin` section only for that role; anyone else gets the Overview. Three i18n keys were added to both bundles. No backend, route or SAP change.
+- **TEST DECISION:** TEST UPDATED and TEST ADDED: `test/unit/controller/AppController.test.js`, `test/unit/dashboard/dashboardMetrics.test.js`, `test/e2e/shell/verifyShellScreens.e2e.js`. The dashboard test title that ruled out placeholder tabs now allows this one empty section, as the user chose. `docs/e2e-coverage-matrix.md` is unchanged because no route changed.
+- **TESTED:** `npx jest --runInBand --silent`: 224 suites passed, 1 skipped; 4,105 tests passed, 56 skipped. `npm --prefix app/fiori-app run lint`: no findings. `npm --prefix app/fiori-app run build`: succeeded. ESLint on the changed test files: clean (the two controllers are ignored by the ESLint config). `git diff --check`: clean. `TARGET_URL=http://localhost:4010 node test/e2e/shell/verifyShellScreens.e2e.js`: every step printed PASS, including the admin item opening its section and a `test-viewer-1120` user seeing no item and the Overview on `#/dashboard/admin`. `node test/e2e/runAllE2E.js --only=a11y`: 1 of 1 passed.
+- **SAP:** READ-ONLY. The dashboard read its figures through CAP behind the write guard. No SAP write ran.
+- **Warnings:** The accessibility suite now reports `aria-allowed-attr` ×5 on the dashboard, because the new item is a fifth node of the rule the user accepted at ×4. It passes because the suite compares rule ids, not counts, so `test/e2e/a11y/baseline.json` still says 4. The UI5 MCP API lookup failed with a CDN error, so the item's `visible` behaviour was proven in the browser instead. The other browser suites, `npm run test:e2e` in full and GitHub Actions were not run.
+- **ASSUMPTIONS:** none. Wording of the item tooltip and empty message is the agent's.
+- **Next action:** The user decides whether to commit, and which tools the section should hold.
+- **FINAL STATUS:** PASS for the item and empty section. It offers no administrator function yet. Uncommitted.
