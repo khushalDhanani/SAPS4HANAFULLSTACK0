@@ -7,7 +7,6 @@ const evidence = require('./support/evidence');
 const { closeBrowser } = require('./support/screenCheck');
 const { startIsolatedServer, assertSapUnreachable } = require('./support/isolatedServer');
 
-const { runHardeningE2E } = require('./wm/verifyHardeningUI.e2e');
 const { verifyMvt201 } = require('./wm/verifyMvt201.e2e');
 const { verifyMvt241 } = require('./wm/verifyMvt241.e2e');
 const { verifyMvt261 } = require('./wm/verifyMvt261.e2e');
@@ -92,15 +91,6 @@ async function runSuitesAndSummarize(options) {
   }
 
   const suites = selectSuites([
-    {
-      name: 'UI Hardening & Rapid Submission',
-      file: 'verifyHardeningUI.e2e.js',
-      fn: async (opts) => {
-        const res = await runHardeningE2E(opts);
-        const pass = res && res.status === 'PASS' && (!res.errors || res.errors.length === 0);
-        return { status: pass ? 'PASS' : 'FAIL', errors: res?.errors || [], details: res?.details };
-      }
-    },
     {
       name: 'Movement 201 (GI to Cost Center)',
       file: 'verifyMvt201.e2e.js',

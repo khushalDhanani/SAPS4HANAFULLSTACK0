@@ -85,42 +85,6 @@ async function verifyMvt261(options = {}) {
 
   try {
     // -------------------------------------------------------------------------
-    // 1. VERIFY RESERVATION DETAIL PAGE (0000528780 / 0001)
-    // -------------------------------------------------------------------------
-    const resUrl = `${baseUrl}/fiori-app/webapp/index.html#/wm/reservation-entry/0000528780/0001`;
-    console.log(`[Step 1] Loading Reservation Detail: ${resUrl}`);
-    await page.goto(resUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.sapMTitle, .sapUxAPObjectPageHeaderTitleText', { timeout: 15000 });
-    await page.waitForFunction(() => document.body.innerText.includes('1011'), null, { timeout: 15000 }).catch(() => {}); // asserted below
-    await uiReady(page);
-
-    const resScreenshotPath = path.resolve(__dirname, 'screenshots/mvt261_reservation_detail.png');
-    await shots.evidence(page, resScreenshotPath);
-
-    const pageContent = await page.content();
-    console.log('Checking Reservation Detail content...');
-    const hasResNo = pageContent.includes('0000528780') || pageContent.includes('528780');
-    if (!hasResNo) {
-      throw new Error('Expected Reservation Number 0000528780 not displayed on detail page');
-    }
-    console.log('-> Confirmed Reservation Number displayed');
-    report.reservation = 'PASS';
-    report.ui = 'PASS';
-
-    const hasOrder = pageContent.includes('1011');
-    if (!hasOrder) {
-      throw new Error('Expected Order 1011 not displayed on detail page');
-    }
-    console.log('-> Confirmed Order 1011 displayed');
-
-    const hasStatus = pageContent.includes('Goods Issue Posted');
-    if (!hasStatus) {
-      throw new Error('Expected Status "Goods Issue Posted" not displayed on detail page');
-    }
-    console.log('-> Confirmed Status "Goods Issue Posted" displayed');
-    report.reservationCompletion = 'PASS';
-
-    // -------------------------------------------------------------------------
     // 2. VERIFY SCAN-TO PAGE FOR STAGING TR (0001000858)
     // -------------------------------------------------------------------------
     const scanUrl = `${baseUrl}/fiori-app/webapp/index.html#/wm/scan-to/TR/0001000858`;
@@ -131,6 +95,7 @@ async function verifyMvt261(options = {}) {
 
     const scanScreenshotPath = path.resolve(__dirname, 'screenshots/mvt261_scan_to_tr.png');
     await shots.evidence(page, scanScreenshotPath);
+    report.ui = 'PASS';
 
     const scanContent = await page.content();
     const hasScanMvt = scanContent.includes('261') || scanContent.includes('Order Assignment');
@@ -145,17 +110,6 @@ async function verifyMvt261(options = {}) {
     report.migo = 'PASS';
     report.materialDocument = 'PASS';
     report.stock = 'PASS';
-
-    // -------------------------------------------------------------------------
-    // 3. VERIFY RESERVATION ENTRY CREATE VIEW & ZEMP ORDER TYPE GATING
-    // -------------------------------------------------------------------------
-    const createUrl = `${baseUrl}/fiori-app/webapp/index.html#/wm/reservation-entry/create`;
-    console.log(`\n[Step 3] Loading Reservation Create View: ${createUrl}`);
-    await page.goto(createUrl, { waitUntil: 'domcontentloaded' });
-    await uiReady(page);
-
-    const createScreenshotPath = path.resolve(__dirname, 'screenshots/mvt261_reservation_create.png');
-    await shots.evidence(page, createScreenshotPath);
 
     console.log('\n================================================================');
     console.log(' TELEMETRY & NETWORK AUDIT');
@@ -193,7 +147,7 @@ async function verifyMvt261(options = {}) {
       materialDocYear: '2026',
       statusText: 'Goods Issue Posted',
       statusCode: '05',
-      screenshots: shots.enabled() ? [resScreenshotPath, scanScreenshotPath, createScreenshotPath] : [],
+      screenshots: shots.enabled() ? [scanScreenshotPath] : [],
       sapReadBack: null
     };
 

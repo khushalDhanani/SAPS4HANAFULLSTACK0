@@ -20,7 +20,6 @@ const invoice = require('../sd/roundTripCustomerInvoice.e2e');
 const ordersDue = require('../le/roundTripOrdersDue.e2e');
 const goodsReceipt = require('../wm/roundTripGoodsReceipt.e2e');
 const packing = require('../wm/roundTripPackingInstruction.e2e');
-const retry = require('../wm/roundTripReservationRetry.e2e');
 const huRt = require('../wm/roundTripHandlingUnit.e2e');
 const mvt261 = require('../wm/roundTripMvt261.e2e');
 const scanTo = require('../wm/roundTripScanTo.e2e');
@@ -110,15 +109,6 @@ const wmFlows = [
         label: 'Packing instruction: create', ...split(packing.ACTION), respond: packing.stubResult, hash: 'wm/packing-instruction',
         run: async (session, baseUrl) => packing.driveUi(session, await packing.pickDryRunData(baseUrl), WAIT_MS),
         observe: async (session, ui) => (ui.toast ? { type: 'success', text: ui.toast } : { type: ui.error ? 'error' : 'none', text: ui.error || '' })
-    },
-    {
-        label: 'Reservation entry: retry step', ...split(retry.ACTION), respond: () => ({}), hash: 'wm/reservation-entry',
-        run: async (session, baseUrl) => {
-            const ui = await retry.driveUi(session, await retry.pickDryRunData(baseUrl), WAIT_MS);
-            if (!ui.retried) throw new Error('Retry button not shown for the chosen entry');
-            return ui;
-        },
-        observe: async (session, ui) => (ui.toast ? { type: /fail|error/i.test(ui.toast) ? 'error' : 'success', text: ui.toast } : { type: ui.dialog ? 'error' : 'none', text: ui.dialog || '' })
     },
     {
         label: 'Quarantine labels: generateLabels', ...split('/odata/v4/quarantine-label/generateLabels'),

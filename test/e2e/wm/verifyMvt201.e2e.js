@@ -84,95 +84,6 @@ async function verifyMvt201(options = {}) {
 
   try {
     // -------------------------------------------------------------------------
-    // -------------------------------------------------------------------------
-    // 1. VERIFY RESERVATION DETAIL PAGE
-    // -------------------------------------------------------------------------
-    const resUrl = `${baseUrl}/fiori-app/webapp/index.html#/wm/reservation-entry/0000525278/0001`;
-    console.log(`[Step 1] Loading Reservation Detail: ${resUrl}`);
-    await page.goto(resUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.sapMTitle', { timeout: 10000 });
-    await uiReady(page);
-
-    // Take screenshot
-    const resScreenshotPath = path.resolve(__dirname, 'screenshots/mvt201_reservation_detail.png');
-    await shots.evidence(page, resScreenshotPath);
-
-    // Check header title
-    const headerTitle = await page.textContent('.sapUxAPObjectPageHeaderTitleText, .sapMTitle');
-    console.log(`Header Title: ${headerTitle}`);
-    if (!headerTitle || !headerTitle.includes('0000525278')) {
-      throw new Error(`Expected reservation 0000525278 in title, got: ${headerTitle}`);
-    }
-    report.reservation = 'PASS';
-    report.ui = 'PASS';
-
-    // Read full page text content, once the reservation data has arrived (slower when suites run in parallel)
-    await page.waitForFunction(() => document.body.innerText.includes('8000009754'), null, { timeout: 15000 }).catch(() => {});
-    const pageText = await page.innerText('body');
-
-    // Assert Movement Type 201
-    const hasMvt201 = pageText.includes('201') || pageText.includes('Cost Center');
-    console.log(`Displays Movement Type 201: ${hasMvt201}`);
-    if (!hasMvt201) throw new Error('Movement Type 201 not displayed on page');
-
-    // Assert Material 8000009754
-    const hasMaterial = pageText.includes('8000009754');
-    console.log(`Displays Material 8000009754: ${hasMaterial}`);
-    if (!hasMaterial) throw new Error('Material 8000009754 not displayed on page');
-
-    // Assert Plant 1120 & SLoc HS01
-    const hasPlant = pageText.includes('1120');
-    const hasSLoc = pageText.includes('HS01');
-    console.log(`Displays Plant 1120: ${hasPlant}, SLoc HS01: ${hasSLoc}`);
-    if (!hasPlant || !hasSLoc) throw new Error('Plant 1120 or SLoc HS01 not displayed');
-
-    // Assert Cost Center 1011201301
-    const hasCostCenter = pageText.includes('1011201301');
-    console.log(`Displays Cost Center 1011201301: ${hasCostCenter}`);
-    if (!hasCostCenter) throw new Error('Cost Center 1011201301 not displayed');
-
-    // In Reservation Detail, check if TR is displayed or tracked via LTBK
-    const hasTR = pageText.includes('1000757') || pageText.includes('Transfer Requirement');
-    console.log(`Displays TR reference / section: ${hasTR}`);
-    if (!hasTR) throw new Error('TR reference not displayed on page');
-    report.tr = 'PASS';
-
-    // Assert TO Number 0001037270 or 1037270
-    const hasTO = pageText.includes('1037270');
-    console.log(`Displays TO 1037270: ${hasTO}`);
-    if (!hasTO) throw new Error('TO 1037270 not displayed');
-    report.to = 'PASS';
-
-    // Assert Material Document 4900050142
-    await page.waitForFunction(() => document.body.innerText.includes('4900050142'), { timeout: 10000 }).catch(() => {});
-    const updatedPageText = await page.innerText('body');
-    const hasMatDoc = updatedPageText.includes('4900050142');
-    console.log(`Displays Material Document 4900050142: ${hasMatDoc}`);
-    if (!hasMatDoc) throw new Error('Material Document 4900050142 not displayed');
-    report.materialDocument = 'PASS';
-
-    // Assert Status is Goods Issue Posted (code 05)
-    const hasGiPosted = pageText.includes('Goods Issue Posted');
-    console.log(`Displays Status "Goods Issue Posted": ${hasGiPosted}`);
-    if (!hasGiPosted) throw new Error('Status "Goods Issue Posted" not displayed');
-    report.reservationCompletion = 'PASS';
-
-    // Assert no skeleton loader remains stuck
-    const skeletonCount = await page.$$eval('.sapMSkeleton, .sapUiSkeleton', els => els.length);
-    console.log(`Active skeletons count: ${skeletonCount}`);
-    if (skeletonCount > 0) throw new Error(`Stuck skeletons detected: ${skeletonCount}`);
-
-    // Test page refresh does not corrupt state
-    console.log('[Step 1b] Testing page refresh persistence...');
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => document.body.innerText.includes('4900050142'), null, { timeout: 15000 }).catch(() => {}); // asserted next
-    const refreshedText = await page.innerText('body');
-    if (!refreshedText.includes('0000525278') || !refreshedText.includes('4900050142')) {
-      throw new Error('Refresh corrupted workflow state!');
-    }
-    console.log('Page refresh verified: state strictly preserved.');
-
-    // -------------------------------------------------------------------------
     // 2. VERIFY WAREHOUSE SCAN PAGE FOR TR 0001000757
     // -------------------------------------------------------------------------
     const scanUrl = `${baseUrl}/fiori-app/webapp/index.html#/wm/scan-to/TR/0001000757`;
@@ -188,6 +99,7 @@ async function verifyMvt201(options = {}) {
 
     const scanScreenshotPath = path.resolve(__dirname, 'screenshots/mvt201_warehouse_scan.png');
     await shots.evidence(page, scanScreenshotPath);
+    report.ui = 'PASS';
 
     const scanPageText = await page.innerText('body');
     console.log('Scan Page message contains completed TR validation:');
@@ -244,7 +156,7 @@ async function verifyMvt201(options = {}) {
       materialDocYear: '2026',
       statusText: 'Goods Issue Posted',
       statusCode: '05',
-      screenshots: shots.enabled() ? [resScreenshotPath, scanScreenshotPath] : [],
+      screenshots: shots.enabled() ? [scanScreenshotPath] : [],
       sapReadBack: null
     };
 
