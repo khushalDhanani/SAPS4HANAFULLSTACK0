@@ -98,7 +98,6 @@ jobs:
           path: |
             test-results/
             coverage/
-            test/e2e/wm/screenshots/
           if-no-files-found: ignore
 
       - name: Build UI5 application
@@ -264,5 +263,4 @@ jobs:
             test-results/e2e-summary.json
             test-results/e2e-evidence/
             test-results/cap-server.log
-            test/e2e/wm/screenshots/
           if-no-files-found: warn
