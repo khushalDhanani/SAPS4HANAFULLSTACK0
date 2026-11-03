@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Root files moved into folders (2026-11-03 16:49 IST) — PARTIAL, committed locally, not pushed:** Four documents moved under `docs/` with `git mv`. The root logo was a byte-identical duplicate of the app's copy, so only the root copy was removed. See the entry below.
+
 - **Creatable services classification (2026-11-03 16:43 IST) — PARTIAL, committed locally in `43e96d2b`, not pushed:** `docs/creatable-services-classification.md` sorts the 497 workbook services: 4 proven live, 69 likely proper (unproven), 117 likely master data or configuration, 152 unclear, 155 not proper. Two service docs were corrected. Only the proven bucket is CONFIRMED. See the entry below.
 
 - **HU storage type rules for W01 (2026-11-03 16:37 IST) — PARTIAL, pushed to `origin/feature01`:** W01 now has approved rules in `srv/wm/hu-stock-transfer/storage-types.json`, and the missing-rules error is gone. The HU dry run still fails on an HU that is correctly refused, so no browser run has proven an accepted HU. See the entry below.
@@ -86,6 +88,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Root file move (2026-11-03): committed locally on `feature01`, not pushed. Still not run: Playwright E2E and `npm run build:mta`.
 - Creatable services (2026-11-03): the classification is committed locally in `43e96d2b` and not pushed. To rebuild the workbook, restore `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json`. POST-only services are still outside the workbook.
 - HU rules (2026-11-03): decide 261 blocked-bin rules; have the SAP administrator check packaging type Z007, which has no storage unit type in W01; get rules for other warehouses.
 - Database removal (2026-11-03): Phase 1 is done and the target is the connected client. Still needed: a transport request owned by, or with a task for, the connected user, and a written go for the live proof in docs/decisions/sap-only-persistence-migration.md (Phase 2), then the store swap and final removal (Phase 3). The user also decides where movement 261 blocked-bin rules and HU storage types should live. Check production BusinessConfig values before any deployment.
@@ -1570,3 +1573,28 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **TESTED:** `git diff --check` clean. `node tools/scan-secrets.js` found 0 secrets with all four files staged.
 - **ASSUMPTIONS:** none.
 - **FINAL STATUS:** PASS for the commit. The classification work stays PARTIAL.
+
+### 2026-11-03 16:49 IST — Root files moved into proper folders: PARTIAL
+
+- **Request:** The user asked to move five root files with `git mv`, update references, and verify.
+- **CHANGED:**
+  - `AUDIT_261.md` -> `docs/audits/AUDIT_261.md`
+  - `migo_idempotency_design.md` -> `docs/design/migo_idempotency_design.md`
+  - `sap_s4hana_all_apis.postman_collection.json` -> `docs/api/sap_s4hana_all_apis.postman_collection.json`
+  - `ZRF_RES_HU_DNR_DISCOVERY.md` -> `docs/abap/ZRF_RES_HU_DNR_DISCOVERY.md`
+  - `AetherLogoForSAP.svg`: root copy removed with `git mv -f` onto `app/fiori-app/webapp/assets/AetherLogoForSAP.svg`. `shasum` showed both copies identical, so the app's file did not change. No root `assets/` folder was created.
+  - `srv/integration/s4hana/wm/Mvt261Adapter.js:25`: comment now points to `docs/audits/AUDIT_261.md`. This was the only live path reference.
+- **Left unchanged on purpose:** `WORKSTATUS.md` history and `docs/archive/`. `AetherLogo.js:4` and `:42` name the logo file without a path, and the name is unchanged. The first line of `AUDIT_261.md` is its own title.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT: `npx jest --runInBand`, the lint commands and the UI5 build.
+- **TESTED:**
+  - Re-search of the five names outside `WORKSTATUS.md` and `docs/archive/`: no old root path remains.
+  - `npm run lint`: clean. `npm run lint` in `app/fiori-app`: no findings.
+  - `npm run build` in `app/fiori-app`: succeeded, with `dist/assets` holding both logo files. It warned that the `jspdf.umd.min.js` source map is missing.
+  - `npx jest --runInBand`: 223 suites passed, 1 skipped; 4,101 tests passed, 56 skipped.
+  - Browser on the `cap-e2e` server: `AetherLogoForSAP.svg` loaded at 4232 x 2804 and `AeElementally.png` at 755 x 500 through the app's asset path. `git diff --check`: clean.
+- **NOT VERIFIED:** The header logo after sign-in; I stopped at the login page. That logo is `AeElementally.png`, which did not move. Playwright E2E and `npm run build:mta` were not run. No SAP call ran.
+- **Finding:** Nothing in the app loads `AetherLogoForSAP.svg` at runtime. The label logo comes from vectors stored in `AetherLogo.js`.
+- **ASSUMPTIONS:** Reusing `app/fiori-app/webapp/assets/` fits "the existing logo/images folder" in the request.
+- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
+- **Next action:** The user decides whether to push.
+- **FINAL STATUS:** PARTIAL.

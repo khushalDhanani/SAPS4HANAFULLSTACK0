@@ -22,7 +22,7 @@ const { sapKey } = require('../sapKey');
  * only when the S/4 destination uses principal propagation. The RFC_READ_TABLE path used by the
  * cycle / scan / open-list reads runs under the fixed technical user (S4_USERNAME in RfcClient), so
  * it does NOT apply per-end-user plant authorization - the app role (service.cds @requires) is the
- * gate there. See AUDIT_261.md F10.
+ * gate there. See docs/audits/AUDIT_261.md F10.
  */
 const FIND_PATH = '/sap/opu/odata/sap/MMIM_MATDOC_OV_SRV/F_Mmim_Findmatdoc';
 const ITEM_PATH = '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentItem';
