@@ -1732,7 +1732,8 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
           MovementType: '311',
           ReservationNo: testMigoResNo,
           ReservationItem: '0001',
-          Quantity: 6
+          Quantity: 6,
+          ClientAttemptId: 'partial-issue'
         },
         authClerk
       );
@@ -1782,7 +1783,8 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
           MovementType: '311',
           ReservationNo: testMigoResNo,
           ReservationItem: '0001',
-          Quantity: 10
+          Quantity: 10,
+          ClientAttemptId: 'complete-issue'
         },
         authClerk
       );
@@ -1817,7 +1819,8 @@ describe('Chunk 3: Step 1 Service — ReservationEntryService (Create Reservatio
         {
           MovementType: '311',
           ReservationNo: testMigoResNo,
-          ReservationItem: '0001'
+          ReservationItem: '0001',
+          ClientAttemptId: 'failed-issue'
         },
         authClerk
       );

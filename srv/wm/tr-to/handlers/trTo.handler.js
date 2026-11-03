@@ -262,6 +262,10 @@ class TrToHandler {
       // PROCESS_ID of this GI step: reused on retry so an already posted document is found, never posted twice.
       // After a posted document the next issue on this item is a new step and gets a fresh id.
       const priorDocPosted = Boolean(existingTrack?.MaterialDocument) && existingTrack?.Status_code === STATUS.GI_POSTED;
+      // Without the caller's id a further issue cannot be told from a resend of the last one.
+      if (priorDocPosted && !data.ProcessId) {
+        throw httpError(400, `Reservation ${sResNo}/${sResItem} already has Material Document ${existingTrack.MaterialDocument}. ProcessId is required for a further issue, so a resend cannot post twice. Goods Issue was not posted.`);
+      }
       const processId = data.ProcessId || (!priorDocPosted && existingTrack?.ProcessId) || cds.utils.uuid();
       const trackKey = existingTrack ? { ReservationNo: existingTrack.ReservationNo, ReservationItem: existingTrack.ReservationItem } : null;
       if (trackKey && existingTrack.ProcessId !== processId) {

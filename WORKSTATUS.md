@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **MIGO resend versus further issue, reservation-entry and tr-to (2026-11-03 09:55 IST) — PARTIAL, uncommitted:** A resend with the same id returns its document without posting, and a new id posts the further quantity, on both `postMigoGoodsMovement` actions. A further issue with no id gets HTTP 400 before SAP (`ClientAttemptId` on reservation-entry, `ProcessId` on tr-to). The false repeat is fixed once in `checkMigoIdempotency`. Jest: 228 suites and 4,464 tests passed, 59 skipped. SAP-free browser E2E: 3 of 3 passed; those suites do not post a goods movement. Not proven against live SAP. See Change Entry 2026-11-03 09:55 IST.
+
 - **Reservation create (/wm/reservation-entry/create) Batch-managed material detection & BatchVH Value Help fixed (2026-11-02 17:55 IST) — PASS, uncommitted:**
   1. Root cause: In SAP S/4HANA (Client 220), material `8000006684` has `MARC-XCHPF = 'X'` (Batch management requirement indicator active in Plant 1120). Reservations for batch-managed materials require `RESB-CHARG`. `ReservationProcessAdapter.js:226-228` validates `MARC-XCHPF === 'X'` and rejects with HTTP 400 (`"Batch is mandatory for batch-managed material 8000006684"`) when batch is omitted. However, `ReservationEntryDetail.view.xml` previously displayed `inputBatch` with no required indicator, placeholder `Batch (optional)`, no value help, and no suggestion items. The user was unaware the material required a batch and had no F4 discovery of live SAP batches from `MCHB`/`MCHA` (e.g. batch `IN26001071` with 8 KG in SLoc HS01).
   2. Resolution:
@@ -54,6 +56,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- MIGO resend versus further issue (2026-11-03): commit when the user asks, then restart the local CAP server to load it. Live proof needs a written go: post a partial issue, resend the same id, post a further issue with a new id, and read MATDOC and RESB back. Decide whether one Transfer Order may have more than one goods movement; today a new id on the same TO posts again.
+
 - Reservation create batch detection & Value Help (2026-11-02 17:55 IST): RESOLVED (PASS, uncommitted). Batch management dynamically detected via `checkMaterialBatchManaged`, Batch marked mandatory on batch-managed materials, `BatchVH` value help implemented reading `MCHB`/`MCHA` stock, unit tests (108/108 service, 75/75 UI) and browser E2E (17/17 screens, verifyMvt311) pass. Commit when the user asks.
 - Reservation create Movement Type default (2026-11-02 17:35 IST): RESOLVED (PASS, uncommitted). Model and Select dropdown synchronized with `MovementType: "311"`; unit tests (72/72) and browser E2E (17/17) pass. Commit when the user asks.
 - Reservation list date display (2026-11-02): RESOLVED (2026-11-02 17:00 IST). Date resolved and formatted on `#/wm/reservation-entry` across UI XML, controller formatter, CAP service mapping, and S/4HANA OData client; verifyWmScreens 16/16 steps PASS. Commit when the user asks.
@@ -80,6 +84,57 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-03 09:55 IST — MIGO false repeat fixed in the shared check, tr-to guard added: PARTIAL
+
+- **Status:** PARTIAL. Implemented and tested with SAP mocked. No live SAP call was made.
+- **Why:** The user asked to fix the same false repeat in `tr-to/postMigoGoodsMovement`, the action behind the scan screen.
+- **Root cause:** Both handlers write `ProcessId` before posting. `checkMigoIdempotency` then read that row and treated a matching `ProcessId` or Transfer Order as proof that the row's document belonged to this request.
+- **Changes:**
+  - `srv/integration/s4hana/wm/ReservationProcessAdapter.js`: when a row has a stored `MigoBusinessKey`, only that key proves the row's document. `ProcessId` and Transfer Order matching now applies only to rows with no stored key, or to Transfer Order matching when the caller sends no id.
+  - `srv/wm/tr-to/handlers/trTo.handler.js`: a further issue with no `ProcessId` returns HTTP 400 before SAP. Without this, the adapter fix would let a resend with no id post twice.
+  - `srv/wm/reservation-entry/service.js`: removed the special cases from the 09:48 entry (the skipped pre-write, `ProcessId` written with the result, and `ProcessId` written in the error path), because the shared fix replaces them. This supersedes that part of the 09:48 entry.
+  - `test/unit/wm/migoClientAttempt.test.js`: now 11 tests, including 4 for tr-to.
+- **Test decision:** TEST ADDED and TEST UPDATED.
+- **Executed validation:**
+  - `npx jest --silent --runInBand`: 228 suites passed, 1 skipped; 4,464 tests passed, 59 skipped.
+  - Same new test file against the committed adapter: 7 of 11 failed, so these tests catch the old behaviour.
+  - `npx eslint .`: clean.
+  - `node tools/scan-secrets.js`: 0 secrets.
+  - `git diff --check`: clean.
+  - `npm run test:e2e:sap-free`: 3 of 3 passed. These suites do not post a goods movement.
+- **Not run:** the scan-screen round trip `test/e2e/wm/roundTripScanTo.e2e.js`, because proving this change needs a live post and a written go. A dry run stubs the write, so it would not exercise this logic.
+- **Behaviour to decide:** A caller that sends a new `ProcessId` on a Transfer Order that already has a document now posts again; before, it got the earlier document back. This matches the handler's documented rule that a new id is a new step. The scan screen reuses its id on retry. Whether one Transfer Order may have more than one goods movement is UNKNOWN.
+- **Limit:** A posted row with no stored `MigoBusinessKey` can still report its earlier document once. This is marked `shortcut:` in the code. In the local `db.sqlite`, 3 of the 10 rows with a material document have no key and are not complete. The production count is UNKNOWN.
+- **Next action:** Commit when the user asks, then run the live proof if the user gives a written go.
+
+### 2026-11-03 09:48 IST — Reservation-entry MIGO `ClientAttemptId`: PARTIAL
+
+- **Status:** PARTIAL. Implemented and tested with SAP mocked. No live SAP call was made.
+- **Why:** The audit of 2026-11-03 reported that resending a partial goods issue posts twice.
+- **Correction to that audit finding:** A temporary probe on the committed code gave a different result when the tracking row is readable. The handler saved a new `ProcessId` before posting, and `checkMigoIdempotency` then read that row and matched it (`pidMatches`, source `DB`). The second request returned the earlier document as success and did not post. A resend was therefore not posted twice on this path, but a genuine further issue was also not posted.
+- **Changes:**
+  - `srv/wm/reservation-entry/service.cds`: added `ClientAttemptId : String(36)` to `postMigoGoodsMovement`.
+  - `srv/wm/reservation-entry/service.js`:
+    - The process id is a SHA-256 hash of reservation, item and `ClientAttemptId`, so one id on another item is a separate attempt.
+    - Over a posted document, `ProcessId` is written with the result instead of before posting, which removes the false repeat.
+    - On failure, the attempt's `ProcessId` is saved, so a retry looks for that attempt's document.
+    - A resend no longer counts its quantity again when the SAP read-back is unavailable.
+    - A further issue with no `ClientAttemptId` returns HTTP 400 before SAP. First postings without an id are unchanged.
+  - `test/unit/wm/migoClientAttempt.test.js`: new suite, 7 tests, running the real `checkMigoIdempotency` with the BAPI and RFC reads mocked.
+  - `test/unit/wm/reservationEntryService.test.js`: 3 existing POSTs now send `ClientAttemptId`, because they post over a document left by an earlier test.
+- **Test decision:** TEST ADDED and TEST UPDATED.
+- **Executed validation:**
+  - `npx jest --silent --runInBand`: 228 suites passed, 1 skipped; 4,460 tests passed, 59 skipped.
+  - `npx eslint .`: clean.
+  - `node tools/scan-secrets.js`: 0 secrets.
+  - `git diff --check`: clean.
+- **Not run:** browser E2E and UI5 checks, because no screen calls this action and no webapp file changed. Live SAP proof was not run because it needs a written go.
+- **Open findings, not changed:**
+  - `srv/wm/tr-to/handlers/trTo.handler.js:264-269` has the same false repeat. A temporary mock probe with a new `ProcessId` returned the earlier document. The scan screen uses this action.
+  - No screen sends `ClientAttemptId` yet, because no screen calls this action. The `tools/run*-mvt*-live.js` scripts send no id, so a further issue from them now gets HTTP 400.
+- **Assumption (INFERRED):** Refusing a further issue with no id is safe because the repository shows no screen caller. External API callers are UNKNOWN.
+- **Next action:** Decide on the `tr-to` fix, and give a written go for the live proof if wanted.
 
 ### 2026-11-02 17:55 IST — Reservation Entry Batch Detection & BatchVH Value Help: PASS
 

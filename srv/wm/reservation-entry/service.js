@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const cds = require('@sap/cds');
 const ReservationProcessAdapter = require('../../integration/s4hana/wm/ReservationProcessAdapter');
 const GoodsIssueAdapter = require('../../integration/s4hana/wm/GoodsIssueAdapter');
@@ -1640,6 +1641,12 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       return { isBatchManaged: false };
     });
 
+    /** UUID-shaped process id for one caller attempt on one reservation item. */
+    const attemptProcessId = ({ ReservationNo, ReservationItem }, clientAttemptId) => {
+      const h = crypto.createHash('sha256').update(`${ReservationNo}/${ReservationItem}/${clientAttemptId}`).digest('hex');
+      return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+    };
+
     /** Goods movement for a tracked reservation item (step MIGO). Shares one adapter path with tr-to. */
     async function postMigoForTrack(track, data, req, { sLogHandle, extId, subObject }) {
       const sResNo = track.ReservationNo;
@@ -1660,7 +1667,9 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
       // PROCESS_ID of this GI step; persisted before posting so a retry finds an already posted document.
       // After a posted document the next issue on this item is a new step: a fresh id, so the BKTXT lookup cannot return the earlier document.
       const priorDocPosted = Boolean(track.MaterialDocument) && track.Status_code === STATUS.GI_POSTED;
-      const processId = data.ProcessId || (!priorDocPosted && track.ProcessId) || cds.utils.uuid();
+      // A ClientAttemptId always maps to the same id, so a resend finds its document even if the first request's tracking update rolled back.
+      const clientAttemptId = String(data.ClientAttemptId || '').trim();
+      const processId = clientAttemptId ? attemptProcessId(key, clientAttemptId) : (data.ProcessId || (!priorDocPosted && track.ProcessId) || cds.utils.uuid());
       if (track.ProcessId !== processId) await UPDATE(ReservationEntries).set({ ProcessId: processId }).where(key);
 
       // SAP-side lock (feature flag, off by default); lock, authorization checks and posting share one RFC session.
@@ -1700,8 +1709,10 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
 
       const resVer = migoRes.reservationVerification;
       const isCompletelyProcessed = resVer ? resVer.completelyProcessed === true : (data.completeReservation === true || data.CompleteReservation === true || (migoRes.Quantity && track.Quantity && Number(migoRes.Quantity) >= Number(track.Quantity)));
-      const withdrawnQty = resVer ? resVer.issuedQuantity : ((track.WithdrawnQuantity || 0) + Number(data.Quantity || migoRes.Quantity || 0));
-      const remainingQty = resVer ? resVer.remainingQuantity : Math.max(0, (track.Quantity || 0) - Number(data.Quantity || migoRes.Quantity || 0));
+      // A resend of a document already on this row must not count its quantity again when SAP's read-back is unavailable.
+      const alreadyCounted = !resVer && migoRes.alreadyPosted && track.MaterialDocument === migoRes.materialDocument;
+      const withdrawnQty = resVer ? resVer.issuedQuantity : (alreadyCounted ? track.WithdrawnQuantity : ((track.WithdrawnQuantity || 0) + Number(data.Quantity || migoRes.Quantity || 0)));
+      const remainingQty = resVer ? resVer.remainingQuantity : (alreadyCounted ? track.RemainingQuantity : Math.max(0, (track.Quantity || 0) - Number(data.Quantity || migoRes.Quantity || 0)));
 
       await UPDATE(ReservationEntries).set({
         MaterialDocument: migoRes.materialDocument,
@@ -1851,6 +1862,10 @@ module.exports = class ReservationEntryService extends cds.ApplicationService {
             MessageText: `Idempotency guard: Material Document ${existing.MaterialDocument}/${existing.MaterialDocYear || ''} already posted for business key ${bKey} and the item is completely processed; returning existing document`
           });
           return existing;
+        }
+        // Open quantity is left, so this is either a further issue or a resend of the last one: only the caller's id can tell.
+        if (!String(data.ClientAttemptId || '').trim()) {
+          return req.error(400, `Reservation ${sResNo}/${sResItem} already has Material Document ${existing.MaterialDocument}. ClientAttemptId is required for a further issue, so a resend cannot post twice. Goods Issue was not posted.`);
         }
       }
 

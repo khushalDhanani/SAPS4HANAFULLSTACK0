@@ -225,7 +225,8 @@ service ReservationEntryService {
         Serials                    : array of String(18),
         serials                    : array of String(18),
         CompleteReservation        : Boolean,
-        completeReservation        : Boolean
+        completeReservation        : Boolean,
+        ClientAttemptId            : String(36) // one per operator attempt, resent unchanged on retry; required once a document exists on the item
     ) returns ReservationEntries;
 
     type MaterialDocumentVerification {

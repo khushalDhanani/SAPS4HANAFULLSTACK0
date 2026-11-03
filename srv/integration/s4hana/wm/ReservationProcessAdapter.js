@@ -2068,8 +2068,10 @@ class ReservationProcessAdapter {
         );
         if (trk && trk.MaterialDocument && (trk.Status_code === STATUS.GI_POSTED || trk.ProcessStatus === PROCESS_STATUS.MIGO_POSTED || trk.ProcessStatus === PROCESS_STATUS.COMPLETED)) {
           const bKeyMatches = trk.MigoBusinessKey && trk.MigoBusinessKey === key;
-          const pidMatches = processId && trk.ProcessId && trk.ProcessId === processId;
-          const toMatches = transferOrder && trk.TransferOrder && sapKey(trk.TransferOrder, 'tanum') === sapKey(transferOrder, 'tanum') && (processId ? trk.ProcessId === processId : true);
+          // ProcessId and TransferOrder are written before posting, so with a stored key they say nothing about the document on this row.
+          // shortcut: a row with no stored key can still report its earlier document once; every posting since the key was added stores one.
+          const pidMatches = !trk.MigoBusinessKey && processId && trk.ProcessId && trk.ProcessId === processId;
+          const toMatches = (!trk.MigoBusinessKey || !processId) && transferOrder && trk.TransferOrder && sapKey(trk.TransferOrder, 'tanum') === sapKey(transferOrder, 'tanum') && (processId ? trk.ProcessId === processId : true);
           if (bKeyMatches || pidMatches || toMatches) {
             return {
               alreadyPosted: true,
