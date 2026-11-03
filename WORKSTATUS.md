@@ -89,6 +89,25 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-03 10:58 IST — Final Reservation Entry audit: PARTIAL
+
+- **Status:** PARTIAL. The frontend, tests, tools and config have no feature reference. The word search cannot reach zero, by user decision. No live SAP write was proven, and outside API callers and the production table are not verified.
+- **Why:** The user asked for a final exhaustive audit and accepted the recommended answers: keep history, ABAP and SQL files, and use a new branch from the existing tip.
+- **Branch:** `feature/remove-reservation-entry-final`, not pushed.
+- **Deleted:** `test/e2e/support/uiReady.js` and `test/e2e/support/shots.js`, used only by the removed suites.
+- **Changed:** the `test/e2e/wm/screenshots/` path was removed from `.github/workflows/ci.yml` and `.gitignore`.
+- **Test decision:** EXISTING TEST SUFFICIENT: full Jest and `verifyWmScreens.e2e.js`.
+- **Executed validation:**
+  - Deleted `dist`, `coverage`, `gen` and caches, then `npm run build` in `app/fiori-app`: succeeded, with 0 feature matches in the fresh `dist`.
+  - `npx cds build --production` to a scratch folder: succeeded, with 0 feature matches.
+  - `npm run lint` in `app/fiori-app`, `npx eslint --max-warnings 0 .`, `node tools/scan-secrets.js`, `npm run validate:mta`: clean.
+  - `npx jest --silent --runInBand`: 224 suites passed, 1 skipped; 4,176 tests passed, 59 skipped.
+  - `npm run test:e2e`: 17 of 17 passed; see the entries below for which commit it ran on. `npm run test:e2e:sap-free` on the new tip: 3 of 3 passed.
+  - Browser, test login, port 4010: `#/wm/reservation-entry`, `/create` and `/0000525278/0001` show the dashboard, with 0 console errors, 0 network errors and 0 blocked writes. The Warehouse tab has no Reservation Entry tile.
+- **Remaining feature-name lines:** `WORKSTATUS.md`, `docs/archive/`, 5 `docs/abap/z*_res_entry*` files and 2 `db-migrate-20261021-*.sql` files. `srv/wm/readScope.js:18` also says `ReservationEntries`.
+- **Not run:** `npm run test:e2e:sap`, which needs a written go for live runs. `knip` and `ts-prune` are not installed, so unused exports were checked by script only.
+- **Next action:** The user checks outside API callers and the production table, then decides about merging.
+
 ### 2026-11-03 — Correction: branch moved during the full browser run
 
 - **Status:** Correction to the full browser E2E entry below. No code changed in this entry.
