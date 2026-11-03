@@ -124,9 +124,8 @@ const FLOW_REQUIRED_FIELDS = Object.freeze({
  */
 const ALL_REQUIRED_FIELDS = FLOW_REQUIRED_FIELDS.sd;
 
-// Configured warehouse storage type rules (warehouse-specific customizing)
-// Zero guessed defaults; must be supplied by business configuration or registered explicitly
-const CONFIGURED_WAREHOUSE_STORAGE_TYPES = new Map();
+// Warehouse storage type rules, approved per warehouse in this file. A warehouse not listed there fails closed.
+const CONFIGURED_WAREHOUSE_STORAGE_TYPES = new Map(Object.entries(require('../wm/hu-stock-transfer/storage-types.json')));
 
 class BusinessConfigResolver {
   /**

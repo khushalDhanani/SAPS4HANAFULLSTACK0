@@ -1,0 +1,7 @@
+{
+  "W01": {
+    "pickableStorageTypes": ["RM1", "EN1", "GS1"],
+    "holdStorageTypes": ["OH1"],
+    "interimStorageTypes": ["901", "902", "904", "910", "911", "912", "913", "914", "916", "918", "920", "921", "922", "923"]
+  }
+}

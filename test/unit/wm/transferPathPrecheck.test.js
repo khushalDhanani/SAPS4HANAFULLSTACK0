@@ -188,9 +188,9 @@ describe('transferPathHelper Unit Tests', () => {
   });
 
   describe('Storage type rules via BusinessConfigResolver (fail closed, no literals)', () => {
-    test('fails closed for W01 when storage types have not been supplied by business customizing', async () => {
+    test('fails closed for a warehouse with no approved storage types', async () => {
       await expect(
-        resolveHuStorageTypeRules({ warehouse: 'W01', plant: '1120' })
+        resolveHuStorageTypeRules({ warehouse: 'W15', plant: '1150' })
       ).rejects.toThrow(/Storage types must be supplied by business configuration; fail-closed without hardcoded defaults/);
     });
 

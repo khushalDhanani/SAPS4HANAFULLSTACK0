@@ -118,9 +118,11 @@ The user approved removing the local settings table and its unserved admin API.
 | Oversize HU behaviour | Always `BLOCK` |
 | Quarantine label form and size | The wrapper's default form, no size check |
 | Movement 261 blocked-bin rules | **No source.** The rule stays off |
-| HU pickable, hold and interim storage types | **No source.** HU transfer rules fail closed |
+| HU pickable, hold and interim storage types | `srv/wm/hu-stock-transfer/storage-types.json`, approved by the user for W01. Other warehouses fail closed |
 
-The last two need a decision on where they should live. Nothing guesses them.
+Blocked-bin rules still need a decision on where they should live. Nothing guesses them.
+
+The HU rules file sits under `srv/`, not `config/`, because the production build does not include `config/` (checked with `cds build --production`). A rule change needs a redeploy. W01 rules, chosen by the user on 2026-11-03: pickable `RM1`, `EN1`, `GS1`; hold `OH1`; interim `901`, `902`, `904`, `910`, `911`, `912`, `913`, `914`, `916`, `918`, `920`, `921`, `922`, `923`. Hazardous areas `COR`, `FLM`, `OXD`, `TOX` and `WRA` are not listed, so they are not preferred.
 
 ## Implementation sequence after contract verification
 

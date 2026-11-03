@@ -65,20 +65,37 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
 
     test('storage-type rules fail closed unless a warehouse has them registered', async () => {
       const resolver = new BusinessConfigResolver({ ttlMs: 0 });
-      await expect(resolver.resolveHuStorageTypeRules({ plant: '1120', warehouse: 'W01' }))
+      await expect(resolver.resolveHuStorageTypeRules({ plant: '1150', warehouse: 'W15' }))
         .rejects.toThrow(/could not resolve storage type rules/);
 
-      BusinessConfigResolver.registerWarehouseStorageTypes('W01', {
+      BusinessConfigResolver.registerWarehouseStorageTypes('W15', {
         pickableStorageTypes: ['EN1'], holdStorageTypes: ['OH1'], interimStorageTypes: ['911']
       });
       try {
-        const rules = await resolver.resolveHuStorageTypeRules({ plant: '1120', warehouse: 'W01' });
+        const rules = await resolver.resolveHuStorageTypeRules({ plant: '1150', warehouse: 'W15' });
         expect(rules.isPickable('EN1')).toBe(true);
         expect(rules.isOnHold('OH1')).toBe(true);
         expect(rules.isInterim('911')).toBe(true);
       } finally {
-        BusinessConfigResolver.unregisterWarehouseStorageTypes('W01');
+        BusinessConfigResolver.unregisterWarehouseStorageTypes('W15');
       }
+    });
+
+    test('W01 uses the approved rules: OH1 is hold only, and hazardous areas are not pickable', async () => {
+      const resolver = new BusinessConfigResolver({ ttlMs: 0 });
+      const rules = await resolver.resolveHuStorageTypeRules({ plant: '1120', warehouse: 'w01' });
+      expect(rules.pickableStorageTypes).toEqual(['RM1', 'EN1', 'GS1']);
+      expect(rules.holdStorageTypes).toEqual(['OH1']);
+      expect(rules.interimStorageTypes).toHaveLength(14);
+      expect(rules.isPickable('OH1')).toBe(false);
+      expect(rules.isOnHold('OH1')).toBe(true);
+      expect(rules.isInterim('921')).toBe(true);
+      ['COR', 'FLM', 'OXD', 'TOX', 'WRA'].forEach((type) => expect(rules.isPickable(type)).toBe(false));
+    });
+
+    test('every warehouse in the rules file passes validation', () => {
+      const file = require('../../../srv/wm/hu-stock-transfer/storage-types.json');
+      Object.values(file).forEach((rules) => expect(() => businessConfigResolver.validateHuStorageTypeLists(rules)).not.toThrow());
     });
   });
 
