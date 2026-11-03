@@ -234,9 +234,9 @@ sap.ui.define([
             var oPayload = {
                 ShippingPoint: String(mParams.shippingPoint).trim(),
                 DeliveryDocumentType: mParams.deliveryType ? String(mParams.deliveryType).trim() : "LO2",
-                SalesOrganization: mParams.salesOrg ? String(mParams.salesOrg).trim() : "1000",
-                DistributionChannel: mParams.distChannel ? String(mParams.distChannel).trim() : "10",
-                Division: mParams.division ? String(mParams.division).trim() : "52",
+                SalesOrganization: String(mParams.salesOrg || "").trim(),
+                DistributionChannel: String(mParams.distChannel || "").trim(),
+                Division: String(mParams.division || "").trim(),
                 ShipToParty: String(mParams.shipToParty).trim(),
                 Plant: String(mParams.plant).trim(),
                 StorageLocation: String(mParams.storageLocation).trim(),

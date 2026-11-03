@@ -521,6 +521,10 @@ describe("OrdersDueForDelivery Controller", () => {
             expect(dialogModel.getProperty("/storageLocation")).toBe("FG01");
             expect(dialogModel.getProperty("/shipToParty")).toBe("10135");
             expect(dialogModel.getProperty("/items")).toHaveLength(1);
+            // No guessed sales area: the server posts these values as typed.
+            expect(dialogModel.getProperty("/salesOrg")).toBe("");
+            expect(dialogModel.getProperty("/distChannel")).toBe("");
+            expect(dialogModel.getProperty("/division")).toBe("");
         });
 
         test("onAddDeliveryNoRefItem adds a new line item with incremented item number", () => {

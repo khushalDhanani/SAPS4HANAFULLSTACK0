@@ -153,6 +153,41 @@ describe('Unit: DeliveryNoRefAdapter', () => {
         items: [{ material: '4000000186', quantity: 1, uom: 'KG' }]
       })).rejects.toThrow(/could not resolve required business config/);
     });
+
+    test('asks the user for the sales area with a 400 when neither the form nor SAP has it', async () => {
+      await expect(adapter.createDeliveryWithoutRef({
+        shippingPoint: '1104',
+        shipToParty: '10135',
+        salesOrg: '',
+        distChannel: '',
+        division: '',
+        plant: '9999',
+        storageLocation: 'FG01',
+        items: [{ material: '4000000186', quantity: 1, uom: 'KG' }]
+      }, { isTrusted: true })).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringMatching(/^Enter Sales Organization, Distribution Channel and Division/)
+      });
+      expect(mockClient.post).not.toHaveBeenCalled();
+    });
+
+    test('sends the typed sales area to SAP and keeps the trust flag out of the HTTP call', async () => {
+      mockClient.post.mockResolvedValue({ data: { d: { OutboundDelivery: '80000059' } } });
+      await adapter.createDeliveryWithoutRef({
+        shippingPoint: '1104',
+        shipToParty: '10135',
+        salesOrg: ' 1000 ',
+        distChannel: '14',
+        division: '00',
+        plant: '1120',
+        storageLocation: 'FG01',
+        items: [{ material: '4000000186', quantity: 1, uom: 'KG' }]
+      }, { isTrusted: true, ifMatch: '*' });
+      const [, sent] = mockClient.post.mock.calls[0];
+      expect(sent.data).toMatchObject({ SalesOrganization: '1000', DistributionChannel: '14', Division: '00' });
+      expect(sent.ifMatch).toBe('*');
+      expect(sent).not.toHaveProperty('isTrusted');
+    });
   });
 
   describe('getDeliveryWithoutRef', () => {

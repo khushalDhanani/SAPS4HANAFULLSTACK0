@@ -92,6 +92,7 @@
                         <Input
                             id="inputNoRefSalesOrg"
                             value="{deliveryNoRefDialog>/salesOrg}"
+                            placeholder="{i18n>dlgSalesAreaFromSapPlaceholder}"
                             width="100%" />
 
                         <Label text="{i18n>dlgDistChannel} / {i18n>dlgDivision}" />
@@ -99,11 +100,13 @@
                             <Input
                                 id="inputNoRefDistChannel"
                                 value="{deliveryNoRefDialog>/distChannel}"
+                                placeholder="{i18n>dlgSalesAreaFromSapPlaceholder}"
                                 width="48%"
                                 class="sapUiTinyMarginEnd" />
                             <Input
                                 id="inputNoRefDivision"
                                 value="{deliveryNoRefDialog>/division}"
+                                placeholder="{i18n>dlgSalesAreaFromSapPlaceholder}"
                                 width="48%" />
                         </HBox>
                     </form:content>

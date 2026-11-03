@@ -128,13 +128,13 @@ class DeliveryNoRefAdapter {
       }
     }
 
-    // Resolve org context from BusinessConfig.
-    // Overrides are accepted ONLY from trusted server-side options, never from request body payload.
-    const isTrusted = options.isTrusted === true || options.trustedContext === true;
-    const trustedOverrides = options.trustedOverrides || (isTrusted ? {
-      salesOrganization:   payload.salesOrg    || undefined,
-      distributionChannel: payload.distChannel || undefined,
-      division:            payload.division    || undefined
+    // Resolve org context: the caller's values when it declares them trusted, otherwise SAP customizing.
+    const { isTrusted: _isTrusted, trustedContext: _trustedContext, trustedOverrides: _trustedOverrides, ...httpOptions } = options;
+    const isTrusted = _isTrusted === true || _trustedContext === true;
+    const trustedOverrides = _trustedOverrides || (isTrusted ? {
+      salesOrganization:   String(payload.salesOrg || '').trim() || undefined,
+      distributionChannel: String(payload.distChannel || '').trim() || undefined,
+      division:            String(payload.division || '').trim() || undefined
     } : undefined);
 
     const cfg = await (this.resolver || businessConfigResolver).resolve({
@@ -144,6 +144,12 @@ class DeliveryNoRefAdapter {
       flow: 'delivery-no-ref',
       fields: ['salesOrganization', 'distributionChannel', 'division'],
       trustedOverrides
+    }).catch((err) => {
+      if (/could not resolve/.test(err.message)) {
+        err.status = 400;
+        err.message = `Enter Sales Organization, Distribution Channel and Division: they could not be read from SAP for plant ${String(payload.plant).trim()}, storage location ${String(payload.storageLocation).trim()}. ${err.message}`;
+      }
+      throw err;
     });
 
     const s4Payload = {
@@ -163,7 +169,7 @@ class DeliveryNoRefAdapter {
 
     try {
       const res = await this.client.post(`${this.servicePath}/C_DelivWthoutRefQuickCreate`, {
-        ...options,
+        ...httpOptions,
         data: s4Payload
       });
 

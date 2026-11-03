@@ -59,9 +59,9 @@ sap.ui.define([
                 deliveryType: "LO2",
                 plant: "1110",
                 storageLocation: "FG01",
-                salesOrg: "1000",
-                distChannel: "10",
-                division: "52",
+                salesOrg: "",
+                distChannel: "",
+                division: "",
                 shipToParty: "10135",
                 plannedGoodsIssueDate: this._getTodayDateString(),
                 busy: false,
@@ -486,9 +486,9 @@ sap.ui.define([
                 oModel.setProperty("/deliveryType", "LO2");
                 oModel.setProperty("/plant", "1110");
                 oModel.setProperty("/storageLocation", "FG01");
-                oModel.setProperty("/salesOrg", "1000");
-                oModel.setProperty("/distChannel", "10");
-                oModel.setProperty("/division", "52");
+                oModel.setProperty("/salesOrg", "");
+                oModel.setProperty("/distChannel", "");
+                oModel.setProperty("/division", "");
                 oModel.setProperty("/shipToParty", "10135");
                 oModel.setProperty("/plannedGoodsIssueDate", this._getTodayDateString());
                 oModel.setProperty("/busy", false);

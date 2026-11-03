@@ -224,6 +224,11 @@ function registerOutboundDeliveryHandlers(srv) {
     if (!isPlantAllowed(data.Plant, plantScope(req.user))) {
       return req.error(403, `Plant ${data.Plant || '(none)'} is outside the authenticated user's plant scope`);
     }
+    // A partly typed sales area could mix with another one read from SAP.
+    const salesArea = [data.SalesOrganization, data.DistributionChannel, data.Division].map((v) => String(v || '').trim());
+    if (salesArea.some(Boolean) && !salesArea.every(Boolean)) {
+      return req.error(400, 'Enter Sales Organization, Distribution Channel and Division together, or leave all three empty.');
+    }
     try {
       const ifMatch = extractIfMatch(req);
       const payload = {
@@ -238,9 +243,10 @@ function registerOutboundDeliveryHandlers(srv) {
         plannedGoodsIssueDate: data.PlannedGoodsIssueDate,
         items: data.Items
       };
+      // The user types the sales area in this dialog; SAP validates it and the plant scope is checked above.
       const result = ifMatch
-        ? await deliveryNoRefAdapter.createDeliveryWithoutRef(payload, { ifMatch })
-        : await deliveryNoRefAdapter.createDeliveryWithoutRef(payload);
+        ? await deliveryNoRefAdapter.createDeliveryWithoutRef(payload, { ifMatch, isTrusted: true })
+        : await deliveryNoRefAdapter.createDeliveryWithoutRef(payload, { isTrusted: true });
       return result;
     } catch (err) {
       LOG.error(`Error in createDeliveryWithoutRef (${err.status || 500}): ${err.message}`);

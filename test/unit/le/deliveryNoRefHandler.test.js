@@ -142,8 +142,24 @@ describe('Unit: OutboundDeliveryService DeliveryWithoutRef Handlers', () => {
         storageLocation: 'FG01',
         plannedGoodsIssueDate: '2026-10-01',
         items: [{ Material: '4000000186', ActualDeliveryQuantity: 1, DeliveryQuantityUnit: 'KG' }]
-      });
+      }, { isTrusted: true });
       expect(req.error).not.toHaveBeenCalled();
+    });
+
+    test('refuses a partly typed sales area before calling SAP', async () => {
+      const req = { data: { Plant: '1110', SalesOrganization: '1000', DistributionChannel: ' ' }, user: clerkOf('1110'), error: jest.fn() };
+      await handlers['createDeliveryWithoutRef'](req);
+      expect(req.error).toHaveBeenCalledWith(400, expect.stringContaining('together'));
+      expect(deliveryNoRefAdapter.createDeliveryWithoutRef).not.toHaveBeenCalled();
+    });
+
+    test('an empty sales area goes on, so SAP customizing can supply it', async () => {
+      deliveryNoRefAdapter.createDeliveryWithoutRef.mockClear();
+      deliveryNoRefAdapter.createDeliveryWithoutRef.mockResolvedValue({ OutboundDelivery: '80000059' });
+      const req = { data: { Plant: '1110', SalesOrganization: '', DistributionChannel: '', Division: '' }, user: clerkOf('1110'), error: jest.fn() };
+      await handlers['createDeliveryWithoutRef'](req);
+      expect(req.error).not.toHaveBeenCalled();
+      expect(deliveryNoRefAdapter.createDeliveryWithoutRef).toHaveBeenCalledTimes(1);
     });
 
     test('handles adapter errors via req.error', async () => {
