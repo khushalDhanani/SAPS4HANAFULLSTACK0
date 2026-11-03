@@ -14,7 +14,6 @@ const CREATE_SCREENS = [
     { name: 'Sales inquiry create', hash: 'sd/sales-inquiries/create', route: 'createSalesInquiry', button: 'btnSaveInquiry' },
     { name: 'Sales order create', hash: 'sd/sales-orders/create', route: 'createSalesOrder', button: 'btnSaveOrder' },
     { name: 'Customer return create', hash: 'sd/returns/create', route: 'createCustomerReturn', button: 'btnFooterCreateInSAP' },
-    { name: 'Reservation entry create', hash: 'wm/reservation-entry/create', route: 'wmReservationEntryCreate', button: 'btnSaveReservation' }
 ];
 
 const FAILING_LISTS = [

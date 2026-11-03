@@ -48,10 +48,7 @@ sap.ui.define([
         "/SoldToPartyVH": { title: "Select Sold-to Party", key: "Customer", desc: "CustomerName" },
         "/CustomerVH": { title: "Select Customer", key: "Customer", desc: "CustomerName" },
         "/ContactPersonVH": { title: "Select Contact Person", key: "ContactPerson", desc: "FullName", descAlt: "LastName", info: "Customer" },
-        "/OrderTypeVH": { title: "Select Order Type", key: "OrderType", desc: "OrderTypeName", info: "OrderCategory" },
-        "/InternalOrderVH": { title: "Select Internal Order", key: "OrderID", desc: "OrderDescription", info: "Plant" },
-        "/CostCenterVH": { title: "Select Cost Center", key: "CostCenter", desc: "CostCenterName", info: "CompanyCode" },
-        "/BatchVH": { title: "Select Batch", key: "Batch", desc: "Batch", info: "StorageLocation" }
+        "/OrderTypeVH": { title: "Select Order Type", key: "OrderType", desc: "OrderTypeName", info: "OrderCategory" }
     };
 
 
@@ -321,7 +318,6 @@ sap.ui.define([
 
             if (oModel) {
                 oSelectDialog.setModel(oModel);
-                oSelectDialog.setModel(oModel, "reservationEntry");
                 oSelectDialog.setModel(oModel, "salesInquiry");
                 oSelectDialog.setModel(oModel, "salesOrder");
             }
@@ -346,8 +342,6 @@ sap.ui.define([
                     oTemplateConfig.info = "{= ${FaxNumber} ? ${FaxNumber} : '' }";
                 } else if (sCleanPath === "/OrderTypeVH") {
                     oTemplateConfig.info = "{= ${OrderCategory} ? 'Cat ' + ${OrderCategory} : '' }";
-                } else if (sCleanPath === "/InternalOrderVH") {
-                    oTemplateConfig.info = "{= ${Plant} ? 'Plant ' + ${Plant} : '' }";
                 } else {
                     oTemplateConfig.info = "{" + oConf.info + "}";
                 }

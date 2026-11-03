@@ -18,7 +18,7 @@ on:
         type: boolean
         default: false
       run_browser_e2e:
-        description: 'Run the 23-suite Playwright browser E2E (test/e2e/runAllE2E.js) against a CAP server bound to the dev sandbox: SAP reads only, every write guarded or mocked'
+        description: 'Run the 22-suite Playwright browser E2E (test/e2e/runAllE2E.js) against a CAP server bound to the dev sandbox: SAP reads only, every write guarded or mocked'
         required: false
         type: boolean
         default: false
@@ -193,7 +193,7 @@ jobs:
           if-no-files-found: warn
 
   browser-e2e:
-    name: Browser E2E, 23 suites (Separately Controlled)
+    name: Browser E2E, 22 suites (Separately Controlled)
     needs: ci
     if: ${{ github.event.inputs.run_browser_e2e == 'true' }}
     runs-on: ${{ github.event.inputs.e2e_runner || 'ubuntu-latest' }}

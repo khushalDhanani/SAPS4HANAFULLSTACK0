@@ -322,7 +322,7 @@ async function reloadWhilePending(baseUrl, flow) {
         if (flow.before) await flow.before(session);
         let runError = null;
         const running = Promise.resolve(flow.run(session, baseUrl)).catch((e) => { runError = e; }); // outcome is irrelevant once the page is reloaded; kept for the message below
-        const end = Date.now() + 90000; // some screens read for a long time before the write click (reservation retry ~25 s)
+        const end = Date.now() + 90000; // some screens read for a long time before the write click
         while (calls.length < 1 && Date.now() < end) await session.page.waitForTimeout(200);
         if (calls.length !== 1) throw new Error(`expected the write to be sent once before the reload, got ${calls.length}${runError ? ` (driver: ${runError.message.split('\n')[0]})` : ''}`);
         await session.page.reload({ waitUntil: 'domcontentloaded' });
@@ -412,7 +412,7 @@ if (require.main === module) {
 
 // Kit flows share the kit's module-level failure mode, so they stay together and serial; the others run in their own shard
 const SHARDS = [
-    { name: 'Action failures: invoice, orders due, goods receipt, packing, retry, quarantine (mocked)', only: '^(Customer invoice|Orders due|Goods receipt|Packing instruction|Reservation entry|Quarantine labels)' },
+    { name: 'Action failures: invoice, orders due, goods receipt, packing, quarantine (mocked)', only: '^(Customer invoice|Orders due|Goods receipt|Packing instruction|Quarantine labels)' },
     { name: 'Action failures: handling unit, 261, scan-to (mocked)', only: '^(Handling unit|Movement 261|Scan-to)' }
 ];
 

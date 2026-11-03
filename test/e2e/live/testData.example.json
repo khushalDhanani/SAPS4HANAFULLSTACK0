@@ -55,15 +55,6 @@
     "deliveryDocument": "NOT PROVIDED",
     "quantity": "NOT PROVIDED"
   },
-  "goodsIssue": {
-    "plant": "NOT PROVIDED",
-    "storageLocation": "NOT PROVIDED",
-    "warehouseNumber": "NOT PROVIDED",
-    "material": "NOT PROVIDED",
-    "quantity": "NOT PROVIDED",
-    "unit": "NOT PROVIDED",
-    "costCenter": "NOT PROVIDED"
-  },
   "huTransfer": {
     "reservationNo": "NOT PROVIDED",
     "reservationItem": "NOT PROVIDED",
@@ -160,9 +151,5 @@
     "material": "NOT PROVIDED",
     "quantity": "NOT PROVIDED",
     "unit": "NOT PROVIDED"
-  },
-  "reservationRetry": {
-    "reservationNo": "NOT PROVIDED",
-    "reservationItem": "NOT PROVIDED"
   }
 }

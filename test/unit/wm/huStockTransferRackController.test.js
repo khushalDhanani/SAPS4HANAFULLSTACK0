@@ -103,22 +103,13 @@ describe("HU stock transfer bin selector", () => {
             NonRackBins: [{ StorageBin: "TRANSFER", StorageType: "921", IsRackBin: false }]
         };
         MockODataClient.get.mockResolvedValueOnce({ value: layoutResult });
-        const oNavSpy = jest.fn();
-        controller.getRouter = jest.fn(() => ({ navTo: oNavSpy }));
-
         await controller.loadBins("527868", "1");
 
         expect(controller.model.getProperty("/isHuManaged")).toBe(false);
         expect(controller.model.getProperty("/storageLocation")).toBe("HS01");
         expect(rackView).toContain('id="stripBlankXhupf"');
         expect(rackView).toContain('{i18n>rackBlankXhupfBannerText}');
-        expect(rackView).toContain('press=".onRouteToStandard311"');
-
-        controller.onRouteToStandard311();
-        expect(oNavSpy).toHaveBeenCalledWith("wmReservationEntryDetail", {
-            ReservationNo: "527868",
-            ReservationItem: "1"
-        });
+        expect(rackView).not.toContain("onRouteToStandard311");
     });
 
     test("shows an unmaintained section without a color and wraps section color slots after 24", async () => {

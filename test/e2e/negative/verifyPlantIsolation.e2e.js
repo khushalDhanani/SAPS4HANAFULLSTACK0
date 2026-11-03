@@ -74,18 +74,11 @@ async function verifyPlantIsolation(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
     console.log(`\n=== Plant isolation as test-viewer-1120 (Viewer, Plant ${OWN_PLANT}) — READ-ONLY, write guard on ===`);
 
-    const res = await adminRead(baseUrl, `/odata/v4/reservation-entry/ReservationEntries?$top=1&$select=ReservationNo,ReservationItem,Plant&$filter=Plant ne '${OWN_PLANT}'`);
-    const foreignRes = res && res.value && res.value[0];
     const open261 = await adminRead(baseUrl, '/odata/v4/mvt261/openItems()');
     const foreign261 = open261 && (open261.Items || []).find((i) => i.Plant && i.Plant !== OWN_PLANT);
 
     const cases = [
-        { name: 'Reservation entry list shows only own plant', run: (s) => scopedList(s, 'wm/reservation-entry') },
         { name: 'HU stock transfer list shows only own plant', run: (s) => scopedList(s, 'wm/hu-stock-transfer') },
-        foreignRes
-            ? { name: `Foreign reservation ${foreignRes.ReservationNo}/${foreignRes.ReservationItem} (plant ${foreignRes.Plant}) is refused`,
-                run: (s) => foreignDeepLink(s, `wm/reservation-entry/${foreignRes.ReservationNo}/${foreignRes.ReservationItem}`, foreignRes.Plant, 'foreign reservation') }
-            : { name: 'Foreign reservation deep link', skip: 'no reservation outside plant 1120 found' },
         foreign261
             ? { name: `Foreign 261 item ${foreign261.Reservation}/${foreign261.ReservationItem} (plant ${foreign261.Plant}) is refused`,
                 run: (s) => foreignDeepLink(s, `wm/mvt261/open/${foreign261.Reservation}/${foreign261.ReservationItem}`, foreign261.Plant, 'foreign 261 item') }

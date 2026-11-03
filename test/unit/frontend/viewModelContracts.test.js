@@ -35,7 +35,7 @@ describe('UI view/model contracts', () => {
         .map(([fq, d]) => ({ fq, elements: Object.keys(d.elements || {}) }));
 
     // The config is keyed by entity-set path only and shared by several services, so each entry must match at least
-    // one service entity of that name (e.g. /InternalOrderVH is shaped for ReservationEntryService, not PurchaseOrderService).
+    // one service entity of that name.
     it('every value-help dialog config matches a service entity with its key and desc fields', () => {
         const src = fs.readFileSync(path.join(WEBAPP, 'service/ValueHelpService.js'), 'utf8');
         const configs = [...src.matchAll(/"\/(\w+)": \{[^}]*?key: "(\w+)", desc: "(\w+)"(?:, descAlt: "(\w+)")?/g)];
