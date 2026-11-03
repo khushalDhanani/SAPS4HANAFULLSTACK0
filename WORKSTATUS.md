@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Database removal Phase 1 and test cleanup merged (2026-11-03 16:09 IST) — local `feature01`, not pushed:** The work from `chore/remove-application-db`, `chore/remove-local-db-files` and `chore/test-audit-cleanup` is on `feature01`. `db/` and the posting-attempt guard stay until the SAP table replaces them. See the entry below.
+
 - **Test audit cleanup (2026-11-03 16:07 IST) — PASS for the cleanup, committed locally on `chore/test-audit-cleanup`, not pushed:** 20 false tests deleted and 4 weak tests fixed, with no production code changed. Jest passed; SAP-free E2E 3 of 3. `test/screenshots/` was removed afterwards at the user's request. See the entries below.
 
 - **SAP target confirmed, deploy tool ready (2026-11-03 15:55 IST) — BLOCKED on the transport request and written go:** Target is the connected client, system `DS4`. The connected user has no open request or task, so one is needed first. `tools/adt-create-post-attempt.js` is built and tested offline, and has never run against SAP.
@@ -1465,3 +1467,13 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **TESTED:** reference search outside history found no use of the folder or any file name. `npx jest` on the two tests above: 2 suites, 17 tests PASS. `node tools/scan-secrets.js` exit 0. `git diff --check` clean. Full suites not rerun, because only unreferenced image files were removed.
 - **ASSUMPTIONS:** none.
 - **FINAL STATUS:** PASS.
+
+### 2026-11-03 16:09 IST — Merged the database removal and test cleanup into local `feature01`: PASS for the merge
+
+- **Request:** The user asked to merge the current branch. `feature01` was the proposed target and the branch this work started from (INFERRED that it is the target).
+- **CHANGED:** fast-forward of local `feature01` from `0e885ba7` to `1211748b` (17 commits), plus this log entry. No merge commit and no conflicts. Not pushed. The 3 source branches were kept.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT: the runs recorded in the entries above. A fast-forward leaves the tree identical to the tested branch.
+- **TESTED:** `git diff --stat 1211748b HEAD` before this log entry showed no difference. `git diff --check` clean.
+- **Remote:** `origin/feature01` is at `c74f0b52`, so local `feature01` is ahead and nothing here is on the remote.
+- **ASSUMPTIONS:** `feature01` is the intended target (INFERRED).
+- **FINAL STATUS:** PASS for the merge. Complete database removal stays BLOCKED on the SAP posting-attempt table.
