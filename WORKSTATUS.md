@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Database removal inventory (2026-11-03 14:37 IST) — BLOCKED on the user's OK and answers:** Nothing deleted. `AllowSAPtool` does not exist in this repository, and `ALLOW_LIVE_SAP_TOOLS` only gates tools, so there is no DB-or-SAP switch to remove. Posting-attempt protection cannot work on SAP reads alone with 2 production instances. See the entry of 14:37 IST below.
+
 - **SAP-only / application database removal (2026-11-03 14:02 IST) — BLOCKED:** User selected ZAMM and will provide the development target and transport request. Live metadata confirms ZAMM exists and the currently connected client has role Test; it is not implicitly the approved development target. Required persistence contracts remain UNKNOWN. See docs/decisions/sap-only-persistence-migration.md. No runtime/database changes or SAP writes made.
 
 - **Theme switcher in the header (2026-11-03 14:00 IST) — PASS, committed locally (`39cd7044`), not pushed:** A palette button in the `ShellBar` offers Morning Horizon, Evening Horizon, Quartz Light and Quartz Dark. The choice is saved under `app.theme`, and UI5 boots with it, so the default theme CSS is never requested. In the browser it applied without a reload, survived a refresh and a new tab, and invalid or missing values fell back to `sap_horizon`. See the Change Entry below.
@@ -67,6 +69,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **ZQUAR 4x6 Quarantine Label Production Format & Movement 261 BusinessConfig (2026-10-31 IST) — BASELINE CONFIRMED:** Full ZQUAR 4x6 label layout (vertical left strip, official Aether SVG corporate vector logo, colon alignment on uniform vertical axis, centered barcode, 14 field rows) and Plant 1120 / Warehouse W01 BusinessConfig bootstrap operational. Detailed implementation history, measurements, and evidence archived in [`WORKSTATUS-archive-2026-10-31.md`](docs/archive/WORKSTATUS-archive-2026-10-31.md).
 
 ## Next Steps
+
+- Database removal (2026-11-03): the user approves the delete list and answers the questions on posting attempts, sales defaults and local data. Deletion starts only after that, on branch `chore/remove-application-db`.
 
 - SAP-only migration: await the development target and workbench transport request the user will provide; ZAMM is selected. Then establish verified replacement contracts for durable posting claims, tracking and settings as specified in docs/decisions/sap-only-persistence-migration.md. Preserve existing data until migration and retention are settled.
 
@@ -1340,3 +1344,21 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **REGRESSION:** No runtime changes; full application regression/build/E2E not applicable to this documentation decision.
 - **Next action:** User supplies development target and transport request; then verify target/contracts before preparing dependent implementation.
 - **FINAL STATUS:** BLOCKED for implementation/database removal. ZAMM selection is confirmed.
+
+### 2026-11-03 14:37 IST — Database removal inventory (steps 1-3 of the user's request): BLOCKED on the user's OK
+
+- **Request:** Remove the SQL database completely with SAP as the only data source; list what will be deleted and wait for the OK before deleting.
+- **CHANGED:** WORKSTATUS.md only, on new branch `chore/remove-application-db`. No code, database, dependency or deployment file changed or deleted.
+- **CONFIRMED, the switch:** `AllowSAPtool` has zero matches in the repository. `ALLOW_LIVE_SAP_TOOLS` gates `tools/` scripts only (`tools/live-sap-gate.js`, `tools/live_sap_gate.py`); no runtime code reads it. There is no DB-or-SAP branch to remove. The runtime branches on whether `cds.db` exists. Using the flag as the user's meaning is INFERRED.
+- **CONFIRMED, no-database boot probe:** with the test profile, no SAP variables and `requires.db=false`, the CAP server boots and `/health`, `goods-issue/$metadata` and `tr-to/$metadata` return 200. `reservation-track/ReservationTracks` and `ReservationStatuses` return 500 `NO_DATABASE_CONNECTION`. `business-config/BusinessConfigs` returns 404 because `srv/service.cds` does not include that service, so `BusinessConfig` has no served maintenance API.
+- **CONFIRMED, posting attempts:** `GoodsIssuePostingAttempt` guards movement 261 (`srv/wm/mvt261/service.js:98,114`), goods receipt (`srv/wm/goods-receipt/handlers/goodsReceipt.handler.js:48`), HU transfer (`srv/wm/hu-stock-transfer/handlers/huStockTransfer.handler.js:120`) and goods issue (`srv/wm/goods-issue/handlers/goodsIssuePerType.handler.js:538`). The memory fallback (`GoodsIssueAttemptStore.js:113`) is per process and `mta/extensions/prod/prod.mtaext:9` sets 2 instances. A SAP read is not an atomic claim, and the store waits 15 minutes before treating a missing document as not posted (`GoodsIssueAttemptStore.js:58`).
+- **CONFIRMED, tracking:** no UI code calls `/odata/v4/tr-to` or `/odata/v4/reservation-track`. `TrToAdapter` and `ReservationProcessAdapter` are used only by the `tr-to` service. Without tracking, `checkMigoIdempotency` still reads MATDOC, but a further partial issue on an item with an earlier document returns 409 (`ReservationProcessAdapter.js`, `knownWithdrawn === null`), and `getTRByReservation` loses its lookup for movement 311 (`TrToAdapter.js:582`).
+- **VERIFIED (READ-ONLY, RFC_READ_TABLE only, via `tools/lib/readOnlyRfcGuard.js`):** plant 1120 currency INR (T001K, T001) and shipping points WAVG, 1112 (TVSTZ) match the local `BusinessConfig` row. T320 confirms W01 for plant 1120. T001L has sales area data on 9 of 72 storage locations with two combinations, 1000/14/00 and 1000/10/52, so a plant-only call cannot derive one. No SAP write ran.
+- **UNKNOWN:** the production database contents, whether production is deployed, and any outside callers of `tr-to`. Local rows (read only): BusinessConfig 1, attempts 6 with none open, ReservationTrack 30, ReservationLog 98, ReservationStatus 10.
+- **TEST DECISION:** TEST NOT POSSIBLE for this entry; no code changed, and the tests follow the approved deletion. Unit, build, lint and E2E suites were not run.
+- **TESTED:** the two probes above only. `git diff --check` is run before the commit.
+- **NOT VERIFIED:** full suites without a database, every SAP flow without a database, deployment.
+- **ASSUMPTIONS:** `ALLOW_LIVE_SAP_TOOLS` is what the user meant by `AllowSAPtool` (INFERRED).
+- **REGRESSION:** no runtime change.
+- **Next action:** the user approves the delete list and answers the open questions.
+- **FINAL STATUS:** BLOCKED, waiting for the user's OK. Nothing deleted.
