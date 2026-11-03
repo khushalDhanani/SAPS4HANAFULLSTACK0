@@ -33,17 +33,6 @@ async function getJson(baseUrl, path) {
     return body && body.value !== undefined ? body.value : body;
 }
 
-/**
- * POST to an action that only reads SAP (e.g. verifyMaterialDocument: MATDOC/MSEG reads,
- * srv/integration/s4hana/wm/ReservationProcessAdapter.js:1100-1160). Live read-back only, from Node, outside the browser.
- */
-async function postReadOnlyAction(baseUrl, path, body) {
-    // Runs outside the browser write guard, so only the read-only verify* actions are accepted here.
-    if (!/\/verify(MaterialDocument|Stock|Reservation)$/.test(path)) throw new Error(`postReadOnlyAction refuses non-read-only action ${path}`);
-    const res = await fetch(`${baseUrl}${path}`, { method: 'POST', headers: { ...AUTH, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    return { status: res.status, body: await res.json().catch(() => null) };
-}
-
 const open = openHash;
 
 /** A named JSON model of the view that owns the control with the given local id (copy of its data). */
@@ -199,6 +188,6 @@ function main(fn) {
 }
 
 module.exports = {
-    setFailure, capWaits, setDelay, setGate, AUTH, waitForHealth, getJson, postReadOnlyAction, open, viewModel, currentHash, stubAction, recordPosts,
+    setFailure, capWaits, setDelay, setGate, AUTH, waitForHealth, getJson, open, viewModel, currentHash, stubAction, recordPosts,
     waitForToast, messageBoxButton, messageBoxText, sessionErrors, expectCalls, runSuite, main
 };
