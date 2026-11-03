@@ -97,6 +97,20 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-03 — Orders Due scroll error fixed: PASS for this screen
+
+- **Status:** PASS for the screen error. The branch stays PARTIAL overall for the reasons in the `tr-to` entry below.
+- **Why:** Scrolling before a plant was set raised an uncaught error from the suspended table, which made the LE browser suite fail intermittently.
+- **Changes:** `OrdersDueForDelivery.view.xml` starts with `growingScrollToLoad="false"`; `OrdersDueForDelivery.controller.js` turns it on after `resume()`. `verifyLeScreens.e2e.js` scrolls before a plant is set and checks scrolling loads more rows afterwards. `ordersDueForDeliveryController.test.js` and `docs/e2e-coverage-matrix.md` updated.
+- **Test decision:** TEST ADDED and TEST UPDATED.
+- **Executed validation:**
+  - The new browser step failed before the fix with the same page error, then passed 5 of 5 after it.
+  - On `af656790`: clean `npm run build`, `npx cds build --production` to a scratch folder, UI5 lint, `npx eslint --max-warnings 0 .`, `node tools/scan-secrets.js`, `npm run validate:mta`, `git diff --check`: clean.
+  - `npx jest --silent --runInBand`: 224 suites passed, 1 skipped; 4,127 tests passed, 59 skipped.
+  - `npm run test:e2e:sap-free`: 3 of 3 passed.
+  - `TARGET_URL=http://localhost:4010 npm run test:e2e`: Total 17, Passed 17, Failed 0 (SAP read-only; writes guarded or mocked).
+- **Next action:** The user reviews `fix/tr-to-lookup-readonly` and decides about merging.
+
 ### 2026-11-03 — Orders Due intermittent E2E failure diagnosed: root cause found, not fixed
 
 - **Status:** Diagnosis only. No code changed. No SAP write was made.
