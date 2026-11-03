@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **`tr-to` security fix and limited cleanup (2026-11-03) — PARTIAL, on local branch `fix/tr-to-lookup-readonly`, not pushed:** `lookupTR` no longer writes to SAP, read operations enforce plant scope, and 6 unreachable handler names and `getAvailableSUs` are removed. Backend `tr-to` stays deployed. See the Change Entry below.
+
 - **Scan To screen removed (2026-11-03) — PARTIAL, on local branch `feature/remove-scan-to`, not pushed:** The UI at `#/wm/scan-to` is gone; old URLs show the dashboard. This was the last screen for Transfer Order create and confirm and the follow-up goods movement. Backend and database are unchanged. See the Change Entry below.
 
 - **Reservation Entry screen removed (2026-11-03) — PARTIAL, on local branch `feature/remove-reservation-entry`, not pushed:** The UI at `#/wm/reservation-entry` is gone, and the three old URLs now show the dashboard with no console errors. Backend, API and database are unchanged. The five `verifyMvt*` browser suites and the other reservation-entry tests were then deleted at the user's request, and the backend service `/odata/v4/reservation-entry` was removed as well. `tr-to` can still post reservations through `executeReservationWarehouseFlow`. See the four Change Entries of 2026-11-03 below for what was run and what was not.
@@ -60,6 +62,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- `tr-to` (2026-11-03): review `fix/tr-to-lookup-readonly` and decide about merging. Check outside callers of `/odata/v4/tr-to` with API owners. Decide about `createTO`, `_createTO`, `checkSU`, `tools/test-rfc-trto.js` and the `scan-to` flow entry. `getAvailableSerials` is still not limited by plant in its SAP read.
+
 - Scan To removal (2026-11-03): review `feature/remove-scan-to` and decide whether to merge it. `/odata/v4/tr-to` now has no screen calling it but stays deployed and can post to SAP. Decide about it separately, and check for outside callers first.
 
 - Reservation Entry removal (2026-11-03): review `feature/remove-reservation-entry` and decide whether to merge it. Before merging, check for outside callers of `/odata/v4/reservation-entry`. Any production drop of the `ReservationCreateAttempt` table needs a data export and a written go. This screen was the only UI for creating a reservation entry or retrying a failed reservation step.
@@ -92,6 +96,29 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-03 — `tr-to` lookupTR read-only, plant scope, limited removal: PARTIAL
+
+- **Status:** PARTIAL. Tested with SAP writes mocked or guarded. Outside callers are not verified, and the fix was not proven against a real status-E TR in SAP.
+- **Why:** Audit finding 5: a Viewer could trigger `Z_WM_TR_CREATE` through `lookupTR`. The user approved option (b) and a limited removal.
+- **Branch:** `fix/tr-to-lookup-readonly`, from `feature/remove-scan-to`. Not pushed.
+- **Changes:**
+  - `TrToAdapter.lookupTR`: returns `RecoveryRequired: true` and `RecoveryMessage` instead of recovering. `createTOFromTR` keeps the recovery. `service.cds`: 2 new `TRDetail` fields.
+  - `trTo.handler.js`: `lookupTR`, `getTR` and `verifyReservation` answer 404 for a document outside the user's plants. `getOpenTRs` and `getFifoBatches` refuse an out-of-scope warehouse with 403. `getFifoBatches`, `getAvailableSerials`, `verifyMaterialDocument` and `verifyStock` require a plant of the user's own for non-Admins.
+  - `TrToAdapter.assertWarehouseInScope`: new.
+  - Removed: 6 handler registrations with no service definition; `getAvailableSUs` and its 3 tests.
+  - `test/unit/wm/trToLookupReadOnly.test.js`: new; `trToHandler.test.js`, `trToAdapter.test.js`, `test/support/trToHandlerAsAdmin.js` updated.
+- **Test decision:** TEST ADDED and TEST UPDATED.
+- **Executed validation:**
+  - Read-only tests against the old adapter: 2 of 4 failed, so they catch the old write.
+  - `npx jest --silent --runInBand`: 224 suites passed, 1 skipped; 4,127 tests passed, 59 skipped.
+  - `npm run build` in `app/fiori-app`, `npx cds build --production` to a scratch folder, `npx eslint --max-warnings 0 .`, `node tools/scan-secrets.js`, `npm run validate:mta`, `git diff --check`: clean.
+  - `npm run test:e2e:sap-free`: 3 of 3 passed.
+  - `TARGET_URL=http://localhost:4010 npm run test:e2e` on `2e6cda74`: Total 17, Passed 17, Failed 0 (SAP read-only; writes guarded or mocked).
+- **Finding:** `OutboundDeliveryAdapter.js:120` passes `fields`, not `flow`, so nothing in `srv` passes `scan-to`. The entry was kept, as instructed.
+- **Known limit:** `getAvailableSerials` reads `EQUI` by material only, so a plant check limits who may ask, not which serials return. `verifyStock` checks the plant named in the request; it was not proven to compare that plant with the document.
+- **Not run:** `npm run test:e2e:sap`, including the HU and goods receipt round trips.
+- **Next action:** The user reviews the branch and decides about merging.
 
 ### 2026-11-03 — Scan To screen removed: PARTIAL
 
