@@ -89,6 +89,12 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-03 — Backend removal confirmed
+
+- **Status:** Decision recorded. No code changed and no test was run.
+- **Decision:** The user confirmed that the earlier backend removal stays on `feature/remove-reservation-entry`. This resolves the conflict recorded in the leftover sweep entry.
+- **Still open:** outside API callers, the production `ReservationCreateAttempt` table, the full 17-suite browser run, and the merge decision.
+
 ### 2026-11-03 10:40 IST — Reservation Entry leftover sweep: PARTIAL
 
 - **Status:** PARTIAL. No SAP call was made in this step. The full 17-suite browser run was not run.
