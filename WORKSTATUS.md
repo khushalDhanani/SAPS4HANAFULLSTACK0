@@ -15,7 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Test audit cleanup (2026-11-03 16:07 IST) — PASS for the cleanup, committed locally on `chore/test-audit-cleanup`, not pushed:** 20 false tests deleted and 4 weak tests fixed, with no production code changed. Jest passed; SAP-free E2E 3 of 3. `test/screenshots/` is untouched, waiting on the user. See the entry below.
+- **Test audit cleanup (2026-11-03 16:07 IST) — PASS for the cleanup, committed locally on `chore/test-audit-cleanup`, not pushed:** 20 false tests deleted and 4 weak tests fixed, with no production code changed. Jest passed; SAP-free E2E 3 of 3. `test/screenshots/` was removed afterwards at the user's request. See the entries below.
 
 - **SAP target confirmed, deploy tool ready (2026-11-03 15:55 IST) — BLOCKED on the transport request and written go:** Target is the connected client, system `DS4`. The connected user has no open request or task, so one is needed first. `tools/adt-create-post-attempt.js` is built and tested offline, and has never run against SAP.
 
@@ -1454,5 +1454,14 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **NOT VERIFIED:** whether the remaining tests check the right behaviour; mutation testing was not run. 35 mock-only files do not prove SAP behaviour. 56 live SAP tests stay skipped by default.
 - **ASSUMPTIONS:** none.
 - **REGRESSION:** no production code changed; suites as above.
-- **Next action:** the user decides on `test/screenshots/` and whether to merge this branch.
+- **Next action:** the user decides whether to merge this branch.
 - **FINAL STATUS:** PASS for the approved cleanup.
+
+### 2026-11-03 16:08 IST — Unused test screenshots removed: PASS
+
+- **Request:** The user approved deleting `test/screenshots/` after the test audit.
+- **CHANGED:** removed `test/screenshots/` (7 PNGs, 1.7 MB) with `git rm`, so they stay recoverable from history. No code changed.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT: `test/unit/tools/e2eRunner.test.js` and `test/unit/tools/e2eCoverageMatrix.test.js`; nothing referenced these files.
+- **TESTED:** reference search outside history found no use of the folder or any file name. `npx jest` on the two tests above: 2 suites, 17 tests PASS. `node tools/scan-secrets.js` exit 0. `git diff --check` clean. Full suites not rerun, because only unreferenced image files were removed.
+- **ASSUMPTIONS:** none.
+- **FINAL STATUS:** PASS.
