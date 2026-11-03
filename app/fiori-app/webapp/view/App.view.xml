@@ -6,7 +6,7 @@
     xmlns:core="sap.ui.core"
     xmlns:tnt="sap.tnt"
     class="sapUiSizeCompact">
-    <tnt:ToolPage id="appToolPage" class="appRootContainer">
+    <tnt:ToolPage id="appToolPage" sideExpanded="false" class="appRootContainer">
         <tnt:header>
             <core:Fragment fragmentName="saps4hana.fiori.fragment.CommonHeader" type="XML" />
         </tnt:header>

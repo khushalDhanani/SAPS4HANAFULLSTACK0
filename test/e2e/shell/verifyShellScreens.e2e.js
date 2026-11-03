@@ -75,6 +75,11 @@ async function verifySidebar(baseUrl) {
         await openHash(session, 'dashboard');
         step(errors, details, 'Dashboard opens on Overview', await expectSection('dashboard', 'overview'));
 
+        const sideWidth = () => page.evaluate(() => document.querySelector('.sapTntToolPageAside').getBoundingClientRect().width);
+        const closedWidth = await sideWidth();
+        step(errors, details, 'The sidebar starts closed, as an icon strip', closedWidth > 0 && closedWidth < 100 ? [] : [`sidebar width ${closedWidth}px`]);
+
+        // Everything below also runs on the closed sidebar's icons, so the closed state stays usable
         const loaded = metricsCalls;
         for (const key of ['mm', 'sd', 'ewm']) {
             await click(ITEM[key]);
@@ -103,6 +108,15 @@ async function verifySidebar(baseUrl) {
 
         await openHash(session, 'dashboard/bogus');
         step(errors, details, 'An unknown section shows the Overview', await expectSection('dashboard/bogus', 'overview'));
+
+        await page.click('.sapFShellBar button[title="Menu"]');
+        await page.waitForTimeout(500); // the sidebar slides open
+        const openWidth = await sideWidth();
+        await click(ITEM.mm);
+        const stillOpen = await sideWidth();
+        const toggle = openWidth > 100 ? [] : [`menu button left the sidebar at ${openWidth}px`];
+        if (stillOpen !== openWidth) toggle.push(`sidebar width changed from ${openWidth}px to ${stillOpen}px after a selection`);
+        step(errors, details, 'Desktop: the menu button opens the sidebar and a selection keeps it open', toggle);
 
         const blockedOrFailed = session.consoleErrors.concat(session.networkErrors.map((e) => `HTTP ${e.status} ${e.url}`), session.blocked.map((b) => `write guard blocked ${b.reason}`));
         step(errors, details, 'No console error, failed request or blocked write', blockedOrFailed);
