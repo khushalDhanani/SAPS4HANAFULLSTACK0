@@ -54,7 +54,13 @@ The user chose a Z table in ZAMM for double-post protection, over memory plus SA
 
 **Not verified:** that the source activates, including source-based table creation through ADT (no precedent in this repository); `IS SUPPLIED` over RFC from node-rfc; atomicity under parallel sessions; the S_RFC role.
 
-**Pending from the user:** target system, transport request, and a written go for each write below.
+**Target (2026-11-03 15:55 IST):** the user confirmed the connected client. It is system `DS4` (from recent request numbers and the `SRCSYSTEM` of objects this app created).
+
+**READ-ONLY readiness checks, same date:** the connected user has no open request or task in E070, so the request must be created or a task added for that user first. TADIR records ZAMM's original system as `MSD`, not `DS4`, with transport layer `ZDS4`; whether new objects can go on a request from `DS4` is **Not verified**. TRNSPACE shows the customer namespace is changeable. The names are still free.
+
+**Deploy tool:** `tools/adt-create-post-attempt.js` creates and activates the objects. It is create-only, and `--print-only` makes no SAP call.
+
+**Pending from the user:** the transport request, and a written go for each write below.
 
 ### Live proof, each step a separate SAP WRITE
 

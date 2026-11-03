@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **SAP target confirmed, deploy tool ready (2026-11-03 15:55 IST) — BLOCKED on the transport request and written go:** Target is the connected client, system `DS4`. The connected user has no open request or task, so one is needed first. `tools/adt-create-post-attempt.js` is built and tested offline, and has never run against SAP.
+
 - **Local database files and references (branch `chore/remove-local-db-files`, 2026-11-03 15:52 IST) — PARTIAL, committed locally, not pushed:** No `.sql` file, seed folder or backup folder remains in the repo; copies are in `~/Desktop/sql-backup/`. By the user's choice, `db/`, `db.sqlite`, the database dependencies and the HANA resources stay until the SAP posting-attempt table replaces them, so references to them remain. Jest passed; browser E2E 17 of 17 and SAP-free 3 of 3; SAP round-trip dry run still has the HU transfer failure that predates this work. SAP document counts for the app's user were 0 before and after the runs. See the entry below.
 
 - **Database removal Phase 1 (2026-11-03 15:32 IST) — PARTIAL, committed locally on `chore/remove-application-db`, not pushed:** Reservation tracking and BusinessConfig are removed, and Create Delivery Without Reference now uses the typed sales area, otherwise T001L. `GoodsIssuePostingAttempt`, its database config and the HANA resources stay until the SAP table is live and proven, so the database is not gone yet. Jest passed; browser E2E 17 of 17 and SAP-free 3 of 3; SAP round-trip dry run has one failure, HU transfer, which fails the same way on the commit before this work. Movement 261 blocked-bin rules and HU storage types have no source. See the entry of 15:32 IST below.
@@ -76,7 +78,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- Database removal (2026-11-03): Phase 1 is done. Still needed: the target system, the transport request and a written go for the live proof in docs/decisions/sap-only-persistence-migration.md (Phase 2), then the store swap and final removal (Phase 3). The user also decides where movement 261 blocked-bin rules and HU storage types should live. Check production BusinessConfig values before any deployment.
+- Database removal (2026-11-03): Phase 1 is done and the target is the connected client. Still needed: a transport request owned by, or with a task for, the connected user, and a written go for the live proof in docs/decisions/sap-only-persistence-migration.md (Phase 2), then the store swap and final removal (Phase 3). The user also decides where movement 261 blocked-bin rules and HU storage types should live. Check production BusinessConfig values before any deployment.
 
 - SAP-only migration: await the development target and workbench transport request the user will provide; ZAMM is selected. Then establish verified replacement contracts for durable posting claims, tracking and settings as specified in docs/decisions/sap-only-persistence-migration.md. Preserve existing data until migration and retention are settled.
 
@@ -1422,3 +1424,17 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **REGRESSION:** none found; same results as Phase 1.
 - **Next action:** the user supplies the SAP target and transport request, and decides where HU storage types and blocked-bin rules live.
 - **FINAL STATUS:** PARTIAL. Complete database removal stays BLOCKED on the SAP posting-attempt table.
+
+### 2026-11-03 15:55 IST — SAP target confirmed and deploy tool prepared: BLOCKED on the transport request and written go
+
+- **Request:** The user confirmed the connected client as the target for `ZWM_POST_ATTEMPT`.
+- **CHANGED:** added `tools/adt-create-post-attempt.js` and `test/unit/tools/adtCreatePostAttempt.test.js`; updated `docs/decisions/sap-only-persistence-migration.md` and WORKSTATUS.md. No SAP write ran.
+- **VERIFIED (READ-ONLY, RFC_READ_TABLE only, via `tools/lib/readOnlyRfcGuard.js`):** the connected user has 0 open requests or tasks in E070. Requests since 2026-10-01 and object ZMM_QUAR_LABEL show system `DS4`. TDEVC: ZAMM, transport layer `ZDS4`. TADIR: ZAMM `SRCSYSTEM` is `MSD`. TRNSPACE `/0CUST/` EDITFLAG `X`. TADIR and TFDIR have no objects with the proposed names. TCETRAL was not readable through RFC_READ_TABLE, so the transport route is not read.
+- **TEST DECISION:** TEST ADDED: `test/unit/tools/adtCreatePostAttempt.test.js`, offline only.
+- **TESTED:** `npx jest` on `adtCreatePostAttempt`, `postAttemptAbapSource`, `adtCreateQuarLabel` and `liveSapToolGate`: 4 suites, 30 tests PASS. `npx eslint --max-warnings 0` on the new files: clean. A `--print-only` run with a sample request number made no SAP call. Full Jest and E2E not rerun, because no runtime code changed.
+- **NOT VERIFIED:** whether `DS4` can take new ZAMM objects given `SRCSYSTEM` `MSD`; the table create payload; activation of any source; everything in the live proof.
+- **BLOCKED:** the user creates a workbench request owned by the connected user, or adds a task for that user, then gives a written go for the create step.
+- **ASSUMPTIONS:** `DS4` is the connected system (INFERRED from request numbers and object `SRCSYSTEM`; `sy-sysid` was not read).
+- **REGRESSION:** no runtime change.
+- **Next action:** the user sends the request number and the written go.
+- **FINAL STATUS:** BLOCKED for SAP creation; the tool is ready and untested against SAP.
