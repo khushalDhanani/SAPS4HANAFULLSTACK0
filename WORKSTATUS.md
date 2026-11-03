@@ -15,11 +15,11 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Undefined `FinanceManager` role removed (2026-11-03) — PARTIAL, committed locally, not pushed:** `cancelBillingDocument` now allows `SalesManager` and `Admin` only. A new test fails if any `@requires` role is missing from `xs-security.json`. See the entry below.
+- **Undefined `FinanceManager` role removed (2026-11-03) — PARTIAL, pushed to `origin/feature01`:** `cancelBillingDocument` now allows `SalesManager` and `Admin` only. A new test fails if any `@requires` role is missing from `xs-security.json`. See the entry below.
 
-- **Root files moved into folders (2026-11-03 16:49 IST) — PARTIAL, committed locally, not pushed:** Four documents moved under `docs/` with `git mv`. The root logo was a byte-identical duplicate of the app's copy, so only the root copy was removed. See the entry below.
+- **Root files moved into folders (2026-11-03 16:49 IST) — PARTIAL, pushed to `origin/feature01`:** Four documents moved under `docs/` with `git mv`. The root logo was a byte-identical duplicate of the app's copy, so only the root copy was removed. See the entry below.
 
-- **Creatable services classification (2026-11-03 16:43 IST) — PARTIAL, committed locally in `43e96d2b`, not pushed:** `docs/creatable-services-classification.md` sorts the 497 workbook services: 4 proven live, 69 likely proper (unproven), 117 likely master data or configuration, 152 unclear, 155 not proper. Two service docs were corrected. Only the proven bucket is CONFIRMED. See the entry below.
+- **Creatable services classification (2026-11-03 16:43 IST) — PARTIAL, pushed to `origin/feature01` in `43e96d2b`:** `docs/creatable-services-classification.md` sorts the 497 workbook services: 4 proven live, 69 likely proper (unproven), 117 likely master data or configuration, 152 unclear, 155 not proper. Two service docs were corrected. Only the proven bucket is CONFIRMED. See the entry below.
 
 - **HU storage type rules for W01 (2026-11-03 16:37 IST) — PARTIAL, pushed to `origin/feature01`:** W01 now has approved rules in `srv/wm/hu-stock-transfer/storage-types.json`, and the missing-rules error is gone. The HU dry run still fails on an HU that is correctly refused, so no browser run has proven an accepted HU. See the entry below.
 
@@ -90,8 +90,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- Root file move (2026-11-03): committed locally on `feature01`, not pushed. Still not run: Playwright E2E and `npm run build:mta`.
-- Creatable services (2026-11-03): the classification is committed locally in `43e96d2b` and not pushed. To rebuild the workbook, restore `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json`. POST-only services are still outside the workbook.
+- Root file move (2026-11-03): pushed to `origin/feature01`. Still not run: Playwright E2E and `npm run build:mta`.
+- Creatable services (2026-11-03): the classification is pushed in `43e96d2b`. To rebuild the workbook, restore `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json`. POST-only services are still outside the workbook.
 - HU rules (2026-11-03): decide 261 blocked-bin rules; have the SAP administrator check packaging type Z007, which has no storage unit type in W01; get rules for other warehouses.
 - Database removal (2026-11-03): Phase 1 is done and the target is the connected client. Still needed: a transport request owned by, or with a task for, the connected user, and a written go for the live proof in docs/decisions/sap-only-persistence-migration.md (Phase 2), then the store swap and final removal (Phase 3). The user also decides where movement 261 blocked-bin rules and HU storage types should live. Check production BusinessConfig values before any deployment.
 
@@ -1619,3 +1619,13 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
 - **Next action:** The user decides whether to push.
 - **FINAL STATUS:** PARTIAL.
+
+### 2026-11-03 16:57 IST — Pushed creatable services, root file move and role fix to origin: PASS for the push
+
+- **Request:** The user said "Go" and then chose "Push to origin" when asked what it meant.
+- **CHANGED:** `origin/feature01` moved from `fdafd552` to `c57be992` by a normal push, with no force. Commits: `43e96d2b`, `4762e441`, `a0637bc0`, `c57be992`. This log entry follows as one more commit and push. No deployment and no SAP write ran.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT: runs recorded in the entries above.
+- **TESTED:** `node tools/scan-secrets.js` passed before the push. The remote had no commits missing locally.
+- **NOT VERIFIED:** GitHub Actions results for this push. `gh` is not installed here.
+- **ASSUMPTIONS:** none.
+- **FINAL STATUS:** PASS for the push. The three pieces of work stay PARTIAL.
