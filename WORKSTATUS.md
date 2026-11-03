@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Undefined `FinanceManager` role removed (2026-11-03) — PARTIAL, committed locally, not pushed:** `cancelBillingDocument` now allows `SalesManager` and `Admin` only. A new test fails if any `@requires` role is missing from `xs-security.json`. See the entry below.
+
 - **Root files moved into folders (2026-11-03 16:49 IST) — PARTIAL, committed locally, not pushed:** Four documents moved under `docs/` with `git mv`. The root logo was a byte-identical duplicate of the app's copy, so only the root copy was removed. See the entry below.
 
 - **Creatable services classification (2026-11-03 16:43 IST) — PARTIAL, committed locally in `43e96d2b`, not pushed:** `docs/creatable-services-classification.md` sorts the 497 workbook services: 4 proven live, 69 likely proper (unproven), 117 likely master data or configuration, 152 unclear, 155 not proper. Two service docs were corrected. Only the proven bucket is CONFIRMED. See the entry below.
@@ -1595,6 +1597,25 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **NOT VERIFIED:** The header logo after sign-in; I stopped at the login page. That logo is `AeElementally.png`, which did not move. Playwright E2E and `npm run build:mta` were not run. No SAP call ran.
 - **Finding:** Nothing in the app loads `AetherLogoForSAP.svg` at runtime. The label logo comes from vectors stored in `AetherLogo.js`.
 - **ASSUMPTIONS:** Reusing `app/fiori-app/webapp/assets/` fits "the existing logo/images folder" in the request.
+- **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
+- **Next action:** The user decides whether to push.
+- **FINAL STATUS:** PARTIAL.
+
+### 2026-11-03 16:55 IST — Undefined `FinanceManager` role removed from `cancelBillingDocument`: PARTIAL
+
+- **Request:** The user chose "Remove it" for the `FinanceManager` role, which `xs-security.json` does not define.
+- **CHANGED:**
+  - `srv/sd/customer-invoice/service.cds:51`: `@requires` is now `['SalesManager', 'Admin']`. This was the only `FinanceManager` reference outside `WORKSTATUS.md` and `docs/archive/`.
+  - New `test/unit/common/roleDefinitions.test.js`.
+- **Behaviour:** No grantable access was lost on BTP, because no `xs-security.json` scope or role template provided this role. A user given `FinanceManager` by another route, such as a local mock user, can no longer cancel.
+- **TEST DECISION:** TEST ADDED: `test/unit/common/roleDefinitions.test.js`.
+- **TESTED:**
+  - New test: 2 passed. With the role temporarily restored, both tests failed as expected; the file was then restored.
+  - `npx cds compile srv/ --to json`: exit 0. `npx eslint` on the new test: clean. `git diff --check`: clean.
+  - `node test/e2e/negative/verifyWriteAuthorization.e2e.js` (no SAP reachable): PASS, Viewer and signed-out users refused on all 38 role-checked write actions.
+  - `npx jest --runInBand`: 224 suites passed, 1 skipped; 4,103 tests passed, 56 skipped.
+- **NOT VERIFIED:** No test signed in with a `FinanceManager` user. The cancel action was not run against SAP. The live invoice round trip stays pending (`docs/e2e-coverage-matrix.md:81`). No SAP call ran.
+- **ASSUMPTIONS:** Finance users are not meant to cancel billing documents through this role. The user chose removal over adding the role.
 - **Commit:** The user said "Yes, commit". Committed locally on `feature01` together with this entry. Not pushed.
 - **Next action:** The user decides whether to push.
 - **FINAL STATUS:** PARTIAL.

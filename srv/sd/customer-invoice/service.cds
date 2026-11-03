@@ -48,7 +48,7 @@ service CustomerInvoiceService @(path: '/odata/v4/customer-invoice') {
         Message                  : String;
     };
 
-    @(requires: ['SalesManager', 'FinanceManager', 'Admin'])
+    @(requires: ['SalesManager', 'Admin'])
     action cancelBillingDocument(
         BillingDocument : String
     ) returns {
