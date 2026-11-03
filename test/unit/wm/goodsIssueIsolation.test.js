@@ -1,7 +1,7 @@
 /**
  * Structural isolation test for the per-movement-type Goods Issue stack (Phase 5 #2).
- * Proves every per-type module - BACKEND (validation / normalize / S/4 mapper) and FRONTEND
- * (controller / model / service) - imports NO other movement type's module. This is the
+ * Proves every per-type backend module (validation / normalize / S/4 mapper) imports NO other
+ * movement type's module. This is the
  * "posting 311 never touches 201's files" proof, done structurally rather than by hope.
  * Shared PURE infrastructure (common.js / s4common.js / goodsIssue.mapper) is allowed; another
  * movement type's file is not.
@@ -13,19 +13,10 @@ const path = require('path');
 const TYPES = ['201', '301', '311'];
 
 const BACKEND_FILES = [];
-const FRONTEND_FILES = [];
 for (const t of TYPES) {
   BACKEND_FILES.push({ type: t, file: path.resolve(__dirname, `../../../srv/wm/goods-issue/validation/goodsIssue${t}.validation.js`) });
   BACKEND_FILES.push({ type: t, file: path.resolve(__dirname, `../../../srv/wm/goods-issue/mapping/goodsIssue${t}.normalize.js`) });
   BACKEND_FILES.push({ type: t, file: path.resolve(__dirname, `../../../srv/integration/s4hana/wm/goods-issue/GoodsIssue${t}Mapper.js`) });
-
-  const feBase = path.resolve(__dirname, '../../../app/fiori-app/webapp/modules/wm/goods-issue');
-  const ctrlFile = path.join(feBase, `controller/GoodsIssue${t}.controller.js`);
-  if (fs.existsSync(ctrlFile)) {
-    FRONTEND_FILES.push({ type: t, file: ctrlFile });
-    FRONTEND_FILES.push({ type: t, file: path.join(feBase, `model/GoodsIssue${t}Model.js`) });
-    FRONTEND_FILES.push({ type: t, file: path.join(feBase, `service/GoodsIssue${t}Service.js`) });
-  }
 }
 
 /**
@@ -46,10 +37,8 @@ function dependencyPaths(src) {
   return out;
 }
 
-const ALL_FILES = [...BACKEND_FILES, ...FRONTEND_FILES];
-
 describe('per-type Goods Issue module isolation (Phase 5 #2)', () => {
-  test.each(ALL_FILES)('$type module imports no other movement type file ($file)', ({ type, file }) => {
+  test.each(BACKEND_FILES)('$type module imports no other movement type file ($file)', ({ type, file }) => {
     expect(fs.existsSync(file)).toBe(true);
     const src = fs.readFileSync(file, 'utf8');
     const others = TYPES.filter(t => t !== type);

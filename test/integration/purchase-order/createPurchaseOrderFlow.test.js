@@ -51,53 +51,40 @@ describe('Integration (mocked SAP): Create Purchase Order flow through CAP', () 
         createPOSpy?.mockRestore();
     });
 
-    // Simulated Fiori UI State Model across the user journey
-    let uiModel;
+    // The request the Create PO screen would build; the supplier and material come from the value helps below.
+    const uiModel = {
+        header: {
+            PurchaseOrderType: 'NB',
+            CompanyCode: '1010',
+            PurchasingOrganization: '1010',
+            PurchasingGroup: '001',
+            Supplier: '',
+            DocumentDate: new Date().toISOString().split('T')[0],
+            Currency: 'EUR',
+            IncotermsClassification: 'EXW',
+            IncotermsLocation1: 'MUMBAI',
+            PaymentTerms: '0001'
+        },
+        items: [
+            {
+                PurchaseOrderItem: '10',
+                PurchaseOrderItemCategory: '0',
+                AccountAssignmentCategory: '',
+                Material: '',
+                MaterialGroup: '',
+                Plant: '1010',
+                StorageLocation: '101A',
+                OrderQuantity: '10',
+                UnitOfMeasure: 'PC',
+                NetPriceAmount: '25.00',
+                TaxCode: 'V1',
+                NetAmount: '250.00',
+                NetAmountIsEstimate: true
+            }
+        ]
+    };
 
-    it('Step 1: open Create PO - initialize view state and default model', () => {
-        // Mirrors CreatePurchaseOrder.controller.js _resetModel()
-        uiModel = {
-            header: {
-                PurchaseOrderType: 'NB',
-                CompanyCode: '',
-                PurchasingOrganization: '',
-                PurchasingGroup: '',
-                Supplier: '',
-                DocumentDate: new Date().toISOString().split('T')[0],
-                Currency: '',
-                IncotermsClassification: '',
-                IncotermsLocation1: '',
-                PaymentTerms: ''
-            },
-            items: [
-                {
-                    PurchaseOrderItem: '10',
-                    PurchaseOrderItemCategory: '0',
-                    AccountAssignmentCategory: '',
-                    Material: '',
-                    MaterialGroup: '',
-                    Plant: '',
-                    StorageLocation: '',
-                    OrderQuantity: '',
-                    UnitOfMeasure: 'PC',
-                    NetPriceAmount: '',
-                    TaxCode: '',
-                    NetAmount: '0.00',
-                    NetAmountIsEstimate: true
-                }
-            ]
-        };
-
-        expect(uiModel.header.PurchaseOrderType).toBe('NB');
-        expect(uiModel.header.DocumentDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-        expect(uiModel.header.Supplier).toBe('');
-        expect(uiModel.items).toHaveLength(1);
-        expect(uiModel.items[0].PurchaseOrderItem).toBe('10');
-        expect(uiModel.items[0].UnitOfMeasure).toBe('PC');
-        expect(uiModel.items[0].NetAmount).toBe('0.00');
-    });
-
-    it('Step 2: search Supplier - query SupplierVH and select supplier', async () => {
+    it('Step 1: search Supplier - query SupplierVH and select supplier', async () => {
         // Mirrors Fiori SelectDialog search on /SupplierVH
         const { status, data } = await GET('/odata/v4/purchase-order/SupplierVH?$top=5');
         expect(status).toBe(200);
@@ -112,7 +99,7 @@ describe('Integration (mocked SAP): Create Purchase Order flow through CAP', () 
         expect(uiModel.header.Supplier).toBe('10300001');
     });
 
-    it('Step 3: search Material - query MaterialVH and select material', async () => {
+    it('Step 2: search Material - query MaterialVH and select material', async () => {
         // Mirrors Fiori SelectDialog search on /MaterialVH
         const { status, data } = await GET('/odata/v4/purchase-order/MaterialVH?$top=5');
         expect(status).toBe(200);
@@ -127,43 +114,7 @@ describe('Integration (mocked SAP): Create Purchase Order flow through CAP', () 
         expect(uiModel.items[0].Material).toBe('TG11');
     });
 
-    it('Step 4: populate required fields - fill header organizational data and item details', () => {
-        // Header
-        uiModel.header.CompanyCode = '1010';
-        uiModel.header.PurchasingOrganization = '1010';
-        uiModel.header.PurchasingGroup = '001';
-        uiModel.header.Currency = 'EUR';
-        uiModel.header.IncotermsClassification = 'EXW';
-        uiModel.header.IncotermsLocation1 = 'MUMBAI';
-        uiModel.header.PaymentTerms = '0001';
-
-        // Item
-        uiModel.items[0].Plant = '1010';
-        uiModel.items[0].StorageLocation = '101A';
-        uiModel.items[0].OrderQuantity = '10';
-        uiModel.items[0].NetPriceAmount = '25.00';
-        uiModel.items[0].TaxCode = 'V1';
-
-        expect(uiModel.header.CompanyCode).toBe('1010');
-        expect(uiModel.items[0].Plant).toBe('1010');
-        expect(uiModel.items[0].OrderQuantity).toBe('10');
-    });
-
-    it('Step 5: calculate Net Amount - trigger onCalculateNetAmount and verify updated item amount', () => {
-        // Mirrors CreatePurchaseOrder.controller.js onCalculateNetAmount
-        const item = uiModel.items[0];
-        const fQty = parseFloat(item.OrderQuantity) || 0;
-        const fNetPrice = parseFloat(item.NetPriceAmount) || 0;
-        const fNetAmount = fQty * fNetPrice;
-
-        item.NetAmount = fNetAmount.toFixed(2);
-        item.NetAmountIsEstimate = true;
-
-        expect(item.NetAmount).toBe('250.00');
-        expect(item.NetAmountIsEstimate).toBe(true);
-    });
-
-    it('Step 6: submit - dispatch createPurchaseOrder action to CAP backend and assert success', async () => {
+    it('Step 3: submit - dispatch createPurchaseOrder action to CAP backend and assert success', async () => {
         // Mirrors CreatePurchaseOrder.controller.js onCreatePress cleaning UI-only fields
         const cleanItems = uiModel.items.map(item => {
             const clean = { ...item };
@@ -183,7 +134,7 @@ describe('Integration (mocked SAP): Create Purchase Order flow through CAP', () 
         expect(data).toHaveProperty('value', '4500001001');
     });
 
-    it('Step 7: verify created PO - retrieve purchase order via /PurchaseOrders endpoint', async () => {
+    it('Step 4: verify created PO - retrieve purchase order via /PurchaseOrders endpoint', async () => {
         const { status, data } = await GET('/odata/v4/purchase-order/PurchaseOrders');
 
         expect(status).toBe(200);

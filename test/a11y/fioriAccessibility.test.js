@@ -142,15 +142,9 @@ describe('Release Automation: SAP Fiori Accessibility (a11y) Suite', () => {
   // 5. Handling Unit QR Dialog a11y: Dialog header and download buttons
   it('validates Handling Unit QR Dialog fragments declare accessible titles and button tooltips', () => {
     const qrFragPath = path.join(WEBAPP_DIR, 'modules/wm/handling-unit/view/QrCodeDialog.fragment.xml');
-    if (fs.existsSync(qrFragPath)) {
-      const content = fs.readFileSync(qrFragPath, 'utf8');
-      expect(content).toContain('title="{i18n>huQrTitle}"');
-    }
+    expect(fs.readFileSync(qrFragPath, 'utf8')).toContain('title="{i18n>huQrTitle}"');
 
     const layoutFragPath = path.join(WEBAPP_DIR, 'modules/wm/handling-unit/view/SelectQrLayoutDialog.fragment.xml');
-    if (fs.existsSync(layoutFragPath)) {
-      const content = fs.readFileSync(layoutFragPath, 'utf8');
-      expect(content).toContain('title="{i18n>huQrCombineTitle}"');
-    }
+    expect(fs.readFileSync(layoutFragPath, 'utf8')).toContain('title="{i18n>huQrCombineTitle}"');
   });
 });
