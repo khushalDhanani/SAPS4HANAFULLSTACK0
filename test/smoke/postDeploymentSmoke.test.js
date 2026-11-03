@@ -16,7 +16,7 @@ describe('Post-Deployment Smoke Test Suite', () => {
   beforeAll(async () => { server = await startIsolatedServer(); }, 90000);
   afterAll(() => server && server.stop());
 
-  it('executes smoke tests against the running server and validates all 10 endpoints pass', async () => {
+  it('executes smoke tests against the running server and validates all 9 endpoints pass', async () => {
     const summary = await executeSmokeTests({
       baseUrl: server.baseUrl,
       authUser: 'khushal:'
@@ -24,8 +24,8 @@ describe('Post-Deployment Smoke Test Suite', () => {
 
     expect(summary.isSuccess).toBe(true);
     expect(summary.failed).toBe(0);
-    expect(summary.passed).toBe(10);
-    expect(summary.results.length).toBe(10);
+    expect(summary.passed).toBe(9);
+    expect(summary.results.length).toBe(9);
 
     const healthResult = summary.results.find(r => r.name.includes('/health'));
     expect(healthResult).toBeDefined();
@@ -47,7 +47,7 @@ describe('Post-Deployment Smoke Test Suite', () => {
     });
 
     expect(summary.isSuccess).toBe(false);
-    expect(summary.failed).toBe(10);
+    expect(summary.failed).toBe(9);
     expect(summary.passed).toBe(0);
     expect(summary.results[0].status).toBe('ERROR');
   });

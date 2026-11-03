@@ -37,7 +37,7 @@ node tools/smoke-test-deployment.js --url=https://saps4hana-approuter-<space>.cf
 #### Readiness Assertions:
 1. **Readiness Probe (`GET /health`)**: Returns `HTTP 200 OK`, JSON payload `{"status":"UP"}`, and header `Cache-Control: no-store`.
 2. **Unauthenticated Security Gating**: Accessing `/odata/v4/purchase-order/$metadata` without credentials returns `HTTP 401 Unauthorized`.
-3. **Core OData Metadata Availability**: Authenticated reads of `$metadata` for `purchase-order`, `reservation-entry`, `tr-to`, and `auth` return valid EDMX XML schemas.
+3. **Core OData Metadata Availability**: Authenticated reads of `$metadata` for `purchase-order`, `tr-to`, and `auth` return valid EDMX XML schemas.
 4. **Session & Scope Resolution (`GET /odata/v4/auth/getUserInfo()`)**: Resolves caller principal, role collections, and system identifier without errors.
 5. **UI5 Flexibility & Preload Assets**: Confirms `/sap/bc/lrep/flex/settings` and `/Component-preload.js` respond with `HTTP 200`.
 6. **AI Assistant Streaming Route**: Validates `/ai/chat/stream` is mounted and responsive.

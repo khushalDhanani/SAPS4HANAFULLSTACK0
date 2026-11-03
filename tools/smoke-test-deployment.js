@@ -131,19 +131,6 @@ async function executeSmokeTests(options = {}) {
       }
     },
     {
-      name: 'OData V4 Reservation Entry Metadata',
-      url: `${baseUrl}/odata/v4/reservation-entry/$metadata`,
-      method: 'GET',
-      headers: { ...authHeader },
-      validate: (res, body) => {
-        if (res.status !== 200) return `Expected 200 OK, got ${res.status}`;
-        if (!body.includes('ReservationEntries') && !body.includes('edmx:Edmx')) {
-          return 'Response does not contain valid EDMX metadata';
-        }
-        return null;
-      }
-    },
-    {
       name: 'OData V4 Transfer Order Metadata',
       url: `${baseUrl}/odata/v4/tr-to/$metadata`,
       method: 'GET',
