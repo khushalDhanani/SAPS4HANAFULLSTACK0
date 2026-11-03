@@ -37,6 +37,40 @@ READ-ONLY package/client discovery used the same guarded RFC client:
 
 **Pending user input:** the development target and assigned workbench transport request. The current test client is not implicitly selected as that target. Do not create, activate or transport SAP objects until the target/transport are supplied, the required contracts/design are verified and the specific write is authorized. Package selection does not resolve the backend persistence contract gaps below.
 
+## Posting-attempt table decision — 2026-11-03 IST
+
+The user chose a Z table in ZAMM for double-post protection, over memory plus SAP reads. Reasons: production runs 2 instances (`mta/extensions/prod/prod.mtaext:9`), memory is lost on restart, and a SAP read is not an atomic claim.
+
+**Prepared, not created in SAP:** `docs/abap/zwm_post_attempt.tabl.ddl` and `docs/abap/zwm_post_attempt.fugr.abap`.
+
+| Object | Purpose |
+| --- | --- |
+| Table `ZWM_POST_ATTEMPT` | One row per attempt; primary key client + reference document |
+| `Z_WM_ATTEMPT_CLAIM` (RFC) | Inserts a `sending` row and commits, or returns the existing row |
+| `Z_WM_ATTEMPT_SET_STATUS` (RFC) | Moves an attempt to a new status and commits |
+| `Z_WM_ATTEMPT_READ` (RFC) | Reads by reference, by request hash, or all open attempts |
+
+**READ-ONLY checks, 2026-11-03 (`RFC_READ_TABLE` through `tools/lib/readOnlyRfcGuard.js`):** these names return no rows in TADIR and TFDIR. TDEVC shows ZAMM with transport layer ZDS4. CVERS shows SAP_BASIS 816. T000 shows the configured client has category T and a blank `CCNOCLIIND`, which DD07T describes as repository changes allowed. So this client can technically hold the objects; whether it is the approved target is the user's decision.
+
+**Not verified:** that the source activates, including source-based table creation through ADT (no precedent in this repository); `IS SUPPLIED` over RFC from node-rfc; atomicity under parallel sessions; the S_RFC role.
+
+**Pending from the user:** target system, transport request, and a written go for each write below.
+
+### Live proof, each step a separate SAP WRITE
+
+Use references starting `ZTEST` and end every test row in `rejected`, so the app's recheck never picks one up. No delete module exists; removing test rows afterwards is a manual decision.
+
+1. Create and activate the table and function group in ZAMM on the transport request. Read back through TADIR, TFDIR and DD03L.
+2. Claim a new reference: `EV_CREATED = X`. Read it back on a new connection, which proves it is durable.
+3. Claim the same reference again: `EV_CREATED` blank and the first row returned.
+4. Run two parallel claims on two connections for one new reference: exactly one wins. Repeat several times.
+5. Set status with only `IV_MATERIAL_DOCUMENT` sent, then with only `IV_LAST_ERROR` sent: the other field is kept. Send `IV_LAST_ERROR` empty: it clears.
+6. Read by reference, by hash and open only. Confirm an unknown status and a call with no filter both return `E`.
+
+### After the proof
+
+Add one client under `srv/integration/s4hana/` that calls these modules with `RfcClient.call`, never inside a posting `session()`. Point `GoodsIssueAttemptStore` at it and remove its database and memory branches. Keep the fail-closed behaviour: if a claim cannot be written, nothing is posted. Then carry over production rows: open attempts must be resolved first, and `posted` rows matter too, because re-claim logic reads them. Only then remove the attempts entity, the database configuration and the HDI resources.
+
 ## Required replacement behavior
 
 ### Durable posting attempts and duplicate protection

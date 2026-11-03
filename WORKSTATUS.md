@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Posting-attempt Z table in ZAMM (2026-11-03) — PARTIAL, source prepared only, BLOCKED on target, transport and written go:** The user chose this option. ABAP source and an offline test exist; nothing was created in SAP and nothing was deleted. See the entry "Posting-attempt Z table source prepared" below.
+
 - **Database removal inventory (2026-11-03 14:37 IST) — BLOCKED on the user's OK and answers:** Nothing deleted. `AllowSAPtool` does not exist in this repository, and `ALLOW_LIVE_SAP_TOOLS` only gates tools, so there is no DB-or-SAP switch to remove. Posting-attempt protection cannot work on SAP reads alone with 2 production instances. See the entry of 14:37 IST below.
 
 - **SAP-only / application database removal (2026-11-03 14:02 IST) — BLOCKED:** User selected ZAMM and will provide the development target and transport request. Live metadata confirms ZAMM exists and the currently connected client has role Test; it is not implicitly the approved development target. Required persistence contracts remain UNKNOWN. See docs/decisions/sap-only-persistence-migration.md. No runtime/database changes or SAP writes made.
@@ -70,7 +72,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- Database removal (2026-11-03): the user approves the delete list and answers the questions on posting attempts, sales defaults and local data. Deletion starts only after that, on branch `chore/remove-application-db`.
+- Database removal (2026-11-03): the user chose the Z table in ZAMM. Still needed: the target system, the transport request and a written go for the live proof in docs/decisions/sap-only-persistence-migration.md; the OK on the delete list; answers on sales defaults, local data and the reference search scope. Deletion starts only after the OK, on branch `chore/remove-application-db`.
 
 - SAP-only migration: await the development target and workbench transport request the user will provide; ZAMM is selected. Then establish verified replacement contracts for durable posting claims, tracking and settings as specified in docs/decisions/sap-only-persistence-migration.md. Preserve existing data until migration and retention are settled.
 
@@ -1362,3 +1364,18 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **REGRESSION:** no runtime change.
 - **Next action:** the user approves the delete list and answers the open questions.
 - **FINAL STATUS:** BLOCKED, waiting for the user's OK. Nothing deleted.
+
+### 2026-11-03 14:41 IST — Posting-attempt Z table source prepared: PARTIAL, BLOCKED on target, transport and written go
+
+- **Request:** The user chose "Z table in ZAMM" for double-post protection. That answers the design question only; it is not a go for a SAP write and not the OK on the delete list.
+- **CHANGED:** added `docs/abap/zwm_post_attempt.tabl.ddl`, `docs/abap/zwm_post_attempt.fugr.abap`, `test/unit/tools/postAttemptAbapSource.test.js`; updated `docs/decisions/sap-only-persistence-migration.md` and WORKSTATUS.md. No runtime code changed. Nothing was created in SAP and nothing was deleted.
+- **Design:** table `ZWM_POST_ATTEMPT` with primary key client + reference document, and RFC modules `Z_WM_ATTEMPT_CLAIM`, `Z_WM_ATTEMPT_SET_STATUS`, `Z_WM_ATTEMPT_READ`. Only posting attempts move to SAP. Each call commits, so it must run on its own connection, never inside a posting `session()`. Node integration code was not written, because AGENTS.md requires the live proof first.
+- **VERIFIED (READ-ONLY, RFC_READ_TABLE only, via `tools/lib/readOnlyRfcGuard.js`):** TADIR and TFDIR return no rows for the proposed names. TDEVC: ZAMM, transport layer ZDS4. CVERS: SAP_BASIS 816. T000: configured client has category T and blank `CCNOCLIIND`, which DD07T describes as repository changes allowed. No SAP write ran.
+- **TEST DECISION:** TEST ADDED: `test/unit/tools/postAttemptAbapSource.test.js`. It checks the ABAP source against the current store offline (columns, statuses, signature, commit placement) and proves nothing about SAP.
+- **TESTED:** `npx jest --runInBand test/unit/tools/postAttemptAbapSource.test.js test/unit/tools/adtCreateQuarLabel.test.js test/unit/wm/goodsIssueAttempt.test.js`: 3 suites, 44 tests PASS. `npx eslint` on the new test printed no findings. `node tools/scan-secrets.js`: 0 findings, new files included. `git diff --check`: clean. Full Jest, build and browser E2E not run, because no runtime code changed.
+- **NOT VERIFIED:** that the ABAP activates, source-based table creation through ADT, `IS SUPPLIED` over RFC, atomic claims under parallel sessions, the S_RFC role, carrying over production rows.
+- **BLOCKED:** the user supplies the target system and transport request, then gives a written go for each live step listed in the migration document.
+- **ASSUMPTIONS:** tracking tables and BusinessConfig are removed rather than moved to SAP (INFERRED from the user's choice; waits on the OK for the delete list). Standard data elements `MANDT`, `TIMESTAMPL`, `CHAR1`, `BAPI_MSG` exist on the target (Not verified on the target; `CHAR1` and `BAPI_MSG` are used by existing proposals in this repository).
+- **REGRESSION:** no runtime change; the store tests above still pass.
+- **Next action:** the user provides the target and transport request, and the OK or changes for the delete list.
+- **FINAL STATUS:** PARTIAL for the source; BLOCKED for SAP creation and database removal.
