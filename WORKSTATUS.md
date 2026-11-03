@@ -97,6 +97,13 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-03 — Scan To removal and `tr-to` fixes merged into `feature01`: PARTIAL
+
+- **Status:** PARTIAL. Merged locally by fast-forward at the user's request. Not pushed. Outside API callers are not verified, and the `lookupTR` fix was not proven against a real status-E TR in SAP.
+- **Changes:** `feature01` moved to `fix/tr-to-lookup-readonly`, which includes `feature/remove-scan-to`. Both branches were kept.
+- **Executed validation:** the merged tree hash equals the verified branch tree. No test was rerun, because the code is identical. See the Orders Due entry below for the 17 of 17 browser run on `af656790`.
+- **Next action:** Check outside callers before pushing. Pushing needs the user's request.
+
 ### 2026-11-03 — Orders Due scroll error fixed: PASS for this screen
 
 - **Status:** PASS for the screen error. The branch stays PARTIAL overall for the reasons in the `tr-to` entry below.
