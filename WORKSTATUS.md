@@ -114,7 +114,9 @@ All historical change logs and past milestone statuses are preserved verbatim in
   - `npx jest --silent --runInBand`: 224 suites passed, 1 skipped; 4,127 tests passed, 59 skipped.
   - `npm run build` in `app/fiori-app`, `npx cds build --production` to a scratch folder, `npx eslint --max-warnings 0 .`, `node tools/scan-secrets.js`, `npm run validate:mta`, `git diff --check`: clean.
   - `npm run test:e2e:sap-free`: 3 of 3 passed.
-  - `TARGET_URL=http://localhost:4010 npm run test:e2e` on `2e6cda74`: **Total 17, Passed 16, Failed 1** (SAP read-only; writes guarded or mocked). FAIL: LE screens, "Orders due, no Plant attribute: nothing requested until a plant is set". Cause under investigation.
+  - `TARGET_URL=http://localhost:4010 npm run test:e2e` on `2e6cda74`: **Total 17, Passed 16, Failed 1** (SAP read-only; writes guarded or mocked). FAIL: LE screens, "Orders due, no Plant attribute: nothing requested until a plant is set", with the page error "Must not call method when the binding's root binding is suspended" on `/OrdersDueForDelivery`.
+  - Repeat on `1eb76853`: `verifyLeScreens.e2e.js` alone passed 6 of 6, then `npm run test:e2e` passed Total 17, Passed 17, Failed 0.
+  - **Failure classed as intermittent, cause UNKNOWN:** 1 failure in 8 LE runs on this code. No file under `app/` changed since `71ddf805`, which passed 17 of 17, and this branch changed only `tr-to` backend files. It was not reproduced on purpose, and it is not proven to exist before this branch.
 - **Finding:** `OutboundDeliveryAdapter.js:120` passes `fields`, not `flow`, so nothing in `srv` passes `scan-to`. The entry was kept, as instructed.
 - **Known limit:** `getAvailableSerials` reads `EQUI` by material only, so a plant check limits who may ask, not which serials return. `verifyStock` checks the plant named in the request; it was not proven to compare that plant with the document.
 - **Not run:** `npm run test:e2e:sap`, including the HU and goods receipt round trips.
