@@ -192,7 +192,7 @@ async function live(baseUrl, data) {
             const c = ui.cockpit.cockpit;
             // READ-ONLY read-back: verifyMaterialDocument is a POST action but only reads MATDOC/MSEG
             // (ReservationProcessAdapter.js:1100-1160). Called from Node, outside the browser write guard.
-            const res = await fetch(`${baseUrl}/odata/v4/reservation-entry/verifyMaterialDocument`, {
+            const res = await fetch(`${baseUrl}/odata/v4/tr-to/verifyMaterialDocument`, {
                 method: 'POST',
                 headers: { ...AUTH, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ materialDocument: m[1], materialDocumentYear: m[2], movementType: '311', material: c.Material, quantity: Number(data.transferQty), plant: c.Plant, reservationNo: data.reservationNo, reservationItem: data.reservationItem })

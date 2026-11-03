@@ -15,7 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Reservation Entry screen removed (2026-11-03) — PARTIAL, on local branch `feature/remove-reservation-entry`, not pushed:** The UI at `#/wm/reservation-entry` is gone, and the three old URLs now show the dashboard with no console errors. Backend, API and database are unchanged. The five `verifyMvt*` browser suites were then deleted at the user's request. See the two Change Entries of 2026-11-03 below for what was run and what was not.
+- **Reservation Entry screen removed (2026-11-03) — PARTIAL, on local branch `feature/remove-reservation-entry`, not pushed:** The UI at `#/wm/reservation-entry` is gone, and the three old URLs now show the dashboard with no console errors. Backend, API and database are unchanged. The five `verifyMvt*` browser suites and the other reservation-entry tests were then deleted at the user's request, so the backend service that stays no longer has its own tests. See the three Change Entries of 2026-11-03 below for what was run and what was not.
 
 - **MIGO resend versus further issue, reservation-entry and tr-to (2026-11-03 09:55 IST) — PARTIAL, uncommitted:** A resend with the same id returns its document without posting, and a new id posts the further quantity, on both `postMigoGoodsMovement` actions. A further issue with no id gets HTTP 400 before SAP (`ClientAttemptId` on reservation-entry, `ProcessId` on tr-to). The false repeat is fixed once in `checkMigoIdempotency`. Jest: 228 suites and 4,464 tests passed, 59 skipped. SAP-free browser E2E: 3 of 3 passed; those suites do not post a goods movement. Not proven against live SAP. See Change Entry 2026-11-03 09:55 IST.
 
@@ -88,6 +88,32 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-03 — Reservation-entry tests deleted: PARTIAL
+
+- **Status:** PARTIAL. No SAP call was made in this step. The full 17-suite browser run and `roundTripHuTransfer` were not run.
+- **Why:** The user asked to delete all tests and E2E related to `/wm/reservation-entry`.
+- **Deleted:** `test/unit/wm/reservationEntryService.test.js`, `reservationCreateRecovery.test.js`, `reservationIdempotency.test.js`.
+- **Reservation-entry cases removed from mixed files:**
+  - `criticalTransactionAuth.test.js`: section 1.
+  - `duplicateConcurrentTimeoutRecovery.test.js`: 4 `createReservation` and `createReservationEntry` tests.
+  - `reservationMonitorRetry.test.js`: the retry section.
+  - `sapReadBackEvidence.test.js`: section 7.
+  - `migoClientAttempt.test.js`: 7 reservation-entry tests; the 4 tr-to tests stay.
+  - `verifyWriteAuthorization.e2e.js`: 2 plant cases.
+- **Pointed at another service:** `roundTripHuTransfer.e2e.js` read-back now calls `/odata/v4/tr-to/verifyMaterialDocument`, which uses the same adapter method. `e2eWriteGuard.test.js` uses a handling-unit sample URL.
+- **Kept, because they cover shared code:**
+  - `reservationEntryReadScope.test.js`: other services import `readScope.js`.
+  - `reservationProcess`, `reservationBapiPayload`, `reservationStockPrecheck`, `reservationTrack`, `reservationValidationMatrix`: they do not reference this service.
+  - `verifyWriteAuthorization.e2e.js` still generates 401 and 403 checks from the CDS model, which is not specific to this service but includes its actions.
+- **Test decision:** TEST UPDATED. Tests were removed at the user's request.
+- **Executed validation:**
+  - `npx jest --silent --runInBand`: 224 suites passed, 1 skipped; 4,176 tests passed, 59 skipped.
+  - `npx eslint .`: clean. `node tools/scan-secrets.js`: 0 secrets. `git diff --check`: clean.
+  - `npm run test:e2e:sap-free`: 3 of 3 passed.
+  - `node --check` on `roundTripHuTransfer.e2e.js` only.
+- **Risk:** `srv/wm/reservation-entry/service.js` stays deployed and can write to SAP, but its handlers, plant checks and duplicate-reservation protection no longer have dedicated tests. This includes the `ClientAttemptId` guard from commit `0903aafe`.
+- **Next action:** The user decides whether to remove the backend service as well, then whether to merge the branch.
 
 ### 2026-11-03 — Movement browser suites deleted: PARTIAL
 

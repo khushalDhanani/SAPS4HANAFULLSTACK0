@@ -17,7 +17,7 @@ describe('E2E write guard', () => {
 
     it.each([
         ['an action POST', { method: 'POST', url: `${BASE}/odata/v4/purchase-order/createPurchaseOrder` }],
-        ['a PATCH', { method: 'PATCH', url: `${BASE}/odata/v4/reservation-entry/Reservations('1')` }],
+        ['a PATCH', { method: 'PATCH', url: `${BASE}/odata/v4/handling-unit/HandlingUnits('1')` }],
         ['a DELETE', { method: 'DELETE', url: `${BASE}/odata/v4/handling-unit/HandlingUnits('1')` }],
         ['a $batch with a POST', { method: 'POST', url: `${BASE}/odata/v4/goods-issue/$batch`, postData: batch('GET Items', 'POST postGoodsIssue201') }],
         ['a $batch with a PATCH', { method: 'POST', url: `${BASE}/odata/v4/sales-order/$batch`, postData: batch('PATCH SalesOrders(1)') }],

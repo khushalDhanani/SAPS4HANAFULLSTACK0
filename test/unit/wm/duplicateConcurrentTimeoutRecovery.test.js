@@ -16,7 +16,6 @@ const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/Re
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 const Mvt261Adapter = require('../../../srv/integration/s4hana/wm/Mvt261Adapter');
 const HuStockTransferAdapter = require('../../../srv/integration/s4hana/wm/HuStockTransferAdapter');
-const attemptStore = require('../../../srv/wm/reservation-entry/ReservationAttemptStore');
 const GoodsIssueAttemptStore = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
 const { S4HttpClient } = require('../../../srv/integration/s4hana/S4HttpClient');
 const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
@@ -24,7 +23,6 @@ const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 const { POST } = cds.test(__dirname + '/../../../');
 
 describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout Recovery [mock only]', () => {
-  let resvSpy;
   let giPost201Spy;
   let giPost301Spy;
   let giPost311Spy;
@@ -100,7 +98,7 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
     });
 
     // Adapter write spies
-    resvSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValue({
+    jest.spyOn(ReservationProcessAdapter.prototype, 'createReservation').mockResolvedValue({
       success: true,
       stage: 'RESERVATION_CREATED',
       reservation: { number: '520001', item: '0001' },
@@ -181,50 +179,6 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
   // SECTION 1: Fail Closed If Production Transaction Logging Is Unavailable
   // ===========================================================================
   describe('1. Fail closed if production transaction logging is unavailable', () => {
-
-    test('createReservation: aborts with HTTP 503 and NEVER calls SAP when attempt store throws', async () => {
-      jest.spyOn(attemptStore, 'claim').mockRejectedValue(new Error('SQLITE_BUSY: database is locked'));
-
-      await expect(POST('/odata/v4/reservation-entry/createReservation', {
-        MovementType: '201',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        Material: '8000000023',
-        Quantity: 5,
-        Unit: 'KG',
-        CostCenter: '1011201301',
-        ClientAttemptId: 'test-attempt-failclosed-001'
-      }, authCarol)).rejects.toMatchObject({
-        response: {
-          status: 503,
-          data: { error: { message: expect.stringMatching(/production transaction logging is unavailable/i) } }
-        }
-      });
-
-      expect(resvSpy).not.toHaveBeenCalled();
-    });
-
-    test('createReservationEntry: aborts with HTTP 503 and NEVER calls SAP when attempt store throws', async () => {
-      jest.spyOn(attemptStore, 'claim').mockRejectedValue(new Error('Transaction log connection pool exhausted'));
-
-      await expect(POST('/odata/v4/reservation-entry/createReservationEntry', {
-        MovementType: '201',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        Material: '8000000023',
-        Quantity: 5,
-        Unit: 'KG',
-        CostCenter: '1011201301',
-        ClientAttemptId: 'test-attempt-failclosed-002'
-      }, authCarol)).rejects.toMatchObject({
-        response: {
-          status: 503,
-          data: { error: { message: expect.stringMatching(/production transaction logging is unavailable/i) } }
-        }
-      });
-
-      expect(resvSpy).not.toHaveBeenCalled();
-    });
 
     test('postGoodsIssue201: aborts with HTTP 503 and NEVER calls SAP when GoodsIssueAttemptStore throws', async () => {
       jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockRejectedValue(new Error('Persistent store unreachable'));
@@ -365,89 +319,6 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
   // SECTION 2: Duplicate / Concurrent Posting Protection
   // ===========================================================================
   describe('2. Duplicate and concurrent posting protection', () => {
-
-    test('createReservation: concurrent in-progress attempt returns IN_PROGRESS and does not call SAP twice', async () => {
-      let firstClaim = true;
-      jest.spyOn(attemptStore, 'claim').mockImplementation(async () => {
-        if (firstClaim) {
-          firstClaim = false;
-          return {
-            created: true,
-            row: { ID: 'attempt-res-1', AttemptKey: 'key-1', Stage: 'INITIAL' }
-          };
-        }
-        return {
-          created: false,
-          reason: 'in_progress',
-          row: { ID: 'attempt-res-1', AttemptKey: 'key-1', Stage: 'RESERVATION_CLAIMED', LastError: '' }
-        };
-      });
-
-      // First call (creates claim, proceeds to SAP)
-      const res1 = await POST('/odata/v4/reservation-entry/createReservation', {
-        MovementType: '201',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        Material: '8000000023',
-        Quantity: 5,
-        Unit: 'KG',
-        CostCenter: '1011201301',
-        ClientAttemptId: 'concurrent-res-1'
-      }, authCarol);
-
-      expect(res1.status).toBe(200);
-      expect(res1.data.success).toBe(true);
-      expect(resvSpy).toHaveBeenCalledTimes(1);
-
-      // Second concurrent call with same attempt
-      const res2 = await POST('/odata/v4/reservation-entry/createReservation', {
-        MovementType: '201',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        Material: '8000000023',
-        Quantity: 5,
-        Unit: 'KG',
-        CostCenter: '1011201301',
-        ClientAttemptId: 'concurrent-res-1'
-      }, authCarol);
-
-      expect(res2.status).toBe(200);
-      expect(res2.data.success).toBe(false);
-      expect(res2.data.stage).toBe('IN_PROGRESS');
-      // SAP must NOT have been called a second time
-      expect(resvSpy).toHaveBeenCalledTimes(1);
-    });
-
-    test('createReservation: replay of completed attempt returns existing document without duplicate SAP call', async () => {
-      jest.spyOn(attemptStore, 'claim').mockResolvedValue({
-        created: false,
-        reason: 'replay',
-        row: {
-          ID: 'attempt-res-done',
-          AttemptKey: 'key-replay',
-          Stage: 'RESERVATION_CREATED',
-          ReservationNo: '0000520001',
-          ReservationItem: '0001'
-        }
-      });
-
-      const res = await POST('/odata/v4/reservation-entry/createReservation', {
-        MovementType: '201',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        Material: '8000000023',
-        Quantity: 5,
-        Unit: 'KG',
-        CostCenter: '1011201301',
-        ClientAttemptId: 'replay-res-001'
-      }, authCarol);
-
-      expect(res.status).toBe(200);
-      expect(res.data.success).toBe(true);
-      expect(res.data.stage).toBe('REPLAY');
-      expect(res.data.reservation.number).toBe('520001');
-      expect(resvSpy).not.toHaveBeenCalled();
-    });
 
     test('postGoodsIssue201: replay of already posted goods issue returns existing document without duplicate SAP call', async () => {
       // First call succeeds and claims

@@ -5,14 +5,6 @@
  * Phase 2 — Gate critical SAP transactions
  *
  * Covers:
- * 1. ReservationEntryService write action gating:
- *    - Unauthenticated (no session) -> 401 Unauthorized
- *    - Viewer role (test-viewer-1120) -> 403 Forbidden
- *    - WarehouseClerk (test-clerk-1120) -> 200 Permitted (bypasses auth gate)
- *    Covers: createReservation, createTransferRequirement, createTOFromTR,
- *            confirmTransferOrder, createReservationEntry, postMigoGoodsMovement,
- *            executeReservationWarehouseFlow
- *
  * 2. GoodsIssueService write action gating & privilege escalation protection:
  *    - postGoodsIssue201, postGoodsIssue301, postGoodsIssue311:
  *      - Unauthenticated -> 401
@@ -50,9 +42,7 @@ const { POST, GET } = cds.test(__dirname + '/../../../');
 
 describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not SAP verification]', () => {
   let resvSpy;
-  let trSpy;
   let _toSpy;
-  let toConfirmSpy;
   let postMigoSpy;
   let flowSpy;
   let giPost201Spy;
@@ -122,7 +112,7 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       movementType: '201'
     });
 
-    trSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement').mockResolvedValue({
+    jest.spyOn(ReservationProcessAdapter.prototype, 'createTransferRequirement').mockResolvedValue({
       success: true,
       stage: 'TR_CREATED',
       trNumber: '1000001',
@@ -140,7 +130,7 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       status: 'O'
     });
 
-    toConfirmSpy = jest.spyOn(ReservationProcessAdapter.prototype, 'confirmTransferOrder').mockResolvedValue({
+    jest.spyOn(ReservationProcessAdapter.prototype, 'confirmTransferOrder').mockResolvedValue({
       success: true,
       stage: 'TO_CONFIRMED',
       warehouseNumber: 'W01',
@@ -269,324 +259,6 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
 
   afterEach(() => {
     jest.restoreAllMocks();
-  });
-
-  // =========================================================================
-  // 1. ReservationEntryService Write Action Authorization Gates
-  // =========================================================================
-  describe('1. ReservationEntryService Write Action Gating', () => {
-    const defaultResvPayload = {
-      MovementType: '201',
-      Plant: '1120',
-      StorageLocation: 'HS01',
-      Material: '8000000023',
-      Quantity: 10,
-      Unit: 'NOS',
-      CostCenter: '1011201301',
-      WarehouseNumber: 'W01',
-      ClientAttemptId: 'test-attempt-001'
-    };
-
-    describe('createReservation action', () => {
-      const url = '/odata/v4/reservation-entry/createReservation';
-
-      it('rejects unauthenticated request with 401', async () => {
-        await expect(POST(url, defaultResvPayload)).rejects.toMatchObject({ response: { status: 401 } });
-        expect(resvSpy).not.toHaveBeenCalled();
-      });
-
-      it('rejects read-only Viewer (test-viewer-1120) with 403', async () => {
-        await expect(POST(url, defaultResvPayload, { auth: { username: 'test-viewer-1120', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(resvSpy).not.toHaveBeenCalled();
-      });
-
-      it('permits authorized WarehouseClerk (test-clerk-1120)', async () => {
-        const res = await POST(url, defaultResvPayload, { auth: { username: 'test-clerk-1120', password: '' } });
-        expect(res.status).toBe(200);
-        expect(resvSpy).toHaveBeenCalledTimes(1);
-      });
-
-      it('rejects out-of-scope clerk (test-clerk-1130, plant 1130) creating reservation for plant 1120 with 403', async () => {
-        await expect(POST(url, defaultResvPayload, { auth: { username: 'test-clerk-1130', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(resvSpy).not.toHaveBeenCalled();
-      });
-
-      it('rejects unassigned plant user (test-viewer-noplant, no plant attribute) with 403', async () => {
-        await expect(POST(url, defaultResvPayload, { auth: { username: 'test-viewer-noplant', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(resvSpy).not.toHaveBeenCalled();
-      });
-    });
-
-    describe('createTransferRequirement action', () => {
-      const url = '/odata/v4/reservation-entry/createTransferRequirement';
-      const payload = { ReservationNo: '520001', ReservationItem: '0001', WarehouseNumber: 'W01' };
-
-      it('rejects unauthenticated request with 401', async () => {
-        await expect(POST(url, payload)).rejects.toMatchObject({ response: { status: 401 } });
-        expect(trSpy).not.toHaveBeenCalled();
-      });
-
-      it('rejects read-only Viewer (test-viewer-1120) with 403', async () => {
-        await expect(POST(url, payload, { auth: { username: 'test-viewer-1120', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(trSpy).not.toHaveBeenCalled();
-      });
-
-      it('permits authorized WarehouseClerk (test-clerk-1120)', async () => {
-        const res = await POST(url, payload, { auth: { username: 'test-clerk-1120', password: '' } });
-        expect(res.status).toBe(200);
-        expect(trSpy).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    describe('createTOFromTR action', () => {
-      const url = '/odata/v4/reservation-entry/createTOFromTR';
-      const payload = { ReservationNo: '520001', ReservationItem: '0001', WarehouseNumber: 'W01', TRNumber: '1000001', autoConfirm: false };
-
-      it('rejects unauthenticated request with 401', async () => {
-        await expect(POST(url, payload)).rejects.toMatchObject({ response: { status: 401 } });
-      });
-
-      it('rejects read-only Viewer (test-viewer-1120) with 403', async () => {
-        await expect(POST(url, payload, { auth: { username: 'test-viewer-1120', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-      });
-
-      it('permits authorized WarehouseClerk (test-clerk-1120) through auth gate', async () => {
-        const res = await POST(url, payload, { auth: { username: 'test-clerk-1120', password: '' } });
-        expect(res.status).toBe(200);
-      });
-    });
-
-    describe('confirmTransferOrder action', () => {
-      const url = '/odata/v4/reservation-entry/confirmTransferOrder';
-      const payload = { ReservationNo: '520001', ReservationItem: '0001', WarehouseNumber: 'W01', TransferOrder: '1030001' };
-
-      it('rejects unauthenticated request with 401', async () => {
-        await expect(POST(url, payload)).rejects.toMatchObject({ response: { status: 401 } });
-        expect(toConfirmSpy).not.toHaveBeenCalled();
-      });
-
-      it('rejects read-only Viewer (test-viewer-1120) with 403', async () => {
-        await expect(POST(url, payload, { auth: { username: 'test-viewer-1120', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(toConfirmSpy).not.toHaveBeenCalled();
-      });
-
-      it('permits authorized WarehouseClerk (test-clerk-1120)', async () => {
-        const res = await POST(url, payload, { auth: { username: 'test-clerk-1120', password: '' } });
-        expect(res.status).toBe(200);
-        expect(toConfirmSpy).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    describe('createReservationEntry action', () => {
-      const url = '/odata/v4/reservation-entry/createReservationEntry';
-
-      it('rejects unauthenticated request with 401', async () => {
-        await expect(POST(url, defaultResvPayload)).rejects.toMatchObject({ response: { status: 401 } });
-      });
-
-      it('rejects read-only Viewer (test-viewer-1120) with 403', async () => {
-        await expect(POST(url, defaultResvPayload, { auth: { username: 'test-viewer-1120', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-      });
-
-      it('permits authorized WarehouseClerk (test-clerk-1120) past authorization gate', async () => {
-        const res = await POST(url, defaultResvPayload, { auth: { username: 'test-clerk-1120', password: '' } })
-          .catch((err) => err.response);
-        // test-clerk-1120 is authenticated and authorized; not rejected with 401 or 403
-        expect(res.status).not.toBe(401);
-        expect(res.status).not.toBe(403);
-      });
-
-      it('rejects out-of-scope clerk (test-clerk-1130, plant 1130) creating reservation entry for plant 1120 with 403', async () => {
-        await expect(POST(url, defaultResvPayload, { auth: { username: 'test-clerk-1130', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-      });
-
-      it('rejects unassigned plant user (test-viewer-noplant, no plant attribute) creating entry with 403', async () => {
-        await expect(POST(url, defaultResvPayload, { auth: { username: 'test-viewer-noplant', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-      });
-    });
-
-    describe('plant limits read from the document, not the request', () => {
-      const clerk1120 = { auth: { username: 'test-clerk-1120', password: '' } };
-      const clerk1130 = { auth: { username: 'test-clerk-1130', password: '' } };
-      const base = { ReservationNo: '520001', ReservationItem: '0001', WarehouseNumber: 'W01' };
-      // Own reservation numbers, so the result does not depend on rows other tests in this file created.
-      const seedTrack = async (ReservationNo, Plant) => {
-        await DELETE.from('saps4hana.wm.ReservationTrack').where({ ReservationNo, ReservationItem: '0001' });
-        await INSERT.into('saps4hana.wm.ReservationTrack').entries({ ReservationNo, ReservationItem: '0001', MovementType: '201', Plant, StorageLocation: 'HS01', Material: '8000000023', Quantity: 1, Unit: 'KG', WarehouseNumber: 'W01', Status_code: '01' });
-      };
-      const sapPlant = (table, rows) => {
-        const original = _rfcReadTableSpy.getMockImplementation();
-        _rfcReadTableSpy.mockImplementation(async (name, ...rest) => (name === table ? rows() : original(name, ...rest)));
-      };
-
-      it('createTransferRequirement: refuses a clerk of another plant than the tracked reservation', async () => {
-        await seedTrack('0000529901', '1120');
-        await expect(POST('/odata/v4/reservation-entry/createTransferRequirement', { ...base, ReservationNo: '0000529901' }, clerk1130))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(trSpy).not.toHaveBeenCalled();
-      });
-
-      it("createTOFromTR: refuses a clerk who names a foreign plant's TR on their own reservation", async () => {
-        sapPlant('LTBP', () => [{ WERKS: '1130' }]);
-        await expect(POST('/odata/v4/reservation-entry/createTOFromTR', { ...base, TRNumber: '1000001' }, clerk1120))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(_toSpy).not.toHaveBeenCalled();
-      });
-
-      it('createTOFromTR: fails closed when the TR plant cannot be read', async () => {
-        sapPlant('LTBP', () => { throw new Error('RFC down'); });
-        await expect(POST('/odata/v4/reservation-entry/createTOFromTR', { ...base, TRNumber: '1000001' }, clerk1120))
-          .rejects.toMatchObject({ response: { status: 503 } });
-        expect(_toSpy).not.toHaveBeenCalled();
-      });
-
-      it("confirmTransferOrder: refuses a foreign plant's TO, with or without a reservation", async () => {
-        sapPlant('LTAP', () => [{ WERKS: '1130' }]);
-        await expect(POST('/odata/v4/reservation-entry/confirmTransferOrder', { ...base, TransferOrder: '1030001' }, clerk1120))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        await expect(POST('/odata/v4/reservation-entry/confirmTransferOrder', { WarehouseNumber: 'W01', TransferOrder: '1030001' }, clerk1120))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(toConfirmSpy).not.toHaveBeenCalled();
-      });
-
-      it('confirmTransferOrder: fails closed when SAP has no plant for the TO', async () => {
-        sapPlant('LTAP', () => []);
-        await expect(POST('/odata/v4/reservation-entry/confirmTransferOrder', { WarehouseNumber: 'W01', TransferOrder: '1030001' }, clerk1120))
-          .rejects.toMatchObject({ response: { status: 503 } });
-        expect(toConfirmSpy).not.toHaveBeenCalled();
-      });
-
-      it('retryStep: refuses a clerk of another plant than the tracked reservation', async () => {
-        await seedTrack('0000529902', '1120');
-        await expect(POST('/odata/v4/reservation-entry/retryStep', { ReservationNo: '0000529902', ReservationItem: '0001', Step: 'TR' }, clerk1130))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(trSpy).not.toHaveBeenCalled();
-      });
-
-      it('an Admin is not limited and needs no plant read', async () => {
-        sapPlant('LTAP', () => [{ WERKS: '1130' }]);
-        const res = await POST('/odata/v4/reservation-entry/confirmTransferOrder', { WarehouseNumber: 'W01', TransferOrder: '1030001' }, { auth: { username: 'khushal', password: '' } });
-        expect(res.status).toBe(200);
-        expect(toConfirmSpy).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    describe('postMigoGoodsMovement action', () => {
-      const url = '/odata/v4/reservation-entry/postMigoGoodsMovement';
-      const payload = {
-        ReservationNo: '520001',
-        ReservationItem: '0001',
-        MovementType: '201',
-        Plant: '1120',
-        StorageLocation: 'HS01',
-        Material: '8000000023',
-        Quantity: 10,
-        Unit: 'NOS',
-        CostCenter: '1011201301'
-      };
-
-      it('rejects unauthenticated request with 401', async () => {
-        await expect(POST(url, payload)).rejects.toMatchObject({ response: { status: 401 } });
-        expect(postMigoSpy).not.toHaveBeenCalled();
-      });
-
-      it('rejects read-only Viewer (test-viewer-1120) with 403', async () => {
-        await expect(POST(url, payload, { auth: { username: 'test-viewer-1120', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(postMigoSpy).not.toHaveBeenCalled();
-      });
-
-      it('permits authorized WarehouseClerk (test-clerk-1120) through auth gate', async () => {
-        const res = await POST(url, payload, { auth: { username: 'test-clerk-1120', password: '' } })
-          .catch((err) => err.response);
-        expect(res.status).not.toBe(401);
-        expect(res.status).not.toBe(403);
-      });
-
-      it('rejects out-of-scope clerk (test-clerk-1130, plant 1130) posting MIGO for plant 1120 with 403', async () => {
-        await expect(POST(url, payload, { auth: { username: 'test-clerk-1130', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(postMigoSpy).not.toHaveBeenCalled();
-      });
-
-      it('rejects unassigned plant user (test-viewer-noplant) with 403', async () => {
-        await expect(POST(url, payload, { auth: { username: 'test-viewer-noplant', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(postMigoSpy).not.toHaveBeenCalled();
-      });
-    });
-
-    describe('executeReservationWarehouseFlow action', () => {
-      const url = '/odata/v4/reservation-entry/executeReservationWarehouseFlow';
-      const flowPayload = {
-        movementType: '201',
-        plant: '1120',
-        storageLocation: 'HS01',
-        material: '8000000023',
-        quantity: 10,
-        unit: 'NOS',
-        costCenter: '1011201301',
-        warehouseNumber: 'W01'
-      };
-
-      it('rejects unauthenticated request with 401', async () => {
-        await expect(POST(url, flowPayload)).rejects.toMatchObject({ response: { status: 401 } });
-        expect(flowSpy).not.toHaveBeenCalled();
-      });
-
-      it('rejects read-only Viewer (test-viewer-1120) with 403', async () => {
-        await expect(POST(url, flowPayload, { auth: { username: 'test-viewer-1120', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(flowSpy).not.toHaveBeenCalled();
-      });
-
-      it('permits authorized WarehouseClerk (test-clerk-1120)', async () => {
-        const res = await POST(url, flowPayload, { auth: { username: 'test-clerk-1120', password: '' } });
-        expect(res.status).toBe(200);
-        expect(flowSpy).toHaveBeenCalledTimes(1);
-      });
-
-      it('rejects out-of-scope clerk (test-clerk-1130, plant 1130) executing flow for plant 1120 with 403', async () => {
-        await expect(POST(url, flowPayload, { auth: { username: 'test-clerk-1130', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(flowSpy).not.toHaveBeenCalled();
-      });
-
-      it('rejects unassigned plant user (test-viewer-noplant, no plant attribute) executing flow with 403', async () => {
-        await expect(POST(url, flowPayload, { auth: { username: 'test-viewer-noplant', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-        expect(flowSpy).not.toHaveBeenCalled();
-      });
-    });
-
-    describe('getOpenReservations function (plant scope)', () => {
-      const url = "/odata/v4/reservation-entry/getOpenReservations(plant='1120',movementType='')";
-
-      it('rejects out-of-scope user (test-clerk-1130, plant 1130) querying plant 1120 with 403', async () => {
-        await expect(GET(url, { auth: { username: 'test-clerk-1130', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-      });
-
-      it('rejects unassigned plant user (test-viewer-noplant) querying plant 1120 with 403', async () => {
-        await expect(GET(url, { auth: { username: 'test-viewer-noplant', password: '' } }))
-          .rejects.toMatchObject({ response: { status: 403 } });
-      });
-
-      it('permits authorized user (test-clerk-1120, plant 1120) querying plant 1120', async () => {
-        const res = await GET(url, { auth: { username: 'test-clerk-1120', password: '' } });
-        expect(res.status).toBe(200);
-        expect(res.data.value).toHaveLength(1);
-      });
-    });
   });
 
   // =========================================================================

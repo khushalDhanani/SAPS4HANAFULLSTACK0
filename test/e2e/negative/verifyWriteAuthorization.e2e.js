@@ -17,10 +17,6 @@ const ROOT = path.join(__dirname, '../../..');
 const SKIP_SERVICES = /(^AuthService$|_SRV$)/;
 
 const PLANT_CASES = [
-    { name: 'createReservation for plant 1120', path: '/odata/v4/reservation-entry/createReservation',
-        body: { MovementType: '201', Plant: '1120', StorageLocation: 'HS01', Material: 'E2E', Quantity: 1, Unit: 'EA', CostCenter: '1011201301' } },
-    { name: 'createReservationEntry for plant 1120', path: '/odata/v4/reservation-entry/createReservationEntry',
-        body: { MovementType: '201', Plant: '1120', StorageLocation: 'HS01', Material: 'E2E', Quantity: 1, Unit: 'EA', CostCenter: '1011201301' } },
     { name: 'HU pack for plant 1120', path: '/odata/v4/handling-unit/pack',
         body: { handlingUnitExternalID: 'E2E', material: 'E2E', quantity: 1, unit: 'EA', plant: '1120', storageLocation: 'HS01' } },
     { name: 'postGoodsReceipt for plant 1120', path: '/odata/v4/goods-receipt/postGoodsReceipt',

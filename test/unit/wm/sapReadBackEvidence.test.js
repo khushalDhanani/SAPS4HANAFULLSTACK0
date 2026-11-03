@@ -20,13 +20,12 @@ const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/Re
 const GoodsIssuePostingClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssuePostingClient');
 const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
-const { POST } = cds.test(__dirname + '/../../../');
+cds.test(__dirname + '/../../../');
 
 describe('P1: Controlled SAP Read-Back Evidence for Critical Movement Flows [mock only]', () => {
   let adapter;
   let rfcClient;
   let postingClient;
-  const authCarol = { auth: { username: 'test-clerk-1120', password: '' } };
 
   beforeEach(() => {
     jest.restoreAllMocks();
@@ -403,32 +402,4 @@ describe('P1: Controlled SAP Read-Back Evidence for Critical Movement Flows [moc
     });
   });
 
-  // ===========================================================================
-  // SECTION 7: Controlled SAP Read-Back HTTP Action Endpoint
-  // ===========================================================================
-  describe('7. HTTP Action verifyMaterialDocument Endpoint', () => {
-
-    test('POST /odata/v4/reservation-entry/verifyMaterialDocument returns verified contract', async () => {
-      jest.spyOn(ReservationProcessAdapter.prototype, 'verifyMaterialDocument').mockResolvedValue({
-        success: true,
-        stage: 'MIGO',
-        materialDocument: '4900050142',
-        materialDocumentYear: '2026',
-        movementType: '201'
-      });
-
-      const res = await POST('/odata/v4/reservation-entry/verifyMaterialDocument', {
-        materialDocument: '4900050142',
-        materialDocYear: '2026',
-        movementType: '201',
-        plant: '1120'
-      }, authCarol);
-
-      expect(res.status).toBe(200);
-      expect(res.data.success).toBe(true);
-      expect(res.data.materialDocument).toBe('4900050142');
-      expect(res.data.materialDocumentYear).toBe('2026');
-      expect(res.data.movementType).toBe('201');
-    });
-  });
 });
