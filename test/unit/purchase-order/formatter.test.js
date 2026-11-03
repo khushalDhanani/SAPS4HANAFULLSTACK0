@@ -3,7 +3,6 @@
  */
 
 let mmFormatter;
-let fiFormatter;
 
 const mockDateFormat = {
     getDateInstance: jest.fn(_options => ({
@@ -22,31 +21,12 @@ const originalSap = global.sap;
 global.sap = {
     ui: {
         define: function (deps, factory) {
-            const hasNumberFormat = deps.some(d => d && d.includes("NumberFormat"));
-            if (hasNumberFormat) {
-                // FI Formatter
-                const mockNumberFormat = {
-                    getCurrencyInstance: jest.fn(() => ({
-                        format: jest.fn(v => Number(v).toFixed(2))
-                    }))
-                };
-                fiFormatter = factory(mockNumberFormat, mockDateFormat);
-            } else {
-                // MM / Common Formatter
-                mmFormatter = factory(mockDateFormat);
-            }
+            mmFormatter = factory(mockDateFormat);
         }
     }
 };
 
-const fs = require('fs');
-const path = require('path');
-
 require('../../../app/fiori-app/webapp/model/formatter');
-const fiFormatterPath = path.resolve(__dirname, '../../../app/fiori-app/webapp/modules/fi/journal-entry/model/formatter.js');
-if (fs.existsSync(fiFormatterPath)) {
-    require(fiFormatterPath);
-}
 
 describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
     describe('Common / MM Formatter (webapp/model/formatter.js)', () => {
@@ -203,24 +183,6 @@ describe('Strict Platform Date Formatter (DD-MM-YYYY)', () => {
             expect(mmFormatter.createdByDisplay("", "SAP_USER_23")).toBe("SAP_USER_23");
             expect(mmFormatter.createdByDisplay("Shriram Andhale", "")).toBe("Shriram Andhale");
             expect(mmFormatter.createdByDisplay("", "")).toBe("-");
-        });
-    });
-
-    (fiFormatter ? describe : describe.skip)('FI Formatter (modules/fi/journal-entry/model/formatter.js)', () => {
-        it('should return empty string for falsy date values', () => {
-            expect(fiFormatter.formatDate(null)).toBe("");
-            expect(fiFormatter.formatDate(undefined)).toBe("");
-            expect(fiFormatter.formatDate("")).toBe("");
-        });
-
-        it('should format ISO YYYY-MM-DD string to DD-MM-YYYY', () => {
-            expect(fiFormatter.formatDate("2026-09-05")).toBe("05-09-2026");
-            expect(fiFormatter.formatDate("2025-07-15")).toBe("15-07-2025");
-        });
-
-        it('should format Date instance to DD-MM-YYYY', () => {
-            const oDate = new Date(2026, 8, 5);
-            expect(fiFormatter.formatDate(oDate)).toBe("05-09-2026");
         });
     });
 

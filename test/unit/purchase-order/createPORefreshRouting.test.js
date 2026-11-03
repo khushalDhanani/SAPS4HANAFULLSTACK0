@@ -261,47 +261,4 @@ describe('Unit & Regression: Create PO Refresh and Routing State Management', ()
         });
     });
 
-    describe('Shell Navigation Synchronization', () => {
-        it('should map createPurchaseOrder route to correct Shell title and enable back button', () => {
-            const mockShellModel = new MockJSONModel({
-                currentTitle: "",
-                showNavButton: false
-            });
-
-            // Simulate App.controller shell update logic
-            function updateShell(sRouteName) {
-                let sTitle = "";
-                let bShowNav = false;
-                if (sRouteName === "createPurchaseOrder") {
-                    sTitle = "Create Purchase Order";
-                    bShowNav = true;
-                } else if (sRouteName === "purchaseOrders") {
-                    sTitle = "Purchase Orders";
-                    bShowNav = true;
-                } else if (sRouteName === "dashboard") {
-                    sTitle = "Enterprise Operations Dashboard";
-                    bShowNav = false;
-                }
-                mockShellModel.setProperty("/currentTitle", sTitle);
-                mockShellModel.setProperty("/showNavButton", bShowNav);
-            }
-
-            updateShell("createPurchaseOrder");
-            expect(mockShellModel.getProperty("/currentTitle")).toBe("Create Purchase Order");
-            expect(mockShellModel.getProperty("/showNavButton")).toBe(true);
-
-            updateShell("purchaseOrders");
-            expect(mockShellModel.getProperty("/currentTitle")).toBe("Purchase Orders");
-            expect(mockShellModel.getProperty("/showNavButton")).toBe(true);
-        });
-
-        it('should handle direct URL hash mm/purchase-orders/create correctly on refresh', () => {
-            const sHash = "mm/purchase-orders/create";
-            let sDerivedRoute = "";
-            if (sHash.indexOf("mm/purchase-orders/create") === 0) {
-                sDerivedRoute = "createPurchaseOrder";
-            }
-            expect(sDerivedRoute).toBe("createPurchaseOrder");
-        });
-    });
 });

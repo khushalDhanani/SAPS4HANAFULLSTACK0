@@ -437,39 +437,4 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
     });
   });
 
-  // ─── Live Customizing Confirmation (Parts 1 & 2) ──────────────────────────
-
-  describe('Live SAP customizing data confirmation (DC 10/52 vs 14/00, TVSTZ/TVST)', () => {
-    test('confirms Customer 1120 uses 1000/14/00 while legacy Customer 10135 used 1000/10/52', () => {
-      // Plant 1120 / CS02 assigns Customer 0000001120 in T001L:
-      const t001l_CS02 = { WERKS: '1120', LGORT: 'CS02', VKORG: '1000', VTWEG: '14', SPART: '00', KUNNR: '0000001120' };
-
-      // KNVV records verified live from Client 220:
-      const knvv_1120 = { KUNNR: '0000001120', VKORG: '1000', VTWEG: '14', SPART: '00' };
-      const knvv_10135 = { KUNNR: '0000010135', VKORG: '1000', VTWEG: '10', SPART: '52' };
-
-      expect(knvv_1120.VKORG).toBe(t001l_CS02.VKORG);
-      expect(knvv_1120.VTWEG).toBe(t001l_CS02.VTWEG);
-      expect(knvv_1120.SPART).toBe(t001l_CS02.SPART);
-
-      // Customer 10135 explains why DC 10 / Div 52 was previously hardcoded:
-      expect(knvv_10135.VTWEG).toBe('10');
-      expect(knvv_10135.SPART).toBe('52');
-    });
-
-    test('confirms shipping points for Plant 1120 in TVSTZ and TVST: 1112 and WAVG are both valid', () => {
-      const tvstz_1120 = ['WAVG', '1112'];
-      const tvst_entries = [
-        { VSTEL: '1112', FABKL: 'IN', ALAND: 'IN', VTEXT: '1120-FG Loading Area' },
-        { VSTEL: 'WAVG', FABKL: 'IN', ALAND: 'IN', VTEXT: 'Aether Vault Gamma' }
-      ];
-
-      expect(tvstz_1120).toContain('1112');
-      expect(tvstz_1120).toContain('WAVG');
-
-      const vstelCodes = tvst_entries.map(e => e.VSTEL);
-      expect(vstelCodes).toContain('1112');
-      expect(vstelCodes).toContain('WAVG');
-    });
-  });
 });

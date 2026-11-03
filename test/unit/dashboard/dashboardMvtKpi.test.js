@@ -1,17 +1,13 @@
 /**
  * Dashboard Movement-Type KPI Cards — Unit Tests
  *
- * Tests the Dashboard controller's _loadGiKpis() method that fetches
- * movement-type KPI data (201/301/311) from the Goods Issue dashboard
- * backend endpoint and populates the view model.
- *
- * Also tests the GoodsIssueDashboardClient.getDashboardData() server-side
+ * Tests the GoodsIssueDashboardClient.getDashboardData() server-side
  * aggregation and caching behaviour.
  */
 
 'use strict';
 
-// ─── 1. GoodsIssueDashboardClient backend tests ─────────────────────────────
+// ─── GoodsIssueDashboardClient backend tests ─────────────────────────────
 
 const GoodsIssueDashboardClient = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssueDashboardClient');
 
@@ -157,108 +153,5 @@ describe('Unit: GoodsIssueDashboardClient — Movement Type KPI Aggregation', ()
         await expect(
             client.getDashboardData({ days: 30, plant: 'INVALID_LONG_PLANT', forceRefresh: true })
         ).rejects.toThrow(/Invalid plant code/);
-    });
-});
-
-// ─── 2. Dashboard controller _loadGiKpis logic tests (mocked ODataClient) ───
-
-describe('Unit: Dashboard Controller — GI Movement-Type KPI Loading Logic', () => {
-    // These tests validate the controller logic without SAPUI5 runtime,
-    // focusing on model property mapping from the API response.
-
-    const GI_KPI_KEYS = [
-        'mvt311Total', 'mvt311Today'
-    ];
-
-    function createMockModel() {
-        const data = {};
-        return {
-            data,
-            setProperty: jest.fn((path, value) => { data[path] = value; }),
-            getProperty: jest.fn((path) => data[path])
-        };
-    }
-
-    test('maps Kpis response to correct model properties', () => {
-        const oModel = createMockModel();
-        const oKpis = {
-            Mvt311: { TotalCount: 1052, OpenPendingCount: 5, TodayPostingsCount: 1 },
-            Overall: { TotalCount: 4072, OpenPendingCount: 5, TodayPostingsCount: 1 }
-        };
-
-        // Simulate the mapping logic from the controller
-        const mMapping = {
-            'Mvt311': { total: 'mvt311Total', today: 'mvt311Today' }
-        };
-
-        Object.keys(mMapping).forEach(function (sKpiKey) {
-            const oItem = oKpis[sKpiKey];
-            const mTarget = mMapping[sKpiKey];
-            if (oItem && typeof oItem.TotalCount === 'number') {
-                oModel.setProperty('/' + mTarget.total, oItem.TotalCount);
-            } else {
-                oModel.setProperty('/' + mTarget.total, null);
-            }
-            if (oItem && typeof oItem.TodayPostingsCount === 'number') {
-                oModel.setProperty('/' + mTarget.today, oItem.TodayPostingsCount);
-            } else {
-                oModel.setProperty('/' + mTarget.today, null);
-            }
-        });
-
-        expect(oModel.data['/mvt311Total']).toBe(1052);
-        expect(oModel.data['/mvt311Today']).toBe(1);
-    });
-
-    test('sets all properties to null on missing Kpis response', () => {
-        const oModel = createMockModel();
-
-        // Simulate error path: all keys set to null
-        GI_KPI_KEYS.forEach(function (sKey) {
-            oModel.setProperty('/' + sKey, null);
-        });
-        oModel.setProperty('/giKpiError', 'SAP not reachable');
-
-        GI_KPI_KEYS.forEach(function (sKey) {
-            expect(oModel.data['/' + sKey]).toBeNull();
-        });
-        expect(oModel.data['/giKpiError']).toBe('SAP not reachable');
-    });
-
-    test('sets properties to undefined during loading state', () => {
-        const oModel = createMockModel();
-
-        GI_KPI_KEYS.forEach(function (sKey) {
-            oModel.setProperty('/' + sKey, undefined);
-        });
-
-        GI_KPI_KEYS.forEach(function (sKey) {
-            expect(oModel.data['/' + sKey]).toBeUndefined();
-        });
-    });
-
-    test('formatTileState returns correct states', () => {
-        // Mirrors Dashboard.controller.js formatTileState
-        function formatTileState(vCount) {
-            if (vCount === undefined) return 'Loading';
-            return vCount === null ? 'Failed' : 'Loaded';
-        }
-
-        expect(formatTileState(undefined)).toBe('Loading');
-        expect(formatTileState(null)).toBe('Failed');
-        expect(formatTileState(0)).toBe('Loaded');
-        expect(formatTileState(54)).toBe('Loaded');
-    });
-
-    test('formatMetricValue returns correct display text', () => {
-        // Mirrors Dashboard.controller.js formatMetricValue
-        function formatMetricValue(vCount) {
-            return (typeof vCount === 'number') ? String(vCount) : '';
-        }
-
-        expect(formatMetricValue(undefined)).toBe('');
-        expect(formatMetricValue(null)).toBe('');
-        expect(formatMetricValue(0)).toBe('0');
-        expect(formatMetricValue(9671)).toBe('9671');
     });
 });

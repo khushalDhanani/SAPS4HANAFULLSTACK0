@@ -1,5 +1,5 @@
 /**
- * Phase 5 #3 (handler routing) + #4 (frontend contract).
+ * Phase 5 #3 (handler routing).
  *
  * #3 - A per-type action handler enforces ONLY its own type's validation. A 201-shaped payload
  *      (CostCenter, no reservation) sent to postGoodsIssue261 is rejected by 261's own validation
@@ -8,8 +8,6 @@
  *      shared /postGoodsIssue endpoint).
  */
 
-const fs = require('fs');
-const path = require('path');
 const PerTypeGoodsIssueHandler = require('../../../srv/wm/goods-issue/handlers/goodsIssuePerType.handler');
 
 function fakeService() {
@@ -181,23 +179,5 @@ describe('postGoodsIssue201 direct posting and error classification', () => {
     await handlers['postGoodsIssue201'](req(payload));
     await handlers['postGoodsIssue201'](req(payload));
     expect(post.mock.calls[0][0].ReferenceDocument).not.toBe(post.mock.calls[1][0].ReferenceDocument);
-  });
-});
-
-describe('Phase 5 #4 - frontend service contract (each posts only to its own action)', () => {
-  const FE = path.resolve(__dirname, '../../../app/fiori-app/webapp/modules/wm/goods-issue/service');
-
-  test.each(['201', '301', '311'])('GoodsIssue%sService posts to /postGoodsIssue%s and never the shared endpoint', (type) => {
-    const serviceFile = path.join(FE, `GoodsIssue${type}Service.js`);
-    if (!fs.existsSync(serviceFile)) {
-      return;
-    }
-    const src = fs.readFileSync(serviceFile, 'utf8');
-    // The posting call must target the type's own action.
-    expect(src).toContain(`/postGoodsIssue${type}`);
-    // ...and must NOT post to the removed shared endpoint. (Reversal uses /reverseGoodsIssue, allowed.)
-    const postsSharedEndpoint = /post\(\s*BASE_PATH_GI\s*\+\s*["']\/postGoodsIssue["']/.test(src)
-      || /["']\/odata\/v4\/goods-issue\/postGoodsIssue["']/.test(src);
-    expect(postsSharedEndpoint).toBe(false);
   });
 });

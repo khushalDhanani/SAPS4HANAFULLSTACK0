@@ -121,18 +121,6 @@ describe('Phase 2: Write Workflow Document Persistence & Safe Retries', () => {
       });
     });
 
-    test('Identifies and rejects placeholder inputs (___, xxxxx, etc.) as unverified/not provided', () => {
-      const placeholders = ['___', 'xxxxx', 'PLACEHOLDER', 'exact message', '0000000000'];
-
-      placeholders.forEach((val) => {
-        const isPlaceholder = (s) => !s || s === '___' || s === 'xxxxx' || s === 'PLACEHOLDER' || s === 'exact message' || /^0+$/.test(s);
-        expect(isPlaceholder(val)).toBe(true);
-      });
-
-      const genuineDoc = '5000000201';
-      const isGenuine = (s) => /^\d{10}$/.test(s) && !/^0+$/.test(s);
-      expect(isGenuine(genuineDoc)).toBe(true);
-    });
   });
 
   // =========================================================================
