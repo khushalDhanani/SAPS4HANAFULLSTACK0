@@ -192,6 +192,8 @@ service TrToService @(path: '/odata/v4/tr-to') {
         Status                  : String(2);
         StatusText              : String(40);
         StockWarning            : String(255);
+        RecoveryRequired        : Boolean; // lookupTR only reads; createTOFromTR performs the recovery
+        RecoveryMessage         : String(255);
         Items                   : array of TRItem; // all open items; TRItem is '' until one of several is chosen
     };
 

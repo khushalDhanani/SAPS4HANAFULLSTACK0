@@ -1188,24 +1188,30 @@ class TrToAdapter {
       });
     }
 
-    let tr = type === 'RES' ? await this.getTRByReservation(tbnum, wh) : await this.getTR(tbnum, wh);
+    const tr = type === 'RES' ? await this.getTRByReservation(tbnum, wh) : await this.getTR(tbnum, wh);
 
     if (wh && tr.Lgnum && tr.Lgnum !== wh) {
       throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} belongs to warehouse ${tr.Lgnum}, not ${wh}`);
     }
     if (tr.Statu === 'E' || tr.Statu === 'U') {
-      const isCorrupted = tr.Statu === 'E' ? await this._isCorruptedStagingTR(tr, wh) : null;
-      if (isCorrupted) {
-        LOG.warn(`[lookupTR] TR ${alphaOut(tr.Tbnum)} has STATU = 'E' with NO Transfer Order in SAP, but Reservation ${alphaOut(isCorrupted.ReservationNo)} is open; auto-recovering to active staging TR...`);
-        const recoveredTr = await this._recoverCorruptedStagingTR(tr, isCorrupted, wh);
-        if (recoveredTr) {
-          tr = recoveredTr;
-        } else {
-          throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = ${tr.Statu})`);
-        }
-      } else {
-        throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = ${tr.Statu})`);
-      }
+      const needsRecovery = tr.Statu === 'E' ? await this._isCorruptedStagingTR(tr, wh) : null;
+      if (!needsRecovery) throw httpError(400, `Transfer Requirement ${alphaOut(tr.Tbnum)} is already completed (STATU = ${tr.Statu})`);
+      // A lookup only reads: the recovery write stays in createTOFromTR, which requires a warehouse role.
+      LOG.warn(`[lookupTR] TR ${alphaOut(tr.Tbnum)} has STATU = 'E' with NO Transfer Order in SAP, but Reservation ${alphaOut(needsRecovery.ReservationNo)} is open; recovery required`);
+      return {
+        TransferRequirement: alphaOut(tr.Tbnum),
+        WarehouseNumber: wh,
+        MovementType: tr.Bwlvs || '',
+        ReservationNo: alphaOut(needsRecovery.ReservationNo),
+        ReservationItem: alphaOut(needsRecovery.ReservationItem),
+        ReservationMovementType: needsRecovery.MovementType || '',
+        Plant: needsRecovery.Plant || '',
+        Status: tr.Statu,
+        StatusText: 'Recovery required',
+        RecoveryRequired: true,
+        RecoveryMessage: `Transfer Requirement ${alphaOut(tr.Tbnum)} is closed without a Transfer Order while reservation ${alphaOut(needsRecovery.ReservationNo)} is open. Create the Transfer Order to recover it.`,
+        Items: tr.Items || []
+      };
     }
 
     const open = this._openItems(tr);
