@@ -847,15 +847,9 @@ class TrToHandler {
     srv.on('postMigoGoodsMovement', handlePostMigoGoodsMovement);
     srv.on('PostMigoGoodsMovement', handlePostMigoGoodsMovement);
     srv.on('verifyMaterialDocument', handleVerifyMaterialDocument);
-    srv.on('VerifyMaterialDocument', handleVerifyMaterialDocument);
     srv.on('verifyStock', handleVerifyStock);
-    srv.on('VerifyStock', handleVerifyStock);
-    srv.on('verifyResultingStock', handleVerifyStock);
-    srv.on('VerifyResultingStock', handleVerifyStock);
     srv.on('verifyReservation', handleVerifyReservation);
-    srv.on('VerifyReservation', handleVerifyReservation);
     srv.on('executeReservationWarehouseFlow', handleExecuteOrchestrator);
-    srv.on('ExecuteReservationWarehouseFlow', handleExecuteOrchestrator);
   }
 }
 

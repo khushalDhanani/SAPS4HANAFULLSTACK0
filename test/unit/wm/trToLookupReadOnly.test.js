@@ -207,3 +207,14 @@ describe('tr-to read operations keep to the user plants', () => {
     expect(await rows()).toEqual(before);
   });
 });
+
+describe('tr-to handler names with no service definition', () => {
+  test.each(['VerifyMaterialDocument', 'VerifyStock', 'verifyResultingStock', 'VerifyResultingStock', 'VerifyReservation', 'ExecuteReservationWarehouseFlow'])('%s cannot be reached over OData', async (name) => {
+    const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
+    const spies = ['verifyMaterialDocument', 'verifyStock', 'verifyReservation', 'executeReservationWarehouseFlow'].map((m) => jest.spyOn(ReservationProcessAdapter.prototype, m));
+    const { data: metadata } = await GET('/odata/v4/tr-to/$metadata', auth('khushal'));
+    expect(metadata).not.toContain(`Name="${name}"`);
+    await expect(POST(`/odata/v4/tr-to/${name}`, {}, auth('khushal'))).rejects.toMatchObject({ response: { status: expect.any(Number) } });
+    spies.forEach((spy) => { expect(spy).not.toHaveBeenCalled(); spy.mockRestore(); });
+  });
+});
