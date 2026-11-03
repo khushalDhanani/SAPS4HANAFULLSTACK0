@@ -109,6 +109,7 @@
         "sap.m": {},
         "sap.ui.comp": {},
         "sap.f": {},
+        "sap.tnt": {},
         "sap.uxap": {}
       }
     },
@@ -217,7 +218,7 @@
         },
         {
           "name": "dashboard",
-          "pattern": "dashboard",
+          "pattern": "dashboard/:section:",
           "target": "TargetDashboard"
         },
         {

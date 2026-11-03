@@ -34,6 +34,9 @@ sap.ui.define([
         "customerReturnCount"
     ];
 
+    // Sections reachable by URL (#/dashboard/<section>); anything else shows the overview
+    var SECTIONS = ["mm", "sd", "ewm"];
+
     function toCount(vValue) {
         if (vValue === null || vValue === undefined || String(vValue).trim() === "") {
             return null;
@@ -64,6 +67,7 @@ sap.ui.define([
                         oRoute.attachPatternMatched(this._onDashboardMatched, this);
                     }
                 }, this);
+                oRouter.attachRouteMatched(this._onAnyRouteMatched, this);
             }
         },
 
@@ -90,7 +94,20 @@ sap.ui.define([
             return sText;
         },
 
-        _onDashboardMatched: function () {
+        _onAnyRouteMatched: function (oEvent) {
+            var sRoute = oEvent.getParameter("name");
+            if (sRoute !== "dashboard" && sRoute !== "default") {
+                this._bFiguresLoaded = false;
+            }
+        },
+
+        _onDashboardMatched: function (oEvent) {
+            var sSection = oEvent ? oEvent.getParameter("arguments").section : "";
+            this.getView().getModel("dashboardView").setProperty("/selectedTab", SECTIONS.indexOf(sSection) === -1 ? "overview" : sSection);
+            // A sidebar click only changes the section; the figures reload on arrival from another screen.
+            if (this._bFiguresLoaded) {
+                return;
+            }
             var oAuthModel = this.getOwnerComponent() ? this.getOwnerComponent().getModel("auth") : null;
             if (oAuthModel && oAuthModel.getProperty("/isAuthenticated") === false) {
                 // The session check (SSO / getUserInfo) may still be running when the route matches.
@@ -114,6 +131,7 @@ sap.ui.define([
 
         _loadDashboard: function () {
             this._bLoadPending = false;
+            this._bFiguresLoaded = true;
             this._loadMetrics();
         },
 
@@ -219,19 +237,6 @@ sap.ui.define([
             return vCount === null ? "Failed" : "Loaded";
         },
 
-        onTabSelect: function (oEvent) {
-            var sKey = oEvent.getParameter("key");
-            if (!sKey && oEvent.getParameter("item")) {
-                sKey = oEvent.getParameter("item").getKey();
-            }
-            if (sKey) {
-                var oViewModel = this.getView().getModel("dashboardView");
-                if (oViewModel) {
-                    oViewModel.setProperty("/selectedTab", sKey);
-                }
-            }
-        },
-
         onRefresh: function () {
             var that = this;
             this._loadMetrics().then(function () {
@@ -298,16 +303,7 @@ sap.ui.define([
         },
 
         switchToTab: function (sKey) {
-            if (sKey) {
-                var oTabBar = this.byId("dashboardTabBar");
-                var oViewModel = this.getView().getModel("dashboardView");
-                if (oTabBar) {
-                    oTabBar.setSelectedKey(sKey);
-                }
-                if (oViewModel) {
-                    oViewModel.setProperty("/selectedTab", sKey);
-                }
-            }
+            this.getOwnerComponent().getRouter().navTo("dashboard", { section: sKey });
         },
 
         onSelectTabSD: function () { this.switchToTab("sd"); },

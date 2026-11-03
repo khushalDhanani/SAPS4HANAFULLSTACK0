@@ -62,24 +62,10 @@
                     visible="{= !!${dashboardView>/metricsError} }"
                     class="sapUiSmallMarginBottom" />
 
-                <IconTabBar
-                    id="dashboardTabBar"
-                    selectedKey="{dashboardView>/selectedTab}"
-                    select=".onTabSelect"
-                    headerMode="Inline"
-                    tabDensityMode="Compact"
-                    expandable="false"
-                    applyContentPadding="false"
-                    headerBackgroundDesign="Transparent"
-                    class="sapUiNoContentPadding">
+                <VBox id="dashboardSections">
                     <items>
                         <!-- OVERVIEW -->
-                        <IconTabFilter
-                            id="tabOverview"
-                            key="overview"
-                            icon="sap-icon://home"
-                            text="{i18n>tabOverviewTitle}"
-                            tooltip="{i18n>tabOverviewTooltip}">
+                        <VBox id="sectionOverview" visible="{= ${dashboardView>/selectedTab} === 'overview' }">
                             <VBox class="sapUiSmallMarginTop">
 
 
@@ -200,16 +186,11 @@
                                     </HBox>
                                 </Panel>
                             </VBox>
-                        </IconTabFilter>
+                        </VBox>
 
 
                         <!-- PROCUREMENT (MM) -->
-                        <IconTabFilter
-                            id="tabMM"
-                            key="mm"
-                            icon="sap-icon://supplier"
-                            text="{i18n>tabMMTitle}"
-                            tooltip="{i18n>tabMMTooltip}">
+                        <VBox id="sectionMM" visible="{= ${dashboardView>/selectedTab} === 'mm' }">
                             <VBox class="sapUiSmallMarginTop">
                                 <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom" wrap="Wrap">
                                     <VBox class="sapUiTinyMarginBottom">
@@ -235,15 +216,10 @@
                                     </GenericTile>
                                 </HBox>
                             </VBox>
-                        </IconTabFilter>
+                        </VBox>
 
                         <!-- SALES (SD) -->
-                        <IconTabFilter
-                            id="tabSD"
-                            key="sd"
-                            icon="sap-icon://sales-order"
-                            text="{i18n>tabSDTitle}"
-                            tooltip="{i18n>tabSDTooltip}">
+                        <VBox id="sectionSD" visible="{= ${dashboardView>/selectedTab} === 'sd' }">
                             <VBox class="sapUiSmallMarginTop">
                                 <VBox class="sapUiTinyMarginBottom">
                                     <Title text="{i18n>tabSDHeading}" level="H3" titleStyle="H4" />
@@ -298,15 +274,10 @@
                                     </GenericTile>
                                 </HBox>
                             </VBox>
-                        </IconTabFilter>
+                        </VBox>
 
                         <!-- WAREHOUSE (EWM / WM) -->
-                        <IconTabFilter
-                            id="tabEWM"
-                            key="ewm"
-                            icon="sap-icon://inventory"
-                            text="{i18n>tabEWMTitle}"
-                            tooltip="{i18n>tabEWMTooltip}">
+                        <VBox id="sectionEWM" visible="{= ${dashboardView>/selectedTab} === 'ewm' }">
                             <VBox class="sapUiSmallMarginTop">
                                 <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiTinyMarginBottom">
                                     <VBox>
@@ -345,9 +316,9 @@
                                     </GenericTile>
                                 </HBox>
                             </VBox>
-                        </IconTabFilter>
+                        </VBox>
                     </items>
-                </IconTabBar>
+                </VBox>
             </VBox>
         </content>
     </Page>

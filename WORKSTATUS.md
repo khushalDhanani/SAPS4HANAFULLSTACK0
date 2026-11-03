@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Standard sidebar on all screens (2026-11-03 13:15 IST) — In Progress, uncommitted:** The dashboard's four tabs are now a `sap.tnt.SideNavigation` in the app shell, shown on every signed-in screen and hidden on login. Each item opens `#/dashboard/<section>`. See the Change Entry below for what was run.
+
 - **`tr-to` security fix and limited cleanup (2026-11-03) — PARTIAL, on local branch `fix/tr-to-lookup-readonly`, not pushed:** `lookupTR` no longer writes to SAP, read operations enforce plant scope, and 6 unreachable handler names and `getAvailableSUs` are removed. Backend `tr-to` stays deployed. See the Change Entry below.
 
 - **Scan To screen removed (2026-11-03) — PARTIAL, on local branch `feature/remove-scan-to`, not pushed:** The UI at `#/wm/scan-to` is gone; old URLs show the dashboard. This was the last screen for Transfer Order create and confirm and the follow-up goods movement. Backend and database are unchanged. See the Change Entry below.
@@ -62,6 +64,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Sidebar on all screens (2026-11-03): finish the full browser run, then the user reviews the screens and asks for a commit if happy.
+
 - `tr-to` (2026-11-03): review `fix/tr-to-lookup-readonly` and decide about merging. Check outside callers of `/odata/v4/tr-to` with API owners. Decide about `createTO`, `_createTO`, `checkSU`, `tools/test-rfc-trto.js` and the `scan-to` flow entry. `getAvailableSerials` is still not limited by plant in its SAP read.
 
 - Scan To removal (2026-11-03): review `feature/remove-scan-to` and decide whether to merge it. `/odata/v4/tr-to` now has no screen calling it but stays deployed and can post to SAP. Decide about it separately, and check for outside callers first.
@@ -96,6 +100,28 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-03 13:15 IST — Standard sidebar on all screens: In Progress
+
+- **Status:** In Progress. Not committed. No SAP write was made; browser runs read from SAP behind the write guard.
+- **Why:** The user asked to move the `#/dashboard` tabs into a standard UI5 sidebar, and chose all screens over the dashboard only.
+- **Changes:**
+  - `App.view.xml`: root is now `sap.tnt.ToolPage`, with the `ShellBar` in `header`, `SideNavigation` in `sideContent` and `<App id="app">` in `mainContents`.
+  - `App.controller.js`: `_getSideNavKey` picks the highlight from the route's first segment (`mm`, `sd` and `le`, `wm`); added `onSideNavItemPress` and `onMenuButtonPressed`. A phone closes the sidebar after a selection.
+  - `CommonHeader.fragment.xml`: `ShellBar` menu button turned on.
+  - `Dashboard.view.xml`: `IconTabBar` replaced by four `VBox` sections shown by `selectedTab`. Tile IDs are unchanged.
+  - `Dashboard.controller.js`: section comes from the route, an unknown section shows the overview, and figures reload only on arrival from another screen. `onTabSelect` removed as unused; `switchToTab` now navigates.
+  - `manifest.json`: added `sap.tnt`; `dashboard` pattern is now `dashboard/:section:`. `i18n.properties` and `i18n_en.properties`: added `sideNavAriaLabel`. `docs/e2e-coverage-matrix.md`: `dashboard` row updated.
+  - `screenCheck.js`: `openSession` takes `contextOptions`, used for the phone check.
+- **Dependencies:** `sap.tnt` is part of the pinned UI5 1.136.22 on the CDN, and no existing library has a sidebar with this layout. No npm package was added.
+- **Test decision:** TEST ADDED and TEST UPDATED: `AppController.test.js`, `dashboardMetrics.test.js`, `verifyShellScreens.e2e.js`.
+- **Executed validation:**
+  - `npx jest`: 224 suites passed, 1 skipped; 4,136 tests passed, 59 skipped. Run before the one-line ESLint comment added to `verifyShellScreens.e2e.js`.
+  - `npm run lint`: first run 4 errors in the new E2E file (`document` and `window` undefined), fixed; rerun clean.
+  - `npm --prefix app/fiori-app run lint`: clean. `npm --prefix app/fiori-app run build`: succeeded. `git diff --check`: clean.
+  - `TARGET_URL=http://localhost:4010 node test/e2e/runAllE2E.js --only=shell --workers=1`: PASS, 21 of 21 steps.
+- **Not covered:** No check that the sidebar is usable on a real phone or tablet; the phone check is an emulated Android browser. Screens were looked at by screenshot only for dashboard, purchase orders, rack demo, login and phone.
+- **Next action:** Finish the full browser run and record it here.
 
 ### 2026-11-03 — Scan To removal and `tr-to` fixes merged into `feature01`: PARTIAL
 

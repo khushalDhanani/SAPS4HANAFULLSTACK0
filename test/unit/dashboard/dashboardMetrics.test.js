@@ -124,6 +124,7 @@ describe('Unit: Dashboard Controller live figures', () => {
 
     const mockRouter = {
         getRoute: jest.fn().mockReturnValue({ attachPatternMatched: jest.fn() }),
+        attachRouteMatched: jest.fn(),
         navTo: jest.fn()
     };
 
@@ -347,6 +348,57 @@ describe('Unit: Dashboard Controller live figures', () => {
             expect(controller._loadMetrics).toHaveBeenCalledTimes(1);
         });
 
+        describe('sidebar sections', () => {
+            const matched = (section) => ({ getParameter: () => ({ section }) });
+            const routeMatched = (name) => ({ getParameter: () => name });
+
+            test('the route selects the section, and an unknown section shows the overview', () => {
+                const controller = setup(makeAuthModel(true));
+                const oViewModel = controller.getView().getModel('dashboardView');
+
+                controller._onDashboardMatched(matched('sd'));
+                expect(oViewModel.getProperty('/selectedTab')).toBe('sd');
+                controller._onDashboardMatched(matched('bogus'));
+                expect(oViewModel.getProperty('/selectedTab')).toBe('overview');
+                controller._onDashboardMatched(matched(undefined));
+                expect(oViewModel.getProperty('/selectedTab')).toBe('overview');
+            });
+
+            test('switching section does not reload the figures; returning from another screen does', () => {
+                const controller = setup(makeAuthModel(true));
+
+                controller._onDashboardMatched(matched(undefined));
+                controller._onAnyRouteMatched(routeMatched('dashboard'));
+                controller._onDashboardMatched(matched('mm'));
+                controller._onDashboardMatched(matched('ewm'));
+                expect(controller._loadMetrics).toHaveBeenCalledTimes(1);
+
+                controller._onAnyRouteMatched(routeMatched('purchaseOrders'));
+                controller._onDashboardMatched(matched('ewm'));
+                expect(controller._loadMetrics).toHaveBeenCalledTimes(2);
+            });
+
+            test('a section switch before the session check finished still loads once it authenticates', () => {
+                const oAuth = makeAuthModel(false);
+                const controller = setup(oAuth);
+
+                controller._onDashboardMatched(matched('mm'));
+                controller._onDashboardMatched(matched('sd'));
+                expect(controller._loadMetrics).not.toHaveBeenCalled();
+
+                oAuth.set(true);
+                expect(controller._loadMetrics).toHaveBeenCalledTimes(1);
+            });
+
+            test('Overview tiles open their section through the route', () => {
+                const controller = setup(makeAuthModel(true));
+                controller.onSelectTabSD();
+                expect(mockRouter.navTo).toHaveBeenLastCalledWith('dashboard', { section: 'sd' });
+                controller.onSelectTabEWM();
+                expect(mockRouter.navTo).toHaveBeenLastCalledWith('dashboard', { section: 'ewm' });
+            });
+        });
+
         test('never authenticated (redirect to login): nothing is requested', () => {
             const oAuth = makeAuthModel(false);
             const controller = setup(oAuth);
@@ -414,8 +466,12 @@ describe('Unit: Dashboard view binds only live figures', () => {
         expect(viewXml).not.toMatch(/onSimulateCarLoan|onNewCarLoanApp|onShowMasterDataInfo/);
         expect(viewXml).not.toMatch(/Client 220/);
         expect(viewXml).not.toMatch(/systemHealth|totalSpend|completeRate/);
-        const tabKeys = [...viewXml.matchAll(/<IconTabFilter[\s\S]*?key="([a-zA-Z]+)"/g)].map((m) => m[1]);
-        expect(tabKeys).toEqual(['overview', 'mm', 'sd', 'ewm']);
+        // The sidebar in the app shell and the dashboard's sections must offer the same four keys, in order
+        const appViewXml = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/view/App.view.xml'), 'utf8');
+        const navKeys = [...appViewXml.matchAll(/<tnt:NavigationListItem[^>]*?key="([a-zA-Z]+)"/g)].map((m) => m[1]);
+        const sectionKeys = [...viewXml.matchAll(/dashboardView>\/selectedTab\} === '([a-zA-Z]+)'/g)].map((m) => m[1]);
+        expect(navKeys).toEqual(['overview', 'mm', 'sd', 'ewm']);
+        expect(sectionKeys).toEqual(navKeys);
     });
 
     test('every press handler used by the view exists on the controller', () => {

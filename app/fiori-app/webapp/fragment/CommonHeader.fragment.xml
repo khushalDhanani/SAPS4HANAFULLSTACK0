@@ -9,6 +9,8 @@
         homeIcon="{shellModel>/logoUrl}"
         homeIconTooltip="{i18n>homeTooltip}"
         homeIconPressed=".onHomeIconPressed"
+        showMenuButton="true"
+        menuButtonPressed=".onMenuButtonPressed"
         showNavButton="{shellModel>/showNavButton}"
         navButtonPressed=".onNavButtonPressed">
         <f:profile>

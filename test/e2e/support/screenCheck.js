@@ -77,12 +77,14 @@ async function closeBrowser() {
 /**
  * user: a CAP mock user name, or null for a signed-out browser (no Basic header, no stored UI session).
  * allowWrites: only for gated live Tier C runs (support/liveWriteGate.js) — exact action paths the guard lets through.
+ * contextOptions: Playwright context overrides, e.g. a phone's viewport and user agent.
  */
-async function openSession({ baseUrl, user = 'khushal', allowWrites = [] }) {
+async function openSession({ baseUrl, user = 'khushal', allowWrites = [], contextOptions = {} }) {
     const browser = await getBrowser();
     const context = await browser.newContext({
         extraHTTPHeaders: user ? { Authorization: 'Basic ' + Buffer.from(`${user}:`).toString('base64') } : {},
-        viewport: { width: 1440, height: 900 }
+        viewport: { width: 1440, height: 900 },
+        ...contextOptions
     });
     const blocked = await installWriteGuard(context, { allowWrites });
     await installUi5Cache(context); // registered after the guard, so it is asked first and only for ui5.sap.com GETs

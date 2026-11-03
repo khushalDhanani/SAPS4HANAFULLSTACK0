@@ -1,9 +1,13 @@
 sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
-    "sap/ui/core/Messaging"
-], function (BaseController, JSONModel, Messaging) {
+    "sap/ui/core/Messaging",
+    "sap/ui/Device"
+], function (BaseController, JSONModel, Messaging, Device) {
     "use strict";
+
+    // First segment of a route pattern -> the dashboard section the sidebar highlights for that screen
+    var SECTION_BY_ROUTE_PREFIX = { mm: "mm", sd: "sd", le: "sd", wm: "ewm" };
 
     return BaseController.extend("saps4hana.fiori.controller.App", {
         onInit: function () {
@@ -12,6 +16,7 @@ sap.ui.define([
             this._oShellModel = new JSONModel({
                 currentTitle: "",
                 showNavButton: false,
+                sideNavKey: "overview",
                 logoUrl: sLogoPath || "assets/AeElementally.png"
             });
 
@@ -285,6 +290,35 @@ sap.ui.define([
 
             this._oShellModel.setProperty("/currentTitle", sTitle);
             this._oShellModel.setProperty("/showNavButton", bShowNav);
+            this._oShellModel.setProperty("/sideNavKey", this._getSideNavKey(sRouteName, oArgs));
+        },
+
+        /**
+         * The sidebar item of a route: the dashboard's own section, or the section a screen belongs to.
+         */
+        _getSideNavKey: function (sRouteName, oArgs) {
+            if (sRouteName === "dashboard") {
+                var sSection = oArgs && oArgs.section;
+                return ["mm", "sd", "ewm"].indexOf(sSection) === -1 ? "overview" : sSection;
+            }
+            var oRoute = this.getOwnerComponent().getRouter().getRoute(sRouteName);
+            return SECTION_BY_ROUTE_PREFIX[oRoute ? oRoute.getPattern().split("/")[0] : ""] || "overview";
+        },
+
+        /**
+         * Sidebar item press (itemPress, so the highlighted item still returns from a screen to its section).
+         */
+        onSideNavItemPress: function (oEvent) {
+            var sKey = oEvent.getParameter("item").getKey();
+            this.getOwnerComponent().getRouter().navTo("dashboard", sKey === "overview" ? {} : { section: sKey });
+            // On a phone the open sidebar covers the page
+            if (Device.system.phone) {
+                this.byId("appToolPage").setSideExpanded(false);
+            }
+        },
+
+        onMenuButtonPressed: function () {
+            this.byId("appToolPage").toggleSideContentMode();
         },
 
         /**
