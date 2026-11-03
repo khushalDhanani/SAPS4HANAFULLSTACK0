@@ -15,7 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Creatable services classification (2026-11-03 16:43 IST) — PARTIAL, uncommitted:** `docs/creatable-services-classification.md` sorts the 497 workbook services: 4 proven live, 69 likely proper (unproven), 117 likely master data or configuration, 152 unclear, 155 not proper. Two service docs were corrected. Only the proven bucket is CONFIRMED. See the entry below.
+- **Creatable services classification (2026-11-03 16:43 IST) — PARTIAL, committed locally in `43e96d2b`, not pushed:** `docs/creatable-services-classification.md` sorts the 497 workbook services: 4 proven live, 69 likely proper (unproven), 117 likely master data or configuration, 152 unclear, 155 not proper. Two service docs were corrected. Only the proven bucket is CONFIRMED. See the entry below.
 
 - **HU storage type rules for W01 (2026-11-03 16:37 IST) — PARTIAL, pushed to `origin/feature01`:** W01 now has approved rules in `srv/wm/hu-stock-transfer/storage-types.json`, and the missing-rules error is gone. The HU dry run still fails on an HU that is correctly refused, so no browser run has proven an accepted HU. See the entry below.
 
@@ -86,7 +86,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- Creatable services (2026-11-03): the user decides whether to commit the classification. To rebuild the workbook, restore `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json`. POST-only services are still outside the workbook.
+- Creatable services (2026-11-03): the classification is committed locally in `43e96d2b` and not pushed. To rebuild the workbook, restore `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json`. POST-only services are still outside the workbook.
 - HU rules (2026-11-03): decide 261 blocked-bin rules; have the SAP administrator check packaging type Z007, which has no storage unit type in W01; get rules for other warehouses.
 - Database removal (2026-11-03): Phase 1 is done and the target is the connected client. Still needed: a transport request owned by, or with a task for, the connected user, and a written go for the live proof in docs/decisions/sap-only-persistence-migration.md (Phase 2), then the store swap and final removal (Phase 3). The user also decides where movement 261 blocked-bin rules and HU storage types should live. Check production BusinessConfig values before any deployment.
 
@@ -1561,3 +1561,12 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **ASSUMPTIONS:** "Proper" follows `docs/sd-creatable-services.md`, meaning the service really creates or posts a business document. Bucket assignment is my own judgement from names.
 - **Next action:** The user reviews the docs and decides whether to commit them.
 - **FINAL STATUS:** PARTIAL.
+
+### 2026-11-03 — Committed the creatable services classification: PASS for the commit
+
+- **Request:** The user asked to commit the working tree changes.
+- **CHANGED:** Local commit `43e96d2b` on `feature01`, plus this log entry as one more commit. Not pushed.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT: the checks in the entry above, for the same content.
+- **TESTED:** `git diff --check` clean. `node tools/scan-secrets.js` found 0 secrets with all four files staged.
+- **ASSUMPTIONS:** none.
+- **FINAL STATUS:** PASS for the commit. The classification work stays PARTIAL.
