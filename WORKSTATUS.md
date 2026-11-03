@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Reservation Entry screen removed (2026-11-03) — PARTIAL, on local branch `feature/remove-reservation-entry`, not pushed:** The UI at `#/wm/reservation-entry` is gone, and the three old URLs now show the dashboard with no console errors. Backend, API and database are unchanged. See the Change Entry below for what was run and what was not.
+
 - **MIGO resend versus further issue, reservation-entry and tr-to (2026-11-03 09:55 IST) — PARTIAL, uncommitted:** A resend with the same id returns its document without posting, and a new id posts the further quantity, on both `postMigoGoodsMovement` actions. A further issue with no id gets HTTP 400 before SAP (`ClientAttemptId` on reservation-entry, `ProcessId` on tr-to). The false repeat is fixed once in `checkMigoIdempotency`. Jest: 228 suites and 4,464 tests passed, 59 skipped. SAP-free browser E2E: 3 of 3 passed; those suites do not post a goods movement. Not proven against live SAP. See Change Entry 2026-11-03 09:55 IST.
 
 - **Reservation create (/wm/reservation-entry/create) Batch-managed material detection & BatchVH Value Help fixed (2026-11-02 17:55 IST) — PASS, uncommitted:**
@@ -56,6 +58,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Reservation Entry removal (2026-11-03): review `feature/remove-reservation-entry` and decide whether to merge it. Decide separately about the backend with no UI caller: `/odata/v4/reservation-entry` and `ReservationCreateAttempt`. This screen was the only UI for creating a reservation entry or retrying a failed reservation step.
+
 - MIGO resend versus further issue (2026-11-03): commit when the user asks, then restart the local CAP server to load it. Live proof needs a written go: post a partial issue, resend the same id, post a further issue with a new id, and read MATDOC and RESB back. Decide whether one Transfer Order may have more than one goods movement; today a new id on the same TO posts again.
 
 - Reservation create batch detection & Value Help (2026-11-02 17:55 IST): RESOLVED (PASS, uncommitted). Batch management dynamically detected via `checkMaterialBatchManaged`, Batch marked mandatory on batch-managed materials, `BatchVH` value help implemented reading `MCHB`/`MCHA` stock, unit tests (108/108 service, 75/75 UI) and browser E2E (17/17 screens, verifyMvt311) pass. Commit when the user asks.
@@ -84,6 +88,34 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-03 — Reservation Entry screen removed: PARTIAL
+
+- **Status:** PARTIAL. The full 22-suite browser run and `npm run test:e2e:sap` were not run. No SAP write was made; SAP use was read-only through the WM screens suite.
+- **Why:** The user asked to remove the feature at `#/wm/reservation-entry` from the frontend, and approved the EXCLUSIVE and SHARED lists.
+- **Branch:** `feature/remove-reservation-entry`, from `feature01`. Not pushed.
+- **Deleted:**
+  - `app/fiori-app/webapp/modules/wm/reservation-entry/` (5 files)
+  - `test/unit/wm/reservationEntryUi.test.js`
+  - `test/e2e/wm/roundTripGoodsIssue.e2e.js`, `roundTripReservationRetry.e2e.js`, `verifyHardeningUI.e2e.js`
+- **Changed:**
+  - Routing and navigation: `manifest.json`, `App.controller.js`, Dashboard controller and view.
+  - HU Rack and Detail views and controllers: the Standard 311 link is removed, by user decision. The warning banner stays.
+  - Services and text: `AuthService.js`, `ValueHelpService.js` (`/OrderTypeVH` is kept for Sales Order), and 96 keys removed from each i18n bundle.
+  - Suites: `verifyMvt201`, `241`, `261`, `301`, `311` keep their scan-to and read-back steps and lose their Reservation Entry steps. `verifyWmScreens`, `verifyNegativeUi`, `verifyActionFailures`, `verifyPlantIsolation`, `profileLists`, both baselines and `testData.example.json` lose this screen's entries.
+  - Docs and CI: `docs/e2e-coverage-matrix.md`, and the suite count in `.github/workflows/ci.yml` (23 to 22).
+- **Test decision:** TEST UPDATED.
+- **Executed validation:**
+  - `npx jest --silent --runInBand`: 227 suites passed, 1 skipped; 4,388 tests passed, 59 skipped. This count is lower than before because `reservationEntryUi.test.js` was deleted.
+  - `npx eslint .`: clean. `node tools/scan-secrets.js`: 0 secrets. `git diff --check`: clean.
+  - `npm run lint` and `npm run build` in `app/fiori-app`: clean, build succeeded.
+  - `npm run test:e2e:sap-free`: 3 of 3 passed.
+  - `TARGET_URL=http://localhost:4010 node test/e2e/wm/verifyWmScreens.e2e.js`: all 14 listed steps passed (READ-ONLY, write guard on).
+  - Browser session on port 4010, signed in as the E2E test user: `#/wm/reservation-entry`, `/create` and `/1/1` show the dashboard, with 0 console errors, 0 network errors and 0 blocked writes.
+- **Not run:** the trimmed `verifyMvt*` suites (syntax check and ESLint only), `verifyPlantIsolation`, `verifyActionFailures`, and the mbt validation.
+- **Known behaviour:** the old URL stays in the address bar while the dashboard shows, because the router's `bypassed` target does not change the hash.
+- **Backend with no UI caller, not changed:** `/odata/v4/reservation-entry`, still used by `tools/run*-mvt*-live.js`, `tools/sandbox-matrix.js`, `tools/smoke-test-deployment.js` and the `verifyMvt*` read-back; `saps4hana.wm.ReservationCreateAttempt`, used only by `srv/wm/reservation-entry/ReservationAttemptStore.js`. `srv/wm/reservation-entry/readScope.js` is imported by other services, so that folder cannot be deleted whole.
+- **Next action:** The user reviews the branch and decides about merging and about the backend.
 
 ### 2026-11-03 09:55 IST — MIGO false repeat fixed in the shared check, tr-to guard added: PARTIAL
 
