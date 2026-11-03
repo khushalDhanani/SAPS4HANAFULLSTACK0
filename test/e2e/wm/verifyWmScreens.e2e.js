@@ -1,6 +1,6 @@
 'use strict';
 
-/** Tier A read-only E2E: WM goods receipt, handling unit, packing, reservation, scan-to and HU stock transfer screens. */
+/** Tier A read-only E2E: WM goods receipt, handling unit, packing, reservation and HU stock transfer screens. */
 
 const { runScreens } = require('../support/screenCheck');
 
@@ -11,8 +11,6 @@ const STEPS = [
     { name: 'Handling unit detail (first row)', route: 'wmHandlingUnitDetail', fromFirstRow: true },
     { name: 'Packing instruction list', hash: 'wm/packing-instruction', route: 'wmPackingInstructions', needsList: true },
     { name: 'Packing instruction detail (first row)', route: 'wmPackingInstructionDetail', fromFirstRow: true },
-    { name: 'Warehouse scan-to entry', hash: 'wm/scan-to', route: 'wmWarehouseScanTo' },
-    { name: 'Warehouse scan-to detail (first open TR)', route: 'wmWarehouseScanToDetailWithWh', fromFirstRow: 'listOpenTRs' },
     { name: 'HU stock transfer list', hash: 'wm/hu-stock-transfer', route: 'wmHuStockTransfer', needsList: true },
     { name: 'HU stock transfer rack (first row)', route: 'wmHuStockTransferRack', fromFirstRow: true },
     { name: 'HU stock transfer detail (same reservation)', route: 'wmHuStockTransferDetail', hashFrom: (h) => h.replace(/\/rack$/, '') },

@@ -101,11 +101,6 @@
       "uom": "NOT PROVIDED"
     }
   },
-  "scanTo": {
-    "lgnum": "NOT PROVIDED",
-    "tbnum": "NOT PROVIDED",
-    "quantity": "NOT PROVIDED"
-  },
   "mvt261": {
     "scan": {
       "reservation": "NOT PROVIDED",

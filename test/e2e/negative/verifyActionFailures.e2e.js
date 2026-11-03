@@ -10,8 +10,7 @@
  * screen like the flow's round-trip suite up to and including the click that triggers the single write.
  * Reload while pending: for the flows whose write goes through interceptAction the answer is held back, the page is
  * reloaded, and the suite expects no second write, no success and no stuck busy indicator.
- * Open (docs/e2e-coverage-matrix.md): HU stock transfer (its dry-run fails on missing config), the scan-to MIGO retry
- * (no candidate), double click while pending.
+ * Open (docs/e2e-coverage-matrix.md): HU stock transfer (its dry-run fails on missing config), double click while pending.
  */
 
 const { openSession, waitForRoute } = require('../support/screenCheck');
@@ -22,7 +21,6 @@ const goodsReceipt = require('../wm/roundTripGoodsReceipt.e2e');
 const packing = require('../wm/roundTripPackingInstruction.e2e');
 const huRt = require('../wm/roundTripHandlingUnit.e2e');
 const mvt261 = require('../wm/roundTripMvt261.e2e');
-const scanTo = require('../wm/roundTripScanTo.e2e');
 const kit = require('../wm/wmRoundTripKit');
 
 const JSON_TYPE = 'application/json;odata.metadata=minimal';
@@ -145,7 +143,7 @@ const wmFlows = [
 ];
 
 /**
- * Round-trip suites that stub their own actions through wmRoundTripKit.stubAction (handling unit, movement 261, scan-to):
+ * Round-trip suites that stub their own actions through wmRoundTripKit.stubAction (handling unit, movement 261):
  * with kit.setFailure() their stubs answer the failure, and their SUBCASES drive the UI unchanged. Candidates come from
  * READ-ONLY reads, read once per run. A sub-case without a candidate in the current SAP data is SKIPPED, not failed.
  */
@@ -153,7 +151,6 @@ const once = (fn) => { let p; return (...a) => { p = p || fn(...a); return p; };
 const skip = (why) => Object.assign(new Error(why), { skip: true });
 const huData = once(async (baseUrl) => huRt.dryInputs(await huRt.pickDryRunData(baseUrl)));
 const mvtData = once((baseUrl) => mvt261.pickDryRunData(baseUrl));
-const trList = once((baseUrl) => scanTo.candidates(baseUrl));
 
 const kitFlows = [
     ...Object.keys(huRt.SUBCASES).map((name) => ({
@@ -175,15 +172,7 @@ const kitFlows = [
             if (!ui.posted) throw skip(`UI does not allow posting: ${ui.message || ui.state}`);
             return ui;
         }
-    })),
-    {
-        label: 'Scan-to: create transfer order', ...split(scanTo.CREATE), hash: 'wm/scan-to',
-        run: async (session, baseUrl) => {
-            const res = await scanTo.SUBCASES.createTO(session, await trList(baseUrl));
-            if (res.skipped) throw skip(res.skipped);
-            return res;
-        }
-    }
+    }))
 ].map((f) => ({ ...f, kit: true, observe: async (session) => visibleMessage(session.page) }));
 
 /** Text of every visible message the screen shows (MessageBox, error strip, toast); success when it carries a DRYRUN stub value. */
@@ -359,7 +348,7 @@ async function verifyActionFailures(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
     const errors = [];
     const details = [];
-    const filter = options.only || process.env.E2E_FAILURE_FLOWS; // a shard (see SHARDS) or e.g. 'handling|261|scan-to' for a subset
+    const filter = options.only || process.env.E2E_FAILURE_FLOWS; // a shard (see SHARDS) or e.g. 'handling|261' for a subset
     const only = filter ? new RegExp(filter, 'i') : null;
     for (const flow of FLOWS.filter((f) => !only || only.test(f.label))) {
         if (flow.skipped) {
@@ -413,7 +402,7 @@ if (require.main === module) {
 // Kit flows share the kit's module-level failure mode, so they stay together and serial; the others run in their own shard
 const SHARDS = [
     { name: 'Action failures: invoice, orders due, goods receipt, packing, quarantine (mocked)', only: '^(Customer invoice|Orders due|Goods receipt|Packing instruction|Quarantine labels)' },
-    { name: 'Action failures: handling unit, 261, scan-to (mocked)', only: '^(Handling unit|Movement 261|Scan-to)' }
+    { name: 'Action failures: handling unit, 261 (mocked)', only: '^(Handling unit|Movement 261)' }
 ];
 
 module.exports = { verifyActionFailures, FLOWS, SHARDS };

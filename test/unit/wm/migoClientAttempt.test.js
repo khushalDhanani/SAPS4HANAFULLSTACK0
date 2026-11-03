@@ -73,7 +73,7 @@ describe('tr-to postMigoGoodsMovement: telling a resend from a further issue', (
     await cds.db.run(DELETE.from('saps4hana.wm.ReservationLog').where({ ReservationNo: RES }));
   });
 
-  describe('the action behind the scan screen', () => {
+  describe('further issues', () => {
     test('a further issue with a new ProcessId posts the new quantity', async () => {
       const { data } = await POST(TR_TO_URL, { ...body, ProcessId: PID_2 }, authClerk);
       expect(posted).toHaveLength(1);

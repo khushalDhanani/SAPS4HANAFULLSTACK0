@@ -13,7 +13,6 @@
  *   - Stock shortfall check (MARD)
  *   - Idempotency & duplicate-posting protection
  *   - Full End-to-End Orchestrator (executeReservationWarehouseFlow)
- *   - UI Controller Validations (WarehouseScanToDetail)
  *
  * All tests labeled: [mock only, not SAP verification]
  */

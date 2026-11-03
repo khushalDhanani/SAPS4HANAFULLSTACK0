@@ -17,7 +17,6 @@ const { roundTripCustomerReturn } = require('./sd/roundTripCustomerReturn.e2e');
 const { roundTripCustomerInvoice } = require('./sd/roundTripCustomerInvoice.e2e');
 const { roundTripSalesOrderDelivery } = require('./sd/roundTripSalesOrderDelivery.e2e');
 const { roundTripOrdersDue } = require('./le/roundTripOrdersDue.e2e');
-const { roundTripScanTo } = require('./wm/roundTripScanTo.e2e');
 const { roundTripMvt261 } = require('./wm/roundTripMvt261.e2e');
 const { roundTripHandlingUnit } = require('./wm/roundTripHandlingUnit.e2e');
 const { roundTripPackingInstruction } = require('./wm/roundTripPackingInstruction.e2e');
@@ -32,7 +31,6 @@ const SUITES = [
     { flow: 'customerInvoice', name: 'Invoice release / cancel', fn: roundTripCustomerInvoice },
     { flow: 'salesOrderDelivery', name: 'Delivery from sales order list', fn: roundTripSalesOrderDelivery },
     { flow: 'ordersDue', name: 'Orders due: delivery, no-ref delivery, PGI, billing', fn: roundTripOrdersDue },
-    { flow: 'scanTo', name: 'Scan-to: TO from TR, MIGO retry', fn: roundTripScanTo },
     { flow: 'mvt261', name: 'Movement 261 post / reverse', fn: roundTripMvt261 },
     { flow: 'handlingUnit', name: 'HU create / pack / unpack / remove', fn: roundTripHandlingUnit },
     { flow: 'packingInstruction', name: 'Packing instruction create', fn: roundTripPackingInstruction }

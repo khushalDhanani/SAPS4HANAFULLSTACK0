@@ -39,7 +39,7 @@ function setup({ authResult, hash }) {
 afterEach(() => { delete global.window; delete global.document; });
 
 test('restored session: routing starts and no redirect happens', async () => {
-  const { Component, self, initialize } = setup({ authResult: Promise.resolve(true), hash: '#/wm/scan-to' });
+  const { Component, self, initialize } = setup({ authResult: Promise.resolve(true), hash: '#/wm/hu-stock-transfer' });
   Component.init.call(self);
   expect(initialize).not.toHaveBeenCalled(); // not before the auth state is known
   await Promise.resolve(); await Promise.resolve();
@@ -48,7 +48,7 @@ test('restored session: routing starts and no redirect happens', async () => {
 });
 
 test('signed out deep link: the hash is replaced by login BEFORE the router creates any target view', async () => {
-  const { Component, self, initialize } = setup({ authResult: Promise.resolve(false), hash: '#/wm/scan-to' });
+  const { Component, self, initialize } = setup({ authResult: Promise.resolve(false), hash: '#/wm/hu-stock-transfer' });
   Component.init.call(self);
   await Promise.resolve(); await Promise.resolve();
   expect(global.window.location.replace).toHaveBeenCalledWith('#/login');
