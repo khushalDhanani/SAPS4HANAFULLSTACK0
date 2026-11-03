@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Test audit cleanup (2026-11-03 16:07 IST) — PASS for the cleanup, committed locally on `chore/test-audit-cleanup`, not pushed:** 20 false tests deleted and 4 weak tests fixed, with no production code changed. Jest passed; SAP-free E2E 3 of 3. `test/screenshots/` is untouched, waiting on the user. See the entry below.
+
 - **SAP target confirmed, deploy tool ready (2026-11-03 15:55 IST) — BLOCKED on the transport request and written go:** Target is the connected client, system `DS4`. The connected user has no open request or task, so one is needed first. `tools/adt-create-post-attempt.js` is built and tested offline, and has never run against SAP.
 
 - **Local database files and references (branch `chore/remove-local-db-files`, 2026-11-03 15:52 IST) — PARTIAL, committed locally, not pushed:** No `.sql` file, seed folder or backup folder remains in the repo; copies are in `~/Desktop/sql-backup/`. By the user's choice, `db/`, `db.sqlite`, the database dependencies and the HANA resources stay until the SAP posting-attempt table replaces them, so references to them remain. Jest passed; browser E2E 17 of 17 and SAP-free 3 of 3; SAP round-trip dry run still has the HU transfer failure that predates this work. SAP document counts for the app's user were 0 before and after the runs. See the entry below.
@@ -1438,3 +1440,19 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **REGRESSION:** no runtime change.
 - **Next action:** the user sends the request number and the written go.
 - **FINAL STATUS:** BLOCKED for SAP creation; the tool is ready and untested against SAP.
+
+### 2026-11-03 16:07 IST — Test folder audit and cleanup: PASS for the cleanup
+
+- **Request:** The user reported many false test cases. They chose an audit first, then approved deleting the false tests and fixing the weak ones.
+- **Method:** parsed all 225 test files, recorded assertions per test in an instrumented Jest run using a scratch config, and read each candidate. A broad "reaches no required code" scan flagged 707 tests but was mostly noise, so it was discarded.
+- **CHANGED, branch `chore/test-audit-cleanup`:** `82dc6782` deletes 20 tests: `messageToastDockNormalization.test.js` (whole file, 4), `dashboardMvtKpi.test.js` controller section (5), `createPORefreshRouting.test.js` shell section (2), `BusinessConfigResolver.test.js` literal comparisons (2), `transactionPersistenceAndRetry.test.js` placeholder test (1), `goodsIssuePhase5Routing.test.js` frontend contract (3 cases), `formatter.test.js` FI section (3 skipped). `04c5c002` fixes: `createPurchaseOrderFlow.test.js` Steps 1, 4 and 5 become setup and the remaining steps are renumbered 1 to 4; `fioriAccessibility.test.js` dialog check no longer passes when a file is missing; `goodsIssueIsolation.test.js` dead screen list removed. No production code changed.
+- **Not changed:** `test/screenshots/` (7 PNGs, 1.7 MB, no references): the approval covered tests only.
+- **TEST DECISION:** TEST UPDATED. This change is itself to the tests.
+- **TESTED:** Before: 4,119 passed, 59 skipped, 225 suites. After: `npm test` through the audit config: 224 suites, 4,099 passed, 56 skipped, 0 failed. The difference is the 20 deleted tests plus the 3 purchase order steps that became setup. `npx eslint . --max-warnings 0` exit 0. `node tools/scan-secrets.js` exit 0. `npm run test:e2e:sap-free` 3 of 3. `npm run test:e2e` and the SAP dry run were not rerun, because no production or E2E code changed.
+- **VERIFIED:** tests running zero assertions fell from 5 to 2; tests that touch nothing outside themselves fell from 6 to 0; the 3 always-skipped FI tests are gone. The 2 remaining zero-assertion tests are expected: `test.failing` in `mvt311Process.test.js` records a known defect, and `s4Config.test.js` loops over an empty config and fails if a key is added.
+- **Open finding:** the `test.failing` test in `mvt311Process.test.js` passes only while its known defect exists: reservation-level matching blocks a later valid partial pick.
+- **NOT VERIFIED:** whether the remaining tests check the right behaviour; mutation testing was not run. 35 mock-only files do not prove SAP behaviour. 56 live SAP tests stay skipped by default.
+- **ASSUMPTIONS:** none.
+- **REGRESSION:** no production code changed; suites as above.
+- **Next action:** the user decides on `test/screenshots/` and whether to merge this branch.
+- **FINAL STATUS:** PASS for the approved cleanup.
