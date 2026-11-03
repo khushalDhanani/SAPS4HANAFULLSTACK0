@@ -321,8 +321,77 @@
                         <!-- ADMINISTRATOR -->
                         <VBox id="sectionAdmin" visible="{= ${dashboardView>/selectedTab} === 'admin' }">
                             <VBox class="sapUiSmallMarginTop">
-                                <Title text="{i18n>tabAdminTitle}" level="H3" titleStyle="H4" />
-                                <Text text="{i18n>tabAdminEmpty}" class="textMuted" />
+                                <HBox justifyContent="SpaceBetween" alignItems="Center" class="sapUiSmallMarginBottom">
+                                    <VBox>
+                                        <Title text="{i18n>adminUserManagementTitle}" level="H3" titleStyle="H4" />
+                                        <Text text="{i18n>adminUserManagementDesc}" class="textMuted" />
+                                    </VBox>
+                                    <HBox alignItems="Center">
+                                        <SearchField
+                                            id="adminUserSearchField"
+                                            width="18rem"
+                                            placeholder="{i18n>adminSearchPlaceholder}"
+                                            search=".onSearchUsers"
+                                            class="sapUiTinyMarginEnd" />
+                                        <Button
+                                            id="btnRefreshUsers"
+                                            icon="sap-icon://refresh"
+                                            text="{i18n>commonRefresh}"
+                                            type="Transparent"
+                                            press=".onRefreshUsers" />
+                                    </HBox>
+                                </HBox>
+
+                                <Table
+                                    id="adminUsersTable"
+                                    noDataText="{adminView>/noDataText}"
+                                    busy="{adminView>/busy}"
+                                    items="{
+                                        path: 'adminView>/users'
+                                    }"
+                                    growing="true"
+                                    growingThreshold="20">
+                                    <headerToolbar>
+                                        <OverflowToolbar>
+                                            <Title text="{i18n>adminUsersTableTitle} ({adminView>/userCount})" level="H4" />
+                                            <ToolbarSpacer />
+                                        </OverflowToolbar>
+                                    </headerToolbar>
+                                    <columns>
+                                        <Column width="11rem">
+                                            <Text text="{i18n>adminColUsername}" />
+                                        </Column>
+                                        <Column minScreenWidth="Tablet" demandPopin="true">
+                                            <Text text="{i18n>adminColFullName}" />
+                                        </Column>
+                                        <Column minScreenWidth="Desktop" demandPopin="true" width="10rem">
+                                            <Text text="{i18n>adminColFirstName}" />
+                                        </Column>
+                                        <Column minScreenWidth="Desktop" demandPopin="true" width="10rem">
+                                            <Text text="{i18n>adminColLastName}" />
+                                        </Column>
+                                        <Column hAlign="End" width="8rem">
+                                            <Text text="{i18n>adminColActions}" />
+                                        </Column>
+                                    </columns>
+                                    <items>
+                                        <ColumnListItem type="Navigation" press=".onSelectUser">
+                                            <cells>
+                                                <ObjectIdentifier
+                                                    title="{adminView>username}"
+                                                    titleActive="true"
+                                                    titlePress=".onSelectUser" />
+                                                <Text text="{adminView>fullName}" />
+                                                <Text text="{adminView>firstName}" />
+                                                <Text text="{adminView>lastName}" />
+                                                <Button
+                                                    text="{i18n>adminBtnViewDetail}"
+                                                    type="Transparent"
+                                                    press=".onSelectUser" />
+                                            </cells>
+                                        </ColumnListItem>
+                                    </items>
+                                </Table>
                             </VBox>
                         </VBox>
                     </items>

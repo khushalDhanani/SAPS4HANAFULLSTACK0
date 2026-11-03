@@ -13,3 +13,4 @@ using from './wm/handling-unit/service';
 using from './wm/packing-instruction/service';
 using from './wm/hu-stock-transfer/service';
 using from './wm/quarantine-label/service';
+using from './admin/service';

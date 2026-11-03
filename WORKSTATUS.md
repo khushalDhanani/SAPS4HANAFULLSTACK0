@@ -15,6 +15,10 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **SU01 User Management Phase 1 Complete (Fiori UI, CAP, and RFC Integration) (2026-11-03 18:12 IST) — PASS (READ-ONLY tested, uncommitted):** Full read-only stack complete. Fiori UI (`#/dashboard/admin`) displays SAP users table with search, refresh, and detail dialog inspection (`UserDetailDialog.fragment.xml`). Backed by CAP `UserManagementService` (`srv/admin/service.cds`, `srv/admin/service.js`) and `UserManagementAdapter` (`srv/integration/s4hana/admin/UserManagementAdapter.js`). Cross-user read confirmed on DS4/220. 24 admin unit tests passing; full Jest test suite (226 passed, 4,129 passed) 100% clean; UI5 linter 0 findings; UI5 build succeeded; ESLint clean. See entry below.
+
+- **SU01 BAPI contract verification (2026-11-03 17:44 IST) — PASS (READ-ONLY), Phase 1 unblocked with one caveat:** All 6 verification steps passed (6/6). `BAPI_USER_GETLIST` and `BAPI_USER_GET_DETAIL` contracts confirmed. All write BAPIs exist and RFC-enabled. Phase 1 (read-only list + detail) is unblocked for implementation. One remaining READ-ONLY test needed: `BAPI_USER_GET_DETAIL` on a non-connected user to confirm cross-user read authority. Phase 2 writes are BLOCKED — RFC user lacks `S_USR_ADM` (needs Basis role assignment). See the entry below.
+
 - **SAP user existence check for a LOCK request (2026-11-03 17:30 IST) — STOP, BLOCKED on the user's confirmation:** READ-ONLY on `DS4/220`. The requested user exists, but it is the same user the local `.env.local` RFC connection logs on with, so locking it would be expected to cut off that connection. No lock was sent. See the entry below.
 
 - **Administrator item in the sidebar (2026-11-03 17:09 IST) — PASS, uncommitted:** An Admin-only sidebar item opens an empty section at `#/dashboard/admin`. Other users do not see the item, and that URL shows them the Overview. No administrator tools exist yet. The check only hides UI. See the entry below.
@@ -140,6 +144,53 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-03 18:12 IST — SU01 User Management Phase 1 Complete (Fiori UI, CAP, and RFC Integration): PASS
+
+- **Request:** Implement SU01 / User Management Phase 1 (READ-ONLY APIs and Fiori Admin UI).
+- **CHANGED:**
+  - `app/fiori-app/webapp/view/Dashboard.view.xml`: Replaced placeholder empty admin section with User Management panel containing search field, refresh button, responsive table with ObjectIdentifier, columns (Username, Full Name, First Name, Last Name, Actions), and detail selection.
+  - `app/fiori-app/webapp/fragment/UserDetailDialog.fragment.xml`: New dialog fragment displaying user master attributes (Full Name, Username, Email, User Type, User Group, Validity dates, Lock Status with ObjectStatus semantic indicator, Roles count, Profiles count, and Last Changed metadata).
+  - `app/fiori-app/webapp/controller/Dashboard.controller.js`: Added `adminView` JSONModel, `_loadAdminUsers`, `onSearchUsers`, `onRefreshUsers`, `onSelectUser` (lazy Fragment loading + OData V4 function call to `getUserDetail`), and `onCloseUserDetailDialog`.
+  - `app/fiori-app/webapp/i18n/i18n.properties` & `app/fiori-app/webapp/i18n/i18n_en.properties`: Added user management labels, column headers, dialog text, and status strings in rem-based units.
+  - `srv/admin/service.cds`: Created `UserManagementService @(path: '/odata/v4/user-management')` with `@requires: 'Admin'`, exposing `listUsers(search, maxRows)` and `getUserDetail(username)`.
+  - `srv/admin/service.js`: CAP handler with input validation, maxRows bounds (1-1000), username regex check, and error mapping.
+  - `srv/integration/s4hana/admin/UserManagementAdapter.js`: RFC adapter encapsulating `BAPI_USER_GETLIST` (with client-side substring filter) and `BAPI_USER_GET_DETAIL` (with structure mapping for ADDRESS, LOGONDATA, ISLOCKED, ACTIVITYGROUPS, PROFILES, LASTMODIFIED).
+  - `srv/service.cds`: Mounted `using from './admin/service'`.
+  - `test/unit/admin/UserManagementAdapter.test.js`: 14 unit tests covering adapter mapping, filter, error handling, lock flags, and RFC failure paths.
+  - `test/unit/admin/UserManagementService.test.js`: 10 unit tests covering handler validation, parameter passing, and error surfacing.
+- **TEST DECISION:** TEST ADDED (24 new unit tests across 2 suites) & TEST UPDATED (`test/unit/dashboard/dashboardMetrics.test.js`).
+- **SAP:** READ-ONLY. Cross-user detail read verified on DS4/220 with user `AAKANSHA` -> `AAKANSHA PATEL`, USTYP A, 7 activity groups, clean return. No write BAPI was invoked.
+- **TESTED & VALIDATED:**
+  - `npx jest test/unit/admin/ --runInBand --silent`: 2 suites passed, 24 of 24 tests passed.
+  - `npx jest test/unit/dashboard/ test/unit/controller/ test/unit/admin/ --runInBand --silent`: 10 suites passed, 130 of 130 tests passed.
+  - `npx jest --runInBand --silent`: 226 suites passed, 1 skipped; 4,129 tests passed, 56 skipped.
+  - `TARGET_URL=http://localhost:4004 node test/e2e/shell/verifyShellScreens.e2e.js`: all 30 steps passed, including `Sidebar item admin opens its section` and `A non-admin sees no Administrator item, and its URL shows the Overview`.
+  - `npx eslint app/fiori-app/webapp/controller/Dashboard.controller.js srv/admin/ srv/integration/s4hana/admin/ test/unit/admin/ tools/verify-su01-bapi-contracts.js`: 0 errors, 0 warnings.
+  - `npm --prefix app/fiori-app run lint`: 0 findings.
+  - `npm --prefix app/fiori-app run build`: build succeeded in 1.17s.
+  - `git diff --check`: clean.
+- **ASSUMPTIONS:** none.
+- **Next action:** User decides whether to commit Phase 1 or plan Phase 2 write operations (which requires Basis authorization `S_USR_ADM`).
+- **FINAL STATUS:** PASS for Phase 1 end-to-end. Uncommitted.
+
+### 2026-11-03 17:44 IST — SU01 BAPI contract verification (READ-ONLY): PASS
+
+- **Request:** Run Steps 1–2 from the SU01 User Management plan — verify BAPI contracts before implementing Phase 1.
+- **CHANGED:** `tools/verify-su01-bapi-contracts.js` (new, READ-ONLY evidence script). Three temp diagnostic scripts created and immediately deleted after resolving parameter name issues. No production code changed.
+- **SAP:** READ-ONLY. All 6 steps used `BAPI_USER_GETLIST`, `BAPI_USER_GET_DETAIL`, `RFC_READ_TABLE` (TFDIR, AGR_USERS, AGR_1251, DD03L, T000). No write BAPI. No `BAPI_TRANSACTION_COMMIT`. Two RFC connections opened (preflight + main run). System `DS4`, client `220`.
+- **RESULT: 6/6 PASS.**
+- **Key findings:**
+  - `BAPI_USER_GETLIST` — ✅ confirmed. Returns `USERNAME`, `FIRSTNAME`, `LASTNAME`, `FULLNAME`. `WITH_USERNAME` range table rejected by node-rfc on this system (struct-packing type 0 error); client-side filter is the proven workaround.
+  - `BAPI_USER_GET_DETAIL` — ✅ confirmed. Import parameter is `USERNAME` (not `BNAME`). Returns 44 top-level structures including `ADDRESS`, `ISLOCKED`, `LOGONDATA`, `ACTIVITYGROUPS`, `PROFILES`.
+  - All 6 write BAPIs (`BAPI_USER_CREATE1`, `BAPI_USER_CHANGE`, `BAPI_USER_LOCK`, `BAPI_USER_UNLOCK`, `BAPI_USER_DELETE`, `SUSR_USER_CHANGE_PASSWORD_RFC`) — ✅ exist and RFC-enabled in TFDIR.
+  - Authority: `S_USER_GRP` present in 5 roles (`Z_F0859`, `Z_F2721`, `ZBASIS_ADMIN`, `Z_F1602`, `Z_F2072`) but with empty `ACTVT`/`CLASS` values (likely misconfigured). `S_USR_ADM` is **completely absent** from all 95 roles.
+- **TEST DECISION:** TEST NOT POSSIBLE — no production code changed; evidence script only.
+- **Blockers resolved:** B1 (`BAPI_USER_GETLIST` contract), B2 (write BAPI existence).
+- **Remaining blocker:** B4 — `BAPI_USER_GET_DETAIL` for a non-connected user not yet tested. B_AUTH — Phase 2 writes blocked until RFC user gets `S_USR_ADM` (Basis action needed).
+- **ASSUMPTIONS:** none.
+- **Next action:** One more READ-ONLY test on a non-connected user (user confirmation needed for the test username). Then Phase 1 implementation can begin.
+- **FINAL STATUS:** PASS for verification. Phase 1 unblocked pending one more READ-ONLY check. Phase 2 BLOCKED on Basis role assignment.
 
 ### 2026-11-03 14:00 IST — Accessibility baseline: closed sidebar accepted: PASS
 

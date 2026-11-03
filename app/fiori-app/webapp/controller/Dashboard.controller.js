@@ -3,13 +3,15 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "saps4hana/fiori/service/ODataClient",
     "sap/m/MessageToast",
-    "saps4hana/fiori/service/AuthService"
+    "saps4hana/fiori/service/AuthService",
+    "sap/ui/core/Fragment"
 ], function (
     BaseController,
     JSONModel,
     ODataClient,
     MessageToast,
-    AuthService
+    AuthService,
+    Fragment
 ) {
     "use strict";
 
@@ -51,6 +53,16 @@ sap.ui.define([
         METRIC_KEYS: METRIC_KEYS,
 
         onInit: function () {
+            var oAdminModel = new JSONModel({
+                users: [],
+                userCount: 0,
+                busy: false,
+                searchQuery: "",
+                noDataText: this._text("adminNoUsers", "No SAP users found."),
+                selectedUser: null
+            });
+            this.getView().setModel(oAdminModel, "adminView");
+
             var oViewModel = new JSONModel({
                 selectedTab: "overview",
                 connectionState: "None",
@@ -107,6 +119,9 @@ sap.ui.define([
             var sSection = oEvent ? oEvent.getParameter("arguments").section : "";
             var bAllowed = sSection === "admin" ? AuthService.hasAnyRole(["Admin"]) : SECTIONS.indexOf(sSection) !== -1;
             this.getView().getModel("dashboardView").setProperty("/selectedTab", bAllowed ? sSection : "overview");
+            if (sSection === "admin" && bAllowed && !this._bAdminUsersLoaded) {
+                this._loadAdminUsers();
+            }
             // A sidebar click only changes the section; the figures reload on arrival from another screen.
             if (this._bFiguresLoaded) {
                 return;
@@ -352,10 +367,112 @@ sap.ui.define([
             });
         },
 
+        /**
+         * Loads SAP users from UserManagementService.listUsers.
+         *
+         * @param {string} [sSearch]
+         * @returns {Promise<void>}
+         */
+        _loadAdminUsers: function (sSearch) {
+            var oAdminModel = this.getView().getModel("adminView");
+            if (!oAdminModel) {
+                return Promise.resolve();
+            }
+
+            var sQuery = (sSearch !== undefined && sSearch !== null) ? String(sSearch).trim() : (oAdminModel.getProperty("/searchQuery") || "");
+            oAdminModel.setProperty("/busy", true);
+
+            var sUrl = "/odata/v4/user-management/listUsers(search='" + encodeURIComponent(sQuery) + "',maxRows=200)";
+            var that = this;
+
+            return ODataClient.get(sUrl)
+                .then(function (res) {
+                    var aUsers = (res && res.value) || [];
+                    oAdminModel.setProperty("/users", aUsers);
+                    oAdminModel.setProperty("/userCount", aUsers.length);
+                    oAdminModel.setProperty("/busy", false);
+                    that._bAdminUsersLoaded = true;
+                })
+                .catch(function (err) {
+                    oAdminModel.setProperty("/users", []);
+                    oAdminModel.setProperty("/userCount", 0);
+                    oAdminModel.setProperty("/busy", false);
+                    var sMsg = (err && err.message) || that._text("adminLoadFailed", "Failed to load SAP users.");
+                    MessageToast.show(sMsg);
+                });
+        },
+
+        onSearchUsers: function (oEvent) {
+            var sQuery = oEvent ? oEvent.getParameter("query") : "";
+            this.getView().getModel("adminView").setProperty("/searchQuery", sQuery);
+            this._loadAdminUsers(sQuery);
+        },
+
+        onRefreshUsers: function () {
+            var sQuery = this.getView().getModel("adminView").getProperty("/searchQuery") || "";
+            this._loadAdminUsers(sQuery);
+        },
+
+        onSelectUser: function (oEvent) {
+            var oSource = oEvent.getSource();
+            var oContext = oSource.getBindingContext("adminView");
+            var sUsername = oContext ? oContext.getProperty("username") : null;
+            if (!sUsername) {
+                return;
+            }
+
+            var oAdminModel = this.getView().getModel("adminView");
+            var that = this;
+            var oView = this.getView();
+
+            if (!this._pUserDetailDialog) {
+                this._pUserDetailDialog = Fragment.load({
+                    id: oView.getId(),
+                    name: "saps4hana.fiori.fragment.UserDetailDialog",
+                    controller: this
+                }).then(function (oDialog) {
+                    oView.addDependent(oDialog);
+                    return oDialog;
+                });
+            }
+
+            this._pUserDetailDialog.then(function (oDialog) {
+                oDialog.setBusy(true);
+                oDialog.open();
+
+                var sUrl = "/odata/v4/user-management/getUserDetail(username='" + encodeURIComponent(sUsername) + "')";
+                return ODataClient.get(sUrl)
+                    .then(function (res) {
+                        var oDetail = res && res.value ? res.value : res;
+                        oAdminModel.setProperty("/selectedUser", oDetail);
+                        oDialog.setBusy(false);
+                    })
+                    .catch(function (err) {
+                        oDialog.setBusy(false);
+                        var sMsg = (err && err.message) || that._text("adminDetailLoadFailed", "Failed to load user detail from SAP.");
+                        MessageToast.show(sMsg);
+                    });
+            });
+        },
+
+        onCloseUserDetailDialog: function () {
+            if (this._pUserDetailDialog) {
+                this._pUserDetailDialog.then(function (oDialog) {
+                    oDialog.close();
+                });
+            }
+        },
+
         onExit: function () {
             if (this._oAuthBinding) {
                 this._oAuthBinding.detachChange(this._onAuthChanged, this);
                 this._oAuthBinding = null;
+            }
+            if (this._pUserDetailDialog) {
+                this._pUserDetailDialog.then(function (oDialog) {
+                    oDialog.destroy();
+                });
+                this._pUserDetailDialog = null;
             }
         }
     });

@@ -1,0 +1,71 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog
+        id="userDetailDialog"
+        title="{i18n>adminUserDetailTitle} — {adminView>/selectedUser/username}"
+        contentWidth="28rem"
+        class="sapUiSizeCompact">
+        <content>
+            <VBox class="sapUiSmallMargin">
+                <HBox class="sapUiTinyMarginBottom" alignItems="Center">
+                    <Label text="{i18n>adminDetailFullName}:" width="11rem" design="Bold" />
+                    <Text text="{adminView>/selectedUser/fullName}" />
+                </HBox>
+                <HBox class="sapUiTinyMarginBottom" alignItems="Center">
+                    <Label text="{i18n>adminDetailUsername}:" width="11rem" design="Bold" />
+                    <Text text="{adminView>/selectedUser/username}" />
+                </HBox>
+                <HBox class="sapUiTinyMarginBottom" alignItems="Center">
+                    <Label text="{i18n>adminDetailEmail}:" width="11rem" design="Bold" />
+                    <Text text="{= ${adminView>/selectedUser/email} || '-' }" />
+                </HBox>
+                <HBox class="sapUiTinyMarginBottom" alignItems="Center">
+                    <Label text="{i18n>adminDetailUserType}:" width="11rem" design="Bold" />
+                    <Text text="{adminView>/selectedUser/userType}" />
+                </HBox>
+                <HBox class="sapUiTinyMarginBottom" alignItems="Center">
+                    <Label text="{i18n>adminDetailUserGroup}:" width="11rem" design="Bold" />
+                    <Text text="{= ${adminView>/selectedUser/userGroup} || '-' }" />
+                </HBox>
+                <HBox class="sapUiTinyMarginBottom" alignItems="Center">
+                    <Label text="{i18n>adminDetailValidFrom}:" width="11rem" design="Bold" />
+                    <Text text="{= ${adminView>/selectedUser/validFrom} === '00000000' ? '-' : ${adminView>/selectedUser/validFrom} }" />
+                </HBox>
+                <HBox class="sapUiTinyMarginBottom" alignItems="Center">
+                    <Label text="{i18n>adminDetailValidTo}:" width="11rem" design="Bold" />
+                    <Text text="{= ${adminView>/selectedUser/validTo} === '00000000' ? '-' : ${adminView>/selectedUser/validTo} }" />
+                </HBox>
+                <HBox class="sapUiTinyMarginBottom" alignItems="Center">
+                    <Label text="{i18n>adminDetailLockStatus}:" width="11rem" design="Bold" />
+                    <ObjectStatus
+                        text="{= ${adminView>/selectedUser/isLocked} ? ${i18n>adminStatusLocked} : ${i18n>adminStatusUnlocked} }"
+                        state="{= ${adminView>/selectedUser/isLocked} ? 'Error' : 'Success' }"
+                        icon="{= ${adminView>/selectedUser/isLocked} ? 'sap-icon://locked' : 'sap-icon://unlocked' }" />
+                </HBox>
+                <HBox class="sapUiTinyMarginBottom" alignItems="Center">
+                    <Label text="{i18n>adminDetailRoleCount}:" width="11rem" design="Bold" />
+                    <Text text="{adminView>/selectedUser/roleCount}" />
+                </HBox>
+                <HBox class="sapUiTinyMarginBottom" alignItems="Center">
+                    <Label text="{i18n>adminDetailProfileCount}:" width="11rem" design="Bold" />
+                    <Text text="{adminView>/selectedUser/profileCount}" />
+                </HBox>
+                <HBox class="sapUiTinyMarginBottom" alignItems="Center">
+                    <Label text="{i18n>adminDetailLastChanged}:" width="11rem" design="Bold" />
+                    <Text text="{= ${adminView>/selectedUser/lastChanged} ? ${adminView>/selectedUser/lastChanged} : '-' }" />
+                </HBox>
+                <HBox class="sapUiTinyMarginBottom" alignItems="Center">
+                    <Label text="{i18n>adminDetailLastChangedBy}:" width="11rem" design="Bold" />
+                    <Text text="{= ${adminView>/selectedUser/lastChangedBy} ? ${adminView>/selectedUser/lastChangedBy} : '-' }" />
+                </HBox>
+            </VBox>
+        </content>
+        <beginButton>
+            <Button
+                id="btnCloseUserDetail"
+                text="{i18n>adminDialogClose}"
+                press=".onCloseUserDetailDialog" />
+        </beginButton>
+    </Dialog>
+</core:FragmentDefinition>
