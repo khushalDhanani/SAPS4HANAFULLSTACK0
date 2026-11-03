@@ -37,7 +37,7 @@ Reused from the HU label: Code 128 encoder (`Barcode.js`), Helvetica metrics and
 ## Page and print
 
 - **Size:** inches are the source of truth in `SIZES` (`4x6` = 4 x 6 in). From them, mm (101.6 x 152.4) and pt (288 x 432) are derived. The PDF page is created in pt, so the MediaBox is exactly `[0 0 288 432]` on every page.
-- **Size per plant:** `BusinessConfig.QuarantineLabelSize`; empty means the default `4x6`. Another size is a new `SIZES` entry: the layout scales from the 4 x 6 design (unit test with 3 x 5 in).
+- **Other sizes:** the default is `4x6`. Another size is a new `SIZES` entry: the layout scales from the 4 x 6 design (unit test with 3 x 5 in).
 - **Printer:** 203 dpi (`PRINTER_DPI`), 300 allowed; the Code 128 narrow bar is a whole number of printer dots.
 - **Pages:** one label per page, several labels per PDF.
 - **Printing:** the PDF asks viewers not to scale it (`/PrintScaling /None`). It is a PDF, so browser page headers and footers do not apply. Print at "Actual size / 100 %" if the viewer still offers scaling.
