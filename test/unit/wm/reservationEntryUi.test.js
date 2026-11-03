@@ -1369,8 +1369,7 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
                         MovementType: '311',
                         Material: '000000000000000045',
                         MaterialName: 'Raw Material 45',
-                        USNAM: 'RFW12',
-                        ItemCount: 2
+                        USNAM: 'RFW12'
                     }
                 ])
             };
@@ -1401,7 +1400,14 @@ describe('ReservationEntry UI Controller & Logic Tests', () => {
             expect(entries[0].Material).toBe('45');
             expect(entries[0].MovementTypeName).toBe('SLoc to SLoc');
             expect(entries[0].CreatedByUser).toBe('RFW12');
-            expect(entries[0].ItemCount).toBe(2);
+        });
+
+        it('list view shows no row count or item count, and keeps the heading and order number', () => {
+            const fs = require('fs');
+            const view = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/modules/wm/reservation-entry/view/ReservationEntryList.view.xml'), 'utf8');
+            expect(view).toContain('id="lblResTableTitle" text="{i18n>resEntryTableHeading}"');
+            expect(view).toContain("'Order ' + ${view>OrderNo}");
+            expect(view).not.toMatch(/ItemCount|item\(s\)|entries\}\.length/);
         });
 
         it('onSearchFieldSearch matches query across CreatedByUser, OrderNo, and MovementTypeName', () => {

@@ -79,7 +79,7 @@
                 itemPress=".onRowPress">
                 <headerToolbar>
                     <OverflowToolbar id="toolbarResTable">
-                        <Title id="lblResTableTitle" text="{= ${i18n>resEntryTableHeading} + ' (' + (${view>/entries}.length || 0) + ')' }" level="H3" />
+                        <Title id="lblResTableTitle" text="{i18n>resEntryTableHeading}" level="H3" />
                         <ToolbarSpacer />
                         <SearchField
                             id="searchFieldList"
@@ -104,7 +104,7 @@
                         <cells>
                             <ObjectIdentifier
                                 title="{view>ReservationNo}"
-                                text="{= ${view>ItemCount} ? (${view>ItemCount} + ' item(s)' + (${view>OrderNo} ? ' &#183; Order ' + ${view>OrderNo} : '')) : ('Item ' + (${view>ReservationItem} || '0001')) }" />
+                                text="{= ${view>OrderNo} ? 'Order ' + ${view>OrderNo} : '' }" />
 
                             <ObjectStatus
                                 text="{= ${view>MovementType} + (${view>MovementTypeName} ? ' &#183; ' + ${view>MovementTypeName} : '') }"

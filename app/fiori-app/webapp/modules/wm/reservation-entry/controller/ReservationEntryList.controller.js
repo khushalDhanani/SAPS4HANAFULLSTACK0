@@ -89,7 +89,6 @@ sap.ui.define([
                         e.MovementTypeName = e.MovementTypeName || MVT_NAMES[String(e.MovementType || "").trim()] || "";
                         e.CreatedByUser = e.CreatedByUser || e.createdBy || e.USNAM || "";
                         e.OrderNo = e.OrderNo || e.OrderID || "";
-                        e.ItemCount = e.ItemCount || 1;
                         e.ReservationDate = that._formatDateIso(e.ReservationDate, e.createdAt);
 
                         const sClean = fnNorm(e.ReservationNo);
@@ -118,9 +117,6 @@ sap.ui.define([
                             if (!existing.MovementTypeName && o.MovementTypeName) {
                                 existing.MovementTypeName = o.MovementTypeName;
                             }
-                            if ((!existing.ItemCount || existing.ItemCount === 1) && o.ItemCount) {
-                                existing.ItemCount = o.ItemCount;
-                            }
                             if (!existing.Material && o.Material) {
                                 existing.Material = fnCleanMaterial(o.Material);
                             }
@@ -136,7 +132,6 @@ sap.ui.define([
                             o.MovementTypeName = o.MovementTypeName || MVT_NAMES[String(o.MovementType || "").trim()] || "";
                             o.CreatedByUser = o.CreatedByUser || o.USNAM || o.createdBy || "";
                             o.OrderNo = o.OrderNo || o.OrderID || "";
-                            o.ItemCount = o.ItemCount || 1;
                             o.ReservationDate = that._formatDateIso(o.ReservationDate);
 
                             mSeen[sClean] = o;
