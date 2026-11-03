@@ -4,7 +4,7 @@ const ReservationProcessAdapter = require('../../../integration/s4hana/wm/Reserv
 const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
 const { sapKey, sapKeyOpt } = require('../../../integration/s4hana/sapKey');
 const { withReservationLock } = require('../../../integration/s4hana/wm/resLock');
-const { assertPlantsInScope } = require('../../readScope');
+const { assertPlantsInScope, plantScope, isPlantAllowed } = require('../../readScope');
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
@@ -31,11 +31,47 @@ class TrToHandler {
       }
     };
 
-    srv.on('getOpenTRs', run(({ lgnum, mvt }, req) => adapter.getOpenTRs(lgnum, mvt, req?.user)));
-    srv.on('getTR', run(({ tbnum, lgnum }) => adapter.getTR(tbnum, lgnum)));
-    srv.on('lookupTR', run(({ tbnum, lgnum, docType, tbpos }, req) => adapter.lookupTR(tbnum, lgnum, docType, tbpos, req?.user)));
-    srv.on('getFifoBatches', run(({ material, plant, storageLocation, warehouseNumber }) => adapter.getFifoBatches(material, plant, storageLocation, warehouseNumber)));
-    srv.on('getAvailableSerials', run(({ material, plant, storageLocation, batch }) => adapter.getAvailableSerials(material, plant, storageLocation, batch)));
+    const isAdmin = (req) => plantScope(req?.user) === null;
+
+    /** A document outside the user's plants answers like one that does not exist, whichever warehouse the request names. */
+    const inScopeOr404 = (req, doc, plants) => {
+      const allowed = plantScope(req?.user);
+      if (allowed === null) return doc;
+      const known = plants.filter(Boolean);
+      if (!known.length || known.some((plant) => !isPlantAllowed(plant, allowed))) throw httpError(404, 'TR not found in any warehouse');
+      return doc;
+    };
+    const itemPlants = (doc) => [doc?.Plant, ...(doc?.Items || []).map((item) => item.Plant)];
+
+    /** A non-Admin must name a plant of their own: without one, the read is not limited to a plant. */
+    const assertPlantParam = (req, plant) => {
+      if (isAdmin(req)) return;
+      if (!isPlantAllowed(plant, plantScope(req?.user))) {
+        throw httpError(403, `Plant ${plant || '(none)'} is outside the authenticated user's plant scope`);
+      }
+    };
+
+    srv.on('getOpenTRs', run(async ({ lgnum, mvt }, req) => {
+      if (lgnum && !isAdmin(req)) await adapter.assertWarehouseInScope(lgnum, req.user);
+      return adapter.getOpenTRs(lgnum, mvt, req?.user);
+    }));
+    srv.on('getTR', run(async ({ tbnum, lgnum }, req) => {
+      const tr = await adapter.getTR(tbnum, lgnum);
+      return inScopeOr404(req, tr, itemPlants(tr));
+    }));
+    srv.on('lookupTR', run(async ({ tbnum, lgnum, docType, tbpos }, req) => {
+      const tr = await adapter.lookupTR(tbnum, lgnum, docType, tbpos, req?.user);
+      return inScopeOr404(req, tr, itemPlants(tr));
+    }));
+    srv.on('getFifoBatches', run(async ({ material, plant, storageLocation, warehouseNumber }, req) => {
+      assertPlantParam(req, plant);
+      if (warehouseNumber && !isAdmin(req)) await adapter.assertWarehouseInScope(warehouseNumber, req.user);
+      return adapter.getFifoBatches(material, plant, storageLocation, warehouseNumber);
+    }));
+    srv.on('getAvailableSerials', run(({ material, plant, storageLocation, batch }, req) => {
+      assertPlantParam(req, plant);
+      return adapter.getAvailableSerials(material, plant, storageLocation, batch);
+    }));
 
     const entities = () => {
       if (!cds.db) return {};
@@ -721,6 +757,7 @@ class TrToHandler {
 
     const handleVerifyMaterialDocument = async (req) => {
       try {
+        assertPlantParam(req, req.data?.plant);
         return await resProcessAdapter.verifyMaterialDocument(req.data || {});
       } catch (err) {
         return req.error(err.status || 400, err.message);
@@ -729,6 +766,7 @@ class TrToHandler {
 
     const handleVerifyStock = async (req) => {
       try {
+        assertPlantParam(req, req.data?.plant);
         return await resProcessAdapter.verifyStock(req.data || {});
       } catch (err) {
         return req.error(err.status || 400, err.message);
@@ -737,7 +775,8 @@ class TrToHandler {
 
     const handleVerifyReservation = async (req) => {
       try {
-        return await resProcessAdapter.verifyReservation(req.data || {});
+        const res = await resProcessAdapter.verifyReservation(req.data || {});
+        return inScopeOr404(req, res, [res?.plant]);
       } catch (err) {
         return req.error(err.status || 400, err.message);
       }

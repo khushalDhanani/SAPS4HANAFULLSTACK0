@@ -3,7 +3,7 @@
 const TrToHandler = require('../../srv/wm/tr-to/handlers/trTo.handler');
 
 const ADMIN = { is: (role) => role === 'Admin', attr: {} };
-const PLANT_LIMITED = /^(createTOFromTR|CreateTOFromTR|postMigoGoodsMovement|PostMigoGoodsMovement)$/;
+const PLANT_LIMITED = /^(createTOFromTR|CreateTOFromTR|postMigoGoodsMovement|PostMigoGoodsMovement|getOpenTRs|getTR|lookupTR|getFifoBatches|getAvailableSerials|verifyMaterialDocument|VerifyMaterialDocument|verifyStock|VerifyStock|verifyResultingStock|VerifyResultingStock|verifyReservation|VerifyReservation)$/;
 
 /**
  * TrToHandler for tests about something other than plant limits: a write with no real CAP user runs as an Admin,

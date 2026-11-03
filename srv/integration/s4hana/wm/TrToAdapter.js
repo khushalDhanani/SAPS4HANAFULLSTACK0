@@ -402,6 +402,14 @@ class TrToAdapter {
     return Array.from(all).sort();
   }
 
+  /** A warehouse named by a non-Admin must belong to one of the user's plants (SAP T320). */
+  async assertWarehouseInScope(lgnum, user) {
+    const wh = sapKey(lgnum, 'lgnum');
+    if (!(await this._userWarehouses(user)).includes(wh)) {
+      throw httpError(403, `Warehouse ${wh} is outside the authenticated user's plant scope`);
+    }
+  }
+
   async getOpenTRs(lgnum = '', mvt = '', user) {
     const warehouses = lgnum
       ? [await resolveWarehouse(this.rfc, { warehouseNumber: lgnum })]
