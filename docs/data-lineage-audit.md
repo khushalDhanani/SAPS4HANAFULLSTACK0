@@ -13,7 +13,7 @@ There is no Power Query / ETL layer in this project, and **no budget, forecast, 
 | SAP OData V2 via `S4HttpClient` (raw paths) | srv/integration/s4hana/** | 21 services, see section 2 |
 | SAP OData V2 via CAP remote services (`cds.connect.to`) | package.json `cds.requires`; adapters | C_PURCHASEORDER_FS_SRV, MM_PUR_PO_MAINT_V2_SRV, SD_F2370_INQY_WL_SRV, SD_F2369_INQY_FS_SRV, SD_F1873_SO_WL_SRV, FAC_GL_JOURNALENTRY_VER_SRV |
 | SAP OData V4 | GoodsIssuePostingClient.js | `zui_gi_order_rsv_o4` - not published in SAP (404) |
-| CAP database | db/wm/goods-issue-queue.cds | Goods Issue dispatch queue only. In-memory SQLite in dev/test, HDI container in production |
+| CAP database | db/wm/goods-issue-attempt.cds | Posting attempts (double-post guard) only, until the SAP table replaces it. In-memory SQLite in test, file SQLite in dev, HDI container in production |
 | Configuration constants | package.json `cds.s4` | client 220, plant 1120, sloc CS01, sales org 1000, channel 10, division 52, INR, ZIN, ZDOM, ZPR1, shipping points 1120/1112/1108/1109 |
 | Environment | `.env.local`, `.env.qas` | S4 URL, client, user, password, dev-token flags. Non-production default URL `http://localhost:5000` for `FAC_GL_JOURNALENTRY_VER_SRV` removed; services require explicit credentials (`S4_DESTINATION_URL` locally or BTP destination in production) and fail loudly if unconfigured. |
 | In-memory caches | TtlCache: 30 s dashboard, 5 min master-data counts, 5 min customer/office/group/inquiry-type/material, 60 s approval map; LORD field list cached for process life | section 3 |

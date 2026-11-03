@@ -1,6 +1,6 @@
 # SAP-only persistence migration — discovery and implementation gate
 
-Date: 2026-11-03 IST. Status: **BLOCKED for application database removal**.
+Date: 2026-11-03 IST. Status: **Phase 1 removed tracking and settings; complete removal is BLOCKED on the SAP posting-attempt table**.
 
 The user confirmed removing the application database and approved proceeding with SAP-side replacement investigation. This document defines required behavior; it does not define a verified new SAP API or authorize deployment or SAP writes.
 
@@ -18,7 +18,7 @@ The following queries were executed on the configured SAP system:
 - `TFDIR`, filter `FUNCNAME LIKE 'Z%'`: 193 rows, below the 501-row cap. A later concise capture found 49 remote-enabled functions.
 - `TADIR`, field `OBJ_NAME`, filter `PGMID = 'R3TR' AND OBJECT = 'TABL' AND OBJ_NAME LIKE 'Z%'`: 490 rows, below the 501-row cap. Name filtering for `RES|TRACK|LOG|CONFIG|IDEMP|ATTEMPT|LOCK|CLAIM|WM` matched only `ZWM_S_001` and `ZSTR_WM_BIN_STOCK`. TABL objects can be structures; this is not evidence of a usable storage service.
 
-These exact names were checked because the repository references them: `db/wm/reservation-track.cds:17-18`, `:65-66`, and `docs/abap/z_wm_res_lock.fugr.abap:2`. The metadata query pattern is established in `tools/read-system-metadata.js:15-17` and `:100`; the control function is already used by the warehouse integration.
+These exact names were checked because the repository referenced them at the time, including `docs/abap/z_wm_res_lock.fugr.abap:2`. The metadata query pattern is established in `tools/read-system-metadata.js:15-17` and `:100`; the control function is already used by the warehouse integration.
 
 **CONFIRMED:** metadata connectivity and the query results above. No posting, locking, activation, transport, or other SAP write was called.
 
@@ -89,21 +89,32 @@ A verified SAP implementation must provide:
 
 The existing database-free Map is process-local (`GoodsIssueAttemptStore.js:40`, `:111-114`, `:186`). Using it would not meet the requested SAP-only persistence goal or preserve restart/multi-instance guarantees. New SAP technical names, payloads, and parameter types are **Not verified**; no adapter is implemented against assumed names.
 
-### Reservation workflow tracking
+### Reservation workflow tracking: removed, not replaced (2026-11-03)
 
-Current sources: `srv/wm/reservation-track/service.cds`, its handler, `srv/wm/tr-to/handlers/trTo.handler.js`, and `db/wm/reservation-track.cds`. The tracking API and tr-to backend remain present even though their former UI screens were removed.
+The user approved removing the local tracking tables and the unused reservation tracking API. No screen called them. `tr-to` keeps its SAP calls and reads SAP documents instead. What changed on `tr-to`:
 
-A replacement must support the existing track/log reads and updates, step status, SAP document links, retry identity and error history, including authorization and failure behavior. The comments saying the CDS entities mirror SAP objects are not evidence that those SAP objects exist; the live exact-name metadata queries returned no rows.
+- A further partial issue on an item that already has a document returns 409, because it cannot be told from a repeat.
+- A retry must send its own `ProcessId`.
+- The movement 311 reservation-to-TR lookup returns 404, because `LTBK-RSNUM` is empty for 311.
+- A TR whose movement type differs from its reservation's is refused unless the sandbox override is on.
+- A closed staging TR with no reservation in `LTBK` is no longer recovered.
+- Workflow history and step logs are gone. Any production rows are unknown and not migrated.
 
-Removing the backend APIs instead would be a separate feature removal with caller/retention review. It is not assumed by this migration.
+### Business settings: removed, sources open (2026-11-03)
 
-### Business settings
+The user approved removing the local settings table and its unserved admin API.
 
-Current sources: `srv/common/BusinessConfigResolver.js`, `srv/wm/business-config/service.cds`, its handler, and `db/wm/business-config.cds`.
+| Setting | Source now |
+| --- | --- |
+| Currency, shipping points | SAP (T001K, T001, TVSTZ) |
+| Delivery Without Reference sales area | The form, otherwise SAP T001L for the storage location |
+| Sales order and inquiry defaults | Unchanged: the existing hardcoded fallback in `SalesInquiryAdapter.js` |
+| Oversize HU behaviour | Always `BLOCK` |
+| Quarantine label form and size | The wrapper's default form, no size check |
+| Movement 261 blocked-bin rules | **No source.** The rule stays off |
+| HU pickable, hold and interim storage types | **No source.** HU transfer rules fail closed |
 
-The replacement must cover all current configuration consumers, including warehouse storage-type classifications, movement-261 blocked-bin policy, oversize-HU behavior, label form/size and sales/document defaults. Some organizational values already have SAP lookups; that does not establish SAP equivalents for all application-specific policy choices.
-
-Preserve existing plant/warehouse scoping, validation, required-field failure behavior and admin authorization. Do not infer business policy from storage-type names or replace it with hardcoded/environment defaults. Verify the source and maintenance operation for every required setting before changing the resolver or removing its admin API.
+The last two need a decision on where they should live. Nothing guesses them.
 
 ## Implementation sequence after contract verification
 
