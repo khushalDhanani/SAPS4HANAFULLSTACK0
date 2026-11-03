@@ -21,9 +21,6 @@
                     showIcon="true"
                     visible="{= ${rackView>/isHuManaged} === false &amp;&amp; !${rackView>/busy} }"
                     class="sapUiSmallMarginBottom">
-                    <link>
-                        <Link text="{i18n>rackRouteToStandard311Text}" press=".onRouteToStandard311" />
-                    </link>
                 </MessageStrip>
 
                 <MessageStrip

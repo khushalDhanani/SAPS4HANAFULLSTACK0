@@ -68,13 +68,6 @@ sap.ui.define([
                 this._updateShell("wmPackingInstructions");
             } else if (sHash.indexOf("wm/quarantine-labels") === 0) {
                 this._updateShell("wmQuarantineLabels");
-            } else if (sHash.indexOf("wm/reservation-entry/create") === 0) {
-                this._updateShell("wmReservationEntryCreate");
-            } else if (sHash.indexOf("wm/reservation-entry/") === 0) {
-                var aResParts = sHash.replace("wm/reservation-entry/", "").split("/");
-                this._updateShell("wmReservationEntryDetail", { ReservationNo: aResParts[0], ReservationItem: aResParts[1] || "" });
-            } else if (sHash.indexOf("wm/reservation-entry") === 0) {
-                this._updateShell("wmReservationEntryList");
             } else if (sHash.indexOf("wm/hu-stock-transfer/") === 0) {
                 var aHuParts = sHash.replace("wm/hu-stock-transfer/", "").split("/");
                 if (aHuParts[0] === "demo-rack") {
@@ -260,24 +253,6 @@ sap.ui.define([
                     sTitle = oBundle ? oBundle.getText("piDetailTitle") : "Packing Instruction";
                     bShowNav = true;
                     break;
-                case "wmReservationEntryList":
-                    sTitle = oBundle ? oBundle.getText("resEntryListTitle") : "Reservation Entries";
-                    bShowNav = true;
-                    break;
-                case "wmReservationEntryCreate":
-                    sTitle = oBundle ? oBundle.getText("resEntryCreateTitle") : "Create Reservation Entry";
-                    bShowNav = true;
-                    break;
-                case "wmReservationEntryDetail":
-                    var resArgs = oArgs || {};
-                    if (resArgs.ReservationNo) {
-                        var sResPrefix = oBundle ? oBundle.getText("resEntryTitlePrefix") : "Reservation";
-                        sTitle = sResPrefix + " " + resArgs.ReservationNo;
-                    } else {
-                        sTitle = oBundle ? oBundle.getText("resEntryListTitle") : "Reservation Details";
-                    }
-                    bShowNav = true;
-                    break;
                 case "wmHuStockTransfer":
                     sTitle = oBundle ? oBundle.getText("huTransferTitle") : "HU Stock Transfer";
                     bShowNav = true;
@@ -356,10 +331,6 @@ sap.ui.define([
             } else if (sRoute === "wmWarehouseScanToDetail" || sRoute === "wmWarehouseScanToDetailWithWh") {
                 this.onNavBack("wmWarehouseScanTo");
             } else if (sRoute === "wmWarehouseScanTo") {
-                this.onNavBack("dashboard");
-            } else if (sRoute === "wmReservationEntryDetail" || sRoute === "wmReservationEntryCreate") {
-                this.onNavBack("wmReservationEntryList");
-            } else if (sRoute === "wmReservationEntryList") {
                 this.onNavBack("dashboard");
             } else if (sRoute === "wmHuStockTransferRack") {
                 var oRackArgs = this._oLastArgs || {};

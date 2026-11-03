@@ -338,11 +338,6 @@
                                             <NumericContent icon="sap-icon://print" valueColor="Neutral" />
                                         </TileContent>
                                     </GenericTile>
-                                    <GenericTile id="tileReservationEntry" header="{i18n>dashReservationEntryTitle}" subheader="{i18n>dashReservationEntrySub}" press=".onNavigateToReservationEntry" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
-                                        <TileContent unit="{i18n>dashReservationEntryUnit}">
-                                            <NumericContent icon="sap-icon://create" valueColor="Neutral" />
-                                        </TileContent>
-                                    </GenericTile>
                                     <GenericTile id="tileWarehouseScanTo" header="{i18n>dashScanToTitle}" subheader="{i18n>dashScanToSub}" press=".onNavigateToWarehouseScanTo" class="sapUiTinyMarginEnd sapUiTinyMarginBottom">
                                         <TileContent unit="{i18n>dashScanToUnit}">
                                             <NumericContent icon="sap-icon://bar-code" valueColor="Neutral" />

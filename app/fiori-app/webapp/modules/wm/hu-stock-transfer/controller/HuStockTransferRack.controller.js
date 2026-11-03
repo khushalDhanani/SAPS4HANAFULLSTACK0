@@ -263,15 +263,6 @@ sap.ui.define([
                 reservation: this._oViewModel.getProperty("/reservationNo"),
                 item: this._oViewModel.getProperty("/reservationItem") || "1"
             });
-        },
-
-        onRouteToStandard311: function () {
-            var sRes = this._oViewModel.getProperty("/reservationNo");
-            var sItem = this._oViewModel.getProperty("/reservationItem") || "1";
-            this.getRouter().navTo("wmReservationEntryDetail", {
-                ReservationNo: sRes,
-                ReservationItem: sItem
-            });
         }
     });
 });

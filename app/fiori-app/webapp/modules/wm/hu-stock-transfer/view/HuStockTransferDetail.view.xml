@@ -27,9 +27,6 @@
                     showIcon="true"
                     visible="{= ${cockpitView>/cockpit/IsHuManaged} === false &amp;&amp; !${cockpitView>/busy} }"
                     class="sapUiSmallMarginBottom">
-                    <link>
-                        <Link text="{i18n>rackRouteToStandard311Text}" press=".onRouteToStandard311" />
-                    </link>
                 </MessageStrip>
 
                 <!-- 1. Selected Reservation Header & Material Summary -->

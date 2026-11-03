@@ -281,10 +281,6 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("wmQuarantineLabels");
         },
 
-        onNavigateToReservationEntry: function () {
-            this.getOwnerComponent().getRouter().navTo("wmReservationEntryList");
-        },
-
         onNavigateToWarehouseScanTo: function () {
             this.getOwnerComponent().getRouter().navTo("wmWarehouseScanTo");
         },
