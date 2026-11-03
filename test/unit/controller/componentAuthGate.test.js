@@ -29,7 +29,8 @@ function setup({ authResult, hash }) {
     'sap/ui/core/UIComponent': UIComponent,
     'sap/m/MessageToast': { show: jest.fn() },
     'saps4hana/fiori/model/models': { createDeviceModel: () => ({}) },
-    'saps4hana/fiori/service/AuthService': AuthService
+    'saps4hana/fiori/service/AuthService': AuthService,
+    'saps4hana/fiori/service/ThemeService': { restoreTheme: jest.fn() }
   });
   const router = { initialize, attachRouteMatched: jest.fn(), getHashChanger: () => ({ attachEvent: jest.fn() }) };
   const self = Object.assign(Object.create(Component), { getModel: () => null, setModel: jest.fn(), getRouter: () => router });

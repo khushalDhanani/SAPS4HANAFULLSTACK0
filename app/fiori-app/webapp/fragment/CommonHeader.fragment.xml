@@ -13,6 +13,27 @@
         menuButtonPressed=".onMenuButtonPressed"
         showNavButton="{shellModel>/showNavButton}"
         navButtonPressed=".onNavButtonPressed">
+        <f:additionalContent>
+            <OverflowToolbarButton
+                id="shellThemeButton"
+                icon="sap-icon://palette"
+                type="Transparent"
+                text="{i18n>themeMenuTitle}"
+                tooltip="{i18n>themeMenuTitle}"
+                press=".onThemeMenuPressed" />
+        </f:additionalContent>
+        <f:dependents>
+            <Menu id="shellThemeMenu" title="{i18n>themeMenuTitle}" itemSelected=".onThemeSelected">
+                <MenuItemGroup itemSelectionMode="SingleSelect">
+                    <items>
+                        <MenuItem key="sap_horizon" text="{i18n>themeNameHorizon}" selected="{= ${shellModel>/theme} === 'sap_horizon' }" />
+                        <MenuItem key="sap_horizon_dark" text="{i18n>themeNameHorizonDark}" selected="{= ${shellModel>/theme} === 'sap_horizon_dark' }" />
+                        <MenuItem key="sap_fiori_3" text="{i18n>themeNameFiori3}" selected="{= ${shellModel>/theme} === 'sap_fiori_3' }" />
+                        <MenuItem key="sap_fiori_3_dark" text="{i18n>themeNameFiori3Dark}" selected="{= ${shellModel>/theme} === 'sap_fiori_3_dark' }" />
+                    </items>
+                </MenuItemGroup>
+            </Menu>
+        </f:dependents>
         <f:profile>
             <Avatar
                 id="shellUserAvatar"

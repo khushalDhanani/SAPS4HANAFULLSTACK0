@@ -2,8 +2,9 @@ sap.ui.define([
     "saps4hana/fiori/controller/BaseController",
     "sap/ui/model/json/JSONModel",
     "sap/ui/core/Messaging",
-    "sap/ui/Device"
-], function (BaseController, JSONModel, Messaging, Device) {
+    "sap/ui/Device",
+    "saps4hana/fiori/service/ThemeService"
+], function (BaseController, JSONModel, Messaging, Device, ThemeService) {
     "use strict";
 
     // First segment of a route pattern -> the dashboard section the sidebar highlights for that screen
@@ -17,6 +18,7 @@ sap.ui.define([
                 currentTitle: "",
                 showNavButton: false,
                 sideNavKey: "overview",
+                theme: ThemeService.getSavedTheme(),
                 logoUrl: sLogoPath || "assets/AeElementally.png"
             });
 
@@ -319,6 +321,16 @@ sap.ui.define([
 
         onMenuButtonPressed: function () {
             this.byId("appToolPage").toggleSideContentMode();
+        },
+
+        onThemeMenuPressed: function (oEvent) {
+            this.byId("shellThemeMenu").openBy(oEvent.getSource());
+        },
+
+        onThemeSelected: function (oEvent) {
+            var sTheme = oEvent.getParameter("item").getKey();
+            ThemeService.applyTheme(sTheme);
+            this._oShellModel.setProperty("/theme", sTheme);
         },
 
         /**

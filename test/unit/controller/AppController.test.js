@@ -2,6 +2,7 @@ const path = require('path');
 
 let AppController;
 const mockDevice = { system: { phone: false } };
+const mockThemeService = { applyTheme: jest.fn(), getSavedTheme: jest.fn() };
 const manifest = require('../../../app/fiori-app/webapp/manifest.json');
 const routes = manifest['sap.ui5'].routing.routes;
 
@@ -17,7 +18,7 @@ beforeAll(() => {
   global.sap = {
     ui: {
       define: (_dependencies, factory) => {
-        AppController = factory(BaseController, function JSONModel() {}, {}, mockDevice);
+        AppController = factory(BaseController, function JSONModel() {}, {}, mockDevice, mockThemeService);
       }
     }
   };
@@ -115,5 +116,27 @@ describe('App shell sidebar', () => {
     controller.onMenuButtonPressed();
 
     expect(toolPage.toggleSideContentMode).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('App shell theme menu', () => {
+  test('the header button opens the menu at the button', () => {
+    const menu = { openBy: jest.fn() };
+    const button = {};
+    const controller = makeController();
+    controller.byId = (id) => (id === 'shellThemeMenu' ? menu : null);
+
+    controller.onThemeMenuPressed({ getSource: () => button });
+
+    expect(menu.openBy).toHaveBeenCalledWith(button);
+  });
+
+  test('a selection applies and saves the theme and marks it active in the menu', () => {
+    const controller = makeController();
+
+    controller.onThemeSelected({ getParameter: () => ({ getKey: () => 'sap_fiori_3_dark' }) });
+
+    expect(mockThemeService.applyTheme).toHaveBeenCalledWith('sap_fiori_3_dark');
+    expect(controller.shellState['/theme']).toBe('sap_fiori_3_dark');
   });
 });

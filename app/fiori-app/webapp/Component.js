@@ -9,8 +9,9 @@ sap.ui.define([
     "saps4hana/fiori/modules/sd/sales-inquiry/service/SalesInquiryService",
     "saps4hana/fiori/modules/sd/sales-order/service/SalesOrderService",
     "saps4hana/fiori/modules/le/outbound-delivery/service/OutboundDeliveryService",
-    "saps4hana/fiori/modules/sd/customer-invoice/service/CustomerInvoiceService"
-], function (UIComponent, Device, MessageToast, models, AuthService, GoodsReceiptService, PurchaseOrderService, SalesInquiryService, SalesOrderService, OutboundDeliveryService, CustomerInvoiceService) {
+    "saps4hana/fiori/modules/sd/customer-invoice/service/CustomerInvoiceService",
+    "saps4hana/fiori/service/ThemeService"
+], function (UIComponent, Device, MessageToast, models, AuthService, GoodsReceiptService, PurchaseOrderService, SalesInquiryService, SalesOrderService, OutboundDeliveryService, CustomerInvoiceService, ThemeService) {
     "use strict";
 
     // Defensive normalization for UI5 MessageToast dock validation issue (SAP DINC0487249)
@@ -50,6 +51,7 @@ sap.ui.define([
 
         init: function () {
             normalizeMessageToastDock();
+            ThemeService.restoreTheme();
 
             // call the base component's init function
             UIComponent.prototype.init.apply(this, arguments);
