@@ -171,6 +171,22 @@ describe('Unit: DeliveryNoRefAdapter', () => {
       expect(mockClient.post).not.toHaveBeenCalled();
     });
 
+    test('reads the sales area of the storage location from T001L when the form leaves it empty', async () => {
+      const rfc = { readTable: jest.fn(async (table) => (table === 'T001L' ? [{ VKORG: '1000', VTWEG: '14', SPART: '00' }] : [])) };
+      mockClient.post.mockResolvedValue({ data: { d: { OutboundDelivery: '80000059' } } });
+      await new DeliveryNoRefAdapter({ client: mockClient, rfc }).createDeliveryWithoutRef({
+        shippingPoint: '1104',
+        shipToParty: '10135',
+        salesOrg: '',
+        distChannel: '',
+        division: '',
+        plant: '1120',
+        storageLocation: 'CS02',
+        items: [{ material: '4000000186', quantity: 1, uom: 'KG' }]
+      }, { isTrusted: true });
+      expect(mockClient.post.mock.calls[0][1].data).toMatchObject({ SalesOrganization: '1000', DistributionChannel: '14', Division: '00' });
+    });
+
     test('sends the typed sales area to SAP and keeps the trust flag out of the HTTP call', async () => {
       mockClient.post.mockResolvedValue({ data: { d: { OutboundDelivery: '80000059' } } });
       await adapter.createDeliveryWithoutRef({

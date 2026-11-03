@@ -1,5 +1,6 @@
 const LOG = require('../../../../common/logger')('delivery-no-ref-adapter');
 const { S4HttpClient } = require('../../S4HttpClient');
+const { RfcClient } = require('../../RfcClient');
 const businessConfigResolver = require('../../../../common/BusinessConfigResolver');
 const { odataString } = require('../../../../common/filterUtils');
 const { mapS4Error } = require('../../S4ErrorMapper');
@@ -53,6 +54,7 @@ function _toError(mapped) {
 class DeliveryNoRefAdapter {
   constructor(options = {}) {
     this.client = options.client || new S4HttpClient();
+    this.rfc = options.rfc || (RfcClient.isAvailable() ? new RfcClient() : null);
     this.servicePath = options.servicePath || SERVICE_PATH;
   }
 
@@ -143,7 +145,8 @@ class DeliveryNoRefAdapter {
       storageLocation: String(payload.storageLocation || '').trim(),
       flow: 'delivery-no-ref',
       fields: ['salesOrganization', 'distributionChannel', 'division'],
-      trustedOverrides
+      trustedOverrides,
+      rfc: this.rfc
     }).catch((err) => {
       if (/could not resolve/.test(err.message)) {
         err.status = 400;
