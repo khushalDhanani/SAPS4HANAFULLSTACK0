@@ -2,7 +2,7 @@ const LOG = require('../../../common/logger')('outbound-delivery');
 const outboundDeliveryAdapter = require('../../../integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
 const deliveryNoRefAdapter = require('../../../integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter');
 const { applyPaging, extractFilterParam, extractIfMatch } = require('../../../common/filterUtils');
-const { plantScope, isPlantAllowed } = require('../../../wm/reservation-entry/readScope');
+const { plantScope, isPlantAllowed } = require('../../../wm/readScope');
 
 // Fields of the computed worklist rows a text search may match (OrdersDueForDelivery has no SoldToParty/Material).
 const SEARCH_FIELDS = ['SalesOrder', 'ShipToParty', 'ShippingPoint'];

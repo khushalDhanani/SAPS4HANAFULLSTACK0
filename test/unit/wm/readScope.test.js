@@ -1,13 +1,13 @@
 'use strict';
 
-const { applyPlantScope, isPlantAllowed, plantScope } = require('../../../srv/wm/reservation-entry/readScope');
+const { applyPlantScope, isPlantAllowed, plantScope } = require('../../../srv/wm/readScope');
 
 const user = ({ admin = false, attr = {} } = {}) => ({
   attr,
   is: (role) => admin && role === 'Admin'
 });
 
-describe('Reservation Entry plant read scope', () => {
+describe('WM plant read scope', () => {
   test('uses the authenticated Plant attribute; Admin is unrestricted', () => {
     expect(plantScope(user({ attr: { Plant: ['1120', '1130'] } }))).toEqual(['1120', '1130']);
     expect(plantScope(user({ admin: true, attr: { Plant: ['1120'] } }))).toBeNull();

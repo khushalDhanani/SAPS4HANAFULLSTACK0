@@ -1,6 +1,6 @@
 'use strict';
 
-const plantScope = require('../handling-unit/plantScope');
+const plantScope = require('./handling-unit/plantScope');
 
 function plantClause(allowedPlants) {
   if (allowedPlants.length === 0) return [{ val: 1 }, '=', { val: 0 }];

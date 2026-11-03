@@ -7,7 +7,7 @@ const { extractFilterParam, extractFilterParams, applyPaging, extractIfMatch } =
 // Reuse the type-agnostic WM field-format primitives (plant/sloc/material/batch are the same
 // across Goods Issue and Goods Receipt) rather than duplicating the regexes here.
 const { checkMaterial, checkPlant, checkStorageLocation, checkBatch } = require('../../goods-issue/validation/common');
-const { plantScope, isPlantAllowed, assertPlantsInScope } = require('../../reservation-entry/readScope');
+const { plantScope, isPlantAllowed, assertPlantsInScope } = require('../../readScope');
 
 /** 403 message when the posting plant is outside the authenticated user's plant scope (Admin: unrestricted), else null. */
 function plantScopeError(req, plant) {

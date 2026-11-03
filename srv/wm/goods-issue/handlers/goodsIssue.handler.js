@@ -4,7 +4,7 @@ const { validateReversalPayload } = require('../validation/goodsIssue.validation
 const { normalizeReversalPayload } = require('../mapping/goodsIssue.mapper');
 const LOG = require('../../../common/logger')('goods-issue-handler');
 const GoodsIssueAttemptStore = require('../GoodsIssueAttemptStore');
-const { assertPlantsInScope } = require('../../reservation-entry/readScope');
+const { assertPlantsInScope } = require('../../readScope');
 
 const _extractFilterParam = extractFilterParam;
 const LIST_MOVEMENT_TYPES = ['201', '241', '261', '301', '311'];

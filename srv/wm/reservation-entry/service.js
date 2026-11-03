@@ -12,7 +12,7 @@ const attemptStore = require('./ReservationAttemptStore');
 const { userFacingSapError } = require('../../common/sapErrorText');
 const { classifyCreateFailure } = require('./ReservationAttemptStore');
 const { validateReservationInput, getMovementConfig, SUPPORTED_MOVEMENT_TYPES } = require('../../common/movementConfig');
-const { plantScope, applyPlantScope, isPlantAllowed, assertPlantsInScope } = require('./readScope');
+const { plantScope, applyPlantScope, isPlantAllowed, assertPlantsInScope } = require('../readScope');
 const { formatDateToYMD } = require('../../common/dateUtils');
 const LOG = cds.log('reservation-entry');
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');

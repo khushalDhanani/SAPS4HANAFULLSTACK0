@@ -3,7 +3,7 @@ const cds = require('@sap/cds');
 const LOG = cds.log('hu-stock-transfer-handler');
 const HuStockTransferAdapter = require('../../../integration/s4hana/wm/HuStockTransferAdapter');
 const GoodsIssueAttemptStore = require('../../goods-issue/GoodsIssueAttemptStore');
-const { plantScope, isPlantAllowed } = require('../../reservation-entry/readScope');
+const { plantScope, isPlantAllowed } = require('../../readScope');
 
 const adapter = new HuStockTransferAdapter();
 

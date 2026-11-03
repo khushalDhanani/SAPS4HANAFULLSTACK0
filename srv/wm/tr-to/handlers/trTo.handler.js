@@ -4,7 +4,7 @@ const ReservationProcessAdapter = require('../../../integration/s4hana/wm/Reserv
 const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
 const { sapKey, sapKeyOpt } = require('../../../integration/s4hana/sapKey');
 const { withReservationLock } = require('../../../integration/s4hana/wm/resLock');
-const { assertPlantsInScope } = require('../../reservation-entry/readScope');
+const { assertPlantsInScope } = require('../../readScope');
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
