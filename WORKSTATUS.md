@@ -89,6 +89,28 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-03 10:40 IST — Reservation Entry leftover sweep: PARTIAL
+
+- **Status:** PARTIAL. No SAP call was made in this step. The full 17-suite browser run was not run.
+- **Why:** The user asked for an exhaustive sweep, with before and after search results.
+- **Deleted:** `AUDIT_RESERVATION_CREATE.md`; `docs/abap/sandbox-results.md`, the output of the deleted `tools/sandbox-matrix.js`.
+- **Changed:** the section comment in both i18n bundles; one line each in `docs/abap/test-runbook.md`, `docs/wm_tr_create_rfc_wrapper.md` and `migo_idempotency_design.md`.
+- **Local files removed, not in Git:** `app/fiori-app/dist/modules/wm/reservation-entry/`, `test/e2e/wm/screenshots/mvt*.png` and the emptied folder, and the empty `modules/wm/hu-stock-transfer/model/` folder.
+- **Kept on purpose:**
+  - `WORKSTATUS.md` and `docs/archive/`: `AGENTS.md` forbids rewriting history.
+  - `db-migrate-20261021-*.sql`: database code. These scripts recreate a view of the removed service, so they should not be rerun.
+  - `docs/abap/z*_res_entry*`: SAP-side ABAP source.
+  - `srv/wm/readScope.js:18`: an error message in backend code.
+- **Conflict recorded:** this request says not to touch backend or database code, but the earlier approved commits on this branch already removed the backend service and `ReservationCreateAttempt`. They were not reverted.
+- **Test decision:** EXISTING TEST SUFFICIENT: `test/unit/controller/uiConsistency.test.js`, full Jest. Only comments and docs changed.
+- **Executed validation:**
+  - `npx jest --silent --runInBand`: 224 suites passed, 1 skipped; 4,176 tests passed, 59 skipped.
+  - `npx eslint .`: clean. `node tools/scan-secrets.js`: 0 secrets. `git diff --check`: clean.
+  - `npm run lint` and `npm run build` in `app/fiori-app`: clean; `dist` has no `reservation-entry`.
+  - `npm run test:e2e:sap-free`: 3 of 3 passed.
+- **Search results:** saved in `test-results/reservation-search/` (ignored by Git).
+- **Next action:** The user reviews the branch and decides whether to keep the backend removal, then whether to merge.
+
 ### 2026-11-03 — Reservation-entry backend removed: PARTIAL
 
 - **Status:** PARTIAL. Production behaviour, outside API callers and the production table are not verified. No SAP write was made.

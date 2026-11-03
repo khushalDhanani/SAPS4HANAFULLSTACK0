@@ -43,7 +43,7 @@ This runbook is a numbered checklist for the WM consultant to witness and record
 ---
 
 ### Step 1: Create Reservation (Movement 201)
-- **Action:** Post Reservation via CAP endpoint `/odata/v4/reservation-entry/createReservationEntry` or SAP GUI `MB21`.
+- **Action:** Post Reservation via SAP GUI `MB21`.
   - Movement Type: `201`
   - Plant: `1120`, SLoc: `HS01`
   - Cost Center: `1011201301`

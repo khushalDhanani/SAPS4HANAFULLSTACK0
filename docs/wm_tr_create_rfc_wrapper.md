@@ -9,7 +9,7 @@
 
 ## 1. Problem Statement & Root Cause
 
-When creating a reservation through `/wm/reservation-entry/create`, `BAPI_RESERVATION_CREATE1` successfully creates and commits the reservation document in SAP S/4HANA (e.g. `0000525273`).
+When a reservation is created, `BAPI_RESERVATION_CREATE1` successfully creates and commits the reservation document in SAP S/4HANA (e.g. `0000525273`).
 
 However, the subsequent automated warehouse step — creating a Transfer Requirement (TR) via `L_TR_CREATE` — fails with:
 ```text

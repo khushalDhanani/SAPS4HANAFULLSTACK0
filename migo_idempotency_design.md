@@ -123,7 +123,7 @@ flowchart TD
 ```
 
 ### Tier 1: Process UUID Matching via `BKTXT` (Exact Step Identity)
-When `processId` is passed (from `ReservationTrack` or `ReservationEntries`):
+When `processId` is passed (from `ReservationTrack`):
 - Normalize `sProcessIdPrefix25 = processId.replace(/-/g, '').slice(0, 25)`.
 - Query `MATDOC`:
   ```javascript
