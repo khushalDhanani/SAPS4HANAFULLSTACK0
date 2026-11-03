@@ -15,7 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **HU storage type rules for W01 (2026-11-03 16:37 IST) — PARTIAL, committed locally on `chore/hu-storage-rules`, not merged or pushed:** W01 now has approved rules in `srv/wm/hu-stock-transfer/storage-types.json`, and the missing-rules error is gone. The HU dry run still fails on an HU that is correctly refused, so no browser run has proven an accepted HU. See the entry below.
+- **HU storage type rules for W01 (2026-11-03 16:37 IST) — PARTIAL, merged to local `feature01`, not pushed:** W01 now has approved rules in `srv/wm/hu-stock-transfer/storage-types.json`, and the missing-rules error is gone. The HU dry run still fails on an HU that is correctly refused, so no browser run has proven an accepted HU. See the entry below.
 
 - **Database removal Phase 1 and test cleanup merged (2026-11-03 16:09 IST) — pushed to `origin/feature01`:** The work from `chore/remove-application-db`, `chore/remove-local-db-files` and `chore/test-audit-cleanup` is on `feature01`. `db/` and the posting-attempt guard stay until the SAP table replaces them. See the entry below.
 
@@ -84,7 +84,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- HU rules (2026-11-03): review and merge `chore/hu-storage-rules`; decide 261 blocked-bin rules; have the SAP administrator check packaging type Z007, which has no storage unit type in W01; get rules for other warehouses.
+- HU rules (2026-11-03): decide 261 blocked-bin rules; have the SAP administrator check packaging type Z007, which has no storage unit type in W01; get rules for other warehouses.
 - Database removal (2026-11-03): Phase 1 is done and the target is the connected client. Still needed: a transport request owned by, or with a task for, the connected user, and a written go for the live proof in docs/decisions/sap-only-persistence-migration.md (Phase 2), then the store swap and final removal (Phase 3). The user also decides where movement 261 blocked-bin rules and HU storage types should live. Check production BusinessConfig values before any deployment.
 
 - SAP-only migration: await the development target and workbench transport request the user will provide; ZAMM is selected. Then establish verified replacement contracts for durable posting claims, tracking and settings as specified in docs/decisions/sap-only-persistence-migration.md. Preserve existing data until migration and retention are settled.
@@ -1507,3 +1507,13 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **REGRESSION:** Jest and WM browser suites as above; other flows in the dry run unchanged.
 - **Next action:** the user reviews and merges the branch, and has packaging type Z007 checked.
 - **FINAL STATUS:** PARTIAL.
+
+### 2026-11-03 16:37 IST — Merged HU storage type rules into local `feature01`: PASS for the merge
+
+- **Request:** The user said "Merge it".
+- **CHANGED:** fast-forward of local `feature01` to `167486b0`, plus this log entry. No conflicts. Not pushed. The source branch was kept.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT: the runs in the entry above. A fast-forward leaves the tree identical to the tested branch.
+- **TESTED:** `git diff --check` clean.
+- **Remote:** `origin/feature01` does not have these commits.
+- **ASSUMPTIONS:** none.
+- **FINAL STATUS:** PASS for the merge. The HU rules work itself stays PARTIAL, because the HU dry run still fails.
