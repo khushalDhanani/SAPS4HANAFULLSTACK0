@@ -880,11 +880,8 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             expect(res.CostCenter).toBe('CC1120');
         });
 
-        it('lookupTR allows only the exact app-tracked reservation/TR/item/movement link [mock only, not browser verification]', async () => {
+        it('lookupTR refuses a reservation/TR movement mismatch by default [mock only, not browser verification]', async () => {
             delete process.env.WM_ALLOW_MISMATCHED_TR;
-            adapter._findTrackedReservationForTR = jest.fn().mockResolvedValue({
-                TransferRequirement: '0001000823', ReservationNo: '0000527870', ReservationItem: '0001', MovementType: '201'
-            });
             mockRfc.call.mockResolvedValueOnce({
                 ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000823', BWLVS: '311', RSNUM: '0000527870', NLTYP: '921', NLPLA: 'TRANSFER' }],
                 ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000823', TBPOS: '0001', RSPOS: '0001', MATNR: '000000008000005294', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: '' }]
@@ -899,8 +896,7 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             const result = await adapter.lookupTR('0001000823', 'W01', 'TR');
 
             expect(result.ReservationMovementType).toBe('201');
-            expect(result.AllowMismatchedTR).toBe(true);
-            expect(adapter._findTrackedReservationForTR).toHaveBeenCalledWith('0001000823', 'W01'); // warehouse is part of the tracking key
+            expect(result.AllowMismatchedTR).toBe(false);
         });
 
         it('createTOFromTR blocks mismatched TR when WM_ALLOW_MISMATCHED_TR is default false [mock only, not browser verification]', async () => {
@@ -1295,59 +1291,6 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
 
             // MIGO MUST NOT BE CALLED!
             expect(mockResAdapter.postGoodsMovement).not.toHaveBeenCalled();
-        });
-
-        it('strict dependency: MIGO rejects when TransferOrder is not confirmed in tracking record', async () => {
-            const handlers = {};
-            const mockSrv = { on: (event, fn) => { handlers[event] = fn; } };
-            const postGoodsMovement = jest.fn();
-            TrToHandler.init(mockSrv, {
-                adapter: {},
-                resProcessAdapter: {
-                    rfc: { readTable: jest.fn() },
-                    checkAuthorization: jest.fn().mockResolvedValue(true),
-                    postGoodsMovement
-                }
-            });
-
-            const cds = require('@sap/cds');
-            const savedDb = cds.db;
-            cds.db = {
-                entities: () => ({ ReservationTrack: { name: 'ReservationTrack' } }),
-                run: jest.fn(async (q) => {
-                    if (q.SELECT) {
-                        return {
-                            ReservationNo: '524979',
-                            ReservationItem: '0001',
-                            TransferOrder: '987654',
-                            Status_code: '13',
-                            MovementType: '311'
-                        };
-                    }
-                    return 1;
-                })
-            };
-
-            try {
-                await expect(handlers.postMigoGoodsMovement({
-                    data: {
-                        TransferOrder: '987654',
-                        MovementType: '311',
-                        Material: '8000000023',
-                        Plant: '1120',
-                        StorageLocation: 'HS01',
-                        Quantity: 1,
-                        Unit: 'KG'
-                    }
-                })).rejects.toMatchObject({
-                    status: 400,
-                    message: expect.stringContaining('is not confirmed (status 13)')
-                });
-            } finally {
-                cds.db = savedDb;
-            }
-
-            expect(postGoodsMovement).not.toHaveBeenCalled();
         });
 
         it('strict dependency: MIGO rejects when SAP LTAK-KQUIT is blank (unconfirmed TO)', async () => {

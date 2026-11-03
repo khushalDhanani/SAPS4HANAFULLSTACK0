@@ -64,31 +64,12 @@ describe('TrToHandler', () => {
     expect(source).toMatch(/readTable\('RESB',[^\n]+`RSNUM = '\$\{rsnum\}'`/);
   });
 
-  it('passes only the database tracking row to validate a reservation/TR mismatch [mock only, not browser verification]', () => {
+  it('returns an L9/514 delivery number when MIGO/PGI fails so retry can resume that delivery', () => {
     const source = fs.readFileSync(path.join(__dirname, '../../../srv/wm/tr-to/handlers/trTo.handler.js'), 'utf8');
-    expect(source).toMatch(/const trackedReservation = existing\?\.TransferRequirement && existing\?\.ReservationNo/);
-    expect(source).toMatch(/result\.ReservationMovementType !== result\.MovementType/);
-    expect(source).toMatch(/MessageType: 'W'/);
-    expect(source).toMatch(/MessageText: `Linked reservation staging: TR movement[\s\S]*verify the TR destination before processing\.`/);
-  });
-
-  it('scopes the tracking lookup by warehouse when TR numbers collide across warehouses', () => {
-    const source = fs.readFileSync(path.join(__dirname, '../../../srv/wm/tr-to/handlers/trTo.handler.js'), 'utf8');
-    const lookup = source.slice(source.indexOf('const handleCreateTOFromTR'), source.indexOf("srv.on('createTOFromTR'"));
-    expect(lookup).toMatch(/if \(ReservationTrack && wh\)/);
-    expect(lookup.match(/WarehouseNumber: wh/g)).toHaveLength(4);
-    expect(lookup).toMatch(/TransferRequirement: tbnum, WarehouseNumber: wh/);
-    expect(lookup).toMatch(/ReservationNo: rsnum, WarehouseNumber: wh/);
-    expect(lookup).toMatch(/trackedReservation = existing\?\.TransferRequirement[\s\S]*WarehouseNumber: existing\.WarehouseNumber/);
-  });
-
-  it('persists an L9/514 delivery number when MIGO/PGI fails so retry can resume that delivery', () => {
-    const source = fs.readFileSync(path.join(__dirname, '../../../srv/wm/tr-to/handlers/trTo.handler.js'), 'utf8');
-    const catchBlock = source.slice(source.indexOf('// Rollback executed by the adapter; tracking goes to 90 (GI error, retryable)'), source.indexOf("srv.on('postMigoGoodsMovement'"));
-    expect(catchBlock).toMatch(/const failedDeliveryNo = err\.deliveryNumber \|\| err\.DeliveryNumber \|\| existingTrack\?\.DeliveryNumber/);
-    expect(catchBlock).toMatch(/if \(failedDeliveryNo\) errorFields\.DeliveryNumber = failedDeliveryNo/);
+    const catchBlock = source.slice(source.indexOf('// Rollback executed by the adapter; status 90 (GI error, retryable)'), source.indexOf("srv.on('postMigoGoodsMovement'"));
+    expect(catchBlock).toMatch(/const failedDeliveryNo = err\.deliveryNumber \|\| err\.DeliveryNumber/);
     expect(catchBlock).toMatch(/DeliveryNumber: failedDeliveryNo/);
-    expect(source).toMatch(/deliveryNumber: data\.deliveryNumber \|\| data\.DeliveryNumber \|\| existingTrack\?\.DeliveryNumber/);
+    expect(source).toMatch(/deliveryNumber: data\.deliveryNumber \|\| data\.DeliveryNumber/);
   });
 
   it('does not return the technical RFC user as ConfirmedBy when CAP has no user identity', async () => {

@@ -3347,52 +3347,6 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       expect(bapiCalls.length).toBe(1);
     });
 
-    test('Persistent CAP DB (ReservationTrack) check returns existing document without SAP query', async () => {
-      setupDefaultFmCalls();
-      setupDefaultReadTable();
-
-      const origCds = global.cds;
-      try {
-        global.cds = {
-          db: {
-            run: jest.fn().mockResolvedValue({
-              ReservationNo: '0000520235',
-              ReservationItem: '0001',
-              TransferOrder: '0001037299',
-              ProcessId: 'E5B42701-1111-4222-8333-000000000002',
-              MaterialDocument: '5000888888',
-              MaterialDocYear: '2026',
-              Status_code: '05'
-            })
-          },
-          ql: {
-            SELECT: {
-              one: {
-                from: jest.fn().mockReturnValue({
-                  where: jest.fn().mockReturnValue({})
-                })
-              }
-            }
-          }
-        };
-
-        const idempotency = await adapter.checkMigoIdempotency({
-          reservationNumber: '0000520235',
-          reservationItem: '0001',
-          transferOrder: '0001037299',
-          processId: 'E5B42701-1111-4222-8333-000000000002'
-        });
-
-        expect(idempotency.alreadyPosted).toBe(true);
-        expect(idempotency.materialDocument).toBe('5000888888');
-        expect(idempotency.materialDocumentYear).toBe('2026');
-        expect(idempotency.source).toBe('DB');
-        expect(idempotency.businessKey).toBe('RES:520235/1#TO:1037299#PID:E5B42701-1111-4222-8333-000000000002');
-      } finally {
-        global.cds = origCds;
-      }
-    });
-
     test('SAP MATDOC transparent table query detects committed document and filters cancelled documents', async () => {
       setupDefaultFmCalls();
 
@@ -3435,11 +3389,6 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
     });
 
     describe('reservation-item lookup (MATDOC-SGTXT is blank on this system): replay vs new partial issue, fail closed on read errors', () => {
-      const withTrack = async (track, fn) => {
-        const origCds = global.cds;
-        global.cds = { db: { run: jest.fn().mockResolvedValue(track) }, ql: { SELECT: { one: { from: () => ({ where: () => ({}) }) } } } };
-        try { return await fn(); } finally { global.cds = origCds; }
-      };
       const priorDoc = [{ MBLNR: '5000111111', MJAHR: '2026' }];
       const keyParams = { reservationNumber: '0000520235', reservationItem: '0001', processId: 'E5B42701-1111-4222-8333-000000000007', movementType: '201' };
 
@@ -3447,15 +3396,6 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
         setupDefaultReadTable({ MATDOC: () => { throw new Error('RFC_COMMUNICATION_FAILURE'); } });
         await expect(adapter.checkMigoIdempotency(keyParams)).rejects.toMatchObject({ status: 503, idempotencyCheckFailed: true });
         expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
-      });
-
-      test('earlier partial issue (RESB withdrawn equals tracked withdrawn) does not block the next quantity', async () => {
-        setupDefaultReadTable({
-          MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
-          RESB: () => [{ ENMNG: '6.000', KZEAR: '' }]
-        });
-        const res = await withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', Status_code: '05', MaterialDocument: '5000111111', WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(keyParams));
-        expect(res.alreadyPosted).toBe(false);
       });
 
       const PROCESS_TEXT = 'E5B4270111114222833300000'; // the first 25 characters written to HEADER_TXT, stored in MATDOC-BKTXT
@@ -3466,19 +3406,10 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           MATDOC: (_f, _w, whereStr) => { wheres.push(whereStr); return whereStr.includes(`BKTXT = '${PROCESS_TEXT}'`) ? priorDoc : []; },
           RESB: () => [{ ENMNG: '10.000', KZEAR: '' }]
         });
-        const res = await withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', Status_code: '90', MaterialDocument: null, WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(keyParams));
+        const res = await adapter.checkMigoIdempotency(keyParams);
         expect(res).toMatchObject({ alreadyPosted: true, materialDocument: '5000111111', source: 'SAP' });
         expect(wheres[0]).toContain(`BKTXT = '${PROCESS_TEXT}'`);
         expect(wheres.join(' ')).not.toContain('SGTXT');
-      });
-
-      test('a withdrawal made outside this flow is not a replay: no false success, the new quantity posts', async () => {
-        setupDefaultReadTable({
-          MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
-          RESB: () => [{ ENMNG: '10.000', KZEAR: '' }]
-        });
-        const res = await withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', Status_code: '05', MaterialDocument: '5000111110', WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(keyParams));
-        expect(res.alreadyPosted).toBe(false);
       });
 
       test('a final-issued item with no document of this process is refused, not reported as posted', async () => {
@@ -3486,26 +3417,26 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
           RESB: () => [{ ENMNG: '6.000', KZEAR: 'X' }]
         });
-        await expect(withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(keyParams)))
+        await expect(adapter.checkMigoIdempotency(keyParams))
           .rejects.toMatchObject({ status: 422, message: expect.stringContaining('5000111111') });
       });
 
-      test('with no tracking row the app cannot tell: refused with 409, neither posted nor reported as posted', async () => {
+      test('a document this process id did not post cannot be told from a repeat: refused with 409, neither posted nor reported as posted', async () => {
         setupDefaultReadTable({
           MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
           RESB: () => [{ ENMNG: '6.000', KZEAR: '' }]
         });
-        await expect(withTrack(null, () => adapter.checkMigoIdempotency(keyParams)))
+        await expect(adapter.checkMigoIdempotency(keyParams))
           .rejects.toMatchObject({ status: 409, message: expect.stringContaining('5000111111') });
       });
 
-      test('with no process id the quantity comparison is still the guard: a higher withdrawal counts as a replay', async () => {
+      test('with no process id a document on the item counts as a replay', async () => {
         setupDefaultReadTable({
           MATDOC: (_f, _w, whereStr) => (whereStr.includes("RSNUM = '0000520235'") ? priorDoc : []),
           RESB: () => [{ ENMNG: '10.000', KZEAR: '' }]
         });
         const { processId: _none, ...noId } = keyParams;
-        const res = await withTrack({ ReservationNo: '0000520235', ReservationItem: '0001', WithdrawnQuantity: 6 }, () => adapter.checkMigoIdempotency(noId));
+        const res = await adapter.checkMigoIdempotency(noId);
         expect(res).toMatchObject({ alreadyPosted: true, materialDocument: '5000111111' });
       });
     });

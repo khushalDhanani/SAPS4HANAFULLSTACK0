@@ -20,4 +20,3 @@ namespace saps4hana.fullstack;
 
 // Warehouse Management Persistence (Tracking & Logging)
 using from './wm/goods-issue-attempt';
-using from './wm/reservation-track';

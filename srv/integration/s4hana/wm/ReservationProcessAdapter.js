@@ -2056,36 +2056,7 @@ class ReservationProcessAdapter {
       };
     }
 
-    // 2. Persistent CAP database check (ZRES_TRACK)
-    let trk = null;
-    if (global.cds?.db && reservationNo) {
-      try {
-        trk = await global.cds.db.run(
-          global.cds.ql.SELECT.one.from('saps4hana.wm.ReservationTrack').where({
-            ReservationNo: reservationNo,
-            ReservationItem: reservationItem
-          })
-        );
-        if (trk && trk.MaterialDocument && (trk.Status_code === STATUS.GI_POSTED || trk.ProcessStatus === PROCESS_STATUS.MIGO_POSTED || trk.ProcessStatus === PROCESS_STATUS.COMPLETED)) {
-          const bKeyMatches = trk.MigoBusinessKey && trk.MigoBusinessKey === key;
-          // ProcessId and TransferOrder are written before posting, so with a stored key they say nothing about the document on this row.
-          // shortcut: a row with no stored key can still report its earlier document once; every posting since the key was added stores one.
-          const pidMatches = !trk.MigoBusinessKey && processId && trk.ProcessId && trk.ProcessId === processId;
-          const toMatches = (!trk.MigoBusinessKey || !processId) && transferOrder && trk.TransferOrder && sapKey(trk.TransferOrder, 'tanum') === sapKey(transferOrder, 'tanum') && (processId ? trk.ProcessId === processId : true);
-          if (bKeyMatches || pidMatches || toMatches) {
-            return {
-              alreadyPosted: true,
-              materialDocument: alphaOut(trk.MaterialDocument),
-              materialDocumentYear: trk.MaterialDocYear || String(new Date().getFullYear()),
-              businessKey: key,
-              source: 'DB'
-            };
-          }
-        }
-      } catch (_) { /* ignore DB query errors in mock unit test environments */ }
-    }
-
-    // 3. SAP MATDOC transparent table query, keyed on THIS attempt (PROCESS_ID in BKTXT, or the TO in XBLNR).
+    // 2. SAP MATDOC transparent table query, keyed on THIS attempt (PROCESS_ID in BKTXT, or the TO in XBLNR).
     //    A read failure fails closed: posting without knowing whether the previous attempt committed could double-post.
     //    BKTXT carries HEADER_TXT on every line; SGTXT is blank on reservation postings (live 2026-11-02, all 5 movement types).
     if (this.rfc) {
@@ -2120,25 +2091,17 @@ class ReservationProcessAdapter {
           } catch (err) {
             throw Object.assign(httpError(503, `Cannot verify in SAP (RESB) whether material document ${alphaOut(docs[0].MBLNR)} belongs to this request: ${err.message}. Nothing was posted.`), { stage: 'MIGO', idempotencyCheckFailed: true });
           }
-          const sapWithdrawn = Number(resb?.ENMNG) || 0;
-          const knownWithdrawn = trk ? (Number(trk.WithdrawnQuantity) || 0) : null;
           const finalIssued = String(resb?.KZEAR || '').trim() === 'X';
           const otherDoc = alphaOut(docs[0].MBLNR);
           if (processId) {
             if (finalIssued) {
               throw Object.assign(httpError(422, `Reservation ${reservationNo}/${reservationItem} is already final-issued in SAP (for example material document ${otherDoc}). This request did not post; nothing was posted.`), { stage: 'MIGO' });
             }
-            // A fresh process id with no tracking row cannot be told from a resubmit (tr-to generates one per call).
-            if (knownWithdrawn === null) {
-              throw Object.assign(httpError(409, `Reservation ${reservationNo}/${reservationItem} already has material document ${otherDoc} and no tracking record, so this cannot be told apart from a repeat. Nothing was posted; check the document in MB51.`), { stage: 'MIGO' });
-            }
-            LOG.info(`[Idempotency Guard] Reservation ${reservationNo}/${reservationItem}: document ${otherDoc} does not carry this process id; posting the new quantity`);
-          } else if (knownWithdrawn === null || finalIssued || sapWithdrawn > knownWithdrawn) {
-            // shortcut: without a process id a withdrawal outside this flow looks like a replay; every screen path sends one.
-            found = docs;
-          } else {
-            LOG.info(`[Idempotency Guard] Reservation ${reservationNo}/${reservationItem}: document ${otherDoc} is an earlier partial issue (RESB withdrawn ${sapWithdrawn} = tracked ${knownWithdrawn}); posting the new quantity`);
+            // A process id SAP does not know cannot be told from a resubmit (tr-to generates one per call).
+            throw Object.assign(httpError(409, `Reservation ${reservationNo}/${reservationItem} already has material document ${otherDoc} and this request cannot be told apart from a repeat. Nothing was posted; check the document in MB51.`), { stage: 'MIGO' });
           }
+          // shortcut: without a process id a withdrawal outside this flow looks like a replay; every screen path sends one.
+          found = docs;
         }
       }
 
@@ -3934,36 +3897,6 @@ class ReservationProcessAdapter {
       const fn = input.persistStatus || input.onProgress || this.persistStatus;
       if (typeof fn === 'function') {
         await fn(status, details);
-      }
-      if (global.cds?.db) {
-        const entities = global.cds.entities?.('saps4hana.wm') || {};
-        const ReservationTrack = entities.ReservationTrack;
-        const resNo = details.reservationNumber || details.reservationNo || details.ReservationNo;
-        const resItem = details.reservationItem || details.ReservationItem || '0001';
-        if (ReservationTrack && resNo) {
-          const sRes = String(resNo).padStart(10, '0');
-          const sItem = String(resItem).padStart(4, '0');
-          const updateData = { ProcessStatus: status };
-          if (details.trNumber) updateData.TransferRequirement = details.trNumber;
-          if (details.toNumber) updateData.TransferOrder = details.toNumber;
-          if (details.materialDocument) updateData.MaterialDocument = details.materialDocument;
-          if (details.materialDocYear || details.materialDocumentYear) {
-            updateData.MaterialDocYear = details.materialDocYear || details.materialDocumentYear;
-          }
-          if (details.businessKey || details.migoBusinessKey || details.MigoBusinessKey) {
-            updateData.MigoBusinessKey = details.businessKey || details.migoBusinessKey || details.MigoBusinessKey;
-          }
-          if (details.withdrawnQuantity != null) updateData.WithdrawnQuantity = details.withdrawnQuantity;
-          if (details.remainingQuantity != null) updateData.RemainingQuantity = details.remainingQuantity;
-          if (details.completelyProcessed != null) updateData.CompletelyProcessed = details.completelyProcessed;
-          if (details.error) updateData.ErrorMessage = String(details.error).substring(0, 255);
-
-          await global.cds.db.run(
-            UPDATE(ReservationTrack)
-              .set(updateData)
-              .where({ ReservationNo: sRes, ReservationItem: sItem })
-          );
-        }
       }
     } catch (err) {
       LOG.warn(`_persistProcessStatus failed for status ${status}: ${err.message}`);

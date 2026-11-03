@@ -3,7 +3,7 @@
 /**
  * Single source of the reservation/WM process status codes for the JS layer.
  * docs/abap/zcl_res_process.clas.abap (gc_status_*) and docs/abap/zres_track.ddl (domain ZRES_STATUS)
- * carry the same values; keep all three in sync. db/data/saps4hana.wm-ReservationStatus.csv seeds them.
+ * carry the same values; keep all three in sync.
  */
 const STATUS = Object.freeze({
   RES_CREATED: '01',

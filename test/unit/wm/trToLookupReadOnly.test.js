@@ -1,14 +1,12 @@
 'use strict';
 
-// [mock only, not SAP verification] Read operations of /odata/v4/tr-to must not write to SAP or to ReservationTrack.
+// [mock only, not SAP verification] Read operations of /odata/v4/tr-to must not write to SAP.
 const cds = require('@sap/cds');
 const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 const TrToAdapter = require('../../../srv/integration/s4hana/wm/TrToAdapter');
 
 const { GET, POST } = cds.test(__dirname + '/../../../');
-const { SELECT, INSERT, DELETE } = cds.ql;
 
-const TRACK_ENTITY = 'saps4hana.wm.ReservationTrack';
 const auth = (username) => ({ auth: { username, password: '' } });
 const VIEWER = auth('test-viewer-1120');
 const CLERK = auth('test-clerk-1120');
@@ -21,7 +19,7 @@ const closedTr = {
   ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000849', TBPOS: '0001', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: '' }]
 };
 const fakeTables = async (table) => {
-  if (table === 'RESB') return [{ RSNUM: RES, RSPOS: '0001', BDMNG: '1.000', ENMNG: '0.000', KZEAR: '' }];
+  if (table === 'RESB') return [{ RSNUM: RES, RSPOS: '0001', MATNR: '000000008000009754', WERKS: '1120', LGORT: 'HS01', BWART: '311', MEINS: 'NOS', BDMNG: '1.000', ENMNG: '0.000', KZEAR: '' }];
   return [];
 };
 
@@ -29,12 +27,7 @@ describe('tr-to lookupTR is read-only', () => {
   let call;
   let spies;
 
-  beforeEach(async () => {
-    await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: RES }));
-    await cds.db.run(INSERT.into(TRACK_ENTITY).entries({
-      ReservationNo: RES, ReservationItem: '0001', MovementType: '311', Material: '8000009754', Plant: '1120', StorageLocation: 'HS01',
-      Quantity: 1, Unit: 'NOS', Status_code: '02', TransferRequirement: TR, WarehouseNumber: 'W01'
-    }));
+  beforeEach(() => {
     call = jest.fn(async () => closedTr);
     spies = [
       jest.spyOn(RfcClient.prototype, 'call').mockImplementation(call),
@@ -43,19 +36,13 @@ describe('tr-to lookupTR is read-only', () => {
     ];
   });
 
-  afterEach(async () => {
-    spies.forEach((s) => s.mockRestore());
-    await cds.db.run(DELETE.from(TRACK_ENTITY).where({ ReservationNo: RES }));
-  });
+  afterEach(() => spies.forEach((s) => s.mockRestore()));
 
-  test('a Viewer on a status-E TR never calls Z_WM_TR_CREATE and never updates ReservationTrack', async () => {
-    const before = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: RES }));
+  test('a Viewer on a status-E TR never calls Z_WM_TR_CREATE', async () => {
     await GET(LOOKUP, VIEWER);
     expect(call).not.toHaveBeenCalledWith('Z_WM_TR_CREATE', expect.anything());
     expect(call.mock.calls.map(([fm]) => fm)).toEqual(expect.arrayContaining(['Z_WM_GET_TR_MATERIAL_LIST']));
     expect(new Set(call.mock.calls.map(([fm]) => fm))).toEqual(new Set(['Z_WM_GET_TR_MATERIAL_LIST']));
-    const after = await cds.db.run(SELECT.one.from(TRACK_ENTITY).where({ ReservationNo: RES }));
-    expect(after).toEqual(before);
   });
 
   test('lookupTR returns the recovery required result', async () => {
@@ -91,8 +78,6 @@ describe('tr-to createTOFromTR keeps the recovery', () => {
     });
     const rfc = { call, readTable: jest.fn(fakeTables), session: jest.fn(async (fn) => fn(call)) };
     const adapter = new TrToAdapter({ rfc });
-    const track = { ReservationNo: RES, ReservationItem: '0001', Material: '8000009754', Plant: '1120', StorageLocation: 'HS01', Quantity: 1, Unit: 'NOS', MovementType: '311', Status_code: '02' };
-    jest.spyOn(adapter, '_findTrackedReservationForTR').mockResolvedValue(track);
 
     await adapter.createTOFromTR({ lgnum: 'W01', tbnum: TR, tbpos: '0001', qty: 1, unit: 'NOS' }).catch(() => {});
 
@@ -181,13 +166,8 @@ describe('tr-to read operations keep to the user plants', () => {
     await expect(GET(lookup('W01'), OTHER)).rejects.toMatchObject({ response: { status: 404 } });
   });
 
-  test('no read operation calls a writing function module or changes the local tracking tables', async () => {
+  test('no read operation calls a writing function module', async () => {
     useSap('1120');
-    const rows = async () => [
-      await cds.db.run(SELECT.from(TRACK_ENTITY)),
-      await cds.db.run(SELECT.from('saps4hana.wm.ReservationLog'))
-    ];
-    const before = await rows();
     const doc = { materialDocument: '4900000001', materialDocumentYear: '2026', movementType: '311', plant: '1120', material: '8000009754', quantity: 1 };
     const calls = [
       () => GET("/odata/v4/tr-to/getOpenTRs(lgnum='W01',mvt='')", CLERK),
@@ -204,7 +184,6 @@ describe('tr-to read operations keep to the user plants', () => {
     expect([...called]).toEqual(['Z_WM_GET_TR_MATERIAL_LIST']);
     const tablesRead = RfcClient.prototype.readTable.mock.calls.map(([table]) => table);
     expect(tablesRead).toEqual(expect.arrayContaining(['LTBK', 'MATDOC', 'RESB'])); // the operations did reach their SAP reads
-    expect(await rows()).toEqual(before);
   });
 });
 

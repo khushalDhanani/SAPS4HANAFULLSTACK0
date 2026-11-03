@@ -690,42 +690,6 @@ describe('TrToAdapter (RFC)', () => {
     ]);
   });
 
-  it('getTRByReservation falls back to ReservationTrack when LTBK has no open TR (e.g. mvt 311 LTBK-RSNUM is 0000000000)', async () => {
-    const cds = require('@sap/cds');
-    const origRun = cds.db && cds.db.run;
-    cds.db = cds.db || {};
-    cds.db.run = jest.fn().mockImplementation(async (_query) => {
-      return { ReservationNo: '0000527594', TransferRequirement: '1000810' };
-    });
-
-    const rfc = {
-      call: jest.fn(async (fm) => {
-        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
-          return {
-            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000810', BWLVS: '311', STATU: '' }],
-            ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000810', TBPOS: '0001', MATNR: '000000008000006485', WERKS: '1120', LGORT: 'CS02', MENGE: '2.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: '' }]
-          };
-        }
-        throw new Error(`unexpected FM ${fm}`);
-      }),
-      readTable: jest.fn(async (table) => {
-        if (table === 'LTBK') return []; // LTBK has no RSNUM row (standard 311)
-        if (table === 'MAKT') return [{ MAKTX: 'Graphite Condenser' }];
-        return [];
-      })
-    };
-
-    try {
-      const adapter = new TrToAdapter({ rfc });
-      const tr = await adapter.getTRByReservation('0000527594', 'W01');
-      expect(tr.Tbnum).toBe('0001000810');
-      expect(tr.Items[0].Material).toBe('8000006485');
-    } finally {
-      if (origRun) cds.db.run = origRun;
-      else delete cds.db.run;
-    }
-  });
-
   it('lookupTR: filled from RESB (mock only, not browser verification)', async () => {
     const rfc = {
       call: jest.fn(async (fm) => {
@@ -749,45 +713,6 @@ describe('TrToAdapter (RFC)', () => {
     expect(detail.ReceivingStorageLocationSource).toBe('Reservation');
     expect(detail.ReceivingPlant).toBe('1120');
     expect(detail.ReceivingPlantSource).toBe('Reservation');
-  });
-
-  it('lookupTR: filled from tracking (ReservationTrack) [mock only, not browser verification]', async () => {
-    const cds = require('@sap/cds');
-    const origRun = cds.db && cds.db.run;
-    cds.db = cds.db || {};
-    cds.db.run = jest.fn().mockImplementation(async () => ({
-      TransferRequirement: '1000888',
-      ReceivingStorageLocation: 'CS01',
-      ReceivingPlant: '1110'
-    }));
-
-    const rfc = {
-      call: jest.fn(async (fm) => {
-        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') {
-          return {
-            ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000888', BWLVS: '311', RSNUM: '0000000000', STATU: '' }],
-            ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000888', TBPOS: '0001', MATNR: '000000008000009753', WERKS: '1120', LGORT: 'CS02', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS' }]
-          };
-        }
-        throw new Error(`unexpected FM ${fm}`);
-      }),
-      readTable: jest.fn(async (table) => {
-        if (table === 'MAKT') return [{ MAKTX: 'Test Material' }];
-        return [];
-      })
-    };
-
-    try {
-      const adapter = new TrToAdapter({ rfc });
-      const detail = await adapter.lookupTR('1000888', 'W01', 'TR');
-      expect(detail.ReceivingStorageLocation).toBe('CS01');
-      expect(detail.ReceivingStorageLocationSource).toBe('Tracking');
-      expect(detail.ReceivingPlant).toBe('1110');
-      expect(detail.ReceivingPlantSource).toBe('Tracking');
-    } finally {
-      if (origRun) cds.db.run = origRun;
-      else delete cds.db.run;
-    }
   });
 
   it('lookupTR: filled from MATDOC (mock only, not browser verification)', async () => {
@@ -1233,24 +1158,12 @@ describe('getOpenTRs without a warehouse: derived from the user Plant attribute 
   });
 });
 
-describe('_findTrackedReservationForTR: the warehouse is part of the key (TR numbers repeat across warehouses)', () => {
-  const cds = require('@sap/cds');
-  let savedDb;
-  beforeEach(() => { savedDb = cds.db; });
-  afterEach(() => { cds.db = savedDb; });
-
-  it('queries ReservationTrack by TransferRequirement AND WarehouseNumber', async () => {
-    const wheres = [];
-    cds.db = { run: jest.fn(async (q) => { wheres.push(JSON.stringify(q.SELECT.where)); return null; }) };
-    await new TrToAdapter({ rfc: { readTable: jest.fn() } })._findTrackedReservationForTR('1000891', 'w12');
-    expect(wheres.length).toBeGreaterThan(0);
-    for (const w of wheres) { expect(w).toContain('TransferRequirement'); expect(w).toContain('"W12"'); }
-  });
-
-  it('returns nothing without a warehouse instead of another warehouse\'s tracking row', async () => {
-    cds.db = { run: jest.fn(async () => ({ ReservationNo: '0000530744', WarehouseNumber: 'W01' })) };
-    await expect(new TrToAdapter({ rfc: { readTable: jest.fn() } })._findTrackedReservationForTR('1000891', '')).resolves.toBeNull();
-    expect(cds.db.run).not.toHaveBeenCalled();
+describe('getTRByReservation without an RSNUM link in LTBK', () => {
+  it('answers 404: a movement 311 TR has LTBK-RSNUM 0000000000, so the caller must pass the TR number', async () => {
+    const rfc = { call: jest.fn(), readTable: jest.fn(async () => []) };
+    await expect(new TrToAdapter({ rfc }).getTRByReservation('527594', 'W01'))
+      .rejects.toMatchObject({ status: 404, message: expect.stringContaining('no open Transfer Requirement') });
+    expect(rfc.call).not.toHaveBeenCalled();
   });
 });
 

@@ -1,13 +1,12 @@
 const cds = require('@sap/cds');
 const TrToAdapter = require('../../../integration/s4hana/wm/TrToAdapter');
 const ReservationProcessAdapter = require('../../../integration/s4hana/wm/ReservationProcessAdapter');
-const { STATUS, STATUS_TEXT, UNCONFIRMED_TO } = require('../../../common/wmStatus');
+const { STATUS, STATUS_TEXT } = require('../../../common/wmStatus');
 const { sapKey, sapKeyOpt } = require('../../../integration/s4hana/sapKey');
 const { withReservationLock } = require('../../../integration/s4hana/wm/resLock');
 const { assertPlantsInScope, plantScope, isPlantAllowed } = require('../../readScope');
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
-const alphaOut = (v) => String(v || '').replace(/^0+(?=\d)/, '');
 
 /** Thin CAP binding; all validation lives in TrToAdapter and ReservationProcessAdapter. */
 class TrToHandler {
@@ -73,36 +72,12 @@ class TrToHandler {
       return adapter.getAvailableSerials(material, plant, storageLocation, batch);
     }));
 
-    const entities = () => {
-      if (!cds.db) return {};
-      return {
-        ReservationTrack: 'saps4hana.wm.ReservationTrack',
-        ReservationLog: 'saps4hana.wm.ReservationLog'
-      };
-    };
     // Confirm the authenticated CAP user; never expose the technical RFC account in an API response.
     const userOf = (req) => req.user?.id || '';
-    const log = async (ReservationLog, row) => {
-      if (!ReservationLog || !cds.db) return;
-      try {
-        await INSERT.into(ReservationLog).entries({ ID: cds.utils.uuid(), ...row });
-      } catch (_) {}
-    };
-    /** Row lock for the duration of the request transaction (HANA; a no-op on SQLite). */
-    const lockTrack = (ReservationTrack, where) => {
-      if (!ReservationTrack || !cds.db) return null;
-      try {
-        return SELECT.one.from(ReservationTrack).where(where).forUpdate();
-      } catch (_) {
-        return null;
-      }
-    };
 
     // Step 3 Service (MIGO Goods Movement Posting & Retry)
     const handlePostMigoGoodsMovement = async (req) => {
       const data = req.data || {};
-      const { ReservationTrack, ReservationLog } = entities();
-      let existingTrack = null;
 
       const sResNoIn = sapKeyOpt(data.ReservationNo || data.reservationNumber || data.reservationNo, 'rsnum');
       const sTanumIn = sapKeyOpt(data.TransferOrder || data.transferOrder, 'tanum');
@@ -118,45 +93,23 @@ class TrToHandler {
       }
       const sResItemIn = sapKeyOpt(data.ReservationItem || data.reservationItem, 'rspos');
 
-      if (ReservationTrack) {
-        try {
-          existingTrack = await lockTrack(ReservationTrack,
-            sResNoIn
-              ? { ReservationNo: data.ReservationNo || data.reservationNumber || data.reservationNo, ReservationItem: data.ReservationItem || data.reservationItem || '0001' }
-              : (sTanumIn ? { TransferOrder: data.TransferOrder || data.transferOrder } : { ID: '__dummy__' }));
-          if (!existingTrack && sResNoIn) {
-            existingTrack = await lockTrack(ReservationTrack, { ReservationNo: sResNoIn.padStart(10, '0'), ReservationItem: (data.ReservationItem || data.reservationItem || '0001').padStart(4, '0') });
-          }
-        } catch (dbErr) {
-          console.warn('[trTo.handler] ReservationTrack lookup warning:', dbErr.message);
-        }
-      }
-
-      const sResNo = sResNoIn || existingTrack?.ReservationNo || '';
-      const sResItem = sResItemIn || existingTrack?.ReservationItem || '0001';
-      if (existingTrack?.MovementType && String(existingTrack.MovementType).trim() !== sMvt) {
-        throw httpError(400, `Requested MovementType ${sMvt} does not match reservation MovementType ${existingTrack.MovementType}; Goods Issue was not posted.`);
-      }
-      let sMat = data.Material || data.material || existingTrack?.Material;
-      let sPlant = data.Plant || data.plant || data.sourcePlant || data.SourcePlant || existingTrack?.Plant;
-      let sSLoc = data.StorageLocation || data.storageLocation || data.sourceStorageLocation || data.SourceStorageLocation || existingTrack?.StorageLocation;
-      const nQty = data.Quantity != null ? data.Quantity : (data.quantity != null ? data.quantity : existingTrack?.Quantity);
-      const sUnit = data.Unit || data.unit || existingTrack?.Unit;
-      let sRecPlant = data.ReceivingPlant || data.receivingPlant || data.destinationPlant || data.DestinationPlant || existingTrack?.ReceivingPlant;
-      let sRecSLoc = data.ReceivingStorageLocation || data.receivingStorageLocation || data.destinationStorageLocation || data.DestinationStorageLocation || existingTrack?.ReceivingStorageLocation;
-      let sCostCenter = data.CostCenter || data.costCenter || existingTrack?.CostCenter;
-      let sAssetNo = data.AssetNo || data.assetNo || existingTrack?.AssetNo;
-      let sSubNumber = data.SubNumber || data.subNumber || existingTrack?.SubNumber;
-      let sOrderId = data.OrderID || data.orderId || data.OrderNo || data.orderNo || existingTrack?.OrderID || existingTrack?.OrderNo;
-      const sTanum = sTanumIn || existingTrack?.TransferOrder || '';
-      let sBatch = data.Batch || data.batch || existingTrack?.Batch || '';
+      const sResNo = sResNoIn || '';
+      const sResItem = sResItemIn || '0001';
+      let sMat = data.Material || data.material;
+      let sPlant = data.Plant || data.plant || data.sourcePlant || data.SourcePlant;
+      let sSLoc = data.StorageLocation || data.storageLocation || data.sourceStorageLocation || data.SourceStorageLocation;
+      const nQty = data.Quantity != null ? data.Quantity : data.quantity;
+      const sUnit = data.Unit || data.unit;
+      let sRecPlant = data.ReceivingPlant || data.receivingPlant || data.destinationPlant || data.DestinationPlant;
+      let sRecSLoc = data.ReceivingStorageLocation || data.receivingStorageLocation || data.destinationStorageLocation || data.DestinationStorageLocation;
+      let sCostCenter = data.CostCenter || data.costCenter;
+      let sAssetNo = data.AssetNo || data.assetNo;
+      let sSubNumber = data.SubNumber || data.subNumber;
+      let sOrderId = data.OrderID || data.orderId || data.OrderNo || data.orderNo;
+      const sTanum = sTanumIn || '';
+      let sBatch = data.Batch || data.batch || '';
       const sSerials = data.Serials || data.serials || (data.SerialNo ? [data.SerialNo] : []);
       const completeReservation = data.CompleteReservation === true || data.completeReservation === true;
-
-      // Enforce strict dependency: TO CREATED AND TO CONFIRMED -> MIGO
-      if (existingTrack && [STATUS.TO_CREATED, STATUS.TO_CONFIRM_ERROR, STATUS.TO_ERROR].includes(existingTrack.Status_code)) {
-        throw httpError(400, `Transfer Order ${sTanum || existingTrack.TransferOrder} is not confirmed (status ${existingTrack.Status_code}). TO must be confirmed before posting MIGO goods movement.`);
-      }
 
       // Resilient destination/account resolution from TO (LTAK -> LTAP -> RESB/RKPF) if missing on untracked records
       if (sTanum && resProcessAdapter.rfc) {
@@ -234,31 +187,6 @@ class TrToHandler {
               }
             }
 
-            // Fallback 1: ReservationTrack by TBNUM or TANUM
-            if ((!sRecPlant || !sRecSLoc) && ReservationTrack) {
-              try {
-                const tbPad = (tbnum || '').padStart(10, '0');
-                const tanumPad = sTanum.padStart(10, '0');
-                const conds = [];
-                if (tbnum) conds.push(`TransferRequirement = '${tbnum}'`, `TransferRequirement = '${tbPad}'`);
-                conds.push(`TransferOrder = '${sTanum}'`, `TransferOrder = '${tanumPad}'`);
-                const trk = await cds.db.run(
-                  cds.ql.SELECT.one.from(ReservationTrack).where(conds.join(' or '))
-                );
-                if (trk) {
-                  if (!sRecPlant && trk.ReceivingPlant?.trim()) sRecPlant = trk.ReceivingPlant.trim().toUpperCase();
-                  if (!sRecSLoc && trk.ReceivingStorageLocation?.trim()) sRecSLoc = trk.ReceivingStorageLocation.trim().toUpperCase();
-                  if (!sCostCenter && trk.CostCenter?.trim()) sCostCenter = trk.CostCenter.trim();
-                  if (!sAssetNo && trk.AssetNo?.trim()) {
-                    sAssetNo = trk.AssetNo.trim();
-                    sSubNumber = trk.SubNumber?.trim() || '0000';
-                  }
-                  if (!sOrderId && trk.OrderID?.trim()) {
-                    sOrderId = trk.OrderID.trim();
-                  }
-                }
-              } catch (_) {}
-            }
           }
           if ((!sMat || !sPlant || !sSLoc || !sBatch) && (!resProcessAdapter.rfc.readTable?.mock)) {
             const ltapRows = await resProcessAdapter.rfc.readTable('LTAP', ['MATNR', 'WERKS', 'LGORT', 'CHARG'], [`TANUM = '${sTanum.padStart(10, '0')}'`], 1);
@@ -279,7 +207,7 @@ class TrToHandler {
         requiredFields.push([sMat, 'Material'], [nQty, 'Quantity'], [sUnit, 'Unit']);
       }
       for (const [v, label] of requiredFields) {
-        if (!v) throw httpError(400, `${label} is required (not in the request and not on the tracking record)`);
+        if (!v) throw httpError(400, `${label} is required (not in the request)`);
       }
       // The reservation or transfer order decides the plant in SAP; the named plant is checked too because it is posted.
       await assertPlantsInScope(req.user, async () => {
@@ -295,18 +223,8 @@ class TrToHandler {
         return plants;
       }, sResNo ? `reservation ${sResNo}` : (sTanum ? `Transfer Order ${sTanum}` : `plant ${sPlant}`));
 
-      // PROCESS_ID of this GI step: reused on retry so an already posted document is found, never posted twice.
-      // After a posted document the next issue on this item is a new step and gets a fresh id.
-      const priorDocPosted = Boolean(existingTrack?.MaterialDocument) && existingTrack?.Status_code === STATUS.GI_POSTED;
-      // Without the caller's id a further issue cannot be told from a resend of the last one.
-      if (priorDocPosted && !data.ProcessId) {
-        throw httpError(400, `Reservation ${sResNo}/${sResItem} already has Material Document ${existingTrack.MaterialDocument}. ProcessId is required for a further issue, so a resend cannot post twice. Goods Issue was not posted.`);
-      }
-      const processId = data.ProcessId || (!priorDocPosted && existingTrack?.ProcessId) || cds.utils.uuid();
-      const trackKey = existingTrack ? { ReservationNo: existingTrack.ReservationNo, ReservationItem: existingTrack.ReservationItem } : null;
-      if (trackKey && existingTrack.ProcessId !== processId) {
-        await UPDATE(ReservationTrack).set({ ProcessId: processId }).where(trackKey);
-      }
+      // PROCESS_ID of this GI step: a retry sends the same id, so an already posted document is found, never posted twice.
+      const processId = data.ProcessId || cds.utils.uuid();
 
       const result = {
         ProcessId: processId,
@@ -354,70 +272,14 @@ class TrToHandler {
           serials: sSerials,
           completeReservation,
           confMenge: data.confMenge || data.ConfirmedQuantity,
-          deliveryNumber: data.deliveryNumber || data.DeliveryNumber || existingTrack?.DeliveryNumber || undefined,
-          DeliveryNumber: data.deliveryNumber || data.DeliveryNumber || existingTrack?.DeliveryNumber || undefined,
+          deliveryNumber: data.deliveryNumber || data.DeliveryNumber || undefined,
+          DeliveryNumber: data.deliveryNumber || data.DeliveryNumber || undefined,
           processId
         });
 
         const delivNo = migoRes.deliveryNumber || migoRes.DeliveryNumber || '';
         const matDocNo = migoRes.materialDocument || migoRes.MaterialDocument || '';
         const isDocConfirmed = Boolean(matDocNo);
-
-        if (trackKey) {
-          try {
-            const resVer = migoRes.reservationVerification;
-            const isCompletelyProcessed = resVer ? resVer.completelyProcessed === true : (completeReservation === true);
-            const updateFields = {
-              MaterialDocument: matDocNo,
-              MaterialDocYear: migoRes.materialDocYear || migoRes.materialDocumentYear || '',
-              Status_code: isDocConfirmed ? STATUS.GI_POSTED : STATUS.GI_ERROR,
-              ErrorMessage: isDocConfirmed ? '' : (migoRes.ErrorMessage || 'Material document not confirmed in SAP'),
-              ErrorStep: isDocConfirmed ? '' : 'MIGO'
-            };
-            if (delivNo) {
-              updateFields.DeliveryNumber = delivNo;
-            }
-            if (migoRes.businessKey) {
-              updateFields.MigoBusinessKey = migoRes.businessKey;
-            }
-            if (resVer) {
-              updateFields.WithdrawnQuantity = resVer.issuedQuantity;
-              updateFields.RemainingQuantity = resVer.remainingQuantity;
-              updateFields.CompletelyProcessed = isDocConfirmed ? isCompletelyProcessed : false;
-            }
-            await UPDATE(ReservationTrack)
-              .set(updateFields)
-              .where(trackKey);
-            await log(ReservationLog, {
-              ...trackKey, ProcessId: processId, DocumentNo: matDocNo || delivNo,
-              Step: 'MIGO', Status: isDocConfirmed ? STATUS.GI_POSTED : STATUS.GI_ERROR,
-              MessageType: isDocConfirmed ? 'S' : 'E',
-              MessageId: isDocConfirmed ? (delivNo ? 'L9' : 'M7') : 'M7',
-              MessageNo: isDocConfirmed ? (delivNo ? '514' : '060') : '021',
-              MigoBusinessKey: migoRes.businessKey || '',
-              MessageText: isDocConfirmed
-                ? (delivNo
-                    ? `PGI posted for Outbound Delivery ${delivNo}; Material Document ${matDocNo}/${migoRes.materialDocYear || ''} confirmed in SAP`
-                    : (migoRes.alreadyPosted
-                        ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} already existed for process ${processId}; not posted again`
-                        : (isCompletelyProcessed
-                            ? `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect}) - Reservation completely processed`
-                            : `Material Document ${migoRes.materialDocument}/${migoRes.materialDocYear} created (${migoRes.stockEffect}) - Partial issue: remaining quantity ${resVer?.remainingQuantity ?? 'open'}`)))
-                : `Goods issue failed: Material Document not confirmed (Outbound Delivery ${delivNo || 'unknown'})`
-            });
-            if (migoRes.warning) {
-              if (req && typeof req.warn === 'function') req.warn(migoRes.warning);
-              await log(ReservationLog, {
-                ...trackKey, ProcessId: processId, DocumentNo: matDocNo || delivNo,
-                Step: 'MIGO', Status: isDocConfirmed ? STATUS.GI_POSTED : STATUS.GI_ERROR, MessageType: 'W', MessageId: 'L3', MessageNo: '001',
-                MigoBusinessKey: migoRes.businessKey || '',
-                MessageText: migoRes.warning
-              });
-            }
-          } catch (dbErr) {
-            console.warn('[trTo.handler] DB post-MIGO tracking update warning:', dbErr.message);
-          }
-        }
 
         return {
           ...result,
@@ -457,22 +319,8 @@ class TrToHandler {
           ErrorMessage: ''
         };
       } catch (err) {
-        // Rollback executed by the adapter; tracking goes to 90 (GI error, retryable)
-        const failedDeliveryNo = err.deliveryNumber || err.DeliveryNumber || existingTrack?.DeliveryNumber || '';
-        if (trackKey) {
-          try {
-            const errorFields = { Status_code: STATUS.GI_ERROR, ErrorMessage: err.message, ErrorStep: 'MIGO' };
-            if (failedDeliveryNo) errorFields.DeliveryNumber = failedDeliveryNo;
-            await UPDATE(ReservationTrack).set(errorFields).where(trackKey);
-            await log(ReservationLog, {
-              ...trackKey, ProcessId: processId, DocumentNo: failedDeliveryNo,
-              Step: 'MIGO', Status: STATUS.GI_ERROR, MessageType: 'E', MessageId: 'M7', MessageNo: '021',
-              MessageText: `Goods movement failed${failedDeliveryNo ? ` for Outbound Delivery ${failedDeliveryNo}` : ''}: ${err.message}`
-            });
-          } catch (dbErr) {
-            console.warn('[trTo.handler] DB MIGO error status update warning:', dbErr.message);
-          }
-        }
+        // Rollback executed by the adapter; status 90 (GI error, retryable)
+        const failedDeliveryNo = err.deliveryNumber || err.DeliveryNumber || '';
         return {
           ...result,
           success: false,
@@ -499,7 +347,6 @@ class TrToHandler {
     // Step 2: Create TO from TR + Auto Confirm + Optional Auto MIGO
     const handleCreateTOFromTR = async (req) => {
       const data = req.data || {};
-      const { ReservationTrack, ReservationLog } = entities();
       const autoPostMovementAliases = ['MovementType', 'movementType', 'ReservationMovementType', 'reservationMovementType']
         .filter((key) => data[key] !== undefined && data[key] !== null)
         .map((key) => String(data[key]).trim());
@@ -507,104 +354,21 @@ class TrToHandler {
       if (data.autoPostMigo && (!requestedAutoPostMovementType || autoPostMovementAliases.some((mvt) => mvt !== requestedAutoPostMovementType) || !['201', '241', '261', '301', '311'].includes(requestedAutoPostMovementType))) {
         throw httpError(400, 'MovementType is required for autoPostMigo and aliases must exactly match one supported type (201, 241, 261, 301, 311)');
       }
-      let existing = null;
       const wh = sapKeyOpt(data.lgnum || data.WarehouseNumber || data.warehouseNumber, 'lgnum');
       const trToCheck = data.tbnum || data.trNumber || data.TRNumber;
       if (trToCheck) {
         await assertPlantsInScope(req.user, async () => ((await adapter.getTR(trToCheck, wh)).Items || []).map((i) => i.Plant), `Transfer Requirement ${trToCheck}`);
       }
 
-      if (ReservationTrack && wh) {
-        try {
-          const tbnum = sapKeyOpt(data.tbnum, 'tbnum').padStart(10, '0');
-          const rsnum = sapKeyOpt(data.ReservationNo || data.reservationNo, 'rsnum');
-          if (tbnum.trim()) {
-            existing = await lockTrack(ReservationTrack, { TransferRequirement: tbnum, WarehouseNumber: wh });
-            if (!existing) {
-              existing = await lockTrack(ReservationTrack, { TransferRequirement: alphaOut(tbnum), WarehouseNumber: wh });
-            }
-          }
-
-      if (data.autoPostMigo && existing?.MovementType && String(existing.MovementType).trim() !== requestedAutoPostMovementType) {
-        throw httpError(400, `Requested MovementType ${requestedAutoPostMovementType} does not match reservation MovementType ${existing.MovementType}; Goods Issue was not posted.`);
-      }
-          if (!existing && rsnum) {
-            existing = await lockTrack(ReservationTrack, { ReservationNo: rsnum, WarehouseNumber: wh });
-            if (!existing) {
-              existing = await lockTrack(ReservationTrack, { ReservationNo: rsnum.padStart(10, '0'), WarehouseNumber: wh });
-            }
-          }
-        } catch (_) {}
-      }
-
-      // A tracked TO that is not yet confirmed (03/13) is confirmed again, never re-created. A confirmed TO does not
-      // block another TO for the remaining quantity.
-      if (existing?.TransferOrder && UNCONFIRMED_TO.includes(existing.Status_code)) {
-        data.existingToNumber = existing.TransferOrder;
-        data.status = existing.Status_code;
-      }
-      const isRetry = Boolean(data.existingToNumber);
-      const processId = (isRetry && existing?.ProcessId) || cds.utils.uuid();
-      const trackKey = existing ? { ReservationNo: existing.ReservationNo, ReservationItem: existing.ReservationItem } : null;
+      const processId = cds.utils.uuid();
 
       try {
-        const trackedReservation = existing?.TransferRequirement && existing?.ReservationNo ? {
-          TransferRequirement: existing.TransferRequirement,
-          ReservationNo: existing.ReservationNo,
-          ReservationItem: existing.ReservationItem,
-          WarehouseNumber: existing.WarehouseNumber,
-          MovementType: existing.MovementType
-        } : null;
         // SAP-side lock (feature flag, off by default) around the TO step only; a conflict leaves as 409.
-        const lockKey = existing?.ReservationNo ? { rsnum: existing.ReservationNo, rspos: existing.ReservationItem } : null;
+        const lockRsnum = sapKeyOpt(data.ReservationNo || data.reservationNo, 'rsnum');
+        const lockKey = lockRsnum ? { rsnum: lockRsnum, rspos: sapKeyOpt(data.ReservationItem || data.reservationItem, 'rspos') || '0001' } : null;
         const result = await withReservationLock(lockKey ? adapter.rfc : null, lockKey, (scopedRfc) =>
-          (scopedRfc && adapter.withRfc ? adapter.withRfc(scopedRfc) : adapter).createTOFromTR({ ...data, trackedReservation }));
+          (scopedRfc && adapter.withRfc ? adapter.withRfc(scopedRfc) : adapter).createTOFromTR({ ...data, trackedReservation: null }));
         result.ProcessId = processId;
-
-        if (result.TransferOrder &&
-            result.ReservationMovementType && result.MovementType &&
-            result.ReservationMovementType !== result.MovementType) {
-          await log(ReservationLog, {
-            ReservationNo: result.ReservationNo || existing?.ReservationNo || '',
-            ReservationItem: result.ReservationItem || existing?.ReservationItem || '',
-            ProcessId: processId,
-            DocumentNo: result.TransferOrder,
-            Step: 'LT04',
-            Status: result.Status || STATUS.TO_CREATED,
-            MessageType: 'W',
-            MessageText: `Linked reservation staging: TR movement ${result.MovementType}, reservation/MIGO movement ${result.ReservationMovementType}; verify the TR destination before processing.`
-          });
-        }
-
-        if (trackKey && result.TransferOrder) {
-          try {
-            await UPDATE(ReservationTrack)
-              .set({ TransferOrder: result.TransferOrder, Status_code: result.Status, ErrorMessage: result.ErrorMessage || '', ErrorStep: result.ErrorStep || '', ProcessId: processId })
-              .where(trackKey);
-            if (!isRetry) {
-              await log(ReservationLog, {
-                ...trackKey, ProcessId: processId, DocumentNo: result.TransferOrder,
-                Step: 'LT04', Status: STATUS.TO_CREATED, MessageType: 'S', MessageId: 'L3', MessageNo: '001',
-                MessageText: `Transfer Order ${result.TransferOrder} created from TR ${result.TransferRequirement} item ${result.TRItem} (${result.Quantity} ${result.Unit})`
-              });
-            }
-            if (result.Confirmed) {
-              await log(ReservationLog, {
-                ...trackKey, ProcessId: processId, DocumentNo: result.TransferOrder,
-                Step: 'LT12', Status: STATUS.TO_CONFIRMED, MessageType: 'S', MessageId: 'L3', MessageNo: '025',
-                MessageText: `Transfer Order ${result.TransferOrder} confirmed via L_TO_CONFIRM`
-              });
-            } else if (result.Status === STATUS.TO_CONFIRM_ERROR) {
-              await log(ReservationLog, {
-                ...trackKey, ProcessId: processId, DocumentNo: result.TransferOrder,
-                Step: 'LT12', Status: STATUS.TO_CONFIRM_ERROR, MessageType: 'E', MessageId: 'L3', MessageNo: '026',
-                MessageText: result.ErrorMessage || `Transfer Order ${result.TransferOrder} confirmation failed (LT12)`
-              });
-            }
-          } catch (dbErr) {
-            console.warn('[trTo.handler] Tracking update warning:', dbErr.message);
-          }
-        }
 
         // A TR created by an already posted material document needs no MIGO: posting again would move the stock twice.
         if (result.GoodsMovementPosted && data.autoPostMigo && result.Confirmed && result.success !== false) {
@@ -619,27 +383,27 @@ class TrToHandler {
             const migoResult = await handlePostMigoGoodsMovement({
               user: req.user,
               data: {
-                ReservationNo: (result.ReservationNo && result.ReservationNo !== '0' ? result.ReservationNo : '') || (existing?.ReservationNo && existing?.ReservationNo !== '0' ? existing.ReservationNo : '') || (data.ReservationNo && data.ReservationNo !== '0' ? data.ReservationNo : '') || data.reservationNo,
-                ReservationItem: (result.ReservationItem && result.ReservationItem !== '0' ? result.ReservationItem : '') || existing?.ReservationItem || data.ReservationItem || data.reservationItem || '1',
+                ReservationNo: (result.ReservationNo && result.ReservationNo !== '0' ? result.ReservationNo : '') || (data.ReservationNo && data.ReservationNo !== '0' ? data.ReservationNo : '') || data.reservationNo,
+                ReservationItem: (result.ReservationItem && result.ReservationItem !== '0' ? result.ReservationItem : '') || data.ReservationItem || data.reservationItem || '1',
                 ReservationMovementType: requestedAutoPostMovementType,
                 TransferOrder: result.TransferOrder,
                 Quantity: confirmedQty,
                 confMenge: confirmedQty,
                 Unit: result.Unit,
                 MovementType: effMvt,
-                Material: result.Material || existing?.Material || data.Material || data.material,
-                Plant: existing?.Plant || result.Plant || data.Plant || data.plant,
-                StorageLocation: existing?.StorageLocation || result.StorageLocation || data.StorageLocation || data.storageLocation,
-                CostCenter: existing?.CostCenter || result.CostCenter || (result.Betyp === 'K' ? result.Benum : '') || data.CostCenter || data.costCenter,
-                AssetNo: existing?.AssetNo || result.AssetNo || (result.Betyp === 'A' ? result.Benum : '') || data.AssetNo || data.assetNo,
-                SubNumber: existing?.SubNumber || result.SubNumber || data.SubNumber || data.subNumber || (result.Betyp === 'A' ? '0000' : ''),
-                OrderID: existing?.OrderID || result.OrderID || (result.Betyp === 'F' ? result.Benum : '') || data.OrderID || data.orderId,
-                orderId: existing?.OrderID || result.OrderID || (result.Betyp === 'F' ? result.Benum : '') || data.OrderID || data.orderId,
-                ReceivingPlant: result.ReceivingPlant || data.ReceivingPlant || data.receivingPlant || existing?.ReceivingPlant || '',
-                receivingPlant: result.ReceivingPlant || data.ReceivingPlant || data.receivingPlant || existing?.ReceivingPlant || '',
-                ReceivingStorageLocation: result.ReceivingStorageLocation || data.ReceivingStorageLocation || data.receivingStorageLocation || existing?.ReceivingStorageLocation || '',
-                receivingStorageLocation: result.ReceivingStorageLocation || data.ReceivingStorageLocation || data.receivingStorageLocation || existing?.ReceivingStorageLocation || '',
-                Batch: result.Batch || data.batch || existing?.Batch || '',
+                Material: result.Material || data.Material || data.material,
+                Plant: result.Plant || data.Plant || data.plant,
+                StorageLocation: result.StorageLocation || data.StorageLocation || data.storageLocation,
+                CostCenter: result.CostCenter || (result.Betyp === 'K' ? result.Benum : '') || data.CostCenter || data.costCenter,
+                AssetNo: result.AssetNo || (result.Betyp === 'A' ? result.Benum : '') || data.AssetNo || data.assetNo,
+                SubNumber: result.SubNumber || data.SubNumber || data.subNumber || (result.Betyp === 'A' ? '0000' : ''),
+                OrderID: result.OrderID || (result.Betyp === 'F' ? result.Benum : '') || data.OrderID || data.orderId,
+                orderId: result.OrderID || (result.Betyp === 'F' ? result.Benum : '') || data.OrderID || data.orderId,
+                ReceivingPlant: result.ReceivingPlant || data.ReceivingPlant || data.receivingPlant || '',
+                receivingPlant: result.ReceivingPlant || data.ReceivingPlant || data.receivingPlant || '',
+                ReceivingStorageLocation: result.ReceivingStorageLocation || data.ReceivingStorageLocation || data.receivingStorageLocation || '',
+                receivingStorageLocation: result.ReceivingStorageLocation || data.ReceivingStorageLocation || data.receivingStorageLocation || '',
+                Batch: result.Batch || data.batch || '',
                 Serials: result.Serials || data.serials || [],
                 CompleteReservation: data.CompleteReservation === true,
                 ProcessId: cds.utils.uuid() // the goods movement is its own step
@@ -655,7 +419,7 @@ class TrToHandler {
               result.StockEffect = migoResult.StockEffect;
               result.Batch = migoResult.Batch || result.Batch;
               result.ReservationNo = migoResult.ReservationNo || result.ReservationNo;
-              result.MovementType = migoResult.MovementType || migoResult.movementType || result.ReservationMovementType || result.MovementType || existing?.MovementType || '';
+              result.MovementType = migoResult.MovementType || migoResult.movementType || result.ReservationMovementType || result.MovementType || '';
               result.Warning = migoResult.Warning || migoResult.warning || '';
               result.ReceivingTr = migoResult.ReceivingTr || migoResult.receivingTr || null;
               if (result.Warning && req && typeof req.warn === 'function') {
@@ -692,34 +456,14 @@ class TrToHandler {
             result.ErrorStep = 'MIGO';
             result.ErrorMessage = migoErr.message;
           }
-
-          if (trackKey) {
-            try {
-              const postMigoUpdate = {
-                Status_code: result.Status,
-                ErrorMessage: result.ErrorMessage || '',
-                ErrorStep: result.ErrorStep || ''
-              };
-              if (result.MaterialDocument) {
-                postMigoUpdate.MaterialDocument = result.MaterialDocument;
-                postMigoUpdate.MaterialDocYear = result.MaterialDocYear;
-              }
-              if (result.DeliveryNumber) {
-                postMigoUpdate.DeliveryNumber = result.DeliveryNumber;
-              }
-              await UPDATE(ReservationTrack).set(postMigoUpdate).where(trackKey);
-            } catch (dbErr) {
-              console.warn('[trTo.handler] Tracking update after MIGO warning:', dbErr.message);
-            }
-          }
         }
 
-        result.ReceivingPlant = data.ReceivingPlant || data.receivingPlant || result.ReceivingPlant || existing?.ReceivingPlant || '';
-        result.ReceivingStorageLocation = data.ReceivingStorageLocation || data.receivingStorageLocation || result.ReceivingStorageLocation || existing?.ReceivingStorageLocation || '';
-        result.CostCenter = data.CostCenter || data.costCenter || result.CostCenter || existing?.CostCenter || '';
-        result.AssetNo = data.AssetNo || data.assetNo || result.AssetNo || existing?.AssetNo || '';
-        result.SubNumber = data.SubNumber || data.subNumber || result.SubNumber || existing?.SubNumber || '';
-        result.OrderID = data.OrderID || data.orderId || (result.Betyp === 'F' ? result.Benum : '') || result.OrderID || existing?.OrderID || '';
+        result.ReceivingPlant = data.ReceivingPlant || data.receivingPlant || result.ReceivingPlant || '';
+        result.ReceivingStorageLocation = data.ReceivingStorageLocation || data.receivingStorageLocation || result.ReceivingStorageLocation || '';
+        result.CostCenter = data.CostCenter || data.costCenter || result.CostCenter || '';
+        result.AssetNo = data.AssetNo || data.assetNo || result.AssetNo || '';
+        result.SubNumber = data.SubNumber || data.subNumber || result.SubNumber || '';
+        result.OrderID = data.OrderID || data.orderId || (result.Betyp === 'F' ? result.Benum : '') || result.OrderID || '';
 
         if (result.success === false && result.stage === 'TO_CONFIRMATION') {
           result.confirmed = false;
@@ -736,21 +480,6 @@ class TrToHandler {
         return result;
       } catch (err) {
         if (err.code === 'RES_LOCKED') throw err;
-        if (trackKey) {
-          try {
-            await UPDATE(ReservationTrack).set({
-              Status_code: err.Status || STATUS.TO_ERROR,
-              ErrorMessage: err.message || '',
-              ErrorStep: err.ErrorStep || 'LT04',
-              ProcessId: processId
-            }).where(trackKey);
-            await log(ReservationLog, {
-              ...trackKey, ProcessId: processId, DocumentNo: existing?.TransferOrder || '',
-              Step: err.ErrorStep || 'LT04', Status: err.Status || STATUS.TO_ERROR, MessageType: 'E', MessageId: 'L3', MessageNo: '110',
-              MessageText: err.message || 'TO Step failed'
-            });
-          } catch (_) {}
-        }
         return req.error(err.status || 400, err.message || 'CreateTOFromTR failed');
       }
     };
@@ -784,34 +513,7 @@ class TrToHandler {
 
     const handleExecuteOrchestrator = async (req) => {
       try {
-        const { ReservationTrack } = entities();
-        const persistStatus = async (status, extra = {}) => {
-          if (!ReservationTrack) return;
-          const resNo = extra.reservationNumber || extra.reservationNo;
-          const resItem = extra.reservationItem || '0001';
-          if (!resNo) return;
-          const sRes = String(resNo).padStart(10, '0');
-          const sItem = String(resItem).padStart(4, '0');
-          const updateData = { ProcessStatus: status };
-          if (extra.trNumber) updateData.TransferRequirement = extra.trNumber;
-          if (extra.toNumber) updateData.TransferOrder = extra.toNumber;
-          if (extra.materialDocument) updateData.MaterialDocument = extra.materialDocument;
-          if (extra.materialDocYear || extra.materialDocumentYear) updateData.MaterialDocYear = extra.materialDocYear || extra.materialDocumentYear;
-          if (extra.businessKey || extra.migoBusinessKey) updateData.MigoBusinessKey = extra.businessKey || extra.migoBusinessKey;
-          if (extra.withdrawnQuantity != null) updateData.WithdrawnQuantity = extra.withdrawnQuantity;
-          if (extra.remainingQuantity != null) updateData.RemainingQuantity = extra.remainingQuantity;
-          if (extra.completelyProcessed != null) updateData.CompletelyProcessed = extra.completelyProcessed;
-          if (extra.error) updateData.ErrorMessage = String(extra.error).substring(0, 255);
-
-          try {
-            await UPDATE(ReservationTrack).set(updateData).where({ ReservationNo: sRes, ReservationItem: sItem });
-          } catch (_) { /* ignore */ }
-        };
-
-        const result = await resProcessAdapter.executeReservationWarehouseFlow({
-          ...req.data,
-          persistStatus
-        });
+        const result = await resProcessAdapter.executeReservationWarehouseFlow({ ...req.data });
         return {
           success: result.success,
           stage: result.stage || result.state || '',

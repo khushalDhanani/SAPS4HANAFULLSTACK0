@@ -15,21 +15,6 @@ const { isToFullyConfirmed, isTrClosedWithoutTo, trCompletedWithoutTo, stagedSto
 
 const authorized = () => Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' });
 
-/** Fake CAP database: cds.ql queries resolve through cds.db.run; UPDATE payloads are recorded. */
-async function withFakeDb(row, fn) {
-  const cds = require('@sap/cds');
-  const updates = [];
-  const saved = cds.db;
-  cds.db = {
-    entities: () => ({ ReservationTrack: { name: 'ReservationTrack' }, ReservationLog: { name: 'ReservationLog' } }),
-    run: jest.fn(async (q) => {
-      if (q.SELECT) return typeof row === 'function' ? row() : row;
-      if (q.UPDATE) { updates.push(q.UPDATE.data); return 1; }
-      return 1;
-    })
-  };
-  try { return await fn(updates); } finally { cds.db = saved; }
-}
 const HEADER = { LGNUM: 'W01', TBNUM: '0001001839', BWLVS: '311', RSNUM: '0000524979', NLTYP: '', NLPLA: '', VLTYP: '', VLPLA: '' };
 const ITEM = (tbpos, matnr, menge, tamen) => ({ LGNUM: 'W01', TBNUM: '0001001839', TBPOS: tbpos, MATNR: matnr, WERKS: '1120', LGORT: 'HS01', CHARG: '', MENGE: menge, TAMEN: tamen, MEINS: 'KG', ELIKZ: '' });
 
@@ -222,19 +207,15 @@ describe('Fix 5: partial quantity and the unconfirmed-TO guard [mock only, not S
     const rfc = fakeRfc({ fm: { Z_WM_GET_TR_MATERIAL_LIST: tr }, tables: { MAKT: [] } });
     await expect(new TrToAdapter({ rfc }).createTOFromTR({ tbnum: '1001839', qty: 7 })).rejects.toMatchObject({ status: 400, message: /exceeds open TR quantity \(6 KG\)/ });
   });
-  it('handler retries confirm-only for a tracked 03/13 TO and creates a new TO for a tracked 04/05 one; each TO step has its own ProcessId', async () => {
-    const calls = [];
-    const adapter = { createTOFromTR: jest.fn(async (d) => { calls.push({ existingToNumber: d.existingToNumber, status: d.status }); return { TransferOrder: '1012967', Status: '04', Confirmed: true, TRItem: '0001' }; }) };
+  it('handler passes the unconfirmed TO the caller names to the retry; each TO step has its own ProcessId', async () => {
+    const adapter = { createTOFromTR: jest.fn(async () => ({ TransferOrder: '1012966', Status: '04', Confirmed: true, TRItem: '0001' })) };
     const handlers = {};
     TrToHandler.init({ on: (e, fn) => { handlers[e] = fn; } }, { adapter, resProcessAdapter: {} });
-    const rows = { '13': { TransferOrder: '1012966', Status_code: '13', ProcessId: 'P13', ReservationNo: '524979', ReservationItem: '0001' }, '04': { TransferOrder: '1012966', Status_code: '04', ProcessId: 'P04', ReservationNo: '524979', ReservationItem: '0001' } };
-    for (const st of ['13', '04']) {
-      const res = await withFakeDb({ WarehouseNumber: 'W01', ...rows[st] }, () => handlers.createTOFromTR({ data: { lgnum: 'W01', tbnum: '1001839', qty: 1 }, user: { id: 'tester' }, error: jest.fn() }));
-      if (st === '13') expect(res.ProcessId).toBe('P13');
-      else { expect(res.ProcessId).toMatch(/^[0-9a-f-]{36}$/); expect(res.ProcessId).not.toBe('P04'); }
-      expect(res.ConfirmedBy).toBe('tester');
-    }
-    expect(calls).toEqual([{ existingToNumber: '1012966', status: '13' }, { existingToNumber: undefined, status: undefined }]);
+    const send = () => handlers.createTOFromTR({ data: { lgnum: 'W01', existingToNumber: '1012966', status: '13' }, user: { id: 'tester' }, error: jest.fn() });
+    const [first, second] = [await send(), await send()];
+    expect(adapter.createTOFromTR).toHaveBeenCalledWith(expect.objectContaining({ existingToNumber: '1012966', status: '13', trackedReservation: null }));
+    expect(first.ProcessId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(first.ProcessId).not.toBe(second.ProcessId);
   });
 });
 
@@ -284,19 +265,21 @@ describe('Fix 9: goods-movement retry guard by PROCESS_ID [mock only, not SAP ve
     expect(item.ITEM_TEXT).toBe(pid.toUpperCase());
     expect(item.ITEM_TEXT).toHaveLength(36);
   });
-  it('handler persists the ProcessId on the tracking row before posting and reuses it on retry', async () => {
+  it('handler sends the caller\'s ProcessId, so a retry finds the document it already posted', async () => {
     const postGoodsMovement = jest.fn().mockResolvedValue({ materialDocument: '4900000010', materialDocYear: '2026', stockEffect: 'x' });
     const handlers = {};
-    TrToHandler.init({ on: (e, fn) => { handlers[e] = fn; } }, { adapter: {}, resProcessAdapter: { checkAuthorization: jest.fn(), postGoodsMovement } });
-    const track = { ReservationNo: '524979', ReservationItem: '0001', MovementType: '201', Material: '8000000023', Plant: '1120', Quantity: 1, Unit: 'KG', ProcessId: null };
-    const { res, updates } = await withFakeDb(track, async (updates) => ({ res: await handlers.postMigoGoodsMovement({ data: { ReservationNo: '524979', MovementType: '201' } }), updates }));
-    expect(updates[0]).toEqual({ ProcessId: res.ProcessId });
-    expect(postGoodsMovement).toHaveBeenCalledWith(expect.objectContaining({ processId: res.ProcessId }));
-    expect(updates[1]).toMatchObject({ Status_code: '05', MaterialDocument: '4900000010' });
-
-    postGoodsMovement.mockClear();
-    await withFakeDb({ ...track, ProcessId: res.ProcessId }, () => handlers.postMigoGoodsMovement({ data: { ReservationNo: '524979', MovementType: '201' } }));
-    expect(postGoodsMovement).toHaveBeenCalledWith(expect.objectContaining({ processId: res.ProcessId }));
+    TrToHandler.init({ on: (e, fn) => { handlers[e] = fn; } }, { adapter: {}, resProcessAdapter: { checkAuthorization: jest.fn(), postGoodsMovement, rfc: { readTable: jest.fn(async () => [{ WERKS: '1120' }]) } } });
+    const body = { ReservationNo: '524979', ReservationItem: '0001', MovementType: '201', Material: '8000000023', Plant: '1120', Quantity: 1, Unit: 'KG', ProcessId: pid };
+    const res = await handlers.postMigoGoodsMovement({ data: body, user: { id: 'tester', is: (r) => r === 'Admin' } });
+    expect(res.ProcessId).toBe(pid);
+    expect(postGoodsMovement).toHaveBeenCalledWith(expect.objectContaining({ processId: pid }));
+  });
+  it('handler generates a ProcessId when the caller sends none', async () => {
+    const postGoodsMovement = jest.fn().mockResolvedValue({ materialDocument: '4900000010', materialDocYear: '2026', stockEffect: 'x' });
+    const handlers = {};
+    TrToHandler.init({ on: (e, fn) => { handlers[e] = fn; } }, { adapter: {}, resProcessAdapter: { checkAuthorization: jest.fn(), postGoodsMovement, rfc: { readTable: jest.fn(async () => [{ WERKS: '1120' }]) } } });
+    const res = await handlers.postMigoGoodsMovement({ data: { ReservationNo: '524979', MovementType: '201', Material: '8000000023', Plant: '1120', Quantity: 1, Unit: 'KG' }, user: { id: 'tester', is: (r) => r === 'Admin' } });
+    expect(res.ProcessId).toMatch(/^[0-9a-f-]{36}$/);
   });
 });
 
