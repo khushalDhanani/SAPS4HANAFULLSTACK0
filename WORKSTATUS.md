@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Scan To screen removed (2026-11-03) — PARTIAL, on local branch `feature/remove-scan-to`, not pushed:** The UI at `#/wm/scan-to` is gone; old URLs show the dashboard. This was the last screen for Transfer Order create and confirm and the follow-up goods movement. Backend and database are unchanged. See the Change Entry below.
+
 - **Reservation Entry screen removed (2026-11-03) — PARTIAL, on local branch `feature/remove-reservation-entry`, not pushed:** The UI at `#/wm/reservation-entry` is gone, and the three old URLs now show the dashboard with no console errors. Backend, API and database are unchanged. The five `verifyMvt*` browser suites and the other reservation-entry tests were then deleted at the user's request, and the backend service `/odata/v4/reservation-entry` was removed as well. `tr-to` can still post reservations through `executeReservationWarehouseFlow`. See the four Change Entries of 2026-11-03 below for what was run and what was not.
 
 - **MIGO resend versus further issue, reservation-entry and tr-to (2026-11-03 09:55 IST) — PARTIAL, uncommitted:** A resend with the same id returns its document without posting, and a new id posts the further quantity, on both `postMigoGoodsMovement` actions. A further issue with no id gets HTTP 400 before SAP (`ClientAttemptId` on reservation-entry, `ProcessId` on tr-to). The false repeat is fixed once in `checkMigoIdempotency`. Jest: 228 suites and 4,464 tests passed, 59 skipped. SAP-free browser E2E: 3 of 3 passed; those suites do not post a goods movement. Not proven against live SAP. See Change Entry 2026-11-03 09:55 IST.
@@ -58,6 +60,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Scan To removal (2026-11-03): review `feature/remove-scan-to` and decide whether to merge it. `/odata/v4/tr-to` now has no screen calling it but stays deployed and can post to SAP. Decide about it separately, and check for outside callers first.
+
 - Reservation Entry removal (2026-11-03): review `feature/remove-reservation-entry` and decide whether to merge it. Before merging, check for outside callers of `/odata/v4/reservation-entry`. Any production drop of the `ReservationCreateAttempt` table needs a data export and a written go. This screen was the only UI for creating a reservation entry or retrying a failed reservation step.
 
 - MIGO resend versus further issue (2026-11-03): commit when the user asks, then restart the local CAP server to load it. Live proof needs a written go: post a partial issue, resend the same id, post a further issue with a new id, and read MATDOC and RESB back. Decide whether one Transfer Order may have more than one goods movement; today a new id on the same TO posts again.
@@ -88,6 +92,33 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-03 — Scan To screen removed: PARTIAL
+
+- **Status:** PARTIAL. Live SAP behaviour and outside API callers are not verified. No SAP write was made.
+- **Why:** The user asked to remove the feature at `#/wm/scan-to`, and approved the classified list and both decisions: remove the last Transfer Order screen, and keep `tr-to` backend tests.
+- **Branch:** `feature/remove-scan-to`, from `feature01`. Not pushed.
+- **Deleted:** `app/fiori-app/webapp/modules/wm/warehouse-scan-to/` (7 files), `test/unit/wm/warehouseScanToUi.test.js`, `test/e2e/wm/roundTripScanTo.e2e.js`, `docs/images/scan_to_landing_1280px.png`, `docs/images/scan_to_landing_360px.png`.
+- **Changed:**
+  - `manifest.json`: 3 routes, 2 targets, `trTo` model and data source.
+  - `App.controller.js`, Dashboard controller and view, `AuthService.js`.
+  - 153 keys from each i18n bundle.
+  - `verifyWmScreens`, `verifyActionFailures`, `runSapRoundTrips`, `wmRoundTripKit` (`postReadOnlyAction` removed), both baselines, `testData.example.json`.
+  - `componentAuthGate`, `movement261UnifiedLifecycle` and `migoClientAttempt` tests.
+  - `docs/e2e-coverage-matrix.md`: rows removed. Its totals were stale and are now counted from the rows.
+  - `docs/abap/flow-decision.md`.
+- **Test decision:** TEST UPDATED.
+- **Executed validation:**
+  - Deleted `dist`, `coverage`, `gen` and caches. `npm run build` in `app/fiori-app` succeeded, with 0 feature matches in `dist`.
+  - `npx cds build --production` to a scratch folder succeeded. Feature words remain only in the 3 backend files listed below.
+  - `npm run lint` in `app/fiori-app`, `npx eslint --max-warnings 0 .`, `node tools/scan-secrets.js`, `npm run validate:mta`: clean.
+  - `npx jest --silent --runInBand`: 223 suites passed, 1 skipped; 4,108 tests passed, 59 skipped.
+  - `npm run test:e2e:sap-free`: 3 of 3 passed.
+  - `TARGET_URL=http://localhost:4010 npm run test:e2e` on `71ddf805`: Total 17, Passed 17, Failed 0 (SAP read-only; writes guarded or mocked).
+  - Browser, test login: `#/wm/scan-to`, `/TR/1000757` and `/W01/TR/1000757` show the dashboard, with 0 console errors, 0 network errors and 0 blocked writes; no tile on the Warehouse tab.
+- **Kept:** `WORKSTATUS.md`, `docs/archive/`, `srv/common/BusinessConfigResolver.js`, `srv/integration/s4hana/wm/TrToAdapter.js`, `srv/integration/s4hana/wm/ReservationProcessAdapter.js`, `test/unit/common/BusinessConfigResolver.test.js`, and shared `BarcodeScanService.js` and `.rfScanInput`.
+- **Not run:** `npm run test:e2e:sap`, which needs a written go for live runs. `knip` and `ts-prune` are not installed.
+- **Next action:** The user reviews the branch and decides about merging, and separately about the `tr-to` backend.
 
 ### 2026-11-03 — Reservation Entry removal merged into `feature01`: PARTIAL
 
