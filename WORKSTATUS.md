@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Local database files and references (branch `chore/remove-local-db-files`, 2026-11-03 15:52 IST) — PARTIAL, committed locally, not pushed:** No `.sql` file, seed folder or backup folder remains in the repo; copies are in `~/Desktop/sql-backup/`. By the user's choice, `db/`, `db.sqlite`, the database dependencies and the HANA resources stay until the SAP posting-attempt table replaces them, so references to them remain. Jest passed; browser E2E 17 of 17 and SAP-free 3 of 3; SAP round-trip dry run still has the HU transfer failure that predates this work. SAP document counts for the app's user were 0 before and after the runs. See the entry below.
+
 - **Database removal Phase 1 (2026-11-03 15:32 IST) — PARTIAL, committed locally on `chore/remove-application-db`, not pushed:** Reservation tracking and BusinessConfig are removed, and Create Delivery Without Reference now uses the typed sales area, otherwise T001L. `GoodsIssuePostingAttempt`, its database config and the HANA resources stay until the SAP table is live and proven, so the database is not gone yet. Jest passed; browser E2E 17 of 17 and SAP-free 3 of 3; SAP round-trip dry run has one failure, HU transfer, which fails the same way on the commit before this work. Movement 261 blocked-bin rules and HU storage types have no source. See the entry of 15:32 IST below.
 
 - **Posting-attempt Z table in ZAMM (2026-11-03) — PARTIAL, source prepared only, BLOCKED on target, transport and written go:** The user chose this option. ABAP source and an offline test exist; nothing was created in SAP and nothing was deleted. See the entry "Posting-attempt Z table source prepared" below.
@@ -1402,3 +1404,21 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - **REGRESSION:** Jest and browser E2E as above; the only E2E failure exists on the pre-change commit.
 - **Next action:** the user provides the SAP target and transport request, and decides where blocked-bin rules and HU storage types live.
 - **FINAL STATUS:** PARTIAL for Phase 1; BLOCKED for complete database removal.
+
+### 2026-11-03 15:52 IST — Local database files and references removed, `db/` kept by the user's choice: PARTIAL
+
+- **Request:** Delete local SQL files and what depends on them, verify with proof, no SAP writes. The user chose "Keep db/ for now", because the posting-attempt guard has no working SAP replacement. No target or transport request has been supplied.
+- **CHANGED:** new branch `chore/remove-local-db-files`, from `chore/remove-application-db`. Commits `d6169fd7` (`.gitignore` entry, `mta.yaml` and `db/schema.cds` comments), `c30e2f85` (README, AGENTS.md, ARCHITECTURE.md, runbook, `docs/abap/flow-decision.md`, `status-codes.md`, `zmm_af_017_4x6-spec.md`), and this log. No runtime code changed. The SQL files and tracking and settings code were already removed on the parent branch.
+- **BACKUP:** `~/Desktop/sql-backup/`: 5 SQL files exported from `feature01`, `db-from-feature01/`, a copy of `db.sqlite` (integrity check ok, 6 attempt rows), and the moved `.backup-db-*`, `seed-data-local/` and pre-config copy (9 files, checksums match). Nothing was hard-deleted. The earlier `../SAPS4HANAFULLSTACK0-db-archive-20261103/` folder no longer exists; its contents moved here. `gen/`, `app/fiori-app/dist` and caches were cleared as requested; `app/fiori-app/dist` was rebuilt.
+- **TEST DECISION:** EXISTING TEST SUFFICIENT: full Jest and E2E suites. Only comments, an ignore entry and docs changed.
+- **TESTED:** `npx cds build --production --dest <scratch>` exit 0 (2 CDS warnings in a file not changed here). `ui5lint` and `ui5 build` exit 0. `npx eslint . --max-warnings 0` exit 0. `node tools/scan-secrets.js` exit 0. `npm run validate:mta` exit 0. `npm test`: 223 suites, 4,109 tests passed, 59 skipped. `npm run test:e2e:sap-free`: 3 of 3. `npm run test:e2e`: 17 of 17, including Shell, MM, SD, LE and WM screens.
+- **FAIL:** `npm run test:e2e:sap` dry run exit 1: HU stock transfer 311 fails on missing storage type rules, as on the commit before this work. Orders due is PARTIAL: PGI and billing skipped.
+- **SKIPPED:** root `npm run build` does not exist. `npm run build:mta` was not run, because its first step is `npm ci`, which would reinstall `node_modules`.
+- **VERIFIED (write guard on):** server log during the runs has no `no such table` or `NO_DATABASE_CONNECTION`. App started normally; `AllowSAPtool` does not exist and `ALLOW_LIVE_SAP_TOOLS` is not read at runtime.
+- **VERIFIED (READ-ONLY, RFC_READ_TABLE only):** documents created today by the app's SAP user in MKPF, LIKP, VBAK, EKKO, VBRK, LTAK and VEKP: 0 before and 0 after the runs. Control on 2026-11-02 found 3 MKPF and 1 LTAK, so the check can find documents. It does not cover other tables or other SAP users.
+- **Remaining references:** `sqlite`, HANA and HDI in `package.json`, the lockfile, `mta.yaml`, `.gitignore`, ADR-0001, ARCHITECTURE.md and the runbook; `cds.db` in `GoodsIssueAttemptStore.js` and 8 test files; posting-attempt references across services, tests and docs. All are kept for the guard until Phase 3. `.backup-db-recovery` in the runbook is a recovery step that stays valid while `db.sqlite` exists. `BusinessConfig` in 4 dated `docs/evidence` files is a historical record. `.sql` in `noGiQueueGuard.test.js` is a file-type list, and in 3 `docs/wm-discovery` XML files it is an SAP media type.
+- **NOT VERIFIED:** production data; outside callers of `tr-to`; deployment; the Z table source.
+- **ASSUMPTIONS:** "Keep db/ for now" approves everything else in the discovery table (INFERRED from the option as offered).
+- **REGRESSION:** none found; same results as Phase 1.
+- **Next action:** the user supplies the SAP target and transport request, and decides where HU storage types and blocked-bin rules live.
+- **FINAL STATUS:** PARTIAL. Complete database removal stays BLOCKED on the SAP posting-attempt table.
