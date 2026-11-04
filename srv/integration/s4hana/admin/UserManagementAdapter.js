@@ -163,8 +163,9 @@ class UserManagementAdapter {
       throw Object.assign(new Error('username is required'), { status: 400 });
     }
     const bname = username.trim().toUpperCase();
-    const connUser = String(process.env.S4_USERNAME || '').trim().toUpperCase();
-    if (connUser && bname === connUser) {
+    // The user RFC really logs on with: local env, or the BTP destination in production. A failed read rejects, so nothing is locked.
+    const { user } = await this._rfc.resolveConnectionParams();
+    if (bname === String(user || '').trim().toUpperCase()) {
       throw Object.assign(
         new Error(`Cannot lock user '${bname}': operation refused because it is the active RFC connection user`),
         { status: 403 }

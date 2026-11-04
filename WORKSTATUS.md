@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Self-lock guard fixed (2026-11-04 16:50 IST) — PARTIAL, uncommitted, not deployed, no live lock run:** `lockUser` now compares against the user RFC really connects with, including a BTP destination. Before, it read only `S4_USERNAME`, which production refuses, so the guard did nothing there. Jest 180 suites, 2,819 passed, 0 failed. 17 known defects remain marked `test.failing`. See the entry below.
+
 - **Read-only browser E2E after the removals (2026-11-04 16:35 IST) — PASS for the read-only tier, log and matrix update committed locally, not pushed:** `npm run test:e2e` passed 17 of 17 suites against a local server on `S4HANA_DEV` client 220, with real SAP data and no writes seen. The live-write round trips (`test:e2e:sap`) did not run. See the entry below.
 
 - **Demo rack route removed (2026-11-04 16:20 IST) — PARTIAL, committed locally, not pushed, not deployed:** The route showed hard-coded warehouse data and nothing linked to it. Jest 180 suites, 2,816 passed, 0 failed, 0 skipped. Group 2 APIs were not touched and stay until the user can rule out outside callers. See the entry below.
@@ -118,7 +120,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - Group 2 (2026-11-04): kept by the user's choice. `getVisualRack`, `checkATP`, `askAI`, `MaterialStorageLocations`, `MaterialBatches`, `DeliveryWithoutRefTypes` and `DeliveryWithoutRefShipToParties` have no screen; remove them only after access logs or owners rule out outside callers. `chat` is used by the Purchase Orders AI assistant and stays.
 - `tr-to` and `goods-issue` removal (2026-11-04): before deploying, check the deployed access logs for callers of the two removed paths. `npm run validate:mta` and the read-only `npm run test:e2e` are done.
 - Unused-test removal (2026-11-04): the live goods-receipt read checks and RFC field-list checks were deleted; if live proof of those is wanted, rebuild them as a READ-ONLY tool from tag `test-audit-backup-2026-11-04` or `9186852c`.
-- Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 18 remaining `test.failing` defects as separate changes; each fix must remove its marker. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
+- Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 17 remaining `test.failing` defects as separate changes; each fix must remove its marker. The next security item is the outbound-delivery plant scope, which needs the user's choice: refuse with 503/403, or return an empty list. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
 - Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
@@ -165,6 +167,23 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-04 16:50 IST — Fixed the self-lock guard: PARTIAL (uncommitted, not deployed, no live lock run)
+
+**Why:** `UserManagementAdapter.lockUser` compared only `process.env.S4_USERNAME`. `srv/common/productionGuard.js:93` refuses that variable in production, where the RFC user comes from the BTP destination, so an Admin could lock the technical user and stop all SAP integration. This was the known defect at `UserManagementAdapter.test.js`.
+
+**Changed:** `srv/integration/s4hana/admin/UserManagementAdapter.js` reads the user from `RfcClient.resolveConnectionParams()`, the same source the RFC session logs on with. The comparison ignores case. If the connection cannot be resolved, the call rejects and nothing is locked.
+
+**Test decision:** TEST UPDATED and TEST ADDED. The `test.failing` marker is gone. New tests use a real `RfcClient` with only node-rfc and the Destination service faked: refuses the destination user in any case, still locks another user, refuses the local connection user, locks nothing when the user cannot be read. The destination property names are not proven against a live destination.
+
+**Validation (all run 2026-11-04):**
+- `npm test` equivalent with coverage: 180 suites passed; 2,819 passed, 0 failed, 0 skipped. Before: 2,816 passed. `test.failing` entries: 18 to 17.
+- `npm run test:coverage` with thresholds, `npm run lint`, `npm run scan:secrets`, `git diff --check`: exit 0. `npm run test:e2e:sap-free`: 3 of 3 passed.
+- Mutations in a throwaway copy: restoring the old `S4_USERNAME` read, disabling the guard, and a case-sensitive compare were all caught. Swallowing a failed read was not caught, because `session()` reads the same parameters and fails with the same 503, so behavior does not change.
+- Per-function coverage: 691 functions kept or better. One lower by one statement: `scanFile` in `tools/scan-secrets.js`, which this change did not touch; cause not traced.
+- NOT RUN: any live lock. The RFC user has no `S_USR_ADM`, and a lock is a write that needs a written go per call. `npm run test:e2e` was not re-run; it does not press the lock buttons.
+
+**Next action:** see Next Steps.
 
 ### 2026-11-04 16:35 IST — Read-only browser E2E after the removals: PASS for this tier (no live writes run)
 

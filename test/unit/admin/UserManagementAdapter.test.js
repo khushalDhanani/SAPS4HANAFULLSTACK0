@@ -40,7 +40,8 @@ function makeAdapter(rfcCallResult) {
   const mockCall = makeRfcCallMock(rfcCallResult);
   const rfcClient = {
     call: mockCall,
-    session: jest.fn().mockImplementation((fn) => fn(mockCall))
+    session: jest.fn().mockImplementation((fn) => fn(mockCall)),
+    resolveConnectionParams: jest.fn().mockResolvedValue({ user: 'CONNECTED_ADMIN' })
   };
   const adapter = new UserManagementAdapter({ rfcClient });
   return { adapter, mockCall, rfcClient };
@@ -183,14 +184,6 @@ describe('UserManagementAdapter.getUserDetail', () => {
 // ── lockUser ──────────────────────────────────────────────────────────────────
 
 describe('UserManagementAdapter.lockUser', () => {
-  const origEnv = process.env.S4_USERNAME;
-  beforeEach(() => {
-    process.env.S4_USERNAME = 'CONNECTED_ADMIN';
-  });
-  afterAll(() => {
-    process.env.S4_USERNAME = origEnv;
-  });
-
   test('calls BAPI_USER_LOCK and BAPI_TRANSACTION_COMMIT in a single session', async () => {
     const { adapter, mockCall, rfcClient } = makeAdapter({
       BAPI_USER_LOCK: { RETURN: [] },
@@ -235,7 +228,7 @@ describe('UserManagementAdapter.lockUser', () => {
 
   test('throws 502 when RFC call fails', async () => {
     const mockCall = jest.fn().mockRejectedValue(new Error('RFC connection dropped'));
-    const rfcClient = { session: jest.fn().mockImplementation((fn) => fn(mockCall)) };
+    const rfcClient = { session: jest.fn().mockImplementation((fn) => fn(mockCall)), resolveConnectionParams: jest.fn().mockResolvedValue({ user: 'CONNECTED_ADMIN' }) };
     const adapter = new UserManagementAdapter({ rfcClient });
     await expect(adapter.lockUser('ALICE')).rejects.toMatchObject({ status: 502 });
   });
@@ -279,7 +272,7 @@ describe('UserManagementAdapter.unlockUser', () => {
 
   test('throws 502 when RFC call fails', async () => {
     const mockCall = jest.fn().mockRejectedValue(new Error('RFC connection dropped'));
-    const rfcClient = { session: jest.fn().mockImplementation((fn) => fn(mockCall)) };
+    const rfcClient = { session: jest.fn().mockImplementation((fn) => fn(mockCall)), resolveConnectionParams: jest.fn().mockResolvedValue({ user: 'CONNECTED_ADMIN' }) };
     const adapter = new UserManagementAdapter({ rfcClient });
     await expect(adapter.unlockUser('BOB')).rejects.toMatchObject({ status: 502 });
   });
@@ -287,16 +280,9 @@ describe('UserManagementAdapter.unlockUser', () => {
 
 // ── self-lock guard with the production connection ───────────────────────────
 
-describe('UserManagementAdapter.lockUser with the RFC user from a BTP destination', () => {
-  const origEnv = process.env.S4_USERNAME;
-  beforeEach(() => { delete process.env.S4_USERNAME; }); // production refuses S4_USERNAME (productionGuard.js:93)
-  afterEach(() => {
-    if (origEnv === undefined) delete process.env.S4_USERNAME;
-    else process.env.S4_USERNAME = origEnv;
-  });
-
-  // Known defect: srv/integration/s4hana/admin/UserManagementAdapter.js:166 compares only process.env.S4_USERNAME, but in production the RFC user is jco.client.user of the destination (RfcClient.js:16), so the fail-closed self-lock guard promised in srv/admin/service.cds never fires there
-  test.failing('refuses to lock the user the destination connects with', async () => {
+describe('UserManagementAdapter.lockUser self-lock guard with a real RfcClient', () => {
+  // Only node-rfc and the Destination service are faked. Property names follow RFC_DESTINATION_PROPS in RfcClient.js; not proven against a live destination.
+  function fakeNodeRfc() {
     const called = [];
     const noderfc = {
       Client: function Client() {
@@ -307,13 +293,49 @@ describe('UserManagementAdapter.lockUser with the RFC user from a BTP destinatio
         };
       }
     };
-    const destination = async () => ({
-      originalProperties: { 'jco.client.ashost': 'sap.internal', 'jco.client.sysnr': '00', 'jco.client.client': '220', 'jco.client.user': 'TECH_USER', 'jco.client.passwd': 'x' }
-    });
+    return { called, noderfc };
+  }
+  const destination = async () => ({
+    originalProperties: { 'jco.client.ashost': 'sap.internal', 'jco.client.sysnr': '00', 'jco.client.client': '220', 'jco.client.user': 'TECH_USER', 'jco.client.passwd': 'x' }
+  });
+
+  test('refuses to lock the user the BTP destination connects with', async () => {
+    const { called, noderfc } = fakeNodeRfc();
     const rfcClient = new RfcClient({ S4_RFC_DESTINATION_NAME: 'S4_RFC', NODE_ENV: 'production' }, () => noderfc, destination);
     const adapter = new UserManagementAdapter({ rfcClient });
 
-    await expect(adapter.lockUser('TECH_USER')).rejects.toMatchObject({ status: 403 });
+    await expect(adapter.lockUser('tech_user')).rejects.toMatchObject({
+      status: 403,
+      message: "Cannot lock user 'TECH_USER': operation refused because it is the active RFC connection user"
+    });
+    expect(called).toEqual([]);
+  });
+
+  test('still locks another user through that destination', async () => {
+    const { called, noderfc } = fakeNodeRfc();
+    const rfcClient = new RfcClient({ S4_RFC_DESTINATION_NAME: 'S4_RFC', NODE_ENV: 'production' }, () => noderfc, destination);
+    const adapter = new UserManagementAdapter({ rfcClient });
+
+    await expect(adapter.lockUser('ALICE')).resolves.toMatchObject({ success: true, username: 'ALICE' });
+    expect(called).toEqual(['BAPI_USER_LOCK', 'BAPI_TRANSACTION_COMMIT']);
+  });
+
+  test('refuses to lock the user a local connection logs on with', async () => {
+    const { called, noderfc } = fakeNodeRfc();
+    const env = { S4_DESTINATION_URL: 'https://sap.internal', S4_RFC_SYSNR: '00', S4_CLIENT: '220', S4_USERNAME: 'Local_User', S4_PASSWORD: 'x' };
+    const adapter = new UserManagementAdapter({ rfcClient: new RfcClient(env, () => noderfc) });
+
+    await expect(adapter.lockUser('LOCAL_USER')).rejects.toMatchObject({ status: 403 });
+    expect(called).toEqual([]);
+  });
+
+  test('locks nothing when the connection user cannot be read', async () => {
+    const { called, noderfc } = fakeNodeRfc();
+    const unreachable = async () => { throw new Error('Destination service down'); };
+    const rfcClient = new RfcClient({ S4_RFC_DESTINATION_NAME: 'S4_RFC', NODE_ENV: 'production' }, () => noderfc, unreachable);
+    const adapter = new UserManagementAdapter({ rfcClient });
+
+    await expect(adapter.lockUser('ALICE')).rejects.toMatchObject({ status: 503 });
     expect(called).toEqual([]);
   });
 });

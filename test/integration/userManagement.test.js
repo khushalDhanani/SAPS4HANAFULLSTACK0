@@ -2,7 +2,7 @@
 
 /**
  * Integration: real CAP HTTP, real role gate, real UserManagementService and UserManagementAdapter.
- * Only the RFC session is stubbed. BAPI names, parameters and list/detail fields follow the adapter header and
+ * Only the RFC session and its connection parameters are stubbed. BAPI names, parameters and list/detail fields follow the adapter header and
  * tools/verify-su01-bapi-contracts.js; BAPI_USER_LOCK/UNLOCK answers were never read live (RETURN shape not proven).
  */
 
@@ -20,6 +20,7 @@ const ANONYMOUS = { validateStatus: () => true };
 /** Answers each function module from `answers` (a value, or a function that may throw); records every call. */
 function stubRfc(answers = {}) {
     const calls = [];
+    jest.spyOn(RfcClient.prototype, 'resolveConnectionParams').mockResolvedValue({ user: 'CONNECTED_ADMIN' });
     jest.spyOn(RfcClient.prototype, 'session').mockImplementation((fn) => fn(async (fm, params) => {
         calls.push({ fm, params });
         const answer = answers[fm];
@@ -35,7 +36,6 @@ const UNLOCK_OK = { BAPI_USER_UNLOCK: { RETURN: [] }, BAPI_TRANSACTION_COMMIT: {
 describe('Integration: SU01 user management', () => {
     afterEach(() => {
         jest.restoreAllMocks();
-        delete process.env.S4_USERNAME;
     });
 
     describe('Admin gate', () => {
@@ -130,8 +130,7 @@ describe('Integration: SU01 user management', () => {
             expect(res.data).toMatchObject({ success: true, message: "User 'ALICE' locked successfully in SAP", username: 'ALICE' });
         });
 
-        it('refuses the connection user from S4_USERNAME in any case with 403, and nothing reaches SAP', async () => {
-            process.env.S4_USERNAME = 'CONNECTED_ADMIN';
+        it('refuses the RFC connection user in any case with 403, and nothing reaches SAP', async () => {
             const calls = stubRfc(LOCK_OK);
 
             const res = await axios.post(`${BASE}/lockUser`, { username: 'connected_admin' }, ADMIN);
