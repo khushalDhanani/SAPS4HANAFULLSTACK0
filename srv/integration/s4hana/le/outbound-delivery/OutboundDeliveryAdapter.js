@@ -2,6 +2,7 @@ const LOG = require('../../../../common/logger')('outbound-delivery-adapter');
 const { S4HttpClient } = require('../../S4HttpClient');
 const { odataString, extractFilterParam } = require('../../../../common/filterUtils');
 const { mapS4Error } = require('../../S4ErrorMapper');
+const { sapKey } = require('../../sapKey');
 
 let RfcClient = null;
 try {
@@ -151,13 +152,44 @@ class OutboundDeliveryAdapter {
     const lists = await Promise.all(plants.map((plant) => this.getShippingPointsForPlant(plant, options)));
     const points = [...new Set(lists.flat().map((point) => String(point).trim().toUpperCase()))];
     if (points.length === 0) {
-      const err = new Error(`The shipping points of plant ${plants.join(', ')} could not be read from SAP; no orders were read. Try again.`);
+      const err = new Error(`The shipping points of plant ${plants.join(', ')} could not be read from SAP, so nothing was read or posted. Try again.`);
       err.status = 503;
       err.statusCode = 503;
       err.isScopeRefusal = true;
       throw err;
     }
     return points;
+  }
+
+  /**
+   * Refuses (403) a shipping point that belongs to none of the plants, or (503) when their points cannot be read.
+   *
+   * @param {string} shippingPoint
+   * @param {Array<string>} plants
+   * @param {Object} [options]
+   * @returns {Promise<void>}
+   */
+  async assertShippingPointInPlants(shippingPoint, plants, options = {}) {
+    const allowed = plants.length ? await this._shippingPointsInScope(plants, options) : [];
+    if (!allowed.includes(String(shippingPoint).trim().toUpperCase())) {
+      const err = new Error(`Shipping point '${shippingPoint}' is outside user's authorized plants: [${plants.join(', ')}]. Access denied.`);
+      err.status = 403;
+      err.statusCode = 403;
+      err.isScopeRefusal = true;
+      throw err;
+    }
+  }
+
+  /**
+   * Plant of every item of a delivery, from LIPS. A delivery can span plants, so all of them are returned.
+   *
+   * @param {string} deliveryDocument
+   * @returns {Promise<Array<string>>}
+   */
+  async readDeliveryPlants(deliveryDocument) {
+    const vbeln = sapKey(deliveryDocument, 'vbeln').padStart(10, '0');
+    const rows = await this.rfc.readTable('LIPS', ['WERKS'], [`VBELN = '${vbeln}'`]);
+    return rows.map((row) => row.WERKS);
   }
 
   /**
@@ -285,14 +317,7 @@ class OutboundDeliveryAdapter {
       // If ShippingPoint is specified, filter by it using odataString
       if (sp) {
         if (isPlantScoped) {
-          const allowed = await this._shippingPointsInScope(requestedPlant ? [resolvedPlant] : authorizedPlants, options);
-          if (!allowed.includes(String(sp).trim().toUpperCase())) {
-            const err = new Error(`Shipping point '${sp}' is outside user's authorized plants: [${authorizedPlants.join(', ')}]. Access denied.`);
-            err.status = 403;
-            err.statusCode = 403;
-            err.isScopeRefusal = true;
-            throw err;
-          }
+          await this.assertShippingPointInPlants(sp, requestedPlant ? [resolvedPlant] : authorizedPlants, options);
         }
         filterClauses.push(`ShippingPoint eq ${odataString(sp)}`);
       } else {

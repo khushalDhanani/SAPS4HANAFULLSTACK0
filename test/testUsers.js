@@ -10,7 +10,9 @@ const USERS = {
   'test-viewer-1120': { roles: ['Viewer'], attr: { Plant: ['1120'] } },
   'test-clerk-1130': { roles: ['Viewer', 'WarehouseClerk'], attr: { Plant: ['1130'] } },
   'test-viewer-noplant': { roles: ['Viewer'] },
-  'test-clerk-1120': { roles: ['Viewer', 'WarehouseClerk'], attr: { Plant: ['1120'] } }
+  'test-clerk-1120': { roles: ['Viewer', 'WarehouseClerk'], attr: { Plant: ['1120'] } },
+  'test-clerk-noplant': { roles: ['Viewer', 'WarehouseClerk'] },
+  'test-sales-1120': { roles: ['Viewer', 'SalesRepresentative'], attr: { Plant: ['1120'] } }
 };
 
 module.exports = { USERS, cdsConfig: JSON.stringify({ requires: { auth: { users: USERS } } }) };

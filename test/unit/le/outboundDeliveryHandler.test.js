@@ -26,6 +26,9 @@ function createMockService() {
   return handlers;
 }
 
+// Plant scope of these writes is covered in test/integration/outboundDeliveryPlantScope.test.js.
+const admin = { is: (role) => role === 'Admin' };
+
 describe('Unit: OutboundDeliveryService Handlers', () => {
   let handlers;
 
@@ -167,6 +170,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
           ShippingPoint: '1120',
           DeliveryDate: '2025-08-14'
         },
+        user: admin,
         error: jest.fn()
       };
 
@@ -205,6 +209,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
           SalesOrder: '5000461',
           ShippingPoint: 'WAVG'
         },
+        user: admin,
         error: jest.fn()
       };
 
@@ -218,7 +223,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
 
     test('returns an empty string, never a made-up number, when the adapter got no delivery number', async () => {
       outboundDeliveryAdapter.createDeliveryFromOrder.mockResolvedValue({ OutboundDelivery: '', ReferenceSDDocument: '5000104', ShippingPoint: '1120' });
-      const req = { data: { SalesOrder: '5000104', ShippingPoint: '1120' }, error: jest.fn() };
+      const req = { data: { SalesOrder: '5000104', ShippingPoint: '1120' }, user: admin, error: jest.fn() };
 
       await expect(handlers['createOutboundDelivery'](req)).resolves.toBe('');
     });
@@ -282,7 +287,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       outboundDeliveryAdapter.postGoodsIssue.mockResolvedValue({ DeliveryDocument: '13000526', Done: true, ErrorFlags: [] });
       outboundDeliveryAdapter.getBillingDocumentTypes.mockResolvedValue([{ BillingDocumentType: 'F2', BillingDocumentTypeName: 'Invoice' }]);
       outboundDeliveryAdapter.createBillingDocument.mockResolvedValue({ BillingDocument: '90000123', Messages: [] });
-      const req = (data) => ({ data, error: jest.fn() });
+      const req = (data) => ({ data, user: admin, error: jest.fn() });
       expect(await handlers['postGoodsIssue'](req({ DeliveryDocument: '13000526' }))).toEqual({ DeliveryDocument: '13000526', Done: true, ErrorFlags: [] });
       expect(await handlers['getBillingDocumentTypes'](req({ DeliveryDocument: '13000526' }))).toEqual([{ BillingDocumentType: 'F2', BillingDocumentTypeName: 'Invoice' }]);
       expect(await handlers['createBillingDocument'](req({ DeliveryDocument: '13000526', BillingDocumentType: 'F2', BillingDocumentDate: '2026-09-22' }))).toEqual({ BillingDocument: '90000123', Messages: [] });
@@ -292,7 +297,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
     test('map adapter errors to req.error with the SAP status and message', async () => {
       const err = new Error('S/4HANA did not post goods issue for delivery 1 (ErrorInGoodsIssue).'); err.status = 422;
       outboundDeliveryAdapter.postGoodsIssue.mockRejectedValue(err);
-      const req = { data: { DeliveryDocument: '1' }, error: jest.fn() };
+      const req = { data: { DeliveryDocument: '1' }, user: admin, error: jest.fn() };
       await handlers['postGoodsIssue'](req);
       expect(req.error).toHaveBeenCalledWith(422, expect.stringContaining('ErrorInGoodsIssue'));
     });
@@ -302,6 +307,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       const req = {
         data: { DeliveryDocument: '13000526' },
         headers: { 'if-match': 'W/"datetimeoffset\'2026-10-28T10%3A00%3A00Z\'"' },
+        user: admin,
         error: jest.fn()
       };
       await handlers['postGoodsIssue'](req);
@@ -315,6 +321,7 @@ describe('Unit: OutboundDeliveryService Handlers', () => {
       outboundDeliveryAdapter.createBillingDocument.mockResolvedValue({ BillingDocument: '90000123', Messages: [] });
       const req = {
         data: { DeliveryDocument: '13000526', BillingDocumentType: 'F2', ETag: 'W/"etag-val-456"' },
+        user: admin,
         error: jest.fn()
       };
       await handlers['createBillingDocument'](req);

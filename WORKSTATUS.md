@@ -15,7 +15,9 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Orders Due plant scope fixed (2026-11-04 17:20 IST) — PARTIAL, uncommitted, not deployed, confirmed READ-ONLY against SAP:** A plant-limited user can no longer read other plants' due orders. A failed shipping-point lookup now answers 503, and another plant's shipping point answers 403. The user chose refusal over an empty list. Admins are unaffected. Jest 180 suites, 2,826 passed, 0 failed. 15 known defects remain marked `test.failing`. See the entry below.
+- **Plant scope on PGI, billing and delivery from order (2026-11-04 16:55 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** A plant-limited user can no longer post goods issue or billing on a delivery with an item in another plant (403), or create a delivery from a shipping point outside their plants (403). If the plant or shipping points can't be read, the answer is 503 and nothing is sent to SAP. Admins are unchanged. Proven with SAP doubled and by the SAP-free E2E; that LIPS-WERKS holds the plant of an outbound delivery is NOT verified. **Before deploying, every non-Admin who uses these actions needs a Plant attribute, including sales roles, or they are refused.**
+
+- **Orders Due plant scope fixed (2026-11-04 17:20 IST) — PARTIAL, committed locally as `3f915640`, not pushed, not deployed, confirmed READ-ONLY against SAP:** A plant-limited user can no longer read other plants' due orders. A failed shipping-point lookup now answers 503, and another plant's shipping point answers 403. The user chose refusal over an empty list. Admins are unaffected. Jest 180 suites, 2,826 passed, 0 failed. 15 known defects remain marked `test.failing`. See the entry below.
 
 - **Self-lock guard fixed (2026-11-04 16:50 IST) — PARTIAL, committed locally, not pushed, not deployed, no live lock run:** `lockUser` now compares against the user RFC really connects with, including a BTP destination. Before, it read only `S4_USERNAME`, which production refuses, so the guard did nothing there. Jest 180 suites, 2,819 passed, 0 failed. 17 known defects remain marked `test.failing`. See the entry below.
 
@@ -122,7 +124,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - Group 2 (2026-11-04): kept by the user's choice. `getVisualRack`, `checkATP`, `askAI`, `MaterialStorageLocations`, `MaterialBatches`, `DeliveryWithoutRefTypes` and `DeliveryWithoutRefShipToParties` have no screen; remove them only after access logs or owners rule out outside callers. `chat` is used by the Purchase Orders AI assistant and stays.
 - `tr-to` and `goods-issue` removal (2026-11-04): before deploying, check the deployed access logs for callers of the two removed paths. `npm run validate:mta` and the read-only `npm run test:e2e` are done.
 - Unused-test removal (2026-11-04): the live goods-receipt read checks and RFC field-list checks were deleted; if live proof of those is wanted, rebuild them as a READ-ONLY tool from tag `test-audit-backup-2026-11-04` or `9186852c`.
-- Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 15 remaining `test.failing` defects as separate changes; each fix must remove its marker. Plant scope on PGI, billing and delivery from order still needs the user's decision and a READ-ONLY check for the plant field. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
+- Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 15 remaining `test.failing` defects as separate changes; each fix must remove its marker. Plant scope on PGI, billing and delivery from order is coded but still needs a READ-ONLY check that LIPS-WERKS holds the plant of a real outbound delivery, then a live round trip with the user's written go per call. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
 - Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
@@ -170,7 +172,41 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
+### 2026-11-04 16:55 IST — Enforced plant scope on PGI, billing and delivery from order: PARTIAL (uncommitted, not deployed, not run against SAP)
+
+**Why:** `postGoodsIssue`, `createBillingDocument` and `createOutboundDelivery` checked the role only, so a clerk of one plant could post another plant's delivery by number. The user chose to enforce all three.
+
+**Changed:**
+- `srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js`: new `readDeliveryPlants` (every item's plant from LIPS, number validated with `sapKey`) and `assertShippingPointInPlants`, which Orders Due now also uses. The 503 text now reads "so nothing was read or posted".
+- `srv/le/outbound-delivery/handlers/outboundDelivery.handler.js`: PGI and billing call `assertPlantsInScope` on the delivery's plants; delivery from order checks its shipping point. All three checks run before any SAP write.
+- `test/testUsers.js`: new `test-clerk-noplant` and `test-sales-1120`. No test user could reach billing with a plant.
+- `docs/e2e-coverage-matrix.md`: replaced the "not covered" note with what is and is not proven.
+
+**TEST DECISION:** TEST ADDED: `test/integration/outboundDeliveryPlantScope.test.js` (22 tests: real CAP HTTP, roles, handlers and adapter, with SAP doubled), plus 4 checks in `test/e2e/negative/verifyWriteAuthorization.e2e.js`. TEST UPDATED: `outboundDeliveryHandler.test.js` (7 write tests now run as Admin, because a request with no user is now refused) and the 503 text in `outboundDeliveryAdapter.test.js`.
+
+**Executed validation:**
+- Jest: 181 suites, 2,848 passed, 0 failed, 0 skipped. `test.failing` entries: 15, unchanged.
+- Mutations in a throwaway copy: 10 of 10 caught.
+- `npm run lint`, `npm run test:coverage`, `npm run scan:secrets`, `git diff --check`: exit 0.
+- Per-function coverage against the earlier baseline, over `srv` and the webapp: 575 functions compared, 0 lower.
+- `npm run test:e2e:sap-free`: 3 of 3, including a limited user refused with 503 on all three actions and a no-plant clerk refused with 403.
+
+**NOT RUN / NOT VERIFIED:**
+- No SAP call was made for this change, read or write. That LIPS-WERKS holds the plant of a real outbound delivery is NOT verified; the repo shows it only for inbound deliveries.
+- No live PGI, billing or delivery create; `npm run test:e2e:sap` not run.
+- How these screens display the new 403 and 503 was not checked in a browser with real answers.
+
+**Known limits:**
+- Delivery from order checks the shipping point, not the order's plant, because the repo has no proven order-plant read. An order of another plant sent through the user's own shipping point is not refused here.
+- A delivery item with a blank plant answers 503. If real deliveries have such items (text items, for example; NOT verified), a limited user can't post them.
+- `getDeliveryStatus` and `getBillingDocumentTypes` are reads and still have no plant check. Not changed: outside this request.
+- A non-Admin with no Plant attribute is now refused on these actions, including sales roles.
+
+**Next:** with the user's go, a READ-ONLY read of LIPS-WERKS for one real outbound delivery. Any live post needs a written go per call.
+
 ### 2026-11-04 17:20 IST — Fixed Orders Due plant scope: PARTIAL (uncommitted, not deployed, read-only SAP check passed)
+
+> Update: committed by the user as `3f915640`; still not pushed or deployed. The 17:20 in this heading was ahead of the real clock; the entry above, at 16:55, is later.
 
 **Why:** a plant-limited user could read other plants' due orders two ways: an empty shipping-point lookup sent SAP no filter at all, and a client `ShippingPoint` filter was never checked against the user's plant. An RFC failure was also cached as an empty list for the cache period. The user chose refusal over an empty list.
 

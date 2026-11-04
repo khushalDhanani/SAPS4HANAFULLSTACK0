@@ -298,7 +298,7 @@ describe('Unit: OutboundDeliveryAdapter', () => {
         const scoped = scopedAdapter({ readTable: async () => { throw new Error('RFC down'); } });
         await expect(scoped.getOrdersDueForDelivery({}, { user: clerk1120 })).rejects.toMatchObject({
           status: 503,
-          message: 'The shipping points of plant 1120 could not be read from SAP; no orders were read. Try again.'
+          message: 'The shipping points of plant 1120 could not be read from SAP, so nothing was read or posted. Try again.'
         });
         expect(dueReads()).toEqual([]);
       });

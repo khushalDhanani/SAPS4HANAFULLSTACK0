@@ -2,7 +2,14 @@ const LOG = require('../../../common/logger')('outbound-delivery');
 const outboundDeliveryAdapter = require('../../../integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter');
 const deliveryNoRefAdapter = require('../../../integration/s4hana/le/delivery-no-ref/DeliveryNoRefAdapter');
 const { applyPaging, extractFilterParam, extractIfMatch } = require('../../../common/filterUtils');
-const { plantScope, isPlantAllowed } = require('../../../wm/readScope');
+const { plantScope, isPlantAllowed, assertPlantsInScope } = require('../../../wm/readScope');
+
+/** SAP posts by delivery number, so the plants on the delivery decide. */
+const assertDeliveryInScope = (req) => assertPlantsInScope(
+  req.user,
+  () => outboundDeliveryAdapter.readDeliveryPlants(req.data?.DeliveryDocument),
+  `delivery ${req.data?.DeliveryDocument}`
+);
 
 // Fields of the computed worklist rows a text search may match (OrdersDueForDelivery has no SoldToParty/Material).
 const SEARCH_FIELDS = ['SalesOrder', 'ShipToParty', 'ShippingPoint'];
@@ -79,6 +86,9 @@ function registerOutboundDeliveryHandlers(srv) {
     const resolvedSP = String(ShippingPoint).trim();
 
     try {
+      // shortcut: the order's own plant has no proven read here, so its shipping point decides; read VBAP-WERKS once verified.
+      const allowedPlants = plantScope(req.user);
+      if (allowedPlants !== null) await outboundDeliveryAdapter.assertShippingPointInPlants(resolvedSP, allowedPlants);
       const ifMatch = extractIfMatch(req);
       const payload = {
         salesOrder: SalesOrder,
@@ -117,6 +127,7 @@ function registerOutboundDeliveryHandlers(srv) {
 
   srv.on('postGoodsIssue', async (req) => {
     try {
+      await assertDeliveryInScope(req);
       const ifMatch = extractIfMatch(req);
       return ifMatch
         ? await outboundDeliveryAdapter.postGoodsIssue(req.data?.DeliveryDocument, { ifMatch })
@@ -139,6 +150,7 @@ function registerOutboundDeliveryHandlers(srv) {
   srv.on('createBillingDocument', async (req) => {
     const { DeliveryDocument, BillingDocumentType, BillingDocumentDate } = req.data || {};
     try {
+      await assertDeliveryInScope(req);
       const ifMatch = extractIfMatch(req);
       const payload = { deliveryDocument: DeliveryDocument, billingDocumentType: BillingDocumentType, billingDocumentDate: BillingDocumentDate };
       return ifMatch
