@@ -84,7 +84,7 @@ describe('Integration: SU01 user management', () => {
                     ADDRESS: { FULLNAME: 'Alice Smith' },
                     LOGONDATA: { USTYP: 'A', GLTGV: '00000000', GLTGB: '00000000' },
                     ISLOCKED: { GLOB_LOCK: 'U' },
-                    LASTMODIFIED: { MODDATE: '20261001', MODUSER: 'ADMIN' },
+                    LASTMODIFIED: { MODDATE: '20261001', MODIFIER: 'ADMIN' },
                     RETURN: []
                 }
             });

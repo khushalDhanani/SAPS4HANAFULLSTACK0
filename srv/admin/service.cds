@@ -55,7 +55,7 @@ service UserManagementService @(path: '/odata/v4/user-management') {
         roleCount    : Integer;
         profileCount : Integer;
         lastChanged  : String;   // LASTMODIFIED.MODDATE
-        lastChangedBy: String;   // LASTMODIFIED.MODUSER
+        lastChangedBy: String;   // LASTMODIFIED.MODIFIER
     };
 
     type ActionResult {

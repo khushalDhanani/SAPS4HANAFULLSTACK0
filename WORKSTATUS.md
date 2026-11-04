@@ -15,7 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Admin dashboard user list (2026-11-04 18:04 IST) — PARTIAL, uncommitted, not deployed:** `#/dashboard/admin` now shows lock status, user type, validity dates, last-changed date/by, and confirmed Lock/Unlock row actions. A read-only SAP-backed browser/API check showed the detail fields; last-changed values were absent for the checked user and display as `-`. No lock/unlock write was run. See the Changes Log for validation and limits.
+- **Admin dashboard user list (2026-11-04 18:07 IST) — PARTIAL, uncommitted, not deployed:** `#/dashboard/admin` shows lock status, user type, validity dates, last-changed date/by, and confirmed Lock/Unlock row actions. Fixed Changed By: SAP returns `LASTMODIFIED.MODIFIER`; the adapter had incorrectly read `MODUSER`. A read-only call confirmed `MODIFIER` is populated for the configured RFC user. No lock/unlock write was run. See the Changes Log for validation and limits.
 - **Handling unit result after a commit (2026-11-04 17:40 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** If anything fails once the commit was sent, create, pack, unpack and delete now answer 502 with the handling unit number and "NOT confirmed. Check it in SAP before trying again", and the text stays visible in production. **Open finding:** `npm run test:coverage` crashed once with exit 139 (SIGSEGV) and passed on two reruns; cause UNKNOWN.
 
 - **"Nothing was posted" refusals stay visible in production (2026-11-04 17:32 IST) — PARTIAL, committed locally as `8d4f87dd`, not pushed, not deployed, not run against SAP:** Plant scope refusals, shipping point read failures, posting-log failures, goods receipt read failures and HU stock transfer checks now keep their text in production. Still hidden there: the lock and unlock SAP reason, and other 5xx text.
@@ -140,7 +140,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - Test replacement (2026-11-04): the user answers the open decision: read-only `$metadata` checks for the assumed SAP shapes. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 10 remaining `test.failing` defects as separate changes; each fix must remove its marker. Plant scope on PGI, billing and delivery from order is coded but still needs a READ-ONLY check that LIPS-WERKS holds the plant of a real outbound delivery, then a live round trip with the user's written go per call. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
-- Admin dashboard user list (2026-11-04): implementation, focused tests and read-only shell/API checks are done. SAP Lock/Unlock Tier C proof remains pending; do not run it without the user's written go for a specific test user/data scope. A refresh can issue up to 200 sequential `BAPI_USER_GET_DETAIL` reads; latency has not been separately measured.
+- Admin dashboard user list (2026-11-04): Changed By mapping fixed and verified against the read-only SAP response. SAP Lock/Unlock Tier C proof remains pending; do not run it without the user's written go for a specific test user/data scope. A refresh can issue up to 200 sequential `BAPI_USER_GET_DETAIL` reads; latency has not been separately measured.
 - Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
 - Creatable services (2026-11-03): the classification is pushed in `43e96d2b`. To rebuild the workbook, restore `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json`. POST-only services are still outside the workbook.
 - HU rules (2026-11-03): decide 261 blocked-bin rules; have the SAP administrator check packaging type Z007, which has no storage unit type in W01; get rules for other warehouses.
@@ -185,6 +185,17 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-04 18:07 IST — Fixed Admin list "Changed By" mapping: PARTIAL
+
+- **Why:** The table and CAP response already bound `lastChangedBy`, but the adapter read `LASTMODIFIED.MODUSER`. A gated READ-ONLY call to `BAPI_USER_GET_DETAIL` confirmed the live response has `LASTMODIFIED.MODIFIER` and that the field is populated. The wrong field name caused Changed By to display `-`.
+- **Changed:** `srv/integration/s4hana/admin/UserManagementAdapter.js` now maps `LASTMODIFIED.MODIFIER`; the CAP contract comment and adapter/integration fixtures use the verified field name. No UI binding change was needed.
+- **TEST DECISION:** TEST UPDATED — adapter and CAP integration fixtures now reproduce the SAP field name and verify the resulting `lastChangedBy` value.
+- **Executed validation:** `npx jest --runInBand test/unit/admin/UserManagementAdapter.test.js test/integration/userManagement.test.js test/unit/admin/adminDashboardList.test.js` — 3 suites, 67 tests passed; `npx cds compile srv/` — passed; `npm run lint` — passed; `npm --prefix app/fiori-app run lint` — passed.
+- **SAP:** READ-ONLY `BAPI_USER_GET_DETAIL` on the configured RFC user; confirmed `LASTMODIFIED` includes `MODIFIER` and the value is non-empty. The value itself was not printed. No write call.
+- **Warnings/blockers:** Two initial diagnostic attempts were blocked before SAP by Node argument parsing and the live-tool safety gate; the gated read then succeeded. UI5 MCP tools are not exposed in this session. No deployment or Lock/Unlock write was performed.
+- **FINAL STATUS:** PARTIAL — Changed By mapping is fixed and its SAP field shape is verified; the Admin Lock/Unlock live write round trip remains pending authorization.
+- **Next:** Refresh the Admin list to see the corrected Changed By values. Keep live Lock/Unlock E2E pending until written authorization is provided for a specific test user/data scope.
 
 ### 2026-11-04 18:04 IST — Admin dashboard list fields and row actions: PARTIAL (uncommitted, not deployed)
 

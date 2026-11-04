@@ -68,7 +68,7 @@ function mapDetail(username, raw) {
     roleCount:     (raw.ACTIVITYGROUPS || []).length,
     profileCount:  (raw.PROFILES       || []).length,
     lastChanged:   String(lm.MODDATE   || '').trim(),
-    lastChangedBy: String(lm.MODUSER   || '').trim(),
+    lastChangedBy: String(lm.MODIFIER  || '').trim(),
   };
 }
 
