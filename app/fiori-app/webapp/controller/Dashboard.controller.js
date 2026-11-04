@@ -247,6 +247,16 @@ sap.ui.define([
             return (typeof vCount === "number") ? String(vCount) : "";
         },
 
+        formatAdminDate: function (sDate) {
+            if (!sDate || sDate === "00000000") {
+                return "-";
+            }
+            if (typeof sDate !== "string" || !/^\d{8}$/.test(sDate)) {
+                return sDate;
+            }
+            return sDate.slice(6, 8) + "-" + sDate.slice(4, 6) + "-" + sDate.slice(0, 4);
+        },
+
         /**
          * Tile state: Loading until the count arrives, Failed when SAP did not return it.
          */
@@ -352,12 +362,14 @@ sap.ui.define([
                     var aUsers = (res && res.value) || [];
                     oAdminModel.setProperty("/users", aUsers);
                     oAdminModel.setProperty("/userCount", aUsers.length);
+                    oAdminModel.setProperty("/noDataText", that._text("adminNoUsers", "No SAP users found."));
                     oAdminModel.setProperty("/busy", false);
                     that._bAdminUsersLoaded = true;
                 })
                 .catch(function (err) {
                     oAdminModel.setProperty("/users", []);
                     oAdminModel.setProperty("/userCount", 0);
+                    oAdminModel.setProperty("/noDataText", that._text("adminLoadFailed", "Failed to load SAP users."));
                     oAdminModel.setProperty("/busy", false);
                     var sMsg = (err && err.message) || that._text("adminLoadFailed", "Failed to load SAP users.");
                     MessageToast.show(sMsg);
@@ -407,10 +419,12 @@ sap.ui.define([
                     .then(function (res) {
                         var oDetail = res && res.value ? res.value : res;
                         oAdminModel.setProperty("/selectedUser", oDetail);
+                        that._updateAdminUserListEntry(oDetail);
                         oDialog.setBusy(false);
                     })
                     .catch(function (err) {
                         oDialog.setBusy(false);
+                        that._markAdminUserDetailsUnavailable(sUsername);
                         var sMsg = (err && err.message) || that._text("adminDetailLoadFailed", "Failed to load user detail from SAP.");
                         MessageToast.show(sMsg);
                     });
@@ -425,10 +439,19 @@ sap.ui.define([
             }
         },
 
-        onLockUser: function () {
+        _getAdminActionUsername: function (oEvent) {
+            var oSource = oEvent && oEvent.getSource ? oEvent.getSource() : null;
+            var oContext = oSource && oSource.getBindingContext ? oSource.getBindingContext("adminView") : null;
+            if (oContext) {
+                return oContext.getProperty("username");
+            }
             var oAdminModel = this.getView().getModel("adminView");
             var oUser = oAdminModel ? oAdminModel.getProperty("/selectedUser") : null;
-            var sUsername = oUser ? oUser.username : null;
+            return oUser ? oUser.username : null;
+        },
+
+        onLockUser: function (oEvent) {
+            var sUsername = this._getAdminActionUsername(oEvent);
             if (!sUsername) {
                 return;
             }
@@ -443,16 +466,14 @@ sap.ui.define([
                 emphasizedAction: MessageBox.Action.OK,
                 onClose: function (sAction) {
                     if (sAction === MessageBox.Action.OK) {
-                        that._executeUserAction("/odata/v4/user-management/lockUser", sUsername);
+                        that._executeUserAction("/odata/v4/user-management/lockUser", sUsername, true);
                     }
                 }
             });
         },
 
-        onUnlockUser: function () {
-            var oAdminModel = this.getView().getModel("adminView");
-            var oUser = oAdminModel ? oAdminModel.getProperty("/selectedUser") : null;
-            var sUsername = oUser ? oUser.username : null;
+        onUnlockUser: function (oEvent) {
+            var sUsername = this._getAdminActionUsername(oEvent);
             if (!sUsername) {
                 return;
             }
@@ -467,15 +488,56 @@ sap.ui.define([
                 emphasizedAction: MessageBox.Action.OK,
                 onClose: function (sAction) {
                     if (sAction === MessageBox.Action.OK) {
-                        that._executeUserAction("/odata/v4/user-management/unlockUser", sUsername);
+                        that._executeUserAction("/odata/v4/user-management/unlockUser", sUsername, false);
                     }
                 }
             });
         },
 
-        _executeUserAction: function (sUrl, sUsername) {
+        _updateAdminUserListEntry: function (oDetail) {
+            var oAdminModel = this.getView().getModel("adminView");
+            var aUsers = oAdminModel ? oAdminModel.getProperty("/users") || [] : [];
+            var sUsername = oDetail && oDetail.username;
+            for (var i = 0; i < aUsers.length; i++) {
+                if (aUsers[i].username === sUsername) {
+                    oAdminModel.setProperty("/users/" + i, Object.assign({}, aUsers[i], {
+                        detailsAvailable: true,
+                        isLocked: oDetail.isLocked,
+                        userType: oDetail.userType,
+                        validFrom: oDetail.validFrom,
+                        validTo: oDetail.validTo,
+                        lastChanged: oDetail.lastChanged,
+                        lastChangedBy: oDetail.lastChangedBy
+                    }));
+                    return;
+                }
+            }
+        },
+
+        _markAdminUserDetailsUnavailable: function (sUsername) {
+            var oAdminModel = this.getView().getModel("adminView");
+            var aUsers = oAdminModel ? oAdminModel.getProperty("/users") || [] : [];
+            for (var i = 0; i < aUsers.length; i++) {
+                if (aUsers[i].username === sUsername) {
+                    oAdminModel.setProperty("/users/" + i, Object.assign({}, aUsers[i], {
+                        detailsAvailable: false,
+                        isLocked: null,
+                        userType: null,
+                        validFrom: null,
+                        validTo: null,
+                        lastChanged: null,
+                        lastChangedBy: null
+                    }));
+                    return;
+                }
+            }
+        },
+
+        _executeUserAction: function (sUrl, sUsername, bExpectedLocked) {
             var that = this;
             var oAdminModel = this.getView().getModel("adminView");
+            var bActionAccepted = false;
+            var bDetailReceived = false;
 
             if (this._pUserDetailDialog) {
                 this._pUserDetailDialog.then(function (oDialog) {
@@ -485,17 +547,32 @@ sap.ui.define([
 
             return ODataClient.post(sUrl, { username: sUsername })
                 .then(function (res) {
-                    var sSuccess = (res && res.message) || that._text("adminActionSuccess", "Action completed successfully in SAP.");
-                    MessageToast.show(sSuccess);
+                    bActionAccepted = true;
                     var sDetailUrl = "/odata/v4/user-management/getUserDetail(username='" + encodeURIComponent(sUsername) + "')";
                     return ODataClient.get(sDetailUrl)
                         .then(function (detailRes) {
                             var oDetail = detailRes && detailRes.value ? detailRes.value : detailRes;
+                            if (!oDetail || typeof oDetail.isLocked !== "boolean") {
+                                throw new Error(that._text("adminDetailLoadFailed", "Failed to load user detail from SAP."));
+                            }
+                            bDetailReceived = true;
                             oAdminModel.setProperty("/selectedUser", oDetail);
-                            that.onRefreshUsers();
+                            that._updateAdminUserListEntry(oDetail);
+                            if (oDetail.isLocked !== bExpectedLocked) {
+                                throw new Error(that._text(
+                                    "adminActionStatusMismatch",
+                                    "SAP did not confirm the requested lock status for user {0}. The current SAP status is shown in the list.",
+                                    [sUsername]
+                                ));
+                            }
+                            var sSuccess = (res && res.message) || that._text("adminActionSuccess", "Action completed successfully in SAP.");
+                            MessageToast.show(sSuccess);
                         });
                 })
                 .catch(function (err) {
+                    if (bActionAccepted && !bDetailReceived) {
+                        that._markAdminUserDetailsUnavailable(sUsername);
+                    }
                     var sError = (err && err.message) || that._text("adminActionFailed", "SAP user action failed.");
                     MessageBox.error(sError);
                 })

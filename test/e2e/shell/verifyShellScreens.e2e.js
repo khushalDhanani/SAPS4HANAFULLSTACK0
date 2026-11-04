@@ -84,6 +84,44 @@ async function verifySidebar(baseUrl) {
         for (const key of ['mm', 'sd', 'ewm', 'admin']) {
             await click(ITEM[key]);
             step(errors, details, `Sidebar item ${key} opens its section`, await expectSection(`dashboard/${key}`, key));
+            if (key === 'admin') {
+                const adminList = await page.evaluate(() => {
+                    const Element = window.sap.ui.require('sap/ui/core/Element');
+                    const table = Element.registry.filter((control) => control.getId().endsWith('--adminUsersTable'))[0];
+                    if (!table) return null;
+                    const row = table.getItems().find((item) => item.getBindingContext('adminView'));
+                    const cells = row ? row.getCells() : [];
+                    const actions = cells[8] && cells[8].getItems ? cells[8].getItems() : [];
+                    return {
+                        headers: table.getColumns().map((column) => column.getHeader().getText()),
+                        detailsAvailable: row ? row.getBindingContext('adminView').getProperty('detailsAvailable') : null,
+                        status: cells[2] && cells[2].getText ? cells[2].getText() : '',
+                        visibleActions: actions
+                            .filter((control) => control.isA('sap.m.Button') && control.getVisible())
+                            .map((control) => control.getText())
+                    };
+                });
+                const problems = [];
+                const requiredHeaders = ['Username', 'Full Name', 'Lock Status', 'User Type', 'Valid From', 'Valid To', 'Last Changed', 'Changed By', 'Actions'];
+                if (!adminList) {
+                    problems.push('Admin user table was not found');
+                } else {
+                    requiredHeaders.forEach((header) => {
+                        if (!adminList.headers.includes(header)) problems.push(`missing ${header} column`);
+                    });
+                    if (!adminList.status) problems.push('first row has no visible lock/detail status');
+                    if (!adminList.visibleActions.includes('View Detail')) problems.push('first row has no View Detail action');
+                    if (adminList.detailsAvailable === true
+                        && !adminList.visibleActions.some((action) => action === 'Lock User' || action === 'Unlock User')) {
+                        problems.push('first row has no applicable Lock/Unlock action');
+                    }
+                    if (adminList.detailsAvailable === false
+                        && adminList.visibleActions.some((action) => action === 'Lock User' || action === 'Unlock User')) {
+                        problems.push('Lock/Unlock is enabled despite unavailable SAP detail');
+                    }
+                }
+                step(errors, details, 'Admin user list shows status fields and safe row actions', problems);
+            }
         }
         await click(ITEM.overview);
         step(errors, details, 'Sidebar Overview returns to the plain dashboard URL', await expectSection('dashboard', 'overview'));

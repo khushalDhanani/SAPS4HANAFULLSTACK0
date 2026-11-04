@@ -79,14 +79,36 @@ describe('Integration: SU01 user management', () => {
                         { USERNAME: 'BOB', FIRSTNAME: 'Bob', LASTNAME: 'Jones', FULLNAME: 'Bob Jones' }
                     ],
                     RETURN: []
+                },
+                BAPI_USER_GET_DETAIL: {
+                    ADDRESS: { FULLNAME: 'Alice Smith' },
+                    LOGONDATA: { USTYP: 'A', GLTGV: '00000000', GLTGB: '00000000' },
+                    ISLOCKED: { GLOB_LOCK: 'U' },
+                    LASTMODIFIED: { MODDATE: '20261001', MODUSER: 'ADMIN' },
+                    RETURN: []
                 }
             });
 
             const res = await axios.get(`${BASE}/listUsers(search='ali',maxRows=100)`, ADMIN);
 
-            expect(calls).toEqual([{ fm: 'BAPI_USER_GETLIST', params: { MAX_ROWS: 100 } }]);
+            expect(calls).toEqual([
+                { fm: 'BAPI_USER_GETLIST', params: { MAX_ROWS: 100 } },
+                { fm: 'BAPI_USER_GET_DETAIL', params: { USERNAME: 'ALICE' } }
+            ]);
             expect(res.status).toBe(200);
-            expect(res.data.value).toEqual([{ username: 'ALICE', firstName: 'Alice', lastName: 'Smith', fullName: 'Alice Smith' }]);
+            expect(res.data.value).toEqual([{
+                username: 'ALICE',
+                firstName: 'Alice',
+                lastName: 'Smith',
+                fullName: 'Alice Smith',
+                detailsAvailable: true,
+                isLocked: false,
+                userType: 'A',
+                validFrom: '00000000',
+                validTo: '00000000',
+                lastChanged: '20261001',
+                lastChangedBy: 'ADMIN'
+            }]);
         });
 
         it('listUsers answers 502 with the adapter text when the RFC call fails', async () => {

@@ -15,6 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Admin dashboard user list (2026-11-04 18:04 IST) — PARTIAL, uncommitted, not deployed:** `#/dashboard/admin` now shows lock status, user type, validity dates, last-changed date/by, and confirmed Lock/Unlock row actions. A read-only SAP-backed browser/API check showed the detail fields; last-changed values were absent for the checked user and display as `-`. No lock/unlock write was run. See the Changes Log for validation and limits.
 - **Handling unit result after a commit (2026-11-04 17:40 IST) — PARTIAL, uncommitted, not deployed, not run against SAP:** If anything fails once the commit was sent, create, pack, unpack and delete now answer 502 with the handling unit number and "NOT confirmed. Check it in SAP before trying again", and the text stays visible in production. **Open finding:** `npm run test:coverage` crashed once with exit 139 (SIGSEGV) and passed on two reruns; cause UNKNOWN.
 
 - **"Nothing was posted" refusals stay visible in production (2026-11-04 17:32 IST) — PARTIAL, committed locally as `8d4f87dd`, not pushed, not deployed, not run against SAP:** Plant scope refusals, shipping point read failures, posting-log failures, goods receipt read failures and HU stock transfer checks now keep their text in production. Still hidden there: the lock and unlock SAP reason, and other 5xx text.
@@ -139,6 +140,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - Test replacement (2026-11-04): the user answers the open decision: read-only `$metadata` checks for the assumed SAP shapes. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 10 remaining `test.failing` defects as separate changes; each fix must remove its marker. Plant scope on PGI, billing and delivery from order is coded but still needs a READ-ONLY check that LIPS-WERKS holds the plant of a real outbound delivery, then a live round trip with the user's written go per call. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
+- Admin dashboard user list (2026-11-04): implementation, focused tests and read-only shell/API checks are done. SAP Lock/Unlock Tier C proof remains pending; do not run it without the user's written go for a specific test user/data scope. A refresh can issue up to 200 sequential `BAPI_USER_GET_DETAIL` reads; latency has not been separately measured.
 - Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
 - Creatable services (2026-11-03): the classification is pushed in `43e96d2b`. To rebuild the workbook, restore `catalog-audit.csv`, `catalog-creatable.csv` and `srv/external/all_catalog_services.json`. POST-only services are still outside the workbook.
 - HU rules (2026-11-03): decide 261 blocked-bin rules; have the SAP administrator check packaging type Z007, which has no storage unit type in W01; get rules for other warehouses.
@@ -183,6 +185,27 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-04 18:04 IST — Admin dashboard list fields and row actions: PARTIAL (uncommitted, not deployed)
+
+- **Request:** Show necessary and actionable data in the Admin list at `#/dashboard/admin`. The user approved lock status, user type, validity dates, last-changed date/by, and Lock/Unlock row actions with confirmation.
+- **Changed:** `srv/integration/s4hana/admin/UserManagementAdapter.js` enriches the filtered user list sequentially with the existing `BAPI_USER_GET_DETAIL` read in one RFC session. Individual detail failures retain the base row, mark its details unavailable, and provide no lock state. `srv/admin/service.cds` exposes the fields and documents that contract. The Admin table presents the requested fields and conditional row actions; successful actions refresh and confirm the resulting lock state. Added translations, unit/integration tests, shell E2E assertions and an E2E matrix update.
+- **TEST DECISION:** TEST UPDATED — adapter, integration and existing Admin shell E2E coverage; two additional adapter tests cover generic errors when RFC session setup fails.
+- **Executed validation:**
+  - `npx jest --runInBand test/unit/admin test/unit/dashboard/dashboardMetrics.test.js test/unit/tools/e2eCoverageMatrix.test.js test/integration/userManagement.test.js` — 6 suites, 129 tests passed.
+  - `npx jest --runInBand test/unit/tools/e2eCoverageMatrix.test.js` — 8 tests passed.
+  - `npx cds compile srv/` — passed.
+  - `npm --prefix app/fiori-app run lint` — passed.
+  - `npm --prefix app/fiori-app run build` — succeeded; warning: `jspdf.umd.min.js.map` is missing.
+  - `npm run lint` — passed after final adapter/test changes.
+  - `npm run scan:secrets` — passed, zero findings.
+  - `TARGET_URL=http://localhost:4104 npm run test:e2e -- --only=shell --workers=1` — one read-only shell suite passed; the write guard reported no blocked writes.
+  - Read-only Admin API check with `maxRows=1` — HTTP 200; lock status, user type and validity fields were available. Last-changed fields were absent for that user and display as `-`.
+  - `git diff --check` — passed before this status update; rerun after it.
+- **Review corrections and warnings:** An early adapter test had a stale RFC mock interface; it was corrected. A later test exposed `00000000` date formatting order and was fixed. Final review found RFC session-setup errors could bypass the adapter's generic error response; the response was restored and two regression tests passed in the final 129-test run. Starting E2E on port 4004 failed with `EADDRINUSE`; the read-only run used port 4104. The UI5 build emitted the source-map warning above. Existing CAP action/function naming warnings appeared at server startup. UI5/CAP MCP tools were unavailable; local project tooling was used.
+- **NOT RUN / NOT VERIFIED:** No SAP lock/unlock write, live-write E2E, or deployment was performed. The SAP result after an actual row action is therefore unverified; any live test requires explicit written go for its specific test user/data scope. Detail-read latency for the maximum 200 rows was not measured.
+- **FINAL STATUS:** PARTIAL — requested data/actions are implemented and covered by tests, read-only browser/API evidence, and local validation; the SAP write round trip is pending authorization.
+- **Next:** review/commit/deploy only if requested. Keep SAP Lock/Unlock Tier C pending until written authorization is provided; measure list latency if the maximum page size is used in practice.
 
 ### 2026-11-04 17:45 IST — Review of the packing instruction create errors: findings only, no code changed
 

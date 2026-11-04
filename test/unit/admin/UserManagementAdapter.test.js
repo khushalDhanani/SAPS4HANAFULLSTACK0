@@ -37,7 +37,7 @@ const DETAIL_RESULT = {
 };
 
 function makeAdapter(rfcCallResult) {
-  const mockCall = makeRfcCallMock(rfcCallResult);
+  const mockCall = makeRfcCallMock({ BAPI_USER_GET_DETAIL: DETAIL_RESULT, ...rfcCallResult });
   const rfcClient = {
     call: mockCall,
     session: jest.fn().mockImplementation((fn) => fn(mockCall)),
@@ -54,14 +54,27 @@ describe('UserManagementAdapter.listUsers', () => {
     const { adapter } = makeAdapter({ BAPI_USER_GETLIST: GETLIST_RESULT });
     const result = await adapter.listUsers();
     expect(result).toHaveLength(3);
-    expect(result[0]).toEqual({ username: 'ALICE', firstName: 'Alice', lastName: 'Smith', fullName: 'Alice Smith' });
-    expect(result[1]).toEqual({ username: 'BOB', firstName: 'Bob', lastName: 'Jones', fullName: 'Bob Jones' });
+    expect(result[0]).toMatchObject({
+      username: 'ALICE',
+      firstName: 'Alice',
+      lastName: 'Smith',
+      fullName: 'Alice Smith',
+      detailsAvailable: true,
+      isLocked: false,
+      userType: 'A',
+      validFrom: '00000000',
+      validTo: '00000000',
+      lastChanged: '20261001',
+      lastChangedBy: 'ADMIN'
+    });
+    expect(result[1]).toMatchObject({ username: 'BOB', fullName: 'Bob Jones', detailsAvailable: true });
   });
 
   test('passes MAX_ROWS to RFC call', async () => {
     const { adapter, mockCall } = makeAdapter({ BAPI_USER_GETLIST: GETLIST_RESULT });
     await adapter.listUsers({ maxRows: 50 });
     expect(mockCall).toHaveBeenCalledWith('BAPI_USER_GETLIST', { MAX_ROWS: 50 });
+    expect(mockCall).toHaveBeenCalledWith('BAPI_USER_GET_DETAIL', { USERNAME: 'ALICE' });
   });
 
   test('applies client-side search filter on USERNAME', async () => {
@@ -84,10 +97,60 @@ describe('UserManagementAdapter.listUsers', () => {
     expect(result).toHaveLength(0);
   });
 
-  test('throws 502 when RFC call fails', async () => {
-    const rfcClient = { call: jest.fn().mockRejectedValue(new Error('RFC_COMM_FAILURE')) };
+  test('keeps a row visible but marks its detail unavailable when SAP rejects that user detail read', async () => {
+    const mockCall = jest.fn().mockImplementation(async (fm, params) => {
+      if (fm === 'BAPI_USER_GETLIST') return GETLIST_RESULT;
+      if (fm === 'BAPI_USER_GET_DETAIL' && params.USERNAME === 'BOB') {
+        return {
+          ...DETAIL_RESULT,
+          RETURN: [{ TYPE: 'E', ID: 'SU', NUMBER: '001', MESSAGE: 'Not authorized' }]
+        };
+      }
+      return DETAIL_RESULT;
+    });
+    const rfcClient = {
+      session: jest.fn().mockImplementation((fn) => fn(mockCall))
+    };
     const adapter = new UserManagementAdapter({ rfcClient });
-    await expect(adapter.listUsers()).rejects.toMatchObject({ status: 502 });
+
+    const result = await adapter.listUsers();
+
+    expect(result).toHaveLength(3);
+    expect(result[0]).toMatchObject({ username: 'ALICE', detailsAvailable: true, isLocked: false });
+    expect(result[1]).toMatchObject({
+      username: 'BOB',
+      detailsAvailable: false,
+      isLocked: null,
+      userType: null,
+      validFrom: null,
+      validTo: null,
+      lastChanged: null,
+      lastChangedBy: null
+    });
+    expect(mockCall).toHaveBeenCalledTimes(4);
+  });
+
+  test('throws 502 when RFC call fails', async () => {
+    const rfcClient = {
+      session: jest.fn().mockImplementation(() => Promise.reject(new Error('RFC_COMM_FAILURE')))
+    };
+    const adapter = new UserManagementAdapter({ rfcClient });
+    await expect(adapter.listUsers()).rejects.toMatchObject({
+      status: 502,
+      message: 'Failed to retrieve user list from SAP'
+    });
+  });
+
+  test('does not expose RFC session setup errors from the list endpoint', async () => {
+    const rfcClient = {
+      session: jest.fn().mockRejectedValue(Object.assign(new Error('RFC destination unavailable'), { status: 503 }))
+    };
+    const adapter = new UserManagementAdapter({ rfcClient });
+
+    await expect(adapter.listUsers()).rejects.toMatchObject({
+      status: 502,
+      message: 'Failed to retrieve user list from SAP'
+    });
   });
 
   test('throws 502 when RETURN contains error message', async () => {
@@ -165,9 +228,22 @@ describe('UserManagementAdapter.getUserDetail', () => {
   });
 
   test('throws 502 when RFC call fails', async () => {
-    const rfcClient = { call: jest.fn().mockRejectedValue(new Error('RFC timeout')) };
+    const mockCall = jest.fn().mockRejectedValue(new Error('RFC timeout'));
+    const rfcClient = { session: jest.fn().mockImplementation((fn) => fn(mockCall)) };
     const adapter = new UserManagementAdapter({ rfcClient });
     await expect(adapter.getUserDetail('ALICE')).rejects.toMatchObject({ status: 502 });
+  });
+
+  test('does not expose RFC session setup errors from the detail endpoint', async () => {
+    const rfcClient = {
+      session: jest.fn().mockRejectedValue(Object.assign(new Error('RFC destination unavailable'), { status: 503 }))
+    };
+    const adapter = new UserManagementAdapter({ rfcClient });
+
+    await expect(adapter.getUserDetail('ALICE')).rejects.toMatchObject({
+      status: 502,
+      message: 'Failed to retrieve user detail from SAP'
+    });
   });
 
   test('throws 502 on SAP error in RETURN', async () => {

@@ -358,19 +358,31 @@
                                         </OverflowToolbar>
                                     </headerToolbar>
                                     <columns>
-                                        <Column width="11rem">
+                                        <Column width="10rem">
                                             <Text text="{i18n>adminColUsername}" />
                                         </Column>
                                         <Column minScreenWidth="Tablet" demandPopin="true">
                                             <Text text="{i18n>adminColFullName}" />
                                         </Column>
-                                        <Column minScreenWidth="Desktop" demandPopin="true" width="10rem">
-                                            <Text text="{i18n>adminColFirstName}" />
+                                        <Column minScreenWidth="Tablet" demandPopin="true" width="8rem">
+                                            <Text text="{i18n>adminColLockStatus}" />
                                         </Column>
-                                        <Column minScreenWidth="Desktop" demandPopin="true" width="10rem">
-                                            <Text text="{i18n>adminColLastName}" />
+                                        <Column minScreenWidth="Desktop" demandPopin="true" width="7rem">
+                                            <Text text="{i18n>adminColUserType}" />
                                         </Column>
-                                        <Column hAlign="End" width="8rem">
+                                        <Column minScreenWidth="Desktop" demandPopin="true" width="9rem">
+                                            <Text text="{i18n>adminDetailValidFrom}" />
+                                        </Column>
+                                        <Column minScreenWidth="Tablet" demandPopin="true" width="9rem">
+                                            <Text text="{i18n>adminDetailValidTo}" />
+                                        </Column>
+                                        <Column minScreenWidth="Desktop" demandPopin="true" width="9rem">
+                                            <Text text="{i18n>adminColLastChanged}" />
+                                        </Column>
+                                        <Column minScreenWidth="Desktop" demandPopin="true" width="9rem">
+                                            <Text text="{i18n>adminDetailLastChangedBy}" />
+                                        </Column>
+                                        <Column hAlign="End" width="22rem">
                                             <Text text="{i18n>adminColActions}" />
                                         </Column>
                                     </columns>
@@ -382,12 +394,33 @@
                                                     titleActive="true"
                                                     titlePress=".onSelectUser" />
                                                 <Text text="{adminView>fullName}" />
-                                                <Text text="{adminView>firstName}" />
-                                                <Text text="{adminView>lastName}" />
-                                                <Button
-                                                    text="{i18n>adminBtnViewDetail}"
-                                                    type="Transparent"
-                                                    press=".onSelectUser" />
+                                                <ObjectStatus
+                                                    text="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? ${i18n>adminStatusLocked} : ${i18n>adminStatusUnlocked}) : ${i18n>adminDetailsUnavailable} }"
+                                                    state="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? 'Error' : 'Success') : 'Warning' }"
+                                                    icon="{= ${adminView>detailsAvailable} ? (${adminView>isLocked} ? 'sap-icon://locked' : 'sap-icon://unlocked') : 'sap-icon://alert' }" />
+                                                <Text text="{= ${adminView>userType} || '-' }" />
+                                                <Text text="{path: 'adminView>validFrom', formatter: '.formatAdminDate'}" />
+                                                <Text text="{path: 'adminView>validTo', formatter: '.formatAdminDate'}" />
+                                                <Text text="{path: 'adminView>lastChanged', formatter: '.formatAdminDate'}" />
+                                                <Text text="{= ${adminView>lastChangedBy} || '-' }" />
+                                                <HBox wrap="Wrap" justifyContent="End">
+                                                    <Button
+                                                        text="{i18n>adminBtnViewDetail}"
+                                                        type="Transparent"
+                                                        press=".onSelectUser" />
+                                                    <Button
+                                                        text="{i18n>adminBtnLockUser}"
+                                                        type="Negative"
+                                                        icon="sap-icon://locked"
+                                                        visible="{= ${adminView>detailsAvailable} &amp;&amp; !${adminView>isLocked} }"
+                                                        press=".onLockUser" />
+                                                    <Button
+                                                        text="{i18n>adminBtnUnlockUser}"
+                                                        type="Emphasized"
+                                                        icon="sap-icon://unlocked"
+                                                        visible="{= ${adminView>detailsAvailable} &amp;&amp; ${adminView>isLocked} === true }"
+                                                        press=".onUnlockUser" />
+                                                </HBox>
                                             </cells>
                                         </ColumnListItem>
                                     </items>

@@ -14,14 +14,22 @@ service UserManagementService @(path: '/odata/v4/user-management') {
      * List SAP users.
      * Returns up to `maxRows` users (default 200), optionally filtered by `search`
      * (case-insensitive substring match on USERNAME).
-     * Backed by BAPI_USER_GETLIST with client-side filtering.
+     * Backed by BAPI_USER_GETLIST with client-side filtering and BAPI_USER_GET_DETAIL enrichment.
+     * A row with detailsAvailable=false has unknown detail fields and must not expose lock actions.
      * CONFIRMED READ-ONLY: 2026-11-03 DS4/220.
      */
     function listUsers(search: String, maxRows: Integer) returns array of {
-        username     : String;
-        firstName    : String;
-        lastName     : String;
-        fullName     : String;
+        username        : String;
+        firstName       : String;
+        lastName        : String;
+        fullName        : String;
+        detailsAvailable: Boolean;
+        isLocked        : Boolean;
+        userType        : String;
+        validFrom       : String;
+        validTo         : String;
+        lastChanged     : String;
+        lastChangedBy   : String;
     };
 
     /**
@@ -69,4 +77,3 @@ service UserManagementService @(path: '/odata/v4/user-management') {
      */
     action unlockUser(username: String) returns ActionResult;
 }
-

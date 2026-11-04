@@ -72,6 +72,27 @@ function mapDetail(username, raw) {
   };
 }
 
+async function readUserDetail(call, username) {
+  let res;
+  try {
+    res = await call('BAPI_USER_GET_DETAIL', { USERNAME: username });
+  } catch (e) {
+    LOG.error('BAPI_USER_GET_DETAIL failed:', e.message);
+    throw Object.assign(new Error('Failed to retrieve user detail from SAP'), { status: 502, cause: e });
+  }
+
+  for (const m of (res.RETURN || [])) {
+    if (m.TYPE === 'E' || m.TYPE === 'A') {
+      if (m.NUMBER === '121' || (m.MESSAGE || '').toLowerCase().includes('does not exist')) {
+        throw Object.assign(new Error(`User '${username}' does not exist in SAP`), { status: 404 });
+      }
+      throw Object.assign(new Error(`SAP error: ${m.MESSAGE}`), { status: 502 });
+    }
+  }
+
+  return mapDetail(username, res);
+}
+
 class UserManagementAdapter {
   /**
    * @param {object} [options]
@@ -83,47 +104,86 @@ class UserManagementAdapter {
 
   /**
    * List SAP users via BAPI_USER_GETLIST.
-   * Returns up to maxRows users. Client-side search filter applied when provided.
+   * Returns up to maxRows users, enriched with sequential BAPI_USER_GET_DETAIL reads in the same RFC session.
+   * A failed detail read leaves its base user row visible with detailsAvailable=false.
+   * Client-side search filter applied when provided.
    * WITH_USERNAME range table is not used (node-rfc struct-packing incompatibility on DS4).
    *
    * @param {object} [params]
    * @param {string} [params.search]   - substring filter on USERNAME (case-insensitive)
    * @param {number} [params.maxRows]  - max rows to fetch from SAP (default 200)
-   * @returns {Promise<Array<{username, firstName, lastName, fullName}>>}
+   * @returns {Promise<Array<{username, firstName, lastName, fullName, detailsAvailable, isLocked, userType, validFrom, validTo, lastChanged, lastChangedBy}>>}
    */
   async listUsers({ search = '', maxRows = 200 } = {}) {
     LOG.info('listUsers', { search: search || '(none)', maxRows });
 
-    let res;
     try {
-      res = await this._rfc.call('BAPI_USER_GETLIST', { MAX_ROWS: maxRows });
+      return await this._rfc.session(async (call) => {
+        let res;
+        try {
+          res = await call('BAPI_USER_GETLIST', { MAX_ROWS: maxRows });
+        } catch (e) {
+          LOG.error('BAPI_USER_GETLIST failed:', e.message);
+          throw Object.assign(new Error('Failed to retrieve user list from SAP'), { status: 502, cause: e });
+        }
+
+        const userList = res.USERLIST || [];
+        for (const m of (res.RETURN || [])) {
+          if (m.TYPE === 'E' || m.TYPE === 'A') {
+            LOG.error('BAPI_USER_GETLIST RETURN:', m.TYPE, m.ID, m.NUMBER, m.MESSAGE);
+            throw Object.assign(new Error(`SAP error in user list: ${m.MESSAGE}`), { status: 502 });
+          }
+          if (m.TYPE === 'W') LOG.warn('BAPI_USER_GETLIST RETURN:', m.MESSAGE);
+        }
+
+        const needle = search ? search.trim().toLowerCase() : '';
+        const filtered = needle
+          ? userList.filter(u => (u.USERNAME || '').toLowerCase().includes(needle))
+          : userList;
+
+        const enriched = [];
+        for (const user of filtered) {
+          const username = String(user.USERNAME || '').trim();
+          const listedUser = {
+            username,
+            firstName: String(user.FIRSTNAME || '').trim(),
+            lastName: String(user.LASTNAME || '').trim(),
+            fullName: String(user.FULLNAME || '').trim(),
+          };
+
+          try {
+            const detail = await readUserDetail(call, username.toUpperCase());
+            enriched.push({
+              ...listedUser,
+              detailsAvailable: true,
+              isLocked: detail.isLocked,
+              userType: detail.userType,
+              validFrom: detail.validFrom,
+              validTo: detail.validTo,
+              lastChanged: detail.lastChanged,
+              lastChangedBy: detail.lastChangedBy,
+            });
+          } catch (e) {
+            LOG.warn('Could not enrich SAP user list row:', username, e.message);
+            enriched.push({
+              ...listedUser,
+              detailsAvailable: false,
+              isLocked: null,
+              userType: null,
+              validFrom: null,
+              validTo: null,
+              lastChanged: null,
+              lastChangedBy: null,
+            });
+          }
+        }
+        return enriched;
+      });
     } catch (e) {
-      LOG.error('BAPI_USER_GETLIST failed:', e.message);
+      if (e.status === 502) throw e;
+      LOG.error('BAPI_USER_GETLIST session failed:', e.message);
       throw Object.assign(new Error('Failed to retrieve user list from SAP'), { status: 502, cause: e });
     }
-
-    const userList = res.USERLIST || [];
-    // Surface any SAP error/warning messages
-    for (const m of (res.RETURN || [])) {
-      if (m.TYPE === 'E' || m.TYPE === 'A') {
-        LOG.error('BAPI_USER_GETLIST RETURN:', m.TYPE, m.ID, m.NUMBER, m.MESSAGE);
-        throw Object.assign(new Error(`SAP error in user list: ${m.MESSAGE}`), { status: 502 });
-      }
-      if (m.TYPE === 'W') LOG.warn('BAPI_USER_GETLIST RETURN:', m.MESSAGE);
-    }
-
-    // Client-side filter (WITH_USERNAME range table not usable from node-rfc on this system)
-    const needle = search ? search.trim().toLowerCase() : '';
-    const filtered = needle
-      ? userList.filter(u => (u.USERNAME || '').toLowerCase().includes(needle))
-      : userList;
-
-    return filtered.map(u => ({
-      username:  String(u.USERNAME  || '').trim(),
-      firstName: String(u.FIRSTNAME || '').trim(),
-      lastName:  String(u.LASTNAME  || '').trim(),
-      fullName:  String(u.FULLNAME  || '').trim(),
-    }));
   }
 
   /**
@@ -140,25 +200,13 @@ class UserManagementAdapter {
     const bname = username.trim().toUpperCase();
     LOG.info('getUserDetail', { username: bname });
 
-    let res;
     try {
-      res = await this._rfc.call('BAPI_USER_GET_DETAIL', { USERNAME: bname });
+      return await this._rfc.session((call) => readUserDetail(call, bname));
     } catch (e) {
-      LOG.error('BAPI_USER_GET_DETAIL failed:', e.message);
+      if (e.status === 404 || e.status === 502) throw e;
+      LOG.error('BAPI_USER_GET_DETAIL session failed:', e.message);
       throw Object.assign(new Error('Failed to retrieve user detail from SAP'), { status: 502, cause: e });
     }
-
-    for (const m of (res.RETURN || [])) {
-      if (m.TYPE === 'E' || m.TYPE === 'A') {
-        // Common: 121 = user not found
-        if (m.NUMBER === '121' || (m.MESSAGE || '').toLowerCase().includes('does not exist')) {
-          throw Object.assign(new Error(`User '${bname}' does not exist in SAP`), { status: 404 });
-        }
-        throw Object.assign(new Error(`SAP error: ${m.MESSAGE}`), { status: 502 });
-      }
-    }
-
-    return mapDetail(bname, res);
   }
 
   /**
@@ -250,4 +298,3 @@ class UserManagementAdapter {
 }
 
 module.exports = { UserManagementAdapter };
-
