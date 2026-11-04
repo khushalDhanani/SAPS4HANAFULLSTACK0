@@ -80,7 +80,7 @@ sap.ui.define([
         /**
          * Synchronizes authentication Authorization header (Bearer token)
          * to all UI5 OData V4 framework models (default purchase-order, fiService,
-         * salesInquiry, salesOrder, goodsReceipt, warehouseMgmt).
+         * salesInquiry, salesOrder, goodsReceipt).
          *
          * @param {sap.ui.core.UIComponent} [oComponent]
          * @param {boolean} [bForce]
@@ -102,7 +102,7 @@ sap.ui.define([
                 "Authorization": sAuthHeader
             };
 
-            var aModelNames = ["", "huStockTransfer", "salesInquiry", "salesOrder", "goodsReceipt", "warehouseMgmt", "outboundDelivery", "customerInvoice", "customerReturn"];
+            var aModelNames = ["", "salesInquiry", "salesOrder", "goodsReceipt", "outboundDelivery", "customerInvoice", "customerReturn"];
             aModelNames.forEach(function (sModelName) {
                 var oModel = sModelName ? oComp.getModel(sModelName) : oComp.getModel();
                 if (oModel && typeof oModel.changeHttpHeaders === "function") {

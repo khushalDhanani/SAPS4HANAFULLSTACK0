@@ -5,8 +5,7 @@
  * Tier C SAP round trip: customer return create on #/sd/returns/create (CreateCustomerReturn.controller.js:574)
  * → createCustomerReturn (srv/sd/customer-return/service.cds:122-152), called through
  * ODataModel#bindContext(...).execute() (CustomerReturnService.js:124), i.e. as the single request of a `$batch`.
- * The list (#/sd/returns) does not create: its Create button navigates here (CustomerReturns.controller.js:407-411);
- * its own onConfirmCreateReturn (:559) belongs to CreateReturnDialog.fragment.xml, which no code opens.
+ * The list (#/sd/returns) does not create: its Create button navigates here (CustomerReturns.controller.js onCreateReturnPress).
  *
  * dry-run (default): reference document picked in the screen's value help (getReferenceDocuments, READ-ONLY);
  * its material from sales-order/SalesOrderItems; quantity/unit/plant/storage location stay as the screen proposes.

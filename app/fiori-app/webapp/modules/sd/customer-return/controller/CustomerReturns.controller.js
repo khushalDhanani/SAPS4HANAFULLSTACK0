@@ -4,11 +4,7 @@ sap.ui.define([
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
     "sap/ui/core/Fragment",
-    "sap/m/MessageBox",
     "sap/m/MessageToast",
-    "sap/m/SelectDialog",
-    "sap/m/StandardListItem",
-    "sap/ui/core/CustomData",
     "saps4hana/fiori/service/AuthService",
     "saps4hana/fiori/modules/sd/customer-return/service/CustomerReturnService"
 ], function (
@@ -17,11 +13,7 @@ sap.ui.define([
     Filter,
     FilterOperator,
     Fragment,
-    MessageBox,
     MessageToast,
-    SelectDialog,
-    StandardListItem,
-    CustomData,
     AuthService,
     CustomerReturnService
 ) {
@@ -135,9 +127,6 @@ sap.ui.define([
                 busy: false
             });
             this.getView().setModel(oViewModel, "customerReturnsView");
-
-            this._oCreateReturnModel = new JSONModel(this._getDefaultCreateData());
-            this.getView().setModel(this._oCreateReturnModel, "createReturnModel");
 
             this._oReturnReasonsModel = new JSONModel(DEFAULT_RETURN_REASONS);
             this.getView().setModel(this._oReturnReasonsModel, "returnReasons");
@@ -375,37 +364,8 @@ sap.ui.define([
         },
 
         // =========================================================================
-        // Create Customer Return Dialog
+        // Create Customer Return
         // =========================================================================
-
-        _getDefaultCreateData: function () {
-            var sToday = new Date().toISOString().slice(0, 10);
-            return {
-                CustomerReturnType: "ZRET",
-                SoldToParty: "",
-                ReturnsOrderReason: "101",
-                ReferenceSDDocument: "",
-                ReferenceSDDocumentCategory: "M",
-                SalesOrganization: "1000",
-                DistributionChannel: "10",
-                OrganizationDivision: "52",
-                CustomerReturnDate: sToday,
-                PurchaseOrderByCustomer: "",
-                Items: [
-                    {
-                        ItemIndex: 1,
-                        Material: "",
-                        OrderQuantity: "1.000",
-                        OrderQuantityUnit: "KG",
-                        ProductionPlant: "1110",
-                        StorageLocation: "FG01",
-                        ReturnReason: "101",
-                        ReferenceSDDocument: "",
-                        ReferenceSDDocumentItem: "000010"
-                    }
-                ]
-            };
-        },
 
         onCreateReturnPress: function () {
             var oRouter = this.getOwnerComponent() ? this.getOwnerComponent().getRouter() : null;
@@ -414,224 +374,5 @@ sap.ui.define([
             }
         },
 
-        onCancelCreateReturnDialog: function () {
-            if (this._oCreateDialog) {
-                this._oCreateDialog.close();
-            }
-        },
-
-        onAddReturnItem: function () {
-            if (!this._oCreateReturnModel) return;
-            var aItems = this._oCreateReturnModel.getProperty("/Items") || [];
-            var iNextIndex = aItems.length + 1;
-            var sRefDoc = this._oCreateReturnModel.getProperty("/ReferenceSDDocument") || "";
-            var sReason = this._oCreateReturnModel.getProperty("/ReturnsOrderReason") || "101";
-            aItems.push({
-                ItemIndex: iNextIndex,
-                Material: "",
-                OrderQuantity: "1.000",
-                OrderQuantityUnit: "KG",
-                ProductionPlant: "1110",
-                StorageLocation: "FG01",
-                ReturnReason: sReason,
-                ReferenceSDDocument: sRefDoc,
-                ReferenceSDDocumentItem: ("0000" + (iNextIndex * 10)).slice(-6)
-            });
-            this._oCreateReturnModel.setProperty("/Items", aItems);
-        },
-
-        onDeleteReturnItem: function () {
-            if (!this._oCreateReturnModel) return;
-            var aItems = this._oCreateReturnModel.getProperty("/Items") || [];
-            if (aItems.length > 1) {
-                aItems.pop();
-                this._oCreateReturnModel.setProperty("/Items", aItems);
-            }
-        },
-
-        onReferenceDocChange: function (oEvent) {
-            var sVal = oEvent.getParameter("value");
-            if (sVal && this._oCreateReturnModel) {
-                var aItems = this._oCreateReturnModel.getProperty("/Items") || [];
-                aItems.forEach(function (it) {
-                    if (!it.ReferenceSDDocument) {
-                        it.ReferenceSDDocument = sVal;
-                    }
-                });
-                this._oCreateReturnModel.setProperty("/Items", aItems);
-            }
-        },
-
-        onReferenceDocValueHelp: function () {
-            var that = this;
-            if (!this._oRefDocSelectDialog) {
-                this._oRefDocSelectDialog = new SelectDialog({
-                    title: this.getText("titleReferenceDocument"),
-                    search: function (oEvt) {
-                        var sValue = oEvt.getParameter("value");
-                        that._loadReferenceDocuments(sValue);
-                    },
-                    confirm: function (oEvt) {
-                        var oSelectedItem = oEvt.getParameter("selectedItem");
-                        if (oSelectedItem) {
-                            var sDoc = oSelectedItem.getTitle();
-                            var aCustomData = oSelectedItem.getCustomData();
-                            that._onSelectReferenceDoc(sDoc, aCustomData);
-                        }
-                    }
-                });
-                this.getView().addDependent(this._oRefDocSelectDialog);
-            }
-            this._loadReferenceDocuments("");
-            this._oRefDocSelectDialog.open();
-        },
-
-        _loadReferenceDocuments: function (sSearch) {
-            var that = this;
-            var oModel = this._oRefDocSelectDialog.getModel("refDocs");
-            if (!oModel) {
-                oModel = new JSONModel([]);
-                this._oRefDocSelectDialog.setModel(oModel, "refDocs");
-                this._oRefDocSelectDialog.bindAggregation("items", {
-                    path: "refDocs>/",
-                    factory: function (sId, oCtx) {
-                        var item = oCtx.getObject();
-                        var oLi = new StandardListItem(sId, {
-                            title: item.ReferenceSDDocument,
-                            description: (item.SDDocumentCategoryName || item.SDDocumentCategory || "") + " | Customer: " + (item.SoldToParty || "-"),
-                            info: (item.SalesOrganization || "") + "/" + (item.DistributionChannel || "") + "/" + (item.Division || "")
-                        });
-                        oLi.addCustomData(new CustomData({ key: "data", value: item }));
-                        return oLi;
-                    }
-                });
-            }
-
-            if (this._oRefDocSelectDialog.setBusy) {
-                this._oRefDocSelectDialog.setBusy(true);
-            }
-
-            CustomerReturnService.getReferenceDocuments(sSearch, 50, this.getView().getModel("customerReturn"))
-                .then(function (aDocs) {
-                    if (that._oRefDocSelectDialog.setBusy) {
-                        that._oRefDocSelectDialog.setBusy(false);
-                    }
-                    oModel.setData(Array.isArray(aDocs) ? aDocs : []);
-                })
-                .catch(function () {
-                    if (that._oRefDocSelectDialog.setBusy) {
-                        that._oRefDocSelectDialog.setBusy(false);
-                    }
-                    oModel.setData([]);
-                });
-        },
-
-        _onSelectReferenceDoc: function (sDoc, aCustomData) {
-            if (this._oCreateReturnModel) {
-                this._oCreateReturnModel.setProperty("/ReferenceSDDocument", sDoc);
-                if (aCustomData && aCustomData.length > 0) {
-                    var oData = aCustomData[0].getValue();
-                    if (oData) {
-                        if (oData.SoldToParty) {
-                            this._oCreateReturnModel.setProperty("/SoldToParty", oData.SoldToParty);
-                        }
-                        if (oData.SDDocumentCategory) {
-                            this._oCreateReturnModel.setProperty("/ReferenceSDDocumentCategory", oData.SDDocumentCategory);
-                        }
-                        if (oData.SalesOrganization) {
-                            this._oCreateReturnModel.setProperty("/SalesOrganization", oData.SalesOrganization);
-                        }
-                        if (oData.DistributionChannel) {
-                            this._oCreateReturnModel.setProperty("/DistributionChannel", oData.DistributionChannel);
-                        }
-                        if (oData.Division) {
-                            this._oCreateReturnModel.setProperty("/OrganizationDivision", oData.Division);
-                        }
-                    }
-                }
-                var aItems = this._oCreateReturnModel.getProperty("/Items") || [];
-                aItems.forEach(function (it) {
-                    if (!it.ReferenceSDDocument) {
-                        it.ReferenceSDDocument = sDoc;
-                    }
-                });
-                this._oCreateReturnModel.setProperty("/Items", aItems);
-            }
-        },
-
-        onConfirmCreateReturn: function () {
-            var that = this;
-            var oCreateData = this._oCreateReturnModel ? this._oCreateReturnModel.getData() : null;
-            if (!oCreateData) return;
-
-            if (!oCreateData.SoldToParty || !oCreateData.SoldToParty.trim()) {
-                MessageBox.error(this.getText("msgCreateReturnValidationFailed"));
-                return;
-            }
-            if (!oCreateData.ReturnsOrderReason) {
-                MessageBox.error(this.getText("msgCreateReturnValidationFailed"));
-                return;
-            }
-            if (!oCreateData.Items || oCreateData.Items.length === 0 || !oCreateData.Items[0].Material) {
-                MessageBox.error(this.getText("msgCreateReturnValidationFailed"));
-                return;
-            }
-
-            if (this._oCreateDialog && this._oCreateDialog.setBusy) {
-                this._oCreateDialog.setBusy(true);
-            }
-
-            var oPayload = {
-                CustomerReturnType: oCreateData.CustomerReturnType || "ZRET",
-                SoldToParty: oCreateData.SoldToParty.trim(),
-                ReturnsOrderReason: oCreateData.ReturnsOrderReason,
-                ReferenceSDDocument: oCreateData.ReferenceSDDocument ? oCreateData.ReferenceSDDocument.trim() : "",
-                ReferenceSDDocumentCategory: oCreateData.ReferenceSDDocumentCategory || "",
-                SalesOrganization: oCreateData.SalesOrganization || "1000",
-                DistributionChannel: oCreateData.DistributionChannel || "10",
-                OrganizationDivision: oCreateData.OrganizationDivision || "52",
-                CustomerReturnDate: oCreateData.CustomerReturnDate || new Date().toISOString().slice(0, 10),
-                PurchaseOrderByCustomer: oCreateData.PurchaseOrderByCustomer ? oCreateData.PurchaseOrderByCustomer.trim() : "",
-                Items: (oCreateData.Items || []).map(function (it, idx) {
-                    return {
-                        Material: it.Material ? it.Material.trim() : "",
-                        OrderQuantity: parseFloat(it.OrderQuantity) || 1,
-                        OrderQuantityUnit: it.OrderQuantityUnit || "KG",
-                        ProductionPlant: it.ProductionPlant || "1110",
-                        StorageLocation: it.StorageLocation || "FG01",
-                        ReturnReason: it.ReturnReason || oCreateData.ReturnsOrderReason || "101",
-                        ReferenceSDDocument: it.ReferenceSDDocument || oCreateData.ReferenceSDDocument || "",
-                        ReferenceSDDocumentItem: it.ReferenceSDDocumentItem || ("0000" + ((idx + 1) * 10)).slice(-6)
-                    };
-                })
-            };
-
-            CustomerReturnService.createCustomerReturn(oPayload, this.getView().getModel("customerReturn"))
-                .then(function (oResult) {
-                    if (that._oCreateDialog && that._oCreateDialog.setBusy) {
-                        that._oCreateDialog.setBusy(false);
-                    }
-                    if (that._oCreateDialog) {
-                        that._oCreateDialog.close();
-                    }
-                    var sDocNum = oResult && (oResult.CustomerReturn || (oResult.d && oResult.d.CustomerReturn));
-                    MessageBox.success(
-                        that.getText("msgReturnCreatedSuccess", [sDocNum || ""]),
-                        {
-                            title: that.getText("msgReturnCreatedSuccessTitle"),
-                            onClose: function () {
-                                that.onRefresh();
-                            }
-                        }
-                    );
-                })
-                .catch(function (oErr) {
-                    if (that._oCreateDialog && that._oCreateDialog.setBusy) {
-                        that._oCreateDialog.setBusy(false);
-                    }
-                    var sMsg = (oErr && (oErr.message || (oErr.error && oErr.error.message))) || JSON.stringify(oErr);
-                    MessageBox.error(that.getText("msgCreateReturnFailed", [sMsg]));
-                });
-        }
     });
 });

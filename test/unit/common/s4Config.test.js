@@ -79,28 +79,6 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
     });
   });
 
-  // ─── Feature flags (resLockEnabled) ───────────────────────────────────────
-
-  describe('getResLockEnabled()', () => {
-    test('defaults to false when not configured', () => {
-      delete process.env.S4_RES_LOCK_ENABLED;
-      delete process.env.CDS_S4_RES_LOCK_ENABLED;
-      delete cds.env.s4?.resLockEnabled;
-      expect(s4Config.getResLockEnabled()).toBe(false);
-      expect(s4Config.resLockEnabled).toBe(false);
-    });
-
-    test('returns true when S4_RES_LOCK_ENABLED=true', () => {
-      process.env.S4_RES_LOCK_ENABLED = 'true';
-      expect(s4Config.getResLockEnabled()).toBe(true);
-    });
-
-    test('returns true when S4_RES_LOCK_ENABLED=X', () => {
-      process.env.S4_RES_LOCK_ENABLED = 'X';
-      expect(s4Config.getResLockEnabled()).toBe(true);
-    });
-  });
-
   // ─── getAll() and validate() ──────────────────────────────────────────────
 
   describe('getAll() and validate()', () => {

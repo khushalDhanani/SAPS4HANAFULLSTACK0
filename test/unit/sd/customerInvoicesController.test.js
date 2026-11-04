@@ -421,17 +421,6 @@ describe("CustomerInvoices Controller", () => {
         expect(controller.formatInvoiceStatusIcon(false, "E")).toBe("sap-icon://sys-cancel");
         expect(controller.formatInvoiceStatusIcon(false, "A")).toBe("sap-icon://locked");
         expect(controller.formatInvoiceStatusIcon(false, "B")).toBe("sap-icon://alert");
-
-        expect(controller.formatReleaseEnabled(false, "E", "M")).toBe(false);
-        expect(controller.formatReleaseEnabled(false, "A", "N")).toBe(false);
-        expect(controller.formatReleaseEnabled(false, "C", "M")).toBe(false);
-        expect(controller.formatReleaseEnabled(false, "D", "M")).toBe(false);
-        expect(controller.formatReleaseEnabled(false, "A", "M")).toBe(false);
-        expect(controller.formatReleaseEnabled(false, "B", "M")).toBe(true);
-
-        expect(controller.formatCancelEnabled(false, "E", "M")).toBe(false);
-        expect(controller.formatCancelEnabled(false, "A", "N")).toBe(false);
-        expect(controller.formatCancelEnabled(false, "A", "M")).toBe(true);
     });
 
     describe("Optimistic concurrency and ETag handling (Phase 4)", () => {

@@ -328,46 +328,6 @@ sap.ui.define([
 
         onSelectTabSD: function () { this.switchToTab("sd"); },
         onSelectTabEWM: function () { this.switchToTab("ewm"); },
-        /**
-         * Sanitizes a saved or externally supplied card layout, ignoring any obsolete or removed
-         * tile IDs (such as tileMvt201 / kpiMvt201Val / Mvt201 / tileMvt301 / kpiMvt301Val / Mvt301 /
-         * tileMvt311 / kpiMvt311Val / Mvt311 / panelMvtTypeKpis / tileTrTo / tileMvt261 / tileOpen261) so legacy layouts load without error.
-         * @param {Array<string>} [aCardIds]
-         * @returns {Array<string>}
-         */
-        sanitizeCardLayout: function (aCardIds) {
-            if (!Array.isArray(aCardIds)) {
-                return [];
-            }
-            var aRemoved = [
-                "tileMvt201", "kpiMvt201Val", "Mvt201",
-                "tileMvt301", "kpiMvt301Val", "Mvt301",
-                "tileMvt311", "kpiMvt311Val", "Mvt311",
-                "panelMvtTypeKpis",
-                "tileTrTo",
-                "tileMvt261",
-                "tileOpen261",
-                "panelCategoryMasterData",
-                "tileOverviewBupaMD",
-                "tileOverviewProdMD",
-                "tileOverviewGateway",
-                "tabMasterData",
-                "panelMdBusinessPartner",
-                "panelMdProduct",
-                "panelMdFinancial",
-                "panelMdOrganization",
-                "tabFI",
-                "btnQuickManageFI",
-                "panelCategoryFinance",
-                "tileModuleFI",
-                "kpiFIDocsVal",
-                "tileOverviewCostCenters",
-                "tileOverviewGLAccounts"
-            ];
-            return aCardIds.filter(function (sId) {
-                return sId && aRemoved.indexOf(sId) === -1;
-            });
-        },
 
         /**
          * Loads SAP users from UserManagementService.listUsers.

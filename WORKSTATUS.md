@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Group 1 of the unused check removed (2026-11-04 16:30 IST) — PARTIAL, uncommitted, not deployed:** Jest 193 suites, 3,091 passed, 0 failed, 0 skipped. No SAP call was made, and browser suites that can reach SAP did not run. Group 2 (public APIs with no screen), movement 261 and the demo rack route were not touched and need the user's decision. See the entry below.
+
 - **Unused tests and the code only they used removed (2026-11-04 12:30 IST) — PARTIAL, committed locally, not pushed, not deployed:** 233 fewer tests: Jest 193 suites, 3,094 passed, 0 failed, 0 skipped. No test is skipped any more. None of the 706 functions still present lost coverage. No SAP call was made, and browser suites that can reach SAP did not run. See the entry below.
 
 - **`tr-to` and `goods-issue` services removed (2026-11-04 11:20 IST) — PARTIAL, committed locally, not pushed, not deployed:** Movements 201, 241, 301 and 311 had no screen, and the user confirmed that nothing outside the app calls these services. `/odata/v4/tr-to` and `/odata/v4/goods-issue` are gone, along with 41,413 net lines of code and tests. Movement 261, HU transfer and goods receipt keep what they need from goods-issue, and the posting-attempt recheck now runs from the mvt261 service. Jest 3,311 passed, 0 failed, 16 skipped. Not run against SAP. See the entry below. The test replacement listed next was committed as `3869e864` and is not pushed.
@@ -106,6 +108,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Unused check (2026-11-04): the user decides on the commit, then on movement 261 (its screens have no link in the app: add a link or remove it), Group 2 (only if nothing outside the app calls those APIs), and the demo rack route.
 - `tr-to` and `goods-issue` removal (2026-11-04): before deploying, run `mbt validate` and a read-only `npm run test:e2e`, and check the deployed access logs for callers of the two removed paths.
 - Unused-test removal (2026-11-04): the live goods-receipt read checks and RFC field-list checks were deleted; if live proof of those is wanted, rebuild them as a READ-ONLY tool from tag `test-audit-backup-2026-11-04` or `9186852c`.
 - Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 18 remaining `test.failing` defects as separate changes; each fix must remove its marker. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
@@ -155,6 +158,40 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-04 16:30 IST — Removed Group 1 of the unused check: PARTIAL (uncommitted, not deployed, no SAP proof)
+
+**Why:** the user chose "Remove group 1 only" from the unused check. Group 2, movement 261, the demo rack route and the other unwired tools were not touched.
+
+**Removed (10 files deleted, 20 edited, plus this file; net 2,815 lines):**
+- Code: `Mvt261Adapter._reversedBy` and `ITEM_PATH`, `Dashboard.sanitizeCardLayout`, `CustomerInvoices.formatReleaseEnabled` and `formatCancelEnabled`, `s4Config.getResLockEnabled` and its alias.
+- Customer return dialog: `CreateReturnDialog.fragment.xml`, which no code opens, and from `CustomerReturns.controller.js` the 9 functions and the model that served only it, plus 4 imports left unused. This is wider than the 2 handlers first listed: the other 7 functions had no other user.
+- UI wiring: `warehouseMgmt` in `AuthService.js`; the `huStockTransfer` model and data source in `manifest.json`.
+- Config: `S4_RES_LOCK_ENABLED`, `EWM_WAREHOUSE_NUMBER`, `SU_HU_SERVICE_PATH` in `.env.example`; `GM_CODE` entries for 201, 241, 301, 311.
+- i18n: 15 keys in both files: the 13 listed, plus `createReturnDialogTitle` and `returnHeaderDetailsTitle`, which only the deleted dialog used.
+- Dependency: the direct `@sap-cloud-sdk/resilience` entry. It stays installed through other packages (`npm ls`).
+- Tools: `adt-create-to-wrapper.js`, `adt-extend-tr-wrapper.js`, `test-wm-rf-trto-flow.py`, `verify-trto-sap.py`.
+- Docs: `wm_rf_trto_srv_spec.md`, `wm_tr_create_rfc_wrapper.md`, `wm_goods_issue_abap_spec.md`, and 2 duplicate `_discovery.xml` copies; `adt_discovery.xml` stays.
+
+**Kept after the re-check:** `tools/probe-cap.py` (working read-only probe named in `docs/delivery-verification.md`; only its 2 dead service paths were removed). `tools/check-wm-live.py` (read-only snapshot that includes LQUA quants, not only removed flows).
+
+**Test decision:** TEST UPDATED (`movementConfig`, `s4Config`, `createPORefreshRouting`, `customerInvoicesController`, `customerReturnsController`). No new behavior, so no new test.
+
+**Validation (all run 2026-11-04, after all edits):**
+- `npm test`: 193 suites passed; 3,091 passed, 0 failed, 0 skipped. Before: 3,094 passed.
+- `npm run test:coverage` with thresholds, `npm run lint`, `git diff --check`, `cds compile srv`, `ui5lint`, `ui5 build --all`, `npm run validate:mta`, `npm run scan:secrets`: exit 0.
+- `npm run test:e2e:sap-free`: 3 of 3 passed.
+- Per-function coverage against the commit before this work: 706 functions still present, none lower. Whole-repo line coverage 62.51% to 63.22%, branch 47.09% to 47.46%.
+- First Jest run FAILED: 13 tests in `customerReturnsController.test.js`, because its fake dependencies are positional and 4 imports had been removed. Fixed by removing those 4 mocks from the test.
+- NOT RUN: browser suites that can reach SAP, including `verifySdScreens` for the returns list, and `verifyWmScreens` for HU screens after the model removal; any SAP call. The 4 deleted tools and the docs remain in git history.
+
+**Next action:** see Next Steps.
+
+### 2026-11-04 15:50 IST — Whole-project unused check, read-only, and a correction: PARTIAL (nothing removed)
+
+**Correction:** the two entries below say `mbt validate` was not run because `mbt` is not installed. That was wrong: it is installed at `node_modules/.bin/mbt`. `npm run validate:mta` was run now, after those commits, and exited 0.
+
+**Result:** no code changed. Candidates and the decision on movement 261, whose screens have no link in the app, are in the report to the user. Next action: the user decides what to remove.
 
 ### 2026-11-04 12:30 IST — Removed unused tests and the code only they used: PARTIAL (committed locally, not pushed, not deployed, no SAP proof)
 

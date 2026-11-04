@@ -201,21 +201,14 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
   });
 
   describe('6. Central GM_CODE and Policy Rules (Item 17)', () => {
-    test('GM_CODE exports correct SAP Goods Movement codes for all 5 movement types', () => {
-      expect(GM_CODE['201']).toBe('03');
-      expect(GM_CODE['241']).toBe('03');
-      expect(GM_CODE['311']).toBe('04');
-      expect(GM_CODE['301']).toBe('04');
-      expect(GM_CODE['261']).toBe('03');
+    test('GM_CODE holds the goods movement code of the only movement left', () => {
+      expect(GM_CODE).toEqual({ '261': '03' });
     });
 
     test('getGmCode helper returns correct GM_CODE or null', () => {
-      expect(getGmCode('201')).toBe('03');
-      expect(getGmCode(' 201 ')).toBe('03');
-      expect(getGmCode('241')).toBe('03');
-      expect(getGmCode('311')).toBe('04');
-      expect(getGmCode('301')).toBe('04');
       expect(getGmCode('261')).toBe('03');
+      expect(getGmCode(' 261 ')).toBe('03');
+      expect(getGmCode('201')).toBeNull();
       expect(getGmCode('999')).toBeNull();
       expect(getGmCode('')).toBeNull();
       expect(getGmCode(null)).toBeNull();

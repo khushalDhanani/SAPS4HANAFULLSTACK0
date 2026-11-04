@@ -113,20 +113,11 @@ class S4Config {
     return this._requireString('client', ['CDS_S4_CLIENT', 'S4_CLIENT']);
   }
 
-  // ─── Feature flags that are truly env-config (not business data) ─────────────
-
-  /** SAP-side reservation lock via Z_WM_RES_LOCK. OFF unless explicitly 'true'/'X'. */
-  getResLockEnabled() {
-    const v = this._getRaw('resLockEnabled', ['CDS_S4_RES_LOCK_ENABLED', 'S4_RES_LOCK_ENABLED']);
-    return v === true || ['TRUE', 'X'].includes(String(v ?? '').trim().toUpperCase());
-  }
-
   // ─── Property aliases ─────────────────────────────────────────────────────────
 
   get systemName()  { return this.getSystemName(); }
   get systemLabel() { return this.getSystemLabel(); }
   get client()      { return this.getClient(); }
-  get resLockEnabled() { return this.getResLockEnabled(); }
 
   // ─── Snapshot / validation ────────────────────────────────────────────────────
 

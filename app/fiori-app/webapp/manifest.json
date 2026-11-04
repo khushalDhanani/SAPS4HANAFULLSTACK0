@@ -69,14 +69,6 @@
           "annotations": [],
           "odataVersion": "4.0"
         }
-      },
-      "huStockTransferService": {
-        "uri": "/odata/v4/hu-stock-transfer/",
-        "type": "OData",
-        "settings": {
-          "annotations": [],
-          "odataVersion": "4.0"
-        }
       }
     }
   },
@@ -158,13 +150,6 @@
       },
       "customerReturn": {
         "dataSource": "customerReturnService",
-        "settings": {
-          "operationMode": "Server",
-          "autoExpandSelect": true
-        }
-      },
-      "huStockTransfer": {
-        "dataSource": "huStockTransferService",
         "settings": {
           "operationMode": "Server",
           "autoExpandSelect": true

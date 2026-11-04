@@ -55,35 +55,8 @@ const MockFilterOperator = {
     NE: "NE"
 };
 
-const MockMessageBox = {
-    success: jest.fn((msg, opts) => {
-        if (opts && opts.onClose) opts.onClose();
-    }),
-    error: jest.fn()
-};
-
 const MockMessageToast = {
     show: jest.fn()
-};
-
-const MockSelectDialog = function (opts) {
-    this.opts = opts;
-    this.open = jest.fn();
-    this.close = jest.fn();
-    this.setBusy = jest.fn();
-    this.setModel = jest.fn();
-    this.getModel = jest.fn();
-    this.bindAggregation = jest.fn();
-};
-
-const MockStandardListItem = function (id, opts) {
-    this.id = id;
-    this.opts = opts;
-    this.addCustomData = jest.fn();
-};
-
-const MockCustomData = function (opts) {
-    this.opts = opts;
 };
 
 const MockAuthService = {
@@ -167,11 +140,7 @@ beforeAll(() => {
                     MockFilter,
                     MockFilterOperator,
                     MockFragment,
-                    MockMessageBox,
                     MockMessageToast,
-                    MockSelectDialog,
-                    MockStandardListItem,
-                    MockCustomData,
                     MockAuthService,
                     MockCustomerReturnService
                 );

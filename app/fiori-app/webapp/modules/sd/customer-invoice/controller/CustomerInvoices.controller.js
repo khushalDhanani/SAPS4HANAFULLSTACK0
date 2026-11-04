@@ -536,17 +536,5 @@ sap.ui.define([
             return "sap-icon://alert";
         },
 
-        formatReleaseEnabled: function (bIsCancelled, sAccountingStatus, sCategory) {
-            return bIsCancelled !== true && bIsCancelled !== "true" &&
-                sAccountingStatus !== "C" && sAccountingStatus !== "H" &&
-                sAccountingStatus !== "D" && sAccountingStatus !== "E" &&
-                sAccountingStatus !== "A" &&
-                sCategory !== "N";
-        },
-
-        formatCancelEnabled: function (bIsCancelled, sAccountingStatus, sCategory) {
-            return bIsCancelled !== true && bIsCancelled !== "true" &&
-                sAccountingStatus !== "E" && sCategory !== "N";
-        }
     });
 });

@@ -10,7 +10,6 @@ const GoodsIssuePostingClient = require('./goods-issue/GoodsIssuePostingClient')
 const { calculateMovement261StockEligibility, validateMovement261Payload } = require('../../../common/movementConfig');
 const { sapKey } = require('../sapKey');
 
-const ITEM_PATH = '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentItem';
 const MATDOC_API = '/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV';
 
 /**
@@ -195,26 +194,6 @@ class Mvt261Adapter {
       }
     }
     return out;
-  }
-
-  /** "doc/year/item" of the 262 that reverses each cancelled row; {} when SAP does not answer. */
-  async _reversedBy(rows) {
-    const docs = [...new Set(rows.filter((r) => r.IsCancelled).map((r) => `${r.MaterialDocument}/${r.MaterialDocumentYear}`))];
-    if (!docs.length) return {};
-    const pairs = docs.map((d) => d.split('/')).map(([doc, year]) => `(ReversedMaterialDocument eq '${doc}' and ReversedMaterialDocumentYear eq '${year}')`);
-    try {
-      const d = await this._results(ITEM_PATH, {
-        $filter: `GoodsMovementType eq '262' and (${pairs.join(' or ')})`,
-        $select: 'MaterialDocument,MaterialDocumentYear,MaterialDocumentItem,ReversedMaterialDocument,ReversedMaterialDocumentYear,ReversedMaterialDocumentItem',
-        $format: 'json'
-      }, 'Read reversal documents');
-      return Object.fromEntries((d.results || []).map((r) => [
-        `${r.ReversedMaterialDocument}/${r.ReversedMaterialDocumentYear}/${Number(r.ReversedMaterialDocumentItem)}`,
-        `${r.MaterialDocument}/${r.MaterialDocumentYear}/${String(r.MaterialDocumentItem).padStart(4, '0')}`
-      ]));
-    } catch (_e) {
-      return {}; // evidence only: IsReversed still comes from SAP's cancelled flag
-    }
   }
 
   /**
