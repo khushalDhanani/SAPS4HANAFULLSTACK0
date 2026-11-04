@@ -68,10 +68,5 @@
   "wmHuStockTransfer": {
     "aria-allowed-attr": 4,
     "label-content-name-mismatch": 1
-  },
-  "wmHuStockTransferRackDemo": {
-    "aria-allowed-attr": 4,
-    "aria-input-field-name": 3,
-    "label-content-name-mismatch": 1
   }
 }

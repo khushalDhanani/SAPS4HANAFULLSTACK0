@@ -72,9 +72,7 @@ sap.ui.define([
                 this._updateShell("wmQuarantineLabels");
             } else if (sHash.indexOf("wm/hu-stock-transfer/") === 0) {
                 var aHuParts = sHash.replace("wm/hu-stock-transfer/", "").split("/");
-                if (aHuParts[0] === "demo-rack") {
-                    this._updateShell("wmHuStockTransferRackDemo");
-                } else if (aHuParts.length >= 3 && aHuParts[2] === "rack") {
+                if (aHuParts.length >= 3 && aHuParts[2] === "rack") {
                     this._updateShell("wmHuStockTransferRack", { reservation: aHuParts[0], item: aHuParts[1] || "1" });
                 } else {
                     this._updateShell("wmHuStockTransferDetail", { reservation: aHuParts[0], item: aHuParts[1] || "" });
@@ -249,10 +247,6 @@ sap.ui.define([
                     sTitle = oBundle ? oBundle.getText("rackVisualizerTitle") : "HU Stock Transfer — Stock Bins";
                     bShowNav = true;
                     break;
-                case "wmHuStockTransferRackDemo":
-                    sTitle = oBundle ? oBundle.getText("rackReservationPageTitle") : "Rack Visualizer · Select Reservation";
-                    bShowNav = true;
-                    break;
                 case "wmHuStockTransferDetail":
                     sTitle = oBundle ? oBundle.getText("cockpitPageTitle") : "Transfer Cockpit";
                     bShowNav = true;
@@ -371,8 +365,6 @@ sap.ui.define([
                     reservation: oRackArgs.reservation || "",
                     item: oRackArgs.item || "1"
                 });
-            } else if (sRoute === "wmHuStockTransferRackDemo") {
-                this.onNavBack("wmHuStockTransfer");
             } else if (sRoute === "wmHuStockTransferDetail") {
                 this.onNavBack("wmHuStockTransfer");
             } else if (sRoute === "wmHuStockTransfer") {

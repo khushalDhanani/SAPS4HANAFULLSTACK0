@@ -101,7 +101,7 @@ async function verifySidebar(baseUrl) {
         if (metricsCalls === beforeReturn) back.push('figures were not reloaded on returning from another screen');
         step(errors, details, 'The highlighted item returns from a screen to its section', back);
 
-        for (const [hash, key] of [['mm/purchase-orders/create', 'mm'], ['sd/sales-orders', 'sd'], ['le/orders-due', 'sd'], ['wm/hu-stock-transfer/demo-rack', 'ewm']]) {
+        for (const [hash, key] of [['mm/purchase-orders/create', 'mm'], ['sd/sales-orders', 'sd'], ['le/orders-due', 'sd'], ['wm/hu-stock-transfer', 'ewm']]) {
             await openHash(session, hash);
             step(errors, details, `Direct URL ${hash} highlights ${key}`, (await expectState(hash, key)).problems);
         }

@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Demo rack route removed (2026-11-04 16:20 IST) — PARTIAL, committed locally, not pushed, not deployed:** The route showed hard-coded warehouse data and nothing linked to it. Jest 180 suites, 2,816 passed, 0 failed, 0 skipped. Group 2 APIs were not touched and stay until the user can rule out outside callers. See the entry below.
+
 - **Movement 261 removed (2026-11-04 16:15 IST) — PARTIAL, committed locally, not pushed, not deployed:** The user chose to remove it because its screens had no link in the app. `/odata/v4/mvt261`, its screens, adapter and tools are gone, and this app no longer posts goods issues. Jest 180 suites, 2,823 passed, 0 failed, 0 skipped. The posting-attempt recheck now runs from the HU stock transfer service. No SAP call was made, and browser suites that can reach SAP did not run. See the entry below. The Group 1 work listed next was committed as `18812aa1` and is not pushed.
 
 - **Group 1 of the unused check removed (2026-11-04 16:30 IST) — PARTIAL, uncommitted, not deployed:** Jest 193 suites, 3,091 passed, 0 failed, 0 skipped. No SAP call was made, and browser suites that can reach SAP did not run. Group 2 (public APIs with no screen), movement 261 and the demo rack route were not touched and need the user's decision. See the entry below.
@@ -110,7 +112,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
-- Movement 261 removal (2026-11-04): before deploying, run a read-only `npm run test:e2e`, and check that no open 261 posting attempts are waiting in the attempt table. Then decide on Group 2 (only if nothing outside the app calls those APIs) and the demo rack route.
+- Movement 261 removal (2026-11-04): before deploying, run a read-only `npm run test:e2e`, and check that no open 261 posting attempts are waiting in the attempt table.
+- Group 2 (2026-11-04): kept by the user's choice. `getVisualRack`, `checkATP`, `askAI`, `MaterialStorageLocations`, `MaterialBatches`, `DeliveryWithoutRefTypes` and `DeliveryWithoutRefShipToParties` have no screen; remove them only after access logs or owners rule out outside callers. `chat` is used by the Purchase Orders AI assistant and stays.
 - `tr-to` and `goods-issue` removal (2026-11-04): before deploying, run `mbt validate` and a read-only `npm run test:e2e`, and check the deployed access logs for callers of the two removed paths.
 - Unused-test removal (2026-11-04): the live goods-receipt read checks and RFC field-list checks were deleted; if live proof of those is wanted, rebuild them as a READ-ONLY tool from tag `test-audit-backup-2026-11-04` or `9186852c`.
 - Test replacement (2026-11-04): the user answers the open decisions: read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, and what a failed read-back returns. The partial-pick and `readTable?.mock` decisions no longer apply, because that code is removed. Fix the 18 remaining `test.failing` defects as separate changes; each fix must remove its marker. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
@@ -160,6 +163,26 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-04 16:20 IST — Removed the demo rack route: PARTIAL (committed locally, not pushed, not deployed, not browser-checked)
+
+**Why:** the user chose "Demo route only". `wmHuStockTransferRackDemo` showed hard-coded warehouse data on a real route, and nothing linked to it. Group 2 APIs were not touched.
+
+**Removed (2 files deleted, 10 edited, plus this file; net 462 lines):** `HuStockTransferRackDemo.controller.js` and `.view.xml`, the route, target and shell mappings, 24 `demoRack*` i18n keys in both files, the entries in the a11y and performance baselines, the `verifyWmScreens` step, the matrix row (totals now Browser E2E 🟢 25, SAP round trip 10 N/A), and the 7 demo tests in `huStockTransferRackReservations.test.js`.
+
+**Changed:** `verifyShellScreens.e2e.js` now checks sidebar highlighting on `wm/hu-stock-transfer` instead of the demo URL.
+
+**Test decision:** TEST UPDATED. The routing and worklist tests in that file stay.
+
+**Validation (all run 2026-11-04):**
+- `npm test` equivalent with coverage: 180 suites passed; 2,816 passed, 0 failed, 0 skipped. Before: 2,823 passed.
+- `npm run test:coverage` with thresholds, `npm run lint`, `git diff --check`, `ui5lint`, `ui5 build --all`, `npm run validate:mta`, `npm run scan:secrets`: exit 0. `npm run test:e2e:sap-free`: 3 of 3 passed.
+- Per-function coverage against the commit before this work: 692 functions kept or better, none lower. Whole-repo line coverage 62.19% to 62.17%.
+- NOT RUN: `verifyShellScreens` and `verifyWmScreens`, whose edits have not run because they are not SAP-free; any SAP call. How an old `#/wm/hu-stock-transfer/demo-rack` bookmark behaves was not checked in a browser.
+
+**Leftover, not removed:** `rackReservationPageTitle` in both i18n files is now unused.
+
+**Next action:** see Next Steps.
 
 ### 2026-11-04 16:15 IST — Removed movement 261: PARTIAL (committed locally, not pushed, not deployed, no SAP proof)
 

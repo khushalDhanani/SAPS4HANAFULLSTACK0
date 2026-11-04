@@ -13,8 +13,7 @@ const STEPS = [
     { name: 'Packing instruction detail (first row)', route: 'wmPackingInstructionDetail', fromFirstRow: true },
     { name: 'HU stock transfer list', hash: 'wm/hu-stock-transfer', route: 'wmHuStockTransfer', needsList: true },
     { name: 'HU stock transfer rack (first row)', route: 'wmHuStockTransferRack', fromFirstRow: true },
-    { name: 'HU stock transfer detail (same reservation)', route: 'wmHuStockTransferDetail', hashFrom: (h) => h.replace(/\/rack$/, '') },
-    { name: 'HU stock transfer rack demo', hash: 'wm/hu-stock-transfer/demo-rack', route: 'wmHuStockTransferRackDemo' }
+    { name: 'HU stock transfer detail (same reservation)', route: 'wmHuStockTransferDetail', hashFrom: (h) => h.replace(/\/rack$/, '') }
 ];
 
 async function verifyWmScreens(options = {}) {
