@@ -162,7 +162,7 @@ describe("SalesOrderModel - Calculation and Item Operations", () => {
         expect(header.ShipToPartyName).toBe("Acme Plant 2");
     });
 
-    test("applyMaterialDefaults sets material, desc, unit and recalculates totals", () => {
+    test("applyMaterialDefaults sets material, description and unit", () => {
         const oModel = SalesOrderModel.createInitialModel();
         SalesOrderModel.applyMaterialDefaults(oModel, "/items/0", {
             Material: "4000000001",
@@ -175,18 +175,33 @@ describe("SalesOrderModel - Calculation and Item Operations", () => {
         expect(item.SalesOrderItemText).toBe("Sodium Chloride");
         expect(item.OrderQuantityUnit).toBe("KG");
     });
+
+    test("applyMaterialDefaults proposes quantity 1.000 on an empty line and recalculates the totals", () => {
+        const oModel = SalesOrderModel.createInitialModel();
+        oModel.setProperty("/items/0/NetPriceAmount", "50.00");
+
+        SalesOrderModel.applyMaterialDefaults(oModel, "/items/0", { Material: "4000000001" });
+
+        expect(oModel.getProperty("/items/0/OrderQuantity")).toBe("1.000");
+        expect(oModel.getProperty("/items/0/NetAmount")).toBe("50.00");
+        expect(oModel.getProperty("/header/TotalNetAmount")).toBe("50.00");
+    });
 });
 
 describe("SalesOrderModel - Validation and Payload Generation", () => {
-    test("validateForm fails when required fields are missing", () => {
+    test("validateForm on a blank model reports the 8 required header and 4 required item fields", () => {
         const oModel = SalesOrderModel.createInitialModel();
-        oModel.setProperty("/header/SoldToParty", ""); // Missing sold-to party
-        oModel.setProperty("/items/0/Material", "");   // Missing material
 
         const bValid = SalesOrderModel.validateForm(oModel);
+
         expect(bValid).toBe(false);
         expect(oModel.getProperty("/hasError")).toBe(true);
-        expect(oModel.getProperty("/errorCount")).toBeGreaterThan(0);
+        expect(oModel.getProperty("/errorCount")).toBe(12);
+        expect(oModel.getProperty("/errorList").map((e) => e.field)).toEqual([
+            "SalesOrderType", "SalesOrganization", "DistributionChannel", "OrganizationDivision",
+            "SoldToParty", "TransactionCurrency", "PaymentTerms", "ContactPerson",
+            "Material", "OrderQuantity", "OrderQuantityUnit", "Plant"
+        ]);
     });
 
     test("validateForm passes when all required fields and items are populated", () => {
@@ -214,7 +229,7 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         expect(oModel.getProperty("/errorCount")).toBe(0);
     });
 
-    test("each required field empty blocks Create", () => {
+    test("each required header field left empty blocks Create with its own message", () => {
         const createPopulatedModel = () => {
             const oModel = SalesOrderModel.createInitialModel();
             SalesOrderModel.applyServerDefaults(oModel, {
@@ -237,6 +252,12 @@ describe("SalesOrderModel - Validation and Payload Generation", () => {
         };
 
         const requiredFields = [
+            { field: "SalesOrderType", expectedError: "Order Type is required" },
+            { field: "SalesOrganization", expectedError: "Sales Organization is required" },
+            { field: "DistributionChannel", expectedError: "Distribution Channel is required" },
+            { field: "OrganizationDivision", expectedError: "Division is required" },
+            { field: "SoldToParty", expectedError: "Sold-to Party (Customer) is required" },
+            { field: "TransactionCurrency", expectedError: "Currency is required" },
             { field: "PaymentTerms", expectedError: "Payment Terms are required" },
             { field: "ContactPerson", expectedError: "Contact Person is required" }
         ];

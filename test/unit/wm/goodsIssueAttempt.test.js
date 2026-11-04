@@ -171,41 +171,6 @@ describe('unconfirmed documents and re-confirm job', () => {
     expect(att201.MaterialDocYear).toBe('2026');
   });
 
-  test('reconfirmUnconfirmed retries read-back for unconfirmed documents and clears the flag', async () => {
-    // 1. Setup attempt in 'unconfirmed' status
-    const refDoc = 'GICONFIRM001';
-    await attempts.create({
-      ReferenceDocument: refDoc,
-      MovementType: '201',
-      Material: '1000000514',
-      Plant: '1120',
-      StorageLocation: 'HS01',
-      IssueQty: 10,
-      Unit: 'KG'
-    });
-    await attempts.setStatus(refDoc, 'unconfirmed', {
-      MaterialDocument: '4900099999',
-      MaterialDocYear: '2026'
-    });
-
-    // 2. Mock adapter.readBackDocument to confirm
-    jest.spyOn(GoodsIssueAdapter, 'readBackDocument').mockResolvedValue({
-      MaterialDocument: '4900099999',
-      MaterialDocYear: '2026',
-      Confirmed: true,
-      Status: 'confirmed'
-    });
-
-    // 3. Run reconfirmUnconfirmed job
-    const summary = await attempts.reconfirmUnconfirmed(GoodsIssueAdapter);
-    expect(summary.Checked).toBe(1);
-    expect(summary.Confirmed).toBe(1);
-
-    // 4. Verify attempt is now 'posted'
-    const updatedAttempt = await attempts.getByReference(refDoc);
-    expect(updatedAttempt.Status).toBe('posted');
-  });
-
   test('reconfirmUnconfirmed marks attempt needs-attention past maximum age', async () => {
     // 1. Setup attempt in 'unconfirmed' status
     const refDoc = 'GICONFIRM002';

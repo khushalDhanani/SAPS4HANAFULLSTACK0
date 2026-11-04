@@ -134,6 +134,39 @@ describe('Security & Authorization: Purchase Order RBAC', () => {
         });
     });
 
+    describe('Rules in service.cds beyond PurchaseOrders and the create action', () => {
+        const viewer = { auth: { username: 'test-viewer-1120', password: '' } };
+        const manager = { auth: { username: 'khushal', password: '' } };
+
+        it('should reject an unauthenticated read of PurchaseOrderItems with 401', async () => {
+            await expect(GET('/odata/v4/purchase-order/PurchaseOrderItems')).rejects.toMatchObject({ response: { status: 401 } });
+        });
+
+        it('should allow a Viewer to read PurchaseOrderItems', async () => {
+            const { status } = await GET('/odata/v4/purchase-order/PurchaseOrderItems', viewer);
+            expect(status).toBe(200);
+        });
+
+        it('should reject an unauthenticated getSupplierDefaults call with 401', async () => {
+            await expect(GET("/odata/v4/purchase-order/getSupplierDefaults(Supplier='',CompanyCode='',PurchasingOrganization='')"))
+                .rejects.toMatchObject({ response: { status: 401 } });
+        });
+
+        it('should allow a Viewer to call getSupplierDefaults', async () => {
+            const { status } = await GET("/odata/v4/purchase-order/getSupplierDefaults(Supplier='',CompanyCode='',PurchasingOrganization='')", viewer);
+            expect(status).toBe(200);
+        });
+
+        it('should reject an unauthenticated getDashboardMetrics call with 401', async () => {
+            await expect(GET('/odata/v4/purchase-order/getDashboardMetrics()')).rejects.toMatchObject({ response: { status: 401 } });
+        });
+
+        it('should refuse a write to the @readonly PurchaseOrders entity even for a PurchasingManager', async () => {
+            await expect(POST('/odata/v4/purchase-order/PurchaseOrders', { PurchaseOrder: '4500009999' }, manager))
+                .rejects.toMatchObject({ response: { status: 405 } });
+        });
+    });
+
     describe('Local Development Bearer Token Authorization (JWT with XSUAA Claims)', () => {
         it('should allow PurchasingManager Bearer token to invoke createPurchaseOrder', async () => {
             const token = localTokenUtil.issueToken('KHUSHAL', ['PurchasingManager', 'Viewer']).token;

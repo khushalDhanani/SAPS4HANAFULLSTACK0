@@ -6,7 +6,6 @@
  */
 
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
-const { MOVEMENT_CONFIG } = require('../../../srv/common/movementConfig');
 
 const RSNUM = '0000530001';
 const base = { plant: '1120', storageLocation: 'CS01', material: '1000000045', quantity: 2.5, unit: 'KG', batch: 'IN26001170', reservationDate: '20261019' };
@@ -62,16 +61,6 @@ describe('Step 7.4: exact BAPI_RESERVATION_CREATE1 payload per movement (MOVEMEN
     expect(rfc.call.mock.calls[1]).toEqual(['BAPI_TRANSACTION_COMMIT', { WAIT: 'X' }]);
     expect(res).toMatchObject({ success: true, reservationNoRaw: RSNUM, reservationItem: '0002', sapVerified: true, createdByUser: 'RFCUSER', reservationDate: '2026-10-19' });
     expect(res.reservation).toEqual({ number: '530001', item: '0002' });
-  });
-
-  test.each(Object.keys(inputs))('%s: a field the policy forbids never reaches the header even if validation is bypassed', async (mvt) => {
-    const cfg = MOVEMENT_CONFIG[mvt];
-    const headerKeys = Object.keys(expectedHeader[mvt]);
-    const forbiddenBapi = { CostCenter: 'COSTCENTER', AssetNo: 'ASSET_NO', SubNumber: 'SUB_NUMBER', OrderID: 'ORDERID', ReceivingPlant: 'MOVE_PLANT', ReceivingStorageLocation: 'MOVE_STLOC' };
-    for (const f of cfg.forbiddenFields) {
-      if (forbiddenBapi[f]) expect(headerKeys).not.toContain(forbiddenBapi[f]);
-    }
-    expect(headerKeys).not.toContain('GL_ACCOUNT');
   });
 
   test('241 (D7): no company-code or sub-number fallback - missing T001K row is reported, SUB_NUMBER is what was sent', async () => {

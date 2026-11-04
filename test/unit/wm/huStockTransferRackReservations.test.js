@@ -3,6 +3,8 @@ let WorklistController;
 const fs = require("fs");
 const path = require("path");
 const demoView = fs.readFileSync(path.join(__dirname, "../../../app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferRackDemo.view.xml"), "utf8");
+const i18n = fs.readFileSync(path.join(__dirname, "../../../app/fiori-app/webapp/i18n/i18n.properties"), "utf8");
+const parseRackBinName = require("../../../srv/integration/s4hana/wm/parseRackBinName");
 const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "../../../app/fiori-app/webapp/manifest.json"), "utf8"));
 
 class MockJSONModel {
@@ -53,52 +55,34 @@ describe("HuStockTransferRackDemo fixture shaped like rackLayout()", () => {
         controller.onInit();
     });
 
-    test("initializes with a fixture shaped like rackLayout() (single row of positions, floor/rack/position, no bays or levels)", () => {
-        expect(controller.model.getProperty("/isDemo")).toBe(true);
-        expect(controller.model.getProperty("/warehouse")).toBe("W01");
-        expect(controller.model.getProperty("/floor")).toBe("1");
-        expect(controller.model.getProperty("/rack")).toBe("L0001");
-
+    test("demo fixture shows one rack row of five positions, occupied ones holding synthetic DEMO-HU numbers", () => {
         const positions = controller.model.getProperty("/positions");
-        expect(Array.isArray(positions)).toBe(true);
-        expect(positions.length).toBe(5);
+        expect(positions.map((pos) => [pos.position, pos.status, pos.unitNumber])).toEqual([
+            ["01", "occupied", "DEMO-HU-001"],
+            ["02", "empty", ""],
+            ["03", "occupied", "DEMO-HU-002"],
+            ["04", "empty", ""],
+            ["05", "occupied", "DEMO-HU-003"]
+        ]);
+    });
 
-        // Verify single row of positions (floor/rack/position, no bays or levels)
-        positions.forEach((pos) => {
-            expect(pos.floor).toBe("1");
-            expect(pos.rack).toBe("L0001");
-            expect(pos.position).toMatch(/^\d{2}$/);
-            expect(pos.storageBin).toBe(`1-L0001-${pos.position}`);
-            expect(pos.isRackBin).toBe(true);
-            // Must have no bay or level fields
-            expect(pos.bay).toBeUndefined();
-            expect(pos.level).toBeUndefined();
-
-            // Two cell states only: 'empty' or 'occupied'
-            expect(["empty", "occupied"]).toContain(pos.status);
-            expect(pos.occupied).toBe(pos.status === "occupied");
-
-            // Synthetic HU numbers only when occupied
-            if (pos.occupied) {
-                expect(pos.unitNumber).toMatch(/^DEMO-HU-\d{3}$/);
-            } else {
-                expect(pos.unitNumber).toBe("");
-            }
+    test("every demo position agrees with the server bin parser used by rackLayout", () => {
+        controller.model.getProperty("/positions").forEach((pos) => {
+            expect(parseRackBinName(pos.storageBin)).toEqual({ Floor: pos.floor, Rack: pos.rack, Position: pos.position, IsRackBin: true });
         });
     });
 
-    test("contains separate list for non-rack bins with synthetic numbers", () => {
+    test("demo non-rack list holds one synthetic unit on a bin the server parser rejects as a rack bin", () => {
         const nonRack = controller.model.getProperty("/nonRackBins");
-        expect(Array.isArray(nonRack)).toBe(true);
-        expect(nonRack.length).toBe(1);
-        expect(nonRack[0].isRackBin).toBe(false);
-        expect(nonRack[0].unitNumber).toMatch(/^DEMO-HU-\d{3}$/);
+        expect(nonRack.map((bin) => bin.unitNumber)).toEqual(["DEMO-HU-004"]);
+        expect(parseRackBinName(nonRack[0].storageBin).IsRackBin).toBe(false);
     });
 
-    test("view is clearly labelled DEMO with synthetic banner and single row layout", () => {
-        expect(demoView).toContain('id="demoNoticeStrip"');
-        expect(demoView).toContain('{i18n>demoRackNotice}');
-        expect(demoView).toContain('{i18n>demoRackNonRackPanel}');
+    test("demo notice strip text resolves to an i18n entry that says the data is synthetic", () => {
+        // Cross-file rule: the view binds the strip to a key, and that key must exist with demo wording. Display needs a browser check.
+        const key = /id="demoNoticeStrip"\s+text="\{i18n>(\w+)\}"/.exec(demoView)[1];
+        const entry = i18n.split("\n").find((line) => line.startsWith(`${key}=`));
+        expect(entry).toMatch(/^demoRackNotice=DEMO MODE .* Synthetic/);
     });
 
     test("toggles mode between rack and table", () => {

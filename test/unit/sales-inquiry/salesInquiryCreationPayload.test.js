@@ -96,8 +96,8 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
         expect(sanitized.items[0].OrderQuantityUnit).toBe('PC');
     });
 
-    test('Sanitized payload should pass server-side business validation cleanly', () => {
-        const payload = {
+    test('_sanitizePayload output passes server-side validation and maps to the S/4 payload', () => {
+        const payload = SalesInquiryService._sanitizePayload({
             header: {
                 SalesInquiryType: 'ZIN',
                 SalesOrganization: '1000',
@@ -105,6 +105,7 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
                 OrganizationDivision: '52',
                 SoldToParty: '10135',
                 CustomerName: "Divi's Laboratories Limited",
+                CustomerCity: 'Hyderabad',
                 ShipToParty: '10135',
                 PurchaseOrderByCustomer: 'PO-999',
                 CustomerPurchaseOrderDate: '2026-09-07',
@@ -124,10 +125,11 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
                     Plant: '1120',
                     NetPriceAmount: 600,
                     NetAmount: 600,
-                    TransactionCurrency: 'INR'
+                    TransactionCurrency: 'INR',
+                    errors: {}
                 }
             ]
-        };
+        });
 
         const validation = validateCreateSalesInquiryPayload(payload);
         expect(validation.isValid).toBe(true);
@@ -164,5 +166,19 @@ describe('Unit: Sales Inquiry Creation Payload Contract Validation', () => {
             items: [{ Material: 'TG11', OrderQuantity: 1, OrderQuantityUnit: 'EA', Plant: '1110', errors: {} }]
         });
         expect(sanitized.items[0]).toEqual({ Material: 'TG11', OrderQuantity: 1, OrderQuantityUnit: 'EA', Plant: '1110' });
+    });
+
+    // Known defect: app/fiori-app/webapp/modules/sd/sales-inquiry/service/SalesInquiryService.js:87-104 whitelist omits fields that
+    // srv/sd/sales-inquiry/service.cds:142-145 declares and SalesInquiryModel.buildPayload sends, so they never reach CAP.
+    test.failing('createSalesInquiry posts the incompletion fields the CAP InquiryHeader declares', async () => {
+        mockODataClient.post.mockResolvedValueOnce({ value: '1000529' });
+
+        await SalesInquiryService.createSalesInquiry({
+            header: { SalesInquiryType: 'ZIN', CustomerGroup2: 'SEA', PortOfLoading: 'INMAA', PortOfDischarge: 'ESBCN', ContactPerson: '25116' },
+            items: []
+        });
+
+        const [, body] = mockODataClient.post.mock.calls[mockODataClient.post.mock.calls.length - 1];
+        expect(body.header).toMatchObject({ CustomerGroup2: 'SEA', PortOfLoading: 'INMAA', PortOfDischarge: 'ESBCN', ContactPerson: '25116' });
     });
 });

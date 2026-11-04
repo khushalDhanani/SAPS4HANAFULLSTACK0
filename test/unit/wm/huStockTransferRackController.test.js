@@ -90,7 +90,7 @@ describe("HU stock transfer bin selector", () => {
         expect(controller.model.getProperty("/error")).toBe("");
     });
 
-    test("Option A banner displays when T001L-XHUPF is blank and routes to standard 311", async () => {
+    test("a layout response with blank XHUPF marks the storage location as not HU-managed in the model", async () => {
         const layoutResult = {
             Warehouse: "W01",
             StorageType: "EN1",
@@ -106,10 +106,9 @@ describe("HU stock transfer bin selector", () => {
         await controller.loadBins("527868", "1");
 
         expect(controller.model.getProperty("/isHuManaged")).toBe(false);
+        expect(controller.model.getProperty("/xhupf")).toBe("");
         expect(controller.model.getProperty("/storageLocation")).toBe("HS01");
-        expect(rackView).toContain('id="stripBlankXhupf"');
-        expect(rackView).toContain('{i18n>rackBlankXhupfBannerText}');
-        expect(rackView).not.toContain("onRouteToStandard311");
+        expect(controller.model.getProperty("/nonRackCount")).toBe(1);
     });
 
     test("shows an unmaintained section without a color and wraps section color slots after 24", async () => {
@@ -143,7 +142,7 @@ describe("HU stock transfer bin selector", () => {
         expect(controller.model.getProperty("/mode")).toBe("rack");
     });
 
-    test("empty rack state shows the non-rack count and links to table mode", async () => {
+    test("a response with only a non-rack bin gives no rack positions and counts the bin", async () => {
         MockODataClient.get.mockResolvedValueOnce({ value: [
             { UnitNumber: "TRANSFER", UnitCategory: "BIN", StorageBin: "TRANSFER", StorageType: "921", IsRackBin: false }
         ] });
@@ -151,25 +150,28 @@ describe("HU stock transfer bin selector", () => {
 
         expect(controller.model.getProperty("/positions")).toEqual([]);
         expect(controller.model.getProperty("/nonRackCount")).toBe(1);
-        expect(rackView).toContain('text="{i18n>rackNoRackBins}"');
-        expect(rackI18n).toContain("rackNoRackBins=No rack bins for this item;");
-        expect(rackView).toContain("{i18n>rackOneNonRackBinIsIn}");
-        expect(rackView).toContain("!(${rackView>/positions}.length === 0)");
-        expect(rackView).toContain("press=\".onShowTable\"");
+        expect(controller.model.getProperty("/filteredBins")).toHaveLength(1);
+    });
 
+    test("onShowTable switches the view from rack mode to table mode", () => {
+        expect(controller.model.getProperty("/mode")).toBe("rack");
         controller.onShowTable();
         expect(controller.model.getProperty("/mode")).toBe("table");
     });
 
-    test("renders floor-rack-position groups while keeping the complete response in table mode", () => {
-        expect(rackView).toContain("selectedKey=\"{rackView>/selectedWarehouse}\"");
-        expect(rackView).toContain("selectedKey=\"{rackView>/selectedFloor}\"");
-        expect(rackView).toContain("selectedKey=\"{rackView>/selectedRack}\"");
-        expect(rackView).toContain("items=\"{rackView>/positions}\"");
-        expect(rackView).toContain('wrap="NoWrap"');
-        expect(rackView).toContain("items=\"{path: 'rackView>/filteredBins'}\"");
-        expect(rackView).toContain("rackStockScopeNote");
-        expect(rackView).not.toMatch(/\b(Bay|Level|Shelf)\b/);
+    // Cross-file contract: a binding to a path the controller never creates renders empty with no error.
+    test("every rackView path bound in the view exists in the model the controller creates", () => {
+        const boundProperties = [...new Set([...rackView.matchAll(/rackView>\/(\w+)/g)].map((match) => match[1]))];
+        expect(boundProperties.length).toBeGreaterThan(0);
+        const missing = boundProperties.filter((property) => !(property in controller.model.data));
+        expect(missing).toEqual([]);
+    });
+
+    test("every i18n key used in the view exists in i18n.properties", () => {
+        const usedKeys = [...new Set([...rackView.matchAll(/i18n>(\w+)/g)].map((match) => match[1]))];
+        expect(usedKeys.length).toBeGreaterThan(0);
+        const missing = usedKeys.filter((key) => !new RegExp(`^${key}=`, "m").test(rackI18n));
+        expect(missing).toEqual([]);
     });
 
     test("rebuilds dependent selectors from data and shows only the chosen rack positions", async () => {

@@ -174,9 +174,10 @@ describe('SalesInquiryAdapter.createSalesInquiryViaRfc', () => {
             .rejects.toMatchObject({ SalesInquiry: '0001500200', name: 'PartialSalesInquiryError' });
     });
 
-    it('returns the created document after a successful read-back', async () => {
-        const creator = { create: jest.fn().mockResolvedValue({ SalesInquiry: '0001500200', testRun: false }), readBack: jest.fn().mockResolvedValue({ VBELN: '0001500200' }) };
-        const out = await SalesInquiryAdapter.prototype.createSalesInquiryViaRfc.call({ rfc: {} }, header(), items(), { creator });
+    it('reads the committed document back from VBAK before returning it (real creator, fake RFC)', async () => {
+        const rfc = fakeRfc({ [BAPI]: ok, BAPI_TRANSACTION_COMMIT: { RETURN: { TYPE: '', MESSAGE: '' } } });
+        const out = await SalesInquiryAdapter.prototype.createSalesInquiryViaRfc.call({ rfc }, header(), items(), {});
+        expect(rfc.readTable).toHaveBeenCalledWith('VBAK', ['VBELN', 'AUART', 'VBTYP', 'KUNNR'], ["VBELN = '0001500200'"], 1);
         expect(out.SalesInquiry).toBe('0001500200');
     });
 });

@@ -7,14 +7,12 @@
  * Validates:
  * 1. Correlation ID propagation & structured logging in plain & JSON formats
  * 2. Supervisor alerting state transition ('needs-attention') for stale unconfirmed transactions
- * 3. Gateway error sanitization and diagnostic capture
- * 4. Production guardrail security alerts and startup warning triggers
+ * 3. Gateway error message content
  */
 
 const cds = require('@sap/cds');
 const getLogger = require('../../../srv/common/logger');
 const { GoodsIssueAttemptStore } = require('../../../srv/wm/goods-issue/GoodsIssueAttemptStore');
-const productionGuard = require('../../../srv/common/productionGuard');
 const { S4HttpClient } = require('../../../srv/integration/s4hana/S4HttpClient');
 
 describe('Production Assurance: Monitoring & Alerting Verification', () => {
@@ -121,48 +119,26 @@ describe('Production Assurance: Monitoring & Alerting Verification', () => {
     });
   });
 
-  describe('3. Gateway Error Sanitization & Security Alerting', () => {
-    it('sanitizes SAP Gateway error responses without exposing backend URLs or stack traces', () => {
-      const rawError = {
+  describe('3. Gateway Error Message', () => {
+    // Body keeps the earlier fixture; that SAP answers in exactly this shape is not proven here.
+    it('builds the error message from method, path and the SAP text, without the host from the raw error', () => {
+      const rawError = Object.assign(new Error('Request to https://s4.internal.example:44300 failed'), {
         response: {
           status: 500,
           data: {
             error: {
               code: 'CX_SADL_DPC_NOT_IMPL/005056A700711EE88C8',
-              message: { value: 'RFC execution error occurred in backend system' },
-              innererror: {
-                errordetails: [
-                  { code: 'SY/530', message: 'Work process disconnected' }
-                ]
-              }
+              message: { value: 'RFC execution error occurred in backend system' }
             }
           }
         }
-      };
+      });
 
-      const sanitized = S4HttpClient.toS4HttpError(rawError, 'POST', '/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV');
-      expect(sanitized.status).toBe(500);
-      expect(sanitized.message).toContain('RFC execution error occurred in backend system');
-      expect(sanitized.code).toBe('CX_SADL_DPC_NOT_IMPL/005056A700711EE88C8');
-      expect(sanitized.response).toBeDefined();
-    });
+      const mapped = S4HttpClient.toS4HttpError(rawError, 'POST', '/sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV');
 
-    it('triggers security alerts when illegal mock authentication is configured in production', () => {
-      expect(() => {
-        productionGuard.assertDevFlagsOff(
-          { NODE_ENV: 'production' },
-          { kind: 'mocked' }
-        );
-      }).toThrow(productionGuard.ProductionGuardError);
-    });
-
-    it('triggers security alerts when raw passwords exist in environment variables in production', () => {
-      expect(() => {
-        productionGuard.assertS4ConnectionConfig({
-          NODE_ENV: 'production',
-          S4_PASSWORD: 'supersecretpassword'
-        });
-      }).toThrow(productionGuard.ProductionGuardError);
+      expect(mapped.status).toBe(500);
+      expect(mapped.code).toBe('CX_SADL_DPC_NOT_IMPL/005056A700711EE88C8');
+      expect(mapped.message).toBe('S/4HANA POST /sap/opu/odata/sap/C_PURCHASEORDER_FS_SRV failed: HTTP 500 - RFC execution error occurred in backend system');
     });
   });
 });

@@ -142,33 +142,36 @@ describe('Sales Inquiry Detail Controller Unit Tests', () => {
     });
 
     describe('Data Loading (_loadInquiry)', () => {
-        it('should fetch inquiry data, show/hide BusyIndicator, and set detail JSONModel', async () => {
-            const mockData = {
-                header: {
-                    SalesInquiry: '160000005',
-                    SoldToParty: '1000000',
-                    TotalNetAmount: '4500.00'
-                },
-                items: [
-                    { SalesInquiryItem: '10', Material: 'TG11', RequestedQuantity: '5' }
-                ]
-            };
-            mockSalesInquiryService.getSalesInquiry.mockResolvedValue(mockData);
+        // Same shape as the READ handler returns: a flat header with to_Items (salesInquiry.handler.js:23-25)
+        const flatInquiry = () => ({
+            SalesInquiry: '160000005',
+            SoldToParty: '1000000',
+            to_Items: [{ SalesInquiryItem: '10', Material: 'TG11' }]
+        });
+
+        it('shows the BusyIndicator while loading and hides it afterwards', async () => {
+            mockSalesInquiryService.getSalesInquiry.mockResolvedValue(flatInquiry());
 
             controller._loadInquiry('160000005');
-
             expect(mockBusyIndicator.show).toHaveBeenCalledWith(0);
+            expect(mockBusyIndicator.hide).not.toHaveBeenCalled();
 
-            // Wait for promise resolution
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            expect(mockBusyIndicator.hide).toHaveBeenCalledTimes(1);
+        });
+
+        it('binds the flat CAP result to the detail model: header fields and to_Items as items', async () => {
+            mockSalesInquiryService.getSalesInquiry.mockResolvedValue(flatInquiry());
+
+            controller._loadInquiry('160000005');
             await new Promise((resolve) => setTimeout(resolve, 10));
 
-            expect(mockBusyIndicator.hide).toHaveBeenCalled();
+            expect(mockSalesInquiryService.getSalesInquiry).toHaveBeenCalledWith('160000005');
             expect(mockView.setModel).toHaveBeenCalledWith(expect.any(MockJSONModel), 'detail');
-
-            const setModelCall = mockView.setModel.mock.calls[0];
-            const boundModel = setModelCall[0];
-            expect(boundModel.getData().header.SalesInquiry).toBe('160000005');
-            expect(boundModel.getData().items).toHaveLength(1);
+            const oData = mockView.setModel.mock.calls[0][0].getData();
+            expect(oData.header.SalesInquiry).toBe('160000005');
+            expect(oData.header.SoldToParty).toBe('1000000');
+            expect(oData.items).toEqual([{ SalesInquiryItem: '10', Material: 'TG11' }]);
         });
 
         it('should handle service error gracefully and hide BusyIndicator', async () => {
@@ -188,10 +191,11 @@ describe('Sales Inquiry Detail Controller Unit Tests', () => {
             spyWarn.mockRestore();
         });
 
-        it('should populate itemsUnavailable flag when inquiry items service fails', async () => {
+        // Controller side only: today the READ handler never delivers this flag, see salesInquiryReadHandler.test.js
+        it('copies itemsUnavailable and its reason to the model when the service result carries them', async () => {
             mockSalesInquiryService.getSalesInquiry.mockResolvedValue({
-                header: { SalesInquiry: '160000005' },
-                items: [],
+                ...flatInquiry(),
+                to_Items: [],
                 itemsUnavailable: true,
                 itemsUnavailableReason: 'Factsheet items service unavailable'
             });
@@ -199,10 +203,20 @@ describe('Sales Inquiry Detail Controller Unit Tests', () => {
             controller._loadInquiry('160000005');
             await new Promise((resolve) => setTimeout(resolve, 10));
 
-            const setModelCall = mockView.setModel.mock.calls[0];
-            const boundModel = setModelCall[0];
-            expect(boundModel.getData().itemsUnavailable).toBe(true);
-            expect(boundModel.getData().itemsUnavailableReason).toBe('Factsheet items service unavailable');
+            const oData = mockView.setModel.mock.calls[0][0].getData();
+            expect(oData.itemsUnavailable).toBe(true);
+            expect(oData.itemsUnavailableReason).toBe('Factsheet items service unavailable');
+        });
+
+        it('sets itemsUnavailable false and an empty reason when the service result has no flag', async () => {
+            mockSalesInquiryService.getSalesInquiry.mockResolvedValue(flatInquiry());
+
+            controller._loadInquiry('160000005');
+            await new Promise((resolve) => setTimeout(resolve, 10));
+
+            const oData = mockView.setModel.mock.calls[0][0].getData();
+            expect(oData.itemsUnavailable).toBe(false);
+            expect(oData.itemsUnavailableReason).toBe('');
         });
     });
 

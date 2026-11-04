@@ -4,11 +4,15 @@
 
 let BarcodeScanService;
 
+const dialogs = [];
+const inputs = [];
+
 class MockDialog {
     constructor(config) {
         this.config = config || {};
         this.open = jest.fn();
         this.destroy = jest.fn();
+        dialogs.push(this);
     }
 }
 
@@ -16,6 +20,7 @@ class MockInput {
     constructor(config) {
         this.config = config || {};
         this._value = "";
+        inputs.push(this);
     }
     getValue() { return this._value; }
     setValue(v) { this._value = v; }
@@ -164,13 +169,40 @@ describe('BarcodeScanService Unit Tests', () => {
     });
 
     describe('Camera Barcode Scanning', () => {
-        it('should provide fallback dialog when navigator.mediaDevices is absent', async () => {
-            // navigator.mediaDevices is undefined in Node/Jest environment
-            const scanPromise = BarcodeScanService.scanWithCamera({ title: 'Test Camera Scan' });
+        // navigator.mediaDevices is undefined under Jest's node environment, so scanWithCamera takes the fallback path.
+        beforeEach(() => {
+            dialogs.length = 0;
+            inputs.length = 0;
+        });
 
-            // Ensure a promise is returned
-            expect(scanPromise).toBeDefined();
-            expect(typeof scanPromise.then).toBe('function');
+        it('opens the simulation dialog titled after the caller when the camera API is absent', () => {
+            BarcodeScanService.scanWithCamera({ title: 'Test Camera Scan' }).catch(() => {});
+
+            expect(dialogs).toHaveLength(1);
+            expect(dialogs[0].config.title).toBe('Test Camera Scan (Camera Simulation)');
+            expect(dialogs[0].open).toHaveBeenCalledTimes(1);
+        });
+
+        it('resolves with the trimmed value when Submit Scan is pressed', async () => {
+            const scan = BarcodeScanService.scanWithCamera({});
+            inputs[0].setValue('  RM-4520 ');
+            dialogs[0].config.beginButton.firePress();
+
+            await expect(scan).resolves.toBe('RM-4520');
+        });
+
+        it('rejects when Submit Scan is pressed with an empty value', async () => {
+            const scan = BarcodeScanService.scanWithCamera({});
+            dialogs[0].config.beginButton.firePress();
+
+            await expect(scan).rejects.toThrow('No barcode entered');
+        });
+
+        it('rejects when Cancel is pressed', async () => {
+            const scan = BarcodeScanService.scanWithCamera({});
+            dialogs[0].config.endButton.firePress();
+
+            await expect(scan).rejects.toThrow('Scan cancelled');
         });
     });
 });

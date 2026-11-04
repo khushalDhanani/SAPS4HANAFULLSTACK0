@@ -28,8 +28,12 @@ describe('Frontend CustomerReturnService collection functions', () => {
         await expect(Service.getReturnReasons(modelReturning({ value: rows }))).resolves.toEqual(rows);
     });
 
-    it.each([[null], [undefined], [{}], [[{ a: 1 }]]])('returns an array for %p', async (result) => {
-        const out = await Service.getReturnReasons(modelReturning(result));
-        expect(Array.isArray(out)).toBe(true);
+    it.each([
+        [null, []],
+        [undefined, []],
+        [{}, []],
+        [[{ Reason: '101' }], [{ Reason: '101' }]]
+    ])('for a function result of %p returns %p', async (result, expected) => {
+        await expect(Service.getReturnReasons(modelReturning(result))).resolves.toEqual(expected);
     });
 });

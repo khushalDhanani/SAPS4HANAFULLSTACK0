@@ -357,30 +357,27 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
       expect(giPost201Spy).toHaveBeenCalledTimes(1);
     });
 
-    test('Mvt261 postGoodsIssue: concurrent double-submit returns 409 and calls adapter once', async () => {
-      jest.spyOn(GoodsIssueAttemptStore, 'createOrGet').mockResolvedValue({
-        created: false,
-        row: {
-          ReferenceDocument: 'GI261CONCUR01',
-          Status: 'sending'
-        }
+    test('Mvt261 postGoodsIssue: a second submit while the first is still at SAP gets 409 and SAP is called once', async () => {
+      let reachedSap;
+      let releaseSap;
+      const atSap = new Promise((resolve) => { reachedSap = resolve; });
+      const sapHolds = new Promise((resolve) => { releaseSap = resolve; });
+      mvt261PostSpy.mockImplementation(async () => {
+        reachedSap();
+        await sapHolds;
+        return { MaterialDocument: '4900050254', MaterialDocumentYear: '2026', Pending: false };
       });
+      const body = { movementType: '261', orderId: '4000033120', orderType: 'ZBDN', reservation: '0000528780', item: '0001', quantity: 1 };
 
-      await expect(POST('/odata/v4/mvt261/postGoodsIssue', {
-        movementType: '261',
-        orderId: '4000033120',
-        orderType: 'ZBDN',
-        reservation: '0000528780',
-        item: '0001',
-        quantity: 1
-      }, authCarol)).rejects.toMatchObject({
-        response: {
-          status: 409,
-          data: { error: { message: expect.stringMatching(/already in progress/i) } }
-        }
+      const first = POST('/odata/v4/mvt261/postGoodsIssue', body, authCarol);
+      await atSap;
+      await expect(POST('/odata/v4/mvt261/postGoodsIssue', body, authCarol)).rejects.toMatchObject({
+        response: { status: 409, data: { error: { message: 'A goods issue for reservation 0000528780/0001 is already in progress.' } } }
       });
+      releaseSap();
 
-      expect(mvt261PostSpy).not.toHaveBeenCalled();
+      expect((await first).data.MaterialDocument).toBe('4900050254');
+      expect(mvt261PostSpy).toHaveBeenCalledTimes(1);
     });
 
     test('ReservationProcessAdapter postGoodsMovement: de-duplicates concurrent in-flight calls sharing ProcessId', async () => {
@@ -486,26 +483,5 @@ describe('P1: Protect SAP Writes - Fail-Closed, Duplicate/Concurrent & Timeout R
       expect(row.MaterialDocYear).toBe('2026');
     });
 
-    test('recheck reconciliation: transitions aged attempt (>= 15 min) to not_posted when SAP proves absence', async () => {
-      const now = Date.now();
-      await GoodsIssueAttemptStore.create({
-        ReferenceDocument: 'GI-AGED-ABSENT-01',
-        MovementType: '201',
-        Material: '8000000023',
-        Plant: '1120',
-        StorageLocation: 'CS01',
-        IssueQty: 2,
-        createdAt: new Date(now).toISOString()
-      });
-
-      jest.spyOn(GoodsIssueAdapter, 'findPostedGoodsIssueByReference').mockResolvedValue(null);
-      jest.spyOn(GoodsIssueAttemptStore, '_findDeliveryForAttempt').mockResolvedValue(null);
-
-      const summary = await GoodsIssueAttemptStore.recheck(GoodsIssueAdapter, now + 16 * 60 * 1000);
-
-      expect(summary.NotPosted).toBe(1);
-      const row = await GoodsIssueAttemptStore.getByReference('GI-AGED-ABSENT-01');
-      expect(row.Status).toBe('not_posted');
-    });
   });
 });

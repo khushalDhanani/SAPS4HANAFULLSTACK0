@@ -322,12 +322,19 @@ describe('Unit: Dashboard Controller live figures', () => {
             return controller;
         };
 
-        test('onInit loads on both routes that show the dashboard ("dashboard" and the empty-hash "default")', () => {
+        test('onInit attaches _onDashboardMatched to both routes that show the dashboard ("dashboard" and the empty-hash "default")', () => {
+            const attached = {};
+            const router = {
+                getRoute: (name) => ({ attachPatternMatched: (handler) => { attached[name] = handler; } }),
+                attachRouteMatched: jest.fn()
+            };
             const controller = new DashboardControllerClass();
             controller.getView = () => ({ setModel: jest.fn() });
-            controller.getOwnerComponent = () => ({ getRouter: () => mockRouter, getModel: () => null });
+            controller.getOwnerComponent = () => ({ getRouter: () => router, getModel: () => null });
+
             controller.onInit();
-            expect(mockRouter.getRoute.mock.calls.map((c) => c[0])).toEqual(['dashboard', 'default']);
+
+            expect(attached).toEqual({ dashboard: controller._onDashboardMatched, default: controller._onDashboardMatched });
         });
 
         test('already signed in: loads immediately', () => {
@@ -433,26 +440,6 @@ describe('Unit: Dashboard Controller live figures', () => {
         });
     });
 
-    test('exposes no simulator, info-dialog or placeholder-tab handlers', () => {
-        const controller = new DashboardControllerClass();
-        ['onSimulateCarLoan', 'onNewCarLoanApp', 'onShowMasterDataInfo', '_loadIndividualMetrics',
-            'onSelectTabCO', 'onSelectTabPP', 'onSelectTabQM', 'onSelectTabEAM', 'onSelectTabPS',
-            'onSelectTabTM', 'onSelectTabService', 'onSelectTabHCM', 'onSelectTabAnalytics', 'onSelectTabAdmin']
-            .forEach((fn) => expect(controller[fn]).toBeUndefined());
-    });
-
-    test('sanitizeCardLayout filters out obsolete or removed card IDs (tileMvt201, tileMvt301, tileMvt311, tileTrTo, tileMvt261, tileOpen261, panelCategoryMasterData, tabMasterData, tabFI, panelCategoryFinance, etc.)', () => {
-        const controller = new DashboardControllerClass();
-        expect(controller.sanitizeCardLayout([
-            'tileMvt301', 'tileMvt201', 'kpiMvt201Val', 'kpiMvt301Val', 'Mvt301',
-            'tileMvt311', 'kpiMvt311Val', 'Mvt311', 'panelMvtTypeKpis', 'tileTrTo', 'tileMvt261', 'tileOpen261',
-            'panelCategoryMasterData', 'tileOverviewBupaMD', 'tileOverviewProdMD', 'tileOverviewGateway',
-            'tabMasterData', 'panelMdBusinessPartner', 'panelMdProduct', 'panelMdFinancial', 'panelMdOrganization',
-            'tabFI', 'panelCategoryFinance', 'tileModuleFI', 'tileOverviewCostCenters', 'tileOverviewGLAccounts', 'kpiFIDocsVal', 'btnQuickManageFI',
-            'tileGoodsReceipt'
-        ])).toEqual(['tileGoodsReceipt']);
-        expect(controller.sanitizeCardLayout(null)).toEqual([]);
-    });
 });
 
 describe('Unit: Dashboard view binds only live figures', () => {
@@ -469,19 +456,34 @@ describe('Unit: Dashboard view binds only live figures', () => {
         expect(unknown).toEqual([]);
     });
 
-    test('every metric tile shows Loading / Failed states through the formatter', () => {
+    test('every NumericContent value is bound through formatMetricValue', () => {
         const numericValues = [...viewXml.matchAll(/<NumericContent[^>]*value="([^"]*)"/g)].map((m) => m[1]);
         expect(numericValues.length).toBeGreaterThan(0);
         numericValues.forEach((binding) => expect(binding).toMatch(/formatter: '\.formatMetricValue'/));
-        const tilesWithValue = [...viewXml.matchAll(/<GenericTile[^>]*>\s*<TileContent[^>]*>\s*<NumericContent[^>]*value=/g)].map((m) => m[0]);
-        tilesWithValue.forEach((tile) => expect(tile).toMatch(/state="\{path: 'dashboardView>\/[A-Za-z]+', formatter: '\.formatTileState'\}"/));
     });
 
-    test('contains no simulators, info dialogs or hard-coded status, and only Administrator is an empty section', () => {
-        expect(viewXml).not.toMatch(/onSimulateCarLoan|onNewCarLoanApp|onShowMasterDataInfo/);
+    test('every tile showing a figure takes its Loading / Failed state from that same figure', () => {
+        const attrs = '(?:[^>"]|"[^"]*")*'; // bindings contain ">", so match attributes up to the tag end
+        // Action tiles (create order, handling units, ...) have an icon-only NumericContent and no figure.
+        const tiles = [...viewXml.matchAll(new RegExp(`<GenericTile\\b(${attrs})>\\s*<TileContent\\b${attrs}>\\s*<NumericContent\\b(${attrs})>`, 'g'))]
+            .filter(([, , numeric]) => /\svalue="/.test(numeric));
+        const figureCount = [...viewXml.matchAll(/<NumericContent[^>]*value="/g)].length;
+        expect(figureCount).toBeGreaterThan(0);
+        expect(tiles.length).toBe(figureCount);
+
+        const mismatched = tiles.filter(([, tile, numeric]) => {
+            const state = tile.match(/\sstate="\{path: 'dashboardView>\/(\w+)', formatter: '\.formatTileState'\}"/);
+            const value = numeric.match(/\svalue="\{path: 'dashboardView>\/(\w+)'/);
+            return !state || !value || state[1] !== value[1];
+        }).map(([, tile]) => tile.match(/\sid="(\w+)"/)[1]);
+        expect(mismatched).toEqual([]);
+    });
+
+    test('the view shows no hard-coded "Client 220" status', () => {
         expect(viewXml).not.toMatch(/Client 220/);
-        expect(viewXml).not.toMatch(/systemHealth|totalSpend|completeRate/);
-        // The sidebar in the app shell and the dashboard's sections must offer the same keys, in order
+    });
+
+    test('the sidebar items and the dashboard sections offer the same keys, in order', () => {
         const appViewXml = fs.readFileSync(path.join(__dirname, '../../../app/fiori-app/webapp/view/App.view.xml'), 'utf8');
         const navKeys = [...appViewXml.matchAll(/<tnt:NavigationListItem[^>]*?key="([a-zA-Z]+)"/g)].map((m) => m[1]);
         const sectionKeys = [...viewXml.matchAll(/dashboardView>\/selectedTab\} === '([a-zA-Z]+)'/g)].map((m) => m[1]);
@@ -649,7 +651,7 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         expect(metrics2).toEqual(metrics1);
     });
 
-    test('bypasses cache and refetches live figures when forceRefresh is true', async () => {
+    test('forceRefresh re-reads all 12 counts, master data counts included', async () => {
         poAdapter.clearMetricsCache();
         const mockExecute = liveSap();
         const opts = { destination: { url: 'https://mock.s4hana' }, executeHttpRequest: mockExecute, useCache: true };
@@ -657,10 +659,8 @@ describe('Unit: PurchaseOrderAdapter getDashboardMetrics & getBusinessPartnerCou
         await poAdapter.getDashboardMetrics(opts);
         expect(mockExecute).toHaveBeenCalledTimes(12);
 
-        // With forceRefresh: true, executes calls again
         await poAdapter.getDashboardMetrics({ ...opts, forceRefresh: true });
-        // The transactional counts are executed again; master data counts may hit masterDataCountCache
-        expect(mockExecute.mock.calls.length).toBeGreaterThan(12);
+        expect(mockExecute).toHaveBeenCalledTimes(24);
     });
 
     test('clearMetricsCache invalidates cached metrics', async () => {

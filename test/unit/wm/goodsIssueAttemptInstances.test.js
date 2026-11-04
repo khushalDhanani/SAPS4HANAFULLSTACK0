@@ -58,6 +58,18 @@ describe('Attempt store with a database: the database is the only source', () =>
   });
 });
 
+describe('Attempt store when the database cannot be read', () => {
+  // Rule from the comment at srv/wm/goods-issue/GoodsIssueAttemptStore.js:284: a failed read is not "no open attempt".
+  const unreadable = new GoodsIssueAttemptStore({ db: { tx: async () => { throw new Error('db down'); } } });
+
+  it('refuses the open-attempt check with 503 instead of answering false', async () => {
+    await expect(unreadable.hasOpenAttemptForReservation('528779', '1')).rejects.toMatchObject({
+      status: 503,
+      message: 'Open posting attempts for reservation 528779 could not be read (db down). Goods Issue was NOT posted.'
+    });
+  });
+});
+
 describe('Attempt store with no database: memory is the fallback', () => {
   it('still records and resolves attempts', async () => {
     const store = new GoodsIssueAttemptStore({ db: null });

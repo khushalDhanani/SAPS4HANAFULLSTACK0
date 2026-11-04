@@ -64,28 +64,21 @@ describe('Unit: AuthAdapter (S/4HANA Credential Validation)', () => {
             expect(res.message).toContain('S/4HANA system is not configured');
         });
 
-        it('should return authenticated: true when S/4 Gateway returns 200 OK', async () => {
-            const mockFetch = jest.fn().mockResolvedValueOnce({
-                ok: true,
-                status: 200
-            });
+        it('should return authenticated: true when the read-only catalog GET with the caller credentials answers 200', async () => {
+            const execute = jest.fn().mockResolvedValueOnce({ status: 200, data: {} });
 
             const res = await authAdapter.validateCredentials('cb9980000001', 'Welcome123!', {
                 baseUrl: 'http://s4hana.example.corp:8000',
                 client: '220',
-                fetchFn: mockFetch
+                executeHttpRequest: execute
             });
 
-            expect(res.authenticated).toBe(true);
-            expect(res.statusCode).toBe(200);
-            expect(res.system).toBe('DEV - Client 220');
-            expect(res.client).toBe('220');
-            expect(mockFetch).toHaveBeenCalledTimes(1);
-
-            const [calledUrl, calledOptions] = mockFetch.mock.calls[0];
-            expect(calledUrl).toBe('http://s4hana.example.corp:8000/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection?$top=1&sap-client=220');
-            expect(calledOptions.method).toBe('GET');
-            expect(calledOptions.headers.Authorization).toBe('Basic ' + Buffer.from('cb9980000001:Welcome123!').toString('base64'));
+            expect(res).toMatchObject({ authenticated: true, statusCode: 200, system: 'DEV - Client 220', client: '220' });
+            expect(execute).toHaveBeenCalledTimes(1);
+            const [destination, config] = execute.mock.calls[0];
+            expect(destination).toMatchObject({ url: 'http://s4hana.example.corp:8000', username: 'cb9980000001', password: 'Welcome123!', authentication: 'BasicAuthentication' });
+            expect(config.method).toBe('get');
+            expect(config.url).toBe('/sap/opu/odata/IWFND/CATALOGSERVICE;v=2/ServiceCollection?$top=1&sap-client=220');
         });
 
         it('should return 401 when S/4 Gateway rejects credentials', async () => {

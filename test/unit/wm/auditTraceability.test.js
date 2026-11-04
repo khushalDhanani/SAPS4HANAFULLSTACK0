@@ -121,32 +121,47 @@ describe('Phase 3: Observability, Correlation Tracking & Security Gating', () =>
       expect(interceptedHeaders['X-Custom-Client-Header']).toBe('ClientTrace123');
     });
 
-    test('S4HttpClient.toS4HttpError sanitizes Gateway errors and returns clean S4HttpError', () => {
-      const networkErr = {
-        message: 'Request failed with status code 400',
-        response: {
-          status: 400,
-          data: {
-            error: {
-              code: 'M7/021',
-              message: { value: 'Deficit of BA Unrestricted-use stock 10.000 EA' }
-            }
-          },
-          headers: {
-            'set-cookie': ['MYSAPSSO2=secret-session-cookie; Path=/'],
-            'sap-server': 's4app01.internal'
-          }
-        }
-      };
+    const gatewayRejection = () => ({
+      message: 'Request failed with status code 400',
+      response: {
+        status: 400,
+        data: { error: { code: 'M7/021', message: { value: 'Deficit of BA Unrestricted-use stock 10.000 EA' } } },
+        headers: { 'set-cookie': ['MYSAPSSO2=secret-session-cookie; Path=/'], 'sap-server': 's4app01.internal' }
+      }
+    });
 
-      const s4Err = S4HttpClient.toS4HttpError(networkErr, 'POST', '/sap/opu/odata/sap/SERVICE/Post');
+    test('S4HttpClient.toS4HttpError maps the Gateway rejection to status, SAP code and a message naming the call', () => {
+      const s4Err = S4HttpClient.toS4HttpError(gatewayRejection(), 'POST', '/sap/opu/odata/sap/SERVICE/Post');
 
       expect(s4Err).toBeInstanceOf(S4HttpError);
       expect(s4Err.status).toBe(400);
       expect(s4Err.code).toBe('M7/021');
-      expect(s4Err.message).toContain('Deficit of BA Unrestricted-use stock 10.000 EA');
-      // Secret cookies are not serialized in message
+      expect(s4Err.message).toBe('S/4HANA POST /sap/opu/odata/sap/SERVICE/Post failed: HTTP 400 - Deficit of BA Unrestricted-use stock 10.000 EA');
+    });
+
+    test('S4HttpClient.toS4HttpError keeps response header values out of the error message', () => {
+      const s4Err = S4HttpClient.toS4HttpError(gatewayRejection(), 'POST', '/sap/opu/odata/sap/SERVICE/Post');
+
       expect(s4Err.message).not.toContain('MYSAPSSO2');
+      expect(s4Err.message).not.toContain('s4app01.internal');
+    });
+
+    // Known defect: srv/integration/s4hana/S4HttpClient.js:338 deletes only 'authorization' and 'Authorization', so any other casing of the caller's credential header reaches S/4.
+    test.failing('S4HttpClient.post strips the caller credential header whatever its casing', async () => {
+      const sent = [];
+      const client = new S4HttpClient({
+        destinationName: 'MOCK_DEST',
+        getDestination: async () => ({ url: 'https://mock.s4.local', headers: {} }),
+        executeHttpRequest: async (_dest, config) => {
+          sent.push(config);
+          return { status: 200, data: {}, headers: {} };
+        }
+      });
+
+      await client.post('/sap/opu/odata/sap/MOCK_SRV/ItemSet', { data: {}, headers: { AUTHORIZATION: 'Bearer caller-token' } });
+
+      const postConfig = sent.find((config) => config.method === 'post');
+      expect(postConfig.headers.AUTHORIZATION).toBeUndefined();
     });
   });
 

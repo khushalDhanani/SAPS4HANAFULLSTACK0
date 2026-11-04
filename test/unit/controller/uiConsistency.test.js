@@ -16,22 +16,22 @@ const views = walk(WEBAPP).filter((f) => /\.(view|fragment)\.xml$/.test(f)).map(
 const css = fs.readFileSync(path.join(WEBAPP, 'css/style.css'), 'utf8');
 const i18n = fs.readFileSync(path.join(WEBAPP, 'i18n/i18n.properties'), 'utf8');
 const i18nEn = fs.readFileSync(path.join(WEBAPP, 'i18n/i18n_en.properties'), 'utf8');
-const appController = fs.readFileSync(path.join(WEBAPP, 'controller/App.controller.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(WEBAPP, 'manifest.json'), 'utf8'));
 /** Opening tags of the given control, attributes included (bindings contain ">" so match up to the tag end). */
 const tags = (xml, control) => xml.match(new RegExp(`<(?:\\w+:)?${control}\\b(?:[^>"]|"[^"]*")*>`, 'g')) || [];
 
 test('there are views to check', () => expect(views.length).toBeGreaterThan(30));
 
-test('no page renders its own title or back button (the ShellBar owns both)', () => {
+test('no sap.m.Page renders its own title or back button (the ShellBar owns both)', () => {
   views.forEach(({ name, xml }) => tags(xml, 'Page').forEach((tag) => {
     expect(`${name}: ${/\s(title|showNavButton|navButtonPress)=/.test(tag)}`).toBe(`${name}: false`);
   }));
 });
 
-test('every route except login has a ShellBar title', () => {
-  const routes = manifest['sap.ui5'].routing.routes.map((r) => r.name).filter((n) => !['login', 'default'].includes(n));
-  routes.forEach((route) => expect(`${route}: ${new RegExp(`case "${route}":`).test(appController)}`).toBe(`${route}: true`));
+// Known defect: app/fiori-app/webapp/modules/wm/hu-stock-transfer/view/HuStockTransferList.view.xml:12-14 renders its own DynamicPageTitle heading although the ShellBar owns the title.
+test.failing('no DynamicPage renders its own heading title (the ShellBar owns it)', () => {
+  const withOwnTitle = views.filter(({ xml }) => /<(?:\w+:)?heading>\s*<(?:\w+:)?Title\b/.test(xml)).map(({ name }) => name);
+  expect(withOwnTitle).toEqual([]);
 });
 
 test('every table has an empty-state text', () => {

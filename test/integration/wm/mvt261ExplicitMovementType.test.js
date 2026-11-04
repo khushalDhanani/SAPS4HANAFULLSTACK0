@@ -54,13 +54,16 @@ describe('Integration: 261 adapter → posting client → mapper → SAP payload
     expect(client.readBackDocument).toHaveBeenCalledWith('4900050046', '2026', { expectedMovementType: '261' });
   });
 
-  it('never accepts a read-back that contains BWART 201', async () => {
+  it('never accepts a read-back whose MATDOC rows carry BWART 201', async () => {
     const { adapter, client, sapCalls } = setup();
-    client.readBackDocument.mockResolvedValue({
-      MaterialDocument: '4900050046', MaterialDocYear: '2026', Confirmed: false,
-      Status: 'movement type mismatch', Items: [{ BWART: '201' }]
+    // The real strict read-back runs here; only the SAP table read is doubled. Row fields are those MATDOC reads select.
+    client.readBackDocument = GoodsIssuePostingClient.prototype.readBackDocument;
+    client.rfc = { readTable: async () => [{ MBLNR: '4900050046', MJAHR: '2026', BWART: '201' }] };
+    await expect(adapter.postGoodsIssue(request())).rejects.toMatchObject({
+      status: 504,
+      code: 'GI_POSTING_OUTCOME_UNKNOWN',
+      message: 'SAP read-back GoodsMovementType did not exactly match requested MovementType 261'
     });
-    await expect(adapter.postGoodsIssue(request())).rejects.toMatchObject({ status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' });
     expect(sapCalls[0].payload.to_MaterialDocumentItem.results[0].GoodsMovementType).toBe('261');
   });
 

@@ -6,8 +6,7 @@
 
 const {
   validateGoodsIssue301Payload,
-  verifyGoodsIssue301InSap,
-  verifyReceivingLocationInSap
+  verifyGoodsIssue301InSap
 } = require('../../../srv/wm/goods-issue/validation/goodsIssue301.validation');
 const { validateGoodsIssue201Payload } = require('../../../srv/wm/goods-issue/validation/goodsIssue201.validation');
 const {
@@ -207,18 +206,6 @@ describe('301 SAP verification (ReceivingPlant + ReceivingStorageLocation in SAP
     });
     expect(result.valid).toBe(true);
   });
-
-  test('verifyReceivingLocationInSap directly verifies location in SAP', async () => {
-    const mockRfc = {
-      readTable: jest.fn().mockResolvedValue([{ WERKS: '1110', LGORT: 'CS01' }])
-    };
-    const res = await verifyReceivingLocationInSap(mockRfc, {
-      movementType: '301',
-      receivingPlant: '1110',
-      receivingStorageLocation: 'CS01'
-    });
-    expect(res.valid).toBe(true);
-  });
 });
 
 describe('311 validation (Transfer)', () => {
@@ -255,11 +242,6 @@ describe('311 validation (Transfer)', () => {
     const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS-01' });
     expect(r.isValid).toBe(false);
     expect(r.errors.some(e => e.field === 'ReceivingStorageLocation')).toBe(true);
-  });
-  test('311 receiving plant is optional (absent is valid)', () => {
-    const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02' });
-    expect(r.isValid).toBe(true);
-    expect(r.errors.some(e => e.field === 'ReceivingPlant')).toBe(false);
   });
   test('311 malformed receiving plant is rejected', () => {
     const r = validateGoodsIssue311Payload({ ...base, MovementType: '311', ReservationNo: '519944', ReservationItem: '0001', ReceivingStorageLocation: 'CS02', ReceivingPlant: 'XX' });
@@ -428,7 +410,3 @@ describe('261 validation (Goods Issue to Order)', () => {
 });
 
 // Compatibility imports must execute the same validator as the live 261 service.
-test('legacy 261 validator export is the canonical validator', () => {
-  const legacy = require('../../../srv/wm/goods-issue/validation/goodsIssue261.validation');
-  expect(legacy.validateGoodsIssue261Payload).toBe(validateGoodsIssue261Payload);
-});

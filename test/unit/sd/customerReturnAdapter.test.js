@@ -128,8 +128,26 @@ describe('Unit: CustomerReturnAdapter', () => {
     });
   });
 
+  // Query parameters of the URL the adapter requested, decoded
+  const requestedParams = () => new URL(mockHttpClient.get.mock.calls[0][0], 'http://sap.mock').searchParams;
+
+  // Entity and field names in the value-help and list tests below are hand-written: no metadata for
+  // SD_F2651_CRT_CREATE_SRV is in the repo, so the SAP shape is not proven. Only OUR URL and mapping are checked.
   describe('getCustomerReturns', () => {
-    test('calls SAP Gateway with pagination and filters', async () => {
+    test('requests the given paging and filter, newest first, with the inline count', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({ data: { d: { results: [] } } });
+
+      await adapter.getCustomerReturns({ top: 10, skip: 0, filter: "SoldToParty eq '10082'" });
+
+      const params = requestedParams();
+      expect(params.get('$top')).toBe('10');
+      expect(params.get('$skip')).toBe('0');
+      expect(params.get('$filter')).toBe("SoldToParty eq '10082'");
+      expect(params.get('$orderby')).toBe('CustomerReturn desc');
+      expect(params.get('$inlinecount')).toBe('allpages');
+    });
+
+    test('reads the worklist entity and returns mapped rows with the count', async () => {
       mockHttpClient.get.mockResolvedValueOnce({
         data: {
           d: {
@@ -265,7 +283,7 @@ describe('Unit: CustomerReturnAdapter', () => {
   });
 
   describe('getCustomers', () => {
-    test('fetches customers from C_SoldToValueHelp with filter and top', async () => {
+    test('fetches customers from C_SoldToValueHelp and maps the rows', async () => {
       mockHttpClient.get.mockResolvedValueOnce({
         data: {
           d: {
@@ -285,10 +303,20 @@ describe('Unit: CustomerReturnAdapter', () => {
       expect(res[0].Customer).toBe('10082');
       expect(res[0].OrganizationBPName1).toBe('Bajaj Healthcare Limited');
     });
+
+    test('searches number and name with the given top', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({ data: { d: { results: [] } } });
+
+      await adapter.getCustomers({ search: ' Bajaj ', top: 10 });
+
+      const params = requestedParams();
+      expect(params.get('$top')).toBe('10');
+      expect(params.get('$filter')).toBe("substringof('Bajaj', Customer) or substringof('Bajaj', OrganizationBPName1)");
+    });
   });
 
   describe('getMaterials', () => {
-    test('fetches materials from I_MaterialStdVH with filter and top', async () => {
+    test('fetches materials from I_MaterialStdVH and maps the rows', async () => {
       mockHttpClient.get.mockResolvedValueOnce({
         data: {
           d: {
@@ -306,6 +334,16 @@ describe('Unit: CustomerReturnAdapter', () => {
       );
       expect(res.length).toBe(1);
       expect(res[0].Material).toBe('4000000001');
+    });
+
+    test('searches number and text with the given top', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({ data: { d: { results: [] } } });
+
+      await adapter.getMaterials({ search: '40000', top: 5 });
+
+      const params = requestedParams();
+      expect(params.get('$top')).toBe('5');
+      expect(params.get('$filter')).toBe("substringof('40000', Material) or substringof('40000', Material_Text)");
     });
   });
 
@@ -357,7 +395,18 @@ describe('Unit: CustomerReturnAdapter', () => {
   });
 
   describe('getReferenceDocuments', () => {
-    test('fetches eligible reference documents with search', async () => {
+    test('searches document number and sold-to with the given top, newest first', async () => {
+      mockHttpClient.get.mockResolvedValueOnce({ data: { d: { results: [] } } });
+
+      await adapter.getReferenceDocuments({ search: '31000007', top: 5 });
+
+      const params = requestedParams();
+      expect(params.get('$top')).toBe('5');
+      expect(params.get('$orderby')).toBe('DocumentDate desc');
+      expect(params.get('$filter')).toBe("substringof('31000007', ReferenceSDDocument) or substringof('31000007', SoldToParty)");
+    });
+
+    test('maps the eligible reference documents', async () => {
       mockHttpClient.get.mockResolvedValueOnce({
         data: {
           d: {
@@ -493,6 +542,25 @@ describe('Unit: CustomerReturnAdapter', () => {
       expect(res.TotalNetAmount).toBe(15000.00);
       expect(res.TransactionCurrency).toBe('INR');
       expect(res.Message).toContain('4500099 successfully created and verified');
+    });
+
+    // Known defect: srv/integration/s4hana/sd/customer-return/CustomerReturnAdapter.js:573-581 returns "created and verified" after
+    // every read-back failed; the adapter comment at :553 calls this a mandatory check of real persistence.
+    test.failing('does not claim the return was verified when every read-back failed', async () => {
+      mockHttpClient.post.mockResolvedValueOnce({ data: { d: { SalesOrderID: '4500099', DocumentCurrency: 'INR' } } });
+      mockHttpClient.get.mockRejectedValue(new Error('read-back unavailable'));
+
+      const outcome = await adapter.createCustomerReturn({
+        SoldToParty: '10082',
+        ReturnsOrderReason: '101',
+        SalesOrganization: '1000',
+        DistributionChannel: '10',
+        OrganizationDivision: '52',
+        Items: [{ Material: '4000000001', OrderQuantity: 1, OrderQuantityUnit: 'KG', ProductionPlant: '1110' }]
+      }).catch((err) => ({ rejectedWith: err.message }));
+
+      expect(mockHttpClient.get).toHaveBeenCalledTimes(3);
+      expect(outcome.Message || '').not.toContain('created and verified');
     });
 
     test('rejects when no items with material are provided', async () => {

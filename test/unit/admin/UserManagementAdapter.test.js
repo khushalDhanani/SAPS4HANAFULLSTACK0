@@ -6,6 +6,7 @@
  */
 
 const { UserManagementAdapter } = require('../../../srv/integration/s4hana/admin/UserManagementAdapter');
+const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -281,5 +282,38 @@ describe('UserManagementAdapter.unlockUser', () => {
     const rfcClient = { session: jest.fn().mockImplementation((fn) => fn(mockCall)) };
     const adapter = new UserManagementAdapter({ rfcClient });
     await expect(adapter.unlockUser('BOB')).rejects.toMatchObject({ status: 502 });
+  });
+});
+
+// ── self-lock guard with the production connection ───────────────────────────
+
+describe('UserManagementAdapter.lockUser with the RFC user from a BTP destination', () => {
+  const origEnv = process.env.S4_USERNAME;
+  beforeEach(() => { delete process.env.S4_USERNAME; }); // production refuses S4_USERNAME (productionGuard.js:93)
+  afterEach(() => {
+    if (origEnv === undefined) delete process.env.S4_USERNAME;
+    else process.env.S4_USERNAME = origEnv;
+  });
+
+  // Known defect: srv/integration/s4hana/admin/UserManagementAdapter.js:166 compares only process.env.S4_USERNAME, but in production the RFC user is jco.client.user of the destination (RfcClient.js:16), so the fail-closed self-lock guard promised in srv/admin/service.cds never fires there
+  test.failing('refuses to lock the user the destination connects with', async () => {
+    const called = [];
+    const noderfc = {
+      Client: function Client() {
+        return {
+          open: async () => {},
+          close: async () => {},
+          call: async (fm) => { called.push(fm); return { RETURN: [] }; }
+        };
+      }
+    };
+    const destination = async () => ({
+      originalProperties: { 'jco.client.ashost': 'sap.internal', 'jco.client.sysnr': '00', 'jco.client.client': '220', 'jco.client.user': 'TECH_USER', 'jco.client.passwd': 'x' }
+    });
+    const rfcClient = new RfcClient({ S4_RFC_DESTINATION_NAME: 'S4_RFC', NODE_ENV: 'production' }, () => noderfc, destination);
+    const adapter = new UserManagementAdapter({ rfcClient });
+
+    await expect(adapter.lockUser('TECH_USER')).rejects.toMatchObject({ status: 403 });
+    expect(called).toEqual([]);
   });
 });

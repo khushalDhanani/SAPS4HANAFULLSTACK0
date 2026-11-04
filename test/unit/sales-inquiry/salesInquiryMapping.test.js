@@ -198,7 +198,7 @@ describe('Unit: Sales Inquiry Mapping', () => {
         });
 
         test('should throw error if header is null or missing', () => {
-            expect(() => mapToS4InquiryPayload(null, [])).toThrow();
+            expect(() => mapToS4InquiryPayload(null, [])).toThrow('Header data is required for S/4HANA Sales Inquiry payload mapping');
         });
 
         test('should preserve CustomerName, ShipToPartyName, and TotalNetAmount in mapToS4InquiryPayload', () => {

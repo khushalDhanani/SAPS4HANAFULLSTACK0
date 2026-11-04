@@ -133,11 +133,12 @@ describe('QuarantineLabels controller', () => {
             expect(Service.generateLabels).not.toHaveBeenCalled(); // the SAP PDF action is separate
         });
         it('uses the configured label size of the plant', async () => {
-            Service.labelRows.mockResolvedValue({ ...rows, LabelSize: '4x6' });
+            // 4x5 differs from the stubbed Layout.DEFAULT_SIZE (4x6), so ignoring the plant size would fail here.
+            Service.labelRows.mockResolvedValue({ ...rows, LabelSize: '4x5' });
             Pdf.toBlob.mockResolvedValue({ blob: {}, warnings: [] });
             const { s } = subject();
             await s.on4x6Labels();
-            expect(Pdf.toBlob.mock.calls[0][2]).toEqual({ size: '4x6', variant: 'vertical' });
+            expect(Pdf.toBlob.mock.calls[0][2]).toEqual({ size: '4x5', variant: 'vertical' });
         });
         it('passes selected variant (top header) to Pdf.toBlob', async () => {
             Service.labelRows.mockResolvedValue(rows);

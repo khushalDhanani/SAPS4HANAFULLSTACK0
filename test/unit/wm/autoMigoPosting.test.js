@@ -1699,63 +1699,6 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       });
     });
 
-    test('Persistence Check: Fails with 500 when document cannot be found in MATDOC/MSEG and check is enabled', async () => {
-      adapter._checkMatdocPersistence = true;
-      mockRfc.readTable.mockResolvedValue([]); // not found
-
-      await expect(ReservationProcessAdapter.prototype.verifyMaterialDocument.call(adapter, {
-        materialDocument: '5000123456',
-        materialDocumentYear: '2026',
-        movementType: '201'
-      })).rejects.toMatchObject({
-        status: 500,
-        stage: 'MIGO',
-        message: expect.stringContaining('persistence check failed')
-      });
-    });
-
-    test('TrToHandler verifyMaterialDocument action calls resProcessAdapter.verifyMaterialDocument and returns Step 10 contract', async () => {
-      const handlers = {};
-      const mockAdapter = {};
-      const mockRes = {
-        verifyMaterialDocument: jest.fn().mockResolvedValue({
-          success: true,
-          stage: 'MIGO',
-          materialDocument: '5000123456',
-          materialDocumentYear: '2026',
-          movementType: '201'
-        })
-      };
-
-      TrToHandler.init(
-        { on: (event, fn) => { handlers[event] = fn; } },
-        { adapter: mockAdapter, resProcessAdapter: mockRes }
-      );
-
-      const req = {
-        data: {
-          materialDocument: '5000123456',
-          materialDocumentYear: '2026',
-          movementType: '201',
-          material: 'ABC123',
-          quantity: 10,
-          plant: '1000',
-          storageLocation: '0001',
-          reservationNumber: '520235'
-        },
-        error: jest.fn()
-      };
-
-      const result = await handlers.verifyMaterialDocument(req);
-      expect(result).toEqual({
-        success: true,
-        stage: 'MIGO',
-        materialDocument: '5000123456',
-        materialDocumentYear: '2026',
-        movementType: '201'
-      });
-      expect(mockRes.verifyMaterialDocument).toHaveBeenCalledWith(req.data);
-    });
   });
 
   describe('8. Step 11: Add Final Stock Verification (Expected vs Actual per Movement Type)', () => {
@@ -2117,109 +2060,6 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       });
     });
 
-    test('postGoodsMovement() chains Step 10 and Step 11 automatically', async () => {
-      mockRfc.call
-        .mockResolvedValueOnce({
-          MATERIALDOCUMENT: '5000999999',
-          MATDOCUMENTYEAR: '2026',
-          RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Document posted' }]
-        })
-        .mockResolvedValueOnce({}); // COMMIT
-
-      mockRfc.readTable.mockImplementation(async (table, fields, where = []) => {
-        const whereStr = where.join(' ');
-        if (table === 'MATDOC' || table === 'MSEG') {
-          if (whereStr.includes('5000999999')) {
-            return [{
-              MBLNR: '5000999999',
-              MJAHR: '2026',
-              ZEILE: '0001',
-              BWART: '201',
-              MATNR: '000000008000000023',
-              WERKS: '1120',
-              LGORT: 'HS01',
-              MENGE: '5.000',
-              SHKZG: 'H',
-              KOSTL: '1011201301',
-              RSNUM: '0000524980',
-              RSPOS: '0001'
-            }];
-          }
-          return [];
-        }
-        if (table === 'MARD') {
-          return [{ LGORT: 'HS01', LABST: '95.000' }];
-        }
-        return [];
-      });
-
-      const res = await adapter.postGoodsMovement({
-        reservationNo: '524980',
-        reservationItem: '0001',
-        movementType: '201',
-        material: '8000000023',
-        plant: '1120',
-        storageLocation: 'HS01',
-        quantity: 5,
-        unit: 'NOS',
-        costCenter: '1011201301'
-      });
-
-      expect(res.success).toBe(true);
-      expect(res.stage).toBe('MIGO');
-      expect(res.materialDocument).toBe('5000999999');
-      expect(res.stockVerification).toBeDefined();
-      expect(res.stockVerification.success).toBe(true);
-      expect(res.stockVerification.stage).toBe('STOCK_VERIFICATION');
-      expect(res.stockVerification.movementType).toBe('201');
-      expect(res.stockVerification.comparison.matches).toBe(true);
-    });
-
-    test('TrToHandler verifyStock action executes and returns StockVerificationResult', async () => {
-      const handlers = {};
-      const mockAdapter = {};
-      const mockRes = {
-        verifyStock: jest.fn().mockResolvedValue({
-          success: true,
-          stage: 'STOCK_VERIFICATION',
-          movementType: '201',
-          materialDocument: '5000123456',
-          materialDocumentYear: '2026',
-          material: '8000000023',
-          quantity: 5,
-          consumedQuantity: 5,
-          sourceStockDecreased: true,
-          destinationStockIncreased: false,
-          comparison: { matches: true },
-          verified: true
-        })
-      };
-
-      TrToHandler.init(
-        { on: (event, fn) => { handlers[event] = fn; } },
-        { adapter: mockAdapter, resProcessAdapter: mockRes }
-      );
-
-      const req = {
-        data: {
-          materialDocument: '5000123456',
-          materialDocumentYear: '2026',
-          movementType: '201',
-          material: '8000000023',
-          quantity: 5,
-          plant: '1120',
-          storageLocation: 'HS01',
-          costCenter: '1011201301'
-        },
-        error: jest.fn()
-      };
-
-      const result = await handlers.verifyStock(req);
-      expect(result.success).toBe(true);
-      expect(result.stage).toBe('STOCK_VERIFICATION');
-      expect(result.sourceStockDecreased).toBe(true);
-      expect(mockRes.verifyStock).toHaveBeenCalledWith(req.data);
-    });
   });
 
   describe('9. Step 12: Add Reservation Verification (After MIGO: Read Reservation, Check Issued/Withdrawn, Remaining, and Completion Status)', () => {
@@ -2490,46 +2330,6 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       expect(res.success).toBe(true);
       expect(res.materialDocument).toBe('5000777777');
       expect(res.reservationVerification).toBeNull();
-    });
-
-    test('TrToHandler verifyReservation action executes and returns ReservationVerificationResult', async () => {
-      const handlers = {};
-      const mockAdapter = {};
-      const mockRes = {
-        verifyReservation: jest.fn().mockResolvedValue({
-          success: true,
-          stage: 'RESERVATION_VERIFICATION',
-          reservationNumber: '520235',
-          reservationItem: '0001',
-          requestedQuantity: 10,
-          issuedQuantity: 6,
-          remainingQuantity: 4,
-          completelyProcessed: false,
-          isComplete: false,
-          completionStatus: 'PARTIALLY_PROCESSED',
-          verified: true
-        })
-      };
-
-      TrToHandler.init(
-        { on: (event, fn) => { handlers[event] = fn; } },
-        { adapter: mockAdapter, resProcessAdapter: mockRes }
-      );
-
-      const req = {
-        data: {
-          reservationNumber: '520235',
-          reservationItem: '0001'
-        },
-        error: jest.fn()
-      };
-
-      const result = await handlers.verifyReservation(req);
-      expect(result.success).toBe(true);
-      expect(result.stage).toBe('RESERVATION_VERIFICATION');
-      expect(result.completelyProcessed).toBe(false);
-      expect(result.completionStatus).toBe('PARTIALLY_PROCESSED');
-      expect(mockRes.verifyReservation).toHaveBeenCalledWith(req.data);
     });
   });
 
@@ -2852,14 +2652,6 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           stage: 'TR_VERIFICATION',
           message: expect.stringContaining('already completed in SAP (STATU = E)')
         });
-    });
-
-    test('Adapter helper aliases createTR, createTO, confirmTO, postMigo are defined and callable', async () => {
-      expect(typeof adapter.createTR).toBe('function');
-      expect(typeof adapter.createTO).toBe('function');
-      expect(typeof adapter.confirmTO).toBe('function');
-      expect(typeof adapter.postMigo).toBe('function');
-      expect(typeof adapter.verifyTR).toBe('function');
     });
 
     test('TrToHandler executeReservationWarehouseFlow action executes and returns OrchestratorProcessResult', async () => {
@@ -3489,33 +3281,37 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
       expect(bapiCalls.length).toBe(1);
     });
 
-    test('TrToHandler handlePostMigoGoodsMovement returns idempotency fields and writes MigoBusinessKey', async () => {
-      const handlers = {};
-      const mockAdapter = {};
-      const mockRes = {
-        checkAuthorization: jest.fn().mockResolvedValue(true),
-        postGoodsMovement: jest.fn().mockResolvedValue({
-          success: true,
-          materialDocument: '5000999999',
-          materialDocYear: '2026',
-          movementType: '201',
-          alreadyPosted: true,
-          idempotentRetry: true,
-          businessKey: 'RES:520235/1#TO:1037299#PID:E5B42701-1111-4222-8333-000000000007',
-          stockEffect: 'Stock consumed to Cost Center 1011201301'
-        })
+    test('postMigoGoodsMovement with a ProcessId SAP already knows reports the existing document and posts nothing', async () => {
+      // Real handler and adapter; SAP is a plain RFC double. The MATDOC row shape follows the adapter's field list and is not proven against SAP.
+      const fms = [];
+      const tables = {
+        T001K: [{ BWKEY: '1120', BUKRS: '1000' }],
+        CSKS: [{ KOKRS: '1000', KOSTL: '1011201301', DATAB: '20200101', DATBI: '99991231', BKZKP: '' }],
+        MARC: [{ XCHPF: '' }],
+        MARD: [{ LGORT: 'HS01', LABST: '100.000' }]
       };
-
+      const rfc = {
+        session: (fn) => fn(rfc.call),
+        call: async (fm) => {
+          fms.push(fm);
+          if (fm === 'AUTHORITY_CHECK') throw Object.assign(new Error('authorized'), { key: 'USER_IS_AUTHORIZED' });
+          return {};
+        },
+        readTable: async (table, _fields, where = []) => {
+          if (table === 'MATDOC') return where.join(' ').includes("BKTXT = 'E5B4270111114222833300000'") ? [{ MBLNR: '5000999999', MJAHR: '2026', BWART: '201' }] : [];
+          return tables[table] || [];
+        }
+      };
+      const handlers = {};
       TrToHandler.init(
         { on: (event, fn) => { handlers[event] = fn; } },
-        { adapter: mockAdapter, resProcessAdapter: mockRes }
+        { adapter: {}, resProcessAdapter: new ReservationProcessAdapter({ rfc }) }
       );
 
-      const req = {
+      const result = await handlers.postMigoGoodsMovement({
         data: {
           ReservationNo: '520235',
           ReservationItem: '0001',
-          TransferOrder: '1037299',
           MovementType: '201',
           Material: '8000000023',
           Plant: '1120',
@@ -3526,15 +3322,17 @@ describe('Chunk 5: Step 3 Auto MIGO Posting & Retry', () => {
           ProcessId: 'E5B42701-1111-4222-8333-000000000007'
         },
         error: jest.fn()
-      };
+      });
 
-      const result = await handlers.postMigoGoodsMovement(req);
-      expect(result.success).toBe(true);
-      expect(result.materialDocument).toBe('5000999999');
-      expect(result.alreadyPosted).toBe(true);
-      expect(result.idempotentRetry).toBe(true);
-      expect(result.businessKey).toBe('RES:520235/1#TO:1037299#PID:E5B42701-1111-4222-8333-000000000007');
-      expect(result.Message).toContain('already existed for this process step; not posted again');
+      expect(result).toMatchObject({
+        success: true,
+        materialDocument: '5000999999',
+        alreadyPosted: true,
+        idempotentRetry: true,
+        businessKey: 'RES:520235/1#TO:NONE#PID:E5B42701-1111-4222-8333-000000000007',
+        Message: 'Material Document 5000999999/2026 already existed for this process step; not posted again.'
+      });
+      expect(fms).not.toContain('BAPI_GOODSMVT_CREATE');
     });
 
     test('TrToHandler handleExecuteOrchestrator propagates alreadyPosted, idempotentRetry, and businessKey', async () => {

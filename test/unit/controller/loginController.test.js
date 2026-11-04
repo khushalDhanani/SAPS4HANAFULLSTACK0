@@ -165,9 +165,12 @@ describe("Login.controller Unit Tests", () => {
         });
     });
 
-    test("onInit should initialize view model with saved username", () => {
+    test("onInit puts the saved username in the loginView model", () => {
         controller.onInit();
-        expect(mockView.setModel).toHaveBeenCalledWith(expect.any(Object), "loginView");
+
+        const [model, name] = mockView.setModel.mock.calls[0];
+        expect(name).toBe("loginView");
+        expect(model.data.username).toBe("khushal");
     });
 
     test("onInputChange should sync control values to view model and reset error states", () => {

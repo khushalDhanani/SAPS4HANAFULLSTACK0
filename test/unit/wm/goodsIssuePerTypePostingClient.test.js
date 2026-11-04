@@ -127,12 +127,28 @@ test.each([
   expect(calls).toHaveLength(0);
 });
 
-test('postByMovementType routes to the isolated method', async () => {
-  const { client } = makeClient();
-  client.post301 = jest.fn().mockResolvedValue({ Success: true, mvt: '301' });
-  const res = await client.postByMovementType({ ...base, MovementType: '301' });
-  expect(client.post301).toHaveBeenCalled();
-  expect(res.mvt).toBe('301');
+test('postByMovementType posts a 301 request as movement 301 over HTTP', async () => {
+  // Only the HTTP and RFC boundaries are doubled. SAP read-back row shape follows the MATDOC field list at GoodsIssuePostingClient.js:515; not proven against SAP.
+  const posted = [];
+  const http = {
+    post: async (path, { data }) => {
+      posted.push({ path, data });
+      return { data: { d: { MaterialDocument: '4900099999', MaterialDocumentYear: '2026' } }, headers: {} };
+    },
+    resolveDestination: async () => ({ name: 'DEST' })
+  };
+  const rfc = { readTable: async () => [{ MBLNR: '4900099999', MJAHR: '2026', BWART: '301' }] };
+  const client = new GoodsIssuePostingClient({ client: http, rfc });
+
+  const res = await client.postByMovementType({
+    ...base, MovementType: '301', ValidatedMovementType: '301', Material: 'M1',
+    ReceivingPlant: '1600', ReceivingStorageLocation: 'CS02'
+  });
+
+  expect(posted).toHaveLength(1);
+  expect(posted[0].path).toBe('/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader');
+  expect(posted[0].data.to_MaterialDocumentItem.results[0].GoodsMovementType).toBe('301');
+  expect(res.MaterialDocument).toBe('4900099999');
 });
 
 test('postByMovementType routes 261 to post261 and preserves the requested Order', async () => {
@@ -286,36 +302,23 @@ describe('readBackDocument & commit-lag handling', () => {
     }
   });
 
-  test('hanging readBackDocument in post201 fails closed with an unknown outcome', async () => {
-    const client = new GoodsIssuePostingClient({ readBackTimeoutMs: 50 });
-    client._getDestination = jest.fn().mockResolvedValue({ name: 'DEST' });
-    client._post = jest.fn().mockResolvedValue({ MaterialDocument: '4900099999', MaterialDocumentYear: '2026' });
-    client.readBackDocument = jest.fn().mockImplementation(async (doc, yr) => {
-      return { MaterialDocument: doc, MaterialDocYear: yr, Confirmed: false, Status: 'posted, confirmation pending' };
-    });
-
-    await expect(client.post201({ ...base, MovementType: '201', ValidatedMovementType: '201', CostCenter: '1011202902', Material: '1000000980' }))
-      .rejects.toMatchObject({ status: 504, code: 'GI_POSTING_OUTCOME_UNKNOWN' });
-  });
-
-
-  test('readBackDocument passes abort signal if client supports abort', async () => {
-    const mockHttpClient = {
+  test('readBackDocument hands the same AbortSignal to an abort-capable HTTP client and to its GET', async () => {
+    let getSignal = null;
+    const httpClient = {
       supportsAbort: true,
       abortSignal: null,
-      get: jest.fn().mockImplementation((path, opts) => {
-        expect(opts).toBeDefined();
-        expect(opts.signal).toBeDefined();
-        return Promise.resolve({ data: { d: { MaterialDocument: '4900011111', MaterialDocumentYear: '2026' } } });
-      })
+      get: async (_path, opts) => {
+        getSignal = opts.signal;
+        return { data: { d: { MaterialDocument: '4900011111', MaterialDocumentYear: '2026' } } };
+      }
     };
-    const client = new GoodsIssuePostingClient({ client: mockHttpClient });
+    const client = new GoodsIssuePostingClient({ client: httpClient });
     client.rfc = null; // force OData path
 
     const res = await client.readBackDocument('4900011111', '2026');
-    expect(mockHttpClient.abortSignal).toBeDefined();
-    expect(res.Confirmed).toBe(true);
-    expect(res.MaterialDocument).toBe('4900011111');
+    expect(getSignal).toBeInstanceOf(AbortSignal);
+    expect(httpClient.abortSignal).toBe(getSignal);
+    expect(res).toMatchObject({ Confirmed: true, MaterialDocument: '4900011111', Tier: 'OData' });
   });
 
   test('readBackDocument caps concurrent read-backs when maxConcurrentReadBacks is reached', async () => {
@@ -345,6 +348,37 @@ describe('readBackDocument & commit-lag handling', () => {
     expect(results).toHaveLength(5);
     expect(maxObservedConcurrent).toBeLessThanOrEqual(2);
     results.forEach((r) => expect(r.Confirmed).toBe(true));
+  });
+});
+
+describe('reverseGoodsIssue confirmation', () => {
+  // Only HTTP is doubled. The sap-message header shape follows GoodsIssuePostingClient.js:187; it is not proven against SAP here.
+  const clientAnswering = (response) => new GoodsIssuePostingClient({
+    client: { post: async () => response, resolveDestination: async () => ({ name: 'DEST' }) },
+    rfc: { readTable: async () => [] }
+  });
+
+  test('refuses a reversal when SAP answers 2xx without a reversal document', async () => {
+    const client = clientAnswering({ data: { d: {} }, headers: {} });
+
+    await expect(client.reverseGoodsIssue('4900012345', '2026')).rejects.toMatchObject({
+      message: expect.stringContaining('did not return a reversal material document for the cancellation of 4900012345/2026')
+    });
+  });
+
+  test('refuses a reversal with status 422 and the SAP text when a 2xx carries a sap-message error', async () => {
+    const sapMessage = JSON.stringify({ code: 'M7/001', message: 'Document already reversed', severity: 'error' });
+    const client = clientAnswering({ data: { d: {} }, headers: { 'sap-message': sapMessage } });
+
+    await expect(client.reverseGoodsIssue('4900012345', '2026')).rejects.toMatchObject({ status: 422, message: 'Document already reversed' });
+  });
+
+  test('returns the reversal document SAP created', async () => {
+    const client = clientAnswering({ data: { d: { MaterialDocument: '4900099999', MaterialDocumentYear: '2026' } }, headers: {} });
+
+    await expect(client.reverseGoodsIssue('4900012345', '2026')).resolves.toMatchObject({
+      Success: true, OriginalMaterialDocument: '4900012345', ReversalMaterialDocument: '4900099999', ReversalMaterialDocYear: '2026'
+    });
   });
 });
 

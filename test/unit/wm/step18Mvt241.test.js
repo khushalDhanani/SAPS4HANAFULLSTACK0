@@ -297,6 +297,15 @@ describe('Step 18: Movement Type 241 (Goods Issue to Asset) Proof Suite [mock on
     };
   };
 
+  // Plain function readTable, so the adapter takes its production path (no readTable.mock).
+  const plainAdapter = (env) => new ReservationProcessAdapter({
+    rfc: {
+      session: (fn) => fn(env.mockRfc.call),
+      call: (...args) => env.mockRfc.call(...args),
+      readTable: (...args) => env.mockRfc.readTable(...args)
+    }
+  });
+
   const makeInput241 = (customId = '000000000241') => ({
     movementType: '241',
     plant: '1120',
@@ -385,34 +394,27 @@ describe('Step 18: Movement Type 241 (Goods Issue to Asset) Proof Suite [mock on
       expect(scanRes.warehouseNumber).toBe('W01');
     });
 
-    test('Step 4: TO — Create Transfer Order referencing verified TR produces SAP TANUM to Asset interim storage', async () => {
+    test('Step 4: TO — createTransferOrderFromTR sends the padded TR to L_TO_CREATE_TR and returns the TO read back from LTAK', async () => {
       const input = makeInput241('000000000104');
-      const toRes = await env.adapter.createTransferOrderFromTR({
+      const toRes = await plainAdapter(env).createTransferOrderFromTR({
         ...input,
         trNumber: '1000241',
         trItem: '0001',
         autoConfirm: false
       });
 
-      expect(toRes.success).toBe(true);
-      expect(toRes.toNumber).toBe('1030241');
-      expect(toRes.toItem).toBe('0001');
-      expect(toRes.warehouseNumber).toBe('W01');
+      expect(env.getToCreateCalls()).toEqual([{ I_LGNUM: 'W01', I_TBNUM: '0001000241', I_COMMIT_WORK: 'X' }]);
+      expect(toRes).toMatchObject({ success: true, toNumber: '1030241', toItem: '0001', confirmed: false });
     });
 
-    test('Step 5: Confirm — Confirm Transfer Order updates LTAK-KQUIT and LTAP-PQUIT', async () => {
-      const confirmRes = await env.adapter.confirmTransferOrder({
+    test('Step 5: Confirm — confirmTransferOrder calls L_TO_CONFIRM once with the padded TO and confirm flags', async () => {
+      const confirmRes = await plainAdapter(env).confirmTransferOrder({
         warehouseNumber: 'W01',
         toNumber: '1030241'
       });
 
-      expect(confirmRes.success).toBe(true);
-      expect(confirmRes.confirmed).toBe(true);
-      expect(confirmRes.toNumber).toBe('1030241');
-
-      const confirmCalls = env.getToConfirmCalls();
-      expect(confirmCalls.length).toBe(1);
-      expect(confirmCalls[0].I_TANUM).toBe('0001030241');
+      expect(env.getToConfirmCalls()).toEqual([{ I_LGNUM: 'W01', I_TANUM: '0001030241', I_SQUIT: 'X', I_COMMIT_WORK: 'X' }]);
+      expect(confirmRes).toMatchObject({ success: true, confirmed: true, toNumber: '1030241' });
     });
 
     test('Step 6: MIGO 241 — Post Goods Movement with confirmed TO and Asset Account Assignment calls BAPI_GOODSMVT_CREATE', async () => {
@@ -466,30 +468,26 @@ describe('Step 18: Movement Type 241 (Goods Issue to Asset) Proof Suite [mock on
       expect(matdoc.movementType).toBe('241');
     });
 
-    test('Step 8: Asset / required account assignment verified — MATDOC contains ANLN1 and ANLN2', async () => {
-      // Direct DDIC check on MATDOC transparent table for Asset Account Assignment
-      const rows = await env.mockRfc.readTable('MATDOC', [
-        'MBLNR', 'MJAHR', 'ZEILE', 'BWART', 'ANLN1', 'ANLN2', 'MENGE'
-      ], ["MBLNR = '5000000241'"]);
-
-      expect(rows.length).toBeGreaterThan(0);
-      const postRecord = rows[0];
-      expect(postRecord.BWART).toBe('241');
-      expect(postRecord.ANLN1).toBe('000000400001'); // Main asset number
-      expect(postRecord.ANLN2).toBe('0000'); // Asset sub-number
-    });
-
-    test('Step 9: Stock Reduced — Verified in MARD and LQUA that source stock decreased with assetConsumptionPosted', async () => {
-      const input = makeInput241('000000000108');
-      const stock = await env.adapter.verifyStock(input, {
+    test('Step 9: Stock Reduced — verifyStock computes the drop from the given initial stock and the MARD stock', async () => {
+      env.setupDefaultTables({ MARD: () => [{ LABST: '90.000' }] });
+      const stock = await plainAdapter(env).verifyStock({ ...makeInput241('000000000108'), initialSourceStock: 100 }, {
         materialDocument: '5000000241',
         materialDocumentYear: '2026'
       });
 
-      expect(stock.success).toBe(true);
-      expect(stock.sourceStockDecreased).toBe(true);
+      expect(stock.sourceStock).toMatchObject({ initial: 100, resulting: 90, delta: -10, decreased: true });
+    });
+
+    test('Step 9: Asset reference — verifyStock takes the asset from the MATDOC row when the request names none', async () => {
+      const { assetNo: _assetNo, subNumber: _subNumber, ...withoutAsset } = makeInput241('000000000109');
+      const stock = await plainAdapter(env).verifyStock(withoutAsset, {
+        materialDocument: '5000000241',
+        materialDocumentYear: '2026'
+      });
+
       expect(stock.assetConsumptionPosted).toBe(true);
-      expect(stock.assetNo).toContain('400001');
+      expect(stock.assetNo).toBe('000000400001');
+      expect(stock.subNumber).toBe('0000');
     });
 
     test('Step 10: Reservation Updated — Verified in RESB with ENMNG=10, KZEAR=X, completelyProcessed=true', async () => {

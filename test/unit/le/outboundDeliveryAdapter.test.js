@@ -231,18 +231,28 @@ describe('Unit: OutboundDeliveryAdapter', () => {
       expect(mockClient.get).not.toHaveBeenCalled();
     });
 
-    test('an Admin without a Plant attribute reads with the $filter Plant the worklist sends', async () => {
-      mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+    /** RFC double: TVSTZ rows of plant 1120 only, so the shipping point filter proves which plant was used. */
+    const tvstzOf1120 = {
+      readTable: async (_table, _fields, where) => (where[0] === "WERKS = '1120'" ? [{ WERKS: '1120', VSTEL: 'WAVG' }] : [])
+    };
+
+    test('an Admin without a Plant attribute selects the shipping points of the $filter Plant', async () => {
+      const scoped = new OutboundDeliveryAdapter({ client: mockClient, rfc: tvstzOf1120 });
       const user = { attr: {}, is: (r) => r === 'Admin' };
       const req = { query: { SELECT: { where: [{ ref: ['Plant'] }, '=', { val: '1120' }] } } };
-      await expect(adapter.getOrdersDueForDelivery(req, { user })).resolves.toEqual([]);
-      expect(mockClient.get).toHaveBeenCalled();
+
+      await scoped.getOrdersDueForDelivery(req, { user });
+
+      expect(mockClient.get.mock.calls[0][0]).toContain("$filter=ShippingPoint eq 'WAVG'");
     });
 
-    test('reads the metrics function parameter Plant from req.data', async () => {
-      mockClient.get.mockResolvedValue({ status: 200, data: { d: { results: [] } } });
+    test('the metrics function parameter Plant in req.data selects the shipping points of that plant', async () => {
+      const scoped = new OutboundDeliveryAdapter({ client: mockClient, rfc: tvstzOf1120 });
       const user = { attr: {}, is: (r) => r === 'Admin' };
-      await expect(adapter.getOrdersDueForDelivery({ data: { Plant: '1120' } }, { user })).resolves.toEqual([]);
+
+      await scoped.getOrdersDueForDelivery({ data: { Plant: '1120' } }, { user });
+
+      expect(mockClient.get.mock.calls[0][0]).toContain("$filter=ShippingPoint eq 'WAVG'");
     });
 
     test('fails closed (HTTP 403) when authenticated non-admin user has no authorized plants', async () => {
@@ -253,9 +263,10 @@ describe('Unit: OutboundDeliveryAdapter', () => {
 
     test('tamper test: rejects query.plant outside authenticated non-admin user authorized plants with HTTP 403', async () => {
       const user = { attr: { Plant: ['1120'] }, is: () => false };
-      await expect(adapter.getOrdersDueForDelivery({ plant: '1130' }, { user })).rejects.toThrow(
-        "Plant '1130' is outside user's authorized plants: [1120]. Access denied."
-      );
+      await expect(adapter.getOrdersDueForDelivery({ plant: '1130' }, { user })).rejects.toMatchObject({
+        status: 403,
+        message: "Plant '1130' is outside user's authorized plants: [1120]. Access denied."
+      });
       expect(mockClient.get).not.toHaveBeenCalled();
     });
 
@@ -268,10 +279,44 @@ describe('Unit: OutboundDeliveryAdapter', () => {
           }
         }
       };
-      await expect(adapter.getOrdersDueForDelivery(capReq)).rejects.toThrow(
-        "Plant '1130' is outside user's authorized plants: [1120]. Access denied."
-      );
+      await expect(adapter.getOrdersDueForDelivery(capReq)).rejects.toMatchObject({
+        status: 403,
+        message: "Plant '1130' is outside user's authorized plants: [1120]. Access denied."
+      });
       expect(mockClient.get).not.toHaveBeenCalled();
+    });
+
+    // Known defect: srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js:264-271 adds no ShippingPoint filter when TVSTZ yields no points, so a plant-scoped user reads every plant (docs/e2e-coverage-matrix.md:90: scoped lists show only their plant).
+    test.failing('a plant-scoped user never triggers a due-orders read without a ShippingPoint filter when TVSTZ cannot be read', async () => {
+      const scoped = new OutboundDeliveryAdapter({
+        client: mockClient,
+        rfc: { readTable: async () => { throw new Error('RFC down'); } }
+      });
+      const user = { attr: { Plant: ['1120'] }, is: () => false };
+
+      await scoped.getOrdersDueForDelivery({}, { user }).catch(() => {});
+
+      const unfilteredReads = mockClient.get.mock.calls
+        .map(([url]) => url)
+        .filter((url) => url.includes('C_SalesOrderDueForDeliveryVH') && !url.includes('ShippingPoint eq'));
+      expect(unfilteredReads).toEqual([]);
+    });
+
+    // Known defect: srv/integration/s4hana/le/outbound-delivery/OutboundDeliveryAdapter.js:251,261-262 sends a client ShippingPoint filter to SAP without checking it belongs to the resolved plant, so a plant-scoped user can read another plant's rows (docs/e2e-coverage-matrix.md:90).
+    test.failing('a plant-scoped user cannot read a shipping point outside their plant through $filter', async () => {
+      const scoped = new OutboundDeliveryAdapter({
+        client: mockClient,
+        rfc: { readTable: async () => [{ WERKS: '1120', VSTEL: 'WAVG' }] }
+      });
+      const capReq = {
+        user: { attr: { Plant: ['1120'] }, is: () => false },
+        query: { SELECT: { where: [{ ref: ['ShippingPoint'] }, '=', { val: '9999' }] } }
+      };
+
+      await scoped.getOrdersDueForDelivery(capReq).catch(() => {});
+
+      const foreignReads = mockClient.get.mock.calls.map(([url]) => url).filter((url) => url.includes("ShippingPoint eq '9999'"));
+      expect(foreignReads).toEqual([]);
     });
 
     test('takes plant strictly from authenticated user attribute when query specifies no plant', async () => {
@@ -555,13 +600,26 @@ describe('Unit: OutboundDeliveryAdapter', () => {
 
   describe('createDeliveryFromOrder', () => {
     test('throws 400 when SalesOrder reference is missing', async () => {
-      await expect(adapter.createDeliveryFromOrder({ salesOrder: '' })).rejects.toThrow('SalesOrder reference is required');
-      await expect(adapter.createDeliveryFromOrder({})).rejects.toThrow('SalesOrder reference is required');
+      const expected = { status: 400, message: 'SalesOrder reference is required to create an outbound delivery.' };
+      await expect(adapter.createDeliveryFromOrder({ salesOrder: '' })).rejects.toMatchObject(expected);
+      await expect(adapter.createDeliveryFromOrder({})).rejects.toMatchObject(expected);
+      expect(mockClient.post).not.toHaveBeenCalled();
     });
 
     test('throws 400 when ShippingPoint is missing and never defaults to first list entry', async () => {
-      await expect(adapter.createDeliveryFromOrder({ salesOrder: '5000104' })).rejects.toThrow('ShippingPoint is required to create an outbound delivery and cannot be defaulted.');
-      await expect(adapter.createDeliveryFromOrder({ salesOrder: '5000104', shippingPoint: '' })).rejects.toThrow('ShippingPoint is required to create an outbound delivery and cannot be defaulted.');
+      const expected = { status: 400, message: 'ShippingPoint is required to create an outbound delivery and cannot be defaulted.' };
+      await expect(adapter.createDeliveryFromOrder({ salesOrder: '5000104' })).rejects.toMatchObject(expected);
+      await expect(adapter.createDeliveryFromOrder({ salesOrder: '5000104', shippingPoint: '' })).rejects.toMatchObject(expected);
+      expect(mockClient.post).not.toHaveBeenCalled();
+    });
+
+    test('returns an empty delivery number, never a made-up one, when SAP answers success without a number', async () => {
+      mockClient.post.mockResolvedValue({ status: 201, data: { d: { ReferenceSDDocument: '5000104' } } });
+
+      const result = await adapter.createDeliveryFromOrder({ salesOrder: '5000104', shippingPoint: '1120' });
+
+      expect(result.OutboundDelivery).toBe('');
+      expect(result.ReferenceSDDocument).toBe('5000104');
     });
 
     test('POSTs minimal payload with ReferenceSDDocument and ShippingPoint only', async () => {
@@ -617,13 +675,16 @@ describe('Unit: OutboundDeliveryAdapter', () => {
       });
 
       const callOptions = mockClient.post.mock.calls[0][1];
-      expect(callOptions.data.DeliveryDate).toMatch(/^\/Date\(\d+\)\/$/);
+      // 2025-08-14T00:00:00Z
+      expect(callOptions.data.DeliveryDate).toBe('/Date(1755129600000)/');
     });
 
+    // SAP error shape not proven: V2/478 and this body are hand-written; the test proves our mapping only.
     test('maps SAP approval block error V2/478 with clean status and message', async () => {
       mockClient.post.mockRejectedValue({
         status: 400,
         response: {
+          status: 400, // the real client always sets it (S4HttpClient.js:402)
           data: {
             error: {
               code: 'V2/478',
@@ -649,10 +710,13 @@ describe('Unit: OutboundDeliveryAdapter', () => {
           salesOrder: '5000461',
           shippingPoint: 'WAVG'
         })
-      ).rejects.toThrow('Subsequent documents not possible due to approval status of the document.');
+      ).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringContaining('Subsequent documents not possible due to approval status of the document.')
+      });
     });
 
-    test('blocks with 502 when approval status check fails from Gateway', async () => {
+    test('blocks with 502 and no POST when approval status check fails from Gateway', async () => {
       mockClient.get.mockRejectedValueOnce(new Error('SD_F1873_SO_WL_SRV timeout'));
 
       await expect(
@@ -660,19 +724,23 @@ describe('Unit: OutboundDeliveryAdapter', () => {
           salesOrder: '5000104',
           shippingPoint: '1120'
         })
-      ).rejects.toThrow('Could not verify approval status for Sales Order 5000104. Outbound delivery creation blocked.');
+      ).rejects.toMatchObject({
+        status: 502,
+        message: 'Could not verify approval status for Sales Order 5000104. Outbound delivery creation blocked.'
+      });
+      expect(mockClient.post).not.toHaveBeenCalled();
     });
 
-    test('blocks with 400 when order is unapproved (status A, C, or D)', async () => {
+    // Status list comes from the adapter's own descriptions; SAP's value list is not proven here. 'Z' stands for any other value.
+    test.each([
+      ['A', 'Sales Order 5000461 is in approval and cannot be delivered.'],
+      ['C', 'Sales Order 5000461 is rejected and cannot be delivered.'],
+      ['D', 'Sales Order 5000461 is being reworked and cannot be delivered.'],
+      ['Z', "Sales Order 5000461 is status 'Z' and cannot be delivered."]
+    ])('blocks with 400 and no POST when approval status is %s', async (status, message) => {
       mockClient.get.mockResolvedValueOnce({
         status: 200,
-        data: {
-          d: {
-            results: [
-              { SalesOrder: '5000461', SalesDocApprovalStatus: 'A' }
-            ]
-          }
-        }
+        data: { d: { results: [{ SalesOrder: '5000461', SalesDocApprovalStatus: status }] } }
       });
 
       await expect(
@@ -680,7 +748,8 @@ describe('Unit: OutboundDeliveryAdapter', () => {
           salesOrder: '5000461',
           shippingPoint: '1120'
         })
-      ).rejects.toThrow('Sales Order 5000461 is in approval and cannot be delivered.');
+      ).rejects.toMatchObject({ status: 400, message });
+      expect(mockClient.post).not.toHaveBeenCalled();
     });
 
     test('bypasses approval check when skipApprovalCheck is true', async () => {
@@ -720,6 +789,15 @@ describe('Unit: OutboundDeliveryAdapter', () => {
     test('throws (never reports success) when SAP says Done=false and names the error flags', async () => {
       mockClient.post.mockResolvedValue({ data: { d: { Done: false, ErrorAny: true, ErrorInGoodsIssue: true, ErrorInFinalCheck: false } } });
       await expect(adapter.postGoodsIssue('13000526')).rejects.toThrow(/did not post goods issue.*ErrorInGoodsIssue/);
+    });
+
+    // SAP response shape not proven (docs/sd-creatable-services.md:30 names Done and ErrorAny, no live run recorded); the test proves our gate only.
+    test('throws 422 (never reports success) when SAP says Done=true together with ErrorAny=true', async () => {
+      mockClient.post.mockResolvedValue({ data: { d: { PostGoodsIssue: { Done: true, ErrorAny: true } } } });
+      await expect(adapter.postGoodsIssue('13000526')).rejects.toMatchObject({
+        status: 422,
+        message: 'S/4HANA did not post goods issue for delivery 13000526.'
+      });
     });
   });
 

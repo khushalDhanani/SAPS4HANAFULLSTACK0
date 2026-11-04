@@ -50,14 +50,33 @@ const MockFilterOperator = {
 function MockSelectDialog() {}
 function MockStandardListItem() {}
 
-const mockODataClient = {
-    get: jest.fn(),
-    post: jest.fn()
-};
+const mockODataClient = {};
+
+// Stands in for the UI5 OData V4 model: bindList(...).requestContexts(...) is the network boundary of these reads.
+function fakeODataModel(fnRows) {
+    const reads = [];
+    return {
+        reads,
+        bindList: (sPath, _ctx, _sorters, aFilters) => ({
+            requestContexts: (_start, iLength) => {
+                const aPlain = aFilters.map(f => [f.sPath, f.sOperator, f.oValue1]);
+                reads.push({ path: sPath, filters: aPlain, length: iLength });
+                return Promise.resolve(fnRows(aPlain).map(row => ({ getObject: () => row })));
+            }
+        })
+    };
+}
 
 const originalSap = global.sap;
 
 beforeAll(() => {
+    // The real shared reader runs; only the model passed to it is a double.
+    require('vm').runInNewContext(require('fs').readFileSync(
+        require('path').resolve(__dirname, '../../../app/fiori-app/webapp/service/ODataClient.js'), 'utf8'), {
+        sap: { ui: { define: (_deps, factory) => {
+            mockODataClient.readEntitySet = factory({}).readEntitySet;
+        } } }
+    });
     global.sap = {
         ui: {
             define: function (deps, factory) {
@@ -206,53 +225,41 @@ describe('Purchase Order Material Selection Flow', () => {
     });
 
     describe('PurchaseOrderService.getMaterialDetails', () => {
-        beforeEach(() => {
-            jest.clearAllMocks();
-        });
-
         it('should return null for empty material input', async () => {
             const result = await PurchaseOrderService.getMaterialDetails('');
             expect(result).toBeNull();
         });
 
-        it('should query MaterialVH with plant filter when sPlant is provided', async () => {
-            mockODataClient.get.mockResolvedValueOnce({
-                value: [{
-                    Material: '1000000003',
-                    Plant: '1120',
-                    MaterialName: 'test material plant 1120',
-                    MaterialBaseUnit: 'KG',
-                    MaterialGroup: '103'
-                }]
-            });
+        it('should read MaterialVH through the OData model filtered by Material and Plant, one row', async () => {
+            const oModel = fakeODataModel(() => [{
+                Material: '1000000003',
+                Plant: '1120',
+                MaterialName: 'test material plant 1120',
+                MaterialBaseUnit: 'KG',
+                MaterialGroup: '103'
+            }]);
 
-            const result = await PurchaseOrderService.getMaterialDetails('1000000003', '1120');
+            const result = await PurchaseOrderService.getMaterialDetails(oModel, '1000000003', '1120');
 
-            expect(mockODataClient.get).toHaveBeenCalledTimes(1);
-            expect(mockODataClient.get.mock.calls[0][0]).toContain('Plant eq \'1120\'');
-            expect(result).toBeDefined();
-            expect(result.Plant).toBe('1120');
+            expect(oModel.reads).toEqual([{
+                path: '/MaterialVH',
+                filters: [['Material', 'EQ', '1000000003'], ['Plant', 'EQ', '1120']],
+                length: 1
+            }]);
             expect(result.MaterialName).toBe('test material plant 1120');
         });
 
-        it('should fallback to query without plant if specific plant record is not found', async () => {
-            mockODataClient.get
-                .mockResolvedValueOnce({ value: [] }) // first call with plant returns empty
-                .mockResolvedValueOnce({
-                    value: [{
-                        Material: '1000000003',
-                        Plant: '1110',
-                        MaterialName: 'test material plant 1110',
-                        MaterialBaseUnit: 'KG'
-                    }]
-                }); // fallback call
+        it('should read again without Plant when the plant-specific read finds nothing', async () => {
+            const fallbackRow = { Material: '1000000003', Plant: '1110', MaterialName: 'test material plant 1110', MaterialBaseUnit: 'KG' };
+            const oModel = fakeODataModel((aFilters) => (aFilters.length === 2 ? [] : [fallbackRow]));
 
-            const result = await PurchaseOrderService.getMaterialDetails('1000000003', '9999');
+            const result = await PurchaseOrderService.getMaterialDetails(oModel, '1000000003', '9999');
 
-            expect(mockODataClient.get).toHaveBeenCalledTimes(2);
-            expect(result).toBeDefined();
-            expect(result.Material).toBe('1000000003');
-            expect(result.Plant).toBe('1110');
+            expect(oModel.reads.map(r => r.filters)).toEqual([
+                [['Material', 'EQ', '1000000003'], ['Plant', 'EQ', '9999']],
+                [['Material', 'EQ', '1000000003']]
+            ]);
+            expect(result).toEqual(fallbackRow);
         });
     });
 

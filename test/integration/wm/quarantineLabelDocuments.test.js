@@ -1,5 +1,6 @@
 const cds = require('@sap/cds');
 const QuarantineLabelAdapter = require('../../../srv/integration/s4hana/wm/QuarantineLabelAdapter');
+const { RfcClient } = require('../../../srv/integration/s4hana/RfcClient');
 
 // CAP wiring of the quarantine-labels document list: roles, server-side plant scope, error mapping. SAP reads mocked.
 const cdsTest = cds.test(__dirname + '/../../../');
@@ -23,53 +24,24 @@ describe('Integration: quarantine labels document list', () => {
     expect(list.mock.calls[0][0]).toMatchObject({ ...range, allowedPlants: ['1120'] });
   });
 
-  it('preserves the material code on each label row through CAP serialization', async () => {
-    jest.spyOn(QuarantineLabelAdapter.prototype, 'labelRows').mockResolvedValue({
-      MaterialDocument: '5000000001', MaterialDocumentYear: '2026',
-      Rows: [{ Material: '000000000000123456', MaterialDescription: 'DEMO MATERIAL' },
-        { Material: 'DEMO-MAT-2', MaterialDescription: 'DEMO SECOND MATERIAL' }]
-    });
-    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('khushal'));
-    expect(data.Rows.map((row) => row.Material)).toEqual(['000000000000123456', 'DEMO-MAT-2']);
-  });
-
-  it('preserves PreparedBy on each label row through CAP serialization', async () => {
-    jest.spyOn(QuarantineLabelAdapter.prototype, 'labelRows').mockResolvedValue({
-      MaterialDocument: '5000000001', MaterialDocumentYear: '2026',
-      Rows: [{ Material: 'DEMO-MAT-1', PreparedBy: 'SAP_USER_12' }]
-    });
-    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('khushal'));
-    expect(data.Rows[0].PreparedBy).toBe('SAP_USER_12');
-  });
-
-  it('preserves InwardNo and Text on each label row through CAP serialization', async () => {
-    jest.spyOn(QuarantineLabelAdapter.prototype, 'labelRows').mockResolvedValue({
-      MaterialDocument: '5000000001', MaterialDocumentYear: '2026',
-      Rows: [{ Material: 'DEMO-MAT-1', InwardNo: '34567', Text: '34567' }]
-    });
-    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('khushal'));
-    expect(data.Rows[0].InwardNo).toBe('34567');
-    expect(data.Rows[0].Text).toBe('34567');
-  });
-
-  it('preserves InspectionLot on each label row through CAP serialization', async () => {
-    jest.spyOn(QuarantineLabelAdapter.prototype, 'labelRows').mockResolvedValue({
-      MaterialDocument: '5000000001', MaterialDocumentYear: '2026',
-      Rows: [{ Material: 'DEMO-MAT-1', InspectionLot: '010000005588' }]
-    });
-    const { data } = await POST(`${BASE}/labelRows`, { MaterialDocument: '5000000001', MaterialDocumentYear: '2026' }, as('khushal'));
-    expect(data.Rows[0].InspectionLot).toBe('010000005588');
-  });
-
   it('Admin is unrestricted (allowedPlants null)', async () => {
     const list = jest.spyOn(QuarantineLabelAdapter.prototype, 'listDocuments').mockResolvedValue({ Plant: '1120', More: false, Documents: [] });
     await POST(`${BASE}/listDocuments`, range, as('khushal'));
     expect(list.mock.calls[0][0].allowedPlants).toBeNull();
   });
 
-  it('adapter errors keep their status (403 plant, 400 input)', async () => {
-    jest.spyOn(QuarantineLabelAdapter.prototype, 'listDocuments').mockRejectedValue(Object.assign(new Error('You are not authorized for plant 1130.'), { status: 403 }));
-    await expect(POST(`${BASE}/listDocuments`, { ...range, Plant: '1130' }, as('test-clerk-1120'))).rejects.toMatchObject({ response: { status: 403 } });
+  it('refuses a plant outside the user\'s scope with 403 before any SAP read', async () => {
+    const session = jest.spyOn(RfcClient.prototype, 'session');
+    await expect(POST(`${BASE}/listDocuments`, { ...range, Plant: '1130' }, as('test-clerk-1120')))
+      .rejects.toMatchObject({ response: { status: 403, data: { error: { message: 'You are not authorized for plant 1130.' } } } });
+    expect(session).not.toHaveBeenCalled();
+  });
+
+  it('refuses a date range that ends before it starts with 400 before any SAP read', async () => {
+    const session = jest.spyOn(RfcClient.prototype, 'session');
+    await expect(POST(`${BASE}/listDocuments`, { Plant: '1120', DateFrom: '2026-10-27', DateTo: '2026-10-01' }, as('test-clerk-1120')))
+      .rejects.toMatchObject({ response: { status: 400, data: { error: { message: 'The posting date "from" must not be after "to".' } } } });
+    expect(session).not.toHaveBeenCalled();
   });
 
   it('a user without a warehouse role cannot list', async () => {

@@ -27,6 +27,21 @@ const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/Re
 const TrToAdapter = require('../../../srv/integration/s4hana/wm/TrToAdapter');
 const { STATUS } = require('../../../srv/common/wmStatus');
 
+// Plain-function RFC double, so the adapters run their production path (no readTable.mock branch). SAP rows are not proven here.
+const plainRfc = (tables, onCall = () => ({})) => {
+  const calls = [];
+  const rfc = {
+    readTable: async (table, _fields, where = []) => (typeof tables[table] === 'function' ? tables[table](where) : (tables[table] || [])),
+    call: async (fm, params) => {
+      calls.push([fm, params]);
+      return onCall(fm, params);
+    },
+    session: async (fn) => fn(rfc.call)
+  };
+  return { rfc, calls, paramsOf: (fm) => calls.find(([name]) => name === fm)?.[1], names: () => calls.map(([fm]) => fm) };
+};
+const ASSET_ROW = { BUKRS: '1000', ANLN1: '000000400001', ANLN2: '0000', AKTIV: '20250529', DEAKT: '00000000', XLOEV: '', XSPEB: '' };
+
 describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP verification]', () => {
   let mockRfc;
   let resAdapter;
@@ -245,68 +260,29 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
       );
     });
 
-    test('Class B: Batch material completes 241 reservation with batch, TR, TO, and MIGO [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (table) => {
-        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
-        if (table === 'MARC') return [{ MATNR: '000000008900000004', WERKS: '1120', XCHPF: 'X', SERNP: '' }];
-        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }];
-        if (table === 'MARD') return [{ LGORT: 'CS01', LABST: '50.000' }];
-        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }];
-        if (table === 'ANLA') return [{ BUKRS: '1000', ANLN1: '000000400001', ANLN2: '0000', AKTIV: '20250529', DEAKT: '00000000' }];
-        return [];
+    test('Class B: the batch travels on the reservation item and on the MIGO item [mock only, not SAP verification]', async () => {
+      const { rfc, paramsOf } = plainRfc({
+        T001K: [{ BWKEY: '1120', BUKRS: '1000' }],
+        MARC: [{ MATNR: '000000008900000004', WERKS: '1120', XCHPF: 'X', SERNP: '' }],
+        T320: [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS01' }],
+        MARD: [{ LGORT: 'CS01', LABST: '50.000' }],
+        MCHA: [{ MATNR: '000000008900000004', WERKS: '1120', CHARG: 'INJW260001', LVORM: '' }],
+        MCHB: [{ CLABS: '50.000' }],
+        ANLA: [ASSET_ROW],
+        MATDOC: (where) => (where.some((w) => w.includes('MBLNR')) ? [{ MBLNR: '4900050144', MJAHR: '2026', ZEILE: '0001', BWART: '241', MATNR: '000000008900000004', WERKS: '1120', LGORT: 'CS01', MENGE: '2.000', MEINS: 'KG', SHKZG: 'H' }] : []),
+        RESB: [{ RSNUM: '0000525291', RSPOS: '0001', MATNR: '000000008900000004', BDMNG: '2.000', ENMNG: '2.000', MEINS: 'KG', KZEAR: '', XLOEK: '' }]
+      }, (fm) => {
+        if (fm === 'BAPI_RESERVATION_CREATE1') return { RESERVATION: '0000525291', RETURN: [{ TYPE: 'S', MESSAGE: 'Created' }] };
+        if (fm === 'BAPI_GOODSMVT_CREATE') return { MATERIALDOCUMENT: '4900050144', MATDOCUMENTYEAR: '2026', RETURN: [{ TYPE: 'S', MESSAGE: 'Posted' }] };
+        return {};
       });
+      const adapter = new ReservationProcessAdapter({ rfc });
 
-      mockRfc.call
-        .mockResolvedValueOnce({ RESERVATION: '0000525291', RETURN: [{ TYPE: 'S', MESSAGE: 'Created' }] })
-        .mockResolvedValueOnce({}); // COMMIT
+      await adapter.createReservation({ movementType: '241', plant: '1120', storageLocation: 'CS01', material: '8900000004', quantity: 2, unit: 'KG', batch: 'INJW260001', assetNo: '400001', subNumber: '0000' });
+      await adapter.postGoodsMovement({ reservationNo: '0000525291', reservationItem: '0001', movementType: '241', material: '8900000004', plant: '1120', storageLocation: 'CS01', quantity: 2, unit: 'KG', batch: 'INJW260001', assetNo: '400001' });
 
-      const res = await resAdapter.createReservation({
-        movementType: '241',
-        plant: '1120',
-        storageLocation: 'CS01',
-        material: '8900000004',
-        quantity: 2,
-        unit: 'KG',
-        batch: 'INJW260001',
-        assetNo: '400001',
-        subNumber: '0000'
-      });
-      expect(res.success).toBe(true);
-
-      mockRfc.call
-        .mockResolvedValueOnce({
-          MATERIALDOCUMENT: '4900050144',
-          MATDOCUMENTYEAR: '2026',
-          RETURN: [{ TYPE: 'S', MESSAGE: 'Posted' }]
-        })
-        .mockResolvedValueOnce({}); // COMMIT
-
-      const migo = await resAdapter.postGoodsMovement({
-        reservationNo: '0000525291',
-        reservationItem: '0001',
-        movementType: '241',
-        material: '8900000004',
-        plant: '1120',
-        storageLocation: 'CS01',
-        quantity: 2,
-        unit: 'KG',
-        batch: 'INJW260001',
-        assetNo: '400001'
-      });
-      expect(migo.success).toBe(true);
-      expect(migo.batch).toBe('INJW260001');
-      expect(mockRfc.call).toHaveBeenCalledWith(
-        'BAPI_GOODSMVT_CREATE',
-        expect.objectContaining({
-          GOODSMVT_ITEM: [
-            expect.objectContaining({
-              BATCH: 'INJW260001',
-              ASSET_NO: '000000400001',
-              SUB_NUMBER: '0000'
-            })
-          ]
-        })
-      );
+      expect(paramsOf('BAPI_RESERVATION_CREATE1').RESERVATIONITEMS[0].BATCH).toBe('INJW260001');
+      expect(paramsOf('BAPI_GOODSMVT_CREATE').GOODSMVT_ITEM[0]).toMatchObject({ BATCH: 'INJW260001', ASSET_NO: '000000400001', SUB_NUMBER: '0000' });
     });
 
     test('Class C: Serial material completes 241 with serial numbers in MIGO [mock only, not SAP verification]', async () => {
@@ -349,62 +325,37 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
       );
     });
 
-    test('Class E: Small SU stock (VOLLE = blank) allows partial pick [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
-        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
-        if (table === 'T331') return [{ VOLLE: '' }];
-        if (table === 'MARC') return [{ XCHPF: '', SERNP: '' }];
-        if (table === 'MAKT') return [{ MAKTX: 'Small SU Mat' }];
-        const optStr = (where || []).join(' ');
-        if (table === 'LTAK' && optStr.includes('TANUM')) {
-          return [{ LGNUM: 'W01', TANUM: '0001014000', TBNUM: '0001000761', BWLVS: '241', KQUIT: '' }];
-        }
-        if (table === 'LTAP' && optStr.includes('TANUM')) {
-          return [{ LGNUM: 'W01', TANUM: '0001014000', TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000008977', NSOLA: '1.000', ALTME: 'KG', PQUIT: '' }];
-        }
-        return [];
-      });
+    const trList = (params) => ({
+      ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: params.IV_TR_NUMBER, BWLVS: '241', BETYP: 'A', BENUM: '0000400001', RSNUM: '0000525290', NLTYP: '913', NLPLA: '0000400001' }],
+      ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: params.IV_TR_NUMBER, TBPOS: '0001', MATNR: '000000008000008977', WERKS: '1120', LGORT: 'HS01', MENGE: 100, TAMEN: 0, MEINS: 'KG' }]
+    });
+    const onTrCall = (fm, params) => {
+      if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') return trList(params);
+      if (fm === 'Z_WM_TO_CREATE_FROM_TR') return { EV_SUCCESS: 'S', EV_TANUM: '0001014000' };
+      return {};
+    };
+    // LTAK/LTAP answer only the read-back by TO number: no earlier TO exists for this TR.
+    const byTanum = (rows) => (where) => (where.some((w) => w.includes('TANUM')) ? rows : []);
+    const toRows = {
+      LTAK: byTanum([{ LGNUM: 'W01', TANUM: '0001014000', TBNUM: '0001000761', BWLVS: '241', KQUIT: '' }]),
+      LTAP: byTanum([{ LGNUM: 'W01', TANUM: '0001014000', TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000008977', NSOLA: '1.000', ALTME: 'KG', PQUIT: '' }])
+    };
 
-      const toRes = await trAdapter.createTOFromTR({
-        warehouseNumber: 'W01',
-        tbnum: '0001000761',
-        tbpos: '0001',
-        qty: 1,
-        storageUnit: '00000000002000020148',
-        sourceStorageType: '002',
-        autoConfirm: false
-      });
-      expect(toRes.TransferOrder).toBe('1014000');
+
+    test('Class E: with VOLLE blank a partial pick is sent to SAP with its storage unit and source type [mock only, not SAP verification]', async () => {
+      const { rfc, paramsOf } = plainRfc({ ...toRows, T331: [{ VOLLE: '' }], MARC: [{ XCHPF: '', SERNP: '' }], MAKT: [{ MAKTX: 'Small SU Mat' }] }, onTrCall);
+
+      await new TrToAdapter({ rfc }).createTOFromTR({ warehouseNumber: 'W01', lgnum: 'W01', tbnum: '0001000761', tbpos: '0001', qty: 1, storageUnit: '00000000002000020148', sourceStorageType: '002', autoConfirm: false });
+
+      expect(paramsOf('Z_WM_TO_CREATE_FROM_TR').IT_ITEMS[0]).toMatchObject({ ANFME: '1.000', VLTYP: '002', VLENR: '00000000002000020148' });
     });
 
-    test('Class F: Large SU stock (VOLLE = X) allows full SU pick [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (table, fields, where) => {
-        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
-        if (table === 'T331') return [{ VOLLE: 'X' }];
-        if (table === 'LQUA') return [{ VERME: '100.000' }];
-        if (table === 'MARC') return [{ XCHPF: 'X', SERNP: '' }];
-        if (table === 'MAKT') return [{ MAKTX: 'Large SU Mat' }];
-        const optStr = (where || []).join(' ');
-        if (table === 'LTAK' && optStr.includes('TANUM')) {
-          return [{ LGNUM: 'W01', TANUM: '0001014000', TBNUM: '0001000761', BWLVS: '241', KQUIT: '' }];
-        }
-        if (table === 'LTAP' && optStr.includes('TANUM')) {
-          return [{ LGNUM: 'W01', TANUM: '0001014000', TAPOS: '0001', TBPOS: '0001', MATNR: '000000008000008977', NSOLA: '100.000', ALTME: 'KG', PQUIT: '' }];
-        }
-        return [];
-      });
+    test('Class F: with VOLLE = X a pick of the whole unit is sent to SAP with that unit and batch [mock only, not SAP verification]', async () => {
+      const { rfc, paramsOf } = plainRfc({ ...toRows, T331: [{ VOLLE: 'X' }], LQUA: [{ VERME: '100.000' }], MARC: [{ XCHPF: 'X', SERNP: '' }], MAKT: [{ MAKTX: 'Large SU Mat' }] }, onTrCall);
 
-      const toRes = await trAdapter.createTOFromTR({
-        warehouseNumber: 'W01',
-        tbnum: '0001000761',
-        tbpos: '0001',
-        qty: 100,
-        batch: 'IN26001220',
-        storageUnit: '00000000001000058618',
-        sourceStorageType: 'OH1',
-        autoConfirm: false
-      });
-      expect(toRes.TransferOrder).toBe('1014000');
+      await new TrToAdapter({ rfc }).createTOFromTR({ warehouseNumber: 'W01', lgnum: 'W01', tbnum: '0001000761', tbpos: '0001', qty: 100, batch: 'IN26001220', storageUnit: '00000000001000058618', sourceStorageType: 'OH1', autoConfirm: false });
+
+      expect(paramsOf('Z_WM_TO_CREATE_FROM_TR').IT_ITEMS[0]).toMatchObject({ ANFME: '100.000', CHARG: 'IN26001220', VLTYP: 'OH1', VLENR: '00000000001000058618' });
     });
   });
 
@@ -666,52 +617,33 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
       ).rejects.toThrow(/Asset 400004\/0000 is locked for postings \(ANLA-XSPEB = X\)/);
     });
 
-    test('GI failure then retry: first fails, second recovers with alreadyPosted or success [mock only, not SAP verification]', async () => {
-      mockRfc.call
-        .mockResolvedValueOnce({
-          RETURN: [{ TYPE: 'E', MESSAGE: 'Posting period 01/2026 is closed' }]
-        })
-        .mockResolvedValueOnce({}); // ROLLBACK
-
-      await expect(
-        resAdapter.postGoodsMovement({
-          reservationNo: '0000525297',
-          reservationItem: '0001',
-          movementType: '241',
-          plant: '1120',
-          storageLocation: 'HS01',
-          material: '8000008977',
-          quantity: 1,
-          unit: 'KG',
-          assetNo: '400001',
-          processId: '123e4567-e89b-12d3-a456-426614174000'
-        })
-      ).rejects.toThrow(/Posting period 01\/2026 is closed/);
-      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', expect.anything());
-
-      // Retry: found already posted in MATDOC
-      mockRfc.readTable.mockImplementation(async (table) => {
-        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }]; // company code from the plant (no fallback since D7 fix)
-        if (table === 'MATDOC') return [{ MBLNR: '4900050149', MJAHR: '2026', BWART: '241' }];
-        return [];
+    test('a BAPI error rolls back without a commit, and a retry with the same ProcessId posts [mock only, not SAP verification]', async () => {
+      let attempt = 0;
+      const { rfc, names } = plainRfc({
+        T001K: [{ BWKEY: '1120', BUKRS: '1000' }],
+        MARC: [{ XCHPF: '', SERNP: '' }],
+        MARD: [{ LGORT: 'HS01', LABST: '10.000' }],
+        ANLA: [ASSET_ROW],
+        MATDOC: (where) => (where.some((w) => w.includes('MBLNR')) ? [{ MBLNR: '4900050149', MJAHR: '2026', ZEILE: '0001', BWART: '241', MATNR: '000000008000008977', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', MEINS: 'KG', SHKZG: 'H' }] : []),
+        RESB: [{ RSNUM: '0000525297', RSPOS: '0001', MATNR: '000000008000008977', BDMNG: '1.000', ENMNG: '1.000', MEINS: 'KG', KZEAR: '', XLOEK: '' }]
+      }, (fm) => {
+        if (fm !== 'BAPI_GOODSMVT_CREATE') return {};
+        attempt += 1;
+        return attempt === 1
+          ? { RETURN: [{ TYPE: 'E', MESSAGE: 'Posting period 01/2026 is closed' }] }
+          : { MATERIALDOCUMENT: '4900050149', MATDOCUMENTYEAR: '2026', RETURN: [{ TYPE: 'S', MESSAGE: 'Posted' }] };
       });
+      const adapter = new ReservationProcessAdapter({ rfc });
+      const movement = { reservationNo: '0000525297', reservationItem: '0001', movementType: '241', plant: '1120', storageLocation: 'HS01', material: '8000008977', quantity: 1, unit: 'KG', assetNo: '400001', processId: '123e4567-e89b-12d3-a456-426614174000' };
 
-      const retryRes = await resAdapter.postGoodsMovement({
-        reservationNo: '0000525297',
-        reservationItem: '0001',
-        movementType: '241',
-        plant: '1120',
-        storageLocation: 'HS01',
-        material: '8000008977',
-        quantity: 1,
-        unit: 'KG',
-        assetNo: '400001',
-        processId: '123e4567-e89b-12d3-a456-426614174000'
-      });
-      expect(retryRes.success).toBe(true);
-      expect(retryRes.alreadyPosted).toBe(true);
-      expect(retryRes.materialDocument).toBe('4900050149');
-      expect(retryRes.status).toBe(STATUS.GI_POSTED);
+      await expect(adapter.postGoodsMovement(movement)).rejects.toThrow(/Posting period 01\/2026 is closed/);
+      expect(names()).toContain('BAPI_TRANSACTION_ROLLBACK');
+      expect(names()).not.toContain('BAPI_TRANSACTION_COMMIT');
+
+      const retry = await adapter.postGoodsMovement(movement);
+      expect(retry.materialDocument).toBe('4900050149');
+      expect(retry.status).toBe(STATUS.GI_POSTED);
+      expect(names()).toContain('BAPI_TRANSACTION_COMMIT');
     });
 
     test('Confirmed TO quantity (CONF_MENGE) from LTAP scopes MIGO quantity [mock only, not SAP verification]', async () => {
@@ -750,36 +682,6 @@ describe('Movement Type 241 (GI to Asset) Process Tests [mock only, not SAP veri
           GOODSMVT_ITEM: [
             expect.objectContaining({
               ENTRY_QNT: 3 // Scoped to confirmed TO quantity NISTM = 3
-            })
-          ]
-        })
-      );
-    });
-
-    test('NO_MORE_GR indicator is set only when CompleteReservation = true [mock only, not SAP verification]', async () => {
-      mockRfc.call
-        .mockResolvedValueOnce({ MATERIALDOCUMENT: '4900050151', MATDOCUMENTYEAR: '2026', RETURN: [{ TYPE: 'S', MESSAGE: 'Success' }] })
-        .mockResolvedValueOnce({});
-
-      await resAdapter.postGoodsMovement({
-        reservationNo: '0000525290',
-        reservationItem: '0001',
-        movementType: '241',
-        plant: '1120',
-        storageLocation: 'HS01',
-        material: '8000008977',
-        quantity: 1,
-        unit: 'KG',
-        assetNo: '400001',
-        completeReservation: true
-      });
-
-      expect(mockRfc.call).toHaveBeenCalledWith(
-        'BAPI_GOODSMVT_CREATE',
-        expect.objectContaining({
-          GOODSMVT_ITEM: [
-            expect.objectContaining({
-              NO_MORE_GR: 'X'
             })
           ]
         })

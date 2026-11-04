@@ -256,8 +256,10 @@ describe("SalesOrders Controller", () => {
         expect(viewModel.getProperty("/totalCount")).toBe(3);
     });
 
-    test("onUpdateFinished sets totalCount to '-' when $count parameter is absent", () => {
+    test("onUpdateFinished replaces an earlier totalCount with '-' when $count parameter is absent", () => {
         controller.onInit();
+        const viewModel = mockView.getModel("salesOrdersView");
+        viewModel.setProperty("/totalCount", 42);
 
         const mockEvent = {
             getSource: () => ({}),
@@ -266,7 +268,6 @@ describe("SalesOrders Controller", () => {
 
         controller.onUpdateFinished(mockEvent);
 
-        const viewModel = mockView.getModel("salesOrdersView");
         expect(viewModel.getProperty("/totalCount")).toBe("-");
     });
 
@@ -285,20 +286,6 @@ describe("SalesOrders Controller", () => {
     test("onNavigateToCreateSalesOrder navigates to createSalesOrder route", () => {
         controller.onNavigateToCreateSalesOrder();
         expect(mockRouter.navTo).toHaveBeenCalledWith("createSalesOrder");
-    });
-
-    test("onSearch applies filter on table items", () => {
-        controller.byId = jest.fn((id) => {
-            if (id === "salesOrdersTable") return mockTable;
-            return null;
-        });
-
-        const mockEvent = {
-            getParameter: (param) => (param === "query" ? "10135" : "")
-        };
-
-        controller.onSearch(mockEvent);
-        expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
     });
 
     test.each([

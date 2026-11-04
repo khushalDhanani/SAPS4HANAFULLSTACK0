@@ -85,4 +85,54 @@ describe('Goods Issue 261 capability preflight', () => {
       .rejects.toMatchObject({ status: 501, code: 'GI261_CREATE_CAPABILITY_NOT_PROVEN' });
     expect(rfc.readTable).not.toHaveBeenCalled();
   });
+
+  describe('destination checks run before the metadata read', () => {
+    const preflightWith = (resolveDestination, expectedSapClient) => {
+      const { client, rfc } = setup({ client: { resolveDestination } });
+      return { client, run: assert261CapabilityReady({ requestedMovementType: '261', validatedMovementType: '261', client, rfc, expectedSapClient }) };
+    };
+
+    test('keeps the status of a failed destination lookup', async () => {
+      const failure = Object.assign(new Error('destination refused'), { status: 401 });
+      const { client, run } = preflightWith(jest.fn().mockRejectedValue(failure));
+      await expect(run).rejects.toMatchObject({ status: 401, code: 'GI261_DESTINATION_UNAVAILABLE' });
+      expect(client.getText).not.toHaveBeenCalled();
+    });
+
+    test('answers 503 when the destination lookup fails with no status', async () => {
+      const { run } = preflightWith(jest.fn().mockRejectedValue(new Error('no destination service')));
+      await expect(run).rejects.toMatchObject({ status: 503, code: 'GI261_DESTINATION_UNAVAILABLE' });
+    });
+
+    test('blocks a destination with no endpoint', async () => {
+      const { client, run } = preflightWith(jest.fn().mockResolvedValue({ sapClient: '220', authentication: 'BasicAuthentication' }));
+      await expect(run).rejects.toMatchObject({ status: 503, code: 'GI261_DESTINATION_UNAVAILABLE' });
+      expect(client.getText).not.toHaveBeenCalled();
+    });
+
+    test('blocks a destination with no SAP client', async () => {
+      const { client, run } = preflightWith(jest.fn().mockResolvedValue({ url: 'https://sap.example.invalid', authentication: 'BasicAuthentication' }));
+      await expect(run).rejects.toMatchObject({ status: 503, code: 'GI261_DESTINATION_CLIENT_MISMATCH' });
+      expect(client.getText).not.toHaveBeenCalled();
+    });
+
+    test('blocks a destination pointing at a SAP client other than the expected one', async () => {
+      const destination = { url: 'https://sap.example.invalid', sapClient: '100', authentication: 'BasicAuthentication' };
+      const { client, run } = preflightWith(jest.fn().mockResolvedValue(destination), '220');
+      await expect(run).rejects.toMatchObject({ status: 503, code: 'GI261_DESTINATION_CLIENT_MISMATCH' });
+      expect(client.getText).not.toHaveBeenCalled();
+    });
+
+    test('accepts the SAP client from the sap-client header', async () => {
+      const destination = { url: 'https://sap.example.invalid', headers: { 'sap-client': '220' }, authentication: 'BasicAuthentication' };
+      const { run } = preflightWith(jest.fn().mockResolvedValue(destination), '220');
+      await expect(run).resolves.toMatchObject({ ready: true, sapClient: '220' });
+    });
+
+    test('blocks a destination with no declared authentication mode', async () => {
+      const { client, run } = preflightWith(jest.fn().mockResolvedValue({ url: 'https://sap.example.invalid', sapClient: '220' }));
+      await expect(run).rejects.toMatchObject({ status: 503, code: 'GI261_DESTINATION_AUTH_UNVERIFIED' });
+      expect(client.getText).not.toHaveBeenCalled();
+    });
+  });
 });

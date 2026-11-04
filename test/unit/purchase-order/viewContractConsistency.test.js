@@ -39,26 +39,42 @@ describe('PO view contract consistency', () => {
         expect(fields.slice(0, 6)).toEqual(['PurchaseOrderItem', 'PurchaseOrderItemCategory', 'AccountAssignmentCategory', 'Plant', 'StorageLocation', 'Material']);
     });
 
-    it.each(['model/PurchaseOrderValidator.js', 'model/PurchaseOrderModel.js'])('item field config cellIndex values match the view (%s)', (file) => {
-        const src = read(path.join(PO, file));
-        const entries = [...src.matchAll(/(\w+): \{ cellIndex: (\d+), label: "([^"]+)"/g)];
-        expect(entries.length).toBe(8);
-        entries.forEach(([, field, idx]) => expect([field, Number(idx)]).toEqual([field, cellOf(field)]));
+    it('every PurchaseOrderModel.ITEM_FIELD_CONFIG cellIndex points at the cell bound to that field', () => {
+        const prevSap = global.sap;
+        let Model;
+        global.sap = { ui: { define: (deps, factory) => { Model = factory(function () {}); } } };
+        try {
+            jest.isolateModules(() => require('../../../app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderModel'));
+        } finally {
+            global.sap = prevSap;
+        }
+        const entries = Object.entries(Model.ITEM_FIELD_CONFIG);
+        expect(entries.map(([field]) => field).sort()).toEqual(['Material', 'NetPriceAmount', 'OrderQuantity', 'Plant', 'PurchaseOrderItemText', 'StorageLocation', 'TaxCode', 'UnitOfMeasure']);
+        entries.forEach(([field, conf]) => expect([field, conf.cellIndex]).toEqual([field, cellOf(field)]));
     });
 
-    it('every literal item error cellIndex in the validator matches the view', () => {
-        const src = read(path.join(PO, 'model/PurchaseOrderValidator.js'));
-        const labelToField = {
-            'Plant': 'Plant', 'Storage Location': 'StorageLocation', 'Material': 'Material', 'Description': 'PurchaseOrderItemText',
-            'Quantity': 'OrderQuantity', 'Unit of Measure': 'UnitOfMeasure', 'Net Price': 'NetPriceAmount', 'Tax Code': 'TaxCode',
-            'Item Category': 'PurchaseOrderItemCategory', 'Account Assignment': 'AccountAssignmentCategory'
-        };
-        const literals = [...src.matchAll(/field: sItemNo \+ " \/ ([^"]+)",[\s\S]{0,300}?cellIndex: (\d+)/g)];
-        expect(literals.length).toBeGreaterThanOrEqual(11);
-        literals.forEach(([, label, idx]) => {
-            expect(labelToField[label]).toBeDefined();
-            expect([label, Number(idx)]).toEqual([label, cellOf(labelToField[label])]);
-        });
+    it.each(['Plant', 'StorageLocation', 'Material', 'OrderQuantity', 'UnitOfMeasure', 'NetPriceAmount', 'TaxCode'])('a backend error targeting items[0].%s focuses the cell bound to that field', (field) => {
+        const Validator = require('../../../app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderValidator');
+        const res = Validator.applyBackendErrors({ errors: {}, items: [{ errors: {} }] }, { details: [{ message: 'x', target: `items[0].${field}` }] });
+        expect(res.errorList[0].cellIndex).toBe(cellOf(field));
+    });
+
+    it.each([
+        ['Material', 'Material', {}, {}],
+        ['Storage Location', 'StorageLocation', {}, {}],
+        ['Unit of Measure', 'UnitOfMeasure', {}, {}],
+        ['Quantity', 'OrderQuantity', {}, {}],
+        ['Net Price', 'NetPriceAmount', {}, { NetPriceAmount: '-1' }],
+        ['Tax Code', 'TaxCode', {}, { TaxCode: 'TAX' }],
+        ['Description', 'PurchaseOrderItemText', { PurchaseOrderType: 'ZSER' }, {}],
+        ['Item Category', 'PurchaseOrderItemCategory', { PurchaseOrderType: 'ZDOM' }, { PurchaseOrderItemCategory: '9' }],
+        ['Account Assignment', 'AccountAssignmentCategory', { PurchaseOrderType: 'ZDOM' }, { AccountAssignmentCategory: 'K' }],
+        ['Plant', 'Plant', { PurchaseOrderType: 'ZDOM' }, { Plant: '2000' }]
+    ])('validateForm focuses the cell bound to the field for a "%s" error', (label, field, header, item) => {
+        const Validator = require('../../../app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderValidator');
+        const res = Validator.validateForm({ header, items: [{ PurchaseOrderItem: '00010', ...item }] });
+        const error = res.errorList.find((e) => e.field === `00010 / ${label}`);
+        expect(error.cellIndex).toBe(cellOf(field));
     });
 
     it('validateForm focuses the Plant cell for a missing item plant', () => {

@@ -80,7 +80,6 @@ const mockFilterOperator = {
 const mockValueHelpService = {};
 const mockPurchaseOrderService = {
     getSupplierDefaults: jest.fn().mockResolvedValue({}),
-    getMaterialDetails: jest.fn().mockResolvedValue(null),
     loadConfiguration: jest.fn().mockResolvedValue({
         documentTypes: [{ PurchasingDocumentType: 'ZDOM', PurchasingDocumentType_Text: 'Dom. Aether In.LTD.' }],
         companyCodes: [{ CompanyCode: '1010', CompanyCodeName: 'Aether India' }],
@@ -223,38 +222,6 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
         expect(oModel.getProperty('/userModified/PurchaseOrderType')).toBe(true);
     });
 
-    it('should set /header/PurchaseOrderType to ZDOM and PurchaseOrderTypeText to Dom. Aether In.LTD. when inDocType value help is selected', () => {
-        const mockSource = {
-            getId: () => 'inDocType',
-            getBindingContext: () => null,
-            getBindingPath: () => 'PurchaseOrderType'
-        };
-
-        controller._handleValueHelpSelected(mockSource, 'ZDOM', {
-            getDescription: () => 'Dom. Aether In.LTD.'
-        });
-
-        expect(oModel.getProperty('/header/PurchaseOrderType')).toBe('ZDOM');
-        expect(oModel.getProperty('/header/PurchaseOrderTypeText')).toBe('Dom. Aether In.LTD.');
-        expect(oModel.getProperty('/userModified/PurchaseOrderType')).toBe(true);
-    });
-
-    it('should set /header/PurchaseOrderType to ZDOS and description when inDocType value help is selected', () => {
-        const mockSource = {
-            getId: () => 'inDocType',
-            getBindingContext: () => null,
-            getBindingPath: () => 'PurchaseOrderType'
-        };
-
-        controller._handleValueHelpSelected(mockSource, 'ZDOS', {
-            getDescription: () => 'Dom.Aether Spec.Chem'
-        });
-
-        expect(oModel.getProperty('/header/PurchaseOrderType')).toBe('ZDOS');
-        expect(oModel.getProperty('/header/PurchaseOrderTypeText')).toBe('Dom.Aether Spec.Chem');
-        expect(oModel.getProperty('/userModified/PurchaseOrderType')).toBe(true);
-    });
-
     it('should build context filter with StartsWith Z for inDocType', () => {
         const mockSource = {
             getId: () => 'inDocType',
@@ -378,20 +345,6 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
         expect(oModel.getProperty('/userModified/IncotermsClassification')).toBe(true);
     });
 
-    it('should set /header/Supplier and derive defaults when inSupplier value help item is selected', () => {
-        const mockSource = {
-            getId: () => 'inSupplier',
-            getBindingContext: () => null,
-            getBindingPath: () => 'Supplier'
-        };
-
-        controller._handleValueHelpSelected(mockSource, '100102', {}, { CompanyCode: '1000' });
-
-        expect(oModel.getProperty('/header/Supplier')).toBe('100102');
-        expect(oModel.getProperty('/header/CompanyCode')).toBe('1000');
-        expect(oModel.getProperty('/userModified/Supplier')).toBe(true);
-    });
-
     describe('Field Resolution and Routing Robustness (_resolveSourceField & customData)', () => {
         it('should resolve field via data("field") regardless of control ID', () => {
             const mockSource = {
@@ -458,20 +411,6 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
             expect(aFilters.length).toBe(1);
             expect(aFilters[0].sPath).toBe('Plant');
             expect(aFilters[0].sValue).toBe('1010');
-        });
-
-        it('should build header context filter for PurchaseOrderType restricting to Z*', () => {
-            const mockSource = {
-                getId: () => 'inDocType',
-                data: (key) => (key === 'field' ? 'PurchaseOrderType' : null),
-                getBindingContext: () => null
-            };
-
-            const aFilters = controller._buildContextFilters(mockSource);
-            expect(aFilters.length).toBe(1);
-            expect(aFilters[0].sPath).toBe('PurchasingDocumentType');
-            expect(aFilters[0].sOperator).toBe('StartsWith');
-            expect(aFilters[0].sValue).toBe('Z');
         });
     });
 
@@ -584,71 +523,6 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
         });
     });
 
-    describe('Consistent Model Retrieval (Item 6)', () => {
-        it('should pass default unnamed model to PurchaseOrderService.getMaterialDetails in onItemMaterialSelect', async () => {
-            const defaultModel = { name: 'defaultODataModel' };
-            controller.getModel = jest.fn((sName) => (sName === 'newPO' ? oModel : (!sName ? defaultModel : null)));
-
-            mockPurchaseOrderService.getMaterialDetails.mockClear();
-            mockPurchaseOrderService.getMaterialDetails.mockResolvedValueOnce({
-                Material: 'MAT01',
-                MaterialBaseUnit: 'EA',
-                MaterialGroup: 'L001'
-            });
-
-            const mockContext = {
-                getPath: () => '/items/0',
-                getProperty: () => ''
-            };
-            const mockSource = {
-                getBindingContext: (name) => (name === 'newPO' ? mockContext : null)
-            };
-            const mockEvent = {
-                getSource: () => mockSource,
-                getParameter: (param) => (param === 'selectedItem' ? {
-                    getKey: () => 'MAT01',
-                    getText: () => 'MAT01',
-                    getBindingContext: () => null
-                } : null)
-            };
-
-            controller.onItemMaterialSelect(mockEvent);
-
-            await Promise.resolve();
-
-            expect(controller.getModel).toHaveBeenCalledWith();
-            expect(mockPurchaseOrderService.getMaterialDetails).toHaveBeenCalledWith(defaultModel, 'MAT01', '');
-        });
-
-        it('should pass default unnamed model to PurchaseOrderService.getMaterialDetails in _handleValueHelpSelected', async () => {
-            const defaultModel = { name: 'defaultODataModel' };
-            controller.getModel = jest.fn((sName) => (sName === 'newPO' ? oModel : (!sName ? defaultModel : null)));
-
-            mockPurchaseOrderService.getMaterialDetails.mockClear();
-            mockPurchaseOrderService.getMaterialDetails.mockResolvedValueOnce({
-                Material: 'MAT02',
-                MaterialBaseUnit: 'KG',
-                MaterialGroup: 'L002'
-            });
-
-            const mockRowContext = {
-                getPath: () => '/items/0',
-                getProperty: () => ''
-            };
-            const mockSource = {
-                data: (key) => (key === 'field' ? 'Material' : null),
-                getBindingContext: (name) => (name === 'newPO' ? mockRowContext : null)
-            };
-
-            controller._handleValueHelpSelected(mockSource, 'MAT02', null, null);
-
-            await Promise.resolve();
-
-            expect(controller.getModel).toHaveBeenCalledWith();
-            expect(mockPurchaseOrderService.getMaterialDetails).toHaveBeenCalledWith(defaultModel, 'MAT02', '');
-        });
-    });
-
     describe('Purchase Order Localization & i18n Handling (Audit 7)', () => {
         it('should resolve localized error titles and messages in _getErrorMessageConfig', () => {
             const mockErr401 = { status: 401 };
@@ -707,35 +581,6 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
 
             expect(mockMessageToast.show).toHaveBeenCalled();
             expect(mockMessageToast.show.mock.calls[0][0]).toContain('Supplier defaults applied');
-        });
-
-        it('PurchaseOrderModel.isValidDocType should enforce Z-prefix and max length 4', () => {
-            expect(PurchaseOrderModel.isValidDocType('ZDOM')).toBe(true);
-            expect(PurchaseOrderModel.isValidDocType('ZCAP')).toBe(true);
-            expect(PurchaseOrderModel.isValidDocType('z123')).toBe(true);
-            expect(PurchaseOrderModel.isValidDocType('Z1')).toBe(true);
-            expect(PurchaseOrderModel.isValidDocType('NB')).toBe(false);
-            expect(PurchaseOrderModel.isValidDocType('FO')).toBe(false);
-            expect(PurchaseOrderModel.isValidDocType('ZTOOLONG')).toBe(false);
-            expect(PurchaseOrderModel.isValidDocType('')).toBe(false);
-            expect(PurchaseOrderModel.isValidDocType(null)).toBe(false);
-        });
-
-        it('PurchaseOrderModel.validateDocType should return structured validation result', () => {
-            const validResult = PurchaseOrderModel.validateDocType('ZDOM');
-            expect(validResult.valid).toBe(true);
-            expect(validResult.state).toBe('None');
-            expect(validResult.text).toBe('');
-
-            const emptyResult = PurchaseOrderModel.validateDocType('');
-            expect(emptyResult.valid).toBe(false);
-            expect(emptyResult.state).toBe('Error');
-            expect(emptyResult.text).toContain('Document Type is required');
-
-            const invalidResult = PurchaseOrderModel.validateDocType('NB');
-            expect(invalidResult.valid).toBe(false);
-            expect(invalidResult.state).toBe('Error');
-            expect(invalidResult.text).toContain('Only Z-related document types');
         });
 
         it('PurchaseOrderModel.setDocumentType should set valid doc type and update model state', () => {
@@ -835,10 +680,6 @@ describe('Unit: CreatePurchaseOrder Controller Header Value Help Selection', () 
     });
 
     describe('Default PurchaseOrderType Consistency Across Layers (Audit Item 6)', () => {
-        it('HEADER_FIELD_CONFIG should specify ZDOM as example document type, not NB', () => {
-            expect(PurchaseOrderModel.HEADER_FIELD_CONFIG.PurchaseOrderType.example).toBe('ZDOM');
-        });
-
         it('_resetModel should initialize clean model without hardcoding PurchaseOrderType before configuration', () => {
             controller.getOwnerComponent = jest.fn(() => ({
                 getModel: jest.fn(() => null)

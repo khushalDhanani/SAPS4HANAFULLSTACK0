@@ -36,12 +36,6 @@ describe('Unit: Logger Module (srv/common/logger.js)', () => {
       expect(log.id).toBe('test-service');
       expect(log.label).toBe('test-service');
     });
-
-    it('returns the same cached logger when called repeatedly with identical label', () => {
-      const log1 = getLogger('cached-logger');
-      const log2 = getLogger('cached-logger');
-      expect(log1).toBe(log2);
-    });
   });
 
   describe('correlationPlainFormat', () => {
@@ -57,8 +51,9 @@ describe('Unit: Logger Module (srv/common/logger.js)', () => {
       expect(formatted).toEqual(['[my-service] [req-corr-12345] - Processing order 1001']);
     });
 
-    it('prefers cds.context.id as the authoritative request correlation identifier', () => {
+    it('uses cds.context.id, not correlation_id, when both are present', () => {
       cds.context = { id: 'req-auth-9999' };
+      cds.context.correlation_id = 'other-correlation';
       const formatted = correlationPlainFormat('my-service', 3, 'Task completed');
       expect(formatted).toEqual(['[my-service] [req-auth-9999] - Task completed']);
     });
@@ -81,14 +76,6 @@ describe('Unit: Logger Module (srv/common/logger.js)', () => {
   });
 
   describe('Log Level Control', () => {
-    it('respects CAP log levels dynamically', () => {
-      const log = getLogger('dynamic-level-test', 'warn');
-      expect(log.level).toBe(cds.log.levels.WARN);
-      expect(log._info).toBe(false);
-      expect(log._warn).toBe(true);
-      expect(log._error).toBe(true);
-    });
-
     it('suppresses logs below the configured level', () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
       const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});

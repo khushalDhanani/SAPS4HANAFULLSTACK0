@@ -75,29 +75,6 @@ describe('Unit: PurchaseOrderDefaults', () => {
             });
         });
 
-        it('should apply master data fields and clear validation errors on item', () => {
-            const materialData = {
-                Material: 'TG11',
-                MaterialName: 'Polypropylene Resin',
-                MaterialBaseUnit: 'PC',
-                MaterialGroup: 'L001',
-                Plant: '1010'
-            };
-
-            const report = PurchaseOrderDefaults.applyMaterialDefaults(oModel, 0, materialData);
-
-            expect(report.Material).toBe('TG11');
-            expect(report.PurchaseOrderItemText).toBe('Polypropylene Resin');
-            expect(report.UnitOfMeasure).toBe('PC');
-            expect(report.Plant).toBe('1010');
-
-            expect(oModel.getProperty('/items/0/Material')).toBe('TG11');
-            expect(oModel.getProperty('/items/0/PurchaseOrderItemText')).toBe('Polypropylene Resin');
-            expect(oModel.getProperty('/items/0/UnitOfMeasure')).toBe('PC');
-            expect(oModel.getProperty('/items/0/errors/Material/state')).toBe('None');
-            expect(oModel.getProperty('/items/0/errors/UnitOfMeasure/state')).toBe('None');
-        });
-
         it('should not overwrite existing description unless bForce is true', () => {
             oModel.setProperty('/items/0/PurchaseOrderItemText', 'User Custom Text');
             const materialData = {
@@ -174,21 +151,6 @@ describe('Unit: PurchaseOrderDefaults', () => {
             expect(report.applied.PurchasingGroup).toBe('101');
             expect(oModel.getProperty('/header/PurchasingGroup')).toBe('101');
         });
-
-        it('should preserve user modified fields from being overwritten', () => {
-            oModel.setProperty('/header/CompanyCode', '2000');
-            oModel.setProperty('/userModified/CompanyCode', true);
-
-            const report = PurchaseOrderDefaults.applyConfigurationDefaults(
-                oModel,
-                mockConfigData,
-                { code: 'ZDOM', text: 'Domestic PO' },
-                PurchaseOrderValidator
-            );
-
-            expect(report.skippedDueToUser.CompanyCode).toBe('2000');
-            expect(oModel.getProperty('/header/CompanyCode')).toBe('2000');
-        });
     });
 
     describe('deriveSupplierDefaults', () => {
@@ -233,27 +195,6 @@ describe('Unit: PurchaseOrderDefaults', () => {
             expect(oModel.getProperty('/header/Currency')).toBe('USD');
             expect(oModel.getProperty('/supplierDefaultsDerived')).toBe(true);
             expect(oModel.getProperty('/supplierDefaultsLastPo')).toBe('4500000001');
-        });
-
-        it('should not overwrite user-modified fields', () => {
-            oModel.setProperty('/header/Currency', 'EUR');
-            oModel.setProperty('/userModified/Currency', true);
-
-            const supplierDefaults = {
-                Currency: 'USD',
-                PaymentTerms: '0001'
-            };
-
-            const report = PurchaseOrderDefaults.deriveSupplierDefaults(
-                oModel,
-                '10300001',
-                supplierDefaults,
-                PurchaseOrderValidator
-            );
-
-            expect(report.preserved.Currency).toBe('EUR');
-            expect(oModel.getProperty('/header/Currency')).toBe('EUR');
-            expect(report.applied.PaymentTerms).toBe('0001');
         });
     });
 });

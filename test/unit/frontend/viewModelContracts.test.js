@@ -34,12 +34,23 @@ describe('UI view/model contracts', () => {
         .filter(([fq, d]) => d.kind === 'entity' && fq.endsWith(`Service.${name}`))
         .map(([fq, d]) => ({ fq, elements: Object.keys(d.elements || {}) }));
 
-    // The config is keyed by entity-set path only and shared by several services, so each entry must match at least
-    // one service entity of that name.
-    it('every value-help dialog config matches a service entity with its key and desc fields', () => {
+    const valueHelpConfigs = () => {
         const src = fs.readFileSync(path.join(WEBAPP, 'service/ValueHelpService.js'), 'utf8');
-        const configs = [...src.matchAll(/"\/(\w+)": \{[^}]*?key: "(\w+)", desc: "(\w+)"(?:, descAlt: "(\w+)")?/g)];
+        return [...src.matchAll(/"\/(\w+)": \{[^}]*?key: "(\w+)", desc: "(\w+)"(?:, descAlt: "(\w+)")?/g)];
+    };
+
+    // OrderTypeVH (ValueHelpService.js:51) has no service entity and no view or controller opens it; reported as a
+    // dead config. Any further entry without an entity, or fixing this one, fails here on purpose.
+    it('the only value-help dialog config without a service entity is OrderTypeVH', () => {
+        const configs = valueHelpConfigs();
         expect(configs.length).toBeGreaterThan(10);
+        expect(configs.filter(([, entity]) => entitiesNamed(entity).length === 0).map(([, entity]) => entity)).toEqual(['OrderTypeVH']);
+    });
+
+    // The config is keyed by entity-set path only and shared by several services, so an entry with a service entity
+    // must match at least one of that name.
+    it('every value-help dialog config with a service entity names its key and desc fields', () => {
+        const configs = valueHelpConfigs();
         const problems = configs
             .filter(([, entity]) => entitiesNamed(entity).length > 0)
             .filter(([, entity, key, desc, descAlt]) => !entitiesNamed(entity).some(({ elements }) =>

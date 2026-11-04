@@ -40,8 +40,10 @@ class MockJSONModel {
 
 
 class MockFilter {
-    constructor(config) {
+    constructor(config, operator, value) {
         this.config = config;
+        this.operator = operator;
+        this.value = value;
     }
 }
 
@@ -229,8 +231,10 @@ describe("SalesInquiries.controller", () => {
             expect(viewModel.getProperty("/totalCount")).toBe(3);
         });
 
-        it("onUpdateFinished sets totalCount to '-' when $count parameter is absent", () => {
+        it("onUpdateFinished replaces an earlier totalCount with '-' when $count parameter is absent", () => {
             controller.onInit();
+            const viewModel = controller.getView().getModel("salesInquiriesView");
+            viewModel.setProperty("/totalCount", 42);
 
             const oEvent = {
                 getSource: () => ({}),
@@ -238,7 +242,6 @@ describe("SalesInquiries.controller", () => {
             };
 
             controller.onUpdateFinished(oEvent);
-            const viewModel = controller.getView().getModel("salesInquiriesView");
             expect(viewModel.getProperty("/totalCount")).toBe("-");
         });
 
@@ -292,15 +295,23 @@ describe("SalesInquiries.controller", () => {
     });
 
     describe("Search and Refresh", () => {
-        it("onSearch applies multi-attribute filter", () => {
+        it("onSearch ORs a Contains filter on the five searchable fields with the trimmed query", () => {
             const oEvent = {
-                getParameter: () => "Bajaj"
+                getParameter: () => " Bajaj "
             };
             controller.onSearch(oEvent);
-            expect(mockBinding.filter).toHaveBeenCalledWith(
-                expect.any(Array),
-                MockFilterType.Application
-            );
+
+            const [aFilters, sType] = mockBinding.filter.mock.calls[0];
+            expect(sType).toBe(MockFilterType.Application);
+            expect(aFilters).toHaveLength(1);
+            expect(aFilters[0].config.and).toBe(false);
+            expect(aFilters[0].config.filters.map((f) => [f.config, f.operator, f.value])).toEqual([
+                ["SalesInquiry", "Contains", "Bajaj"],
+                ["SoldToParty", "Contains", "Bajaj"],
+                ["OrganizationBPName1", "Contains", "Bajaj"],
+                ["PurchaseOrderByCustomer", "Contains", "Bajaj"],
+                ["SalesInquiryType", "Contains", "Bajaj"]
+            ]);
         });
 
         it("onSearch with empty query clears filters", () => {

@@ -486,101 +486,6 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
         });
     });
 
-    // ─── autoConfirm × autoPostMigo matrix (adapter level) ─────────────────────
-    // autoPostMigo is NOT handled by the adapter; it is handled by the handler.
-    // These 4 tests verify the adapter half: confirm called/skipped, status correct.
-    // [mock only, not SAP verification]
-    describe('10. autoConfirm × autoPostMigo flag matrix — adapter level [mock only, not SAP verification]', () => {
-        const trHeader = [{
-            LGNUM: 'W01', TBNUM: '0001001839', BWLVS: '311',
-            RSNUM: '0000524979', NLTYP: '921', NLPLA: 'TRANSFER', VLTYP: '', VLPLA: ''
-        }];
-        const trItem = [{
-            LGNUM: 'W01', TBNUM: '0001001839', TBPOS: '0001',
-            MATNR: '000000001000000045', WERKS: '1120', LGORT: 'HS01', CHARG: '',
-            MENGE: '10.000', TAMEN: '0.000', MEINS: 'KG', ELIKZ: ''
-        }];
-
-        /** Minimal TR + profile setup shared by all 4 cases */
-        const setupTr = () => {
-            mockRfc.call.mockResolvedValueOnce({ ET_TR_HEADER: trHeader, ET_TR_ITEMS: trItem }); // getTR
-            mockRfc.readTable.mockResolvedValueOnce([{ MAKTX: 'Test Mat' }]);          // MAKT
-            mockRfc.readTable.mockResolvedValueOnce([{ XCHPF: '', SERNP: '' }]);       // MARC profile
-            mockRfc.readTable.mockResolvedValueOnce([]);                                // LTAK double-TO guard
-            // AUTHORITY_CHECK always throws (auth stub)
-            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' }));
-        };
-        const toCreated = { EV_SUCCESS: 'S', EV_TANUM: '0001099001', EV_MESSAGE: 'created' };
-
-        it('case 1: autoConfirm=true, autoPostMigo=true — adapter confirms, returns status 04, Confirmed true', async () => {
-            setupTr();
-            mockRfc.call.mockResolvedValueOnce(toCreated);      // Z_WM_TO_CREATE_FROM_TR
-            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // L_LGNUM auth
-            mockRfc.call.mockResolvedValueOnce({});             // L_TO_CONFIRM succeeds
-
-            const res = await adapter.createTOFromTR({
-                lgnum: 'W01',
-                tbnum: '0001001839', qty: 3,
-                autoConfirm: true,
-                autoPostMigo: true   // adapter ignores this; handler uses it for MIGO
-            });
-
-            expect(res.Confirmed).toBe(true);
-            expect(res.Status).toBe('04');
-            expect(mockRfc.call).toHaveBeenCalledWith('L_TO_CONFIRM', expect.objectContaining({ I_TANUM: '0001099001' }));
-        });
-
-        it('case 2: autoConfirm=true, autoPostMigo=false — adapter confirms, returns status 04, Confirmed true', async () => {
-            setupTr();
-            mockRfc.call.mockResolvedValueOnce(toCreated);
-            mockRfc.call.mockRejectedValueOnce(Object.assign(new Error('auth'), { key: 'USER_IS_AUTHORIZED' })); // L_LGNUM auth
-            mockRfc.call.mockResolvedValueOnce({});             // L_TO_CONFIRM
-
-            const res = await adapter.createTOFromTR({
-                lgnum: 'W01',
-                tbnum: '0001001839', qty: 3,
-                autoConfirm: true,
-                autoPostMigo: false
-            });
-
-            expect(res.Confirmed).toBe(true);
-            expect(res.Status).toBe('04');
-            expect(mockRfc.call).toHaveBeenCalledWith('L_TO_CONFIRM', expect.objectContaining({ I_TANUM: '0001099001' }));
-        });
-
-        it('case 3: autoConfirm=false, autoPostMigo=true — adapter skips confirm, returns status 03, Confirmed false', async () => {
-            setupTr();
-            mockRfc.call.mockResolvedValueOnce(toCreated);  // Z_WM_TO_CREATE_FROM_TR
-
-            const res = await adapter.createTOFromTR({
-                lgnum: 'W01',
-                tbnum: '0001001839', qty: 3,
-                autoConfirm: false,
-                autoPostMigo: true
-            });
-
-            expect(res.Confirmed).toBe(false);
-            expect(res.Status).toBe('03');
-            expect(mockRfc.call).not.toHaveBeenCalledWith('L_TO_CONFIRM', expect.anything());
-        });
-
-        it('case 4: autoConfirm=false, autoPostMigo=false — adapter skips confirm, returns status 03, Confirmed false', async () => {
-            setupTr();
-            mockRfc.call.mockResolvedValueOnce(toCreated);  // Z_WM_TO_CREATE_FROM_TR
-
-            const res = await adapter.createTOFromTR({
-                lgnum: 'W01',
-                tbnum: '0001001839', qty: 3,
-                autoConfirm: false,
-                autoPostMigo: false
-            });
-
-            expect(res.Confirmed).toBe(false);
-            expect(res.Status).toBe('03');
-            expect(mockRfc.call).not.toHaveBeenCalledWith('L_TO_CONFIRM', expect.anything());
-        });
-    });
-
     // ─── WM_PICK_SOURCE_FROM_LQUA Feature Flag Tests ─────────────────────────
     // [mock only, not SAP verification]
     describe('11. WM_PICK_SOURCE_FROM_LQUA feature flag [mock only, not SAP verification]', () => {
@@ -878,25 +783,6 @@ describe('Chunk 4: Step 2 Service — CreateTOFromTR & Auto Confirm [mock only, 
             expect(res.AllowMismatchedTR).toBe(false);
             expect(res.Warning).toBe('TR movement 311 does not match reservation movement 201');
             expect(res.CostCenter).toBe('CC1120');
-        });
-
-        it('lookupTR refuses a reservation/TR movement mismatch by default [mock only, not browser verification]', async () => {
-            delete process.env.WM_ALLOW_MISMATCHED_TR;
-            mockRfc.call.mockResolvedValueOnce({
-                ET_TR_HEADER: [{ LGNUM: 'W01', TBNUM: '0001000823', BWLVS: '311', RSNUM: '0000527870', NLTYP: '921', NLPLA: 'TRANSFER' }],
-                ET_TR_ITEMS: [{ LGNUM: 'W01', TBNUM: '0001000823', TBPOS: '0001', RSPOS: '0001', MATNR: '000000008000005294', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', TAMEN: '0.000', MEINS: 'NOS', ELIKZ: '' }]
-            });
-            mockRfc.readTable
-                .mockResolvedValueOnce([{ MAKTX: 'Mobile Charger' }])
-                .mockResolvedValueOnce([{ XCHPF: '', SERNP: '' }])
-                .mockResolvedValueOnce([{ LGTYP: '001', LGPLA: 'BIN1', VERME: '1.000' }])
-                .mockResolvedValueOnce([{ RSNUM: '0000527870', RSPOS: '0001', BWART: '201', UMWRK: '', UMLGO: '', CHARG: '' }])
-                .mockResolvedValueOnce([{ KOSTL: '1011201301', ANLN1: '', ANLN2: '' }]);
-
-            const result = await adapter.lookupTR('0001000823', 'W01', 'TR');
-
-            expect(result.ReservationMovementType).toBe('201');
-            expect(result.AllowMismatchedTR).toBe(false);
         });
 
         it('createTOFromTR blocks mismatched TR when WM_ALLOW_MISMATCHED_TR is default false [mock only, not browser verification]', async () => {

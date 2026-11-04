@@ -65,24 +65,47 @@ describe('Unit: SalesOrderService Handler', () => {
     };
 
     describe('action: createSalesOrder', () => {
-        test('successfully creates sales order and returns document number', async () => {
-            salesInquiryAdapter.createSalesOrder.mockResolvedValue({
-                SalesOrder: '5000459',
-                SalesDocument: '5000459',
-                TotalNetAmount: '1250.00',
+        test('returns the trimmed SAP document number', async () => {
+            salesInquiryAdapter.createSalesOrder.mockResolvedValue({ SalesOrder: ' 5000459 ' });
+
+            const req = { data: validOrderPayload, user: { id: 'salesrep1' }, error: jest.fn() };
+
+            await expect(handlers.createSalesOrder(req)).resolves.toBe('5000459');
+            expect(req.error).not.toHaveBeenCalled();
+        });
+
+        test('sends the validated, normalized and mapped payload to the adapter', async () => {
+            salesInquiryAdapter.createSalesOrder.mockResolvedValue({ SalesOrder: '5000459' });
+
+            await handlers.createSalesOrder({ data: validOrderPayload, user: { id: 'salesrep1' }, error: jest.fn() });
+
+            expect(salesInquiryAdapter.createSalesOrder).toHaveBeenCalledTimes(1);
+            const [header, items, options] = salesInquiryAdapter.createSalesOrder.mock.calls[0];
+            expect(header).toMatchObject({
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                SoldToParty: '10135',
+                PurchaseOrderNumber: 'PO-TEST-123',
+                RequestedDeliveryDate: '2026-09-25',
                 TransactionCurrency: 'INR'
             });
-
-            const req = {
-                data: validOrderPayload,
-                user: { id: 'salesrep1' },
-                error: jest.fn()
-            };
-
-            const result = await handlers.createSalesOrder(req);
-            expect(result).toBe('5000459');
-            expect(req.error).not.toHaveBeenCalled();
-            expect(salesInquiryAdapter.createSalesOrder).toHaveBeenCalledTimes(1);
+            // 5 x 250.00 = 1250.00, formatted by the mapper as 3 and 2 decimals
+            expect(items).toEqual([{
+                SalesOrderItem: '000010',
+                SalesInquiryItem: '000010',
+                Material: '4000000123',
+                SalesOrderItemText: 'NODG-NEW',
+                OrderQuantity: '5.000',
+                OrderQuantityUnit: 'KG',
+                NetPriceAmount: '250.00',
+                NetAmount: '1250.00',
+                TransactionCurrency: 'INR',
+                RequestedDeliveryDate: '2026-09-25',
+                Plant: '1120'
+            }]);
+            expect(options).toEqual({ user: 'salesrep1' });
         });
 
         test('rejects with HTTP 502 when SAP returns no SalesOrder document number', async () => {
@@ -268,22 +291,12 @@ describe('Unit: SalesOrderService Handler', () => {
             expect(req.error).toHaveBeenCalledWith(503, 'Customer master read failed');
         });
 
-        test('getSalesOrderDefaults delegates to adapter', async () => {
-            const mockDefaults = { SalesOrderType: 'ZDOM', SalesOrganization: '1000' };
-            salesInquiryAdapter.getSalesOrderDefaults.mockResolvedValue(mockDefaults);
+        test('getSalesOrderMetrics asks for order metrics: no entity option, unlike the inquiry service', async () => {
+            salesInquiryAdapter.getSalesMetrics.mockResolvedValue({ openOrdersCount: 42, totalOrdersCount: 887 });
 
-            const result = await handlers.getSalesOrderDefaults();
-            expect(result).toEqual(mockDefaults);
-            expect(salesInquiryAdapter.getSalesOrderDefaults).toHaveBeenCalled();
-        });
+            await handlers.getSalesOrderMetrics();
 
-        test('getSalesOrderMetrics delegates to adapter', async () => {
-            const mockMetrics = { openOrdersCount: 42, totalOrdersCount: 887 };
-            salesInquiryAdapter.getSalesMetrics.mockResolvedValue(mockMetrics);
-
-            const result = await handlers.getSalesOrderMetrics();
-            expect(result).toEqual(mockMetrics);
-            expect(salesInquiryAdapter.getSalesMetrics).toHaveBeenCalled();
+            expect(salesInquiryAdapter.getSalesMetrics).toHaveBeenCalledWith();
         });
 
         test('getSalesOrderMetrics propagates error instead of returning silent zero counts', async () => {

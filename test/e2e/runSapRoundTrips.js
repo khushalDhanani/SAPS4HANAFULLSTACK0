@@ -54,7 +54,11 @@ async function runSapRoundTrips(options = {}) {
     const baseUrl = (options.baseUrl || process.env.TARGET_URL || 'http://localhost:4004').replace(/\/+$/, '');
     const only = String(process.env.E2E_SAP_FLOWS || '').split(',').map((s) => s.trim()).filter(Boolean);
     const results = [];
-    const blocked = await livePreflight(process.env, options.preflight);
+    // A mistyped flow must not end as "nothing ran, exit 0"
+    const unknown = only.filter((flow) => !SUITES.some((s) => s.flow === flow));
+    const blocked = unknown.length
+        ? { flow: '*', suite: 'E2E_SAP_FLOWS', status: 'FAIL', mode: 'none', errors: [`unknown flow(s): ${unknown.join(', ')}`] }
+        : await livePreflight(process.env, options.preflight);
     if (blocked) results.push(blocked);
     for (const s of blocked ? [] : SUITES.filter((x) => only.length === 0 || only.includes(x.flow))) {
         console.log(`\n>>> ${s.name} (${s.flow})`);

@@ -563,202 +563,68 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       expect(mockRfc.call.mock.calls[0][1].T_LTBA[0].BENUM).toBeUndefined();
     });
 
-    test('when WM_TR_REAL_MOVEMENT is true, passes real BWLVS 201, BETYP K and formatted BENUM cost center [mock only, not SAP verification]', async () => {
-      const origEnv = process.env.WM_TR_REAL_MOVEMENT;
-      process.env.WM_TR_REAL_MOVEMENT = 'true';
-      try {
-        mockRfc.call.mockResolvedValueOnce({
-          T_LTBA: [{ TBNUM: '0001001839', TBPOS: '0001' }]
-        });
+    test('241: a 12-character asset number goes to BENUM as its rightmost 10 characters', async () => {
+      mockRfc.call.mockResolvedValueOnce({ T_LTBA: [{ TBNUM: '0001001839', TBPOS: '0001' }] });
 
-        await adapter.createTransferRequirement({
-          warehouseNumber: 'W01',
-          wmMovementType: '201',
-          material: '8000000023',
-          plant: '1120',
-          storageLocation: 'HS01',
-          quantity: 1,
-          unit: 'NOS',
-          reservationNo: '524979',
-          costCenter: '1011201301'
-        });
+      await adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '524979',
+        wmMovementType: '241',
+        assetNo: '000000400001'
+      });
 
-        expect(mockRfc.call).toHaveBeenCalledWith(
-          'L_TR_CREATE',
-          expect.objectContaining({
-            T_LTBA: [
-              expect.objectContaining({
-                BWLVS: '201',
-                BETYP: 'K',
-                BENUM: '1011201301'
-              })
-            ]
-          })
-        );
-      } finally {
-        process.env.WM_TR_REAL_MOVEMENT = origEnv;
-      }
+      expect(mockRfc.call.mock.calls[0][1].T_LTBA[0]).toMatchObject({ BWLVS: '241', BETYP: 'A', BENUM: '0000400001' });
     });
 
-    test('when WM_TR_REAL_MOVEMENT is true, passes real BWLVS 241, BETYP A and formatted BENUM asset [mock only, not SAP verification]', async () => {
-      const origEnv = process.env.WM_TR_REAL_MOVEMENT;
-      process.env.WM_TR_REAL_MOVEMENT = 'true';
-      try {
-        mockRfc.call.mockResolvedValueOnce({
-          T_LTBA: [{ TBNUM: '0001001839', TBPOS: '0001' }]
-        });
+    test('201: an alphanumeric cost center goes to BENUM unchanged', async () => {
+      mockRfc.call.mockResolvedValueOnce({ T_LTBA: [{ TBNUM: '0001001840', TBPOS: '0001' }] });
 
-        await adapter.createTransferRequirement({
-          warehouseNumber: 'W01',
-          wmMovementType: '241',
-          material: '8000000023',
-          plant: '1120',
-          storageLocation: 'HS01',
-          quantity: 1,
-          unit: 'NOS',
-          reservationNo: '524979',
-          assetNo: '000000400001'
-        });
+      await adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '524979',
+        wmMovementType: '201',
+        costCenter: 'SAP-DUMMY'
+      });
 
-        expect(mockRfc.call).toHaveBeenCalledWith(
-          'L_TR_CREATE',
-          expect.objectContaining({
-            T_LTBA: [
-              expect.objectContaining({
-                BWLVS: '241',
-                BETYP: 'A',
-                BENUM: '0000400001'
-              })
-            ]
-          })
-        );
-      } finally {
-        process.env.WM_TR_REAL_MOVEMENT = origEnv;
-      }
+      expect(mockRfc.call.mock.calls[0][1].T_LTBA[0]).toMatchObject({ BWLVS: '201', BETYP: 'K', BENUM: 'SAP-DUMMY' });
     });
 
-    test('when WM_TR_REAL_MOVEMENT is true, passes alphanumeric cost center unchanged up to 10 chars with VERIFY rule [mock only, not SAP verification]', async () => {
-      const origEnv = process.env.WM_TR_REAL_MOVEMENT;
-      process.env.WM_TR_REAL_MOVEMENT = 'true';
-      try {
-        mockRfc.call.mockResolvedValueOnce({
-          T_LTBA: [{ TBNUM: '0001001840', TBPOS: '0001' }]
-        });
-
-        await adapter.createTransferRequirement({
-          warehouseNumber: 'W01',
-          wmMovementType: '201',
-          material: '8000000023',
-          plant: '1120',
-          storageLocation: 'HS01',
-          quantity: 1,
-          unit: 'NOS',
-          reservationNo: '524979',
-          costCenter: 'SAP-DUMMY'
-        });
-
-        expect(mockRfc.call).toHaveBeenCalledWith(
-          'L_TR_CREATE',
-          expect.objectContaining({
-            T_LTBA: [
-              expect.objectContaining({
-                BWLVS: '201',
-                BETYP: 'K',
-                BENUM: 'SAP-DUMMY'
-              })
-            ]
-          })
-        );
-      } finally {
-        process.env.WM_TR_REAL_MOVEMENT = origEnv;
-      }
+    test('201 without a cost center is refused with 400 before any function module call', async () => {
+      await expect(adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '524979',
+        wmMovementType: '201'
+      })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('Movement 201 requires Cost Center (BENUM)') });
+      expect(mockRfc.call).not.toHaveBeenCalled();
     });
 
-    test('when WM_TR_REAL_MOVEMENT is true, pads short numeric asset number to 10 chars [mock only, not SAP verification]', async () => {
-      const origEnv = process.env.WM_TR_REAL_MOVEMENT;
-      process.env.WM_TR_REAL_MOVEMENT = 'true';
-      try {
-        mockRfc.call.mockResolvedValueOnce({
-          T_LTBA: [{ TBNUM: '0001001841', TBPOS: '0001' }]
-        });
-
-        await adapter.createTransferRequirement({
-          warehouseNumber: 'W01',
-          wmMovementType: '241',
-          material: '8000000023',
-          plant: '1120',
-          storageLocation: 'HS01',
-          quantity: 1,
-          unit: 'NOS',
-          reservationNo: '524979',
-          assetNo: '400001'
-        });
-
-        expect(mockRfc.call).toHaveBeenCalledWith(
-          'L_TR_CREATE',
-          expect.objectContaining({
-            T_LTBA: [
-              expect.objectContaining({
-                BWLVS: '241',
-                BETYP: 'A',
-                BENUM: '0000400001'
-              })
-            ]
-          })
-        );
-      } finally {
-        process.env.WM_TR_REAL_MOVEMENT = origEnv;
-      }
-    });
-
-    test('when WM_TR_REAL_MOVEMENT is true and cost center is missing for 201, throws clear 400 error before calling SAP [mock only, not SAP verification]', async () => {
-      const origEnv = process.env.WM_TR_REAL_MOVEMENT;
-      process.env.WM_TR_REAL_MOVEMENT = 'true';
-      try {
-        await expect(
-          adapter.createTransferRequirement({
-            warehouseNumber: 'W01',
-            wmMovementType: '201',
-            material: '8000000023',
-            plant: '1120',
-            storageLocation: 'HS01',
-            quantity: 1,
-            unit: 'NOS',
-            reservationNo: '524979'
-          })
-        ).rejects.toMatchObject({
-          status: 400,
-          message: expect.stringContaining('Movement 201 requires Cost Center (BENUM)')
-        });
-        expect(mockRfc.call).not.toHaveBeenCalled();
-      } finally {
-        process.env.WM_TR_REAL_MOVEMENT = origEnv;
-      }
-    });
-
-    test('when WM_TR_REAL_MOVEMENT is true and asset is missing for 241, throws clear 400 error before calling SAP [mock only, not SAP verification]', async () => {
-      const origEnv = process.env.WM_TR_REAL_MOVEMENT;
-      process.env.WM_TR_REAL_MOVEMENT = 'true';
-      try {
-        await expect(
-          adapter.createTransferRequirement({
-            warehouseNumber: 'W01',
-            wmMovementType: '241',
-            material: '8000000023',
-            plant: '1120',
-            storageLocation: 'HS01',
-            quantity: 1,
-            unit: 'NOS',
-            reservationNo: '524979'
-          })
-        ).rejects.toMatchObject({
-          status: 400,
-          message: expect.stringContaining('Movement 241 requires Asset number (BENUM)')
-        });
-        expect(mockRfc.call).not.toHaveBeenCalled();
-      } finally {
-        process.env.WM_TR_REAL_MOVEMENT = origEnv;
-      }
+    test('241 without an asset is refused with 400 before any function module call', async () => {
+      await expect(adapter.createTransferRequirement({
+        warehouseNumber: 'W01',
+        material: '8000000023',
+        plant: '1120',
+        storageLocation: 'HS01',
+        quantity: 1,
+        unit: 'NOS',
+        reservationNo: '524979',
+        wmMovementType: '241'
+      })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('Movement 241 requires Asset number (BENUM)') });
+      expect(mockRfc.call).not.toHaveBeenCalled();
     });
 
     test('Pre-check before TR creation: when WM_PRE_MIGO_T321_CHECK is true and T321 has TBFKZ = X, returns warning that goods movement will create an additional TR [mock only, not SAP verification]', async () => {
@@ -1502,8 +1368,11 @@ describe('Chunk 2: Backend Function Wrappers (ZCL_RES_PROCESS)', () => {
       await expect(adapter.confirmTransferOrder({ warehouseNumber: 'W01' })).rejects.toMatchObject({ status: 400 });
     });
 
-    test('postGoodsMovement throws 400 when reservationNo is missing', async () => {
-      await expect(adapter.postGoodsMovement({ movementType: '311', material: '123', quantity: 1 })).rejects.toMatchObject({ status: 400 });
+    test('postGoodsMovement refuses a 201 with neither a reservation nor a transfer order', async () => {
+      const rfc = { readTable: async () => [], call: async () => ({}), session: async (fn) => fn(async () => ({})) };
+      await expect(new ReservationProcessAdapter({ rfc }).postGoodsMovement({
+        movementType: '201', material: '8000000023', plant: '1120', storageLocation: 'HS01', quantity: 1, unit: 'NOS', costCenter: '1011201301'
+      })).rejects.toMatchObject({ status: 400, message: 'ReservationNo is mandatory' });
     });
   });
 

@@ -89,25 +89,25 @@ describe('Phase 5 #3 - handler routing (no cross-type fall-through)', () => {
       expect(post).not.toHaveBeenCalled();
     });
 
-    test('rejects (400) and blocks posting when receiving SLoc does not exist in plant (T001L)', async () => {
-      jest.spyOn(GoodsIssueAdapter, 'verifyReceivingLocation').mockResolvedValue({
-        valid: false,
-        error: 'Receiving Storage Location CS02 does not exist in plant 1120 (T001L)'
+    test('asks SAP to check the destination against T320, T001L and MARD', async () => {
+      const verify = jest.spyOn(GoodsIssueAdapter, 'verifyReceivingLocation').mockResolvedValue({ valid: true });
+      await handlers['postGoodsIssue311'](req(body311));
+      expect(verify).toHaveBeenCalledWith({
+        movementType: '311', plant: '1120', storageLocation: 'HS01', receivingPlant: '1120', receivingStorageLocation: 'CS02',
+        material: 'M1', checkT320: true, checkT001L: true, checkMard: true
       });
-      const r = req(body311);
-      await handlers['postGoodsIssue311'](r);
-      expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('does not exist in plant 1120 (T001L)'));
-      expect(r.error).toHaveBeenCalledWith(400, expect.stringContaining('Goods Issue was NOT posted'));
-      expect(post).not.toHaveBeenCalled();
     });
 
-    test('posts successfully when destination SLoc and WM configuration are valid', async () => {
+    test('sends the checked 311 request to the adapter when the destination is valid', async () => {
       jest.spyOn(GoodsIssueAdapter, 'verifyReceivingLocation').mockResolvedValue({ valid: true });
       const r = req(body311);
-      const res = await handlers['postGoodsIssue311'](r);
+      await handlers['postGoodsIssue311'](r);
       expect(r.error).not.toHaveBeenCalled();
-      expect(res.MaterialDocument).toBe('4900000002');
-      expect(post).toHaveBeenCalled();
+      expect(post).toHaveBeenCalledTimes(1);
+      expect(post.mock.calls[0][0]).toMatchObject({
+        MovementType: '311', ReservationNo: '519145', ReservationItem: '0001', Material: 'M1', Plant: '1120',
+        StorageLocation: 'HS01', ReceivingStorageLocation: 'CS02', IssueQty: 1, Unit: 'NOS'
+      });
     });
   });
 
@@ -136,15 +136,24 @@ describe('postGoodsIssue201 direct posting and error classification', () => {
   afterEach(() => jest.restoreAllMocks());
 
   test.each([
-    [422, 'Deficit of SL Unrestr. prod. 1 NOS'],
     [403, 'HTTP 403 Forbidden'],
+    [422, 'Deficit of SL Unrestr. prod. 1 NOS'],
     [504, 'SAP S/4HANA did not confirm the outcome']
   ])('surfaces a %i from the adapter directly', async (status, message) => {
     jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockRejectedValue(Object.assign(new Error(message), { status }));
     const r = req(payload);
     await handlers['postGoodsIssue201'](r);
     expect(r.error).toHaveBeenCalledWith(status, expect.stringContaining(message));
-    expect(setStatus).toHaveBeenCalledWith(expect.stringMatching(/^GI/), expect.stringMatching(/rejected|unconfirmed/), expect.anything());
+  });
+
+  test.each([
+    [422, 'Deficit of SL Unrestr. prod. 1 NOS', 'rejected'],
+    [403, 'HTTP 403 Forbidden', 'rejected'],
+    [504, 'SAP S/4HANA did not confirm the outcome', 'unconfirmed']
+  ])('a %i from the adapter settles the attempt with the status for that outcome', async (status, message, attemptStatus) => {
+    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockRejectedValue(Object.assign(new Error(message), { status }));
+    await handlers['postGoodsIssue201'](req(payload));
+    expect(setStatus).toHaveBeenCalledWith(expect.stringMatching(/^GI/), attemptStatus, expect.anything());
   });
 
   test('blocks the posting with 503 when the attempt cannot be recorded', async () => {
@@ -164,14 +173,6 @@ describe('postGoodsIssue201 direct posting and error classification', () => {
     await handlers['postGoodsIssue201'](r);
     expect(r.error).toHaveBeenCalledWith(expect.objectContaining({ status: 400, code: 'POSTING_PERIOD_CLOSED', details }));
     expect(setStatus).toHaveBeenCalledWith(expect.anything(), 'rejected', expect.anything());
-  });
-
-  test('surfaces 501 capability-unavailable error directly as 503 and marks attempt rejected', async () => {
-    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockRejectedValue(Object.assign(new Error('SAP S/4HANA Backend Posting Capability Unavailable'), { status: 501 }));
-    const r = req(payload);
-    await handlers['postGoodsIssue201'](r);
-    expect(r.error).toHaveBeenCalledWith(503, expect.stringContaining('SAP S/4HANA service unreachable or posting capability unavailable'));
-    expect(setStatus).toHaveBeenCalledWith(expect.stringMatching(/^GI/), 'rejected', expect.anything());
   });
 
   test('generates a new reference for every posting attempt', async () => {

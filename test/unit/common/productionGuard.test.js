@@ -79,16 +79,6 @@ describe('Unit: productionGuard — assertDevFlagsOff()', () => {
       expect(run).toThrow(/ENABLE_DEV_TOKEN_ISSUER/);
       expect(run).toThrow(/XSUAA/);
     });
-
-    test('error message is an instance of ProductionGuardError', () => {
-      try {
-        assertDevFlagsOff({ NODE_ENV: 'production', ENABLE_DEV_TOKEN_ISSUER: 'true' });
-        fail('should have thrown');
-      } catch (e) {
-        expect(e).toBeInstanceOf(ProductionGuardError);
-        expect(e.name).toBe('ProductionGuardError');
-      }
-    });
   });
 
   // ─── LOCAL_AUTH_SECRET set in production ────────────────────────────────
@@ -152,23 +142,6 @@ describe('Unit: productionGuard — assertDevFlagsOff()', () => {
         expect(e.message).toMatch(/2\./);
         expect(e.message).toMatch(/3\./);
       }
-    });
-  });
-
-  // ─── Dependency injection / isolation ───────────────────────────────────
-
-  describe('Env injection ensures isolation from process.env', () => {
-    test('uses the injected env object, not process.env', () => {
-      // process.env has no NODE_ENV=production, but injected env does
-      const originalNodeEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
-
-      expect(() => assertDevFlagsOff({
-        NODE_ENV: 'production',
-        LOCAL_AUTH_SECRET: 'injected-secret'
-      })).toThrow(ProductionGuardError);
-
-      process.env.NODE_ENV = originalNodeEnv;
     });
   });
 

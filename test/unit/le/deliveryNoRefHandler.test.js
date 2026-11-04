@@ -188,9 +188,9 @@ describe('Unit: OutboundDeliveryService DeliveryWithoutRef Handlers', () => {
       expect(deliveryNoRefAdapter.createDeliveryWithoutRef).not.toHaveBeenCalled();
     });
 
-    test('lets a clerk create for their own plant (case-insensitive)', async () => {
+    test('lets a clerk create for their own plant, ignoring case and surrounding spaces', async () => {
       deliveryNoRefAdapter.createDeliveryWithoutRef.mockResolvedValue({ OutboundDelivery: '80000060' });
-      const req = { data: { ShippingPoint: '1104', Plant: '1120' }, user: clerkOf(' 1120 '), error: jest.fn() };
+      const req = { data: { ShippingPoint: '1104', Plant: 'ab12' }, user: clerkOf(' AB12 '), error: jest.fn() };
       await expect(handlers['createDeliveryWithoutRef'](req)).resolves.toMatchObject({ OutboundDelivery: '80000060' });
       expect(req.error).not.toHaveBeenCalled();
     });

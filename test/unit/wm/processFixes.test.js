@@ -290,7 +290,7 @@ describe('Fix 10 + 11: explicit document type and TR item choice [mock only, not
     const a = new TrToAdapter({ rfc });
     await expect(a.lookupTR('524979', 'W01')).rejects.toMatchObject({ status: 400 });
     await expect(a.lookupTR('524979', 'W01', 'TR')).rejects.toMatchObject({ status: 404, message: 'Transfer Requirement 524979 not found in warehouse W01' });
-    expect(rfc.readTable).not.toHaveBeenCalledWith('RKPF', expect.anything(), expect.anything());
+    expect(rfc.readTable.mock.calls.map(([table]) => table)).not.toContain('RKPF');
     expect(rfc.call).not.toHaveBeenCalledWith('Z_WM_GET_TR_MATERIAL_LIST', expect.objectContaining({ IV_RESERVATION: expect.anything() }));
   });
   it('a reservation with no TR is a backend issue (status 11), read from LTBK-RSNUM', async () => {

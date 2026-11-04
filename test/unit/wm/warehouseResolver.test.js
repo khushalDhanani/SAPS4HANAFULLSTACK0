@@ -75,4 +75,46 @@ describe('WM warehouse resolver', () => {
       message: expect.stringContaining('Cannot resolve warehouse: provide a route warehouse')
     });
   });
+
+  test('refuses with 409 when one TR number exists in several warehouses', async () => {
+    const rfc = { readTable: async () => [{ LGNUM: 'W12' }, { LGNUM: 'W13' }] };
+    await expect(resolveWarehouse(rfc, { trNumber: '1000889' })).rejects.toMatchObject({
+      status: 409,
+      message: 'Cannot resolve warehouse: Transfer Requirement 1000889 exists in multiple warehouses (W12, W13)'
+    });
+  });
+
+  test('refuses with 409 when a plant and storage location map to several warehouses in T320', async () => {
+    const rfc = { readTable: async () => [{ LGNUM: 'W10' }, { LGNUM: 'W11' }] };
+    await expect(resolveWarehouse(rfc, { plant: '1120', storageLocation: 'CS02' })).rejects.toMatchObject({
+      status: 409,
+      message: 'Cannot resolve warehouse: plant 1120 / storage location CS02 maps to multiple warehouses (W10, W11)'
+    });
+  });
+
+  test('counts repeated rows of one warehouse as that single warehouse', async () => {
+    const rfc = { readTable: async () => [{ LGNUM: 'W12' }, { LGNUM: 'W12 ' }] };
+    await expect(resolveWarehouse(rfc, { trNumber: '1000889' })).resolves.toBe('W12');
+  });
+
+  test('resolves from the reservation on the TR header', async () => {
+    const reads = [];
+    const rfc = { readTable: async (...args) => { reads.push(args); return [{ LGNUM: 'W14' }]; } };
+    await expect(resolveWarehouse(rfc, { reservationNumber: '524979' })).resolves.toBe('W14');
+    expect(reads).toEqual([['LTBK', ['LGNUM'], ["RSNUM = '0000524979'"], 10]]);
+  });
+
+  test('tells the caller to supply a warehouse when no RFC client is available', async () => {
+    await expect(resolveWarehouse(null, { trNumber: '1000889' })).rejects.toMatchObject({
+      status: 400,
+      message: 'Cannot resolve warehouse: provide a warehouse number; SAP document lookup is unavailable.'
+    });
+  });
+
+  test('rejects a warehouse number with a quote before any read', async () => {
+    const reads = [];
+    const rfc = { readTable: async (...args) => { reads.push(args); return []; } };
+    await expect(resolveWarehouse(rfc, { warehouseNumber: "W1'" })).rejects.toMatchObject({ status: 400 });
+    expect(reads).toEqual([]);
+  });
 });

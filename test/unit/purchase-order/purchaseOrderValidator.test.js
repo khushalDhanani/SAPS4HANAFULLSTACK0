@@ -192,7 +192,7 @@ describe('Unit: PurchaseOrderValidator', () => {
     });
 
     describe('clearErrors and setFieldValidation', () => {
-        it('should clear all header and item errors', () => {
+        it('should reset the header error states and the error summary', () => {
             const oModel = createMockModel({
                 hasError: true,
                 errorMessage: 'Some error',
@@ -201,13 +201,7 @@ describe('Unit: PurchaseOrderValidator', () => {
                 errors: {
                     CompanyCode: { state: 'Error', text: 'Required' }
                 },
-                items: [
-                    {
-                        errors: {
-                            Plant: { state: 'Error', text: 'Required' }
-                        }
-                    }
-                ]
+                items: []
             });
 
             PurchaseOrderValidator.clearErrors(oModel);
@@ -215,8 +209,31 @@ describe('Unit: PurchaseOrderValidator', () => {
             expect(oModel.getProperty('/hasError')).toBe(false);
             expect(oModel.getProperty('/errorMessage')).toBe('');
             expect(oModel.getProperty('/errorCount')).toBe(0);
-            expect(oModel.getProperty('/errors/CompanyCode/state')).toBe('None');
-            expect(oModel.getProperty('/items/0/errors/Plant/state')).toBe('None');
+            expect(oModel.getProperty('/errorList')).toEqual([]);
+            expect(oModel.getProperty('/errors/CompanyCode')).toEqual({ state: 'None', text: '' });
+        });
+
+        it.each(['Plant', 'StorageLocation', 'Material', 'OrderQuantity', 'UnitOfMeasure', 'NetPriceAmount', 'TaxCode'])('should clear the %s error on an item', (sField) => {
+            const oModel = createMockModel({
+                errors: {},
+                items: [{ errors: { [sField]: { state: 'Error', text: 'Required' } } }]
+            });
+
+            PurchaseOrderValidator.clearErrors(oModel);
+
+            expect(oModel.getProperty(`/items/0/errors/${sField}`)).toEqual({ state: 'None', text: '' });
+        });
+
+        // Known defect: app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderValidator.js:1042-1051 clearErrors ("Clears all validation error states") skips three item fields that validateForm sets at :623 and :628-629.
+        it.failing.each(['PurchaseOrderItemText', 'PurchaseOrderItemCategory', 'AccountAssignmentCategory'])('should clear the %s error on an item', (sField) => {
+            const oModel = createMockModel({
+                errors: {},
+                items: [{ errors: { [sField]: { state: 'Error', text: 'Required' } } }]
+            });
+
+            PurchaseOrderValidator.clearErrors(oModel);
+
+            expect(oModel.getProperty(`/items/0/errors/${sField}`)).toEqual({ state: 'None', text: '' });
         });
 
         it('should set field validation state and text', () => {

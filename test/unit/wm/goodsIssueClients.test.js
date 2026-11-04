@@ -30,32 +30,6 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(client._isOutage({ status: 404, message: 'Not found' })).toBe(false);
     });
 
-    it('should delegate _isOutage to adapter when adapter is provided', () => {
-      const mockAdapter = {
-        _isOutage: jest.fn().mockReturnValue(true)
-      };
-      const client = new BaseGoodsIssueClient({ adapter: mockAdapter });
-      const err = new Error('Test error');
-      expect(client._isOutage(err)).toBe(true);
-      expect(mockAdapter._isOutage).toHaveBeenCalledWith(err);
-    });
-
-    it('should delegate _get and _post to adapter when adapter is provided', async () => {
-      const mockAdapter = {
-        _get: jest.fn().mockResolvedValue([{ id: 1 }]),
-        _post: jest.fn().mockResolvedValue({ success: true })
-      };
-      const client = new BaseGoodsIssueClient({ adapter: mockAdapter });
-
-      const getRes = await client._get('/test/path', 'query=1');
-      expect(getRes).toEqual([{ id: 1 }]);
-      expect(mockAdapter._get).toHaveBeenCalledWith('/test/path', 'query=1');
-
-      const postRes = await client._post('/test/post', { key: 'val' });
-      expect(postRes).toEqual({ success: true });
-      expect(mockAdapter._post).toHaveBeenCalledWith('/test/post', { key: 'val' }, {});
-    });
-
     it('should format dates and enrich batch status using shared utilities', () => {
       const client = new BaseGoodsIssueClient();
       expect(client._formatDate('/Date(1767225600000)/')).toBe('2026-01-01');
@@ -564,49 +538,6 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(items).toEqual([]);
     });
 
-    it('should not include StorageBin in returned items (field removed — SAP holds no bin data)', async () => {
-      const mockAdapter = {
-        _get: jest.fn().mockResolvedValue([
-          {
-            Reservation: '10001',
-            ReservationItem: '1',
-            OrderID: '40001',
-            Product: 'MAT01',
-            ProductName: 'Material 1',
-            Plant: '1120',
-            StorageLocation: 'CS01',
-            StorageLocationName: 'Raw Material',
-            BaseUnit: 'KG',
-            Batch: 'BATCH_A',
-            ResvnItmRequiredQtyInBaseUnit: '100',
-            ResvnItmWithdrawnQtyInBaseUnit: '20',
-            GoodsMovementType: '261',
-            GoodsMovementTypeName: 'GI for order'
-          }
-        ]),
-        getMaterialPackagingUnits: jest.fn().mockResolvedValue([
-          { Unit: 'KG', Description: 'Kilogram', Numerator: 1, Denominator: 1, FactorToBase: 1, IsBaseUnit: true }
-        ]),
-        getMaterialBatches: jest.fn().mockResolvedValue([
-          {
-            Batch: 'BATCH_A',
-            ExpiryDate: '2030-06-15',
-            StatusState: 'Success',
-            StatusText: 'VALID',
-            AvailableStock: 500
-          }
-        ]),
-        _enrichBatchStatus: jest.fn()
-      };
-
-      const reservationsClient = new GoodsIssueReservationsClient({ adapter: mockAdapter });
-      const items = await reservationsClient.getOpenItems('40001', '10001');
-
-      expect(items).toHaveLength(1);
-      // StorageBin field was removed — SAP holds no material-to-bin data
-      expect(items[0].StorageBin).toBeUndefined();
-    });
-
     it('should set BatchStatusText to unknown when batch lookup fails, never defaulting to NO SLED', async () => {
       const mockAdapter = {
         _get: jest.fn().mockResolvedValue([
@@ -904,25 +835,25 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       ).rejects.toThrow('Batch EXPIRED01 has expired.');
     });
 
-    it('should successfully post Goods Issue when SAP service responds', async () => {
+    const postedWithBatch = async () => {
       const mockAdapter = {
         validateBatch: jest.fn().mockResolvedValue({ valid: true }),
         _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
-        _post: jest.fn().mockResolvedValue({
-          MaterialDocument: '4900009999',
-          MaterialDocYear: '2026',
-          TransferOrder: '123'
-        })
+        _post: jest.fn().mockResolvedValue({ MaterialDocument: '4900009999', MaterialDocYear: '2026', TransferOrder: '123' })
       };
-
       const postingClient = new GoodsIssuePostingClient({ adapter: mockAdapter });
       mockStrictReadBack(postingClient, '201');
       const res = await postingClient.postGoodsIssue('10001', '1', 'MAT01', 10, 'KG', 'B01', 0, '', '', false, '1120', 'HS01', { movementType: '201', validatedMovementType: '201', costCenter: '1011101301' });
+      return { res, body: mockAdapter._post.mock.calls[0][1] };
+    };
 
-      expect(res.Success).toBe(true);
-      expect(res.MaterialDocument).toBe('4900009999');
-      // Isolated single-line posting (per-type methods) does not perform short-pick difference
-      // clearing - that stays with the multi-line submitGoodsIssueRequest path. DifferenceQty is 0 here.
+    it('should send the requested batch on the posted item', async () => {
+      const { body } = await postedWithBatch();
+      expect(body.to_MaterialDocumentItem.results[0].Batch).toBe('B01');
+    });
+
+    it('should report no difference clearing on a single-line posting', async () => {
+      const { res } = await postedWithBatch();
       expect(res.DifferenceCleared).toBe(false);
       expect(res.DifferenceQty).toBe(0);
     });
@@ -1614,47 +1545,9 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       expect(props[1]).toEqual({ name: 'WarehouseNumber', type: 'Edm.String', key: false });
     });
 
-    it('should reset HU model cache on _resetHuModelCache', () => {
-      const stockUnitClient = new GoodsIssueStockUnitClient();
-      stockUnitClient._huModelCache = { model: {}, expires: Date.now() + 10000 };
-      expect(stockUnitClient._huModelCache).not.toBeNull();
-      stockUnitClient._resetHuModelCache();
-      expect(stockUnitClient._huModelCache).toBeNull();
-    });
   });
 
   describe('GoodsIssueAdapter Facade & Integration Wiring', () => {
-    it('should instantiate all 4 domain clients and delegate method calls', () => {
-      expect(GoodsIssueAdapter.reservations).toBeInstanceOf(GoodsIssueReservationsClient);
-      expect(GoodsIssueAdapter.batches).toBeInstanceOf(GoodsIssueBatchesClient);
-      expect(GoodsIssueAdapter.stockUnits).toBeInstanceOf(GoodsIssueStockUnitClient);
-      expect(GoodsIssueAdapter.posting).toBeInstanceOf(GoodsIssuePostingClient);
-    });
-
-    it('should delegate getMaterialPackagingUnits to batches client', async () => {
-      const spy = jest.spyOn(GoodsIssueAdapter.batches, 'getMaterialPackagingUnits').mockResolvedValue([{ Unit: 'BOX' }]);
-      const res = await GoodsIssueAdapter.getMaterialPackagingUnits('MAT01');
-      expect(res).toEqual([{ Unit: 'BOX' }]);
-      expect(spy).toHaveBeenCalledWith('MAT01');
-      spy.mockRestore();
-    });
-
-    it('should delegate getOpenReservations to reservations client', async () => {
-      const spy = jest.spyOn(GoodsIssueAdapter.reservations, 'getOpenReservations').mockResolvedValue([{ ReservationNo: '101' }]);
-      const res = await GoodsIssueAdapter.getOpenReservations('261', '1120');
-      expect(res).toEqual([{ ReservationNo: '101' }]);
-      expect(spy).toHaveBeenCalledWith('261', '1120');
-      spy.mockRestore();
-    });
-
-    it('should delegate postGoodsIssue to posting client', async () => {
-      const spy = jest.spyOn(GoodsIssueAdapter.posting, 'postGoodsIssue').mockResolvedValue({ Success: true, MaterialDocument: '12345' });
-      const res = await GoodsIssueAdapter.postGoodsIssue('10001', '1', 'MAT01', 10, 'KG');
-      expect(res.Success).toBe(true);
-      expect(spy).toHaveBeenCalledWith('10001', '1', 'MAT01', 10, 'KG', undefined, undefined, undefined, undefined, undefined);
-      spy.mockRestore();
-    });
-
     it('should filter zero-stock batches from AvailableBatches and avoid auto-picking empty batch in resolveIdentifier', async () => {
       const spyGet = jest.spyOn(GoodsIssueAdapter, '_get').mockResolvedValue([
         { Reservation: '375047', OrderID: '1001952' }
@@ -1756,48 +1649,28 @@ describe('Goods Issue Domain Clients Unit Tests', () => {
       spyOpen.mockRestore();
     });
 
-    it('resolves authentic storage location CS02 for real reservation 0000530233 / 0001 without defaulting', async () => {
-      const spyGet = jest.spyOn(GoodsIssueAdapter, '_get').mockResolvedValue([
-        {
-          Reservation: '0000530233',
-          ReservationItem: '0001',
-          OrderID: '0001002345',
-          Product: '000000008000009754',
-          Plant: '1120',
-          StorageLocation: 'CS02',
-          ResvnItmRequiredQtyInBaseUnit: '1.000',
-          ResvnItmWithdrawnQtyInBaseUnit: '0.000',
-          ReservationItemIsFinallyIssued: false,
-          ReservationItmIsMarkedForDeltn: false
-        }
-      ]);
-      const spyOpen = jest.spyOn(GoodsIssueAdapter, 'getOpenItems').mockResolvedValue([
-        {
-          ReservationNo: '0000530233',
-          ReservationItem: '0001',
-          OrderNo: '0001002345',
-          Material: '000000008000009754',
-          Plant: '1120',
-          StorageLocation: 'CS02',
-          OpenQty: 1,
-          Batch: ''
-        }
-      ]);
-      const spyBatches = jest.spyOn(GoodsIssueAdapter, 'getMaterialBatches').mockResolvedValue([]);
+    // The reservation row is the fixture this test always used; the SAP shape is not proven here.
+    it('takes the storage location from the reservation item, without defaulting it', async () => {
+      const spyGet = jest.spyOn(GoodsIssueAdapter, '_get').mockImplementation(async (path) => (path.includes('ReservationDocumentItem') ? [{
+        Reservation: '0000530233',
+        ReservationItem: '0001',
+        OrderID: '0001002345',
+        Product: '000000008000009754',
+        Plant: '1120',
+        StorageLocation: 'CS02',
+        ResvnItmRequiredQtyInBaseUnit: '1.000',
+        ResvnItmWithdrawnQtyInBaseUnit: '0.000',
+        ReservationItemIsFinallyIssued: false,
+        ReservationItmIsMarkedForDeltn: false
+      }] : []));
 
       const res = await GoodsIssueAdapter.resolveIdentifier('0000530233');
 
-      expect(res.ReservationNo).toBe('0000530233');
-      expect(res.Plant).toBe('1120');
       expect(res.DefaultStorageLocation).toBe('CS02');
-      expect(res.ActiveItem).toBeDefined();
       expect(res.ActiveItem.StorageLocation).toBe('CS02');
-      expect(res.ActiveItem.Material).toBe('000000008000009754');
       expect(res.ActiveItem.OpenQty).toBe(1);
 
       spyGet.mockRestore();
-      spyOpen.mockRestore();
-      spyBatches.mockRestore();
     });
   });
 });

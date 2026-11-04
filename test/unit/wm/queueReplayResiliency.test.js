@@ -11,7 +11,7 @@
  *     - Blocks duplicate submissions with HTTP 409 when an attempt is in-flight (sending) or unconfirmed.
  *     - Returns cached attemptResponse when identical ClientAttemptId is re-submitted.
  *  3. UI / Client Response Representation (attemptResponse):
- *     - Translates attempt states (posted, queued, delivery_created, unconfirmed, rejected, not_posted) into honest Fiori payloads.
+ *     - Translates attempt states (posted, delivery_created, unconfirmed, rejected, not_posted) into honest Fiori payloads.
  *
  * [mock only, not SAP verification]
  */
@@ -222,21 +222,6 @@ describe('Phase 3: Operational Error Classification & Pending-State Gating', () 
         MaterialDocYear: '2026'
       });
       expect(res.Message).toMatch(/already posted in SAP/i);
-    });
-
-    test('maps queued attempt to PostingStatus: QUEUED with empty MaterialDocument', () => {
-      const res = attemptResponse({
-        Status: 'queued',
-        MaterialDocument: 'ignored-mock-doc'
-      });
-
-      expect(res).toMatchObject({
-        PostingStatus: 'QUEUED',
-        Success: false,
-        Confirmed: false,
-        MaterialDocument: ''
-      });
-      expect(res.Message).toMatch(/safely queued/i);
     });
 
     test('maps delivery_created attempt to DELIVERY_CREATED and identifies delivery number', () => {

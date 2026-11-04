@@ -3,7 +3,9 @@
 
 /**
  * Authorization / plant-isolation E2E (READ-ONLY, write guard on), as CAP mock user `test-viewer-1120` (Viewer, Plant 1120):
- * - plant-scoped lists show only rows of plant 1120;
+ * - the HU stock transfer list shows only rows of the plant the screen asked for. The screen's default filter is 1120
+ *   (HuStockTransferList.controller.js:17), so this proves the filter, not authorization; the server's refusal of another
+ *   plant is checked in verifyWriteAuthorization.e2e.js;
  * - deep links to another plant's documents (ids looked up read-only as `khushal`, Admin) show no foreign data and are
  *   refused by the server (403/404), never a 5xx;
  * - choosing a plant outside the user's scope on Orders Due is refused and loads no rows.
@@ -78,7 +80,7 @@ async function verifyPlantIsolation(options = {}) {
     const foreign261 = open261 && (open261.Items || []).find((i) => i.Plant && i.Plant !== OWN_PLANT);
 
     const cases = [
-        { name: 'HU stock transfer list shows only own plant', run: (s) => scopedList(s, 'wm/hu-stock-transfer') },
+        { name: 'HU stock transfer list shows only the plant of its default filter (1120)', run: (s) => scopedList(s, 'wm/hu-stock-transfer') },
         foreign261
             ? { name: `Foreign 261 item ${foreign261.Reservation}/${foreign261.ReservationItem} (plant ${foreign261.Plant}) is refused`,
                 run: (s) => foreignDeepLink(s, `wm/mvt261/open/${foreign261.Reservation}/${foreign261.ReservationItem}`, foreign261.Plant, 'foreign 261 item') }

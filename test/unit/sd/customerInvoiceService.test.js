@@ -42,7 +42,7 @@ describe('Frontend CustomerInvoiceService Unit Tests', () => {
     });
 
     describe('releaseInvoiceToAccounting', () => {
-        it('calls bindContext on V4 model when model is provided', async () => {
+        it('with a V4 model, executes the bound action with the document and returns the bound result', async () => {
             const mockAction = {
                 setParameter: jest.fn(),
                 execute: jest.fn().mockResolvedValue(),
@@ -52,12 +52,24 @@ describe('Frontend CustomerInvoiceService Unit Tests', () => {
                 bindContext: jest.fn().mockReturnValue(mockAction)
             };
 
-            const res = await CustomerInvoiceService.releaseInvoiceToAccounting('31000111', mockModel, { etag: 'W/"12345"' });
+            const res = await CustomerInvoiceService.releaseInvoiceToAccounting('31000111', mockModel);
             expect(mockModel.bindContext).toHaveBeenCalledWith('/releaseInvoiceToAccounting(...)');
-            expect(mockAction.setParameter).toHaveBeenCalledWith('BillingDocument', '31000111');
-            expect(mockAction.execute).toHaveBeenCalled();
+            expect(mockAction.setParameter.mock.calls).toEqual([['BillingDocument', '31000111']]);
+            expect(mockAction.execute).toHaveBeenCalledTimes(1);
             expect(res).toEqual({ AccountingDocument: '9000000100' });
             expect(mockODataClient.post).not.toHaveBeenCalled();
+        });
+
+        it('with a V4 model, also sets the ETag parameter when one is given', async () => {
+            const mockAction = {
+                setParameter: jest.fn(),
+                execute: jest.fn().mockResolvedValue(),
+                getBoundContext: () => ({ getObject: () => ({}) })
+            };
+
+            await CustomerInvoiceService.releaseInvoiceToAccounting('31000111', { bindContext: () => mockAction }, { etag: 'W/"12345"' });
+
+            expect(mockAction.setParameter).toHaveBeenCalledWith('ETag', 'W/"12345"');
         });
 
         it('falls back to ODataClient.post without ETag (2 arguments)', async () => {
@@ -83,7 +95,8 @@ describe('Frontend CustomerInvoiceService Unit Tests', () => {
     });
 
     describe('cancelBillingDocument', () => {
-        it('calls bindContext on V4 model when model is provided', async () => {
+        // ETag on this V4 path is left out on purpose: whether it should be sent is an open question (see the audit ask file).
+        it('with a V4 model, executes the bound action with the document and returns the bound result', async () => {
             const mockAction = {
                 setParameter: jest.fn(),
                 execute: jest.fn().mockResolvedValue(),
@@ -93,10 +106,10 @@ describe('Frontend CustomerInvoiceService Unit Tests', () => {
                 bindContext: jest.fn().mockReturnValue(mockAction)
             };
 
-            const res = await CustomerInvoiceService.cancelBillingDocument('31000112', mockModel, { etag: 'W/"67890"' });
+            const res = await CustomerInvoiceService.cancelBillingDocument('31000112', mockModel);
             expect(mockModel.bindContext).toHaveBeenCalledWith('/cancelBillingDocument(...)');
-            expect(mockAction.setParameter).toHaveBeenCalledWith('BillingDocument', '31000112');
-            expect(mockAction.execute).toHaveBeenCalled();
+            expect(mockAction.setParameter.mock.calls).toEqual([['BillingDocument', '31000112']]);
+            expect(mockAction.execute).toHaveBeenCalledTimes(1);
             expect(res).toEqual({ CancellationDocument: '90000053' });
             expect(mockODataClient.post).not.toHaveBeenCalled();
         });

@@ -15,6 +15,8 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
+- **Targeted test replacement (2026-11-04 10:30 IST) — PARTIAL, uncommitted, only `test/` and this file changed:** 187 false or redundant tests removed, 314 rewritten, 175 added; 75 rewrite verdicts left unchanged (57 browser checks and 16 Jest tests need SAP, 2 await the partial-pick decision). Jest 4,313 passed, 0 failed, 16 skipped; 24 of the passes are `test.failing` entries recording known defects. No production code changed, nothing was run against SAP, and owner decisions are open. Backup tag `test-audit-backup-2026-11-04`. See the entry below. The phase 2 lock and unlock work listed next was committed as `04c19f73` and is not pushed.
+
 - **SU01 User Management Phase 2 (User Lock & Unlock) (2026-11-03 18:22 IST) — PASS (mock-tested, uncommitted; live SAP write gated):** `lockUser` and `unlockUser` actions added to `UserManagementService` (`srv/admin/service.cds`, `srv/admin/service.js`) and `UserManagementAdapter` (`srv/integration/s4hana/admin/UserManagementAdapter.js`). Implements fail-closed self-lock guard protecting the active RFC connection user (`process.env.S4_USERNAME`), atomic single-session LUW with `BAPI_TRANSACTION_COMMIT`, and UI buttons in `UserDetailDialog.fragment.xml` with confirmation dialogs (`MessageBox.confirm`). 42 admin unit tests pass (18 new). Full Jest test suite (226 passed, 4,147 tests) 100% clean. Playwright browser E2E 30/30 passed. Live write remains strictly gated. See entry below.
 
 - **SU01 User Management Phase 1 Complete (2026-11-03 18:14 IST) — PASS, committed (`fc51176`):** Full read-only stack committed to `feature01`. Fiori UI (`#/dashboard/admin`), CAP service, and RFC integration verified. See entry below.
@@ -100,6 +102,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Next Steps
 
+- Test replacement (2026-11-04): the user decides whether to commit it, then answers the open decisions: partial picks versus repeats (`mvt311Process.test.js`), read-only `$metadata` checks for the assumed SAP shapes, plant scope on PGI and billing, what a failed read-back returns, and removing the `readTable?.mock` branches. Fix the 22 new `test.failing` defects as separate changes; each fix must remove its marker. Before any live E2E flow outside PO, inquiry and sales order, add the `assertTarget` and second-write protection. Update `docs/e2e-coverage-matrix.md` as listed in the entry below.
 - SAP user LOCK request (2026-11-03): the user confirms whether the requested user is really the one to lock, given that it is also the local RFC user. Any lock is a live write and needs a written go for that call.
 - Administrator sidebar (2026-11-03): the user decides whether to commit and which tools the section should hold. Any admin API needs its own server role check. Refresh `test/e2e/a11y/baseline.json` if its counts should show the fifth `aria-allowed-attr` node.
 - Root file move (2026-11-03): pushed to `origin/feature01`. SAP-free E2E and MTA validation passed; still not run: the full `npm run test:e2e` and `npm run build:mta`.
@@ -146,6 +149,44 @@ All historical change logs and past milestone statuses are preserved verbatim in
 - List latency (2026-10-28): user decides which findings to fix: duplicate list/metrics requests (PO, Sales Inquiries/Orders, Customer Returns), unpaged WM reads (`handling-unit/list` 586 KB, `getOpenReservations` 208 KB), `$top=0` returning every row. Each needs a plan and a before/after profile.
 
 ## Changes Log
+
+### 2026-11-04 10:30 IST — Test audit and targeted test replacement: PARTIAL (uncommitted, no SAP proof)
+
+**Why:** the user reported that many tests rested on assumptions. Audit of 3,826 tests and browser checks: KEEP 3,250, REWRITE 389, REMOVE 187. The user chose targeted replacement over replacing the whole folder.
+
+**Changed:** 157 files, all under `test/` (145 modified, 2 deleted, 10 new), plus this file. No production code, docs or shared test support changed. Local backup tag `test-audit-backup-2026-11-04` at `04c19f73`; not pushed.
+- Removed 187 tests. Deleted `test/unit/purchase-order/userIdentity.test.js` and `test/unit/wm/goodsIssueIsolation.test.js`.
+- Rewrote 314: 310 Jest tests and 4 browser checks. Left 75: 57 browser checks and 16 live-gated Jest tests that need SAP, and 2 protected partial-pick tests.
+- Added 175: 164 Jest tests and 11 browser checks, including the Admin gate on `lockUser` and `unlockUser` over real CAP HTTP (`test/integration/userManagement.test.js`), and `test/unit/tools/e2eRoundTripKit.test.js`.
+- Test logic changes: `wmRoundTripKit.js` returns PARTIAL when nothing ran, `runSapRoundTrips.js` fails on an unknown `E2E_SAP_FLOWS`, `runAllE2E.js` lists skipped steps. Rewritten tests use plain-function RFC doubles, so they run the production path.
+
+**Assumptions used until the user answers:** failing tests on today's bugs are marked `test.failing`; partial-pick tests left untouched; no SAP calls and no new tests on assumed SAP shapes; KEEP tests with internal mocks left as they are.
+
+**Validation (all run 2026-11-04):**
+
+| Command | Before | After |
+| --- | --- | --- |
+| `npm test` | 226 suites passed, 1 skipped; 4,147 passed, 0 failed, 56 skipped | 234 suites passed, 1 skipped; 4,313 passed, 0 failed, 16 skipped |
+| Line coverage, whole repo (`jest --coverage` with `srv`, `tools`, `app/fiori-app/webapp`) | 64.38% | 66.30% |
+| Branch coverage, same command | 50.81% | 52.41% |
+
+- `npm run test:coverage` equivalent with the configured thresholds, `npm run lint`, `npm run scan:secrets`, `git diff --check`: all exit 0.
+- `npm run test:e2e:sap-free`: 3 of 3 passed. The other browser suites, including the edited `verifyPlantIsolation.e2e.js` and `wmRoundTripKit.js`, were NOT RUN because they can reach SAP.
+- Mutation checks in throwaway copies: the rewrite reports record one for each rewritten or added test, except where they state NOT MUTATED with a reason. Independent sample of 12 mutations: 10 caught at the first or second attempt, 1 caught after a new test was added (TR recovery at `ReservationProcessAdapter.js:4102`), 1 not caught (below).
+- Each of the 24 `test.failing` entries was run as a plain test in a copy: 29 runs, every failure was the named defect, none was a setup error.
+- 75 covered lines lost across 10 files, 661 gained across 41 files. The largest loss is `SalesInquiryAdapter.js` (52 lines), the `createSalesInquiry` path with no caller in `srv/`.
+
+**Known defects now recorded by `test.failing` (22 new, 2 already there; no fix applied):** self-lock guard misses a destination user; commit `RETURN` error after lock reports success; plant scope bypass in outbound delivery reads (empty TVSTZ, foreign `ShippingPoint`); reservation movement type guard never receives its value; unchanged stock returns `verified: true`; SAP quantity ignored in stock verification; invoice cancel and return create claim success without read-back; server skips Z-type and plant-prefix PO rules; `validateForm` blocks ZSER; `clearErrors` skips 3 fields; `valueHelp.handler.js:25` misses `columns: ['*']`; inquiry sanitizer strips 4 fields; READ handler drops `itemsUnavailable`; uppercase `AUTHORIZATION` reaches S/4; `execute-delivery-pgi.js:89` accepts any VDAT or TABU object; 2 UI consistency items.
+
+**Not verified or still open:**
+- No test proves any SAP contract, and no live or read-only SAP call was made.
+- `ReservationProcessAdapter.js:4140`: no test notices when the `verifyTR` skip on resume is broken.
+- About 606 KEEP tests still use `jest.fn` RFC doubles, so they run the weaker `readTable?.mock` paths (rough count from a text search).
+- Live E2E gaps: `assertTarget` covers 3 of 12 flows; only `roundTrip.js:148` aborts a second write; HU `remove` reads any GET failure as deleted.
+- Doc edits needed, not made: `docs/e2e-coverage-matrix.md` lines 38, 40, 57-58, 62, 85, 90, 91, 113 and the CAP table; `docs/sap-test-classification.md:11`.
+- Unused after this work: `createMockReservationItems` in `test/unit/wm/fixtures/goodsIssueFixtures.js`, `srv/wm/goods-issue/validation/goodsIssue261.validation.js`. Neither was removed.
+
+**Next action:** the user decides on the commit and the open decisions; see Next Steps.
 
 ### 2026-11-03 18:22 IST — SU01 User Management Phase 2 (User Lock & Unlock): PASS (mock-tested, live write gated)
 

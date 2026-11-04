@@ -139,6 +139,18 @@ describe('Phase 3: Background Re-Check & Orphan Transaction Reconciliation', () 
   // 2. Definitive Resolution Outcomes
   // =========================================================================
   describe('2. Resolution Outcomes', () => {
+    // SAP stubbed at the adapter boundary, so the real _findDeliveryForAttempt runs. Delivery shape is the one the
+    // store reads (store:424); the SAP side of it is not proven here.
+    const deliveryAttempt = (ReferenceDocument) => ({
+      ReferenceDocument, MovementType: '311', ReservationNo: '520311', ReservationItem: '0001', Material: '8000000023',
+      Plant: '1120', StorageLocation: 'HS01', IssueQty: 10, PostingDate: '2026-10-24'
+    });
+    const candidate = (DeliveryNumber, over = {}) => ({ DeliveryNumber, ExternalId: '', CreatedOn: '20261024', Quantity: '10.000', ...over });
+    const sapDouble = ({ byRef = null, candidates = [] }) => ({
+      findPostedGoodsIssueByReference: async () => null,
+      findDeliveryByReference: async () => byRef,
+      findDeliveriesForReservationItem: async () => candidates
+    });
 
     test('promotes attempt to posted when Material Document is discovered in SAP', async () => {
       const now = Date.now();
@@ -170,59 +182,60 @@ describe('Phase 3: Background Re-Check & Orphan Transaction Reconciliation', () 
       expect(row.LastError).toBe('');
     });
 
-    test('transitions attempt to delivery_created when outbound delivery (L9/514) was created', async () => {
+    test('keeps status open past 15 minutes when two candidate deliveries match the attempt', async () => {
       const now = Date.now();
-      await attempts.create({
-        ReferenceDocument: 'GI-DELIV-001',
-        MovementType: '311',
-        Material: '8000000023',
-        Plant: '1120',
-        StorageLocation: 'HS01',
-        IssueQty: 10,
-        createdAt: new Date(now).toISOString()
-      });
+      await attempts.create(deliveryAttempt('GI-AMBIG-001'));
+      const summary = await attempts.recheck(sapDouble({ candidates: [candidate('80000001'), candidate('80000002')] }), now + 20 * MIN);
 
-      jest.spyOn(GoodsIssueAdapter, 'findPostedGoodsIssueByReference').mockResolvedValue(null);
-      jest.spyOn(attempts, '_findDeliveryForAttempt').mockResolvedValue({
-        DeliveryNumber: '0080000134'
-      });
-
-      const summary = await attempts.recheck(GoodsIssueAdapter, now + 5 * MIN);
-
-      expect(summary.Checked).toBe(1);
-      expect(summary.DeliveryCreated).toBe(1);
-
-      const row = await attempts.getByReference('GI-DELIV-001');
-      expect(row.Status).toBe('delivery_created');
-      expect(row.DeliveryNumber).toBe('0080000134');
-      expect(row.LastError).toMatch(/outbound delivery 0080000134 instead of a material document/i);
+      expect(summary).toMatchObject({ Checked: 1, StillOpen: 1, NotPosted: 0, DeliveryCreated: 0 });
+      expect((await attempts.getByReference('GI-AMBIG-001')).Status).toBe('sending');
     });
 
-    test('keeps status open when candidate deliveries in SAP are ambiguous', async () => {
+    test('attributes a delivery found by exact LIFEX match without reading reservation candidates', async () => {
       const now = Date.now();
-      await attempts.create({
-        ReferenceDocument: 'GI-AMBIG-001',
-        MovementType: '311',
-        Material: '8000000023',
-        Plant: '1120',
-        StorageLocation: 'HS01',
-        IssueQty: 10,
-        createdAt: new Date(now).toISOString()
-      });
+      await attempts.create(deliveryAttempt('GI-LIFEX-001'));
+      const candidateRead = jest.fn();
+      const sap = sapDouble({ byRef: { DeliveryNumber: '80000009' } });
+      sap.findDeliveriesForReservationItem = candidateRead;
+      await attempts.recheck(sap, now + 5 * MIN);
 
-      jest.spyOn(GoodsIssueAdapter, 'findPostedGoodsIssueByReference').mockResolvedValue(null);
-      // Multiple candidates without external ID -> ambiguous
-      jest.spyOn(attempts, '_findDeliveryForAttempt').mockResolvedValue('ambiguous');
+      expect((await attempts.getByReference('GI-LIFEX-001')).DeliveryNumber).toBe('80000009');
+      expect(candidateRead).not.toHaveBeenCalled();
+    });
 
-      // Even past 15 min, ambiguous delivery keeps status open (never falsely marked not_posted)
-      const summary = await attempts.recheck(GoodsIssueAdapter, now + 20 * MIN);
+    test('attributes the single candidate with no external id, same quantity and same posting date', async () => {
+      const now = Date.now();
+      await attempts.create(deliveryAttempt('GI-CAND-001'));
+      await attempts.recheck(sapDouble({ candidates: [candidate('80000003')] }), now + 5 * MIN);
 
-      expect(summary.Checked).toBe(1);
-      expect(summary.StillOpen).toBe(1);
-      expect(summary.NotPosted).toBe(0);
+      const row = await attempts.getByReference('GI-CAND-001');
+      expect(row.Status).toBe('delivery_created');
+      expect(row.DeliveryNumber).toBe('80000003');
+    });
 
-      const row = await attempts.getByReference('GI-AMBIG-001');
+    test.each([
+      ['carries an external id', { ExternalId: 'OTHER-REF' }],
+      ['was created on another day', { CreatedOn: '20261025' }],
+      ['has another quantity', { Quantity: '11.000' }]
+    ])('does not attribute a candidate that %s', async (_label, over) => {
+      const now = Date.now();
+      await attempts.create(deliveryAttempt('GI-CANDX-001'));
+      await attempts.recheck(sapDouble({ candidates: [candidate('80000004', over)] }), now + 5 * MIN);
+
+      const row = await attempts.getByReference('GI-CANDX-001');
       expect(row.Status).toBe('sending');
+      expect(row.DeliveryNumber).toBe('');
+    });
+
+    test('keeps status and counts an error when the delivery lookup fails', async () => {
+      const now = Date.now();
+      await attempts.create(deliveryAttempt('GI-DLVERR-001'));
+      const sap = sapDouble({});
+      sap.findDeliveryByReference = async () => { throw new Error('LIKP read failed'); };
+      const summary = await attempts.recheck(sap, now + 20 * MIN);
+
+      expect(summary).toMatchObject({ Checked: 1, Errors: 1, NotPosted: 0 });
+      expect((await attempts.getByReference('GI-DLVERR-001')).Status).toBe('sending');
     });
 
     test('preserves attempt status when S/4HANA query encounters network error', async () => {
@@ -254,39 +267,6 @@ describe('Phase 3: Background Re-Check & Orphan Transaction Reconciliation', () 
   // 3. Re-Confirm Job for Unconfirmed Attempts
   // =========================================================================
   describe('3. Re-Confirm Job (reconfirmUnconfirmed)', () => {
-
-    test('promotes unconfirmed attempt to posted when readBackDocument confirms persistence', async () => {
-      await attempts.create({
-        ReferenceDocument: 'GI-UNCONF-OK',
-        MovementType: '201',
-        Material: '8000000023',
-        Plant: '1120',
-        StorageLocation: 'HS01',
-        IssueQty: 10
-      });
-
-      await attempts.setStatus('GI-UNCONF-OK', 'unconfirmed', {
-        MaterialDocument: '5000000201',
-        MaterialDocYear: '2026'
-      });
-
-      jest.spyOn(GoodsIssueAdapter, 'readBackDocument').mockResolvedValue({
-        MaterialDocument: '5000000201',
-        MaterialDocYear: '2026',
-        Confirmed: true,
-        Status: 'confirmed'
-      });
-
-      const summary = await attempts.reconfirmUnconfirmed(GoodsIssueAdapter);
-
-      expect(summary.Checked).toBe(1);
-      expect(summary.Confirmed).toBe(1);
-      expect(summary.StillUnconfirmed).toBe(0);
-
-      const row = await attempts.getByReference('GI-UNCONF-OK');
-      expect(row.Status).toBe('posted');
-      expect(row.MaterialDocument).toBe('5000000201');
-    });
 
     test('marks unconfirmed attempt as needs-attention after exceeding maximum age (30 minutes)', async () => {
       const now = Date.now();

@@ -42,7 +42,6 @@
  */
 
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
-const { PROCESS_STATUS } = require('../../../srv/common/wmStatus');
 
 describe('Step 20: Movement Type 301 (Plant to Plant Transfer) Proof Suite [mock only, not SAP verification]', () => {
   const create301Environment = () => {
@@ -374,7 +373,7 @@ describe('Step 20: Movement Type 301 (Plant to Plant Transfer) Proof Suite [mock
     expect(verified.status).toBe('O');
   });
 
-  test('Stage 4: TO Creation for 301 routes to Interim Storage 920/TRANSFER', async () => {
+  test('Stage 4: TO Creation for 301 calls L_TO_CREATE_TR for the TR in W01 and returns the SAP TO number', async () => {
     const env = create301Environment();
     env.setupDefaultFms();
     env.setupDefaultTables();
@@ -393,7 +392,7 @@ describe('Step 20: Movement Type 301 (Plant to Plant Transfer) Proof Suite [mock
     expect(to.status).toBe('03');
     const toCalls = env.getToCreateCalls();
     expect(toCalls).toHaveLength(1);
-    expect(toCalls[0].I_TBNUM).toBe('0001000794');
+    expect(toCalls[0]).toMatchObject({ I_LGNUM: 'W01', I_TBNUM: '0001000794' });
   });
 
   test('Stage 5: TO Confirmation confirms transfer order in Warehouse W01', async () => {
@@ -717,45 +716,5 @@ describe('Step 20: Movement Type 301 (Plant to Plant Transfer) Proof Suite [mock
     expect(second.materialDocument).toBe('4900050149');
     expect(second.alreadyPosted).toBe(true);
     expect(env.getBapiGoodsmvtCalls()).toHaveLength(1);
-  });
-
-  test('Full Orchestrator: executeReservationWarehouseFlow runs complete 301 cycle', async () => {
-    const env = create301Environment();
-    env.setupDefaultFms();
-    env.setupDefaultTables({
-      RESB: async () => [{
-        RSNUM: '0000525868',
-        RSPOS: '0001',
-        MATNR: '000000008900000004',
-        WERKS: '1120',
-        LGORT: 'CS01',
-        UMWRK: '1110',
-        UMLGO: 'CS01',
-        BDMNG: '1.000',
-        ENMNG: '1.000',
-        MEINS: 'KG',
-        KZEAR: 'X'
-      }]
-    });
-
-    const res = await env.adapter.executeReservationWarehouseFlow({
-      movementType: '301',
-      plant: '1120',
-      storageLocation: 'CS01',
-      receivingPlant: '1110',
-      receivingStorageLocation: 'CS01',
-      material: '8900000004',
-      quantity: 1,
-      unit: 'KG',
-      warehouseNumber: 'W01',
-      autoConfirm: true,
-      initialSourceStock: 100,
-      initialDestStock: 20
-    });
-
-    expect(res.success).toBe(true);
-    expect(res.processStatus).toBe(PROCESS_STATUS.COMPLETED);
-    expect(res.materialDocument).toBe('4900050149');
-    expect(res.stockVerified).toBe(true);
   });
 });

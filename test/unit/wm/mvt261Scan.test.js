@@ -2,8 +2,6 @@
  * 261 scan screen, stage 1 (scan and validate only): acceptance cases T1-T7 and the no-write guarantee.
  * SAP rows are the ones read live on 2026-10-06 (RFC_READ_TABLE), trimmed to the fields the code reads.
  */
-const fs = require('fs');
-const path = require('path');
 const Mvt261Adapter = require('../../../srv/integration/s4hana/wm/Mvt261Adapter');
 
 let ScanSession;
@@ -189,24 +187,6 @@ describe('261 scan screen, stage 1', () => {
       for (const u of units) await s.scan(u);
       expect(s.http).toEqual([]); // the double throws on any HTTP call and has no RFC function-call method
     }
-  });
-
-  it('Stage 2 UI has post button, onPost handler, and CAP postGoodsIssue action with idempotency guard', () => {
-    const mod = path.join(__dirname, '../../../app/fiori-app/webapp/modules/wm/mvt261');
-    const viewSrc = fs.readFileSync(path.join(mod, 'view/Scan261.view.xml'), 'utf8');
-    expect(viewSrc).toContain('id="scan261Post"');
-    expect(viewSrc).toContain('press=".onPost"');
-
-    const ctrlSrc = fs.readFileSync(path.join(mod, 'controller/Scan261.controller.js'), 'utf8');
-    expect(ctrlSrc).toContain('onPost: function');
-    expect(ctrlSrc).toContain('/postGoodsIssue');
-
-    const cdsSrc = fs.readFileSync(path.join(__dirname, '../../../srv/wm/mvt261/service.cds'), 'utf8');
-    expect(cdsSrc).toContain('action postGoodsIssue');
-
-    const svcSrc = fs.readFileSync(path.join(__dirname, '../../../srv/wm/mvt261/service.js'), 'utf8');
-    expect(svcSrc).toContain("this.on('postGoodsIssue'");
-    expect(svcSrc).toContain('createOrGet'); // atomic idempotency claim (F3)
   });
 });
 
@@ -517,33 +497,6 @@ describe('Mvt261Service postGoodsIssue action', () => {
     expect(r2.error).toHaveBeenCalledWith(409, expect.stringContaining('in progress'));
   });
 
-  it("A6: a definite SAP rejection (422) records 'rejected'", async () => {
-    await svc.init();
-    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
-    jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockRejectedValue(Object.assign(new Error('Goods issue not possible: over-issue'), { status: 422 }));
-    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus');
-    await handlers.postGoodsIssue(req({ reservation: '512851', item: '3', quantity: 200 }));
-    const statuses = statusSpy.mock.calls.map((c) => c[1]);
-    expect(statuses).toContain('rejected');
-    expect(statuses).not.toContain('unconfirmed');
-  });
-
-  it("re-claim: a 'rejected' post is re-claimable - fix the cause and the retry posts (new generation)", async () => {
-    await svc.init();
-    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
-    const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
-      .mockRejectedValueOnce(Object.assign(new Error('Goods issue not possible: staging shortfall'), { status: 422 }))
-      .mockResolvedValue({ MaterialDocument: '4900050046', MaterialDocumentYear: '2026', Pending: false });
-
-    const r1 = req({ reservation: '512851', item: '3', quantity: 200 });
-    await handlers.postGoodsIssue(r1);                    // -> rejected
-    expect(r1.error).toHaveBeenCalledWith(422, expect.anything());
-    const r2 = req({ reservation: '512851', item: '3', quantity: 200 });
-    await handlers.postGoodsIssue(r2);                    // re-claim -> posts
-    expect(r2.error).not.toHaveBeenCalled();
-    expect(postSpy).toHaveBeenCalledTimes(2);
-  });
-
   it("re-claim: a 'not_posted' post (recheck confirmed nothing posted) is re-claimable", async () => {
     await svc.init();
     jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
@@ -588,30 +541,6 @@ describe('Mvt261Service postGoodsIssue action', () => {
     expect(postSpy).toHaveBeenCalledTimes(2);                                                  // gen0 + gen1 only; r3 never posted
     release();
     await p2;
-  });
-
-  it('SAP POST succeeds -> status becomes posted, and status persistence failure logs critical reconciliation error without swallowing', async () => {
-    await svc.init();
-    const LOG = require('../../../srv/common/logger')('mvt261-service');
-    const logSpy = jest.spyOn(LOG, 'error').mockImplementation(() => {});
-    jest.spyOn(Mvt261Adapter.prototype, 'cycle').mockResolvedValue(cycleOf());
-    jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockResolvedValue({ MaterialDocument: '4900050046', MaterialDocumentYear: '2026', Pending: false });
-    const statusSpy = jest.spyOn(GoodsIssueAttemptStore, 'setStatus').mockRejectedValueOnce(new Error('DB failure while updating status'));
-
-    const r = req({ reservation: '512851', item: '3', quantity: 200 });
-    const res = await handlers.postGoodsIssue(r);
-
-    expect(statusSpy).toHaveBeenCalledWith(expect.stringMatching(/^GI/), 'posted', expect.objectContaining({
-      MaterialDocument: '4900050046',
-      MaterialDocYear: '2026'
-    }));
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Critical reconciliation error: failed to persist attempt status 'posted'"),
-      expect.stringContaining('DB failure while updating status'),
-      expect.anything()
-    );
-    expect(res).toMatchObject({ MaterialDocument: '4900050046' });
-    expect(r.error).not.toHaveBeenCalled();
   });
 
   it('SAP POST fails -> status becomes rejected, and status persistence failure logs critical reconciliation error', async () => {

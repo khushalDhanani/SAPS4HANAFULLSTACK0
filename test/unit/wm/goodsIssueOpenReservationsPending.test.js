@@ -45,7 +45,7 @@ describe('OpenQty Calculation & Pending Confirmation Display', () => {
   });
 
   describe('GoodsIssueReservationsClient: OpenQty calculation has zero queue deduction', () => {
-    it('calculates OpenQty strictly as Math.max(0, reqQty - wdnQty) in getOpenReservations', async () => {
+    it('getOpenReservations keeps a partially withdrawn reservation and skips a fully withdrawn one', async () => {
       const mockAdapter = {
         _get: jest.fn().mockResolvedValue([
           // Partially withdrawn item: 100 - 25 = 75 open -> included

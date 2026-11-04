@@ -436,13 +436,12 @@ describe('Mvt261Adapter.postGoodsIssue / reverse', () => {
     expect(posts).toHaveLength(0);
   });
 
-  it('revalidates stock immediately before SAP POST and succeeds with fresh stock and reservation', async () => {
-    const a = adapter();
-    const reval = await a.revalidateStock(input);
+  it('revalidateStock accepts an item whose open quantity is covered by SAP stock', async () => {
+    const reval = await adapter().revalidateStock(input);
     expect(reval.eligible).toBe(true);
     expect(reval.issuableQuantity).toBe(1);
     expect(reval.source).toBe('SAP');
-    expect(reval.freshCycle).toBeDefined();
+    expect(reval.freshCycle.OpenQuantity).toBe(1);
   });
 
   it('revalidates stock and rejects when stock in MARD was consumed between scan and POST', async () => {
@@ -693,10 +692,6 @@ describe('Mvt261Adapter._issuable (the one shared issuable-stock rule)', () => {
     expect(r.reason).toBe('25 KG in supply area CS01; issue location PT01 is empty - transfer required');
   });
 
-  it('450402/3 shape: PT01 empty, 168 KG in supply area CS01 -> blocked', () => {
-    const r = nonWm('PT01', 'CS01', [{ StorageLocation: 'PT01', Batch: '', Quantity: 0 }], [q({ LGORT: 'CS01', VERME: '168.000' })]);
-    expect(r).toMatchObject({ issuableQty: 0, supplyAreaStock: 168, blocked: true });
-  });
 });
 
 describe('Mvt261Adapter.openItems issuable per reservation', () => {

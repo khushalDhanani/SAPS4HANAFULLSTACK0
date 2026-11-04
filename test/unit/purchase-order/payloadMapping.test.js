@@ -137,4 +137,27 @@ describe('Unit: Payload Mapping', () => {
         expect(payloadWithExplicit.to_PurchaseOrderItemTP[0].RequisitionerName).toBe('AUTH_TESTER');
     });
 
+    // Mapper comment at PurchaseOrderMapper.js:109-111 states these rules; whether SAP needs them is not proven here.
+    const itemWithCategory = (category, extra = {}) => [{ Material: 'TG11', Plant: '1000', OrderQuantity: 1, UnitOfMeasure: 'PC', PurchaseOrderItemCategory: category, ...extra }];
+
+    it('should send item category 7 (ZSTO stock transfer) to SAP as 0', () => {
+        const payload = mapToS4Payload(validPayload.header, itemWithCategory('7'));
+        expect(payload.to_PurchaseOrderItemTP[0].PurchaseOrderItemCategory).toBe('0');
+    });
+
+    it('should send item category 9 (ZSER service) without service lines to SAP as 0', () => {
+        const payload = mapToS4Payload(validPayload.header, itemWithCategory('9'));
+        expect(payload.to_PurchaseOrderItemTP[0].PurchaseOrderItemCategory).toBe('0');
+    });
+
+    it('should keep item category 9 when the item carries service lines', () => {
+        const payload = mapToS4Payload(validPayload.header, itemWithCategory('9', { to_PurOrdServiceLineTP: [{}] }));
+        expect(payload.to_PurchaseOrderItemTP[0].PurchaseOrderItemCategory).toBe('9');
+    });
+
+    it('should keep item category 3 (ZSUB subcontracting) unchanged', () => {
+        const payload = mapToS4Payload(validPayload.header, itemWithCategory('3'));
+        expect(payload.to_PurchaseOrderItemTP[0].PurchaseOrderItemCategory).toBe('3');
+    });
+
 });

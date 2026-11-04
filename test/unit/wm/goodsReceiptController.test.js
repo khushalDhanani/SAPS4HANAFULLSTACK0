@@ -316,28 +316,28 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             expect(oModel.getProperty('/activeSU/Unit')).toBe('KG');
         });
 
-        it('should handle hardware laser scanner event and resolve Storage Unit', async () => {
-            mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce(mockSUData);
+        it('should resolve the trimmed barcode from a hardware scanner event', async () => {
+          mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce(mockSUData);
 
-            expect(capturedHardwareScannerHandler).toBeDefined();
-            capturedHardwareScannerHandler('180000001');
+          capturedHardwareScannerHandler(' 180000001 ');
+          await new Promise((resolve) => setImmediate(resolve));
 
-            const oModel = controller.getView().getModel('grView');
-            expect(oModel.getProperty('/storageUnitBarcode')).toBe('180000001');
+          const oModel = controller.getView().getModel('grView');
+          expect(mockGoodsReceiptService.resolveStorageUnit).toHaveBeenCalledWith('180000001');
+          expect(oModel.getProperty('/hasActiveSU')).toBe(true);
         });
 
-        it('should handle camera scanner callback and resolve Storage Unit', () => {
-            mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce(mockSUData);
+        it('should resolve the trimmed barcode returned by the camera scanner', async () => {
+          mockGoodsReceiptService.resolveStorageUnit.mockResolvedValueOnce(mockSUData);
 
-            controller.onCameraScanStorageUnit();
-            expect(mockBarcodeScanService.openCameraScanner).toHaveBeenCalled();
+          controller.onCameraScanStorageUnit();
+          const callback = mockBarcodeScanService.openCameraScanner.mock.calls[0][1];
+          callback(' 180000001 ');
+          await new Promise((resolve) => setImmediate(resolve));
 
-            // Simulate camera scan callback
-            const callback = mockBarcodeScanService.openCameraScanner.mock.calls[0][1];
-            callback('180000001');
-
-            const oModel = controller.getView().getModel('grView');
-            expect(oModel.getProperty('/storageUnitBarcode')).toBe('180000001');
+          const oModel = controller.getView().getModel('grView');
+          expect(mockGoodsReceiptService.resolveStorageUnit).toHaveBeenCalledWith('180000001');
+          expect(oModel.getProperty('/hasActiveSU')).toBe(true);
         });
 
         it('should ignore a list row press while a detail page is open', () => {
@@ -587,18 +587,19 @@ describe('GoodsReceipt Controller Unit Tests', () => {
             );
         });
 
-        it('should handle backend error on posting and display error dialog', async () => {
-            mockGoodsReceiptService.postGoodsReceipt.mockRejectedValueOnce(
-                new Error('SAP S/4HANA Backend Posting Capability Error: 501 Not Implemented')
-            );
+        it('should show the SAP error text in the failure dialog when posting fails', async () => {
+          // The default getText stub drops its arguments, which would hide a lost SAP message.
+          controller.getText = (key, args) => (args ? key + ':' + args.join('|') : key);
+          mockGoodsReceiptService.postGoodsReceipt.mockRejectedValueOnce(
+            new Error('SAP S/4HANA Backend Posting Capability Error: 501 Not Implemented')
+          );
+          mockMessageBox.confirm.mockImplementationOnce((msg, opts) => {
+            opts.onClose('YES');
+          });
 
-            mockMessageBox.confirm.mockImplementationOnce((msg, opts) => {
-                opts.onClose('YES');
-            });
+          await controller.onPostGoodsReceipt();
 
-            await controller.onPostGoodsReceipt();
-
-            expect(mockMessageBox.error).toHaveBeenCalledWith('grPostFailed');
+          expect(mockMessageBox.error).toHaveBeenCalledWith('grPostFailed:SAP S/4HANA Backend Posting Capability Error: 501 Not Implemented');
         });
 
         it('should forward ETag in payload and handle 409 STALE_DATA error by resetting workflow', async () => {

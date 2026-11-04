@@ -30,6 +30,9 @@
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
 const { PROCESS_STATUS } = require('../../../srv/common/wmStatus');
 
+const TO_CREATE_FMS = ['L_TO_CREATE_TR', 'ZWM_TO_CREATE_FROM_TR', 'Z_WM_TO_CREATE_FROM_TR'];
+const TR_CREATE_FMS = ['L_TR_CREATE', 'ZWM_TR_CREATE', 'Z_WM_TR_CREATE'];
+
 describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only, not SAP verification]', () => {
   const origRealMvt = process.env.WM_TR_REAL_MOVEMENT;
 
@@ -173,6 +176,9 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
           ];
         }
 
+        // Read only on the production path (plainAdapter): receiving-plant valuation check for 301.
+        if (table === 'MBEW') return [{ BWKEY: '1110' }];
+
         if (table === 'MARD') {
           return [
             { MATNR: '000000008000000023', WERKS: '1120', LGORT: 'HS01', LABST: '100.000' },
@@ -269,6 +275,11 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
     return {
       mockRfc,
       adapter,
+      // readTable as a plain function, so the adapter takes its production path (no readTable.mock branches).
+      plainAdapter: () => new ReservationProcessAdapter({
+        rfc: { session: mockRfc.session, call: mockRfc.call, readTable: (...args) => mockRfc.readTable(...args) }
+      }),
+      fmCalls: () => mockRfc.call.mock.calls.map(([fm]) => fm),
       setupDefaultFms,
       setupDefaultTables,
       getBapiGoodsmvtCalls: () => bapiGoodsmvtCalls
@@ -567,21 +578,16 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(result.finalReservation.completelyProcessed).toBe(false);
     });
 
-    test('Failure path 10: Wrong material (MARC existence or master data validation fails)', async () => {
-      const wrongMatInput = { ...defaultInput201, material: 'NONEXISTENT_MAT' };
-      env.setupDefaultFms({
-        BAPI_RESERVATION_CREATE1: () => {
-          throw new Error('BAPI_RESERVATION_CREATE1 failed: Material NONEXISTENT_MAT does not exist in plant 1120');
-        }
-      });
-
-      const result = await env.adapter.executeReservationWarehouseFlow(wrongMatInput);
+    test('Unknown material stops at the MARC check before any SAP write', async () => {
+      env.mockRfc.call.mockClear();
+      const result = await env.plainAdapter().executeReservationWarehouseFlow({ ...defaultInput201, material: 'NONEXISTENT_MAT' });
 
       expect(result.success).toBe(false);
       expect(result.stage).toBe('RESERVATION');
       expect(result.processStatus).toBe(PROCESS_STATUS.FAILED_RESERVATION);
-      expect(result.error).toContain('NONEXISTENT_MAT');
+      expect(result.error).toContain('Material NONEXISTENT_MAT does not exist in plant 1120 (MARC)');
       expect(result.stages).toEqual([]);
+      expect(env.fmCalls()).not.toContain('BAPI_RESERVATION_CREATE1');
     });
 
     test('Failure path 11: Wrong SLoc (T320 warehouse mapping fails)', async () => {
@@ -902,21 +908,16 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(result.finalReservation.completelyProcessed).toBe(false);
     });
 
-    test('Failure path 10: Wrong material (MARC existence or master data validation fails)', async () => {
-      const wrongMatInput = { ...defaultInput241, material: 'NONEXISTENT_MAT' };
-      env.setupDefaultFms({
-        BAPI_RESERVATION_CREATE1: () => {
-          throw new Error('BAPI_RESERVATION_CREATE1 failed: Material NONEXISTENT_MAT does not exist in plant 1120');
-        }
-      });
-
-      const result = await env.adapter.executeReservationWarehouseFlow(wrongMatInput);
+    test('Unknown material stops at the MARC check before any SAP write', async () => {
+      env.mockRfc.call.mockClear();
+      const result = await env.plainAdapter().executeReservationWarehouseFlow({ ...defaultInput241, material: 'NONEXISTENT_MAT' });
 
       expect(result.success).toBe(false);
       expect(result.stage).toBe('RESERVATION');
       expect(result.processStatus).toBe(PROCESS_STATUS.FAILED_RESERVATION);
-      expect(result.error).toContain('NONEXISTENT_MAT');
+      expect(result.error).toContain('Material NONEXISTENT_MAT does not exist in plant 1120 (MARC)');
       expect(result.stages).toEqual([]);
+      expect(env.fmCalls()).not.toContain('BAPI_RESERVATION_CREATE1');
     });
 
     test('Failure path 11: Wrong SLoc (T320 warehouse mapping fails)', async () => {
@@ -1234,21 +1235,16 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(result.finalReservation.completelyProcessed).toBe(false);
     });
 
-    test('Failure path 10: Wrong material (MARC existence or master data validation fails)', async () => {
-      const wrongMatInput = { ...defaultInput311, material: 'NONEXISTENT_MAT' };
-      env.setupDefaultFms({
-        BAPI_RESERVATION_CREATE1: () => {
-          throw new Error('BAPI_RESERVATION_CREATE1 failed: Material NONEXISTENT_MAT does not exist in plant 1120');
-        }
-      });
-
-      const result = await env.adapter.executeReservationWarehouseFlow(wrongMatInput);
+    test('Unknown material stops at the MARC check before any SAP write', async () => {
+      env.mockRfc.call.mockClear();
+      const result = await env.plainAdapter().executeReservationWarehouseFlow({ ...defaultInput311, material: 'NONEXISTENT_MAT' });
 
       expect(result.success).toBe(false);
       expect(result.stage).toBe('RESERVATION');
       expect(result.processStatus).toBe(PROCESS_STATUS.FAILED_RESERVATION);
-      expect(result.error).toContain('NONEXISTENT_MAT');
+      expect(result.error).toContain('Material NONEXISTENT_MAT does not exist in plant 1120 (MARC)');
       expect(result.stages).toEqual([]);
+      expect(env.fmCalls()).not.toContain('BAPI_RESERVATION_CREATE1');
     });
 
     test('Failure path 11: Wrong SLoc (Identical issuing and receiving SLoc rejected)', async () => {
@@ -1618,7 +1614,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
   });
 
   // =========================================================================
-  // Failure Paths: Fixes, Retries & Resumption across all 12 Scenarios
+  // Failure Paths: Fixes, Retries & Resumption
   // =========================================================================
   describe('Failure-first MIGO rejection and retry [mock only, not SAP verification]', () => {
     test.each([
@@ -1670,7 +1666,7 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
     });
   });
 
-  describe('Movement Type 201 — Failure Paths: Fixes, Retries & Resumptions for All 12 Scenarios', () => {
+  describe('Movement Type 201 — Failure Paths: Fixes, Retries & Resumptions', () => {
     const env = createTestEnvironment('201');
 
     const baseInput = {
@@ -1704,71 +1700,47 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(fixed.completed).toBe(true);
     });
 
-    test('Fix 2 (TR failure retry): Resuming with existing reservationNumber creates TR and completes all subsequent stages', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput,
-        reservationNumber: '520201' // Adopt already-created reservation
-      });
+    test('Resume with reservationNumber creates no second reservation and creates the TR once', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput, reservationNumber: '520201' });
 
       expect(resumed.success).toBe(true);
       expect(resumed.reservationNumber).toBe('520201');
-      expect(resumed.trNumber).toBe('1000201');
-      expect(resumed.state).toBe('COMPLETED');
-      expect(resumed.completed).toBe(true);
+      expect(env.fmCalls()).not.toContain('BAPI_RESERVATION_CREATE1');
+      expect(env.fmCalls().filter((fm) => TR_CREATE_FMS.includes(fm))).toHaveLength(1);
     });
 
-    test('Fix 3 (TR missing recovery): Resuming with reservationNumber regenerates missing TR in SAP and completes flow', async () => {
-      const regenerated = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput,
-        reservationNumber: '520201'
-      });
-
-      expect(regenerated.success).toBe(true);
-      expect(regenerated.trNumber).toBe('1000201');
-      expect(regenerated.state).toBe('COMPLETED');
-    });
-
-    test('Fix 4 (TO failure retry): Resuming with existing reservationNumber and trNumber creates TO and finishes flow', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput,
-        reservationNumber: '520201',
-        trNumber: '1000201' // Adopt verified TR
-      });
+    test('Resume with trNumber creates no reservation or TR and creates the TO from that TR', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput, reservationNumber: '520201', trNumber: '1000201' });
 
       expect(resumed.success).toBe(true);
-      expect(resumed.reservationNumber).toBe('520201');
-      expect(resumed.trNumber).toBe('1000201');
-      expect(resumed.toNumber).toBe('1030201');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(env.fmCalls()).not.toContain('BAPI_RESERVATION_CREATE1');
+      expect(env.fmCalls().filter((fm) => TR_CREATE_FMS.includes(fm))).toEqual([]);
+      const toCreate = env.mockRfc.call.mock.calls.filter(([fm]) => TO_CREATE_FMS.includes(fm));
+      expect(toCreate).toHaveLength(1);
+      expect(toCreate[0][1].I_TBNUM).toBe('0001000201');
     });
 
-    test('Fix 5 (TO confirmation failure retry): Resuming with existing toNumber confirms TO and posts MIGO', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput,
-        reservationNumber: '520201',
-        trNumber: '1000201',
-        toNumber: '1030201' // Adopt unconfirmed TO
-      });
+    test('Resume with toNumber creates nothing new and confirms that TO', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput, reservationNumber: '520201', trNumber: '1000201', toNumber: '1030201' });
 
       expect(resumed.success).toBe(true);
-      expect(resumed.toNumber).toBe('1030201');
-      expect(resumed.confirmation.confirmed).toBe(true);
-      expect(resumed.migo.materialDocument).toBe('5000000201');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(env.fmCalls().filter((fm) => ['BAPI_RESERVATION_CREATE1', ...TR_CREATE_FMS, ...TO_CREATE_FMS].includes(fm))).toEqual([]);
+      const confirm = env.mockRfc.call.mock.calls.filter(([fm]) => fm === 'L_TO_CONFIRM');
+      expect(confirm).toHaveLength(1);
+      expect(confirm[0][1].I_TANUM).toBe('0001030201');
     });
 
-    test('Fix 6 (MIGO failure retry): Resuming with confirmed TO posts MIGO after issue resolved without re-picking', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput,
-        reservationNumber: '520201',
-        trNumber: '1000201',
-        toNumber: '1030201',
-        toConfirmed: true // Adopt confirmed TO
-      });
+    test('Resume with a confirmed TO skips creation and confirmation and posts the movement once', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput, reservationNumber: '520201', trNumber: '1000201', toNumber: '1030201', toConfirmed: true });
 
       expect(resumed.success).toBe(true);
       expect(resumed.migo.materialDocument).toBe('5000000201');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(env.fmCalls().filter((fm) => ['BAPI_RESERVATION_CREATE1', 'L_TO_CONFIRM', ...TR_CREATE_FMS, ...TO_CREATE_FMS].includes(fm))).toEqual([]);
+      expect(env.fmCalls().filter((fm) => fm === 'BAPI_GOODSMVT_CREATE')).toHaveLength(1);
     });
 
     test('Fix 7 (MIGO timeout recovery): Re-submitting identical processId after timeout recovers committed document via idempotency', async () => {
@@ -1806,41 +1778,6 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(recovered.alreadyPosted).toBe(true);
       expect(recovered.idempotentRetry).toBe(true);
       expect(env.getBapiGoodsmvtCalls().length).toBe(0); // No double posting!
-    });
-
-    test('Fix 8 (Duplicate MIGO guard): Idempotency check prevents duplicate stock consumption on repeated submits', async () => {
-      // Run 1
-      const first = await env.adapter.executeReservationWarehouseFlow(baseInput);
-      expect(first.success).toBe(true);
-      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
-
-      // Setup MATDOC for repeat attempt
-      env.setupDefaultTables({
-        MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`BKTXT = '${baseInput.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520201'")) {
-            return [{
-              MBLNR: '5000000201',
-              MJAHR: '2026',
-              BWART: '201',
-              MATNR: '000000008000000023',
-              MENGE: '10.000',
-              WERKS: '1120',
-              LGORT: 'HS01',
-              RSNUM: '0000520201',
-              RSPOS: '0001',
-              KOSTL: '001011201301',
-              SHKZG: 'H'
-            }];
-          }
-          return [];
-        }
-      });
-
-      // Run 2 (same business key and processId)
-      const second = await env.adapter.executeReservationWarehouseFlow(baseInput);
-      expect(second.success).toBe(true);
-      expect(second.alreadyPosted).toBe(true);
-      expect(env.getBapiGoodsmvtCalls().length).toBe(1); // Not posted twice
     });
 
     test('Fix 9 (Partial quantity continuation): Second issue consumes remaining quantity and completely processes reservation', async () => {
@@ -1964,30 +1901,12 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(part2.finalReservation.completelyProcessed).toBe(true);
       expect(part2.finalReservation.remainingQuantity).toBe(0);
     });
-
-    test('Fix 10 (Wrong material correction): Providing valid material completes the flow', async () => {
-      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput, material: '8000000023' });
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
-    });
-
-    test('Fix 11 (Wrong SLoc correction): Providing valid SLoc mapped in T320 completes the flow', async () => {
-      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput, storageLocation: 'HS01' });
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
-    });
-
-    test('Fix 12 (Wrong plant correction): Providing valid plant mapped in T320 completes the flow', async () => {
-      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput, plant: '1120' });
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
-    });
   });
 
   // =========================================================================
-  // Movement Type 241 — Failure Paths: Fixes, Retries & Resumptions (12 Scenarios)
+  // Movement Type 241 — Failure Paths: Fixes, Retries & Resumptions
   // =========================================================================
-  describe('Movement Type 241 — Failure Paths: Fixes, Retries & Resumptions for All 12 Scenarios', () => {
+  describe('Movement Type 241 — Failure Paths: Fixes, Retries & Resumptions', () => {
     const env = createTestEnvironment('241');
 
     const baseInput241 = {
@@ -2020,65 +1939,47 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(fixed.completed).toBe(true);
     });
 
-    test('Fix 2 (TR failure retry): Resuming with existing reservationNumber creates TR and completes all subsequent stages', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput241,
-        reservationNumber: '520241'
-      });
+    test('Resume with reservationNumber creates no second reservation and creates the TR once', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput241, reservationNumber: '520241' });
+
       expect(resumed.success).toBe(true);
       expect(resumed.reservationNumber).toBe('520241');
-      expect(resumed.trNumber).toBe('1000241');
-      expect(resumed.state).toBe('COMPLETED');
-      expect(resumed.completed).toBe(true);
+      expect(env.fmCalls()).not.toContain('BAPI_RESERVATION_CREATE1');
+      expect(env.fmCalls().filter((fm) => TR_CREATE_FMS.includes(fm))).toHaveLength(1);
     });
 
-    test('Fix 3 (TR missing recovery): Resuming with reservationNumber regenerates missing TR in SAP and completes flow', async () => {
-      const regenerated = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput241,
-        reservationNumber: '520241'
-      });
-      expect(regenerated.success).toBe(true);
-      expect(regenerated.trNumber).toBe('1000241');
-      expect(regenerated.state).toBe('COMPLETED');
-    });
+    test('Resume with trNumber creates no reservation or TR and creates the TO from that TR', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput241, reservationNumber: '520241', trNumber: '1000241' });
 
-    test('Fix 4 (TO failure retry): Resuming with existing reservationNumber and trNumber creates TO and finishes flow', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput241,
-        reservationNumber: '520241',
-        trNumber: '1000241'
-      });
       expect(resumed.success).toBe(true);
-      expect(resumed.reservationNumber).toBe('520241');
-      expect(resumed.trNumber).toBe('1000241');
-      expect(resumed.toNumber).toBe('1030241');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(env.fmCalls()).not.toContain('BAPI_RESERVATION_CREATE1');
+      expect(env.fmCalls().filter((fm) => TR_CREATE_FMS.includes(fm))).toEqual([]);
+      const toCreate = env.mockRfc.call.mock.calls.filter(([fm]) => TO_CREATE_FMS.includes(fm));
+      expect(toCreate).toHaveLength(1);
+      expect(toCreate[0][1].I_TBNUM).toBe('0001000241');
     });
 
-    test('Fix 5 (TO confirmation failure retry): Resuming with existing toNumber confirms TO and posts MIGO', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput241,
-        reservationNumber: '520241',
-        trNumber: '1000241',
-        toNumber: '1030241'
-      });
+    test('Resume with toNumber creates nothing new and confirms that TO', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput241, reservationNumber: '520241', trNumber: '1000241', toNumber: '1030241' });
+
       expect(resumed.success).toBe(true);
-      expect(resumed.toNumber).toBe('1030241');
-      expect(resumed.confirmation.confirmed).toBe(true);
-      expect(resumed.migo.materialDocument).toBe('5000000241');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(env.fmCalls().filter((fm) => ['BAPI_RESERVATION_CREATE1', ...TR_CREATE_FMS, ...TO_CREATE_FMS].includes(fm))).toEqual([]);
+      const confirm = env.mockRfc.call.mock.calls.filter(([fm]) => fm === 'L_TO_CONFIRM');
+      expect(confirm).toHaveLength(1);
+      expect(confirm[0][1].I_TANUM).toBe('0001030241');
     });
 
-    test('Fix 6 (MIGO failure retry): Resuming with confirmed TO posts MIGO after issue resolved without re-picking', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput241,
-        reservationNumber: '520241',
-        toNumber: '1030241',
-        toConfirmed: true
-      });
+    test('Resume with a confirmed TO skips creation and confirmation and posts the movement once', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput241, reservationNumber: '520241', trNumber: '1000241', toNumber: '1030241', toConfirmed: true });
+
       expect(resumed.success).toBe(true);
       expect(resumed.migo.materialDocument).toBe('5000000241');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(env.fmCalls().filter((fm) => ['BAPI_RESERVATION_CREATE1', 'L_TO_CONFIRM', ...TR_CREATE_FMS, ...TO_CREATE_FMS].includes(fm))).toEqual([]);
+      expect(env.fmCalls().filter((fm) => fm === 'BAPI_GOODSMVT_CREATE')).toHaveLength(1);
     });
 
     test('Fix 7 (MIGO timeout recovery): Re-submitting identical processId after timeout recovers committed document via idempotency', async () => {
@@ -2113,37 +2014,6 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(recovered.alreadyPosted).toBe(true);
       expect(recovered.idempotentRetry).toBe(true);
       expect(env.getBapiGoodsmvtCalls().length).toBe(0);
-    });
-
-    test('Fix 8 (Duplicate MIGO guard): Idempotency check prevents duplicate stock consumption on repeated submits', async () => {
-      const first = await env.adapter.executeReservationWarehouseFlow(baseInput241);
-      expect(first.success).toBe(true);
-      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
-
-      env.setupDefaultTables({
-        MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`BKTXT = '${baseInput241.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520241'")) {
-            return [{
-              MBLNR: '5000000241',
-              MJAHR: '2026',
-              BWART: '241',
-              MATNR: '000000008000008977',
-              MENGE: '10.000',
-              WERKS: '1120',
-              LGORT: 'HS01',
-              RSNUM: '0000520241',
-              RSPOS: '0001',
-              ANLN1: '0000400001',
-              SHKZG: 'H'
-            }];
-          }
-          return [];
-        }
-      });
-      const second = await env.adapter.executeReservationWarehouseFlow(baseInput241);
-      expect(second.success).toBe(true);
-      expect(second.alreadyPosted).toBe(true);
-      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
     });
 
     test('Fix 9 (Partial quantity continuation): Second issue consumes remaining quantity and completely processes reservation', async () => {
@@ -2265,30 +2135,12 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(part2.finalReservation.completelyProcessed).toBe(true);
       expect(part2.finalReservation.remainingQuantity).toBe(0);
     });
-
-    test('Fix 10 (Wrong material correction): Providing valid material completes the flow', async () => {
-      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput241, material: '8000008977' });
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
-    });
-
-    test('Fix 11 (Wrong SLoc correction): Providing valid SLoc mapped in T320 completes the flow', async () => {
-      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput241, storageLocation: 'HS01' });
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
-    });
-
-    test('Fix 12 (Wrong plant correction): Providing valid plant mapped in T320 completes the flow', async () => {
-      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput241, plant: '1120' });
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
-    });
   });
 
   // =========================================================================
-  // Movement Type 311 — Failure Paths: Fixes, Retries & Resumptions (12 Scenarios)
+  // Movement Type 311 — Failure Paths: Fixes, Retries & Resumptions
   // =========================================================================
-  describe('Movement Type 311 — Failure Paths: Fixes, Retries & Resumptions for All 12 Scenarios', () => {
+  describe('Movement Type 311 — Failure Paths: Fixes, Retries & Resumptions', () => {
     const env = createTestEnvironment('311');
 
     const baseInput311 = {
@@ -2320,65 +2172,47 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(fixed.completed).toBe(true);
     });
 
-    test('Fix 2 (TR failure retry): Resuming with existing reservationNumber creates TR and completes all subsequent stages', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput311,
-        reservationNumber: '520311'
-      });
+    test('Resume with reservationNumber creates no second reservation and creates the TR once', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput311, reservationNumber: '520311' });
+
       expect(resumed.success).toBe(true);
       expect(resumed.reservationNumber).toBe('520311');
-      expect(resumed.trNumber).toBe('1000311');
-      expect(resumed.state).toBe('COMPLETED');
-      expect(resumed.completed).toBe(true);
+      expect(env.fmCalls()).not.toContain('BAPI_RESERVATION_CREATE1');
+      expect(env.fmCalls().filter((fm) => TR_CREATE_FMS.includes(fm))).toHaveLength(1);
     });
 
-    test('Fix 3 (TR missing recovery): Resuming with reservationNumber regenerates missing TR in SAP and completes flow', async () => {
-      const regenerated = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput311,
-        reservationNumber: '520311'
-      });
-      expect(regenerated.success).toBe(true);
-      expect(regenerated.trNumber).toBe('1000311');
-      expect(regenerated.state).toBe('COMPLETED');
-    });
+    test('Resume with trNumber creates no reservation or TR and creates the TO from that TR', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput311, reservationNumber: '520311', trNumber: '1000311' });
 
-    test('Fix 4 (TO failure retry): Resuming with existing reservationNumber and trNumber creates TO and finishes flow', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput311,
-        reservationNumber: '520311',
-        trNumber: '1000311'
-      });
       expect(resumed.success).toBe(true);
-      expect(resumed.reservationNumber).toBe('520311');
-      expect(resumed.trNumber).toBe('1000311');
-      expect(resumed.toNumber).toBe('1030311');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(env.fmCalls()).not.toContain('BAPI_RESERVATION_CREATE1');
+      expect(env.fmCalls().filter((fm) => TR_CREATE_FMS.includes(fm))).toEqual([]);
+      const toCreate = env.mockRfc.call.mock.calls.filter(([fm]) => TO_CREATE_FMS.includes(fm));
+      expect(toCreate).toHaveLength(1);
+      expect(toCreate[0][1].I_TBNUM).toBe('0001000311');
     });
 
-    test('Fix 5 (TO confirmation failure retry): Resuming with existing toNumber confirms TO and posts MIGO', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput311,
-        reservationNumber: '520311',
-        trNumber: '1000311',
-        toNumber: '1030311'
-      });
+    test('Resume with toNumber creates nothing new and confirms that TO', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput311, reservationNumber: '520311', trNumber: '1000311', toNumber: '1030311' });
+
       expect(resumed.success).toBe(true);
-      expect(resumed.toNumber).toBe('1030311');
-      expect(resumed.confirmation.confirmed).toBe(true);
-      expect(resumed.migo.materialDocument).toBe('5000000311');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(env.fmCalls().filter((fm) => ['BAPI_RESERVATION_CREATE1', ...TR_CREATE_FMS, ...TO_CREATE_FMS].includes(fm))).toEqual([]);
+      const confirm = env.mockRfc.call.mock.calls.filter(([fm]) => fm === 'L_TO_CONFIRM');
+      expect(confirm).toHaveLength(1);
+      expect(confirm[0][1].I_TANUM).toBe('0001030311');
     });
 
-    test('Fix 6 (MIGO failure retry): Resuming with confirmed TO posts MIGO after issue resolved without re-picking', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput311,
-        reservationNumber: '520311',
-        toNumber: '1030311',
-        toConfirmed: true
-      });
+    test('Resume with a confirmed TO skips creation and confirmation and posts the movement once', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput311, reservationNumber: '520311', trNumber: '1000311', toNumber: '1030311', toConfirmed: true });
+
       expect(resumed.success).toBe(true);
       expect(resumed.migo.materialDocument).toBe('5000000311');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(env.fmCalls().filter((fm) => ['BAPI_RESERVATION_CREATE1', 'L_TO_CONFIRM', ...TR_CREATE_FMS, ...TO_CREATE_FMS].includes(fm))).toEqual([]);
+      expect(env.fmCalls().filter((fm) => fm === 'BAPI_GOODSMVT_CREATE')).toHaveLength(1);
     });
 
     test('Fix 7 (MIGO timeout recovery): Re-submitting identical processId after timeout recovers committed document via idempotency', async () => {
@@ -2413,37 +2247,6 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(recovered.alreadyPosted).toBe(true);
       expect(recovered.idempotentRetry).toBe(true);
       expect(env.getBapiGoodsmvtCalls().length).toBe(0);
-    });
-
-    test('Fix 8 (Duplicate MIGO guard): Idempotency check prevents duplicate stock consumption on repeated submits', async () => {
-      const first = await env.adapter.executeReservationWarehouseFlow(baseInput311);
-      expect(first.success).toBe(true);
-      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
-
-      env.setupDefaultTables({
-        MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`BKTXT = '${baseInput311.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520311'")) {
-            return [{
-              MBLNR: '5000000311',
-              MJAHR: '2026',
-              BWART: '311',
-              MATNR: '000000008000000023',
-              MENGE: '10.000',
-              WERKS: '1120',
-              LGORT: 'HS01',
-              UMLGO: 'CS01',
-              RSNUM: '0000520311',
-              RSPOS: '0001',
-              SHKZG: 'H'
-            }];
-          }
-          return [];
-        }
-      });
-      const second = await env.adapter.executeReservationWarehouseFlow(baseInput311);
-      expect(second.success).toBe(true);
-      expect(second.alreadyPosted).toBe(true);
-      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
     });
 
     test('Fix 9 (Partial quantity continuation): Second issue consumes remaining quantity and completely processes reservation', async () => {
@@ -2567,30 +2370,12 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(part2.finalReservation.completelyProcessed).toBe(true);
       expect(part2.finalReservation.remainingQuantity).toBe(0);
     });
-
-    test('Fix 10 (Wrong material correction): Providing valid material completes the flow', async () => {
-      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput311, material: '8000000023' });
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
-    });
-
-    test('Fix 11 (Wrong SLoc correction): Providing valid SLoc mapped in T320 completes the flow', async () => {
-      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput311, receivingStorageLocation: 'CS01' });
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
-    });
-
-    test('Fix 12 (Wrong plant correction): Providing valid plant mapped in T320 completes the flow', async () => {
-      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput311, plant: '1120' });
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
-    });
   });
 
   // =========================================================================
-  // Movement Type 301 — Failure Paths: Fixes, Retries & Resumptions (12 Scenarios)
+  // Movement Type 301 — Failure Paths: Fixes, Retries & Resumptions
   // =========================================================================
-  describe('Movement Type 301 — Failure Paths: Fixes, Retries & Resumptions for All 12 Scenarios', () => {
+  describe('Movement Type 301 — Failure Paths: Fixes, Retries & Resumptions', () => {
     const env = createTestEnvironment('301');
 
     const baseInput301 = {
@@ -2623,65 +2408,47 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(fixed.completed).toBe(true);
     });
 
-    test('Fix 2 (TR failure retry): Resuming with existing reservationNumber creates TR and completes all subsequent stages', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput301,
-        reservationNumber: '520301'
-      });
+    test('Resume with reservationNumber creates no second reservation and creates the TR once', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput301, reservationNumber: '520301' });
+
       expect(resumed.success).toBe(true);
       expect(resumed.reservationNumber).toBe('520301');
-      expect(resumed.trNumber).toBe('1000301');
-      expect(resumed.state).toBe('COMPLETED');
-      expect(resumed.completed).toBe(true);
+      expect(env.fmCalls()).not.toContain('BAPI_RESERVATION_CREATE1');
+      expect(env.fmCalls().filter((fm) => TR_CREATE_FMS.includes(fm))).toHaveLength(1);
     });
 
-    test('Fix 3 (TR missing recovery): Resuming with reservationNumber regenerates missing TR in SAP and completes flow', async () => {
-      const regenerated = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput301,
-        reservationNumber: '520301'
-      });
-      expect(regenerated.success).toBe(true);
-      expect(regenerated.trNumber).toBe('1000301');
-      expect(regenerated.state).toBe('COMPLETED');
-    });
+    test('Resume with trNumber creates no reservation or TR and creates the TO from that TR', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput301, reservationNumber: '520301', trNumber: '1000301' });
 
-    test('Fix 4 (TO failure retry): Resuming with existing reservationNumber and trNumber creates TO and finishes flow', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput301,
-        reservationNumber: '520301',
-        trNumber: '1000301'
-      });
       expect(resumed.success).toBe(true);
-      expect(resumed.reservationNumber).toBe('520301');
-      expect(resumed.trNumber).toBe('1000301');
-      expect(resumed.toNumber).toBe('1030301');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(env.fmCalls()).not.toContain('BAPI_RESERVATION_CREATE1');
+      expect(env.fmCalls().filter((fm) => TR_CREATE_FMS.includes(fm))).toEqual([]);
+      const toCreate = env.mockRfc.call.mock.calls.filter(([fm]) => TO_CREATE_FMS.includes(fm));
+      expect(toCreate).toHaveLength(1);
+      expect(toCreate[0][1].I_TBNUM).toBe('0001000301');
     });
 
-    test('Fix 5 (TO confirmation failure retry): Resuming with existing toNumber confirms TO and posts MIGO', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput301,
-        reservationNumber: '520301',
-        trNumber: '1000301',
-        toNumber: '1030301'
-      });
+    test('Resume with toNumber creates nothing new and confirms that TO', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput301, reservationNumber: '520301', trNumber: '1000301', toNumber: '1030301' });
+
       expect(resumed.success).toBe(true);
-      expect(resumed.toNumber).toBe('1030301');
-      expect(resumed.confirmation.confirmed).toBe(true);
-      expect(resumed.migo.materialDocument).toBe('5000000301');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(env.fmCalls().filter((fm) => ['BAPI_RESERVATION_CREATE1', ...TR_CREATE_FMS, ...TO_CREATE_FMS].includes(fm))).toEqual([]);
+      const confirm = env.mockRfc.call.mock.calls.filter(([fm]) => fm === 'L_TO_CONFIRM');
+      expect(confirm).toHaveLength(1);
+      expect(confirm[0][1].I_TANUM).toBe('0001030301');
     });
 
-    test('Fix 6 (MIGO failure retry): Resuming with confirmed TO posts MIGO after issue resolved without re-picking', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
-        ...baseInput301,
-        reservationNumber: '520301',
-        toNumber: '1030301',
-        toConfirmed: true
-      });
+    test('Resume with a confirmed TO skips creation and confirmation and posts the movement once', async () => {
+      env.mockRfc.call.mockClear();
+      const resumed = await env.plainAdapter().executeReservationWarehouseFlow({ ...baseInput301, reservationNumber: '520301', trNumber: '1000301', toNumber: '1030301', toConfirmed: true });
+
       expect(resumed.success).toBe(true);
       expect(resumed.migo.materialDocument).toBe('5000000301');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(env.fmCalls().filter((fm) => ['BAPI_RESERVATION_CREATE1', 'L_TO_CONFIRM', ...TR_CREATE_FMS, ...TO_CREATE_FMS].includes(fm))).toEqual([]);
+      expect(env.fmCalls().filter((fm) => fm === 'BAPI_GOODSMVT_CREATE')).toHaveLength(1);
     });
 
     test('Fix 7 (MIGO timeout recovery): Re-submitting identical processId after timeout recovers committed document via idempotency', async () => {
@@ -2717,38 +2484,6 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(recovered.alreadyPosted).toBe(true);
       expect(recovered.idempotentRetry).toBe(true);
       expect(env.getBapiGoodsmvtCalls().length).toBe(0);
-    });
-
-    test('Fix 8 (Duplicate MIGO guard): Idempotency check prevents duplicate stock consumption on repeated submits', async () => {
-      const first = await env.adapter.executeReservationWarehouseFlow(baseInput301);
-      expect(first.success).toBe(true);
-      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
-
-      env.setupDefaultTables({
-        MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`BKTXT = '${baseInput301.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520301'")) {
-            return [{
-              MBLNR: '5000000301',
-              MJAHR: '2026',
-              BWART: '301',
-              MATNR: '000000008000000023',
-              MENGE: '10.000',
-              WERKS: '1120',
-              LGORT: 'HS01',
-              UMWRK: '1110',
-              UMLGO: 'CS01',
-              RSNUM: '0000520301',
-              RSPOS: '0001',
-              SHKZG: 'H'
-            }];
-          }
-          return [];
-        }
-      });
-      const second = await env.adapter.executeReservationWarehouseFlow(baseInput301);
-      expect(second.success).toBe(true);
-      expect(second.alreadyPosted).toBe(true);
-      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
     });
 
     test('Fix 9 (Partial quantity continuation): Second issue consumes remaining quantity and completely processes reservation', async () => {
@@ -2875,24 +2610,6 @@ describe('Step 16: Complete Movement Type Lifecycle & Failure Matrix [mock only,
       expect(part2.completed).toBe(true);
       expect(part2.finalReservation.completelyProcessed).toBe(true);
       expect(part2.finalReservation.remainingQuantity).toBe(0);
-    });
-
-    test('Fix 10 (Wrong material correction): Providing valid material completes the flow', async () => {
-      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput301, material: '8000000023' });
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
-    });
-
-    test('Fix 11 (Wrong SLoc correction): Providing valid SLoc mapped in T320 completes the flow', async () => {
-      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput301, receivingStorageLocation: 'CS01' });
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
-    });
-
-    test('Fix 12 (Wrong plant correction): Providing valid plant mapped in T320 completes the flow', async () => {
-      const fixed = await env.adapter.executeReservationWarehouseFlow({ ...baseInput301, receivingPlant: '1110' });
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
     });
   });
 });

@@ -22,7 +22,7 @@ function setup({ authResult, hash }) {
   const initialize = jest.fn();
   const extended = {};
   const UIComponent = { prototype: { init: jest.fn() }, extend: (_n, obj) => Object.assign(extended, obj) };
-  const AuthService = { init: jest.fn(() => authResult), isAuthenticated: jest.fn(() => false), syncModelHeaders: jest.fn() };
+  const AuthService = { init: jest.fn(() => authResult), syncModelHeaders: jest.fn() };
   global.window = { location: { hash, replace: jest.fn() } };
   global.document = undefined;
   const Component = loadComponent({
@@ -65,11 +65,4 @@ test('signed out on the login route or an empty hash: no redirect loop', async (
     expect(global.window.location.replace).not.toHaveBeenCalled();
     expect(initialize).toHaveBeenCalledTimes(1);
   }
-});
-
-test('AuthService.init without a promise (older service): routing still starts', async () => {
-  const { Component, self, initialize } = setup({ authResult: undefined, hash: '' });
-  Component.init.call(self);
-  await Promise.resolve(); await Promise.resolve();
-  expect(initialize).toHaveBeenCalledTimes(1);
 });

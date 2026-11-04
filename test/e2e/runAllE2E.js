@@ -37,6 +37,13 @@ const sapFreeArg = process.argv.includes('--sap-free');
 // --only=wm,shell or E2E_ONLY: only the suites whose name or file contains a term, for checking one change quickly.
 const onlyArg = process.argv.find(a => a.startsWith('--only='))?.split('=')[1] || process.env.E2E_ONLY || '';
 
+/** Steps a suite reported as SKIPPED, so a PASS that skipped something stays visible in the summary file. */
+function skippedSteps(outcome) {
+  return (Array.isArray(outcome.details) ? outcome.details : [])
+    .filter((d) => d.status === 'SKIPPED')
+    .map((d) => [d.flow, d.step || d.case].filter(Boolean).join(': '));
+}
+
 async function checkServerHealth(urlStr) {
   const target = (urlStr || targetUrlArg).replace(/\/+$/, '');
   const checkUrl = `${target}/fiori-app/webapp/index.html`;
@@ -137,6 +144,7 @@ async function runSuitesAndSummarize(options) {
         status: outcome.status,
         durationMs,
         errors: outcome.errors || [],
+        skipped: skippedSteps(outcome),
         ...(evidenceDir ? { evidence: path.relative(path.resolve(__dirname, '../..'), evidenceDir) } : {})
       };
     } catch (err) {
@@ -215,4 +223,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { runAll, checkServerHealth };
+module.exports = { runAll, checkServerHealth, skippedSteps };

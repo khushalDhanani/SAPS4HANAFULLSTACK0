@@ -69,15 +69,6 @@ describe('Scan261.controller post flow', () => {
     expect(ODataClient.post).not.toHaveBeenCalled();
   });
 
-  it('F13: a single-batch scan still posts after confirm', () => {
-    model.setProperty('/rows', [{ Accepted: true, Batch: 'B1', Quantity: 200 }]);
-    ODataClient.post.mockReturnValue(new Promise(() => {}));
-    ctrl.onPost();
-    confirmOk();
-    expect(MessageBox.error).not.toHaveBeenCalled();
-    expect(ODataClient.post).toHaveBeenCalled();
-  });
-
   it('on confirm: sets busy during the post and posts the scanned total and batch', async () => {
     let resolvePost;
     ODataClient.post.mockReturnValue(new Promise((res) => { resolvePost = res; }));

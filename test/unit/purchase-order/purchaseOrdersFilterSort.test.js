@@ -8,10 +8,11 @@
  * - FilterBar clear action
  * - Column sorting toggle and column switching (OData $orderby mapping)
  * - State preservation on refresh
- * - Value help and autocomplete delegation
+ * - Autocomplete delegation
  */
 
 let ControllerClass;
+let baseControllerMembers;
 
 // Mock UI5 classes and environment
 class MockFilter {
@@ -53,7 +54,6 @@ const coreLibrary = {
 };
 
 const mockValueHelpService = {
-    openValueHelp: jest.fn(),
     applySuggestionFilter: jest.fn()
 };
 
@@ -65,6 +65,11 @@ const mockODataClient = {
 global.sap = {
     ui: {
         define: function (deps, factory) {
+            if (deps.includes("sap/ui/core/mvc/Controller")) {
+                // The real BaseController members, so calculateKpiMetrics runs for real.
+                baseControllerMembers = factory({ extend: (_sName, oMembers) => oMembers }, {}, {}, {}, {}, {}, {}, {});
+                return;
+            }
             function MockBaseController() {}
             MockBaseController.extend = function (sName, oMembers) {
                 function Controller() {
@@ -72,6 +77,7 @@ global.sap = {
                         this.onInit = oMembers.onInit;
                     }
                 }
+                Controller.prototype.calculateKpiMetrics = baseControllerMembers.calculateKpiMetrics;
                 Object.assign(Controller.prototype, oMembers);
                 return Controller;
             };
@@ -102,6 +108,7 @@ global.sap = {
 };
 
 // Require the controller under test
+require('../../../app/fiori-app/webapp/controller/BaseController');
 require('../../../app/fiori-app/webapp/modules/mm/purchase-order/controller/PurchaseOrders.controller');
 
 describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
@@ -540,18 +547,7 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
         });
     });
 
-    describe('Value Help and Suggestion Delegation', () => {
-        it('should delegate valueHelpRequest to ValueHelpService.openValueHelp', () => {
-            const mockInput = { id: "input" };
-            const oEvent = { getSource: () => mockInput };
-
-            controller.onValueHelpRequest(oEvent);
-            expect(mockValueHelpService.openValueHelp).toHaveBeenCalledWith(
-                controller.getView(),
-                mockInput
-            );
-        });
-
+    describe('Suggestion Delegation', () => {
         it('should delegate suggest event to ValueHelpService.applySuggestionFilter', () => {
             const mockInput = { id: "input" };
             const oEvent = {
@@ -619,12 +615,21 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             expect(oModel.data.completeRate).toBeUndefined();
         });
 
-        it('should load authentic supplierCount from server getDashboardMetrics', async () => {
-            mockODataClient.get.mockResolvedValueOnce({ supplierCount: 4376 });
+        it('should read supplierCount from the JSON string that getDashboardMetrics returns in value', async () => {
+            // The function returns String (service.cds:150, handler JSON.stringify at purchaseOrder.handler.js:189), so OData wraps it in value.
+            // 5120 differs from the harness default that onInit reads, so that earlier call cannot satisfy this assertion.
+            mockODataClient.get.mockResolvedValueOnce({ value: JSON.stringify({ supplierCount: 5120 }) });
             await controller._loadServerSupplierCount();
 
             expect(mockODataClient.get).toHaveBeenCalledWith("/odata/v4/purchase-order/getDashboardMetrics()");
-            expect(mockViewModel.setProperty).toHaveBeenCalledWith("/supplierCount", 4376);
+            expect(mockViewModel.setProperty).toHaveBeenCalledWith("/supplierCount", 5120);
+        });
+
+        it('should show "-" when getDashboardMetrics reports no supplier count', async () => {
+            mockODataClient.get.mockResolvedValueOnce({ value: JSON.stringify({ supplierCount: null, unavailable: ['supplierCount'] }) });
+            await controller._loadServerSupplierCount();
+
+            expect(mockViewModel.setProperty).toHaveBeenCalledWith("/supplierCount", "-");
         });
 
         it('should handle string JSON and string value from server getDashboardMetrics', async () => {
@@ -641,13 +646,25 @@ describe('PurchaseOrders Controller - FilterBar & Table Sorting UI', () => {
             expect(mockViewModel.setProperty).toHaveBeenCalledWith("/supplierCount", "-");
         });
 
-        it('should update totalCount from binding updateFinished total parameter', () => {
-            controller.calculateKpiMetrics = jest.fn().mockReturnValue({ totalCount: 2788 });
-            const oEvent = { getSource: jest.fn().mockReturnValue({}) };
+        it('should update totalCount from the updateFinished total parameter', () => {
+            const oEvent = {
+                getSource: jest.fn().mockReturnValue({}),
+                getParameter: (sName) => (sName === 'total' ? 2788 : undefined)
+            };
 
             controller._updateKpiMetrics(oEvent);
 
             expect(mockViewModel.setProperty).toHaveBeenCalledWith("/totalCount", 2788);
+        });
+
+        it('should not publish a completeRate KPI on updateFinished', () => {
+            const oEvent = {
+                getSource: jest.fn().mockReturnValue({}),
+                getParameter: (sName) => (sName === 'total' ? 2788 : undefined)
+            };
+
+            controller._updateKpiMetrics(oEvent);
+
             expect(mockViewModel.setProperty).not.toHaveBeenCalledWith("/completeRate", expect.anything());
         });
 

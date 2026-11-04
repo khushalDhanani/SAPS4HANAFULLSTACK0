@@ -329,7 +329,7 @@ describe('Step 17: Movement Type 201 (Goods Issue to Cost Center) Proof Suite [m
       expect(bapiCalls[0].RESERVATIONITEMS[0].ENTRY_QNT).toBe(10);
     });
 
-    test('Step 2: TR — Create Transfer Requirement generates SAP TR and verifies LTBK/LTBP', async () => {
+    test('Step 2: TR — L_TR_CREATE is sent movement 201, requirement type K, the cost center and the reservation', async () => {
       const input = makeInput201('000000000102');
       const trRes = await env.adapter.createTransferRequirement({
         ...input,
@@ -337,35 +337,37 @@ describe('Step 17: Movement Type 201 (Goods Issue to Cost Center) Proof Suite [m
         reservationItem: '0001'
       });
 
-      expect(trRes.success).toBe(true);
       expect(trRes.trNumber).toBe('1000201');
-      expect(trRes.trItem).toBe('0001');
-      expect(trRes.warehouseNumber).toBe('W01');
-
       const trCalls = env.getTrCreateCalls();
-      expect(trCalls.length).toBeGreaterThanOrEqual(1);
+      expect(trCalls.map(({ fm }) => fm)).toEqual(['L_TR_CREATE']);
+      expect(trCalls[0].params.T_LTBA).toEqual([expect.objectContaining({
+        LGNUM: 'W01',
+        BWLVS: '201',
+        MATNR: '000000008000000023',
+        WERKS: '1120',
+        LGORT: 'HS01',
+        MENGA: 10,
+        BETYP: 'K',
+        BENUM: '1011201301',
+        RSNUM: '0000520201',
+        RSPOS: '0001'
+      })]);
     });
 
-    test('Step 3: Scan — Warehouse Scan verifies critical 8-fields from SAP TR (LTBK/LTBP)', async () => {
-      const scanRes = await env.adapter.verifyTR({
-        warehouseNumber: 'W01',
+    test('Step 3: Scan — verifyTR reports the movement and requirement read from LTBK for an open TR', async () => {
+      const scanRes = await env.adapter.verifyTR({ warehouseNumber: 'W01', trNumber: '1000201' });
+
+      expect(scanRes).toMatchObject({
+        success: true,
+        verified: true,
         trNumber: '1000201',
-        trItem: '0001',
+        warehouseNumber: 'W01',
         movement: '201',
-        material: '8000000023',
-        quantity: 10,
-        plant: '1120',
-        storageLocation: 'HS01'
+        requirementType: 'K'
       });
-
-      expect(scanRes.success).toBe(true);
-      expect(scanRes.stage).toBe('TR_VERIFICATION');
-      expect(scanRes.verified).toBe(true);
-      expect(scanRes.trNumber).toBe('1000201');
-      expect(scanRes.warehouseNumber).toBe('W01');
     });
 
-    test('Step 4: TO — Create Transfer Order referencing verified TR produces SAP TANUM', async () => {
+    test('Step 4: TO — L_TO_CREATE_TR is called once for the TR in W01 and its TO number is returned', async () => {
       const input = makeInput201('000000000104');
       const toRes = await env.adapter.createTransferOrderFromTR({
         ...input,
@@ -374,10 +376,9 @@ describe('Step 17: Movement Type 201 (Goods Issue to Cost Center) Proof Suite [m
         autoConfirm: false
       });
 
-      expect(toRes.success).toBe(true);
       expect(toRes.toNumber).toBe('1030201');
-      expect(toRes.toItem).toBe('0001');
-      expect(toRes.warehouseNumber).toBe('W01');
+      expect(env.getToCreateCalls()).toHaveLength(1);
+      expect(env.getToCreateCalls()[0]).toMatchObject({ I_LGNUM: 'W01', I_TBNUM: '0001000201' });
     });
 
     test('Step 5: TO Confirmation — Confirm Transfer Order updates LTAK-KQUIT and LTAP-PQUIT', async () => {
@@ -423,36 +424,28 @@ describe('Step 17: Movement Type 201 (Goods Issue to Cost Center) Proof Suite [m
       expect(gmCalls[0].GOODSMVT_ITEM[0].NO_MORE_GR).toBe('X');
     });
 
-    test('Step 7: Material Document — Verified in SAP MATDOC with BWART 201 and Cost Center', async () => {
-      const matdoc = await env.adapter.verifyMaterialDocument({
-        materialDocument: '5000000201',
-        materialDocumentYear: '2026',
-        movementType: '201',
-        material: '8000000023',
-        quantity: 10,
-        plant: '1120',
-        storageLocation: 'HS01',
-        costCenter: '1011201301',
-        reservationNumber: '520201',
-        reservationItem: '0001'
-      });
-
-      expect(matdoc.success).toBe(true);
-      expect(matdoc.materialDocument).toBe('5000000201');
-      expect(matdoc.materialDocumentYear).toBe('2026');
-      expect(matdoc.movementType).toBe('201');
+    // readTable as a plain function so verifyStock takes its production path; MARD row is hand-written (SAP shape not proven).
+    const stockAdapter = () => new ReservationProcessAdapter({
+      rfc: { readTable: (...args) => env.mockRfc.readTable(...args), call: env.mockRfc.call, session: env.mockRfc.session }
     });
+    const stockAfter = (labst) => env.setupDefaultTables({ MARD: () => [{ LABST: labst }] });
+    const postedDoc = { materialDocument: '5000000201', materialDocumentYear: '2026' };
 
-    test('Step 8: Stock Reduced — Verified in MARD and LQUA that source stock decreased', async () => {
-      const input = makeInput201('000000000108');
-      const stock = await env.adapter.verifyStock(input, {
-        materialDocument: '5000000201',
-        materialDocumentYear: '2026'
-      });
+    test('Step 8: Stock Reduced — verifyStock reports the MARD drop against the initial stock', async () => {
+      stockAfter('90.000');
+      const stock = await stockAdapter().verifyStock({ ...makeInput201('000000000108'), initialSourceStock: 100 }, postedDoc);
 
       expect(stock.success).toBe(true);
       expect(stock.sourceStockDecreased).toBe(true);
-      expect(stock.costCenter).toContain('1011201301');
+      expect(stock.sourceStock).toMatchObject({ initial: 100, resulting: 90, delta: -10 });
+    });
+
+    test('Step 8: Stock Reduced — verifyStock fails with 400 when MARD stock rose against the initial stock', async () => {
+      stockAfter('110.000');
+      await expect(stockAdapter().verifyStock({ ...makeInput201('000000000109'), initialSourceStock: 100 }, postedDoc)).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringContaining('Stock verification failed for movement 201: Source stock did not decrease (initial: 100')
+      });
     });
 
     test('Step 9: Reservation Updated — Verified in RESB with ENMNG=10, KZEAR=X, completelyProcessed=true', async () => {
@@ -481,43 +474,6 @@ describe('Step 17: Movement Type 201 (Goods Issue to Cost Center) Proof Suite [m
       env = create201Environment();
       env.setupDefaultFms();
       env.setupDefaultTables();
-    });
-
-    test('Executes all 9 stages in strict sequence: MB21 -> TR -> Scan -> TO -> TO Confirm -> MIGO 201 -> MATDOC -> Stock -> RESB', async () => {
-      const input = makeInput201('000000000201');
-      const flowResult = await env.adapter.executeReservationWarehouseFlow(input);
-
-      // Status invariants
-      expect(flowResult.success).toBe(true);
-      expect(flowResult.state).toBe('COMPLETED');
-      expect(flowResult.processStatus).toBe(PROCESS_STATUS.COMPLETED);
-      expect(flowResult.completed).toBe(true);
-      expect(flowResult.completelyProcessed).toBe(true);
-
-      // Exact 9-stage progression sequence
-      expect(flowResult.stages).toEqual([
-        'RESERVATION_CREATED',
-        'TR_CREATED',
-        'TR_VERIFIED',
-        'TO_CREATED',
-        'TO_CONFIRMED',
-        'MIGO_POSTED',
-        'STOCK_VERIFIED',
-        'RESERVATION_VERIFIED',
-        'COMPLETED'
-      ]);
-
-      // Stage outputs
-      expect(flowResult.reservationNumber).toBe('520201');
-      expect(flowResult.trNumber).toBe('1000201');
-      expect(flowResult.toNumber).toBe('1030201');
-      expect(flowResult.toConfirmed).toBe(true);
-      expect(flowResult.migo.materialDocument).toBe('5000000201');
-      expect(flowResult.migo.materialDocYear).toBe('2026');
-      expect(flowResult.stock.sourceStockDecreased).toBe(true);
-      expect(flowResult.stock.costCenter).toContain('1011201301');
-      expect(flowResult.finalReservation.completelyProcessed).toBe(true);
-      expect(flowResult.finalReservation.remainingQuantity).toBe(0);
     });
 
     test('Strict Precondition: MIGO 201 fails cleanly if TO confirmation fails', async () => {
@@ -569,92 +525,6 @@ describe('Step 17: Movement Type 201 (Goods Issue to Cost Center) Proof Suite [m
       expect(flowResult.processStatus).toBe(PROCESS_STATUS.FAILED_RESERVATION);
       expect(flowResult.error).toContain('Material is mandatory');
       expect(env.getBapiReservationCalls().length).toBe(0);
-    });
-
-    test('Idempotency: Re-submitting identical processId returns committed material document without duplicate stock consumption', async () => {
-      const input = makeInput201('000000000205');
-
-      env.setupDefaultFms({
-        BAPI_RESERVATION_CREATE1: () => ({
-          RESERVATION: '0000520999',
-          RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Reservation 520999 created' }]
-        })
-      });
-
-      env.setupDefaultTables({
-        RESB: () => [{
-          RSNUM: '0000520999',
-          RSPOS: '0001',
-          MATNR: '000000008000000023',
-          WERKS: '1120',
-          LGORT: 'HS01',
-          BDMNG: '10.000',
-          ENMNG: '10.000',
-          MEINS: 'NOS',
-          KZEAR: 'X',
-          XLOEK: ''
-        }],
-        MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes("MBLNR = '5000000201'")) {
-            return [{
-              MBLNR: '5000000201',
-              MJAHR: '2026',
-              ZEILE: '0001',
-              BWART: '201',
-              MATNR: '000000008000000023',
-              MENGE: '10.000',
-              WERKS: '1120',
-              LGORT: 'HS01',
-              KOSTL: '001011201301',
-              RSNUM: '0000520999',
-              RSPOS: '0001',
-              SHKZG: 'H',
-              CANCELLED: '',
-              REVERSAL_MOVEMENT: ''
-            }];
-          }
-          return [];
-        }
-      });
-
-      // First submission succeeds
-      const first = await env.adapter.executeReservationWarehouseFlow(input);
-      expect(first.success).toBe(true);
-      expect(first.migo.materialDocument).toBe('5000000201');
-      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
-
-      // Setup MATDOC for repeat attempt
-      env.setupDefaultTables({
-        MATDOC: (fields, where, whereStr) => {
-          if (whereStr.includes(`BKTXT = '${input.processId.replace(/-/g, '').slice(0, 25)}'`) || whereStr.includes("RSNUM = '0000520999'") || whereStr.includes("MBLNR = '5000000201'")) {
-            return [{
-              MBLNR: '5000000201',
-              MJAHR: '2026',
-              ZEILE: '0001',
-              BWART: '201',
-              MATNR: '000000008000000023',
-              MENGE: '10.000',
-              WERKS: '1120',
-              LGORT: 'HS01',
-              KOSTL: '001011201301',
-              RSNUM: '0000520999',
-              RSPOS: '0001',
-              SHKZG: 'H',
-              CANCELLED: '',
-              REVERSAL_MOVEMENT: ''
-            }];
-          }
-          return [];
-        }
-      });
-
-      // Re-submission with identical processId
-      const second = await env.adapter.executeReservationWarehouseFlow(input);
-      expect(second.success).toBe(true);
-      expect(second.alreadyPosted).toBe(true);
-      expect(second.migo.materialDocument).toBe('5000000201');
-      // BAPI must not be called a second time
-      expect(env.getBapiGoodsmvtCalls().length).toBe(1);
     });
   });
 });

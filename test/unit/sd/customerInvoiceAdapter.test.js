@@ -72,36 +72,37 @@ describe('Unit: CustomerInvoiceAdapter', () => {
   });
 
   describe('getBillingDocuments', () => {
-    test('calls SAP Gateway with pagination and filters', async () => {
-      mockHttpClient.get.mockResolvedValue({
-        data: {
-          d: {
-            __count: '2',
-            results: [
-              { BillingDocument: '31000111', TotalNetAmount: '100' },
-              { BillingDocument: '31000112', TotalNetAmount: '200' }
-            ]
-          }
+    // Row and count shape are hand-written; C_BillingDocument_F0797 metadata is not in the repo, so the SAP shape is not proven.
+    const twoRows = {
+      data: {
+        d: {
+          __count: '2',
+          results: [
+            { BillingDocument: '31000111', TotalNetAmount: '100' },
+            { BillingDocument: '31000112', TotalNetAmount: '200' }
+          ]
         }
-      });
+      }
+    };
 
-      const query = {
-        top: 10,
-        skip: 0,
-        filter: "SoldToParty eq '10358'",
-        orderby: 'BillingDocument desc'
-      };
+    test('builds the exact URL from paging, encoded filter and encoded order', async () => {
+      mockHttpClient.get.mockResolvedValue(twoRows);
 
-      const res = await adapter.getBillingDocuments(query);
+      await adapter.getBillingDocuments({ top: 10, skip: 0, filter: "SoldToParty eq '10358'", orderby: 'BillingDocument desc' });
+
       expect(mockHttpClient.get).toHaveBeenCalledTimes(1);
-      const calledUrl = mockHttpClient.get.mock.calls[0][0];
-      expect(calledUrl).toContain('/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_MANAGE/C_BillingDocument_F0797?');
-      expect(calledUrl).toContain('$top=10');
-      expect(calledUrl).toContain('$skip=0');
-      expect(calledUrl).toContain('$inlinecount=allpages');
+      expect(mockHttpClient.get.mock.calls[0][0]).toBe(
+        "/sap/opu/odata/sap/SD_CUSTOMER_INVOICES_MANAGE/C_BillingDocument_F0797?$top=10&$skip=0&$filter=SoldToParty%20eq%20'10358'&$orderby=BillingDocument%20desc&$inlinecount=allpages"
+      );
+    });
+
+    test('returns the mapped rows and the inline count', async () => {
+      mockHttpClient.get.mockResolvedValue(twoRows);
+
+      const res = await adapter.getBillingDocuments({});
+
       expect(res.count).toBe(2);
-      expect(res.results).toHaveLength(2);
-      expect(res.results[0].BillingDocument).toBe('31000111');
+      expect(res.results.map((r) => [r.BillingDocument, r.TotalNetAmount])).toEqual([['31000111', 100], ['31000112', 200]]);
     });
   });
 
@@ -376,6 +377,33 @@ describe('Unit: CustomerInvoiceAdapter', () => {
     test('throws 400 when billing document is missing', async () => {
       await expect(adapter.cancelBillingDocument({ billingDocument: '' }))
         .rejects.toThrow('BillingDocument is required to cancel billing document.');
+    });
+
+    // SAP response shapes below are hand-written, as in the test above; only OUR reaction to them is checked.
+    const acceptedCancel = { data: { d: { results: [{ BillingDocument: '90000053', MessageType: 'S', Message: 'Document 90000053 has been saved.' }] } } };
+
+    // Known defect: srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js:359-372 reports Success: true after all
+    // read-backs still show the invoice as not cancelled; the method's doc says it "confirms cancellation via readback".
+    test.failing('does not report success when every read-back still shows the invoice as not cancelled', async () => {
+      mockHttpClient.post.mockResolvedValue(acceptedCancel);
+      mockHttpClient.get.mockResolvedValue({
+        data: { d: { BillingDocument: '31000112', BillingDocumentIsCancelled: false, AccountingTransferStatus: 'C' } }
+      });
+
+      const outcome = await adapter.cancelBillingDocument({ billingDocument: '31000112' }).catch((err) => ({ rejectedWith: err.message }));
+
+      expect(outcome.Success).not.toBe(true);
+    });
+
+    // Known defect: srv/integration/s4hana/sd/customer-invoice/CustomerInvoiceAdapter.js:359 defaults BillingDocumentIsCancelled to
+    // true when no read-back succeeded, so an unconfirmed cancellation is reported as confirmed.
+    test.failing('does not claim the invoice is cancelled when no read-back succeeded', async () => {
+      mockHttpClient.post.mockResolvedValue(acceptedCancel);
+      mockHttpClient.get.mockRejectedValue(new Error('read-back unavailable'));
+
+      const outcome = await adapter.cancelBillingDocument({ billingDocument: '31000112' }).catch((err) => ({ rejectedWith: err.message }));
+
+      expect(outcome.BillingDocumentIsCancelled).not.toBe(true);
     });
   });
 });

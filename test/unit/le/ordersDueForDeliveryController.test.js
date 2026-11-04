@@ -182,13 +182,28 @@ describe("OrdersDueForDelivery Controller", () => {
         });
     });
 
-    test("onInit sets up view models and attaches route pattern matched", () => {
+    test("onInit attaches _onRouteMatched to the ordersDueForDelivery route", () => {
         controller.onInit();
 
-        expect(mockView.setModel).toHaveBeenCalledWith(expect.any(MockJSONModel), "ordersDueView");
-        expect(mockView.setModel).toHaveBeenCalledWith(expect.any(MockJSONModel), "deliveryDialog");
         expect(mockRouter.getRoute).toHaveBeenCalledWith("ordersDueForDelivery");
-        expect(mockRoute.attachPatternMatched).toHaveBeenCalled();
+        expect(mockRoute.attachPatternMatched).toHaveBeenCalledWith(controller._onRouteMatched, controller);
+    });
+
+    test("onInit starts on the ready tab with every KPI at '-' and no plant", () => {
+        controller.onInit();
+
+        expect(mockView.getModel("ordersDueView").getData()).toMatchObject({
+            totalCount: "-",
+            readyCount: "-",
+            inApprovalCount: "-",
+            shippingPointCount: "-",
+            distinctOrdersCount: "-",
+            readyOrdersCount: "-",
+            inApprovalOrdersCount: "-",
+            displayCount: "-",
+            selectedTab: "ready",
+            plant: ""
+        });
     });
 
     test("_loadServerMetrics takes KPI counts from getOrdersDueMetrics (full set, not the loaded page)", async () => {
@@ -217,13 +232,25 @@ describe("OrdersDueForDelivery Controller", () => {
         expect(viewModel.getProperty("/displayCount")).toBe(42);
     });
 
-    test("_loadServerMetrics shows '-' (never 0) when the server metrics call fails", async () => {
-        MockOutboundDeliveryService.getOrdersDueMetrics.mockRejectedValueOnce(new Error("502"));
+    test("a failed metrics reload replaces the loaded figures with '-' (never stale, never 0)", async () => {
+        MockOutboundDeliveryService.getOrdersDueMetrics.mockResolvedValueOnce({
+            scheduleLineCount: 57,
+            readyToDeliverCount: 42,
+            inApprovalCount: 12,
+            shippingPointCount: 3,
+            distinctOrdersCount: 38,
+            readyOrdersCount: 29,
+            inApprovalOrdersCount: 8
+        });
         controller.onInit();
-        await Promise.resolve();
-        await Promise.resolve();
-
+        await flush();
         const viewModel = mockView.getModel("ordersDueView");
+        expect(viewModel.getProperty("/totalCount")).toBe(57);
+
+        MockOutboundDeliveryService.getOrdersDueMetrics.mockRejectedValueOnce(new Error("502"));
+        controller.onRefresh();
+        await flush();
+
         expect(viewModel.getProperty("/totalCount")).toBe("-");
         expect(viewModel.getProperty("/readyCount")).toBe("-");
         expect(viewModel.getProperty("/inApprovalCount")).toBe("-");
@@ -234,39 +261,69 @@ describe("OrdersDueForDelivery Controller", () => {
         expect(viewModel.getProperty("/displayCount")).toBe("-");
     });
 
-    test("onTabSelect applies IsDeliverable filter for ready tab and updates displayCount", () => {
-        controller.onInit();
-        controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
+    const selectTab = (key) => controller.onTabSelect({ getParameter: (p) => (p === "key" ? key : null) });
+    const PLANT_1120 = { config: "Plant", operator: "EQ", value: "1120" };
 
-        controller.onTabSelect({ getParameter: (p) => (p === "key" ? "ready" : null) });
-        expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
-        const viewModel = mockView.getModel("ordersDueView");
-        expect(viewModel.getProperty("/selectedTab")).toBe("ready");
+    test("onTabSelect filters the ready tab on the plant and IsDeliverable", async () => {
+        controller.onInit();
+        await flush();
+        mockBinding.filter.mockClear();
+
+        selectTab("ready");
+
+        expect(mockBinding.filter).toHaveBeenCalledTimes(1);
+        expect(mockBinding.filter).toHaveBeenCalledWith(
+            [PLANT_1120, { config: "IsDeliverable", operator: "EQ", value: true }],
+            MockFilterType.Application
+        );
     });
 
-    test("onTabSelect applies SalesDocApprovalStatus filter for inApproval tab", () => {
+    test("onTabSelect filters the inApproval tab on the plant and SalesDocApprovalStatus A", async () => {
         controller.onInit();
-        controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
+        await flush();
+        mockBinding.filter.mockClear();
 
-        controller.onTabSelect({ getParameter: (p) => (p === "key" ? "inApproval" : null) });
-        expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
-        const viewModel = mockView.getModel("ordersDueView");
-        expect(viewModel.getProperty("/selectedTab")).toBe("inApproval");
+        selectTab("inApproval");
+
+        expect(mockBinding.filter).toHaveBeenCalledWith(
+            [PLANT_1120, { config: "SalesDocApprovalStatus", operator: "EQ", value: "A" }],
+            MockFilterType.Application
+        );
     });
 
-    test("onTabSelect removes approval filter for all tab", () => {
+    test("onTabSelect keeps only the plant filter for the all tab", async () => {
         controller.onInit();
-        controller.byId = jest.fn((id) => (id === "ordersDueTable" ? mockTable : null));
+        await flush();
+        mockBinding.filter.mockClear();
 
-        controller.onTabSelect({ getParameter: (p) => (p === "key" ? "all" : null) });
-        expect(mockBinding.filter).toHaveBeenCalledWith([], MockFilterType.Application);
-        const viewModel = mockView.getModel("ordersDueView");
-        expect(viewModel.getProperty("/selectedTab")).toBe("all");
+        selectTab("all");
+
+        expect(mockBinding.filter).toHaveBeenCalledWith([PLANT_1120], MockFilterType.Application);
     });
 
-    test("onSearch applies filter on table items combining tab filter and search query", () => {
+    test.each([["ready", 42], ["inApproval", 12], ["all", 57]])("onTabSelect shows the %s figure (%s) as displayCount", async (key, expected) => {
+        MockOutboundDeliveryService.getOrdersDueMetrics.mockResolvedValueOnce({
+            scheduleLineCount: 57,
+            readyToDeliverCount: 42,
+            inApprovalCount: 12,
+            shippingPointCount: 3
+        });
         controller.onInit();
-        const mockSearchField = { getValue: () => "1120" };
+        await flush();
+        const viewModel = mockView.getModel("ordersDueView");
+        viewModel.setProperty("/displayCount", "stale");
+
+        selectTab(key);
+
+        expect(viewModel.getProperty("/selectedTab")).toBe(key);
+        expect(viewModel.getProperty("/displayCount")).toBe(expected);
+    });
+
+    test("onSearch adds an OR group over SalesOrder, ShipToParty and ShippingPoint to the tab filter", async () => {
+        controller.onInit();
+        await flush();
+        mockBinding.filter.mockClear();
+        const mockSearchField = { getValue: () => " 5000 " };
         controller.byId = jest.fn((id) => {
             if (id === "ordersDueTable") return mockTable;
             if (id === "searchOrdersDue") return mockSearchField;
@@ -274,7 +331,24 @@ describe("OrdersDueForDelivery Controller", () => {
         });
 
         controller.onSearch();
-        expect(mockBinding.filter).toHaveBeenCalledWith(expect.any(Array), MockFilterType.Application);
+
+        expect(mockBinding.filter).toHaveBeenCalledWith(
+            [
+                PLANT_1120,
+                { config: "IsDeliverable", operator: "EQ", value: true },
+                {
+                    config: {
+                        filters: [
+                            { config: "SalesOrder", operator: "Contains", value: "5000" },
+                            { config: "ShipToParty", operator: "Contains", value: "5000" },
+                            { config: "ShippingPoint", operator: "Contains", value: "5000" }
+                        ],
+                        and: false
+                    }
+                }
+            ],
+            MockFilterType.Application
+        );
     });
 
     test("onRefresh refreshes table items binding and reloads server metrics", async () => {
@@ -450,7 +524,7 @@ describe("OrdersDueForDelivery Controller", () => {
         });
     });
 
-    test("onConfirmCreateDelivery validates required fields and creates delivery", async () => {
+    test("onConfirmCreateDelivery sends the dialog values, closes the dialog and shows the delivery number returned", async () => {
         controller.onInit();
         const dialogModel = mockView.getModel("deliveryDialog");
         dialogModel.setProperty("/salesOrder", "5000104");
@@ -473,6 +547,19 @@ describe("OrdersDueForDelivery Controller", () => {
             expect.stringContaining("13000526"),
             expect.any(Object)
         );
+    });
+
+    test.each([[""], ["   "]])("onConfirmCreateDelivery rejects a blank shipping point (%j) without calling the service", (shippingPoint) => {
+        controller.onInit();
+        const dialogModel = mockView.getModel("deliveryDialog");
+        dialogModel.setProperty("/salesOrder", "5000104");
+        dialogModel.setProperty("/shippingPoint", shippingPoint);
+
+        controller.onConfirmCreateDelivery();
+
+        expect(dialogModel.getProperty("/shippingPointValueState")).toBe("Error");
+        expect(MockMessageBox.error).toHaveBeenCalledWith(expect.stringContaining("Shipping Point is required"));
+        expect(MockOutboundDeliveryService.createOutboundDelivery).not.toHaveBeenCalled();
     });
 
     test("onConfirmCreateDelivery rejects when sales order is missing", () => {
@@ -507,24 +594,24 @@ describe("OrdersDueForDelivery Controller", () => {
     });
 
     describe("Delivery Without Reference Dialog & Actions", () => {
-        test("onOpenCreateDeliveryNoRefDialog resets model to defaults", () => {
+        test("onOpenCreateDeliveryNoRefDialog clears values left over from the last use", () => {
             controller.onInit();
             const dialogModel = mockView.getModel("deliveryNoRefDialog");
-            dialogModel.setProperty("/shippingPoint", "9999");
+            dialogModel.setProperty("/salesOrg", "1000");
+            dialogModel.setProperty("/distChannel", "14");
+            dialogModel.setProperty("/division", "00");
+            dialogModel.setProperty("/busy", true);
+            dialogModel.setProperty("/items", [{ itemNo: "000010" }, { itemNo: "000020" }, { itemNo: "000030" }]);
             controller._pCreateDeliveryNoRefDialog = Promise.resolve({ open: jest.fn() });
 
             controller.onOpenCreateDeliveryNoRefDialog();
 
-            expect(dialogModel.getProperty("/shippingPoint")).toBe("1104");
-            expect(dialogModel.getProperty("/deliveryType")).toBe("LO2");
-            expect(dialogModel.getProperty("/plant")).toBe("1110");
-            expect(dialogModel.getProperty("/storageLocation")).toBe("FG01");
-            expect(dialogModel.getProperty("/shipToParty")).toBe("10135");
-            expect(dialogModel.getProperty("/items")).toHaveLength(1);
             // No guessed sales area: the server posts these values as typed.
             expect(dialogModel.getProperty("/salesOrg")).toBe("");
             expect(dialogModel.getProperty("/distChannel")).toBe("");
             expect(dialogModel.getProperty("/division")).toBe("");
+            expect(dialogModel.getProperty("/busy")).toBe(false);
+            expect(dialogModel.getProperty("/items")).toHaveLength(1);
         });
 
         test("onAddDeliveryNoRefItem adds a new line item with incremented item number", () => {
@@ -537,10 +624,9 @@ describe("OrdersDueForDelivery Controller", () => {
             const items = dialogModel.getProperty("/items");
             expect(items).toHaveLength(2);
             expect(items[1].itemNo).toBe("000020");
-            expect(items[1].material).toBe("4000000187");
         });
 
-        test("onDeleteDeliveryNoRefItem deletes line item when more than one exists", () => {
+        test("onDeleteDeliveryNoRefItem deletes the line item of the pressed row", () => {
             controller.onInit();
             controller.onAddDeliveryNoRefItem();
             const dialogModel = mockView.getModel("deliveryNoRefDialog");
@@ -549,13 +635,13 @@ describe("OrdersDueForDelivery Controller", () => {
             const mockEvent = {
                 getSource: () => ({
                     getBindingContext: () => ({
-                        getPath: () => "/items/1"
+                        getPath: () => "/items/0"
                     })
                 })
             };
 
             controller.onDeleteDeliveryNoRefItem(mockEvent);
-            expect(dialogModel.getProperty("/items")).toHaveLength(1);
+            expect(dialogModel.getProperty("/items").map((item) => item.itemNo)).toEqual(["000020"]);
         });
 
         test("onDeleteDeliveryNoRefItem warns and prevents deletion if only one item remains", () => {
@@ -747,7 +833,9 @@ describe("OrdersDueForDelivery Controller", () => {
     });
 
     describe("Optimistic concurrency and ETag handling (Phase 4)", () => {
-        test("onLoadDeliveryStatus preserves @odata.etag into follow-up model", async () => {
+        // Controller behaviour only: the real status response has no ETag today (OutboundDeliveryAdapter.js:564-575,
+        // service.cds getDeliveryStatus), so this path is not reachable from a real read. See the audit ask file.
+        test("onLoadDeliveryStatus keeps an @odata.etag if the status response carries one", async () => {
             controller.onInit();
             await flush();
             MockOutboundDeliveryService.getDeliveryStatus.mockResolvedValueOnce({
@@ -766,7 +854,29 @@ describe("OrdersDueForDelivery Controller", () => {
             await flush();
 
             expect(fu.getProperty("/etag")).toBe('W/"20261028120000"');
-            expect(fu.getProperty("/canPgi")).toBe(true);
+        });
+
+        test.each([
+            ["C", "A", true],
+            ["C", "C", false],
+            ["A", "A", false]
+        ])("picking %s and goods movement %s -> canPgi %s", async (picking, movement, expected) => {
+            controller.onInit();
+            await flush();
+            MockOutboundDeliveryService.getDeliveryStatus.mockResolvedValueOnce({
+                DeliveryDocument: "80000085",
+                DeliveryDocumentType: "ZLF",
+                SoldToParty: "10135",
+                OverallPickingStatus: picking,
+                OverallGoodsMovementStatus: movement,
+                OverallDelivReltdBillgStatus: "A"
+            });
+            const fu = mockView.getModel("deliveryFollowUp");
+            fu.setProperty("/delivery", "80000085");
+            await controller.onLoadDeliveryStatus();
+            await flush();
+
+            expect(fu.getProperty("/canPgi")).toBe(expected);
         });
 
         test("onPostGoodsIssue passes ETag to service and catches 409 STALE_DATA with reload guidance", async () => {

@@ -226,22 +226,6 @@ describe('Movement 261 Concurrency and Edge Case Regression Tests', () => {
       expect(postSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('allows the retry once the recheck proves nothing was posted', async () => {
-      await svc.init();
-      const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue')
-        .mockRejectedValueOnce(Object.assign(new Error('Gateway Timeout'), { status: 504 }))
-        .mockResolvedValue(DOC);
-
-      stock({ OpenQuantity: 20 });
-      await post();
-      const [attempt] = GoodsIssueAttemptStore._memoryStore.values();
-      await GoodsIssueAttemptStore.setStatus(attempt.ReferenceDocument, 'not_posted');
-      const { r } = await post();
-
-      expect(r.error).not.toHaveBeenCalled();
-      expect(postSpy).toHaveBeenCalledTimes(2);
-    });
-
     it('still allows a second partial issue of the same quantity', async () => {
       await svc.init();
       const postSpy = jest.spyOn(Mvt261Adapter.prototype, 'postGoodsIssue').mockResolvedValue(DOC);

@@ -460,15 +460,6 @@ describe('ZQUAR 4 x 6 label', () => {
             expect(Rows.toLabels([{ ...capRow, InwardNo: '', Text: 'TEXT-888' }], TEXTS)[0].inwNo).toBe('TEXT-888');
             expect(Rows.toLabels([{ ...capRow, InwardNo: '', Text: '' }], TEXTS)[0].inwNo).toBe('-');
         });
-        it('formats match the shapes measured on the current label', () => {
-            const [l] = Rows.toLabels([capRow], TEXTS);
-            expect(l.grnNo).toMatch(/^\d{10}$/);
-            [l.grnDate, l.mfgDate, l.expiryDate].forEach((d) => expect(d).toMatch(/^\d\d\/\d\d\/\d{4}$/));
-            expect(l.qtyReceived).toMatch(/^\d+\.\d\d [A-Z]+$/);
-            expect(l.netWeight).toMatch(/^\d+\.\d\d [A-Z]+$/);
-            expect(l.containerNo).toMatch(/^\d+ of \d+$/);
-            expect(l.barcode).toMatch(/^\d{10}$/);
-        });
         it('a retest date keeps its own caption instead of "Expiry Date"', () => {
             const [l] = Rows.toLabels([{ ...capRow, DateKind: 'RETEST' }], TEXTS);
             expect(l.captions).toEqual({ expiryDate: TEXTS.retestDate });

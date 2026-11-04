@@ -972,11 +972,13 @@ describe('TrToAdapter (RFC)', () => {
         .rejects.toMatchObject({ status: 400, message: expect.stringContaining('missing storage location') });
     });
 
-    it('lookupTR rejects TR item with zero or negative required quantity with 400', async () => {
-      const zeroQtyItem = [{ ...ITEMS[0], MENGE: '0.000', TAMEN: '0.000' }];
-      const rfc = fakeRfc({ items: zeroQtyItem });
+    it.each([
+      ['zero', '0.000'],
+      ['negative', '5.000-']
+    ])('lookupTR answers 400 no open items for a TR item with %s required quantity', async (_label, menge) => {
+      const rfc = fakeRfc({ items: [{ ...ITEMS[0], MENGE: menge, TAMEN: '0.000' }] });
       await expect(new TrToAdapter({ rfc }).lookupTR('1000663', 'W01', 'TR', '0001'))
-        .rejects.toMatchObject({ status: 400, message: expect.stringContaining('has no open items (already completed)') });
+        .rejects.toMatchObject({ status: 400, message: 'Transfer Requirement 1000663 has no open items (already completed)' });
     });
 
     it('createTOFromTR rejects wrong warehouse with 400', async () => {
@@ -1196,11 +1198,20 @@ describe('TR created by an already posted material document (header MBLNR): no s
     expect(plain.ShippingManaged).toBe(false);
   });
 
-  it('createTOFromTR no longer rejects "Receiving Plant must be different" for such a TR (SAP already posted it inside one plant)', async () => {
-    const rfc = rfcFor(() => { throw new Error('TO create reached (mocked)'); });
-    // The receiving-plant rule sits before the SAP authorization check; reaching the (unmocked) AUTHORITY_CHECK proves it no longer fires.
+  it('createTOFromTR reaches the TO create for such a TR even though its receiving plant equals the issuing plant (SAP already posted it inside one plant)', async () => {
+    const fms = [];
+    const rfc = {
+      call: async (fm) => {
+        fms.push(fm);
+        if (fm === 'Z_WM_GET_TR_MATERIAL_LIST') return { ET_TR_HEADER: [header], ET_TR_ITEMS: items };
+        // AUTHORITY_CHECK always answers with a classic exception (authCheck.js, docs/abap/system-metadata.md).
+        if (fm === 'AUTHORITY_CHECK') throw Object.assign(new Error('authorized'), { key: 'USER_IS_AUTHORIZED' });
+        throw new Error(`stop at ${fm}`);
+      },
+      readTable: async (table) => (table === 'MATDOC' ? matdoc : [])
+    };
     await expect(new TrToAdapter({ rfc }).createTOFromTR({ lgnum: 'W12', tbnum: '1000891', tbpos: '0001', qty: 1, unit: 'NOS', receivingPlant: '1130', receivingStorageLocation: 'MT01' }))
-      .rejects.toThrow(/Authorization check L_BWLVS/);
-    expect(rfc.readTable).not.toHaveBeenCalledWith('T001L', expect.anything(), expect.anything(), expect.anything());
+      .rejects.toThrow(/stop at Z_WM_TO_CREATE_FROM_TR/);
+    expect(fms).toContain('Z_WM_TO_CREATE_FROM_TR');
   });
 });

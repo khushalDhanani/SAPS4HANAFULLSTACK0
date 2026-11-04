@@ -674,86 +674,120 @@ describe('Phase 2: Movement Type 261 Complete Lifecycle & Failure Matrix [mock o
     });
   });
 
-  describe('Movement Type 261 — Failure Paths: Fixes, Retries & Resumptions for Scenarios', () => {
+  describe('Movement Type 261 — resume: a step that already happened is not created again', () => {
     let env;
+    const RESERVATION_FM = 'BAPI_RESERVATION_CREATE1';
+    const TR_FMS = ['L_TR_CREATE', 'ZWM_TR_CREATE', 'Z_WM_TR_CREATE'];
+    const TO_FMS = ['L_TO_CREATE_TR', 'ZWM_TO_CREATE_FROM_TR', 'Z_WM_TO_CREATE_FROM_TR'];
+
+    // Plain-function RFC, so the production path runs (no readTable.mock branch). The fake answers with the same
+    // numbers whether or not a step runs, so only the function modules called can prove a step was skipped.
+    const plainEnv = (tableOverrides = {}) => {
+      env.setupDefaultTables(tableOverrides);
+      const fmImpl = env.mockRfc.call.getMockImplementation();
+      const names = [];
+      const rfc = {
+        readTable: env.mockRfc.readTable.getMockImplementation(),
+        call: async (fm, params) => { names.push(fm); return fmImpl(fm, params); }
+      };
+      rfc.session = async (fn) => fn(rfc.call);
+      return { rfc, called: (...fms) => names.filter((fm) => fms.flat().includes(fm)) };
+    };
 
     beforeEach(() => {
       env = createTestEnvironment();
       env.setupDefaultFms();
-      env.setupDefaultTables();
     });
 
-    test('Fix 1 (Reservation failure recovery): Correcting invalid parameters generates reservation and finishes flow', async () => {
-      const badInput = { ...env.defaultInput261, orderId: '' };
-      const failed = await env.adapter.executeReservationWarehouseFlow(badInput);
-      expect(failed.success).toBe(false);
-      expect(failed.stage).toBe('RESERVATION');
-
-      const fixed = await env.adapter.executeReservationWarehouseFlow(env.defaultInput261);
-      expect(fixed.success).toBe(true);
-      expect(fixed.state).toBe('COMPLETED');
-      expect(fixed.completed).toBe(true);
-    });
-
-    test('Fix 2 (TR failure retry): Resuming with existing reservationNumber creates TR and completes all subsequent stages', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
+    test('with reservationNumber: no new reservation, the TR is created once', async () => {
+      const { rfc, called } = plainEnv();
+      const adapter = new ReservationProcessAdapter({ rfc });
+      const resumed = await adapter.executeReservationWarehouseFlow({
         ...env.defaultInput261,
         reservationNumber: '520261'
+      });
+      expect(resumed.state).toBe('COMPLETED');
+      expect(resumed.reservationNumber).toBe('520261');
+      expect(called(RESERVATION_FM)).toEqual([]);
+      expect(called(TR_FMS)).toEqual(['L_TR_CREATE']);
+    });
+
+    test('with toNumber whose TR cannot be found: stops at TR and creates nothing', async () => {
+      const { rfc, called } = plainEnv({ LTAK: () => [], LTBK: () => [] });
+      const adapter = new ReservationProcessAdapter({ rfc });
+      const resumed = await adapter.executeReservationWarehouseFlow({
+        ...env.defaultInput261,
+        reservationNumber: '520261',
+        toNumber: '1030261'
+      });
+      expect(resumed.success).toBe(false);
+      expect(resumed.stage).toBe('TR');
+      expect(resumed.error).toBe('Transfer Requirement cannot be resolved in SAP for Transfer Order 1030261');
+      expect(called(RESERVATION_FM, TR_FMS, TO_FMS, 'L_TO_CONFIRM', 'BAPI_GOODSMVT_CREATE')).toEqual([]);
+    });
+
+    test('with toNumber and no TR anywhere on the TO: takes the TR from LTBK by the reservation and creates none', async () => {
+      const ltbkWheres = [];
+      const { rfc, called } = plainEnv({
+        LTAK: () => [],
+        LTBK: (_fields, where) => {
+          ltbkWheres.push(where);
+          return [{ TBNUM: '0001000777', LGNUM: 'W01' }];
+        }
+      });
+      const adapter = new ReservationProcessAdapter({ rfc });
+      const resumed = await adapter.executeReservationWarehouseFlow({
+        ...env.defaultInput261,
+        reservationNumber: '520261',
+        toNumber: '1030261'
       });
       expect(resumed.success).toBe(true);
-      expect(resumed.reservationNumber).toBe('520261');
-      expect(resumed.trNumber).toBe('1000261');
-      expect(resumed.state).toBe('COMPLETED');
-      expect(resumed.completed).toBe(true);
+      expect(resumed.trNumber).toBe('1000777');
+      expect(ltbkWheres[0]).toEqual(["RSNUM = '0000520261'"]);
+      expect(called(RESERVATION_FM, TR_FMS, TO_FMS)).toEqual([]);
     });
 
-    test('Fix 3 (TR missing recovery): Resuming with reservationNumber regenerates missing TR in SAP and completes flow', async () => {
-      const regenerated = await env.adapter.executeReservationWarehouseFlow({
-        ...env.defaultInput261,
-        reservationNumber: '520261'
-      });
-      expect(regenerated.success).toBe(true);
-      expect(regenerated.trNumber).toBe('1000261');
-      expect(regenerated.state).toBe('COMPLETED');
-    });
-
-    test('Fix 4 (TO failure retry): Resuming with existing reservationNumber and trNumber creates TO and finishes flow', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
+    test('with reservationNumber and trNumber: no new reservation or TR, the TO is created', async () => {
+      const { rfc, called } = plainEnv();
+      const adapter = new ReservationProcessAdapter({ rfc });
+      const resumed = await adapter.executeReservationWarehouseFlow({
         ...env.defaultInput261,
         reservationNumber: '520261',
         trNumber: '1000261'
       });
-      expect(resumed.success).toBe(true);
-      expect(resumed.reservationNumber).toBe('520261');
-      expect(resumed.trNumber).toBe('1000261');
-      expect(resumed.toNumber).toBe('1030261');
       expect(resumed.state).toBe('COMPLETED');
+      expect(resumed.trNumber).toBe('1000261');
+      expect(called(RESERVATION_FM, TR_FMS)).toEqual([]);
+      expect(called(TO_FMS).length).toBeGreaterThan(0);
     });
 
-    test('Fix 5 (TO confirmation failure retry): Resuming with existing toNumber confirms TO and posts MIGO', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
+    test('with toNumber: no new reservation, TR or TO, the existing TO is confirmed', async () => {
+      const { rfc, called } = plainEnv();
+      const adapter = new ReservationProcessAdapter({ rfc });
+      const resumed = await adapter.executeReservationWarehouseFlow({
         ...env.defaultInput261,
         reservationNumber: '520261',
         trNumber: '1000261',
         toNumber: '1030261'
       });
-      expect(resumed.success).toBe(true);
-      expect(resumed.toNumber).toBe('1030261');
-      expect(resumed.confirmation.confirmed).toBe(true);
-      expect(resumed.migo.materialDocument).toBe('5000000261');
       expect(resumed.state).toBe('COMPLETED');
+      expect(resumed.toNumber).toBe('1030261');
+      expect(called(RESERVATION_FM, TR_FMS, TO_FMS)).toEqual([]);
+      expect(called('L_TO_CONFIRM')).toEqual(['L_TO_CONFIRM']);
     });
 
-    test('Fix 6 (MIGO failure retry): Resuming with confirmed TO posts MIGO after issue resolved without re-picking', async () => {
-      const resumed = await env.adapter.executeReservationWarehouseFlow({
+    test('with toConfirmed: nothing before MIGO runs again, MIGO posts once', async () => {
+      const { rfc, called } = plainEnv();
+      const adapter = new ReservationProcessAdapter({ rfc });
+      const resumed = await adapter.executeReservationWarehouseFlow({
         ...env.defaultInput261,
         reservationNumber: '520261',
         toNumber: '1030261',
         toConfirmed: true
       });
-      expect(resumed.success).toBe(true);
       expect(resumed.migo.materialDocument).toBe('5000000261');
-      expect(resumed.state).toBe('COMPLETED');
+      expect(called(RESERVATION_FM, TR_FMS, TO_FMS, 'L_TO_CONFIRM')).toEqual([]);
+      expect(called('BAPI_GOODSMVT_CREATE')).toEqual(['BAPI_GOODSMVT_CREATE']);
     });
   });
 });

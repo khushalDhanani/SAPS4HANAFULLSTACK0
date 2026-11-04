@@ -450,107 +450,34 @@ describe('Final SAP WM Production Hardening Audit Suite [mock only, not SAP veri
   // 3. PARTIAL QUANTITY PROCESSING (AUDIT ALL 4 MOVEMENTS)
   // =========================================================================
   describe('3. Partial Quantity Processing & Final Completion', () => {
-    test.each(MOVEMENTS)('Movement %s: Issue 6 of 10 leaves remaining=4 and KZEAR unset; then issuing 4 marks completion', async (mvt) => {
+    // Plain-function RFC, so verifyReservation really reads the scripted RESB row (no readTable.mock fallback).
+    // RESB is the scripted SAP state: these tests prove what our code derives from it, not what SAP withdraws.
+    const postWithResb = async (mvt, resbRow) => {
       const env = createHardenedEnv(mvt);
       env.setupFms();
-
-      // Step 1: Issue partial quantity 6 of 10
       env.setupTables({
-        RESB: () => [{
-          RSNUM: `000052${mvt}`,
-          RSPOS: '0001',
-          MATNR: '000000008000000023',
-          WERKS: '1120',
-          LGORT: 'CS01',
-          BDMNG: '10.000',
-          ENMNG: '6.000',
-          MEINS: 'EA',
-          KZEAR: '' // NOT completed!
-        }],
-        MATDOC: (_f, _w, whereStr) => {
-          if (whereStr.includes(`5000000${mvt}`)) {
-            return [{
-              MBLNR: `5000000${mvt}`,
-              MJAHR: '2026',
-              ZEILE: '0001',
-              BWART: mvt,
-              MATNR: '000000008000000023',
-              MENGE: '6.000',
-              MEINS: 'EA',
-              WERKS: '1120',
-              LGORT: 'CS01',
-              RSNUM: `000052${mvt}`,
-              RSPOS: '0001',
-              SHKZG: 'H'
-            }];
-          }
-          return [];
-        }
+        RESB: () => [{ RSNUM: `000052${mvt}`, RSPOS: '0001', MATNR: '000000008000000023', WERKS: '1120', LGORT: 'CS01', MEINS: 'EA', ...resbRow }],
+        MATDOC: (_f, _w, whereStr) => (whereStr.includes(`5000000${mvt}`) ? [{ MBLNR: `5000000${mvt}`, MJAHR: '2026', ZEILE: '0001', BWART: mvt, MATNR: '000000008000000023', WERKS: '1120', LGORT: 'CS01', MENGE: '6.000', MEINS: 'EA', RSNUM: `000052${mvt}`, RSPOS: '0001', SHKZG: 'H' }] : [])
       });
-
-      const partialRes = await env.adapter.postGoodsMovement({
+      const rfc = { call: env.mockRfc.call.getMockImplementation(), readTable: env.mockRfc.readTable.getMockImplementation() };
+      rfc.session = async (fn) => fn(rfc.call);
+      return new ReservationProcessAdapter({ rfc }).postGoodsMovement({
         ...env.makeInput('000000000301'),
         reservationNo: `000052${mvt}`,
         reservationItem: '0001',
         quantity: 6,
-        transferOrder: `0001030${mvt}`,
-        completeReservation: false
+        transferOrder: `0001030${mvt}`
       });
+    };
 
-      expect(partialRes.materialDocument).toBe(`5000000${mvt}`);
-      expect(partialRes.reservationVerification.completelyProcessed).toBe(false);
-      expect(partialRes.reservationVerification.issuedQuantity).toBe(6);
-      expect(partialRes.reservationVerification.remainingQuantity).toBe(4);
-      expect(partialRes.reservationVerification.isFinalIssue).toBe(false);
+    test.each(MOVEMENTS)('Movement %s: RESB with 6 of 10 withdrawn and KZEAR blank is reported as 4 remaining, not complete', async (mvt) => {
+      const { reservationVerification } = await postWithResb(mvt, { BDMNG: '10.000', ENMNG: '6.000', KZEAR: '' });
+      expect(reservationVerification).toMatchObject({ issuedQuantity: 6, remainingQuantity: 4, isFinalIssue: false, completelyProcessed: false });
+    });
 
-      // Step 2: Issue remaining 4 of 10
-      env.setupTables({
-        RESB: () => [{
-          RSNUM: `000052${mvt}`,
-          RSPOS: '0001',
-          MATNR: '000000008000000023',
-          WERKS: '1120',
-          LGORT: 'CS01',
-          BDMNG: '10.000',
-          ENMNG: '10.000',
-          MEINS: 'EA',
-          KZEAR: 'X' // NOW completed!
-        }],
-        MATDOC: (_f, _w, whereStr) => {
-          if (whereStr.includes(`5000000${mvt}`)) {
-            return [{
-              MBLNR: `5000000${mvt}`,
-              MJAHR: '2026',
-              ZEILE: '0001',
-              BWART: mvt,
-              MATNR: '000000008000000023',
-              MENGE: '4.000',
-              MEINS: 'EA',
-              WERKS: '1120',
-              LGORT: 'CS01',
-              RSNUM: `000052${mvt}`,
-              RSPOS: '0001',
-              SHKZG: 'H'
-            }];
-          }
-          return [];
-        }
-      });
-
-      const finalRes = await env.adapter.postGoodsMovement({
-        ...env.makeInput('000000000302'),
-        reservationNo: `000052${mvt}`,
-        reservationItem: '0001',
-        quantity: 4,
-        transferOrder: `0001030${mvt}`,
-        completeReservation: true
-      });
-
-      expect(finalRes.materialDocument).toBe(`5000000${mvt}`);
-      expect(finalRes.reservationVerification.completelyProcessed).toBe(true);
-      expect(finalRes.reservationVerification.issuedQuantity).toBe(10);
-      expect(finalRes.reservationVerification.remainingQuantity).toBe(0);
-      expect(finalRes.reservationVerification.isFinalIssue).toBe(true);
+    test.each(MOVEMENTS)('Movement %s: RESB with 10 of 10 withdrawn and KZEAR X is reported as 0 remaining and complete', async (mvt) => {
+      const { reservationVerification } = await postWithResb(mvt, { BDMNG: '10.000', ENMNG: '10.000', KZEAR: 'X' });
+      expect(reservationVerification).toMatchObject({ issuedQuantity: 10, remainingQuantity: 0, isFinalIssue: true, completelyProcessed: true });
     });
   });
 

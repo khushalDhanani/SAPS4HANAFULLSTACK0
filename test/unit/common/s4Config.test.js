@@ -1,6 +1,5 @@
 const cds = require('@sap/cds');
 const s4Config = require('../../../srv/common/s4Config');
-const s4ConfigFromIntegration = require('../../../srv/integration/s4hana/s4Config');
 const { ConfigurationError } = s4Config;
 
 describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
@@ -21,25 +20,10 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
     process.env = { ...savedEnv };
   });
 
-  // ─── Re-export wiring ─────────────────────────────────────────────────────
-
-  describe('Integration Re-Export', () => {
-    test('srv/integration/s4hana/s4Config re-exports the same instance as srv/common/s4Config', () => {
-      expect(s4ConfigFromIntegration).toBe(s4Config);
-      expect(s4Config.ConfigurationError).toBe(ConfigurationError);
-    });
-  });
-
   // ─── package.json must NOT contain any business data or plant/storageLocation ───
 
   describe('package.json cds.s4 — environment config only', () => {
     const pkg = require('../../../package.json');
-    const forbiddenKeys = [
-      'plant', 'storageLocation',
-      'salesOrganization', 'distributionChannel', 'division', 'currency',
-      'inquiryType', 'orderType', 'conditionType', 'shippingPoints',
-      'salesMaterialTypes', 'mvt261NotReadyBins', 'warehouseNumber'
-    ];
 
     test('package.json cds.s4 contains only env-config keys (client)', () => {
       const allowedKeys = new Set(['client']);
@@ -49,32 +33,8 @@ describe('Unit: S/4HANA Configuration Module (s4Config)', () => {
       }
     });
 
-    forbiddenKeys.forEach(key => {
-      test(`package.json cds.s4 must not define ${key}`, () => {
-        expect(pkg.cds.s4).not.toHaveProperty(key);
-      });
-    });
-
     test('package.json cds.s4 carries no client placeholder (client comes from env locally or from the BTP destination)', () => {
       expect(pkg.cds.s4).not.toHaveProperty('client');
-    });
-  });
-
-  // ─── s4Config surface: environment config only ────────────────────────────
-
-  describe('s4Config API surface — business methods removed', () => {
-    const removedMethods = [
-      'getPlant', 'getStorageLocation',
-      'getSalesOrganization', 'getDistributionChannel', 'getDivision', 'getCurrency',
-      'getInquiryType', 'getOrderType', 'getConditionType',
-      'getShippingPoints', 'getSalesMaterialTypes', 'getDifferenceStorageType',
-      'getMvt261NotReadyBins'
-    ];
-
-    removedMethods.forEach(method => {
-      test(`s4Config.${method} is undefined (business data handled by BusinessConfigResolver)`, () => {
-        expect(s4Config[method]).toBeUndefined();
-      });
     });
   });
 

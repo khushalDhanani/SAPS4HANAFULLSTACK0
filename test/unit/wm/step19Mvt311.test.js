@@ -316,6 +316,15 @@ describe('Step 19: Movement Type 311 (SLoc to SLoc Transfer) Proof Suite [mock o
     };
   };
 
+  // Plain function readTable, so the adapter takes its production path (no readTable.mock).
+  const plainAdapter = (env) => new ReservationProcessAdapter({
+    rfc: {
+      session: (fn) => fn(env.mockRfc.call),
+      call: (...args) => env.mockRfc.call(...args),
+      readTable: (...args) => env.mockRfc.readTable(...args)
+    }
+  });
+
   const makeInput311 = (customId = '000000000311') => ({
     movementType: '311',
     plant: '1120',
@@ -400,34 +409,27 @@ describe('Step 19: Movement Type 311 (SLoc to SLoc Transfer) Proof Suite [mock o
       expect(scanRes.warehouseNumber).toBe('W01');
     });
 
-    test('Step 4: TO — Create Transfer Order referencing verified TR produces SAP TANUM to 921/TRANSFER', async () => {
+    test('Step 4: TO — createTransferOrderFromTR sends the padded TR to L_TO_CREATE_TR and returns the TO read back from LTAK', async () => {
       const input = makeInput311('000000000104');
-      const toRes = await env.adapter.createTransferOrderFromTR({
+      const toRes = await plainAdapter(env).createTransferOrderFromTR({
         ...input,
         trNumber: '1000311',
         trItem: '0001',
         autoConfirm: false
       });
 
-      expect(toRes.success).toBe(true);
-      expect(toRes.toNumber).toBe('1030311');
-      expect(toRes.toItem).toBe('0001');
-      expect(toRes.warehouseNumber).toBe('W01');
+      expect(env.getToCreateCalls()).toEqual([{ I_LGNUM: 'W01', I_TBNUM: '0001000311', I_COMMIT_WORK: 'X' }]);
+      expect(toRes).toMatchObject({ success: true, toNumber: '1030311', toItem: '0001', confirmed: false });
     });
 
-    test('Step 5: Confirm — Confirm Transfer Order updates LTAK-KQUIT and LTAP-PQUIT', async () => {
-      const confirmRes = await env.adapter.confirmTransferOrder({
+    test('Step 5: Confirm — confirmTransferOrder calls L_TO_CONFIRM once with the padded TO and confirm flags', async () => {
+      const confirmRes = await plainAdapter(env).confirmTransferOrder({
         warehouseNumber: 'W01',
         toNumber: '1030311'
       });
 
-      expect(confirmRes.success).toBe(true);
-      expect(confirmRes.confirmed).toBe(true);
-      expect(confirmRes.toNumber).toBe('1030311');
-
-      const confirmCalls = env.getToConfirmCalls();
-      expect(confirmCalls.length).toBe(1);
-      expect(confirmCalls[0].I_TANUM).toBe('0001030311');
+      expect(env.getToConfirmCalls()).toEqual([{ I_LGNUM: 'W01', I_TANUM: '0001030311', I_SQUIT: 'X', I_COMMIT_WORK: 'X' }]);
+      expect(confirmRes).toMatchObject({ success: true, confirmed: true, toNumber: '1030311' });
     });
 
     test('Step 6: MIGO 311 — Post Goods Movement with confirmed TO and GM_CODE 04 calls BAPI_GOODSMVT_CREATE', async () => {
@@ -458,8 +460,8 @@ describe('Step 19: Movement Type 311 (SLoc to SLoc Transfer) Proof Suite [mock o
       expect(gmCalls[0].GOODSMVT_ITEM[0].NO_MORE_GR).toBe('X');
     });
 
-    test('Step 7: Material Document — Verified in SAP MATDOC with BWART 311 and both credit/debit rows', async () => {
-      const matdoc = await env.adapter.verifyMaterialDocument({
+    test('Step 7: Material Document — verifyMaterialDocument confirms a MATDOC document with BWART 311', async () => {
+      const matdoc = await plainAdapter(env).verifyMaterialDocument({
         materialDocument: '5000000311',
         materialDocumentYear: '2026',
         movementType: '311',
@@ -471,22 +473,13 @@ describe('Step 19: Movement Type 311 (SLoc to SLoc Transfer) Proof Suite [mock o
         reservationItem: '0001'
       });
 
-      expect(matdoc.success).toBe(true);
-      expect(matdoc.materialDocument).toBe('5000000311');
-      expect(matdoc.materialDocumentYear).toBe('2026');
-      expect(matdoc.movementType).toBe('311');
-
-      // Directly verify credit/debit items in MATDOC
-      const rows = await env.mockRfc.readTable('MATDOC', ['ZEILE', 'BWART', 'LGORT', 'UMLGO', 'SHKZG', 'MENGE'], [
-        "MBLNR = '5000000311'"
-      ]);
-      expect(rows.length).toBe(2);
-      expect(rows[0].LGORT).toBe('0001');
-      expect(rows[0].UMLGO).toBe('0002');
-      expect(rows[0].SHKZG).toBe('H'); // Credit (Issue from 0001)
-      expect(rows[1].LGORT).toBe('0002');
-      expect(rows[1].UMLGO).toBe('0001');
-      expect(rows[1].SHKZG).toBe('S'); // Debit (Receipt to 0002)
+      expect(matdoc).toEqual({
+        success: true,
+        stage: 'MIGO',
+        materialDocument: '5000000311',
+        materialDocumentYear: '2026',
+        movementType: '311'
+      });
     });
 
     test('Step 8: Dual-SLoc Stock Verification — Source: -10 EA (100 -> 90), Destination: +10 EA (20 -> 30), Constant Sum: 120', async () => {

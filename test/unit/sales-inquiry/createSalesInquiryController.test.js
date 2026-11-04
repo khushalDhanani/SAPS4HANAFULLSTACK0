@@ -216,28 +216,46 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
     });
 
     describe("Initialization & Model Reset", () => {
-        it("onInit attaches route matched handler and initializes model", () => {
+        it("onInit attaches _onRouteMatched to the createSalesInquiry route", () => {
             controller.onInit();
             expect(mockRouter.getRoute).toHaveBeenCalledWith("createSalesInquiry");
-            expect(controller.getView().setModel).toHaveBeenCalled();
+            const oRoute = mockRouter.getRoute.mock.results[0].value;
+            expect(oRoute.attachPatternMatched).toHaveBeenCalledWith(controller._onRouteMatched, controller);
+        });
+
+        it("onInit binds a new Draft newInquiry model to the view", () => {
+            controller.onInit();
+            expect(mockView.setModel).toHaveBeenCalledWith(mockModel, "newInquiry");
             expect(mockModel.getProperty("/header/StatusText")).toBe("Draft");
         });
 
-        it("_loadConfigurationAndDefaults updates organizational filters on cached data", async () => {
+        it("_loadConfigurationAndDefaults applies cached defaults and scopes the org filters before the refetch resolves", async () => {
             controller._oConfigData = {
                 inquiryTypes: [{ SalesDocumentType: "ZIN" }],
                 salesOrgs: [{ SalesOrganization: "1000" }],
                 distChannels: [{ SalesOrganization: "1000", DistributionChannel: "10" }],
                 divisions: [{ SalesOrganization: "1000", DistributionChannel: "10", Division: "52" }]
             };
-            const updateSpy = jest.spyOn(controller, "_updateOrganizationalFilters");
-            await controller._loadConfigurationAndDefaults();
-            expect(updateSpy).toHaveBeenCalled();
+
+            const pLoad = controller._loadConfigurationAndDefaults();
+
+            expect(mockModel.getProperty("/header/SalesInquiryType")).toBe("ZIN");
+            expect(mockModel.getProperty("/header/SalesOrganization")).toBe("1000");
+            expect(mockModel.getProperty("/header/DistributionChannel")).toBe("10");
+            expect(mockModel.getProperty("/header/OrganizationDivision")).toBe("52");
+            expect(mockControls.inDistChannel.getBinding().filter).toHaveBeenCalledWith([
+                { path: "SalesOrganization", op: "EQ", val: "1000" }
+            ]);
+            expect(mockControls.inDivision.getBinding().filter).toHaveBeenCalledWith([
+                { path: "SalesOrganization", op: "EQ", val: "1000" },
+                { path: "DistributionChannel", op: "EQ", val: "10" }
+            ]);
+            await pLoad;
         });
     });
 
     describe("Organizational Data & Suggestions Selection", () => {
-        it("onInquiryTypeSelect updates Inquiry Type in model and triggers validation", () => {
+        it("onInquiryTypeSelect stores the type and marks it user-modified", () => {
             const oEvent = {
                 getParameter: (param) => param === "selectedItem" ? { getKey: () => "IN", getText: () => "IN" } : null
             };
@@ -246,22 +264,36 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
             expect(mockModel.getProperty("/userModified/SalesInquiryType")).toBe(true);
         });
 
-        it("onSalesOrgSelect updates SalesOrg and triggers organizational filters", () => {
+        it("onInquiryTypeSelect validates the field: a blank selection is flagged as mandatory", () => {
+            const oEvent = {
+                getParameter: (param) => param === "selectedItem" ? { getKey: () => "", getText: () => "" } : null
+            };
+            controller.onInquiryTypeSelect(oEvent);
+            expect(mockModel.getProperty("/errors/SalesInquiryType")).toEqual({ state: "Error", text: "SalesInquiryType is mandatory" });
+        });
+
+        it("onSalesOrgSelect stores the org and scopes the distribution channel suggestions to it", () => {
             const oEvent = {
                 getParameter: (param) => param === "selectedItem" ? { getKey: () => "1000", getText: () => "1000" } : null
             };
-            const filterSpy = jest.spyOn(controller, "_updateOrganizationalFilters");
             controller.onSalesOrgSelect(oEvent);
             expect(mockModel.getProperty("/header/SalesOrganization")).toBe("1000");
-            expect(filterSpy).toHaveBeenCalled();
+            expect(mockControls.inDistChannel.getBinding().filter).toHaveBeenCalledWith([
+                { path: "SalesOrganization", op: "EQ", val: "1000" }
+            ]);
         });
 
-        it("onDistChannelSelect updates DistChannel and triggers filters", () => {
+        it("onDistChannelSelect stores the channel and scopes the division suggestions to org and channel", () => {
+            mockModel.setProperty("/header/SalesOrganization", "1000");
             const oEvent = {
                 getParameter: (param) => param === "selectedItem" ? { getKey: () => "10", getText: () => "10" } : null
             };
             controller.onDistChannelSelect(oEvent);
             expect(mockModel.getProperty("/header/DistributionChannel")).toBe("10");
+            expect(mockControls.inDivision.getBinding().filter).toHaveBeenCalledWith([
+                { path: "SalesOrganization", op: "EQ", val: "1000" },
+                { path: "DistributionChannel", op: "EQ", val: "10" }
+            ]);
         });
 
         it("onDivisionSelect updates OrganizationDivision", () => {
@@ -323,9 +355,12 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
             expect(aItems[1].SalesInquiryItem).toBe("000020");
         });
 
-        it("onDeleteItem removes line item and recalculates totals", () => {
+        it("onDeleteItem removes the line, renumbers the rest and recalculates the total", () => {
+            mockModel.setProperty("/items/0/OrderQuantity", 2);
+            mockModel.setProperty("/items/0/NetPriceAmount", 100);
             controller.onAddItem();
-            expect(mockModel.getProperty("/items").length).toBe(2);
+            mockModel.setProperty("/items/1/OrderQuantity", 3);
+            mockModel.setProperty("/items/1/NetPriceAmount", 10);
 
             const oEvent = {
                 getParameter: () => ({
@@ -335,6 +370,8 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
             controller.onDeleteItem(oEvent);
             expect(mockModel.getProperty("/items").length).toBe(1);
             expect(mockModel.getProperty("/items/0/SalesInquiryItem")).toBe("000010");
+            // Only the 3 x 10 line is left
+            expect(mockModel.getProperty("/header/TotalNetAmount")).toBe("30.00");
         });
 
         it("onItemMaterialLiveChange updates model property and clears error state without HTTP call", () => {
@@ -466,23 +503,76 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
     });
 
     describe("Incompletion Log & Message Popover (No ReferenceError)", () => {
-        it("onCheckIncompletion shows toast when complete or triggers MessagePopover", () => {
-            mockModel.setProperty("/header/SoldToParty", ""); // Invalid
-            const popoverSpy = jest.spyOn(controller, "onMessageButtonPress");
+        function setupCompleteDocument(m) {
+            m.setProperty("/header/SalesInquiryType", "ZIN");
+            m.setProperty("/header/SalesOrganization", "1000");
+            m.setProperty("/header/DistributionChannel", "10");
+            m.setProperty("/header/OrganizationDivision", "52");
+            m.setProperty("/header/TransactionCurrency", "INR");
+            m.setProperty("/header/SoldToParty", "10135");
+            m.setProperty("/items/0/Material", "1000000003");
+            m.setProperty("/items/0/OrderQuantity", 10);
+            m.setProperty("/items/0/OrderQuantityUnit", "KG");
+            m.setProperty("/items/0/Plant", "1120");
+        }
+
+        it("onCheckIncompletion lists a missing mandatory header field in the message popover", () => {
             controller.onCheckIncompletion();
-            expect(popoverSpy).toHaveBeenCalled();
+            expect(controller._oMessagePopover.getModel().getData()).toContainEqual({
+                type: "Error",
+                title: "Sold-to Party is mandatory",
+                subtitle: "Header: SoldToParty"
+            });
+            expect(mockMessageToast.show).not.toHaveBeenCalled();
         });
 
-        it("onMessageButtonPress instantiates MessagePopover with JSONModel without ReferenceError", (done) => {
-            mockModel.setProperty("/header/SoldToParty", ""); // Error
+        it("onCheckIncompletion lists a value SAP requires but the form cannot enforce as a warning", () => {
+            setupCompleteDocument(mockModel);
+            mockModel.setProperty("/header/PortOfLoading", "INMAA");
+            mockModel.setProperty("/header/PortOfDischarge", "ESBCN");
+            mockModel.setProperty("/header/ContactPerson", "25116");
+
+            controller.onCheckIncompletion();
+
+            expect(controller._oMessagePopover.getModel().getData()).toEqual([{
+                type: "Warning",
+                title: "Customer Group 2 is missing",
+                subtitle: "Required by SAP; not yet supported by the SAP inquiry service, maintain directly in SAP after creation"
+            }]);
+        });
+
+        it("onCheckIncompletion shows the complete toast and no popover when nothing is missing", () => {
+            setupCompleteDocument(mockModel);
+            mockModel.setProperty("/header/CustomerGroup2", "SEA");
+            mockModel.setProperty("/header/PortOfLoading", "INMAA");
+            mockModel.setProperty("/header/PortOfDischarge", "ESBCN");
+            mockModel.setProperty("/header/ContactPerson", "25116");
+
+            controller.onCheckIncompletion();
+
+            expect(mockMessageToast.show).toHaveBeenCalledWith("Document is complete. No incompletions detected.");
+            expect(controller._oMessagePopover).toBeUndefined();
+        });
+
+        it("onMessageButtonPress lists header and item errors with where they apply", () => {
             SalesInquiryModel.validateForm(mockModel);
 
             controller.onMessageButtonPress();
-            expect(controller._oMessagePopover).toBeDefined();
-            expect(controller._oMessagePopover.getModel()).toBeInstanceOf(MockJSONModel);
+
+            const aMessages = controller._oMessagePopover.getModel().getData();
+            expect(aMessages).toContainEqual({ type: "Error", title: "Sold-to Party is mandatory", subtitle: "Header: SoldToParty" });
+            expect(aMessages).toContainEqual({ type: "Error", title: "Material is required", subtitle: "Item 1: Material" });
+        });
+
+        it("onMessageButtonPress opens the popover on the messages button after its 50 ms delay", (done) => {
+            SalesInquiryModel.validateForm(mockModel);
+
+            controller.onMessageButtonPress();
+            expect(controller._oMessagePopover.isOpen()).toBe(false);
 
             setTimeout(() => {
                 expect(controller._oMessagePopover.isOpen()).toBe(true);
+                expect(controller._oMessagePopover._anchor).toBe(mockControls.btnInquiryMessages);
                 done();
             }, 60);
         });
@@ -523,36 +613,92 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
             expect(aItems[0].errors.Plant.text).toContain("Plant is required for each line item");
         });
 
-        it("onSave dispatches payload and presents success dialog with Create Another option", async () => {
-            setupValidHeader(mockModel);
-            mockModel.setProperty("/header/SoldToParty", "10135");
-            mockModel.setProperty("/items/0/Material", "1000000003");
-            mockModel.setProperty("/items/0/OrderQuantity", 10);
-            mockModel.setProperty("/items/0/OrderQuantityUnit", "KG");
-            mockModel.setProperty("/items/0/Plant", "1120");
-            mockModel.setProperty("/items/0/NetPriceAmount", "50.00");
+        function setupSavableInquiry(m) {
+            setupValidHeader(m);
+            m.setProperty("/header/SoldToParty", "10135");
+            m.setProperty("/items/0/Material", "1000000003");
+            m.setProperty("/items/0/OrderQuantity", 10);
+            m.setProperty("/items/0/OrderQuantityUnit", "KG");
+            m.setProperty("/items/0/Plant", "1120");
+            m.setProperty("/items/0/NetPriceAmount", "50.00");
+        }
 
-            mockSalesInquiryService.createSalesInquiry.mockResolvedValue("10000005");
-
+        async function saveSuccessfully(sInquiry) {
+            mockSalesInquiryService.createSalesInquiry.mockResolvedValue(sInquiry);
             controller.onSave();
-            expect(mockBusyIndicator.show).toHaveBeenCalled();
-
             await Promise.resolve();
             await Promise.resolve();
+            return mockMessageBox.success.mock.calls[0][1];
+        }
 
-            expect(mockBusyIndicator.hide).toHaveBeenCalled();
+        it("onSave sends the form values to the service once", async () => {
+            setupSavableInquiry(mockModel);
+
+            await saveSuccessfully("10000005");
+
+            expect(mockSalesInquiryService.createSalesInquiry).toHaveBeenCalledTimes(1);
+            const oPayload = mockSalesInquiryService.createSalesInquiry.mock.calls[0][0];
+            expect(oPayload.header).toMatchObject({
+                SalesInquiryType: "ZIN",
+                SalesOrganization: "1000",
+                DistributionChannel: "10",
+                OrganizationDivision: "52",
+                SoldToParty: "10135",
+                TransactionCurrency: "INR"
+            });
+            expect(oPayload.items).toHaveLength(1);
+            expect(oPayload.items[0]).toMatchObject({
+                SalesInquiryItem: "000010",
+                Material: "1000000003",
+                OrderQuantity: 10,
+                OrderQuantityUnit: "KG",
+                Plant: "1120",
+                NetPriceAmount: 50
+            });
+        });
+
+        it("onSave shows the SAP number in a success dialog and hides the busy indicator", async () => {
+            setupSavableInquiry(mockModel);
+
+            await saveSuccessfully("10000005");
+
+            expect(mockBusyIndicator.show).toHaveBeenCalledWith(0);
+            expect(mockBusyIndicator.hide).toHaveBeenCalledTimes(1);
             expect(mockMessageBox.success).toHaveBeenCalledWith(
-                expect.stringContaining("10000005"),
+                "Sales Inquiry 10000005 has been successfully created.",
                 expect.objectContaining({
+                    title: "Sales Inquiry Created",
                     actions: ["Display Inquiry", "Create Another", "Close"]
                 })
             );
+        });
 
-            // Test Create Another action
-            const successCallConfig = mockMessageBox.success.mock.calls[0][1];
-            const resetSpy = jest.spyOn(controller, "_resetModel");
-            successCallConfig.onClose("Create Another");
-            expect(resetSpy).toHaveBeenCalledWith(true);
+        it("onSave success dialog: Create Another blanks the form", async () => {
+            setupSavableInquiry(mockModel);
+            const oDialog = await saveSuccessfully("10000005");
+
+            oDialog.onClose("Create Another");
+
+            expect(mockModel.getProperty("/header/SoldToParty")).toBe("");
+            expect(mockModel.getProperty("/items/0/Material")).toBe("");
+        });
+
+        it("onSave success dialog: Display Inquiry opens the created inquiry", async () => {
+            setupSavableInquiry(mockModel);
+            const oDialog = await saveSuccessfully("10000005");
+
+            oDialog.onClose("Display Inquiry");
+
+            expect(mockRouter.navTo).toHaveBeenCalledWith("salesInquiryDetail", { SalesInquiry: "10000005" });
+        });
+
+        it("onSave success dialog: Close returns to the inquiry list", async () => {
+            setupSavableInquiry(mockModel);
+            const oDialog = await saveSuccessfully("10000005");
+
+            oDialog.onClose("Close");
+
+            expect(mockRouter.navTo).toHaveBeenCalledWith("salesInquiries");
         });
 
         it("onSave handles backend rejection gracefully", async () => {
@@ -610,6 +756,22 @@ describe("Create Sales Inquiry Controller Unit Tests", () => {
             expect(mockRouter.navTo).toHaveBeenCalledWith("salesInquiryDetail", {
                 SalesInquiry: "1000529"
             });
+        });
+
+        it("onSave partial creation: closing the warning blanks the form so the same inquiry cannot be resubmitted", async () => {
+            setupSavableInquiry(mockModel);
+            const partialError = new Error("Sales Inquiry 1000529 was created in SAP S/4HANA, but adding item 000010 failed");
+            partialError.SalesInquiry = "1000529";
+            mockSalesInquiryService.createSalesInquiry.mockRejectedValue(partialError);
+
+            controller.onSave();
+            await Promise.resolve();
+            await Promise.resolve();
+            mockMessageBox.warning.mock.calls[0][1].onClose("Close");
+
+            expect(mockModel.getProperty("/header/SoldToParty")).toBe("");
+            expect(mockModel.getProperty("/items/0/Material")).toBe("");
+            expect(mockRouter.navTo).not.toHaveBeenCalled();
         });
     });
 

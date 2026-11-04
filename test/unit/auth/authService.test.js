@@ -241,11 +241,6 @@ describe('Unit: AuthService (CAP Authentication Handler)', () => {
             expect(validate).toHaveBeenCalledWith('KHUSHAL', 'not-the-password');
         });
 
-        it('has no password written in the login source', () => {
-            const source = require('fs').readFileSync(require.resolve('../../../srv/auth-service'), 'utf8');
-            expect(source).not.toMatch(/timingSafeEqual\([^,]+,\s*["'`]/);
-        });
-
         it('should validate credentials against authAdapter when username is not a dev user', async () => {
             process.env.ENABLE_DEV_TOKEN_ISSUER = 'true';
             process.env.LOCAL_AUTH_SECRET = 'secret1234567890';

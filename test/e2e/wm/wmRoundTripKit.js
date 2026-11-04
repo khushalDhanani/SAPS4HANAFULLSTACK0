@@ -173,7 +173,10 @@ async function runSuite({ flow, title, dryRun, live }, options = {}) {
         if (mode.mode === 'live' || !res.errors.some((e) => RESTART.test(e))) break;
         console.log(`  server restarted during the dry-run; running it once more (${res.errors.find((e) => RESTART.test(e))})`);
     }
-    const status = res.errors.length ? 'FAIL' : 'PASS';
+    // Every sub-case skipped, or a live data section naming none: nothing ran, so this is not a pass
+    const subcases = res.details && res.details.subcases;
+    const nothingRan = subcases && Object.values(subcases).every((s) => s.status === 'SKIPPED');
+    const status = res.errors.length ? 'FAIL' : (nothingRan ? 'PARTIAL' : 'PASS');
     console.log(`  [${status}] ${title} ${mode.mode}`);
     res.errors.forEach((e) => console.log(`      - ${e}`));
     return { status, mode: mode.mode, errors: res.errors, details: res.details };

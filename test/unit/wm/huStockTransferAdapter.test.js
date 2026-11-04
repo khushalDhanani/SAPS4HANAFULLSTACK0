@@ -185,7 +185,10 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
 
     it('rejects with 404 when reservation is not found', async () => {
       mockRfc.readTable.mockResolvedValue([]);
-      await expect(adapter.getCockpitDetail('99999', '1')).rejects.toThrow('not found');
+      await expect(adapter.getCockpitDetail('99999', '1')).rejects.toMatchObject({
+        status: 404,
+        message: 'Reservation 99999 item 1 not found in SAP'
+      });
     });
   });
 
@@ -484,45 +487,79 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
       });
     });
 
-    it('executes Path B (BAPI_GOODSMVT_CREATE) for standard / fallback location and commits', async () => {
+    // Path B double. SAP shape is not proven here: GOODSMVT_HEADRET and the BAPI item fields are hand-written.
+    const stubPathB = () => {
       mockRfc.readTable.mockImplementation((table) => {
         if (table === 'T001L') return Promise.resolve([{ WERKS: '1120', LGORT: 'CS02', XHUPF: '' }]);
         if (table === 'MATDOC') return Promise.resolve([{ MBLNR: '4900012345', MJAHR: '2026', BWART: '311' }]);
         return Promise.resolve([]);
       });
+      mockRfc.call.mockImplementation((fm) => Promise.resolve(fm === 'BAPI_GOODSMVT_CREATE'
+        ? { GOODSMVT_HEADRET: { MAT_DOC: '4900012345', DOC_YEAR: '2026' } }
+        : {}));
+    };
+    const fullTransfer = {
+      ReservationNo: '10042',
+      ReservationItem: '1',
+      UnitNumber: '2000019371',
+      TransferQty: 50,
+      IsFullUnit: true,
+      ClientAttemptId: 'attempt-001'
+    };
 
-      mockRfc.call.mockImplementation((fm) => {
-        if (fm === 'BAPI_GOODSMVT_CREATE') {
-          return Promise.resolve({
-            GOODSMVT_HEADRET: { MAT_DOC: '4900012345', DOC_YEAR: '2026' }
-          });
-        }
-        if (fm === 'BAPI_TRANSACTION_COMMIT') {
-          return Promise.resolve({});
-        }
-        return Promise.resolve({});
-      });
+    it('Path B sends BAPI_GOODSMVT_CREATE with GM_CODE 06 and the reservation-linked 311 item', async () => {
+      stubPathB();
+      await adapter.executeHuStockTransfer(fullTransfer);
+      const [fm, params] = mockRfc.call.mock.calls[0];
+      expect(fm).toBe('BAPI_GOODSMVT_CREATE');
+      expect(params.GOODSMVT_CODE).toEqual({ GM_CODE: '06' });
+      expect(params.GOODSMVT_ITEM).toEqual([{
+        MATERIAL: '000000008000009754',
+        PLANT: '1120',
+        STGE_LOC: 'CS02',
+        BATCH: 'BATCH01',
+        MOVE_TYPE: '311',
+        ENTRY_QNT: 50,
+        ENTRY_UOM: 'NOS',
+        MOVE_PLANT: '1120',
+        MOVE_STLOC: 'CS01',
+        MOVE_BATCH: 'BATCH01',
+        RESERV_NO: '0000010042',
+        RES_ITEM: '0001',
+        NO_MORE_GR: 'X'
+      }]);
+    });
 
-      const res = await adapter.executeHuStockTransfer({
-        ReservationNo: '10042',
-        ReservationItem: '1',
-        UnitNumber: '2000019371',
-        TransferQty: 50,
-        IsFullUnit: true,
-        ClientAttemptId: 'attempt-001'
-      });
-
-      expect(res.Success).toBe(true);
-      expect(res.MaterialDocument).toBe('4900012345');
-      expect(res.MaterialDocYear).toBe('2026');
-      expect(res.PostingPath).toBe('STANDARD_BAPI_06');
-      expect(res.IsFinalIssue).toBe(true);
-      expect(res.UpdatedOpenQty).toBe(0);
-      expect(res.UpdatedStatus).toBe('Completed');
-      expect(res.ReadBackVerified).toBe(true);
-      expect(res.RequesterAlertSent).toBe(false);
-      expect(res.Message).not.toMatch(/alert/i);
+    it('Path B commits with WAIT=X on the same session after the BAPI returns a document', async () => {
+      stubPathB();
+      await adapter.executeHuStockTransfer(fullTransfer);
+      expect(mockRfc.call.mock.calls.map(([fm]) => fm)).toEqual(['BAPI_GOODSMVT_CREATE', 'BAPI_TRANSACTION_COMMIT']);
+      expect(mockRfc.call.mock.calls[1][1]).toEqual({ WAIT: 'X' });
       expect(mockRfc.session).toHaveBeenCalledTimes(1);
+    });
+
+    it('Path B rolls back and does not commit when the BAPI returns no document', async () => {
+      stubPathB();
+      mockRfc.call.mockImplementation((fm) => Promise.resolve(fm === 'BAPI_GOODSMVT_CREATE'
+        ? { GOODSMVT_HEADRET: {}, RETURN: [{ TYPE: 'E', ID: 'M7', NUMBER: '021', MESSAGE: 'Deficit' }] }
+        : {}));
+      await expect(adapter.executeHuStockTransfer(fullTransfer)).rejects.toMatchObject({ status: 422 });
+      expect(mockRfc.call.mock.calls.map(([fm]) => fm)).toEqual(['BAPI_GOODSMVT_CREATE', 'BAPI_TRANSACTION_ROLLBACK']);
+    });
+
+    it('Path B returns the read-back document and marks a full transfer of the open quantity as final', async () => {
+      stubPathB();
+      const res = await adapter.executeHuStockTransfer(fullTransfer);
+      expect(res).toMatchObject({
+        Success: true,
+        MaterialDocument: '4900012345',
+        MaterialDocYear: '2026',
+        PostingPath: 'STANDARD_BAPI_06',
+        IsFinalIssue: true,
+        UpdatedOpenQty: 0,
+        UpdatedStatus: 'Completed',
+        ReadBackVerified: true
+      });
       expect(mockRfc.readTable).toHaveBeenCalledWith('MATDOC', ['MBLNR', 'MJAHR', 'BWART'], ["MBLNR = '4900012345'", "AND MJAHR = '2026'"], 10);
     });
 
@@ -558,7 +595,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
       expect(res2.MaterialDocument).toBe('4900012345');
     });
 
-    it('propagates SAP BAPI rejection with 422', async () => {
+    it('propagates the SAP BAPI rejection text with status 422', async () => {
       mockRfc.readTable.mockResolvedValue([{ WERKS: '1120', LGORT: 'CS02', XHUPF: '' }]);
       mockRfc.call.mockImplementation((fm) => {
         if (fm === 'BAPI_GOODSMVT_CREATE') {
@@ -577,7 +614,7 @@ describe('HuStockTransferAdapter (ZRF_RES_HU_DNR)', () => {
         UnitNumber: '2000019371',
         TransferQty: 50,
         ClientAttemptId: 'attempt-fail'
-      })).rejects.toThrow('Deficit of BA Unrestricted-use stock');
+      })).rejects.toMatchObject({ status: 422, message: expect.stringContaining('Deficit of BA Unrestricted-use stock') });
     });
   });
 

@@ -336,6 +336,40 @@ describe('P1: Controlled SAP Read-Back Evidence for Critical Movement Flows [moc
   });
 
   // ===========================================================================
+  // SECTION 5b: production path of verifyMaterialDocument
+  // A plain-function RFC double has no .mock property, so the fail-closed branches at adapter:1242 and :1249 run.
+  // ===========================================================================
+  describe('5b. verifyMaterialDocument fails closed with a plain RFC double', () => {
+    const verify = (readTable) => new ReservationProcessAdapter({ rfc: { readTable } }).verifyMaterialDocument({
+      materialDocument: '4900050142', materialDocYear: '2026', movementType: '201', plant: '1120'
+    });
+
+    test('answers 500 when the MATDOC read fails', async () => {
+      await expect(verify(async () => { throw new Error('table locked'); })).rejects.toMatchObject({
+        status: 500,
+        stage: 'MIGO',
+        message: 'Material Document verification query error: table locked'
+      });
+    });
+
+    test('answers 500 when neither MATDOC nor MSEG holds the document', async () => {
+      const read = [];
+      await expect(verify(async (table) => { read.push(table); return []; })).rejects.toMatchObject({
+        status: 500,
+        message: expect.stringContaining('Material Document 4900050142 was created by SAP BAPI but cannot be verified')
+      });
+      expect(read).toEqual(['MATDOC', 'MSEG']);
+    });
+
+    test('refuses a document whose RSNUM belongs to another reservation', async () => {
+      const row = { MBLNR: '4900050142', MJAHR: '2026', BWART: '201', WERKS: '1120', RSNUM: '0000999999' };
+      await expect(new ReservationProcessAdapter({ rfc: { readTable: async () => [row] } }).verifyMaterialDocument({
+        materialDocument: '4900050142', materialDocYear: '2026', movementType: '201', reservationNumber: '520001'
+      })).rejects.toMatchObject({ status: 400, message: 'Material document 4900050142 verification failed: Reservation reference mismatch (SAP: 0000999999, expected: 0000520001)' });
+    });
+  });
+
+  // ===========================================================================
   // SECTION 6: Multi-Tier Read-Back Fallback in GoodsIssuePostingClient
   // ===========================================================================
   describe('6. Multi-tier readback fallback in GoodsIssuePostingClient', () => {

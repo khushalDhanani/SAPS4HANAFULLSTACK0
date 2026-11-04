@@ -5,7 +5,7 @@
  *
  * Performance and Scalability Benchmark Suite for Release Automation.
  * Validates OData endpoint response time SLAs, concurrency throughput,
- * in-memory attempt store lookup latency, and heap memory stability.
+ * and heap memory stability.
  */
 
 const cds = require('@sap/cds');
@@ -68,40 +68,7 @@ describe('Release Automation: Performance & Scalability Benchmarks', () => {
     expect(totalTimeMs).toBeLessThan(2500);
   });
 
-  // 3. Attempt Store In-Memory Lookup Latency Benchmark
-  it('executes in-memory attempt store key hashing and lookups in < 0.5ms per operation under high load', () => {
-    const LOOPS = 100;
-    const map = new Map();
-
-    // Benchmark in-memory hash index lookup pattern
-    for (let i = 0; i < 50; i++) {
-      const key = `${i.toString().padStart(10, '0')}-0001`;
-      map.set(key, {
-        ClientAttemptId: `PERF-ATTEMPT-${i}`,
-        ReservationNo: `${i.toString().padStart(10, '0')}`,
-        ReservationItem: '0001',
-        PostingStatus: 'POSTED',
-        MaterialDocument: `490005000${i}`
-      });
-    }
-
-    const start = process.hrtime.bigint();
-    for (let i = 0; i < LOOPS; i++) {
-      const idx = i % 50;
-      const key = `${idx.toString().padStart(10, '0')}-0001`;
-      const found = map.get(key);
-      expect(found).toBeDefined();
-    }
-    const end = process.hrtime.bigint();
-
-    const totalMs = Number(end - start) / 1e6;
-    const avgMs = totalMs / LOOPS;
-
-    expect(avgMs).toBeLessThan(0.5);
-    expect(totalMs).toBeLessThan(50);
-  });
-
-  // 4. Memory Leak / Heap Stability Guard
+  // 3. Memory Leak / Heap Stability Guard
   it('maintains bounded heap memory usage (delta < 25MB) across 50 sequential operations', async () => {
     gc();
     const initialHeap = process.memoryUsage().heapUsed;

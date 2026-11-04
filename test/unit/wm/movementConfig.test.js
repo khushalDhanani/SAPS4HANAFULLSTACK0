@@ -13,7 +13,6 @@ const {
   validateMovementDestination,
   validateMovementAccountAssignment,
   validateMovement261Payload,
-  validateMovement301Destination,
   validateMovement311Destination,
   verifyReceivingLocationInSap,
   verifyMovement311DestinationInSap,
@@ -122,14 +121,6 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
       expect(resolveWmMovement('201')).toBe('201'); // the process-wide flag no longer downgrades a goods issue to staging
       expect(resolveWmMovement('241')).toBe('241');
       delete process.env.WM_TR_REAL_MOVEMENT;
-    });
-
-    test('WM movement type exactly equals each inventory movement type', () => {
-      for (const mvt of ['201', '241', '261', '301', '311']) {
-        expect(resolveWmMovement(mvt)).toBe(mvt);
-      }
-      expect(getMovementConfig('201').wmMovement).toBe('201');
-      expect(getMovementConfig('241').wmMovement).toBe('241');
     });
 
     test('getMovementConfig handles whitespace trimming and unsupported keys', () => {
@@ -284,11 +275,11 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
         }).toThrow('MovementType is mandatory (201, 241, 311, 301, 261)');
       });
 
-      test('Populates req.error when req is passed', () => {
+      test('Reports the missing MovementType through req.error with status 400 when req is passed', () => {
         const mockReq = { error: jest.fn() };
         const res = validateReservationInput({}, { req: mockReq });
         expect(res.isValid).toBe(false);
-        expect(mockReq.error).toHaveBeenCalled();
+        expect(mockReq.error).toHaveBeenCalledWith(400, 'MovementType is mandatory (201, 241, 311, 301, 261)');
       });
     });
   });
@@ -418,24 +409,29 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
         expect(res.error).toContain('Material MAT100 is not extended to receiving storage location CS02 in plant 1120 (MARD)');
       });
 
-      test('verifyReceivingLocationInSap supports both 301 and 311 movements directly', async () => {
-        const mockRfc = {
-          readTable: jest.fn().mockImplementation(async (table) => {
-            if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'CS02' }];
-            if (table === 'T001L') return [{ WERKS: '1120', LGORT: 'CS02' }];
-            return [];
-          })
-        };
-        const res311 = await verifyReceivingLocationInSap(mockRfc, {
-          movementType: '311',
+      test('verifyReceivingLocationInSap 301: rejects a material not extended to the receiving plant (MARC)', async () => {
+        const rfc = { readTable: async () => [] };
+        const res = await verifyReceivingLocationInSap(rfc, {
+          movementType: '301',
           plant: '1120',
-          storageLocation: 'CS01',
-          receivingStorageLocation: 'CS02'
+          receivingPlant: '1130',
+          receivingStorageLocation: 'CS02',
+          material: 'MAT100'
         });
-        expect(res311.valid).toBe(true);
+        expect(res).toEqual({ valid: false, error: 'Material MAT100 is not extended to receiving plant 1130 (MARC)' });
+      });
 
-        const res301Val = validateMovement301Destination('1120', '1130', 'CS01');
-        expect(res301Val.isValid).toBe(true);
+      test('verifyReceivingLocationInSap 301: accepts when MARC, MARD and T001L have rows and reports the destination stock', async () => {
+        const rows = { MARC: [{ WERKS: '1130' }], MARD: [{ LGORT: 'CS02', LABST: '7.000' }], T001L: [{ LGORT: 'CS02' }] };
+        const rfc = { readTable: async (table) => rows[table] || [] };
+        const res = await verifyReceivingLocationInSap(rfc, {
+          movementType: '301',
+          plant: '1120',
+          receivingPlant: '1130',
+          receivingStorageLocation: 'CS02',
+          material: 'MAT100'
+        });
+        expect(res).toEqual({ valid: true, initialDestStock: 7 });
       });
 
       test('verifyReceivingLocationInSap does not infer a movement type', async () => {
@@ -645,24 +641,9 @@ describe('Single Normalized Movement Configuration (Step 2) [mock only, not SAP 
       expect(getGmCode(null)).toBeNull();
     });
 
-    test('MOVEMENT_CONFIG specifies requiredFields, forbiddenFields, and policy rules for all types', () => {
-      for (const mvt of SUPPORTED_MOVEMENT_TYPES) {
-        const cfg = MOVEMENT_CONFIG[mvt];
-        expect(Array.isArray(cfg.requiredFields)).toBe(true);
-        expect(cfg.requiredFields.length).toBeGreaterThan(0);
-        expect(Array.isArray(cfg.forbiddenFields)).toBe(true);
-        expect(cfg.destinationRules).toBeDefined();
-        expect(typeof cfg.destinationRules.type).toBe('string');
-        expect(cfg.batchRules).toBeDefined();
-        expect(cfg.batchRules.supported).toBe(true);
-        expect(cfg.batchRules.maxLength).toBe(10);
-        expect(cfg.serialRules).toBeDefined();
-        expect(cfg.serialRules.supported).toBe(true);
-        expect(cfg.serialRules.maxLength).toBe(18);
-        expect(cfg.reservationRules).toBeDefined();
-        expect(cfg.accountAssignment).toBeDefined();
-        expect(typeof cfg.accountAssignment.type).toBe('string');
-      }
+    test.each(['201', '241', '311', '301', '261'])('%s config limits batch numbers to 10 and serial numbers to 18 characters', (mvt) => {
+      expect(MOVEMENT_CONFIG[mvt].batchRules.maxLength).toBe(10);
+      expect(MOVEMENT_CONFIG[mvt].serialRules.maxLength).toBe(18);
     });
 
     test('201 config has correct forbidden fields, destination rules, and account assignment', () => {

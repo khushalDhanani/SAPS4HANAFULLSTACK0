@@ -9,7 +9,7 @@
  * - Icon-only buttons declare tooltip or ariaLabel
  * - Form inputs have accessible labels or placeholder descriptions
  * - Tables declare column header semantics
- * - AI assistant dialog controls and QR code modals declare accessible roles
+ * - AI assistant send and stop buttons are named by tooltips
  */
 
 const fs = require('fs');
@@ -29,6 +29,51 @@ function findXmlFiles(dir, fileList = []) {
     }
   }
   return fileList;
+}
+
+/** Minimal element tree of a view or fragment; names without namespace prefix. */
+function parseXml(content) {
+  const tokens = /<!--[\s\S]*?-->|<\/[\w:.]+\s*>|<([\w:.]+)((?:"[^"]*"|'[^']*'|[^'">])*?)(\/?)>/g;
+  const root = { name: '#root', attrs: '', kids: [], parent: null };
+  const stack = [root];
+  let m;
+  while ((m = tokens.exec(content)) !== null) {
+    if (m[0].startsWith('<!--')) continue;
+    if (m[0].startsWith('</')) { stack.pop(); continue; }
+    const parent = stack[stack.length - 1];
+    const node = { name: m[1].split(':').pop(), attrs: m[2], kids: [], parent };
+    parent.kids.push(node);
+    if (!m[3]) stack.push(node);
+  }
+  return root;
+}
+
+const allNodes = (node) => node.kids.flatMap((k) => [k, ...allNodes(k)]);
+const attr = (node, name) => (node.attrs.match(new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`)) || [])[1] || '';
+const ancestor = (node, name) => { for (let p = node.parent; p; p = p.parent) if (p.name === name) return p; return null; };
+
+/**
+ * An input is named by its own placeholder, tooltip, ariaLabel or ariaLabelledBy, by a Label with labelFor, by a labelled
+ * FilterGroupItem, by a column header when it is a table cell, or by a Label before it directly in the same form content.
+ */
+function isInputNamed(node, nodes) {
+  if (['placeholder', 'tooltip', 'ariaLabel', 'ariaLabelledBy'].some((n) => attr(node, n))) return true;
+  const id = attr(node, 'id');
+  if (id && nodes.some((n) => n.name === 'Label' && attr(n, 'labelFor') === id)) return true;
+  const filterItem = ancestor(node, 'FilterGroupItem');
+  if (filterItem && attr(filterItem, 'label')) return true;
+  if (node.parent.name === 'cells') return true;
+  const siblings = node.parent.kids;
+  return Boolean(ancestor(node, 'SimpleForm')) && siblings.slice(0, siblings.indexOf(node)).some((n) => n.name === 'Label');
+}
+
+function unnamedInputs() {
+  return findXmlFiles(WEBAPP_DIR).flatMap((file) => {
+    const nodes = allNodes(parseXml(fs.readFileSync(file, 'utf8')));
+    return nodes
+      .filter((n) => (n.name === 'Input' || n.name === 'SearchField') && !isInputNamed(n, nodes))
+      .map((n) => `${path.relative(WEBAPP_DIR, file)} -> Input #${attr(n, 'id') || 'unnamed'}`);
+  });
 }
 
 describe('Release Automation: SAP Fiori Accessibility (a11y) Suite', () => {
@@ -94,57 +139,30 @@ describe('Release Automation: SAP Fiori Accessibility (a11y) Suite', () => {
     expect(violations).toEqual([]);
   });
 
-  // 3. Form Input Accessibility: Every Input or SearchField must have an accessible label association, placeholder, or tooltip
-  it('enforces accessible labels, placeholders, or tooltips on Input and SearchField controls', () => {
-    const inputRegex = /<(?:Input|SearchField)\b([\s\S]*?(?:"[^"]*"|'[^']*'|[^'">])*?)\/?>/g;
-    const violations = [];
+  // 3. Form Input Accessibility: a name of its own, a labelFor, or a container that labels it
+  describe('Input and SearchField naming', () => {
+    // Known defect, asserted separately below.
+    const RECEIPT_QTY = 'modules/wm/goods-receipt/view/GoodsReceipt.view.xml -> Input #inputReceiptQty';
 
-    xmlFiles.forEach((file) => {
-      const content = fs.readFileSync(file, 'utf8');
-      let match;
-      while ((match = inputRegex.exec(content)) !== null) {
-        const attrs = match[1];
-        const hasPlaceholder = /\bplaceholder\s*=\s*["'][^"']+["']/.test(attrs);
-        const hasTooltip = /\btooltip\s*=\s*["'][^"']+["']/.test(attrs);
-        const hasAriaLabel = /\bariaLabel\s*=\s*["'][^"']+["']/.test(attrs);
-        const hasAriaLabelledBy = /\bariaLabelledBy\s*=\s*["'][^"']+["']/.test(attrs);
-
-        const idMatch = attrs.match(/\bid\s*=\s*["']([^"']+)["']/);
-        const inputId = idMatch ? idMatch[1] : null;
-
-        // Check if there is an associated Label (labelFor="inputId") in the same XML file (standard UI5 pattern)
-        const hasAssociatedLabel = inputId ? new RegExp(`labelFor\\s*=\\s*["']${inputId}["']`).test(content) : false;
-
-        // Or if it's inside a SimpleForm where the preceding element is a Label
-        const isFormLabeled = content.includes('sap.ui.layout.form') || content.includes('SimpleForm') || content.includes('FilterGroupItem') || content.includes('FilterBar');
-
-        if (!hasPlaceholder && !hasTooltip && !hasAriaLabel && !hasAriaLabelledBy && !hasAssociatedLabel && !isFormLabeled) {
-          violations.push(`${path.relative(WEBAPP_DIR, file)} -> Input #${inputId || 'unnamed'}`);
-        }
-      }
+    it('names every Input and SearchField other than the known defect', () => {
+      expect(unnamedInputs().filter((v) => v !== RECEIPT_QTY)).toEqual([]);
     });
 
-    expect(violations).toEqual([]);
+    // Known defect: app/fiori-app/webapp/modules/wm/goods-receipt/view/GoodsReceipt.view.xml inputReceiptQty sits in an HBox inside the SimpleForm, so the form Label is not its sibling and it has no name of its own
+    it.failing('names the goods receipt quantity input', () => {
+      expect(unnamedInputs()).not.toContain(RECEIPT_QTY);
+    });
   });
 
-  // 4. AI Assistant Dialog Specific a11y: Region role, aria labels, and stop/send button accessibility
-  it('validates AskAIDialog fragment adheres to Fiori AI accessibility requirements', () => {
-    const aiFragPath = path.join(WEBAPP_DIR, 'modules/mm/purchase-order/view/AskAIDialog.fragment.xml');
-    expect(fs.existsSync(aiFragPath)).toBe(true);
+  // 4. AI Assistant: send and stop are icon-only buttons, so the tooltip is what names them
+  it('names the AI send and stop buttons through tooltips whose i18n text exists', () => {
+    const fragment = parseXml(fs.readFileSync(path.join(WEBAPP_DIR, 'modules/mm/purchase-order/view/AskAIDialog.fragment.xml'), 'utf8'));
+    const i18n = fs.readFileSync(path.join(WEBAPP_DIR, 'i18n/i18n.properties'), 'utf8');
+    const byId = (id) => allNodes(fragment).find((n) => attr(n, 'id') === id);
 
-    const content = fs.readFileSync(aiFragPath, 'utf8');
-    expect(content).toContain('accessibleRole="Region"');
-    expect(content).toContain('ariaLabel="{i18n>aiDialogTitle}"');
-    expect(content).toContain('press=".onAIStop"');
-    expect(content).toContain('press=".onAIAsk"');
-  });
-
-  // 5. Handling Unit QR Dialog a11y: Dialog header and download buttons
-  it('validates Handling Unit QR Dialog fragments declare accessible titles and button tooltips', () => {
-    const qrFragPath = path.join(WEBAPP_DIR, 'modules/wm/handling-unit/view/QrCodeDialog.fragment.xml');
-    expect(fs.readFileSync(qrFragPath, 'utf8')).toContain('title="{i18n>huQrTitle}"');
-
-    const layoutFragPath = path.join(WEBAPP_DIR, 'modules/wm/handling-unit/view/SelectQrLayoutDialog.fragment.xml');
-    expect(fs.readFileSync(layoutFragPath, 'utf8')).toContain('title="{i18n>huQrCombineTitle}"');
+    expect(attr(byId('aiSendBtn'), 'tooltip')).toBe('{i18n>aiAsk}');
+    expect(attr(byId('aiStopBtn'), 'tooltip')).toBe('{i18n>aiStop}');
+    expect(i18n).toMatch(/^aiAsk=Send$/m);
+    expect(i18n).toMatch(/^aiStop=Stop$/m);
   });
 });

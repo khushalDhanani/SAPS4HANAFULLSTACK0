@@ -176,14 +176,16 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
       expect(res.orderType).toBe('ZDOM');
     });
 
-    test('TAMPER TEST: fails closed when untrusted body supplies invalid plant and attempted overrides', async () => {
-      const resolver = new BusinessConfigResolver();
+    test('TAMPER TEST: an untrusted body value never fills a field SAP did not supply, so resolve fails closed', async () => {
+      const resolver = new BusinessConfigResolver({ sapCustomizing: async () => ({ currency: 'INR' }) });
 
       await expect(resolver.resolve({
-        plant: '9999',
-        warehouse: 'W99',
-        salesOrg: 'MALICIOUS_9999'
-      })).rejects.toThrow(BusinessConfigError);
+        plant: '1120',
+        warehouse: 'W01',
+        fields: ['salesOrganization'],
+        salesOrg: 'MALICIOUS_9999',
+        salesOrganization: 'MALICIOUS_9999'
+      })).rejects.toThrow(/could not resolve required business config fields \[salesOrganization\]/);
     });
   });
 
@@ -351,17 +353,16 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
         .rejects.toThrow(/could not resolve required business config fields/);
     });
 
-    test('never falls back to process.env or package.json when resolving', async () => {
+    test('never fills a missing field from process.env', async () => {
       process.env.S4_SALES_ORGANIZATION = 'FAKE_ORG';
-      process.env.S4_PLANT = 'FAKE_PLANT';
+      try {
+        const resolver = new BusinessConfigResolver({ sapCustomizing: async () => ({ currency: 'INR' }) });
 
-      const resolver = new BusinessConfigResolver();
-
-      await expect(resolver.resolve({ plant: '1120', warehouse: 'W01' }))
-        .rejects.toThrow(BusinessConfigError);
-
-      delete process.env.S4_SALES_ORGANIZATION;
-      delete process.env.S4_PLANT;
+        await expect(resolver.resolve({ plant: '1120', warehouse: 'W01', fields: ['salesOrganization'] }))
+          .rejects.toThrow(/could not resolve required business config fields \[salesOrganization\]/);
+      } finally {
+        delete process.env.S4_SALES_ORGANIZATION;
+      }
     });
 
     test('throws when mvt261NotReadyBins is invalid JSON', async () => {
@@ -382,18 +383,6 @@ describe('Unit: BusinessConfigResolver (Hardened)', () => {
   // ─── Flow-Specific Required Fields ─────────────────────────────────────────
 
   describe('Flow-specific required fields (delivery-no-ref, 261, scan-to)', () => {
-    test('FLOW_REQUIRED_FIELDS defines exact minimal fields per flow', () => {
-      expect(BusinessConfigResolver.FLOW_REQUIRED_FIELDS['delivery-no-ref']).toEqual([
-        'salesOrganization', 'distributionChannel', 'division'
-      ]);
-      expect(BusinessConfigResolver.FLOW_REQUIRED_FIELDS['261']).toEqual([
-        'mvt261NotReadyBins'
-      ]);
-      expect(BusinessConfigResolver.FLOW_REQUIRED_FIELDS['scan-to']).toEqual([
-        'warehouseNumber', 'plant'
-      ]);
-    });
-
     test('delivery-no-ref flow requires only salesOrganization, distributionChannel, division', async () => {
       const resolver = new BusinessConfigResolver({
         sapCustomizing: async () => ({ salesOrganization: '1000', distributionChannel: '14', division: '00' })

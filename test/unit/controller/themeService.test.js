@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 const WEBAPP = path.join(__dirname, '../../../app/fiori-app/webapp');
 const mockTheming = { setTheme: jest.fn() };
@@ -81,11 +82,32 @@ describe('ThemeService restoring', () => {
 describe('Theme lists stay in sync', () => {
   const read = (file) => fs.readFileSync(path.join(WEBAPP, file), 'utf8');
 
-  test('themeStartup.js offers the same themes, key and default', () => {
+  /** Runs the plain boot script against the given storage and returns the theme it hands to UI5. */
+  const startupTheme = (storage) => {
+    const window = { localStorage: storage };
+    vm.runInNewContext(read('themeStartup.js'), { window });
+    return window['sap-ui-config'].theme;
+  };
+
+  test('themeStartup.js lists the same themes as ThemeService', () => {
     const script = read('themeStartup.js');
     expect(JSON.parse(script.match(/aThemes = (\[[^\]]*\])/)[1])).toEqual(ThemeService.THEMES);
-    expect(script).toContain(`getItem("${ThemeService.STORAGE_KEY}")`);
-    expect(script).toContain(`=== -1 ? "${ThemeService.DEFAULT_THEME}"`);
+  });
+
+  test('themeStartup.js boots with the theme ThemeService saved', () => {
+    const storage = memoryStorage();
+    useStorage(storage);
+    ThemeService.applyTheme('sap_fiori_3');
+
+    expect(startupTheme(storage)).toBe('sap_fiori_3');
+  });
+
+  test.each([
+    ['nothing saved', memoryStorage],
+    ['an invalid value', () => memoryStorage({ 'app.theme': 'not_a_theme' })],
+    ['blocked storage', blockedStorage]
+  ])('themeStartup.js boots with sap_horizon with %s', (_name, makeStorage) => {
+    expect(startupTheme(makeStorage())).toBe('sap_horizon');
   });
 
   test('index.html loads the startup script before UI5 and sets no fixed theme, which would override the saved one', () => {
@@ -102,9 +124,26 @@ describe('Theme lists stay in sync', () => {
     items.forEach((m) => expect(m[2]).toBe(m[1]));
   });
 
-  test('the component restores the theme before its base init renders anything', () => {
-    const src = read('Component.js');
-    expect(src.indexOf('ThemeService.restoreTheme()')).toBeGreaterThan(-1);
-    expect(src.indexOf('ThemeService.restoreTheme()')).toBeLessThan(src.indexOf('UIComponent.prototype.init.apply'));
+  test('Component.init restores the theme before its base init renders anything', () => {
+    const calls = [];
+    const deps = {
+      'sap/ui/core/UIComponent': { prototype: { init: () => calls.push('base init') }, extend: (_name, proto) => proto },
+      'sap/m/MessageToast': { show: () => {} },
+      'saps4hana/fiori/model/models': { createDeviceModel: () => ({}) },
+      'saps4hana/fiori/service/AuthService': { init: () => Promise.resolve(true), syncModelHeaders: () => {} },
+      'saps4hana/fiori/service/ThemeService': { restoreTheme: () => calls.push('restore theme') }
+    };
+    let Component;
+    new Function('sap', read('Component.js'))({
+      ui: { define: (names, factory) => { Component = factory(...names.map((name) => deps[name] || {})); } }
+    });
+
+    Component.init.call(Object.assign(Object.create(Component), {
+      getModel: () => null,
+      setModel: () => {},
+      getRouter: () => ({ attachRouteMatched: () => {}, getHashChanger: () => null, initialize: () => {} })
+    }));
+
+    expect(calls).toEqual(['restore theme', 'base init']);
   });
 });

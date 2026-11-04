@@ -174,4 +174,46 @@ describe('Unit: Validation', () => {
         expect(result.message).toContain('NetPriceAmount must be a non-negative number');
     });
 
+    describe('rules the schema defines for both layers (purchaseOrderRules.json: "across CAP backend and SAPUI5 frontend")', () => {
+        const zdomPayload = (headerChanges, itemChanges) => ({
+            header: {
+                PurchaseOrderType: 'ZDOM',
+                CompanyCode: '1000',
+                PurchasingOrganization: 'AE01',
+                PurchasingGroup: '101',
+                Supplier: '100102',
+                Currency: 'INR',
+                DocumentDate: '2026-09-24',
+                ...headerChanges
+            },
+            items: [{
+                PurchaseOrderItem: '10',
+                Material: 'MAT101',
+                Plant: '1000',
+                StorageLocation: '100A',
+                OrderQuantity: '10',
+                UnitOfMeasure: 'PC',
+                PurchaseOrderItemCategory: '0',
+                AccountAssignmentCategory: '',
+                ...itemChanges
+            }]
+        });
+
+        it('should accept a ZDOM payload whose plant starts with the allowed prefix 1', () => {
+            expect(validateCreatePurchaseOrderPayload(zdomPayload()).isValid).toBe(true);
+        });
+
+        // Known defect: srv/mm/purchase-order/validation/purchaseOrder.validation.js:101-116 never applies header.PurchaseOrderType.prefix "Z" from config/schema/purchaseOrderRules.json; only the UI rejects non-Z types (PurchaseOrderValidator.js:115-118).
+        it.failing('should reject a document type without the Z prefix', () => {
+            const result = validateCreatePurchaseOrderPayload(zdomPayload({ PurchaseOrderType: 'NB' }));
+            expect(result.errors.map(e => e.field)).toContain('header.PurchaseOrderType');
+        });
+
+        // Known defect: srv/mm/purchase-order/validation/purchaseOrder.validation.js:195-213 never applies poTypes.*.allowedPlantPrefix from config/schema/purchaseOrderRules.json; only the UI does (PurchaseOrderValidator.js:216-218).
+        it.failing('should reject a ZDOM plant outside the allowed prefix 1', () => {
+            const result = validateCreatePurchaseOrderPayload(zdomPayload({}, { Plant: '2000' }));
+            expect(result.errors.map(e => e.field)).toContain('items[0].Plant');
+        });
+    });
+
 });

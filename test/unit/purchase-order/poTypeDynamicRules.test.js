@@ -284,6 +284,43 @@ describe('PO Type-Wise Dynamic Business Rules - 16 Types Matrix', () => {
             const errors = PurchaseOrderValidator.validateUI(data);
             expect(errors.some(e => e.includes("must start with '1'"))).toBe(true);
         });
+
+        describe('ZSER without a storage location (storageLocationRequired: false in the schema)', () => {
+            const zserNoStorageLocation = () => ({
+                header: {
+                    PurchaseOrderType: 'ZSER',
+                    CompanyCode: '1000',
+                    PurchasingOrganization: 'AE01',
+                    PurchasingGroup: '101',
+                    Supplier: '10300001',
+                    Currency: 'INR',
+                    DocumentDate: '2026-09-24'
+                },
+                items: [{
+                    PurchaseOrderItem: '10',
+                    Material: '',
+                    PurchaseOrderItemText: 'Consulting & Maintenance Services',
+                    Plant: '1000',
+                    UnitOfMeasure: 'AU',
+                    OrderQuantity: '1',
+                    PurchaseOrderItemCategory: '9',
+                    AccountAssignmentCategory: 'K'
+                }]
+            });
+
+            it('validateUI should report no error', () => {
+                expect(PurchaseOrderValidator.validateUI(zserNoStorageLocation())).toEqual([]);
+            });
+
+            it('the server validation should accept it', () => {
+                expect(validateCreatePurchaseOrderPayload(zserNoStorageLocation()).isValid).toBe(true);
+            });
+
+            // Known defect: app/fiori-app/webapp/modules/mm/purchase-order/model/PurchaseOrderValidator.js:680 validateForm ignores storageLocationRequired, so onCreatePress (CreatePurchaseOrder.controller.js:1110) blocks a ZSER PO that validateUI:205 and the server (purchaseOrder.validation.js:140) accept.
+            it.failing('validateForm should report no error', () => {
+                expect(PurchaseOrderValidator.validateForm(zserNoStorageLocation()).errorList).toEqual([]);
+            });
+        });
     });
 
     describe('4. Backend Business Validation for All 16 PO Types', () => {

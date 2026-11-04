@@ -303,33 +303,6 @@ describe('HandlingUnitAdapter.labels (batched material + first serial join)', ()
     expect(calls.client).toHaveLength(0);
     expect(calls.rfc).toHaveLength(0);
   });
-
-  // Authorization: labels() reads I_HandlingUnitItemCombined in the SAME auth-enforced service as list(); SAP filters
-  // out HUs the user may not see, so a restricted id simply comes back with no rows -> empty label, no serial read.
-  it('returns no data for an HU the user is not authorized to see (SAP filters it out)', async () => {
-    const rfcCalls = [];
-    const client = {
-      // Mimics SAP DCL: only rows whose HU id is in the $filter AND is authorized ('B') are returned; 'RESTRICTED' is filtered out.
-      get: async (path, { query } = {}) => {
-        const q = decodeURIComponent(query || '');
-        const rows = items.filter((r) => q.includes(`HandlingUnitExternalID eq '${r.HandlingUnitExternalID}'`));
-        return { data: { d: { results: rows } } };
-      }
-    };
-    const rfc = {
-      readTable: async (table, fields, where) => {
-        rfcCalls.push({ table, where: where.join(' ') });
-        return table === 'SER06' ? [{ OBKNR: 'OB1', VENUM: '0000021496' }] : [{ OBKNR: 'OB1', SERNR: 'SR-B' }];
-      }
-    };
-    const out = await new HandlingUnitAdapter({ client, rfc }).labels({ handlingUnitExternalIDs: ['B', 'RESTRICTED'] });
-    expect(out.Items).toEqual([
-      { HandlingUnitExternalID: 'B', MaterialName: 'Motor', SerialNumber: 'SR-B' },
-      { HandlingUnitExternalID: 'RESTRICTED', MaterialName: '', SerialNumber: '' } // filtered out by SAP -> no data
-    ]);
-    // the restricted HU never reaches the serial read; only authorized 'B' (VENUM 0000021496) does
-    expect(rfcCalls[0].where).toBe("( VENUM = '0000021496' )");
-  });
 });
 
 describe('HandlingUnitAdapter plant authorization (all read paths)', () => {

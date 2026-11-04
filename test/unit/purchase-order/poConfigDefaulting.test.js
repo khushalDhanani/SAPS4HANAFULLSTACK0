@@ -114,15 +114,19 @@ describe('Unit: Configuration-Driven PO Creation Defaults & Supplier Derivations
             expect(oData.header.DocumentDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         });
 
-        it('should ensure Document Date is Today when applying defaults', () => {
-            const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
-            oModel.setProperty('/header/DocumentDate', '');
+        it('should fill an empty Document Date with the calendar date of a clock fixed at 12:00 UTC', () => {
+            jest.useFakeTimers({ now: new Date('2026-09-05T12:00:00Z') });
+            try {
+                const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
+                oModel.setProperty('/header/DocumentDate', '');
 
-            const oReport = PurchaseOrderModel.applyConfigurationDefaults(oModel, mockConfigData);
-            const sToday = new Date().toISOString().split('T')[0];
+                const oReport = PurchaseOrderModel.applyConfigurationDefaults(oModel, mockConfigData);
 
-            expect(oModel.getProperty('/header/DocumentDate')).toBe(sToday);
-            expect(oReport.applied.DocumentDate).toBe(sToday);
+                expect(oModel.getProperty('/header/DocumentDate')).toBe('2026-09-05');
+                expect(oReport.applied.DocumentDate).toBe('2026-09-05');
+            } finally {
+                jest.useRealTimers();
+            }
         });
     });
 
@@ -172,21 +176,13 @@ describe('Unit: Configuration-Driven PO Creation Defaults & Supplier Derivations
     });
 
     describe('3. Document Type Driving Configuration', () => {
-        it('should drive ZDOM as default document type when available in configuration', () => {
+        it('should not default an empty Document Type once the user has modified it', () => {
             const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
-            PurchaseOrderModel.applyConfigurationDefaults(oModel, mockConfigData);
-
-            expect(oModel.getProperty('/header/PurchaseOrderType')).toBe('ZDOM');
-        });
-
-        it('should preserve user-entered Document Type if user explicitly changed it', () => {
-            const oModel = PurchaseOrderModel.createInitialModel('TEST_USER');
-            oModel.setProperty('/header/PurchaseOrderType', 'FO');
             PurchaseOrderModel.markUserModified(oModel, 'PurchaseOrderType', true);
 
             PurchaseOrderModel.applyConfigurationDefaults(oModel, mockConfigData);
 
-            expect(oModel.getProperty('/header/PurchaseOrderType')).toBe('FO');
+            expect(oModel.getProperty('/header/PurchaseOrderType')).toBe('');
         });
     });
 
@@ -360,21 +356,34 @@ describe('Unit: Configuration-Driven PO Creation Defaults & Supplier Derivations
     });
 
     describe('7. PurchaseOrderService loadConfiguration and getSupplierDefaults', () => {
-        it('loadConfiguration should aggregate all value help collections', async () => {
-            mockODataClient.get.mockImplementation(async (url) => {
-                if (url.includes('/DocumentTypeVH')) return { value: mockConfigData.documentTypes };
-                if (url.includes('/CompanyCodeVH')) return { value: mockConfigData.companyCodes };
-                if (url.includes('/PurchasingOrgVH')) return { value: mockConfigData.purchasingOrgs };
-                if (url.includes('/PurchasingGroupVH')) return { value: mockConfigData.purchasingGroups };
-                return { value: [] };
-            });
+        // Stands in for the UI5 OData V4 model the controller passes in (CreatePurchaseOrder.controller.js:74-75).
+        const fakeODataModel = (fnRows) => ({
+            bindList: (sPath) => ({
+                requestContexts: () => fnRows(sPath).then(aRows => aRows.map(row => ({ getObject: () => row })))
+            })
+        });
 
-            const config = await PurchaseOrderService.loadConfiguration();
+        it('loadConfiguration should read each value help through the OData model into its own list', async () => {
+            const mRows = {
+                '/DocumentTypeVH': mockConfigData.documentTypes,
+                '/CompanyCodeVH': mockConfigData.companyCodes,
+                '/PurchasingOrgVH': mockConfigData.purchasingOrgs,
+                '/PurchasingGroupVH': mockConfigData.purchasingGroups
+            };
 
-            expect(config.documentTypes).toHaveLength(3);
-            expect(config.companyCodes).toHaveLength(3);
-            expect(config.purchasingOrgs).toHaveLength(3);
-            expect(config.purchasingGroups).toHaveLength(2);
+            const config = await PurchaseOrderService.loadConfiguration(fakeODataModel(sPath => Promise.resolve(mRows[sPath])));
+
+            expect(config).toEqual(mockConfigData);
+        });
+
+        it('loadConfiguration should resolve four empty lists when one value help read fails', async () => {
+            jest.spyOn(console, 'warn').mockImplementation(() => {});
+            const fnRows = sPath => (sPath === '/CompanyCodeVH' ? Promise.reject(new Error('HTTP 503')) : Promise.resolve([{ any: 'row' }]));
+
+            const config = await PurchaseOrderService.loadConfiguration(fakeODataModel(fnRows));
+
+            expect(config).toEqual({ documentTypes: [], companyCodes: [], purchasingOrgs: [], purchasingGroups: [] });
+            console.warn.mockRestore();
         });
 
         it('getSupplierDefaults should return supplier defaults from API function', async () => {

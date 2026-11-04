@@ -2,8 +2,8 @@
 
 /**
  * Unit tests for UserManagementService handler (Phase 1 — read-only)
- * Tests the private _handleListUsers and _handleGetUserDetail methods directly,
- * bypassing cds.ApplicationService's init lifecycle to keep tests fast and isolated.
+ * Input validation and non-default status pass-through of the private handlers, called directly with the adapter
+ * mocked. The real service, adapter and role gate run together in test/integration/userManagement.test.js.
  */
 
 // ── Mock the adapter before requiring the service ─────────────────────────────
@@ -51,16 +51,6 @@ function makeReq(data = {}) {
 describe('UserManagementService._handleListUsers', () => {
   beforeEach(() => mockListUsers.mockReset());
 
-  test('calls adapter.listUsers with correct params and returns result', async () => {
-    const users = [{ username: 'ALICE', firstName: 'Alice', lastName: 'Smith', fullName: 'Alice Smith' }];
-    mockListUsers.mockResolvedValue(users);
-    const req    = makeReq({ search: 'ALI', maxRows: 100 });
-    const result = await svc._handleListUsers(req);
-    expect(mockListUsers).toHaveBeenCalledWith({ search: 'ALI', maxRows: 100 });
-    expect(result).toBe(users);
-    expect(req.reject).not.toHaveBeenCalled();
-  });
-
   test('defaults maxRows to 200 when not provided', async () => {
     mockListUsers.mockResolvedValue([]);
     await svc._handleListUsers(makeReq({}));
@@ -78,35 +68,12 @@ describe('UserManagementService._handleListUsers', () => {
     await svc._handleListUsers(req);
     expect(req.reject).toHaveBeenCalledWith(400, expect.any(String));
   });
-
-  test('rejects 502 when adapter throws', async () => {
-    mockListUsers.mockRejectedValue(Object.assign(new Error('RFC error'), { status: 502 }));
-    const req = makeReq({});
-    await svc._handleListUsers(req);
-    expect(req.reject).toHaveBeenCalledWith(502, expect.any(String));
-  });
 });
 
 // ── getUserDetail ─────────────────────────────────────────────────────────────
 
 describe('UserManagementService._handleGetUserDetail', () => {
   beforeEach(() => mockGetUserDetail.mockReset());
-
-  const DETAIL = {
-    username: 'ALICE', firstName: 'Alice', lastName: 'Smith', fullName: 'Alice Smith',
-    email: 'alice@test.com', userType: 'A', validFrom: '00000000', validTo: '00000000',
-    userGroup: '', lockedWrong: 'U', lockedNoPw: 'U', lockedGlobal: 'U', lockedLocal: 'U',
-    isLocked: false, roleCount: 2, profileCount: 1, lastChanged: '20261001', lastChangedBy: 'ADMIN',
-  };
-
-  test('calls adapter.getUserDetail with trimmed username and returns result', async () => {
-    mockGetUserDetail.mockResolvedValue(DETAIL);
-    const req    = makeReq({ username: '  alice  ' });
-    const result = await svc._handleGetUserDetail(req);
-    expect(mockGetUserDetail).toHaveBeenCalledWith('alice');
-    expect(result).toBe(DETAIL);
-    expect(req.reject).not.toHaveBeenCalled();
-  });
 
   test('rejects 400 when username is empty', async () => {
     const req = makeReq({ username: '' });
@@ -126,29 +93,12 @@ describe('UserManagementService._handleGetUserDetail', () => {
     await svc._handleGetUserDetail(req);
     expect(req.reject).toHaveBeenCalledWith(404, expect.any(String));
   });
-
-  test('rejects 502 when adapter throws RFC error', async () => {
-    mockGetUserDetail.mockRejectedValue(Object.assign(new Error('RFC timeout'), { status: 502 }));
-    const req = makeReq({ username: 'ALICE' });
-    await svc._handleGetUserDetail(req);
-    expect(req.reject).toHaveBeenCalledWith(502, expect.any(String));
-  });
 });
 
 // ── lockUser ──────────────────────────────────────────────────────────────────
 
 describe('UserManagementService._handleLockUser', () => {
   beforeEach(() => mockLockUser.mockReset());
-
-  test('calls adapter.lockUser with trimmed username and returns result', async () => {
-    const outcome = { success: true, message: "User 'ALICE' locked", username: 'ALICE' };
-    mockLockUser.mockResolvedValue(outcome);
-    const req = makeReq({ username: '  alice  ' });
-    const result = await svc._handleLockUser(req);
-    expect(mockLockUser).toHaveBeenCalledWith('alice');
-    expect(result).toBe(outcome);
-    expect(req.reject).not.toHaveBeenCalled();
-  });
 
   test('rejects 400 when username is empty', async () => {
     const req = makeReq({ username: '' });
@@ -161,36 +111,12 @@ describe('UserManagementService._handleLockUser', () => {
     await svc._handleLockUser(req);
     expect(req.reject).toHaveBeenCalledWith(400, expect.any(String));
   });
-
-  test('surfaces 403 when adapter rejects self-lock', async () => {
-    mockLockUser.mockRejectedValue(Object.assign(new Error('Cannot lock connection user'), { status: 403 }));
-    const req = makeReq({ username: 'CONNECTED_ADMIN' });
-    await svc._handleLockUser(req);
-    expect(req.reject).toHaveBeenCalledWith(403, expect.stringContaining('connection user'));
-  });
-
-  test('rejects 502 when adapter throws RFC error', async () => {
-    mockLockUser.mockRejectedValue(Object.assign(new Error('RFC error'), { status: 502 }));
-    const req = makeReq({ username: 'ALICE' });
-    await svc._handleLockUser(req);
-    expect(req.reject).toHaveBeenCalledWith(502, expect.any(String));
-  });
 });
 
 // ── unlockUser ────────────────────────────────────────────────────────────────
 
 describe('UserManagementService._handleUnlockUser', () => {
   beforeEach(() => mockUnlockUser.mockReset());
-
-  test('calls adapter.unlockUser with trimmed username and returns result', async () => {
-    const outcome = { success: true, message: "User 'BOB' unlocked", username: 'BOB' };
-    mockUnlockUser.mockResolvedValue(outcome);
-    const req = makeReq({ username: '  bob  ' });
-    const result = await svc._handleUnlockUser(req);
-    expect(mockUnlockUser).toHaveBeenCalledWith('bob');
-    expect(result).toBe(outcome);
-    expect(req.reject).not.toHaveBeenCalled();
-  });
 
   test('rejects 400 when username is empty', async () => {
     const req = makeReq({ username: '' });
@@ -202,12 +128,5 @@ describe('UserManagementService._handleUnlockUser', () => {
     const req = makeReq({ username: 'BOB*INVAL' });
     await svc._handleUnlockUser(req);
     expect(req.reject).toHaveBeenCalledWith(400, expect.any(String));
-  });
-
-  test('rejects 502 when adapter throws RFC error', async () => {
-    mockUnlockUser.mockRejectedValue(Object.assign(new Error('RFC error'), { status: 502 }));
-    const req = makeReq({ username: 'BOB' });
-    await svc._handleUnlockUser(req);
-    expect(req.reject).toHaveBeenCalledWith(502, expect.any(String));
   });
 });

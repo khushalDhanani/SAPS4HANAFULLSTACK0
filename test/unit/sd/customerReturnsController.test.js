@@ -309,17 +309,34 @@ describe("CustomerReturns Controller", () => {
     // Initialization & Lifecycle
     // -------------------------------------------------------------------------
     describe("Initialization & Lifecycle", () => {
-        test("onInit sets up models, router listener, and loads metrics", () => {
+        test("onInit starts on the ALL tab and attaches _onRouteMatched to the customerReturns route", () => {
             controller.onInit();
-            expect(MockAuthService.syncModelHeaders).toHaveBeenCalled();
-            expect(mockView.setModel).toHaveBeenCalled();
+
+            expect(models["customerReturnsView"].getProperty("/selectedTab")).toBe("ALL");
+            expect(mockRouter.getRoute).toHaveBeenCalledWith("customerReturns");
+            expect(mockRoute.attachPatternMatched).toHaveBeenCalledWith(controller._onRouteMatched, controller);
+        });
+
+        test("onInit shows the server metrics in the KPI model, with the net value formatted", async () => {
+            controller.onInit();
+            await new Promise((resolve) => setImmediate(resolve));
 
             const viewModel = models["customerReturnsView"];
-            expect(viewModel).toBeDefined();
-            expect(viewModel.getProperty("/selectedTab")).toBe("ALL");
-            expect(mockRoute.attachPatternMatched).toHaveBeenCalled();
-            expect(MockCustomerReturnService.getMetrics).toHaveBeenCalled();
-            expect(MockCustomerReturnService.getReturnReasons).toHaveBeenCalled();
+            expect(viewModel.getProperty("/totalReturns")).toBe(179);
+            expect(viewModel.getProperty("/totalNetValueFormatted")).toBe("54,200.50");
+            expect(viewModel.getProperty("/poorQualityCount")).toBe(68);
+            expect(viewModel.getProperty("/damagedTransitCount")).toBe(31);
+            expect(viewModel.getProperty("/otherReasonsCount")).toBe(80);
+        });
+
+        test("onInit replaces the default return reasons with those from the service", async () => {
+            controller.onInit();
+            await new Promise((resolve) => setImmediate(resolve));
+
+            expect(models["returnReasons"].getData()).toEqual([
+                { ReasonCode: "101", ReasonText: "Poor quality" },
+                { ReasonCode: "102", ReasonText: "Damaged in transit" }
+            ]);
         });
 
         test("_onRouteMatched skips the reload on the first match (onInit already loaded)", async () => {
@@ -336,19 +353,24 @@ describe("CustomerReturns Controller", () => {
             controller.onInit();
             await controller._onRouteMatched();
             mockBinding.refresh.mockClear();
+            MockCustomerReturnService.getMetrics.mockClear();
             await controller._onRouteMatched();
 
-            expect(mockBinding.refresh).toHaveBeenCalled();
-            expect(MockCustomerReturnService.getMetrics).toHaveBeenCalled();
+            expect(mockBinding.refresh).toHaveBeenCalledTimes(1);
+            expect(MockCustomerReturnService.getMetrics).toHaveBeenCalledTimes(1);
         });
 
         test("onRefresh refreshes table, metrics, reasons, and shows MessageToast", async () => {
             controller.onInit();
+            MockCustomerReturnService.getMetrics.mockClear();
+            MockCustomerReturnService.getReturnReasons.mockClear();
+
             controller.onRefresh();
 
-            expect(mockBinding.refresh).toHaveBeenCalled();
-            expect(MockCustomerReturnService.getMetrics).toHaveBeenCalled();
-            expect(MockMessageToast.show).toHaveBeenCalled();
+            expect(mockBinding.refresh).toHaveBeenCalledTimes(1);
+            expect(MockCustomerReturnService.getMetrics).toHaveBeenCalledTimes(1);
+            expect(MockCustomerReturnService.getReturnReasons).toHaveBeenCalledTimes(1);
+            expect(MockMessageToast.show).toHaveBeenCalledWith("msgReturnsRefreshed");
         });
 
         test("onUpdateFinished updates totalReturns if not set", () => {
@@ -366,7 +388,8 @@ describe("CustomerReturns Controller", () => {
     // Filtering & Search
     // -------------------------------------------------------------------------
     describe("Filtering & Search", () => {
-        test("onTabSelect updates tab and filters table", () => {
+        // Reason codes 101 / 102 are what the controller hard-codes; that SAP uses them this way is not proven.
+        test("onTabSelect with 101 stores the tab and filters the table to that reason", () => {
             controller.onInit();
             const oEvent = {
                 getParameter: jest.fn().mockReturnValue("101")
@@ -375,7 +398,7 @@ describe("CustomerReturns Controller", () => {
 
             const viewModel = models["customerReturnsView"];
             expect(viewModel.getProperty("/selectedTab")).toBe("101");
-            expect(mockBinding.filter).toHaveBeenCalled();
+            expect(mockBinding.filter).toHaveBeenCalledWith([{ sPath: "ReturnsOrderReason", sOperator: "EQ", oValue1: "101" }]);
         });
 
         test("onTabSelect with OTHER filters out 101 and 102", () => {
@@ -387,19 +410,39 @@ describe("CustomerReturns Controller", () => {
 
             const viewModel = models["customerReturnsView"];
             expect(viewModel.getProperty("/selectedTab")).toBe("OTHER");
-            expect(mockBinding.filter).toHaveBeenCalled();
+            expect(mockBinding.filter).toHaveBeenCalledWith([{
+                config: {
+                    filters: [
+                        { sPath: "ReturnsOrderReason", sOperator: "NE", oValue1: "101" },
+                        { sPath: "ReturnsOrderReason", sOperator: "NE", oValue1: "102" }
+                    ],
+                    and: true
+                }
+            }]);
         });
 
-        test("onSearch updates search query and filters table", () => {
+        test("onSearch stores the trimmed query and ORs a Contains filter on the five searchable fields", () => {
             controller.onInit();
             const oEvent = {
-                getParameter: jest.fn().mockReturnValue("100000")
+                getParameter: jest.fn().mockReturnValue(" 100000 ")
             };
             controller.onSearch(oEvent);
 
             const viewModel = models["customerReturnsView"];
             expect(viewModel.getProperty("/searchQuery")).toBe("100000");
-            expect(mockBinding.filter).toHaveBeenCalled();
+            const contains = (sPath) => ({ sPath, sOperator: "Contains", oValue1: "100000" });
+            expect(mockBinding.filter).toHaveBeenCalledWith([{
+                config: {
+                    filters: [
+                        contains("CustomerReturn"),
+                        contains("SoldToParty"),
+                        contains("SoldToPartyName"),
+                        contains("ReferenceSDDocument"),
+                        contains("SDDocumentReasonText")
+                    ],
+                    and: false
+                }
+            }]);
         });
     });
 

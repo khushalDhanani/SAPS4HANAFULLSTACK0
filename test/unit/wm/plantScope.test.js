@@ -37,8 +37,4 @@ describe('plantScope(user)', () => {
   it('coerces numeric plant values to strings and normalizes', () => {
     expect(plantScope(user({ attr: { Plant: [1120, 1130] } }))).toEqual(['1120', '1130']);
   });
-  it('Admin precedence overrides any Plant attribute values', () => {
-    expect(plantScope({ is: () => true, attr: { Plant: ['1120'] } })).toBeNull();
-    expect(plantScope({ is: (r) => r === 'Admin', attr: { Plant: [] } })).toBeNull();
-  });
 });

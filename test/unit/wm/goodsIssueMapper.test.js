@@ -37,13 +37,9 @@ describe('Goods Issue Mappers (Domain & S/4 Technical)', () => {
   });
 
   describe('S/4 Technical Mapper (GoodsIssueMapper)', () => {
-    it('formats dates into SAP OData V2 JSON timestamp /Date(epoch)/ at UTC midnight', () => {
-      const formatted = formatDateToODataV2('2026-09-29');
-      expect(formatted).toMatch(/^\/Date\(\d+\)\/$/);
-      const epoch = Number(formatted.match(/\d+/)[0]);
-      const date = new Date(epoch);
-      expect(date.getUTCHours()).toBe(0);
-      expect(date.getUTCMinutes()).toBe(0);
+    it('formats 2026-09-29 as the OData V2 timestamp of that day at UTC midnight', () => {
+      // 2026-09-29T00:00:00Z = 1790640000 seconds since the epoch, worked out independently of the code.
+      expect(formatDateToODataV2('2026-09-29')).toBe('/Date(1790640000000)/');
     });
 
     it('maps CancelHeader URL with proper encoding', () => {
@@ -54,10 +50,4 @@ describe('Goods Issue Mappers (Domain & S/4 Technical)', () => {
       expect(url).toContain("PostingDate=datetime'2026-09-29T00:00:00'");
     });
   });
-});
-
-test('legacy date formatter shares the posting formatter implementation', () => {
-  const legacy = require('../../../srv/integration/s4hana/wm/goods-issue/GoodsIssueMapper');
-  const posting = require('../../../srv/integration/s4hana/wm/goods-issue/s4common');
-  expect(legacy.formatDateToODataV2).toBe(posting.formatDateToODataV2);
 });

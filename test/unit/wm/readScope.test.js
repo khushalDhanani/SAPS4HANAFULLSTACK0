@@ -1,6 +1,6 @@
 'use strict';
 
-const { applyPlantScope, isPlantAllowed, plantScope } = require('../../../srv/wm/readScope');
+const { applyPlantScope, assertPlantsInScope, isPlantAllowed, plantScope } = require('../../../srv/wm/readScope');
 
 const user = ({ admin = false, attr = {} } = {}) => ({
   attr,
@@ -35,5 +35,54 @@ describe('WM plant read scope', () => {
     expect(isPlantAllowed('1130', ['1120'])).toBe(false);
     expect(isPlantAllowed('', ['1120'])).toBe(false);
     expect(isPlantAllowed('1130', null)).toBe(true);
+  });
+
+  // Rule from the comment on assertPlantsInScope (srv/wm/readScope.js:33): a plant that cannot be read refuses the action.
+  describe('assertPlantsInScope', () => {
+    const clerk1120 = user({ attr: { Plant: ['1120'] } });
+    const sapError = (status) => Object.assign(new Error('SAP said no'), { status });
+
+    test('an Admin passes without SAP being read', async () => {
+      let reads = 0;
+      await assertPlantsInScope(user({ admin: true }), async () => { reads += 1; return ['1130']; }, 'delivery 1');
+      expect(reads).toBe(0);
+    });
+
+    test('a plant in the user scope passes', async () => {
+      await expect(assertPlantsInScope(clerk1120, async () => ['1120'], 'delivery 1')).resolves.toBeUndefined();
+    });
+
+    test('a plant outside the user scope is refused with 403 naming the plant', async () => {
+      await expect(assertPlantsInScope(clerk1120, async () => ['1120', '1130'], 'delivery 1')).rejects.toMatchObject({
+        status: 403,
+        statusCode: 403,
+        message: "Plant 1130 is outside the authenticated user's plant scope"
+      });
+    });
+
+    test('a failed SAP read refuses with 503 and says nothing was posted', async () => {
+      await expect(assertPlantsInScope(clerk1120, async () => { throw sapError(500); }, 'delivery 1')).rejects.toMatchObject({
+        status: 503,
+        message: 'The plant of delivery 1 could not be read from SAP; nothing was posted (NOT posted). Try again.'
+      });
+    });
+
+    test('a read error without a status also refuses with 503', async () => {
+      await expect(assertPlantsInScope(clerk1120, async () => { throw new Error('socket hang up'); }, 'delivery 1'))
+        .rejects.toMatchObject({ status: 503 });
+    });
+
+    test('a 4xx from the read is passed on unchanged', async () => {
+      await expect(assertPlantsInScope(clerk1120, async () => { throw sapError(404); }, 'delivery 1'))
+        .rejects.toMatchObject({ status: 404, message: 'SAP said no' });
+    });
+
+    test('an empty plant list refuses with 503, never passes', async () => {
+      await expect(assertPlantsInScope(clerk1120, async () => [], 'delivery 1')).rejects.toMatchObject({ status: 503 });
+    });
+
+    test('a blank plant among the rows refuses with 503, even when another row is in scope', async () => {
+      await expect(assertPlantsInScope(clerk1120, async () => ['1120', '  '], 'delivery 1')).rejects.toMatchObject({ status: 503 });
+    });
   });
 });

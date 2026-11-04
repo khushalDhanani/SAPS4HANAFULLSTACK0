@@ -178,7 +178,11 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(callConfig.data.PurchaseOrderNumber).toBe('');
         });
 
-        test('rejects createSalesOrder when SalesOrganization, DistributionChannel, or Division is missing or blank', async () => {
+        test.each([
+            ['SalesOrganization', 'SalesOrganization is required for Sales Order creation'],
+            ['DistributionChannel', 'DistributionChannel is required for Sales Order creation'],
+            ['OrganizationDivision', 'Division is required for Sales Order creation']
+        ])('rejects a missing or blank %s and posts nothing', async (field, message) => {
             const baseHeader = {
                 SalesOrderType: 'ZDOM',
                 SalesOrganization: '1000',
@@ -187,26 +191,37 @@ describe('Unit: Sales Order Adapter Integration', () => {
                 TransactionCurrency: 'INR',
                 SoldToParty: '10135'
             };
+            const mockExecute = jest.fn();
+            const options = { destination: { url: 'http://sap.mock' }, executeHttpRequest: mockExecute };
 
-            const orgFields = ['SalesOrganization', 'DistributionChannel', 'OrganizationDivision'];
-            for (const field of orgFields) {
-                const missing = { ...baseHeader };
-                delete missing[field];
-                await expect(
-                    adapter.createSalesOrder(missing, [], {
-                        destination: { url: 'http://sap.mock' },
-                        executeHttpRequest: jest.fn()
-                    })
-                ).rejects.toThrow();
+            const missing = { ...baseHeader };
+            delete missing[field];
+            await expect(adapter.createSalesOrder(missing, [], options)).rejects.toThrow(message);
+            await expect(adapter.createSalesOrder({ ...baseHeader, [field]: '   ' }, [], options)).rejects.toThrow(message);
+            expect(mockExecute).not.toHaveBeenCalled();
+        });
 
-                const blank = { ...baseHeader, [field]: '   ' };
-                await expect(
-                    adapter.createSalesOrder(blank, [], {
-                        destination: { url: 'http://sap.mock' },
-                        executeHttpRequest: jest.fn()
-                    })
-                ).rejects.toThrow();
-            }
+        test.each([
+            ['no unit', { OrderQuantity: 1 }, 'Order quantity unit (SalesUnit) is required for item 000010'],
+            ['no quantity', { OrderQuantityUnit: 'PC' }, 'OrderQuantity is required for item 000010'],
+            ['zero quantity', { OrderQuantity: 0, OrderQuantityUnit: 'PC' }, 'OrderQuantity must be greater than 0 for item 000010'],
+            ['negative quantity', { OrderQuantity: -1, OrderQuantityUnit: 'PC' }, 'OrderQuantity must be greater than 0 for item 000010']
+        ])('rejects an item with %s and posts nothing', async (_label, itemFields, message) => {
+            const header = {
+                SalesOrderType: 'ZDOM',
+                SalesOrganization: '1000',
+                DistributionChannel: '10',
+                OrganizationDivision: '52',
+                TransactionCurrency: 'INR',
+                SoldToParty: '10135'
+            };
+            const mockExecute = jest.fn();
+
+            await expect(adapter.createSalesOrder(header, [{ SalesOrderItem: '000010', Material: '4000000091', ...itemFields }], {
+                destination: { url: 'http://sap.mock' },
+                executeHttpRequest: mockExecute
+            })).rejects.toThrow(message);
+            expect(mockExecute).not.toHaveBeenCalled();
         });
 
         test('propagates SAP error message when Deep Insert fails', async () => {
@@ -586,93 +601,104 @@ describe('Unit: Sales Order Adapter Integration', () => {
         });
     });
 
-    describe('createSalesDocument Routing', () => {
-        test('routes ZIN to sequential 3-step POSTs', async () => {
-            const mockExecute = jest.fn()
-                // Header POST
-                .mockResolvedValueOnce({ status: 201, data: { d: { SalesOrderID: '1000530' } } })
-                // Item POST
-                .mockResolvedValueOnce({ status: 201, data: { d: {} } })
-                // Condition POST
-                .mockResolvedValueOnce({ status: 201, data: { d: {} } });
+    describe('LORD_ODATA_ORDER_SRV $metadata (docs/sap-metadata-reference/LORD_ODATA_ORDER_SRV.edmx, real capture)', () => {
+        const lordMetadata = require('fs').readFileSync(
+            require('path').resolve(__dirname, '../../../docs/sap-metadata-reference/LORD_ODATA_ORDER_SRV.edmx'), 'utf8');
+        const options = (executeHttpRequest) => ({ destination: { url: 'http://sap.mock' }, executeHttpRequest });
 
-            const header = {
-                SalesInquiryType: 'ZIN',
-                SalesOrganization: '1000',
-                DistributionChannel: '10',
-                OrganizationDivision: '52',
-                SoldToParty: '10135'
-            };
+        test('capabilities from the captured metadata: Plant on Item is accepted, the Header extension fields are not', async () => {
+            const caps = await adapter.getInquiryCreationCapabilities(options(jest.fn().mockResolvedValue({ data: lordMetadata })));
 
-            const items = [
-                {
-                    SalesInquiryItem: '000010',
-                    Material: '4000000123',
-                    OrderQuantity: 1,
-                    OrderQuantityUnit: 'PC',
-                    NetPriceAmount: 100
-                }
-            ];
-
-            const result = await adapter.createSalesDocument('ZIN', header, items, {
-                destination: { url: 'http://sap.mock' },
-                executeHttpRequest: mockExecute
-            });
-
-            expect(result.SalesDocument).toBe('1000530');
-            expect(result.SalesInquiry).toBe('1000530');
-            // 3 sequential calls
-            // 3 POSTs + 1 GET read-back for the document totals
-            expect(mockExecute).toHaveBeenCalledTimes(4);
+            expect(caps.service).toBe('LORD_ODATA_ORDER_SRV');
+            expect(caps.Plant).toBe(true);
+            expect(caps.CustomerGroup2).toBe(false);
+            expect(caps.PortOfLoading).toBe(false);
+            expect(caps.PortOfDischarge).toBe(false);
+            expect(caps.ContactPerson).toBe(false);
         });
 
-        test('routes ZDOM to single Deep Insert POST', async () => {
-            const mockExecute = jest.fn().mockResolvedValue({
-                status: 201,
-                data: { d: { SalesOrderID: '5000461', NetAmount: '500.00', DocumentCurrency: 'INR' } }
-            });
+        test('capabilities report a Header property as accepted once the service exposes it', async () => {
+            const extended = '<EntityType Name="Header"><Property Name="ContactPerson"/></EntityType><EntityType Name="Item"></EntityType>';
 
+            const caps = await adapter.getInquiryCreationCapabilities(options(jest.fn().mockResolvedValue({ data: extended })));
+
+            expect(caps.ContactPerson).toBe(true);
+            expect(caps.PortOfLoading).toBe(false);
+            expect(caps.Plant).toBe(false);
+        });
+
+        test('a failed metadata read reports nothing as accepted and is retried on the next call', async () => {
+            const mockExecute = jest.fn()
+                .mockRejectedValueOnce(new Error('metadata 503'))
+                .mockResolvedValueOnce({ data: lordMetadata });
+
+            const first = await adapter.getInquiryCreationCapabilities(options(mockExecute));
+            const second = await adapter.getInquiryCreationCapabilities(options(mockExecute));
+
+            expect(first.Plant).toBe(false);
+            expect(second.Plant).toBe(true);
+            expect(mockExecute).toHaveBeenCalledTimes(2);
+        });
+
+        test('successful metadata is read once and cached', async () => {
+            const mockExecute = jest.fn().mockResolvedValue({ data: lordMetadata });
+
+            await adapter.getInquiryCreationCapabilities(options(mockExecute));
+            await adapter.getInquiryCreationCapabilities(options(mockExecute));
+
+            expect(mockExecute).toHaveBeenCalledTimes(1);
+            expect(mockExecute.mock.calls[0][1].url).toBe('/sap/opu/odata/sap/LORD_ODATA_ORDER_SRV/$metadata');
+        });
+
+        // Payload follows the metadata; that SAP accepts partner function ZP this way is not proven here.
+        test('with the captured metadata, ContactPerson is sent as a ZP header partner and not as a Header property', async () => {
+            const mockExecute = jest.fn(async (_dest, request) => (request.url.endsWith('/$metadata')
+                ? { data: lordMetadata }
+                : { status: 201, data: { d: { SalesOrderID: '5000470' } } }));
             const header = {
                 SalesOrderType: 'ZDOM',
                 SalesOrganization: '1000',
                 DistributionChannel: '10',
                 OrganizationDivision: '52',
-                SoldToParty: '10135'
+                SoldToParty: '10135',
+                ContactPerson: '24789'
             };
 
-            const items = [
-                {
-                    SalesOrderItem: '000010',
-                    Material: '4000000123',
-                    OrderQuantity: 2,
-                    OrderQuantityUnit: 'KG',
-                    Plant: '1120',
-                    NetPriceAmount: 250
-                }
-            ];
+            await adapter.createSalesOrder(header, [], options(mockExecute));
 
-            const result = await adapter.createSalesDocument('ZDOM', header, items, {
-                destination: { url: 'http://sap.mock' },
-                executeHttpRequest: mockExecute
-            });
+            const post = mockExecute.mock.calls.map((c) => c[1]).find((r) => r.method === 'post');
+            expect(post.data.ContactPerson).toBeUndefined();
+            expect(post.data.HeaderPartnerSet).toEqual([{ PartnerFunctionCode: 'ZP', CustomerID: '24789' }]);
+        });
+    });
 
-            expect(result.SalesDocument).toBe('5000461');
-            expect(result.SalesOrder).toBe('5000461');
-            // 1 atomic POST + 1 GET read-back
-            expect(mockExecute).toHaveBeenCalledTimes(2);
+    describe('resolveMaterial', () => {
+        test('passes a numeric material number through without asking SAP', async () => {
+            const mockRun = jest.fn();
+            adapter.s4hanaFS = { run: mockRun };
+
+            await expect(adapter.resolveMaterial(' 4000000123 ')).resolves.toBe('4000000123');
+            expect(mockRun).not.toHaveBeenCalled();
+        });
+
+        test('resolves a description to the number from I_Material and caches it', async () => {
+            const mockRun = jest.fn().mockResolvedValue([{ Material: '4000000001' }]);
+            adapter.s4hanaFS = { run: mockRun };
+
+            await expect(adapter.resolveMaterial('X-265')).resolves.toBe('4000000001');
+            await expect(adapter.resolveMaterial('X-265')).resolves.toBe('4000000001');
+            expect(mockRun).toHaveBeenCalledTimes(1);
+            expect(mockRun.mock.calls[0][0].SELECT.from.ref[0]).toBe('SD_F2369_INQY_FS_SRV.I_Material');
+        });
+
+        test('returns the input unchanged when SAP finds no material for it', async () => {
+            adapter.s4hanaFS = { run: jest.fn().mockResolvedValue([]) };
+
+            await expect(adapter.resolveMaterial('Unknown text')).resolves.toBe('Unknown text');
         });
     });
 
     describe('getSalesOrders and getSalesOrder', () => {
-        test('getSalesOrders runs query on s4hanaSO service', async () => {
-            const mockRun = jest.fn().mockResolvedValue([{ SalesOrder: '5000455' }]);
-            adapter.s4hanaSO = { run: mockRun };
-
-            const result = await adapter.getSalesOrders();
-            expect(result).toEqual([{ SalesOrder: '5000455' }]);
-            expect(mockRun).toHaveBeenCalled();
-        });
-
         test('getSalesOrders maps query to remote entity C_SalesOrderWl_F1873 and preserves $count', async () => {
             const mockList = [{ SalesOrder: '2500085' }];
             mockList.$count = 894;
@@ -837,14 +863,18 @@ describe('Unit: Sales Order Adapter Integration', () => {
             });
         });
 
-        test('getSalesOrder reads single order with item navigation', async () => {
-            const mockOrder = { SalesOrder: '5000455', to_SalesDocumentItemWl: [{ SalesDocumentItem: '10' }] };
-            const mockRun = jest.fn().mockResolvedValue(mockOrder);
+        test('getSalesOrder asks the worklist service for one order by key, expanding its items', async () => {
+            const mockRun = jest.fn().mockResolvedValue({ SalesOrder: '5000455' });
             adapter.s4hanaSO = { run: mockRun };
 
-            const result = await adapter.getSalesOrder('5000455');
-            expect(result).toEqual(mockOrder);
-            expect(mockRun).toHaveBeenCalled();
+            await adapter.getSalesOrder(' 5000455 ');
+
+            expect(mockRun).toHaveBeenCalledTimes(1);
+            const { SELECT: select } = mockRun.mock.calls[0][0];
+            expect(select.one).toBe(true);
+            expect(select.from.ref[0]).toBe('SD_F1873_SO_WL_SRV.C_SalesOrderWl_F1873');
+            expect(select.where).toEqual([{ ref: ['SalesOrder'] }, '=', { val: '5000455' }]);
+            expect(select.columns).toContainEqual(expect.objectContaining({ ref: ['to_SalesDocumentItemWl'], expand: ['*'] }));
         });
 
         test('getSalesOrderDefaults returns valid order defaults', async () => {
@@ -855,7 +885,8 @@ describe('Unit: Sales Order Adapter Integration', () => {
             expect(defaults.OrganizationDivision).toBe('52');
             expect(defaults.Plant).toBe('1120');
             expect(defaults.TransactionCurrency).toBe('INR');
-            expect(defaults.RequestedDeliveryDate).toBeDefined();
+            // No proposed delivery date: S/4HANA derives it when left blank
+            expect(defaults.RequestedDeliveryDate).toBe('');
         });
 
         test('getCustomerDefaults validates sales area and returns validForSalesArea: false for mismatched sales area', async () => {

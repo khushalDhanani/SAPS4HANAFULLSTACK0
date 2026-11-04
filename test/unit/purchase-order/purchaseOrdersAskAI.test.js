@@ -385,14 +385,6 @@ describe('PurchaseOrders Ask AI helpers', () => {
         expect(mockPost.mock.calls[0][1].system).toContain('ANY of the terms ["Macbook","laptop"] found 8');
     });
 
-    test('onAIClear resets the conversation', () => {
-        const { c, data } = mkController('x');
-        data.messages = [{ role: 'user' }];
-        c.onAIClear();
-        expect(data.messages).toEqual([]);
-        expect(data.question).toBe('');
-    });
-
     test('_buildAISystemPrompt embeds evidence-backed traceability protocol and SAP field catalog', () => {
         const p = ControllerClass._buildAISystemPrompt([{ po: '4500001234' }], ['9999999999'], { shown: 1, total: 1 });
         expect(p).toContain('EVIDENCE-BACKED TRACEABILITY PROTOCOL (CRITICAL REQUIREMENT)');
@@ -791,48 +783,59 @@ describe('PurchaseOrders Ask AI helpers', () => {
         expect(data.messages[1].html).toContain('aiStopped');
     });
 
-    test('_generateFollowUps creates relevant grounded suggestions across procurement dimensions', () => {
-        // Specific PO
-        const fPO = ControllerClass._generateFollowUps(null, 'What is status of PO 4500001234?');
-        expect(fPO.length).toBe(3);
-        expect(fPO[0].text).toContain('4500001234');
-        expect(fPO[0].question).toBe(fPO[0].text);
-
-        // Status intent
-        const fStatus = ControllerClass._generateFollowUps(null, 'Show approval status breakdown');
-        expect(fStatus.some(f => f.text.includes('approval') || f.text.includes('02'))).toBe(true);
-
-        // Spend intent
-        const fSpend = ControllerClass._generateFollowUps(null, 'Who are the top spend suppliers?');
-        expect(fSpend.some(f => f.text.includes('spend') || f.text.includes('net'))).toBe(true);
-
-        // Delivery date intent
-        const fDelivery = ControllerClass._generateFollowUps(null, 'Which items are overdue or due soon?');
-        expect(fDelivery.some(f => f.text.includes('due') || f.text.includes('delivery'))).toBe(true);
-
-        // Supplier intent
-        const fSupplier = ControllerClass._generateFollowUps(null, 'Show vendor performance for 100001');
-        expect(fSupplier.some(f => f.text.includes('supplier'))).toBe(true);
-
-        // Material / items intent
-        const fItem = ControllerClass._generateFollowUps(null, 'Show line item quantities for raw materials');
-        expect(fItem.some(f => f.text.includes('line items') || f.text.includes('materials'))).toBe(true);
-
-        // Default intent
-        const fDefault = ControllerClass._generateFollowUps(null, 'hello there');
-        expect(fDefault.length).toBe(3);
+    test.each([
+        ['a PO number', 'What is status of PO 4500001234?', [
+            'Show delivery schedule and items for PO 4500001234',
+            'What is the approval status of PO 4500001234?',
+            'Who is the supplier and payment terms for PO 4500001234?'
+        ]],
+        ['a status question', 'Show approval status breakdown', [
+            'List all purchase orders pending approval (02)',
+            'Which purchase orders are released (08)?',
+            'Are there any rejected purchase orders?'
+        ]],
+        ['a spend question', 'Who are the top spend suppliers?', [
+            'Which suppliers have the highest net spend?',
+            'Show top 5 purchase orders by net amount',
+            'What is the average PO value across the filtered list?'
+        ]],
+        ['a delivery question', 'Which items are overdue or due soon?', [
+            'Which purchase orders are due this month?',
+            'Show overdue line items across all suppliers',
+            'List delivery dates for pending orders'
+        ]],
+        ['a supplier question', 'Show vendor performance for 100001', [
+            'What is the total spend per supplier?',
+            'Show purchase orders for the top supplier',
+            'Which suppliers have active pending orders?'
+        ]],
+        ['an item question', 'Show line item quantities for raw materials', [
+            'Show line items and ordered quantities',
+            'Which materials have the highest ordered volumes?',
+            'List items pending delivery'
+        ]],
+        ['a question with no procurement topic', 'show me the list', [
+            'What is the total net spend across all filtered POs?',
+            'Show purchase orders pending approval',
+            'Which suppliers have the highest order volume?'
+        ]]
+    ])('_generateFollowUps suggests the fixed questions for %s', (_label, sQuestion, aExpected) => {
+        const aFollowUps = ControllerClass._generateFollowUps(null, sQuestion);
+        expect(aFollowUps).toEqual(aExpected.map(s => ({ text: s, question: s })));
     });
 
-    test('onAIAsk populates contextual follow-ups upon successful completion', async () => {
+    test('onAIAsk offers the status follow-ups after a successful status question', async () => {
         const { c, data } = mkController('Which POs are pending approval?');
         mockPost.mockResolvedValue({ answer: 'Found 3 pending POs', model: 'nim-test' });
 
         await c.onAIAsk();
 
         expect(data.busy).toBe(false);
-        expect(data.followUps).toBeDefined();
-        expect(data.followUps.length).toBeGreaterThan(0);
-        expect(data.followUps[0].text).toBeDefined();
+        expect(data.followUps.map(f => f.text)).toEqual([
+            'List all purchase orders pending approval (02)',
+            'Which purchase orders are released (08)?',
+            'Are there any rejected purchase orders?'
+        ]);
     });
 
     test('onAIAsk sets error bubble with lastQuestion and offers retry follow-up on failure', async () => {

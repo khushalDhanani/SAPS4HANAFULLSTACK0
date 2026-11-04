@@ -25,10 +25,15 @@
  *    - executeHuStockTransfer: Unauthenticated -> 401, Viewer (test-viewer-1120) -> 403, WarehouseClerk (test-clerk-1120) -> 200 Permitted
  *
  * 5. S/4HANA Backend RFC Authorization Failure:
- *    - Backend RFC authorization failure is handled safely without leaking credentials or passwords.
+ *    - A backend RFC authorization failure stops the flow and rolls back; the SAP text reaches the caller.
  *
  * [mock only, not SAP verification]
  */
+
+// A clerk with no Plant attribute passes the role check, so only the plant scope can refuse it. It is added here, for this
+// file only, before cds loads: plantScope.js:5 says a non-Admin with no Plant attribute sees nothing.
+const { USERS } = require('../../testUsers');
+process.env.CDS_CONFIG = JSON.stringify({ requires: { auth: { users: { ...USERS, 'test-clerk-noplant': { roles: ['Viewer', 'WarehouseClerk'] } } } } });
 
 const cds = require('@sap/cds');
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
@@ -325,10 +330,10 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       expect(giPost201Spy).not.toHaveBeenCalled();
     });
 
-    it('postGoodsIssue201: rejects unassigned plant user (test-viewer-noplant) with 403', async () => {
+    it('postGoodsIssue201: refuses a clerk with no Plant attribute through the plant scope, not the role check', async () => {
       const url = '/odata/v4/goods-issue/postGoodsIssue201';
-      await expect(POST(url, giPayload201, { auth: { username: 'test-viewer-noplant', password: '' } }))
-        .rejects.toMatchObject({ response: { status: 403 } });
+      await expect(POST(url, giPayload201, { auth: { username: 'test-clerk-noplant', password: '' } }))
+        .rejects.toMatchObject({ response: { status: 403, data: { error: { message: expect.stringContaining('outside') } } } });
       expect(giPost201Spy).not.toHaveBeenCalled();
     });
 
@@ -351,10 +356,10 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       expect(giPost301Spy).not.toHaveBeenCalled();
     });
 
-    it('postGoodsIssue301: rejects unassigned plant user (test-viewer-noplant) with 403', async () => {
+    it('postGoodsIssue301: refuses a clerk with no Plant attribute through the plant scope, not the role check', async () => {
       const url = '/odata/v4/goods-issue/postGoodsIssue301';
-      await expect(POST(url, giPayload301, { auth: { username: 'test-viewer-noplant', password: '' } }))
-        .rejects.toMatchObject({ response: { status: 403 } });
+      await expect(POST(url, giPayload301, { auth: { username: 'test-clerk-noplant', password: '' } }))
+        .rejects.toMatchObject({ response: { status: 403, data: { error: { message: expect.stringContaining('outside') } } } });
       expect(giPost301Spy).not.toHaveBeenCalled();
     });
 
@@ -377,10 +382,10 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       expect(giPost311Spy).not.toHaveBeenCalled();
     });
 
-    it('postGoodsIssue311: rejects unassigned plant user (test-viewer-noplant) with 403', async () => {
+    it('postGoodsIssue311: refuses a clerk with no Plant attribute through the plant scope, not the role check', async () => {
       const url = '/odata/v4/goods-issue/postGoodsIssue311';
-      await expect(POST(url, giPayload311, { auth: { username: 'test-viewer-noplant', password: '' } }))
-        .rejects.toMatchObject({ response: { status: 403 } });
+      await expect(POST(url, giPayload311, { auth: { username: 'test-clerk-noplant', password: '' } }))
+        .rejects.toMatchObject({ response: { status: 403, data: { error: { message: expect.stringContaining('outside') } } } });
       expect(giPost311Spy).not.toHaveBeenCalled();
     });
 
@@ -433,11 +438,12 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
       expect(mvt261PostSpy).not.toHaveBeenCalled();
     });
 
-    it('postGoodsIssue: rejects unassigned plant user (test-viewer-noplant) with 403', async () => {
+    it('postGoodsIssue: the service passes an empty plant scope for a clerk with no Plant attribute, and the post is refused', async () => {
       const url = '/odata/v4/mvt261/postGoodsIssue';
       const payload = { movementType: '261', orderId: '4000033120', orderType: 'ZBDN', reservation: '528780', item: '1', quantity: 10 };
-      await expect(POST(url, payload, { auth: { username: 'test-viewer-noplant', password: '' } }))
-        .rejects.toMatchObject({ response: { status: 403 } });
+      // The 403 here is raised by the cycle stub at the top of this file when allowedPlants lacks 1120; the real adapter's check is not run.
+      await expect(POST(url, payload, { auth: { username: 'test-clerk-noplant', password: '' } }))
+        .rejects.toMatchObject({ response: { status: 403, data: { error: { message: 'Not authorized for plant 1120' } } } });
       expect(mvt261PostSpy).not.toHaveBeenCalled();
     });
 
@@ -508,34 +514,31 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
   // =========================================================================
   // 5. Backend RFC Authorization Failure & Leak Prevention
   // =========================================================================
-  describe('5. S/4HANA Backend RFC Authorization Failure & Leak Prevention', () => {
-    it('handles backend USER_NOT_AUTHORIZED safely without leaking system secrets', async () => {
+  // SAP is stubbed at RFC with a plain readTable. The error texts and message numbers are hand-written, so SAP's real wording is not
+  // proven. Whether raw SAP error text (user, client) may reach the caller is an open question, not asserted here.
+  describe('5. S/4HANA Backend RFC Authorization Failure', () => {
+    it('a USER_NOT_AUTHORIZED failure on reservation create stops the flow at RESERVATION with no later SAP call', async () => {
       flowSpy.mockRestore();
       resvSpy.mockRestore();
-
-      const mockRfc = {
-        session: jest.fn(async (fn) => fn(mockRfc.call)),
-        call: jest.fn().mockImplementation(async (fm) => {
-          if (fm === 'BAPI_RESERVATION_CREATE1') {
-            const authErr = new Error('RFC_ERROR_SYSTEM_FAILURE: No authorization to execute RFC BAPI_RESERVATION_CREATE1 (authorization object S_RFC user TESTUSER client 100)');
-            authErr.code = 'USER_NOT_AUTHORIZED';
-            throw authErr;
-          }
-          return {};
-        }),
-        readTable: jest.fn().mockImplementation(async (table) => {
-          if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }];
-          if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
-          if (table === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011201301', DATBI: '99991231' }];
-          if (table === 'MARC') return [{ MATNR: '000000008000000023', WERKS: '1120' }];
-          if (table === 'MARD') return [{ MATNR: '000000008000000023', WERKS: '1120', LGORT: 'HS01', LABST: '100.000' }];
-          return [];
-        })
+      const fms = [];
+      const call = async (fm) => {
+        fms.push(fm);
+        if (fm === 'BAPI_RESERVATION_CREATE1') {
+          throw Object.assign(new Error('RFC_ERROR_SYSTEM_FAILURE: No authorization to execute RFC BAPI_RESERVATION_CREATE1'), { code: 'USER_NOT_AUTHORIZED' });
+        }
+        return {};
       };
+      const readTable = async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }];
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
+        if (table === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011201301', DATBI: '99991231' }];
+        if (table === 'MARC') return [{ MATNR: '000000008000000023', WERKS: '1120' }];
+        if (table === 'MARD') return [{ MATNR: '000000008000000023', WERKS: '1120', LGORT: 'HS01', LABST: '100.000' }];
+        return [];
+      };
+      const testAdapter = new ReservationProcessAdapter({ rfc: { session: async (fn) => fn(call), call, readTable } });
 
-      const testAdapter = new ReservationProcessAdapter({ rfc: mockRfc });
-
-      const input = {
+      const result = await testAdapter.executeReservationWarehouseFlow({
         movementType: '201',
         plant: '1120',
         storageLocation: 'HS01',
@@ -544,69 +547,55 @@ describe('Phase 2: Critical Transaction Authorization & Gating [mock only, not S
         unit: 'NOS',
         costCenter: '1011201301',
         processId: 'auth-test-proc-001'
-      };
-
-      const result = await testAdapter.executeReservationWarehouseFlow(input);
+      });
 
       expect(result.success).toBe(false);
       expect(result.stage).toBe('RESERVATION');
-      expect(result.error).toContain('No authorization');
-      // Verify no password, token, or secret is leaked in error message or details
-      expect(result.error).not.toMatch(/password|passwd|bearer|client_secret/i);
-      expect(JSON.stringify(result)).not.toMatch(/password|passwd|bearer|client_secret/i);
+      expect(result.error).toContain('No authorization to execute RFC BAPI_RESERVATION_CREATE1');
+      expect(fms).toEqual(['BAPI_RESERVATION_CREATE1']);
     });
 
-    it('handles BAPI_GOODSMVT_CREATE authorization failure without leaking credentials', async () => {
+    it('a BAPI_GOODSMVT_CREATE TYPE E return rolls back, never commits, and rejects with the SAP text', async () => {
       postMigoSpy.mockRestore();
-
-      const mockRfc = {
-        session: jest.fn(async (fn) => fn(mockRfc.call)),
-        call: jest.fn().mockImplementation(async (fm) => {
-          if (fm === 'BAPI_GOODSMVT_CREATE') {
-            return {
-              MATERIALDOCUMENT: '',
-              MATDOCUMENTYEAR: '',
-              RETURN: [{
-                TYPE: 'E',
-                ID: 'M7',
-                NUMBER: '120',
-                MESSAGE: 'You have no authorization for movement type 201 in plant 1120'
-              }]
-            };
-          }
-          if (fm === 'BAPI_TRANSACTION_ROLLBACK') return {};
-          return {};
-        }),
-        readTable: jest.fn().mockImplementation(async (table) => {
-          if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }];
-          if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
-          if (table === 'LTAK') return [{ LGNUM: 'W01', TANUM: '0001030201', KQUIT: 'X' }];
-          return [];
-        })
+      const fms = [];
+      const call = async (fm) => {
+        fms.push(fm);
+        if (fm === 'BAPI_GOODSMVT_CREATE') {
+          return {
+            MATERIALDOCUMENT: '',
+            MATDOCUMENTYEAR: '',
+            RETURN: [{ TYPE: 'E', ID: 'M7', NUMBER: '120', MESSAGE: 'You have no authorization for movement type 201 in plant 1120' }]
+          };
+        }
+        return {};
       };
+      const readTable = async (table) => {
+        if (table === 'T001K') return [{ BWKEY: '1120', BUKRS: '1000' }];
+        if (table === 'T320') return [{ LGNUM: 'W01', WERKS: '1120', LGORT: 'HS01' }];
+        if (table === 'MARC') return [{ MATNR: '000000008000000023', WERKS: '1120' }];
+        if (table === 'MARD') return [{ MATNR: '000000008000000023', WERKS: '1120', LGORT: 'HS01', LABST: '100.000' }];
+        if (table === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011201301', DATBI: '99991231' }];
+        if (table === 'LTAK') return [{ LGNUM: 'W01', TANUM: '0001030201', KQUIT: 'X' }];
+        return [];
+      };
+      const testAdapter = new ReservationProcessAdapter({ rfc: { session: async (fn) => fn(call), call, readTable } });
 
-      const testAdapter = new ReservationProcessAdapter({ rfc: mockRfc });
-
-      let caughtErr = null;
-      try {
-        await testAdapter.postGoodsMovement({
-          movementType: '201',
-          plant: '1120',
-          storageLocation: 'HS01',
-          material: '8000000023',
-          quantity: 10,
-          unit: 'NOS',
-          costCenter: '1011201301',
-          reservationNumber: '520201',
-          reservationItem: '0001'
-        });
-      } catch (err) {
-        caughtErr = err;
-      }
-
-      expect(caughtErr).not.toBeNull();
-      expect(caughtErr.message).toContain('You have no authorization');
-      expect(caughtErr.message).not.toMatch(/password|passwd|bearer|client_secret/i);
+      await expect(testAdapter.postGoodsMovement({
+        movementType: '201',
+        plant: '1120',
+        storageLocation: 'HS01',
+        material: '8000000023',
+        quantity: 10,
+        unit: 'NOS',
+        costCenter: '1011201301',
+        reservationNumber: '520201',
+        reservationItem: '0001'
+      })).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringContaining('You have no authorization for movement type 201 in plant 1120')
+      });
+      expect(fms).toContain('BAPI_TRANSACTION_ROLLBACK');
+      expect(fms).not.toContain('BAPI_TRANSACTION_COMMIT');
     });
   });
 });

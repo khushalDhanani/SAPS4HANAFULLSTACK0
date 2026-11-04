@@ -1,4 +1,6 @@
 const cds = require('@sap/cds');
+const connectivity = require('@sap-cloud-sdk/connectivity');
+const httpClient = require('@sap-cloud-sdk/http-client');
 const GoodsIssueAdapter = require('../../../srv/integration/s4hana/wm/GoodsIssueAdapter');
 
 const cdsTest = cds.test(__dirname + '/../../../');
@@ -7,50 +9,39 @@ const { POST, axios } = cdsTest;
 
 const BASE = '/odata/v4/goods-issue';
 
+// S/4 answers below are hand-written from API_MATERIAL_DOCUMENT_SRV.xml field names and what the clients read;
+// the stock and serial read shapes are not proven against SAP here.
+const openStock = { status: 200, headers: {}, data: { d: { results: [{ StorageLocation: 'HS01', CurrentStock: '10', BaseUnit: 'EA' }] } } };
+
+/** Stubs the Cloud SDK only: handlers, adapter, posting client and mapper all run. Returns the POSTs that reached SAP. */
+function stubSap({ post, get = () => ({ status: 200, data: {}, headers: {} }) }) {
+  jest.spyOn(connectivity, 'getDestination').mockResolvedValue({ url: 'https://s4.example.test', sapClient: '220' });
+  const posts = [];
+  jest.spyOn(httpClient, 'executeHttpRequest').mockImplementation(async (_dest, config) => {
+    if (config.headers['x-csrf-token'] === 'Fetch') return { status: 200, data: {}, headers: { 'x-csrf-token': 'TOKEN' } };
+    if (config.method === 'get') return get(config);
+    posts.push(config);
+    return post(config);
+  });
+  return posts;
+}
+
 describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
   afterEach(() => {
     jest.restoreAllMocks();
+    delete GoodsIssueAdapter.rfc.readTable; // back to RfcClient.prototype.readTable
   });
 
-  it('posts a 201 Goods Issue to Cost Center and reverses it via CancelHeader', async () => {
-    // 1. Mock S/4 stock pre-check and serial status pre-check
-    jest.spyOn(GoodsIssueAdapter, 'revalidateStockBeforePosting').mockResolvedValue({
-      StockSufficient: true,
-      CurrentStock: 10,
-      Valid: true
+  it('posts a 201 Goods Issue: the payload reaches S/4 and the document S/4 created comes back after read-back', async () => {
+    const posts = stubSap({
+      get: () => openStock,
+      post: () => ({ status: 201, headers: {}, data: { d: { MaterialDocument: '4900055001', MaterialDocumentYear: '2026' } } })
     });
+    GoodsIssueAdapter.rfc.readTable = async (table) => (table === 'MATDOC'
+      ? [{ MBLNR: '4900055001', MJAHR: '2026', BWART: '201' }]
+      : []);
 
-    jest.spyOn(GoodsIssueAdapter, 'validateSerialStatus').mockResolvedValue({
-      valid: true
-    });
-
-    // 2. Mock S/4 posting & reversal methods on adapter
-    jest.spyOn(GoodsIssueAdapter, 'postGoodsIssue201').mockResolvedValue({
-      ReservationNo: '',
-      ReservationItem: '',
-      MaterialDocument: '4900055001',
-      MaterialDocYear: '2026',
-      TransferOrder: '',
-      DifferenceCleared: false,
-      DifferenceQty: 0,
-      Success: true,
-      Message: 'Goods Issue to Cost Center 201 posted successfully in S/4HANA via API_MATERIAL_DOCUMENT_SRV (MatDoc: 4900055001/2026).'
-    });
-
-    jest.spyOn(GoodsIssueAdapter, 'reverseGoodsIssue').mockResolvedValue({
-      OriginalMaterialDocument: '4900055001',
-      OriginalMaterialDocYear: '2026',
-      ReversalMaterialDocument: '4900055002',
-      ReversalMaterialDocYear: '2026',
-      PostingDate: '2026-09-29',
-      Success: true,
-      Message: 'Material Document 4900055001/2026 reversed successfully in S/4HANA via CancelHeader. Reversal Document: 4900055002/2026.'
-    });
-
-    // 3. Execute POST /odata/v4/goods-issue/postGoodsIssue for Movement 201
-    // GLAccount is intentionally omitted here: for Movement 201 it is system-determined via
-    // OBYC/GBB-VBR and the server now rejects any caller-supplied value (see goodsIssueValidation
-    // and goodsIssueMapper tests for the rejection/stripping behavior itself).
+    // GLAccount is intentionally omitted: for Movement 201 it is system-determined via OBYC/GBB-VBR.
     const postRes = await POST(`${BASE}/postGoodsIssue201`, {
       MovementType: '201',
       CostCenter: '1011101301',
@@ -58,32 +49,28 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
       Plant: '1120',
       StorageLocation: 'HS01',
       IssueQty: 1,
-      Unit: 'EA',
-      SerialNumbers: ['MACBOOK-004']
+      Unit: 'EA'
     });
 
+    expect(posts).toHaveLength(1);
+    expect(posts[0].url).toBe('/sap/opu/odata/sap/API_MATERIAL_DOCUMENT_SRV/A_MaterialDocumentHeader');
+    expect(posts[0].data.GoodsMovementCode).toBe('03');
+    expect(posts[0].data.to_MaterialDocumentItem.results[0]).toMatchObject({
+      GoodsMovementType: '201',
+      Material: '8000009753',
+      Plant: '1120',
+      StorageLocation: 'HS01',
+      CostCenter: '1011101301'
+    });
     expect(postRes.status).toBe(200);
-    expect(postRes.data).toMatchObject({
-      Success: true,
-      MaterialDocument: '4900055001',
-      MaterialDocYear: '2026'
+    expect(postRes.data).toMatchObject({ Success: true, MaterialDocument: '4900055001', MaterialDocYear: '2026' });
+  });
+
+  it('reverses a material document through the S/4 Cancel import and returns the reversal document S/4 created', async () => {
+    const posts = stubSap({
+      post: () => ({ status: 201, headers: {}, data: { d: { MaterialDocument: '4900055002', MaterialDocumentYear: '2026' } } })
     });
 
-    // Verify the isolated 201 adapter method received the normalized 201 payload.
-    expect(GoodsIssueAdapter.postGoodsIssue201).toHaveBeenCalledWith(
-      expect.objectContaining({
-        MovementType: '201',
-        CostCenter: '1011101301',
-        Material: '8000009753',
-        Plant: '1120',
-        StorageLocation: 'HS01',
-        IssueQty: 1,
-        Unit: 'EA',
-        SerialNumbers: ['MACBOOK-004']
-      })
-    );
-
-    // 4. Execute POST /odata/v4/goods-issue/reverseGoodsIssue for 202 Reversal
     const reverseRes = await POST(`${BASE}/reverseGoodsIssue`, {
       MaterialDocument: '4900055001',
       MaterialDocYear: '2026',
@@ -91,6 +78,8 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
       ReversalReason: '01'
     });
 
+    expect(posts).toHaveLength(1);
+    expect(posts[0].url).toContain("/API_MATERIAL_DOCUMENT_SRV/Cancel?MaterialDocument='4900055001'&MaterialDocumentYear='2026'");
     expect(reverseRes.status).toBe(200);
     expect(reverseRes.data).toMatchObject({
       OriginalMaterialDocument: '4900055001',
@@ -99,7 +88,6 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
       ReversalMaterialDocYear: '2026',
       Success: true
     });
-    expect(reverseRes.data.Message).toContain('reversed successfully in S/4HANA via CancelHeader');
   });
 
   it('rejects postGoodsIssue with 400 when a caller supplies GLAccount for Movement 201', async () => {
@@ -152,18 +140,14 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     expect(postSpy).not.toHaveBeenCalled();
   });
 
-  it('rejects postGoodsIssue with 422 when serial number is not ESTO (already issued)', async () => {
-    jest.spyOn(GoodsIssueAdapter, 'revalidateStockBeforePosting').mockResolvedValue({
-      StockSufficient: true,
-      CurrentStock: 5,
-      Valid: true
+  it('rejects with 422 and posts nothing when SAP reports the serial number outside unrestricted stock', async () => {
+    const posts = stubSap({
+      get: (config) => (config.url.includes('UI_MATERIALSERIALNUMBER')
+        ? { status: 200, headers: {}, data: { d: { results: [{ SerialNumber: 'MACBOOK-004', Material: '8000009753', Plant: '1120', StorageLocation: 'HS01', InventoryStockType: '07', InventoryStockType_Text: 'Blocked' }] } } }
+        : openStock),
+      post: () => ({ status: 201, headers: {}, data: { d: { MaterialDocument: '4900055009', MaterialDocumentYear: '2026' } } })
     });
-
-    const serErr = new Error(
-      'Serial Number "MACBOOK-004" is already issued or not in unrestricted stock (Status: Not in Stock (ESTO)). Serial numbers for Goods Issue must have status In-Stock (ESTO). Goods Issue is blocked.'
-    );
-    serErr.status = 422;
-    jest.spyOn(GoodsIssueAdapter, 'validateSerialStatus').mockRejectedValue(serErr);
+    GoodsIssueAdapter.rfc.readTable = async () => [];
 
     const res = await axios.post(
       `${BASE}/postGoodsIssue201`,
@@ -181,6 +165,7 @@ describe('Integration: Movement 201 Post and 202 Reversal Cycle', () => {
     );
 
     expect(res.status).toBe(422);
-    expect(res.data.error.message).toContain('already issued or not in unrestricted stock');
+    expect(res.data.error.message).toBe('Serial number MACBOOK-004 is not in unrestricted stock (plant 1120, storage location HS01, Blocked).');
+    expect(posts).toHaveLength(0);
   });
 });

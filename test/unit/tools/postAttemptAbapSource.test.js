@@ -51,11 +51,18 @@ describe('ZWM_POST_ATTEMPT proposal (offline)', () => {
         expect([...open.matchAll(/'([^']+)'/g)].map((m) => m[1]).sort()).toEqual(listIn('OPEN_STATUSES').sort());
     });
 
-    it('commits the claim only after a successful insert, and the read never writes', () => {
+    // Text of the proposal only: none of this ABAP has run on SAP.
+    it('proposal text: the claim has one COMMIT WORK, inside the sy-subrc = 0 branch right after the INSERT', () => {
         const claim = moduleSource('Z_WM_ATTEMPT_CLAIM');
-        expect(claim.indexOf('INSERT zwm_post_attempt')).toBeGreaterThan(-1);
-        expect(claim.indexOf('COMMIT WORK')).toBeGreaterThan(claim.indexOf('INSERT zwm_post_attempt'));
-        expect(claim).toMatch(/ls_attempt-status\s+= 'sending'/);
+        expect(claim).toMatch(/INSERT zwm_post_attempt FROM ls_attempt\.\n\s+IF sy-subrc = 0\.\n\s+COMMIT WORK\./);
+        expect(claim.match(/COMMIT WORK/g)).toHaveLength(1);
+    });
+
+    it('proposal text: the claim row starts in status sending', () => {
+        expect(moduleSource('Z_WM_ATTEMPT_CLAIM')).toMatch(/ls_attempt-status\s+= 'sending'/);
+    });
+
+    it('proposal text: the read module contains no write statement', () => {
         expect(moduleSource('Z_WM_ATTEMPT_READ')).not.toMatch(/\b(COMMIT|INSERT|UPDATE|DELETE|MODIFY)\b/);
     });
 

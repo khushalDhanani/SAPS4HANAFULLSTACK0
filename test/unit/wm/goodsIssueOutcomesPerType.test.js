@@ -28,91 +28,67 @@ describe('post261 reference lookup after an unknown outcome', () => {
   });
 });
 
-describe('User-Facing Posting Outcome Messages Per Movement Type (201, 301, 311)', () => {
-  const movementTypes = [
-    { type: '201', name: 'Goods Issue to Cost Center' },
-    { type: '301', name: 'Plant-to-Plant Stock Transfer' },
-    { type: '311', name: 'Storage Location Stock Transfer' }
+// SAP is stubbed at the adapter transport (_post/_get); the error objects are hand-written, so the SAP side is not proven.
+describe('Posting outcome classification through post201, post301 and post311', () => {
+  const POSTS = [
+    ['201', 'post201', { CostCenter: '1011201301' }],
+    ['301', 'post301', { ReceivingPlant: '1110', ReceivingStorageLocation: 'CS01' }],
+    ['311', 'post311', { ReceivingStorageLocation: 'CS01' }]
   ];
+  const payload = (type, extra) => ({
+    MovementType: type, ValidatedMovementType: type, ReservationNo: '520001', ReservationItem: '1', Material: '8000000023',
+    Plant: '1120', StorageLocation: 'HS01', IssueQty: 5, Unit: 'KG', PostingDate: '2026-10-24', ...extra
+  });
+  const clientRejecting = (err, get = async () => []) => new GoodsIssuePostingClient({
+    adapter: { _getDestination: async () => ({ name: 'S4HANA' }), _post: async () => { throw err; }, _get: get }
+  });
 
-  movementTypes.forEach(({ type, name }) => {
-    describe(`Movement Type ${type} (${name})`, () => {
-      let client;
-      let mockAdapter;
+  describe.each(POSTS)('Movement %s', (type, method, extra) => {
+    it('a 422 SAP rejection reaches the caller unchanged', async () => {
+      const err = Object.assign(new Error('Deficit of BA Unrestricted-use stock'), { status: 422 });
+      await expect(clientRejecting(err)[method](payload(type, extra))).rejects.toBe(err);
+    });
 
-      beforeEach(() => {
-        mockAdapter = {
-          _getDestination: jest.fn().mockResolvedValue({ name: 'S4HANA' }),
-          _post: jest.fn(),
-          _get: jest.fn()
-        };
-        client = new GoodsIssuePostingClient({ adapter: mockAdapter });
+    it('a refused connection means never posted: 501 naming this movement', async () => {
+      const err = Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:443'), { status: 502, code: 'ECONNREFUSED' });
+      await expect(clientRejecting(err)[method](payload(type, extra))).rejects.toMatchObject({
+        status: 501,
+        message: expect.stringContaining(`Backend Posting Capability Unavailable on Gateway client 220 for single-item movement ${type}.`)
       });
+    });
 
-      // -------------------------------------------------------------
-      // 1. REJECTED: SAP business rejection (e.g. 400 / 422, deficit of stock)
-      // -------------------------------------------------------------
-      it(`[${type}] rejected: surfaces authentic SAP business rejection message`, async () => {
-        const businessErr = Object.assign(
-          new Error(`Deficit of BA Unrestricted-use stock for Movement ${type}`),
-          { status: 422 }
-        );
-        const classified = client._reclassifyPostingError(null, businessErr, name);
+    it('a plain 403 says NOT posted and points to SU53 for this movement', async () => {
+      const err = Object.assign(new Error('Forbidden'), { status: 403 });
+      const rejected = await clientRejecting(err)[method](payload(type, extra)).catch((e) => e);
+      expect(rejected.status).toBe(403);
+      expect(rejected.message).toContain(`SAP refused the single-item movement ${type} (authorization or CSRF token). It was NOT posted; check SU53`);
+    });
 
-        expect(classified.status).toBe(422);
-        expect(classified.message).toContain(`Deficit of BA Unrestricted-use stock for Movement ${type}`);
-        // Business rejections are definitive and must never report unconfirmed outcome
-        expect(classified.message).not.toContain('Outcome is unconfirmed');
-      });
+    it('a timeout without a reference is an unknown outcome that warns not to post again', async () => {
+      const err = Object.assign(new Error('timeout of 30000ms exceeded'), { status: 502, code: 'ECONNABORTED' });
+      const rejected = await clientRejecting(err)[method](payload(type, extra)).catch((e) => e);
+      expect(rejected.status).toBe(504);
+      expect(rejected.code).toBe('GI_POSTING_OUTCOME_UNKNOWN');
+      expect(rejected.message).toContain(`did not confirm the outcome of the single-item movement ${type}`);
+      expect(rejected.message).toContain('The goods issue may or may not have been posted. Outcome is unconfirmed; do not post again.');
+    });
+  });
 
-      // -------------------------------------------------------------
-      // 2. NEVER REACHED: Outage, inactive service, refused connection
-      // -------------------------------------------------------------
-      it(`[${type}] never reached: informs user that posting was not made and capability is unavailable`, async () => {
-        const unreachableErr = Object.assign(
-          new Error('connect ECONNREFUSED 10.0.0.1:443'),
-          { status: 502, code: 'ECONNREFUSED' }
-        );
-        const classified = client._reclassifyPostingError(null, unreachableErr, name);
+  describe('Movement 201 reference lookup after a timeout', () => {
+    const saved = process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+    beforeEach(() => { process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = '0'; });
+    afterEach(() => {
+      if (saved === undefined) delete process.env.GI_REFERENCE_LOOKUP_DELAYS_MS;
+      else process.env.GI_REFERENCE_LOOKUP_DELAYS_MS = saved;
+    });
+    const timeout = () => Object.assign(new Error('timeout'), { status: 502, code: 'ECONNABORTED' });
 
-        expect(classified.status).toBe(501);
-        expect(classified.message).toContain('Backend Posting Capability Unavailable');
-        expect(classified.message).toContain(name);
-        expect(classified.message).not.toContain('Outcome is unconfirmed');
-      });
-
-      // -------------------------------------------------------------
-      // 3. PLAIN 403: Authorization failure pointing to SU53
-      // -------------------------------------------------------------
-      it(`[${type}] plain 403: surfaces authorization failure pointing to transaction SU53`, async () => {
-        const authErr = Object.assign(new Error('Forbidden'), { status: 403 });
-        const classified = client._reclassifyPostingError(null, authErr, name);
-
-        expect(classified.status).toBe(403);
-        expect(classified.message).toContain('SU53');
-        expect(classified.message).toContain(name);
-        expect(classified.message).toContain('NOT posted');
-      });
-
-      // -------------------------------------------------------------
-      // 4. UNKNOWN OUTCOME: Timeout, reset, hangup
-      // MUST state that it may have posted and not to post again!
-      // -------------------------------------------------------------
-      it(`[${type}] unknown outcome: explicitly warns the document may have posted and NOT to post again`, async () => {
-        const timeoutErr = Object.assign(
-          new Error('timeout of 30000ms exceeded'),
-          { status: 502, code: 'ECONNABORTED' }
-        );
-        const classified = client._reclassifyPostingError(null, timeoutErr, name);
-
-        expect(classified.status).toBe(504);
-        expect(classified.code).toBe('GI_POSTING_OUTCOME_UNKNOWN');
-
-        // Requirement: Must state it may have posted and not to post again
-        expect(classified.message).toMatch(/may (or may not )?have been posted/i);
-        expect(classified.message).toContain('do not post again');
-        expect(classified.message).toContain(name);
-      });
+    it('with no document visible it reports GI_POSTING_UNCONFIRMED naming the reference', async () => {
+      const client = clientRejecting(timeout());
+      const rejected = await client.post201(payload('201', { CostCenter: '1011201301', ReferenceDocument: 'GIREF01' })).catch((e) => e);
+      expect(rejected.status).toBe(504);
+      expect(rejected.code).toBe('GI_POSTING_UNCONFIRMED');
+      expect(rejected.message).toContain('no material document with reference GIREF01 is visible yet after 1 check(s)');
     });
   });
 });

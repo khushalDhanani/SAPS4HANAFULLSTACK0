@@ -214,7 +214,7 @@ describe('Unit: Error Mapping', () => {
             };
             const mapped = mapS4Error(cudError);
             expect(mapped.code).toBe('CX_SADL_ENTITY_CUD_DISABLED');
-            expect(mapped.message).toContain('Creating operations are disabled');
+            expect(mapped.message).toBe('SAP S/4HANA Backend Operation Disabled: Creating operations are disabled for this entity in the backend software stack (CX_SADL_ENTITY_CUD_DISABLED).');
         });
 
         it('should map HTTP 412 Precondition Failed to HTTP 409 Conflict with STALE_DATA code', () => {
@@ -286,14 +286,14 @@ describe('Unit: Error Mapping', () => {
             expect(mapS4Error(denied)).toMatchObject({ status: 403, code: 'FORBIDDEN' });
         });
 
-        it('still classifies errors without a 4xx status as before', () => {
+        it('classifies an adapter error without a 4xx status as 500', () => {
             expect(mapS4Error(new Error('boom')).status).toBe(500);
-            expect(mapS4Error(Object.assign(new Error('upstream'), { status: 502 })).status).not.toBe(400);
+            expect(mapS4Error(Object.assign(new Error('upstream'), { status: 502 })).status).toBe(500);
         });
 
         it('still classifies S/4 responses by their HTTP status, not by an error.status', () => {
             const err = Object.assign(new Error('Request failed'), { status: 400, response: { status: 503, data: {} } });
-            expect(mapS4Error(err).status).not.toBe(400);
+            expect(mapS4Error(err).status).toBe(503);
         });
     });
 });

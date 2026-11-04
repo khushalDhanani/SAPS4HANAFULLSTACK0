@@ -155,17 +155,32 @@ describe('HuLabelPrinter.buildHtml (size-aware label, from clean labels)', () =>
         expect(html).toContain('&lt;b&gt;Pump &amp; &quot;Co&quot;');
         expect(html).not.toContain('<b>Pump');
     });
-    it('wraps the material name to the size line count via the shared wrap (no line-clamp) — same lines as the spec/PDF', () => {
-        const longMat = 'Hydraulic Pump Assembly 24V Industrial Grade High Flow Heavy Duty Model X';
-        const htmlB = Printer.buildHtml(clean({ header, items: [{ Material: 'X', MaterialName: longMat }] }), {}, 'B');
-        expect(htmlB).not.toContain('-webkit-line-clamp');
-        const Lb = Layout.layout('B');
-        const wb = Layout.wrap(longMat, Lb.material.w, Lb.fonts.material.pt, Lb.material.maxLines, true);
-        expect(wb.lines.length).toBeLessThanOrEqual(2);
-        wb.lines.forEach((line) => expect(htmlB).toContain('>' + line + '</div>')); // each wrapped line = one material div
-        const Lc = Layout.layout('C');
-        const wc = Layout.wrap(longMat, Lc.material.w, Lc.fonts.material.pt, Lc.material.maxLines, true);
-        expect(wc.lines.length).toBeLessThanOrEqual(3);
+    const longMat = 'Hydraulic Pump Assembly 24V Industrial Grade High Flow Heavy Duty Model X';
+    const materialLines = (html, name = longMat) => [...html.matchAll(/<div class="fld"[^>]*>([^<]*)<\/div>/g)].map((m) => m[1])
+      .filter((text) => text && name.includes(text.replace(/…$/, '')));
+
+    it('renders the long material name as separate lines, not a CSS line clamp', () => {
+      const html = Printer.buildHtml(clean({ header, items: [{ Material: 'X', MaterialName: longMat }] }), {}, 'B');
+      expect(html).not.toContain('-webkit-line-clamp');
+      expect(materialLines(html).length).toBeGreaterThan(1);
+    });
+
+    it.each([['B', 2], ['C', 3]])('size %s stops a name too long for the label at %i lines, in reading order, ending in an ellipsis', (size, maxLines) => {
+      const tooLong = 'Hydraulic Pump Assembly '.repeat(20).trim();
+      const lines = materialLines(Printer.buildHtml(clean({ header, items: [{ Material: 'X', MaterialName: tooLong }] }), {}, size), tooLong);
+      expect(lines).toHaveLength(maxLines);
+      expect(lines[maxLines - 1].endsWith('…')).toBe(true);
+      expect(tooLong.startsWith(lines.join(' ').replace(/…$/, ''))).toBe(true);
+    });
+
+    it('the PDF draws the same material lines as the print HTML', () => {
+      const label = clean({ header, items: [{ Material: 'X', MaterialName: longMat }] });
+      const html = Printer.buildHtml(label, {}, 'B');
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [100, 50] });
+      const text = jest.spyOn(doc, 'text');
+      Pdf.drawLabel(doc, label[0], Layout.layout('B'));
+      const drawn = text.mock.calls.map((c) => c[0]).filter((s) => longMat.includes(s.replace(/…$/, '')));
+      expect(drawn).toEqual(materialLines(html));
     });
     it('falls back to the material number when no name', () => {
         expect(Printer.buildHtml(clean({ header, items: [{ Material: '8000007113' }] }), {})).toContain('>8000007113</div>');
@@ -216,13 +231,27 @@ describe('HuLabelPdf.generate (size-aware mm PDF, one page per label)', () => {
         expect(clean[0]).toMatchObject({ huNumber: '0012', materialName: '-', createdDate: '-', srNo: '' });
         ['A', 'B', 'E', 'C', 'D'].forEach((k) => expect(() => Pdf.generate(jsPDF, clean, k)).not.toThrow());
     });
-    it('truncates an overlong serial / long material to the box so it cannot overrun (every size)', () => {
-        const labels = Printer.prepare([{ huNumber: '2000050002', materialName: 'M'.repeat(152), createdDate: '2026-10-06', srNo: 'S'.repeat(40) }]).labels;
-        ['A', 'B', 'E', 'C', 'D'].forEach((k) => {
-            const doc = Pdf.generate(jsPDF, labels, k);
-            expect(doc.getNumberOfPages()).toBe(1); // one page, no overflow page
-            expect(() => doc.output('arraybuffer')).not.toThrow();
-        });
+    describe('overlong values on the PDF label', () => {
+      const overlong = () => Printer.prepare([{ huNumber: '2000050002', materialName: 'M'.repeat(152), createdDate: '2026-10-06', srNo: 'S'.repeat(40) }]).labels[0];
+      const drawnTexts = (key, w, h) => {
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [w, h] });
+        const text = jest.spyOn(doc, 'text');
+        Pdf.drawLabel(doc, overlong(), Layout.layout(key));
+        return text.mock.calls.map((c) => c[0]);
+      };
+      const SIZES = [['A', 50, 25], ['B', 100, 50], ['E', 100, 100], ['C', 150, 100], ['D', 200, 100]];
+
+      it.each(SIZES)('size %s cuts the 40-character serial and marks the cut with an ellipsis', (key, w, h) => {
+        const serial = drawnTexts(key, w, h).find((s) => s.includes('SSS'));
+        expect(serial.endsWith('…')).toBe(true);
+        expect(serial.replace(/[^S]/g, '').length).toBeLessThan(40);
+      });
+
+      it.each(SIZES)('size %s cuts the 152-character material name and marks the cut with an ellipsis', (key, w, h) => {
+        const lines = drawnTexts(key, w, h).filter((s) => s.startsWith('MMM'));
+        expect(lines[lines.length - 1].endsWith('…')).toBe(true);
+        expect(lines.join('').replace(/[^M]/g, '').length).toBeLessThan(152);
+      });
     });
     it('draws a 0.5px solid black border 1 mm inside the page edge (every size)', () => {
         const px = 0.5 * 25.4 / 96;

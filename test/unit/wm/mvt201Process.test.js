@@ -22,7 +22,6 @@
 
 const ReservationProcessAdapter = require('../../../srv/integration/s4hana/wm/ReservationProcessAdapter');
 const TrToAdapter = require('../../../srv/integration/s4hana/wm/TrToAdapter');
-const { STATUS } = require('../../../srv/common/wmStatus');
 
 const matdocHelper = (table, where) => {
   if (table === 'MATDOC' || table === 'MSEG') {
@@ -547,22 +546,38 @@ describe('Movement Type 201 (GI to Cost Center) Process Tests [mock only, not SA
       expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_GOODSMVT_CREATE', expect.anything());
     });
 
-    test('GI failure marks status 90 and subsequent retry succeeds with status 05 [mock only, not SAP verification]', async () => {
-      mockRfc.readTable.mockImplementation(async (tbl, flds, where) => {
-        const md = matdocHelper(tbl, where);
-        if (md) return md;
-        if (tbl === 'MARC') return [{ XCHPF: '', SERNP: '' }];
-        if (tbl === 'CSKS') return [{ KOKRS: '1000', KOSTL: '001011202701', DATAB: '20230401', DATBI: '99991231', BKZKP: '' }];
-        if (tbl === 'MARD') return [{ LGORT: 'HS01', LABST: '100.000' }];
-        return [];
-      });
-
-      // 1st attempt: BAPI fails with backend error
-      mockRfc.call.mockResolvedValueOnce({
-        RETURN: [{ TYPE: 'E', ID: 'M7', NUMBER: '021', MESSAGE: 'Deficit of SL Unrestricted-use' }]
-      });
-
-      await expect(resAdapter.postGoodsMovement({
+    test('a BAPI error throws the SAP text without a commit, and a retry with the same ProcessId posts with status 05 [mock only, not SAP verification]', async () => {
+      // Plain function readTable, so the adapter takes its production path (no readTable.mock).
+      const tables = {
+        MARC: [{ XCHPF: '', SERNP: '' }],
+        CSKS: [{ KOKRS: '1000', KOSTL: '001011202701', DATAB: '20230401', DATBI: '99991231', BKZKP: '' }],
+        MARD: [{ LGORT: 'HS01', LABST: '100.000' }],
+        RESB: [{ RSNUM: '0000525289', RSPOS: '0001', MATNR: '000000008000008977', WERKS: '1120', LGORT: 'HS01', BDMNG: '1.000', ENMNG: '1.000', MEINS: 'KG', KZEAR: '', XLOEK: '' }]
+      };
+      const fms = [];
+      let posted = false;
+      const rfc = {
+        session: (fn) => fn(rfc.call),
+        call: async (fm) => {
+          fms.push(fm);
+          if (fm !== 'BAPI_GOODSMVT_CREATE') return {};
+          if (!fms.includes('BAPI_TRANSACTION_ROLLBACK')) {
+            return { RETURN: [{ TYPE: 'E', ID: 'M7', NUMBER: '021', MESSAGE: 'Deficit of SL Unrestricted-use' }] };
+          }
+          posted = true;
+          return { MATERIALDOCUMENT: '4900050299', MATDOCUMENTYEAR: '2026', RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Success on retry' }] };
+        },
+        readTable: async (table, _fields, where = []) => {
+          if (table === 'MATDOC' || table === 'MSEG') {
+            return posted && where.join(' ').includes('MBLNR')
+              ? [{ MBLNR: '4900050299', MJAHR: '2026', ZEILE: '0001', BWART: '201', MATNR: '000000008000008977', WERKS: '1120', LGORT: 'HS01', MENGE: '1.000', MEINS: 'KG', RSNUM: '0000525289', RSPOS: '0001' }]
+              : [];
+          }
+          return tables[table] || [];
+        }
+      };
+      const adapter = new ReservationProcessAdapter({ rfc });
+      const request = {
         reservationNo: '525289',
         reservationItem: '0001',
         movementType: '201',
@@ -573,34 +588,17 @@ describe('Movement Type 201 (GI to Cost Center) Process Tests [mock only, not SA
         unit: 'KG',
         costCenter: '1011202701',
         processId: '11111111-2222-3333-4444-555555555555'
-      })).rejects.toThrow(/BAPI_GOODSMVT_CREATE failed: Deficit of SL Unrestricted-use/);
-      expect(mockRfc.call).not.toHaveBeenCalledWith('BAPI_TRANSACTION_COMMIT', expect.anything());
+      };
 
-      // 2nd attempt: Retry succeeds
-      mockRfc.call
-        .mockResolvedValueOnce({
-          MATERIALDOCUMENT: '4900050299',
-          MATDOCUMENTYEAR: '2026',
-          RETURN: [{ TYPE: 'S', ID: 'M7', NUMBER: '060', MESSAGE: 'Success on retry' }]
-        })
-        .mockResolvedValueOnce({});
+      await expect(adapter.postGoodsMovement(request)).rejects.toThrow(/BAPI_GOODSMVT_CREATE failed: Deficit of SL Unrestricted-use/);
+      expect(fms).toContain('BAPI_TRANSACTION_ROLLBACK');
+      expect(fms).not.toContain('BAPI_TRANSACTION_COMMIT');
 
-      const retryRes = await resAdapter.postGoodsMovement({
-        reservationNo: '525289',
-        reservationItem: '0001',
-        movementType: '201',
-        material: '8000008977',
-        plant: '1120',
-        storageLocation: 'HS01',
-        quantity: 1,
-        unit: 'KG',
-        costCenter: '1011202701',
-        processId: '11111111-2222-3333-4444-555555555555'
-      });
+      const retryRes = await adapter.postGoodsMovement(request);
 
-      expect(retryRes.success).toBe(true);
-      expect(retryRes.materialDocument).toBe('4900050299');
-      expect(retryRes.status).toBe(STATUS.GI_POSTED);
+      expect(retryRes).toMatchObject({ success: true, materialDocument: '4900050299', status: '05' });
+      expect(fms.filter((fm) => fm === 'BAPI_GOODSMVT_CREATE')).toHaveLength(2);
+      expect(fms).toContain('BAPI_TRANSACTION_COMMIT');
     });
 
     test('T321 warning flag WM_PRE_MIGO_T321_CHECK produces warning when TBFKZ = "X" [mock only, not SAP verification]', async () => {

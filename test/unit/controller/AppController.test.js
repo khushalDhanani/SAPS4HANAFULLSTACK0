@@ -63,6 +63,19 @@ describe('App shell route titles', () => {
       '/sideNavKey': 'mm'
     });
   });
+
+  test('every manifest route except login and default gets a non-empty ShellBar title', () => {
+    const controller = makeController();
+    const untitled = routes
+      .filter((route) => !['login', 'default'].includes(route.name))
+      .filter((route) => {
+        controller._updateShell(route.name, {});
+        return !controller.shellState['/currentTitle'];
+      })
+      .map((route) => route.name);
+
+    expect(untitled).toEqual([]);
+  });
 });
 
 describe('App shell sidebar', () => {
