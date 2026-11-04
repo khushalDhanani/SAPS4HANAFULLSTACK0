@@ -15,7 +15,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Current Status
 
-- **Self-lock guard fixed (2026-11-04 16:50 IST) — PARTIAL, uncommitted, not deployed, no live lock run:** `lockUser` now compares against the user RFC really connects with, including a BTP destination. Before, it read only `S4_USERNAME`, which production refuses, so the guard did nothing there. Jest 180 suites, 2,819 passed, 0 failed. 17 known defects remain marked `test.failing`. See the entry below.
+- **Self-lock guard fixed (2026-11-04 16:50 IST) — PARTIAL, committed locally, not pushed, not deployed, no live lock run:** `lockUser` now compares against the user RFC really connects with, including a BTP destination. Before, it read only `S4_USERNAME`, which production refuses, so the guard did nothing there. Jest 180 suites, 2,819 passed, 0 failed. 17 known defects remain marked `test.failing`. See the entry below.
 
 - **Read-only browser E2E after the removals (2026-11-04 16:35 IST) — PASS for the read-only tier, log and matrix update committed locally, not pushed:** `npm run test:e2e` passed 17 of 17 suites against a local server on `S4HANA_DEV` client 220, with real SAP data and no writes seen. The live-write round trips (`test:e2e:sap`) did not run. See the entry below.
 
@@ -168,7 +168,7 @@ All historical change logs and past milestone statuses are preserved verbatim in
 
 ## Changes Log
 
-### 2026-11-04 16:50 IST — Fixed the self-lock guard: PARTIAL (uncommitted, not deployed, no live lock run)
+### 2026-11-04 16:50 IST — Fixed the self-lock guard: PARTIAL (committed locally, not pushed, not deployed, no live lock run)
 
 **Why:** `UserManagementAdapter.lockUser` compared only `process.env.S4_USERNAME`. `srv/common/productionGuard.js:93` refuses that variable in production, where the RFC user comes from the BTP destination, so an Admin could lock the technical user and stop all SAP integration. This was the known defect at `UserManagementAdapter.test.js`.
 
